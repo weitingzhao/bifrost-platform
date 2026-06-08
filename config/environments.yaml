@@ -1,0 +1,25 @@
+# Registered Bifrost Trade environments for connectivity matrix (Phase 0).
+# Override nginx_base via env-specific .env on the platform host if needed.
+
+environments:
+  - id: dev
+    label: Development
+    nginx_base: http://127.0.0.1
+    postgres:
+      host: 192.168.10.80
+      port: 5432
+    redis:
+      host: 127.0.0.1
+      port: 6379
+    ops_token_env: BIFROST_DEV_OPS_TOKEN
+
+  - id: prod
+    label: Production
+    nginx_base: http://192.168.10.70
+    postgres:
+      host: 192.168.10.80
+      port: 5432
+    redis:
+      host: 192.168.10.70
+      port: 6379
+    ops_token_env: BIFROST_PROD_OPS_TOKEN
