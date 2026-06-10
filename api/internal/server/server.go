@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 )
 
 type Server struct {
@@ -41,6 +42,7 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
+		r.Get("/topology", s.handleTopology)
 	})
 
 	return r
@@ -92,6 +94,35 @@ func (s *Server) handleMatrix(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 
 	writeJSON(w, http.StatusOK, map[string]any{"matrices": results})
+}
+
+func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Topology == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "topology not loaded",
+		})
+		return
+	}
+
+	envID := r.URL.Query().Get("env")
+	if envID == "" {
+		envID = "prod"
+		if len(s.cfg.Environments) > 0 {
+			envID = s.cfg.Environments[0].ID
+		}
+	}
+
+	env, ok := s.cfg.GetEnvironment(envID)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "unknown environment: " + envID,
+		})
+		return
+	}
+
+	matrix := s.prober.ProbeEnvironment(r.Context(), *env)
+	resp := topology.Build(s.cfg.Topology, *env, matrix)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

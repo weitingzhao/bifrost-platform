@@ -34,7 +34,10 @@ With the trade dev stack running (`cd ../bifrost-trade-infra && make dev`), the 
 
 ```bash
 curl -s 'http://127.0.0.1:8780/api/v1/matrix?env=dev' | jq .
+curl -s 'http://127.0.0.1:8780/api/v1/topology?env=prod' | jq .
 ```
+
+Edit network layout in `config/topology.yaml` (hosts, edges, K3s roles). Console **Topology** tab shows live status.
 
 ## Layout
 

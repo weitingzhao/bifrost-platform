@@ -27,9 +27,11 @@ type File struct {
 }
 
 type Config struct {
-	Environments []Environment
-	Listen       string
-	ConfigPath   string
+	Environments  []Environment
+	Topology      *TopologyFile
+	Listen        string
+	ConfigPath    string
+	TopologyPath  string
 }
 
 func Load() (*Config, error) {
@@ -56,10 +58,17 @@ func Load() (*Config, error) {
 		listen = ":8780"
 	}
 
+	topo, topoPath, err := LoadTopology(TopologyDirFromConfigPath(configPath))
+	if err != nil {
+		return nil, err
+	}
+
 	return &Config{
 		Environments: file.Environments,
+		Topology:     topo,
 		Listen:       listen,
 		ConfigPath:   configPath,
+		TopologyPath: topoPath,
 	}, nil
 }
 

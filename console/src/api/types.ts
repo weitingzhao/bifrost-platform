@@ -27,3 +27,36 @@ export interface MatrixResponse {
 export interface AllMatricesResponse {
   matrices: MatrixResponse[]
 }
+
+export interface TopologyNode {
+  id: string
+  label: string
+  host?: string
+  group: string
+  compose_roles: string[]
+  k3s_roles: string[]
+  in_k3s_cluster: boolean
+  grid: { row: number; col: number }
+  status: Reachability
+  detail: string
+}
+
+export interface TopologyEdge {
+  id: string
+  from: string
+  to: string
+  label: string
+  kind: string
+  matrix_target?: string
+  status: Reachability
+  detail: string
+}
+
+export interface TopologyResponse {
+  environment: string
+  label: string
+  deployment_phase: string
+  generated_at: string
+  nodes: TopologyNode[]
+  edges: TopologyEdge[]
+}

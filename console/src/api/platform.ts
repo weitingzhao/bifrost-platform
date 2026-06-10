@@ -1,4 +1,9 @@
-import type { AllMatricesResponse, EnvironmentSummary, MatrixResponse } from './types'
+import type {
+  AllMatricesResponse,
+  EnvironmentSummary,
+  MatrixResponse,
+  TopologyResponse,
+} from './types'
 
 export async function fetchEnvironments(): Promise<EnvironmentSummary[]> {
   const r = await fetch('/api/v1/environments')
@@ -27,4 +32,10 @@ export function isAllMatrices(
   data: MatrixResponse | AllMatricesResponse
 ): data is AllMatricesResponse {
   return 'matrices' in data
+}
+
+export async function fetchTopology(env: string): Promise<TopologyResponse> {
+  const r = await fetch(`/api/v1/topology?env=${encodeURIComponent(env)}`)
+  if (!r.ok) throw new Error(`topology: HTTP ${r.status}`)
+  return r.json() as Promise<TopologyResponse>
 }
