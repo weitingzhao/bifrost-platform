@@ -1,0 +1,144 @@
+# Network / platform topology — aligned with bifrost-trade-infra K3S_PLATFORM_ARCHITECTURE.md
+# Status is enriched at runtime from connectivity matrix probes.
+
+deployment_phase: compose   # compose | k3s_partial | k3s_ha
+
+nodes:
+  - id: win11-host
+    label: Win11 Host
+    host: ""                  # set your TWS LAN IP in .env or override below
+    group: external
+    compose_roles: [tws, ib_host]
+    k3s_roles: []
+    in_k3s_cluster: false
+    grid: { row: 0, col: 1 }
+
+  - id: win11-secondary
+    label: Win11 Secondary
+    host: ""
+    group: external
+    compose_roles: [tws_secondary]
+    k3s_roles: []
+    in_k3s_cluster: false
+    grid: { row: 0, col: 2 }
+
+  - id: mini-pc-a
+    label: mini-pc-a
+    host: 192.168.10.70
+    group: linux
+    compose_roles: [prod_compose, redis, nginx]
+    k3s_roles: [k3s_server_1, api, redis, ingress, gitea, argocd]
+    in_k3s_cluster: true
+    grid: { row: 1, col: 0 }
+
+  - id: mini-pc-b
+    label: mini-pc-b
+    host: 192.168.10.80
+    group: linux
+    compose_roles: [postgres]
+    k3s_roles: [k3s_server_2, postgres_primary, cnpg]
+    in_k3s_cluster: true
+    grid: { row: 1, col: 2 }
+
+  - id: mini-pc-c
+    label: mini-pc-c
+    host: ""
+    group: linux
+    compose_roles: [planned_staging]
+    k3s_roles: [k3s_server_3, monitoring, tekton]
+    in_k3s_cluster: true
+    grid: { row: 1, col: 3 }
+
+  - id: gpu-server
+    label: gpu-server (4090)
+    host: ""
+    group: compute
+    compose_roles: [ollama_dev]
+    k3s_roles: [k3s_agent_gpu, ollama, socket, celery]
+    in_k3s_cluster: true
+    grid: { row: 2, col: 1 }
+
+  - id: mac-mini-1
+    label: Mac Mini #1
+    host: ""
+    group: mac
+    compose_roles: [dev_compose]
+    k3s_roles: [k3s_agent, frontend]
+    in_k3s_cluster: true
+    grid: { row: 2, col: 0 }
+
+  - id: mac-mini-2
+    label: Mac Mini #2
+    host: ""
+    group: mac
+    compose_roles: [ci, watchdog]
+    k3s_roles: [k3s_agent, ci_runner]
+    in_k3s_cluster: false
+    grid: { row: 2, col: 2 }
+
+  - id: macbook
+    label: MacBook Dev
+    host: 127.0.0.1
+    group: mac
+    compose_roles: [dev_workstation, platform_console]
+    k3s_roles: [kubectl, mcp_client]
+    in_k3s_cluster: false
+    grid: { row: 2, col: 3 }
+
+# Edges: matrix_target links probe row for dynamic status (per environment).
+edges:
+  - id: prod-app-to-pg
+    from: mini-pc-a
+    to: mini-pc-b
+    label: PostgreSQL
+    kind: data
+    environments: [prod, dev]
+    matrix_target: postgres
+
+  - id: prod-app-to-redis
+    from: mini-pc-a
+    to: mini-pc-a
+    label: Redis
+    kind: data
+    environments: [prod]
+    matrix_target: redis
+
+  - id: dev-app-to-redis
+    from: mac-mini-1
+    to: macbook
+    label: Redis (local dev)
+    kind: data
+    environments: [dev]
+    matrix_target: redis
+
+  - id: dev-nginx
+    from: macbook
+    to: macbook
+    label: Dev nginx / APIs
+    kind: http
+    environments: [dev]
+    matrix_target: nginx-spa
+
+  - id: prod-nginx
+    from: mini-pc-a
+    to: mini-pc-a
+    label: Prod nginx / APIs
+    kind: http
+    environments: [prod]
+    matrix_target: nginx-spa
+
+  - id: socket-to-ib
+    from: mini-pc-a
+    to: win11-host
+    label: IB_HOST (TWS)
+    kind: ib
+    environments: [prod, dev]
+    matrix_target: ""
+
+  - id: platform-console
+    from: macbook
+    to: mini-pc-a
+    label: Platform probe
+    kind: control
+    environments: [prod]
+    matrix_target: api-ops

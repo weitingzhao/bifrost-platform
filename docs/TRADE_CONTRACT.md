@@ -41,6 +41,15 @@ Response shape matches `bifrost_api.ops.auth` capabilities payload (`identity`, 
 | ib-operator-rpc | Trade write path — R-DV3 |
 | daemon-control-write | Platform L0 does not invoke control writes |
 
+## Topology API
+
+`GET /api/v1/topology?env=dev|prod` merges:
+
+- Static graph: `config/topology.yaml` (nodes, edges, Compose/K3s roles)
+- Dynamic status: same probes as `/api/v1/matrix` for the selected environment
+
+Edit `topology.yaml` when hardware or K3s rollout changes; set `deployment_phase` to `compose` | `k3s_partial` | `k3s_ha`.
+
 ## Versioning
 
 Phase 0: informal contract documented here. Breaking changes to trade health URLs must update `api/internal/probe/probe.go` and this file together.

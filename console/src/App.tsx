@@ -1,5 +1,5 @@
-import { MatrixPage } from '@/pages/MatrixPage'
+import { ConsolePage } from '@/pages/ConsolePage'
 
 export function App() {
-  return <MatrixPage />
+  return <ConsolePage />
 }
