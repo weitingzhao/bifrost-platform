@@ -13,6 +13,14 @@ console/node_modules/
 console/dist/
 console/.vite/
 
+# MkDocs
+site/
+.cache/
+docs/overview.md
+docs/agent/
+docs/mcp/
+.venv-docs/
+
 # OS / IDE
 .DS_Store
 .idea/

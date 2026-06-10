@@ -23,6 +23,7 @@ type TopologyNode struct {
 	InK3sCluster  bool     `yaml:"in_k3s_cluster" json:"in_k3s_cluster"`
 	Grid          GridPos  `yaml:"grid" json:"grid"`
 	MatrixTargets []string `yaml:"matrix_targets" json:"matrix_targets,omitempty"`
+	SSHPort       int      `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`
 }
 
 type TopologyEdge struct {

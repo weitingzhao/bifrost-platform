@@ -54,7 +54,7 @@ export function MatrixPage() {
             </span>
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn-ui btn-ui-primary"
               onClick={() => {
                 void qc.invalidateQueries({ queryKey: ['matrix'] })
                 void qc.invalidateQueries({ queryKey: ['platform-health'] })

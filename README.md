@@ -39,6 +39,8 @@ curl -s 'http://127.0.0.1:8780/api/v1/topology?env=prod' | jq .
 
 Edit network layout in `config/topology.yaml` (hosts, edges, K3s roles). Console **Topology** tab shows live status.
 
+**Environments** tab — living catalog + **Copy for LLM** (`console/src/lib/environments-catalog.ts`): hardware, CI/CD, K3s phases, Dev/Prod flows.
+
 ## Layout
 
 ```

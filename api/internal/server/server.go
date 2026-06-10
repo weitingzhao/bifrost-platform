@@ -10,17 +10,23 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/console"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 )
 
 type Server struct {
-	cfg    *config.Config
-	prober *probe.Prober
+	cfg     *config.Config
+	prober  *probe.Prober
+	console *console.Handler
 }
 
 func New(cfg *config.Config) *Server {
-	return &Server{cfg: cfg, prober: probe.NewProber()}
+	return &Server{
+		cfg:     cfg,
+		prober:  probe.NewProber(),
+		console: console.NewHandler(cfg),
+	}
 }
 
 func (s *Server) Router() http.Handler {
@@ -33,7 +39,7 @@ func (s *Server) Router() http.Handler {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://127.0.0.1:5180", "http://localhost:5180"},
 		AllowedMethods:   []string{"GET", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Content-Type", "Upgrade", "Connection"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
@@ -43,6 +49,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/topology", s.handleTopology)
+		r.Get("/console/hosts", s.console.HandleHosts)
+		r.Get("/console/ws", s.console.HandleWebSocket)
 	})
 
 	return r

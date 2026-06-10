@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { MonitoringShell, PageHeader, PageShell, SegmentControl, StatusLamp } from '@bifrost/ui'
 import { useMemo, useState } from 'react'
 import type { MatrixResponse } from '@/api/types'
 import {
@@ -10,10 +11,20 @@ import {
 } from '@/api/platform'
 import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
 import { MatrixTable } from '@/components/MatrixTable'
-import { StatusLamp } from '@/components/StatusLamp'
 import { TopologyDiagram } from '@/components/TopologyDiagram'
+import { EnvironmentsPage } from '@/pages/EnvironmentsPage'
+import { ServerConsolePage } from '@/pages/ServerConsolePage'
 
-type ViewTab = 'topology' | 'matrix'
+type ViewTab = 'topology' | 'matrix' | 'environments' | 'console'
+
+const VIEW_TITLES: Record<ViewTab, string> = {
+  topology: 'Network topology',
+  matrix: 'Connectivity matrix',
+  environments: 'Environments',
+  console: 'Server console',
+}
+
+const TRADE_APP_URL = import.meta.env.VITE_TRADE_FRONTEND_URL ?? 'http://127.0.0.1:5173'
 
 export function ConsolePage() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('prod')
@@ -60,91 +71,122 @@ export function ConsolePage() {
     void qc.invalidateQueries({ queryKey: ['platform-health'] })
   }
 
+  const navGroups = [
+    {
+      label: 'Console',
+      items: (
+        [
+          { id: 'topology', label: 'Topology', shortLabel: 'T' },
+          { id: 'matrix', label: 'Matrix', shortLabel: 'M' },
+          { id: 'environments', label: 'Environments', shortLabel: 'E' },
+          { id: 'console', label: 'Console', shortLabel: 'C' },
+        ] as const
+      ).map(item => ({
+        id: item.id,
+        label: item.label,
+        shortLabel: item.shortLabel,
+        href: `#${item.id}`,
+        active: viewTab === item.id,
+        onClick: () => setViewTab(item.id),
+      })),
+    },
+  ]
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="border-b border-[var(--border)] bg-[var(--card)] px-4 py-3">
-        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="m-0 text-base font-semibold tracking-tight">Bifrost Platform Console</h1>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Topology &amp; connectivity matrix (L0 read-only)
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Platform API{' '}
-              <StatusLamp value={healthQuery.data ? 'ok' : 'fail'} kind="reach" />
-            </span>
-            <button type="button" className="btn btn-primary" onClick={refreshAll}>
-              Refresh
-            </button>
-          </div>
-        </div>
-      </header>
+    <MonitoringShell
+      productName="Bifrost Platform"
+      productBadge="Environment"
+      productTagline="Connectivity & governance (L0 read-only)"
+      navGroups={navGroups}
+      peerApp={{
+        label: 'Bifrost Trade Monitoring',
+        href: TRADE_APP_URL,
+        description: 'Business console · positions, daemon, market',
+      }}
+      headerActions={
+        <>
+          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Platform API{' '}
+            <StatusLamp value={healthQuery.data ? 'ok' : 'fail'} kind="reach" />
+          </span>
+          <button type="button" className="btn-ui btn-ui-primary" onClick={refreshAll}>
+            Refresh
+          </button>
+        </>
+      }
+    >
+      <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
+        {viewTab !== 'environments' && viewTab !== 'console' && (
+          <PageHeader
+            title={VIEW_TITLES[viewTab]}
+            description="L0 read-only probes — collapse the sidebar to use full width for tables and topology."
+          />
+        )}
 
-      <main className="flex-1 px-4 py-4">
-        <div className="max-w-6xl mx-auto flex flex-col gap-4">
-          {envQuery.data && (
-            <EnvironmentStrip
-              environments={envQuery.data}
-              selected={envFilter}
-              onSelect={id => {
-                setEnvFilter(id)
-                if (id === 'all') setViewTab('matrix')
-              }}
+        {envQuery.data && viewTab !== 'environments' && viewTab !== 'console' && (
+          <EnvironmentStrip
+            environments={envQuery.data}
+            selected={envFilter}
+            onSelect={id => {
+              setEnvFilter(id)
+              if (id === 'all') setViewTab('matrix')
+            }}
+          />
+        )}
+
+        {viewTab !== 'environments' && (
+          <SegmentControl
+            ariaLabel="Console view"
+            value={viewTab}
+            onChange={v => setViewTab(v as ViewTab)}
+            options={[
+              { value: 'topology', label: 'Topology' },
+              { value: 'matrix', label: 'Matrix' },
+              { value: 'environments', label: 'Environments' },
+              { value: 'console', label: 'Console' },
+            ]}
+          />
+        )}
+
+        {viewTab === 'console' && <ServerConsolePage />}
+
+        {viewTab === 'environments' && (
+          <>
+            <PageHeader
+              title={VIEW_TITLES.environments}
+              description="Hardware, CI/CD, K3s target, and trade Dev/Prod catalog."
             />
-          )}
+            <EnvironmentsPage />
+          </>
+        )}
 
-          <div className="segment w-fit" role="tablist" aria-label="Console view">
-            <button
-              type="button"
-              role="tab"
-              data-active={viewTab === 'topology'}
-              onClick={() => setViewTab('topology')}
-            >
-              Topology
-            </button>
-            <button
-              type="button"
-              role="tab"
-              data-active={viewTab === 'matrix'}
-              onClick={() => setViewTab('matrix')}
-            >
-              Matrix
-            </button>
-          </div>
+        {viewTab === 'topology' && envFilter === 'all' && (
+          <p className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Topology view uses a single environment — showing Production. Select Dev or Prod for
+            environment-specific links.
+          </p>
+        )}
 
-          {viewTab === 'topology' && envFilter === 'all' && (
-            <p className="text-[var(--muted-foreground)] text-[var(--text-dense-meta)]">
-              Topology view uses a single environment — showing Production. Select Dev or Prod for
-              environment-specific links.
-            </p>
-          )}
+        {viewTab === 'topology' && topologyQuery.isLoading && (
+          <p className="text-[var(--muted-foreground)]">Loading topology…</p>
+        )}
+        {viewTab === 'topology' && topologyQuery.isError && (
+          <p className="lamp-fail">
+            Failed to load topology: {(topologyQuery.error as Error).message}
+          </p>
+        )}
+        {viewTab === 'topology' && topologyQuery.data && (
+          <TopologyDiagram data={topologyQuery.data} />
+        )}
 
-          {viewTab === 'topology' && topologyQuery.isLoading && (
-            <p className="text-[var(--muted-foreground)]">Loading topology…</p>
-          )}
-          {viewTab === 'topology' && topologyQuery.isError && (
-            <p className="lamp-fail">
-              Failed to load topology: {(topologyQuery.error as Error).message}
-            </p>
-          )}
-          {viewTab === 'topology' && topologyQuery.data && (
-            <TopologyDiagram data={topologyQuery.data} />
-          )}
-
-          {viewTab === 'matrix' && matrixQuery.isLoading && (
-            <p className="text-[var(--muted-foreground)]">Probing targets…</p>
-          )}
-          {viewTab === 'matrix' && matrixQuery.isError && (
-            <p className="lamp-fail">
-              Failed to load matrix: {(matrixQuery.error as Error).message}
-            </p>
-          )}
-          {viewTab === 'matrix' &&
-            matrices.map(m => <MatrixTable key={m.environment} matrix={m} />)}
-        </div>
-      </main>
-    </div>
+        {viewTab === 'matrix' && matrixQuery.isLoading && (
+          <p className="text-[var(--muted-foreground)]">Probing targets…</p>
+        )}
+        {viewTab === 'matrix' && matrixQuery.isError && (
+          <p className="lamp-fail">Failed to load matrix: {(matrixQuery.error as Error).message}</p>
+        )}
+        {viewTab === 'matrix' && matrices.map(m => <MatrixTable key={m.environment} matrix={m} />)}
+      </PageShell>
+    </MonitoringShell>
   )
 }

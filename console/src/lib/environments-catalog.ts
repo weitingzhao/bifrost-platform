@@ -1,0 +1,369 @@
+/**
+ * Bifrost Platform — environments & architecture catalog.
+ *
+ * Single source of truth for the Environments UI and "Copy for LLM" context.
+ * Update this file when hardware roles, CI/CD, or deployment phases change.
+ *
+ * Authoritative docs (MkDocs): bifrost-trade-infra :8050 · bifrost-platform :8060
+ */
+
+export const CATALOG_VERSION = '2026-06-09'
+export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
+
+/** Scope row — one logical component in the Bifrost stack. */
+export type ScopeRow = {
+  tag: string
+  component: string
+  technology: string
+  notes: string
+}
+
+/** End-to-end flow row — how a path moves through environments. */
+export type FlowRow = {
+  path: string
+  stage: 'Development' | 'Staging' | 'Production'
+  trigger: string
+  runtime: string
+  dataStore: string
+}
+
+export type HardwareRow = {
+  id: string
+  host: string
+  roleCompose: string
+  roleK3s: string
+}
+
+export type PlatformPhase = {
+  id: string
+  label: string
+  timeframe: string
+  deliverables: string
+}
+
+export const PLATFORM_PORTS = {
+  platformApi: 8780,
+  platformConsole: 5180,
+  tradeFrontend: 5173,
+  infraDocs: 8050,
+  platformDocs: 8060,
+} as const
+
+/** Registered trade environments (mirrors config/environments.yaml). */
+export const TRADE_ENVIRONMENTS = [
+  {
+    id: 'dev',
+    label: 'Development',
+    nginx: 'http://127.0.0.1',
+    postgres: '192.168.10.80:5432 (bifrost_dev)',
+    redis: '127.0.0.1:6379 (local or Mac Mini #1)',
+    host: 'MacBook / Mac Mini #1 — docker-compose.dev.yml',
+  },
+  {
+    id: 'prod',
+    label: 'Production',
+    nginx: 'http://192.168.10.70',
+    postgres: '192.168.10.80:5432 (bifrost_prod)',
+    redis: '192.168.10.70:6379',
+    host: 'Linux mini-pc-a — docker-compose.yml (2C-B) → K3s bifrost ns',
+  },
+] as const
+
+export const SCOPE_ROWS: ScopeRow[] = [
+  {
+    tag: 'PLATFORM',
+    component: 'bifrost-platform (control plane)',
+    technology: 'Go API :8780 · React Console :5180 · Dense UI tokens',
+    notes:
+      'Phase 0 L0 read-only: connectivity matrix, topology, Ops auth probe. No daemon_control or ib:operator:cmd. Future: agent/, mcp/.',
+  },
+  {
+    tag: 'TRADE-FE',
+    component: 'bifrost-trade-frontend',
+    technology: 'React 18 · Vite · TanStack Query · shadcn/ui',
+    notes: 'Trade monitoring SPA :5173. Separate from Platform Console. Phase 1: New FE + Legacy API equivalence.',
+  },
+  {
+    tag: 'TRADE-API',
+    component: 'bifrost-trade-api (9 domains)',
+    technology: 'FastAPI · ports 8765–8773 via nginx /api/{domain}/',
+    notes:
+      'monitor · massive · docs · ops · trading · strategy · portfolio · market · research. Platform probes health endpoints only.',
+  },
+  {
+    tag: 'WORKER',
+    component: 'bifrost-trade-worker',
+    technology: 'Python · daemon (GsTrading FSM) · Celery · Flower :5555',
+    notes: 'Daemon reads Redis quotes/account; orders via ib_operator RPC. Does not connect to TWS directly.',
+  },
+  {
+    tag: 'SOCKET',
+    component: 'bifrost-trade-socket',
+    technology: 'Python · IB ingestor / account agent / operator · Massive WS',
+    notes: 'Only layer that talks to TWS (IB_HOST → Win11 LAN). Writes Redis streams/hashes; operator listens ib:operator:cmd.',
+  },
+  {
+    tag: 'CORE',
+    component: 'bifrost-trade-core',
+    technology: 'Python package bifrost_core — config, persistence, portfolio, monitor',
+    notes: 'Shared library pip-installed by api/worker/socket. Version via BIFROST_CORE_REF tag in Docker builds.',
+  },
+  {
+    tag: 'INFRA',
+    component: 'bifrost-trade-infra',
+    technology: 'Docker Compose · nginx · Makefile · config/*.yaml',
+    notes:
+      'Prod: docker-compose.yml on mini-pc-a. Dev: docker-compose.dev.yml. make prod-health · prod-preflight · release_gate (planned).',
+  },
+  {
+    tag: 'PG',
+    component: 'PostgreSQL',
+    technology: 'Bare metal mini-pc-b :5432 · bifrost_dev / bifrost_prod',
+    notes: 'Owner D2: keep .80 bare PG until CloudNativePG on K3s (mini-pc-b Primary + standby on mini-pc-a).',
+  },
+  {
+    tag: 'REDIS',
+    component: 'Redis',
+    technology: 'Prod on mini-pc-a :6379 · Dev local or co-located',
+    notes: 'Streams: ib:ingester:tick:* · RPC: ib:operator:cmd · Health keys bifrost:health:ws_*',
+  },
+  {
+    tag: 'TWS',
+    component: 'Interactive Brokers TWS / Gateway',
+    technology: 'Win11 ×2 (Host + Secondary) — cluster-external forever',
+    notes: 'R-DV3: Dev/Prod distinct client_id; one auto-trading Engine per IB account. D4: auto-order switch deferred.',
+  },
+  {
+    tag: 'GITHUB',
+    component: 'Source control & CI (target)',
+    technology: 'Git · Gitea on K3s (internal) · Mac Mini #2 runner (near-term)',
+    notes: 'Near-term: pytest · npm run build · check:legacy-css on PR. Target: Tekton Pipeline in K3s cicd namespace.',
+  },
+  {
+    tag: 'K3S',
+    component: 'K3s cluster (target)',
+    technology: 'K3s HA · Traefik Ingress · CloudNativePG · local-path PVC',
+    notes:
+      'Phase B GitOps: Gitea · ArgoCD · Tekton. Namespaces: data · cicd · monitoring · ai · bifrost. deployment_phase in topology.yaml.',
+  },
+  {
+    tag: 'OBSERVE',
+    component: 'Observability (target)',
+    technology: 'Prometheus · Loki · Grafana · AlertManager · AIOps webhook',
+    notes: 'Phase C on mini-pc-c. External watchdog cron on Mac Mini #2 (monitor the monitors).',
+  },
+  {
+    tag: 'AI',
+    component: 'Inference & MCP (target)',
+    technology: 'Ollama on gpu-server (4090) · mcp-server-kubernetes · bifrost-ops-mcp',
+    notes: 'L0/L1 ops only; research RAG CronJob read-only. Forbidden: trade write paths for platform AI.',
+  },
+]
+
+export const FLOW_ROWS: FlowRow[] = [
+  {
+    path: 'Application (trade stack)',
+    stage: 'Development',
+    trigger: 'Local / Mac Mini #1: make dev · feature branches',
+    runtime: 'docker-compose.dev.yml · nginx localhost · hot reload mounts',
+    dataStore: 'bifrost_dev @ PG .80 · local Redis',
+  },
+  {
+    path: 'Application (trade stack)',
+    stage: 'Staging',
+    trigger: 'Mac Mini #2 CI or K3s bifrost-stg (planned) · merge to main',
+    runtime: 'Same images as prod · optional Mac Mini #2 or mini-pc-c',
+    dataStore: 'bifrost_dev or isolated stg DB (TBD)',
+  },
+  {
+    path: 'Application (trade stack)',
+    stage: 'Production',
+    trigger: '2C-B compose on .70 · future: git tag → Tekton → ArgoCD sync',
+    runtime: 'docker-compose.yml (now) → K3s bifrost namespace (target)',
+    dataStore: 'bifrost_prod @ PG .80 · Redis .70',
+  },
+  {
+    path: 'Platform (control plane)',
+    stage: 'Development',
+    trigger: 'make start / ./scripts/run_platform.py on MacBook',
+    runtime: 'Go platform-api :8780 · Vite console :5180',
+    dataStore: 'config/environments.yaml · config/topology.yaml (no DB)',
+  },
+  {
+    path: 'Platform (control plane)',
+    stage: 'Production',
+    trigger: 'Same binary; probes prod nginx/PG/Redis via LAN',
+    runtime: 'MacBook or Mac Mini #2 watchdog · L0 matrix refresh 30s',
+    dataStore: 'Optional BIFROST_PROD_OPS_TOKEN for capabilities probe',
+  },
+  {
+    path: 'Release gate',
+    stage: 'Production',
+    trigger: 'Tag / maintenance window · scripts/release_gate.sh (planned)',
+    runtime: 'make prod-health 12/12 · Platform GET /api/v1/matrix?env=prod',
+    dataStore: 'Sign-off: PHASE2C_SIGNOFF_MASTER.md · LOCAL_PROD_FINAL_SIGNOFF.md',
+  },
+  {
+    path: 'IB edge (socket)',
+    stage: 'Production',
+    trigger: 'Socket containers on prod host · IB_HOST env',
+    runtime: 'bifrost-trade-socket → Win11 TWS LAN',
+    dataStore: 'Redis on .70 · no direct daemon→TWS',
+  },
+  {
+    path: 'Frontend migration',
+    stage: 'Development',
+    trigger: 'Page-by-page migrate · npm run lint && build && check:legacy-css',
+    runtime: 'New frontend :5173 vs Legacy UI on same Legacy API (Phase 1 rule)',
+    dataStore: 'MIGRATION_TRACKING.md progress',
+  },
+]
+
+export const HARDWARE_ROWS: HardwareRow[] = [
+  {
+    id: 'mini-pc-a',
+    host: '192.168.10.70',
+    roleCompose: 'Prod compose · Redis · nginx',
+    roleK3s: 'Server ① · API · Redis · Ingress · Gitea · ArgoCD',
+  },
+  {
+    id: 'mini-pc-b',
+    host: '192.168.10.80',
+    roleCompose: 'PostgreSQL dedicated',
+    roleK3s: 'Server ② · CNPG Primary · pgvector',
+  },
+  {
+    id: 'mini-pc-c',
+    host: '192.168.10.73',
+    roleCompose: 'New Linux server (ubt-k3s-01) · K3s staging target',
+    roleK3s: 'Server ③ · Prometheus · Loki · Tekton runners',
+  },
+  {
+    id: 'mac-mini-1',
+    host: '(LAN TBD)',
+    roleCompose: '24/7 Dev stack docker-compose.dev.yml',
+    roleK3s: 'OrbStack Agent · frontend dev',
+  },
+  {
+    id: 'mac-mini-2',
+    host: '(LAN TBD)',
+    roleCompose: 'Git runner · prod-health gate · Uptime Kuma',
+    roleK3s: 'OrbStack Agent · CI · external watchdog',
+  },
+  {
+    id: 'gpu-server',
+    host: '(LAN TBD)',
+    roleCompose: 'Ollama dev trial only — no Prod Redis',
+    roleK3s: 'Agent workload=gpu · Ollama · socket · celery',
+  },
+  {
+    id: 'win11-host',
+    host: '(LAN TBD)',
+    roleCompose: 'TWS Host account',
+    roleK3s: 'Never in cluster',
+  },
+  {
+    id: 'win11-secondary',
+    host: '(LAN TBD)',
+    roleCompose: 'TWS Secondary account',
+    roleK3s: 'Never in cluster',
+  },
+  {
+    id: 'macbook',
+    host: '127.0.0.1',
+    roleCompose: 'Cursor dev · platform console · local prod smoke',
+    roleK3s: 'kubectl · MCP client',
+  },
+]
+
+export const PLATFORM_PHASES: PlatformPhase[] = [
+  {
+    id: 'A',
+    label: 'Gate (now ~3mo)',
+    timeframe: 'Compose prod + Mac CI',
+    deliverables: '2C-B Docker Prod · release_gate.sh · Mac Mini #2 CI · MkDocs Goal',
+  },
+  {
+    id: 'B',
+    label: 'GitOps (3–9mo)',
+    timeframe: 'K3s + CNPG',
+    deliverables: 'Gitea · Tekton · ArgoCD · k8s/base/ · FE staging on K3s',
+  },
+  {
+    id: 'C',
+    label: 'Closed loop (9–18mo)',
+    timeframe: 'Observe + AI ops',
+    deliverables: 'Prometheus/Loki/Grafana · bifrost-ops-mcp · AlertManager · research RAG',
+  },
+]
+
+export const AUTHORIZATION_LEVELS = [
+  { level: 'L0', behavior: 'Read-only probes (Phase 0 default — matrix, topology, logs context)' },
+  { level: 'L1', behavior: 'Safe retries via trade Ops API (Celery retry, worker restart — future)' },
+  { level: 'L2', behavior: 'Owner-confirmed changes (ArgoCD rollback, scale — future)' },
+  { level: 'forbidden', behavior: 'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass' },
+]
+
+/** Plain-text block optimized for LLM / Agent context paste. */
+export function buildEnvironmentsLlmContext(): string {
+  const lines: string[] = [
+    '# Bifrost Platform — Environments & Architecture Context',
+    `# Catalog version: ${CATALOG_VERSION} · source: ${CATALOG_SOURCE}`,
+    '',
+    '## One-line goal',
+    'AI-native environment governance control plane (bifrost-platform) over Bifrost Trade data plane (bifrost-trade-*).',
+    'Platform aggregates health; it does not implement trading logic or IB write paths.',
+    '',
+    '## Ports',
+    ...Object.entries(PLATFORM_PORTS).map(([k, v]) => `- ${k}: ${v}`),
+    '',
+    '## Trade environments',
+    ...TRADE_ENVIRONMENTS.flatMap(e => [
+      `### ${e.label} (${e.id})`,
+      `- nginx: ${e.nginx}`,
+      `- postgres: ${e.postgres}`,
+      `- redis: ${e.redis}`,
+      `- host: ${e.host}`,
+      '',
+    ]),
+    '## SCOPE (components)',
+    ...SCOPE_ROWS.map(r => `- **${r.tag}** ${r.component}: ${r.technology}. ${r.notes}`),
+    '',
+    '## End-to-end flows',
+    ...FLOW_ROWS.map(
+      r =>
+        `- **${r.path}** · ${r.stage}: trigger=${r.trigger}; runtime=${r.runtime}; data=${r.dataStore}`,
+    ),
+    '',
+    '## Hardware (planned / partial)',
+    ...HARDWARE_ROWS.map(h => `- **${h.id}** ${h.host}: compose=[${h.roleCompose}] k3s=[${h.roleK3s}]`),
+    '',
+    '## Platform roadmap phases',
+    ...PLATFORM_PHASES.map(p => `- **Phase ${p.id}** ${p.label} (${p.timeframe}): ${p.deliverables}`),
+    '',
+    '## Authorization (platform)',
+    ...AUTHORIZATION_LEVELS.map(a => `- **${a.level}**: ${a.behavior}`),
+    '',
+    '## Key repos',
+    '- bifrost-platform — control plane (this console)',
+    '- bifrost-trade-infra — compose, nginx, Goal, PLATFORM_ROADMAP, K3S_ARCHITECTURE',
+    '- bifrost-trade-{api,worker,socket,frontend,core} — data plane',
+    '- bifrost-trader-engine — READ-ONLY reference (do not edit)',
+    '',
+    '## MkDocs handbooks',
+    '- Infra (hardware, migration, Goal): http://127.0.0.1:8050/',
+    '- Platform (architecture, probe contract): http://127.0.0.1:8060/',
+    '',
+    '## Current milestone status (2026-06)',
+    '- Phase 2B + 2C-A + Local Prod Final: CLOSED',
+    '- 2C-B stable test: signed; production cutover pending K3s/migration decision (Owner D1)',
+    '- K3s phase 1: unlocked; not yet implemented',
+    '- Platform Phase 0: matrix + topology L0 live',
+    '',
+    '## Agent discipline',
+    '- Probe, do not duplicate trade health endpoints',
+    '- Never expose forbidden write paths to platform MCP/AI',
+    '- Frontend Phase 1: do not migrate API until FE business-equivalent to Legacy',
+  ]
+  return lines.join('\n')
+}

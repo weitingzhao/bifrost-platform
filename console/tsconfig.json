@@ -17,7 +17,9 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@bifrost/ui": ["../../bifrost-ui/src/index.ts"],
+      "@bifrost/ui/styles": ["../../bifrost-ui/src/styles/bifrost-ui.css"]
     }
   },
   "include": ["src"]
