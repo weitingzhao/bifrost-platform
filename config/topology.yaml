@@ -42,7 +42,7 @@ nodes:
 
   - id: mini-pc-c
     label: mini-pc-c
-    host: ""
+    host: 192.168.10.73
     group: linux
     compose_roles: [planned_staging]
     k3s_roles: [k3s_server_3, monitoring, tekton]

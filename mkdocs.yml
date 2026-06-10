@@ -1,0 +1,41 @@
+site_name: Bifrost Platform
+site_description: Environment governance control plane — matrix, topology, ops probes
+site_url: http://127.0.0.1:8060/
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+    - scheme: default
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - search.suggest
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Overview: overview.md
+  - Architecture: ARCHITECTURE.md
+  - Trade probe contract: TRADE_CONTRACT.md
+  - Agent (Phase B): agent/README.md
+  - MCP (Phase P2): mcp/README.md
