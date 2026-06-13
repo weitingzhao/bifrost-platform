@@ -1,0 +1,139 @@
+# Bifrost Ops Platform — context spine (authoritative for milestones & decisions).
+# Console Program/Pulse and Copy-for-LLM merge this file via GET /api/v1/context.
+# Detail: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md L3
+
+meta:
+  version: "2026-06-12"
+  catalog_version: "2026-06-12"
+
+deployment:
+  phase: compose # compose | k3s_partial | k3s_ha
+  active_track: k3s_phase1
+
+focus:
+  headline: "K3s phase 1 IN_PROGRESS"
+  flywheel_primary: B # A = trade FE, B = runtime/ops
+  blocker: decision:D1
+
+milestones:
+  - id: phase-2b
+    label: Phase 2B API + FE cutover
+    status: CLOSED
+    authority: bifrost-trade-infra/docs/MIGRATION_TRACKING.md
+
+  - id: phase-2c-a
+    label: Phase 2C-A Session 0–9
+    status: CLOSED
+    authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
+
+  - id: local-prod-final
+    label: Local Prod Final
+    status: CLOSED
+    signed_at: "2026-06-04"
+    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+
+  - id: 2c-b-stable-test
+    label: 2C-B Linux Docker stable test
+    status: SIGNED
+    signed_at: "2026-06-04"
+    authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
+
+  - id: 2c-b-prod-cutover
+    label: 2C-B production cutover
+    status: BLOCKED_ON
+    blocker: decision:D1
+    authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
+
+  - id: k3s-phase1
+    label: K3s phase 1 bootstrap
+    status: IN_PROGRESS
+    pipeline_lane: parallel
+    pipeline_after: 2c-b-stable-test
+    authority: bifrost-trade-infra/docs/K3S_PLATFORM_ARCHITECTURE.md
+
+  - id: legacy-retirement
+    label: Phase 3 Legacy retirement
+    status: NOT_STARTED
+    authority: bifrost-trade-infra/docs/PHASE2C_PROD_DEFERRED.md
+
+decisions:
+  - id: D1
+    status: SIGNED
+    topic: Prod host & migration path
+    conclusion: "K3s first; compose→k3s path TBD after cluster ready (do not lock .70 as sole prod target)"
+    signed_at: "2026-06-04"
+    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+
+  - id: D2
+    status: SIGNED
+    topic: PostgreSQL host
+    conclusion: "Keep bare-metal PG on mini-pc-b (.80) until CloudNativePG migration"
+    signed_at: "2026-06-04"
+    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+
+  - id: D3
+    status: SIGNED
+    topic: TWS placement
+    conclusion: "TWS Host + Secondary on Win11; IB_HOST per account"
+    signed_at: "2026-06-04"
+    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+
+  - id: D4
+    status: SIGNED
+    topic: R-DV3 auto-order
+    conclusion: "Deferred — no auto-order requirement at current milestone"
+    signed_at: "2026-06-04"
+    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+
+  - id: D5
+    status: SIGNED
+    topic: K3s vs 2C-B sequencing
+    conclusion: "2C-B stable test signed; K3s env setup may start in parallel with compose stable state"
+    signed_at: "2026-06-04"
+    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+
+platform_phases:
+  - id: A
+    label: Gate
+    timeframe: "now ~3mo"
+    deliverables: "2C-B Docker Prod · release_gate.sh · Mac Mini #2 CI · MkDocs Goal"
+
+  - id: B
+    label: GitOps
+    timeframe: "3–9mo"
+    deliverables: "Gitea · Tekton · ArgoCD · k8s/base/ · FE staging on K3s"
+
+  - id: C
+    label: Closed loop
+    timeframe: "9–18mo"
+    deliverables: "Prometheus/Loki/Grafana · bifrost-ops-mcp · AlertManager · research RAG"
+
+coupling_surfaces:
+  - api_nginx_paths
+  - vite_api_env
+  - ops_auth_capabilities
+  - ib_client_id
+
+promotion:
+  last_gate:
+    at: null
+    result: null
+    log_path: bifrost-trade-infra/scripts/release_gate.log
+
+environments_extended:
+  staging:
+    status: NOT_STARTED
+    note: "Mac Mini #2 CI or K3s bifrost-stg (planned)"
+
+probe_hints:
+  - target_id: api-market
+    trade_route: /market/live
+    hint: "Market SSE and live quotes"
+
+  - target_id: api-monitor
+    trade_route: /operations/daemon
+    hint: "Daemon status and control overview"
+
+  - target_id: api-ops
+    trade_route: /operations/celery
+    hint: "Celery workers and queues"

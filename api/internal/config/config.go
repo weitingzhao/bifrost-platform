@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/opscontext"
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,11 +28,13 @@ type File struct {
 }
 
 type Config struct {
-	Environments  []Environment
-	Topology      *TopologyFile
-	Listen        string
-	ConfigPath    string
-	TopologyPath  string
+	Environments   []Environment
+	Topology       *TopologyFile
+	OpsContext     *opscontext.File
+	Listen         string
+	ConfigPath     string
+	TopologyPath   string
+	OpsContextPath string
 }
 
 func Load() (*Config, error) {
@@ -63,12 +66,20 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	opsCtxPath := opscontext.ResolvePath(configPath)
+	opsCtx, err := opscontext.Load(opsCtxPath)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Config{
-		Environments: file.Environments,
-		Topology:     topo,
-		Listen:       listen,
-		ConfigPath:   configPath,
-		TopologyPath: topoPath,
+		Environments:   file.Environments,
+		Topology:       topo,
+		OpsContext:     opsCtx,
+		Listen:         listen,
+		ConfigPath:     configPath,
+		TopologyPath:   topoPath,
+		OpsContextPath: opsCtxPath,
 	}, nil
 }
 

@@ -1,13 +1,15 @@
 /**
- * Bifrost Platform — environments & architecture catalog.
+ * Bifrost Ops — environments & architecture catalog.
  *
- * Single source of truth for the Environments UI and "Copy for LLM" context.
- * Update this file when hardware roles, CI/CD, or deployment phases change.
+ * Static catalog for Environments UI and "Copy for LLM" context.
+ * Milestones and decisions: authoritative via config/ops-context.yaml + GET /api/v1/context.
  *
  * Authoritative docs (MkDocs): bifrost-trade-infra :8050 · bifrost-platform :8060
  */
 
-export const CATALOG_VERSION = '2026-06-09'
+import type { OpsContextResponse } from '@/api/types'
+
+export const CATALOG_VERSION = '2026-06-12'
 export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
 
 /** Scope row — one logical component in the Bifrost stack. */
@@ -72,10 +74,10 @@ export const TRADE_ENVIRONMENTS = [
 export const SCOPE_ROWS: ScopeRow[] = [
   {
     tag: 'PLATFORM',
-    component: 'bifrost-platform (control plane)',
-    technology: 'Go API :8780 · React Console :5180 · Dense UI tokens',
+    component: 'Bifrost Ops Platform (control plane)',
+    technology: 'Go API :8780 · React Ops Console :5180 · Dense UI tokens',
     notes:
-      'Phase 0 L0 read-only: connectivity matrix, topology, Ops auth probe. No daemon_control or ib:operator:cmd. Future: agent/, mcp/.',
+      'Phase 0 L0 read-only: Pulse, connectivity matrix, topology, Program spine, Ops auth probe. No daemon_control or ib:operator:cmd. Future: agent/, mcp/.',
   },
   {
     tag: 'TRADE-FE',
@@ -304,15 +306,51 @@ export const AUTHORIZATION_LEVELS = [
   { level: 'forbidden', behavior: 'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass' },
 ]
 
-/** Plain-text block optimized for LLM / Agent context paste. */
-export function buildEnvironmentsLlmContext(): string {
+/** Spine section from GET /api/v1/context (authoritative milestones). */
+export function formatSpineContextSection(ctx: OpsContextResponse): string {
   const lines: string[] = [
-    '# Bifrost Platform — Environments & Architecture Context',
+    '## Ops context spine (authoritative)',
+    `Spine version: ${ctx.meta.version} · catalog_version: ${ctx.meta.catalog_version}`,
+    '',
+    '### Focus',
+    `- headline: ${ctx.focus.headline}`,
+    `- flywheel_primary: ${ctx.focus.flywheel_primary}`,
+    ctx.focus.blocker != null && ctx.focus.blocker !== ''
+      ? `- blocker: ${ctx.focus.blocker}`
+      : '- blocker: (none)',
+    '',
+    '### Deployment',
+    `- phase: ${ctx.deployment.phase}`,
+    `- active_track: ${ctx.deployment.active_track}`,
+    '',
+    '### Milestones',
+    ...ctx.milestones.map(
+      m =>
+        `- **${m.id}** ${m.label ?? ''}: ${m.status}${m.blocker != null ? ` (blocker: ${m.blocker})` : ''}${m.signed_at != null ? ` signed ${m.signed_at}` : ''}`,
+    ),
+    '',
+    '### Owner decisions',
+    ...ctx.decisions.map(
+      d => `- **${d.id}** (${d.status}${d.signed_at != null ? ` ${d.signed_at}` : ''}): ${d.conclusion}`,
+    ),
+    '',
+    '### Promotion / staging',
+    `- last_gate: ${ctx.promotion.last_gate.result ?? 'not recorded'}`,
+    `- staging: ${ctx.environments_extended.staging?.status ?? 'unknown'}`,
+    '',
+  ]
+  return lines.join('\n')
+}
+
+/** Static catalog without milestone narrative (spine is authoritative). */
+export function buildStaticCatalogContext(): string {
+  const lines: string[] = [
+    '# Bifrost Ops — Environments & Architecture Context',
     `# Catalog version: ${CATALOG_VERSION} · source: ${CATALOG_SOURCE}`,
     '',
     '## One-line goal',
-    'AI-native environment governance control plane (bifrost-platform) over Bifrost Trade data plane (bifrost-trade-*).',
-    'Platform aggregates health; it does not implement trading logic or IB write paths.',
+    'AI-native environment governance control plane (Bifrost Ops) over Bifrost Trade data plane (bifrost-trade-*).',
+    'Ops aggregates health; it does not implement trading logic or IB write paths.',
     '',
     '## Ports',
     ...Object.entries(PLATFORM_PORTS).map(([k, v]) => `- ${k}: ${v}`),
@@ -345,7 +383,7 @@ export function buildEnvironmentsLlmContext(): string {
     ...AUTHORIZATION_LEVELS.map(a => `- **${a.level}**: ${a.behavior}`),
     '',
     '## Key repos',
-    '- bifrost-platform — control plane (this console)',
+    '- bifrost-platform — Bifrost Ops control plane (this console)',
     '- bifrost-trade-infra — compose, nginx, Goal, PLATFORM_ROADMAP, K3S_ARCHITECTURE',
     '- bifrost-trade-{api,worker,socket,frontend,core} — data plane',
     '- bifrost-trader-engine — READ-ONLY reference (do not edit)',
@@ -354,16 +392,20 @@ export function buildEnvironmentsLlmContext(): string {
     '- Infra (hardware, migration, Goal): http://127.0.0.1:8050/',
     '- Platform (architecture, probe contract): http://127.0.0.1:8060/',
     '',
-    '## Current milestone status (2026-06)',
-    '- Phase 2B + 2C-A + Local Prod Final: CLOSED',
-    '- 2C-B stable test: signed; production cutover pending K3s/migration decision (Owner D1)',
-    '- K3s phase 1: unlocked; not yet implemented',
-    '- Platform Phase 0: matrix + topology L0 live',
-    '',
     '## Agent discipline',
     '- Probe, do not duplicate trade health endpoints',
     '- Never expose forbidden write paths to platform MCP/AI',
     '- Frontend Phase 1: do not migrate API until FE business-equivalent to Legacy',
+    '- Agent modes: see bifrost-platform/docs/AGENT_MODES.md (Product / Ops / Promote)',
   ]
   return lines.join('\n')
+}
+
+/** Plain-text block optimized for LLM / Agent context paste. */
+export function buildEnvironmentsLlmContext(spine?: OpsContextResponse): string {
+  const staticPart = buildStaticCatalogContext()
+  if (spine == null) {
+    return `${staticPart}\n\n## Ops context spine\n(spine not loaded — open Ops Console or call GET /api/v1/context)\n`
+  }
+  return `${staticPart}\n\n${formatSpineContextSection(spine)}`
 }
