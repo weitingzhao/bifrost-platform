@@ -1,4 +1,6 @@
 import { useCallback, useState, type ReactNode } from 'react'
+import type { OpsContextResponse } from '@/api/types'
+import { fetchContext } from '@/api/platform'
 import {
   AUTHORIZATION_LEVELS,
   CATALOG_SOURCE,
@@ -13,11 +15,19 @@ import {
 
 type CopyState = 'idle' | 'copied' | 'error'
 
-export function EnvironmentsPage() {
+export function EnvironmentsPage({ context }: { context?: OpsContextResponse }) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
 
   const handleCopyForLlm = useCallback(async () => {
-    const text = buildEnvironmentsLlmContext()
+    let spine = context
+    if (spine == null) {
+      try {
+        spine = await fetchContext()
+      } catch {
+        /* static catalog only */
+      }
+    }
+    const text = buildEnvironmentsLlmContext(spine)
     try {
       await navigator.clipboard.writeText(text)
       setCopyState('copied')
@@ -26,7 +36,7 @@ export function EnvironmentsPage() {
       setCopyState('error')
       window.setTimeout(() => setCopyState('idle'), 3000)
     }
-  }, [])
+  }, [context])
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">

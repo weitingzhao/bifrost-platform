@@ -48,6 +48,15 @@ Response shape matches `bifrost_api.ops.auth` capabilities payload (`identity`, 
 - Static graph: `config/topology.yaml` (nodes, edges, Compose/K3s roles)
 - Dynamic status: same probes as `/api/v1/matrix` for the selected environment
 
+## Context API (spine)
+
+`GET /api/v1/context` returns `config/ops-context.yaml` as JSON:
+
+- `focus`, `deployment`, `milestones`, `decisions`
+- `promotion`, `environments_extended`, `probe_hints`
+
+Used by Ops Console Program / Pulse / Promote views and Copy for LLM.
+
 Edit `topology.yaml` when hardware or K3s rollout changes; set `deployment_phase` to `compose` | `k3s_partial` | `k3s_ha`.
 
 ## Versioning

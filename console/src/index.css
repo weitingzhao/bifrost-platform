@@ -33,3 +33,268 @@
 html {
   font-family: var(--font-sans);
 }
+
+.focus-strip {
+  max-width: 42rem;
+  line-height: 1.4;
+}
+
+.focus-strip-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.lamp-warn {
+  color: var(--color-lamp-yellow);
+}
+
+.badge-status-closed {
+  border-color: var(--color-lamp-gray);
+  color: var(--muted-foreground);
+}
+
+.badge-status-signed,
+.badge-status-deployed {
+  border-color: var(--color-lamp-green);
+  color: var(--color-lamp-green);
+}
+
+.badge-status-progress {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.badge-status-blocked {
+  border-color: var(--color-lamp-red);
+  color: var(--color-lamp-red);
+}
+
+.badge-status-pending {
+  border-color: var(--color-lamp-gray);
+  color: var(--color-lamp-gray);
+}
+
+.btn-ui-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.btn-ui-ghost:hover {
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.shell-header-focus {
+  flex: 1;
+  min-width: 0;
+  margin-left: 0.5rem;
+}
+
+/* Control Room */
+.control-room-layout {
+  position: relative;
+}
+
+.dual-flywheel-grid {
+  display: grid;
+  grid-template-columns: 1fr minmax(12rem, 16rem) 1fr;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .dual-flywheel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.flywheel-column-title {
+  font-size: var(--text-dense-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  margin-bottom: 0.5rem;
+}
+
+.bay-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bay-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.bay-card:hover {
+  border-color: var(--primary);
+}
+
+.bay-card--selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.bay-card-label {
+  flex: 1;
+  font-size: var(--text-dense);
+}
+
+.coupling-gate-panel {
+  height: 100%;
+}
+
+.bay-detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 40;
+  width: min(24rem, 100vw);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px color-mix(in srgb, var(--background) 50%, transparent);
+}
+
+.bay-detail-drawer-header,
+.bay-detail-drawer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.bay-detail-drawer-footer {
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+
+.bay-detail-drawer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.agent-focus-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+}
+
+/* Pipeline flow (@xyflow/react) */
+.pipeline-flow-host {
+  height: 360px;
+}
+
+.pipeline-flow-host .react-flow {
+  background: var(--background);
+}
+
+.pipeline-node {
+  min-width: 140px;
+  max-width: 180px;
+  padding: 0.5rem 0.65rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  font-size: var(--text-dense-meta);
+}
+
+.pipeline-node-id {
+  font-size: 0.65rem;
+  color: var(--muted-foreground);
+  margin-bottom: 0.15rem;
+}
+
+.pipeline-node-label {
+  font-size: var(--text-dense);
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  line-height: 1.3;
+}
+
+.pipeline-node--selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.pipeline-node--active {
+  animation: pipeline-pulse 2s ease-in-out infinite;
+  border-color: var(--primary);
+}
+
+.pipeline-node--blocked {
+  border-color: var(--color-lamp-red);
+}
+
+.pipeline-node--done {
+  border-color: var(--color-lamp-green);
+}
+
+.pipeline-node--pending {
+  border-color: var(--color-lamp-gray);
+}
+
+.pipeline-node--decision {
+  border-style: dashed;
+  min-width: 120px;
+}
+
+@keyframes pipeline-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+}
+
+.pipeline-handle {
+  width: 6px !important;
+  height: 6px !important;
+  background: var(--border) !important;
+  border: none !important;
+}
+
+.pipeline-controls {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+}
+
+.pipeline-controls button {
+  background: var(--card) !important;
+  border-bottom: 1px solid var(--border) !important;
+  fill: var(--foreground) !important;
+}
+
+.pipeline-minimap {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+}

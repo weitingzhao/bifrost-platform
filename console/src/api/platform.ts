@@ -2,6 +2,7 @@ import type {
   AllMatricesResponse,
   EnvironmentSummary,
   MatrixResponse,
+  OpsContextResponse,
   TopologyResponse,
 } from './types'
 
@@ -38,4 +39,10 @@ export async function fetchTopology(env: string): Promise<TopologyResponse> {
   const r = await fetch(`/api/v1/topology?env=${encodeURIComponent(env)}`)
   if (!r.ok) throw new Error(`topology: HTTP ${r.status}`)
   return r.json() as Promise<TopologyResponse>
+}
+
+export async function fetchContext(): Promise<OpsContextResponse> {
+  const r = await fetch('/api/v1/context')
+  if (!r.ok) throw new Error(`context: HTTP ${r.status}`)
+  return r.json() as Promise<OpsContextResponse>
 }

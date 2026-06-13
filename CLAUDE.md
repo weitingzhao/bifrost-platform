@@ -1,4 +1,4 @@
-# CLAUDE.md — bifrost-platform
+# CLAUDE.md — bifrost-platform (Bifrost Ops Platform)
 
 > AI-native **control plane** for Bifrost Trade dev/prod environments. Strategic goal: [bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md](../bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md).
 
@@ -11,10 +11,10 @@
 | 子目录 | 职责 |
 |--------|------|
 | `api/` | Go — 环境注册、连通性/权限矩阵探测、未来审计 API |
-| `console/` | React Utility UI — Dev/Prod 矩阵（Dense UI token 风格） |
+| `console/` | React **Bifrost Ops Console** :5180 — Pulse, Runtime, Program, Catalog |
 | `agent/` | 未来：各节点 Go 探针 |
 | `mcp/` | 未来：Platform MCP Tools（只读矩阵等） |
-| `config/` | 环境注册表 `environments.yaml` |
+| `config/` | `environments.yaml`, **`ops-context.yaml`** (spine), `topology.yaml` |
 
 **不包含**：交易 daemon、IB Operator、业务 API 实现。
 
@@ -23,6 +23,7 @@
 - **L0 默认**：Phase 0 仅只读探测；不实现 `daemon_control`、不连 `ib:operator:cmd`
 - **R-DV3**：平台 Agent 不得触发自动交易 Engine 写路径
 - **聚合不复制**：探测 `bifrost-trade` 已有 `/health`、`/auth/capabilities`，不 import Python 业务包
+- **Agent 模式**：见 `docs/AGENT_MODES.md`（Product / Ops / Promote）
 
 ## 端口
 

@@ -49,6 +49,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/topology", s.handleTopology)
+		r.Get("/context", s.handleContext)
 		r.Get("/console/hosts", s.console.HandleHosts)
 		r.Get("/console/ws", s.console.HandleWebSocket)
 	})
@@ -131,6 +132,16 @@ func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
 	matrix := s.prober.ProbeEnvironment(r.Context(), *env)
 	resp := topology.Build(s.cfg.Topology, *env, matrix)
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleContext(w http.ResponseWriter, _ *http.Request) {
+	if s.cfg.OpsContext == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "ops context not loaded",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.cfg.OpsContext)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

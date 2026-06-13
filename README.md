@@ -1,8 +1,8 @@
 # bifrost-platform
 
-AI-native **environment governance** control plane for [Bifrost Trade](https://github.com/weitingzhao/bifrost-trade-infra).
+**Bifrost Ops Platform** — AI-native environment governance control plane for [Bifrost Trade](https://github.com/weitingzhao/bifrost-trade-infra).
 
-Manage and monitor **Development** and **Production** environments through a dedicated Utility Console. The trade monitoring UI (`bifrost-trade-frontend`) remains separate.
+Manage and monitor **Development** and **Production** environments through the **Bifrost Ops Console**. The trade monitoring UI (`bifrost-trade-frontend`) remains separate.
 
 ## Prerequisites
 
@@ -26,8 +26,9 @@ cd console && npm install && cd ..
 ./scripts/run_platform.py
 # or: make start
 
-# Console: http://127.0.0.1:5180
+# Console: http://127.0.0.1:5180  (default tab: **Control Room**)
 # API:     http://127.0.0.1:8780/health
+# Context: http://127.0.0.1:8780/api/v1/context
 ```
 
 With the trade dev stack running (`cd ../bifrost-trade-infra && make dev`), the matrix should show green reachability for local nginx + APIs.
@@ -48,7 +49,7 @@ api/       Go control-plane API (:8780)
 console/   React Utility UI (:5180) — Dense UI token style
 agent/     Node agent (Phase B placeholder)
 mcp/       MCP tools (Phase P2 placeholder)
-config/    environments.yaml — dev + prod registration
+config/    environments.yaml + ops-context.yaml (spine) + topology.yaml
 docs/      Architecture and trade-stack contract
 ```
 

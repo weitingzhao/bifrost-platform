@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-console test test-api test-console build-api start
+.PHONY: dev dev-api dev-console test test-api test-console build-api start check-spine
 
 ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
@@ -18,7 +18,10 @@ test-api:
 test-console:
 	cd console && npm run type-check
 
-test: test-api test-console
+check-spine:
+	bash scripts/check_spine_catalog.sh
+
+test: test-api test-console check-spine
 
 build-api:
 	cd api && go build -o bin/platform-api ./cmd/platform-api
