@@ -7,27 +7,38 @@ import (
 )
 
 type SummaryResponse struct {
-	ClusterID       string             `json:"cluster_id"`
-	Label           string             `json:"label"`
-	Distribution    string             `json:"distribution"`
-	APIServer       string             `json:"api_server"`
-	KubeconfigPath  string             `json:"kubeconfig_path"`
-	Reachability    probe.Reachability `json:"reachability"`
-	Detail          string             `json:"detail"`
-	ServerVersion   string             `json:"server_version,omitempty"`
-	NodesReady      int                `json:"nodes_ready"`
-	NodesTotal      int                `json:"nodes_total"`
-	FailingPods     int                `json:"failing_pods"`
-	GeneratedAt     time.Time          `json:"generated_at"`
+	ClusterID        string             `json:"cluster_id"`
+	Label            string             `json:"label"`
+	Distribution     string             `json:"distribution"`
+	APIServer        string             `json:"api_server"`
+	KubeconfigPath   string             `json:"kubeconfig_path"`
+	Reachability     probe.Reachability `json:"reachability"`
+	Detail           string             `json:"detail"`
+	ServerVersion    string             `json:"server_version,omitempty"`
+	NodesReady       int                `json:"nodes_ready"`
+	NodesTotal       int                `json:"nodes_total"`
+	FailingPods      int                `json:"failing_pods"`
+	RunningPods      int                `json:"running_pods"`
+	PendingPods      int                `json:"pending_pods"`
+	CPUAllocatable   string             `json:"cpu_allocatable,omitempty"`
+	MemoryAllocatable string            `json:"memory_allocatable,omitempty"`
+	GeneratedAt      time.Time          `json:"generated_at"`
 }
 
 type NodeView struct {
-	Name        string `json:"name"`
-	Status      string `json:"status"`
-	Roles       string `json:"roles"`
-	Version     string `json:"version"`
-	InternalIP  string `json:"internal_ip"`
-	Reachability probe.Reachability `json:"reachability"`
+	Name               string             `json:"name"`
+	Status             string             `json:"status"`
+	Roles              string             `json:"roles"`
+	Version            string             `json:"version"`
+	InternalIP         string             `json:"internal_ip"`
+	Reachability       probe.Reachability `json:"reachability"`
+	CPUAllocatable     string             `json:"cpu_allocatable,omitempty"`
+	MemoryAllocatable  string             `json:"memory_allocatable,omitempty"`
+	StorageAllocatable string             `json:"storage_allocatable,omitempty"`
+	CPUUsagePercent    *float64           `json:"cpu_usage_percent,omitempty"`
+	MemoryUsagePercent *float64           `json:"memory_usage_percent,omitempty"`
+	CPUReachability    probe.Reachability `json:"cpu_reachability,omitempty"`
+	MemoryReachability probe.Reachability `json:"memory_reachability,omitempty"`
 }
 
 type NodesResponse struct {
@@ -99,6 +110,27 @@ type SyncResponse struct {
 	OK      bool   `json:"ok"`
 	Path    string `json:"path"`
 	Message string `json:"message"`
+}
+
+type PodMetricView struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	CPU       string `json:"cpu"`
+	Memory    string `json:"memory"`
+}
+
+type MetricsResponse struct {
+	ClusterID              string             `json:"cluster_id"`
+	Reachability           probe.Reachability `json:"reachability"`
+	Detail                 string             `json:"detail"`
+	MetricsServerAvailable bool               `json:"metrics_server_available"`
+	MetricsServerDetail    string             `json:"metrics_server_detail,omitempty"`
+	CPUUsagePercent        *float64           `json:"cpu_usage_percent,omitempty"`
+	MemoryUsagePercent     *float64           `json:"memory_usage_percent,omitempty"`
+	CPUReachability        probe.Reachability `json:"cpu_reachability,omitempty"`
+	MemoryReachability     probe.Reachability `json:"memory_reachability,omitempty"`
+	TopPods                []PodMetricView    `json:"top_pods"`
+	GeneratedAt            time.Time          `json:"generated_at"`
 }
 
 type ClientError struct {

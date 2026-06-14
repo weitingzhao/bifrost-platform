@@ -4,9 +4,9 @@ import {
   deletePod,
   ensureBifrostNamespaces,
   fetchAudit,
-  fetchAuthCapabilities,
   fetchCluster,
   fetchClusterEvents,
+  fetchClusterMetrics,
   fetchClusterNamespaces,
   fetchClusterNodes,
   fetchClusterWorkloads,
@@ -18,10 +18,12 @@ import {
 import type { ClusterWorkload } from '@/api/types'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
-import { ClusterHealthStrip } from '@/components/cluster/ClusterHealthStrip'
 import { ClusterNamespacesPanel } from '@/components/cluster/ClusterNamespacesPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
+import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
+import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { ClusterWorkloadsTable } from '@/components/cluster/ClusterWorkloadsTable'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 type NsFilter = 'all' | 'bifrost'
 
@@ -49,11 +51,7 @@ export function ClusterPage() {
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [scaleState, setScaleState] = useState<ScaleState | null>(null)
 
-  const capabilitiesQuery = useQuery({
-    queryKey: ['platform', 'auth', 'capabilities'],
-    queryFn: fetchAuthCapabilities,
-    refetchInterval: 60_000,
-  })
+  const { canOperate, caps, capsLoading } = usePlatformAuth()
 
   const summaryQuery = useQuery({
     queryKey: ['cluster', 'summary'],
@@ -64,6 +62,12 @@ export function ClusterPage() {
   const nodesQuery = useQuery({
     queryKey: ['cluster', 'nodes'],
     queryFn: fetchClusterNodes,
+    refetchInterval: 30_000,
+  })
+
+  const metricsQuery = useQuery({
+    queryKey: ['cluster', 'metrics'],
+    queryFn: () => fetchClusterMetrics(8),
     refetchInterval: 30_000,
   })
 
@@ -152,9 +156,11 @@ export function ClusterPage() {
     return (eventsQuery.data?.events ?? []).filter(e => e.object.includes(selectedPod))
   }, [eventsQuery.data, selectedPod])
 
+  const auditRecords = auditQuery.data?.records ?? []
+
   const unreachable =
     summaryQuery.data?.reachability === 'fail' &&
-    summaryQuery.data?.detail.includes('kubeconfig')
+    (summaryQuery.data?.detail?.includes('kubeconfig') ?? false)
 
   function refreshCluster() {
     void qc.invalidateQueries({ queryKey: ['cluster'] })
@@ -226,8 +232,6 @@ export function ClusterPage() {
     )
   }
 
-  const canOperate = capabilitiesQuery.data?.can_operate === true
-
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <section className="page-section panel-elevated px-4 py-3">
@@ -277,8 +281,10 @@ export function ClusterPage() {
             <h2 className="m-0 text-sm font-semibold">Actions</h2>
             <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               {canOperate
-                ? `Authenticated as ${capabilitiesQuery.data?.principal ?? 'operator'}`
-                : 'Operator token is required for write actions.'}
+                ? `Authenticated as ${caps?.principal ?? 'operator'}`
+                : capsLoading
+                  ? 'Checking operator session…'
+                  : 'Use Authenticate in the header to enable write actions.'}
             </p>
           </div>
           <button
@@ -290,11 +296,10 @@ export function ClusterPage() {
             Ensure Bifrost namespaces
           </button>
         </div>
-        {!canOperate && (
+        {!canOperate && !capsLoading && (
           <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Configure <code>PLATFORM_OPERATOR_TOKEN</code> for platform-api and{' '}
-            <code>VITE_PLATFORM_OPERATOR_TOKEN</code> for console, or set{' '}
-            <code>localStorage.platform_operator_token</code> in this browser.
+            Dev default token: <code>platform-operator-dev</code> (see{' '}
+            <code>config/platform-auth.yaml</code>).
           </p>
         )}
       </section>
@@ -313,11 +318,16 @@ cd ../bifrost-platform && make start`}
         </section>
       )}
 
-      <ClusterHealthStrip summary={summaryQuery.data} isLoading={summaryQuery.isLoading} />
+      <ClusterOverviewKpi
+        summary={summaryQuery.data}
+        metrics={metricsQuery.data}
+        isLoading={summaryQuery.isLoading || metricsQuery.isLoading}
+      />
 
       <ClusterNodesTable
         nodes={nodesQuery.data?.nodes ?? []}
         isLoading={nodesQuery.isLoading}
+        metricsAvailable={metricsQuery.data?.metrics_server_available}
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -345,11 +355,13 @@ cd ../bifrost-platform && make start`}
         />
       </div>
 
+      <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
+
       <section className="page-section panel-elevated overflow-hidden">
         <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
           <h2 className="m-0 text-sm font-semibold">Audit</h2>
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {auditQuery.isLoading ? '…' : `${auditQuery.data?.records.length ?? 0} records`}
+            {auditQuery.isLoading ? '…' : `${auditRecords.length} records`}
           </span>
         </header>
         <div className="dense-table-scroll">
@@ -365,14 +377,14 @@ cd ../bifrost-platform && make start`}
               </tr>
             </thead>
             <tbody>
-              {(auditQuery.data?.records ?? []).length === 0 ? (
+              {auditRecords.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-[var(--muted-foreground)]">
                     {auditQuery.isLoading ? 'Loading…' : 'No actuation records yet'}
                   </td>
                 </tr>
               ) : (
-                (auditQuery.data?.records ?? []).slice(0, 20).map(record => (
+                auditRecords.slice(0, 20).map(record => (
                   <tr key={record.id}>
                     <td className="font-mono-tabular">{new Date(record.at).toLocaleString()}</td>
                     <td className="font-mono-tabular">{record.actor}</td>

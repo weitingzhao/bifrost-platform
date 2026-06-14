@@ -74,6 +74,7 @@ func (s *Server) Router() http.Handler {
 		r.Route("/cluster", func(r chi.Router) {
 			r.Get("/", s.cluster.HandleSummary)
 			r.Get("/nodes", s.cluster.HandleNodes)
+			r.Get("/metrics", s.cluster.HandleMetrics)
 			r.Get("/namespaces", s.cluster.HandleNamespaces)
 			r.Get("/workloads", s.cluster.HandleWorkloads)
 			r.Get("/events", s.cluster.HandleEvents)

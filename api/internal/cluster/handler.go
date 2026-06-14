@@ -28,6 +28,11 @@ func (h *Handler) HandleNodes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Nodes(r.Context()))
 }
 
+func (h *Handler) HandleMetrics(w http.ResponseWriter, r *http.Request) {
+	limit := parseLimit(r.URL.Query().Get("limit"), 8)
+	writeJSON(w, http.StatusOK, h.svc.Metrics(r.Context(), limit))
+}
+
 func (h *Handler) HandleNamespaces(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("watch")
 	writeJSON(w, http.StatusOK, h.svc.Namespaces(r.Context(), filter))
