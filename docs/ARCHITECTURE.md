@@ -37,7 +37,8 @@ flowchart TB
 
 | View | Plane | Purpose |
 |------|-------|---------|
-| **Control Room** | Governance | **Default Ops entry** — dual flywheel bays, program milestone spine, Agent focus dock |
+| **Agent Briefing** | Governance | **New-session entry** — work-intent picker, UI progress, live snapshot, full LLM briefing pack |
+| **Control Room** | Governance | Dual flywheel bays, program milestone spine, Agent focus dock |
 | **Delivery** | PLAN + LIVE | **CI/CD dual track** — near-term Mac runner vs target GitOps; coupling gate summary |
 | **Runtime Map** | LIVE + PLAN | **Unified runtime** — hardware topology + SCOPE stack + matrix probes |
 | **Cluster** | LIVE | **K3s L0 probe** — nodes, namespaces, workloads via platform-api + local kubeconfig |

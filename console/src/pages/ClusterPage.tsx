@@ -3,12 +3,14 @@ import { useMemo, useState } from 'react'
 import {
   deletePod,
   ensureBifrostNamespaces,
+  ensureMetricsServer,
   fetchAudit,
   fetchCluster,
   fetchClusterEvents,
   fetchClusterMetrics,
   fetchClusterNamespaces,
   fetchClusterNodes,
+  fetchClusterObservability,
   fetchClusterWorkloads,
   fetchPodLogs,
   rolloutRestartDeployment,
@@ -20,6 +22,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
 import { ClusterNamespacesPanel } from '@/components/cluster/ClusterNamespacesPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
+import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabilityPanel'
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { ClusterWorkloadsTable } from '@/components/cluster/ClusterWorkloadsTable'
@@ -51,7 +54,7 @@ export function ClusterPage() {
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [scaleState, setScaleState] = useState<ScaleState | null>(null)
 
-  const { canOperate, caps, capsLoading } = usePlatformAuth()
+  const { canOperate, canAdmin, caps, capsLoading } = usePlatformAuth()
 
   const summaryQuery = useQuery({
     queryKey: ['cluster', 'summary'],
@@ -69,6 +72,13 @@ export function ClusterPage() {
     queryKey: ['cluster', 'metrics'],
     queryFn: () => fetchClusterMetrics(8),
     refetchInterval: 30_000,
+  })
+
+  const observabilityQuery = useQuery({
+    queryKey: ['cluster', 'observability'],
+    queryFn: fetchClusterObservability,
+    refetchInterval: 30_000,
+    retry: false,
   })
 
   const namespacesQuery = useQuery({
@@ -121,6 +131,12 @@ export function ClusterPage() {
     onError: (err: Error) => setActionError(err.message),
   })
 
+  const metricsServerMutation = useMutation({
+    mutationFn: ensureMetricsServer,
+    onSuccess: data => handleActuationSuccess(data.message),
+    onError: (err: Error) => setActionError(err.message),
+  })
+
   const restartMutation = useMutation({
     mutationFn: rolloutRestartDeployment,
     onSuccess: data => handleActuationSuccess(data.message),
@@ -153,7 +169,7 @@ export function ClusterPage() {
 
   const podEvents = useMemo(() => {
     if (selectedPod == null) return []
-    return (eventsQuery.data?.events ?? []).filter(e => e.object.includes(selectedPod))
+    return (eventsQuery.data?.events ?? []).filter(e => e.object?.includes(selectedPod) ?? false)
   }, [eventsQuery.data, selectedPod])
 
   const auditRecords = auditQuery.data?.records ?? []
@@ -191,6 +207,16 @@ export function ClusterPage() {
     setConfirmState({ ...next, open: true })
   }
 
+  function handleEnsureMetricsServer() {
+    requireConfirm({
+      title: 'Install metrics-server',
+      message:
+        'This installs metrics-server in kube-system (Layer A). Required for live CPU/memory usage and top pods. Does not install Prometheus or Grafana (Layer B).',
+      confirmLabel: 'Install metrics-server',
+      action: () => metricsServerMutation.mutate(),
+    })
+  }
+
   function handleEnsureNamespaces() {
     requireConfirm({
       title: 'Ensure Bifrost namespaces',
@@ -226,11 +252,14 @@ export function ClusterPage() {
   function actionPending() {
     return (
       ensureMutation.isPending ||
+      metricsServerMutation.isPending ||
       restartMutation.isPending ||
       scaleMutation.isPending ||
       deletePodMutation.isPending
     )
   }
+
+  const metricsOk = metricsQuery.data?.metrics_server_available === true
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -281,25 +310,43 @@ export function ClusterPage() {
             <h2 className="m-0 text-sm font-semibold">Actions</h2>
             <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               {canOperate
-                ? `Authenticated as ${caps?.principal ?? 'operator'}`
+                ? `Authenticated as ${caps?.principal ?? 'operator'}${canAdmin ? ' (admin)' : ''}`
                 : capsLoading
                   ? 'Checking operator session…'
                   : 'Use Authenticate in the header to enable write actions.'}
             </p>
           </div>
-          <button
-            type="button"
-            className="btn-ui btn-ui-primary"
-            disabled={!canOperate || ensureMutation.isPending}
-            onClick={handleEnsureNamespaces}
-          >
-            Ensure Bifrost namespaces
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {!metricsOk && (
+              <button
+                type="button"
+                className="btn-ui"
+                disabled={!canAdmin || metricsServerMutation.isPending}
+                onClick={handleEnsureMetricsServer}
+              >
+                {metricsServerMutation.isPending ? 'Installing…' : 'Install metrics-server'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-ui btn-ui-primary"
+              disabled={!canOperate || ensureMutation.isPending}
+              onClick={handleEnsureNamespaces}
+            >
+              Ensure Bifrost namespaces
+            </button>
+          </div>
         </div>
         {!canOperate && !capsLoading && (
           <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Dev default token: <code>platform-operator-dev</code> (see{' '}
-            <code>config/platform-auth.yaml</code>).
+            Dev default token: <code>platform-operator-dev</code> (operator) or{' '}
+            <code>platform-admin-dev</code> (admin + metrics-server). See{' '}
+            <code>config/platform-auth.yaml</code>.
+          </p>
+        )}
+        {!metricsOk && canOperate && !canAdmin && !capsLoading && (
+          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Install metrics-server requires admin token (<code>platform-admin-dev</code>).
           </p>
         )}
       </section>
@@ -356,6 +403,11 @@ cd ../bifrost-platform && make start`}
       </div>
 
       <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
+
+      <ClusterObservabilityPanel
+        data={observabilityQuery.data}
+        isLoading={observabilityQuery.isLoading}
+      />
 
       <section className="page-section panel-elevated overflow-hidden">
         <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">

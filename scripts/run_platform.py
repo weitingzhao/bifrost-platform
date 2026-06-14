@@ -51,7 +51,10 @@ _PLATFORM_DOTENV_KEYS = frozenset({
     "PLATFORM_KUBECONFIG",
     "PLATFORM_CLUSTER_SYNC_SCRIPT",
     "PLATFORM_CLUSTER_SYNC_ENABLED",
+    "PLATFORM_METRICS_SERVER_SCRIPT",
+    "PLATFORM_METRICS_SERVER_ENABLED",
     "PLATFORM_OPERATOR_TOKEN",
+    "PLATFORM_ADMIN_TOKEN",
     "PLATFORM_LISTEN",
     "PLATFORM_CONFIG",
 })
@@ -68,25 +71,43 @@ def _normalize_platform_env() -> None:
         default = _PROJECT_ROOT.parent / "bifrost-trade-infra" / "scripts" / "k3s" / "fetch-kubeconfig.sh"
         if default.is_file():
             os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(default.resolve())
+    else:
+        expanded = os.path.expanduser(os.path.expandvars(script))
+        candidate = Path(expanded)
+        if candidate.is_file():
+            os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(candidate.resolve())
+        elif not candidate.is_absolute():
+            candidate = (_PROJECT_ROOT / expanded).resolve()
+            if candidate.is_file():
+                os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(candidate)
+        else:
+            sibling = _PROJECT_ROOT.parent / "bifrost-trade-infra" / "scripts" / "k3s" / "fetch-kubeconfig.sh"
+            if sibling.is_file():
+                os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(sibling.resolve())
+
+    _resolve_metrics_server_script()
+
+
+def _resolve_metrics_server_script() -> None:
+    script = os.environ.get("PLATFORM_METRICS_SERVER_SCRIPT", "").strip()
+    default = _PROJECT_ROOT.parent / "bifrost-trade-infra" / "scripts" / "k3s" / "install-metrics-server.sh"
+    if not script:
+        if default.is_file():
+            os.environ["PLATFORM_METRICS_SERVER_SCRIPT"] = str(default.resolve())
         return
 
     expanded = os.path.expanduser(os.path.expandvars(script))
     candidate = Path(expanded)
     if candidate.is_file():
-        os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(candidate.resolve())
+        os.environ["PLATFORM_METRICS_SERVER_SCRIPT"] = str(candidate.resolve())
         return
     if not candidate.is_absolute():
         candidate = (_PROJECT_ROOT / expanded).resolve()
     if candidate.is_file():
-        os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(candidate)
+        os.environ["PLATFORM_METRICS_SERVER_SCRIPT"] = str(candidate)
         return
-
-    sibling = _PROJECT_ROOT.parent / "bifrost-trade-infra" / "scripts" / "k3s" / "fetch-kubeconfig.sh"
-    if sibling.is_file():
-        os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(sibling.resolve())
-        return
-
-    # Last resort: keep configured value (API will surface a clear not-found error).
+    if default.is_file():
+        os.environ["PLATFORM_METRICS_SERVER_SCRIPT"] = str(default.resolve())
 
 
 def _parse_listen_port(listen: str, default: int) -> int:

@@ -33,6 +33,10 @@ func (h *Handler) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Metrics(r.Context(), limit))
 }
 
+func (h *Handler) HandleObservability(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.Observability(r.Context()))
+}
+
 func (h *Handler) HandleNamespaces(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("watch")
 	writeJSON(w, http.StatusOK, h.svc.Namespaces(r.Context(), filter))
@@ -55,6 +59,12 @@ func (h *Handler) HandleSyncKubeconfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, h.svc.SyncKubeconfig())
+}
+
+func (h *Handler) HandleEnsureMetricsServer(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.svc.EnsureMetricsServer()
+	h.recordAudit(r, resp.Action, resp.Target, auditStatus(err), resp.Message)
+	writeActuationResponse(w, resp, err)
 }
 
 func (h *Handler) HandleEnsureBifrost(w http.ResponseWriter, r *http.Request) {

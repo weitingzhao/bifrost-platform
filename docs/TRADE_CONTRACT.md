@@ -68,21 +68,23 @@ Platform API reads **local kubeconfig** (`PLATFORM_KUBECONFIG`, default `~/.kube
 | GET | `/api/v1/cluster` | Summary: `reachability`, `server_version`, `nodes_ready`/`nodes_total`, `failing_pods`, `running_pods`, `pending_pods`, `cpu_allocatable`, `memory_allocatable` |
 | GET | `/api/v1/cluster/nodes` | Node list with allocatable CPU/mem/storage; optional `cpu_usage_percent` / `memory_usage_percent` when metrics-server is installed |
 | GET | `/api/v1/cluster/metrics` | `metrics_server_available`, cluster CPU/Mem %, `top_pods` in Bifrost namespaces (`?limit=8`, max 50) |
+| GET | `/api/v1/cluster/observability` | Layer B: `layer_b_status`, `components[]` (Prometheus/Grafana/Loki/Alertmanager in `monitoring` NS), optional `grafana_url` / `prometheus_url` |
 | GET | `/api/v1/cluster/namespaces` | All namespaces; `?watch=bifrost` → `clusters.yaml` bifrost_namespaces |
 | GET | `/api/v1/cluster/workloads?ns=` | Pod workloads in namespace |
 | GET | `/api/v1/cluster/events?ns=&limit=` | Recent events (default limit 50) |
 | POST | `/api/v1/cluster/sync-kubeconfig` | `{ok, path, message}` — runs infra `fetch-kubeconfig.sh` when sync enabled |
+| POST | `/api/v1/cluster/addons/metrics-server/ensure` | admin — install metrics-server (Layer A) via infra script |
 | POST | `/api/v1/cluster/namespaces/ensure-bifrost` | operator — create Bifrost namespaces from `clusters.yaml` |
 | POST | `/api/v1/cluster/workloads/rollout-restart` | operator — rollout restart Deployment |
 | POST | `/api/v1/cluster/workloads/scale` | operator — scale Deployment |
 | DELETE | `/api/v1/cluster/workloads/pods/{namespace}/{name}` | operator — delete Pod |
 | GET | `/api/v1/cluster/workloads/pods/{namespace}/{name}/logs` | Pod log tail |
 
-**Layer A vs B:** Layer A (above KPI/metrics routes) uses Kubernetes API + optional metrics-server only. Layer B (Prometheus/Grafana/Loki in `monitoring` namespace) is documented in `bifrost-trade-infra/docs/K3S_PLATFORM_ARCHITECTURE.md` §9 phase 3 — not exposed on Cluster page yet.
+**Layer A vs B:** Layer A (KPI/metrics routes) uses Kubernetes API + optional metrics-server. Layer B is probed via `GET /cluster/observability` — lists workloads in `monitoring` namespace; Console shows **Planned** when kube-prometheus-stack is not deployed. Full stack install is P4; see `bifrost-trade-infra/docs/K3S_PLATFORM_ARCHITECTURE.md` §9 phase 3.
 
 **Failure behavior:** missing kubeconfig or API unreachable → HTTP 200 with `reachability: fail` and `detail` (same as matrix probes). metrics-server missing → `metrics_server_available: false`; capacity fields still populate from Node API.
 
-**Env:** `PLATFORM_KUBECONFIG`, `PLATFORM_CLUSTER_SYNC_ENABLED`, `PLATFORM_CLUSTER_SYNC_SCRIPT` — see [`.env.example`](../.env.example).
+**Env:** `PLATFORM_KUBECONFIG`, `PLATFORM_CLUSTER_SYNC_ENABLED`, `PLATFORM_CLUSTER_SYNC_SCRIPT`, `PLATFORM_METRICS_SERVER_ENABLED`, `PLATFORM_METRICS_SERVER_SCRIPT`, `PLATFORM_ADMIN_TOKEN` — see [`.env.example`](../.env.example).
 
 **Authorization:** Cluster read routes are viewer. P1 write routes require operator Bearer token — see `config/platform-auth.yaml`.
 

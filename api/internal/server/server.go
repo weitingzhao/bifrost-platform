@@ -75,11 +75,16 @@ func (s *Server) Router() http.Handler {
 			r.Get("/", s.cluster.HandleSummary)
 			r.Get("/nodes", s.cluster.HandleNodes)
 			r.Get("/metrics", s.cluster.HandleMetrics)
+			r.Get("/observability", s.cluster.HandleObservability)
 			r.Get("/namespaces", s.cluster.HandleNamespaces)
 			r.Get("/workloads", s.cluster.HandleWorkloads)
 			r.Get("/events", s.cluster.HandleEvents)
 			r.Post("/sync-kubeconfig", s.cluster.HandleSyncKubeconfig)
 			r.Get("/workloads/pods/{namespace}/{name}/logs", s.cluster.HandlePodLogs)
+			r.Group(func(r chi.Router) {
+				r.Use(s.auth.Require(actuation.RoleAdmin))
+				r.Post("/addons/metrics-server/ensure", s.cluster.HandleEnsureMetricsServer)
+			})
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleOperator))
 				r.Post("/namespaces/ensure-bifrost", s.cluster.HandleEnsureBifrost)
