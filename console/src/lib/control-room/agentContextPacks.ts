@@ -49,10 +49,21 @@ export function buildOpsPack(ctx: OpsContextResponse, matrices: MatrixResponse[]
       `- **${m.environment}** (${m.label}): ok=${s.ok} fail=${s.fail} degraded=${s.degraded} worst=${s.worstReach}`,
     )
   }
+  const northStarDiscipline =
+    ctx.north_star != null
+      ? [
+          '## North star discipline',
+          'All routine ops via Ops Console/API only (Strategy C hybrid).',
+          `Owner exception: ${ctx.north_star.owner_exception}`,
+          'Do not instruct manual ssh/kubectl/Makefile for operations available or planned in platform-api.',
+          '',
+        ].join('\n')
+      : ''
   return [
     modeLine('Ops'),
     '',
     spine,
+    northStarDiscipline,
     matrixLines.join('\n'),
     '',
     '## Deployment',
@@ -145,4 +156,90 @@ export const STARTER_PROMPTS: Record<AgentMode, string> = {
   Ops: 'Mode: Ops. Task: read spine + prod matrix; list blockers. No trade-frontend page edits.',
   Promote:
     'Mode: Promote. Task: assess release readiness from spine + matrix; do not skip D1 or gate blockers.',
+}
+
+function selectionSection(
+  selection?: { kind: 'bay' | 'milestone'; id: string } | null,
+): string {
+  if (selection == null) return '## UI selection\n(none — using global focus)'
+  return `## UI selection\n- kind: ${selection.kind}\n- id: ${selection.id}`
+}
+
+function nextStepQuestion(
+  mode: AgentMode,
+  ctx: OpsContextResponse,
+  selection?: { kind: 'bay' | 'milestone'; id: string } | null,
+): string {
+  if (selection?.kind === 'milestone' && selection.id.startsWith('decision:')) {
+    const id = selection.id.replace(/^decision:/, '')
+    return `Given decision ${id} and the spine below, what is the smallest next action to unblock 2c-b-prod-cutover without violating D1?`
+  }
+  if (selection?.kind === 'bay' && selection.id === 'bay_apis') {
+    return 'Prod Trade APIs are failing in matrix. List failing target ids, likely root cause, and a read-only verification plan (no writes).'
+  }
+  if (mode === 'Promote') {
+    return 'From spine + matrix, list all promote blockers in priority order and propose one single-variable next step for Owner.'
+  }
+  if (ctx.focus.blocker != null && ctx.focus.blocker !== '') {
+    return `Focus is blocked on ${ctx.focus.blocker}. What should we do on active track ${ctx.deployment.active_track} while cutover remains blocked?`
+  }
+  if (ctx.deployment.active_track === 'k3s_phase1') {
+    return 'K3s phase 1 is IN_PROGRESS while compose prod cutover is blocked. Propose the parallel work plan and what must NOT change on flywheel B until D1 is resolved.'
+  }
+  return STARTER_PROMPTS[mode]
+}
+
+/** One-click pack for Control Room → paste into Cursor / Agent chat. */
+export function buildSessionPack(
+  ctx: OpsContextResponse | undefined,
+  matrices: MatrixResponse[],
+  selection?: { kind: 'bay' | 'milestone'; id: string } | null,
+): string {
+  const mode = suggestAgentMode(
+    ctx,
+    selection?.kind === 'milestone' ? selection.id : null,
+    selection?.kind === 'bay' ? selection.id : null,
+  )
+
+  const core =
+    mode === 'Product'
+      ? buildProductPack(ctx)
+      : mode === 'Ops' && ctx != null
+        ? selection?.kind === 'milestone'
+          ? buildScopedMilestonePack(ctx, selection.id, matrices)
+          : buildOpsPack(ctx, matrices)
+        : ctx != null
+          ? buildPromotePack(ctx, matrices)
+          : buildProductPack(ctx)
+
+  const question =
+    ctx != null ? nextStepQuestion(mode, ctx, selection) : STARTER_PROMPTS[mode]
+
+  return [
+    core,
+    '',
+    selectionSection(selection),
+    '',
+    '## Suggested Agent question',
+    question,
+    '',
+    '## Session discipline',
+    '- Reply in Chinese for dialogue; English for UI strings and code identifiers.',
+    '- One repo / one variable per task unless Owner expands scope.',
+  ].join('\n')
+}
+
+export function packForMode(
+  mode: AgentMode,
+  ctx: OpsContextResponse | undefined,
+  matrices: MatrixResponse[],
+  selection?: { kind: 'bay' | 'milestone'; id: string } | null,
+): string {
+  if (mode === 'Product') return buildProductPack(ctx)
+  if (!ctx) return buildProductPack(ctx)
+  if (mode === 'Ops' && selection?.kind === 'milestone') {
+    return buildScopedMilestonePack(ctx, selection.id, matrices)
+  }
+  if (mode === 'Ops') return buildOpsPack(ctx, matrices)
+  return buildPromotePack(ctx, matrices)
 }

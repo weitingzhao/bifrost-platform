@@ -13,8 +13,9 @@ interface ControlRoomPageProps {
   contextLoading: boolean
   matrices: MatrixResponse[]
   matrixLoading: boolean
-  onOpenMatrix: () => void
+  onOpenRuntimeMap: () => void
   onOpenProgram: () => void
+  onOpenDelivery: () => void
 }
 
 export function ControlRoomPage({
@@ -22,8 +23,9 @@ export function ControlRoomPage({
   contextLoading,
   matrices,
   matrixLoading,
-  onOpenMatrix,
+  onOpenRuntimeMap,
   onOpenProgram,
+  onOpenDelivery,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
 
@@ -36,7 +38,11 @@ export function ControlRoomPage({
       <section className="page-section panel-elevated px-4 py-3">
         <h2 className="m-0 text-sm font-semibold">Control Room — dual flywheel governance (L0)</h2>
         <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Release pipeline, bay lamps, and Agent context packs. Read-only probes — no write actions.
+          Program milestone spine, bay lamps, and Agent context packs. CI/CD path diagram lives on{' '}
+          <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
+            Delivery
+          </button>
+          . Read-only probes — no write actions.
         </p>
       </section>
 
@@ -46,6 +52,7 @@ export function ControlRoomPage({
         selection={selection}
         onSelectBay={id => setSelection({ kind: 'bay', id })}
         onOpenProgram={onOpenProgram}
+        onOpenDelivery={onOpenDelivery}
       />
 
       {context != null && (
@@ -63,7 +70,7 @@ export function ControlRoomPage({
         context={context}
         matrices={matrices}
         onClose={() => setSelection(null)}
-        onOpenMatrix={onOpenMatrix}
+        onOpenRuntimeMap={onOpenRuntimeMap}
         onOpenProgram={onOpenProgram}
       />
     </div>

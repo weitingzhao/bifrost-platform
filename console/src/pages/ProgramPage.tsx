@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { OpsContextResponse } from '@/api/types'
 import { milestoneStatusClass } from '@/components/FocusStrip'
+import { DOC_LINKS } from '@/lib/docsLinks'
 
 interface ProgramPageProps {
   context: OpsContextResponse | undefined
@@ -27,6 +28,69 @@ export function ProgramPage({ context, isLoading, error }: ProgramPageProps) {
           {context.meta.version}).
         </p>
       </section>
+
+      {context.north_star != null && (
+        <ProgramSection title="North star — ultimate goal (Strategy C)">
+          <div className="flex flex-col gap-3 p-4 text-[var(--text-dense)]">
+            <p className="m-0 font-medium leading-snug">{context.north_star.statement}</p>
+            <div className="flex flex-wrap gap-2">
+              <span className="badge-ui font-mono-tabular">{context.north_star.id}</span>
+              <span className="badge-ui badge-status-progress font-mono-tabular">
+                {context.north_star.strategy}
+              </span>
+            </div>
+            <div>
+              <h4 className="m-0 mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Owner exception
+              </h4>
+              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                {context.north_star.owner_exception}
+              </p>
+            </div>
+            <div>
+              <h4 className="m-0 mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Principles
+              </h4>
+              <ul className="m-0 list-disc space-y-1 pl-5 text-[var(--text-dense-meta)]">
+                {context.north_star.principles.map(p => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="m-0 mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Success criteria
+              </h4>
+              <ul className="m-0 list-disc space-y-1 pl-5 text-[var(--text-dense-meta)]">
+                {context.north_star.success_criteria.map(c => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </div>
+            <p className="m-0 font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              {context.north_star.authority}
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <a
+                href={DOC_LINKS.northStar}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-ui btn-ui-ghost text-xs"
+              >
+                Full doc (MkDocs)
+              </a>
+              <a
+                href={DOC_LINKS.platformHome}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-ui btn-ui-ghost text-xs"
+              >
+                Platform handbook
+              </a>
+            </div>
+          </div>
+        </ProgramSection>
+      )}
 
       <ProgramSection title="Milestones">
         <table className="dense-table">

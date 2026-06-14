@@ -28,13 +28,16 @@ type File struct {
 }
 
 type Config struct {
-	Environments   []Environment
-	Topology       *TopologyFile
-	OpsContext     *opscontext.File
-	Listen         string
-	ConfigPath     string
-	TopologyPath   string
-	OpsContextPath string
+	Environments     []Environment
+	Topology         *TopologyFile
+	Clusters         *ClustersFile
+	OpsContext       *opscontext.File
+	Listen           string
+	ConfigPath       string
+	TopologyPath     string
+	ClustersPath     string
+	PlatformAuthPath string
+	OpsContextPath   string
 }
 
 func Load() (*Config, error) {
@@ -66,6 +69,13 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	configDir := TopologyDirFromConfigPath(configPath)
+	clusters, clustersPath, err := LoadClusters(configDir)
+	if err != nil {
+		return nil, err
+	}
+	platformAuthPath := ResolvePlatformAuthPath(configDir)
+
 	opsCtxPath := opscontext.ResolvePath(configPath)
 	opsCtx, err := opscontext.Load(opsCtxPath)
 	if err != nil {
@@ -73,13 +83,16 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Environments:   file.Environments,
-		Topology:       topo,
-		OpsContext:     opsCtx,
-		Listen:         listen,
-		ConfigPath:     configPath,
-		TopologyPath:   topoPath,
-		OpsContextPath: opsCtxPath,
+		Environments:     file.Environments,
+		Topology:         topo,
+		Clusters:         clusters,
+		OpsContext:       opsCtx,
+		Listen:           listen,
+		ConfigPath:       configPath,
+		TopologyPath:     topoPath,
+		ClustersPath:     clustersPath,
+		PlatformAuthPath: platformAuthPath,
+		OpsContextPath:   opsCtxPath,
 	}, nil
 }
 

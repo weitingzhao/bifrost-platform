@@ -9,6 +9,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -19,13 +21,27 @@ type Server struct {
 	cfg     *config.Config
 	prober  *probe.Prober
 	console *console.Handler
+	cluster *cluster.Handler
+	auth    *actuation.AuthService
+	audit   *actuation.AuditLog
+	jobs    *actuation.JobStore
 }
 
 func New(cfg *config.Config) *Server {
+	auth, err := actuation.LoadAuth(cfg.PlatformAuthPath)
+	if err != nil {
+		auth = &actuation.AuthService{}
+	}
+	audit := actuation.NewAuditLog("")
+	jobs := actuation.NewJobStore()
 	return &Server{
 		cfg:     cfg,
 		prober:  probe.NewProber(),
 		console: console.NewHandler(cfg),
+		cluster: cluster.NewHandler(cfg, audit),
+		auth:    auth,
+		audit:   audit,
+		jobs:    jobs,
 	}
 }
 
@@ -38,8 +54,8 @@ func (s *Server) Router() http.Handler {
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://127.0.0.1:5180", "http://localhost:5180"},
-		AllowedMethods:   []string{"GET", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Content-Type", "Upgrade", "Connection"},
+		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Upgrade", "Connection"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
@@ -50,8 +66,27 @@ func (s *Server) Router() http.Handler {
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/topology", s.handleTopology)
 		r.Get("/context", s.handleContext)
+		r.Get("/auth/capabilities", s.auth.Capabilities)
+		r.Get("/audit", s.audit.HandleList)
+		r.Get("/jobs", s.jobs.HandleList)
 		r.Get("/console/hosts", s.console.HandleHosts)
 		r.Get("/console/ws", s.console.HandleWebSocket)
+		r.Route("/cluster", func(r chi.Router) {
+			r.Get("/", s.cluster.HandleSummary)
+			r.Get("/nodes", s.cluster.HandleNodes)
+			r.Get("/namespaces", s.cluster.HandleNamespaces)
+			r.Get("/workloads", s.cluster.HandleWorkloads)
+			r.Get("/events", s.cluster.HandleEvents)
+			r.Post("/sync-kubeconfig", s.cluster.HandleSyncKubeconfig)
+			r.Get("/workloads/pods/{namespace}/{name}/logs", s.cluster.HandlePodLogs)
+			r.Group(func(r chi.Router) {
+				r.Use(s.auth.Require(actuation.RoleOperator))
+				r.Post("/namespaces/ensure-bifrost", s.cluster.HandleEnsureBifrost)
+				r.Post("/workloads/rollout-restart", s.cluster.HandleRolloutRestart)
+				r.Post("/workloads/scale", s.cluster.HandleScale)
+				r.Delete("/workloads/pods/{namespace}/{name}", s.cluster.HandleDeletePod)
+			})
+		})
 	})
 
 	return r

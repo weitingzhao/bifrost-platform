@@ -12,6 +12,8 @@ Deployment, hardware roadmap, Goal, and migration sign-off live in the **infra h
 
 | Topic | Document |
 |-------|----------|
+| **North star (ultimate goal)** | [NORTH_STAR.md](NORTH_STAR.md) |
+| **MkDocs site** | `make docs` → http://127.0.0.1:8060/ (also linked from Console → Docs) |
 | Repo overview | [Overview](overview.md) |
 | Control plane vs data plane | [Architecture](ARCHITECTURE.md) |
 | L0 probe contract | [Trade contract](TRADE_CONTRACT.md) |

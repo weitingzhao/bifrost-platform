@@ -21,6 +21,7 @@ interface PromotePageProps {
   matrices: MatrixResponse[]
   isLoading: boolean
   onOpenProgram: () => void
+  onOpenDelivery?: () => void
 }
 
 export function PromotePage({
@@ -28,6 +29,7 @@ export function PromotePage({
   matrices,
   isLoading,
   onOpenProgram,
+  onOpenDelivery,
 }: PromotePageProps) {
   if (isLoading || !context) {
     return <p className="text-[var(--muted-foreground)]">Loading promotion context…</p>
@@ -50,7 +52,15 @@ export function PromotePage({
           </span>
         </div>
         <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Read-only checklist for flywheel A + B promotion. No write actions at L0.
+          Read-only checklist for flywheel A + B promotion. CI/CD path diagram lives on{' '}
+          {onOpenDelivery != null ? (
+            <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
+              Delivery
+            </button>
+          ) : (
+            <strong>Delivery</strong>
+          )}
+          . No write actions at L0.
         </p>
       </section>
 
@@ -75,7 +85,7 @@ export function PromotePage({
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <PromoteSection title="Flywheel A — Trade frontend">
+        <PromoteSection title="Flywheel A — Trade frontend (Now)">
           <ul className="m-0 list-disc px-5 py-3 text-[var(--text-dense)]">
             {FLYWHEEL_A_CHECKS.map(c => (
               <li key={c}>{c}</li>
@@ -83,7 +93,7 @@ export function PromotePage({
           </ul>
         </PromoteSection>
 
-        <PromoteSection title="Flywheel B — Runtime & ops">
+        <PromoteSection title="Flywheel B — Runtime & ops (Now)">
           <ul className="m-0 list-disc px-5 py-3 text-[var(--text-dense)]">
             {FLYWHEEL_B_CHECKS.map(c => (
               <li key={c}>{c}</li>
@@ -117,6 +127,11 @@ export function PromotePage({
             </tr>
           </tbody>
         </table>
+        {gate.result == null && (
+          <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] lamp-warn">
+            No gate recorded — run release_gate.sh when available (Phase A).
+          </p>
+        )}
       </PromoteSection>
 
       {staging != null && (

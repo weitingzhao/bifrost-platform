@@ -26,7 +26,7 @@ cd console && npm install && cd ..
 ./scripts/run_platform.py
 # or: make start
 
-# Console: http://127.0.0.1:5180  (default tab: **Control Room**)
+# Console: http://127.0.0.1:5180  (default tab: **Control Room**; CI/CD overview: **Delivery**)
 # API:     http://127.0.0.1:8780/health
 # Context: http://127.0.0.1:8780/api/v1/context
 ```
@@ -38,9 +38,9 @@ curl -s 'http://127.0.0.1:8780/api/v1/matrix?env=dev' | jq .
 curl -s 'http://127.0.0.1:8780/api/v1/topology?env=prod' | jq .
 ```
 
-Edit network layout in `config/topology.yaml` (hosts, edges, K3s roles). Console **Topology** tab shows live status.
+Edit network layout in `config/topology.yaml` (hosts, edges, K3s roles). Console **Runtime Map** shows hardware + software with live status.
 
-**Environments** tab — living catalog + **Copy for LLM** (`console/src/lib/environments-catalog.ts`): hardware, CI/CD, K3s phases, Dev/Prod flows.
+**Delivery** tab — CI/CD dual track (near-term Mac runner vs target GitOps). **Catalog** — flows with status + **Copy for LLM**; hardware/scope live view is on **Runtime Map**.
 
 ## Layout
 

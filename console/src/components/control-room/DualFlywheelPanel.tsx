@@ -48,6 +48,7 @@ interface DualFlywheelPanelProps {
   selection: ControlRoomSelection
   onSelectBay: (bayId: string) => void
   onOpenProgram: () => void
+  onOpenDelivery?: () => void
 }
 
 export function DualFlywheelPanel({
@@ -56,6 +57,7 @@ export function DualFlywheelPanel({
   selection,
   onSelectBay,
   onOpenProgram,
+  onOpenDelivery,
 }: DualFlywheelPanelProps) {
   const flywheelA = baysForFlywheel('A')
   const flywheelB = baysForFlywheel('B')
@@ -89,7 +91,12 @@ export function DualFlywheelPanel({
           </div>
         </div>
         <div className="flywheel-column flywheel-column--coupling">
-          <CouplingGatePanel context={context} matrices={matrices} onOpenProgram={onOpenProgram} />
+          <CouplingGatePanel
+            context={context}
+            matrices={matrices}
+            onOpenProgram={onOpenProgram}
+            onOpenDelivery={onOpenDelivery}
+          />
         </div>
         <div className="flywheel-column">
           <div className="flywheel-column-title">B — Runtime</div>

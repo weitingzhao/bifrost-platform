@@ -38,4 +38,7 @@ func TestBuild_ProdEdgeStatuses(t *testing.T) {
 	if resp.Edges[0].Status != probe.ReachOK {
 		t.Fatalf("edge status: %s", resp.Edges[0].Status)
 	}
+	if len(resp.Nodes[0].MatrixServices) == 0 {
+		t.Fatalf("expected matrix_services on mini-pc-a")
+	}
 }

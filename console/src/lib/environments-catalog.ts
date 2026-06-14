@@ -9,7 +9,7 @@
 
 import type { OpsContextResponse } from '@/api/types'
 
-export const CATALOG_VERSION = '2026-06-12'
+export const CATALOG_VERSION = '2026-06-15'
 export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
 
 /** Scope row — one logical component in the Bifrost stack. */
@@ -21,12 +21,22 @@ export type ScopeRow = {
 }
 
 /** End-to-end flow row — how a path moves through environments. */
+export type FlowRowStatus = 'live' | 'planned' | 'blocked' | 'tbd'
+
 export type FlowRow = {
   path: string
   stage: 'Development' | 'Staging' | 'Production'
   trigger: string
   runtime: string
   dataStore: string
+  status: FlowRowStatus
+}
+
+export function flowStatusBadgeClass(status: FlowRowStatus): string {
+  if (status === 'live') return 'badge-ui badge-status-signed'
+  if (status === 'blocked') return 'badge-ui badge-status-blocked'
+  if (status === 'tbd') return 'badge-ui badge-status-pending'
+  return 'badge-ui badge-status-pending'
 }
 
 export type HardwareRow = {
@@ -169,6 +179,7 @@ export const FLOW_ROWS: FlowRow[] = [
     trigger: 'Local / Mac Mini #1: make dev · feature branches',
     runtime: 'docker-compose.dev.yml · nginx localhost · hot reload mounts',
     dataStore: 'bifrost_dev @ PG .80 · local Redis',
+    status: 'live',
   },
   {
     path: 'Application (trade stack)',
@@ -176,6 +187,7 @@ export const FLOW_ROWS: FlowRow[] = [
     trigger: 'Mac Mini #2 CI or K3s bifrost-stg (planned) · merge to main',
     runtime: 'Same images as prod · optional Mac Mini #2 or mini-pc-c',
     dataStore: 'bifrost_dev or isolated stg DB (TBD)',
+    status: 'tbd',
   },
   {
     path: 'Application (trade stack)',
@@ -183,6 +195,7 @@ export const FLOW_ROWS: FlowRow[] = [
     trigger: '2C-B compose on .70 · future: git tag → Tekton → ArgoCD sync',
     runtime: 'docker-compose.yml (now) → K3s bifrost namespace (target)',
     dataStore: 'bifrost_prod @ PG .80 · Redis .70',
+    status: 'blocked',
   },
   {
     path: 'Platform (control plane)',
@@ -190,6 +203,7 @@ export const FLOW_ROWS: FlowRow[] = [
     trigger: 'make start / ./scripts/run_platform.py on MacBook',
     runtime: 'Go platform-api :8780 · Vite console :5180',
     dataStore: 'config/environments.yaml · config/topology.yaml (no DB)',
+    status: 'live',
   },
   {
     path: 'Platform (control plane)',
@@ -197,6 +211,7 @@ export const FLOW_ROWS: FlowRow[] = [
     trigger: 'Same binary; probes prod nginx/PG/Redis via LAN',
     runtime: 'MacBook or Mac Mini #2 watchdog · L0 matrix refresh 30s',
     dataStore: 'Optional BIFROST_PROD_OPS_TOKEN for capabilities probe',
+    status: 'live',
   },
   {
     path: 'Release gate',
@@ -204,6 +219,7 @@ export const FLOW_ROWS: FlowRow[] = [
     trigger: 'Tag / maintenance window · scripts/release_gate.sh (planned)',
     runtime: 'make prod-health 12/12 · Platform GET /api/v1/matrix?env=prod',
     dataStore: 'Sign-off: PHASE2C_SIGNOFF_MASTER.md · LOCAL_PROD_FINAL_SIGNOFF.md',
+    status: 'planned',
   },
   {
     path: 'IB edge (socket)',
@@ -211,6 +227,7 @@ export const FLOW_ROWS: FlowRow[] = [
     trigger: 'Socket containers on prod host · IB_HOST env',
     runtime: 'bifrost-trade-socket → Win11 TWS LAN',
     dataStore: 'Redis on .70 · no direct daemon→TWS',
+    status: 'live',
   },
   {
     path: 'Frontend migration',
@@ -218,6 +235,7 @@ export const FLOW_ROWS: FlowRow[] = [
     trigger: 'Page-by-page migrate · npm run lint && build && check:legacy-css',
     runtime: 'New frontend :5173 vs Legacy UI on same Legacy API (Phase 1 rule)',
     dataStore: 'MIGRATION_TRACKING.md progress',
+    status: 'live',
   },
 ]
 
@@ -236,9 +254,9 @@ export const HARDWARE_ROWS: HardwareRow[] = [
   },
   {
     id: 'mini-pc-c',
-    host: '192.168.10.73',
-    roleCompose: 'New Linux server (ubt-k3s-01) · K3s staging target',
-    roleK3s: 'Server ③ · Prometheus · Loki · Tekton runners',
+    host: '192.168.10.73 (ubt-k3s-01)',
+    roleCompose: 'K3s bootstrap server (first node)',
+    roleK3s: 'Live K3s bootstrap @ .73 · monitoring · Tekton (planned)',
   },
   {
     id: 'mac-mini-1',
@@ -300,9 +318,15 @@ export const PLATFORM_PHASES: PlatformPhase[] = [
 ]
 
 export const AUTHORIZATION_LEVELS = [
-  { level: 'L0', behavior: 'Read-only probes (Phase 0 default — matrix, topology, logs context)' },
-  { level: 'L1', behavior: 'Safe retries via trade Ops API (Celery retry, worker restart — future)' },
-  { level: 'L2', behavior: 'Owner-confirmed changes (ArgoCD rollback, scale — future)' },
+  { level: 'L0', behavior: 'Read-only probes (matrix, topology, cluster, logs)' },
+  {
+    level: 'L1',
+    behavior: 'Safe actuation via platform-api (rollout restart, scale, sync — north star P1)',
+  },
+  {
+    level: 'L2',
+    behavior: 'Owner-confirmed changes (node join, stack install, Argo rollback — north star P2+)',
+  },
   { level: 'forbidden', behavior: 'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass' },
 ]
 
@@ -312,6 +336,20 @@ export function formatSpineContextSection(ctx: OpsContextResponse): string {
     '## Ops context spine (authoritative)',
     `Spine version: ${ctx.meta.version} · catalog_version: ${ctx.meta.catalog_version}`,
     '',
+  ]
+  if (ctx.north_star != null) {
+    lines.push(
+      '### North star (ultimate goal)',
+      `- id: ${ctx.north_star.id}`,
+      `- strategy: ${ctx.north_star.strategy}`,
+      `- statement: ${ctx.north_star.statement.trim()}`,
+      `- owner_exception: ${ctx.north_star.owner_exception}`,
+      `- authority: ${ctx.north_star.authority}`,
+      ...ctx.north_star.principles.map(p => `- principle: ${p}`),
+      '',
+    )
+  }
+  lines.push(
     '### Focus',
     `- headline: ${ctx.focus.headline}`,
     `- flywheel_primary: ${ctx.focus.flywheel_primary}`,
@@ -338,7 +376,7 @@ export function formatSpineContextSection(ctx: OpsContextResponse): string {
     `- last_gate: ${ctx.promotion.last_gate.result ?? 'not recorded'}`,
     `- staging: ${ctx.environments_extended.staging?.status ?? 'unknown'}`,
     '',
-  ]
+  )
   return lines.join('\n')
 }
 
@@ -349,8 +387,9 @@ export function buildStaticCatalogContext(): string {
     `# Catalog version: ${CATALOG_VERSION} · source: ${CATALOG_SOURCE}`,
     '',
     '## One-line goal',
-    'AI-native environment governance control plane (Bifrost Ops) over Bifrost Trade data plane (bifrost-trade-*).',
-    'Ops aggregates health; it does not implement trading logic or IB write paths.',
+    'AI-native environment governance control plane (Bifrost Ops) over Bifrost Trade data plane.',
+    'North star: all routine ops via Ops Console/API only (Strategy C hybrid); Owner exception = restart Ops Platform.',
+    'Authority: bifrost-platform/docs/NORTH_STAR.md · spine north_star + decision D6.',
     '',
     '## Ports',
     ...Object.entries(PLATFORM_PORTS).map(([k, v]) => `- ${k}: ${v}`),
@@ -370,7 +409,7 @@ export function buildStaticCatalogContext(): string {
     '## End-to-end flows',
     ...FLOW_ROWS.map(
       r =>
-        `- **${r.path}** · ${r.stage}: trigger=${r.trigger}; runtime=${r.runtime}; data=${r.dataStore}`,
+        `- **${r.path}** · ${r.stage} [${r.status}]: trigger=${r.trigger}; runtime=${r.runtime}; data=${r.dataStore}`,
     ),
     '',
     '## Hardware (planned / partial)',

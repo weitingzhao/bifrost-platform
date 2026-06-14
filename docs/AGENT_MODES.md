@@ -2,6 +2,8 @@
 
 Bifrost Trade uses two flywheels (product vs runtime). Agents and Owner should declare which mode applies before making changes.
 
+**North star**: All routine ops via Ops Console/API (Strategy C hybrid). See [NORTH_STAR.md](NORTH_STAR.md) and Program → north star in spine.
+
 ## Modes
 
 | Mode | Flywheel | Default UI | Agent may | Agent must not |

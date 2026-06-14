@@ -8,17 +8,25 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
+type ServiceView struct {
+	ID           string             `json:"id"`
+	Reachability probe.Reachability `json:"reachability"`
+	Detail       string             `json:"detail"`
+	Category     string             `json:"category"`
+}
+
 type NodeView struct {
-	ID           string   `json:"id"`
-	Label        string   `json:"label"`
-	Host         string   `json:"host,omitempty"`
-	Group        string   `json:"group"`
-	ComposeRoles []string `json:"compose_roles"`
-	K3sRoles     []string `json:"k3s_roles"`
-	InK3sCluster bool     `json:"in_k3s_cluster"`
-	Grid         config.GridPos `json:"grid"`
-	Status       probe.Reachability `json:"status"`
-	Detail       string   `json:"detail"`
+	ID             string             `json:"id"`
+	Label          string             `json:"label"`
+	Host           string             `json:"host,omitempty"`
+	Group          string             `json:"group"`
+	ComposeRoles   []string           `json:"compose_roles"`
+	K3sRoles       []string           `json:"k3s_roles"`
+	InK3sCluster   bool               `json:"in_k3s_cluster"`
+	Grid           config.GridPos     `json:"grid"`
+	Status         probe.Reachability `json:"status"`
+	Detail         string             `json:"detail"`
+	MatrixServices []ServiceView      `json:"matrix_services"`
 }
 
 type EdgeView struct {
@@ -112,8 +120,10 @@ func Build(
 				nv.Status = probe.ReachUnknown
 				nv.Detail = "no linked probes"
 			}
+			nv.MatrixServices = []ServiceView{}
 		} else {
 			nv.Status, nv.Detail = aggregateTargets(targets, targetByID)
+			nv.MatrixServices = buildServiceViews(targets, targetByID)
 		}
 		nodes = append(nodes, nv)
 	}
@@ -224,6 +234,25 @@ func aggregateTargets(targetIDs []string, byID map[string]probe.Target) (probe.R
 		return probe.ReachUnknown, "no probe data"
 	}
 	return worst, strings.Join(details, "; ")
+}
+
+func buildServiceViews(targetIDs []string, byID map[string]probe.Target) []ServiceView {
+	seen := map[string]bool{}
+	out := make([]ServiceView, 0, len(targetIDs))
+	for _, id := range targetIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		sv := ServiceView{ID: id, Reachability: probe.ReachUnknown, Detail: "no probe data"}
+		if t, ok := byID[id]; ok {
+			sv.Reachability = t.Reachability
+			sv.Detail = t.Detail
+			sv.Category = t.Category
+		}
+		out = append(out, sv)
+	}
+	return out
 }
 
 func worse(a, b probe.Reachability) probe.Reachability {

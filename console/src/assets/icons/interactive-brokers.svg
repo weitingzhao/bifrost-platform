@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Interactive Brokers logomark — sourced from IBKR Design Resource Library
+     via https://github.com/aegis-icons/aegis-icons (icons/1_Primary/Interactive Brokers.svg)
+     Brand color: #DB1222 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Interactive Brokers">
+  <circle cx="512" cy="512" r="512" fill="#db1222"/>
+  <path d="M352.02 484.41V816l302.15-680.01zm350.52 81.321a90.435 90.435 0 0 1-90.435 90.435 90.435 90.435 0 0 1-90.435-90.435 90.435 90.435 0 0 1 90.435-90.435 90.435 90.435 0 0 1 90.435 90.435m-245.85 33.55-88.619 199.44c-2.583 5.75-5.09 11.535-7.686 17.279h293.78z" fill="#fff"/>
+</svg>

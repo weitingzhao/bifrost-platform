@@ -1,4 +1,6 @@
-import type { OpsContextResponse } from '@/api/types'
+import type { ClusterSummary, OpsContextResponse } from '@/api/types'
+import { ciModeLabel, showGitOpsPlannedBadge } from '@/lib/delivery/deliveryPhase'
+import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 
 const STATUS_CLASS: Record<string, string> = {
   CLOSED: 'badge-ui badge-status-closed',
@@ -23,14 +25,22 @@ interface FocusStripProps {
   context: OpsContextResponse | undefined
   isLoading: boolean
   matrixUpdatedAt: string | null
+  clusterSummary?: ClusterSummary
+  clusterLoading?: boolean
   onOpenProgram?: () => void
+  onOpenDelivery?: () => void
+  onOpenCluster?: () => void
 }
 
 export function FocusStrip({
   context,
   isLoading,
   matrixUpdatedAt,
+  clusterSummary,
+  clusterLoading,
   onOpenProgram,
+  onOpenDelivery,
+  onOpenCluster,
 }: FocusStripProps) {
   if (isLoading) {
     return (
@@ -48,6 +58,14 @@ export function FocusStrip({
   }
 
   const { focus, deployment } = context
+  const ciMode = ciModeLabel(deployment.phase)
+  const gitOpsPlanned = showGitOpsPlannedBadge(deployment)
+  const clusterKpi = clusterLoading
+    ? 'Cluster: …'
+    : summarizeCluster(clusterSummary).label
+  const clusterReach = clusterLoading
+    ? 'unknown'
+    : (clusterSummary?.reachability ?? 'unknown')
   const matrixAge =
     matrixUpdatedAt != null
       ? `Matrix ${formatAge(matrixUpdatedAt)}`
@@ -64,6 +82,32 @@ export function FocusStrip({
       <span>
         Phase <code className="font-mono-tabular">{deployment.phase}</code>
       </span>
+      <span className="text-[var(--muted-foreground)]">·</span>
+      {onOpenDelivery != null ? (
+        <button type="button" className="focus-strip-link focus-strip-ci-mode" onClick={onOpenDelivery}>
+          CI: {ciMode}
+        </button>
+      ) : (
+        <span className="focus-strip-ci-mode">CI: {ciMode}</span>
+      )}
+      {gitOpsPlanned && (
+        <>
+          <span className="text-[var(--muted-foreground)]">·</span>
+          <span className="badge-ui badge-status-pending text-[10px]">GitOps planned</span>
+        </>
+      )}
+      <span className="text-[var(--muted-foreground)]">·</span>
+      {onOpenCluster != null ? (
+        <button
+          type="button"
+          className={`focus-strip-link ${clusterReach === 'fail' ? 'lamp-warn' : ''}`}
+          onClick={onOpenCluster}
+        >
+          {clusterKpi}
+        </button>
+      ) : (
+        <span className={clusterReach === 'fail' ? 'lamp-warn' : ''}>{clusterKpi}</span>
+      )}
       <span className="text-[var(--muted-foreground)]">·</span>
       <span>{flywheelLabel(focus.flywheel_primary)}</span>
       {focus.blocker != null && focus.blocker !== '' && (

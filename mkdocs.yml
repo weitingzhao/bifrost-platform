@@ -35,6 +35,8 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Overview: overview.md
+  - North star: NORTH_STAR.md
+  - Cluster actuation: CLUSTER_ACTUATION.md
   - Architecture: ARCHITECTURE.md
   - Agent modes: AGENT_MODES.md
   - Trade probe contract: TRADE_CONTRACT.md

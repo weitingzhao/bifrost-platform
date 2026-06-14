@@ -28,6 +28,13 @@ export interface AllMatricesResponse {
   matrices: MatrixResponse[]
 }
 
+export interface TopologyMatrixService {
+  id: string
+  reachability: Reachability
+  detail: string
+  category: string
+}
+
 export interface TopologyNode {
   id: string
   label: string
@@ -39,6 +46,7 @@ export interface TopologyNode {
   grid: { row: number; col: number }
   status: Reachability
   detail: string
+  matrix_services: TopologyMatrixService[]
 }
 
 export interface TopologyEdge {
@@ -125,8 +133,19 @@ export interface OpsContextProbeHint {
   hint: string
 }
 
+export interface OpsContextNorthStar {
+  id: string
+  statement: string
+  strategy: string
+  principles: string[]
+  owner_exception: string
+  authority: string
+  success_criteria: string[]
+}
+
 export interface OpsContextResponse {
   meta: OpsContextMeta
+  north_star?: OpsContextNorthStar
   deployment: OpsContextDeployment
   focus: OpsContextFocus
   milestones: OpsContextMilestone[]
@@ -136,4 +155,153 @@ export interface OpsContextResponse {
   promotion: OpsContextPromotion
   environments_extended: Record<string, OpsContextEnvironmentExtended>
   probe_hints: OpsContextProbeHint[]
+}
+
+export interface ClusterSummary {
+  cluster_id: string
+  label: string
+  distribution: string
+  api_server: string
+  kubeconfig_path: string
+  reachability: Reachability
+  detail: string
+  server_version?: string
+  nodes_ready: number
+  nodes_total: number
+  failing_pods: number
+  generated_at: string
+}
+
+export interface ClusterNode {
+  name: string
+  status: string
+  roles: string
+  version: string
+  internal_ip: string
+  reachability: Reachability
+}
+
+export interface ClusterNodesResponse {
+  cluster_id: string
+  reachability: Reachability
+  detail: string
+  nodes: ClusterNode[]
+  generated_at: string
+}
+
+export interface ClusterNamespace {
+  name: string
+  status: string
+  pod_count: number
+  running_pods: number
+  failing_pods: number
+}
+
+export interface ClusterNamespacesResponse {
+  cluster_id: string
+  reachability: Reachability
+  detail: string
+  filter: string
+  namespaces: ClusterNamespace[]
+  generated_at: string
+}
+
+export interface ClusterWorkload {
+  namespace: string
+  kind: string
+  name: string
+  ready: string
+  status: string
+  restarts: number
+  age: string
+  reachability: Reachability
+}
+
+export interface ClusterWorkloadsResponse {
+  cluster_id: string
+  namespace: string
+  reachability: Reachability
+  detail: string
+  workloads: ClusterWorkload[]
+  generated_at: string
+}
+
+export interface ClusterEvent {
+  namespace: string
+  type: string
+  reason: string
+  object: string
+  message: string
+  count: number
+  first_seen: string
+  last_seen: string
+}
+
+export interface ClusterEventsResponse {
+  cluster_id: string
+  namespace: string
+  reachability: Reachability
+  detail: string
+  events: ClusterEvent[]
+  generated_at: string
+}
+
+export interface ClusterSyncResponse {
+  ok: boolean
+  path: string
+  message: string
+}
+
+export interface AuthCapabilities {
+  authenticated: boolean
+  principal?: string
+  role: 'viewer' | 'operator' | 'admin'
+  can_operate: boolean
+  can_admin: boolean
+}
+
+export interface ActuationResponse {
+  ok: boolean
+  action: string
+  target: string
+  changed: boolean
+  message: string
+  namespaces?: string[]
+  generated_at: string
+}
+
+export interface RolloutRestartRequest {
+  namespace: string
+  kind: 'Deployment'
+  name: string
+}
+
+export interface ScaleRequest {
+  namespace: string
+  kind: 'Deployment'
+  name: string
+  replicas: number
+}
+
+export interface PodLogsResponse {
+  namespace: string
+  pod: string
+  container?: string
+  tail_lines: number
+  logs: string
+}
+
+export interface AuditRecord {
+  id: string
+  at: string
+  actor: string
+  role: 'viewer' | 'operator' | 'admin'
+  action: string
+  target: string
+  status: string
+  detail: string
+}
+
+export interface AuditResponse {
+  records: AuditRecord[]
 }
