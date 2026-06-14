@@ -76,20 +76,64 @@ func (s *Service) buildClient() (kubernetes.Interface, string, error) {
 
 func defaultSyncScript() string {
 	if v := os.Getenv("PLATFORM_CLUSTER_SYNC_SCRIPT"); v != "" {
-		return v
+		return resolveSyncScript(v)
 	}
-	if wd, err := os.Getwd(); err == nil {
-		candidates := []string{
-			filepath.Join(wd, "..", "bifrost-trade-infra", "scripts", "k3s", "fetch-kubeconfig.sh"),
-			filepath.Join(wd, "..", "..", "bifrost-trade-infra", "scripts", "k3s", "fetch-kubeconfig.sh"),
+	return resolveSyncScript("")
+}
+
+// resolveSyncScript finds fetch-kubeconfig.sh. API often runs with cwd=api/, so a
+// ../bifrost-trade-infra path from .env must be resolved against repo roots.
+func resolveSyncScript(configured string) string {
+	infraRel := filepath.Join("bifrost-trade-infra", "scripts", "k3s", "fetch-kubeconfig.sh")
+
+	try := func(p string) (string, bool) {
+		p = filepath.Clean(p)
+		if _, err := os.Stat(p); err == nil {
+			if abs, err := filepath.Abs(p); err == nil {
+				return abs, true
+			}
+			return p, true
 		}
-		for _, p := range candidates {
-			if _, err := os.Stat(p); err == nil {
+		return "", false
+	}
+
+	if configured != "" {
+		if filepath.IsAbs(configured) {
+			if p, ok := try(configured); ok {
+				return p
+			}
+			return configured
+		}
+		if abs, err := filepath.Abs(configured); err == nil {
+			if p, ok := try(abs); ok {
+				return p
+			}
+		}
+		if wd, err := os.Getwd(); err == nil {
+			for _, base := range []string{wd, filepath.Join(wd, ".."), filepath.Join(wd, "../..")} {
+				if p, ok := try(filepath.Join(base, configured)); ok {
+					return p
+				}
+			}
+		}
+	}
+
+	if wd, err := os.Getwd(); err == nil {
+		for _, base := range []string{wd, filepath.Join(wd, ".."), filepath.Join(wd, "../..")} {
+			if p, ok := try(filepath.Join(base, "..", infraRel)); ok {
+				return p
+			}
+			if p, ok := try(filepath.Join(base, infraRel)); ok {
 				return p
 			}
 		}
 	}
-	return "../bifrost-trade-infra/scripts/k3s/fetch-kubeconfig.sh"
+	if root := os.Getenv("PLATFORM_PROJECT_ROOT"); root != "" {
+		if p, ok := try(filepath.Join(root, "..", infraRel)); ok {
+			return p
+		}
+	}
+	return filepath.Join("..", "..", "bifrost-trade-infra", "scripts", "k3s", "fetch-kubeconfig.sh")
 }
 
 func syncEnabled() bool {

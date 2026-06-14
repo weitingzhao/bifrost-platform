@@ -28,6 +28,12 @@ export function summarizeCluster(summary: ClusterSummary | undefined): {
           : `Cluster: ${summary.detail}`,
     }
   }
+  if (summary.failing_pods > 0) {
+    return {
+      reach: 'degraded',
+      label: `Cluster: ${summary.failing_pods} failing pods`,
+    }
+  }
   return {
     reach: summary.reachability,
     label: `Cluster: ${summary.nodes_ready}/${summary.nodes_total} Ready`,

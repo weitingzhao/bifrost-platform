@@ -85,6 +85,7 @@ func (e *ClusterEntry) KubeconfigPath() string {
 }
 
 func expandHome(path string) string {
+	path = os.ExpandEnv(path)
 	if len(path) >= 2 && path[:2] == "~/" {
 		home, err := os.UserHomeDir()
 		if err == nil {

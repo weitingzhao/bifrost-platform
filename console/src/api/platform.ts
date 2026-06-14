@@ -4,6 +4,7 @@ import type {
   AuditResponse,
   AuthCapabilities,
   ClusterEventsResponse,
+  ClusterMetricsResponse,
   ClusterNamespacesResponse,
   ClusterNodesResponse,
   ClusterSummary,
@@ -17,12 +18,10 @@ import type {
   ScaleRequest,
   TopologyResponse,
 } from './types'
+import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
 function operatorToken(): string {
-  const envToken = import.meta.env.VITE_PLATFORM_OPERATOR_TOKEN as string | undefined
-  if (envToken != null && envToken !== '') return envToken
-  if (typeof window === 'undefined') return ''
-  return window.localStorage.getItem('platform_operator_token') ?? ''
+  return getPlatformOperatorToken()
 }
 
 async function parseError(prefix: string, r: Response): Promise<Error> {
@@ -97,6 +96,12 @@ export async function fetchClusterNodes(): Promise<ClusterNodesResponse> {
   const r = await fetch('/api/v1/cluster/nodes')
   if (!r.ok) throw new Error(`cluster nodes: HTTP ${r.status}`)
   return r.json() as Promise<ClusterNodesResponse>
+}
+
+export async function fetchClusterMetrics(limit = 8): Promise<ClusterMetricsResponse> {
+  const r = await fetch(`/api/v1/cluster/metrics?limit=${limit}`)
+  if (!r.ok) throw new Error(`cluster metrics: HTTP ${r.status}`)
+  return r.json() as Promise<ClusterMetricsResponse>
 }
 
 export async function fetchClusterNamespaces(

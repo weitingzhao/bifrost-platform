@@ -40,8 +40,53 @@ def _load_dotenv() -> None:
         key, _, val = line.partition("=")
         key = key.strip()
         val = val.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        if not key:
+            continue
+        # Always apply platform-local paths from .env (API cwd=api/ breaks relatives).
+        if key in _PLATFORM_DOTENV_KEYS or key not in os.environ:
             os.environ[key] = val
+
+
+_PLATFORM_DOTENV_KEYS = frozenset({
+    "PLATFORM_KUBECONFIG",
+    "PLATFORM_CLUSTER_SYNC_SCRIPT",
+    "PLATFORM_CLUSTER_SYNC_ENABLED",
+    "PLATFORM_OPERATOR_TOKEN",
+    "PLATFORM_LISTEN",
+    "PLATFORM_CONFIG",
+})
+
+
+def _normalize_platform_env() -> None:
+    """Expand $HOME/~ and resolve infra script paths before starting API (cwd=api/)."""
+    kc = os.environ.get("PLATFORM_KUBECONFIG", "")
+    if kc:
+        os.environ["PLATFORM_KUBECONFIG"] = os.path.expanduser(os.path.expandvars(kc))
+
+    script = os.environ.get("PLATFORM_CLUSTER_SYNC_SCRIPT", "").strip()
+    if not script:
+        default = _PROJECT_ROOT.parent / "bifrost-trade-infra" / "scripts" / "k3s" / "fetch-kubeconfig.sh"
+        if default.is_file():
+            os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(default.resolve())
+        return
+
+    expanded = os.path.expanduser(os.path.expandvars(script))
+    candidate = Path(expanded)
+    if candidate.is_file():
+        os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(candidate.resolve())
+        return
+    if not candidate.is_absolute():
+        candidate = (_PROJECT_ROOT / expanded).resolve()
+    if candidate.is_file():
+        os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(candidate)
+        return
+
+    sibling = _PROJECT_ROOT.parent / "bifrost-trade-infra" / "scripts" / "k3s" / "fetch-kubeconfig.sh"
+    if sibling.is_file():
+        os.environ["PLATFORM_CLUSTER_SYNC_SCRIPT"] = str(sibling.resolve())
+        return
+
+    # Last resort: keep configured value (API will surface a clear not-found error).
 
 
 def _parse_listen_port(listen: str, default: int) -> int:
@@ -125,7 +170,9 @@ def shutil_which(cmd: str) -> str | None:
 
 
 def _child_env() -> dict[str, str]:
+    _normalize_platform_env()
     env = os.environ.copy()
+    env["PLATFORM_PROJECT_ROOT"] = str(_PROJECT_ROOT)
     # Homebrew Go on Apple Silicon
     brew_bin = "/opt/homebrew/bin"
     if Path(brew_bin).is_dir():
@@ -148,6 +195,7 @@ def main() -> int:
     args = parser.parse_args()
 
     _load_dotenv()
+    _normalize_platform_env()
 
     api_port = _parse_listen_port(os.environ.get("PLATFORM_LISTEN", ":8780"), 8780)
     console_port = int(os.environ.get("PLATFORM_CONSOLE_PORT", "5180"))

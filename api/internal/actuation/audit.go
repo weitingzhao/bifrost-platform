@@ -64,6 +64,9 @@ func (l *AuditLog) HandleList(w http.ResponseWriter, _ *http.Request) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	records := append([]AuditRecord(nil), l.records...)
+	if records == nil {
+		records = []AuditRecord{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"records": records})
 }
 

@@ -14,6 +14,7 @@ import {
 import { DOC_LINKS } from '@/lib/docsLinks'
 import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
+import { PlatformAuthBar } from '@/components/PlatformAuthBar'
 import { ClusterPage } from '@/pages/ClusterPage'
 import { DeliveryPage } from '@/pages/DeliveryPage'
 import { EnvironmentsPage } from '@/pages/EnvironmentsPage'
@@ -289,6 +290,7 @@ export function ConsolePage() {
               onOpenCluster={openCluster}
             />
           </div>
+          <PlatformAuthBar />
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Ops API{' '}
             <StatusLamp value={healthQuery.data ? 'ok' : 'fail'} kind="reach" />

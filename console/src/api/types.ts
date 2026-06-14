@@ -169,6 +169,10 @@ export interface ClusterSummary {
   nodes_ready: number
   nodes_total: number
   failing_pods: number
+  running_pods: number
+  pending_pods: number
+  cpu_allocatable?: string
+  memory_allocatable?: string
   generated_at: string
 }
 
@@ -179,6 +183,13 @@ export interface ClusterNode {
   version: string
   internal_ip: string
   reachability: Reachability
+  cpu_allocatable?: string
+  memory_allocatable?: string
+  storage_allocatable?: string
+  cpu_usage_percent?: number
+  memory_usage_percent?: number
+  cpu_reachability?: Reachability
+  memory_reachability?: Reachability
 }
 
 export interface ClusterNodesResponse {
@@ -250,6 +261,27 @@ export interface ClusterSyncResponse {
   ok: boolean
   path: string
   message: string
+}
+
+export interface ClusterPodMetric {
+  namespace: string
+  name: string
+  cpu: string
+  memory: string
+}
+
+export interface ClusterMetricsResponse {
+  cluster_id: string
+  reachability: Reachability
+  detail: string
+  metrics_server_available: boolean
+  metrics_server_detail?: string
+  cpu_usage_percent?: number
+  memory_usage_percent?: number
+  cpu_reachability?: Reachability
+  memory_reachability?: Reachability
+  top_pods: ClusterPodMetric[]
+  generated_at: string
 }
 
 export interface AuthCapabilities {

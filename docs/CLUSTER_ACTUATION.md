@@ -10,7 +10,7 @@ This document breaks cluster control into P1-P4 so the Platform can move from L0
 
 | Phase | Nodes | Workloads | GitOps / Delivery | Stack | Audit / Jobs |
 |-------|-------|-----------|-------------------|-------|--------------|
-| P1 | Read-only node health from L0 probe | Ensure Bifrost namespaces, restart Deployment, scale Deployment, delete Pod, tail Pod logs | Documented only | Documented only | Bearer token auth, in-memory/JSON audit log, simple job list stub |
+| P1 | Read-only node health + **Layer A KPIs** (capacity, metrics-server usage when installed) | Ensure Bifrost namespaces, restart Deployment, scale Deployment, delete Pod, tail Pod logs | Documented only | Documented only | Bearer token auth, in-memory/JSON audit log, simple job list stub |
 | P2 | Join node, drain/uncordon node, cordon node with Owner confirmation | Safer workload presets and namespace guardrails | Delivery page deep links | Preflight checks for platform add-ons | Durable jobs for long-running node operations |
 | P3 | Node readiness gates for promotion | Workload rollout status gates | Argo CD sync/rollback, Tekton pipeline run and logs | GitOps app status | Shared audit contract for UI, API, future MCP |
 | P4 | Cluster maintenance playbooks | Stack-wide restart presets | Release gate integration | Install/upgrade Platform stack add-ons via curated Helm/API presets | Persistent audit store, retention, export, job replay context |
@@ -29,6 +29,29 @@ This document breaks cluster control into P1-P4 so the Platform can move from L0
 | POST | `/api/v1/cluster/workloads/scale` | operator | Scale a Deployment with `{namespace, kind, name, replicas}` |
 | DELETE | `/api/v1/cluster/workloads/pods/{namespace}/{name}` | operator | Delete a Pod; controller may recreate it |
 | GET | `/api/v1/cluster/workloads/pods/{namespace}/{name}/logs` | viewer | Tail Pod logs, with `tailLines` and optional `container` |
+| GET | `/api/v1/cluster/metrics` | viewer | Cluster CPU/Mem usage (metrics-server), top pods in Bifrost namespaces (`?limit=8`) |
+
+### P1.5 — Layer A observability (implemented)
+
+Operational dashboards on the Cluster page — **not** full Prometheus/Grafana (Layer B).
+
+| Surface | Data source | Notes |
+|---------|-------------|-------|
+| Overview KPI strip | `GET /cluster` + `GET /cluster/metrics` | Nodes ready %, running/pending pods, failing pods, metrics-server status, cluster allocatable CPU/mem |
+| Nodes table | `GET /cluster/nodes` | Per-node allocatable CPU/mem/storage; CPU/Mem % when metrics-server is reachable |
+| Top pods table | `GET /cluster/metrics` | Top N pods by CPU in `clusters.yaml` `bifrost_namespaces` only |
+
+**Usage thresholds (lamp):** CPU/Mem ≥85% degraded, ≥95% fail.
+
+**metrics-server:** Required for live usage % and top pods. Install on K3s when ready:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+On some K3s dev clusters you may need `--kubelet-insecure-tls` on the metrics-server deployment.
+
+**Layer B (deferred):** `monitoring` namespace — Prometheus, Grafana, Loki, node_exporter disk %, historical charts, alert rules. Cluster page will link/embed Grafana in a later phase; do not duplicate full monitoring in Console.
 
 ### P2
 
@@ -64,11 +87,12 @@ Cluster page evolves into tabs while preserving the current P0 sections:
 
 | Tab | Phase | Contents |
 |-----|-------|----------|
-| Overview | P0/P1 | Health strip, kubeconfig sync, reachability detail |
-| Nodes | P0/P2 | Node table, readiness, future cordon/drain/join actions |
+| Overview | P0/P1/P1.5 | KPI strip (reachability, pods, metrics-server, allocatable), kubeconfig sync |
+| Nodes | P0/P1.5/P2 | Node table with capacity + usage %, readiness; future cordon/drain/join |
 | Namespaces | P0/P1 | Bifrost namespace filter, Ensure Bifrost namespaces action |
 | Workloads | P0/P1 | Deployment and Pod table, restart/scale/delete actions, Pod drawer |
 | Logs | P1 | Pod drawer log tail and recent events |
+| Metrics | P1.5 | Top pods (Bifrost NS), cluster usage summary via metrics-server |
 | Audit | P1+ | Recent actuation records and future job links |
 | GitOps | P3 | Argo CD apps, sync/rollback, Tekton runs |
 | Stack | P4 | Platform add-on install/upgrade workflows |

@@ -74,10 +74,15 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 
 	ready, total := countReadyNodes(nodes.Items)
 	failing := 0
+	runningPods := 0
+	pendingPods := 0
 	pods, podErr := clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if podErr == nil {
 		failing = countFailingPods(pods.Items)
+		runningPods, pendingPods = countPodsByPhase(pods.Items)
 	}
+
+	cpuAlloc, memAlloc := sumAllocatable(nodes.Items, true)
 
 	reach := probe.ReachOK
 	detail := "cluster API reachable"
@@ -97,18 +102,22 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 	}
 
 	return SummaryResponse{
-		ClusterID:      base.ClusterID,
-		Label:          base.Label,
-		Distribution:   base.Distribution,
-		APIServer:      base.APIServer,
-		KubeconfigPath: path,
-		Reachability:   reach,
-		Detail:         detail,
-		ServerVersion:  version.GitVersion,
-		NodesReady:     ready,
-		NodesTotal:     total,
-		FailingPods:    failing,
-		GeneratedAt:    now,
+		ClusterID:         base.ClusterID,
+		Label:             base.Label,
+		Distribution:      base.Distribution,
+		APIServer:         base.APIServer,
+		KubeconfigPath:    path,
+		Reachability:      reach,
+		Detail:            detail,
+		ServerVersion:     version.GitVersion,
+		NodesReady:        ready,
+		NodesTotal:        total,
+		FailingPods:       failing,
+		RunningPods:       runningPods,
+		PendingPods:       pendingPods,
+		CPUAllocatable:    formatCPU(cpuAlloc),
+		MemoryAllocatable: formatMemory(memAlloc),
+		GeneratedAt:       now,
 	}
 }
 
@@ -136,6 +145,12 @@ func (s *Service) Nodes(ctx context.Context) NodesResponse {
 	for _, n := range list.Items {
 		views = append(views, nodeView(n))
 	}
+
+	metricsClient, _ := s.buildMetricsClient()
+	if metricsClient != nil {
+		views = enrichNodesWithMetrics(ctx, views, list.Items, metricsClient)
+	}
+
 	sort.Slice(views, func(i, j int) bool { return views[i].Name < views[j].Name })
 
 	ready, total := countReadyNodes(list.Items)
@@ -437,13 +452,17 @@ func nodeView(n corev1.Node) NodeView {
 	if status != "Ready" {
 		reach = probe.ReachFail
 	}
+	cpuAlloc, memAlloc, storageAlloc := nodeAllocatable(n)
 	return NodeView{
-		Name:         n.Name,
-		Status:       status,
-		Roles:        nodeRoles(n.Labels),
-		Version:      n.Status.NodeInfo.KubeletVersion,
-		InternalIP:   ip,
-		Reachability: reach,
+		Name:               n.Name,
+		Status:             status,
+		Roles:              nodeRoles(n.Labels),
+		Version:            n.Status.NodeInfo.KubeletVersion,
+		InternalIP:         ip,
+		Reachability:       reach,
+		CPUAllocatable:     formatCPU(cpuAlloc),
+		MemoryAllocatable:  formatMemory(memAlloc),
+		StorageAllocatable: formatMemory(storageAlloc),
 	}
 }
 
