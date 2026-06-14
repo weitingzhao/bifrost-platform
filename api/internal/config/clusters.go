@@ -4,19 +4,28 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
+type ObservabilityURLs struct {
+	Grafana    string `yaml:"grafana"`
+	Prometheus string `yaml:"prometheus"`
+	DocsInfra  string `yaml:"docs_infra"`
+}
+
 type ClusterEntry struct {
-	ID                 string   `yaml:"id" json:"id"`
-	Label              string   `yaml:"label" json:"label"`
-	Distribution       string   `yaml:"distribution" json:"distribution"`
-	APIServer          string   `yaml:"api_server" json:"api_server"`
-	KubeconfigEnv      string   `yaml:"kubeconfig_env" json:"kubeconfig_env"`
-	SSHHost            string   `yaml:"ssh_host" json:"ssh_host"`
-	NodeIP             string   `yaml:"node_ip" json:"node_ip"`
-	BifrostNamespaces  []string `yaml:"bifrost_namespaces" json:"bifrost_namespaces"`
+	ID                  string             `yaml:"id" json:"id"`
+	Label               string             `yaml:"label" json:"label"`
+	Distribution        string             `yaml:"distribution" json:"distribution"`
+	APIServer           string             `yaml:"api_server" json:"api_server"`
+	KubeconfigEnv       string             `yaml:"kubeconfig_env" json:"kubeconfig_env"`
+	SSHHost             string             `yaml:"ssh_host" json:"ssh_host"`
+	NodeIP              string             `yaml:"node_ip" json:"node_ip"`
+	BifrostNamespaces   []string           `yaml:"bifrost_namespaces" json:"bifrost_namespaces"`
+	MonitoringNS        string             `yaml:"monitoring_namespace" json:"monitoring_namespace"`
+	ObservabilityURLs   ObservabilityURLs  `yaml:"observability_urls" json:"observability_urls"`
 }
 
 type ClustersFile struct {
@@ -80,6 +89,40 @@ func (e *ClusterEntry) KubeconfigPath() string {
 	home, _ := os.UserHomeDir()
 	if home != "" {
 		return filepath.Join(home, ".kube", "bifrost-k3s.yaml")
+	}
+	return ""
+}
+
+func (e *ClusterEntry) ResolvedMonitoringNamespace() string {
+	if e == nil || e.MonitoringNS == "" {
+		return "monitoring"
+	}
+	return e.MonitoringNS
+}
+
+func (e *ClusterEntry) GrafanaURL() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_GRAFANA_URL")); v != "" {
+		return v
+	}
+	if e != nil {
+		return strings.TrimSpace(e.ObservabilityURLs.Grafana)
+	}
+	return ""
+}
+
+func (e *ClusterEntry) PrometheusURL() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_PROMETHEUS_URL")); v != "" {
+		return v
+	}
+	if e != nil {
+		return strings.TrimSpace(e.ObservabilityURLs.Prometheus)
+	}
+	return ""
+}
+
+func (e *ClusterEntry) ObservabilityDocsURL() string {
+	if e != nil && strings.TrimSpace(e.ObservabilityURLs.DocsInfra) != "" {
+		return strings.TrimSpace(e.ObservabilityURLs.DocsInfra)
 	}
 	return ""
 }

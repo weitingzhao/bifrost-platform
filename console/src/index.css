@@ -408,6 +408,20 @@ html {
   z-index: 10;
 }
 
+.briefing-section-kicker {
+  font-size: var(--text-dense-meta);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.briefing-maintain-panel {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+}
+
 .llm-content-panel {
   border: 1px solid var(--border);
   border-radius: var(--radius);

@@ -30,6 +30,8 @@ This document breaks cluster control into P1-P4 so the Platform can move from L0
 | DELETE | `/api/v1/cluster/workloads/pods/{namespace}/{name}` | operator | Delete a Pod; controller may recreate it |
 | GET | `/api/v1/cluster/workloads/pods/{namespace}/{name}/logs` | viewer | Tail Pod logs, with `tailLines` and optional `container` |
 | GET | `/api/v1/cluster/metrics` | viewer | Cluster CPU/Mem usage (metrics-server), top pods in Bifrost namespaces (`?limit=8`) |
+| GET | `/api/v1/cluster/observability` | viewer | Layer B probe: `monitoring` namespace workloads (Prometheus/Grafana/Loki/Alertmanager) |
+| POST | `/api/v1/cluster/addons/metrics-server/ensure` | admin | Idempotently install metrics-server via curated `install-metrics-server.sh` (Layer A) |
 
 ### P1.5 — Layer A observability (implemented)
 
@@ -43,7 +45,16 @@ Operational dashboards on the Cluster page — **not** full Prometheus/Grafana (
 
 **Usage thresholds (lamp):** CPU/Mem ≥85% degraded, ≥95% fail.
 
-**metrics-server:** Required for live usage % and top pods. Install on K3s when ready:
+**metrics-server:** Required for live usage % and top pods. Install via Platform API (preferred):
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $PLATFORM_ADMIN_TOKEN" \
+  http://127.0.0.1:8780/api/v1/cluster/addons/metrics-server/ensure
+```
+
+Or Console **Install metrics-server** (admin token). Bootstrap Makefile: `make k3s-install-metrics-remote` in `bifrost-trade-infra`.
+
+Manual reference only (not operator runbook):
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -51,7 +62,45 @@ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/late
 
 On some K3s dev clusters you may need `--kubelet-insecure-tls` on the metrics-server deployment.
 
-**Layer B (deferred):** `monitoring` namespace — Prometheus, Grafana, Loki, node_exporter disk %, historical charts, alert rules. Cluster page will link/embed Grafana in a later phase; do not duplicate full monitoring in Console.
+### P1.5 — Layer B observability panel (implemented)
+
+Lightweight probe + Cluster UI panel — **not** Grafana iframe, Prometheus query API, or stack install actuation (P4).
+
+| Surface | Data source | Notes |
+|---------|-------------|-------|
+| Observability panel | `GET /cluster/observability` | Shows Planned / Partial / Ready; component table; doc links |
+| Open Grafana | `grafana_url` from config/env | Button only when component is ready and URL is configured |
+
+**Probe logic:** List Deployments and StatefulSets in `monitoring_namespace` (default `monitoring` from `config/clusters.yaml`). Match component names by substring (case-insensitive): `prometheus`, `grafana`, `loki`, `alertmanager`. No HTTP health checks against Grafana/Prometheus URLs.
+
+**`GET /api/v1/cluster/observability` response fields:**
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `cluster_id` | string | From `clusters.yaml` |
+| `namespace` | string | Resolved monitoring namespace |
+| `layer_b_status` | `not_installed` \| `partial` \| `ready` | 0 ready → not_installed; 1–3 → partial; 4 → ready |
+| `reachability` | `ok` \| `degraded` \| `fail` \| `unknown` | Aggregate lamp |
+| `detail` | string | Human summary (e.g. planned message when not installed) |
+| `components[]` | array | `id`, `label`, `kind`, `name`, `ready`, `status`, `reachability`, `detail` |
+| `grafana_url` | string? | From `observability_urls.grafana` or `PLATFORM_GRAFANA_URL` when Grafana component is ready |
+| `prometheus_url` | string? | From `observability_urls.prometheus` or `PLATFORM_PROMETHEUS_URL` when Prometheus is ready |
+| `docs_url` | string? | Optional override for infra handbook link |
+| `generated_at` | RFC3339 | Probe timestamp |
+
+**UI when not deployed:** Panel title **Observability — Layer B** shows **Planned · kube-prometheus-stack not detected** with links to K3s phase 3 docs and this handbook. All four components show `missing` — the UI does not pretend Grafana exists.
+
+**Config (`config/clusters.yaml`):**
+
+```yaml
+monitoring_namespace: monitoring
+observability_urls:
+  grafana: ""      # e.g. http://192.168.10.73:3000 after deploy
+  prometheus: ""
+  docs_infra: ""   # optional; Console defaults to infra K3S_PLATFORM_ARCHITECTURE §9
+```
+
+Env overrides: `PLATFORM_GRAFANA_URL`, `PLATFORM_PROMETHEUS_URL`.
 
 ### P2
 
@@ -93,6 +142,7 @@ Cluster page evolves into tabs while preserving the current P0 sections:
 | Workloads | P0/P1 | Deployment and Pod table, restart/scale/delete actions, Pod drawer |
 | Logs | P1 | Pod drawer log tail and recent events |
 | Metrics | P1.5 | Top pods (Bifrost NS), cluster usage summary via metrics-server |
+| Observability (Layer B) | P1.5 | Planned/partial/ready probe; component table; Open Grafana when configured |
 | Audit | P1+ | Recent actuation records and future job links |
 | GitOps | P3 | Argo CD apps, sync/rollback, Tekton runs |
 | Stack | P4 | Platform add-on install/upgrade workflows |

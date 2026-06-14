@@ -11,5 +11,7 @@ export const DOC_LINKS = {
   architecture: `${PLATFORM_DOCS_BASE}/ARCHITECTURE/`,
   agentModes: `${PLATFORM_DOCS_BASE}/AGENT_MODES/`,
   tradeContract: `${PLATFORM_DOCS_BASE}/TRADE_CONTRACT/`,
+  clusterActuation: `${PLATFORM_DOCS_BASE}/CLUSTER_ACTUATION/`,
   infraHome: INFRA_DOCS_BASE,
+  k3sObservability: `${INFRA_DOCS_BASE}/K3S_PLATFORM_ARCHITECTURE/#9-实施路线图`,
 } as const

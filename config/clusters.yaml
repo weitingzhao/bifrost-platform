@@ -16,3 +16,8 @@ clusters:
       - bifrost-stg
       - monitoring
       - ai
+    monitoring_namespace: monitoring
+    observability_urls:
+      grafana: ""
+      prometheus: ""
+      docs_infra: ""

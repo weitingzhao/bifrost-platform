@@ -284,6 +284,32 @@ export interface ClusterMetricsResponse {
   generated_at: string
 }
 
+export type LayerBStatus = 'not_installed' | 'partial' | 'ready'
+
+export interface ObservabilityComponent {
+  id: string
+  label: string
+  kind: string
+  name: string
+  ready: string
+  status: string
+  reachability: Reachability
+  detail: string
+}
+
+export interface ClusterObservabilityResponse {
+  cluster_id: string
+  namespace: string
+  layer_b_status: LayerBStatus
+  reachability: Reachability
+  detail: string
+  components: ObservabilityComponent[]
+  grafana_url?: string
+  prometheus_url?: string
+  docs_url?: string
+  generated_at: string
+}
+
 export interface AuthCapabilities {
   authenticated: boolean
   principal?: string

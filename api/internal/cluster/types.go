@@ -133,6 +133,30 @@ type MetricsResponse struct {
 	GeneratedAt            time.Time          `json:"generated_at"`
 }
 
+type ObservabilityComponentView struct {
+	ID           string             `json:"id"`
+	Label        string             `json:"label"`
+	Kind         string             `json:"kind"`
+	Name         string             `json:"name"`
+	Ready        string             `json:"ready"`
+	Status       string             `json:"status"`
+	Reachability probe.Reachability `json:"reachability"`
+	Detail       string             `json:"detail"`
+}
+
+type ObservabilityResponse struct {
+	ClusterID     string                       `json:"cluster_id"`
+	Namespace     string                       `json:"namespace"`
+	LayerBStatus  string                       `json:"layer_b_status"`
+	Reachability  probe.Reachability           `json:"reachability"`
+	Detail        string                       `json:"detail"`
+	Components    []ObservabilityComponentView `json:"components"`
+	GrafanaURL    string                       `json:"grafana_url,omitempty"`
+	PrometheusURL string                       `json:"prometheus_url,omitempty"`
+	DocsURL       string                       `json:"docs_url,omitempty"`
+	GeneratedAt   time.Time                    `json:"generated_at"`
+}
+
 type ClientError struct {
 	Reachability probe.Reachability
 	Detail       string

@@ -15,6 +15,7 @@ import { DOC_LINKS } from '@/lib/docsLinks'
 import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
 import { PlatformAuthBar } from '@/components/PlatformAuthBar'
+import { BriefingPage } from '@/pages/BriefingPage'
 import { ClusterPage } from '@/pages/ClusterPage'
 import { DeliveryPage } from '@/pages/DeliveryPage'
 import { EnvironmentsPage } from '@/pages/EnvironmentsPage'
@@ -29,6 +30,7 @@ const ControlRoomPage = lazy(() =>
 )
 
 type ViewTab =
+  | 'briefing'
   | 'control-room'
   | 'pulse'
   | 'runtime-map'
@@ -40,6 +42,7 @@ type ViewTab =
   | 'console'
 
 const VIEW_TITLES: Record<ViewTab, string> = {
+  briefing: 'Agent Briefing',
   'control-room': 'Control Room',
   pulse: 'Pulse',
   'runtime-map': 'Runtime Map',
@@ -93,6 +96,7 @@ export function ConsolePage() {
     queryFn: () => fetchMatrix(),
     refetchInterval: 30_000,
     enabled:
+      viewTab === 'briefing' ||
       viewTab === 'control-room' ||
       viewTab === 'pulse' ||
       viewTab === 'promote' ||
@@ -104,6 +108,7 @@ export function ConsolePage() {
     queryFn: fetchCluster,
     refetchInterval: 30_000,
     enabled:
+      viewTab === 'briefing' ||
       viewTab === 'cluster' ||
       viewTab === 'control-room' ||
       viewTab === 'pulse' ||
@@ -142,6 +147,7 @@ export function ConsolePage() {
   const matrixUpdatedAt = useMemo(() => {
     if (viewTab === 'runtime-map') return runtimeMatrix?.generated_at ?? null
     if (
+      viewTab === 'briefing' ||
       viewTab === 'control-room' ||
       viewTab === 'pulse' ||
       viewTab === 'promote' ||
@@ -179,6 +185,7 @@ export function ConsolePage() {
     {
       label: 'Ops',
       items: [
+        { id: 'briefing', label: 'Agent Briefing', shortLabel: 'B' },
         { id: 'control-room', label: 'Control Room', shortLabel: 'C' },
         { id: 'pulse', label: 'Pulse', shortLabel: 'P' },
       ],
@@ -250,6 +257,7 @@ export function ConsolePage() {
 
   const showEnvStrip = viewTab === 'runtime-map'
   const showPageHeader = ![
+    'briefing',
     'control-room',
     'pulse',
     'runtime-map',
@@ -317,6 +325,24 @@ export function ConsolePage() {
               setEnvFilter(id)
             }}
           />
+        )}
+
+        {viewTab === 'briefing' && (
+          <>
+            <PageHeader
+              title={VIEW_TITLES.briefing}
+              description="Pick work intent, review UI progress, generate a full context pack for a new Cursor Agent session."
+            />
+            <BriefingPage
+              context={contextQuery.data}
+              contextLoading={contextQuery.isLoading}
+              matrices={pulseMatrices}
+              matrixLoading={matrixForPulse.isLoading}
+              clusterSummary={clusterQuery.data}
+              clusterLoading={clusterQuery.isLoading}
+              platformHealthy={healthQuery.data}
+            />
+          </>
         )}
 
         {viewTab === 'control-room' && (

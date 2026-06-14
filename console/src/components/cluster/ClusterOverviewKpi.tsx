@@ -92,7 +92,8 @@ export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverv
       </div>
 
       <p className="cluster-kpi-footer m-0 mt-3 font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-        {summary.distribution.toUpperCase()} @ {summary.api_server.replace('https://', '')}
+        Layer A · metrics-server · {summary.distribution.toUpperCase()} @{' '}
+        {summary.api_server.replace('https://', '')}
         {summary.server_version != null && summary.server_version !== '' && (
           <> · {summary.server_version}</>
         )}

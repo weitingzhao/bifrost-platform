@@ -16,6 +16,16 @@ Bifrost Trade uses two flywheels (product vs runtime). Agents and Owner should d
 
 On **Control Room** → **Agent focus dock**, three Copy buttons build layered clipboard text (length increases Product &lt; Ops &lt; Promote). Each pack starts with `Mode: Product|Ops|Promote`.
 
+**Agent Briefing** (Ops → **Agent Briefing** tab) is the recommended entry for **new Cursor sessions**:
+
+1. Select **work intent** (operations, feature extension, troubleshooting, release, cluster/K3s, trade frontend migration).
+2. Review live snapshot + Console UI progress table.
+3. Click **Generate session briefing** → **Copy session pack** → paste as the first message in a new chat.
+
+The briefing pack includes: intent-specific read-first docs, live matrix/cluster/spine status, UI progress snapshot, full spine+matrix context, and a suggested opening prompt. Content **changes with the work intent** you select in step 1.
+
+**Align Briefing with the system** (separate section at page bottom — **not** the same as session briefing): meta task `briefing_alignment` for an Agent to sync Briefing sources with live Console/API. Use after shipping platform features; **do not** use for day-to-day ops/debug/release work.
+
 | Button | Contents |
 |--------|----------|
 | **Copy Product** | Phase 1 discipline + spine focus/deployment — **no** matrix |
@@ -31,6 +41,7 @@ Catalog tab **Copy for LLM** still uses the full static catalog + spine (`buildE
 
 When starting a Cursor session, prefer this order:
 
+0. **Agent Briefing** — Ops Console → Agent Briefing → pick intent → Generate → Copy all (new sessions)
 1. **Discipline** — workspace rules, migration-protocol, dense-ui-system
 2. **Spine** — `GET http://127.0.0.1:8780/api/v1/context` or Ops Console → Catalog → Copy for LLM
 3. **Task scope** — one milestone id, one env (`dev` / `prod`), one repo

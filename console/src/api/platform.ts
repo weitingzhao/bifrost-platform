@@ -5,6 +5,7 @@ import type {
   AuthCapabilities,
   ClusterEventsResponse,
   ClusterMetricsResponse,
+  ClusterObservabilityResponse,
   ClusterNamespacesResponse,
   ClusterNodesResponse,
   ClusterSummary,
@@ -104,6 +105,12 @@ export async function fetchClusterMetrics(limit = 8): Promise<ClusterMetricsResp
   return r.json() as Promise<ClusterMetricsResponse>
 }
 
+export async function fetchClusterObservability(): Promise<ClusterObservabilityResponse> {
+  const r = await fetch('/api/v1/cluster/observability')
+  if (!r.ok) throw new Error(`cluster observability: HTTP ${r.status}`)
+  return r.json() as Promise<ClusterObservabilityResponse>
+}
+
 export async function fetchClusterNamespaces(
   watch?: 'bifrost' | '',
 ): Promise<ClusterNamespacesResponse> {
@@ -154,6 +161,13 @@ export async function fetchAudit(): Promise<AuditResponse> {
 
 export async function ensureBifrostNamespaces(): Promise<ActuationResponse> {
   const r = await authedFetch('ensure bifrost namespaces', '/api/v1/cluster/namespaces/ensure-bifrost', {
+    method: 'POST',
+  })
+  return r.json() as Promise<ActuationResponse>
+}
+
+export async function ensureMetricsServer(): Promise<ActuationResponse> {
+  const r = await authedFetch('ensure metrics-server', '/api/v1/cluster/addons/metrics-server/ensure', {
     method: 'POST',
   })
   return r.json() as Promise<ActuationResponse>

@@ -1,0 +1,189 @@
+import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import {
+  buildOpsPack,
+  buildProductPack,
+  buildPromotePack,
+  STARTER_PROMPTS,
+} from '@/lib/control-room/agentContextPacks'
+import {
+  evaluatePromoteStatus,
+  prodFailingTargetIds,
+} from '@/lib/control-room/matrixSummary'
+import { formatBriefingLiveStatus, type BriefingSnapshotInput } from '@/lib/briefing/briefingSnapshot'
+import { formatUiProgressSection } from '@/lib/briefing/uiProgressSnapshot'
+import { type WorkIntent, workIntentById } from '@/lib/briefing/workIntents'
+
+export interface BriefingInputs extends BriefingSnapshotInput {
+  intent: WorkIntent
+}
+
+function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string {
+  const opt = workIntentById(intent)
+  const lines = [
+    '## Your task for this session',
+    '',
+    `Work intent: **${opt.label}** (${opt.id})`,
+    `Suggested Agent mode: ${opt.agentMode}`,
+    '',
+    opt.description,
+    '',
+  ]
+  if (ctx?.focus.blocker) {
+    lines.push(`Current spine blocker: ${ctx.focus.blocker}`, '')
+  }
+
+  const readFirst: Record<WorkIntent, string[]> = {
+    ops: [
+      'bifrost-platform/docs/NORTH_STAR.md',
+      'bifrost-platform/docs/TRADE_CONTRACT.md',
+      'bifrost-platform/config/ops-context.yaml (via GET /api/v1/context)',
+      'bifrost-trade-infra/docs/MIGRATION_TRACKING.md (trade stack only)',
+    ],
+    feature: [
+      'bifrost-platform/docs/ARCHITECTURE.md',
+      'bifrost-platform/docs/CLUSTER_ACTUATION.md (if Cluster-related)',
+      'bifrost-platform/config/ops-context.yaml — milestone ops-ui-actuation',
+    ],
+    debug: [
+      'Ops Console → Runtime Map (failing matrix targets)',
+      'Ops Console → Cluster (kubeconfig, failing pods)',
+      'bifrost-platform/docs/TRADE_CONTRACT.md — probe failure behavior',
+      'context.probe_hints in GET /api/v1/context',
+    ],
+    release: [
+      'bifrost-platform/docs/NORTH_STAR.md',
+      'bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md',
+      'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md',
+      'decision D1 in ops-context spine',
+    ],
+    cluster: [
+      'bifrost-platform/docs/CLUSTER_ACTUATION.md',
+      'bifrost-trade-infra/docs/K3S_PLATFORM_ARCHITECTURE.md §9',
+      'bifrost-platform/config/clusters.yaml',
+    ],
+    frontend: [
+      'bifrost-trade-frontend/CLAUDE.md + docs/DENSE_UI.md',
+      '.cursor/rules/migration-protocol.mdc — Phase 1: New FE + Legacy API',
+      'bifrost-trade-infra/docs/MIGRATION_TRACKING.md',
+      'Never edit bifrost-trader-engine/ (read-only reference)',
+    ],
+  }
+
+  lines.push('### Read first')
+  for (const doc of readFirst[intent]) lines.push(`- ${doc}`)
+
+  lines.push('', '### Do not (unless Owner expands scope)')
+  const avoid: Record<WorkIntent, string[]> = {
+    ops: ['Edit bifrost-trade-frontend pages', 'Migrate bifrost-trade-api (Phase 1)'],
+    feature: ['Mix trade-frontend + infra in one task', 'Skip audit/auth for write routes'],
+    debug: ['Apply prod actuation without operator token', 'Restart trading daemon via platform'],
+    release: ['Skip D1 or release_gate blockers', 'Mix API migration + FE in one change'],
+    cluster: ['Raw kubectl as operator runbook — use platform-api', 'Install kube-prometheus via ad-hoc shell'],
+    frontend: ['Change compose/prod cutover', 'Migrate bifrost-trade-api backends'],
+  }
+  for (const rule of avoid[intent]) lines.push(`- ${rule}`)
+
+  return lines.join('\n')
+}
+
+function suggestedOpening(intent: WorkIntent, ctx?: OpsContextResponse, matrices?: MatrixResponse[]): string {
+  const opt = workIntentById(intent)
+  const fails = matrices != null ? prodFailingTargetIds(matrices) : []
+
+  switch (intent) {
+    case 'ops':
+      return ctx?.focus.blocker
+        ? `Mode: Ops. Work intent: operations. Spine blocker is ${ctx.focus.blocker}. List the smallest read-only verification steps on active track ${ctx.deployment.active_track}, then propose one single-variable next action. No trade-frontend edits.`
+        : `Mode: Ops. Work intent: operations. Read spine + prod/dev matrix. Summarize platform governance state and recommend the next ops-ui-actuation milestone step. No trade-frontend edits.`
+    case 'feature':
+      return `Mode: Ops. Work intent: feature extension. Scope to bifrost-platform unless Owner named trade repos. Check milestone ops-ui-actuation and CLUSTER_ACTUATION phase plan. Propose minimal API+Console diff for one capability.`
+    case 'debug':
+      return fails.length > 0
+        ? `Mode: Ops. Work intent: troubleshooting. Prod failing targets: ${fails.join(', ')}. Diagnose root cause with read-only probes first; list evidence from matrix/cluster/spine before suggesting fixes.`
+        : `Mode: Ops. Work intent: troubleshooting. Use live status below. Identify failing or degraded probes, hypothesize root cause, propose read-only verification then minimal fix.`
+    case 'release':
+      return `Mode: Promote. Work intent: release. Assess flywheel A/B readiness from spine + matrix. List all blockers (especially D1). Do not recommend cutover until blockers are explicit.`
+    case 'cluster':
+      return `Mode: Ops. Work intent: cluster/K3s. Review Cluster page Layer A (metrics-server) vs Layer B (observability stack). Propose next step for k3s-phase1 milestone without skipping kubeconfig guardrails.`
+    case 'frontend':
+      return STARTER_PROMPTS.Product +
+        ' Work intent: trade frontend migration. One page / one variable; Legacy API only.'
+    default:
+      return `Mode: ${opt.agentMode}. Work intent: ${intent}.`
+  }
+}
+
+function intentCorePack(intent: WorkIntent, ctx?: OpsContextResponse, matrices: MatrixResponse[] = []): string {
+  const opt = workIntentById(intent)
+  if (!ctx) return buildProductPack(ctx)
+
+  if (opt.agentMode === 'Product' || intent === 'frontend') return buildProductPack(ctx)
+  if (opt.agentMode === 'Promote' || intent === 'release') return buildPromotePack(ctx, matrices)
+
+  const ops = buildOpsPack(ctx, matrices)
+  if (intent === 'debug') {
+    const status = evaluatePromoteStatus(ctx, matrices)
+    const fails = prodFailingTargetIds(matrices)
+    return [
+      ops,
+      '',
+      '## Debug appendix',
+      fails.length > 0 ? `- prod_failing_targets: ${fails.join(', ')}` : '- prod_failing_targets: (none)',
+      ...status.reasons.map(r => `- promote_note: ${r}`),
+      ctx.probe_hints.length > 0
+        ? ctx.probe_hints.map(h => `- hint [${h.target_id}]: ${h.hint}`).join('\n')
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+  if (intent === 'cluster' && matrices.length >= 0) {
+    return [
+      ops,
+      '',
+      '## Cluster appendix',
+      'Layer A: metrics-server + GET /cluster/metrics (CPU/mem, top pods).',
+      'Layer B: GET /cluster/observability — Prometheus/Grafana/Loki/Alertmanager in monitoring NS.',
+      'P1 actuation: ensure namespaces, rollout restart, scale, delete pod (operator token).',
+      'Docs: bifrost-platform/docs/CLUSTER_ACTUATION.md',
+    ].join('\n')
+  }
+  return ops
+}
+
+/** Full briefing for a new Cursor Agent session — paste as first message or context block. */
+export function buildBriefingPack(input: BriefingInputs): string {
+  const now = new Date().toISOString()
+  const opt = workIntentById(input.intent)
+  const opening = suggestedOpening(input.intent, input.context, input.matrices)
+
+  return [
+    '# Bifrost Ops Platform — Agent Session Briefing',
+    `Generated: ${now}`,
+    `Work intent: ${opt.label} (${input.intent})`,
+    '',
+    intentTaskSection(input.intent, input.context),
+    '',
+    formatBriefingLiveStatus(input),
+    '',
+    formatUiProgressSection(),
+    '',
+    '## Authoritative context (spine + matrix)',
+    intentCorePack(input.intent, input.context, input.matrices),
+    '',
+    '## Suggested opening message (paste to Agent)',
+    opening,
+    '',
+    '## Session discipline',
+    '- Reply in Chinese for dialogue; English for UI strings and code identifiers.',
+    '- One repo / one variable per task unless Owner expands scope.',
+    '- bifrost-trader-engine/ is read-only reference — never edit.',
+    '- Phase 1 trade stack: New Frontend + Legacy API only — do not migrate bifrost-trade-api yet.',
+    '',
+    '## Related Console views',
+    '- Control Room — governance + scoped packs',
+    '- Runtime Map — hardware + failing probes',
+    '- Cluster — K3s workloads + Layer A/B observability',
+    '- Catalog → Copy for LLM — full static catalog appendix if needed',
+  ].join('\n')
+}
