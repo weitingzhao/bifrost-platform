@@ -1,6 +1,8 @@
 # CLAUDE.md — bifrost-platform (Bifrost Ops Platform)
 
-> AI-native **control plane** for Bifrost Trade dev/prod environments. Strategic goal: [bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md](../bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md).
+> **North star (终极目标)**: [docs/NORTH_STAR.md](docs/NORTH_STAR.md) — Strategy C hybrid; **all routine ops via Ops Console/API only**; Owner exception = restart Ops Platform. Spine: `config/ops-context.yaml` → `north_star` · decision **D6** · milestone **ops-ui-actuation**.
+
+> AI-native **control plane** for Bifrost Trade dev/prod environments. Upper Goal: [bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md](../bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md).
 
 与本项目用户的所有对话一律使用中文。
 
@@ -20,7 +22,8 @@
 
 ## 边界与纪律
 
-- **L0 默认**：Phase 0 仅只读探测；不实现 `daemon_control`、不连 `ib:operator:cmd`
+- **North star**：除重启 Ops Platform 外，所有运维操作经 Console + platform-api（脚本仅作 API 后端执行器）— 见 `docs/NORTH_STAR.md`
+- **L0 默认**：Phase 0 以只读探测为主；actuation 按 L1/L2 逐步落地（milestone `ops-ui-actuation`）
 - **R-DV3**：平台 Agent 不得触发自动交易 Engine 写路径
 - **聚合不复制**：探测 `bifrost-trade` 已有 `/health`、`/auth/capabilities`，不 import Python 业务包
 - **Agent 模式**：见 `docs/AGENT_MODES.md`（Product / Ops / Promote）

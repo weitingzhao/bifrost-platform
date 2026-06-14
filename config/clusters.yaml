@@ -1,0 +1,18 @@
+# Registered Kubernetes clusters for Platform API cluster probe (L0).
+# Kubeconfig path: PLATFORM_KUBECONFIG env (default ~/.kube/bifrost-k3s.yaml).
+
+clusters:
+  - id: bifrost-bootstrap
+    label: K3s bootstrap
+    distribution: k3s
+    api_server: https://192.168.10.73:6443
+    kubeconfig_env: PLATFORM_KUBECONFIG
+    ssh_host: vision@192.168.10.73
+    node_ip: 192.168.10.73
+    bifrost_namespaces:
+      - cicd
+      - data
+      - bifrost
+      - bifrost-stg
+      - monitoring
+      - ai

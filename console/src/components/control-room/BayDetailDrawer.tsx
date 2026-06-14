@@ -11,7 +11,7 @@ interface BayDetailDrawerProps {
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
   onClose: () => void
-  onOpenMatrix: () => void
+  onOpenRuntimeMap: () => void
   onOpenProgram: () => void
 }
 
@@ -20,7 +20,7 @@ export function BayDetailDrawer({
   context,
   matrices,
   onClose,
-  onOpenMatrix,
+  onOpenRuntimeMap,
   onOpenProgram,
 }: BayDetailDrawerProps) {
   if (selection == null) return null
@@ -135,8 +135,8 @@ export function BayDetailDrawer({
       </div>
 
       <footer className="bay-detail-drawer-footer">
-        <button type="button" className="btn-ui btn-ui-ghost" onClick={onOpenMatrix}>
-          Open Matrix
+        <button type="button" className="btn-ui btn-ui-ghost" onClick={onOpenRuntimeMap}>
+          Open Runtime Map
         </button>
         <button type="button" className="btn-ui btn-ui-ghost" onClick={onOpenProgram}>
           Open Program

@@ -15,14 +15,17 @@ func TestLoadFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Meta.CatalogVersion != "2026-06-12" {
+	if f.Meta.CatalogVersion != "2026-06-15" {
 		t.Errorf("catalog_version = %q", f.Meta.CatalogVersion)
+	}
+	if f.NorthStar == nil || f.NorthStar.ID != "ops-ui-single-pane" {
+		t.Errorf("north_star = %+v", f.NorthStar)
 	}
 	if f.Deployment.ActiveTrack != "k3s_phase1" {
 		t.Errorf("active_track = %q", f.Deployment.ActiveTrack)
 	}
-	if len(f.Decisions) < 5 {
-		t.Errorf("expected >= 5 decisions, got %d", len(f.Decisions))
+	if len(f.Decisions) < 6 {
+		t.Errorf("expected >= 6 decisions, got %d", len(f.Decisions))
 	}
 	foundD1 := false
 	for _, m := range f.Milestones {

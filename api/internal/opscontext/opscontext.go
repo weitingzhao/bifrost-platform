@@ -72,8 +72,19 @@ type ProbeHint struct {
 	Hint       string `yaml:"hint" json:"hint"`
 }
 
+type NorthStar struct {
+	ID              string   `yaml:"id" json:"id"`
+	Statement       string   `yaml:"statement" json:"statement"`
+	Strategy        string   `yaml:"strategy" json:"strategy"`
+	Principles      []string `yaml:"principles" json:"principles"`
+	OwnerException  string   `yaml:"owner_exception" json:"owner_exception"`
+	Authority       string   `yaml:"authority" json:"authority"`
+	SuccessCriteria []string `yaml:"success_criteria" json:"success_criteria"`
+}
+
 type File struct {
 	Meta                 Meta                            `yaml:"meta" json:"meta"`
+	NorthStar            *NorthStar                      `yaml:"north_star,omitempty" json:"north_star,omitempty"`
 	Deployment           Deployment                      `yaml:"deployment" json:"deployment"`
 	Focus                Focus                           `yaml:"focus" json:"focus"`
 	Milestones           []Milestone                     `yaml:"milestones" json:"milestones"`

@@ -1,7 +1,8 @@
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { MatrixTable } from '@/components/MatrixTable'
 import { flywheelLabel, milestoneStatusClass } from '@/components/FocusStrip'
 import { StatusLamp } from '@bifrost/ui'
+import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 
 interface PulsePageProps {
   context: OpsContextResponse | undefined
@@ -10,8 +11,11 @@ interface PulsePageProps {
   matrixLoading: boolean
   matrixError: Error | null
   platformHealthy: boolean
-  onOpenMatrix: () => void
+  clusterSummary?: ClusterSummary
+  clusterLoading?: boolean
+  onOpenRuntimeMap: () => void
   onOpenProgram: () => void
+  onOpenCluster?: () => void
 }
 
 function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: number } {
@@ -31,8 +35,11 @@ export function PulsePage({
   matrixLoading,
   matrixError,
   platformHealthy,
-  onOpenMatrix,
+  clusterSummary,
+  clusterLoading,
+  onOpenRuntimeMap,
   onOpenProgram,
+  onOpenCluster,
 }: PulsePageProps) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -49,6 +56,22 @@ export function PulsePage({
           <span className="ml-2 text-[var(--text-dense)]">
             platform-api {platformHealthy ? 'healthy' : 'down'}
           </span>
+        </PulseCard>
+
+        <PulseCard title="Cluster">
+          {clusterLoading ? (
+            <span className="text-[var(--muted-foreground)]">…</span>
+          ) : onOpenCluster != null ? (
+            <button type="button" className="focus-strip-link" onClick={onOpenCluster}>
+              <StatusLamp value={clusterSummary?.reachability ?? 'unknown'} kind="reach" />
+              <span className="ml-2">{summarizeCluster(clusterSummary).label}</span>
+            </button>
+          ) : (
+            <>
+              <StatusLamp value={clusterSummary?.reachability ?? 'unknown'} kind="reach" />
+              <span className="ml-2">{summarizeCluster(clusterSummary).label}</span>
+            </>
+          )}
         </PulseCard>
 
         <PulseCard title="Deployment">
@@ -86,8 +109,8 @@ export function PulsePage({
           <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Environment reachability
           </h3>
-          <button type="button" className="btn-ui btn-ui-ghost text-xs" onClick={onOpenMatrix}>
-            Open full matrix
+          <button type="button" className="btn-ui btn-ui-ghost text-xs" onClick={onOpenRuntimeMap}>
+            Open Runtime Map
           </button>
         </header>
         {matrixLoading && (

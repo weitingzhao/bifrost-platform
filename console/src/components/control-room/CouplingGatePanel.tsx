@@ -7,9 +7,15 @@ interface CouplingGatePanelProps {
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
   onOpenProgram: () => void
+  onOpenDelivery?: () => void
 }
 
-export function CouplingGatePanel({ context, matrices, onOpenProgram }: CouplingGatePanelProps) {
+export function CouplingGatePanel({
+  context,
+  matrices,
+  onOpenProgram,
+  onOpenDelivery,
+}: CouplingGatePanelProps) {
   if (!context) {
     return (
       <section className="page-section panel-elevated px-3 py-3">
@@ -45,6 +51,11 @@ export function CouplingGatePanel({ context, matrices, onOpenProgram }: Coupling
       {context.focus.blocker != null && context.focus.blocker !== '' && (
         <button type="button" className="btn-ui btn-ui-ghost mt-2 text-[var(--text-dense)]" onClick={onOpenProgram}>
           Open blocker: {context.focus.blocker}
+        </button>
+      )}
+      {onOpenDelivery != null && (
+        <button type="button" className="btn-ui btn-ui-ghost mt-2 text-[var(--text-dense)]" onClick={onOpenDelivery}>
+          Open Delivery
         </button>
       )}
     </section>

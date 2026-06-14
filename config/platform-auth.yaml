@@ -1,0 +1,16 @@
+# Bifrost Ops Platform auth for L1+ actuation.
+# Prefer env overrides in real runs; inline defaults are local-dev placeholders only.
+
+tokens:
+  - name: viewer
+    role: viewer
+    token_env: PLATFORM_VIEWER_TOKEN
+    token: platform-viewer-dev
+  - name: operator
+    role: operator
+    token_env: PLATFORM_OPERATOR_TOKEN
+    token: platform-operator-dev
+  - name: admin
+    role: admin
+    token_env: PLATFORM_ADMIN_TOKEN
+    token: platform-admin-dev

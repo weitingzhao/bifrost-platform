@@ -3,12 +3,35 @@
 # Detail: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md L3
 
 meta:
-  version: "2026-06-12"
-  catalog_version: "2026-06-12"
+  version: "2026-06-15"
+  catalog_version: "2026-06-15"
+
+# Ultimate goal (Strategy C hybrid) — authoritative for Agent / Program UI.
+# Detail: bifrost-platform/docs/NORTH_STAR.md · decision D6
+north_star:
+  id: ops-ui-single-pane
+  statement: >
+    All environment, cluster, release, and routine ops actions are performed through
+    Bifrost Ops Console and platform-api. The Owner only restarts the Ops Platform
+    process outside the UI (cold start / control-plane upgrade).
+  strategy: hybrid_c
+  principles:
+    - "Single pane — Console + platform-api (+ future MCP) is the only interaction surface"
+    - "Scripts are executors behind API — not operator runbooks; no routine ssh/kubectl/Makefile"
+    - "L0/L1/L2 actuation with audit; identical contract for human UI and AI Agent"
+    - "Hybrid backends — client-go, Argo CD, Tekton, SSH whitelist; embed mature tools, do not fork K8s UIs"
+  owner_exception: "Restart bifrost-platform (make start) when control plane is down or upgraded"
+  authority: bifrost-platform/docs/NORTH_STAR.md
+  success_criteria:
+    - "Cluster join/drain/workload/gitops runnable from Cluster + Delivery pages only"
+    - "Program page and GET /api/v1/context expose north_star on every Agent session"
+    - "MCP Tools mirror UI capabilities with same auth and audit trail"
 
 deployment:
-  phase: compose # compose | k3s_partial | k3s_ha
+  phase: k3s_partial # compose | k3s_partial | k3s_ha
   active_track: k3s_phase1
+
+# clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 
 focus:
   headline: "K3s phase 1 IN_PROGRESS"
@@ -51,6 +74,13 @@ milestones:
     pipeline_after: 2c-b-stable-test
     authority: bifrost-trade-infra/docs/K3S_PLATFORM_ARCHITECTURE.md
 
+  - id: ops-ui-actuation
+    label: Ops UI single-pane actuation (north star)
+    status: IN_PROGRESS
+    pipeline_lane: parallel
+    pipeline_after: k3s-phase1
+    authority: bifrost-platform/docs/NORTH_STAR.md
+
   - id: legacy-retirement
     label: Phase 3 Legacy retirement
     status: NOT_STARTED
@@ -92,6 +122,13 @@ decisions:
     signed_at: "2026-06-04"
     authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
 
+  - id: D6
+    status: SIGNED
+    topic: Ops Platform ultimate goal — Strategy C hybrid single pane
+    conclusion: "All routine ops via Ops Console/API only; hybrid embed Argo/Tekton/K8s executors behind platform-api; Owner exception is restarting Ops Platform itself"
+    signed_at: "2026-06-15"
+    authority: bifrost-platform/docs/NORTH_STAR.md
+
 platform_phases:
   - id: A
     label: Gate
@@ -106,7 +143,7 @@ platform_phases:
   - id: C
     label: Closed loop
     timeframe: "9–18mo"
-    deliverables: "Prometheus/Loki/Grafana · bifrost-ops-mcp · AlertManager · research RAG"
+    deliverables: "Single-pane actuation P1–P5 · Prometheus/Loki/Grafana · bifrost-ops-mcp · Agent self-interaction"
 
 coupling_surfaces:
   - api_nginx_paths

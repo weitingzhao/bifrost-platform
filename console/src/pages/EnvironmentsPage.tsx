@@ -6,6 +6,7 @@ import {
   CATALOG_SOURCE,
   CATALOG_VERSION,
   FLOW_ROWS,
+  flowStatusBadgeClass,
   HARDWARE_ROWS,
   PLATFORM_PHASES,
   SCOPE_ROWS,
@@ -15,7 +16,15 @@ import {
 
 type CopyState = 'idle' | 'copied' | 'error'
 
-export function EnvironmentsPage({ context }: { context?: OpsContextResponse }) {
+export function EnvironmentsPage({
+  context,
+  onOpenRuntimeMap,
+  onOpenDelivery,
+}: {
+  context?: OpsContextResponse
+  onOpenRuntimeMap?: () => void
+  onOpenDelivery?: () => void
+}) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
 
   const handleCopyForLlm = useCallback(async () => {
@@ -84,37 +93,92 @@ export function EnvironmentsPage({ context }: { context?: OpsContextResponse }) 
         </table>
       </CatalogSection>
 
-      <CatalogSection title="Scope — stack components">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Tag</th>
-              <th>Component</th>
-              <th>Technology</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SCOPE_ROWS.map(row => (
-              <tr key={row.tag}>
-                <td>
-                  <span className="badge-ui font-mono-tabular">{row.tag}</span>
-                </td>
-                <td className="font-medium">{row.component}</td>
-                <td>{row.technology}</td>
-                <td className="text-[var(--muted-foreground)]">{row.notes}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </CatalogSection>
+      <section className="page-section panel-elevated px-4 py-3">
+        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+          Hardware & software stack (live)
+        </h3>
+        <p className="m-0 mt-2 text-[var(--text-dense)]">
+          Interactive topology, SCOPE layers, and matrix probes are on{' '}
+          <strong>Runtime Map</strong> (authoritative live view).
+        </p>
+        {onOpenRuntimeMap != null && (
+          <button type="button" className="btn-ui btn-ui-primary mt-3" onClick={onOpenRuntimeMap}>
+            Open Runtime Map
+          </button>
+        )}
+        <details className="mt-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          <summary className="cursor-pointer">Full static catalog (Scope + Hardware tables)</summary>
+          <div className="mt-3 flex flex-col gap-4">
+            <CatalogSection title="Scope — stack components">
+              <table className="dense-table">
+                <thead>
+                  <tr>
+                    <th>Tag</th>
+                    <th>Component</th>
+                    <th>Technology</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {SCOPE_ROWS.map(row => (
+                    <tr key={row.tag}>
+                      <td>
+                        <span className="badge-ui font-mono-tabular">{row.tag}</span>
+                      </td>
+                      <td className="font-medium">{row.component}</td>
+                      <td>{row.technology}</td>
+                      <td className="text-[var(--muted-foreground)]">{row.notes}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CatalogSection>
+            <CatalogSection title="Hardware nodes">
+              <table className="dense-table">
+                <thead>
+                  <tr>
+                    <th>Node</th>
+                    <th>Host</th>
+                    <th>Compose role</th>
+                    <th>K3s role (target)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {HARDWARE_ROWS.map(row => (
+                    <tr key={row.id}>
+                      <td className="font-mono-tabular">{row.id}</td>
+                      <td className="font-mono-tabular">{row.host}</td>
+                      <td>{row.roleCompose}</td>
+                      <td className="text-[var(--muted-foreground)]">{row.roleK3s}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CatalogSection>
+          </div>
+        </details>
+      </section>
 
-      <CatalogSection title="End-to-end flow">
+      <CatalogSection
+        title="End-to-end flow"
+        action={
+          onOpenDelivery != null ? (
+            <button type="button" className="btn-ui btn-ui-ghost text-xs" onClick={onOpenDelivery}>
+              Open Delivery
+            </button>
+          ) : undefined
+        }
+      >
+        <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] border-b border-[var(--border)]">
+          Status: live = operational now · planned = Phase A/B target · blocked = milestone gate · tbd =
+          owner decision pending.
+        </p>
         <table className="dense-table">
           <thead>
             <tr>
               <th>Path</th>
               <th>Stage</th>
+              <th>Status</th>
               <th>Trigger</th>
               <th>Runtime</th>
               <th>Data</th>
@@ -125,32 +189,12 @@ export function EnvironmentsPage({ context }: { context?: OpsContextResponse }) 
               <tr key={`${row.path}-${row.stage}-${i}`}>
                 <td>{row.path}</td>
                 <td>{row.stage}</td>
+                <td>
+                  <span className={flowStatusBadgeClass(row.status)}>{row.status}</span>
+                </td>
                 <td>{row.trigger}</td>
                 <td>{row.runtime}</td>
                 <td className="text-[var(--muted-foreground)]">{row.dataStore}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </CatalogSection>
-
-      <CatalogSection title="Hardware nodes">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Node</th>
-              <th>Host</th>
-              <th>Compose role</th>
-              <th>K3s role (target)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {HARDWARE_ROWS.map(row => (
-              <tr key={row.id}>
-                <td className="font-mono-tabular">{row.id}</td>
-                <td className="font-mono-tabular">{row.host}</td>
-                <td>{row.roleCompose}</td>
-                <td className="text-[var(--muted-foreground)]">{row.roleK3s}</td>
               </tr>
             ))}
           </tbody>
@@ -187,13 +231,22 @@ export function EnvironmentsPage({ context }: { context?: OpsContextResponse }) 
   )
 }
 
-function CatalogSection({ title, children }: { title: string; children: ReactNode }) {
+function CatalogSection({
+  title,
+  children,
+  action,
+}: {
+  title: string
+  children: ReactNode
+  action?: ReactNode
+}) {
   return (
     <section className="page-section panel-elevated overflow-hidden">
-      <header className="px-3 py-2 border-b border-[var(--border)]">
+      <header className="px-3 py-2 border-b border-[var(--border)] flex items-center justify-between gap-2">
         <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           {title}
         </h3>
+        {action}
       </header>
       <div className="dense-table-scroll p-0">{children}</div>
     </section>

@@ -1,14 +1,14 @@
 # Network / platform topology — aligned with bifrost-trade-infra K3S_PLATFORM_ARCHITECTURE.md
 # Status is enriched at runtime from connectivity matrix probes.
 
-deployment_phase: compose   # compose | k3s_partial | k3s_ha
+deployment_phase: k3s_partial   # compose | k3s_partial | k3s_ha
 
 nodes:
   - id: win11-host
     label: Win11 Host
     host: ""                  # set your TWS LAN IP in .env or override below
     group: external
-    compose_roles: [tws, ib_host]
+    compose_roles: [tws]
     k3s_roles: []
     in_k3s_cluster: false
     grid: { row: 0, col: 1 }
@@ -41,11 +41,11 @@ nodes:
     grid: { row: 1, col: 2 }
 
   - id: mini-pc-c
-    label: mini-pc-c
+    label: mini-pc-c (ubt-k3s-01)
     host: 192.168.10.73
     group: linux
     compose_roles: [planned_staging]
-    k3s_roles: [k3s_server_3, monitoring, tekton]
+    k3s_roles: [k3s_server_1, k3s_server_3, monitoring, tekton]
     in_k3s_cluster: true
     grid: { row: 1, col: 3 }
 
