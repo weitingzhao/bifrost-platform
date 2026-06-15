@@ -2,7 +2,13 @@ import { useState } from 'react'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { platformAuthAuthenticatedBadgeClass, platformAuthRoleBadgeClass } from '@/lib/platformAuthUi'
 
-export function PlatformAuthBar() {
+export function PlatformAuthBar({
+  compact = false,
+  hideRefresh = false,
+}: {
+  compact?: boolean
+  hideRefresh?: boolean
+}) {
   const { token, caps, capsLoading, setToken, signOut, refreshCapabilities } = usePlatformAuth()
   const [authOpen, setAuthOpen] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
@@ -31,21 +37,27 @@ export function PlatformAuthBar() {
       <div className="platform-auth-bar__row">
         <div className="platform-auth-bar__badges">
           <span className={`badge-ui ${platformAuthRoleBadgeClass(role)}`}>{role}</span>
-          {caps?.principal != null && caps.principal !== '' && (
+          {!compact && caps?.principal != null && caps.principal !== '' && (
             <span className="text-[var(--muted-foreground)]">{caps.principal}</span>
           )}
           {isAuthenticated ? (
-            <span className={`badge-ui ${platformAuthAuthenticatedBadgeClass()}`}>Authenticated</span>
+            <span className={`badge-ui ${platformAuthAuthenticatedBadgeClass()}`}>
+              {compact ? 'Auth' : 'Authenticated'}
+            </span>
           ) : isInvalidToken ? (
-            <span className="badge-ui platform-auth-badge--warn">Invalid token</span>
+            <span className="badge-ui platform-auth-badge--warn">{compact ? 'Invalid' : 'Invalid token'}</span>
           ) : (
-            <span className="badge-ui platform-auth-badge--warn">Token required for control</span>
+            <span className="badge-ui platform-auth-badge--warn">
+              {compact ? 'No token' : 'Token required for control'}
+            </span>
           )}
         </div>
         <div className="platform-auth-bar__actions">
-          <button type="button" className="btn-ui text-xs" onClick={refreshCapabilities}>
-            Refresh
-          </button>
+          {!hideRefresh && (
+            <button type="button" className="btn-ui text-xs" onClick={refreshCapabilities}>
+              Refresh
+            </button>
+          )}
           {isAuthenticated ? (
             <button type="button" className="btn-ui text-xs" onClick={handleSignOut}>
               Sign out

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { MonitoringShell, PageHeader, PageShell, StatusLamp } from '@bifrost/ui'
+import { PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { MatrixResponse } from '@/api/types'
 import {
@@ -15,6 +15,8 @@ import { DOC_LINKS } from '@/lib/docsLinks'
 import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
 import { PlatformAuthBar } from '@/components/PlatformAuthBar'
+import { ConsoleHeader, OpsContextBar } from '@/components/ConsoleHeader'
+import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
 import { BlueprintPage } from '@/pages/BlueprintPage'
@@ -34,23 +36,7 @@ const ControlRoomPage = lazy(() =>
   import('@/pages/ControlRoomPage').then(m => ({ default: m.ControlRoomPage })),
 )
 
-type ViewTab =
-  | 'briefing'
-  | 'control-room'
-  | 'pulse'
-  | 'runtime-map'
-  | 'cluster'
-  | 'delivery'
-  | 'program'
-  | 'promote'
-  | 'blueprint'
-  | 'environments'
-  | 'platform-standards'
-  | 'agent-protocol'
-  | 'design-system'
-  | 'console'
-
-const VIEW_TITLES: Record<ViewTab, string> = {
+const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   briefing: 'Agent Briefing',
   'control-room': 'Control Room',
   pulse: 'Pulse',
@@ -67,16 +53,25 @@ const VIEW_TITLES: Record<ViewTab, string> = {
   console: 'Server console',
 }
 
-const TRADE_APP_URL = import.meta.env.VITE_TRADE_FRONTEND_URL ?? 'http://127.0.0.1:5173'
+const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
+  'briefing',
+  'control-room',
+  'pulse',
+  'promote',
+  'delivery',
+  'cluster',
+  'runtime-map',
+  'program',
+]
 
-const LEGACY_RUNTIME_HASHES: Record<string, ViewTab> = {
+const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   topology: 'runtime-map',
   matrix: 'runtime-map',
 }
 
 export function ConsolePage() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('prod')
-  const [viewTab, setViewTab] = useState<ViewTab>('control-room')
+  const [viewTab, setViewTab] = useState<ConsoleViewTab>('control-room')
   const qc = useQueryClient()
 
   const envForRuntime = envFilter === 'all' ? 'prod' : envFilter
@@ -209,98 +204,11 @@ export function ConsolePage() {
     }
   }
 
-  type NavItemDef = {
-    id: string
-    label: string
-    shortLabel: string
-    href?: string
-    external?: boolean
-  }
-
-  const navGroups = [
-    {
-      label: 'Ops',
-      items: [
-        { id: 'briefing', label: 'Agent Briefing', shortLabel: 'B' },
-        { id: 'control-room', label: 'Control Room', shortLabel: 'C' },
-        { id: 'pulse', label: 'Pulse', shortLabel: 'P' },
-      ],
-    },
-    {
-      label: 'Runtime',
-      items: [
-        { id: 'runtime-map', label: 'Runtime Map', shortLabel: 'M' },
-        { id: 'cluster', label: 'Cluster', shortLabel: 'K' },
-      ],
-    },
-    {
-      label: 'Program',
-      items: [
-        { id: 'delivery', label: 'Delivery', shortLabel: 'D' },
-        { id: 'program', label: 'Milestones', shortLabel: 'G' },
-        { id: 'promote', label: 'Promote', shortLabel: 'R' },
-      ],
-    },
-    {
-      label: 'Architecture',
-      items: [
-        { id: 'blueprint', label: 'Blueprint', shortLabel: 'A' },
-        { id: 'environments', label: 'Environments', shortLabel: 'E' },
-      ],
-    },
-    {
-      label: 'Standards',
-      items: [
-        { id: 'platform-standards', label: 'Platform', shortLabel: 'T' },
-        { id: 'agent-protocol', label: 'Agent Protocol', shortLabel: 'N' },
-        { id: 'design-system', label: 'Design System', shortLabel: 'U' },
-      ],
-    },
-    {
-      label: 'Tools',
-      items: [{ id: 'console', label: 'Server console', shortLabel: 'S' }],
-    },
-    {
-      label: 'Docs',
-      items: [
-        {
-          id: 'docs-staging',
-          label: 'Docs staging',
-          shortLabel: 'D',
-          href: DOC_LINKS.platformHome,
-          external: true,
-        },
-        {
-          id: 'docs-staging-policy',
-          label: 'Staging policy',
-          shortLabel: 'S',
-          href: DOC_LINKS.stagingPolicy,
-          external: true,
-        },
-        {
-          id: 'docs-infra',
-          label: 'Infra handbook',
-          shortLabel: 'I',
-          href: DOC_LINKS.infraHome,
-          external: true,
-        },
-      ],
-    },
-  ].map(group => ({
-    label: group.label,
-    items: (group.items as NavItemDef[]).map(item => ({
-      id: item.id,
-      label: item.label,
-      shortLabel: item.shortLabel,
-      href: item.href ?? `#${item.id}`,
-      external: item.external,
-      active: !item.external && viewTab === item.id,
-      onClick:
-        item.external != null && item.external
-          ? undefined
-          : () => setViewTab(item.id as ViewTab),
-    })),
-  }))
+  const docLinks = [
+    { id: 'docs-staging', label: 'Docs staging', href: DOC_LINKS.platformHome },
+    { id: 'docs-staging-policy', label: 'Staging policy', href: DOC_LINKS.stagingPolicy },
+    { id: 'docs-infra', label: 'Infra handbook', href: DOC_LINKS.infraHome },
+  ]
 
   const showEnvStrip = viewTab === 'runtime-map'
   const showPageHeader = ![
@@ -325,41 +233,37 @@ export function ConsolePage() {
     (topologyQuery.error as Error | null) ?? (runtimeMatrixQuery.error as Error | null)
 
   return (
-    <MonitoringShell
-      productName="Bifrost Ops"
-      productBadge="Ops"
-      productTagline="Environment governance & release (L0 read-only)"
-      navGroups={navGroups}
-      peerApp={{
-        label: 'Bifrost Trade Monitoring',
-        href: TRADE_APP_URL,
-        description: 'Business console · positions, daemon, market',
-      }}
-      headerActions={
-        <>
-          <div className="shell-header-focus">
-            <FocusStrip
-              context={contextQuery.data}
-              isLoading={contextQuery.isLoading}
-              matrixUpdatedAt={matrixUpdatedAt}
-              clusterSummary={clusterQuery.data}
-              clusterLoading={clusterQuery.isLoading}
-              onOpenProgram={openProgram}
-              onOpenDelivery={openDelivery}
-              onOpenCluster={openCluster}
-            />
-          </div>
-          <PlatformAuthBar />
-          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Ops API{' '}
-            <StatusLamp value={healthQuery.data ? 'ok' : 'fail'} kind="reach" />
-          </span>
-          <button type="button" className="btn-ui btn-ui-primary" onClick={refreshAll}>
-            Refresh
-          </button>
-        </>
-      }
-    >
+    <TooltipProvider>
+    <SidebarProvider>
+      <ConsoleSidebar
+        activeTab={viewTab}
+        onSelect={(id) => setViewTab(id as ConsoleViewTab)}
+        docLinks={docLinks}
+      />
+      <SidebarInset>
+        <div className="sticky top-0 z-20 bg-card">
+          <ConsoleHeader
+            title={VIEW_TITLES[viewTab]}
+            healthy={healthQuery.data}
+            onRefresh={refreshAll}
+          >
+            <PlatformAuthBar compact hideRefresh />
+          </ConsoleHeader>
+          {OPS_CONTEXT_TABS.includes(viewTab) && (
+            <OpsContextBar>
+              <FocusStrip
+                context={contextQuery.data}
+                isLoading={contextQuery.isLoading}
+                matrixUpdatedAt={matrixUpdatedAt}
+                clusterSummary={clusterQuery.data}
+                clusterLoading={clusterQuery.isLoading}
+                onOpenProgram={openProgram}
+                onOpenDelivery={openDelivery}
+                onOpenCluster={openCluster}
+              />
+            </OpsContextBar>
+          )}
+        </div>
       <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
         {showPageHeader && (
           <PageHeader
@@ -559,6 +463,8 @@ export function ConsolePage() {
 
         {viewTab === 'design-system' && <DesignSystemPage />}
       </PageShell>
-    </MonitoringShell>
+      </SidebarInset>
+    </SidebarProvider>
+    </TooltipProvider>
   )
 }

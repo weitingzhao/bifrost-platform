@@ -1,35 +1,50 @@
 import type { ReactNode } from 'react'
-import { SidebarTrigger, StatusLamp, cn } from '@bifrost/ui'
+import { Button, SidebarTrigger, SHELL_TOP_BAR_HEIGHT_CLASS, StatusLamp, cn } from '@bifrost/ui'
 
 export function ConsoleHeader({
+  title,
   healthy,
   onRefresh,
   children,
 }: {
+  title?: string
   healthy: boolean | undefined
   onRefresh: () => void
+  /** Right-side slot — e.g. compact PlatformAuthBar */
   children?: ReactNode
 }) {
   return (
     <header
       className={cn(
-        'flex h-12 items-center gap-3 border-b border-border bg-card px-3',
-        'sticky top-0 z-20',
+        SHELL_TOP_BAR_HEIGHT_CLASS,
+        'flex items-center gap-2 border-b border-border bg-card px-3',
       )}
     >
       <SidebarTrigger />
 
-      {/* FocusStrip + auth bar injected by consumer */}
-      <div className="flex flex-1 items-center gap-3 overflow-hidden">
-        {children}
-      </div>
+      {title != null && title !== '' && (
+        <h1 className="min-w-0 truncate text-sm font-semibold text-foreground sm:max-w-[11rem]">
+          {title}
+        </h1>
+      )}
 
-      <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)] shrink-0">
+      <div className="flex-1" />
+
+      {children}
+
+      <span className="hidden shrink-0 items-center gap-1 text-[var(--text-dense-meta)] text-muted-foreground sm:inline-flex">
         Ops API <StatusLamp value={healthy ? 'ok' : 'fail'} kind="reach" />
       </span>
-      <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={onRefresh}>
+      <Button type="button" size="sm" className="shrink-0" onClick={onRefresh}>
         Refresh
-      </button>
+      </Button>
     </header>
+  )
+}
+
+/** Second chrome row — spine / matrix context (below title bar). */
+export function OpsContextBar({ children }: { children: ReactNode }) {
+  return (
+    <div className="border-b border-border bg-secondary/60 px-3 py-2">{children}</div>
   )
 }
