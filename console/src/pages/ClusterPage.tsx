@@ -4,7 +4,6 @@ import {
   deletePod,
   ensureBifrostNamespaces,
   ensureMetricsServer,
-  fetchAudit,
   fetchCluster,
   fetchClusterEvents,
   fetchClusterMetrics,
@@ -17,7 +16,8 @@ import {
   scaleDeployment,
   syncClusterKubeconfig,
 } from '@/api/platform'
-import type { ClusterWorkload } from '@/api/types'
+import type { AuditRecord, ClusterWorkload } from '@/api/types'
+import { AuditRecordsPanel } from '@/components/AuditRecordsPanel'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
 import { ClusterNamespacesPanel } from '@/components/cluster/ClusterNamespacesPanel'
@@ -44,9 +44,13 @@ interface ScaleState {
 }
 
 export function ClusterPage({
+  auditRecords = [],
+  auditLoading = false,
   onOpenStandards,
   onOpenEnvironments,
 }: {
+  auditRecords?: AuditRecord[]
+  auditLoading?: boolean
   onOpenStandards?: () => void
   onOpenEnvironments?: () => void
 }) {
@@ -114,12 +118,6 @@ export function ClusterPage({
     refetchInterval: 30_000,
   })
 
-  const auditQuery = useQuery({
-    queryKey: ['platform', 'audit'],
-    queryFn: fetchAudit,
-    refetchInterval: 30_000,
-  })
-
   const syncMutation = useMutation({
     mutationFn: syncClusterKubeconfig,
     onSuccess: data => {
@@ -177,8 +175,6 @@ export function ClusterPage({
     if (selectedPod == null) return []
     return (eventsQuery.data?.events ?? []).filter(e => e.object?.includes(selectedPod) ?? false)
   }, [eventsQuery.data, selectedPod])
-
-  const auditRecords = auditQuery.data?.records ?? []
 
   const unreachable =
     summaryQuery.data?.reachability === 'fail' &&
@@ -417,48 +413,7 @@ cd ../bifrost-platform && make start`}
         onOpenEnvironments={onOpenEnvironments}
       />
 
-      <section className="page-section panel-elevated overflow-hidden">
-        <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-          <h2 className="m-0 text-sm font-semibold">Audit</h2>
-          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {auditQuery.isLoading ? '…' : `${auditRecords.length} records`}
-          </span>
-        </header>
-        <div className="dense-table-scroll">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Actor</th>
-                <th>Action</th>
-                <th>Target</th>
-                <th>Status</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {auditRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-[var(--muted-foreground)]">
-                    {auditQuery.isLoading ? 'Loading…' : 'No actuation records yet'}
-                  </td>
-                </tr>
-              ) : (
-                auditRecords.slice(0, 20).map(record => (
-                  <tr key={record.id}>
-                    <td className="font-mono-tabular">{new Date(record.at).toLocaleString()}</td>
-                    <td className="font-mono-tabular">{record.actor}</td>
-                    <td className="font-mono-tabular">{record.action}</td>
-                    <td className="font-mono-tabular">{record.target}</td>
-                    <td className="font-mono-tabular">{record.status}</td>
-                    <td>{record.detail}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <AuditRecordsPanel records={auditRecords} isLoading={auditLoading} limit={20} />
 
       <ClusterDrawer
         open={drawerOpen}

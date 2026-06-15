@@ -3,6 +3,7 @@ import { PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipProvider }
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { MatrixResponse } from '@/api/types'
 import {
+  fetchAudit,
   fetchCluster,
   fetchContext,
   fetchEnvironments,
@@ -124,6 +125,18 @@ export function ConsolePage() {
       viewTab === 'delivery',
   })
 
+  const auditQuery = useQuery({
+    queryKey: ['platform', 'audit'],
+    queryFn: fetchAudit,
+    refetchInterval: 30_000,
+    enabled:
+      viewTab === 'briefing' ||
+      viewTab === 'control-room' ||
+      viewTab === 'cluster',
+  })
+
+  const auditRecords = auditQuery.data?.records ?? []
+
   const runtimeMatrixQuery = useQuery({
     queryKey: ['matrix', envForRuntime],
     queryFn: () => fetchMatrix(envForRuntime),
@@ -173,6 +186,7 @@ export function ConsolePage() {
     void qc.invalidateQueries({ queryKey: ['platform-health'] })
     void qc.invalidateQueries({ queryKey: ['context'] })
     void qc.invalidateQueries({ queryKey: ['cluster'] })
+    void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
   }
 
   const openProgram = () => setViewTab('program')
@@ -296,6 +310,8 @@ export function ConsolePage() {
               clusterSummary={clusterQuery.data}
               clusterLoading={clusterQuery.isLoading}
               platformHealthy={healthQuery.data}
+              auditRecords={auditRecords}
+              auditLoading={auditQuery.isLoading}
             />
           </>
         )}
@@ -312,9 +328,12 @@ export function ConsolePage() {
                 contextLoading={contextQuery.isLoading}
                 matrices={pulseMatrices}
                 matrixLoading={matrixForPulse.isLoading}
+                auditRecords={auditRecords}
+                auditLoading={auditQuery.isLoading}
                 onOpenRuntimeMap={openRuntimeMap}
                 onOpenProgram={openProgram}
                 onOpenDelivery={openDelivery}
+                onOpenCluster={openCluster}
               />
             </Suspense>
           </>
@@ -371,7 +390,12 @@ export function ConsolePage() {
               title={VIEW_TITLES.cluster}
               description="K3s cluster nodes, namespaces, and workloads — L0 read-only via platform-api."
             />
-            <ClusterPage onOpenStandards={openStandards} onOpenEnvironments={openEnvironments} />
+            <ClusterPage
+              auditRecords={auditRecords}
+              auditLoading={auditQuery.isLoading}
+              onOpenStandards={openStandards}
+              onOpenEnvironments={openEnvironments}
+            />
           </>
         )}
 

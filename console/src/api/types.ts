@@ -143,6 +143,44 @@ export interface OpsContextNorthStar {
   success_criteria: string[]
 }
 
+export interface TrackTask {
+  id: string
+  label: string
+  status: 'done' | 'in_progress' | 'next' | 'pending' | 'blocked'
+}
+
+export interface BuildTrack {
+  label: string
+  current_phase: string
+  tasks: TrackTask[]
+}
+
+export interface MigrateStream {
+  id: string
+  label: string
+  total: number
+  done: number
+  status: string
+  next_task?: string | null
+  note?: string
+}
+
+export interface MigrateTrack {
+  label: string
+  streams: MigrateStream[]
+}
+
+export interface OperateTrack {
+  label: string
+  note?: string
+}
+
+export interface OpsContextTracks {
+  build?: BuildTrack
+  migrate?: MigrateTrack
+  operate?: OperateTrack
+}
+
 export interface OpsContextResponse {
   meta: OpsContextMeta
   north_star?: OpsContextNorthStar
@@ -155,6 +193,7 @@ export interface OpsContextResponse {
   promotion: OpsContextPromotion
   environments_extended: Record<string, OpsContextEnvironmentExtended>
   probe_hints: OpsContextProbeHint[]
+  tracks?: OpsContextTracks
 }
 
 export interface ClusterSummary {
