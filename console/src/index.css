@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "@fontsource-variable/geist";
 @import "@bifrost/ui/styles";
 
@@ -26,7 +27,14 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
   --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-destructive: var(--destructive);
   --radius-lg: var(--radius);
 }
 
@@ -375,8 +383,14 @@ html {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  background: var(--card);
   border-left: 1px solid var(--border);
   box-shadow: -4px 0 24px color-mix(in srgb, var(--background) 50%, transparent);
+}
+
+.bay-detail-drawer-header,
+.bay-detail-drawer-footer {
+  background: var(--card);
 }
 
 .bay-detail-drawer-header,
@@ -1152,4 +1166,124 @@ button.infra-stack-chip:hover {
   padding: 1px 6px;
   font-size: 8px;
   pointer-events: none;
+}
+
+/* ── Gap Analysis: progress bars, badges, host-level readiness ── */
+
+.gap-progress-bar {
+  display: flex;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--muted-foreground) 15%, transparent);
+  gap: 1px;
+}
+
+.gap-progress-bar__segment {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.3s ease;
+}
+
+.gap-progress-bar__segment--live {
+  background: var(--color-lamp-green);
+}
+
+.gap-progress-bar__segment--degraded {
+  background: var(--color-lamp-yellow);
+}
+
+.gap-progress-bar__segment--fail {
+  background: var(--color-lamp-red);
+}
+
+.gap-progress-bar__segment--planned {
+  background: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+}
+
+.gap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+.gap-badge--live {
+  color: var(--color-lamp-green);
+  background: color-mix(in srgb, var(--color-lamp-green) 12%, transparent);
+}
+
+.gap-badge--partial {
+  color: var(--color-lamp-yellow);
+  background: color-mix(in srgb, var(--color-lamp-yellow) 12%, transparent);
+}
+
+.gap-badge--planned {
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--muted-foreground) 12%, transparent);
+}
+
+.gap-badge--fail {
+  color: var(--color-lamp-red);
+  background: color-mix(in srgb, var(--color-lamp-red) 12%, transparent);
+}
+
+.gap-pct {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.gap-pct--high { color: var(--color-lamp-green); }
+.gap-pct--mid { color: var(--color-lamp-yellow); }
+.gap-pct--low { color: var(--color-lamp-red); }
+.gap-pct--zero { color: var(--muted-foreground); }
+
+.gap-overview-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.gap-overview-strip__item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.gap-overview-strip__item .font-mono-tabular {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.infra-host-bay__gap-bar {
+  padding: 0 6px;
+  margin-top: 2px;
+}
+
+.infra-host-bay__gap-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+  margin-top: 1px;
+  font-size: 9px;
+  color: var(--muted-foreground);
+}
+
+.scope-gap-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 9px;
+  margin-left: auto;
+  flex-shrink: 0;
 }

@@ -1,10 +1,19 @@
 # CLAUDE.md — bifrost-platform (Bifrost Ops Platform)
 
-> **North star (终极目标)**: [docs/NORTH_STAR.md](docs/NORTH_STAR.md) — Strategy C hybrid; **all routine ops via Ops Console/API only**; Owner exception = restart Ops Platform. Spine: `config/ops-context.yaml` → `north_star` · decision **D6** · milestone **ops-ui-actuation**.
+> **North star (终极目标)**: Ops Console → **Architecture → Blueprint** · `console/src/lib/architecture/blueprintCatalog.ts` · spine `config/ops-context.yaml` → `north_star` · decision **D6** · milestone **ops-ui-actuation**.
 
 > AI-native **control plane** for Bifrost Trade dev/prod environments. Upper Goal: [bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md](../bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md).
 
 与本项目用户的所有对话一律使用中文。
+
+## 文档优先级（Route C）
+
+1. **代码** — `api/`、`console/`、`config/` 为行为与契约的 ground truth
+2. **Ops Console UI** — Architecture 页（Blueprint / Standards / Agent Protocol / Environments）由 catalog TS 驱动，贴近生产
+3. **Spine** — `GET /api/v1/context`
+4. **`docs/`** — **Staging 区**：Agent 改代码时的草稿说明；Owner 审阅后迁入 Architecture catalog 或删除。见 [docs/STAGING.md](docs/STAGING.md)
+
+**禁止**在 `docs/` 与 Architecture catalog 中重复维护同一治理内容。
 
 ## 职责范围
 
@@ -13,20 +22,21 @@
 | 子目录 | 职责 |
 |--------|------|
 | `api/` | Go — 环境注册、连通性/权限矩阵探测、未来审计 API |
-| `console/` | React **Bifrost Ops Console** :5180 — Pulse, Runtime, Program, Catalog |
+| `console/` | React **Bifrost Ops Console** :5180 — Pulse, Runtime, Program, Architecture |
 | `agent/` | 未来：各节点 Go 探针 |
 | `mcp/` | 未来：Platform MCP Tools（只读矩阵等） |
 | `config/` | `environments.yaml`, **`ops-context.yaml`** (spine), `topology.yaml` |
+| `docs/` | **Staging only** — 未上线计划、待审草稿（非权威治理源） |
 
 **不包含**：交易 daemon、IB Operator、业务 API 实现。
 
 ## 边界与纪律
 
-- **North star**：除重启 Ops Platform 外，所有运维操作经 Console + platform-api（脚本仅作 API 后端执行器）— 见 `docs/NORTH_STAR.md`
+- **North star**：除重启 Ops Platform 外，所有运维操作经 Console + platform-api（脚本仅作 API 后端执行器）— 见 Architecture → **Blueprint**
 - **L0 默认**：Phase 0 以只读探测为主；actuation 按 L1/L2 逐步落地（milestone `ops-ui-actuation`）
 - **R-DV3**：平台 Agent 不得触发自动交易 Engine 写路径
 - **聚合不复制**：探测 `bifrost-trade` 已有 `/health`、`/auth/capabilities`，不 import Python 业务包
-- **Agent 模式**：见 `docs/AGENT_MODES.md`（Product / Ops / Promote）
+- **Agent 模式**：见 Architecture → **Agent Protocol** · `agentProtocolCatalog.ts`
 
 ## 端口
 
@@ -46,6 +56,7 @@ make start        # ./scripts/run_platform.py — frees ports, api + console
 make dev-api      # Go API only
 make dev-console  # Vite console only
 make test         # go test + console type-check
+make docs         # MkDocs staging site :8060 (not authoritative for governance)
 ```
 
 ## 依赖关系

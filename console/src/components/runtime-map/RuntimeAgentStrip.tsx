@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
+import type { GapOverview } from '@/lib/runtime-map/gapAnalysis'
 import { buildRuntimeLlmPack } from '@/lib/runtime-map/buildRuntimeLlmPack'
 import type { RuntimeMapSelection } from '@/lib/runtime-map/runtimeMapRegistry'
 
@@ -8,6 +9,7 @@ interface RuntimeAgentStripProps {
   matrix: MatrixResponse | undefined
   context: OpsContextResponse | undefined
   selection: RuntimeMapSelection
+  gapOverview?: GapOverview
 }
 
 async function copyText(text: string): Promise<void> {
@@ -19,13 +21,14 @@ export function RuntimeAgentStrip({
   matrix,
   context,
   selection,
+  gapOverview,
 }: RuntimeAgentStripProps) {
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const pack = useMemo(
-    () => buildRuntimeLlmPack(topology, matrix, context, selection),
-    [topology, matrix, context, selection],
+    () => buildRuntimeLlmPack(topology, matrix, context, selection, gapOverview),
+    [topology, matrix, context, selection, gapOverview],
   )
 
   async function handleCopy() {

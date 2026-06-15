@@ -1,10 +1,11 @@
 import type { ClusterObservabilityResponse, LayerBStatus } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
-import { DOC_LINKS } from '@/lib/docsLinks'
 
 interface ClusterObservabilityPanelProps {
   data: ClusterObservabilityResponse | undefined
   isLoading: boolean
+  onOpenStandards?: () => void
+  onOpenEnvironments?: () => void
 }
 
 function layerBHeadline(status: LayerBStatus | undefined): string {
@@ -30,14 +31,14 @@ function layerBLamp(status: LayerBStatus | undefined) {
   }
 }
 
-function resolveK3sDocs(data: ClusterObservabilityResponse | undefined): string {
-  const url = data?.docs_url?.trim()
-  return url != null && url !== '' ? url : DOC_LINKS.k3sObservability
-}
-
-export function ClusterObservabilityPanel({ data, isLoading }: ClusterObservabilityPanelProps) {
-  const k3sDocs = resolveK3sDocs(data)
+export function ClusterObservabilityPanel({
+  data,
+  isLoading,
+  onOpenStandards,
+  onOpenEnvironments,
+}: ClusterObservabilityPanelProps) {
   const components = data?.components ?? []
+  const docsUrl = data?.docs_url?.trim()
 
   return (
     <section className="page-section panel-elevated overflow-hidden">
@@ -66,22 +67,21 @@ export function ClusterObservabilityPanel({ data, isLoading }: ClusterObservabil
           </p>
         )}
         <div className="mt-2 flex flex-wrap gap-2">
-          <a
-            className="btn-ui text-[var(--text-dense-meta)]"
-            href={k3sDocs}
-            target="_blank"
-            rel="noreferrer"
-          >
-            K3s phase 3 docs
-          </a>
-          <a
-            className="btn-ui text-[var(--text-dense-meta)]"
-            href={DOC_LINKS.clusterActuation}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Platform CLUSTER_ACTUATION
-          </a>
+          {onOpenStandards != null && (
+            <button type="button" className="btn-ui text-[var(--text-dense-meta)]" onClick={onOpenStandards}>
+              Open Standards
+            </button>
+          )}
+          {onOpenEnvironments != null && (
+            <button type="button" className="btn-ui text-[var(--text-dense-meta)]" onClick={onOpenEnvironments}>
+              Open Environments
+            </button>
+          )}
+          {docsUrl != null && docsUrl !== '' && (
+            <a className="btn-ui text-[var(--text-dense-meta)]" href={docsUrl} target="_blank" rel="noreferrer">
+              External docs
+            </a>
+          )}
           {data?.grafana_url != null && data.grafana_url !== '' && data.layer_b_status === 'ready' && (
             <a
               className="btn-ui btn-ui-primary"

@@ -1,5 +1,6 @@
 import type { MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
+import { formatGapForLlm, type GapOverview } from '@/lib/runtime-map/gapAnalysis'
 import {
   filterTargetsForNode,
   getEdge,
@@ -17,6 +18,7 @@ export function buildRuntimeLlmPack(
   matrix: MatrixResponse | undefined,
   context: OpsContextResponse | undefined,
   selection: RuntimeMapSelection,
+  gapOverview?: GapOverview,
 ): string {
   const lines: string[] = ['Mode: Ops', '', '## Runtime Map context']
 
@@ -39,17 +41,23 @@ export function buildRuntimeLlmPack(
     lines.push(`- focus: ${context.focus.headline}`)
   }
 
+  if (gapOverview != null && gapOverview.totalComponents > 0) {
+    lines.push('')
+    lines.push(formatGapForLlm(gapOverview, 'compose'))
+  }
+
   lines.push('')
   lines.push(selectionSection(selection, topology, matrix))
 
   lines.push('')
   lines.push('## Suggested Agent question')
-  lines.push(suggestedQuestion(topology, matrix, selection))
+  lines.push(suggestedQuestion(topology, matrix, selection, gapOverview))
 
   lines.push('')
   lines.push('## Session discipline')
   lines.push('- Reply in Chinese for dialogue; English for UI strings and code identifiers.')
   lines.push('- L0 read-only: diagnose probes before proposing infra writes.')
+  lines.push('- Use the Gap Analysis section above to identify which servers and components need attention.')
 
   return lines.join('\n')
 }
@@ -144,6 +152,7 @@ function suggestedQuestion(
   topology: TopologyResponse | undefined,
   matrix: MatrixResponse | undefined,
   selection: RuntimeMapSelection,
+  gapOverview?: GapOverview,
 ): string {
   const fails = matrix?.targets.filter(t => t.reachability === 'fail') ?? []
 
@@ -156,11 +165,24 @@ function suggestedQuestion(
   }
 
   if (selection?.kind === 'node') {
+    const nodeGap = gapOverview?.nodeGaps.find(n => n.nodeId === selection.id)
+    if (nodeGap && nodeGap.plannedCount > 0) {
+      const planned = nodeGap.services
+        .filter(s => s.status === 'planned')
+        .map(s => s.label)
+        .join(', ')
+      return `Node ${selection.id} has ${nodeGap.plannedCount} planned components (${planned}). What is the recommended order to bring them live, considering dependencies and current cluster state?`
+    }
     return `Analyze hardware node ${selection.id} in ${topology?.environment ?? 'env'}: which matrix services are failing and what is the smallest L0 diagnostic step?`
   }
 
   if (fails.length > 0 && fails.every(t => t.id.startsWith('api-'))) {
     return 'All or most Trade API matrix targets are failing on prod. Propose ordered root-cause checks (nginx, docker compose, LAN) without write actions.'
+  }
+
+  if (gapOverview != null && gapOverview.topGapNodes.length > 0) {
+    const topNode = gapOverview.topGapNodes[0]
+    return `Runtime completion is ${gapOverview.overallCompletionPct}%. The biggest gap is on ${topNode.nodeLabel} (${topNode.plannedCount} planned). What should be deployed next, considering the current milestone track?`
   }
 
   if (topology?.deployment_phase === 'compose') {

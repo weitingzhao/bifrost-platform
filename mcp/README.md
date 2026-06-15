@@ -1,3 +1,5 @@
+> **Docs staging** — future plan only. Authoritative agent protocol: Ops Console → Architecture → Agent Protocol · `agentProtocolCatalog.ts`
+
 # bifrost-platform MCP (Phase P2)
 
 Model Context Protocol tools for Cursor / Ollama agents.

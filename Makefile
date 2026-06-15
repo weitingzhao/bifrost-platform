@@ -26,7 +26,7 @@ test: test-api test-console check-spine
 build-api:
 	cd api && go build -o bin/platform-api ./cmd/platform-api
 
-# Platform handbook (NORTH_STAR, ARCHITECTURE, …) — http://127.0.0.1:8060
+# Docs staging site (draft notes — governance in Console Architecture) — http://127.0.0.1:8060
 docs:
 	./scripts/start_docs.sh
 
