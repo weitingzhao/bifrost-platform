@@ -4,6 +4,12 @@ import { fetchContext } from '@/api/platform'
 import { CatalogSection } from '@/components/CatalogSection'
 import {
   ACTUATION_PHASES,
+  AI_MERGE_RATIONALE,
+  AI_PLATFORM_BOUNDARIES,
+  AI_PLATFORM_CAPABILITIES,
+  AI_PLATFORM_MISSION,
+  AI_PLATFORM_PHASES,
+  AI_PLATFORM_SUCCESS,
   BLUEPRINT_AUTHORIZATION_LEVELS,
   BLUEPRINT_SOURCE,
   BLUEPRINT_VERSION,
@@ -248,6 +254,97 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
                 <td className="font-medium whitespace-nowrap">{p.phase}</td>
                 <td>{p.deliverables}</td>
                 <td className="text-[var(--muted-foreground)]">{p.eliminates}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CatalogSection>
+
+      {/* 11 — AI Native Ops Platform */}
+      <CatalogSection title="AI Native Ops Platform — Mission">
+        <div className="flex flex-col gap-2 px-3 py-3 text-[var(--text-dense)]">
+          <p className="m-0 leading-relaxed">{AI_PLATFORM_MISSION}</p>
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{AI_MERGE_RATIONALE}</p>
+        </div>
+      </CatalogSection>
+
+      {/* 12 — AI Capabilities */}
+      <CatalogSection title="AI Platform capabilities">
+        {AI_PLATFORM_CAPABILITIES.map(cap => (
+          <div key={cap.name} className="border-b border-[var(--border)] last:border-b-0">
+            <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              {cap.name}
+            </div>
+            <p className="m-0 px-3 py-1 text-[var(--text-dense)] text-[var(--muted-foreground)]">{cap.description}</p>
+            <ul className="m-0 list-disc px-4 py-2 text-[var(--text-dense)]">
+              {cap.examples.map(e => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </CatalogSection>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* 13 — AI Platform phases */}
+        <CatalogSection title="AI Platform phases">
+          <table className="dense-table">
+            <thead>
+              <tr>
+                <th>Phase</th>
+                <th>Time</th>
+                <th>Deliverables</th>
+                <th>Business unlock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {AI_PLATFORM_PHASES.map(p => (
+                <tr key={p.id}>
+                  <td className="font-medium whitespace-nowrap">{p.id}</td>
+                  <td className="text-[var(--text-dense-meta)]">{p.timeBox}</td>
+                  <td>{p.deliverables}</td>
+                  <td className="text-[var(--muted-foreground)]">{p.businessUnlock}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CatalogSection>
+
+        {/* 14 — AI Boundaries */}
+        <CatalogSection title="AI Platform boundaries">
+          <table className="dense-table">
+            <thead>
+              <tr>
+                <th>Rule</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {AI_PLATFORM_BOUNDARIES.map(b => (
+                <tr key={b.rule}>
+                  <td className="font-medium whitespace-nowrap">{b.rule}</td>
+                  <td className="text-[var(--muted-foreground)]">{b.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CatalogSection>
+      </div>
+
+      {/* 15 — AI Platform success criteria */}
+      <CatalogSection title="AI Platform success criteria">
+        <table className="dense-table">
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th>Criterion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {AI_PLATFORM_SUCCESS.map(s => (
+              <tr key={s.area}>
+                <td className="font-medium whitespace-nowrap">{s.area}</td>
+                <td>{s.criterion}</td>
               </tr>
             ))}
           </tbody>

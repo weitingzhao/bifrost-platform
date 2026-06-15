@@ -7,6 +7,11 @@ import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
 import { TrackCardsSection } from '@/components/briefing/TrackCardsSection'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
+import {
+  AGENT_DIALOGUE_LANGUAGE_OPTIONS,
+  DEFAULT_AGENT_DIALOGUE_LANGUAGE,
+  type AgentDialogueLanguage,
+} from '@/lib/briefing/agentDialogueLanguage'
 import { computeSessionDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
 import { loadSnapshot, saveSnapshot } from '@/lib/briefing/sessionSnapshot'
 import { CONSOLE_UI_PROGRESS, type UiItemStatus } from '@/lib/briefing/uiProgressSnapshot'
@@ -61,6 +66,9 @@ export function BriefingPage({
   const [showAlignmentPack, setShowAlignmentPack] = useState(false)
   const [sessionCopied, setSessionCopied] = useState(false)
   const [alignmentCopied, setAlignmentCopied] = useState(false)
+  const [agentDialogueLanguage, setAgentDialogueLanguage] = useState<AgentDialogueLanguage>(
+    DEFAULT_AGENT_DIALOGUE_LANGUAGE,
+  )
 
   const [previousSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
@@ -123,9 +131,19 @@ export function BriefingPage({
         selectedTrack,
         selectedLane,
         laneQueue,
+        agentDialogueLanguage,
         ...snapshotInput,
       }),
-    [intent, sessionDelta, trackSummaries, selectedTrack, selectedLane, laneQueue, snapshotInput],
+    [
+      intent,
+      sessionDelta,
+      trackSummaries,
+      selectedTrack,
+      selectedLane,
+      laneQueue,
+      agentDialogueLanguage,
+      snapshotInput,
+    ],
   )
 
   const alignmentPack = useMemo(
@@ -183,9 +201,33 @@ export function BriefingPage({
             <h2 className="m-0 text-sm font-semibold">Generate briefing for your work</h2>
             <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               Paste into a <strong>new</strong> Cursor chat before starting the task you selected
-              above. Content includes live status, UI progress, spine + matrix, and intent-specific
-              read-first / opening prompt.
+              above. Content includes live status, UI progress, spine + matrix, intent-specific
+              read-first / opening prompt, and a required first-reply protocol (confirm understanding
+              + task list for you to pick).
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label
+                htmlFor="agent-dialogue-language"
+                className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]"
+              >
+                Agent dialogue language
+              </label>
+              <select
+                id="agent-dialogue-language"
+                className="briefing-language-select"
+                value={agentDialogueLanguage}
+                onChange={e => {
+                  setAgentDialogueLanguage(e.target.value as AgentDialogueLanguage)
+                  setShowSessionPack(false)
+                }}
+              >
+                {AGENT_DIALOGUE_LANGUAGE_OPTIONS.map(opt => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <p className="m-0 mt-2 text-[var(--text-dense-meta)]">
               Track:{' '}
               <span className="font-medium text-[var(--foreground)] capitalize">
@@ -222,9 +264,9 @@ export function BriefingPage({
         {showSessionPack && (
           <LlmPackPreview
             charCount={sessionPack.length}
-            metaLabel={`track: ${selectedTrack} · lane: ${selectedLane}`}
+            metaLabel={`track: ${selectedTrack} · lane: ${selectedLane} · lang: ${agentDialogueLanguage}`}
             pack={sessionPack}
-            footer="The Agent should follow the suggested opening and read-first list for your selected work — not Briefing maintenance."
+            footer="The Agent must first reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) a Source Audit table (provenance per fact + contradiction report) — wait for your selection before implementing."
           />
         )}
       </section>

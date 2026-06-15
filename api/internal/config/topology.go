@@ -24,6 +24,8 @@ type TopologyNode struct {
 	Grid          GridPos  `yaml:"grid" json:"grid"`
 	MatrixTargets []string `yaml:"matrix_targets" json:"matrix_targets,omitempty"`
 	SSHPort       int      `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`
+	SSHUser       string   `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
+	SSHJump       string   `yaml:"ssh_jump,omitempty" json:"ssh_jump,omitempty"` // topology node id — ProxyJump via bastion
 }
 
 type TopologyEdge struct {

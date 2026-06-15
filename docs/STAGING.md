@@ -17,6 +17,11 @@
 | Trade probes, cluster actuation, observability layers | `console/src/lib/architecture/standardsCatalog.ts` · **Standards** |
 | Agent modes, context packs, forbidden actions | `console/src/lib/architecture/agentProtocolCatalog.ts` · **Agent Protocol** |
 | Hardware, flows, platform phases | `console/src/lib/environments-catalog.ts` · **Environments** |
+| Compose → K3s roadmap | `console/src/lib/architecture/roadmapCatalog.ts` · **Platform Roadmap** |
+| K3s target topology & checkpoints | `console/src/lib/architecture/k3sArchitectureCatalog.ts` · **K3s Architecture** |
+| K3s first-node deployment runbook | `console/src/lib/architecture/k3sBootstrapCatalog.ts` · **K3s Bootstrap** |
+| Deploy decision chain & sign-off gates | `console/src/lib/architecture/deployMainlineCatalog.ts` · **Deploy Mainline** (Program) |
+| AI Native Platform mission & boundaries | `console/src/lib/architecture/blueprintCatalog.ts` § AI Native Platform · **Blueprint** |
 
 Use **Copy Prompt for LLM** on each tab, or **Copy All for LLM** on any Architecture page.
 
@@ -33,6 +38,15 @@ Use **Copy Prompt for LLM** on each tab, or **Copy All for LLM** on any Architec
 - Long-lived governance standards (belong in `*Catalog.ts` + UI)
 - Implementation details that live in code (read the code instead)
 
+## Repo documentation ownership
+
+| Repo | Scope | Authoritative source |
+|------|-------|---------------------|
+| **bifrost-platform** (control plane) | Environment governance, cluster architecture, release gates, platform roadmap, AI Ops goals, deploy decision chain | Console Architecture catalogs (`*Catalog.ts`) → rendered in Ops Console UI |
+| **bifrost-trade-infra** (data plane / workloads) | Docker build handbook, migration sign-off checklists, 2C Session runbooks, business API cutover flows | MkDocs :8050 (`docs/*.md`) |
+
+**Rule**: a document that describes *how the platform evolves* (environment, cluster, release process, AI ops strategy) belongs in `bifrost-platform` catalogs. A document that describes *how a specific trade workload is built, tested, or cut over* belongs in `bifrost-trade-infra/docs/`.
+
 ## Infra handbook
 
-Deployment, migration sign-off, K3s hardware roadmap: **[bifrost-trade-infra MkDocs :8050](http://127.0.0.1:8050/)** — separate repo; integrate into Console only when Owner promotes a section to Architecture.
+Trade workload runbooks and migration sign-offs: **[bifrost-trade-infra MkDocs :8050](http://127.0.0.1:8050/)** — separate repo. Content is promoted to Console Architecture only when Owner elevates a section to platform governance.

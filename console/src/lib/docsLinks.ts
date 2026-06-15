@@ -10,5 +10,7 @@ export const DOC_LINKS = {
   platformHome: PLATFORM_DOCS_BASE,
   stagingPolicy: `${PLATFORM_DOCS_BASE}/STAGING/`,
   infraHome: INFRA_DOCS_BASE,
-  k3sObservability: `${INFRA_DOCS_BASE}/K3S_PLATFORM_ARCHITECTURE/#9-实施路线图`,
+  /** Governance: Ops Console → Architecture → K3s Architecture §10 checkpoints */
+  k3sArchitecture: 'architecture/k3s-architecture',
+  platformRoadmap: 'architecture/roadmap',
 } as const

@@ -24,6 +24,7 @@ import { BlueprintPage } from '@/pages/BlueprintPage'
 import { BriefingPage } from '@/pages/BriefingPage'
 import { ClusterPage } from '@/pages/ClusterPage'
 import { DeliveryPage } from '@/pages/DeliveryPage'
+import { DeployMainlinePage } from '@/pages/DeployMainlinePage'
 import { EnvironmentsPage } from '@/pages/EnvironmentsPage'
 import { ProgramPage } from '@/pages/ProgramPage'
 import { PromotePage } from '@/pages/PromotePage'
@@ -31,6 +32,9 @@ import { PulsePage } from '@/pages/PulsePage'
 import { RuntimeMapPage } from '@/pages/RuntimeMapPage'
 import { ServerConsolePage } from '@/pages/ServerConsolePage'
 import { DesignSystemPage } from '@/pages/DesignSystemPage'
+import { K3sArchitecturePage } from '@/pages/K3sArchitecturePage'
+import { K3sBootstrapPage } from '@/pages/K3sBootstrapPage'
+import { RoadmapPage } from '@/pages/RoadmapPage'
 import { StandardsPage } from '@/pages/StandardsPage'
 
 const ControlRoomPage = lazy(() =>
@@ -48,6 +52,10 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   promote: 'Promote',
   blueprint: 'Blueprint',
   environments: 'Environments',
+  roadmap: 'Platform Roadmap',
+  'k3s-architecture': 'K3s Architecture',
+  'k3s-bootstrap': 'K3s Bootstrap',
+  'deploy-mainline': 'Deploy Mainline',
   'platform-standards': 'Platform',
   'agent-protocol': 'Agent Protocol',
   'design-system': 'Design System',
@@ -63,6 +71,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'cluster',
   'runtime-map',
   'program',
+  'deploy-mainline',
 ]
 
 const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
@@ -199,7 +208,12 @@ export function ConsolePage() {
   const openEnvironments = () => setViewTab('environments')
 
   const [govCopyState, setGovCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
-  const isArchTab = viewTab === 'blueprint' || viewTab === 'environments'
+  const isArchTab =
+    viewTab === 'blueprint' ||
+    viewTab === 'environments' ||
+    viewTab === 'roadmap' ||
+    viewTab === 'k3s-architecture' ||
+    viewTab === 'k3s-bootstrap'
   const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-protocol' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
   const handleCopyAllGovernance = async () => {
@@ -234,6 +248,7 @@ export function ConsolePage() {
     'delivery',
     'program',
     'promote',
+    'deploy-mainline',
     'blueprint',
     'environments',
     'platform-standards',
@@ -447,6 +462,16 @@ export function ConsolePage() {
           </>
         )}
 
+        {viewTab === 'deploy-mainline' && (
+          <>
+            <PageHeader
+              title={VIEW_TITLES['deploy-mainline']}
+              description="Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain and sign-off gates."
+            />
+            <DeployMainlinePage />
+          </>
+        )}
+
         {viewTab === 'console' && <ServerConsolePage />}
 
         {isGovernanceTab && (
@@ -456,6 +481,9 @@ export function ConsolePage() {
               description={
                 viewTab === 'blueprint' ? 'North Star, system architecture, control-plane layers, and design principles.'
                   : viewTab === 'environments' ? 'Flows, phases, and LLM catalog — hardware/scope live view is on Runtime Map.'
+                  : viewTab === 'roadmap' ? 'Compose → K3s phased plan: hardware roles, 2C-B priority, GitOps migration, AI ops.'
+                  : viewTab === 'k3s-architecture' ? 'Target K3s topology, CNPG, GitOps, AI-native ops, and living checkpoints.'
+                  : viewTab === 'k3s-bootstrap' ? 'First-node deployment runbook, verification checklist, node join steps, and sign-off.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-protocol' ? 'Agent interaction modes, context pack layers, forbidden actions, and session startup.'
                   : 'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.'
@@ -480,6 +508,12 @@ export function ConsolePage() {
             onOpenDelivery={openDelivery}
           />
         )}
+
+        {viewTab === 'roadmap' && <RoadmapPage />}
+
+        {viewTab === 'k3s-architecture' && <K3sArchitecturePage />}
+
+        {viewTab === 'k3s-bootstrap' && <K3sBootstrapPage />}
 
         {viewTab === 'platform-standards' && <StandardsPage />}
 

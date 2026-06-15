@@ -4,10 +4,14 @@ import {
   BookOpen,
   Boxes,
   ClipboardList,
+  Container,
   FileCode2,
   Gauge,
+  GitBranch,
   Map,
+  MapPinned,
   Milestone,
+  PlugZap,
   Rocket,
   Ruler,
   Server,
@@ -42,6 +46,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
       { id: 'delivery', label: 'Delivery', icon: Workflow },
       { id: 'program', label: 'Milestones', icon: Milestone },
       { id: 'promote', label: 'Promote', icon: Rocket },
+      { id: 'deploy-mainline', label: 'Deploy Mainline', icon: GitBranch },
     ],
   },
   {
@@ -50,6 +55,9 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
     items: [
       { id: 'blueprint', label: 'Blueprint', icon: Boxes },
       { id: 'environments', label: 'Environments', icon: BookOpen },
+      { id: 'roadmap', label: 'Platform Roadmap', icon: MapPinned },
+      { id: 'k3s-architecture', label: 'K3s Architecture', icon: Container },
+      { id: 'k3s-bootstrap', label: 'K3s Bootstrap', icon: PlugZap },
     ],
   },
   {

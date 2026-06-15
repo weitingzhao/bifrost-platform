@@ -16,6 +16,11 @@ import { type WorkIntent, workIntentById } from '@/lib/briefing/workIntents'
 import type { TrackId, TrackSummary } from '@/lib/briefing/workTracks'
 import type { LaneId, QueueItem } from '@/lib/briefing/workLanes'
 import { laneById } from '@/lib/briefing/workLanes'
+import {
+  agentDialogueLanguageById,
+  DEFAULT_AGENT_DIALOGUE_LANGUAGE,
+  type AgentDialogueLanguage,
+} from '@/lib/briefing/agentDialogueLanguage'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
   intent: WorkIntent
@@ -24,6 +29,7 @@ export interface BriefingInputs extends BriefingSnapshotInput {
   selectedTrack?: TrackId
   selectedLane?: LaneId
   laneQueue?: QueueItem[]
+  agentDialogueLanguage?: AgentDialogueLanguage
 }
 
 function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string {
@@ -61,7 +67,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     ],
     release: [
       'Ops Console → Architecture → Blueprint — North Star',
-      'bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md',
+      'Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)',
       'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md',
       'decision D1 in ops-context spine',
     ],
@@ -95,31 +101,158 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
   return lines.join('\n')
 }
 
-function suggestedOpening(intent: WorkIntent, ctx?: OpsContextResponse, matrices?: MatrixResponse[]): string {
+function formatAgentDialogueSection(language: AgentDialogueLanguage): string {
+  const lang = agentDialogueLanguageById(language)
+  const dialogueRule =
+    language === 'zh'
+      ? 'Use **Chinese** for all dialogue with the Owner (chat, explanations, summaries).'
+      : 'Use **English** for all dialogue with the Owner (chat, explanations, summaries).'
+
+  return [
+    '## Agent dialogue language',
+    '',
+    `Owner selected: **${lang.agentLabel}**`,
+    dialogueRule,
+    '- UI strings, code identifiers, and commit messages stay **English** unless Owner says otherwise.',
+  ].join('\n')
+}
+
+function formatFirstResponseProtocol(
+  language: AgentDialogueLanguage,
+  track: TrackId,
+  lane: LaneId,
+  intent: WorkIntent,
+): string {
+  const lang = agentDialogueLanguageById(language)
+  const laneMeta = laneById(lane)
+  const intentMeta = workIntentById(intent)
+
+  const confirmStep =
+    language === 'zh'
+      ? 'Summarize your understanding of this briefing in **Chinese**: active track/lane, work intent, queue priorities, spine blockers, and scope constraints. Ask the Owner to confirm or correct before any implementation.'
+      : 'Summarize your understanding of this briefing in **English**: active track/lane, work intent, queue priorities, spine blockers, and scope constraints. Ask the Owner to confirm or correct before any implementation.'
+
+  const taskListStep =
+    language === 'zh'
+      ? 'Based on the briefing, active lane queue, spine, and matrix below, propose a **numbered task list** (3–7 concrete items). Each item: one-sentence scope + primary repo/files. Mark your recommended default with *(recommended)*.'
+      : 'Based on the briefing, active lane queue, spine, and matrix below, propose a **numbered task list** (3–7 concrete items). Each item: one-sentence scope + primary repo/files. Mark your recommended default with *(recommended)*.'
+
+  const waitStep =
+    language === 'zh'
+      ? '**Do not start implementation** until the Owner confirms your understanding and selects task(s) (or adjusts the list).'
+      : '**Do not start implementation** until the Owner confirms your understanding and selects task(s) (or adjusts the list).'
+
+  return [
+    '## Required first response (before any work)',
+    '',
+    `Dialogue language for this session: **${lang.agentLabel}**`,
+    `Context scope: track **${track}** · lane **${laneMeta.label}** (${lane}) · intent **${intentMeta.label}** (${intent})`,
+    '',
+    'Your **first reply** in this new chat MUST include:',
+    '',
+    '1. **Confirm understanding** — ' + confirmStep,
+    '2. **Propose task list** — ' + taskListStep,
+    '3. **Source audit** — ' + formatSourceAuditInstruction(language),
+    '4. **Wait for selection** — ' + waitStep,
+    '',
+    'Only after Owner confirmation and task selection should you read the read-first list and begin work.',
+  ].join('\n')
+}
+
+function formatSourceAuditInstruction(language: AgentDialogueLanguage): string {
+  if (language === 'zh') {
+    return [
+      'After reading this briefing and the read-first references, produce a **Source Audit** table and a **Contradiction Report**.',
+      '',
+      '   **Source Audit table** — For each key fact you relied on to form your understanding above, state its provenance:',
+      '',
+      '   | # | Key fact (brief) | Source | Discovery method |',
+      '   |---|---|---|---|',
+      '   | 1 | e.g. "k3s-phase1 CLOSED" | Briefing § Milestones | Direct extraction |',
+      '   | 2 | e.g. "metrics-server installed" | `config/clusters.yaml` | Read tool (secondary search) |',
+      '   | 3 | e.g. "Layer B not detected" | platform-api `/cluster/observability` | MCP / HTTP probe |',
+      '',
+      '   Discovery method values: `Direct extraction` (from this briefing text), `Read tool` (opened a file based on briefing clues), `Grep/Search` (searched codebase), `MCP call`, `Web search`, `Inference` (deduced from multiple sources).',
+      '',
+      '   **Contradiction Report** — List any discrepancy between what this briefing states and what you found via secondary search:',
+      '',
+      '   | Briefing states | Actual finding (source) | Severity |',
+      '   |---|---|---|',
+      '   | "..." | "..." (file/API) | low / medium / high |',
+      '',
+      '   If no contradictions found, explicitly state: "No contradictions detected between briefing and secondary sources."',
+      '',
+      '   This audit helps the Owner assess briefing freshness and identify generator drift.',
+    ].join('\n')
+  }
+  return [
+    'After reading this briefing and the read-first references, produce a **Source Audit** table and a **Contradiction Report**.',
+    '',
+    '   **Source Audit table** — For each key fact you relied on to form your understanding above, state its provenance:',
+    '',
+    '   | # | Key fact (brief) | Source | Discovery method |',
+    '   |---|---|---|---|',
+    '   | 1 | e.g. "k3s-phase1 CLOSED" | Briefing § Milestones | Direct extraction |',
+    '   | 2 | e.g. "metrics-server installed" | `config/clusters.yaml` | Read tool (secondary search) |',
+    '   | 3 | e.g. "Layer B not detected" | platform-api `/cluster/observability` | MCP / HTTP probe |',
+    '',
+    '   Discovery method values: `Direct extraction` (from this briefing text), `Read tool` (opened a file based on briefing clues), `Grep/Search` (searched codebase), `MCP call`, `Web search`, `Inference` (deduced from multiple sources).',
+    '',
+    '   **Contradiction Report** — List any discrepancy between what this briefing states and what you found via secondary search:',
+    '',
+    '   | Briefing states | Actual finding (source) | Severity |',
+    '   |---|---|---|',
+    '   | "..." | "..." (file/API) | low / medium / high |',
+    '',
+    '   If no contradictions found, explicitly state: "No contradictions detected between briefing and secondary sources."',
+    '',
+    '   This audit helps the Owner assess briefing freshness and identify generator drift.',
+  ].join('\n')
+}
+
+function suggestedOpening(
+  intent: WorkIntent,
+  ctx?: OpsContextResponse,
+  matrices?: MatrixResponse[],
+  language: AgentDialogueLanguage = DEFAULT_AGENT_DIALOGUE_LANGUAGE,
+): string {
   const opt = workIntentById(intent)
   const fails = matrices != null ? prodFailingTargetIds(matrices) : []
 
+  let base: string
   switch (intent) {
     case 'ops':
-      return ctx?.focus.blocker
+      base = ctx?.focus.blocker
         ? `Mode: Ops. Work intent: operations. Spine blocker is ${ctx.focus.blocker}. List the smallest read-only verification steps on active track ${ctx.deployment.active_track}, then propose one single-variable next action. No trade-frontend edits.`
         : `Mode: Ops. Work intent: operations. Read spine + prod/dev matrix. Summarize platform governance state and recommend the next ops-ui-actuation milestone step. No trade-frontend edits.`
+      break
     case 'feature':
-      return `Mode: Ops. Work intent: feature extension. Scope to bifrost-platform unless Owner named trade repos. Check milestone ops-ui-actuation and Architecture → Standards (actuation phases). Propose minimal API+Console diff for one capability.`
+      base = `Mode: Ops. Work intent: feature extension. Scope to bifrost-platform unless Owner named trade repos. Check milestone ops-ui-actuation and Architecture → Standards (actuation phases). Propose minimal API+Console diff for one capability.`
+      break
     case 'debug':
-      return fails.length > 0
+      base = fails.length > 0
         ? `Mode: Ops. Work intent: troubleshooting. Prod failing targets: ${fails.join(', ')}. Diagnose root cause with read-only probes first; list evidence from matrix/cluster/spine before suggesting fixes.`
         : `Mode: Ops. Work intent: troubleshooting. Use live status below. Identify failing or degraded probes, hypothesize root cause, propose read-only verification then minimal fix.`
+      break
     case 'release':
-      return `Mode: Promote. Work intent: release. Assess flywheel A/B readiness from spine + matrix. List all blockers (especially D1). Do not recommend cutover until blockers are explicit.`
+      base = `Mode: Promote. Work intent: release. Assess flywheel A/B readiness from spine + matrix. List all blockers (especially D1). Do not recommend cutover until blockers are explicit.`
+      break
     case 'cluster':
-      return `Mode: Ops. Work intent: cluster/K3s. Review Cluster page Layer A (metrics-server) vs Layer B (observability stack). Propose next step for k3s-phase1 milestone without skipping kubeconfig guardrails.`
+      base = `Mode: Ops. Work intent: cluster/K3s. Review Cluster page Layer A (metrics-server) vs Layer B (observability stack). Propose next step for k3s-phase1 milestone without skipping kubeconfig guardrails.`
+      break
     case 'frontend':
-      return STARTER_PROMPTS.Product +
+      base =
+        STARTER_PROMPTS.Product +
         ' Work intent: trade frontend migration. One page / one variable; Legacy API only.'
+      break
     default:
-      return `Mode: ${opt.agentMode}. Work intent: ${intent}.`
+      base = `Mode: ${opt.agentMode}. Work intent: ${intent}.`
   }
+
+  const lang = agentDialogueLanguageById(language)
+  const firstReplyHint = ` First reply ONLY in ${lang.agentLabel}: (1) your understanding of this briefing for Owner confirmation, (2) a numbered task list for Owner to pick from, (3) a Source Audit table + Contradiction Report — no implementation yet.`
+
+  return base + firstReplyHint
 }
 
 function intentCorePack(intent: WorkIntent, ctx?: OpsContextResponse, matrices: MatrixResponse[] = []): string {
@@ -200,7 +333,9 @@ function formatLaneQueueSection(laneId: LaneId, queue: QueueItem[]): string {
 export function buildBriefingPack(input: BriefingInputs): string {
   const now = new Date().toISOString()
   const opt = workIntentById(input.intent)
-  const opening = suggestedOpening(input.intent, input.context, input.matrices)
+  const language = input.agentDialogueLanguage ?? DEFAULT_AGENT_DIALOGUE_LANGUAGE
+  const langMeta = agentDialogueLanguageById(language)
+  const opening = suggestedOpening(input.intent, input.context, input.matrices, language)
   const track = input.selectedTrack ?? 'build'
   const lane = input.selectedLane ?? 'console-api'
   const laneMeta = laneById(lane)
@@ -213,10 +348,20 @@ export function buildBriefingPack(input: BriefingInputs): string {
     ? formatLaneQueueSection(lane, input.laneQueue)
     : null
 
+  const dialogueRule =
+    language === 'zh'
+      ? 'Reply in **Chinese** for dialogue with the Owner.'
+      : 'Reply in **English** for dialogue with the Owner.'
+
   return [
     '# Bifrost Ops Platform — Agent Session Briefing',
     `Generated: ${now}`,
     `Work track: ${track} · Lane: ${laneMeta.label} (${lane}) · Intent: ${opt.label} (${input.intent})`,
+    `Agent dialogue language: ${langMeta.agentLabel}`,
+    '',
+    formatAgentDialogueSection(language),
+    '',
+    formatFirstResponseProtocol(language, track, lane, input.intent),
     '',
     ...(trackSection != null ? [trackSection, ''] : []),
     ...(queueSection != null ? [queueSection, ''] : []),
@@ -234,7 +379,8 @@ export function buildBriefingPack(input: BriefingInputs): string {
     opening,
     '',
     '## Session discipline',
-    '- Reply in Chinese for dialogue; English for UI strings and code identifiers.',
+    `- ${dialogueRule} English for UI strings and code identifiers.`,
+    '- First reply: confirm briefing understanding + propose task list + Source Audit (provenance table + contradiction report) — wait for Owner selection before implementing.',
     '- One repo / one variable per task unless Owner expands scope.',
     '- bifrost-trader-engine/ is read-only reference — never edit.',
     '- Phase 1 trade stack: New Frontend + Legacy API only — do not migrate bifrost-trade-api yet.',

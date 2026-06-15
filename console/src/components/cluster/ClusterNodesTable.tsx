@@ -4,6 +4,7 @@ import { StatusLamp } from '@/components/StatusLamp'
 interface ClusterNodesTableProps {
   nodes: ClusterNode[]
   isLoading: boolean
+  isFetching?: boolean
   metricsAvailable?: boolean
 }
 
@@ -15,6 +16,7 @@ function pctCell(value: number | undefined): string {
 export function ClusterNodesTable({
   nodes,
   isLoading,
+  isFetching = false,
   metricsAvailable,
 }: ClusterNodesTableProps) {
   return (
@@ -23,6 +25,7 @@ export function ClusterNodesTable({
         <h2 className="m-0 text-sm font-semibold">Nodes</h2>
         <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {isLoading ? '…' : `${nodes.length} nodes`}
+          {isFetching && !isLoading ? ' · updating…' : ''}
           {metricsAvailable === false ? ' · usage n/a' : ''}
         </span>
       </header>

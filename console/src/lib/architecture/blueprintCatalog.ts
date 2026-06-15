@@ -89,7 +89,8 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Pulse', plane: 'LIVE + focus', purpose: 'Table dashboard — matrix summary + spine headline + cluster KPI' },
   { view: 'Milestones', plane: 'TRACK + PLAN', purpose: 'Milestones, decisions D1–Dn, north star, roadmap (ops-context spine)' },
   { view: 'Promote', plane: 'Coupling', purpose: 'Read-only release readiness (flywheel A + B)' },
-  { view: 'Architecture', plane: 'PLAN static', purpose: 'Blueprint, standards, agent protocol, environments — Copy Prompt for LLM' },
+  { view: 'Architecture', plane: 'PLAN static', purpose: 'Blueprint, Environments, Platform Roadmap, K3s Architecture, K3s Bootstrap — Copy Prompt for LLM' },
+  { view: 'Deploy Mainline', plane: 'TRACK', purpose: 'Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain' },
   { view: 'Tools', plane: 'B', purpose: 'Server console (SSH/WebSocket)' },
 ]
 
@@ -157,6 +158,96 @@ export type ActuationPhaseRow = {
   eliminates: string
 }
 
+// ---------------------------------------------------------------------------
+// AI Native Ops Platform — integrated from Goal/AI_NATIVE_OPS_PLATFORM.md
+// ---------------------------------------------------------------------------
+
+export const AI_PLATFORM_MISSION =
+  'Build an AI-native, self-discovering, self-maintaining, self-healing release and operations environment. ' +
+  'Bifrost Trade workloads (frontend, API, Worker, Socket) evolve safely, observably, and rollback-ready on this platform. ' +
+  'Two downstream product lines share this unified foundation: (1) page continuous refactoring (Dense UI / frontend migration); ' +
+  '(2) trade review AI (read-only analysis, isolated from trade execution path).'
+
+export const AI_MERGE_RATIONALE =
+  'Splitting into two projects causes duplicate MCP, context, and gates. Merged: one platform, one Tool contract, one release mainline.'
+
+export type AiCapability = { name: string; description: string; examples: string[] }
+
+export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
+  {
+    name: 'Discovery',
+    description: 'System auto-exposes topology and state understandable by Agent and humans — no manual port tables or SSH log checking.',
+    examples: [
+      'Service inventory from K8s API / Compose labels → unified list',
+      'Health & dependencies from Monitor + Ops + Socket health Redis',
+      'Config & versions from Git tag, image digest, ArgoCD sync status',
+    ],
+  },
+  {
+    name: 'Maintenance',
+    description: 'Daily changes default to automation; humans handle policy and exceptions only.',
+    examples: [
+      'Build & test via Tekton Pipeline (lint / pytest / npm build)',
+      'Release via ArgoCD GitOps; release_gate.sh aggregates prod-health',
+      'Config drift detection via ArgoCD diff + periodic make prod-health',
+    ],
+  },
+  {
+    name: 'Repair',
+    description: 'AI and rule engine attempt recovery within permission boundaries, not just alerting.',
+    examples: [
+      'L0 read-only: diagnose, root cause summary, Runbook link',
+      'L1 safe retry: retry-failed, restart Celery worker instance via Ops API',
+      'L2 controlled change: ArgoCD rollback, scaling — requires Owner confirmation',
+      'Forbidden: LLM direct to trade — daemon_control write, ib:operator:cmd, R-DV3 violation',
+    ],
+  },
+]
+
+export type AiPlatformPhase = { id: string; timeBox: string; deliverables: string; businessUnlock: string }
+
+export const AI_PLATFORM_PHASES: AiPlatformPhase[] = [
+  {
+    id: 'A — Gates',
+    timeBox: 'now ~3mo',
+    deliverables: 'release_gate.sh, Mac Mini CI, MkDocs+Goal, 2C-B Prod',
+    businessUnlock: 'Page refactoring continues; trade review AI offline trial (4090 Ollama)',
+  },
+  {
+    id: 'B — GitOps',
+    timeBox: '3~9mo',
+    deliverables: 'K3s + Gitea + Tekton + ArgoCD + k8s/base/',
+    businessUnlock: 'Frontend Staging on K8s; review index CronJob',
+  },
+  {
+    id: 'C — Closed loop',
+    timeBox: '9~18mo',
+    deliverables: 'Prometheus/Loki/Grafana + bifrost-ops-mcp + AlertManager',
+    businessUnlock: 'Ops Copilot production-ready; trade review RAG via Open-WebUI',
+  },
+]
+
+export type AiSuccessCriterion = { area: string; criterion: string }
+
+export const AI_PLATFORM_SUCCESS: AiSuccessCriterion[] = [
+  { area: 'Discovery', criterion: 'One command or MCP call returns current Prod service list + health + version' },
+  { area: 'Release', criterion: 'tag → Pipeline → image → ArgoCD sync → prod-health all-green (no manual SSH compose up)' },
+  { area: 'Maintenance', criterion: 'Config drift detectable; docs (Goal + Migration + Sign-off) trackable against runtime' },
+  { area: 'Repair', criterion: 'L0/L1 scenarios (Celery pending, Socket yellow) have Runbook + optional AI summary; L2 needs confirmation' },
+  { area: 'Isolation', criterion: 'Trade review AI and ops Agent cannot trigger daemon_control or IB Operator RPC' },
+  { area: 'Page refactoring', criterion: 'Each migrated page reaches Staging after CI gate; Owner sign-off chain complete' },
+  { area: 'Trade review AI', criterion: 'At least one daily review report (positions + trades + PnL) generated locally; data source read-only and auditable' },
+]
+
+export type AiBoundary = { rule: string; detail: string }
+
+export const AI_PLATFORM_BOUNDARIES: AiBoundary[] = [
+  { rule: 'R-DV3', detail: 'One auto-trade Engine per IB account; Dev/Prod separate client_id' },
+  { rule: 'Trade write path', detail: 'Only daemon → ib:operator:cmd; AI read-only or via verified Ops API' },
+  { rule: 'TWS', detail: 'Win11 dedicated machine, never scheduled into K3s' },
+  { rule: 'Phase 1 constraint', detail: 'While frontend points at Legacy API, platform must not mix "API migration" and "release" into one change (single-variable principle)' },
+]
+
 export const ACTUATION_PHASES: ActuationPhaseRow[] = [
   { phase: 'P0 (current)', deliverables: 'Cluster L0 probes, Delivery dual track display', eliminates: 'Observation only' },
   { phase: 'P1', deliverables: 'Auth + audit + workload L1 + logs', eliminates: 'Daily kubectl' },
@@ -202,6 +293,26 @@ export function buildBlueprintLlmPack(spine?: OpsContextResponse): string {
     '',
     '## Actuation phases (P0–P5)',
     ...ACTUATION_PHASES.map(p => `- **${p.phase}**: ${p.deliverables} → eliminates: ${p.eliminates}`),
+    '',
+    '## AI Native Ops Platform — Mission',
+    AI_PLATFORM_MISSION,
+    AI_MERGE_RATIONALE,
+    '',
+    '## AI Platform capabilities',
+    ...AI_PLATFORM_CAPABILITIES.flatMap(c => [
+      `### ${c.name}`,
+      c.description,
+      ...c.examples.map(e => `- ${e}`),
+    ]),
+    '',
+    '## AI Platform phases',
+    ...AI_PLATFORM_PHASES.map(p => `- **${p.id}** (${p.timeBox}): ${p.deliverables} → unlocks: ${p.businessUnlock}`),
+    '',
+    '## AI Platform success criteria',
+    ...AI_PLATFORM_SUCCESS.map(s => `- [${s.area}] ${s.criterion}`),
+    '',
+    '## AI Platform boundaries',
+    ...AI_PLATFORM_BOUNDARIES.map(b => `- **${b.rule}**: ${b.detail}`),
   ]
 
   if (spine != null) {

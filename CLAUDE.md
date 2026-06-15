@@ -2,14 +2,14 @@
 
 > **North star (终极目标)**: Ops Console → **Architecture → Blueprint** · `console/src/lib/architecture/blueprintCatalog.ts` · spine `config/ops-context.yaml` → `north_star` · decision **D6** · milestone **ops-ui-actuation**.
 
-> AI-native **control plane** for Bifrost Trade dev/prod environments. Upper Goal: [bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md](../bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md).
+> AI-native **control plane** for Bifrost Trade dev/prod environments. AI Native Platform goal integrated into Blueprint § AI Native Platform.
 
 与本项目用户的所有对话一律使用中文。
 
 ## 文档优先级（Route C）
 
 1. **代码** — `api/`、`console/`、`config/` 为行为与契约的 ground truth
-2. **Ops Console UI** — Architecture 页（Blueprint / Standards / Agent Protocol / Environments）由 catalog TS 驱动，贴近生产
+2. **Ops Console UI** — Architecture 页（Blueprint [含 AI Native Platform] / Environments / Platform Roadmap / K3s Architecture / K3s Bootstrap）+ Program（Deploy Mainline）+ Standards（Platform / Agent Protocol / Design System）由 catalog TS 驱动，贴近生产
 3. **Spine** — `GET /api/v1/context`
 4. **`docs/`** — **Staging 区**：Agent 改代码时的草稿说明；Owner 审阅后迁入 Architecture catalog 或删除。见 [docs/STAGING.md](docs/STAGING.md)
 

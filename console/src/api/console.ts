@@ -6,6 +6,7 @@ export type ConsoleHost = {
   port: number
   group: string
   reachable: boolean
+  jump_label?: string
 }
 
 export async function fetchConsoleHosts(): Promise<ConsoleHost[]> {
