@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { SegmentControl } from '@bifrost/ui'
 import type { TopologyResponse } from '@/api/types'
+import { buildGapOverview, type GapOverview } from '@/lib/runtime-map/gapAnalysis'
 import {
   buildInfraMapLayout,
   edgeDash,
@@ -61,6 +62,16 @@ export function InfraMapCanvas({
     () => buildInfraMapLayout(data, { mode: layoutMode }),
     [data, layoutMode],
   )
+
+  const gapOverview: GapOverview = useMemo(
+    () => buildGapOverview(data, undefined, roleView),
+    [data, roleView],
+  )
+  const gapByNode = useMemo(() => {
+    const map = new Map<string, (typeof gapOverview.nodeGaps)[0]>()
+    for (const ng of gapOverview.nodeGaps) map.set(ng.nodeId, ng)
+    return map
+  }, [gapOverview])
   const highlightNodeSet = useMemo(() => new Set(highlightNodeIds), [highlightNodeIds])
   const highlightEdgeSet = useMemo(() => new Set(highlightEdgeIds), [highlightEdgeIds])
   const highlightChipSet = useMemo(() => new Set(highlightChipIds), [highlightChipIds])
@@ -221,6 +232,7 @@ export function InfraMapCanvas({
                 localEdges={localEdgesForNode(node.id, data.edges)}
                 highlightedChipIds={highlightChipSet}
                 selectedChipId={selectedChipId}
+                gap={gapByNode.get(node.id)}
                 onSelectNode={() => onSelectNode(node.id)}
                 onSelectChip={
                   onSelectChip ? chip => onSelectChip(chip, node.id) : undefined

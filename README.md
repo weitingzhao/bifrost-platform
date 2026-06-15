@@ -40,7 +40,7 @@ curl -s 'http://127.0.0.1:8780/api/v1/topology?env=prod' | jq .
 
 Edit network layout in `config/topology.yaml` (hosts, edges, K3s roles). Console **Runtime Map** shows hardware + software with live status.
 
-**Delivery** tab — CI/CD dual track (near-term Mac runner vs target GitOps). **Catalog** — flows with status + **Copy for LLM**; hardware/scope live view is on **Runtime Map**.
+**Delivery** tab — CI/CD dual track (near-term Mac runner vs target GitOps). **Architecture** — governance catalogs + **Copy for LLM**; hardware/scope live view is on **Runtime Map**.
 
 ## Layout
 
@@ -50,7 +50,7 @@ console/   React Utility UI (:5180) — Dense UI token style
 agent/     Node agent (Phase B placeholder)
 mcp/       MCP tools (Phase P2 placeholder)
 config/    environments.yaml + ops-context.yaml (spine) + topology.yaml
-docs/      Architecture and trade-stack contract
+docs/      Staging notes + MkDocs (:8060) — see docs/STAGING.md; governance lives in console/src/lib/architecture/
 ```
 
 ## Design principles
@@ -67,4 +67,4 @@ docs/      Architecture and trade-stack contract
 | [bifrost-trade-frontend](../bifrost-trade-frontend) | Trade monitoring SPA |
 | [bifrost-trade-api](../bifrost-trade-api) | Business APIs (probed read-only) |
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [Goal/AI_NATIVE_OPS_PLATFORM.md](../bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md).
+See Ops Console → **Architecture → Blueprint** and [Goal/AI_NATIVE_OPS_PLATFORM.md](../bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md). Docs staging policy: [docs/STAGING.md](docs/STAGING.md).

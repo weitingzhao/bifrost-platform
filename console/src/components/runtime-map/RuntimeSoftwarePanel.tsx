@@ -3,6 +3,7 @@ import type { MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api
 import { ComponentIcon } from '@/components/runtime-map/ComponentIcon'
 import { StatusLamp } from '@/components/StatusLamp'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
+import type { GapOverview, ScopeGapSummary } from '@/lib/runtime-map/gapAnalysis'
 import { componentIdForScopeTag } from '@/lib/runtime-map/infraVisualRegistry'
 import {
   getFailingTargets,
@@ -24,6 +25,7 @@ interface RuntimeSoftwarePanelProps {
   context: OpsContextResponse | undefined
   topology: TopologyResponse | undefined
   selection: RuntimeMapSelection
+  gapOverview?: GapOverview
   onSelectTarget: (targetId: string) => void
   onSelectScope: (tag: ScopeTag) => void
 }
@@ -33,6 +35,7 @@ export function RuntimeSoftwarePanel({
   context,
   topology,
   selection,
+  gapOverview,
   onSelectTarget,
   onSelectScope,
 }: RuntimeSoftwarePanelProps) {
@@ -55,6 +58,12 @@ export function RuntimeSoftwarePanel({
 
   const summary = matrix != null ? summarizeMatrix(matrix) : null
   const listRef = useRef<HTMLDivElement>(null)
+
+  const scopeGapMap = useMemo(() => {
+    const map = new Map<string, ScopeGapSummary>()
+    for (const sg of gapOverview?.scopeGaps ?? []) map.set(sg.tag, sg)
+    return map
+  }, [gapOverview])
 
   useEffect(() => {
     if (selection?.kind !== 'target' && selection?.kind !== 'scope') return
@@ -123,6 +132,7 @@ export function RuntimeSoftwarePanel({
             key={layer.tag}
             layer={layer}
             matrix={matrix}
+            scopeGap={scopeGapMap.get(layer.tag)}
             selected={selection?.kind === 'scope' && selection.tag === layer.tag}
             selectedTargetId={selection?.kind === 'target' ? selection.id : null}
             forceOpen={
@@ -140,6 +150,7 @@ export function RuntimeSoftwarePanel({
 function ScopeLayerCard({
   layer,
   matrix,
+  scopeGap,
   selected,
   selectedTargetId,
   forceOpen,
@@ -148,6 +159,7 @@ function ScopeLayerCard({
 }: {
   layer: ScopeLayer
   matrix: MatrixResponse | undefined
+  scopeGap?: ScopeGapSummary
   selected: boolean
   selectedTargetId: string | null
   forceOpen?: boolean
@@ -191,8 +203,19 @@ function ScopeLayerCard({
             {layer.technology}
           </div>
         </div>
-        {layer.plannedOnly && (
-          <span className="badge-ui text-[10px] shrink-0">planned</span>
+        {scopeGap != null && (
+          <span
+            className={`gap-badge gap-badge--${scopeGap.status === 'live' ? 'live' : scopeGap.status === 'partial' ? 'partial' : 'planned'} shrink-0`}
+          >
+            {scopeGap.status === 'live'
+              ? 'LIVE'
+              : scopeGap.status === 'partial'
+                ? 'PARTIAL'
+                : 'PLANNED'}
+          </span>
+        )}
+        {scopeGap == null && layer.plannedOnly && (
+          <span className="gap-badge gap-badge--planned shrink-0">PLANNED</span>
         )}
         <span className="text-[var(--muted-foreground)] text-xs shrink-0">{isOpen ? '−' : '+'}</span>
       </button>

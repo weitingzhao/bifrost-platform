@@ -2,13 +2,22 @@ import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import type { TopologyEdge, TopologyNode } from '@/api/types'
 import { ComponentIcon } from '@/components/runtime-map/ComponentIcon'
+import { GapProgressBar } from '@/components/runtime-map/GapProgressBar'
 import { StatusLamp } from '@/components/StatusLamp'
+import type { NodeGapSummary } from '@/lib/runtime-map/gapAnalysis'
 import type { NodeRect } from '@/lib/runtime-map/infraMapLayout'
 import { nodeRectStyle } from '@/lib/runtime-map/infraMapLayout'
 import type { InfraMapViewBox } from '@/lib/runtime-map/infraMapLayout'
 import { chipsForNode, type RoleView, type StackChipModel } from '@/lib/runtime-map/roleComponentRegistry'
 import { countServiceStats, hostRoleSummary } from '@/lib/runtime-map/runtimeMapRegistry'
 import { StackChip } from './StackChip'
+
+function pctClass(pct: number): string {
+  if (pct >= 80) return 'gap-pct--high'
+  if (pct >= 40) return 'gap-pct--mid'
+  if (pct > 0) return 'gap-pct--low'
+  return 'gap-pct--zero'
+}
 
 const GROUP_LABELS: Record<string, string> = {
   external: 'External',
@@ -40,6 +49,7 @@ interface HostBayProps {
   localEdges?: TopologyEdge[]
   highlightedChipIds?: Set<string>
   selectedChipId?: string | null
+  gap?: NodeGapSummary
   onSelectNode: () => void
   onSelectChip?: (chip: StackChipModel) => void
 }
@@ -58,6 +68,7 @@ export function HostBay({
   localEdges = [],
   highlightedChipIds,
   selectedChipId,
+  gap,
   onSelectNode,
   onSelectChip,
 }: HostBayProps) {
@@ -142,6 +153,20 @@ export function HostBay({
           </div>
         )}
       </button>
+
+      {gap != null && gap.totalCount > 0 && (
+        <div className="infra-host-bay__gap-bar">
+          <GapProgressBar gap={gap} />
+        </div>
+      )}
+      {gap != null && gap.totalCount > 0 && (
+        <div className="infra-host-bay__gap-label">
+          <span>{gap.liveCount}/{gap.totalCount} live</span>
+          <span className={`gap-pct ${pctClass(gap.completionPct)}`}>
+            {gap.completionPct}%
+          </span>
+        </div>
+      )}
 
       {selfLoops.length > 0 && (
         <div className="infra-host-bay__local-edges">

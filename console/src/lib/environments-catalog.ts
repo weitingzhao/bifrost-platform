@@ -4,7 +4,7 @@
  * Static catalog for Environments UI and "Copy for LLM" context.
  * Milestones and decisions: authoritative via config/ops-context.yaml + GET /api/v1/context.
  *
- * Authoritative docs (MkDocs): bifrost-trade-infra :8050 · bifrost-platform :8060
+ * Authoritative architecture UI: Ops Console → Architecture (Blueprint, Standards, Agent Protocol, Environments).
  */
 
 import type { OpsContextResponse } from '@/api/types'
@@ -389,7 +389,7 @@ export function buildStaticCatalogContext(): string {
     '## One-line goal',
     'AI-native environment governance control plane (Bifrost Ops) over Bifrost Trade data plane.',
     'North star: all routine ops via Ops Console/API only (Strategy C hybrid); Owner exception = restart Ops Platform.',
-    'Authority: bifrost-platform/docs/NORTH_STAR.md · spine north_star + decision D6.',
+    'Authority: console/src/lib/architecture/blueprintCatalog.ts · spine north_star + decision D6.',
     '',
     '## Ports',
     ...Object.entries(PLATFORM_PORTS).map(([k, v]) => `- ${k}: ${v}`),
@@ -427,15 +427,17 @@ export function buildStaticCatalogContext(): string {
     '- bifrost-trade-{api,worker,socket,frontend,core} — data plane',
     '- bifrost-trader-engine — READ-ONLY reference (do not edit)',
     '',
-    '## MkDocs handbooks',
-    '- Infra (hardware, migration, Goal): http://127.0.0.1:8050/',
-    '- Platform (architecture, probe contract): http://127.0.0.1:8060/',
+    '## Architecture (Ops Console)',
+    '- Blueprint — North Star, system architecture, design principles',
+    '- Standards — Trade probe contract, cluster actuation phases',
+    '- Agent Protocol — Product / Ops / Promote modes',
+    '- Environments — hardware, flows, platform phases (this catalog)',
     '',
     '## Agent discipline',
     '- Probe, do not duplicate trade health endpoints',
     '- Never expose forbidden write paths to platform MCP/AI',
     '- Frontend Phase 1: do not migrate API until FE business-equivalent to Legacy',
-    '- Agent modes: see bifrost-platform/docs/AGENT_MODES.md (Product / Ops / Promote)',
+    '- Agent modes: Ops Console → Architecture → Agent Protocol',
   ]
   return lines.join('\n')
 }

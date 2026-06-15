@@ -1,14 +1,23 @@
 import type { MatrixResponse, TopologyResponse } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
+import type { GapOverview } from '@/lib/runtime-map/gapAnalysis'
 import {
   getAffectedNodeIds,
   getPrimaryFailure,
 } from '@/lib/runtime-map/runtimeMapHealth'
 
+function gapPctClass(pct: number): string {
+  if (pct >= 80) return 'gap-pct--high'
+  if (pct >= 40) return 'gap-pct--mid'
+  if (pct > 0) return 'gap-pct--low'
+  return 'gap-pct--zero'
+}
+
 interface RuntimeHealthStripProps {
   topology: TopologyResponse | undefined
   matrix: MatrixResponse | undefined
+  gapOverview?: GapOverview
   onSelectTarget: (targetId: string) => void
   onSelectNode: (nodeId: string) => void
 }
@@ -16,6 +25,7 @@ interface RuntimeHealthStripProps {
 export function RuntimeHealthStrip({
   topology,
   matrix,
+  gapOverview,
   onSelectTarget,
   onSelectNode,
 }: RuntimeHealthStripProps) {
@@ -92,13 +102,41 @@ export function RuntimeHealthStrip({
         )}
       </div>
 
+      {gapOverview != null && gapOverview.totalComponents > 0 && (
+        <div className="gap-overview-strip mt-2">
+          <span className="gap-overview-strip__item">
+            completion{' '}
+            <span className={`font-mono-tabular gap-pct ${gapPctClass(gapOverview.overallCompletionPct)}`}>
+              {gapOverview.overallCompletionPct}%
+            </span>
+          </span>
+          <span className="gap-overview-strip__item">
+            live <span className="font-mono-tabular">{gapOverview.liveComponents}</span>
+          </span>
+          <span className="gap-overview-strip__item">
+            planned <span className="font-mono-tabular">{gapOverview.plannedComponents}</span>
+          </span>
+          {gapOverview.failComponents > 0 && (
+            <span className="gap-overview-strip__item">
+              fail <span className="font-mono-tabular lamp-fail">{gapOverview.failComponents}</span>
+            </span>
+          )}
+          <span className="gap-overview-strip__item text-[var(--muted-foreground)]">
+            gap{' '}
+            <span className="font-mono-tabular">
+              {gapOverview.plannedComponents + gapOverview.failComponents}
+            </span>
+          </span>
+        </div>
+      )}
+
       <details className="runtime-health-strip__help mt-2">
         <summary className="text-[10px] text-[var(--muted-foreground)] cursor-pointer">
           About Runtime Map
         </summary>
         <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Hardware topology, SCOPE stack, and live matrix probes. Select a node, edge, or chip to
-          sync both panels.
+          Hardware topology, SCOPE stack, and live matrix probes. Progress bars show live vs planned
+          gap per server. Select a node, edge, or chip to sync both panels.
         </p>
       </details>
     </section>

@@ -43,7 +43,13 @@ interface ScaleState {
   replicas: number
 }
 
-export function ClusterPage() {
+export function ClusterPage({
+  onOpenStandards,
+  onOpenEnvironments,
+}: {
+  onOpenStandards?: () => void
+  onOpenEnvironments?: () => void
+}) {
   const qc = useQueryClient()
   const [nsFilter, setNsFilter] = useState<NsFilter>('bifrost')
   const [selectedNs, setSelectedNs] = useState<string | null>('cicd')
@@ -407,6 +413,8 @@ cd ../bifrost-platform && make start`}
       <ClusterObservabilityPanel
         data={observabilityQuery.data}
         isLoading={observabilityQuery.isLoading}
+        onOpenStandards={onOpenStandards}
+        onOpenEnvironments={onOpenEnvironments}
       />
 
       <section className="page-section panel-elevated overflow-hidden">

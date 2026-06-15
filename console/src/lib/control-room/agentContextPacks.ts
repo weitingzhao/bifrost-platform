@@ -186,6 +186,9 @@ function nextStepQuestion(
   if (ctx.deployment.active_track === 'k3s_phase1') {
     return 'K3s phase 1 is IN_PROGRESS while compose prod cutover is blocked. Propose the parallel work plan and what must NOT change on flywheel B until D1 is resolved.'
   }
+  if (ctx.deployment.active_track === 'ops_ui_actuation') {
+    return 'k3s-phase1 is closed. Propose the next ops-ui-actuation slice (P1 workload smoke, agent join, or P2 node lifecycle) without Prod cutover or Layer B ad-hoc install.'
+  }
   return STARTER_PROMPTS[mode]
 }
 

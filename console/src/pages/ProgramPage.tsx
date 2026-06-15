@@ -1,15 +1,15 @@
 import type { ReactNode } from 'react'
 import type { OpsContextResponse } from '@/api/types'
 import { milestoneStatusClass } from '@/components/FocusStrip'
-import { DOC_LINKS } from '@/lib/docsLinks'
 
 interface ProgramPageProps {
   context: OpsContextResponse | undefined
   isLoading: boolean
   error: Error | null
+  onOpenBlueprint?: () => void
 }
 
-export function ProgramPage({ context, isLoading, error }: ProgramPageProps) {
+export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: ProgramPageProps) {
   if (isLoading) {
     return <p className="text-[var(--muted-foreground)]">Loading program context…</p>
   }
@@ -70,24 +70,13 @@ export function ProgramPage({ context, isLoading, error }: ProgramPageProps) {
             <p className="m-0 font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               {context.north_star.authority}
             </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <a
-                href={DOC_LINKS.northStar}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-ui btn-ui-ghost text-xs"
-              >
-                Full doc (MkDocs)
-              </a>
-              <a
-                href={DOC_LINKS.platformHome}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-ui btn-ui-ghost text-xs"
-              >
-                Platform handbook
-              </a>
-            </div>
+            {onOpenBlueprint != null && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button type="button" className="btn-ui btn-ui-ghost text-xs" onClick={onOpenBlueprint}>
+                  Open Blueprint
+                </button>
+              </div>
+            )}
           </div>
         </ProgramSection>
       )}

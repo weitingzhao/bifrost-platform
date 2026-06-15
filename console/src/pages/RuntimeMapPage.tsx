@@ -5,6 +5,7 @@ import { RuntimeHardwarePanel } from '@/components/runtime-map/RuntimeHardwarePa
 import { RuntimeHealthStrip } from '@/components/runtime-map/RuntimeHealthStrip'
 import { RuntimeMapDrawer } from '@/components/runtime-map/RuntimeMapDrawer'
 import { RuntimeSoftwarePanel } from '@/components/runtime-map/RuntimeSoftwarePanel'
+import { buildGapOverview } from '@/lib/runtime-map/gapAnalysis'
 import { chipIdsMatchingTarget } from '@/lib/runtime-map/infraVisualRegistry'
 import type { StackChipModel } from '@/lib/runtime-map/roleComponentRegistry'
 import {
@@ -39,6 +40,11 @@ export function RuntimeMapPage({
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [userDismissedDrawer, setUserDismissedDrawer] = useState(false)
+
+  const gapOverview = useMemo(
+    () => buildGapOverview(topology, matrix, 'compose'),
+    [topology, matrix],
+  )
 
   const applySelection = useCallback(
     (next: RuntimeMapSelection, chipId?: string | null) => {
@@ -116,6 +122,7 @@ export function RuntimeMapPage({
       <RuntimeHealthStrip
         topology={topology}
         matrix={matrix}
+        gapOverview={gapOverview}
         onSelectTarget={id => applySelection({ kind: 'target', id })}
         onSelectNode={id => applySelection({ kind: 'node', id })}
       />
@@ -140,6 +147,7 @@ export function RuntimeMapPage({
           context={context}
           topology={topology}
           selection={selection}
+          gapOverview={gapOverview}
           onSelectTarget={id => applySelection({ kind: 'target', id })}
           onSelectScope={tag => applySelection({ kind: 'scope', tag })}
         />
@@ -150,6 +158,7 @@ export function RuntimeMapPage({
         matrix={matrix}
         context={context}
         selection={selection}
+        gapOverview={gapOverview}
       />
 
       <RuntimeMapDrawer

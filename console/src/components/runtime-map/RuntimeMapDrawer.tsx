@@ -50,7 +50,7 @@ export function RuntimeMapDrawer({
     (selection.id.startsWith('api-') || selection.id.includes('socket'))
 
   return (
-    <aside className="bay-detail-drawer runtime-map-drawer" role="dialog" aria-label="Runtime detail">
+    <aside className="bay-detail-drawer panel-elevated runtime-map-drawer" role="dialog" aria-label="Runtime detail">
       <header className="bay-detail-drawer-header">
         <h3 className="m-0 text-sm font-semibold">{title}</h3>
         <button type="button" className="btn-ui btn-ui-ghost" onClick={onClose} aria-label="Close">

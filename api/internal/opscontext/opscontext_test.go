@@ -21,7 +21,7 @@ func TestLoadFixture(t *testing.T) {
 	if f.NorthStar == nil || f.NorthStar.ID != "ops-ui-single-pane" {
 		t.Errorf("north_star = %+v", f.NorthStar)
 	}
-	if f.Deployment.ActiveTrack != "k3s_phase1" {
+	if f.Deployment.ActiveTrack != "ops_ui_actuation" {
 		t.Errorf("active_track = %q", f.Deployment.ActiveTrack)
 	}
 	if len(f.Decisions) < 6 {
@@ -29,7 +29,7 @@ func TestLoadFixture(t *testing.T) {
 	}
 	foundD1 := false
 	for _, m := range f.Milestones {
-		if m.ID == "k3s-phase1" && m.Status != "IN_PROGRESS" {
+		if m.ID == "k3s-phase1" && m.Status != "CLOSED" {
 			t.Errorf("k3s-phase1 status = %q", m.Status)
 		}
 		if m.ID == "2c-b-prod-cutover" {

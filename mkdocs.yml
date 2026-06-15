@@ -1,5 +1,5 @@
 site_name: Bifrost Ops Platform
-site_description: Environment governance — Pulse, matrix, spine, ops probes
+site_description: Docs staging — draft notes & future plans (authoritative governance is in Ops Console Architecture)
 site_url: http://127.0.0.1:8060/
 
 theme:
@@ -34,11 +34,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Staging policy: STAGING.md
   - Overview: overview.md
-  - North star: NORTH_STAR.md
-  - Cluster actuation: CLUSTER_ACTUATION.md
-  - Architecture: ARCHITECTURE.md
-  - Agent modes: AGENT_MODES.md
-  - Trade probe contract: TRADE_CONTRACT.md
   - Agent (Phase B): agent/README.md
   - MCP (Phase P2): mcp/README.md

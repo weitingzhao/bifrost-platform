@@ -1,3 +1,5 @@
+> **Docs staging** — future plan only. Authoritative cluster actuation: Ops Console → Architecture → Standards · `bifrost-platform/console/src/lib/architecture/standardsCatalog.ts`
+
 # bifrost-platform agent (Phase B)
 
 Lightweight **Go node agent** deployed on Linux mini-pcs, Mac Minis, and GPU server.

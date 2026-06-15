@@ -7,7 +7,7 @@ meta:
   catalog_version: "2026-06-15"
 
 # Ultimate goal (Strategy C hybrid) — authoritative for Agent / Program UI.
-# Detail: bifrost-platform/docs/NORTH_STAR.md · decision D6
+# Detail: Ops Console → Architecture → Blueprint · console/src/lib/architecture/blueprintCatalog.ts · decision D6
 north_star:
   id: ops-ui-single-pane
   statement: >
@@ -21,7 +21,7 @@ north_star:
     - "L0/L1/L2 actuation with audit; identical contract for human UI and AI Agent"
     - "Hybrid backends — client-go, Argo CD, Tekton, SSH whitelist; embed mature tools, do not fork K8s UIs"
   owner_exception: "Restart bifrost-platform (make start) when control plane is down or upgraded"
-  authority: bifrost-platform/docs/NORTH_STAR.md
+  authority: console/src/lib/architecture/blueprintCatalog.ts
   success_criteria:
     - "Cluster join/drain/workload/gitops runnable from Cluster + Delivery pages only"
     - "Program page and GET /api/v1/context expose north_star on every Agent session"
@@ -29,12 +29,12 @@ north_star:
 
 deployment:
   phase: k3s_partial # compose | k3s_partial | k3s_ha
-  active_track: k3s_phase1
+  active_track: ops_ui_actuation
 
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 
 focus:
-  headline: "K3s phase 1 IN_PROGRESS"
+  headline: "k3s-phase1 CLOSED · ops-ui-actuation IN_PROGRESS"
   flywheel_primary: B # A = trade FE, B = runtime/ops
   blocker: decision:D1
 
@@ -69,17 +69,18 @@ milestones:
 
   - id: k3s-phase1
     label: K3s phase 1 bootstrap
-    status: IN_PROGRESS
+    status: CLOSED
+    signed_at: "2026-06-14"
     pipeline_lane: parallel
     pipeline_after: 2c-b-stable-test
-    authority: bifrost-trade-infra/docs/K3S_PLATFORM_ARCHITECTURE.md
+    authority: bifrost-trade-infra/docs/K3S_BOOTSTRAP.md
 
   - id: ops-ui-actuation
     label: Ops UI single-pane actuation (north star)
     status: IN_PROGRESS
     pipeline_lane: parallel
     pipeline_after: k3s-phase1
-    authority: bifrost-platform/docs/NORTH_STAR.md
+    authority: console/src/lib/architecture/blueprintCatalog.ts
 
   - id: legacy-retirement
     label: Phase 3 Legacy retirement
@@ -127,7 +128,7 @@ decisions:
     topic: Ops Platform ultimate goal — Strategy C hybrid single pane
     conclusion: "All routine ops via Ops Console/API only; hybrid embed Argo/Tekton/K8s executors behind platform-api; Owner exception is restarting Ops Platform itself"
     signed_at: "2026-06-15"
-    authority: bifrost-platform/docs/NORTH_STAR.md
+    authority: console/src/lib/architecture/blueprintCatalog.ts
 
 platform_phases:
   - id: A

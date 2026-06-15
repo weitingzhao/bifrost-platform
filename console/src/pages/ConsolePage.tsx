@@ -15,6 +15,9 @@ import { DOC_LINKS } from '@/lib/docsLinks'
 import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
 import { PlatformAuthBar } from '@/components/PlatformAuthBar'
+import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
+import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
+import { BlueprintPage } from '@/pages/BlueprintPage'
 import { BriefingPage } from '@/pages/BriefingPage'
 import { ClusterPage } from '@/pages/ClusterPage'
 import { DeliveryPage } from '@/pages/DeliveryPage'
@@ -24,6 +27,8 @@ import { PromotePage } from '@/pages/PromotePage'
 import { PulsePage } from '@/pages/PulsePage'
 import { RuntimeMapPage } from '@/pages/RuntimeMapPage'
 import { ServerConsolePage } from '@/pages/ServerConsolePage'
+import { DesignSystemPage } from '@/pages/DesignSystemPage'
+import { StandardsPage } from '@/pages/StandardsPage'
 
 const ControlRoomPage = lazy(() =>
   import('@/pages/ControlRoomPage').then(m => ({ default: m.ControlRoomPage })),
@@ -38,7 +43,11 @@ type ViewTab =
   | 'delivery'
   | 'program'
   | 'promote'
+  | 'blueprint'
   | 'environments'
+  | 'platform-standards'
+  | 'agent-protocol'
+  | 'design-system'
   | 'console'
 
 const VIEW_TITLES: Record<ViewTab, string> = {
@@ -50,7 +59,11 @@ const VIEW_TITLES: Record<ViewTab, string> = {
   delivery: 'Delivery',
   program: 'Milestones',
   promote: 'Promote',
-  environments: 'Catalog',
+  blueprint: 'Blueprint',
+  environments: 'Environments',
+  'platform-standards': 'Platform',
+  'agent-protocol': 'Agent Protocol',
+  'design-system': 'Design System',
   console: 'Server console',
 }
 
@@ -172,6 +185,29 @@ export function ConsolePage() {
   const openPromote = () => setViewTab('promote')
   const openRuntimeMap = () => setViewTab('runtime-map')
   const openCluster = () => setViewTab('cluster')
+  const openBlueprint = () => setViewTab('blueprint')
+  const openStandards = () => setViewTab('platform-standards')
+  const openEnvironments = () => setViewTab('environments')
+
+  const [govCopyState, setGovCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+  const isArchTab = viewTab === 'blueprint' || viewTab === 'environments'
+  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-protocol' || viewTab === 'design-system'
+  const isGovernanceTab = isArchTab || isStdTab
+  const handleCopyAllGovernance = async () => {
+    let spine = contextQuery.data
+    if (spine == null) {
+      try { spine = await fetchContext() } catch { /* static only */ }
+    }
+    const text = buildFullArchitectureLlmPack(spine)
+    try {
+      await navigator.clipboard.writeText(text)
+      setGovCopyState('copied')
+      window.setTimeout(() => setGovCopyState('idle'), 2000)
+    } catch {
+      setGovCopyState('error')
+      window.setTimeout(() => setGovCopyState('idle'), 3000)
+    }
+  }
 
   type NavItemDef = {
     id: string
@@ -206,8 +242,19 @@ export function ConsolePage() {
       ],
     },
     {
-      label: 'Catalog',
-      items: [{ id: 'environments', label: 'Environments', shortLabel: 'E' }],
+      label: 'Architecture',
+      items: [
+        { id: 'blueprint', label: 'Blueprint', shortLabel: 'A' },
+        { id: 'environments', label: 'Environments', shortLabel: 'E' },
+      ],
+    },
+    {
+      label: 'Standards',
+      items: [
+        { id: 'platform-standards', label: 'Platform', shortLabel: 'T' },
+        { id: 'agent-protocol', label: 'Agent Protocol', shortLabel: 'N' },
+        { id: 'design-system', label: 'Design System', shortLabel: 'U' },
+      ],
     },
     {
       label: 'Tools',
@@ -217,17 +264,17 @@ export function ConsolePage() {
       label: 'Docs',
       items: [
         {
-          id: 'docs-platform',
-          label: 'Platform handbook',
-          shortLabel: 'P',
+          id: 'docs-staging',
+          label: 'Docs staging',
+          shortLabel: 'D',
           href: DOC_LINKS.platformHome,
           external: true,
         },
         {
-          id: 'docs-north-star',
-          label: 'North star',
-          shortLabel: 'N',
-          href: DOC_LINKS.northStar,
+          id: 'docs-staging-policy',
+          label: 'Staging policy',
+          shortLabel: 'S',
+          href: DOC_LINKS.stagingPolicy,
           external: true,
         },
         {
@@ -265,7 +312,11 @@ export function ConsolePage() {
     'delivery',
     'program',
     'promote',
+    'blueprint',
     'environments',
+    'platform-standards',
+    'agent-protocol',
+    'design-system',
     'console',
   ].includes(viewTab)
 
@@ -416,7 +467,7 @@ export function ConsolePage() {
               title={VIEW_TITLES.cluster}
               description="K3s cluster nodes, namespaces, and workloads — L0 read-only via platform-api."
             />
-            <ClusterPage />
+            <ClusterPage onOpenStandards={openStandards} onOpenEnvironments={openEnvironments} />
           </>
         )}
 
@@ -447,6 +498,7 @@ export function ConsolePage() {
               context={contextQuery.data}
               isLoading={contextQuery.isLoading}
               error={contextQuery.error as Error | null}
+              onOpenBlueprint={openBlueprint}
             />
           </>
         )}
@@ -469,19 +521,43 @@ export function ConsolePage() {
 
         {viewTab === 'console' && <ServerConsolePage />}
 
-        {viewTab === 'environments' && (
-          <>
+        {isGovernanceTab && (
+          <div className="flex items-center justify-between gap-3">
             <PageHeader
-              title={VIEW_TITLES.environments}
-              description="Flows, phases, and LLM catalog — hardware/scope live view is on Runtime Map."
+              title={VIEW_TITLES[viewTab]}
+              description={
+                viewTab === 'blueprint' ? 'North Star, system architecture, control-plane layers, and design principles.'
+                  : viewTab === 'environments' ? 'Flows, phases, and LLM catalog — hardware/scope live view is on Runtime Map.'
+                  : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
+                  : viewTab === 'agent-protocol' ? 'Agent interaction modes, context pack layers, forbidden actions, and session startup.'
+                  : 'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.'
+              }
             />
-            <EnvironmentsPage
-              context={contextQuery.data}
-              onOpenRuntimeMap={openRuntimeMap}
-              onOpenDelivery={openDelivery}
-            />
-          </>
+            <button
+              type="button"
+              className="btn-ui btn-ui-ghost shrink-0 text-xs"
+              onClick={() => void handleCopyAllGovernance()}
+            >
+              {govCopyState === 'copied' ? 'All copied!' : govCopyState === 'error' ? 'Copy failed' : 'Copy All for LLM'}
+            </button>
+          </div>
         )}
+
+        {viewTab === 'blueprint' && <BlueprintPage context={contextQuery.data} />}
+
+        {viewTab === 'environments' && (
+          <EnvironmentsPage
+            context={contextQuery.data}
+            onOpenRuntimeMap={openRuntimeMap}
+            onOpenDelivery={openDelivery}
+          />
+        )}
+
+        {viewTab === 'platform-standards' && <StandardsPage />}
+
+        {viewTab === 'agent-protocol' && <AgentProtocolPage />}
+
+        {viewTab === 'design-system' && <DesignSystemPage />}
       </PageShell>
     </MonitoringShell>
   )

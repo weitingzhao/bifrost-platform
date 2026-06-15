@@ -19,7 +19,12 @@
     "paths": {
       "@/*": ["src/*"],
       "@bifrost/ui": ["../../bifrost-ui/src/index.ts"],
-      "@bifrost/ui/styles": ["../../bifrost-ui/src/styles/bifrost-ui.css"]
+      "@bifrost/ui/styles": ["../../bifrost-ui/src/styles/bifrost-ui.css"],
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"],
+      "radix-ui": ["./node_modules/radix-ui"],
+      "class-variance-authority": ["./node_modules/class-variance-authority"],
+      "lucide-react": ["./node_modules/lucide-react"]
     }
   },
   "include": ["src"]

@@ -34,31 +34,31 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
 
   const readFirst: Record<WorkIntent, string[]> = {
     ops: [
-      'bifrost-platform/docs/NORTH_STAR.md',
-      'bifrost-platform/docs/TRADE_CONTRACT.md',
-      'bifrost-platform/config/ops-context.yaml (via GET /api/v1/context)',
+      'Ops Console → Architecture → Blueprint (console/src/lib/architecture/blueprintCatalog.ts)',
+      'Ops Console → Architecture → Standards (standardsCatalog.ts)',
+      'GET /api/v1/context',
       'bifrost-trade-infra/docs/MIGRATION_TRACKING.md (trade stack only)',
     ],
     feature: [
-      'bifrost-platform/docs/ARCHITECTURE.md',
-      'bifrost-platform/docs/CLUSTER_ACTUATION.md (if Cluster-related)',
-      'bifrost-platform/config/ops-context.yaml — milestone ops-ui-actuation',
+      'Ops Console → Architecture → Blueprint + Standards',
+      'api/internal/server/server.go — registered /api/v1/* routes',
+      'config/ops-context.yaml — milestone ops-ui-actuation',
     ],
     debug: [
       'Ops Console → Runtime Map (failing matrix targets)',
       'Ops Console → Cluster (kubeconfig, failing pods)',
-      'bifrost-platform/docs/TRADE_CONTRACT.md — probe failure behavior',
+      'Ops Console → Architecture → Standards — probe contract',
       'context.probe_hints in GET /api/v1/context',
     ],
     release: [
-      'bifrost-platform/docs/NORTH_STAR.md',
+      'Ops Console → Architecture → Blueprint — North Star',
       'bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md',
       'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md',
       'decision D1 in ops-context spine',
     ],
     cluster: [
-      'bifrost-platform/docs/CLUSTER_ACTUATION.md',
-      'bifrost-trade-infra/docs/K3S_PLATFORM_ARCHITECTURE.md §9',
+      'Ops Console → Architecture → Standards — cluster actuation + observability layers',
+      'api/internal/cluster — implementation',
       'bifrost-platform/config/clusters.yaml',
     ],
     frontend: [
@@ -96,7 +96,7 @@ function suggestedOpening(intent: WorkIntent, ctx?: OpsContextResponse, matrices
         ? `Mode: Ops. Work intent: operations. Spine blocker is ${ctx.focus.blocker}. List the smallest read-only verification steps on active track ${ctx.deployment.active_track}, then propose one single-variable next action. No trade-frontend edits.`
         : `Mode: Ops. Work intent: operations. Read spine + prod/dev matrix. Summarize platform governance state and recommend the next ops-ui-actuation milestone step. No trade-frontend edits.`
     case 'feature':
-      return `Mode: Ops. Work intent: feature extension. Scope to bifrost-platform unless Owner named trade repos. Check milestone ops-ui-actuation and CLUSTER_ACTUATION phase plan. Propose minimal API+Console diff for one capability.`
+      return `Mode: Ops. Work intent: feature extension. Scope to bifrost-platform unless Owner named trade repos. Check milestone ops-ui-actuation and Architecture → Standards (actuation phases). Propose minimal API+Console diff for one capability.`
     case 'debug':
       return fails.length > 0
         ? `Mode: Ops. Work intent: troubleshooting. Prod failing targets: ${fails.join(', ')}. Diagnose root cause with read-only probes first; list evidence from matrix/cluster/spine before suggesting fixes.`
@@ -145,7 +145,7 @@ function intentCorePack(intent: WorkIntent, ctx?: OpsContextResponse, matrices: 
       'Layer A: metrics-server + GET /cluster/metrics (CPU/mem, top pods).',
       'Layer B: GET /cluster/observability — Prometheus/Grafana/Loki/Alertmanager in monitoring NS.',
       'P1 actuation: ensure namespaces, rollout restart, scale, delete pod (operator token).',
-      'Docs: bifrost-platform/docs/CLUSTER_ACTUATION.md',
+      'Reference: Ops Console → Architecture → Standards (cluster actuation + observability layers).',
     ].join('\n')
   }
   return ops
