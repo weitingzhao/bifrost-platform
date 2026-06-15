@@ -15,7 +15,7 @@ func TestLoadFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Meta.CatalogVersion != "2026-06-15" {
+	if f.Meta.CatalogVersion != "2026-06-15-p5b" {
 		t.Errorf("catalog_version = %q", f.Meta.CatalogVersion)
 	}
 	if f.NorthStar == nil || f.NorthStar.ID != "ops-ui-single-pane" {
@@ -28,13 +28,23 @@ func TestLoadFixture(t *testing.T) {
 		t.Errorf("expected >= 6 decisions, got %d", len(f.Decisions))
 	}
 	foundD1 := false
+	foundK3sMacAgents := false
 	for _, m := range f.Milestones {
 		if m.ID == "k3s-phase1" && m.Status != "CLOSED" {
 			t.Errorf("k3s-phase1 status = %q", m.Status)
 		}
+		if m.ID == "k3s-mac-agents" {
+			foundK3sMacAgents = true
+			if m.Status != "CLOSED" {
+				t.Errorf("k3s-mac-agents status = %q", m.Status)
+			}
+		}
 		if m.ID == "2c-b-prod-cutover" {
 			foundD1 = m.Blocker == "decision:D1"
 		}
+	}
+	if !foundK3sMacAgents {
+		t.Error("k3s-mac-agents milestone missing")
 	}
 	if !foundD1 {
 		t.Error("2c-b-prod-cutover should block on decision:D1")

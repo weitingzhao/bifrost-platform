@@ -91,6 +91,12 @@ export function ClusterPage({
     retry: false,
   })
 
+  const clusterFetching =
+    summaryQuery.isFetching ||
+    nodesQuery.isFetching ||
+    metricsQuery.isFetching ||
+    observabilityQuery.isFetching
+
   const namespacesQuery = useQuery({
     queryKey: ['cluster', 'namespaces', nsFilter],
     queryFn: () => fetchClusterNamespaces(nsFilter === 'bifrost' ? 'bifrost' : ''),
@@ -185,6 +191,15 @@ export function ClusterPage({
     void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
   }
 
+  function formatUpdatedAt(ms: number): string {
+    if (!ms) return '—'
+    return new Date(ms).toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  }
+
   function handleActuationSuccess(message: string) {
     setActionError(null)
     setConfirmState(null)
@@ -271,10 +286,22 @@ export function ClusterPage({
             <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               K3s cluster · bifrost-bootstrap · P1 actuation
             </p>
+            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Auto-refresh every 30s
+              {nodesQuery.dataUpdatedAt > 0
+                ? ` · Nodes updated ${formatUpdatedAt(nodesQuery.dataUpdatedAt)}`
+                : ''}
+              {clusterFetching ? ' · Refreshing…' : ''}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="btn-ui" onClick={refreshCluster}>
-              Refresh
+            <button
+              type="button"
+              className="btn-ui"
+              disabled={clusterFetching}
+              onClick={refreshCluster}
+            >
+              {clusterFetching ? 'Refreshing…' : 'Refresh'}
             </button>
             <button
               type="button"
@@ -376,6 +403,7 @@ cd ../bifrost-platform && make start`}
       <ClusterNodesTable
         nodes={nodesQuery.data?.nodes ?? []}
         isLoading={nodesQuery.isLoading}
+        isFetching={nodesQuery.isFetching}
         metricsAvailable={metricsQuery.data?.metrics_server_available}
       />
 

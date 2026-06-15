@@ -419,6 +419,17 @@ html {
   color: var(--muted-foreground);
 }
 
+.briefing-language-select {
+  height: 2rem;
+  min-width: 8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+  padding: 0 0.5rem;
+  font-size: var(--text-dense-meta);
+}
+
 .briefing-maintain-panel {
   border: 1px dashed var(--border);
   border-radius: var(--radius);

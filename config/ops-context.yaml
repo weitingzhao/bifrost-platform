@@ -1,10 +1,10 @@
 # Bifrost Ops Platform — context spine (authoritative for milestones & decisions).
 # Console Program/Pulse and Copy-for-LLM merge this file via GET /api/v1/context.
-# Detail: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md L3
+# Detail: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts) L3
 
 meta:
-  version: "2026-06-15"
-  catalog_version: "2026-06-15"
+  version: "2026-06-15-p5b"
+  catalog_version: "2026-06-15-p5b"
 
 # Ultimate goal (Strategy C hybrid) — authoritative for Agent / Program UI.
 # Detail: Ops Console → Architecture → Blueprint · console/src/lib/architecture/blueprintCatalog.ts · decision D6
@@ -34,7 +34,7 @@ deployment:
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 
 focus:
-  headline: "k3s-phase1 CLOSED · ops-ui-actuation IN_PROGRESS"
+  headline: "k3s-phase1 CLOSED · P5b Mac agents 2/2 Ready · ops-ui-actuation IN_PROGRESS"
   flywheel_primary: B # A = trade FE, B = runtime/ops
   blocker: decision:D1
 
@@ -53,7 +53,7 @@ milestones:
     label: Local Prod Final
     status: CLOSED
     signed_at: "2026-06-04"
-    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
 
   - id: 2c-b-stable-test
     label: 2C-B Linux Docker stable test
@@ -73,7 +73,15 @@ milestones:
     signed_at: "2026-06-14"
     pipeline_lane: parallel
     pipeline_after: 2c-b-stable-test
-    authority: bifrost-trade-infra/docs/K3S_BOOTSTRAP.md
+    authority: Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts)
+
+  - id: k3s-mac-agents
+    label: K3s Mac Mini agents (P5b · UTM Ubuntu)
+    status: CLOSED
+    signed_at: "2026-06-15"
+    pipeline_lane: parallel
+    pipeline_after: k3s-phase1
+    authority: Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts § P5b)
 
   - id: ops-ui-actuation
     label: Ops UI single-pane actuation (north star)
@@ -93,35 +101,35 @@ decisions:
     topic: Prod host & migration path
     conclusion: "K3s first; compose→k3s path TBD after cluster ready (do not lock .70 as sole prod target)"
     signed_at: "2026-06-04"
-    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
 
   - id: D2
     status: SIGNED
     topic: PostgreSQL host
     conclusion: "Keep bare-metal PG on mini-pc-b (.80) until CloudNativePG migration"
     signed_at: "2026-06-04"
-    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
 
   - id: D3
     status: SIGNED
     topic: TWS placement
     conclusion: "TWS Host + Secondary on Win11; IB_HOST per account"
     signed_at: "2026-06-04"
-    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
 
   - id: D4
     status: SIGNED
     topic: R-DV3 auto-order
     conclusion: "Deferred — no auto-order requirement at current milestone"
     signed_at: "2026-06-04"
-    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
 
   - id: D5
     status: SIGNED
     topic: K3s vs 2C-B sequencing
     conclusion: "2C-B stable test signed; K3s env setup may start in parallel with compose stable state"
     signed_at: "2026-06-04"
-    authority: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md
+    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
 
   - id: D6
     status: SIGNED
@@ -217,10 +225,10 @@ tracks:
       - id: compose-to-k3s
         label: "Compose to K3s deployment"
         total: 5
-        done: 1
+        done: 2
         status: in_progress
-        next_task: "Deploy trade stack to K3s bifrost-prod namespace"
-        note: "K3s phase 1 bootstrap CLOSED; workload migration next"
+        next_task: "Join gpu-server Agent (P5a) · then deploy trade stack to K3s bifrost-prod namespace"
+        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ops-vm-ubt-01/.54 + ops-vm-ubt-02/.56 Ready ✓ · ③ gpu-server · ④ trade stack · ⑤ HA/validation"
       - id: legacy-retirement
         label: "Phase 3 Legacy retirement"
         total: 3

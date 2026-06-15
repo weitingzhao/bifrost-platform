@@ -19,7 +19,7 @@ export function ServerConsolePage() {
     <div className="flex w-full min-w-0 flex-col gap-4">
       <PageHeader
         title="Server console"
-        description="Interactive SSH via Platform API (topology allowlist). Passphrase keys use macOS ssh-agent — run ssh-add before Connect if needed."
+        description="Interactive SSH via Platform API (topology allowlist). Select a host to connect; open several for a side-by-side grid. Retry appears if a session fails. Passphrase keys use macOS ssh-agent — run ssh-add first if needed."
       />
 
       {hostsQuery.isLoading && (

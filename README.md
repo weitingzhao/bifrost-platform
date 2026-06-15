@@ -67,4 +67,4 @@ docs/      Staging notes + MkDocs (:8060) — see docs/STAGING.md; governance li
 | [bifrost-trade-frontend](../bifrost-trade-frontend) | Trade monitoring SPA |
 | [bifrost-trade-api](../bifrost-trade-api) | Business APIs (probed read-only) |
 
-See Ops Console → **Architecture → Blueprint** and [Goal/AI_NATIVE_OPS_PLATFORM.md](../bifrost-trade-infra/Goal/AI_NATIVE_OPS_PLATFORM.md). Docs staging policy: [docs/STAGING.md](docs/STAGING.md).
+See Ops Console → **Architecture → Blueprint** (includes AI Native Platform goals). Docs staging policy: [docs/STAGING.md](docs/STAGING.md).

@@ -82,7 +82,7 @@ func (h *Handler) HandleHosts(w http.ResponseWriter, _ *http.Request) {
 	for _, host := range hosts {
 		out = append(out, row{
 			Host:      host,
-			Reachable: Reachable(host.Host, host.Port, 2*time.Second),
+			Reachable: ReachableHost(host, 2*time.Second),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"hosts": out})
@@ -109,12 +109,15 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	client, agentConn, err := dialSSH(target, h.ssh)
+	client, jumpClient, agentConn, err := dialSSH(target, h.ssh)
 	if err != nil {
 		_ = ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n\x1b[31mSSH connect failed: %v\x1b[0m\r\n", err)))
 		return
 	}
 	defer client.Close()
+	if jumpClient != nil {
+		defer jumpClient.Close()
+	}
 	if agentConn != nil {
 		defer agentConn.Close()
 	}
@@ -195,10 +198,13 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	<-done
 }
 
-func dialSSH(target Host, settings SSHSettings) (*ssh.Client, net.Conn, error) {
+func dialSSH(target Host, settings SSHSettings) (*ssh.Client, *ssh.Client, net.Conn, error) {
 	auth, agentConn, err := buildSSHAuth(settings.KeyPath)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if target.jump != nil {
+		return dialSSHViaJump(target, *target.jump, auth, settings.DialTimeout, agentConn)
 	}
 	addr := net.JoinHostPort(target.Host, itoa(target.Port))
 	cfg := &ssh.ClientConfig{
@@ -212,9 +218,59 @@ func dialSSH(target Host, settings SSHSettings) (*ssh.Client, net.Conn, error) {
 		if agentConn != nil {
 			_ = agentConn.Close()
 		}
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return client, agentConn, nil
+	return client, nil, agentConn, nil
+}
+
+func dialSSHViaJump(
+	target Host,
+	jump Host,
+	auth []ssh.AuthMethod,
+	timeout time.Duration,
+	agentConn net.Conn,
+) (*ssh.Client, *ssh.Client, net.Conn, error) {
+	jumpAddr := net.JoinHostPort(jump.Host, itoa(jump.Port))
+	jumpCfg := &ssh.ClientConfig{
+		User:            jump.User,
+		Auth:            auth,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         timeout,
+	}
+	jumpClient, err := ssh.Dial("tcp", jumpAddr, jumpCfg)
+	if err != nil {
+		if agentConn != nil {
+			_ = agentConn.Close()
+		}
+		return nil, nil, nil, fmt.Errorf("jump %s (%s): %w", jump.Label, jumpAddr, err)
+	}
+
+	targetAddr := net.JoinHostPort(target.Host, itoa(target.Port))
+	tunnel, err := jumpClient.Dial("tcp", targetAddr)
+	if err != nil {
+		_ = jumpClient.Close()
+		if agentConn != nil {
+			_ = agentConn.Close()
+		}
+		return nil, nil, nil, fmt.Errorf("tunnel to %s via %s: %w", target.Label, jump.Label, err)
+	}
+
+	targetCfg := &ssh.ClientConfig{
+		User:            target.User,
+		Auth:            auth,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         timeout,
+	}
+	ncc, chans, reqs, err := ssh.NewClientConn(tunnel, targetAddr, targetCfg)
+	if err != nil {
+		_ = tunnel.Close()
+		_ = jumpClient.Close()
+		if agentConn != nil {
+			_ = agentConn.Close()
+		}
+		return nil, nil, nil, fmt.Errorf("target %s (%s): %w", target.Label, targetAddr, err)
+	}
+	return ssh.NewClient(ncc, chans, reqs), jumpClient, agentConn, nil
 }
 
 // buildSSHAuth returns auth methods. When using ssh-agent, agentConn must stay

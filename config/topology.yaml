@@ -1,4 +1,4 @@
-# Network / platform topology — aligned with bifrost-trade-infra K3S_PLATFORM_ARCHITECTURE.md
+# Network / platform topology — aligned with Ops Console Architecture → K3s Architecture catalog
 # Status is enriched at runtime from connectivity matrix probes.
 
 deployment_phase: k3s_partial   # compose | k3s_partial | k3s_ha
@@ -59,21 +59,43 @@ nodes:
     grid: { row: 2, col: 1 }
 
   - id: mac-mini-1
-    label: Mac Mini #1
-    host: ""
+    label: Mac Mini #1 (macOS)
+    host: 192.168.10.50
+    ssh_port: 22
     group: mac
     compose_roles: [dev_compose]
-    k3s_roles: [k3s_agent, frontend]
-    in_k3s_cluster: true
+    k3s_roles: [frontend]
+    in_k3s_cluster: false
+    grid: { row: 2, col: 0 }
+
+  - id: mac-mini-1-orb
+    label: Mac Mini #1 Ubuntu (UTM)
+    host: 192.168.10.54
+    ssh_port: 22
+    group: linux
+    compose_roles: []
+    k3s_roles: [k3s_agent]
+    in_k3s_cluster: true   # ops-vm-ubt-01 · K3s node Ready
     grid: { row: 2, col: 0 }
 
   - id: mac-mini-2
-    label: Mac Mini #2
-    host: ""
+    label: Mac Mini #2 (macOS)
+    host: 192.168.10.52
+    ssh_port: 22
     group: mac
     compose_roles: [ci, watchdog]
-    k3s_roles: [k3s_agent, ci_runner]
+    k3s_roles: [ci_runner]
     in_k3s_cluster: false
+    grid: { row: 2, col: 2 }
+
+  - id: mac-mini-2-orb
+    label: Mac Mini #2 Ubuntu (UTM)
+    host: 192.168.10.56
+    ssh_port: 22
+    group: linux
+    compose_roles: []
+    k3s_roles: [k3s_agent]
+    in_k3s_cluster: true   # ops-vm-ubt-02 · K3s node Ready
     grid: { row: 2, col: 2 }
 
   - id: macbook

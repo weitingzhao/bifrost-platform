@@ -9,7 +9,7 @@
 
 import type { OpsContextResponse } from '@/api/types'
 
-export const CATALOG_VERSION = '2026-06-15'
+export const CATALOG_VERSION = '2026-06-15-p5b'
 export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
 
 /** Scope row — one logical component in the Bifrost stack. */
@@ -218,7 +218,7 @@ export const FLOW_ROWS: FlowRow[] = [
     stage: 'Production',
     trigger: 'Tag / maintenance window · scripts/release_gate.sh (planned)',
     runtime: 'make prod-health 12/12 · Platform GET /api/v1/matrix?env=prod',
-    dataStore: 'Sign-off: PHASE2C_SIGNOFF_MASTER.md · LOCAL_PROD_FINAL_SIGNOFF.md',
+    dataStore: 'Sign-off: PHASE2C_SIGNOFF_MASTER.md · Deploy Mainline (deployMainlineCatalog.ts)',
     status: 'planned',
   },
   {
@@ -260,15 +260,15 @@ export const HARDWARE_ROWS: HardwareRow[] = [
   },
   {
     id: 'mac-mini-1',
-    host: '(LAN TBD)',
+    host: '192.168.10.50 (macOS) · VM 192.168.10.54',
     roleCompose: '24/7 Dev stack docker-compose.dev.yml',
-    roleK3s: 'OrbStack Agent · frontend dev',
+    roleK3s: 'UTM Agent ops-vm-ubt-01 · frontend dev (Ready)',
   },
   {
     id: 'mac-mini-2',
-    host: '(LAN TBD)',
+    host: '192.168.10.52 (macOS) · VM 192.168.10.56',
     roleCompose: 'Git runner · prod-health gate · Uptime Kuma',
-    roleK3s: 'OrbStack Agent · CI · external watchdog',
+    roleK3s: 'UTM Agent ops-vm-ubt-02 · CI · external watchdog (Ready)',
   },
   {
     id: 'gpu-server',
@@ -423,7 +423,8 @@ export function buildStaticCatalogContext(): string {
     '',
     '## Key repos',
     '- bifrost-platform — Bifrost Ops control plane (this console)',
-    '- bifrost-trade-infra — compose, nginx, Goal, PLATFORM_ROADMAP, K3S_ARCHITECTURE',
+    '- bifrost-trade-infra — compose, nginx, Goal, migration sign-off docs',
+    '- Architecture → Platform Roadmap · K3s Architecture (roadmapCatalog.ts · k3sArchitectureCatalog.ts)',
     '- bifrost-trade-{api,worker,socket,frontend,core} — data plane',
     '- bifrost-trader-engine — READ-ONLY reference (do not edit)',
     '',

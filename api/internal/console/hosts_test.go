@@ -37,3 +37,37 @@ func TestFindHost(t *testing.T) {
 		t.Fatal("expected unknown host to be rejected")
 	}
 }
+
+func TestListHostsResolvesSSHJump(t *testing.T) {
+	topo := &config.TopologyFile{
+		Nodes: []config.TopologyNode{
+			{ID: "mac-mini-1", Label: "Mac Mini #1", Host: "192.168.10.50", Group: "mac"},
+			{
+				ID:      "mac-mini-1-orb",
+				Label:   "Mac Mini #1 Ubuntu",
+				Host:    "192.168.139.147",
+				Group:   "linux",
+				SSHJump: "mac-mini-1",
+			},
+		},
+	}
+	hosts := ListHosts(topo, "vision", false)
+	if len(hosts) != 2 {
+		t.Fatalf("expected 2 hosts, got %d", len(hosts))
+	}
+	var orb Host
+	for _, h := range hosts {
+		if h.ID == "mac-mini-1-orb" {
+			orb = h
+		}
+	}
+	if orb.jump == nil {
+		t.Fatal("expected jump host resolved")
+	}
+	if orb.jump.Host != "192.168.10.50" {
+		t.Fatalf("jump host ip: got %q", orb.jump.Host)
+	}
+	if orb.JumpLabel != "Mac Mini #1" {
+		t.Fatalf("jump label: got %q", orb.JumpLabel)
+	}
+}

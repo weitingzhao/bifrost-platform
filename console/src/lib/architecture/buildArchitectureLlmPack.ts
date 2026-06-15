@@ -9,6 +9,10 @@ import { buildEnvironmentsLlmContext } from '@/lib/environments-catalog'
 import { buildDesignSystemLlmPack } from '@/lib/standards/designSystemCatalog'
 import { buildAgentProtocolLlmPack } from './agentProtocolCatalog'
 import { buildBlueprintLlmPack } from './blueprintCatalog'
+import { buildK3sArchitectureLlmPack } from './k3sArchitectureCatalog'
+import { buildDeployMainlineLlmPack } from './deployMainlineCatalog'
+import { buildK3sBootstrapLlmPack } from './k3sBootstrapCatalog'
+import { buildRoadmapLlmPack } from './roadmapCatalog'
 import { buildStandardsLlmPack } from './standardsCatalog'
 
 /**
@@ -19,6 +23,10 @@ export function buildFullArchitectureLlmPack(spine?: OpsContextResponse): string
   const sections = [
     buildBlueprintLlmPack(spine),
     buildEnvironmentsLlmContext(spine),
+    buildRoadmapLlmPack(),
+    buildK3sArchitectureLlmPack(),
+    buildK3sBootstrapLlmPack(),
+    buildDeployMainlineLlmPack(),
     buildStandardsLlmPack(),
     buildAgentProtocolLlmPack(),
     buildDesignSystemLlmPack(),
