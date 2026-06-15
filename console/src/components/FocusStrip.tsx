@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react'
 import type { ClusterSummary, OpsContextResponse } from '@/api/types'
 import { ciModeLabel, showGitOpsPlannedBadge } from '@/lib/delivery/deliveryPhase'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
+import { cn } from '@bifrost/ui'
 
 const STATUS_CLASS: Record<string, string> = {
   CLOSED: 'badge-ui badge-status-closed',
@@ -16,9 +18,50 @@ export function milestoneStatusClass(status: string): string {
 }
 
 export function flywheelLabel(code: string): string {
-  if (code === 'A') return 'Flywheel A (Trade / product)'
-  if (code === 'B') return 'Flywheel B (Runtime / ops)'
+  if (code === 'A') return 'Flywheel A'
+  if (code === 'B') return 'Flywheel B'
   return code
+}
+
+function parseHeadlineSegments(headline: string): Array<{ id: string; status: string }> {
+  return headline.split(' · ').map((segment) => {
+    const trimmed = segment.trim()
+    const space = trimmed.lastIndexOf(' ')
+    if (space <= 0) return { id: trimmed, status: '' }
+    return {
+      id: trimmed.slice(0, space),
+      status: trimmed.slice(space + 1),
+    }
+  })
+}
+
+function MetaChip({
+  children,
+  onClick,
+  className,
+  mono,
+}: {
+  children: ReactNode
+  onClick?: () => void
+  className?: string
+  mono?: boolean
+}) {
+  const Tag = onClick != null ? 'button' : 'span'
+  return (
+    <Tag
+      type={onClick != null ? 'button' : undefined}
+      onClick={onClick}
+      className={cn(
+        'inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-[10px] leading-none text-muted-foreground',
+        onClick != null &&
+          'cursor-pointer text-primary underline-offset-2 hover:border-primary/40 hover:text-primary',
+        mono && 'font-mono tabular-nums',
+        className,
+      )}
+    >
+      {children}
+    </Tag>
+  )
 }
 
 interface FocusStripProps {
@@ -44,14 +87,12 @@ export function FocusStrip({
 }: FocusStripProps) {
   if (isLoading) {
     return (
-      <div className="focus-strip text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-        Loading focus…
-      </div>
+      <div className="text-[var(--text-dense-meta)] text-muted-foreground">Loading ops context…</div>
     )
   }
   if (!context) {
     return (
-      <div className="focus-strip lamp-fail text-[var(--text-dense-meta)]">
+      <div className="text-[var(--text-dense-meta)] text-[color:var(--color-lamp-red)]">
         Ops context unavailable
       </div>
     )
@@ -60,74 +101,64 @@ export function FocusStrip({
   const { focus, deployment } = context
   const ciMode = ciModeLabel(deployment.phase)
   const gitOpsPlanned = showGitOpsPlannedBadge(deployment)
-  const clusterKpi = clusterLoading
-    ? 'Cluster: …'
-    : summarizeCluster(clusterSummary).label
-  const clusterReach = clusterLoading
-    ? 'unknown'
-    : (clusterSummary?.reachability ?? 'unknown')
+  const clusterKpi = clusterLoading ? 'Cluster …' : summarizeCluster(clusterSummary).label
+  const clusterReach = clusterLoading ? 'unknown' : (clusterSummary?.reachability ?? 'unknown')
   const matrixAge =
-    matrixUpdatedAt != null
-      ? `Matrix ${formatAge(matrixUpdatedAt)}`
-      : 'Matrix not refreshed'
+    matrixUpdatedAt != null ? `Matrix ${formatAge(matrixUpdatedAt)}` : 'Matrix not refreshed'
+  const headlineSegments = parseHeadlineSegments(focus.headline)
 
   return (
-    <div className="focus-strip flex flex-wrap items-center gap-x-3 gap-y-1 text-[var(--text-dense-meta)]">
-      <span className="font-medium text-[var(--foreground)]">{focus.headline}</span>
-      <span className="text-[var(--muted-foreground)]">·</span>
-      <span>
-        Track <code className="font-mono-tabular">{deployment.active_track}</code>
-      </span>
-      <span className="text-[var(--muted-foreground)]">·</span>
-      <span>
-        Phase <code className="font-mono-tabular">{deployment.phase}</code>
-      </span>
-      <span className="text-[var(--muted-foreground)]">·</span>
-      {onOpenDelivery != null ? (
-        <button type="button" className="focus-strip-link focus-strip-ci-mode" onClick={onOpenDelivery}>
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {headlineSegments.map(({ id, status }) => (
+          <span
+            key={`${id}-${status}`}
+            className={cn(
+              'badge-ui max-w-full truncate text-[10px]',
+              status !== '' ? milestoneStatusClass(status) : undefined,
+            )}
+            title={`${id} ${status}`.trim()}
+          >
+            {id}
+            {status !== '' ? ` ${status}` : ''}
+          </span>
+        ))}
+        {focus.blocker != null && focus.blocker !== '' && (
+          <MetaChip
+            onClick={onOpenProgram}
+            className="border-[color:var(--color-lamp-red)] text-[color:var(--color-lamp-red)]"
+          >
+            Blocked: {focus.blocker}
+          </MetaChip>
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <MetaChip mono>
+          Track <span className="text-foreground">{deployment.active_track}</span>
+        </MetaChip>
+        <MetaChip mono>
+          Phase <span className="text-foreground">{deployment.phase}</span>
+        </MetaChip>
+        <MetaChip onClick={onOpenDelivery} mono>
           CI: {ciMode}
-        </button>
-      ) : (
-        <span className="focus-strip-ci-mode">CI: {ciMode}</span>
-      )}
-      {gitOpsPlanned && (
-        <>
-          <span className="text-[var(--muted-foreground)]">·</span>
+        </MetaChip>
+        {gitOpsPlanned && (
           <span className="badge-ui badge-status-pending text-[10px]">GitOps planned</span>
-        </>
-      )}
-      <span className="text-[var(--muted-foreground)]">·</span>
-      {onOpenCluster != null ? (
-        <button
-          type="button"
-          className={`focus-strip-link ${clusterReach === 'fail' ? 'lamp-warn' : ''}`}
+        )}
+        <MetaChip
           onClick={onOpenCluster}
+          className={
+            clusterReach === 'fail'
+              ? 'border-[color:var(--color-lamp-yellow)] text-[color:var(--color-lamp-yellow)]'
+              : undefined
+          }
         >
           {clusterKpi}
-        </button>
-      ) : (
-        <span className={clusterReach === 'fail' ? 'lamp-warn' : ''}>{clusterKpi}</span>
-      )}
-      <span className="text-[var(--muted-foreground)]">·</span>
-      <span>{flywheelLabel(focus.flywheel_primary)}</span>
-      {focus.blocker != null && focus.blocker !== '' && (
-        <>
-          <span className="text-[var(--muted-foreground)]">·</span>
-          {onOpenProgram != null ? (
-            <button
-              type="button"
-              className="focus-strip-link"
-              onClick={onOpenProgram}
-            >
-              Blocked: {focus.blocker}
-            </button>
-          ) : (
-            <span className="lamp-warn">Blocked: {focus.blocker}</span>
-          )}
-        </>
-      )}
-      <span className="text-[var(--muted-foreground)]">·</span>
-      <span className="text-[var(--muted-foreground)]">{matrixAge}</span>
+        </MetaChip>
+        <MetaChip>{flywheelLabel(focus.flywheel_primary)}</MetaChip>
+        <MetaChip className="text-muted-foreground/80">{matrixAge}</MetaChip>
+      </div>
     </div>
   )
 }
