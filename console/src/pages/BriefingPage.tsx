@@ -1,12 +1,24 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { fetchClusterObservability } from '@/api/platform'
 import { StatusLamp } from '@/components/StatusLamp'
+import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
+import { TrackCardsSection } from '@/components/briefing/TrackCardsSection'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
+import { computeSessionDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
+import { loadSnapshot, saveSnapshot } from '@/lib/briefing/sessionSnapshot'
 import { CONSOLE_UI_PROGRESS, type UiItemStatus } from '@/lib/briefing/uiProgressSnapshot'
-import { WORK_INTENT_OPTIONS, type WorkIntent, workIntentById } from '@/lib/briefing/workIntents'
+import { TrackLaneSection } from '@/components/briefing/TrackLaneSection'
+import type { WorkIntent } from '@/lib/briefing/workIntents'
+import {
+  buildQueueForLane,
+  defaultLaneForTrack,
+  laneById,
+  type LaneId,
+} from '@/lib/briefing/workLanes'
+import { computeAllTracks, type TrackId } from '@/lib/briefing/workTracks'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
 
@@ -18,6 +30,8 @@ interface BriefingPageProps {
   clusterSummary: ClusterSummary | undefined
   clusterLoading: boolean
   platformHealthy: boolean | undefined
+  auditRecords: AuditRecord[]
+  auditLoading: boolean
 }
 
 async function copyText(text: string): Promise<void> {
@@ -38,12 +52,50 @@ export function BriefingPage({
   clusterSummary,
   clusterLoading,
   platformHealthy,
+  auditRecords,
+  auditLoading,
 }: BriefingPageProps) {
-  const [intent, setIntent] = useState<WorkIntent>('ops')
+  const [selectedTrack, setSelectedTrack] = useState<TrackId>('build')
+  const [selectedLane, setSelectedLane] = useState<LaneId>(() => defaultLaneForTrack('build'))
   const [showSessionPack, setShowSessionPack] = useState(false)
   const [showAlignmentPack, setShowAlignmentPack] = useState(false)
   const [sessionCopied, setSessionCopied] = useState(false)
   const [alignmentCopied, setAlignmentCopied] = useState(false)
+
+  const [previousSnapshot] = useState(() => loadSnapshot())
+  const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
+
+  const dataReady = !contextLoading && !matrixLoading && !auditLoading
+
+  const trackSummaries = useMemo(() => {
+    const clusterFailingPods = clusterSummary?.failing_pods
+    const clusterReach = clusterSummary?.reachability
+    return computeAllTracks(context, matrices, clusterFailingPods, clusterReach)
+  }, [context, matrices, clusterSummary])
+
+  const intent: WorkIntent = laneById(selectedLane).workIntent
+
+  const laneQueue = useMemo(
+    () => buildQueueForLane(selectedLane, context, matrices, clusterSummary),
+    [selectedLane, context, matrices, clusterSummary],
+  )
+
+  useEffect(() => {
+    if (!dataReady || previousSnapshot == null) return
+    const delta = computeSessionDelta(
+      previousSnapshot,
+      { context, matrices, clusterSummary, platformHealthy },
+      auditRecords,
+    )
+    setSessionDelta(delta)
+  }, [dataReady, previousSnapshot, context, matrices, clusterSummary, platformHealthy, auditRecords])
+
+  function handleSaveSnapshot() {
+    saveSnapshot(
+      { context, matrices, clusterSummary, platformHealthy },
+      auditRecords,
+    )
+  }
 
   const observabilityQuery = useQuery({
     queryKey: ['cluster', 'observability'],
@@ -63,8 +115,17 @@ export function BriefingPage({
   )
 
   const sessionPack = useMemo(
-    () => buildBriefingPack({ intent, ...snapshotInput }),
-    [intent, snapshotInput],
+    () =>
+      buildBriefingPack({
+        intent,
+        sessionDelta,
+        trackSummaries,
+        selectedTrack,
+        selectedLane,
+        laneQueue,
+        ...snapshotInput,
+      }),
+    [intent, sessionDelta, trackSummaries, selectedTrack, selectedLane, laneQueue, snapshotInput],
   )
 
   const alignmentPack = useMemo(
@@ -72,12 +133,13 @@ export function BriefingPage({
     [snapshotInput],
   )
 
-  const selectedIntent = workIntentById(intent)
+  const activeTrack = trackSummaries.find(t => t.id === selectedTrack) ?? trackSummaries[0]
+  const activeLane = laneById(selectedLane)
   const clusterLine = summarizeCluster(clusterSummary)
-  const dataReady = !contextLoading && !matrixLoading
 
   async function handleCopySession() {
     await copyText(sessionPack)
+    handleSaveSnapshot()
     setSessionCopied(true)
     window.setTimeout(() => setSessionCopied(false), 2000)
   }
@@ -90,43 +152,29 @@ export function BriefingPage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <p className="briefing-section-kicker m-0">1 · Your next work session</p>
-        <h2 className="m-0 mt-1 text-sm font-semibold">What will you work on next?</h2>
-        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          This choice drives <strong>Session briefing</strong> below — ops, feature work, debug,
-          release, cluster, or trade frontend migration.
-        </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {WORK_INTENT_OPTIONS.map(opt => {
-            const selected = intent === opt.id
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                className={[
-                  'rounded-lg border px-3 py-2 text-left transition-colors',
-                  selected
-                    ? 'border-[var(--primary)] bg-[var(--secondary)]'
-                    : 'border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)]',
-                ].join(' ')}
-                onClick={() => {
-                  setIntent(opt.id)
-                  setShowSessionPack(false)
-                }}
-              >
-                <span className="text-sm font-semibold">{opt.label}</span>
-                <span className="ml-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                  {opt.shortLabel}
-                </span>
-                <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                  {opt.description}
-                </p>
-              </button>
-            )
-          })}
-        </div>
-      </section>
+      <SessionDeltaPanel delta={sessionDelta} hasBaseline={previousSnapshot != null} />
+
+      <TrackCardsSection
+        tracks={trackSummaries}
+        selectedTrack={selectedTrack}
+        onSelectTrack={(id) => {
+          setSelectedTrack(id)
+          setSelectedLane(defaultLaneForTrack(id))
+          setShowSessionPack(false)
+        }}
+      />
+
+      <TrackLaneSection
+        track={selectedTrack}
+        selectedLane={selectedLane}
+        onSelectLane={(id) => {
+          setSelectedLane(id)
+          setShowSessionPack(false)
+        }}
+        context={context}
+        matrices={matrices}
+        clusterSummary={clusterSummary}
+      />
 
       <section className="page-section panel-elevated px-4 py-3">
         <p className="briefing-section-kicker m-0">2 · Session briefing</p>
@@ -139,11 +187,19 @@ export function BriefingPage({
               read-first / opening prompt.
             </p>
             <p className="m-0 mt-2 text-[var(--text-dense-meta)]">
-              Selected:{' '}
+              Track:{' '}
+              <span className="font-medium text-[var(--foreground)] capitalize">
+                {activeTrack.id}
+              </span>
+              {' · '}
+              Lane:{' '}
               <span className="font-medium text-[var(--foreground)]">
-                {selectedIntent.label}
-              </span>{' '}
-              <span className="text-[var(--muted-foreground)]">({selectedIntent.shortLabel})</span>
+                {activeLane.label}
+              </span>
+              <span className="text-[var(--muted-foreground)]">
+                {' '}
+                ({laneQueue.length} queue item{laneQueue.length !== 1 ? 's' : ''})
+              </span>
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -166,7 +222,7 @@ export function BriefingPage({
         {showSessionPack && (
           <LlmPackPreview
             charCount={sessionPack.length}
-            metaLabel={`intent ${intent}`}
+            metaLabel={`track: ${selectedTrack} · lane: ${selectedLane}`}
             pack={sessionPack}
             footer="The Agent should follow the suggested opening and read-first list for your selected work — not Briefing maintenance."
           />

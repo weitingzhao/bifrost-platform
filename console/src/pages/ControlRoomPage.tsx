@@ -1,4 +1,5 @@
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { AuditRecord, MatrixResponse, OpsContextResponse } from '@/api/types'
+import { AuditRecordsPanel } from '@/components/AuditRecordsPanel'
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
 import { BayDetailDrawer } from '@/components/control-room/BayDetailDrawer'
 import {
@@ -13,9 +14,12 @@ interface ControlRoomPageProps {
   contextLoading: boolean
   matrices: MatrixResponse[]
   matrixLoading: boolean
+  auditRecords: AuditRecord[]
+  auditLoading: boolean
   onOpenRuntimeMap: () => void
   onOpenProgram: () => void
   onOpenDelivery: () => void
+  onOpenCluster: () => void
 }
 
 export function ControlRoomPage({
@@ -23,9 +27,12 @@ export function ControlRoomPage({
   contextLoading,
   matrices,
   matrixLoading,
+  auditRecords,
+  auditLoading,
   onOpenRuntimeMap,
   onOpenProgram,
   onOpenDelivery,
+  onOpenCluster,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
 
@@ -45,6 +52,14 @@ export function ControlRoomPage({
           . Read-only probes — no write actions.
         </p>
       </section>
+
+      <AuditRecordsPanel
+        records={auditRecords}
+        isLoading={auditLoading}
+        limit={5}
+        title="Recent actions"
+        onViewAll={onOpenCluster}
+      />
 
       <DualFlywheelPanel
         context={context}

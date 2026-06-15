@@ -163,6 +163,76 @@ environments_extended:
     status: NOT_STARTED
     note: "Mac Mini #2 CI or K3s bifrost-stg (planned)"
 
+tracks:
+  build:
+    label: "Platform capability extension"
+    current_phase: P1
+    tasks:
+      - id: p1-auth-audit
+        label: "Auth + audit for all write routes"
+        status: done
+      - id: p1-workload-actuation
+        label: "Cluster workload actuation (restart/scale/delete)"
+        status: done
+      - id: p1-pod-logs
+        label: "Pod log streaming in Cluster page"
+        status: done
+      - id: p1-session-loop
+        label: "Briefing session delta + Control Room recent actions"
+        status: done
+      - id: p1-track-model
+        label: "Work Track model (build/migrate/operate)"
+        status: in_progress
+      - id: p2-node-lifecycle
+        label: "Node join/drain via platform-api"
+        status: next
+      - id: p2-cluster-wizard
+        label: "Cluster UI wizard for node operations"
+        status: pending
+      - id: p3-gitops-execution
+        label: "GitOps + CI execution (Argo/Tekton API)"
+        status: pending
+      - id: p4-stack-install
+        label: "Platform stack install wizard"
+        status: pending
+      - id: p5-mcp-tools
+        label: "MCP actuation Tools"
+        status: pending
+
+  migrate:
+    label: "Legacy retirement & deployment migration"
+    streams:
+      - id: trade-backend
+        label: "Trade backend (core/socket/worker/api)"
+        total: 4
+        done: 4
+        status: closed
+        note: "All repos VERIFIED + Phase 2B CUTOVER"
+      - id: trade-frontend
+        label: "Trade frontend pages"
+        total: 45
+        done: 45
+        status: closed
+        note: "Phase 1 + 2B CLOSED — Owner signed"
+      - id: compose-to-k3s
+        label: "Compose to K3s deployment"
+        total: 5
+        done: 1
+        status: in_progress
+        next_task: "Deploy trade stack to K3s bifrost-prod namespace"
+        note: "K3s phase 1 bootstrap CLOSED; workload migration next"
+      - id: legacy-retirement
+        label: "Phase 3 Legacy retirement"
+        total: 3
+        done: 0
+        status: not_started
+        next_task: null
+        note: "Blocked until compose→k3s migration stable"
+
+  operate:
+    label: "Day-to-day operations"
+    note: "Event-driven — status computed from live matrix, cluster, and audit data"
+
 probe_hints:
   - target_id: api-market
     trade_route: /market/live

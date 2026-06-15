@@ -82,6 +82,44 @@ type NorthStar struct {
 	SuccessCriteria []string `yaml:"success_criteria" json:"success_criteria"`
 }
 
+type TrackTask struct {
+	ID     string `yaml:"id" json:"id"`
+	Label  string `yaml:"label" json:"label"`
+	Status string `yaml:"status" json:"status"`
+}
+
+type BuildTrack struct {
+	Label        string      `yaml:"label" json:"label"`
+	CurrentPhase string      `yaml:"current_phase" json:"current_phase"`
+	Tasks        []TrackTask `yaml:"tasks" json:"tasks"`
+}
+
+type MigrateStream struct {
+	ID       string  `yaml:"id" json:"id"`
+	Label    string  `yaml:"label" json:"label"`
+	Total    int     `yaml:"total" json:"total"`
+	Done     int     `yaml:"done" json:"done"`
+	Status   string  `yaml:"status" json:"status"`
+	NextTask *string `yaml:"next_task,omitempty" json:"next_task,omitempty"`
+	Note     string  `yaml:"note,omitempty" json:"note,omitempty"`
+}
+
+type MigrateTrack struct {
+	Label   string          `yaml:"label" json:"label"`
+	Streams []MigrateStream `yaml:"streams" json:"streams"`
+}
+
+type OperateTrack struct {
+	Label string `yaml:"label" json:"label"`
+	Note  string `yaml:"note,omitempty" json:"note,omitempty"`
+}
+
+type Tracks struct {
+	Build   *BuildTrack   `yaml:"build,omitempty" json:"build,omitempty"`
+	Migrate *MigrateTrack `yaml:"migrate,omitempty" json:"migrate,omitempty"`
+	Operate *OperateTrack `yaml:"operate,omitempty" json:"operate,omitempty"`
+}
+
 type File struct {
 	Meta                 Meta                            `yaml:"meta" json:"meta"`
 	NorthStar            *NorthStar                      `yaml:"north_star,omitempty" json:"north_star,omitempty"`
@@ -94,6 +132,7 @@ type File struct {
 	Promotion            Promotion                       `yaml:"promotion" json:"promotion"`
 	EnvironmentsExtended map[string]EnvironmentExtended  `yaml:"environments_extended" json:"environments_extended"`
 	ProbeHints           []ProbeHint                     `yaml:"probe_hints" json:"probe_hints"`
+	Tracks               *Tracks                         `yaml:"tracks,omitempty" json:"tracks,omitempty"`
 }
 
 func ContextPathFromConfigDir(configDir string) string {

@@ -10,11 +10,20 @@ import {
   prodFailingTargetIds,
 } from '@/lib/control-room/matrixSummary'
 import { formatBriefingLiveStatus, type BriefingSnapshotInput } from '@/lib/briefing/briefingSnapshot'
+import { formatDeltaForPack, type SessionDelta } from '@/lib/briefing/sessionDiff'
 import { formatUiProgressSection } from '@/lib/briefing/uiProgressSnapshot'
 import { type WorkIntent, workIntentById } from '@/lib/briefing/workIntents'
+import type { TrackId, TrackSummary } from '@/lib/briefing/workTracks'
+import type { LaneId, QueueItem } from '@/lib/briefing/workLanes'
+import { laneById } from '@/lib/briefing/workLanes'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
   intent: WorkIntent
+  sessionDelta?: SessionDelta | null
+  trackSummaries?: TrackSummary[]
+  selectedTrack?: TrackId
+  selectedLane?: LaneId
+  laneQueue?: QueueItem[]
 }
 
 function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string {
@@ -151,19 +160,69 @@ function intentCorePack(intent: WorkIntent, ctx?: OpsContextResponse, matrices: 
   return ops
 }
 
+function formatTrackSection(tracks: TrackSummary[], selected: TrackId): string {
+  const lines = ['## Work tracks (progress from spine)']
+  const active = tracks.find(t => t.id === selected) ?? tracks[0]
+  lines.push(`Active track: **${active.id}** — ${active.label}`)
+  lines.push('')
+
+  for (const t of tracks) {
+    const marker = t.id === selected ? '> ' : '  '
+    const progressStr = t.progress != null
+      ? ` [${t.progress.done}/${t.progress.total}, ${t.progress.percent}%]`
+      : ''
+    lines.push(`${marker}**${t.id}**${progressStr}: ${t.subtitle}`)
+    if (t.nextStep) lines.push(`${marker}  Next: ${t.nextStep}`)
+    if (t.issues.length > 0) {
+      for (const issue of t.issues) {
+        lines.push(`${marker}  Issue: ${issue.label}`)
+      }
+    }
+  }
+  return lines.join('\n')
+}
+
+function formatLaneQueueSection(laneId: LaneId, queue: QueueItem[]): string {
+  const lane = laneById(laneId)
+  const lines = [`## Active lane queue — ${lane.label} (${lane.id})`, '', lane.description, '']
+  if (queue.length === 0) {
+    lines.push('(empty queue)')
+    return lines.join('\n')
+  }
+  for (const item of queue) {
+    const note = item.note ? ` — ${item.note}` : ''
+    lines.push(`- [${item.status}] ${item.label}${note}`)
+  }
+  return lines.join('\n')
+}
+
 /** Full briefing for a new Cursor Agent session — paste as first message or context block. */
 export function buildBriefingPack(input: BriefingInputs): string {
   const now = new Date().toISOString()
   const opt = workIntentById(input.intent)
   const opening = suggestedOpening(input.intent, input.context, input.matrices)
+  const track = input.selectedTrack ?? 'build'
+  const lane = input.selectedLane ?? 'console-api'
+  const laneMeta = laneById(lane)
+
+  const deltaSection = input.sessionDelta != null ? formatDeltaForPack(input.sessionDelta) : null
+  const trackSection = input.trackSummaries != null && input.trackSummaries.length > 0
+    ? formatTrackSection(input.trackSummaries, track)
+    : null
+  const queueSection = input.laneQueue != null
+    ? formatLaneQueueSection(lane, input.laneQueue)
+    : null
 
   return [
     '# Bifrost Ops Platform — Agent Session Briefing',
     `Generated: ${now}`,
-    `Work intent: ${opt.label} (${input.intent})`,
+    `Work track: ${track} · Lane: ${laneMeta.label} (${lane}) · Intent: ${opt.label} (${input.intent})`,
     '',
+    ...(trackSection != null ? [trackSection, ''] : []),
+    ...(queueSection != null ? [queueSection, ''] : []),
     intentTaskSection(input.intent, input.context),
     '',
+    ...(deltaSection != null ? [deltaSection, ''] : []),
     formatBriefingLiveStatus(input),
     '',
     formatUiProgressSection(),
