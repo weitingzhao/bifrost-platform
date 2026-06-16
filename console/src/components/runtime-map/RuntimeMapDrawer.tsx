@@ -1,5 +1,6 @@
 import type { MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
 import { MatrixTable } from '@/components/MatrixTable'
+import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import {
   buildScopeLayers,
   filterTargetsForNode,
@@ -53,9 +54,9 @@ export function RuntimeMapDrawer({
     <aside className="bay-detail-drawer panel-elevated runtime-map-drawer" role="dialog" aria-label="Runtime detail">
       <header className="bay-detail-drawer-header">
         <h3 className="m-0 text-sm font-semibold">{title}</h3>
-        <button type="button" className="btn-ui btn-ui-ghost" onClick={onClose} aria-label="Close">
+        <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
           Close
-        </button>
+        </Button>
       </header>
 
       <div className="bay-detail-drawer-body">
@@ -79,18 +80,19 @@ export function RuntimeMapDrawer({
       </div>
 
       <footer className="bay-detail-drawer-footer">
-        <button type="button" className="btn-ui btn-ui-ghost" onClick={onToggleFullMatrix}>
+        <Button variant="ghost" size="sm" onClick={onToggleFullMatrix}>
           {showFullMatrix ? 'Back to selection' : 'Open full probe table'}
-        </button>
+        </Button>
         {showTradeReactor && (
-          <a
-            className="btn-ui btn-ui-primary"
-            href={TRADE_APP_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open Trade Reactor
-          </a>
+          <Button size="sm" asChild>
+            <a
+              href={TRADE_APP_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Trade Reactor
+            </a>
+          </Button>
         )}
       </footer>
     </aside>
@@ -129,24 +131,24 @@ function NodeDetail({
         </>
       )}
       {targets.length > 0 && (
-        <table className="dense-table mt-3">
-          <thead>
-            <tr>
-              <th>Service</th>
-              <th>Reach</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable wrapClassName="mt-3">
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Service</DenseTableHead>
+              <DenseTableHead>Reach</DenseTableHead>
+              <DenseTableHead>Detail</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {targets.map(t => (
-              <tr key={t.id}>
-                <td className="font-mono-tabular">{t.id}</td>
-                <td>{t.reachability}</td>
-                <td className="text-[var(--muted-foreground)]">{t.detail}</td>
-              </tr>
+              <DenseTableRow key={t.id}>
+                <DenseTableCell className="font-mono-tabular">{t.id}</DenseTableCell>
+                <DenseTableCell>{t.reachability}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{t.detail}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       )}
       {edges.length > 0 && (
         <>
@@ -181,28 +183,28 @@ function TargetDetail({
   return (
     <>
       {t != null ? (
-        <table className="dense-table">
-          <tbody>
-            <tr>
-              <th className="text-left">Reachability</th>
-              <td>{t.reachability}</td>
-            </tr>
-            <tr>
-              <th className="text-left">Category</th>
-              <td>{t.category}</td>
-            </tr>
-            <tr>
-              <th className="text-left">Detail</th>
-              <td className="text-[var(--muted-foreground)]">{t.detail}</td>
-            </tr>
+        <DenseDataTable>
+          <DenseTableBody>
+            <DenseTableRow>
+              <DenseTableHead className="text-left">Reachability</DenseTableHead>
+              <DenseTableCell>{t.reachability}</DenseTableCell>
+            </DenseTableRow>
+            <DenseTableRow>
+              <DenseTableHead className="text-left">Category</DenseTableHead>
+              <DenseTableCell>{t.category}</DenseTableCell>
+            </DenseTableRow>
+            <DenseTableRow>
+              <DenseTableHead className="text-left">Detail</DenseTableHead>
+              <DenseTableCell className="text-[var(--muted-foreground)]">{t.detail}</DenseTableCell>
+            </DenseTableRow>
             {t.url != null && (
-              <tr>
-                <th className="text-left">URL</th>
-                <td className="font-mono-tabular text-[var(--muted-foreground)]">{t.url}</td>
-              </tr>
+              <DenseTableRow>
+                <DenseTableHead className="text-left">URL</DenseTableHead>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{t.url}</DenseTableCell>
+              </DenseTableRow>
             )}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       ) : (
         <p className="m-0 text-[var(--muted-foreground)]">No probe row for this target.</p>
       )}
@@ -255,32 +257,32 @@ function EdgeDetail({
 
   return (
     <>
-      <table className="dense-table">
-        <tbody>
-          <tr>
-            <th className="text-left">From</th>
-            <td>{fromNode?.label ?? edge.from}</td>
-          </tr>
-          <tr>
-            <th className="text-left">To</th>
-            <td>{toNode?.label ?? edge.to}</td>
-          </tr>
-          <tr>
-            <th className="text-left">Kind</th>
-            <td>{edge.kind}</td>
-          </tr>
-          <tr>
-            <th className="text-left">Status</th>
-            <td>{edge.status}</td>
-          </tr>
+      <DenseDataTable>
+        <DenseTableBody>
+          <DenseTableRow>
+            <DenseTableHead className="text-left">From</DenseTableHead>
+            <DenseTableCell>{fromNode?.label ?? edge.from}</DenseTableCell>
+          </DenseTableRow>
+          <DenseTableRow>
+            <DenseTableHead className="text-left">To</DenseTableHead>
+            <DenseTableCell>{toNode?.label ?? edge.to}</DenseTableCell>
+          </DenseTableRow>
+          <DenseTableRow>
+            <DenseTableHead className="text-left">Kind</DenseTableHead>
+            <DenseTableCell>{edge.kind}</DenseTableCell>
+          </DenseTableRow>
+          <DenseTableRow>
+            <DenseTableHead className="text-left">Status</DenseTableHead>
+            <DenseTableCell>{edge.status}</DenseTableCell>
+          </DenseTableRow>
           {edge.matrix_target && (
-            <tr>
-              <th className="text-left">Matrix target</th>
-              <td className="font-mono-tabular">{edge.matrix_target}</td>
-            </tr>
+            <DenseTableRow>
+              <DenseTableHead className="text-left">Matrix target</DenseTableHead>
+              <DenseTableCell className="font-mono-tabular">{edge.matrix_target}</DenseTableCell>
+            </DenseTableRow>
           )}
-        </tbody>
-      </table>
+        </DenseTableBody>
+      </DenseDataTable>
       {target != null && (
         <p className="m-0 mt-3 text-[var(--text-dense-meta)]">
           Probe: <strong>{target.reachability}</strong> — {target.detail}

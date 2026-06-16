@@ -1,5 +1,6 @@
+import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
-import { milestoneStatusClass } from '@/components/FocusStrip'
+import { milestoneStatusVariant } from '@/components/FocusStrip'
 import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
 
 const FLYWHEEL_A_CHECKS = [
@@ -47,9 +48,9 @@ export function PromotePage({
       <section className="page-section panel-elevated px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="m-0 text-sm font-semibold">Promote — release readiness (L0)</h2>
-          <span className={ready ? 'badge-ui badge-status-signed' : 'badge-ui badge-status-blocked'}>
+          <DenseTag variant={ready ? 'success' : 'danger'}>
             {ready ? 'Ready (narrative)' : 'Blocked'}
-          </span>
+          </DenseTag>
         </div>
         <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           Read-only checklist for flywheel A + B promotion. CI/CD path diagram lives on{' '}
@@ -103,30 +104,30 @@ export function PromotePage({
       </div>
 
       <PromoteSection title="Release gate (spine)">
-        <table className="dense-table">
-          <tbody>
-            <tr>
-              <th className="text-left">Last run</th>
-              <td className="font-mono-tabular">{gate.at ?? '—'}</td>
-            </tr>
-            <tr>
-              <th className="text-left">Result</th>
-              <td>
+        <DenseDataTable>
+          <DenseTableBody>
+            <DenseTableRow>
+              <DenseTableHead className="text-left">Last run</DenseTableHead>
+              <DenseTableCell className="font-mono-tabular">{gate.at ?? '—'}</DenseTableCell>
+            </DenseTableRow>
+            <DenseTableRow>
+              <DenseTableHead className="text-left">Result</DenseTableHead>
+              <DenseTableCell>
                 {gate.result != null ? (
-                  <span className={milestoneStatusClass(gate.result === 'pass' ? 'SIGNED' : 'BLOCKED_ON')}>
+                  <DenseTag variant={milestoneStatusVariant(gate.result === 'pass' ? 'SIGNED' : 'BLOCKED_ON')}>
                     {gate.result}
-                  </span>
+                  </DenseTag>
                 ) : (
                   '—'
                 )}
-              </td>
-            </tr>
-            <tr>
-              <th className="text-left">Log path</th>
-              <td className="font-mono-tabular text-[var(--muted-foreground)]">{gate.log_path}</td>
-            </tr>
-          </tbody>
-        </table>
+              </DenseTableCell>
+            </DenseTableRow>
+            <DenseTableRow>
+              <DenseTableHead className="text-left">Log path</DenseTableHead>
+              <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{gate.log_path}</DenseTableCell>
+            </DenseTableRow>
+          </DenseTableBody>
+        </DenseDataTable>
         {gate.result == null && (
           <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] lamp-warn">
             No gate recorded — run release_gate.sh when available (Phase A).
@@ -138,7 +139,7 @@ export function PromotePage({
         <PromoteSection title="Staging environment">
           <p className="m-0 px-3 py-2 text-[var(--text-dense)]">
             Status:{' '}
-            <span className={milestoneStatusClass(staging.status)}>{staging.status}</span>
+            <DenseTag variant={milestoneStatusVariant(staging.status)}>{staging.status}</DenseTag>
             {staging.note != null && (
               <span className="text-[var(--muted-foreground)]"> — {staging.note}</span>
             )}
@@ -148,24 +149,24 @@ export function PromotePage({
 
       {context.probe_hints.length > 0 && (
         <PromoteSection title="Probe hints — related Trade routes">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Target</th>
-                <th>Trade route</th>
-                <th>Hint</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Target</DenseTableHead>
+                <DenseTableHead>Trade route</DenseTableHead>
+                <DenseTableHead>Hint</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {context.probe_hints.map(h => (
-                <tr key={h.target_id}>
-                  <td className="font-mono-tabular">{h.target_id}</td>
-                  <td className="font-mono-tabular">{h.trade_route}</td>
-                  <td className="text-[var(--muted-foreground)]">{h.hint}</td>
-                </tr>
+                <DenseTableRow key={h.target_id}>
+                  <DenseTableCell className="font-mono-tabular">{h.target_id}</DenseTableCell>
+                  <DenseTableCell className="font-mono-tabular">{h.trade_route}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{h.hint}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </PromoteSection>
       )}
     </div>

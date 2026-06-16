@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
 import {
   HARDWARE_MAPPING,
@@ -66,33 +67,33 @@ export function RoadmapPage() {
             </p>
             <p className="m-0 mt-2 text-[var(--text-dense-meta)]">{ROADMAP_STATUS}</p>
           </div>
-          <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={() => void handleCopy()}>
+          <Button size="sm" className="shrink-0" onClick={() => void handleCopy()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </button>
+          </Button>
         </div>
       </section>
 
       <CatalogSection title="§1 Hardware & role mapping">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Device</th>
-              <th>Current</th>
-              <th>Near-term (2C-B)</th>
-              <th>K3s target</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Device</DenseTableHead>
+              <DenseTableHead>Current</DenseTableHead>
+              <DenseTableHead>Near-term (2C-B)</DenseTableHead>
+              <DenseTableHead>K3s target</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {HARDWARE_MAPPING.map(r => (
-              <tr key={r.device}>
-                <td className="font-medium whitespace-nowrap">{r.device}</td>
-                <td>{r.current}</td>
-                <td>{r.nearTerm}</td>
-                <td className="text-[var(--muted-foreground)]">{r.k3sTarget}</td>
-              </tr>
+              <DenseTableRow key={r.device}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{r.device}</DenseTableCell>
+                <DenseTableCell>{r.current}</DenseTableCell>
+                <DenseTableCell>{r.nearTerm}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{r.k3sTarget}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <ul className="m-0 list-disc px-4 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {HARDWARE_NOTES.map(n => (
             <li key={n}>{n}</li>
@@ -101,24 +102,24 @@ export function RoadmapPage() {
       </CatalogSection>
 
       <CatalogSection title="§2 Software baseline">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Milestone</th>
-              <th>Status</th>
-              <th>Meaning</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Milestone</DenseTableHead>
+              <DenseTableHead>Status</DenseTableHead>
+              <DenseTableHead>Meaning</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {SOFTWARE_BASELINE.map(r => (
-              <tr key={r.milestone}>
-                <td className="font-medium">{r.milestone}</td>
-                <td><span className="badge-ui">{r.status}</span></td>
-                <td>{r.meaning}</td>
-              </tr>
+              <DenseTableRow key={r.milestone}>
+                <DenseTableCell className="font-medium">{r.milestone}</DenseTableCell>
+                <DenseTableCell><DenseTag variant="category">{r.status}</DenseTag></DenseTableCell>
+                <DenseTableCell>{r.meaning}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <CatalogSection title="§3 Three-phase overview">
@@ -129,37 +130,37 @@ export function RoadmapPage() {
         <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           A1 · 2C-B production cutover
         </div>
-        <table className="dense-table">
-          <tbody>
+        <DenseDataTable>
+          <DenseTableBody>
             {PHASE_A_2CB_STEPS.map(s => (
-              <tr key={s.step}>
-                <td className="font-mono-tabular">{s.step}</td>
-                <td>{s.action}</td>
-              </tr>
+              <DenseTableRow key={s.step}>
+                <DenseTableCell className="font-mono-tabular">{s.step}</DenseTableCell>
+                <DenseTableCell>{s.action}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           A2 · Mac Mini roles
         </div>
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Machine</th>
-              <th>Service</th>
-              <th>Connection</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Machine</DenseTableHead>
+              <DenseTableHead>Service</DenseTableHead>
+              <DenseTableHead>Connection</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {PHASE_A_MAC_MINI.map(r => (
-              <tr key={r.machine}>
-                <td className="font-medium">{r.machine}</td>
-                <td>{r.service}</td>
-                <td className="text-[var(--muted-foreground)]">{r.connection}</td>
-              </tr>
+              <DenseTableRow key={r.machine}>
+                <DenseTableCell className="font-medium">{r.machine}</DenseTableCell>
+                <DenseTableCell>{r.service}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{r.connection}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           A3 · 4090 trial rules
         </div>
@@ -171,16 +172,16 @@ export function RoadmapPage() {
         <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           A4 · Compose-era deliverables
         </div>
-        <table className="dense-table">
-          <tbody>
+        <DenseDataTable>
+          <DenseTableBody>
             {PHASE_A_DELIVERABLES.map(r => (
-              <tr key={r.artifact}>
-                <td className="font-mono-tabular">{r.artifact}</td>
-                <td>{r.description}</td>
-              </tr>
+              <DenseTableRow key={r.artifact}>
+                <DenseTableCell className="font-mono-tabular">{r.artifact}</DenseTableCell>
+                <DenseTableCell>{r.description}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <ProseBlock>{`Exit: ${PHASE_A_EXIT}`}</ProseBlock>
       </CatalogSection>
 
@@ -203,24 +204,24 @@ export function RoadmapPage() {
           ))}
         </ul>
         <ProseBlock>{`App migration order: ${PHASE_B_APP_ORDER}`}</ProseBlock>
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Component</th>
-              <th>Location</th>
-              <th>Role</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Component</DenseTableHead>
+              <DenseTableHead>Location</DenseTableHead>
+              <DenseTableHead>Role</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {PHASE_B_CICD.map(r => (
-              <tr key={r.component}>
-                <td className="font-medium">{r.component}</td>
-                <td>{r.location}</td>
-                <td className="text-[var(--muted-foreground)]">{r.role}</td>
-              </tr>
+              <DenseTableRow key={r.component}>
+                <DenseTableCell className="font-medium">{r.component}</DenseTableCell>
+                <DenseTableCell>{r.location}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{r.role}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <ul className="m-0 list-disc px-4 py-2 font-mono text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {PHASE_B_REPO_LAYOUT.map(s => (
             <li key={s}>{s}</li>
@@ -230,22 +231,22 @@ export function RoadmapPage() {
       </CatalogSection>
 
       <CatalogSection title="§6 Phase C — AI-native ops + downstream">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Capability</th>
-              <th>Implementation</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Capability</DenseTableHead>
+              <DenseTableHead>Implementation</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {PHASE_C_OPS_PLATFORM.map(r => (
-              <tr key={r.capability}>
-                <td className="font-medium whitespace-nowrap">{r.capability}</td>
-                <td>{r.implementation}</td>
-              </tr>
+              <DenseTableRow key={r.capability}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{r.capability}</DenseTableCell>
+                <DenseTableCell>{r.implementation}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <ul className="m-0 list-disc px-4 py-2 text-[var(--text-dense)]">
           {PHASE_C_DOWNSTREAM.map(s => (
             <li key={s}>{s}</li>
@@ -255,16 +256,16 @@ export function RoadmapPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <CatalogSection title="§7 Optional hardware (12–18 months)">
-          <table className="dense-table">
-            <tbody>
+          <DenseDataTable>
+            <DenseTableBody>
               {OPTIONAL_HARDWARE.map(r => (
-                <tr key={r.item}>
-                  <td className="font-medium">{r.item}</td>
-                  <td className="text-[var(--muted-foreground)]">{r.trigger}</td>
-                </tr>
+                <DenseTableRow key={r.item}>
+                  <DenseTableCell className="font-medium">{r.item}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{r.trigger}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
 
         <CatalogSection title="§8 Owner decision checklist">
@@ -277,18 +278,18 @@ export function RoadmapPage() {
       </div>
 
       <CatalogSection title="Related authorities">
-        <table className="dense-table">
-          <tbody>
+        <DenseDataTable>
+          <DenseTableBody>
             {RELATED_DOCS.map(r => (
-              <tr key={r.topic}>
-                <td className="font-medium whitespace-nowrap">{r.topic}</td>
-                <td className="font-mono text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              <DenseTableRow key={r.topic}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{r.topic}</DenseTableCell>
+                <DenseTableCell className="font-mono text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                   {r.authority}
-                </td>
-              </tr>
+                </DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
     </div>
   )

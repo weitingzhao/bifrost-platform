@@ -1,3 +1,4 @@
+import { DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { MatrixResponse } from '@/api/types'
 import { StatusLamp } from './StatusLamp'
 
@@ -7,44 +8,42 @@ export function MatrixTable({ matrix }: { matrix: MatrixResponse }) {
       <header className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
           <h2 className="m-0 text-sm font-semibold">{matrix.label}</h2>
-          <span className="badge-ui">{matrix.environment}</span>
+          <DenseTag variant="category">{matrix.environment}</DenseTag>
         </div>
         <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)] font-mono-tabular">
           {new Date(matrix.generated_at).toLocaleString()}
         </span>
       </header>
-      <div className="dense-table-scroll">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Target</th>
-              <th>Category</th>
-              <th>Reach</th>
-              <th>Auth</th>
-              <th>Level</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matrix.targets.map(row => (
-              <tr key={`${matrix.environment}-${row.id}`}>
-                <td className="font-mono-tabular">{row.id}</td>
-                <td>{row.category}</td>
-                <td>
-                  <StatusLamp value={row.reachability} kind="reach" />{' '}
-                  <span className="font-mono-tabular">{row.reachability}</span>
-                </td>
-                <td>
-                  <StatusLamp value={row.auth} kind="auth" />{' '}
-                  <span className="font-mono-tabular">{row.auth}</span>
-                </td>
-                <td className="font-mono-tabular">{row.authorization_level}</td>
-                <td className="text-[var(--muted-foreground)] max-w-md">{row.detail}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DenseDataTable>
+        <DenseTableHeader>
+          <DenseTableHeadRow>
+            <DenseTableHead>Target</DenseTableHead>
+            <DenseTableHead>Category</DenseTableHead>
+            <DenseTableHead>Reach</DenseTableHead>
+            <DenseTableHead>Auth</DenseTableHead>
+            <DenseTableHead>Level</DenseTableHead>
+            <DenseTableHead>Detail</DenseTableHead>
+          </DenseTableHeadRow>
+        </DenseTableHeader>
+        <DenseTableBody>
+          {matrix.targets.map(row => (
+            <DenseTableRow key={`${matrix.environment}-${row.id}`}>
+              <DenseTableCell className="font-mono-tabular">{row.id}</DenseTableCell>
+              <DenseTableCell>{row.category}</DenseTableCell>
+              <DenseTableCell>
+                <StatusLamp value={row.reachability} kind="reach" />{' '}
+                <span className="font-mono-tabular">{row.reachability}</span>
+              </DenseTableCell>
+              <DenseTableCell>
+                <StatusLamp value={row.auth} kind="auth" />{' '}
+                <span className="font-mono-tabular">{row.auth}</span>
+              </DenseTableCell>
+              <DenseTableCell className="font-mono-tabular">{row.authorization_level}</DenseTableCell>
+              <DenseTableCell className="text-[var(--muted-foreground)] max-w-md">{row.detail}</DenseTableCell>
+            </DenseTableRow>
+          ))}
+        </DenseTableBody>
+      </DenseDataTable>
     </section>
   )
 }

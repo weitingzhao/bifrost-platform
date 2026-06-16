@@ -1,7 +1,7 @@
+import { Button, DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag, StatusLamp } from '@bifrost/ui'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { MatrixTable } from '@/components/MatrixTable'
-import { flywheelLabel, milestoneStatusClass } from '@/components/FocusStrip'
-import { StatusLamp } from '@bifrost/ui'
+import { flywheelLabel, milestoneStatusVariant } from '@/components/FocusStrip'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 
 interface PulsePageProps {
@@ -109,9 +109,9 @@ export function PulsePage({
           <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Environment reachability
           </h3>
-          <button type="button" className="btn-ui btn-ui-ghost text-xs" onClick={onOpenRuntimeMap}>
+          <Button variant="ghost" size="xs" onClick={onOpenRuntimeMap}>
             Open Runtime Map
-          </button>
+          </Button>
         </header>
         {matrixLoading && (
           <p className="px-3 py-2 text-[var(--muted-foreground)]">Probing targets…</p>
@@ -120,39 +120,39 @@ export function PulsePage({
           <p className="lamp-fail px-3 py-2">Failed to load matrix: {matrixError.message}</p>
         )}
         {!matrixLoading && matrices.length > 0 && (
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Env</th>
-                <th>OK</th>
-                <th>Fail</th>
-                <th>Total</th>
-                <th>Probed at</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Env</DenseTableHead>
+                <DenseTableHead>OK</DenseTableHead>
+                <DenseTableHead>Fail</DenseTableHead>
+                <DenseTableHead>Total</DenseTableHead>
+                <DenseTableHead>Probed at</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {matrices.map(m => {
                 const c = countReach(m)
                 return (
-                  <tr key={m.environment}>
-                    <td>
+                  <DenseTableRow key={m.environment}>
+                    <DenseTableCell>
                       <span className={`badge-ui badge-env-${m.environment}`}>
                         {m.environment}
                       </span>
-                    </td>
-                    <td className="font-mono-tabular lamp-ok">{c.ok}</td>
-                    <td className={`font-mono-tabular ${c.fail > 0 ? 'lamp-fail' : ''}`}>
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular lamp-ok">{c.ok}</DenseTableCell>
+                    <DenseTableCell className={`font-mono-tabular ${c.fail > 0 ? 'lamp-fail' : ''}`}>
                       {c.fail}
-                    </td>
-                    <td className="font-mono-tabular">{c.total}</td>
-                    <td className="font-mono-tabular text-[var(--muted-foreground)]">
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular">{c.total}</DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
                       {m.generated_at}
-                    </td>
-                  </tr>
+                    </DenseTableCell>
+                  </DenseTableRow>
                 )
               })}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         )}
       </section>
 
@@ -163,34 +163,34 @@ export function PulsePage({
               Active milestones (summary)
             </h3>
           </header>
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Status</th>
-                <th>Blocker</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>ID</DenseTableHead>
+                <DenseTableHead>Status</DenseTableHead>
+                <DenseTableHead>Blocker</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {context.milestones
                 .filter(m => m.status !== 'CLOSED')
                 .map(m => (
-                  <tr key={m.id}>
-                    <td className="font-mono-tabular">{m.id}</td>
-                    <td>
-                      <span className={milestoneStatusClass(m.status)}>{m.status}</span>
-                    </td>
-                    <td className="font-mono-tabular text-[var(--muted-foreground)]">
+                  <DenseTableRow key={m.id}>
+                    <DenseTableCell className="font-mono-tabular">{m.id}</DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag variant={milestoneStatusVariant(m.status)}>{m.status}</DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
                       {m.blocker ?? '—'}
-                    </td>
-                  </tr>
+                    </DenseTableCell>
+                  </DenseTableRow>
                 ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
           <div className="border-t border-[var(--border)] px-3 py-2">
-            <button type="button" className="btn-ui btn-ui-ghost text-xs" onClick={onOpenProgram}>
+            <Button variant="ghost" size="xs" onClick={onOpenProgram}>
               Full program & decisions
-            </button>
+            </Button>
           </div>
         </section>
       )}

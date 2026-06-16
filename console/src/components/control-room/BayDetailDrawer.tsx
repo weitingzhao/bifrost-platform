@@ -1,5 +1,6 @@
+import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
-import { milestoneStatusClass } from '@/components/FocusStrip'
+import { milestoneStatusVariant } from '@/components/FocusStrip'
 import { getBay } from '@/lib/control-room/bayRegistry'
 import { filterTargetsForBay } from '@/lib/control-room/matrixSummary'
 import type { ControlRoomSelection } from '@/components/control-room/DualFlywheelPanel'
@@ -60,16 +61,16 @@ export function BayDetailDrawer({
     <aside className="bay-detail-drawer panel-elevated" role="dialog" aria-label="Detail">
       <header className="bay-detail-drawer-header">
         <h3 className="m-0 text-sm font-semibold">{title}</h3>
-        <button type="button" className="btn-ui btn-ui-ghost" onClick={onClose} aria-label="Close">
+        <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
           Close
-        </button>
+        </Button>
       </header>
 
       <div className="bay-detail-drawer-body">
         {!isBay && milestone != null && 'status' in milestone && (
           <p className="m-0 text-[var(--text-dense)]">
             Status:{' '}
-            <span className={milestoneStatusClass(milestone.status)}>{milestone.status}</span>
+            <DenseTag variant={milestoneStatusVariant(milestone.status)}>{milestone.status}</DenseTag>
           </p>
         )}
         {!isBay && milestone != null && 'conclusion' in milestone && (
@@ -87,24 +88,24 @@ export function BayDetailDrawer({
         )}
 
         {targets.length > 0 && (
-          <table className="dense-table mt-3">
-            <thead>
-              <tr>
-                <th>Target</th>
-                <th>Reach</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable wrapClassName="mt-3">
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Target</DenseTableHead>
+                <DenseTableHead>Reach</DenseTableHead>
+                <DenseTableHead>Detail</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {targets.map(t => (
-                <tr key={t.id}>
-                  <td className="font-mono-tabular">{t.id}</td>
-                  <td>{t.reachability}</td>
-                  <td className="text-[var(--muted-foreground)]">{t.detail}</td>
-                </tr>
+                <DenseTableRow key={t.id}>
+                  <DenseTableCell className="font-mono-tabular">{t.id}</DenseTableCell>
+                  <DenseTableCell>{t.reachability}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{t.detail}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         )}
 
         {hints.length > 0 && (
@@ -112,44 +113,45 @@ export function BayDetailDrawer({
             <h4 className="mt-3 text-xs font-semibold uppercase text-[var(--muted-foreground)]">
               Probe hints
             </h4>
-            <table className="dense-table">
-              <thead>
-                <tr>
-                  <th>Target</th>
-                  <th>Trade route</th>
-                  <th>Hint</th>
-                </tr>
-              </thead>
-              <tbody>
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Target</DenseTableHead>
+                  <DenseTableHead>Trade route</DenseTableHead>
+                  <DenseTableHead>Hint</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
                 {hints.map(h => (
-                  <tr key={h.target_id}>
-                    <td className="font-mono-tabular">{h.target_id}</td>
-                    <td className="font-mono-tabular">{h.trade_route}</td>
-                    <td className="text-[var(--muted-foreground)]">{h.hint}</td>
-                  </tr>
+                  <DenseTableRow key={h.target_id}>
+                    <DenseTableCell className="font-mono-tabular">{h.target_id}</DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular">{h.trade_route}</DenseTableCell>
+                    <DenseTableCell className="text-[var(--muted-foreground)]">{h.hint}</DenseTableCell>
+                  </DenseTableRow>
                 ))}
-              </tbody>
-            </table>
+              </DenseTableBody>
+            </DenseDataTable>
           </>
         )}
       </div>
 
       <footer className="bay-detail-drawer-footer">
-        <button type="button" className="btn-ui btn-ui-ghost" onClick={onOpenRuntimeMap}>
+        <Button variant="ghost" size="sm" onClick={onOpenRuntimeMap}>
           Open Runtime Map
-        </button>
-        <button type="button" className="btn-ui btn-ui-ghost" onClick={onOpenProgram}>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onOpenProgram}>
           Open Program
-        </button>
+        </Button>
         {(bay?.id === 'bay_trade_reactor' || selection.id === 'bay_trade_reactor') && (
-          <a
-            className="btn-ui btn-ui-primary"
-            href={`${TRADE_APP_URL}/settings/ui-design-system`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open Trade Reactor
-          </a>
+          <Button asChild size="sm">
+            <a
+              href={`${TRADE_APP_URL}/settings/ui-design-system`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Trade Reactor
+            </a>
+          </Button>
         )}
       </footer>
     </aside>

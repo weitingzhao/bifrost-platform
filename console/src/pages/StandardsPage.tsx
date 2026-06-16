@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, DenseTag } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
 import {
   ACTUATION_API_ROUTES,
@@ -44,176 +45,176 @@ export function StandardsPage() {
               {' '}(v{STANDARDS_VERSION}).
             </p>
           </div>
-          <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={() => void handleCopyForLlm()}>
+          <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </button>
+          </Button>
         </div>
       </section>
 
       {/* 1 — HTTP probes */}
       <CatalogSection title="HTTP probes (via nginx)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Target ID</th>
-              <th>Path</th>
-              <th>OK codes</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Target ID</DenseTableHead>
+              <DenseTableHead>Path</DenseTableHead>
+              <DenseTableHead>OK codes</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {HTTP_PROBES.map(p => (
-              <tr key={p.targetId}>
-                <td className="font-mono-tabular">{p.targetId}</td>
-                <td className="font-mono-tabular">{p.path}</td>
-                <td>{p.okCodes}</td>
-              </tr>
+              <DenseTableRow key={p.targetId}>
+                <DenseTableCell className="font-mono-tabular">{p.targetId}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{p.path}</DenseTableCell>
+                <DenseTableCell>{p.okCodes}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* 2 — Auth probe */}
         <CatalogSection title="Auth probe">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Target ID</th>
-                <th>Path</th>
-                <th>Token</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Target ID</DenseTableHead>
+                <DenseTableHead>Path</DenseTableHead>
+                <DenseTableHead>Token</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {AUTH_PROBES.map(p => (
-                <tr key={p.targetId}>
-                  <td className="font-mono-tabular">{p.targetId}</td>
-                  <td className="font-mono-tabular">{p.path}</td>
-                  <td className="text-[var(--muted-foreground)]">{p.token}</td>
-                </tr>
+                <DenseTableRow key={p.targetId}>
+                  <DenseTableCell className="font-mono-tabular">{p.targetId}</DenseTableCell>
+                  <DenseTableCell className="font-mono-tabular">{p.path}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{p.token}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
 
         {/* 3 — TCP probes */}
         <CatalogSection title="TCP probes">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Target ID</th>
-                <th>Address source</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Target ID</DenseTableHead>
+                <DenseTableHead>Address source</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {TCP_PROBES.map(p => (
-                <tr key={p.targetId}>
-                  <td className="font-mono-tabular">{p.targetId}</td>
-                  <td>{p.addressSource}</td>
-                </tr>
+                <DenseTableRow key={p.targetId}>
+                  <DenseTableCell className="font-mono-tabular">{p.targetId}</DenseTableCell>
+                  <DenseTableCell>{p.addressSource}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
       </div>
 
       {/* 4 — Policy-blocked */}
       <CatalogSection title="Policy-blocked rows">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Target ID</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Target ID</DenseTableHead>
+              <DenseTableHead>Reason</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {POLICY_BLOCKED.map(p => (
-              <tr key={p.targetId}>
-                <td className="font-mono-tabular">{p.targetId}</td>
-                <td className="text-[var(--muted-foreground)]">{p.reason}</td>
-              </tr>
+              <DenseTableRow key={p.targetId}>
+                <DenseTableCell className="font-mono-tabular">{p.targetId}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{p.reason}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 5 — Actuation phase matrix */}
       <CatalogSection title="Cluster actuation phase matrix">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Phase</th>
-              <th>Nodes</th>
-              <th>Workloads</th>
-              <th>GitOps</th>
-              <th>Stack</th>
-              <th>Audit</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Nodes</DenseTableHead>
+              <DenseTableHead>Workloads</DenseTableHead>
+              <DenseTableHead>GitOps</DenseTableHead>
+              <DenseTableHead>Stack</DenseTableHead>
+              <DenseTableHead>Audit</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {ACTUATION_PHASE_MATRIX.map(p => (
-              <tr key={p.phase}>
-                <td className="font-medium whitespace-nowrap">
-                  <span className="badge-ui">{p.phase}</span>
-                </td>
-                <td>{p.nodes}</td>
-                <td>{p.workloads}</td>
-                <td>{p.gitops}</td>
-                <td>{p.stack}</td>
-                <td className="text-[var(--muted-foreground)]">{p.audit}</td>
-              </tr>
+              <DenseTableRow key={p.phase}>
+                <DenseTableCell className="font-medium whitespace-nowrap">
+                  <DenseTag variant="category">{p.phase}</DenseTag>
+                </DenseTableCell>
+                <DenseTableCell>{p.nodes}</DenseTableCell>
+                <DenseTableCell>{p.workloads}</DenseTableCell>
+                <DenseTableCell>{p.gitops}</DenseTableCell>
+                <DenseTableCell>{p.stack}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{p.audit}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 6 — Actuation API routes */}
       <CatalogSection title="Actuation API routes (P1–P4)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Phase</th>
-              <th>Method</th>
-              <th>Route</th>
-              <th>Role</th>
-              <th>Purpose</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Method</DenseTableHead>
+              <DenseTableHead>Route</DenseTableHead>
+              <DenseTableHead>Role</DenseTableHead>
+              <DenseTableHead>Purpose</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {ACTUATION_API_ROUTES.map((r, i) => (
-              <tr key={i}>
-                <td><span className="badge-ui">{r.phase}</span></td>
-                <td><span className="badge-ui font-mono-tabular">{r.method}</span></td>
-                <td className="font-mono-tabular">{r.route}</td>
-                <td>{r.role}</td>
-                <td className="text-[var(--muted-foreground)]">{r.purpose}</td>
-              </tr>
+              <DenseTableRow key={i}>
+                <DenseTableCell><DenseTag variant="category">{r.phase}</DenseTag></DenseTableCell>
+                <DenseTableCell><DenseTag variant="category" className="font-mono-tabular">{r.method}</DenseTag></DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{r.route}</DenseTableCell>
+                <DenseTableCell>{r.role}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{r.purpose}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 7 — Observability layers */}
       <CatalogSection title="Observability layers (A vs B)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Layer</th>
-              <th>Scope</th>
-              <th>Data source</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Layer</DenseTableHead>
+              <DenseTableHead>Scope</DenseTableHead>
+              <DenseTableHead>Data source</DenseTableHead>
+              <DenseTableHead>Notes</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {OBSERVABILITY_LAYERS.map(l => (
-              <tr key={l.layer}>
-                <td className="font-medium whitespace-nowrap">{l.layer}</td>
-                <td>{l.scope}</td>
-                <td>{l.dataSource}</td>
-                <td className="text-[var(--muted-foreground)]">{l.notes}</td>
-              </tr>
+              <DenseTableRow key={l.layer}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{l.layer}</DenseTableCell>
+                <DenseTableCell>{l.scope}</DenseTableCell>
+                <DenseTableCell>{l.dataSource}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{l.notes}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
     </div>
   )

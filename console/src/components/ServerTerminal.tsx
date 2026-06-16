@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { SegmentControl, cn } from '@bifrost/ui'
+import { Button, SegmentControl, cn } from '@bifrost/ui'
 import { X } from 'lucide-react'
 import type { ConsoleHost } from '@/api/console'
 import { ConsoleHostBrandIcon } from '@/components/ConsoleHostBrandIcon'
@@ -164,30 +164,30 @@ export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTermin
               >
                 <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--color-surface-elevated)] px-2 py-1">
                   <ConsoleHostBrandIcon host={host} className="size-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate text-[0.78rem] font-semibold text-foreground">
+                  <span className="min-w-0 flex-1 truncate text-dense-body font-semibold text-foreground">
                     {host.label} · {host.host}
                     {host.jump_label ? ` · via ${host.jump_label}` : ''}
                   </span>
                   {tab.connState === 'open' && (
-                    <span className="inline-flex items-center gap-1 text-[0.72rem] text-[var(--text-dense-meta)]">
+                    <span className="inline-flex items-center gap-1 text-dense-label text-[var(--text-dense-meta)]">
                       <span className="server-console-live-dot" /> Live
                     </span>
                   )}
                   {tab.connState === 'connecting' && (
-                    <span className="text-[0.72rem] text-muted-foreground">Connecting…</span>
+                    <span className="text-dense-label text-muted-foreground">Connecting…</span>
                   )}
                   {tab.connState === 'error' && (
                     <>
-                      <span className="max-w-[8rem] truncate text-[0.72rem] text-destructive">
+                      <span className="max-w-[8rem] truncate text-dense-label text-destructive">
                         {tab.error ?? 'Failed'}
                       </span>
-                      <button
-                        type="button"
-                        className="btn-ui btn-ui-primary shrink-0 px-2 py-0.5 text-[0.72rem]"
+                      <Button
+                        size="sm"
+                        className="shrink-0 px-2 py-0.5 text-dense-label"
                         onClick={() => retrySession(tab.id)}
                       >
                         Retry
-                      </button>
+                      </Button>
                     </>
                   )}
                   <button

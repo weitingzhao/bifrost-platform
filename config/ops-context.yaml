@@ -231,11 +231,31 @@ tracks:
         note: "① bootstrap @ .73 ✓ ② P5b Mac agents ops-vm-ubt-01/.54 + ops-vm-ubt-02/.56 Ready ✓ · ③ gpu-server · ④ trade stack · ⑤ HA/validation"
       - id: legacy-retirement
         label: "Phase 3 Legacy retirement"
-        total: 3
+        total: 4
         done: 0
         status: not_started
-        next_task: null
-        note: "Blocked until compose→k3s migration stable"
+        next_task: "UI experience alignment — Design System-led visual polish with Legacy side-by-side"
+        prerequisites:
+          - "compose→k3s migration stable"
+          - "UI experience alignment Owner sign-off (must complete while Legacy is still running)"
+        note: "① UI experience alignment (Design System + Legacy reference) ② stop Legacy daemon/API/frontend ③ MIGRATION_TRACKING.md mark retired ④ archive bifrost-trader-engine"
+        tasks:
+          - id: ui-experience-alignment
+            label: "UI experience alignment — Design System visual polish"
+            status: not_started
+            note: "Token density tuning + per-page polish using Legacy as side-by-side reference; Owner sign-off required before Legacy shutdown"
+          - id: stop-legacy-runtime
+            label: "Stop Legacy daemon, API, frontend"
+            status: not_started
+            blocked_by: ui-experience-alignment
+          - id: mark-engine-retired
+            label: "MIGRATION_TRACKING.md mark engine retired"
+            status: not_started
+            blocked_by: stop-legacy-runtime
+          - id: archive-engine-repo
+            label: "Archive bifrost-trader-engine (read-only)"
+            status: not_started
+            blocked_by: mark-engine-retired
 
   operate:
     label: "Day-to-day operations"

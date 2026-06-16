@@ -9,6 +9,7 @@ import {
   Position,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { DenseTag, type DenseTagVariant } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 import {
   buildDeliveryGraph,
@@ -20,6 +21,12 @@ function statusBadgeLabel(status: DeliveryNodeData['status']): string {
   if (status === 'live') return 'live'
   if (status === 'blocked') return 'blocked'
   return 'planned'
+}
+
+function statusBadgeVariant(status: DeliveryNodeData['status']): DenseTagVariant {
+  if (status === 'live') return 'success'
+  if (status === 'blocked') return 'danger'
+  return 'neutral'
 }
 
 function DeliveryNode({ data }: NodeProps) {
@@ -41,9 +48,9 @@ function DeliveryNode({ data }: NodeProps) {
       {d.subtitle != null && (
         <div className="delivery-node-subtitle text-[var(--muted-foreground)]">{d.subtitle}</div>
       )}
-      <span className={`badge-ui delivery-node-badge delivery-node-badge--${d.status}`}>
+      <DenseTag variant={statusBadgeVariant(d.status)} className={`delivery-node-badge delivery-node-badge--${d.status}`}>
         {statusBadgeLabel(d.status)}
-      </span>
+      </DenseTag>
       <Handle type="source" position={Position.Right} className="pipeline-handle" />
     </div>
   )

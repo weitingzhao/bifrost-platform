@@ -70,7 +70,7 @@ export function TrackCardsSection({ tracks, selectedTrack, onSelectTrack }: Trac
                     <StatusLamp value={reach} kind="reach" />
                     <span className="text-sm font-semibold capitalize">{t.id}</span>
                     {t.currentPhase && (
-                      <span className="ml-auto rounded bg-[var(--border)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+                      <span className="ml-auto rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
                         {t.currentPhase}
                       </span>
                     )}

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
+import { Button, PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { MatrixResponse } from '@/api/types'
 import {
@@ -489,13 +489,14 @@ export function ConsolePage() {
                   : 'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.'
               }
             />
-            <button
-              type="button"
-              className="btn-ui btn-ui-ghost shrink-0 text-xs"
+            <Button
+              variant="ghost"
+              size="xs"
+              className="shrink-0"
               onClick={() => void handleCopyAllGovernance()}
             >
               {govCopyState === 'copied' ? 'All copied!' : govCopyState === 'error' ? 'Copy failed' : 'Copy All for LLM'}
-            </button>
+            </Button>
           </div>
         )}
 

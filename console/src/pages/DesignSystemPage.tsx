@@ -1,4 +1,15 @@
 import { useCallback, useState } from 'react'
+import {
+  Button,
+  DenseDataTable,
+  DenseTableBody,
+  DenseTableCell,
+  DenseTableHead,
+  DenseTableHeadRow,
+  DenseTableHeader,
+  DenseTableRow,
+  DenseTag,
+} from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
 import {
   AGENT_GOVERNANCE_ASSETS,
@@ -64,54 +75,54 @@ export function DesignSystemPage() {
               {' '}(bifrost-trade-frontend)
             </p>
           </div>
-          <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={() => void handleCopyForLlm()}>
+          <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </button>
+          </Button>
         </div>
       </section>
 
       {/* 1 — Layer stack */}
       <CatalogSection title="Layer stack (do not skip layers)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Layer</th>
-              <th>Location</th>
-              <th>Role</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Layer</DenseTableHead>
+              <DenseTableHead>Location</DenseTableHead>
+              <DenseTableHead>Role</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {LAYER_STACK.map(l => (
-              <tr key={l.layer}>
-                <td className="font-medium whitespace-nowrap">{l.layer}</td>
-                <td className="font-mono-tabular">{l.location}</td>
-                <td className="text-[var(--muted-foreground)]">{l.role}</td>
-              </tr>
+              <DenseTableRow key={l.layer}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{l.layer}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{l.location}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{l.role}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 2 — Page canvas surfaces */}
       <CatalogSection title="Page canvas (three surfaces)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Surface</th>
-              <th>Tailwind</th>
-              <th>Usage</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Surface</DenseTableHead>
+              <DenseTableHead>Tailwind</DenseTableHead>
+              <DenseTableHead>Usage</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {PAGE_SURFACES.map(s => (
-              <tr key={s.surface}>
-                <td className="font-medium whitespace-nowrap">{s.surface}</td>
-                <td className="font-mono-tabular">{s.tailwind}</td>
-                <td className="text-[var(--muted-foreground)]">{s.usage}</td>
-              </tr>
+              <DenseTableRow key={s.surface}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{s.surface}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{s.tailwind}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{s.usage}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 3 — Business semantic colors */}
@@ -120,32 +131,32 @@ export function DesignSystemPage() {
           {taxonomies.map(tax => (
             <div key={tax}>
               <h4 className="m-0 mb-1 text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">{tax}</h4>
-              <table className="dense-table">
-                <thead>
-                  <tr>
-                    <th>Concept</th>
-                    <th>Token</th>
-                    <th>Utility</th>
-                    <th>Accessor</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <DenseDataTable>
+                <DenseTableHeader>
+                  <DenseTableHeadRow>
+                    <DenseTableHead>Concept</DenseTableHead>
+                    <DenseTableHead>Token</DenseTableHead>
+                    <DenseTableHead>Utility</DenseTableHead>
+                    <DenseTableHead>Accessor</DenseTableHead>
+                    <DenseTableHead>Status</DenseTableHead>
+                  </DenseTableHeadRow>
+                </DenseTableHeader>
+                <DenseTableBody>
                   {SEMANTIC_COLORS.filter(c => c.taxonomy === tax).map(c => (
-                    <tr key={c.concept}>
-                      <td className="font-medium">{c.concept}</td>
-                      <td className="font-mono-tabular">{c.token}</td>
-                      <td className="font-mono-tabular">{c.utility}</td>
-                      <td className="text-[var(--muted-foreground)]">{c.accessor}</td>
-                      <td>
-                        <span className={`badge-ui ${c.status === 'live' ? 'badge-ui-success' : ''}`}>
+                    <DenseTableRow key={c.concept}>
+                      <DenseTableCell className="font-medium">{c.concept}</DenseTableCell>
+                      <DenseTableCell className="font-mono-tabular">{c.token}</DenseTableCell>
+                      <DenseTableCell className="font-mono-tabular">{c.utility}</DenseTableCell>
+                      <DenseTableCell className="text-[var(--muted-foreground)]">{c.accessor}</DenseTableCell>
+                      <DenseTableCell>
+                        <DenseTag variant={c.status === 'live' ? 'success' : 'category'}>
                           {c.status}
-                        </span>
-                      </td>
-                    </tr>
+                        </DenseTag>
+                      </DenseTableCell>
+                    </DenseTableRow>
                   ))}
-                </tbody>
-              </table>
+                </DenseTableBody>
+              </DenseDataTable>
             </div>
           ))}
         </div>
@@ -153,48 +164,48 @@ export function DesignSystemPage() {
 
       {/* 4 — Mandatory mapping (core of the standard) */}
       <CatalogSection title="Mandatory interaction → primitive mapping">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Interaction</th>
-              <th>Use</th>
-              <th>Never</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Interaction</DenseTableHead>
+              <DenseTableHead>Use</DenseTableHead>
+              <DenseTableHead>Never</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {MANDATORY_MAPPING.map(m => (
-              <tr key={m.interaction}>
-                <td className="font-medium whitespace-nowrap">{m.interaction}</td>
-                <td className="font-mono-tabular">{m.use}</td>
-                <td className="text-[var(--destructive)]">{m.never}</td>
-              </tr>
+              <DenseTableRow key={m.interaction}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{m.interaction}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{m.use}</DenseTableCell>
+                <DenseTableCell className="text-[var(--destructive)]">{m.never}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 5 — Primitives inventory */}
       <CatalogSection title="Primitives inventory (src/components/data-display/)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Component(s)</th>
-              <th>File</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Category</DenseTableHead>
+              <DenseTableHead>Component(s)</DenseTableHead>
+              <DenseTableHead>File</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {PRIMITIVES.map((p, i) => (
-              <tr key={i}>
-                <td>
-                  <span className="badge-ui">{p.category}</span>
-                </td>
-                <td className="font-mono-tabular">{p.name}</td>
-                <td className="font-mono-tabular text-[var(--muted-foreground)]">{p.file}</td>
-              </tr>
+              <DenseTableRow key={i}>
+                <DenseTableCell>
+                  <DenseTag variant="category">{p.category}</DenseTag>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{p.name}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{p.file}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -225,24 +236,24 @@ export function DesignSystemPage() {
 
       {/* 8 — Agent governance references */}
       <CatalogSection title="Agent governance assets (cross-repo)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Asset</th>
-              <th>Repo</th>
-              <th>Purpose</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Asset</DenseTableHead>
+              <DenseTableHead>Repo</DenseTableHead>
+              <DenseTableHead>Purpose</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {AGENT_GOVERNANCE_ASSETS.map(a => (
-              <tr key={a.asset}>
-                <td className="font-mono-tabular">{a.asset}</td>
-                <td>{a.repo}</td>
-                <td className="text-[var(--muted-foreground)]">{a.purpose}</td>
-              </tr>
+              <DenseTableRow key={a.asset}>
+                <DenseTableCell className="font-mono-tabular">{a.asset}</DenseTableCell>
+                <DenseTableCell>{a.repo}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{a.purpose}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
     </div>
   )

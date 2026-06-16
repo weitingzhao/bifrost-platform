@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, DenseTag } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 import { fetchContext } from '@/api/platform'
 import { CatalogSection } from '@/components/CatalogSection'
@@ -61,9 +62,9 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
               {' '}(v{BLUEPRINT_VERSION}).
             </p>
           </div>
-          <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={() => void handleCopyForLlm()}>
+          <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -71,7 +72,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
       <CatalogSection title="North Star">
         <div className="px-3 py-3 text-[var(--text-dense)] flex flex-col gap-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="badge-ui badge-status-signed">{NORTH_STAR_STRATEGY}</span>
+            <DenseTag variant="success">{NORTH_STAR_STRATEGY}</DenseTag>
             <span className="text-[var(--muted-foreground)] text-xs">Decision {NORTH_STAR_DECISION}</span>
           </div>
           <p className="m-0 leading-relaxed">{NORTH_STAR_STATEMENT}</p>
@@ -80,42 +81,42 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
 
       {/* 2 — Owner exceptions */}
       <CatalogSection title="Owner exceptions">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Allowed (Owner-only)</th>
-              <th>Forbidden (must use Console/API)</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Allowed (Owner-only)</DenseTableHead>
+              <DenseTableHead>Forbidden (must use Console/API)</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {OWNER_EXCEPTIONS.map((e, i) => (
-              <tr key={i}>
-                <td>{e.allowed}</td>
-                <td className="text-[var(--muted-foreground)]">{e.forbidden}</td>
-              </tr>
+              <DenseTableRow key={i}>
+                <DenseTableCell>{e.allowed}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{e.forbidden}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 3 — Strategy C layers */}
       <CatalogSection title="Strategy C — control-plane layers">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Layer</th>
-              <th>Responsibility</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Layer</DenseTableHead>
+              <DenseTableHead>Responsibility</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {STRATEGY_C_LAYERS.map(l => (
-              <tr key={l.layer}>
-                <td className="font-medium whitespace-nowrap">{l.layer}</td>
-                <td>{l.responsibility}</td>
-              </tr>
+              <DenseTableRow key={l.layer}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{l.layer}</DenseTableCell>
+                <DenseTableCell>{l.responsibility}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 4 — Design principles */}
@@ -133,131 +134,131 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
       <div className="grid gap-4 md:grid-cols-2">
         {/* 5 — Console views */}
         <CatalogSection title="Console views">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>View</th>
-                <th>Plane</th>
-                <th>Purpose</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>View</DenseTableHead>
+                <DenseTableHead>Plane</DenseTableHead>
+                <DenseTableHead>Purpose</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {CONSOLE_VIEWS.map(v => (
-                <tr key={v.view}>
-                  <td className="font-medium whitespace-nowrap">{v.view}</td>
-                  <td><span className="badge-ui">{v.plane}</span></td>
-                  <td className="text-[var(--muted-foreground)]">{v.purpose}</td>
-                </tr>
+                <DenseTableRow key={v.view}>
+                  <DenseTableCell className="font-medium whitespace-nowrap">{v.view}</DenseTableCell>
+                  <DenseTableCell><DenseTag variant="category">{v.plane}</DenseTag></DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{v.purpose}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
 
         {/* 6 — Authorization levels */}
         <CatalogSection title="Authorization levels">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Level</th>
-                <th>Behavior</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Level</DenseTableHead>
+                <DenseTableHead>Behavior</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {BLUEPRINT_AUTHORIZATION_LEVELS.map(a => (
-                <tr key={a.level}>
-                  <td>
+                <DenseTableRow key={a.level}>
+                  <DenseTableCell>
                     <code className="font-mono-tabular">{a.level}</code>
-                  </td>
-                  <td>{a.behavior}</td>
-                </tr>
+                  </DenseTableCell>
+                  <DenseTableCell>{a.behavior}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
       </div>
 
       {/* 7 — Platform API endpoints */}
       <CatalogSection title="Platform API endpoints">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Method</th>
-              <th>Path</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Method</DenseTableHead>
+              <DenseTableHead>Path</DenseTableHead>
+              <DenseTableHead>Description</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {PLATFORM_API_ENDPOINTS.map(e => (
-              <tr key={`${e.method}-${e.path}`}>
-                <td><span className="badge-ui font-mono-tabular">{e.method}</span></td>
-                <td className="font-mono-tabular">{e.path}</td>
-                <td className="text-[var(--muted-foreground)]">{e.description}</td>
-              </tr>
+              <DenseTableRow key={`${e.method}-${e.path}`}>
+                <DenseTableCell><DenseTag variant="category" className="font-mono-tabular">{e.method}</DenseTag></DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{e.path}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{e.description}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 8 — Configuration files */}
       <CatalogSection title="Configuration files">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Role</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>File</DenseTableHead>
+              <DenseTableHead>Role</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {CONFIG_FILES.map(c => (
-              <tr key={c.file}>
-                <td className="font-mono-tabular">{c.file}</td>
-                <td className="text-[var(--muted-foreground)]">{c.role}</td>
-              </tr>
+              <DenseTableRow key={c.file}>
+                <DenseTableCell className="font-mono-tabular">{c.file}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{c.role}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 9 — Success criteria */}
       <CatalogSection title="Success criteria (north star completion)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Area</th>
-              <th>Criterion</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Area</DenseTableHead>
+              <DenseTableHead>Criterion</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {SUCCESS_CRITERIA.map(s => (
-              <tr key={s.area}>
-                <td className="font-medium whitespace-nowrap">{s.area}</td>
-                <td>{s.criterion}</td>
-              </tr>
+              <DenseTableRow key={s.area}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{s.area}</DenseTableCell>
+                <DenseTableCell>{s.criterion}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 10 — Actuation phases */}
       <CatalogSection title="Actuation phases (P0–P5)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Phase</th>
-              <th>Deliverables</th>
-              <th>Eliminates</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Deliverables</DenseTableHead>
+              <DenseTableHead>Eliminates</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {ACTUATION_PHASES.map(p => (
-              <tr key={p.phase}>
-                <td className="font-medium whitespace-nowrap">{p.phase}</td>
-                <td>{p.deliverables}</td>
-                <td className="text-[var(--muted-foreground)]">{p.eliminates}</td>
-              </tr>
+              <DenseTableRow key={p.phase}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{p.phase}</DenseTableCell>
+                <DenseTableCell>{p.deliverables}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{p.eliminates}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 11 — AI Native Ops Platform */}
@@ -288,67 +289,67 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
       <div className="grid gap-4 md:grid-cols-2">
         {/* 13 — AI Platform phases */}
         <CatalogSection title="AI Platform phases">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Phase</th>
-                <th>Time</th>
-                <th>Deliverables</th>
-                <th>Business unlock</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Phase</DenseTableHead>
+                <DenseTableHead>Time</DenseTableHead>
+                <DenseTableHead>Deliverables</DenseTableHead>
+                <DenseTableHead>Business unlock</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {AI_PLATFORM_PHASES.map(p => (
-                <tr key={p.id}>
-                  <td className="font-medium whitespace-nowrap">{p.id}</td>
-                  <td className="text-[var(--text-dense-meta)]">{p.timeBox}</td>
-                  <td>{p.deliverables}</td>
-                  <td className="text-[var(--muted-foreground)]">{p.businessUnlock}</td>
-                </tr>
+                <DenseTableRow key={p.id}>
+                  <DenseTableCell className="font-medium whitespace-nowrap">{p.id}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--text-dense-meta)]">{p.timeBox}</DenseTableCell>
+                  <DenseTableCell>{p.deliverables}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{p.businessUnlock}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
 
         {/* 14 — AI Boundaries */}
         <CatalogSection title="AI Platform boundaries">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Rule</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Rule</DenseTableHead>
+                <DenseTableHead>Detail</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {AI_PLATFORM_BOUNDARIES.map(b => (
-                <tr key={b.rule}>
-                  <td className="font-medium whitespace-nowrap">{b.rule}</td>
-                  <td className="text-[var(--muted-foreground)]">{b.detail}</td>
-                </tr>
+                <DenseTableRow key={b.rule}>
+                  <DenseTableCell className="font-medium whitespace-nowrap">{b.rule}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{b.detail}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
       </div>
 
       {/* 15 — AI Platform success criteria */}
       <CatalogSection title="AI Platform success criteria">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Area</th>
-              <th>Criterion</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Area</DenseTableHead>
+              <DenseTableHead>Criterion</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {AI_PLATFORM_SUCCESS.map(s => (
-              <tr key={s.area}>
-                <td className="font-medium whitespace-nowrap">{s.area}</td>
-                <td>{s.criterion}</td>
-              </tr>
+              <DenseTableRow key={s.area}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{s.area}</DenseTableCell>
+                <DenseTableCell>{s.criterion}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
     </div>
   )

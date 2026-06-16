@@ -1,4 +1,4 @@
-import { StatusLamp } from '@bifrost/ui'
+import { Button, StatusLamp } from '@bifrost/ui'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import { flywheelLabel } from '@/components/FocusStrip'
 import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
@@ -49,14 +49,14 @@ export function CouplingGatePanel({
         </ul>
       )}
       {context.focus.blocker != null && context.focus.blocker !== '' && (
-        <button type="button" className="btn-ui btn-ui-ghost mt-2 text-[var(--text-dense)]" onClick={onOpenProgram}>
+        <Button variant="ghost" size="sm" className="mt-2 text-[var(--text-dense)]" onClick={onOpenProgram}>
           Open blocker: {context.focus.blocker}
-        </button>
+        </Button>
       )}
       {onOpenDelivery != null && (
-        <button type="button" className="btn-ui btn-ui-ghost mt-2 text-[var(--text-dense)]" onClick={onOpenDelivery}>
+        <Button variant="ghost" size="sm" className="mt-2 text-[var(--text-dense)]" onClick={onOpenDelivery}>
           Open Delivery
-        </button>
+        </Button>
       )}
     </section>
   )

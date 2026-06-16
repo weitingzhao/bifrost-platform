@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Button } from '@bifrost/ui'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import type { ControlRoomSelection } from '@/components/control-room/DualFlywheelPanel'
 import {
@@ -92,14 +93,9 @@ export function AgentFocusDock({ context, matrices, selection }: AgentFocusDockP
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="btn-ui btn-ui-primary"
-            onClick={handleGenerate}
-            disabled={!context}
-          >
+          <Button size="sm" onClick={handleGenerate} disabled={!context}>
             Generate for LLM
-          </button>
+          </Button>
           <CopyButton
             label="Session"
             onClick={() => void handleCopySession()}
@@ -119,13 +115,9 @@ export function AgentFocusDock({ context, matrices, selection }: AgentFocusDockP
             active={copied === 'Promote'}
             disabled={!context}
           />
-          <button
-            type="button"
-            className="btn-ui btn-ui-ghost"
-            onClick={() => setShowPrompts(v => !v)}
-          >
+          <Button variant="ghost" size="sm" onClick={() => setShowPrompts(v => !v)}>
             {showPrompts ? 'Hide prompts' : 'Starter prompts'}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -138,24 +130,21 @@ export function AgentFocusDock({ context, matrices, selection }: AgentFocusDockP
             </span>
             <div className="flex flex-wrap gap-2">
               {(['Product', 'Ops', 'Promote'] as AgentMode[]).map(mode => (
-                <button
+                <Button
                   key={mode}
-                  type="button"
-                  className={[
-                    'btn-ui',
-                    (previewMode ?? suggested) === mode ? 'btn-ui-primary' : 'btn-ui-ghost',
-                  ].join(' ')}
+                  variant={(previewMode ?? suggested) === mode ? 'default' : 'ghost'}
+                  size="sm"
                   onClick={() => setPreviewMode(mode)}
                 >
                   {mode}
-                </button>
+                </Button>
               ))}
-              <button type="button" className="btn-ui btn-ui-primary" onClick={() => void handleCopySession()}>
+              <Button size="sm" onClick={() => void handleCopySession()}>
                 {copied === 'session' ? 'Copied' : 'Copy all'}
-              </button>
-              <button type="button" className="btn-ui btn-ui-ghost" onClick={() => setShowLlmPanel(false)}>
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowLlmPanel(false)}>
                 Close
-              </button>
+              </Button>
             </div>
           </div>
           <pre className="llm-content-pre font-mono-tabular">{previewPack}</pre>
@@ -192,8 +181,8 @@ function CopyButton({
   disabled?: boolean
 }) {
   return (
-    <button type="button" className="btn-ui btn-ui-ghost" onClick={onClick} disabled={disabled}>
+    <Button variant="ghost" size="sm" onClick={onClick} disabled={disabled}>
       {active ? 'Copied' : `Copy ${label}`}
-    </button>
+    </Button>
   )
 }

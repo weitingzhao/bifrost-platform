@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { Button, DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag, type DenseTagVariant } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
 import {
   CHANGE_LOG,
@@ -21,10 +22,10 @@ import {
 
 type CopyState = 'idle' | 'copied' | 'error'
 
-function statusBadge(status: string): string {
-  if (status.includes('CLOSED')) return 'badge-ui badge-status-signed'
-  if (status.includes('In progress') || status.includes('progress')) return 'badge-ui badge-status-pending'
-  return 'badge-ui'
+function statusVariant(status: string): DenseTagVariant {
+  if (status.includes('CLOSED')) return 'success'
+  if (status.includes('In progress') || status.includes('progress')) return 'neutral'
+  return 'category'
 }
 
 export function DeployMainlinePage() {
@@ -55,33 +56,33 @@ export function DeployMainlinePage() {
             </p>
             <p className="m-0 mt-2 text-[var(--text-dense-meta)]">{DEPLOY_MAINLINE_STATUS}</p>
           </div>
-          <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={() => void handleCopy()}>
+          <Button size="sm" className="shrink-0" onClick={() => void handleCopy()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </button>
+          </Button>
         </div>
       </section>
 
       <CatalogSection title="Mainline phases">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Phase</th>
-              <th>Authority</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>#</DenseTableHead>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Authority</DenseTableHead>
+              <DenseTableHead>Status</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {MAINLINE_PHASES.map(p => (
-              <tr key={p.seq}>
-                <td className="font-mono-tabular">{p.seq}</td>
-                <td className="font-medium">{p.phase}</td>
-                <td className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{p.authority}</td>
-                <td><span className={statusBadge(p.status)}>{p.status}</span></td>
-              </tr>
+              <DenseTableRow key={p.seq}>
+                <DenseTableCell className="font-mono-tabular">{p.seq}</DenseTableCell>
+                <DenseTableCell className="font-medium">{p.phase}</DenseTableCell>
+                <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{p.authority}</DenseTableCell>
+                <DenseTableCell><DenseTag variant={statusVariant(p.status)}>{p.status}</DenseTag></DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <CatalogSection title="Phase L — Local Prod Final (2C-B pre-gate)">
@@ -93,51 +94,51 @@ export function DeployMainlinePage() {
       </CatalogSection>
 
       <CatalogSection title="L1 — Agent mechanical gate">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Check</th>
-              <th>Pass</th>
-              <th>Agent date</th>
-              <th>Remarks</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Check</DenseTableHead>
+              <DenseTableHead>Pass</DenseTableHead>
+              <DenseTableHead>Agent date</DenseTableHead>
+              <DenseTableHead>Remarks</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {L1_CHECKS.map(c => (
-              <tr key={c.check}>
-                <td className="font-medium">{c.check}</td>
-                <td><span className="badge-ui badge-status-signed">{c.pass ? 'Pass' : '—'}</span></td>
-                <td className="font-mono-tabular text-[var(--text-dense-meta)]">{c.agentDate}</td>
-                <td className="text-[var(--muted-foreground)]">{c.remarks}</td>
-              </tr>
+              <DenseTableRow key={c.check}>
+                <DenseTableCell className="font-medium">{c.check}</DenseTableCell>
+                <DenseTableCell><DenseTag variant="success">{c.pass ? 'Pass' : '—'}</DenseTag></DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{c.agentDate}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{c.remarks}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <CatalogSection title="L2 — Owner browser short-list">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Session</th>
-              <th>Item</th>
-              <th>Route</th>
-              <th>Owner date</th>
-              <th>Remarks</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Session</DenseTableHead>
+              <DenseTableHead>Item</DenseTableHead>
+              <DenseTableHead>Route</DenseTableHead>
+              <DenseTableHead>Owner date</DenseTableHead>
+              <DenseTableHead>Remarks</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {L2_SESSIONS.map((s, i) => (
-              <tr key={`${s.session}-${s.item}-${i}`}>
-                <td className="font-mono-tabular">{s.session}</td>
-                <td className="font-medium">{s.item}</td>
-                <td className="font-mono-tabular text-[var(--text-dense-meta)]">{s.route}</td>
-                <td className="text-[var(--text-dense-meta)]">{s.ownerDate}</td>
-                <td className="text-[var(--muted-foreground)]">{s.remarks || '—'}</td>
-              </tr>
+              <DenseTableRow key={`${s.session}-${s.item}-${i}`}>
+                <DenseTableCell className="font-mono-tabular">{s.session}</DenseTableCell>
+                <DenseTableCell className="font-medium">{s.item}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{s.route}</DenseTableCell>
+                <DenseTableCell className="text-[var(--text-dense-meta)]">{s.ownerDate}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{s.remarks || '—'}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <div className="px-3 py-2">
           <p className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Known non-blockers (inherited from 2C-A)</p>
           <ul className="m-0 list-disc px-4 py-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -149,47 +150,47 @@ export function DeployMainlinePage() {
       </CatalogSection>
 
       <CatalogSection title="L3 — Owner decisions (2026-06-04)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Draft proposal</th>
-              <th>Owner decision</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>ID</DenseTableHead>
+              <DenseTableHead>Draft proposal</DenseTableHead>
+              <DenseTableHead>Owner decision</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {L3_DECISIONS.map(d => (
-              <tr key={d.id}>
-                <td className="font-mono-tabular font-medium">{d.id}</td>
-                <td className="text-[var(--muted-foreground)]">{d.draft}</td>
-                <td>{d.ownerDecision}</td>
-              </tr>
+              <DenseTableRow key={d.id}>
+                <DenseTableCell className="font-mono-tabular font-medium">{d.id}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{d.draft}</DenseTableCell>
+                <DenseTableCell>{d.ownerDecision}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <CatalogSection title="L4 — Local Prod Final sign-off">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Pass</th>
-              <th>Owner date</th>
-              <th>Signee</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Item</DenseTableHead>
+              <DenseTableHead>Pass</DenseTableHead>
+              <DenseTableHead>Owner date</DenseTableHead>
+              <DenseTableHead>Signee</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {L4_SIGNOFF.map(s => (
-              <tr key={s.item}>
-                <td className="font-medium">{s.item}</td>
-                <td><span className="badge-ui badge-status-signed">{s.pass ? 'Pass' : '—'}</span></td>
-                <td className="font-mono-tabular text-[var(--text-dense-meta)]">{s.ownerDate}</td>
-                <td className="text-[var(--muted-foreground)]">{s.signee}</td>
-              </tr>
+              <DenseTableRow key={s.item}>
+                <DenseTableCell className="font-medium">{s.item}</DenseTableCell>
+                <DenseTableCell><DenseTag variant="success">{s.pass ? 'Pass' : '—'}</DenseTag></DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{s.ownerDate}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{s.signee}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <p className="m-0 px-3 py-2 text-[var(--text-dense)] text-[var(--muted-foreground)]">
           <strong>Post-signoff unlock:</strong> {POST_SIGNOFF_UNLOCK}
         </p>
@@ -197,22 +198,22 @@ export function DeployMainlinePage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <CatalogSection title="Next: K3s Phase 1 (current priority)">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Target</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Target</DenseTableHead>
+                <DenseTableHead>Detail</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {NEXT_K3S_STEPS.map(s => (
-                <tr key={s.label}>
-                  <td className="font-medium whitespace-nowrap">{s.label}</td>
-                  <td className="text-[var(--muted-foreground)]">{s.detail}</td>
-                </tr>
+                <DenseTableRow key={s.label}>
+                  <DenseTableCell className="font-medium whitespace-nowrap">{s.label}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{s.detail}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
 
         <CatalogSection title="2C-B Compose (stability reference)">
@@ -231,22 +232,22 @@ export function DeployMainlinePage() {
       </div>
 
       <CatalogSection title="Change log">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Content</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Date</DenseTableHead>
+              <DenseTableHead>Content</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {CHANGE_LOG.map(e => (
-              <tr key={e.date}>
-                <td className="font-mono-tabular whitespace-nowrap">{e.date}</td>
-                <td className="text-[var(--muted-foreground)]">{e.content}</td>
-              </tr>
+              <DenseTableRow key={e.date}>
+                <DenseTableCell className="font-mono-tabular whitespace-nowrap">{e.date}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{e.content}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
     </div>
   )

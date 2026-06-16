@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { fetchClusterObservability } from '@/api/platform'
+import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, SegmentControl } from '@bifrost/ui'
 import { StatusLamp } from '@/components/StatusLamp'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
 import { TrackCardsSection } from '@/components/briefing/TrackCardsSection'
@@ -206,27 +207,21 @@ export function BriefingPage({
               + task list for you to pick).
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label
-                htmlFor="agent-dialogue-language"
-                className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]"
-              >
+              <span className="text-dense-meta text-muted-foreground">
                 Agent dialogue language
-              </label>
-              <select
-                id="agent-dialogue-language"
-                className="briefing-language-select"
+              </span>
+              <SegmentControl
                 value={agentDialogueLanguage}
-                onChange={e => {
-                  setAgentDialogueLanguage(e.target.value as AgentDialogueLanguage)
+                onChange={(v) => {
+                  setAgentDialogueLanguage(v as AgentDialogueLanguage)
                   setShowSessionPack(false)
                 }}
-              >
-                {AGENT_DIALOGUE_LANGUAGE_OPTIONS.map(opt => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                options={AGENT_DIALOGUE_LANGUAGE_OPTIONS.map(opt => ({
+                  value: opt.id,
+                  label: opt.label,
+                }))}
+                size="sm"
+              />
             </div>
             <p className="m-0 mt-2 text-[var(--text-dense-meta)]">
               Track:{' '}
@@ -245,18 +240,18 @@ export function BriefingPage({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
+            <Button
               type="button"
-              className="btn-ui btn-ui-primary"
+              size="sm"
               disabled={!dataReady}
               onClick={() => setShowSessionPack(true)}
             >
               {dataReady ? 'Generate session briefing' : 'Loading spine & matrix…'}
-            </button>
+            </Button>
             {showSessionPack && (
-              <button type="button" className="btn-ui" onClick={() => void handleCopySession()}>
+              <Button variant="outline" size="sm" onClick={() => void handleCopySession()}>
                 {sessionCopied ? 'Copied!' : 'Copy session pack'}
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -322,33 +317,31 @@ export function BriefingPage({
             {CONSOLE_UI_PROGRESS.filter(r => r.status === 'planned').length} planned
           </span>
         </header>
-        <div className="dense-table-scroll">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Area</th>
-                <th>Feature</th>
-                <th>Status</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CONSOLE_UI_PROGRESS.map(row => (
-                <tr key={`${row.area}-${row.item}`}>
-                  <td className="font-mono-tabular">{row.area}</td>
-                  <td>{row.item}</td>
-                  <td>
-                    <StatusLamp value={statusLamp(row.status)} kind="reach" />{' '}
-                    <span className="font-mono-tabular">{row.status}</span>
-                  </td>
-                  <td className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                    {row.notes}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Area</DenseTableHead>
+              <DenseTableHead>Feature</DenseTableHead>
+              <DenseTableHead>Status</DenseTableHead>
+              <DenseTableHead>Notes</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {CONSOLE_UI_PROGRESS.map(row => (
+              <DenseTableRow key={`${row.area}-${row.item}`}>
+                <DenseTableCell className="font-mono-tabular">{row.area}</DenseTableCell>
+                <DenseTableCell>{row.item}</DenseTableCell>
+                <DenseTableCell>
+                  <StatusLamp value={statusLamp(row.status)} kind="reach" />{' '}
+                  <span className="font-mono-tabular">{row.status}</span>
+                </DenseTableCell>
+                <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  {row.notes}
+                </DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
       </section>
 
       <section className="briefing-maintain-panel page-section px-4 py-3">
@@ -367,18 +360,18 @@ export function BriefingPage({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="btn-ui"
+            <Button
+              variant="outline"
+              size="sm"
               disabled={!dataReady}
               onClick={() => setShowAlignmentPack(true)}
             >
               {dataReady ? 'Generate alignment task' : 'Loading…'}
-            </button>
+            </Button>
             {showAlignmentPack && (
-              <button type="button" className="btn-ui" onClick={() => void handleCopyAlignment()}>
+              <Button variant="outline" size="sm" onClick={() => void handleCopyAlignment()}>
                 {alignmentCopied ? 'Copied!' : 'Copy alignment pack'}
-              </button>
+              </Button>
             )}
           </div>
         </div>

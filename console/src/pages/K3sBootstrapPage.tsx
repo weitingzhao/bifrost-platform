@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
 import {
   COMPOSE_RELATION,
@@ -63,9 +64,9 @@ export function K3sBootstrapPage() {
             </p>
             <p className="m-0 mt-2 text-[var(--text-dense-meta)]">{K3S_BOOTSTRAP_STATUS}</p>
           </div>
-          <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={() => void handleCopy()}>
+          <Button size="sm" className="shrink-0" onClick={() => void handleCopy()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -89,43 +90,43 @@ export function K3sBootstrapPage() {
       </CatalogSection>
 
       <CatalogSection title="Install contents">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Item</DenseTableHead>
+              <DenseTableHead>Detail</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {INSTALL_CONTENTS.map(c => (
-              <tr key={c.item}>
-                <td className="font-medium whitespace-nowrap">{c.item}</td>
-                <td className="font-mono-tabular text-[var(--muted-foreground)]">{c.detail}</td>
-              </tr>
+              <DenseTableRow key={c.item}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{c.item}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{c.detail}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <CatalogSection title="Slice 1 verification checklist">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Check</th>
-              <th>Command / entry</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>#</DenseTableHead>
+              <DenseTableHead>Check</DenseTableHead>
+              <DenseTableHead>Command / entry</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {SLICE1_CHECKLIST.map(c => (
-              <tr key={c.id}>
-                <td className="font-mono-tabular">{c.id}</td>
-                <td className="font-medium">{c.check}</td>
-                <td className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{c.command}</td>
-              </tr>
+              <DenseTableRow key={c.id}>
+                <DenseTableCell className="font-mono-tabular">{c.id}</DenseTableCell>
+                <DenseTableCell className="font-medium">{c.check}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{c.command}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -157,22 +158,22 @@ export function K3sBootstrapPage() {
         <p className="m-0 px-3 py-2 text-[var(--text-dense)] text-[var(--muted-foreground)]">
           Layer A requires metrics-server (real-time CPU/Mem, top pods). Not Prometheus/Grafana (Layer B).
         </p>
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Method</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Method</DenseTableHead>
+              <DenseTableHead>Detail</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {LAYER_A_METHODS.map(m => (
-              <tr key={m.label}>
-                <td className="font-medium whitespace-nowrap">{m.label}</td>
-                <td className="font-mono-tabular text-[var(--text-dense-meta)]">{m.detail}</td>
-              </tr>
+              <DenseTableRow key={m.label}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{m.label}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{m.detail}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <CatalogSection title="Node join (Phase 1 expansion)">
@@ -206,69 +207,69 @@ export function K3sBootstrapPage() {
       </div>
 
       <CatalogSection title="P5b Mac agents sign-off (Owner 2026-06-15)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Check</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Check</DenseTableHead>
+              <DenseTableHead>Status</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {P5B_SIGNOFF.map(s => (
-              <tr key={s.check}>
-                <td className="font-medium">{s.check}</td>
-                <td>
-                  <span className={s.status === 'Pass' ? 'badge-ui badge-status-signed' : s.status === 'Ready' ? 'badge-ui badge-status-pending' : 'badge-ui'}>
+              <DenseTableRow key={s.check}>
+                <DenseTableCell className="font-medium">{s.check}</DenseTableCell>
+                <DenseTableCell>
+                  <DenseTag variant={s.status === 'Pass' ? 'success' : s.status === 'Ready' ? 'neutral' : 'category'}>
                     {s.status}
-                  </span>
-                </td>
-              </tr>
+                  </DenseTag>
+                </DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
-        <table className="dense-table mt-2">
-          <thead>
-            <tr>
-              <th>Hostname</th>
-              <th>LAN IP</th>
-              <th>Mac Mini host</th>
-              <th>K3s node</th>
-            </tr>
-          </thead>
-          <tbody>
+          </DenseTableBody>
+        </DenseDataTable>
+        <DenseDataTable wrapClassName="mt-2">
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Hostname</DenseTableHead>
+              <DenseTableHead>LAN IP</DenseTableHead>
+              <DenseTableHead>Mac Mini host</DenseTableHead>
+              <DenseTableHead>K3s node</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {MAC_AGENT_NODES.map(n => (
-              <tr key={n.hostname}>
-                <td className="font-mono-tabular">{n.hostname}</td>
-                <td className="font-mono-tabular">{n.ip}</td>
-                <td>{n.hostMac}</td>
-                <td className="font-mono-tabular">{n.k3sNodeName}</td>
-              </tr>
+              <DenseTableRow key={n.hostname}>
+                <DenseTableCell className="font-mono-tabular">{n.hostname}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{n.ip}</DenseTableCell>
+                <DenseTableCell>{n.hostMac}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{n.k3sNodeName}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <CatalogSection title="k3s-phase1 sign-off (Owner 2026-06-14)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Check</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Check</DenseTableHead>
+              <DenseTableHead>Status</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {PHASE1_SIGNOFF.map(s => (
-              <tr key={s.check}>
-                <td className="font-medium">{s.check}</td>
-                <td>
-                  <span className={s.status === 'Pass' ? 'badge-ui badge-status-signed' : s.status === 'Ready' ? 'badge-ui badge-status-pending' : 'badge-ui'}>
+              <DenseTableRow key={s.check}>
+                <DenseTableCell className="font-medium">{s.check}</DenseTableCell>
+                <DenseTableCell>
+                  <DenseTag variant={s.status === 'Pass' ? 'success' : s.status === 'Ready' ? 'neutral' : 'category'}>
                     {s.status}
-                  </span>
-                </td>
-              </tr>
+                  </DenseTag>
+                </DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] font-mono text-[var(--muted-foreground)]">
           {SPINE_REFERENCE}
         </p>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { SegmentControl } from '@bifrost/ui'
+import { Button, DenseTag, SegmentControl } from '@bifrost/ui'
 import type { TopologyResponse } from '@/api/types'
 import { buildGapOverview, type GapOverview } from '@/lib/runtime-map/gapAnalysis'
 import {
@@ -86,27 +86,28 @@ export function InfraMapCanvas({
       <header className="infra-map-header">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           <h2 className="m-0 text-sm font-semibold">Hardware topology</h2>
-          <span className="badge-ui">{data.label}</span>
-          <span className="badge-ui">phase: {data.deployment_phase}</span>
+          <DenseTag variant="category">{data.label}</DenseTag>
+          <DenseTag variant="category">phase: {data.deployment_phase}</DenseTag>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <Button
             type="button"
-            className="btn-ui btn-ui-ghost text-xs"
+            variant="ghost"
+            size="xs"
             onClick={() => onLayoutModeChange(layoutMode === 'dataPath' ? 'grid' : 'dataPath')}
           >
             {layoutMode === 'dataPath' ? 'Grid layout' : 'Data-path layout'}
-          </button>
+          </Button>
           {onToggleGhostOverlay != null && roleView === 'k3s' && data.deployment_phase === 'compose' && (
-            <button
+            <Button
               type="button"
-              className={['btn-ui btn-ui-ghost text-xs', showGhostOverlay ? 'btn-ui-active' : '']
-                .filter(Boolean)
-                .join(' ')}
+              variant="ghost"
+              size="xs"
+              className={showGhostOverlay ? 'bg-accent' : ''}
               onClick={onToggleGhostOverlay}
             >
               {showGhostOverlay ? 'Hide planned overlay' : 'Show planned overlay'}
-            </button>
+            </Button>
           )}
           <SegmentControl
             ariaLabel="Role view"

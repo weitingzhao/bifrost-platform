@@ -57,43 +57,6 @@ html {
   color: var(--color-lamp-yellow);
 }
 
-.badge-status-closed {
-  border-color: var(--color-lamp-gray);
-  color: var(--muted-foreground);
-}
-
-.badge-status-signed,
-.badge-status-deployed {
-  border-color: var(--color-lamp-green);
-  color: var(--color-lamp-green);
-}
-
-.badge-status-progress {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.badge-status-blocked {
-  border-color: var(--color-lamp-red);
-  color: var(--color-lamp-red);
-}
-
-.badge-status-pending {
-  border-color: var(--color-lamp-gray);
-  color: var(--color-lamp-gray);
-}
-
-.btn-ui-ghost {
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted-foreground);
-}
-
-.btn-ui-ghost:hover {
-  border-color: var(--border);
-  color: var(--foreground);
-}
-
 /* Cluster overview — radial gauges + stat tiles */
 .cluster-kpi-grid {
   display: grid;
@@ -178,7 +141,7 @@ html {
 }
 
 .cluster-kpi-gauge__readout {
-  font-size: 11px;
+  font-size: var(--text-dense-meta);
   font-weight: 700;
   fill: var(--foreground);
 }
@@ -201,7 +164,7 @@ html {
 }
 
 .cluster-kpi-gauge__sublabel {
-  font-size: 0.625rem;
+  font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
 }
 
@@ -419,17 +382,6 @@ html {
   color: var(--muted-foreground);
 }
 
-.briefing-language-select {
-  height: 2rem;
-  min-width: 8rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--background);
-  color: var(--foreground);
-  padding: 0 0.5rem;
-  font-size: var(--text-dense-meta);
-}
-
 .briefing-maintain-panel {
   border: 1px dashed var(--border);
   border-radius: var(--radius);
@@ -460,7 +412,7 @@ html {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
-  font-size: 0.7rem;
+  font-size: var(--text-dense-meta);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
@@ -487,7 +439,7 @@ html {
 }
 
 .pipeline-node-id {
-  font-size: 0.65rem;
+  font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
   margin-bottom: 0.15rem;
 }
@@ -532,13 +484,13 @@ html {
 }
 
 .delivery-node-subtitle {
-  font-size: 0.65rem;
+  font-size: var(--text-dense-caption);
   margin-bottom: 0.25rem;
   line-height: 1.2;
 }
 
 .delivery-node-badge {
-  font-size: 0.6rem;
+  font-size: var(--text-dense-micro);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -736,7 +688,7 @@ html {
 }
 
 .infra-edge-label {
-  font-size: 9px;
+  font-size: var(--text-dense-micro);
   fill: var(--muted-foreground);
   pointer-events: none;
   paint-order: stroke;
@@ -787,12 +739,12 @@ html {
 }
 
 .infra-host-bay__title {
-  font-size: 0.75rem;
+  font-size: var(--text-dense-label);
   line-height: 1.2;
 }
 
 .infra-host-bay__role {
-  font-size: 10px;
+  font-size: var(--text-dense-caption);
   font-weight: 600;
   line-height: 1.3;
   color: var(--foreground);
@@ -804,7 +756,7 @@ html {
 }
 
 .infra-host-bay__meta {
-  font-size: 10px;
+  font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
   margin-top: 2px;
 }
@@ -841,7 +793,7 @@ html {
   border-radius: 4px;
   background: var(--secondary);
   padding: 3px 6px 3px 0;
-  font-size: 11px;
+  font-size: var(--text-dense-meta);
   line-height: 1.2;
   text-align: left;
   color: inherit;
@@ -938,15 +890,15 @@ button.infra-stack-chip:hover {
 }
 
 .infra-component-icon--chip .infra-component-icon__letter {
-  font-size: 10px;
+  font-size: var(--text-dense-caption);
 }
 
 .infra-component-icon--scope .infra-component-icon__letter {
-  font-size: 11px;
+  font-size: var(--text-dense-meta);
 }
 
 .infra-component-icon--tile .infra-component-icon__letter {
-  font-size: 12px;
+  font-size: var(--text-dense-label);
 }
 
 .infra-component-icon--ib {
@@ -1031,7 +983,7 @@ button.infra-stack-chip:hover {
 }
 
 .infra-host-bay__local-badge {
-  font-size: 9px;
+  font-size: var(--text-dense-micro);
   padding: 1px 5px;
   border-radius: 3px;
   border: 1px dashed var(--border);
@@ -1082,7 +1034,7 @@ button.infra-stack-chip:hover {
 }
 
 .infra-host-bay__tile-overflow {
-  font-size: 10px;
+  font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
   padding: 0 4px;
 }
@@ -1115,7 +1067,7 @@ button.infra-stack-chip:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  font-size: 10px;
+  font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
 }
 
@@ -1205,7 +1157,7 @@ button.infra-stack-chip:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 9px;
+  font-size: var(--text-dense-micro);
   font-weight: 600;
   padding: 1px 5px;
   border-radius: 3px;
@@ -1235,7 +1187,7 @@ button.infra-stack-chip:hover {
 .gap-pct {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
+  font-size: var(--text-dense-caption);
   font-weight: 700;
 }
 
@@ -1255,7 +1207,7 @@ button.infra-stack-chip:hover {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 11px;
+  font-size: var(--text-dense-meta);
   color: var(--muted-foreground);
 }
 
@@ -1275,7 +1227,7 @@ button.infra-stack-chip:hover {
   justify-content: space-between;
   padding: 0 6px;
   margin-top: 1px;
-  font-size: 9px;
+  font-size: var(--text-dense-micro);
   color: var(--muted-foreground);
 }
 
@@ -1283,7 +1235,7 @@ button.infra-stack-chip:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 9px;
+  font-size: var(--text-dense-micro);
   margin-left: auto;
   flex-shrink: 0;
 }

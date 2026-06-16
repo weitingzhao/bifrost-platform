@@ -88,7 +88,7 @@ const MIGRATE_LANES: WorkLane[] = [
     track: 'migrate',
     label: 'Legacy retirement (Phase 3)',
     shortLabel: 'Retire',
-    description: 'Shut down bifrost-trader-engine and compose prod after K3s is stable.',
+    description: 'UI experience alignment (Design System polish with Legacy side-by-side, Owner sign-off required) → then shut down bifrost-trader-engine and compose prod after K3s is stable.',
     agentMode: 'Ops',
     workIntent: 'ops',
   },

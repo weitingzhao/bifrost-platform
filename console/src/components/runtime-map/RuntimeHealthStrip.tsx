@@ -1,3 +1,4 @@
+import { Button } from '@bifrost/ui'
 import type { MatrixResponse, TopologyResponse } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
@@ -47,15 +48,16 @@ export function RuntimeHealthStrip({
         </span>
 
         {summary.fail > 0 ? (
-          <button
-            type="button"
-            className="runtime-health-strip__fail btn-ui btn-ui-ghost text-xs lamp-fail"
+          <Button
+            variant="ghost"
+            size="xs"
+            className="runtime-health-strip__fail lamp-fail"
             onClick={() => {
               if (primary) onSelectTarget(primary.id)
             }}
           >
             fail <span className="font-mono-tabular">{summary.fail}</span>
-          </button>
+          </Button>
         ) : (
           <span className="runtime-health-strip__stat text-[var(--text-dense-meta)]">
             fail <span className="font-mono-tabular">0</span>
@@ -69,13 +71,14 @@ export function RuntimeHealthStrip({
         {primary != null && (
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             worst:{' '}
-            <button
-              type="button"
-              className="btn-ui btn-ui-ghost text-xs font-mono-tabular p-0 min-h-0"
+            <Button
+              variant="ghost"
+              size="xs"
+              className="font-mono-tabular p-0 min-h-0"
               onClick={() => onSelectTarget(primary.id)}
             >
               {primary.id}
-            </button>
+            </Button>
           </span>
         )}
 
@@ -87,13 +90,14 @@ export function RuntimeHealthStrip({
               if (!node) return null
               return (
                 <span key={nodeId}>
-                  <button
-                    type="button"
-                    className="btn-ui btn-ui-ghost text-xs p-0 min-h-0"
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="p-0 min-h-0"
                     onClick={() => onSelectNode(nodeId)}
                   >
                     {node.label}
-                  </button>
+                  </Button>
                   {i < arr.length - 1 ? ', ' : ''}
                 </span>
               )
@@ -131,7 +135,7 @@ export function RuntimeHealthStrip({
       )}
 
       <details className="runtime-health-strip__help mt-2">
-        <summary className="text-[10px] text-[var(--muted-foreground)] cursor-pointer">
+        <summary className="text-dense-caption text-[var(--muted-foreground)] cursor-pointer">
           About Runtime Map
         </summary>
         <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

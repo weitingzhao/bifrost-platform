@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
+import { DenseTag } from '@bifrost/ui'
 import type { TopologyEdge, TopologyNode } from '@/api/types'
 import { ComponentIcon } from '@/components/runtime-map/ComponentIcon'
 import { GapProgressBar } from '@/components/runtime-map/GapProgressBar'
@@ -118,17 +119,17 @@ export function HostBay({
           {showLiveBadge && onOpenCluster != null && (
             <button
               type="button"
-              className="badge-ui badge-status-deployed text-[10px] ml-1"
+              className="text-dense-caption ml-1"
               onClick={e => {
                 e.stopPropagation()
                 onOpenCluster()
               }}
             >
-              Live
+              <DenseTag variant="success">Live</DenseTag>
             </button>
           )}
           {showLiveBadge && onOpenCluster == null && (
-            <span className="badge-ui badge-status-deployed text-[10px] ml-1">Live</span>
+            <DenseTag variant="success" className="text-dense-caption ml-1">Live</DenseTag>
           )}
         </div>
         {roleSummary != null && (
@@ -142,13 +143,13 @@ export function HostBay({
         </div>
         {stats.total > 0 && (
           <div className="infra-host-bay__stats">
-            <span className="badge-ui font-mono-tabular text-[10px]">
+            <DenseTag variant="category" className="font-mono-tabular text-dense-caption">
               {stats.ok}/{stats.total}
-            </span>
+            </DenseTag>
             {stats.fail > 0 && (
-              <span className="badge-ui badge-status-blocked font-mono-tabular text-[10px]">
+              <DenseTag variant="danger" className="font-mono-tabular text-dense-caption">
                 {stats.fail} fail
-              </span>
+              </DenseTag>
             )}
           </div>
         )}
