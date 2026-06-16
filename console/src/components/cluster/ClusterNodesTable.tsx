@@ -1,3 +1,4 @@
+import { DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { ClusterNode } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
 
@@ -29,71 +30,69 @@ export function ClusterNodesTable({
           {metricsAvailable === false ? ' · usage n/a' : ''}
         </span>
       </header>
-      <div className="dense-table-scroll">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Status</th>
-              <th>Roles</th>
-              <th>CPU alloc</th>
-              <th>Mem alloc</th>
-              <th>Storage</th>
-              <th>CPU %</th>
-              <th>Mem %</th>
-              <th>Version</th>
-              <th>Internal IP</th>
-            </tr>
-          </thead>
-          <tbody>
-            {nodes.length === 0 ? (
-              <tr>
-                <td colSpan={10} className="text-[var(--muted-foreground)]">
-                  {isLoading ? 'Loading…' : 'No nodes (cluster unreachable or empty)'}
-                </td>
-              </tr>
-            ) : (
-              nodes.map(node => (
-                <tr key={node.name}>
-                  <td className="font-mono-tabular">{node.name}</td>
-                  <td>
-                    <StatusLamp value={node.reachability} kind="reach" />{' '}
-                    <span className="font-mono-tabular">{node.status}</span>
-                  </td>
-                  <td className="font-mono-tabular">{node.roles}</td>
-                  <td className="font-mono-tabular">{node.cpu_allocatable ?? '—'}</td>
-                  <td className="font-mono-tabular">{node.memory_allocatable ?? '—'}</td>
-                  <td className="font-mono-tabular">{node.storage_allocatable ?? '—'}</td>
-                  <td className="font-mono-tabular">
-                    {node.cpu_usage_percent != null ? (
-                      <>
-                        <StatusLamp value={node.cpu_reachability ?? 'ok'} kind="reach" />{' '}
-                        {pctCell(node.cpu_usage_percent)}
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="font-mono-tabular">
-                    {node.memory_usage_percent != null ? (
-                      <>
-                        <StatusLamp value={node.memory_reachability ?? 'ok'} kind="reach" />{' '}
-                        {pctCell(node.memory_usage_percent)}
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="font-mono-tabular text-[var(--text-dense-meta)]">
-                    {node.version}
-                  </td>
-                  <td className="font-mono-tabular">{node.internal_ip || '—'}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DenseDataTable>
+        <DenseTableHeader>
+          <DenseTableHeadRow>
+            <DenseTableHead>Name</DenseTableHead>
+            <DenseTableHead>Status</DenseTableHead>
+            <DenseTableHead>Roles</DenseTableHead>
+            <DenseTableHead>CPU alloc</DenseTableHead>
+            <DenseTableHead>Mem alloc</DenseTableHead>
+            <DenseTableHead>Storage</DenseTableHead>
+            <DenseTableHead>CPU %</DenseTableHead>
+            <DenseTableHead>Mem %</DenseTableHead>
+            <DenseTableHead>Version</DenseTableHead>
+            <DenseTableHead>Internal IP</DenseTableHead>
+          </DenseTableHeadRow>
+        </DenseTableHeader>
+        <DenseTableBody>
+          {nodes.length === 0 ? (
+            <DenseTableRow>
+              <DenseTableCell colSpan={10} className="text-[var(--muted-foreground)]">
+                {isLoading ? 'Loading…' : 'No nodes (cluster unreachable or empty)'}
+              </DenseTableCell>
+            </DenseTableRow>
+          ) : (
+            nodes.map(node => (
+              <DenseTableRow key={node.name}>
+                <DenseTableCell className="font-mono-tabular">{node.name}</DenseTableCell>
+                <DenseTableCell>
+                  <StatusLamp value={node.reachability} kind="reach" />{' '}
+                  <span className="font-mono-tabular">{node.status}</span>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{node.roles}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{node.cpu_allocatable ?? '—'}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{node.memory_allocatable ?? '—'}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{node.storage_allocatable ?? '—'}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">
+                  {node.cpu_usage_percent != null ? (
+                    <>
+                      <StatusLamp value={node.cpu_reachability ?? 'ok'} kind="reach" />{' '}
+                      {pctCell(node.cpu_usage_percent)}
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">
+                  {node.memory_usage_percent != null ? (
+                    <>
+                      <StatusLamp value={node.memory_reachability ?? 'ok'} kind="reach" />{' '}
+                      {pctCell(node.memory_usage_percent)}
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">
+                  {node.version}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{node.internal_ip || '—'}</DenseTableCell>
+              </DenseTableRow>
+            ))
+          )}
+        </DenseTableBody>
+      </DenseDataTable>
     </section>
   )
 }

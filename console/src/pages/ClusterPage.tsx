@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
+import { Button } from '@bifrost/ui'
 import {
   deletePod,
   ensureBifrostNamespaces,
@@ -295,17 +296,11 @@ export function ClusterPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="btn-ui"
-              disabled={clusterFetching}
-              onClick={refreshCluster}
-            >
+            <Button variant="outline" size="sm" disabled={clusterFetching} onClick={refreshCluster}>
               {clusterFetching ? 'Refreshing…' : 'Refresh'}
-            </button>
-            <button
-              type="button"
-              className="btn-ui btn-ui-primary"
+            </Button>
+            <Button
+              size="sm"
               disabled={syncMutation.isPending}
               onClick={() => {
                 setSyncError(null)
@@ -313,7 +308,7 @@ export function ClusterPage({
               }}
             >
               {syncMutation.isPending ? 'Syncing…' : 'Sync kubeconfig'}
-            </button>
+            </Button>
           </div>
         </div>
         {syncError != null && (
@@ -347,23 +342,18 @@ export function ClusterPage({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {!metricsOk && (
-              <button
-                type="button"
-                className="btn-ui"
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={!canAdmin || metricsServerMutation.isPending}
                 onClick={handleEnsureMetricsServer}
               >
                 {metricsServerMutation.isPending ? 'Installing…' : 'Install metrics-server'}
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
-              className="btn-ui btn-ui-primary"
-              disabled={!canOperate || ensureMutation.isPending}
-              onClick={handleEnsureNamespaces}
-            >
+            <Button size="sm" disabled={!canOperate || ensureMutation.isPending} onClick={handleEnsureNamespaces}>
               Ensure Bifrost namespaces
-            </button>
+            </Button>
           </div>
         </div>
         {!canOperate && !capsLoading && (
@@ -493,12 +483,11 @@ cd ../bifrost-platform && make start`}
               />
             </label>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className="btn-ui" onClick={() => setScaleState(null)}>
+              <Button variant="outline" size="sm" onClick={() => setScaleState(null)}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-ui btn-ui-primary"
+              </Button>
+              <Button
+                size="sm"
                 disabled={scaleMutation.isPending}
                 onClick={() =>
                   scaleMutation.mutate({
@@ -510,7 +499,7 @@ cd ../bifrost-platform && make start`}
                 }
               >
                 {scaleMutation.isPending ? 'Scaling…' : 'Scale deployment'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

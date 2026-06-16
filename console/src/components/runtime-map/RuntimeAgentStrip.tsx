@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Button } from '@bifrost/ui'
 import type { MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
 import type { GapOverview } from '@/lib/runtime-map/gapAnalysis'
 import { buildRuntimeLlmPack } from '@/lib/runtime-map/buildRuntimeLlmPack'
@@ -44,14 +45,14 @@ export function RuntimeAgentStrip({
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Agent context — generate runtime-scoped pack for Cursor
           </span>
-          <button
-            type="button"
-            className="btn-ui btn-ui-ghost text-xs"
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={() => setExpanded(true)}
             disabled={topology == null}
           >
             Expand
-          </button>
+          </Button>
         </div>
       </section>
     )
@@ -69,22 +70,21 @@ export function RuntimeAgentStrip({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="btn-ui btn-ui-primary"
+          <Button
+            size="sm"
             onClick={() => setExpanded(v => !v)}
             disabled={topology == null}
           >
             Collapse
-          </button>
-          <button
-            type="button"
-            className="btn-ui btn-ui-ghost"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => void handleCopy()}
             disabled={topology == null}
           >
             {copied ? 'Copied' : 'Copy all'}
-          </button>
+          </Button>
         </div>
       </div>
       <pre className="llm-content-pre font-mono-tabular mt-3">{pack}</pre>

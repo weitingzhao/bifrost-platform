@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 import { fetchContext } from '@/api/platform'
 import { CatalogSection } from '@/components/CatalogSection'
@@ -7,7 +8,7 @@ import {
   CATALOG_SOURCE,
   CATALOG_VERSION,
   FLOW_ROWS,
-  flowStatusBadgeClass,
+  flowStatusVariant,
   HARDWARE_ROWS,
   PLATFORM_PHASES,
   SCOPE_ROWS,
@@ -61,37 +62,37 @@ export function EnvironmentsPage({
               {' '}(v{CATALOG_VERSION}).
             </p>
           </div>
-          <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={() => void handleCopyForLlm()}>
+          <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy for LLM'}
-          </button>
+          </Button>
         </div>
       </section>
 
       <CatalogSection title="Registered trade environments">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Env</th>
-              <th>Nginx</th>
-              <th>PostgreSQL</th>
-              <th>Redis</th>
-              <th>Host</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Env</DenseTableHead>
+              <DenseTableHead>Nginx</DenseTableHead>
+              <DenseTableHead>PostgreSQL</DenseTableHead>
+              <DenseTableHead>Redis</DenseTableHead>
+              <DenseTableHead>Host</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {TRADE_ENVIRONMENTS.map(row => (
-              <tr key={row.id}>
-                <td>
+              <DenseTableRow key={row.id}>
+                <DenseTableCell>
                   <span className={`badge-ui badge-env-${row.id}`}>{row.id}</span>
-                </td>
-                <td className="font-mono-tabular">{row.nginx}</td>
-                <td className="font-mono-tabular">{row.postgres}</td>
-                <td className="font-mono-tabular">{row.redis}</td>
-                <td>{row.host}</td>
-              </tr>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{row.nginx}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{row.postgres}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{row.redis}</DenseTableCell>
+                <DenseTableCell>{row.host}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <section className="page-section panel-elevated px-4 py-3">
@@ -103,58 +104,58 @@ export function EnvironmentsPage({
           <strong>Runtime Map</strong> (authoritative live view).
         </p>
         {onOpenRuntimeMap != null && (
-          <button type="button" className="btn-ui btn-ui-primary mt-3" onClick={onOpenRuntimeMap}>
+          <Button size="sm" className="mt-3" onClick={onOpenRuntimeMap}>
             Open Runtime Map
-          </button>
+          </Button>
         )}
         <details className="mt-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           <summary className="cursor-pointer">Full static catalog (Scope + Hardware tables)</summary>
           <div className="mt-3 flex flex-col gap-4">
             <CatalogSection title="Scope — stack components">
-              <table className="dense-table">
-                <thead>
-                  <tr>
-                    <th>Tag</th>
-                    <th>Component</th>
-                    <th>Technology</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <DenseDataTable>
+                <DenseTableHeader>
+                  <DenseTableHeadRow>
+                    <DenseTableHead>Tag</DenseTableHead>
+                    <DenseTableHead>Component</DenseTableHead>
+                    <DenseTableHead>Technology</DenseTableHead>
+                    <DenseTableHead>Notes</DenseTableHead>
+                  </DenseTableHeadRow>
+                </DenseTableHeader>
+                <DenseTableBody>
                   {SCOPE_ROWS.map(row => (
-                    <tr key={row.tag}>
-                      <td>
-                        <span className="badge-ui font-mono-tabular">{row.tag}</span>
-                      </td>
-                      <td className="font-medium">{row.component}</td>
-                      <td>{row.technology}</td>
-                      <td className="text-[var(--muted-foreground)]">{row.notes}</td>
-                    </tr>
+                    <DenseTableRow key={row.tag}>
+                      <DenseTableCell>
+                        <DenseTag variant="category" className="font-mono-tabular">{row.tag}</DenseTag>
+                      </DenseTableCell>
+                      <DenseTableCell className="font-medium">{row.component}</DenseTableCell>
+                      <DenseTableCell>{row.technology}</DenseTableCell>
+                      <DenseTableCell className="text-[var(--muted-foreground)]">{row.notes}</DenseTableCell>
+                    </DenseTableRow>
                   ))}
-                </tbody>
-              </table>
+                </DenseTableBody>
+              </DenseDataTable>
             </CatalogSection>
             <CatalogSection title="Hardware nodes">
-              <table className="dense-table">
-                <thead>
-                  <tr>
-                    <th>Node</th>
-                    <th>Host</th>
-                    <th>Compose role</th>
-                    <th>K3s role (target)</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <DenseDataTable>
+                <DenseTableHeader>
+                  <DenseTableHeadRow>
+                    <DenseTableHead>Node</DenseTableHead>
+                    <DenseTableHead>Host</DenseTableHead>
+                    <DenseTableHead>Compose role</DenseTableHead>
+                    <DenseTableHead>K3s role (target)</DenseTableHead>
+                  </DenseTableHeadRow>
+                </DenseTableHeader>
+                <DenseTableBody>
                   {HARDWARE_ROWS.map(row => (
-                    <tr key={row.id}>
-                      <td className="font-mono-tabular">{row.id}</td>
-                      <td className="font-mono-tabular">{row.host}</td>
-                      <td>{row.roleCompose}</td>
-                      <td className="text-[var(--muted-foreground)]">{row.roleK3s}</td>
-                    </tr>
+                    <DenseTableRow key={row.id}>
+                      <DenseTableCell className="font-mono-tabular">{row.id}</DenseTableCell>
+                      <DenseTableCell className="font-mono-tabular">{row.host}</DenseTableCell>
+                      <DenseTableCell>{row.roleCompose}</DenseTableCell>
+                      <DenseTableCell className="text-[var(--muted-foreground)]">{row.roleK3s}</DenseTableCell>
+                    </DenseTableRow>
                   ))}
-                </tbody>
-              </table>
+                </DenseTableBody>
+              </DenseDataTable>
             </CatalogSection>
           </div>
         </details>
@@ -164,9 +165,9 @@ export function EnvironmentsPage({
         title="End-to-end flow"
         action={
           onOpenDelivery != null ? (
-            <button type="button" className="btn-ui btn-ui-ghost text-xs" onClick={onOpenDelivery}>
+            <Button variant="ghost" size="xs" onClick={onOpenDelivery}>
               Open Delivery
-            </button>
+            </Button>
           ) : undefined
         }
       >
@@ -174,32 +175,32 @@ export function EnvironmentsPage({
           Status: live = operational now · planned = Phase A/B target · blocked = milestone gate · tbd =
           owner decision pending.
         </p>
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Path</th>
-              <th>Stage</th>
-              <th>Status</th>
-              <th>Trigger</th>
-              <th>Runtime</th>
-              <th>Data</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Path</DenseTableHead>
+              <DenseTableHead>Stage</DenseTableHead>
+              <DenseTableHead>Status</DenseTableHead>
+              <DenseTableHead>Trigger</DenseTableHead>
+              <DenseTableHead>Runtime</DenseTableHead>
+              <DenseTableHead>Data</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {FLOW_ROWS.map((row, i) => (
-              <tr key={`${row.path}-${row.stage}-${i}`}>
-                <td>{row.path}</td>
-                <td>{row.stage}</td>
-                <td>
-                  <span className={flowStatusBadgeClass(row.status)}>{row.status}</span>
-                </td>
-                <td>{row.trigger}</td>
-                <td>{row.runtime}</td>
-                <td className="text-[var(--muted-foreground)]">{row.dataStore}</td>
-              </tr>
+              <DenseTableRow key={`${row.path}-${row.stage}-${i}`}>
+                <DenseTableCell>{row.path}</DenseTableCell>
+                <DenseTableCell>{row.stage}</DenseTableCell>
+                <DenseTableCell>
+                  <DenseTag variant={flowStatusVariant(row.status)}>{row.status}</DenseTag>
+                </DenseTableCell>
+                <DenseTableCell>{row.trigger}</DenseTableCell>
+                <DenseTableCell>{row.runtime}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{row.dataStore}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">

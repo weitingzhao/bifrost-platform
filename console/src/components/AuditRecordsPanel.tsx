@@ -1,3 +1,4 @@
+import { DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, type DenseTagVariant } from '@bifrost/ui'
 import type { AuditRecord } from '@/api/types'
 
 function relativeTime(isoDate: string): string {
@@ -11,16 +12,16 @@ function relativeTime(isoDate: string): string {
   return `${days}d ago`
 }
 
-const STATUS_CLASS: Record<string, string> = {
-  ok: 'badge-ui badge-status-closed',
-  success: 'badge-ui badge-status-closed',
-  error: 'badge-ui badge-status-blocked',
-  failed: 'badge-ui badge-status-blocked',
-  noop: 'badge-ui badge-status-pending',
+const STATUS_VARIANT: Record<string, DenseTagVariant> = {
+  ok: 'neutral',
+  success: 'neutral',
+  error: 'danger',
+  failed: 'danger',
+  noop: 'neutral',
 }
 
-function statusBadge(status: string) {
-  return STATUS_CLASS[status.toLowerCase()] ?? 'badge-ui'
+function statusVariant(status: string): DenseTagVariant {
+  return STATUS_VARIANT[status.toLowerCase()] ?? 'category'
 }
 
 interface AuditRecordsPanelProps {
@@ -59,44 +60,42 @@ export function AuditRecordsPanel({
           )}
         </div>
       </header>
-      <div className="dense-table-scroll">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Actor</th>
-              <th>Action</th>
-              <th>Target</th>
-              <th>Status</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="text-[var(--muted-foreground)]">
-                  {isLoading ? 'Loading...' : 'No actuation records yet'}
-                </td>
-              </tr>
-            ) : (
-              visible.map(record => (
-                <tr key={record.id}>
-                  <td className="font-mono-tabular whitespace-nowrap" title={new Date(record.at).toLocaleString()}>
-                    {relativeTime(record.at)}
-                  </td>
-                  <td className="font-mono-tabular">{record.actor}</td>
-                  <td className="font-mono-tabular">{record.action}</td>
-                  <td className="font-mono-tabular">{record.target}</td>
-                  <td>
-                    <span className={statusBadge(record.status)}>{record.status}</span>
-                  </td>
-                  <td>{record.detail}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DenseDataTable>
+        <DenseTableHeader>
+          <DenseTableHeadRow>
+            <DenseTableHead>Time</DenseTableHead>
+            <DenseTableHead>Actor</DenseTableHead>
+            <DenseTableHead>Action</DenseTableHead>
+            <DenseTableHead>Target</DenseTableHead>
+            <DenseTableHead>Status</DenseTableHead>
+            <DenseTableHead>Detail</DenseTableHead>
+          </DenseTableHeadRow>
+        </DenseTableHeader>
+        <DenseTableBody>
+          {visible.length === 0 ? (
+            <DenseTableRow>
+              <DenseTableCell colSpan={6} className="text-[var(--muted-foreground)]">
+                {isLoading ? 'Loading...' : 'No actuation records yet'}
+              </DenseTableCell>
+            </DenseTableRow>
+          ) : (
+            visible.map(record => (
+              <DenseTableRow key={record.id}>
+                <DenseTableCell className="font-mono-tabular whitespace-nowrap" title={new Date(record.at).toLocaleString()}>
+                  {relativeTime(record.at)}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{record.actor}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{record.action}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{record.target}</DenseTableCell>
+                <DenseTableCell>
+                  <DenseTag variant={statusVariant(record.status)}>{record.status}</DenseTag>
+                </DenseTableCell>
+                <DenseTableCell>{record.detail}</DenseTableCell>
+              </DenseTableRow>
+            ))
+          )}
+        </DenseTableBody>
+      </DenseDataTable>
     </section>
   )
 }

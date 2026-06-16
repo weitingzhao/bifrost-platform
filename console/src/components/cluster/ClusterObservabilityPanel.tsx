@@ -1,3 +1,4 @@
+import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { ClusterObservabilityResponse, LayerBStatus } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
 
@@ -68,95 +69,89 @@ export function ClusterObservabilityPanel({
         )}
         <div className="mt-2 flex flex-wrap gap-2">
           {onOpenStandards != null && (
-            <button type="button" className="btn-ui text-[var(--text-dense-meta)]" onClick={onOpenStandards}>
+            <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenStandards}>
               Open Standards
-            </button>
+            </Button>
           )}
           {onOpenEnvironments != null && (
-            <button type="button" className="btn-ui text-[var(--text-dense-meta)]" onClick={onOpenEnvironments}>
+            <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenEnvironments}>
               Open Environments
-            </button>
+            </Button>
           )}
           {docsUrl != null && docsUrl !== '' && (
-            <a className="btn-ui text-[var(--text-dense-meta)]" href={docsUrl} target="_blank" rel="noreferrer">
-              External docs
-            </a>
+            <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" asChild>
+              <a href={docsUrl} target="_blank" rel="noreferrer">
+                External docs
+              </a>
+            </Button>
           )}
           {data?.grafana_url != null && data.grafana_url !== '' && data.layer_b_status === 'ready' && (
-            <a
-              className="btn-ui btn-ui-primary"
-              href={data.grafana_url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open Grafana
-            </a>
+            <Button size="sm" asChild>
+              <a href={data.grafana_url} target="_blank" rel="noreferrer">
+                Open Grafana
+              </a>
+            </Button>
           )}
         </div>
       </header>
 
-      <div className="dense-table-scroll">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Component</th>
-              <th>Ready</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading || data == null ? (
-              <tr>
-                <td colSpan={4} className="text-[var(--muted-foreground)]">
-                  Loading…
-                </td>
-              </tr>
-            ) : components.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="text-[var(--muted-foreground)]">
-                  No observability components detected
-                </td>
-              </tr>
-            ) : (
-              components.map(component => (
-                <tr key={component.id}>
-                  <td>
-                    <span className="font-mono-tabular">{component.label}</span>
-                    {component.name !== '—' && (
-                      <span className="ml-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                        {component.kind}/{component.name}
-                      </span>
-                    )}
-                  </td>
-                  <td className="font-mono-tabular">{component.ready}</td>
-                  <td>
-                    <StatusLamp value={component.reachability} kind="reach" />{' '}
-                    <span className="font-mono-tabular">{component.status}</span>
-                  </td>
-                  <td>
-                    {component.id === 'grafana' &&
-                    data.grafana_url != null &&
-                    data.grafana_url !== '' &&
-                    component.reachability === 'ok' ? (
-                      <a
-                        className="btn-ui text-[var(--text-dense-meta)]"
-                        href={data.grafana_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
+      <DenseDataTable>
+        <DenseTableHeader>
+          <DenseTableHeadRow>
+            <DenseTableHead>Component</DenseTableHead>
+            <DenseTableHead>Ready</DenseTableHead>
+            <DenseTableHead>Status</DenseTableHead>
+            <DenseTableHead>Action</DenseTableHead>
+          </DenseTableHeadRow>
+        </DenseTableHeader>
+        <DenseTableBody>
+          {isLoading || data == null ? (
+            <DenseTableRow>
+              <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
+                Loading…
+              </DenseTableCell>
+            </DenseTableRow>
+          ) : components.length === 0 ? (
+            <DenseTableRow>
+              <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
+                No observability components detected
+              </DenseTableCell>
+            </DenseTableRow>
+          ) : (
+            components.map(component => (
+              <DenseTableRow key={component.id}>
+                <DenseTableCell>
+                  <span className="font-mono-tabular">{component.label}</span>
+                  {component.name !== '—' && (
+                    <span className="ml-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                      {component.kind}/{component.name}
+                    </span>
+                  )}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{component.ready}</DenseTableCell>
+                <DenseTableCell>
+                  <StatusLamp value={component.reachability} kind="reach" />{' '}
+                  <span className="font-mono-tabular">{component.status}</span>
+                </DenseTableCell>
+                <DenseTableCell>
+                  {component.id === 'grafana' &&
+                  data.grafana_url != null &&
+                  data.grafana_url !== '' &&
+                  component.reachability === 'ok' ? (
+                    <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" asChild>
+                      <a href={data.grafana_url} target="_blank" rel="noreferrer">
                         Open Grafana
                       </a>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                    </Button>
+                  ) : (
+                    '—'
+                  )}
+                </DenseTableCell>
+              </DenseTableRow>
+            ))
+          )}
+        </DenseTableBody>
+      </DenseDataTable>
     </section>
   )
 }

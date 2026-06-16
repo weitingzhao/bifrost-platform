@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Button } from '@bifrost/ui'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { platformAuthAuthenticatedBadgeClass, platformAuthRoleBadgeClass } from '@/lib/platformAuthUi'
 
@@ -54,27 +55,27 @@ export function PlatformAuthBar({
         </div>
         <div className="platform-auth-bar__actions">
           {!hideRefresh && (
-            <button type="button" className="btn-ui text-xs" onClick={refreshCapabilities}>
+            <Button variant="outline" size="xs" onClick={refreshCapabilities}>
               Refresh
-            </button>
+            </Button>
           )}
           {isAuthenticated ? (
-            <button type="button" className="btn-ui text-xs" onClick={handleSignOut}>
+            <Button variant="outline" size="xs" onClick={handleSignOut}>
               Sign out
-            </button>
+            </Button>
           ) : (
             <>
-              <button
-                type="button"
-                className="btn-ui text-xs"
+              <Button
+                variant="outline"
+                size="xs"
                 onClick={() => setAuthOpen(open => !open)}
               >
                 {token !== '' ? 'Change token' : 'Authenticate'}
-              </button>
+              </Button>
               {token !== '' ? (
-                <button type="button" className="btn-ui text-xs" onClick={handleSignOut}>
+                <Button variant="outline" size="xs" onClick={handleSignOut}>
                   Sign out
-                </button>
+                </Button>
               ) : null}
             </>
           )}
@@ -91,14 +92,13 @@ export function PlatformAuthBar({
             className="platform-auth-bar__input"
             autoFocus
           />
-          <button
-            type="button"
-            className="btn-ui btn-ui-primary text-xs"
+          <Button
+            size="xs"
             disabled={tokenInput.trim() === ''}
             onClick={handleConnect}
           >
             Connect
-          </button>
+          </Button>
         </div>
       )}
     </div>

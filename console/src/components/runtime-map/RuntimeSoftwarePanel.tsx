@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, DenseTag } from '@bifrost/ui'
 import type { MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
 import { ComponentIcon } from '@/components/runtime-map/ComponentIcon'
 import { StatusLamp } from '@/components/StatusLamp'
@@ -83,15 +84,15 @@ export function RuntimeSoftwarePanel({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="m-0 text-sm font-semibold">Software stack & probes</h2>
           {failCount > 0 && (
-            <button
-              type="button"
-              className="btn-ui btn-ui-ghost text-xs"
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => setShowAllLayers(v => !v)}
             >
               {showAllLayers
                 ? 'Show failures only'
                 : `Show all layers (${baseLayers.length})`}
-            </button>
+            </Button>
           )}
         </div>
         {summary != null && matrix != null && (
@@ -196,7 +197,7 @@ function ScopeLayerCard({
           showWell
           className="shrink-0"
         />
-        <span className="badge-ui font-mono-tabular shrink-0">{layer.tag}</span>
+        <DenseTag variant="category" className="font-mono-tabular shrink-0">{layer.tag}</DenseTag>
         <div className="min-w-0 flex-1">
           <div className="text-[var(--text-dense)] font-medium truncate">{layer.component}</div>
           <div className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)] truncate">
@@ -249,7 +250,7 @@ function ScopeLayerCard({
               {layer.plannedOnly ? 'Planning target — no live matrix probes yet.' : 'No probes in this environment.'}
             </p>
           )}
-          <p className="m-0 mt-2 text-[10px] text-[var(--muted-foreground)] line-clamp-2">{layer.notes}</p>
+          <p className="m-0 mt-2 text-dense-caption text-[var(--muted-foreground)] line-clamp-2">{layer.notes}</p>
         </div>
       )}
     </div>

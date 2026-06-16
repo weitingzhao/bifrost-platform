@@ -45,7 +45,7 @@ function statusLabel(status: QueueItemStatus): string {
 function ProgressBar({ done, total, percent }: { done: number; total: number; percent: number }) {
   return (
     <div className="mt-1.5">
-      <div className="flex items-center justify-between text-[10px] text-[var(--muted-foreground)]">
+      <div className="flex items-center justify-between text-dense-caption text-[var(--muted-foreground)]">
         <span>{done}/{total}</span>
         <span>{percent}%</span>
       </div>
@@ -139,7 +139,7 @@ function TaskQueuePanel({ items, lane }: { items: QueueItem[]; lane: WorkLane })
                 </p>
               )}
             </div>
-            <span className="shrink-0 font-mono text-[10px] uppercase text-[var(--muted-foreground)]">
+            <span className="shrink-0 font-mono text-dense-caption uppercase text-[var(--muted-foreground)]">
               {statusLabel(item.status)}
             </span>
           </li>

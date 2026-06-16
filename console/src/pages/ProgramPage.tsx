@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
+import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
-import { milestoneStatusClass } from '@/components/FocusStrip'
+import { milestoneStatusVariant } from '@/components/FocusStrip'
 
 interface ProgramPageProps {
   context: OpsContextResponse | undefined
@@ -34,10 +35,10 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
           <div className="flex flex-col gap-3 p-4 text-[var(--text-dense)]">
             <p className="m-0 font-medium leading-snug">{context.north_star.statement}</p>
             <div className="flex flex-wrap gap-2">
-              <span className="badge-ui font-mono-tabular">{context.north_star.id}</span>
-              <span className="badge-ui badge-status-progress font-mono-tabular">
+              <DenseTag variant="category" className="font-mono-tabular">{context.north_star.id}</DenseTag>
+              <DenseTag variant="info" className="font-mono-tabular">
                 {context.north_star.strategy}
-              </span>
+              </DenseTag>
             </div>
             <div>
               <h4 className="m-0 mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -72,9 +73,9 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
             </p>
             {onOpenBlueprint != null && (
               <div className="flex flex-wrap gap-2 pt-1">
-                <button type="button" className="btn-ui btn-ui-ghost text-xs" onClick={onOpenBlueprint}>
+                <Button variant="ghost" size="xs" onClick={onOpenBlueprint}>
                   Open Blueprint
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -82,32 +83,32 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
       )}
 
       <ProgramSection title="Milestones">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Label</th>
-              <th>Status</th>
-              <th>Blocker</th>
-              <th>Signed</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>ID</DenseTableHead>
+              <DenseTableHead>Label</DenseTableHead>
+              <DenseTableHead>Status</DenseTableHead>
+              <DenseTableHead>Blocker</DenseTableHead>
+              <DenseTableHead>Signed</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {context.milestones.map(m => (
-              <tr key={m.id}>
-                <td className="font-mono-tabular">{m.id}</td>
-                <td>{m.label ?? '—'}</td>
-                <td>
-                  <span className={milestoneStatusClass(m.status)}>{m.status}</span>
-                </td>
-                <td className="font-mono-tabular text-[var(--muted-foreground)]">
+              <DenseTableRow key={m.id}>
+                <DenseTableCell className="font-mono-tabular">{m.id}</DenseTableCell>
+                <DenseTableCell>{m.label ?? '—'}</DenseTableCell>
+                <DenseTableCell>
+                  <DenseTag variant={milestoneStatusVariant(m.status)}>{m.status}</DenseTag>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
                   {m.blocker ?? '—'}
-                </td>
-                <td className="font-mono-tabular">{m.signed_at ?? '—'}</td>
-              </tr>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{m.signed_at ?? '—'}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </ProgramSection>
 
       <ProgramSection title="Owner decisions">
@@ -119,7 +120,7 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
             >
               <div className="flex flex-wrap items-center gap-2">
                 <code className="font-mono-tabular text-sm font-semibold">{d.id}</code>
-                <span className={milestoneStatusClass(d.status)}>{d.status}</span>
+                <DenseTag variant={milestoneStatusVariant(d.status)}>{d.status}</DenseTag>
                 {d.signed_at != null && (
                   <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                     {d.signed_at}
@@ -143,26 +144,26 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
       </ProgramSection>
 
       <ProgramSection title="Platform roadmap phases (Goal)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Phase</th>
-              <th>Label</th>
-              <th>Timeframe</th>
-              <th>Deliverables</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Label</DenseTableHead>
+              <DenseTableHead>Timeframe</DenseTableHead>
+              <DenseTableHead>Deliverables</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {context.platform_phases.map(p => (
-              <tr key={p.id}>
-                <td className="font-mono-tabular">{p.id}</td>
-                <td>{p.label}</td>
-                <td>{p.timeframe}</td>
-                <td className="text-[var(--muted-foreground)]">{p.deliverables}</td>
-              </tr>
+              <DenseTableRow key={p.id}>
+                <DenseTableCell className="font-mono-tabular">{p.id}</DenseTableCell>
+                <DenseTableCell>{p.label}</DenseTableCell>
+                <DenseTableCell>{p.timeframe}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{p.deliverables}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </ProgramSection>
 
       <ProgramSection title="Coupling surfaces (flywheel boundary)">
@@ -192,7 +193,7 @@ function ProgramSection({
           {title}
         </h3>
       </header>
-      <div className="dense-table-scroll p-0">{children}</div>
+      <div className="p-0">{children}</div>
     </section>
   )
 }

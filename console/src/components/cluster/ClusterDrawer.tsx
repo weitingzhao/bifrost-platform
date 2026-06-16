@@ -1,3 +1,4 @@
+import { Button } from '@bifrost/ui'
 import type { ClusterEvent, ClusterWorkload } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
 import { podReachability } from '@/lib/cluster/clusterHealth'
@@ -40,9 +41,9 @@ export function ClusterDrawer({
             {namespace} · Pod
           </p>
         </div>
-        <button type="button" className="btn-ui" onClick={onClose}>
+        <Button variant="outline" size="sm" onClick={onClose}>
           Close
-        </button>
+        </Button>
       </header>
       <div className="runtime-map-drawer__body flex flex-col gap-4">
         <section>
@@ -81,7 +82,7 @@ export function ClusterDrawer({
           ) : logs == null || logs === '' ? (
             <p className="m-0 text-[var(--muted-foreground)]">No log lines returned</p>
           ) : (
-            <pre className="max-h-72 overflow-auto rounded border border-[var(--border)] bg-[var(--background)] p-2 text-[11px] leading-relaxed font-mono-tabular whitespace-pre-wrap">
+            <pre className="max-h-72 overflow-auto rounded border border-[var(--border)] bg-[var(--background)] p-2 text-dense-meta leading-relaxed font-mono-tabular whitespace-pre-wrap">
               {logs}
             </pre>
           )}

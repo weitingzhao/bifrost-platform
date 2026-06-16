@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { StatusLamp } from '@bifrost/ui'
+import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { flywheelLabel } from '@/components/FocusStrip'
@@ -48,10 +48,10 @@ export function DeliveryPage({
           <strong>Promote</strong>.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="badge-ui font-mono-tabular">phase: {context.deployment.phase}</span>
-          <span className="badge-ui focus-strip-ci-mode">CI: {ciMode}</span>
+          <DenseTag variant="category" className="font-mono-tabular">phase: {context.deployment.phase}</DenseTag>
+          <DenseTag variant="category" className="focus-strip-ci-mode">CI: {ciMode}</DenseTag>
           {gitOpsPlanned && (
-            <span className="badge-ui badge-status-pending">GitOps planned</span>
+            <DenseTag variant="neutral">GitOps planned</DenseTag>
           )}
         </div>
       </section>
@@ -96,12 +96,12 @@ export function DeliveryPage({
           </ul>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" className="btn-ui btn-ui-primary" onClick={onOpenPromote}>
+          <Button size="sm" onClick={onOpenPromote}>
             Open Promote
-          </button>
-          <button type="button" className="btn-ui btn-ui-ghost" onClick={onOpenMilestones}>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onOpenMilestones}>
             Open Milestones
-          </button>
+          </Button>
         </div>
       </section>
     </div>

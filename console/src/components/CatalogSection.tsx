@@ -17,7 +17,7 @@ export function CatalogSection({
         </h3>
         {action}
       </header>
-      <div className="dense-table-scroll p-0">{children}</div>
+      <div className="p-0">{children}</div>
     </section>
   )
 }

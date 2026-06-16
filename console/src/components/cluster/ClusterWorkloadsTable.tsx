@@ -1,3 +1,4 @@
+import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { ClusterWorkload } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
 
@@ -36,97 +37,95 @@ export function ClusterWorkloadsTable({
               : `${workloads.length} workloads`}
         </span>
       </header>
-      <div className="dense-table-scroll">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Kind</th>
-              <th>Ready</th>
-              <th>Status</th>
-              <th>Restarts</th>
-              <th>Age</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {namespace == null ? (
-              <tr>
-                <td colSpan={7} className="text-[var(--muted-foreground)]">
-                  Select a namespace to list workloads
-                </td>
-              </tr>
-            ) : workloads.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="text-[var(--muted-foreground)]">
-                  {isLoading ? 'Loading…' : 'No workloads in this namespace'}
-                </td>
-              </tr>
-            ) : (
-              workloads.map(w => (
-                <tr
-                  key={`${w.kind}-${w.name}`}
-                  className={selectedPod === w.name && w.kind === 'Pod' ? 'dense-table__row--selected' : ''}
-                  onClick={() => {
-                    if (w.kind === 'Pod') onSelectPod(w.name)
-                  }}
-                  style={{ cursor: w.kind === 'Pod' ? 'pointer' : 'default' }}
-                >
-                  <td className="font-mono-tabular">{w.name}</td>
-                  <td className="font-mono-tabular">{w.kind}</td>
-                  <td className="font-mono-tabular">{w.ready}</td>
-                  <td>
-                    <StatusLamp value={w.reachability} kind="reach" />{' '}
-                    <span className="font-mono-tabular">{w.status}</span>
-                  </td>
-                  <td className="font-mono-tabular">{w.restarts}</td>
-                  <td className="font-mono-tabular text-[var(--text-dense-meta)]">{w.age}</td>
-                  <td>
-                    <div className="flex flex-wrap gap-1">
-                      {w.kind === 'Deployment' && (
-                        <>
-                          <button
-                            type="button"
-                            className="btn-ui"
-                            onClick={event => {
-                              event.stopPropagation()
-                              onRestartDeployment(w)
-                            }}
-                          >
-                            Restart
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-ui"
-                            onClick={event => {
-                              event.stopPropagation()
-                              onScaleDeployment(w)
-                            }}
-                          >
-                            Scale
-                          </button>
-                        </>
-                      )}
-                      {w.kind === 'Pod' && (
-                        <button
-                          type="button"
-                          className="btn-ui"
+      <DenseDataTable>
+        <DenseTableHeader>
+          <DenseTableHeadRow>
+            <DenseTableHead>Name</DenseTableHead>
+            <DenseTableHead>Kind</DenseTableHead>
+            <DenseTableHead>Ready</DenseTableHead>
+            <DenseTableHead>Status</DenseTableHead>
+            <DenseTableHead>Restarts</DenseTableHead>
+            <DenseTableHead>Age</DenseTableHead>
+            <DenseTableHead>Actions</DenseTableHead>
+          </DenseTableHeadRow>
+        </DenseTableHeader>
+        <DenseTableBody>
+          {namespace == null ? (
+            <DenseTableRow>
+              <DenseTableCell colSpan={7} className="text-[var(--muted-foreground)]">
+                Select a namespace to list workloads
+              </DenseTableCell>
+            </DenseTableRow>
+          ) : workloads.length === 0 ? (
+            <DenseTableRow>
+              <DenseTableCell colSpan={7} className="text-[var(--muted-foreground)]">
+                {isLoading ? 'Loading…' : 'No workloads in this namespace'}
+              </DenseTableCell>
+            </DenseTableRow>
+          ) : (
+            workloads.map(w => (
+              <DenseTableRow
+                key={`${w.kind}-${w.name}`}
+                className={selectedPod === w.name && w.kind === 'Pod' ? 'dense-table__row--selected' : ''}
+                onClick={() => {
+                  if (w.kind === 'Pod') onSelectPod(w.name)
+                }}
+                style={{ cursor: w.kind === 'Pod' ? 'pointer' : 'default' }}
+              >
+                <DenseTableCell className="font-mono-tabular">{w.name}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{w.kind}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{w.ready}</DenseTableCell>
+                <DenseTableCell>
+                  <StatusLamp value={w.reachability} kind="reach" />{' '}
+                  <span className="font-mono-tabular">{w.status}</span>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{w.restarts}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{w.age}</DenseTableCell>
+                <DenseTableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {w.kind === 'Deployment' && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={event => {
                             event.stopPropagation()
-                            onDeletePod(w)
+                            onRestartDeployment(w)
                           }}
                         >
-                          Delete pod
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                          Restart
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={event => {
+                            event.stopPropagation()
+                            onScaleDeployment(w)
+                          }}
+                        >
+                          Scale
+                        </Button>
+                      </>
+                    )}
+                    {w.kind === 'Pod' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={event => {
+                          event.stopPropagation()
+                          onDeletePod(w)
+                        }}
+                      >
+                        Delete pod
+                      </Button>
+                    )}
+                  </div>
+                </DenseTableCell>
+              </DenseTableRow>
+            ))
+          )}
+        </DenseTableBody>
+      </DenseDataTable>
     </section>
   )
 }

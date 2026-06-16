@@ -2,19 +2,19 @@ import type { ReactNode } from 'react'
 import type { ClusterSummary, OpsContextResponse } from '@/api/types'
 import { ciModeLabel, showGitOpsPlannedBadge } from '@/lib/delivery/deliveryPhase'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
-import { cn } from '@bifrost/ui'
+import { cn, DenseTag, type DenseTagVariant } from '@bifrost/ui'
 
-const STATUS_CLASS: Record<string, string> = {
-  CLOSED: 'badge-ui badge-status-closed',
-  SIGNED: 'badge-ui badge-status-signed',
-  IN_PROGRESS: 'badge-ui badge-status-progress',
-  BLOCKED_ON: 'badge-ui badge-status-blocked',
-  NOT_STARTED: 'badge-ui badge-status-pending',
-  DEPLOYED: 'badge-ui badge-status-deployed',
+const STATUS_VARIANT: Record<string, DenseTagVariant> = {
+  CLOSED: 'neutral',
+  SIGNED: 'success',
+  IN_PROGRESS: 'info',
+  BLOCKED_ON: 'danger',
+  NOT_STARTED: 'neutral',
+  DEPLOYED: 'success',
 }
 
-export function milestoneStatusClass(status: string): string {
-  return STATUS_CLASS[status] ?? 'badge-ui'
+export function milestoneStatusVariant(status: string): DenseTagVariant {
+  return STATUS_VARIANT[status] ?? 'category'
 }
 
 export function flywheelLabel(code: string): string {
@@ -52,7 +52,7 @@ function MetaChip({
       type={onClick != null ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-[10px] leading-none text-muted-foreground',
+        'inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-dense-caption leading-none text-muted-foreground',
         onClick != null &&
           'cursor-pointer text-primary underline-offset-2 hover:border-primary/40 hover:text-primary',
         mono && 'font-mono tabular-nums',
@@ -111,17 +111,15 @@ export function FocusStrip({
     <div className="flex min-w-0 flex-col gap-1.5">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         {headlineSegments.map(({ id, status }) => (
-          <span
+          <DenseTag
             key={`${id}-${status}`}
-            className={cn(
-              'badge-ui max-w-full truncate text-[10px]',
-              status !== '' ? milestoneStatusClass(status) : undefined,
-            )}
+            variant={status !== '' ? milestoneStatusVariant(status) : 'category'}
+            className="max-w-full truncate text-dense-caption"
             title={`${id} ${status}`.trim()}
           >
             {id}
             {status !== '' ? ` ${status}` : ''}
-          </span>
+          </DenseTag>
         ))}
         {focus.blocker != null && focus.blocker !== '' && (
           <MetaChip
@@ -144,7 +142,7 @@ export function FocusStrip({
           CI: {ciMode}
         </MetaChip>
         {gitOpsPlanned && (
-          <span className="badge-ui badge-status-pending text-[10px]">GitOps planned</span>
+          <DenseTag variant="neutral" className="text-dense-caption">GitOps planned</DenseTag>
         )}
         <MetaChip
           onClick={onOpenCluster}

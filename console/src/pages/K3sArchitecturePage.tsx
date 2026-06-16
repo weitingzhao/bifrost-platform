@@ -1,4 +1,16 @@
 import { useCallback, useState } from 'react'
+import {
+  Button,
+  DenseDataTable,
+  DenseTableBody,
+  DenseTableCell,
+  DenseTableHead,
+  DenseTableHeadRow,
+  DenseTableHeader,
+  DenseTableRow,
+  DenseTag,
+  type DenseTagVariant,
+} from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
 import {
   AI_LAYERS_ASCII,
@@ -38,10 +50,10 @@ function AsciiBlock({ children }: { children: string }) {
   )
 }
 
-function checkpointBadge(actual: string): string {
-  if (actual === 'Done' || actual.startsWith('Signed')) return 'badge-ui badge-status-signed'
-  if (actual === 'Scripts ready') return 'badge-ui badge-status-pending'
-  return 'badge-ui'
+function checkpointVariant(actual: string): DenseTagVariant {
+  if (actual === 'Done' || actual.startsWith('Signed')) return 'success'
+  if (actual === 'Scripts ready') return 'neutral'
+  return 'category'
 }
 
 export function K3sArchitecturePage() {
@@ -72,9 +84,9 @@ export function K3sArchitecturePage() {
             </p>
             <p className="m-0 mt-2 text-[var(--text-dense-meta)]">{K3S_ARCH_STATUS}</p>
           </div>
-          <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={() => void handleCopy()}>
+          <Button size="sm" className="shrink-0" onClick={() => void handleCopy()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -88,30 +100,30 @@ export function K3sArchitecturePage() {
       </CatalogSection>
 
       <CatalogSection title="§2 Hardware nodes">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Node</th>
-              <th>CPU</th>
-              <th>RAM</th>
-              <th>OS</th>
-              <th>Batch</th>
-              <th>Role</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Node</DenseTableHead>
+              <DenseTableHead>CPU</DenseTableHead>
+              <DenseTableHead>RAM</DenseTableHead>
+              <DenseTableHead>OS</DenseTableHead>
+              <DenseTableHead>Batch</DenseTableHead>
+              <DenseTableHead>Role</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {HARDWARE_NODES.map(n => (
-              <tr key={n.name}>
-                <td className="font-mono-tabular font-medium">{n.name}</td>
-                <td>{n.cpu}</td>
-                <td>{n.ram}</td>
-                <td>{n.os}</td>
-                <td>{n.batch}</td>
-                <td className="text-[var(--muted-foreground)]">{n.role}</td>
-              </tr>
+              <DenseTableRow key={n.name}>
+                <DenseTableCell className="font-mono-tabular font-medium">{n.name}</DenseTableCell>
+                <DenseTableCell>{n.cpu}</DenseTableCell>
+                <DenseTableCell>{n.ram}</DenseTableCell>
+                <DenseTableCell>{n.os}</DenseTableCell>
+                <DenseTableCell>{n.batch}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{n.role}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{HARDWARE_NOTE}</p>
       </CatalogSection>
 
@@ -120,24 +132,24 @@ export function K3sArchitecturePage() {
       </CatalogSection>
 
       <CatalogSection title="§4 PostgreSQL (CloudNativePG target)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Layer</th>
-              <th>Design</th>
-              <th>Note</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Layer</DenseTableHead>
+              <DenseTableHead>Design</DenseTableHead>
+              <DenseTableHead>Note</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {PG_PRINCIPLES.map(r => (
-              <tr key={r.layer}>
-                <td className="font-medium">{r.layer}</td>
-                <td>{r.content}</td>
-                <td className="text-[var(--muted-foreground)]">{r.note}</td>
-              </tr>
+              <DenseTableRow key={r.layer}>
+                <DenseTableCell className="font-medium">{r.layer}</DenseTableCell>
+                <DenseTableCell>{r.content}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{r.note}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] font-mono text-[var(--muted-foreground)]">
           {PG_DATA_PATH}
         </p>
@@ -145,24 +157,24 @@ export function K3sArchitecturePage() {
       </CatalogSection>
 
       <CatalogSection title="§5 CI/CD platform">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Dimension</th>
-              <th>Self-hosted</th>
-              <th>GitHub Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Dimension</DenseTableHead>
+              <DenseTableHead>Self-hosted</DenseTableHead>
+              <DenseTableHead>GitHub Actions</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {CICD_COMPARE.map(r => (
-              <tr key={r.dimension}>
-                <td className="font-medium">{r.dimension}</td>
-                <td>{r.selfHosted}</td>
-                <td className="text-[var(--muted-foreground)]">{r.github}</td>
-              </tr>
+              <DenseTableRow key={r.dimension}>
+                <DenseTableCell className="font-medium">{r.dimension}</DenseTableCell>
+                <DenseTableCell>{r.selfHosted}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{r.github}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <p className="m-0 px-3 py-2 text-[var(--text-dense)]">{CICD_CONCLUSION}</p>
         <p className="m-0 px-3 py-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{GITOPS_FLOW}</p>
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{CICD_DEPLOYMENT}</p>
@@ -178,24 +190,24 @@ export function K3sArchitecturePage() {
             <li key={c}>{c}</li>
           ))}
         </ul>
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Level</th>
-              <th>Operations</th>
-              <th>Execution</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Level</DenseTableHead>
+              <DenseTableHead>Operations</DenseTableHead>
+              <DenseTableHead>Execution</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {AI_PERMISSION_LEVELS.map(r => (
-              <tr key={r.level}>
-                <td className="font-medium">{r.level}</td>
-                <td>{r.ops}</td>
-                <td className="text-[var(--muted-foreground)]">{r.execution}</td>
-              </tr>
+              <DenseTableRow key={r.level}>
+                <DenseTableCell className="font-medium">{r.level}</DenseTableCell>
+                <DenseTableCell>{r.ops}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{r.execution}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {EXTERNAL_SENTINEL}
         </p>
@@ -203,37 +215,37 @@ export function K3sArchitecturePage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <CatalogSection title="§7 Namespace allocation">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>NS</th>
-                <th>Services</th>
-                <th>Nodes</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>NS</DenseTableHead>
+                <DenseTableHead>Services</DenseTableHead>
+                <DenseTableHead>Nodes</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {NAMESPACE_ALLOCATION.map((r, i) => (
-                <tr key={`${r.namespace}-${i}`}>
-                  <td className="font-mono-tabular">{r.namespace}</td>
-                  <td>{r.services}</td>
-                  <td className="text-[var(--muted-foreground)]">{r.nodeBinding}</td>
-                </tr>
+                <DenseTableRow key={`${r.namespace}-${i}`}>
+                  <DenseTableCell className="font-mono-tabular">{r.namespace}</DenseTableCell>
+                  <DenseTableCell>{r.services}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{r.nodeBinding}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
 
         <CatalogSection title="§8 Compose → K8s mapping">
-          <table className="dense-table">
-            <tbody>
+          <DenseDataTable>
+            <DenseTableBody>
               {COMPOSE_TO_K8S.map(r => (
-                <tr key={r.compose}>
-                  <td className="font-mono text-[var(--text-dense-meta)]">{r.compose}</td>
-                  <td>{r.k8s}</td>
-                </tr>
+                <DenseTableRow key={r.compose}>
+                  <DenseTableCell className="font-mono text-[var(--text-dense-meta)]">{r.compose}</DenseTableCell>
+                  <DenseTableCell>{r.k8s}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
       </div>
 
@@ -253,26 +265,26 @@ export function K3sArchitecturePage() {
       </CatalogSection>
 
       <CatalogSection title="§10 Status checkpoints (living)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Target</th>
-              <th>Planned</th>
-              <th>Actual</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Target</DenseTableHead>
+              <DenseTableHead>Planned</DenseTableHead>
+              <DenseTableHead>Actual</DenseTableHead>
+              <DenseTableHead>Notes</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {STATUS_CHECKPOINTS.map(r => (
-              <tr key={r.target}>
-                <td className="font-medium">{r.target}</td>
-                <td className="text-[var(--text-dense-meta)]">{r.planned}</td>
-                <td><span className={checkpointBadge(r.actual)}>{r.actual}</span></td>
-                <td className="text-[var(--muted-foreground)]">{r.notes}</td>
-              </tr>
+              <DenseTableRow key={r.target}>
+                <DenseTableCell className="font-medium">{r.target}</DenseTableCell>
+                <DenseTableCell className="text-[var(--text-dense-meta)]">{r.planned}</DenseTableCell>
+                <DenseTableCell><DenseTag variant={checkpointVariant(r.actual)}>{r.actual}</DenseTag></DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{r.notes}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <CatalogSection title="Related authorities">

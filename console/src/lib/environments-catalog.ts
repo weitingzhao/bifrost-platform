@@ -7,6 +7,7 @@
  * Authoritative architecture UI: Ops Console → Architecture (Blueprint, Standards, Agent Protocol, Environments).
  */
 
+import type { DenseTagVariant } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 
 export const CATALOG_VERSION = '2026-06-15-p5b'
@@ -32,11 +33,11 @@ export type FlowRow = {
   status: FlowRowStatus
 }
 
-export function flowStatusBadgeClass(status: FlowRowStatus): string {
-  if (status === 'live') return 'badge-ui badge-status-signed'
-  if (status === 'blocked') return 'badge-ui badge-status-blocked'
-  if (status === 'tbd') return 'badge-ui badge-status-pending'
-  return 'badge-ui badge-status-pending'
+export function flowStatusVariant(status: FlowRowStatus): DenseTagVariant {
+  if (status === 'live') return 'success'
+  if (status === 'blocked') return 'danger'
+  if (status === 'tbd') return 'neutral'
+  return 'neutral'
 }
 
 export type HardwareRow = {

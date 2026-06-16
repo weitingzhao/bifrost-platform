@@ -1,5 +1,5 @@
-import { StatusLamp } from '@bifrost/ui'
-import { milestoneStatusClass } from '@/components/FocusStrip'
+import { DenseTag, StatusLamp } from '@bifrost/ui'
+import { milestoneStatusVariant } from '@/components/FocusStrip'
 import type { SessionDelta } from '@/lib/briefing/sessionDiff'
 import { isEmptyDelta } from '@/lib/briefing/sessionDiff'
 
@@ -70,9 +70,9 @@ export function SessionDeltaPanel({ delta, hasBaseline }: SessionDeltaPanelProps
                 {delta.milestoneChanges.map(mc => (
                   <div key={mc.id} className="flex flex-wrap items-center gap-2 text-[var(--text-dense)]">
                     <code className="font-mono-tabular text-xs">{mc.id}</code>
-                    <span className={milestoneStatusClass(mc.from)}>{mc.from}</span>
+                    <DenseTag variant={milestoneStatusVariant(mc.from)}>{mc.from}</DenseTag>
                     <span className="text-[var(--muted-foreground)]">&rarr;</span>
-                    <span className={milestoneStatusClass(mc.to)}>{mc.to}</span>
+                    <DenseTag variant={milestoneStatusVariant(mc.to)}>{mc.to}</DenseTag>
                   </div>
                 ))}
               </div>
@@ -137,7 +137,7 @@ export function SessionDeltaPanel({ delta, hasBaseline }: SessionDeltaPanelProps
                   </span>
                   <code className="font-mono-tabular text-xs">{r.action}</code>
                   <span className="text-[var(--muted-foreground)]">{r.target}</span>
-                  <span className="badge-ui font-mono-tabular">{r.status}</span>
+                  <DenseTag variant="category" className="font-mono-tabular">{r.status}</DenseTag>
                 </div>
               ))}
               {delta.newAuditRecords.length > 5 && (

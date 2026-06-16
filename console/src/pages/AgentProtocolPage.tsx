@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
 import {
   AGENT_MODES,
@@ -43,38 +44,38 @@ export function AgentProtocolPage() {
               {' '}(v{AGENT_PROTOCOL_VERSION}).
             </p>
           </div>
-          <button type="button" className="btn-ui btn-ui-primary shrink-0" onClick={() => void handleCopyForLlm()}>
+          <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </button>
+          </Button>
         </div>
       </section>
 
       {/* 1 — Agent modes */}
       <CatalogSection title="Agent modes">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Mode</th>
-              <th>Flywheel</th>
-              <th>Default UI</th>
-              <th>Agent may</th>
-              <th>Agent must not</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Mode</DenseTableHead>
+              <DenseTableHead>Flywheel</DenseTableHead>
+              <DenseTableHead>Default UI</DenseTableHead>
+              <DenseTableHead>Agent may</DenseTableHead>
+              <DenseTableHead>Agent must not</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {AGENT_MODES.map(m => (
-              <tr key={m.mode}>
-                <td className="font-medium whitespace-nowrap">
-                  <span className="badge-ui badge-status-signed">{m.mode}</span>
-                </td>
-                <td>{m.flywheel}</td>
-                <td className="font-mono-tabular text-xs">{m.defaultUI}</td>
-                <td>{m.agentMay}</td>
-                <td className="text-[var(--muted-foreground)]">{m.agentMustNot}</td>
-              </tr>
+              <DenseTableRow key={m.mode}>
+                <DenseTableCell className="font-medium whitespace-nowrap">
+                  <DenseTag variant="success">{m.mode}</DenseTag>
+                </DenseTableCell>
+                <DenseTableCell>{m.flywheel}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-xs">{m.defaultUI}</DenseTableCell>
+                <DenseTableCell>{m.agentMay}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{m.agentMustNot}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* Mode selection hints */}
@@ -89,65 +90,65 @@ export function AgentProtocolPage() {
       <div className="grid gap-4 md:grid-cols-2">
         {/* 2 — Context pack buttons */}
         <CatalogSection title="Control Room context pack buttons">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Button</th>
-                <th>Contents</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Button</DenseTableHead>
+                <DenseTableHead>Contents</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {CONTEXT_PACK_BUTTONS.map(b => (
-                <tr key={b.button}>
-                  <td className="font-medium whitespace-nowrap">{b.button}</td>
-                  <td className="text-[var(--muted-foreground)]">{b.contents}</td>
-                </tr>
+                <DenseTableRow key={b.button}>
+                  <DenseTableCell className="font-medium whitespace-nowrap">{b.button}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{b.contents}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
 
         {/* 3 — Context pack layers */}
         <CatalogSection title="Context pack layers (session startup)">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Layer</th>
-                <th>Description</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>#</DenseTableHead>
+                <DenseTableHead>Layer</DenseTableHead>
+                <DenseTableHead>Description</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {CONTEXT_PACK_LAYERS.map(l => (
-                <tr key={l.order}>
-                  <td className="font-mono-tabular text-center">{l.order}</td>
-                  <td className="font-medium whitespace-nowrap">{l.name}</td>
-                  <td className="text-[var(--muted-foreground)]">{l.description}</td>
-                </tr>
+                <DenseTableRow key={l.order}>
+                  <DenseTableCell className="font-mono-tabular text-center">{l.order}</DenseTableCell>
+                  <DenseTableCell className="font-medium whitespace-nowrap">{l.name}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{l.description}</DenseTableCell>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
         </CatalogSection>
       </div>
 
       {/* 4 — Forbidden actions */}
       <CatalogSection title="Forbidden actions (all modes)">
-        <table className="dense-table">
-          <thead>
-            <tr>
-              <th>Action</th>
-              <th>Scope</th>
-            </tr>
-          </thead>
-          <tbody>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Action</DenseTableHead>
+              <DenseTableHead>Scope</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
             {FORBIDDEN_ACTIONS.map((f, i) => (
-              <tr key={i}>
-                <td className="text-[color:var(--destructive)]">{f.action}</td>
-                <td>{f.scope}</td>
-              </tr>
+              <DenseTableRow key={i}>
+                <DenseTableCell className="text-[color:var(--destructive)]">{f.action}</DenseTableCell>
+                <DenseTableCell>{f.scope}</DenseTableCell>
+              </DenseTableRow>
             ))}
-          </tbody>
-        </table>
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 5 — Opening prompts */}
@@ -155,7 +156,7 @@ export function AgentProtocolPage() {
         <div className="flex flex-col gap-2 px-3 py-2">
           {OPENING_PROMPTS.map(p => (
             <div key={p.mode} className="text-[var(--text-dense)]">
-              <span className="badge-ui badge-status-signed mr-2">{p.mode}</span>
+              <DenseTag variant="success" className="mr-2">{p.mode}</DenseTag>
               <code className="font-mono-tabular text-xs text-[var(--muted-foreground)]">{p.example}</code>
             </div>
           ))}
