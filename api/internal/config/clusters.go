@@ -216,7 +216,7 @@ func (e *ClusterEntry) ResolvedStgAPIMonitorURL() string {
 		return strings.TrimSpace(e.StgSmoke.APIMonitorURL)
 	}
 	if e != nil && strings.TrimSpace(e.NodeIP) != "" {
-		return fmt.Sprintf("http://%s:30765/status", strings.TrimSpace(e.NodeIP))
+		return fmt.Sprintf("http://%s:30880/api/monitor/status", strings.TrimSpace(e.NodeIP))
 	}
 	return ""
 }
@@ -229,7 +229,7 @@ func (e *ClusterEntry) ResolvedStgFrontendURL() string {
 		return strings.TrimSpace(e.StgSmoke.FrontendURL)
 	}
 	if e != nil && strings.TrimSpace(e.NodeIP) != "" {
-		return fmt.Sprintf("http://%s:30780/", strings.TrimSpace(e.NodeIP))
+		return fmt.Sprintf("http://%s:30880/", strings.TrimSpace(e.NodeIP))
 	}
 	return ""
 }
