@@ -21,7 +21,7 @@ export function StgSmokePanel({ data, isLoading, errorMessage }: StgSmokePanelPr
   return (
     <OpsSection
       title="Stg smoke"
-      description="HTTP probes for bifrost-stg workloads (NodePort api-monitor :30765, frontend :30780). Session S5 acceptance."
+      description="HTTP probes for bifrost-stg via nginx gateway (NodePort :30880 — SPA + /api/monitor/status). Phase B v1."
       actions={
         <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           GET /api/v1/delivery/stg/smoke

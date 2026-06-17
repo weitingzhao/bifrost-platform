@@ -318,8 +318,18 @@ func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 	switch pipelineName {
 	case "bifrost-deliver-stg":
 		return []map[string]any{
-			{"name": "api-source", "emptyDir": map[string]any{}},
-			buildContextPVC,
+			map[string]any{
+				"name": "build-context",
+				"volumeClaimTemplate": map[string]any{
+					"spec": map[string]any{
+						"accessModes":      []any{"ReadWriteOnce"},
+						"storageClassName": "local-path",
+						"resources": map[string]any{
+							"requests": map[string]any{"storage": "10Gi"},
+						},
+					},
+				},
+			},
 		}
 	case "bifrost-build-stg":
 		return []map[string]any{
