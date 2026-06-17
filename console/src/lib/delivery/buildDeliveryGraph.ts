@@ -1,7 +1,7 @@
-import type { OpsContextResponse } from '@/api/types'
+import type { GitOpsAppsResponse, OpsContextResponse } from '@/api/types'
 import type { Edge, Node } from '@xyflow/react'
 
-export type DeliveryNodeStatus = 'live' | 'planned' | 'blocked'
+export type DeliveryNodeStatus = 'live' | 'planned' | 'blocked' | 'degraded'
 
 export type DeliveryNodeData = {
   id: string
@@ -45,37 +45,74 @@ function statusForNowNode(id: string, context: OpsContextResponse): DeliveryNode
   return 'live'
 }
 
-function statusForTargetNode(
-  context: OpsContextResponse,
+function argocdNodeStatus(gitops: GitOpsAppsResponse | undefined): DeliveryNodeStatus {
+  if (gitops == null) return 'planned'
+  if (gitops.argocd_status === 'not_installed') return 'planned'
+  if (gitops.argocd_status === 'unavailable' || gitops.reachability === 'fail') return 'blocked'
+  if (gitops.argocd_status === 'installed' && gitops.reachability === 'ok') return 'live'
+  if (gitops.argocd_status === 'installed') return 'degraded'
+  return 'planned'
+}
+
+function k3sBifrostNodeStatus(
+  gitops: GitOpsAppsResponse | undefined,
   clusterReachOk?: boolean,
 ): DeliveryNodeStatus {
-  const phase = context.deployment.phase
-  if (phase === 'k3s_partial' || phase === 'k3s_ha') {
-    if (clusterReachOk === true) return 'live'
-    return 'planned'
+  if (gitops != null && gitops.apps.length > 0) {
+    const allHealthy = gitops.apps.every(
+      a => a.sync_status.toLowerCase() === 'synced' && a.health_status.toLowerCase() === 'healthy',
+    )
+    return allHealthy ? 'live' : 'degraded'
   }
+  if (gitops?.argocd_status === 'installed' && gitops.reachability === 'ok') {
+    return 'degraded'
+  }
+  if (clusterReachOk === true) return 'planned'
   return 'planned'
 }
 
 function statusForTargetNodeItem(
   id: string,
-  context: OpsContextResponse,
-  defaultStatus: DeliveryNodeStatus,
+  gitops: GitOpsAppsResponse | undefined,
   clusterReachOk?: boolean,
 ): DeliveryNodeStatus {
-  if (id === 'k3s-bifrost') {
-    const phase = context.deployment.phase
-    if ((phase === 'k3s_partial' || phase === 'k3s_ha') && clusterReachOk === true) {
-      return 'live'
-    }
-    return 'planned'
+  switch (id) {
+    case 'argocd':
+      return argocdNodeStatus(gitops)
+    case 'k3s-bifrost':
+      return k3sBifrostNodeStatus(gitops, clusterReachOk)
+    case 'gitea':
+    case 'tekton':
+    case 'registry':
+    default:
+      return 'planned'
   }
-  return defaultStatus
+}
+
+function targetSubtitle(
+  id: string,
+  def: { subtitle?: string },
+  gitops: GitOpsAppsResponse | undefined,
+): string | undefined {
+  if (id === 'argocd' && gitops != null) {
+    if (gitops.argocd_status === 'installed' && gitops.server != null) {
+      return `${gitops.server.name} · ${gitops.server.ready}`
+    }
+    if (gitops.argocd_status === 'not_installed') {
+      return 'Planned · P3 probe'
+    }
+    return gitops.detail.slice(0, 48) || def.subtitle
+  }
+  if (id === 'k3s-bifrost' && gitops != null && gitops.apps.length > 0) {
+    return `${gitops.apps.length} app(s) tracked`
+  }
+  return def.subtitle
 }
 
 function deliveryStatusClass(status: DeliveryNodeStatus): string {
   if (status === 'live') return 'delivery-node--live'
   if (status === 'blocked') return 'delivery-node--blocked'
+  if (status === 'degraded') return 'delivery-node--degraded'
   return 'delivery-node--planned'
 }
 
@@ -85,10 +122,10 @@ export function buildDeliveryGraph(
   context: OpsContextResponse,
   selectionId?: string | null,
   clusterReachOk?: boolean,
+  gitops?: GitOpsAppsResponse,
 ): { nodes: Node<DeliveryNodeData>[]; edges: Edge[] } {
   const nodes: Node<DeliveryNodeData>[] = []
   const edges: Edge[] = []
-  const targetStatus = statusForTargetNode(context, clusterReachOk)
   const cutover = context.milestones.find(m => m.id === '2c-b-prod-cutover')
   const showDecision =
     cutover?.status === 'BLOCKED_ON' && cutover.blocker != null && cutover.blocker !== ''
@@ -123,7 +160,7 @@ export function buildDeliveryGraph(
   })
 
   TARGET_NODES.forEach((def, i) => {
-    const nodeStatus = statusForTargetNodeItem(def.id, context, targetStatus, clusterReachOk)
+    const nodeStatus = statusForTargetNodeItem(def.id, gitops, clusterReachOk)
     nodes.push({
       id: def.id,
       type: 'deliveryNode',
@@ -131,7 +168,7 @@ export function buildDeliveryGraph(
       data: {
         id: def.id,
         label: def.label,
-        subtitle: def.subtitle,
+        subtitle: targetSubtitle(def.id, def, gitops),
         status: nodeStatus,
         lane: 'target',
         selected: selectionId === def.id,

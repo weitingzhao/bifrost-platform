@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
-import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { ClusterSummary, GitOpsAppsResponse, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
+import { GitOpsProbePanel } from '@/components/delivery/GitOpsProbePanel'
 import { flywheelLabel } from '@/components/FocusStrip'
 import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
 import {
@@ -14,6 +15,9 @@ interface DeliveryPageProps {
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
   clusterSummary?: ClusterSummary
+  gitops?: GitOpsAppsResponse
+  gitopsLoading?: boolean
+  gitopsError?: string | null
   isLoading: boolean
   onOpenMilestones: () => void
   onOpenPromote: () => void
@@ -23,6 +27,9 @@ export function DeliveryPage({
   context,
   matrices,
   clusterSummary,
+  gitops,
+  gitopsLoading = false,
+  gitopsError = null,
   isLoading,
   onOpenMilestones,
   onOpenPromote,
@@ -37,6 +44,14 @@ export function DeliveryPage({
   const lamp = promote.ready ? 'ok' : promote.blockedByDecision || promote.prodFails ? 'fail' : 'degraded'
   const ciMode = ciModeLabel(context.deployment.phase)
   const gitOpsPlanned = showGitOpsPlannedBadge(context.deployment)
+  const gitOpsLamp =
+    gitops?.reachability === 'ok' && gitops.argocd_status === 'installed'
+      ? 'ok'
+      : gitops?.reachability === 'fail' || gitops?.argocd_status === 'unavailable'
+        ? 'fail'
+        : gitops != null
+          ? 'degraded'
+          : 'unknown'
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -50,11 +65,17 @@ export function DeliveryPage({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <DenseTag variant="category" className="font-mono-tabular">phase: {context.deployment.phase}</DenseTag>
           <DenseTag variant="category" className="focus-strip-ci-mode">CI: {ciMode}</DenseTag>
+          <span className="inline-flex items-center gap-1.5 text-[var(--text-dense-meta)]">
+            <StatusLamp value={gitOpsLamp} kind="reach" />
+            <span>GitOps probe</span>
+          </span>
           {gitOpsPlanned && (
             <DenseTag variant="neutral">GitOps planned</DenseTag>
           )}
         </div>
       </section>
+
+      <GitOpsProbePanel data={gitops} isLoading={gitopsLoading} errorMessage={gitopsError} />
 
       <section className="page-section panel-elevated px-4 py-3">
         <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -71,6 +92,7 @@ export function DeliveryPage({
         context={context}
         selectionId={selectedNodeId}
         clusterReachOk={clusterSummary?.reachability === 'ok'}
+        gitops={gitops}
         onSelectNode={id => setSelectedNodeId(prev => (prev === id ? null : id))}
       />
 

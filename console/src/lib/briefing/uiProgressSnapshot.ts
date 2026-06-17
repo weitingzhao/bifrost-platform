@@ -44,7 +44,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Program',
     item: 'Delivery',
     status: 'partial',
-    notes: 'Now (Mac CI → compose) + Target (GitOps) lanes — display only, no Tekton/Argo execution',
+    notes: 'Target GitOps lane wired to GET /gitops/apps; Argo CD probe panel; sync/run still pending (P3 WIP)',
   },
   {
     area: 'Program',
@@ -74,7 +74,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Platform API',
     item: 'L0 probes',
     status: 'done',
-    notes: 'matrix, topology, context, cluster read, audit, auth/capabilities',
+    notes: 'matrix, topology, context, cluster read, gitops/apps (P3 L0), audit, auth/capabilities',
   },
   {
     area: 'Platform API',
@@ -91,8 +91,8 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
   {
     area: 'Future',
     item: 'GitOps actuation',
-    status: 'planned',
-    notes: 'Argo sync, Tekton runs, Stack tab install — P3/P4',
+    status: 'partial',
+    notes: 'GET /gitops/apps live on Delivery; POST sync + Tekton runs + Stack install still pending',
   },
 ]
 

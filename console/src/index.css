@@ -508,6 +508,11 @@ html {
   border-color: var(--color-lamp-red);
 }
 
+.delivery-node--degraded {
+  border-color: var(--color-lamp-yellow);
+  border-style: dashed;
+}
+
 .delivery-node--decision {
   border-style: dashed;
   border-color: var(--color-lamp-red);

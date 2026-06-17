@@ -15,6 +15,13 @@ type ObservabilityURLs struct {
 	DocsInfra  string `yaml:"docs_infra"`
 }
 
+// GitOpsConfig — Argo CD probe targets (P3 L0 read).
+type GitOpsConfig struct {
+	ArgoCDNamespace       string `yaml:"argocd_namespace" json:"argocd_namespace"`
+	ApplicationsNamespace string `yaml:"applications_namespace" json:"applications_namespace"`
+	ArgoCDServerMatch     string `yaml:"argocd_server_match" json:"argocd_server_match"`
+}
+
 type ClusterEntry struct {
 	ID                  string             `yaml:"id" json:"id"`
 	Label               string             `yaml:"label" json:"label"`
@@ -26,6 +33,7 @@ type ClusterEntry struct {
 	BifrostNamespaces   []string           `yaml:"bifrost_namespaces" json:"bifrost_namespaces"`
 	MonitoringNS        string             `yaml:"monitoring_namespace" json:"monitoring_namespace"`
 	ObservabilityURLs   ObservabilityURLs  `yaml:"observability_urls" json:"observability_urls"`
+	GitOps              GitOpsConfig       `yaml:"gitops" json:"gitops"`
 }
 
 type ClustersFile struct {
@@ -125,6 +133,36 @@ func (e *ClusterEntry) ObservabilityDocsURL() string {
 		return strings.TrimSpace(e.ObservabilityURLs.DocsInfra)
 	}
 	return ""
+}
+
+func (e *ClusterEntry) ResolvedArgoCDNamespace() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_ARGOCD_NAMESPACE")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.GitOps.ArgoCDNamespace) != "" {
+		return strings.TrimSpace(e.GitOps.ArgoCDNamespace)
+	}
+	return "cicd"
+}
+
+func (e *ClusterEntry) ResolvedApplicationsNamespace() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_GITOPS_APPS_NAMESPACE")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.GitOps.ApplicationsNamespace) != "" {
+		return strings.TrimSpace(e.GitOps.ApplicationsNamespace)
+	}
+	if e != nil {
+		return e.ResolvedArgoCDNamespace()
+	}
+	return "cicd"
+}
+
+func (e *ClusterEntry) ResolvedArgoCDServerMatch() string {
+	if e != nil && strings.TrimSpace(e.GitOps.ArgoCDServerMatch) != "" {
+		return strings.TrimSpace(e.GitOps.ArgoCDServerMatch)
+	}
+	return "argocd-server"
 }
 
 func expandHome(path string) string {

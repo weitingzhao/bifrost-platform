@@ -349,6 +349,39 @@ export interface ClusterObservabilityResponse {
   generated_at: string
 }
 
+export type ArgoCDStatus = 'not_installed' | 'installed' | 'degraded' | 'unavailable'
+
+export interface GitOpsArgoCDServerView {
+  kind: string
+  name: string
+  ready: string
+  status: string
+  reachability: Reachability
+  detail?: string
+}
+
+export interface GitOpsApplicationView {
+  name: string
+  namespace: string
+  project?: string
+  sync_status: string
+  health_status: string
+  destination?: string
+  revision?: string
+}
+
+export interface GitOpsAppsResponse {
+  cluster_id: string
+  argocd_namespace: string
+  applications_namespace: string
+  argocd_status: ArgoCDStatus
+  reachability: Reachability
+  detail: string
+  server?: GitOpsArgoCDServerView
+  apps: GitOpsApplicationView[]
+  generated_at: string
+}
+
 export interface AuthCapabilities {
   authenticated: boolean
   principal?: string
