@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Button, DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag, type DenseTagVariant } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   CHANGE_LOG,
   COMPOSE_REFERENCE_COMMANDS,
@@ -44,23 +45,24 @@ export function DeployMainlinePage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="m-0 text-sm font-semibold">Deploy Mainline</h2>
-            <p className="m-0 mt-1 max-w-2xl text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Deployment decision chain: Local Prod Final → K3s → Compose → Legacy retirement.
-              Source:{' '}
-              <code className="font-mono-tabular text-[var(--primary)]">{DEPLOY_MAINLINE_SOURCE}</code>
-              {' '}(v{DEPLOY_MAINLINE_VERSION}).
-            </p>
-            <p className="m-0 mt-2 text-[var(--text-dense-meta)]">{DEPLOY_MAINLINE_STATUS}</p>
-          </div>
+      <OpsSection
+        title="Overview"
+        description={
+          <>
+            Deployment decision chain: Local Prod Final → K3s → Compose → Legacy retirement.
+            Source:{' '}
+            <code className="font-mono-tabular text-[var(--primary)]">{DEPLOY_MAINLINE_SOURCE}</code>
+            {' '}(v{DEPLOY_MAINLINE_VERSION}).
+          </>
+        }
+        headerExtra={<p className="m-0 mt-2 text-[var(--text-dense-meta)]">{DEPLOY_MAINLINE_STATUS}</p>}
+        actions={
           <Button size="sm" className="shrink-0" onClick={() => void handleCopy()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
           </Button>
-        </div>
-      </section>
+        }
+        overflow="visible"
+      />
 
       <CatalogSection title="Mainline phases">
         <DenseDataTable>

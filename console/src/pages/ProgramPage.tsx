@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 import { milestoneStatusVariant } from '@/components/FocusStrip'
+import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 
 interface ProgramPageProps {
   context: OpsContextResponse | undefined
@@ -21,14 +22,17 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <h2 className="m-0 text-sm font-semibold">Program — milestones & decisions</h2>
-        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Authoritative spine from{' '}
-          <code className="font-mono-tabular">config/ops-context.yaml</code> (v
-          {context.meta.version}).
-        </p>
-      </section>
+      <OpsSection
+        title="Overview"
+        description={
+          <>
+            Authoritative spine from{' '}
+            <code className="font-mono-tabular">config/ops-context.yaml</code> (v
+            {context.meta.version}).
+          </>
+        }
+        overflow="visible"
+      />
 
       {context.north_star != null && (
         <ProgramSection title="North star — ultimate goal (Strategy C)">
@@ -41,17 +45,13 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
               </DenseTag>
             </div>
             <div>
-              <h4 className="m-0 mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Owner exception
-              </h4>
+              <OpsSubsectionTitle>Owner exception</OpsSubsectionTitle>
               <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                 {context.north_star.owner_exception}
               </p>
             </div>
             <div>
-              <h4 className="m-0 mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Principles
-              </h4>
+              <OpsSubsectionTitle>Principles</OpsSubsectionTitle>
               <ul className="m-0 list-disc space-y-1 pl-5 text-[var(--text-dense-meta)]">
                 {context.north_star.principles.map(p => (
                   <li key={p}>{p}</li>
@@ -59,9 +59,7 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
               </ul>
             </div>
             <div>
-              <h4 className="m-0 mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Success criteria
-              </h4>
+              <OpsSubsectionTitle>Success criteria</OpsSubsectionTitle>
               <ul className="m-0 list-disc space-y-1 pl-5 text-[var(--text-dense-meta)]">
                 {context.north_star.success_criteria.map(c => (
                   <li key={c}>{c}</li>
@@ -187,13 +185,8 @@ function ProgramSection({
   children: ReactNode
 }) {
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="border-b border-[var(--border)] px-3 py-2">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          {title}
-        </h3>
-      </header>
-      <div className="p-0">{children}</div>
-    </section>
+    <OpsSection title={title} bodyPadding="none" overflow="hidden">
+      {children}
+    </OpsSection>
   )
 }

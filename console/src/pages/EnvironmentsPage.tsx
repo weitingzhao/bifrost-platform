@@ -3,6 +3,7 @@ import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, Den
 import type { OpsContextResponse } from '@/api/types'
 import { fetchContext } from '@/api/platform'
 import { CatalogSection } from '@/components/CatalogSection'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   AUTHORIZATION_LEVELS,
   CATALOG_SOURCE,
@@ -51,22 +52,23 @@ export function EnvironmentsPage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="m-0 text-sm font-semibold">Environments</h2>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] max-w-2xl">
-              Living catalog for Bifrost hardware, CI/CD, K3s target, and trade Dev/Prod paths.
-              Maintained in{' '}
-              <code className="font-mono-tabular text-[var(--primary)]">{CATALOG_SOURCE}</code>
-              {' '}(v{CATALOG_VERSION}).
-            </p>
-          </div>
+      <OpsSection
+        title="Overview"
+        description={
+          <>
+            Living catalog for Bifrost hardware, CI/CD, K3s target, and trade Dev/Prod paths.
+            Maintained in{' '}
+            <code className="font-mono-tabular text-[var(--primary)]">{CATALOG_SOURCE}</code>
+            {' '}(v{CATALOG_VERSION}).
+          </>
+        }
+        actions={
           <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy for LLM'}
           </Button>
-        </div>
-      </section>
+        }
+        overflow="visible"
+      />
 
       <CatalogSection title="Registered trade environments">
         <DenseDataTable>
@@ -95,16 +97,19 @@ export function EnvironmentsPage({
         </DenseDataTable>
       </CatalogSection>
 
-      <section className="page-section panel-elevated px-4 py-3">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          Hardware & software stack (live)
-        </h3>
-        <p className="m-0 mt-2 text-[var(--text-dense)]">
-          Interactive topology, SCOPE layers, and matrix probes are on{' '}
-          <strong>Runtime Map</strong> (authoritative live view).
-        </p>
+      <OpsSection
+        title="Hardware & software stack (live)"
+        description={
+          <>
+            Interactive topology, SCOPE layers, and matrix probes are on{' '}
+            <strong>Runtime Map</strong> (authoritative live view).
+          </>
+        }
+        bodyPadding="default"
+        overflow="visible"
+      >
         {onOpenRuntimeMap != null && (
-          <Button size="sm" className="mt-3" onClick={onOpenRuntimeMap}>
+          <Button size="sm" onClick={onOpenRuntimeMap}>
             Open Runtime Map
           </Button>
         )}
@@ -159,7 +164,7 @@ export function EnvironmentsPage({
             </CatalogSection>
           </div>
         </details>
-      </section>
+      </OpsSection>
 
       <CatalogSection
         title="End-to-end flow"

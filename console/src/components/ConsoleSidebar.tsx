@@ -7,6 +7,7 @@ export type ConsoleViewTab =
   | 'briefing'
   | 'control-room'
   | 'pulse'
+  | 'audit'
   | 'runtime-map'
   | 'cluster'
   | 'delivery'

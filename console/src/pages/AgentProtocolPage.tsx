@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   AGENT_MODES,
   AGENT_PROTOCOL_SOURCE,
@@ -32,23 +33,23 @@ export function AgentProtocolPage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      {/* Page header */}
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="m-0 text-sm font-semibold">Agent Protocol</h2>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] max-w-2xl">
-              Agent interaction modes, context pack layers, forbidden actions, and session startup guidance.
-              Source:{' '}
-              <code className="font-mono-tabular text-[var(--primary)]">{AGENT_PROTOCOL_SOURCE}</code>
-              {' '}(v{AGENT_PROTOCOL_VERSION}).
-            </p>
-          </div>
+      <OpsSection
+        title="Overview"
+        description={
+          <>
+            Agent interaction modes, context pack layers, forbidden actions, and session startup guidance.
+            Source:{' '}
+            <code className="font-mono-tabular text-[var(--primary)]">{AGENT_PROTOCOL_SOURCE}</code>
+            {' '}(v{AGENT_PROTOCOL_VERSION}).
+          </>
+        }
+        actions={
           <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
           </Button>
-        </div>
-      </section>
+        }
+        overflow="visible"
+      />
 
       {/* 1 — Agent modes */}
       <CatalogSection title="Agent modes">

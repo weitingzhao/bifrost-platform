@@ -4,6 +4,7 @@ import { flywheelLabel } from '@/components/FocusStrip'
 import { CouplingGatePanel } from '@/components/control-room/CouplingGatePanel'
 import { baysForFlywheel, getBay } from '@/lib/control-room/bayRegistry'
 import { lampForBay, summaryForBay } from '@/lib/control-room/matrixSummary'
+import { OpsSection } from '@/components/layout/OpsSection'
 
 export type ControlRoomSelection =
   | { kind: 'bay'; id: string }
@@ -63,17 +64,14 @@ export function DualFlywheelPanel({
   const flywheelB = baysForFlywheel('B')
 
   return (
-    <section className="page-section panel-elevated px-3 py-3">
-      <header className="mb-3">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          Dual flywheel bays
-        </h3>
-        {context != null && (
-          <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Primary: {flywheelLabel(context.focus.flywheel_primary)}
-          </p>
-        )}
-      </header>
+    <OpsSection
+      title="Dual flywheel bays"
+      description={
+        context != null ? `Primary: ${flywheelLabel(context.focus.flywheel_primary)}` : undefined
+      }
+      bodyPadding="compact"
+      overflow="visible"
+    >
       <div className="dual-flywheel-grid">
         <div className="flywheel-column">
           <div className="flywheel-column-title">A — Product</div>
@@ -114,6 +112,6 @@ export function DualFlywheelPanel({
           </div>
         </div>
       </div>
-    </section>
+    </OpsSection>
   )
 }

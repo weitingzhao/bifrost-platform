@@ -17,6 +17,7 @@ import {
   Server,
   Shield,
   Terminal,
+  History,
   Workflow,
 } from 'lucide-react'
 
@@ -29,6 +30,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
       { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
       { id: 'control-room', label: 'Control Room', icon: Gauge },
       { id: 'pulse', label: 'Pulse', icon: Activity },
+      { id: 'audit', label: 'Audit', icon: History },
     ],
   },
   {

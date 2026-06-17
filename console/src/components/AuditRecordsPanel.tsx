@@ -1,5 +1,6 @@
 import { DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, type DenseTagVariant } from '@bifrost/ui'
 import type { AuditRecord } from '@/api/types'
+import { OpsSection } from '@/components/layout/OpsSection'
 
 function relativeTime(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime()
@@ -42,9 +43,9 @@ export function AuditRecordsPanel({
   const visible = records.slice(0, limit)
 
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-        <h2 className="m-0 text-sm font-semibold">{title}</h2>
+    <OpsSection
+      title={title}
+      actions={
         <div className="flex items-center gap-3">
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             {isLoading ? '...' : `${records.length} records`}
@@ -59,7 +60,11 @@ export function AuditRecordsPanel({
             </button>
           )}
         </div>
-      </header>
+      }
+      bodyPadding="none"
+      overflow="visible"
+      bodyClassName="ops-section-body--table"
+    >
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>
@@ -96,6 +101,6 @@ export function AuditRecordsPanel({
           )}
         </DenseTableBody>
       </DenseDataTable>
-    </section>
+    </OpsSection>
   )
 }

@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
-import type { ClusterSummary, GitOpsAppsResponse, MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { ClusterSummary, DeliveryPipelinesResponse, GitOpsAppsResponse, MatrixResponse, OpsContextResponse, StackAddonsResponse, StgSmokeResponse } from '@/api/types'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { GitOpsProbePanel } from '@/components/delivery/GitOpsProbePanel'
+import { PipelineRunsPanel } from '@/components/delivery/PipelineRunsPanel'
+import { StgSmokePanel } from '@/components/delivery/StgSmokePanel'
+import { StackAddonsPanel } from '@/components/delivery/StackAddonsPanel'
+import { AuditPageLink } from '@/components/AuditPageLink'
 import { flywheelLabel } from '@/components/FocusStrip'
+import { OpsSection } from '@/components/layout/OpsSection'
 import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
 import {
   ciModeLabel,
@@ -18,9 +23,19 @@ interface DeliveryPageProps {
   gitops?: GitOpsAppsResponse
   gitopsLoading?: boolean
   gitopsError?: string | null
+  stack?: StackAddonsResponse
+  stackLoading?: boolean
+  stackError?: string | null
+  pipelines?: DeliveryPipelinesResponse
+  pipelinesLoading?: boolean
+  pipelinesError?: string | null
+  stgSmoke?: StgSmokeResponse
+  stgSmokeLoading?: boolean
+  stgSmokeError?: string | null
   isLoading: boolean
   onOpenMilestones: () => void
   onOpenPromote: () => void
+  onOpenAudit: () => void
 }
 
 export function DeliveryPage({
@@ -30,9 +45,19 @@ export function DeliveryPage({
   gitops,
   gitopsLoading = false,
   gitopsError = null,
+  stack,
+  stackLoading = false,
+  stackError = null,
+  pipelines,
+  pipelinesLoading = false,
+  pipelinesError = null,
+  stgSmoke,
+  stgSmokeLoading = false,
+  stgSmokeError = null,
   isLoading,
   onOpenMilestones,
   onOpenPromote,
+  onOpenAudit,
 }: DeliveryPageProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 
@@ -55,54 +80,67 @@ export function DeliveryPage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <h2 className="m-0 text-sm font-semibold">Delivery — CI/CD path</h2>
-        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] max-w-3xl">
-          Unified view of near-term delivery (Mac CI + compose prod) and target GitOps on K3s. For
-          migration milestones see <strong>Milestones</strong>; for release readiness see{' '}
-          <strong>Promote</strong>.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <DenseTag variant="category" className="font-mono-tabular">phase: {context.deployment.phase}</DenseTag>
-          <DenseTag variant="category" className="focus-strip-ci-mode">CI: {ciMode}</DenseTag>
+      <OpsSection
+        title="CI/CD path"
+        description="Unified view of near-term delivery (Mac CI + compose prod) and target GitOps on K3s. For migration milestones see Milestones; for release readiness see Promote."
+        bodyPadding="default"
+        overflow="visible"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <DenseTag variant="category" className="font-mono-tabular">
+            phase: {context.deployment.phase}
+          </DenseTag>
+          <DenseTag variant="category" className="focus-strip-ci-mode">
+            CI: {ciMode}
+          </DenseTag>
           <span className="inline-flex items-center gap-1.5 text-[var(--text-dense-meta)]">
             <StatusLamp value={gitOpsLamp} kind="reach" />
             <span>GitOps probe</span>
           </span>
-          {gitOpsPlanned && (
-            <DenseTag variant="neutral">GitOps planned</DenseTag>
-          )}
+          {gitOpsPlanned && <DenseTag variant="neutral">GitOps planned</DenseTag>}
         </div>
-      </section>
+      </OpsSection>
 
       <GitOpsProbePanel data={gitops} isLoading={gitopsLoading} errorMessage={gitopsError} />
 
-      <section className="page-section panel-elevated px-4 py-3">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          Strategy (K3S §5)
-        </h3>
-        <ul className="m-0 mt-2 list-disc px-5 text-[var(--text-dense)]">
+      <StackAddonsPanel data={stack} isLoading={stackLoading} errorMessage={stackError} />
+
+      <PipelineRunsPanel
+        pipelines={pipelines}
+        pipelinesLoading={pipelinesLoading}
+        errorMessage={pipelinesError}
+      />
+
+      <StgSmokePanel
+        data={stgSmoke}
+        isLoading={stgSmokeLoading}
+        errorMessage={stgSmokeError}
+      />
+
+      <OpsSection title="Strategy (K3S §5)" bodyPadding="default" overflow="visible">
+        <ul className="m-0 list-disc px-5 text-[var(--text-dense)]">
           {DELIVERY_STRATEGY_BULLETS.map(b => (
             <li key={b}>{b}</li>
           ))}
         </ul>
-      </section>
+      </OpsSection>
 
       <DeliveryFlow
         context={context}
         selectionId={selectedNodeId}
         clusterReachOk={clusterSummary?.reachability === 'ok'}
         gitops={gitops}
+        stack={stack}
         onSelectNode={id => setSelectedNodeId(prev => (prev === id ? null : id))}
       />
 
-      <section className="page-section panel-elevated px-4 py-3 coupling-gate-panel">
-        <header className="mb-2 flex items-center gap-2">
-          <StatusLamp value={lamp} kind="reach" />
-          <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Coupling gate
-          </h3>
-        </header>
+      <OpsSection
+        title="Coupling gate"
+        leading={<StatusLamp value={lamp} kind="reach" />}
+        bodyPadding="default"
+        overflow="visible"
+        className="coupling-gate-panel"
+      >
         <p className="m-0 text-[var(--text-dense)] font-medium">
           {promote.ready ? 'Promote ready (narrative)' : 'Promote blocked'}
         </p>
@@ -125,7 +163,12 @@ export function DeliveryPage({
             Open Milestones
           </Button>
         </div>
-      </section>
+        <AuditPageLink
+          onOpenAudit={onOpenAudit}
+          hint="After GitOps Sync, review actuation history on"
+          className="mt-3"
+        />
+      </OpsSection>
     </div>
   )
 }

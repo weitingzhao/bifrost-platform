@@ -1,6 +1,7 @@
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { ClusterWorkload } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
+import { OpsSection } from '@/components/layout/OpsSection'
 
 interface ClusterWorkloadsTableProps {
   namespace: string | null
@@ -24,11 +25,9 @@ export function ClusterWorkloadsTable({
   onDeletePod,
 }: ClusterWorkloadsTableProps) {
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-        <h2 className="m-0 text-sm font-semibold">
-          Workloads{namespace != null ? ` · ${namespace}` : ''}
-        </h2>
+    <OpsSection
+      title={namespace != null ? `Workloads · ${namespace}` : 'Workloads'}
+      actions={
         <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {namespace == null
             ? 'Select a namespace'
@@ -36,7 +35,10 @@ export function ClusterWorkloadsTable({
               ? '…'
               : `${workloads.length} workloads`}
         </span>
-      </header>
+      }
+      bodyPadding="none"
+      overflow="hidden"
+    >
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>
@@ -126,6 +128,6 @@ export function ClusterWorkloadsTable({
           )}
         </DenseTableBody>
       </DenseDataTable>
-    </section>
+    </OpsSection>
   )
 }

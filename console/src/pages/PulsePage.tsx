@@ -1,6 +1,7 @@
 import { Button, DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag, StatusLamp } from '@bifrost/ui'
-import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { ClusterSummary, MatrixResponse, OpsContextResponse, StgSmokeResponse } from '@/api/types'
 import { MatrixTable } from '@/components/MatrixTable'
+import { OpsSection } from '@/components/layout/OpsSection'
 import { flywheelLabel, milestoneStatusVariant } from '@/components/FocusStrip'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 
@@ -13,9 +14,12 @@ interface PulsePageProps {
   platformHealthy: boolean
   clusterSummary?: ClusterSummary
   clusterLoading?: boolean
+  stgSmoke?: StgSmokeResponse
+  stgSmokeLoading?: boolean
   onOpenRuntimeMap: () => void
   onOpenProgram: () => void
   onOpenCluster?: () => void
+  onOpenDelivery?: () => void
 }
 
 function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: number } {
@@ -37,18 +41,20 @@ export function PulsePage({
   platformHealthy,
   clusterSummary,
   clusterLoading,
+  stgSmoke,
+  stgSmokeLoading,
   onOpenRuntimeMap,
   onOpenProgram,
   onOpenCluster,
+  onOpenDelivery,
 }: PulsePageProps) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <h2 className="m-0 text-sm font-semibold">Pulse — live & program snapshot</h2>
-        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Flywheel B runtime health plus spine focus. Refreshes with matrix probes (~30s).
-        </p>
-      </section>
+      <OpsSection
+        title="Overview"
+        description="Flywheel B runtime health plus spine focus. Refreshes with matrix probes (~30s)."
+        overflow="visible"
+      />
 
       <div className="grid gap-4 md:grid-cols-3">
         <PulseCard title="Ops API">
@@ -93,6 +99,22 @@ export function PulsePage({
             <span>{flywheelLabel(context.focus.flywheel_primary)}</span>
           )}
         </PulseCard>
+
+        <PulseCard title="Stg smoke">
+          {stgSmokeLoading ? (
+            <span className="text-[var(--muted-foreground)]">…</span>
+          ) : onOpenDelivery != null ? (
+            <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
+              <StatusLamp value={stgSmoke?.reachability ?? 'unknown'} kind="reach" />
+              <span className="ml-2">{stgSmoke?.detail ?? 'not probed'}</span>
+            </button>
+          ) : (
+            <>
+              <StatusLamp value={stgSmoke?.reachability ?? 'unknown'} kind="reach" />
+              <span className="ml-2">{stgSmoke?.detail ?? 'not probed'}</span>
+            </>
+          )}
+        </PulseCard>
       </div>
 
       {context != null && context.focus.blocker != null && context.focus.blocker !== '' && (
@@ -104,15 +126,16 @@ export function PulsePage({
         </section>
       )}
 
-      <section className="page-section panel-elevated overflow-hidden">
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-          <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Environment reachability
-          </h3>
+      <OpsSection
+        title="Environment reachability"
+        actions={
           <Button variant="ghost" size="xs" onClick={onOpenRuntimeMap}>
             Open Runtime Map
           </Button>
-        </header>
+        }
+        bodyPadding="none"
+        overflow="hidden"
+      >
         {matrixLoading && (
           <p className="px-3 py-2 text-[var(--muted-foreground)]">Probing targets…</p>
         )}
@@ -154,15 +177,10 @@ export function PulsePage({
             </DenseTableBody>
           </DenseDataTable>
         )}
-      </section>
+      </OpsSection>
 
       {context != null && (
-        <section className="page-section panel-elevated overflow-hidden">
-          <header className="border-b border-[var(--border)] px-3 py-2">
-            <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Active milestones (summary)
-            </h3>
-          </header>
+        <OpsSection title="Active milestones (summary)" bodyPadding="none" overflow="hidden">
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
@@ -192,7 +210,7 @@ export function PulsePage({
               Full program & decisions
             </Button>
           </div>
-        </section>
+        </OpsSection>
       )}
 
       {matrices.length > 0 && (
@@ -213,11 +231,8 @@ export function PulsePage({
 
 function PulseCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="page-section panel-elevated px-4 py-3">
-      <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-        {title}
-      </h3>
-      <div className="mt-2 flex items-center text-[var(--text-dense)]">{children}</div>
-    </section>
+    <OpsSection title={title} bodyPadding="default" overflow="visible">
+      <div className="flex items-center text-[var(--text-dense)]">{children}</div>
+    </OpsSection>
   )
 }

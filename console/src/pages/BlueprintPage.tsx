@@ -3,6 +3,7 @@ import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHea
 import type { OpsContextResponse } from '@/api/types'
 import { fetchContext } from '@/api/platform'
 import { CatalogSection } from '@/components/CatalogSection'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   ACTUATION_PHASES,
   AI_MERGE_RATIONALE,
@@ -50,23 +51,23 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      {/* Page header */}
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="m-0 text-sm font-semibold">Blueprint</h2>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] max-w-2xl">
-              North Star, system architecture, control-plane layers, and design principles.
-              Source:{' '}
-              <code className="font-mono-tabular text-[var(--primary)]">{BLUEPRINT_SOURCE}</code>
-              {' '}(v{BLUEPRINT_VERSION}).
-            </p>
-          </div>
+      <OpsSection
+        title="Overview"
+        description={
+          <>
+            North Star, system architecture, control-plane layers, and design principles.
+            Source:{' '}
+            <code className="font-mono-tabular text-[var(--primary)]">{BLUEPRINT_SOURCE}</code>
+            {' '}(v{BLUEPRINT_VERSION}).
+          </>
+        }
+        actions={
           <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
           </Button>
-        </div>
-      </section>
+        }
+        overflow="visible"
+      />
 
       {/* 1 — North Star */}
       <CatalogSection title="North Star">

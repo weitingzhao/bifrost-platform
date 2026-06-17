@@ -11,6 +11,7 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   AGENT_GOVERNANCE_ASSETS,
   CSS_EXCEPTIONS,
@@ -51,35 +52,37 @@ export function DesignSystemPage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      {/* Page header */}
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="m-0 text-sm font-semibold">Dense UI — Design System</h2>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] max-w-2xl">
-              Same business interaction → same shared UI primitive. Change tokens/components once → all adopters upgrade together.
-              Source:{' '}
-              <code className="font-mono-tabular text-[var(--primary)]">{DESIGN_SYSTEM_SOURCE}</code>
-              {' '}(v{DESIGN_SYSTEM_VERSION}).
-            </p>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Living visual contract:{' '}
-              <a
-                href={`${tradeFrontendUrl}${LIVING_CONTRACT_PATH}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[var(--primary)] underline"
-              >
-                Settings → UI Design System
-              </a>
-              {' '}(bifrost-trade-frontend)
-            </p>
-          </div>
+      <OpsSection
+        title="Overview"
+        description={
+          <>
+            Same business interaction → same shared UI primitive. Change tokens/components once → all adopters upgrade together.
+            Source:{' '}
+            <code className="font-mono-tabular text-[var(--primary)]">{DESIGN_SYSTEM_SOURCE}</code>
+            {' '}(v{DESIGN_SYSTEM_VERSION}).
+          </>
+        }
+        headerExtra={
+          <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Living visual contract:{' '}
+            <a
+              href={`${tradeFrontendUrl}${LIVING_CONTRACT_PATH}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--primary)] underline"
+            >
+              Settings → UI Design System
+            </a>
+            {' '}(bifrost-trade-frontend)
+          </p>
+        }
+        actions={
           <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
           </Button>
-        </div>
-      </section>
+        }
+        overflow="visible"
+      />
 
       {/* 1 — Layer stack */}
       <CatalogSection title="Layer stack (do not skip layers)">

@@ -7,11 +7,17 @@ import type {
   ClusterMetricsResponse,
   ClusterObservabilityResponse,
   GitOpsAppsResponse,
+  StackAddonsResponse,
   ClusterNamespacesResponse,
   ClusterNodesResponse,
   ClusterSummary,
   ClusterSyncResponse,
   ClusterWorkloadsResponse,
+  DeliveryPipelineRunsResponse,
+  DeliveryPipelinesResponse,
+  DeliveryRunLogsResponse,
+  DeliveryStartRunResponse,
+  StgSmokeResponse,
   EnvironmentSummary,
   MatrixResponse,
   OpsContextResponse,
@@ -116,6 +122,58 @@ export async function fetchGitOpsApps(): Promise<GitOpsAppsResponse> {
   const r = await fetch('/api/v1/gitops/apps')
   if (!r.ok) throw new Error(`gitops apps: HTTP ${r.status}`)
   return r.json() as Promise<GitOpsAppsResponse>
+}
+
+export async function fetchStackAddons(): Promise<StackAddonsResponse> {
+  const r = await fetch('/api/v1/stack/addons')
+  if (!r.ok) throw new Error(`stack addons: HTTP ${r.status}`)
+  return r.json() as Promise<StackAddonsResponse>
+}
+
+export async function fetchDeliveryPipelines(): Promise<DeliveryPipelinesResponse> {
+  const r = await fetch('/api/v1/delivery/pipelines')
+  if (!r.ok) throw new Error(`delivery pipelines: HTTP ${r.status}`)
+  return r.json() as Promise<DeliveryPipelinesResponse>
+}
+
+export async function fetchStgSmoke(): Promise<StgSmokeResponse> {
+  const r = await fetch('/api/v1/delivery/stg/smoke')
+  if (!r.ok) throw new Error(`stg smoke: HTTP ${r.status}`)
+  return r.json() as Promise<StgSmokeResponse>
+}
+
+export async function fetchPipelineRuns(name: string): Promise<DeliveryPipelineRunsResponse> {
+  const r = await fetch(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`)
+  if (!r.ok) throw new Error(`pipeline runs: HTTP ${r.status}`)
+  return r.json() as Promise<DeliveryPipelineRunsResponse>
+}
+
+export async function startPipelineRun(name: string): Promise<DeliveryStartRunResponse> {
+  const r = await authedFetch(
+    'pipeline run',
+    `/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`,
+    { method: 'POST' },
+  )
+  return r.json() as Promise<DeliveryStartRunResponse>
+}
+
+export async function fetchPipelineRunLogs(
+  runId: string,
+  namespace?: string,
+): Promise<DeliveryRunLogsResponse> {
+  const qs = namespace != null && namespace !== '' ? `?ns=${encodeURIComponent(namespace)}` : ''
+  const r = await fetch(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/logs${qs}`)
+  if (!r.ok) throw new Error(`pipeline logs: HTTP ${r.status}`)
+  return r.json() as Promise<DeliveryRunLogsResponse>
+}
+
+export async function syncGitOpsApp(name: string): Promise<ActuationResponse> {
+  const r = await authedFetch(
+    'gitops sync',
+    `/api/v1/gitops/apps/${encodeURIComponent(name)}/sync`,
+    { method: 'POST' },
+  )
+  return r.json() as Promise<ActuationResponse>
 }
 
 export async function fetchClusterNamespaces(

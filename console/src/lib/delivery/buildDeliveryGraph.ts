@@ -1,4 +1,4 @@
-import type { GitOpsAppsResponse, OpsContextResponse } from '@/api/types'
+import type { GitOpsAppsResponse, OpsContextResponse, StackAddonsResponse } from '@/api/types'
 import type { Edge, Node } from '@xyflow/react'
 
 export type DeliveryNodeStatus = 'live' | 'planned' | 'blocked' | 'degraded'
@@ -12,10 +12,10 @@ export type DeliveryNodeData = {
   selected?: boolean
 }
 
-const X_STEP = 180
+const X_STEP = 172
 const Y_NOW = 0
-const Y_TARGET = 140
-const Y_DECISION = 70
+const Y_TARGET = 200
+const Y_DECISION = 108
 
 const NOW_NODES: Array<{ id: string; label: string; subtitle?: string }> = [
   { id: 'dev-push', label: 'Dev / PR push', subtitle: 'Feature branches' },
@@ -74,6 +74,7 @@ function k3sBifrostNodeStatus(
 function statusForTargetNodeItem(
   id: string,
   gitops: GitOpsAppsResponse | undefined,
+  stack: StackAddonsResponse | undefined,
   clusterReachOk?: boolean,
 ): DeliveryNodeStatus {
   switch (id) {
@@ -83,7 +84,15 @@ function statusForTargetNodeItem(
       return k3sBifrostNodeStatus(gitops, clusterReachOk)
     case 'gitea':
     case 'tekton':
-    case 'registry':
+    case 'registry': {
+      const addon = stack?.addons.find(a => a.id === id)
+      if (addon == null) return 'planned'
+      if (addon.status === 'installed' && addon.reachability === 'ok') return 'live'
+      if (addon.status === 'not_installed') return 'planned'
+      if (addon.reachability === 'fail') return 'blocked'
+      if (addon.status === 'degraded' || addon.reachability === 'degraded') return 'degraded'
+      return 'planned'
+    }
     default:
       return 'planned'
   }
@@ -93,7 +102,18 @@ function targetSubtitle(
   id: string,
   def: { subtitle?: string },
   gitops: GitOpsAppsResponse | undefined,
+  stack: StackAddonsResponse | undefined,
 ): string | undefined {
+  if (id === 'gitea' || id === 'tekton' || id === 'registry') {
+    const addon = stack?.addons.find(a => a.id === id)
+    if (addon?.name != null && addon.ready != null) {
+      return `${addon.name} · ${addon.ready}`
+    }
+    if (addon?.status === 'not_installed') {
+      return 'Planned · P3 install'
+    }
+    return addon?.detail?.slice(0, 48) ?? def.subtitle
+  }
   if (id === 'argocd' && gitops != null) {
     if (gitops.argocd_status === 'installed' && gitops.server != null) {
       return `${gitops.server.name} · ${gitops.server.ready}`
@@ -123,6 +143,7 @@ export function buildDeliveryGraph(
   selectionId?: string | null,
   clusterReachOk?: boolean,
   gitops?: GitOpsAppsResponse,
+  stack?: StackAddonsResponse,
 ): { nodes: Node<DeliveryNodeData>[]; edges: Edge[] } {
   const nodes: Node<DeliveryNodeData>[] = []
   const edges: Edge[] = []
@@ -160,7 +181,7 @@ export function buildDeliveryGraph(
   })
 
   TARGET_NODES.forEach((def, i) => {
-    const nodeStatus = statusForTargetNodeItem(def.id, gitops, clusterReachOk)
+    const nodeStatus = statusForTargetNodeItem(def.id, gitops, stack, clusterReachOk)
     nodes.push({
       id: def.id,
       type: 'deliveryNode',
@@ -168,7 +189,7 @@ export function buildDeliveryGraph(
       data: {
         id: def.id,
         label: def.label,
-        subtitle: targetSubtitle(def.id, def, gitops),
+        subtitle: targetSubtitle(def.id, def, gitops, stack),
         status: nodeStatus,
         lane: 'target',
         selected: selectionId === def.id,

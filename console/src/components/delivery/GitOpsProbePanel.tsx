@@ -1,4 +1,5 @@
 import {
+  Button,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -8,7 +9,13 @@ import {
   DenseTableRow,
   DenseTag,
 } from '@bifrost/ui'
+import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ArgoCDStatus, GitOpsAppsResponse, Reachability } from '@/api/types'
+import { syncGitOpsApp } from '@/api/platform'
+import { DeliveryBrandIcon } from '@/components/delivery/DeliveryBrandIcon'
+import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { StatusLamp } from '@/components/StatusLamp'
 
 interface GitOpsProbePanelProps {
@@ -59,39 +66,70 @@ function healthTagVariant(health: string): 'success' | 'warning' | 'danger' | 'n
 
 export function GitOpsProbePanel({ data, isLoading, errorMessage }: GitOpsProbePanelProps) {
   const apps = data?.apps ?? []
+  const { canOperate } = usePlatformAuth()
+  const qc = useQueryClient()
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [syncingApp, setSyncingApp] = useState<string | null>(null)
+
+  const syncMutation = useMutation({
+    mutationFn: syncGitOpsApp,
+    onMutate: name => {
+      setSyncError(null)
+      setSyncingApp(name)
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['gitops', 'apps'] })
+      void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
+    },
+    onError: (err: Error) => setSyncError(err.message),
+    onSettled: () => setSyncingApp(null),
+  })
+
+  const headerExtra = (
+    <>
+      {errorMessage != null && errorMessage !== '' && (
+        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{errorMessage}</p>
+      )}
+      {!isLoading && data != null && errorMessage == null && (
+        <p className="m-0 mt-2 flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)]">
+          <StatusLamp value={gitOpsLamp(data.reachability, data.argocd_status)} kind="reach" />
+          <span>{gitOpsHeadline(data.argocd_status, data.reachability)}</span>
+        </p>
+      )}
+      {!isLoading && data != null && data.detail !== '' && (
+        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{data.detail}</p>
+      )}
+      {data?.server != null && (
+        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Server: {data.server.kind}/{data.server.name} · {data.server.ready} ·{' '}
+          <StatusLamp value={data.server.reachability} kind="reach" /> {data.server.status}
+        </p>
+      )}
+      {syncError != null && syncError !== '' && (
+        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{syncError}</p>
+      )}
+    </>
+  )
 
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="border-b border-[var(--border)] px-3 py-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="m-0 text-sm font-semibold">GitOps — Argo CD probe</h2>
-          <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {isLoading ? '…' : `GET /api/v1/gitops/apps · ns ${data?.argocd_namespace ?? 'cicd'}`}
-          </span>
-        </div>
-        {errorMessage != null && errorMessage !== '' && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
-            {errorMessage}
-          </p>
-        )}
-        {!isLoading && data != null && errorMessage == null && (
-          <p className="m-0 mt-2 flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)]">
-            <StatusLamp value={gitOpsLamp(data.reachability, data.argocd_status)} kind="reach" />
-            <span>{gitOpsHeadline(data.argocd_status, data.reachability)}</span>
-          </p>
-        )}
-        {!isLoading && data != null && data.detail !== '' && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {data.detail}
-          </p>
-        )}
-        {data?.server != null && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Server: {data.server.kind}/{data.server.name} · {data.server.ready} ·{' '}
-            <StatusLamp value={data.server.reachability} kind="reach" /> {data.server.status}
-          </p>
-        )}
-      </header>
+    <OpsSection
+      title="GitOps — Argo CD probe"
+      leading={<DeliveryBrandIcon id="argocd" variant="scope" />}
+      actions={
+        <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          {isLoading ? '…' : `GET /api/v1/gitops/apps · ns ${data?.argocd_namespace ?? 'cicd'}`}
+        </span>
+      }
+      headerExtra={headerExtra}
+      bodyPadding="none"
+      overflow="visible"
+      bodyClassName="ops-section-body--table"
+    >
+      <div className="border-b border-[var(--border)] px-3 py-2">
+        <OpsSubsectionTitle>
+          Argo CD Applications ({isLoading ? '…' : apps.length})
+        </OpsSubsectionTitle>
+      </div>
 
       <DenseDataTable>
         <DenseTableHeader>
@@ -101,18 +139,19 @@ export function GitOpsProbePanel({ data, isLoading, errorMessage }: GitOpsProbeP
             <DenseTableHead>Sync</DenseTableHead>
             <DenseTableHead>Health</DenseTableHead>
             <DenseTableHead>Destination</DenseTableHead>
+            {canOperate && <DenseTableHead>Actions</DenseTableHead>}
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
           {isLoading || (data == null && errorMessage == null) ? (
             <DenseTableRow>
-              <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
+              <DenseTableCell colSpan={canOperate ? 6 : 5} className="text-[var(--muted-foreground)]">
                 Loading…
               </DenseTableCell>
             </DenseTableRow>
           ) : apps.length === 0 ? (
             <DenseTableRow>
-              <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
+              <DenseTableCell colSpan={canOperate ? 6 : 5} className="text-[var(--muted-foreground)]">
                 {data?.argocd_status === 'installed'
                   ? 'No Argo CD Application resources yet'
                   : 'Install Argo CD in cicd namespace to enable GitOps sync'}
@@ -132,11 +171,23 @@ export function GitOpsProbePanel({ data, isLoading, errorMessage }: GitOpsProbeP
                 <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
                   {app.destination ?? '—'}
                 </DenseTableCell>
+                {canOperate && (
+                  <DenseTableCell>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={syncingApp === app.name}
+                      onClick={() => syncMutation.mutate(app.name)}
+                    >
+                      {syncingApp === app.name ? 'Syncing…' : 'Sync'}
+                    </Button>
+                  </DenseTableCell>
+                )}
               </DenseTableRow>
             ))
           )}
         </DenseTableBody>
       </DenseDataTable>
-    </section>
+    </OpsSection>
   )
 }

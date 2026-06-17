@@ -2,6 +2,7 @@ package gitops
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
@@ -303,4 +305,62 @@ func aggregateArgoStatus(
 		return "installed", probe.ReachOK, fmt.Sprintf("%s ready; %s", server.Name, appsDetail)
 	}
 	return "installed", probe.ReachOK, fmt.Sprintf("%s ready; %s", server.Name, appsDetail)
+}
+
+func (s *Service) SyncApplication(ctx context.Context, name string) (cluster.ActuationResponse, error) {
+	now := time.Now().UTC()
+	ns := s.entry.ResolvedApplicationsNamespace()
+	target := fmt.Sprintf("Application/%s/%s", ns, name)
+	resp := cluster.ActuationResponse{
+		OK:           false,
+		Action:       "gitops.sync",
+		Target:       target,
+		Changed:      false,
+		Message:      "",
+		GeneratedAt:  now,
+	}
+
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		resp.Message = err.Error()
+		return resp, err
+	}
+
+	if _, err := dyn.Resource(applicationGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err != nil {
+		resp.Message = fmt.Sprintf("application %s not found in %s: %v", name, ns, err)
+		return resp, fmt.Errorf("%s", resp.Message)
+	}
+
+	patch := map[string]any{
+		"operation": map[string]any{
+			"initiatedBy": map[string]any{
+				"username": "platform-api",
+			},
+			"sync": map[string]any{
+				"revision": "HEAD",
+			},
+		},
+	}
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		resp.Message = err.Error()
+		return resp, err
+	}
+
+	_, err = dyn.Resource(applicationGVR).Namespace(ns).Patch(
+		ctx,
+		name,
+		types.MergePatchType,
+		patchBytes,
+		metav1.PatchOptions{},
+	)
+	if err != nil {
+		resp.Message = fmt.Sprintf("sync patch failed: %v", err)
+		return resp, err
+	}
+
+	resp.OK = true
+	resp.Changed = true
+	resp.Message = fmt.Sprintf("Sync requested for Application %s in %s", name, ns)
+	return resp, nil
 }

@@ -26,7 +26,7 @@ export type LayerRow = {
 
 export const LAYER_STACK: LayerRow[] = [
   { layer: 'Tokens', location: 'src/index.css', role: 'Typography (--text-dense), cell spacing (--table-cell-*), business semantics (--color-profit/loss/unrealized, --color-entity-*)' },
-  { layer: 'Layout', location: 'src/components/layout/', role: 'PageShell, PageHeader, PageSection — three-surface canvas' },
+  { layer: 'Layout', location: 'console/src/components/layout/OpsSection.tsx', role: 'OpsSection + OpsSubsectionTitle — unified page-section panel-elevated chrome; PageHeader (page title) from @bifrost/ui' },
   { layer: 'Data display', location: 'src/components/data-display/', role: 'Tables, PnL, segments, icon actions, collapsible groups — 14 primitives' },
   { layer: 'Domain', location: 'src/pages/*, src/components/*/', role: 'Business columns, hooks, API wiring only — minimal styling' },
 ]

@@ -1,6 +1,7 @@
 import { DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { ClusterNode } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
+import { OpsSection } from '@/components/layout/OpsSection'
 
 interface ClusterNodesTableProps {
   nodes: ClusterNode[]
@@ -21,15 +22,18 @@ export function ClusterNodesTable({
   metricsAvailable,
 }: ClusterNodesTableProps) {
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-        <h2 className="m-0 text-sm font-semibold">Nodes</h2>
+    <OpsSection
+      title="Nodes"
+      actions={
         <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {isLoading ? '…' : `${nodes.length} nodes`}
           {isFetching && !isLoading ? ' · updating…' : ''}
           {metricsAvailable === false ? ' · usage n/a' : ''}
         </span>
-      </header>
+      }
+      bodyPadding="none"
+      overflow="hidden"
+    >
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>
@@ -93,6 +97,6 @@ export function ClusterNodesTable({
           )}
         </DenseTableBody>
       </DenseDataTable>
-    </section>
+    </OpsSection>
   )
 }
