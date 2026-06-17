@@ -30,7 +30,7 @@ export function ConsoleHeader({
 
       <div className="flex-1" />
 
-      {children}
+      {children != null ? <div className="shrink-0">{children}</div> : null}
 
       <span className="hidden shrink-0 items-center gap-1 text-[var(--text-dense-meta)] text-muted-foreground sm:inline-flex">
         Ops API <StatusLamp value={healthy ? 'ok' : 'fail'} kind="reach" />

@@ -16,6 +16,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 )
@@ -28,6 +29,7 @@ type Server struct {
 	gitops  *gitops.Handler
 	stack   *stack.Handler
 	delivery *delivery.Handler
+	promote  *promote.Handler
 	auth    *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -48,6 +50,7 @@ func New(cfg *config.Config) *Server {
 		gitops:  gitops.NewHandler(cfg, audit),
 		stack:   stack.NewHandler(cfg),
 		delivery: delivery.NewHandler(cfg, audit),
+		promote:  promote.NewHandler(cfg, audit),
 		auth:    auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -82,12 +85,17 @@ func (s *Server) Router() http.Handler {
 		r.Get("/stack/addons", s.stack.HandleAddons)
 		r.Get("/delivery/pipelines", s.delivery.HandlePipelines)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
+		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/gitops/apps/{name}/sync", s.gitops.HandleSyncApp)
 			r.Post("/delivery/pipelines/{name}/runs", s.delivery.HandleStartPipelineRun)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(s.auth.Require(actuation.RoleAdmin))
+			r.Post("/promote/release-gate", s.promote.HandleRunReleaseGate)
 		})
 		r.Get("/console/hosts", s.console.HandleHosts)
 		r.Get("/console/ws", s.console.HandleWebSocket)
@@ -202,7 +210,8 @@ func (s *Server) handleContext(w http.ResponseWriter, _ *http.Request) {
 		})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.cfg.OpsContext)
+	ctx := promote.OverlayContext(s.cfg.OpsContext, s.promote.Store())
+	writeJSON(w, http.StatusOK, ctx)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -56,7 +56,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Program',
     item: 'Promote',
     status: 'partial',
-    notes: 'Read-only flywheel A/B checklist + evaluatePromoteStatus; release_gate not wired',
+    notes: 'Flywheel checklist + POST /promote/release-gate + gate checks table (S6); cutover still BLOCKED_ON D1',
   },
   {
     area: 'Catalog',
@@ -92,7 +92,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Future',
     item: 'GitOps actuation',
     status: 'partial',
-    notes: 'GET /gitops/apps + stack/addons + sync + pipeline runs; bifrost-stg Application (S4)',
+    notes: 'GitOps sync + deliver-stg pipeline + stg smoke + release gate API (S3–S6)',
   },
 ]
 

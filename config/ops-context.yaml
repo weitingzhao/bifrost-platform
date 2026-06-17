@@ -168,8 +168,8 @@ promotion:
 
 environments_extended:
   staging:
-    status: NOT_STARTED
-    note: "Mac Mini #2 CI or K3s bifrost-stg (planned)"
+    status: IN_PROGRESS
+    note: "K3s bifrost-stg workloads running; release gate via Ops Console Promote (Session S6)"
 
 tracks:
   build:

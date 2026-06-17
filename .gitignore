@@ -2,6 +2,10 @@
 .env
 .env.local
 
+# Release gate runtime state (Session S6)
+config/release_gate_state.json
+config/release_gate.log
+
 # Go
 api/bin/
 api/platform-api

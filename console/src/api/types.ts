@@ -466,6 +466,30 @@ export interface StgSmokeResponse {
   generated_at: string
 }
 
+export interface ReleaseGateCheckView {
+  id: string
+  label: string
+  required: boolean
+  reachability: Reachability
+  detail: string
+}
+
+export interface ReleaseGateResponse {
+  result: string
+  at?: string
+  log_path: string
+  checks: ReleaseGateCheckView[]
+  ready: boolean
+  blockers?: string[]
+  generated_at: string
+  reachability: Reachability
+  detail: string
+}
+
+export interface RunReleaseGateResponse extends ActuationResponse {
+  gate: ReleaseGateResponse
+}
+
 export interface AuthCapabilities {
   authenticated: boolean
   principal?: string

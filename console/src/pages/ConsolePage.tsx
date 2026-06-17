@@ -13,6 +13,7 @@ import {
   fetchMatrix,
   fetchPlatformHealth,
   fetchStgSmoke,
+  fetchReleaseGate,
   fetchTopology,
   isAllMatrices,
 } from '@/api/platform'
@@ -166,6 +167,13 @@ export function ConsolePage() {
     queryFn: fetchStgSmoke,
     refetchInterval: 30_000,
     enabled: viewTab === 'delivery' || viewTab === 'pulse',
+  })
+
+  const releaseGateQuery = useQuery({
+    queryKey: ['promote', 'release-gate'],
+    queryFn: fetchReleaseGate,
+    refetchInterval: 30_000,
+    enabled: viewTab === 'promote',
   })
 
   const auditQuery = useQuery({
@@ -514,6 +522,11 @@ export function ConsolePage() {
             <PromotePage
               context={contextQuery.data}
               matrices={pulseMatrices}
+              releaseGate={releaseGateQuery.data}
+              releaseGateLoading={releaseGateQuery.isLoading}
+              releaseGateError={
+                releaseGateQuery.error instanceof Error ? releaseGateQuery.error.message : null
+              }
               isLoading={contextQuery.isLoading || matrixForPulse.isLoading}
               onOpenProgram={openProgram}
               onOpenDelivery={openDelivery}

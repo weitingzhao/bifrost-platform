@@ -231,23 +231,15 @@ html {
 
 .platform-auth-bar {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.5rem;
   flex-shrink: 0;
-}
-
-.platform-auth-bar__row {
-  display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-end;
   gap: 0.5rem;
 }
 
 .platform-auth-bar__badges {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.375rem;
   font-size: var(--text-dense-meta);
@@ -255,19 +247,14 @@ html {
 
 .platform-auth-bar__actions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 0.375rem;
 }
 
-.platform-auth-bar__connect {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .platform-auth-bar__input {
   height: 2rem;
-  width: 13rem;
+  width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--background);
