@@ -1,8 +1,23 @@
-import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import {
+  Button,
+  DenseDataTable,
+  DenseTableBody,
+  DenseTableCell,
+  DenseTableHead,
+  DenseTableHeadRow,
+  DenseTableHeader,
+  DenseTableRow,
+  DenseTag,
+  StatusLamp,
+} from '@bifrost/ui'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import type { MatrixResponse, OpsContextResponse, ReleaseGateResponse } from '@/api/types'
+import { runReleaseGate } from '@/api/platform'
 import { milestoneStatusVariant } from '@/components/FocusStrip'
-import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
 
 const FLYWHEEL_A_CHECKS = [
   'npm run lint',
@@ -13,14 +28,18 @@ const FLYWHEEL_A_CHECKS = [
 
 const FLYWHEEL_B_CHECKS = [
   'make prod-health (12/12)',
-  'scripts/release_gate.sh (when available)',
+  'POST /api/v1/promote/release-gate (admin token)',
   'Platform GET /api/v1/matrix?env=prod',
+  'K3s stg smoke (api-monitor NodePort)',
   'Owner sign-off chain',
 ] as const
 
 interface PromotePageProps {
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
+  releaseGate?: ReleaseGateResponse
+  releaseGateLoading?: boolean
+  releaseGateError?: string | null
   isLoading: boolean
   onOpenProgram: () => void
   onOpenDelivery?: () => void
@@ -29,10 +48,28 @@ interface PromotePageProps {
 export function PromotePage({
   context,
   matrices,
+  releaseGate,
+  releaseGateLoading = false,
+  releaseGateError = null,
   isLoading,
   onOpenProgram,
   onOpenDelivery,
 }: PromotePageProps) {
+  const { canAdmin } = usePlatformAuth()
+  const qc = useQueryClient()
+  const [runError, setRunError] = useState<string | null>(null)
+
+  const runMutation = useMutation({
+    mutationFn: runReleaseGate,
+    onMutate: () => setRunError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['promote', 'release-gate'] })
+      void qc.invalidateQueries({ queryKey: ['context'] })
+      void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
+    },
+    onError: (err: Error) => setRunError(err.message),
+  })
+
   if (isLoading || !context) {
     return <p className="text-[var(--muted-foreground)]">Loading promotion context…</p>
   }
@@ -41,6 +78,7 @@ export function PromotePage({
   const promote = evaluatePromoteStatus(context, matrices)
   const { ready, blockedByDecision, prodFails, gateDone } = promote
   const gate = context.promotion.last_gate
+  const checks = releaseGate?.checks ?? []
 
   const staging = context.environments_extended.staging
 
@@ -55,7 +93,8 @@ export function PromotePage({
         }
         description={
           <>
-            Read-only checklist for flywheel A + B promotion. CI/CD path diagram lives on{' '}
+            Flywheel A + B promotion checklist. Run release gate via API (admin token) — aggregates
+            prod matrix, cutover milestone, and K3s stg smoke. CI/CD path on{' '}
             {onOpenDelivery != null ? (
               <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
                 Delivery
@@ -63,7 +102,7 @@ export function PromotePage({
             ) : (
               <strong>Delivery</strong>
             )}
-            . No write actions at L0.
+            .
           </>
         }
         overflow="visible"
@@ -107,19 +146,61 @@ export function PromotePage({
         </PromoteSection>
       </div>
 
-      <PromoteSection title="Release gate (spine)">
+      <OpsSection
+        title="Release gate"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              POST /api/v1/promote/release-gate
+            </span>
+            {canAdmin && (
+              <Button size="sm" disabled={runMutation.isPending} onClick={() => runMutation.mutate()}>
+                {runMutation.isPending ? 'Running…' : 'Run release gate'}
+              </Button>
+            )}
+          </div>
+        }
+        headerExtra={
+          <>
+            {releaseGateError != null && releaseGateError !== '' && (
+              <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
+                {releaseGateError}
+              </p>
+            )}
+            {runError != null && (
+              <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{runError}</p>
+            )}
+            {!releaseGateLoading && releaseGate != null && releaseGateError == null && (
+              <p className="m-0 mt-2 flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)]">
+                <StatusLamp value={releaseGate.reachability} kind="reach" />
+                <span>{releaseGate.detail}</span>
+              </p>
+            )}
+          </>
+        }
+        bodyPadding="none"
+        overflow="visible"
+        bodyClassName="ops-section-body--table"
+      >
         <DenseDataTable>
           <DenseTableBody>
             <DenseTableRow>
               <DenseTableHead className="text-left">Last run</DenseTableHead>
-              <DenseTableCell className="font-mono-tabular">{gate.at ?? '—'}</DenseTableCell>
+              <DenseTableCell className="font-mono-tabular">
+                {gate.at ?? releaseGate?.at ?? '—'}
+              </DenseTableCell>
             </DenseTableRow>
             <DenseTableRow>
               <DenseTableHead className="text-left">Result</DenseTableHead>
               <DenseTableCell>
-                {gate.result != null ? (
-                  <DenseTag variant={milestoneStatusVariant(gate.result === 'pass' ? 'SIGNED' : 'BLOCKED_ON')}>
-                    {gate.result}
+                {(gate.result ?? releaseGate?.result) != null &&
+                (gate.result ?? releaseGate?.result) !== '' ? (
+                  <DenseTag
+                    variant={milestoneStatusVariant(
+                      (gate.result ?? releaseGate?.result) === 'pass' ? 'SIGNED' : 'BLOCKED_ON',
+                    )}
+                  >
+                    {gate.result ?? releaseGate?.result}
                   </DenseTag>
                 ) : (
                   '—'
@@ -127,17 +208,58 @@ export function PromotePage({
               </DenseTableCell>
             </DenseTableRow>
             <DenseTableRow>
+              <DenseTableHead className="text-left">Narrative ready</DenseTableHead>
+              <DenseTableCell>
+                <DenseTag variant={releaseGate?.ready === true ? 'success' : 'warning'}>
+                  {releaseGate?.ready === true ? 'yes' : 'no'}
+                </DenseTag>
+              </DenseTableCell>
+            </DenseTableRow>
+            <DenseTableRow>
               <DenseTableHead className="text-left">Log path</DenseTableHead>
-              <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{gate.log_path}</DenseTableCell>
+              <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
+                {gate.log_path ?? releaseGate?.log_path ?? '—'}
+              </DenseTableCell>
             </DenseTableRow>
           </DenseTableBody>
         </DenseDataTable>
-        {gate.result == null && (
+
+        {checks.length > 0 && (
+          <>
+            <div className="border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-label)] font-medium">
+              Last gate checks
+            </div>
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Check</DenseTableHead>
+                  <DenseTableHead>Required</DenseTableHead>
+                  <DenseTableHead>Reach</DenseTableHead>
+                  <DenseTableHead>Detail</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {checks.map(c => (
+                  <DenseTableRow key={c.id}>
+                    <DenseTableCell className="font-medium">{c.label || c.id}</DenseTableCell>
+                    <DenseTableCell>{c.required ? 'yes' : 'no'}</DenseTableCell>
+                    <DenseTableCell>
+                      <StatusLamp value={c.reachability} kind="reach" />
+                    </DenseTableCell>
+                    <DenseTableCell className="text-[var(--muted-foreground)]">{c.detail}</DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          </>
+        )}
+
+        {!gateDone && checks.length === 0 && (
           <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] lamp-warn">
-            No gate recorded — run release_gate.sh when available (Phase A).
+            No gate recorded — click Run release gate (admin token required).
           </p>
         )}
-      </PromoteSection>
+      </OpsSection>
 
       {staging != null && (
         <PromoteSection title="Staging environment">

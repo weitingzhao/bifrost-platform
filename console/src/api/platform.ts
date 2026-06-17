@@ -18,6 +18,8 @@ import type {
   DeliveryRunLogsResponse,
   DeliveryStartRunResponse,
   StgSmokeResponse,
+  ReleaseGateResponse,
+  RunReleaseGateResponse,
   EnvironmentSummary,
   MatrixResponse,
   OpsContextResponse,
@@ -140,6 +142,17 @@ export async function fetchStgSmoke(): Promise<StgSmokeResponse> {
   const r = await fetch('/api/v1/delivery/stg/smoke')
   if (!r.ok) throw new Error(`stg smoke: HTTP ${r.status}`)
   return r.json() as Promise<StgSmokeResponse>
+}
+
+export async function fetchReleaseGate(): Promise<ReleaseGateResponse> {
+  const r = await fetch('/api/v1/promote/release-gate')
+  if (!r.ok) throw new Error(`release gate: HTTP ${r.status}`)
+  return r.json() as Promise<ReleaseGateResponse>
+}
+
+export async function runReleaseGate(): Promise<RunReleaseGateResponse> {
+  const r = await authedFetch('release gate', '/api/v1/promote/release-gate', { method: 'POST' })
+  return r.json() as Promise<RunReleaseGateResponse>
 }
 
 export async function fetchPipelineRuns(name: string): Promise<DeliveryPipelineRunsResponse> {

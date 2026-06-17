@@ -42,7 +42,11 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
     [invalidateActuation],
   )
 
-  const signOut = useCallback(() => setToken(''), [setToken])
+  const signOut = useCallback(() => {
+    setPlatformOperatorToken('')
+    setTokenState('')
+    invalidateActuation()
+  }, [invalidateActuation])
 
   const refreshCapabilities = useCallback(() => {
     void qc.invalidateQueries({ queryKey: ['platform', 'auth', 'capabilities', token] })
