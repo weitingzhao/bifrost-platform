@@ -44,7 +44,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Program',
     item: 'Delivery',
     status: 'partial',
-    notes: 'GitOps + stack/addons + Pipeline Run (S3); bifrost-stg overlay + build (S4); deliver-stg pipeline + stg smoke probe (S5)',
+    notes: 'GitOps + stack/addons + Pipeline Run (S3); bifrost-stg overlay + build (S4); deliver-stg real frontend + stg smoke (S5–S9); Gitea + Kaniko CI (S7–S8)',
   },
   {
     area: 'Program',
