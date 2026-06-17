@@ -198,11 +198,8 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName string) (cl
 			"name": pipelineName,
 		},
 	}
-	if needsPipelineWorkspaces(pipelineName) {
-		spec["workspaces"] = []map[string]any{
-			{"name": "api-source", "emptyDir": map[string]any{}},
-			{"name": "frontend-source", "emptyDir": map[string]any{}},
-		}
+	if ws := pipelineRunWorkspaces(pipelineName); len(ws) > 0 {
+		spec["workspaces"] = ws
 	}
 	if pipelineName == "bifrost-deliver-stg" {
 		spec["taskRunSpecs"] = []map[string]any{
@@ -302,11 +299,37 @@ func (s *Service) RunLogs(ctx context.Context, namespace, runName string) (RunLo
 func int64Ptr(v int64) *int64 { return &v }
 
 func needsPipelineWorkspaces(pipelineName string) bool {
+	return len(pipelineRunWorkspaces(pipelineName)) > 0
+}
+
+func pipelineRunWorkspaces(pipelineName string) []map[string]any {
+	buildContextPVC := map[string]any{
+		"name": "build-context",
+		"volumeClaimTemplate": map[string]any{
+			"spec": map[string]any{
+				"accessModes":      []any{"ReadWriteOnce"},
+				"storageClassName": "local-path",
+				"resources": map[string]any{
+					"requests": map[string]any{"storage": "5Gi"},
+				},
+			},
+		},
+	}
 	switch pipelineName {
-	case "bifrost-build-stg", "bifrost-deliver-stg":
-		return true
+	case "bifrost-deliver-stg":
+		return []map[string]any{
+			{"name": "api-source", "emptyDir": map[string]any{}},
+			buildContextPVC,
+		}
+	case "bifrost-build-stg":
+		return []map[string]any{
+			{"name": "api-source", "emptyDir": map[string]any{}},
+			{"name": "frontend-source", "emptyDir": map[string]any{}},
+		}
+	case "bifrost-build-frontend-stg":
+		return []map[string]any{buildContextPVC}
 	default:
-		return false
+		return nil
 	}
 }
 
