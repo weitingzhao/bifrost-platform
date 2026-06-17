@@ -8,8 +8,11 @@ import {
   fetchContext,
   fetchEnvironments,
   fetchGitOpsApps,
+  fetchStackAddons,
+  fetchDeliveryPipelines,
   fetchMatrix,
   fetchPlatformHealth,
+  fetchStgSmoke,
   fetchTopology,
   isAllMatrices,
 } from '@/api/platform'
@@ -21,6 +24,7 @@ import { ConsoleHeader, OpsContextBar } from '@/components/ConsoleHeader'
 import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
+import { AuditPage } from '@/pages/AuditPage'
 import { BlueprintPage } from '@/pages/BlueprintPage'
 import { BriefingPage } from '@/pages/BriefingPage'
 import { ClusterPage } from '@/pages/ClusterPage'
@@ -46,6 +50,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   briefing: 'Agent Briefing',
   'control-room': 'Control Room',
   pulse: 'Pulse',
+  audit: 'Audit',
   'runtime-map': 'Runtime Map',
   cluster: 'Cluster',
   delivery: 'Delivery',
@@ -142,14 +147,32 @@ export function ConsolePage() {
     enabled: viewTab === 'delivery',
   })
 
+  const stackQuery = useQuery({
+    queryKey: ['stack', 'addons'],
+    queryFn: fetchStackAddons,
+    refetchInterval: 30_000,
+    enabled: viewTab === 'delivery',
+  })
+
+  const pipelinesQuery = useQuery({
+    queryKey: ['delivery', 'pipelines'],
+    queryFn: fetchDeliveryPipelines,
+    refetchInterval: 30_000,
+    enabled: viewTab === 'delivery',
+  })
+
+  const stgSmokeQuery = useQuery({
+    queryKey: ['delivery', 'stg-smoke'],
+    queryFn: fetchStgSmoke,
+    refetchInterval: 30_000,
+    enabled: viewTab === 'delivery' || viewTab === 'pulse',
+  })
+
   const auditQuery = useQuery({
     queryKey: ['platform', 'audit'],
     queryFn: fetchAudit,
     refetchInterval: 30_000,
-    enabled:
-      viewTab === 'briefing' ||
-      viewTab === 'control-room' ||
-      viewTab === 'cluster',
+    enabled: viewTab === 'briefing' || viewTab === 'audit',
   })
 
   const auditRecords = auditQuery.data?.records ?? []
@@ -211,6 +234,7 @@ export function ConsolePage() {
   const openPromote = () => setViewTab('promote')
   const openRuntimeMap = () => setViewTab('runtime-map')
   const openCluster = () => setViewTab('cluster')
+  const openAudit = () => setViewTab('audit')
   const openBlueprint = () => setViewTab('blueprint')
   const openStandards = () => setViewTab('platform-standards')
   const openEnvironments = () => setViewTab('environments')
@@ -351,12 +375,10 @@ export function ConsolePage() {
                 contextLoading={contextQuery.isLoading}
                 matrices={pulseMatrices}
                 matrixLoading={matrixForPulse.isLoading}
-                auditRecords={auditRecords}
-                auditLoading={auditQuery.isLoading}
                 onOpenRuntimeMap={openRuntimeMap}
                 onOpenProgram={openProgram}
                 onOpenDelivery={openDelivery}
-                onOpenCluster={openCluster}
+                onOpenAudit={openAudit}
               />
             </Suspense>
           </>
@@ -377,10 +399,23 @@ export function ConsolePage() {
               platformHealthy={healthQuery.data === true}
               clusterSummary={clusterQuery.data}
               clusterLoading={clusterQuery.isLoading}
+              stgSmoke={stgSmokeQuery.data}
+              stgSmokeLoading={stgSmokeQuery.isLoading}
               onOpenRuntimeMap={openRuntimeMap}
               onOpenProgram={openProgram}
               onOpenCluster={openCluster}
+              onOpenDelivery={openDelivery}
             />
+          </>
+        )}
+
+        {viewTab === 'audit' && (
+          <>
+            <PageHeader
+              title={VIEW_TITLES.audit}
+              description="Canonical actuation history for platform-api — GitOps sync, cluster operations, and other operator actions."
+            />
+            <AuditPage records={auditRecords} isLoading={auditQuery.isLoading} />
           </>
         )}
 
@@ -414,10 +449,9 @@ export function ConsolePage() {
               description="K3s cluster nodes, namespaces, and workloads — L0 read-only via platform-api."
             />
             <ClusterPage
-              auditRecords={auditRecords}
-              auditLoading={auditQuery.isLoading}
               onOpenStandards={openStandards}
               onOpenEnvironments={openEnvironments}
+              onOpenAudit={openAudit}
             />
           </>
         )}
@@ -435,9 +469,23 @@ export function ConsolePage() {
               gitops={gitopsQuery.data}
               gitopsLoading={gitopsQuery.isLoading}
               gitopsError={gitopsQuery.error instanceof Error ? gitopsQuery.error.message : null}
+              stack={stackQuery.data}
+              stackLoading={stackQuery.isLoading}
+              stackError={stackQuery.error instanceof Error ? stackQuery.error.message : null}
+              pipelines={pipelinesQuery.data}
+              pipelinesLoading={pipelinesQuery.isLoading}
+              pipelinesError={
+                pipelinesQuery.error instanceof Error ? pipelinesQuery.error.message : null
+              }
+              stgSmoke={stgSmokeQuery.data}
+              stgSmokeLoading={stgSmokeQuery.isLoading}
+              stgSmokeError={
+                stgSmokeQuery.error instanceof Error ? stgSmokeQuery.error.message : null
+              }
               isLoading={contextQuery.isLoading || matrixForPulse.isLoading}
               onOpenMilestones={openProgram}
               onOpenPromote={openPromote}
+              onOpenAudit={openAudit}
             />
           </>
         )}

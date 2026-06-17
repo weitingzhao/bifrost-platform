@@ -16,6 +16,7 @@ import {
   buildPipelineGraph,
   type MilestoneNodeData,
 } from '@/lib/control-room/buildPipelineGraph'
+import { OpsSection } from '@/components/layout/OpsSection'
 
 function statusBorderClass(status: string): string {
   if (status === 'BLOCKED_ON') return 'pipeline-node--blocked'
@@ -65,16 +66,12 @@ export function PipelineFlow({ context, selectionId, onSelectMilestone }: Pipeli
   )
 
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="border-b border-[var(--border)] px-3 py-2">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          Program milestone spine
-        </h3>
-        <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Migration and cutover milestones — not Tekton/CI build runs. See Delivery for CI/CD. Parallel
-          lane shows K3s track (D5).
-        </p>
-      </header>
+    <OpsSection
+      title="Program milestone spine"
+      description="Migration and cutover milestones — not Tekton/CI build runs. See Delivery for CI/CD. Parallel lane shows K3s track (D5)."
+      bodyPadding="none"
+      overflow="hidden"
+    >
       <div className="pipeline-flow-host min-h-[320px]">
         <ReactFlow
           nodes={nodes}
@@ -105,6 +102,6 @@ export function PipelineFlow({ context, selectionId, onSelectMilestone }: Pipeli
           />
         </ReactFlow>
       </div>
-    </section>
+    </OpsSection>
   )
 }

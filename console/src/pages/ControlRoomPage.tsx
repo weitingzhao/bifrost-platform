@@ -1,5 +1,5 @@
-import type { AuditRecord, MatrixResponse, OpsContextResponse } from '@/api/types'
-import { AuditRecordsPanel } from '@/components/AuditRecordsPanel'
+import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import { AuditPageLink } from '@/components/AuditPageLink'
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
 import { BayDetailDrawer } from '@/components/control-room/BayDetailDrawer'
 import {
@@ -7,6 +7,7 @@ import {
   type ControlRoomSelection,
 } from '@/components/control-room/DualFlywheelPanel'
 import { PipelineFlow } from '@/components/control-room/PipelineFlow'
+import { OpsSection } from '@/components/layout/OpsSection'
 import { useState } from 'react'
 
 interface ControlRoomPageProps {
@@ -14,12 +15,10 @@ interface ControlRoomPageProps {
   contextLoading: boolean
   matrices: MatrixResponse[]
   matrixLoading: boolean
-  auditRecords: AuditRecord[]
-  auditLoading: boolean
   onOpenRuntimeMap: () => void
   onOpenProgram: () => void
   onOpenDelivery: () => void
-  onOpenCluster: () => void
+  onOpenAudit: () => void
 }
 
 export function ControlRoomPage({
@@ -27,12 +26,10 @@ export function ControlRoomPage({
   contextLoading,
   matrices,
   matrixLoading,
-  auditRecords,
-  auditLoading,
   onOpenRuntimeMap,
   onOpenProgram,
   onOpenDelivery,
-  onOpenCluster,
+  onOpenAudit,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
 
@@ -42,23 +39,19 @@ export function ControlRoomPage({
 
   return (
     <div className="control-room-layout flex w-full min-w-0 flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <h2 className="m-0 text-sm font-semibold">Control Room — dual flywheel governance (L0)</h2>
-        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Program milestone spine, bay lamps, and Agent context packs. CI/CD path diagram lives on{' '}
-          <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
-            Delivery
-          </button>
-          . Read-only probes — no write actions.
-        </p>
-      </section>
-
-      <AuditRecordsPanel
-        records={auditRecords}
-        isLoading={auditLoading}
-        limit={5}
-        title="Recent actions"
-        onViewAll={onOpenCluster}
+      <OpsSection
+        title="Dual flywheel governance"
+        description={
+          <>
+            Program milestone spine, bay lamps, and Agent context packs. CI/CD path diagram lives on{' '}
+            <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
+              Delivery
+            </button>
+            . Read-only probes — no write actions (L0).
+          </>
+        }
+        headerExtra={<AuditPageLink onOpenAudit={onOpenAudit} className="mt-2" />}
+        overflow="visible"
       />
 
       <DualFlywheelPanel

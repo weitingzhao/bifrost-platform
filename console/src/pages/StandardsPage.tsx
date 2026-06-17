@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, DenseTag } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   ACTUATION_API_ROUTES,
   ACTUATION_PHASE_MATRIX,
@@ -33,23 +34,23 @@ export function StandardsPage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      {/* Page header */}
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="m-0 text-sm font-semibold">Standards</h2>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] max-w-2xl">
-              Trade stack probe contract, cluster actuation phases, and API route inventory.
-              Source:{' '}
-              <code className="font-mono-tabular text-[var(--primary)]">{STANDARDS_SOURCE}</code>
-              {' '}(v{STANDARDS_VERSION}).
-            </p>
-          </div>
+      <OpsSection
+        title="Overview"
+        description={
+          <>
+            Trade stack probe contract, cluster actuation phases, and API route inventory.
+            Source:{' '}
+            <code className="font-mono-tabular text-[var(--primary)]">{STANDARDS_SOURCE}</code>
+            {' '}(v{STANDARDS_VERSION}).
+          </>
+        }
+        actions={
           <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
           </Button>
-        </div>
-      </section>
+        }
+        overflow="visible"
+      />
 
       {/* 1 — HTTP probes */}
       <CatalogSection title="HTTP probes (via nginx)">

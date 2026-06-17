@@ -382,6 +382,90 @@ export interface GitOpsAppsResponse {
   generated_at: string
 }
 
+export type StackAddonStatus = 'not_installed' | 'installed' | 'degraded'
+
+export interface StackAddonView {
+  id: string
+  label: string
+  status: StackAddonStatus
+  reachability: Reachability
+  kind?: string
+  name?: string
+  ready?: string
+  detail?: string
+}
+
+export interface StackAddonsResponse {
+  cluster_id: string
+  namespace: string
+  reachability: Reachability
+  detail: string
+  addons: StackAddonView[]
+  generated_at: string
+}
+
+export interface DeliveryPipelineView {
+  name: string
+  namespace: string
+  detail?: string
+}
+
+export interface DeliveryPipelinesResponse {
+  cluster_id: string
+  namespace: string
+  reachability: Reachability
+  detail: string
+  pipelines: DeliveryPipelineView[]
+  generated_at: string
+}
+
+export interface DeliveryPipelineRunView {
+  name: string
+  namespace: string
+  pipeline: string
+  status: string
+  reason?: string
+  start_time?: string
+  completion_time?: string
+}
+
+export interface DeliveryPipelineRunsResponse {
+  cluster_id: string
+  namespace: string
+  pipeline: string
+  reachability: Reachability
+  detail: string
+  runs: DeliveryPipelineRunView[]
+  generated_at: string
+}
+
+export interface DeliveryRunLogsResponse {
+  cluster_id: string
+  namespace: string
+  run_name: string
+  logs: string
+  generated_at: string
+}
+
+export interface DeliveryStartRunResponse extends ActuationResponse {
+  run?: DeliveryPipelineRunView
+}
+
+export interface StgSmokeTargetView {
+  id: string
+  url: string
+  reachability: Reachability
+  detail: string
+}
+
+export interface StgSmokeResponse {
+  cluster_id: string
+  reachability: Reachability
+  detail: string
+  targets: StgSmokeTargetView[]
+  generated_at: string
+}
+
 export interface AuthCapabilities {
   authenticated: boolean
   principal?: string

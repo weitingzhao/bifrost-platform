@@ -22,6 +22,26 @@ type GitOpsConfig struct {
 	ArgoCDServerMatch     string `yaml:"argocd_server_match" json:"argocd_server_match"`
 }
 
+// StackAddonSpec — CI/CD stack component probe (P2 L0 read).
+type StackAddonSpec struct {
+	ID              string `yaml:"id" json:"id"`
+	Label           string `yaml:"label" json:"label"`
+	Match           string `yaml:"match" json:"match"`
+	ProbeNamespace  string `yaml:"probe_namespace" json:"probe_namespace,omitempty"`
+}
+
+// StackConfig — delivery stack probes in cicd namespace.
+type StackConfig struct {
+	Namespace string           `yaml:"namespace" json:"namespace"`
+	Addons    []StackAddonSpec `yaml:"addons" json:"addons"`
+}
+
+// StgSmokeConfig — HTTP probes for bifrost-stg workloads (Session S5).
+type StgSmokeConfig struct {
+	APIMonitorURL string `yaml:"api_monitor_url" json:"api_monitor_url"`
+	FrontendURL   string `yaml:"frontend_url" json:"frontend_url"`
+}
+
 type ClusterEntry struct {
 	ID                  string             `yaml:"id" json:"id"`
 	Label               string             `yaml:"label" json:"label"`
@@ -34,6 +54,8 @@ type ClusterEntry struct {
 	MonitoringNS        string             `yaml:"monitoring_namespace" json:"monitoring_namespace"`
 	ObservabilityURLs   ObservabilityURLs  `yaml:"observability_urls" json:"observability_urls"`
 	GitOps              GitOpsConfig       `yaml:"gitops" json:"gitops"`
+	Stack               StackConfig        `yaml:"stack" json:"stack"`
+	StgSmoke            StgSmokeConfig     `yaml:"stg_smoke" json:"stg_smoke"`
 }
 
 type ClustersFile struct {
@@ -163,6 +185,53 @@ func (e *ClusterEntry) ResolvedArgoCDServerMatch() string {
 		return strings.TrimSpace(e.GitOps.ArgoCDServerMatch)
 	}
 	return "argocd-server"
+}
+
+func (e *ClusterEntry) ResolvedStackNamespace() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_STACK_NAMESPACE")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.Stack.Namespace) != "" {
+		return strings.TrimSpace(e.Stack.Namespace)
+	}
+	return "cicd"
+}
+
+func (e *ClusterEntry) ResolvedStackAddons() []StackAddonSpec {
+	if e != nil && len(e.Stack.Addons) > 0 {
+		return e.Stack.Addons
+	}
+	return []StackAddonSpec{
+		{ID: "gitea", Label: "Gitea", Match: "gitea"},
+		{ID: "tekton", Label: "Tekton", Match: "tekton"},
+		{ID: "registry", Label: "Registry", Match: "registry"},
+	}
+}
+
+func (e *ClusterEntry) ResolvedStgAPIMonitorURL() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_STG_API_MONITOR_URL")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.StgSmoke.APIMonitorURL) != "" {
+		return strings.TrimSpace(e.StgSmoke.APIMonitorURL)
+	}
+	if e != nil && strings.TrimSpace(e.NodeIP) != "" {
+		return fmt.Sprintf("http://%s:30765/status", strings.TrimSpace(e.NodeIP))
+	}
+	return ""
+}
+
+func (e *ClusterEntry) ResolvedStgFrontendURL() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_STG_FRONTEND_URL")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.StgSmoke.FrontendURL) != "" {
+		return strings.TrimSpace(e.StgSmoke.FrontendURL)
+	}
+	if e != nil && strings.TrimSpace(e.NodeIP) != "" {
+		return fmt.Sprintf("http://%s:30780/", strings.TrimSpace(e.NodeIP))
+	}
+	return ""
 }
 
 func expandHome(path string) string {

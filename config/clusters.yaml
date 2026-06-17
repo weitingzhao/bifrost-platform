@@ -25,3 +25,19 @@ clusters:
       argocd_namespace: cicd
       applications_namespace: cicd
       argocd_server_match: argocd-server
+    stack:
+      namespace: cicd
+      addons:
+        - id: gitea
+          label: Gitea
+          match: gitea
+        - id: tekton
+          label: Tekton
+          match: tekton
+          probe_namespace: tekton-pipelines
+        - id: registry
+          label: Registry
+          match: registry
+    stg_smoke:
+      api_monitor_url: http://192.168.10.73:30765/status
+      frontend_url: http://192.168.10.73:30780/

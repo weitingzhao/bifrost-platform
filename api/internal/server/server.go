@@ -13,8 +13,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
+	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 )
 
@@ -24,6 +26,8 @@ type Server struct {
 	console *console.Handler
 	cluster *cluster.Handler
 	gitops  *gitops.Handler
+	stack   *stack.Handler
+	delivery *delivery.Handler
 	auth    *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -41,7 +45,9 @@ func New(cfg *config.Config) *Server {
 		prober:  probe.NewProber(),
 		console: console.NewHandler(cfg),
 		cluster: cluster.NewHandler(cfg, audit),
-		gitops:  gitops.NewHandler(cfg),
+		gitops:  gitops.NewHandler(cfg, audit),
+		stack:   stack.NewHandler(cfg),
+		delivery: delivery.NewHandler(cfg, audit),
 		auth:    auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -73,6 +79,16 @@ func (s *Server) Router() http.Handler {
 		r.Get("/audit", s.audit.HandleList)
 		r.Get("/jobs", s.jobs.HandleList)
 		r.Get("/gitops/apps", s.gitops.HandleApps)
+		r.Get("/stack/addons", s.stack.HandleAddons)
+		r.Get("/delivery/pipelines", s.delivery.HandlePipelines)
+		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
+		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
+		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
+		r.Group(func(r chi.Router) {
+			r.Use(s.auth.Require(actuation.RoleOperator))
+			r.Post("/gitops/apps/{name}/sync", s.gitops.HandleSyncApp)
+			r.Post("/delivery/pipelines/{name}/runs", s.delivery.HandleStartPipelineRun)
+		})
 		r.Get("/console/hosts", s.console.HandleHosts)
 		r.Get("/console/ws", s.console.HandleWebSocket)
 		r.Route("/cluster", func(r chi.Router) {

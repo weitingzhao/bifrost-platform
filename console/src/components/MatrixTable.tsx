@@ -1,19 +1,26 @@
 import { DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { MatrixResponse } from '@/api/types'
+import { OpsSection } from '@/components/layout/OpsSection'
 import { StatusLamp } from './StatusLamp'
 
 export function MatrixTable({ matrix }: { matrix: MatrixResponse }) {
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-[var(--border)]">
-        <div className="flex items-center gap-2">
-          <h2 className="m-0 text-sm font-semibold">{matrix.label}</h2>
+    <OpsSection
+      title={
+        <span className="inline-flex flex-wrap items-center gap-2 normal-case">
+          {matrix.label}
           <DenseTag variant="category">{matrix.environment}</DenseTag>
-        </div>
+        </span>
+      }
+      actions={
         <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)] font-mono-tabular">
           {new Date(matrix.generated_at).toLocaleString()}
         </span>
-      </header>
+      }
+      bodyPadding="none"
+      overflow="clip-x"
+      bodyClassName="ops-section-body--table"
+    >
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>
@@ -44,6 +51,6 @@ export function MatrixTable({ matrix }: { matrix: MatrixResponse }) {
           ))}
         </DenseTableBody>
       </DenseDataTable>
-    </section>
+    </OpsSection>
   )
 }

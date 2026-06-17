@@ -1,5 +1,6 @@
 import { DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, SegmentControl } from '@bifrost/ui'
 import type { ClusterNamespace } from '@/api/types'
+import { OpsSection } from '@/components/layout/OpsSection'
 
 type NsFilter = 'all' | 'bifrost'
 
@@ -21,9 +22,9 @@ export function ClusterNamespacesPanel({
   onSelectNs,
 }: ClusterNamespacesPanelProps) {
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-        <h2 className="m-0 text-sm font-semibold">Namespaces</h2>
+    <OpsSection
+      title="Namespaces"
+      actions={
         <SegmentControl
           value={filter}
           onChange={(v) => onFilterChange(v as NsFilter)}
@@ -33,7 +34,10 @@ export function ClusterNamespacesPanel({
           ]}
           size="sm"
         />
-      </header>
+      }
+      bodyPadding="none"
+      overflow="hidden"
+    >
       <DenseDataTable wrapClassName="max-h-64">
         <DenseTableHeader>
           <DenseTableHeadRow>
@@ -69,6 +73,6 @@ export function ClusterNamespacesPanel({
           )}
         </DenseTableBody>
       </DenseDataTable>
-    </section>
+    </OpsSection>
   )
 }

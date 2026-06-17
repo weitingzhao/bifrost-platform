@@ -1,6 +1,7 @@
 import { Button, StatusLamp } from '@bifrost/ui'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import { flywheelLabel } from '@/components/FocusStrip'
+import { OpsSection } from '@/components/layout/OpsSection'
 import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
 
 interface CouplingGatePanelProps {
@@ -18,9 +19,9 @@ export function CouplingGatePanel({
 }: CouplingGatePanelProps) {
   if (!context) {
     return (
-      <section className="page-section panel-elevated px-3 py-3">
+      <OpsSection title="Coupling gate" bodyPadding="compact" overflow="visible">
         <p className="m-0 text-[var(--muted-foreground)]">Loading coupling state…</p>
-      </section>
+      </OpsSection>
     )
   }
 
@@ -28,13 +29,13 @@ export function CouplingGatePanel({
   const lamp = promote.ready ? 'ok' : promote.blockedByDecision || promote.prodFails ? 'fail' : 'degraded'
 
   return (
-    <section className="page-section panel-elevated px-3 py-3 coupling-gate-panel">
-      <header className="mb-2 flex items-center gap-2">
-        <StatusLamp value={lamp} kind="reach" />
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          Coupling gate
-        </h3>
-      </header>
+    <OpsSection
+      title="Coupling gate"
+      leading={<StatusLamp value={lamp} kind="reach" />}
+      bodyPadding="default"
+      overflow="visible"
+      className="coupling-gate-panel"
+    >
       <p className="m-0 text-[var(--text-dense)] font-medium">
         {promote.ready ? 'Promote ready (narrative)' : 'Promote blocked'}
       </p>
@@ -58,6 +59,6 @@ export function CouplingGatePanel({
           Open Delivery
         </Button>
       )}
-    </section>
+    </OpsSection>
   )
 }

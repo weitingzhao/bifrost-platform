@@ -17,8 +17,8 @@ import {
   scaleDeployment,
   syncClusterKubeconfig,
 } from '@/api/platform'
-import type { AuditRecord, ClusterWorkload } from '@/api/types'
-import { AuditRecordsPanel } from '@/components/AuditRecordsPanel'
+import type { ClusterWorkload } from '@/api/types'
+import { AuditPageLink } from '@/components/AuditPageLink'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
 import { ClusterNamespacesPanel } from '@/components/cluster/ClusterNamespacesPanel'
@@ -45,15 +45,13 @@ interface ScaleState {
 }
 
 export function ClusterPage({
-  auditRecords = [],
-  auditLoading = false,
   onOpenStandards,
   onOpenEnvironments,
+  onOpenAudit,
 }: {
-  auditRecords?: AuditRecord[]
-  auditLoading?: boolean
   onOpenStandards?: () => void
   onOpenEnvironments?: () => void
+  onOpenAudit?: () => void
 }) {
   const qc = useQueryClient()
   const [nsFilter, setNsFilter] = useState<NsFilter>('bifrost')
@@ -326,6 +324,13 @@ export function ClusterPage({
               : actionError}
           </p>
         )}
+        {onOpenAudit != null && (
+          <AuditPageLink
+            onOpenAudit={onOpenAudit}
+            hint="Rollout restart, scale, and pod delete actions are recorded on"
+            className="mt-2"
+          />
+        )}
       </section>
 
       <section className="page-section panel-elevated px-4 py-3">
@@ -430,8 +435,6 @@ cd ../bifrost-platform && make start`}
         onOpenStandards={onOpenStandards}
         onOpenEnvironments={onOpenEnvironments}
       />
-
-      <AuditRecordsPanel records={auditRecords} isLoading={auditLoading} limit={20} />
 
       <ClusterDrawer
         open={drawerOpen}

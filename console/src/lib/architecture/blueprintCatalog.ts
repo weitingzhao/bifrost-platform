@@ -124,6 +124,12 @@ export const PLATFORM_API_ENDPOINTS: ApiEndpointRow[] = [
   { method: 'GET', path: '/api/v1/cluster/metrics', description: 'Cluster CPU/Mem, top pods' },
   { method: 'GET', path: '/api/v1/cluster/observability', description: 'Layer B probe status' },
   { method: 'GET', path: '/api/v1/gitops/apps', description: 'Argo CD health and Application sync status (P3 L0)' },
+  { method: 'POST', path: '/api/v1/gitops/apps/{name}/sync', description: 'Trigger Argo CD Application sync (operator)' },
+  { method: 'GET', path: '/api/v1/stack/addons', description: 'CI/CD stack add-on probe — Gitea, Tekton, Registry (P2 L0)' },
+  { method: 'GET', path: '/api/v1/delivery/pipelines', description: 'Tekton Pipeline list (P3 L0)' },
+  { method: 'GET', path: '/api/v1/delivery/pipelines/{name}/runs', description: 'PipelineRun history for a pipeline' },
+  { method: 'POST', path: '/api/v1/delivery/pipelines/{name}/runs', description: 'Start Tekton PipelineRun (operator)' },
+  { method: 'GET', path: '/api/v1/delivery/runs/{id}/logs', description: 'PipelineRun pod log tail' },
   { method: 'POST', path: '/api/v1/cluster/sync-kubeconfig', description: 'Run fetch-kubeconfig.sh' },
 ]
 

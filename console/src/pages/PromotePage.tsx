@@ -2,6 +2,7 @@ import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTa
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import { milestoneStatusVariant } from '@/components/FocusStrip'
 import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
+import { OpsSection } from '@/components/layout/OpsSection'
 
 const FLYWHEEL_A_CHECKS = [
   'npm run lint',
@@ -45,25 +46,28 @@ export function PromotePage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="m-0 text-sm font-semibold">Promote — release readiness (L0)</h2>
+      <OpsSection
+        title="Release readiness"
+        actions={
           <DenseTag variant={ready ? 'success' : 'danger'}>
             {ready ? 'Ready (narrative)' : 'Blocked'}
           </DenseTag>
-        </div>
-        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Read-only checklist for flywheel A + B promotion. CI/CD path diagram lives on{' '}
-          {onOpenDelivery != null ? (
-            <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
-              Delivery
-            </button>
-          ) : (
-            <strong>Delivery</strong>
-          )}
-          . No write actions at L0.
-        </p>
-      </section>
+        }
+        description={
+          <>
+            Read-only checklist for flywheel A + B promotion. CI/CD path diagram lives on{' '}
+            {onOpenDelivery != null ? (
+              <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
+                Delivery
+              </button>
+            ) : (
+              <strong>Delivery</strong>
+            )}
+            . No write actions at L0.
+          </>
+        }
+        overflow="visible"
+      />
 
       {!ready && (
         <section className="page-section panel-elevated px-4 py-3 lamp-warn">
@@ -181,13 +185,8 @@ function PromoteSection({
   children: React.ReactNode
 }) {
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="border-b border-[var(--border)] px-3 py-2">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          {title}
-        </h3>
-      </header>
+    <OpsSection title={title} bodyPadding="none" overflow="hidden">
       {children}
-    </section>
+    </OpsSection>
   )
 }

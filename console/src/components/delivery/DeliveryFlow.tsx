@@ -1,21 +1,26 @@
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo } from 'react'
 import {
   Background,
   Controls,
   MiniMap,
   ReactFlow,
+  useReactFlow,
   type NodeProps,
   Handle,
   Position,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { DenseTag, type DenseTagVariant } from '@bifrost/ui'
-import type { GitOpsAppsResponse, OpsContextResponse } from '@/api/types'
+import type { GitOpsAppsResponse, OpsContextResponse, StackAddonsResponse } from '@/api/types'
+import { DeliveryBrandIcon } from '@/components/delivery/DeliveryBrandIcon'
+import { DeliveryBrandLabel } from '@/components/delivery/DeliveryBrandLabel'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   buildDeliveryGraph,
   deliveryStatusClass,
   type DeliveryNodeData,
 } from '@/lib/delivery/buildDeliveryGraph'
+import { hasDeliveryBrandIcon } from '@/lib/delivery/deliveryStackIcons'
 
 function statusBadgeLabel(status: DeliveryNodeData['status']): string {
   if (status === 'live') return 'live'
@@ -33,6 +38,7 @@ function statusBadgeVariant(status: DeliveryNodeData['status']): DenseTagVariant
 
 function DeliveryNode({ data }: NodeProps) {
   const d = data as DeliveryNodeData
+  const showBrand = hasDeliveryBrandIcon(d.id)
   return (
     <div
       className={[
@@ -40,13 +46,17 @@ function DeliveryNode({ data }: NodeProps) {
         deliveryStatusClass(d.status),
         d.lane === 'decision' ? 'delivery-node--decision' : '',
         d.selected ? 'pipeline-node--selected' : '',
+        showBrand ? 'delivery-node--branded' : '',
       ]
         .filter(Boolean)
         .join(' ')}
     >
       <Handle type="target" position={Position.Left} className="pipeline-handle" />
       <div className="pipeline-node-id font-mono-tabular">{d.id}</div>
-      <div className="pipeline-node-label">{d.label}</div>
+      <div className="pipeline-node-label delivery-node-label">
+        {showBrand && <DeliveryBrandIcon id={d.id} variant="scope" />}
+        <span>{d.label}</span>
+      </div>
       {d.subtitle != null && (
         <div className="delivery-node-subtitle text-[var(--muted-foreground)]">{d.subtitle}</div>
       )}
@@ -60,11 +70,24 @@ function DeliveryNode({ data }: NodeProps) {
 
 const nodeTypes = { deliveryNode: memo(DeliveryNode) }
 
+/** Re-fit when node layout changes (gitops probe, milestones). */
+function FitViewOnChange({ nodeCount }: { nodeCount: number }) {
+  const { fitView } = useReactFlow()
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void fitView({ padding: 0.18, minZoom: 0.45, maxZoom: 1.1, duration: 150 })
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [nodeCount, fitView])
+  return null
+}
+
 interface DeliveryFlowProps {
   context: OpsContextResponse
   selectionId?: string | null
   clusterReachOk?: boolean
   gitops?: GitOpsAppsResponse
+  stack?: StackAddonsResponse
   onSelectNode?: (id: string) => void
 }
 
@@ -73,39 +96,66 @@ export function DeliveryFlow({
   selectionId,
   clusterReachOk,
   gitops,
+  stack,
   onSelectNode,
 }: DeliveryFlowProps) {
   const { nodes, edges } = useMemo(
-    () => buildDeliveryGraph(context, selectionId, clusterReachOk, gitops),
-    [context, selectionId, clusterReachOk, gitops],
+    () => buildDeliveryGraph(context, selectionId, clusterReachOk, gitops, stack),
+    [context, selectionId, clusterReachOk, gitops, stack],
   )
 
   return (
-    <section className="page-section panel-elevated overflow-hidden">
-      <header className="border-b border-[var(--border)] px-3 py-2">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          CI/CD dual track
-        </h3>
-        <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+    <OpsSection
+      title="CI/CD dual track"
+      description={
+        <>
           Near-term Mac runner vs target GitOps on K3s. Target lane uses live{' '}
           <span className="font-mono-tabular">GET /api/v1/gitops/apps</span> for Argo CD.
-        </p>
-      </header>
-      <div className="delivery-flow-host pipeline-flow-host min-h-[360px]">
+        </>
+      }
+      headerExtra={
+        <div className="mt-2 flex flex-col gap-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+          <span>
+            <strong className="text-[var(--foreground)]">Now</strong> — Mac CI → release gate → compose
+          </span>
+          <span className="delivery-lane-legend">
+            <strong className="text-[var(--foreground)]">Target</strong>
+            <span className="delivery-lane-legend__track">
+              <DeliveryBrandLabel id="gitea">Gitea</DeliveryBrandLabel>
+              <span aria-hidden>→</span>
+              <DeliveryBrandLabel id="tekton">Tekton</DeliveryBrandLabel>
+              <span aria-hidden>→</span>
+              <DeliveryBrandLabel id="registry">Registry</DeliveryBrandLabel>
+              <span aria-hidden>→</span>
+              <DeliveryBrandLabel id="argocd">Argo CD</DeliveryBrandLabel>
+              <span aria-hidden>→</span>
+              <DeliveryBrandLabel id="k3s-bifrost">K3s</DeliveryBrandLabel>
+            </span>
+          </span>
+        </div>
+      }
+      bodyPadding="none"
+      overflow="visible"
+      className="delivery-flow-section"
+    >
+      <div className="delivery-flow-host pipeline-flow-host">
         <ReactFlow
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
           fitView
-          fitViewOptions={{ padding: 0.25 }}
+          fitViewOptions={{ padding: 0.18, minZoom: 0.45, maxZoom: 1.1 }}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
           panOnScroll
           zoomOnScroll
+          minZoom={0.35}
+          maxZoom={1.25}
           onNodeClick={onSelectNode != null ? (_, node) => onSelectNode(node.id) : undefined}
           proOptions={{ hideAttribution: true }}
         >
+          <FitViewOnChange nodeCount={nodes.length} />
           <Background gap={16} size={1} color="var(--border)" />
           <Controls showInteractive={false} className="pipeline-controls" />
           <MiniMap
@@ -121,6 +171,6 @@ export function DeliveryFlow({
           />
         </ReactFlow>
       </div>
-    </section>
+    </OpsSection>
   )
 }

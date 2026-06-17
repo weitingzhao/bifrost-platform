@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   COMPOSE_RELATION,
   CONSOLE_CLUSTER_COMMANDS,
@@ -52,23 +53,24 @@ export function K3sBootstrapPage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="m-0 text-sm font-semibold">K3s Bootstrap — First Node Deployment</h2>
-            <p className="m-0 mt-1 max-w-2xl text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Bootstrap runbook for {FIRST_SERVER.hostname} ({FIRST_SERVER.ip}).
-              Source:{' '}
-              <code className="font-mono-tabular text-[var(--primary)]">{K3S_BOOTSTRAP_SOURCE}</code>
-              {' '}(v{K3S_BOOTSTRAP_VERSION}).
-            </p>
-            <p className="m-0 mt-2 text-[var(--text-dense-meta)]">{K3S_BOOTSTRAP_STATUS}</p>
-          </div>
+      <OpsSection
+        title="First node deployment"
+        description={
+          <>
+            Bootstrap runbook for {FIRST_SERVER.hostname} ({FIRST_SERVER.ip}).
+            Source:{' '}
+            <code className="font-mono-tabular text-[var(--primary)]">{K3S_BOOTSTRAP_SOURCE}</code>
+            {' '}(v{K3S_BOOTSTRAP_VERSION}).
+          </>
+        }
+        headerExtra={<p className="m-0 mt-2 text-[var(--text-dense-meta)]">{K3S_BOOTSTRAP_STATUS}</p>}
+        actions={
           <Button size="sm" className="shrink-0" onClick={() => void handleCopy()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
           </Button>
-        </div>
-      </section>
+        }
+        overflow="visible"
+      />
 
       <CatalogSection title="Prerequisites">
         <ul className="m-0 list-disc px-4 py-2 text-[var(--text-dense)]">
