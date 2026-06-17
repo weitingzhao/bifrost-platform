@@ -21,3 +21,7 @@ clusters:
       grafana: ""
       prometheus: ""
       docs_infra: ""
+    gitops:
+      argocd_namespace: cicd
+      applications_namespace: cicd
+      argocd_server_match: argocd-server

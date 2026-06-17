@@ -6,6 +6,7 @@ import type {
   ClusterEventsResponse,
   ClusterMetricsResponse,
   ClusterObservabilityResponse,
+  GitOpsAppsResponse,
   ClusterNamespacesResponse,
   ClusterNodesResponse,
   ClusterSummary,
@@ -109,6 +110,12 @@ export async function fetchClusterObservability(): Promise<ClusterObservabilityR
   const r = await fetch('/api/v1/cluster/observability')
   if (!r.ok) throw new Error(`cluster observability: HTTP ${r.status}`)
   return r.json() as Promise<ClusterObservabilityResponse>
+}
+
+export async function fetchGitOpsApps(): Promise<GitOpsAppsResponse> {
+  const r = await fetch('/api/v1/gitops/apps')
+  if (!r.ok) throw new Error(`gitops apps: HTTP ${r.status}`)
+  return r.json() as Promise<GitOpsAppsResponse>
 }
 
 export async function fetchClusterNamespaces(

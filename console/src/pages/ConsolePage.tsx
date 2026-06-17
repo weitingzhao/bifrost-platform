@@ -7,6 +7,7 @@ import {
   fetchCluster,
   fetchContext,
   fetchEnvironments,
+  fetchGitOpsApps,
   fetchMatrix,
   fetchPlatformHealth,
   fetchTopology,
@@ -132,6 +133,13 @@ export function ConsolePage() {
       viewTab === 'pulse' ||
       viewTab === 'runtime-map' ||
       viewTab === 'delivery',
+  })
+
+  const gitopsQuery = useQuery({
+    queryKey: ['gitops', 'apps'],
+    queryFn: fetchGitOpsApps,
+    refetchInterval: 30_000,
+    enabled: viewTab === 'delivery',
   })
 
   const auditQuery = useQuery({
@@ -424,6 +432,9 @@ export function ConsolePage() {
               context={contextQuery.data}
               matrices={pulseMatrices}
               clusterSummary={clusterQuery.data}
+              gitops={gitopsQuery.data}
+              gitopsLoading={gitopsQuery.isLoading}
+              gitopsError={gitopsQuery.error instanceof Error ? gitopsQuery.error.message : null}
               isLoading={contextQuery.isLoading || matrixForPulse.isLoading}
               onOpenMilestones={openProgram}
               onOpenPromote={openPromote}

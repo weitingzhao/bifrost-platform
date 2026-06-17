@@ -123,6 +123,7 @@ export const PLATFORM_API_ENDPOINTS: ApiEndpointRow[] = [
   { method: 'GET', path: '/api/v1/cluster/workloads?ns=', description: 'Pods in namespace' },
   { method: 'GET', path: '/api/v1/cluster/metrics', description: 'Cluster CPU/Mem, top pods' },
   { method: 'GET', path: '/api/v1/cluster/observability', description: 'Layer B probe status' },
+  { method: 'GET', path: '/api/v1/gitops/apps', description: 'Argo CD health and Application sync status (P3 L0)' },
   { method: 'POST', path: '/api/v1/cluster/sync-kubeconfig', description: 'Run fetch-kubeconfig.sh' },
 ]
 

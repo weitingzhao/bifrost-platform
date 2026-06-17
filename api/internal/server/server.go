@@ -13,6 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
+	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 )
@@ -22,6 +23,7 @@ type Server struct {
 	prober  *probe.Prober
 	console *console.Handler
 	cluster *cluster.Handler
+	gitops  *gitops.Handler
 	auth    *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -39,6 +41,7 @@ func New(cfg *config.Config) *Server {
 		prober:  probe.NewProber(),
 		console: console.NewHandler(cfg),
 		cluster: cluster.NewHandler(cfg, audit),
+		gitops:  gitops.NewHandler(cfg),
 		auth:    auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -69,6 +72,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/auth/capabilities", s.auth.Capabilities)
 		r.Get("/audit", s.audit.HandleList)
 		r.Get("/jobs", s.jobs.HandleList)
+		r.Get("/gitops/apps", s.gitops.HandleApps)
 		r.Get("/console/hosts", s.console.HandleHosts)
 		r.Get("/console/ws", s.console.HandleWebSocket)
 		r.Route("/cluster", func(r chi.Router) {

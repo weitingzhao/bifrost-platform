@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -21,6 +22,11 @@ func NewService(entry *config.ClusterEntry) *Service {
 	return &Service{entry: entry}
 }
 
+// SetClientFactoryForTest injects a fake kubernetes client (unit tests only).
+func (s *Service) SetClientFactoryForTest(factory func() (kubernetes.Interface, string, error)) {
+	s.clientFactory = factory
+}
+
 func (s *Service) Entry() *config.ClusterEntry {
 	return s.entry
 }
@@ -30,6 +36,42 @@ func (s *Service) kubeconfigPath() string {
 		return ""
 	}
 	return s.entry.KubeconfigPath()
+}
+
+// KubernetesClient exposes the cluster kube client for sibling packages (e.g. gitops P3 probe).
+func (s *Service) KubernetesClient() (kubernetes.Interface, string, error) {
+	return s.buildClient()
+}
+
+// RestConfig loads kubeconfig for dynamic clients (Argo CD Application CRDs).
+func (s *Service) RestConfig() (*rest.Config, string, error) {
+	path := s.kubeconfigPath()
+	if path == "" {
+		return nil, path, &ClientError{
+			Reachability: probe.ReachFail,
+			Detail:       "kubeconfig path not configured (set PLATFORM_KUBECONFIG)",
+		}
+	}
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, path, &ClientError{
+				Reachability: probe.ReachFail,
+				Detail:       fmt.Sprintf("kubeconfig not found: %s (run Sync kubeconfig or make k3s-fetch-kubeconfig)", path),
+			}
+		}
+		return nil, path, &ClientError{
+			Reachability: probe.ReachFail,
+			Detail:       fmt.Sprintf("kubeconfig unreadable: %s", path),
+		}
+	}
+	cfg, err := clientcmd.BuildConfigFromFlags("", path)
+	if err != nil {
+		return nil, path, &ClientError{
+			Reachability: probe.ReachFail,
+			Detail:       fmt.Sprintf("invalid kubeconfig %s: %v", path, err),
+		}
+	}
+	return cfg, path, nil
 }
 
 func (s *Service) buildClient() (kubernetes.Interface, string, error) {

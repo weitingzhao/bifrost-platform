@@ -10,7 +10,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { DenseTag, type DenseTagVariant } from '@bifrost/ui'
-import type { OpsContextResponse } from '@/api/types'
+import type { GitOpsAppsResponse, OpsContextResponse } from '@/api/types'
 import {
   buildDeliveryGraph,
   deliveryStatusClass,
@@ -20,12 +20,14 @@ import {
 function statusBadgeLabel(status: DeliveryNodeData['status']): string {
   if (status === 'live') return 'live'
   if (status === 'blocked') return 'blocked'
+  if (status === 'degraded') return 'degraded'
   return 'planned'
 }
 
 function statusBadgeVariant(status: DeliveryNodeData['status']): DenseTagVariant {
   if (status === 'live') return 'success'
   if (status === 'blocked') return 'danger'
+  if (status === 'degraded') return 'warning'
   return 'neutral'
 }
 
@@ -62,6 +64,7 @@ interface DeliveryFlowProps {
   context: OpsContextResponse
   selectionId?: string | null
   clusterReachOk?: boolean
+  gitops?: GitOpsAppsResponse
   onSelectNode?: (id: string) => void
 }
 
@@ -69,11 +72,12 @@ export function DeliveryFlow({
   context,
   selectionId,
   clusterReachOk,
+  gitops,
   onSelectNode,
 }: DeliveryFlowProps) {
   const { nodes, edges } = useMemo(
-    () => buildDeliveryGraph(context, selectionId, clusterReachOk),
-    [context, selectionId, clusterReachOk],
+    () => buildDeliveryGraph(context, selectionId, clusterReachOk, gitops),
+    [context, selectionId, clusterReachOk, gitops],
   )
 
   return (
@@ -83,7 +87,8 @@ export function DeliveryFlow({
           CI/CD dual track
         </h3>
         <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Near-term Mac runner vs target GitOps on K3s. Node status is derived from ops-context (L0).
+          Near-term Mac runner vs target GitOps on K3s. Target lane uses live{' '}
+          <span className="font-mono-tabular">GET /api/v1/gitops/apps</span> for Argo CD.
         </p>
       </header>
       <div className="delivery-flow-host pipeline-flow-host min-h-[360px]">
@@ -109,6 +114,7 @@ export function DeliveryFlow({
               const st = (n.data as DeliveryNodeData).status
               if (st === 'blocked') return 'var(--color-lamp-red)'
               if (st === 'live') return 'var(--color-lamp-green)'
+              if (st === 'degraded') return 'var(--color-lamp-yellow)'
               return 'var(--color-lamp-gray)'
             }}
             maskColor="color-mix(in srgb, var(--background) 75%, transparent)"
