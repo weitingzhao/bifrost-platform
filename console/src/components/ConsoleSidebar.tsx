@@ -10,6 +10,7 @@ export type ConsoleViewTab =
   | 'audit'
   | 'runtime-map'
   | 'cluster'
+  | 'placement'
   | 'delivery'
   | 'program'
   | 'promote'

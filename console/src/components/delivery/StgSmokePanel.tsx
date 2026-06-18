@@ -1,4 +1,5 @@
 import {
+  Button,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -14,18 +15,28 @@ import { StatusLamp } from '@/components/StatusLamp'
 interface StgSmokePanelProps {
   data: StgSmokeResponse | undefined
   isLoading: boolean
+  isFetching?: boolean
   errorMessage?: string | null
+  onRefresh?: () => void
 }
 
-export function StgSmokePanel({ data, isLoading, errorMessage }: StgSmokePanelProps) {
+export function StgSmokePanel({
+  data,
+  isLoading,
+  isFetching = false,
+  errorMessage,
+  onRefresh,
+}: StgSmokePanelProps) {
   return (
     <OpsSection
       title="Stg smoke"
-      description="HTTP probes for bifrost-stg via nginx gateway (NodePort :30880 — SPA + /api/monitor/status). Phase B v1."
+      description="HTTP probes for bifrost-stg via nginx gateway (NodePort :30880). APIs: /health (monitor also /status). Auto-refresh every 30s."
       actions={
-        <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          GET /api/v1/delivery/stg/smoke
-        </span>
+        onRefresh != null ? (
+          <Button variant="outline" size="sm" disabled={isFetching} onClick={onRefresh}>
+            {isFetching ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        ) : undefined
       }
       headerExtra={
         <>

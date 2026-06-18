@@ -32,6 +32,7 @@ import { ClusterPage } from '@/pages/ClusterPage'
 import { DeliveryPage } from '@/pages/DeliveryPage'
 import { DeployMainlinePage } from '@/pages/DeployMainlinePage'
 import { EnvironmentsPage } from '@/pages/EnvironmentsPage'
+import { PlacementPage } from '@/pages/PlacementPage'
 import { ProgramPage } from '@/pages/ProgramPage'
 import { PromotePage } from '@/pages/PromotePage'
 import { PulsePage } from '@/pages/PulsePage'
@@ -54,6 +55,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   audit: 'Audit',
   'runtime-map': 'Runtime Map',
   cluster: 'Cluster',
+  placement: 'Placement',
   delivery: 'Delivery',
   program: 'Milestones',
   promote: 'Promote',
@@ -76,6 +78,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'promote',
   'delivery',
   'cluster',
+  'placement',
   'runtime-map',
   'program',
   'deploy-mainline',
@@ -135,6 +138,7 @@ export function ConsolePage() {
     enabled:
       viewTab === 'briefing' ||
       viewTab === 'cluster' ||
+      viewTab === 'placement' ||
       viewTab === 'control-room' ||
       viewTab === 'pulse' ||
       viewTab === 'runtime-map' ||
@@ -159,7 +163,7 @@ export function ConsolePage() {
     queryKey: ['delivery', 'pipelines'],
     queryFn: fetchDeliveryPipelines,
     refetchInterval: 30_000,
-    enabled: viewTab === 'delivery',
+    enabled: viewTab === 'delivery' || viewTab === 'placement',
   })
 
   const stgSmokeQuery = useQuery({
@@ -242,6 +246,7 @@ export function ConsolePage() {
   const openPromote = () => setViewTab('promote')
   const openRuntimeMap = () => setViewTab('runtime-map')
   const openCluster = () => setViewTab('cluster')
+  const openPlacement = () => setViewTab('placement')
   const openAudit = () => setViewTab('audit')
   const openBlueprint = () => setViewTab('blueprint')
   const openStandards = () => setViewTab('platform-standards')
@@ -464,6 +469,16 @@ export function ConsolePage() {
           </>
         )}
 
+        {viewTab === 'placement' && (
+          <>
+            <PageHeader
+              title={VIEW_TITLES.placement}
+              description="Node pools, scheduling policy, and CI readiness — live cluster vs planned topology."
+            />
+            <PlacementPage onOpenDelivery={openDelivery} />
+          </>
+        )}
+
         {viewTab === 'delivery' && (
           <>
             <PageHeader
@@ -487,13 +502,16 @@ export function ConsolePage() {
               }
               stgSmoke={stgSmokeQuery.data}
               stgSmokeLoading={stgSmokeQuery.isLoading}
+              stgSmokeFetching={stgSmokeQuery.isFetching}
               stgSmokeError={
                 stgSmokeQuery.error instanceof Error ? stgSmokeQuery.error.message : null
               }
+              onRefreshStgSmoke={() => void stgSmokeQuery.refetch()}
               isLoading={contextQuery.isLoading || matrixForPulse.isLoading}
               onOpenMilestones={openProgram}
               onOpenPromote={openPromote}
               onOpenAudit={openAudit}
+              onOpenPlacement={openPlacement}
             />
           </>
         )}
@@ -584,7 +602,7 @@ export function ConsolePage() {
 
         {viewTab === 'roadmap' && <RoadmapPage />}
 
-        {viewTab === 'k3s-architecture' && <K3sArchitecturePage />}
+        {viewTab === 'k3s-architecture' && <K3sArchitecturePage onOpenPlacement={openPlacement} />}
 
         {viewTab === 'k3s-bootstrap' && <K3sBootstrapPage />}
 

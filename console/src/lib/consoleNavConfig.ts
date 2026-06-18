@@ -11,6 +11,7 @@ import {
   Map,
   MapPinned,
   Milestone,
+  Network,
   PlugZap,
   Rocket,
   Ruler,
@@ -39,6 +40,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
     items: [
       { id: 'runtime-map', label: 'Runtime Map', icon: Map },
       { id: 'cluster', label: 'Cluster', icon: Server },
+      { id: 'placement', label: 'Placement', icon: Network },
     ],
   },
   {

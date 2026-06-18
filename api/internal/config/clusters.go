@@ -36,10 +36,20 @@ type StackConfig struct {
 	Addons    []StackAddonSpec `yaml:"addons" json:"addons"`
 }
 
-// StgSmokeConfig — HTTP probes for bifrost-stg workloads (Session S5).
+// StgSmokeConfig — HTTP probes for bifrost-stg workloads (Session S5 / Phase B v2).
 type StgSmokeConfig struct {
-	APIMonitorURL string `yaml:"api_monitor_url" json:"api_monitor_url"`
-	FrontendURL   string `yaml:"frontend_url" json:"frontend_url"`
+	GatewayURL    string   `yaml:"gateway_url" json:"gateway_url"`
+	APIMonitorURL string   `yaml:"api_monitor_url" json:"api_monitor_url"`
+	FrontendURL   string   `yaml:"frontend_url" json:"frontend_url"`
+	APIDomains    []string `yaml:"api_domains" json:"api_domains"`
+}
+
+// DefaultStgAPIDomains — FastAPI domains behind nginx /api/{domain}/.
+func DefaultStgAPIDomains() []string {
+	return []string{
+		"monitor", "massive", "docs", "ops", "trading",
+		"strategy", "portfolio", "market", "research",
+	}
 }
 
 type ClusterEntry struct {
@@ -208,6 +218,34 @@ func (e *ClusterEntry) ResolvedStackAddons() []StackAddonSpec {
 	}
 }
 
+func (e *ClusterEntry) ResolvedStgGatewayURL() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_STG_GATEWAY_URL")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.StgSmoke.GatewayURL) != "" {
+		return strings.TrimSpace(e.StgSmoke.GatewayURL)
+	}
+	if e != nil && strings.TrimSpace(e.NodeIP) != "" {
+		return fmt.Sprintf("http://%s:30880", strings.TrimSpace(e.NodeIP))
+	}
+	return ""
+}
+
+func (e *ClusterEntry) ResolvedStgAPIDomains() []string {
+	if e != nil && len(e.StgSmoke.APIDomains) > 0 {
+		out := make([]string, 0, len(e.StgSmoke.APIDomains))
+		for _, d := range e.StgSmoke.APIDomains {
+			if s := strings.TrimSpace(d); s != "" {
+				out = append(out, s)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return DefaultStgAPIDomains()
+}
+
 func (e *ClusterEntry) ResolvedStgAPIMonitorURL() string {
 	if v := strings.TrimSpace(os.Getenv("PLATFORM_STG_API_MONITOR_URL")); v != "" {
 		return v
@@ -215,8 +253,8 @@ func (e *ClusterEntry) ResolvedStgAPIMonitorURL() string {
 	if e != nil && strings.TrimSpace(e.StgSmoke.APIMonitorURL) != "" {
 		return strings.TrimSpace(e.StgSmoke.APIMonitorURL)
 	}
-	if e != nil && strings.TrimSpace(e.NodeIP) != "" {
-		return fmt.Sprintf("http://%s:30880/api/monitor/status", strings.TrimSpace(e.NodeIP))
+	if gw := e.ResolvedStgGatewayURL(); gw != "" {
+		return strings.TrimRight(gw, "/") + "/api/monitor/status"
 	}
 	return ""
 }
@@ -228,8 +266,8 @@ func (e *ClusterEntry) ResolvedStgFrontendURL() string {
 	if e != nil && strings.TrimSpace(e.StgSmoke.FrontendURL) != "" {
 		return strings.TrimSpace(e.StgSmoke.FrontendURL)
 	}
-	if e != nil && strings.TrimSpace(e.NodeIP) != "" {
-		return fmt.Sprintf("http://%s:30880/", strings.TrimSpace(e.NodeIP))
+	if gw := e.ResolvedStgGatewayURL(); gw != "" {
+		return strings.TrimRight(gw, "/") + "/"
 	}
 	return ""
 }

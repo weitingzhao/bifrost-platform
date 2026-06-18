@@ -16,9 +16,20 @@ type PipelinesResponse struct {
 }
 
 type PipelineView struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Detail    string `json:"detail,omitempty"`
+	Name       string `json:"name"`
+	Namespace  string `json:"namespace"`
+	Detail     string `json:"detail,omitempty"`
+	BuildReady *bool  `json:"build_ready,omitempty"`
+	BlockReason string `json:"block_reason,omitempty"`
+}
+
+type PipelinePreflightResponse struct {
+	ClusterID    string             `json:"cluster_id"`
+	Pipeline     string             `json:"pipeline"`
+	BuildReady   bool               `json:"build_ready"`
+	Reason       string             `json:"reason,omitempty"`
+	Reachability probe.Reachability `json:"reachability"`
+	GeneratedAt  time.Time          `json:"generated_at"`
 }
 
 type PipelineRunsResponse struct {

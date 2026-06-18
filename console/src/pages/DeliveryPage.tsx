@@ -31,11 +31,14 @@ interface DeliveryPageProps {
   pipelinesError?: string | null
   stgSmoke?: StgSmokeResponse
   stgSmokeLoading?: boolean
+  stgSmokeFetching?: boolean
   stgSmokeError?: string | null
+  onRefreshStgSmoke?: () => void
   isLoading: boolean
   onOpenMilestones: () => void
   onOpenPromote: () => void
   onOpenAudit: () => void
+  onOpenPlacement?: () => void
 }
 
 export function DeliveryPage({
@@ -53,11 +56,14 @@ export function DeliveryPage({
   pipelinesError = null,
   stgSmoke,
   stgSmokeLoading = false,
+  stgSmokeFetching = false,
   stgSmokeError = null,
+  onRefreshStgSmoke,
   isLoading,
   onOpenMilestones,
   onOpenPromote,
   onOpenAudit,
+  onOpenPlacement,
 }: DeliveryPageProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 
@@ -109,12 +115,16 @@ export function DeliveryPage({
         pipelines={pipelines}
         pipelinesLoading={pipelinesLoading}
         errorMessage={pipelinesError}
+        stgSmokeDetail={stgSmoke?.detail}
+        onOpenPlacement={onOpenPlacement}
       />
 
       <StgSmokePanel
         data={stgSmoke}
         isLoading={stgSmokeLoading}
+        isFetching={stgSmokeFetching}
         errorMessage={stgSmokeError}
+        onRefresh={onRefreshStgSmoke}
       />
 
       <OpsSection title="Strategy (K3S §5)" bodyPadding="default" overflow="visible">

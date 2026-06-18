@@ -90,6 +90,13 @@ milestones:
     pipeline_after: k3s-phase1
     authority: console/src/lib/architecture/blueprintCatalog.ts
 
+  - id: workload-placement-governance
+    label: K8s workload placement governance (G1–G5)
+    status: IN_PROGRESS
+    pipeline_lane: parallel
+    pipeline_after: k3s-mac-agents
+    authority: console/src/lib/architecture/workloadPlacementCatalog.ts
+
   - id: legacy-retirement
     label: Phase 3 Legacy retirement
     status: NOT_STARTED
@@ -227,8 +234,8 @@ tracks:
         total: 5
         done: 2
         status: in_progress
-        next_task: "Join gpu-server Agent (P5a) · then deploy trade stack to K3s bifrost-prod namespace"
-        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ops-vm-ubt-01/.54 + ops-vm-ubt-02/.56 Ready ✓ · ③ gpu-server · ④ trade stack · ⑤ HA/validation"
+        next_task: "Phase B stg v2 — full stack on bifrost-stg (worker/socket + Live TWS + Massive); then Legacy UI alignment"
+        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ · ③ stg v2 full stack (P5a deferred) · ④ prod overlay · ⑤ HA/validation"
       - id: legacy-retirement
         label: "Phase 3 Legacy retirement"
         total: 4

@@ -10,6 +10,7 @@ import {
   fetchClusterMetrics,
   fetchClusterNamespaces,
   fetchClusterNodes,
+  fetchClusterPlacement,
   fetchClusterObservability,
   fetchClusterWorkloads,
   fetchPodLogs,
@@ -20,13 +21,12 @@ import {
 import type { ClusterWorkload } from '@/api/types'
 import { AuditPageLink } from '@/components/AuditPageLink'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
-import { ClusterNamespacesPanel } from '@/components/cluster/ClusterNamespacesPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
 import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabilityPanel'
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
-import { ClusterWorkloadsTable } from '@/components/cluster/ClusterWorkloadsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 type NsFilter = 'all' | 'bifrost'
@@ -55,7 +55,7 @@ export function ClusterPage({
 }) {
   const qc = useQueryClient()
   const [nsFilter, setNsFilter] = useState<NsFilter>('bifrost')
-  const [selectedNs, setSelectedNs] = useState<string | null>('cicd')
+  const [selectedNs, setSelectedNs] = useState<string | null>('bifrost-stg')
   const [selectedPod, setSelectedPod] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
@@ -99,6 +99,12 @@ export function ClusterPage({
   const namespacesQuery = useQuery({
     queryKey: ['cluster', 'namespaces', nsFilter],
     queryFn: () => fetchClusterNamespaces(nsFilter === 'bifrost' ? 'bifrost' : ''),
+    refetchInterval: 30_000,
+  })
+
+  const placementQuery = useQuery({
+    queryKey: ['cluster', 'placement'],
+    queryFn: fetchClusterPlacement,
     refetchInterval: 30_000,
   })
 
@@ -402,30 +408,26 @@ cd ../bifrost-platform && make start`}
         metricsAvailable={metricsQuery.data?.metrics_server_available}
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ClusterNamespacesPanel
-          namespaces={namespacesQuery.data?.namespaces ?? []}
-          filter={nsFilter}
-          selectedNs={selectedNs}
-          isLoading={namespacesQuery.isLoading}
-          onFilterChange={filter => {
-            setNsFilter(filter)
-            setSelectedPod(null)
-            setDrawerOpen(false)
-          }}
-          onSelectNs={handleSelectNs}
-        />
-        <ClusterWorkloadsTable
-          namespace={selectedNs}
-          workloads={workloadsQuery.data?.workloads ?? []}
-          isLoading={workloadsQuery.isLoading}
-          selectedPod={selectedPod}
-          onSelectPod={handleSelectPod}
-          onRestartDeployment={handleRestartDeployment}
-          onScaleDeployment={workload => setScaleState({ workload, replicas: 1 })}
-          onDeletePod={handleDeletePod}
-        />
-      </div>
+      <ClusterWorkloadsExplorer
+        namespaces={namespacesQuery.data?.namespaces ?? []}
+        nsFilter={nsFilter}
+        selectedNs={selectedNs}
+        workloads={workloadsQuery.data?.workloads ?? []}
+        isLoadingNamespaces={namespacesQuery.isLoading}
+        isLoadingWorkloads={workloadsQuery.isLoading}
+        selectedPod={selectedPod}
+        onFilterChange={filter => {
+          setNsFilter(filter)
+          setSelectedPod(null)
+          setDrawerOpen(false)
+        }}
+        onSelectNs={handleSelectNs}
+        onSelectPod={handleSelectPod}
+        onRestartDeployment={handleRestartDeployment}
+        onScaleDeployment={workload => setScaleState({ workload, replicas: 1 })}
+        onDeletePod={handleDeletePod}
+        placementRules={placementQuery.data?.rules}
+      />
 
       <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
 
