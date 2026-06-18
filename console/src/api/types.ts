@@ -219,6 +219,9 @@ export interface ClusterNode {
   name: string
   status: string
   roles: string
+  architecture?: string
+  os_image?: string
+  workload_label?: string
   version: string
   internal_ip: string
   reachability: Reachability
@@ -236,6 +239,46 @@ export interface ClusterNodesResponse {
   reachability: Reachability
   detail: string
   nodes: ClusterNode[]
+  generated_at: string
+}
+
+export interface ClusterPlacementPool {
+  id: string
+  label: string
+  arch?: string
+  workload_label?: string
+  status: 'live' | 'planned' | 'degraded'
+  nodes_total: number
+  nodes_ready: number
+  planned_host?: string
+  node_names: string[]
+}
+
+export interface ClusterPlacementRule {
+  workload_class: string
+  namespace: string
+  services?: string
+  required_selector: string
+  pool_id: string
+  satisfied: boolean
+  reachability: Reachability
+  gap_reason?: string
+  planned_binding?: string
+}
+
+export interface ClusterPlacementViolation {
+  severity: 'critical' | 'warning'
+  code: string
+  message: string
+}
+
+export interface ClusterPlacementResponse {
+  cluster_id: string
+  reachability: Reachability
+  detail: string
+  pools: ClusterPlacementPool[]
+  rules: ClusterPlacementRule[]
+  violations: ClusterPlacementViolation[]
   generated_at: string
 }
 
@@ -408,6 +451,17 @@ export interface DeliveryPipelineView {
   name: string
   namespace: string
   detail?: string
+  build_ready?: boolean
+  block_reason?: string
+}
+
+export interface DeliveryPipelinePreflightResponse {
+  cluster_id: string
+  pipeline: string
+  build_ready: boolean
+  reason?: string
+  reachability: Reachability
+  generated_at: string
 }
 
 export interface DeliveryPipelinesResponse {

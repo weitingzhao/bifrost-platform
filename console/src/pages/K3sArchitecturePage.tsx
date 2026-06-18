@@ -57,7 +57,7 @@ function checkpointVariant(actual: string): DenseTagVariant {
   return 'category'
 }
 
-export function K3sArchitecturePage() {
+export function K3sArchitecturePage({ onOpenPlacement }: { onOpenPlacement?: () => void }) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
 
   const handleCopy = useCallback(async () => {
@@ -85,9 +85,16 @@ export function K3sArchitecturePage() {
         }
         headerExtra={<p className="m-0 mt-2 text-[var(--text-dense-meta)]">{K3S_ARCH_STATUS}</p>}
         actions={
-          <Button size="sm" className="shrink-0" onClick={() => void handleCopy()}>
-            {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {onOpenPlacement != null && (
+              <Button size="sm" variant="outline" onClick={onOpenPlacement}>
+                Live placement
+              </Button>
+            )}
+            <Button size="sm" className="shrink-0" onClick={() => void handleCopy()}>
+              {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
+            </Button>
+          </div>
         }
         overflow="visible"
       />

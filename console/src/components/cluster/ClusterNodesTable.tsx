@@ -1,5 +1,6 @@
 import { DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { ClusterNode } from '@/api/types'
+import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
 
@@ -39,6 +40,8 @@ export function ClusterNodesTable({
           <DenseTableHeadRow>
             <DenseTableHead>Name</DenseTableHead>
             <DenseTableHead>Status</DenseTableHead>
+            <DenseTableHead>Arch</DenseTableHead>
+            <DenseTableHead>Workload</DenseTableHead>
             <DenseTableHead>Roles</DenseTableHead>
             <DenseTableHead>CPU alloc</DenseTableHead>
             <DenseTableHead>Mem alloc</DenseTableHead>
@@ -52,7 +55,7 @@ export function ClusterNodesTable({
         <DenseTableBody>
           {nodes.length === 0 ? (
             <DenseTableRow>
-              <DenseTableCell colSpan={10} className="text-[var(--muted-foreground)]">
+              <DenseTableCell colSpan={12} className="text-[var(--muted-foreground)]">
                 {isLoading ? 'Loading…' : 'No nodes (cluster unreachable or empty)'}
               </DenseTableCell>
             </DenseTableRow>
@@ -64,6 +67,10 @@ export function ClusterNodesTable({
                   <StatusLamp value={node.reachability} kind="reach" />{' '}
                   <span className="font-mono-tabular">{node.status}</span>
                 </DenseTableCell>
+                <DenseTableCell>
+                  <NodeArchLabel arch={node.architecture} />
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{node.workload_label || '—'}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{node.roles}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{node.cpu_allocatable ?? '—'}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{node.memory_allocatable ?? '—'}</DenseTableCell>

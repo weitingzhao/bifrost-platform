@@ -119,9 +119,9 @@ func (s *Service) collectChecks(ctx context.Context) []GateCheck {
 			Reachability: probe.ReachUnknown,
 			Detail:       "stg smoke URLs not configured",
 		})
-	} else {
+		} else {
 		for _, t := range stg.Targets {
-			required := t.ID == "stg-api-monitor"
+			required := t.ID == "stg-frontend" || strings.HasPrefix(t.ID, "stg-api-")
 			checks = append(checks, GateCheck{
 				ID: t.ID, Label: t.ID, Required: required,
 				Reachability: t.Reachability, Detail: t.Detail,

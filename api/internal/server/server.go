@@ -84,6 +84,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/gitops/apps", s.gitops.HandleApps)
 		r.Get("/stack/addons", s.stack.HandleAddons)
 		r.Get("/delivery/pipelines", s.delivery.HandlePipelines)
+		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
@@ -92,6 +93,7 @@ func (s *Server) Router() http.Handler {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/gitops/apps/{name}/sync", s.gitops.HandleSyncApp)
 			r.Post("/delivery/pipelines/{name}/runs", s.delivery.HandleStartPipelineRun)
+			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleAdmin))
@@ -102,6 +104,7 @@ func (s *Server) Router() http.Handler {
 		r.Route("/cluster", func(r chi.Router) {
 			r.Get("/", s.cluster.HandleSummary)
 			r.Get("/nodes", s.cluster.HandleNodes)
+			r.Get("/placement", s.cluster.HandlePlacement)
 			r.Get("/metrics", s.cluster.HandleMetrics)
 			r.Get("/observability", s.cluster.HandleObservability)
 			r.Get("/namespaces", s.cluster.HandleNamespaces)

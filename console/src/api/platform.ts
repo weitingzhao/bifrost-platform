@@ -10,11 +10,13 @@ import type {
   StackAddonsResponse,
   ClusterNamespacesResponse,
   ClusterNodesResponse,
+  ClusterPlacementResponse,
   ClusterSummary,
   ClusterSyncResponse,
   ClusterWorkloadsResponse,
   DeliveryPipelineRunsResponse,
   DeliveryPipelinesResponse,
+  DeliveryPipelinePreflightResponse,
   DeliveryRunLogsResponse,
   DeliveryStartRunResponse,
   StgSmokeResponse,
@@ -108,6 +110,12 @@ export async function fetchClusterNodes(): Promise<ClusterNodesResponse> {
   return r.json() as Promise<ClusterNodesResponse>
 }
 
+export async function fetchClusterPlacement(): Promise<ClusterPlacementResponse> {
+  const r = await fetch('/api/v1/cluster/placement')
+  if (!r.ok) throw new Error(`cluster placement: HTTP ${r.status}`)
+  return r.json() as Promise<ClusterPlacementResponse>
+}
+
 export async function fetchClusterMetrics(limit = 8): Promise<ClusterMetricsResponse> {
   const r = await fetch(`/api/v1/cluster/metrics?limit=${limit}`)
   if (!r.ok) throw new Error(`cluster metrics: HTTP ${r.status}`)
@@ -136,6 +144,14 @@ export async function fetchDeliveryPipelines(): Promise<DeliveryPipelinesRespons
   const r = await fetch('/api/v1/delivery/pipelines')
   if (!r.ok) throw new Error(`delivery pipelines: HTTP ${r.status}`)
   return r.json() as Promise<DeliveryPipelinesResponse>
+}
+
+export async function fetchPipelinePreflight(
+  pipelineName: string,
+): Promise<DeliveryPipelinePreflightResponse> {
+  const r = await fetch(`/api/v1/delivery/pipelines/${encodeURIComponent(pipelineName)}/preflight`)
+  if (!r.ok) throw new Error(`delivery preflight: HTTP ${r.status}`)
+  return r.json() as Promise<DeliveryPipelinePreflightResponse>
 }
 
 export async function fetchStgSmoke(): Promise<StgSmokeResponse> {
@@ -178,6 +194,19 @@ export async function fetchPipelineRunLogs(
   const r = await fetch(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/logs${qs}`)
   if (!r.ok) throw new Error(`pipeline logs: HTTP ${r.status}`)
   return r.json() as Promise<DeliveryRunLogsResponse>
+}
+
+export async function deletePipelineRun(
+  runId: string,
+  namespace?: string,
+): Promise<ActuationResponse> {
+  const qs = namespace != null && namespace !== '' ? `?ns=${encodeURIComponent(namespace)}` : ''
+  const r = await authedFetch(
+    'delete pipeline run',
+    `/api/v1/delivery/runs/${encodeURIComponent(runId)}${qs}`,
+    { method: 'DELETE' },
+  )
+  return r.json() as Promise<ActuationResponse>
 }
 
 export async function syncGitOpsApp(name: string): Promise<ActuationResponse> {

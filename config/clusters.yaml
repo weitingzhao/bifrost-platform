@@ -39,5 +39,6 @@ clusters:
           label: Registry
           match: registry
     stg_smoke:
+      gateway_url: http://192.168.10.73:30880
       api_monitor_url: http://192.168.10.73:30880/api/monitor/status
       frontend_url: http://192.168.10.73:30880/

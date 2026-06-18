@@ -38,13 +38,19 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Runtime',
     item: 'Cluster',
     status: 'partial',
-    notes: 'L0 summary/nodes/NS/workloads; Layer A metrics; Layer B observability probe; P1 actuation (restart/scale/delete pod)',
+    notes: 'L0 summary/nodes/NS/workloads; namespace ideal arch + placement gap; Layer A metrics; P1 actuation',
+  },
+  {
+    area: 'Runtime',
+    item: 'Placement',
+    status: 'done',
+    notes: 'Node pools + policy matrix + violations; GET /cluster/placement; CI preflight; Delivery Run gate; workloadPlacementCatalog',
   },
   {
     area: 'Program',
     item: 'Delivery',
     status: 'partial',
-    notes: 'GitOps + stack/addons + Pipeline Run; Phase B stg v1 — nginx :30880 + 9 Trade APIs + PG/Redis + frontend (worker/socket deferred); Gitea Kaniko deliver-stg',
+    notes: 'GitOps + deliver-stg v2 — Kaniko amd64 taskRunTemplate + preflight; stg overlay amd64 pool (G3)',
   },
   {
     area: 'Program',
@@ -74,7 +80,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Platform API',
     item: 'L0 probes',
     status: 'done',
-    notes: 'matrix, topology, context, cluster read, gitops/apps, delivery/stg/smoke (S5), audit, auth/capabilities',
+    notes: 'matrix, topology, context, cluster read/placement, gitops/apps, delivery/stg/smoke + preflight, audit, auth/capabilities',
   },
   {
     area: 'Platform API',
@@ -105,6 +111,20 @@ export function formatUiProgressSection(): string {
       lastArea = row.area
     }
     lines.push(`- [${row.status.toUpperCase()}] ${row.item} — ${row.notes}`)
+  }
+  return lines.join('\n')
+}
+
+/** Optional live placement violations — append to briefing when placement API is available. */
+export function formatPlacementViolationsSummary(
+  violations: { severity: string; message: string }[] | undefined,
+): string {
+  if (violations == null || violations.length === 0) {
+    return '## Placement violations\n\n0 critical (GET /api/v1/cluster/placement)'
+  }
+  const lines = ['## Placement violations', '']
+  for (const v of violations) {
+    lines.push(`- [${v.severity}] ${v.message}`)
   }
   return lines.join('\n')
 }

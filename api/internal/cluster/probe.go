@@ -453,10 +453,17 @@ func nodeView(n corev1.Node) NodeView {
 		reach = probe.ReachFail
 	}
 	cpuAlloc, memAlloc, storageAlloc := nodeAllocatable(n)
+	arch := n.Status.NodeInfo.Architecture
+	if arch == "" {
+		arch = n.Labels["kubernetes.io/arch"]
+	}
 	return NodeView{
 		Name:               n.Name,
 		Status:             status,
 		Roles:              nodeRoles(n.Labels),
+		Architecture:       arch,
+		OSImage:            n.Status.NodeInfo.OSImage,
+		WorkloadLabel:      n.Labels["workload"],
 		Version:            n.Status.NodeInfo.KubeletVersion,
 		InternalIP:         ip,
 		Reachability:       reach,

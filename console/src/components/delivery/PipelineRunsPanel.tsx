@@ -8,20 +8,40 @@ import {
   DenseTableHeader,
   DenseTableRow,
   DenseTag,
+  IconActionButton,
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import type { DeliveryPipelineRunView, DeliveryPipelinesResponse } from '@/api/types'
-import { fetchPipelineRunLogs, fetchPipelineRuns, startPipelineRun } from '@/api/platform'
+import {
+  deletePipelineRun,
+  fetchPipelineRunLogs,
+  fetchPipelineRuns,
+  startPipelineRun,
+} from '@/api/platform'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeliveryBrandLabel } from '@/components/delivery/DeliveryBrandLabel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { StatusLamp } from '@/components/StatusLamp'
+import {
+  buildPipelineRunAskPack,
+  defaultPipelineRunSort,
+  formatPipelineRunStatus,
+  isPipelineRunSucceeded,
+  sortPipelineRuns,
+  togglePipelineRunSort,
+  type PipelineRunSortDir,
+  type PipelineRunSortKey,
+} from '@/lib/delivery/pipelineRunAskPack'
 
 interface PipelineRunsPanelProps {
   pipelines: DeliveryPipelinesResponse | undefined
   pipelinesLoading: boolean
   errorMessage?: string | null
+  stgSmokeDetail?: string | null
+  onOpenPlacement?: () => void
 }
 
 function runStatusVariant(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -32,14 +52,45 @@ function runStatusVariant(status: string): 'success' | 'warning' | 'danger' | 'n
   return 'neutral'
 }
 
-function formatRunStatus(status: string, reason?: string): string {
-  const s = status.toLowerCase()
-  if (s === 'true') return reason != null && reason !== '' ? reason : 'Succeeded'
-  if (s === 'false') return reason != null && reason !== '' ? reason : 'Failed'
-  return status
+async function copyText(text: string): Promise<void> {
+  await navigator.clipboard.writeText(text)
 }
 
-export function PipelineRunsPanel({ pipelines, pipelinesLoading, errorMessage }: PipelineRunsPanelProps) {
+function SortableRunHead({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onSort,
+}: {
+  label: string
+  sortKey: PipelineRunSortKey
+  activeKey: PipelineRunSortKey
+  dir: PipelineRunSortDir
+  onSort: (key: PipelineRunSortKey) => void
+}) {
+  const active = activeKey === sortKey
+  return (
+    <DenseTableHead
+      className="cursor-pointer select-none"
+      aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      onClick={() => onSort(sortKey)}
+    >
+      <span className="inline-flex items-center gap-1">
+        <span>{label}</span>
+        {active ? <span className="text-[var(--foreground)]">{dir === 'asc' ? '↑' : '↓'}</span> : null}
+      </span>
+    </DenseTableHead>
+  )
+}
+
+export function PipelineRunsPanel({
+  pipelines,
+  pipelinesLoading,
+  errorMessage,
+  stgSmokeDetail,
+  onOpenPlacement,
+}: PipelineRunsPanelProps) {
   const pipelineList = pipelines?.pipelines ?? []
   const defaultPipeline =
     pipelineList.find(p => p.name === 'bifrost-deliver-stg')?.name ??
@@ -49,8 +100,14 @@ export function PipelineRunsPanel({ pipelines, pipelinesLoading, errorMessage }:
     ''
   const [selectedPipeline, setSelectedPipeline] = useState<string>(defaultPipeline)
   const [expandedRun, setExpandedRun] = useState<string | null>(null)
+  const [askAiRun, setAskAiRun] = useState<string | null>(null)
+  const [askAiPack, setAskAiPack] = useState<string | null>(null)
+  const [askAiLoading, setAskAiLoading] = useState(false)
+  const [askAiCopied, setAskAiCopied] = useState(false)
   const [runError, setRunError] = useState<string | null>(null)
   const [startingPipeline, setStartingPipeline] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<DeliveryPipelineRunView | null>(null)
+  const [runSort, setRunSort] = useState(() => defaultPipelineRunSort())
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
 
@@ -61,6 +118,10 @@ export function PipelineRunsPanel({ pipelines, pipelinesLoading, errorMessage }:
       setSelectedPipeline(defaultPipeline)
     }
   }, [defaultPipeline, selectedPipeline])
+
+  useEffect(() => {
+    setRunSort(defaultPipelineRunSort())
+  }, [activePipeline])
 
   const runsQuery = useQuery({
     queryKey: ['delivery', 'runs', activePipeline],
@@ -90,7 +151,70 @@ export function PipelineRunsPanel({ pipelines, pipelinesLoading, errorMessage }:
     onSettled: () => setStartingPipeline(null),
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: ({ run }: { run: DeliveryPipelineRunView }) =>
+      deletePipelineRun(run.name, run.namespace),
+    onSuccess: (_data, { run }) => {
+      setDeleteTarget(null)
+      if (expandedRun === run.name) setExpandedRun(null)
+      if (askAiRun === run.name) {
+        setAskAiRun(null)
+        setAskAiPack(null)
+      }
+      void qc.invalidateQueries({ queryKey: ['delivery', 'runs', activePipeline] })
+      void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
+    },
+    onError: (err: Error) => setRunError(err.message),
+  })
+
   const runs = runsQuery.data?.runs ?? []
+  const sortedRuns = useMemo(
+    () => sortPipelineRuns(runs, runSort.key, runSort.dir),
+    [runs, runSort],
+  )
+
+  function handleRunSort(key: PipelineRunSortKey) {
+    setRunSort(prev => togglePipelineRunSort(prev, key))
+  }
+
+  async function handleAskAi(run: DeliveryPipelineRunView) {
+    setAskAiRun(run.name)
+    setAskAiCopied(false)
+    setAskAiLoading(true)
+    setAskAiPack(null)
+    try {
+      const logsRes = await fetchPipelineRunLogs(run.name, runsQuery.data?.namespace ?? run.namespace)
+      setAskAiPack(
+        buildPipelineRunAskPack({
+          pipeline: activePipeline,
+          run,
+          logs: logsRes.logs,
+          stgSmokeDetail: stgSmokeDetail ?? undefined,
+        }),
+      )
+    } catch (err) {
+      setAskAiPack(
+        buildPipelineRunAskPack({
+          pipeline: activePipeline,
+          run,
+          logs: `(failed to load logs: ${err instanceof Error ? err.message : String(err)})`,
+          stgSmokeDetail: stgSmokeDetail ?? undefined,
+        }),
+      )
+    } finally {
+      setAskAiLoading(false)
+    }
+  }
+
+  async function handleCopyAskPack() {
+    if (askAiPack == null) return
+    await copyText(askAiPack)
+    setAskAiCopied(true)
+    window.setTimeout(() => setAskAiCopied(false), 2000)
+  }
+
+  const activePipelineMeta = pipelineList.find(p => p.name === activePipeline)
+  const buildBlocked = activePipelineMeta?.build_ready === false
 
   return (
     <OpsSection
@@ -113,6 +237,17 @@ export function PipelineRunsPanel({ pipelines, pipelinesLoading, errorMessage }:
           )}
           {runError != null && (
             <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{runError}</p>
+          )}
+          {buildBlocked && (
+            <p className="m-0 mt-2 flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
+              <StatusLamp value="fail" kind="reach" />
+              <span>CI preflight blocked: {activePipelineMeta?.block_reason ?? 'no Ready amd64 node'}</span>
+              {onOpenPlacement != null && (
+                <Button size="sm" variant="outline" onClick={onOpenPlacement}>
+                  Open Placement
+                </Button>
+              )}
+            </p>
           )}
         </>
       }
@@ -164,6 +299,9 @@ export function PipelineRunsPanel({ pipelines, pipelinesLoading, errorMessage }:
                       onClick={() => {
                         setSelectedPipeline(p.name)
                         setExpandedRun(null)
+                        setAskAiRun(null)
+                        setAskAiPack(null)
+                        setRunSort(defaultPipelineRunSort())
                       }}
                     >
                       View runs
@@ -171,11 +309,16 @@ export function PipelineRunsPanel({ pipelines, pipelinesLoading, errorMessage }:
                     {canOperate && (
                       <Button
                         size="sm"
-                        disabled={startMutation.isPending}
+                        disabled={startMutation.isPending || p.build_ready === false}
                         onClick={() => startMutation.mutate(p.name)}
                       >
                         {startingPipeline === p.name ? 'Starting…' : 'Run'}
                       </Button>
+                    )}
+                    {p.build_ready === false && p.block_reason != null && p.block_reason !== '' && (
+                      <span className="text-[var(--text-dense-caption)] text-[var(--destructive)]">
+                        Blocked
+                      </span>
                     )}
                   </div>
                 </DenseTableCell>
@@ -196,9 +339,21 @@ export function PipelineRunsPanel({ pipelines, pipelinesLoading, errorMessage }:
             <DenseTableHeader>
               <DenseTableHeadRow>
                 <DenseTableHead>Run</DenseTableHead>
-                <DenseTableHead>Status</DenseTableHead>
-                <DenseTableHead>Started</DenseTableHead>
-                <DenseTableHead>Actions</DenseTableHead>
+                <SortableRunHead
+                  label="Status"
+                  sortKey="status"
+                  activeKey={runSort.key}
+                  dir={runSort.dir}
+                  onSort={handleRunSort}
+                />
+                <SortableRunHead
+                  label="Started"
+                  sortKey="started"
+                  activeKey={runSort.key}
+                  dir={runSort.dir}
+                  onSort={handleRunSort}
+                />
+                <DenseTableHead className="min-w-[14rem]">Actions</DenseTableHead>
               </DenseTableHeadRow>
             </DenseTableHeader>
             <DenseTableBody>
@@ -215,50 +370,144 @@ export function PipelineRunsPanel({ pipelines, pipelinesLoading, errorMessage }:
                   </DenseTableCell>
                 </DenseTableRow>
               ) : (
-                runs.map((run: DeliveryPipelineRunView) => (
-                  <Fragment key={run.name}>
-                    <DenseTableRow>
-                      <DenseTableCell className="font-mono-tabular">{run.name}</DenseTableCell>
-                      <DenseTableCell>
-                        <DenseTag variant={runStatusVariant(run.status)}>
-                          {formatRunStatus(run.status, run.reason)}
-                        </DenseTag>
-                      </DenseTableCell>
-                      <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
-                        {run.start_time != null && run.start_time !== ''
-                          ? new Date(run.start_time).toLocaleString()
-                          : '—'}
-                      </DenseTableCell>
-                      <DenseTableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            setExpandedRun(prev => (prev === run.name ? null : run.name))
-                          }
-                        >
-                          {expandedRun === run.name ? 'Hide logs' : 'Logs'}
-                        </Button>
-                      </DenseTableCell>
-                    </DenseTableRow>
-                    {expandedRun === run.name && (
-                      <DenseTableRow key={`${run.name}-logs`}>
-                        <DenseTableCell colSpan={4}>
-                          <pre className="llm-content-pre m-0 max-h-48 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
-                            {logsQuery.isLoading
-                              ? 'Loading logs…'
-                              : logsQuery.data?.logs ?? '(empty)'}
-                          </pre>
+                sortedRuns.map((run: DeliveryPipelineRunView) => {
+                  const succeeded = isPipelineRunSucceeded(run)
+                  return (
+                    <Fragment key={run.name}>
+                      <DenseTableRow>
+                        <DenseTableCell className="font-mono-tabular">{run.name}</DenseTableCell>
+                        <DenseTableCell>
+                          <DenseTag variant={runStatusVariant(run.status)}>
+                            {formatPipelineRunStatus(run)}
+                          </DenseTag>
+                        </DenseTableCell>
+                        <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
+                          {run.start_time != null && run.start_time !== ''
+                            ? new Date(run.start_time).toLocaleString()
+                            : '—'}
+                        </DenseTableCell>
+                        <DenseTableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setExpandedRun(prev => (prev === run.name ? null : run.name))
+                              }
+                            >
+                              {expandedRun === run.name ? 'Hide logs' : 'Logs'}
+                            </Button>
+                            {!succeeded && (
+                              <Button
+                                variant={askAiRun === run.name ? 'default' : 'outline'}
+                                size="sm"
+                                disabled={askAiLoading && askAiRun === run.name}
+                                onClick={() => {
+                                  if (askAiRun === run.name && askAiPack != null) {
+                                    setAskAiRun(null)
+                                    setAskAiPack(null)
+                                    return
+                                  }
+                                  void handleAskAi(run)
+                                }}
+                              >
+                                {askAiLoading && askAiRun === run.name
+                                  ? 'Building…'
+                                  : askAiRun === run.name
+                                    ? 'Hide Ask AI'
+                                    : 'Ask AI'}
+                              </Button>
+                            )}
+                            {canOperate && (
+                              <IconActionButton
+                                title="Delete run"
+                                ariaLabel={`Delete pipeline run ${run.name}`}
+                                tone="danger"
+                                onClick={() => setDeleteTarget(run)}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </IconActionButton>
+                            )}
+                          </div>
                         </DenseTableCell>
                       </DenseTableRow>
-                    )}
-                  </Fragment>
-                ))
+                      {expandedRun === run.name && (
+                        <DenseTableRow key={`${run.name}-logs`}>
+                          <DenseTableCell colSpan={4}>
+                            <pre className="llm-content-pre m-0 max-h-48 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
+                              {logsQuery.isLoading
+                                ? 'Loading logs…'
+                                : logsQuery.data?.logs ?? '(empty)'}
+                            </pre>
+                          </DenseTableCell>
+                        </DenseTableRow>
+                      )}
+                      {askAiRun === run.name && (
+                        <DenseTableRow key={`${run.name}-ask-ai`}>
+                          <DenseTableCell colSpan={4}>
+                            <div className="llm-content-panel">
+                              <div className="llm-content-panel-toolbar">
+                                <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                                  Content for LLM · Ops mode · pipeline triage
+                                  {askAiPack != null ? ` · ${askAiPack.length.toLocaleString()} chars` : ''}
+                                </span>
+                                <div className="flex flex-wrap gap-2">
+                                  <Button
+                                    size="sm"
+                                    disabled={askAiPack == null}
+                                    onClick={() => void handleCopyAskPack()}
+                                  >
+                                    {askAiCopied ? 'Copied' : 'Copy for Cursor'}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setAskAiRun(null)
+                                      setAskAiPack(null)
+                                    }}
+                                  >
+                                    Close
+                                  </Button>
+                                </div>
+                              </div>
+                              <pre className="llm-content-pre m-0 max-h-64 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
+                                {askAiLoading
+                                  ? 'Loading logs and building triage pack…'
+                                  : (askAiPack ?? '')}
+                              </pre>
+                              <p className="m-0 mt-2 px-3 pb-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                                Paste into Cursor chat. Pack includes run metadata, STG v2 checklist, stg smoke
+                                signal, and Tekton log tail.
+                              </p>
+                            </div>
+                          </DenseTableCell>
+                        </DenseTableRow>
+                      )}
+                    </Fragment>
+                  )
+                })
               )}
             </DenseTableBody>
           </DenseDataTable>
         </>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget != null}
+        title="Delete pipeline run"
+        message={
+          deleteTarget != null
+            ? `Remove PipelineRun ${deleteTarget.name} from ${deleteTarget.namespace}? This cannot be undone. TaskRun pods may remain until garbage-collected.`
+            : ''
+        }
+        confirmLabel="Delete"
+        confirming={deleteMutation.isPending}
+        onConfirm={() => {
+          if (deleteTarget != null) deleteMutation.mutate({ run: deleteTarget })
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </OpsSection>
   )
 }
