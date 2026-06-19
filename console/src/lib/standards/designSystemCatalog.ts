@@ -74,6 +74,48 @@ export const SEMANTIC_COLORS: SemanticColorRow[] = [
   { taxonomy: 'PnL', concept: 'Unrealized PnL', token: '--color-unrealized', utility: 'text-unrealized', accessor: 'unrealizedPnlColorClass(v) — always yellow', status: 'live' },
 ]
 
+/* ── Ops outcome text (status / phase / feedback) ── */
+
+export type OpsOutcomeSemanticRow = {
+  outcome: string
+  className: string
+  use: string
+  never: string
+}
+
+export const OPS_OUTCOME_SEMANTICS: OpsOutcomeSemanticRow[] = [
+  {
+    outcome: 'Success / OK / Succeeded / Synced',
+    className: 'lamp-ok',
+    use: 'Operation result copy, inline success feedback (classifyOpsOutcome / opsOutcomeTextClass)',
+    never: 'text-destructive / lamp-fail for success messages',
+  },
+  {
+    outcome: 'Warning / Progressing / Degraded / Pending',
+    className: 'lamp-degraded or lamp-warn',
+    use: 'In-progress or partial states',
+    never: 'Red for non-failure states',
+  },
+  {
+    outcome: 'Error / Failed / Forbidden / ComparisonError',
+    className: 'lamp-fail or text-destructive',
+    use: 'API errors, failed operations, Argo conditions, destructive actions',
+    never: 'Generic info or success copy',
+  },
+  {
+    outcome: 'Deleted',
+    className: 'lamp-fail',
+    use: 'Removed resources, delete confirmations',
+    never: 'Neutral gray for delete outcome labels',
+  },
+  {
+    outcome: 'Neutral info',
+    className: 'text-muted-foreground',
+    use: 'Timestamps, hints, metadata, revision SHAs',
+    never: 'destructive red for non-error text',
+  },
+]
+
 /* ── Mandatory interaction → primitive mapping ── */
 
 export type MandatoryMappingRow = {
@@ -97,6 +139,11 @@ export const MANDATORY_MAPPING: MandatoryMappingRow[] = [
   { interaction: 'Execution source label', use: 'ExecSourceBadge', never: 'Hand-rolled Badge / ledger sourceBadge per page' },
   { interaction: 'Position Category tag', use: 'DenseTag variant="category" / DenseTagButton', never: 'Generic gray pills without entity color' },
   { interaction: 'Destructive confirm', use: 'App ConfirmDialog pattern', never: 'window.confirm / window.alert' },
+  {
+    interaction: 'Outcome text color',
+    use: 'opsSemanticText.ts — lamp-ok / lamp-degraded / lamp-fail / muted',
+    never: 'text-destructive for success or neutral operation messages',
+  },
 ]
 
 /* ── Primitives inventory ── */
@@ -189,6 +236,12 @@ export function buildDesignSystemLlmPack(): string {
     '| Taxonomy | Concept | Token | Utility | Status |',
     '|----------|---------|-------|---------|--------|',
     ...SEMANTIC_COLORS.map(c => `| ${c.taxonomy} | ${c.concept} | \`${c.token}\` | \`${c.utility}\` | ${c.status} |`),
+    '',
+    '## Ops outcome text semantics',
+    '',
+    '| Outcome | Class | Use | Never |',
+    '|---------|-------|-----|-------|',
+    ...OPS_OUTCOME_SEMANTICS.map(o => `| ${o.outcome} | \`${o.className}\` | ${o.use} | ${o.never} |`),
     '',
     '## Mandatory interaction → primitive mapping',
     '',

@@ -145,10 +145,8 @@ func (s *Service) DrainNode(ctx context.Context, nodeName string, req DrainNodeR
 }
 
 func (s *Service) drainNodeWithOptions(ctx context.Context, nodeName string, req DrainNodeRequest) error {
+	// --delete-emptydir-data replaces deprecated --delete-local-data (removed in kubectl 1.32+).
 	args := []string{"--ignore-daemonsets", "--delete-emptydir-data"}
-	if req.DeleteLocal {
-		args = append(args, "--delete-local-data")
-	}
 	if req.Force {
 		args = append(args, "--force")
 	}

@@ -2,6 +2,7 @@ package gitops
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -121,6 +122,14 @@ func TestAppsListsApplications(t *testing.T) {
 	_ = unstructured.SetNestedField(app.Object, "Synced", "status", "sync", "status")
 	_ = unstructured.SetNestedField(app.Object, "Healthy", "status", "health", "status")
 	_ = unstructured.SetNestedField(app.Object, "abc123", "status", "sync", "revision")
+	_ = unstructured.SetNestedField(app.Object, "https://github.com/example/repo.git", "spec", "source", "repoURL")
+	_ = unstructured.SetNestedField(app.Object, "k8s/overlays/stg", "spec", "source", "path")
+	_ = unstructured.SetNestedField(app.Object, "main", "spec", "source", "targetRevision")
+	_ = unstructured.SetNestedField(app.Object, map[string]any{"prune": true, "selfHeal": true}, "spec", "syncPolicy", "automated")
+	_ = unstructured.SetNestedSlice(app.Object, []any{
+		map[string]any{"id": int64(1), "revision": "rev-old"},
+		map[string]any{"id": int64(2), "revision": "abc123"},
+	}, "status", "history")
 
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
@@ -149,6 +158,12 @@ func TestAppsListsApplications(t *testing.T) {
 	if resp.Apps[0].Name != "bifrost-stg" || resp.Apps[0].SyncStatus != "Synced" {
 		t.Fatalf("app view: %+v", resp.Apps[0])
 	}
+	if resp.Apps[0].SourcePath != "k8s/overlays/stg" || !resp.Apps[0].AutomatedSync {
+		t.Fatalf("app spec fields: %+v", resp.Apps[0])
+	}
+	if resp.Apps[0].HistoryCount != 2 {
+		t.Fatalf("history_count: got %d want 2", resp.Apps[0].HistoryCount)
+	}
 }
 
 func TestApplicationFromUnstructured(t *testing.T) {
@@ -159,6 +174,12 @@ func TestApplicationFromUnstructured(t *testing.T) {
 	_ = unstructured.SetNestedField(app.Object, "bifrost", "spec", "destination", "namespace")
 	_ = unstructured.SetNestedField(app.Object, "OutOfSync", "status", "sync", "status")
 	_ = unstructured.SetNestedField(app.Object, "Degraded", "status", "health", "status")
+	_ = unstructured.SetNestedSlice(app.Object, []any{
+		map[string]any{
+			"type":    "ComparisonError",
+			"message": "failed to list tlsoptions.traefik.io",
+		},
+	}, "status", "conditions")
 
 	view := applicationFromUnstructured(*app)
 	if view.Project != "prod" || view.Destination != "bifrost" {
@@ -166,5 +187,98 @@ func TestApplicationFromUnstructured(t *testing.T) {
 	}
 	if view.SyncStatus != "OutOfSync" || view.HealthStatus != "Degraded" {
 		t.Fatalf("status: %+v", view)
+	}
+	if len(view.Conditions) != 1 || view.PrimaryCondition == "" {
+		t.Fatalf("conditions: %+v primary=%q", view.Conditions, view.PrimaryCondition)
+	}
+}
+
+func testApplicationWithHistory(revisions ...string) *unstructured.Unstructured {
+	app := &unstructured.Unstructured{}
+	app.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "argoproj.io",
+		Version: "v1alpha1",
+		Kind:    "Application",
+	})
+	app.SetName("bifrost-stg")
+	app.SetNamespace("cicd")
+	history := make([]any, 0, len(revisions))
+	for i, rev := range revisions {
+		history = append(history, map[string]any{
+			"id":       int64(i + 1),
+			"revision": rev,
+		})
+	}
+	_ = unstructured.SetNestedSlice(app.Object, history, "status", "history")
+	return app
+}
+
+func TestPreviousHistoryRevision(t *testing.T) {
+	app := testApplicationWithHistory("rev-old", "rev-current")
+	rev, err := previousHistoryRevision(app)
+	if err != nil {
+		t.Fatalf("previousHistoryRevision: %v", err)
+	}
+	if rev != "rev-old" {
+		t.Fatalf("revision: got %q want rev-old", rev)
+	}
+}
+
+func TestPreviousHistoryRevisionInsufficient(t *testing.T) {
+	app := testApplicationWithHistory("rev-only")
+	if _, err := previousHistoryRevision(app); err == nil {
+		t.Fatal("expected error for single history entry")
+	}
+}
+
+func TestRollbackApplicationUsesPreviousHistory(t *testing.T) {
+	app := testApplicationWithHistory("rev-old", "rev-current")
+	scheme := runtime.NewScheme()
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+		applicationGVR: "ApplicationList",
+	}, app)
+
+	entry := &config.ClusterEntry{
+		ID: "test",
+		GitOps: config.GitOpsConfig{
+			ArgoCDNamespace:       "cicd",
+			ApplicationsNamespace: "cicd",
+		},
+	}
+	svc := newTestService(entry, k8sfake.NewSimpleClientset(), dyn)
+
+	resp, err := svc.RollbackApplication(t.Context(), "bifrost-stg", "")
+	if err != nil {
+		t.Fatalf("RollbackApplication: %v", err)
+	}
+	if !resp.OK || resp.Action != "gitops.rollback" {
+		t.Fatalf("resp: %+v", resp)
+	}
+	if !strings.Contains(resp.Message, "rev-old") {
+		t.Fatalf("message: %q", resp.Message)
+	}
+}
+
+func TestRollbackApplicationExplicitRevision(t *testing.T) {
+	app := testApplicationWithHistory("rev-old", "rev-current")
+	scheme := runtime.NewScheme()
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+		applicationGVR: "ApplicationList",
+	}, app)
+
+	entry := &config.ClusterEntry{
+		ID: "test",
+		GitOps: config.GitOpsConfig{
+			ApplicationsNamespace: "cicd",
+		},
+	}
+	svc := newTestService(entry, k8sfake.NewSimpleClientset(), dyn)
+
+	resp, err := svc.RollbackApplication(t.Context(), "bifrost-stg", "rev-explicit")
+	if err != nil {
+		t.Fatalf("RollbackApplication: %v", err)
+	}
+	if !strings.Contains(resp.Message, "rev-explicit") {
+		t.Fatalf("message: %q", resp.Message)
 	}
 }

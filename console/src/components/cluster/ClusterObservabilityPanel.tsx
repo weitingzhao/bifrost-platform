@@ -2,6 +2,8 @@ import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHea
 import type { ClusterObservabilityResponse, LayerBStatus } from '@/api/types'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 
 interface ClusterObservabilityPanelProps {
   data: ClusterObservabilityResponse | undefined
@@ -39,6 +41,8 @@ export function ClusterObservabilityPanel({
   onOpenStandards,
   onOpenEnvironments,
 }: ClusterObservabilityPanelProps) {
+  const qc = useQueryClient()
+  const observabilityFetching = useIsFetching({ queryKey: ['cluster', 'observability'] }) > 0
   const components = data?.components ?? []
   const docsUrl = data?.docs_url?.trim()
 
@@ -94,9 +98,15 @@ export function ClusterObservabilityPanel({
     <OpsSection
       title="Observability — Layer B"
       actions={
-        <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {isLoading ? '…' : data?.namespace ?? 'monitoring'}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            {isLoading ? '…' : data?.namespace ?? 'monitoring'}
+          </span>
+          <SectionRefreshButton
+            isFetching={observabilityFetching || isLoading}
+            onClick={() => void qc.invalidateQueries({ queryKey: ['cluster', 'observability'] })}
+          />
+        </div>
       }
       headerExtra={headerExtra}
       bodyPadding="none"

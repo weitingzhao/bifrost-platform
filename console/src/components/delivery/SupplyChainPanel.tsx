@@ -21,6 +21,7 @@ import {
 } from '@/api/platform'
 import { DockerfileCmSummary } from '@/components/delivery/DockerfileCmSummary'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
+import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { DELIVERY_FOCUS_RUN_QUERY_KEY } from '@/lib/delivery/deliveryFocusRun'
@@ -116,9 +117,10 @@ export function SupplyChainPanel({ layout = 'full' }: SupplyChainPanelProps) {
       title={sectionTitle}
       description={sectionDescription}
       actions={
-        <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {supplyQuery.isLoading ? '…' : 'GET /api/v1/delivery/supply-chain'}
-        </span>
+        <SectionRefreshButton
+          isFetching={supplyQuery.isFetching}
+          onClick={() => void supplyQuery.refetch()}
+        />
       }
       headerExtra={
         <>

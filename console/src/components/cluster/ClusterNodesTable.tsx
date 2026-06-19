@@ -1,8 +1,10 @@
 import { DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import type { ClusterNode } from '@/api/types'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 
 interface ClusterNodesTableProps {
   nodes: ClusterNode[]
@@ -26,15 +28,29 @@ export function ClusterNodesTable({
   selectedNode = null,
   onSelectNode,
 }: ClusterNodesTableProps) {
+  const qc = useQueryClient()
+  const nodesFetching = useIsFetching({ queryKey: ['cluster', 'nodes'] }) > 0
+
+  const refreshNodes = () => {
+    void qc.invalidateQueries({ queryKey: ['cluster', 'nodes'] })
+    void qc.invalidateQueries({ queryKey: ['cluster', 'metrics'] })
+  }
+
   return (
     <OpsSection
       title="Nodes"
       actions={
-        <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {isLoading ? '…' : `${nodes.length} nodes`}
-          {isFetching && !isLoading ? ' · updating…' : ''}
-          {metricsAvailable === false ? ' · usage n/a' : ''}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            {isLoading ? '…' : `${nodes.length} nodes`}
+            {isFetching && !isLoading ? ' · updating…' : ''}
+            {metricsAvailable === false ? ' · usage n/a' : ''}
+          </span>
+          <SectionRefreshButton
+            isFetching={nodesFetching || (isFetching && !isLoading)}
+            onClick={refreshNodes}
+          />
+        </div>
       }
       bodyPadding="none"
       overflow="hidden"

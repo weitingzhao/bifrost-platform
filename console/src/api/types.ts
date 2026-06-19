@@ -455,6 +455,12 @@ export interface GitOpsArgoCDServerView {
   detail?: string
 }
 
+export interface GitOpsApplicationCondition {
+  type: string
+  message: string
+  last_transition_time?: string
+}
+
 export interface GitOpsApplicationView {
   name: string
   namespace: string
@@ -462,7 +468,19 @@ export interface GitOpsApplicationView {
   sync_status: string
   health_status: string
   destination?: string
+  destination_namespace?: string
   revision?: string
+  source_repo?: string
+  source_path?: string
+  source_target_revision?: string
+  automated_sync?: boolean
+  self_heal?: boolean
+  prune?: boolean
+  history_count?: number
+  conditions?: GitOpsApplicationCondition[]
+  primary_condition?: string
+  operation_phase?: string
+  operation_message?: string
 }
 
 export interface GitOpsAppsResponse {

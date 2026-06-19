@@ -21,6 +21,7 @@ import {
   LAYER_STACK,
   LIVING_CONTRACT_PATH,
   MANDATORY_MAPPING,
+  OPS_OUTCOME_SEMANTICS,
   PAGE_SURFACES,
   PRIMITIVES,
   SEMANTIC_COLORS,
@@ -163,6 +164,34 @@ export function DesignSystemPage() {
             </div>
           ))}
         </div>
+      </CatalogSection>
+
+      <CatalogSection title="Ops outcome text semantics">
+        <p className="m-0 mb-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Status / phase / feedback copy — use{' '}
+          <code className="font-mono-tabular">console/src/lib/opsSemanticText.ts</code>. Red is for errors and
+          deleted states only, not success messages.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Outcome</DenseTableHead>
+              <DenseTableHead>Class</DenseTableHead>
+              <DenseTableHead>Use</DenseTableHead>
+              <DenseTableHead>Never</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {OPS_OUTCOME_SEMANTICS.map(row => (
+              <DenseTableRow key={row.outcome}>
+                <DenseTableCell className="font-medium">{row.outcome}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{row.className}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{row.use}</DenseTableCell>
+                <DenseTableCell className="text-[var(--destructive)]">{row.never}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       {/* 4 — Mandatory mapping (core of the standard) */}

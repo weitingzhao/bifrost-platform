@@ -168,7 +168,7 @@ export async function uncordonNode(nodeName: string): Promise<ActuationResponse>
 
 export async function drainNode(
   nodeName: string,
-  body: DrainNodeRequest = { delete_local_data: true, force: true, grace_period_seconds: 60 },
+  body: DrainNodeRequest = { force: true, grace_period_seconds: 60 },
 ): Promise<ActuationResponse> {
   const r = await authedFetch(
     'drain node',
@@ -348,6 +348,20 @@ export async function syncGitOpsApp(name: string): Promise<ActuationResponse> {
     'gitops sync',
     `/api/v1/gitops/apps/${encodeURIComponent(name)}/sync`,
     { method: 'POST' },
+  )
+  return r.json() as Promise<ActuationResponse>
+}
+
+export async function rollbackGitOpsApp(
+  name: string,
+  revision?: string,
+): Promise<ActuationResponse> {
+  const body =
+    revision != null && revision !== '' ? JSON.stringify({ revision }) : JSON.stringify({})
+  const r = await authedFetch(
+    'gitops rollback',
+    `/api/v1/gitops/apps/${encodeURIComponent(name)}/rollback`,
+    { method: 'POST', body },
   )
   return r.json() as Promise<ActuationResponse>
 }

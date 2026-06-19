@@ -10,12 +10,14 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useIsFetching, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { fetchTierBStatus, signTierB } from '@/api/platform'
 import type { TierBStatusResponse } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { opsInlineFeedbackClass } from '@/lib/opsSemanticText'
 
 interface StgTierBChecklistPanelProps {
   /** When provided, skip internal fetch (ConsolePage shared query). */
@@ -48,6 +50,7 @@ export function StgTierBChecklistPanel({
   const data = tierBProp ?? tierBQuery.data
   const loading = tierBProp == null ? tierBQuery.isLoading : tierBLoading
   const error = tierBError ?? (tierBQuery.error instanceof Error ? tierBQuery.error.message : null)
+  const tierBFetching = useIsFetching({ queryKey: ['promote', 'tier-b'] }) > 0
 
   const signMutation = useMutation({
     mutationFn: () => signTierB(notes),
@@ -76,11 +79,17 @@ export function StgTierBChecklistPanel({
       }
       description="Beyond Tier A HTTP smoke: daemon, ops, socket probes + manual IB/Massive verification. Admin sign-off records Owner acceptance."
       actions={
-        data != null ? (
-          <DenseTag variant={data.ready ? 'success' : data.signed_off ? 'warning' : 'neutral'}>
-            {data.ready ? 'Tier B ready' : data.signed_off ? 'Signed — probes pending' : 'Sign-off pending'}
-          </DenseTag>
-        ) : undefined
+        <div className="flex flex-wrap items-center gap-2">
+          {data != null ? (
+            <DenseTag variant={data.ready ? 'success' : data.signed_off ? 'warning' : 'neutral'}>
+              {data.ready ? 'Tier B ready' : data.signed_off ? 'Signed — probes pending' : 'Sign-off pending'}
+            </DenseTag>
+          ) : null}
+          <SectionRefreshButton
+            isFetching={tierBFetching || loading}
+            onClick={() => void qc.invalidateQueries({ queryKey: ['promote', 'tier-b'] })}
+          />
+        </div>
       }
       headerExtra={
         error != null && error !== '' ? (
@@ -111,8 +120,7 @@ export function StgTierBChecklistPanel({
           )}
           {(data?.items ?? []).length === 0 && !loading && (
             <p className="m-0 border-b border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              No Tier B checks loaded — restart platform-api after P4 deploy, then verify{' '}
-              <code className="font-mono-tabular">GET /api/v1/promote/tier-b</code>.
+              No Tier B checks loaded — restart platform-api after P4 deploy, then use Refresh above.
             </p>
           )}
           <DenseDataTable>
@@ -164,7 +172,7 @@ export function StgTierBChecklistPanel({
                 {signFeedback != null && (
                   <p
                     className={`m-0 text-[var(--text-dense-meta)] ${
-                      signFeedback.kind === 'success' ? 'text-success' : 'text-destructive'
+                      signFeedback.kind === 'success' ? opsInlineFeedbackClass('success') : opsInlineFeedbackClass('error')
                     }`}
                   >
                     {signFeedback.message}

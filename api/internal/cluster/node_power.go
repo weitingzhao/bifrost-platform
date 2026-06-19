@@ -282,7 +282,6 @@ func shellQuoteSSHHost(host string) string {
 
 func (s *Service) drainNode(ctx context.Context, nodeName string) error {
 	return s.drainNodeWithOptions(ctx, nodeName, DrainNodeRequest{
-		DeleteLocal: true,
 		Force:       true,
 		GracePeriod: 60,
 	})

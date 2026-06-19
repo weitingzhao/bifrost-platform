@@ -190,7 +190,7 @@ environments_extended:
 tracks:
   build:
     label: "Platform capability extension"
-    current_phase: P1
+    current_phase: P3
     tasks:
       - id: p1-auth-audit
         label: "Auth + audit for all write routes"
@@ -212,10 +212,10 @@ tracks:
         status: done
       - id: p2-cluster-wizard
         label: "Cluster UI wizard for node operations"
-        status: in_progress
+        status: done
       - id: p3-gitops-execution
         label: "GitOps + CI execution (Argo/Tekton API)"
-        status: in_progress
+        status: done
       - id: p4-stack-install
         label: "Platform stack install wizard"
         status: pending

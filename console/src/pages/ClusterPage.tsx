@@ -30,6 +30,7 @@ import type { ClusterNode, ClusterWorkload, ComputeWorkloadStatus } from '@/api/
 import { AuditPageLink } from '@/components/AuditPageLink'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
+import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPanel'
 import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
@@ -37,6 +38,7 @@ import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabi
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import type { NodeWizardFlow, WizardAction } from '@/lib/cluster/nodeWizard'
 
 type NsFilter = 'all' | 'bifrost'
 
@@ -73,6 +75,8 @@ export function ClusterPage({
   const [actionError, setActionError] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [scaleState, setScaleState] = useState<ScaleState | null>(null)
+  const [wizardFlow, setWizardFlow] = useState<NodeWizardFlow>('maintenance')
+  const [wizardJoinProfileId, setWizardJoinProfileId] = useState<string | null>(null)
 
   const { canOperate, canAdmin, caps, capsLoading } = usePlatformAuth()
 
@@ -87,6 +91,14 @@ export function ClusterPage({
     queryFn: fetchClusterNodes,
     refetchInterval: 30_000,
   })
+
+  const clusterNodes = nodesQuery.data?.nodes ?? []
+
+  /** Merge latest probe fields (unschedulable, status) — selectedNode state alone goes stale after actuation. */
+  const selectedNodeLive = useMemo(() => {
+    if (selectedNode?.name == null) return null
+    return clusterNodes.find(n => n.name === selectedNode.name) ?? selectedNode
+  }, [clusterNodes, selectedNode])
 
   const metricsQuery = useQuery({
     queryKey: ['cluster', 'metrics'],
@@ -147,9 +159,12 @@ export function ClusterPage({
   })
 
   const nodePowerQuery = useQuery({
-    queryKey: ['cluster', 'node-power', selectedNode?.name],
-    queryFn: () => fetchNodePower(selectedNode?.name ?? ''),
-    enabled: nodeDrawerOpen && selectedNode?.compute_managed === true && selectedNode.name != null,
+    queryKey: ['cluster', 'node-power', selectedNodeLive?.name],
+    queryFn: () => fetchNodePower(selectedNodeLive?.name ?? ''),
+    enabled:
+      selectedNodeLive?.compute_managed === true &&
+      selectedNodeLive.name != null &&
+      (nodeDrawerOpen || wizardFlow !== 'join'),
     refetchInterval: 15_000,
   })
 
@@ -299,6 +314,51 @@ export function ClusterPage({
     setNodeDrawerOpen(true)
     setDrawerOpen(false)
     setSelectedPod(null)
+    if (node.compute_managed) {
+      setWizardFlow('compute_shutdown')
+    }
+  }
+
+  function handleWizardSelectNodeName(name: string | null) {
+    if (name == null) {
+      setSelectedNode(null)
+      setNodeDrawerOpen(false)
+      return
+    }
+    const node = nodesQuery.data?.nodes.find(n => n.name === name) ?? null
+    setSelectedNode(node)
+    // Wizard has its own State + Procedure — keep detail panel closed unless user opens it explicitly.
+    setNodeDrawerOpen(false)
+  }
+
+  function handleWizardAction(action: WizardAction, context?: { profileId?: string }) {
+    switch (action) {
+      case 'cordon':
+        handleCordonNode()
+        break
+      case 'drain':
+        handleDrainNode()
+        break
+      case 'uncordon':
+        handleUncordonNode()
+        break
+      case 'wake':
+        handleWakeComputeNode()
+        break
+      case 'poweroff':
+        handlePowerOffComputeNode()
+        break
+      case 'join': {
+        const profileId = context?.profileId ?? wizardJoinProfileId ?? joinProfilesQuery.data?.profiles[0]?.id
+        const profile = joinProfilesQuery.data?.profiles.find(p => p.id === profileId)
+        if (profile != null) {
+          handleJoinNode(profile.id, profile.label)
+        }
+        break
+      }
+      default:
+        break
+    }
   }
 
   function handleWakeComputeNode() {
@@ -442,12 +502,14 @@ export function ClusterPage({
   const metricsOk = metricsQuery.data?.metrics_server_available === true
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
+    <div
+      className={`flex w-full min-w-0 flex-col gap-4${nodeDrawerOpen ? ' cluster-page-shell--node-drawer' : ''}`}
+    >
       <section className="page-section panel-elevated px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              K3s cluster · bifrost-bootstrap · P2 node lifecycle
+              K3s cluster · bifrost-bootstrap · P2 node wizard
             </p>
             <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               Auto-refresh every 30s
@@ -525,31 +587,6 @@ export function ClusterPage({
             </Button>
           </div>
         </div>
-        {joinProfilesQuery.data != null && joinProfilesQuery.data.profiles.length > 0 && (
-          <div className="mt-3 border-t border-[var(--border)] pt-3">
-            <p className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Node join (admin)
-            </p>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              {joinProfilesQuery.data.enabled
-                ? 'Run a configured K3s join profile from bifrost-trade-infra scripts.'
-                : (joinProfilesQuery.data.detail ?? 'Join disabled on platform-api.')}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {joinProfilesQuery.data.profiles.map(profile => (
-                <Button
-                  key={profile.id}
-                  variant="outline"
-                  size="sm"
-                  disabled={!canAdmin || !joinProfilesQuery.data?.enabled || joinNodeMutation.isPending}
-                  onClick={() => handleJoinNode(profile.id, profile.label)}
-                >
-                  Join {profile.id}
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
         {!canOperate && !capsLoading && (
           <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Dev default token: <code>platform-operator-dev</code> (operator) or{' '}
@@ -582,6 +619,26 @@ cd ../bifrost-platform && make start`}
         summary={summaryQuery.data}
         metrics={metricsQuery.data}
         isLoading={summaryQuery.isLoading || metricsQuery.isLoading}
+      />
+
+      <ClusterNodeWizardPanel
+        flow={wizardFlow}
+        onFlowChange={setWizardFlow}
+        nodes={nodesQuery.data?.nodes ?? []}
+        selectedNodeName={selectedNodeLive?.name ?? null}
+        onSelectNodeName={handleWizardSelectNodeName}
+        selectedNode={selectedNodeLive}
+        power={nodePowerQuery.data}
+        joinProfiles={joinProfilesQuery.data}
+        selectedJoinProfileId={
+          wizardJoinProfileId ?? joinProfilesQuery.data?.profiles[0]?.id ?? null
+        }
+        onSelectJoinProfileId={setWizardJoinProfileId}
+        canOperate={canOperate}
+        canAdmin={canAdmin}
+        actionPending={actionPending()}
+        onWizardAction={handleWizardAction}
+        onOpenNodeDetails={() => setNodeDrawerOpen(true)}
       />
 
       <ClusterNodesTable
@@ -641,7 +698,7 @@ cd ../bifrost-platform && make start`}
 
       <ClusterNodeDrawer
         open={nodeDrawerOpen}
-        node={selectedNode}
+        node={selectedNodeLive}
         power={nodePowerQuery.data}
         powerLoading={nodePowerQuery.isLoading}
         powerError={nodePowerQuery.error instanceof Error ? nodePowerQuery.error.message : null}
