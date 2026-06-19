@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import type { MatrixResponse } from '@/api/types'
 import {
   fetchAudit,
@@ -21,6 +21,7 @@ import {
 } from '@/api/platform'
 import { consoleNavPlane } from '@/lib/consoleNavConfig'
 import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
+import type { OpenRuntimeMapFn, RuntimeMapNavigateOptions } from '@/lib/runtime-map/runtimeMapNavigation'
 import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
 import { PlatformAuthBar } from '@/components/PlatformAuthBar'
@@ -99,6 +100,7 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
 export function ConsolePage() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('prod')
   const [viewTab, setViewTab] = useState<ConsoleViewTab>('control-room')
+  const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
   const qc = useQueryClient()
 
   const envForRuntime = envFilter === 'all' ? 'prod' : envFilter
@@ -275,7 +277,17 @@ export function ConsolePage() {
   const openDelivery = () => setViewTab('delivery')
   const openPromote = () => setViewTab('promote')
   const openDeployMainline = () => setViewTab('deploy-mainline')
-  const openRuntimeMap = () => setViewTab('runtime-map')
+  const clearRuntimeMapFocus = useCallback(() => setRuntimeMapFocus(null), [])
+
+  const openRuntimeMap: OpenRuntimeMapFn = useCallback((options) => {
+    if (options?.env) {
+      setEnvFilter(options.env)
+    } else if (envFilter === 'all') {
+      setEnvFilter('prod')
+    }
+    setRuntimeMapFocus(options ?? null)
+    setViewTab('runtime-map')
+  }, [envFilter])
   const openCluster = () => setViewTab('cluster')
   const openPlacement = () => setViewTab('placement')
   const openAudit = () => setViewTab('audit')
@@ -409,7 +421,7 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES['control-room']}
-              description="Live runtime health, dual flywheel governance, program milestone spine, and Agent context packs."
+              description="Live runtime summary (deep-link to Runtime Map for topology), dual flywheel governance, and Agent focus dock."
             />
             <Suspense fallback={<p className="text-[var(--muted-foreground)]">Loading control room…</p>}>
               <ControlRoomPage
@@ -447,7 +459,7 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES['runtime-map']}
-              description="Hardware topology, software stack, and live matrix probes in one view."
+              description="Hardware topology and SCOPE stack — per-environment drill-down, gap analysis, and runtime-scoped Agent packs."
             />
             {envFilter === 'all' && (
               <p className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -461,6 +473,8 @@ export function ConsolePage() {
               clusterSummary={clusterQuery.data}
               isLoading={runtimeLoading}
               error={runtimeError}
+              initialFocus={runtimeMapFocus}
+              onInitialFocusConsumed={clearRuntimeMapFocus}
               onOpenCluster={openCluster}
             />
           </>

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
 import { RuntimeAgentStrip } from '@/components/runtime-map/RuntimeAgentStrip'
 import { RuntimeHardwarePanel } from '@/components/runtime-map/RuntimeHardwarePanel'
@@ -7,6 +7,7 @@ import { RuntimeMapDrawer } from '@/components/runtime-map/RuntimeMapDrawer'
 import { RuntimeSoftwarePanel } from '@/components/runtime-map/RuntimeSoftwarePanel'
 import { buildGapOverview } from '@/lib/runtime-map/gapAnalysis'
 import { chipIdsMatchingTarget } from '@/lib/runtime-map/infraVisualRegistry'
+import type { RuntimeMapNavigateOptions } from '@/lib/runtime-map/runtimeMapNavigation'
 import type { StackChipModel } from '@/lib/runtime-map/roleComponentRegistry'
 import {
   filterEdgesByTarget,
@@ -23,6 +24,8 @@ interface RuntimeMapPageProps {
   clusterSummary?: ClusterSummary
   isLoading: boolean
   error: Error | null
+  initialFocus?: RuntimeMapNavigateOptions | null
+  onInitialFocusConsumed?: () => void
   onOpenCluster?: () => void
 }
 
@@ -33,6 +36,8 @@ export function RuntimeMapPage({
   clusterSummary,
   isLoading,
   error,
+  initialFocus,
+  onInitialFocusConsumed,
   onOpenCluster,
 }: RuntimeMapPageProps) {
   const [selection, setSelection] = useState<RuntimeMapSelection>(null)
@@ -57,6 +62,14 @@ export function RuntimeMapPage({
     },
     [userDismissedDrawer],
   )
+
+  useEffect(() => {
+    if (initialFocus == null || isLoading || !topology) return
+    if (initialFocus.targetId) {
+      applySelection({ kind: 'target', id: initialFocus.targetId })
+    }
+    onInitialFocusConsumed?.()
+  }, [initialFocus, isLoading, topology, applySelection, onInitialFocusConsumed])
 
   const selectedNodeId = selection?.kind === 'node' ? selection.id : null
   const selectedEdgeId = selection?.kind === 'edge' ? selection.id : null

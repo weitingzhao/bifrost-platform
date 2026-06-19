@@ -34,6 +34,12 @@ import {
  * | Operate      | L1/L2 actuation — release, cluster, tools   |
  * | Observe      | L0 probes — live status, audit, briefing    |
  * | Architecture | PLAN static — governance, K3s, standards    |
+ *
+ * Runtime escalation (L0 Observe → L1 Operate; mirrors Architecture → Governance ordered chains):
+ *   Observe → Diagnosis: Control Room → Runtime Map (business topology + matrix, L0)
+ *   Observe → Scheduling: Placement (K8s node-pool / policy gap, L0)
+ *   Observe → Session & audit: Agent Briefing · Audit (session entry + actuation history)
+ *   Operate → Cluster ops: Cluster → Server Console (L0 read + L1 actuation + shell)
  */
 export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
   {
@@ -50,10 +56,9 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         ],
       },
       {
-        label: 'Cluster',
+        label: 'Cluster ops',
         items: [
           { id: 'cluster', label: 'Cluster', icon: Server },
-          { id: 'placement', label: 'Placement', icon: Network },
           { id: 'console', label: 'Server Console', icon: Terminal },
         ],
       },
@@ -64,16 +69,20 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
     icon: Eye,
     subGroups: [
       {
-        label: 'Overview',
+        label: 'Diagnosis',
         items: [
           { id: 'control-room', label: 'Control Room', icon: Gauge },
-          { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
+          { id: 'runtime-map', label: 'Runtime Map', icon: Map },
         ],
       },
       {
-        label: 'Runtime',
+        label: 'Scheduling',
+        items: [{ id: 'placement', label: 'Placement', icon: Network }],
+      },
+      {
+        label: 'Session & audit',
         items: [
-          { id: 'runtime-map', label: 'Runtime Map', icon: Map },
+          { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
           { id: 'audit', label: 'Audit', icon: History },
         ],
       },
@@ -120,7 +129,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'A
   promote: 'Operate',
   'deploy-mainline': 'Operate',
   cluster: 'Operate',
-  placement: 'Operate',
+  placement: 'Observe',
   console: 'Operate',
   'control-room': 'Observe',
   briefing: 'Observe',

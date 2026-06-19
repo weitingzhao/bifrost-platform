@@ -82,10 +82,12 @@ export type ConsoleViewRow = {
 
 export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Agent Briefing', plane: 'Observe', purpose: 'New-session entry — work-intent picker, UI progress, live snapshot, full LLM briefing pack' },
-  { view: 'Control Room', plane: 'Observe', purpose: 'Observe entry — live KPI strip, matrix summary, dual flywheel bays, milestone spine, Agent focus dock' },
+  { view: 'Control Room', plane: 'Observe', purpose: 'Diagnosis step 1 — live KPI + matrix summary; deep-link to Runtime Map; dual flywheel + Agent focus dock' },
   { view: 'Delivery', plane: 'Operate', purpose: 'CI/CD actuation — Operate / Observe / Blueprint tabs; coupling gate summary' },
-  { view: 'Runtime Map', plane: 'Observe', purpose: 'Unified runtime — hardware topology + SCOPE stack + matrix probes + gap analysis' },
-  { view: 'Cluster', plane: 'Operate', purpose: 'K3s L0 probe + L1 namespace ensure — nodes, namespaces, workloads via platform-api' },
+  { view: 'Runtime Map', plane: 'Observe', purpose: 'Diagnosis step 2 — topology-first hardware + SCOPE stack, per-target drawer, gap analysis, runtime-scoped Agent pack' },
+  { view: 'Placement', plane: 'Observe', purpose: 'Scheduling — node pools, workload placement policy matrix, violations; CI preflight for Delivery; workloadPlacementCatalog live evaluation' },
+  { view: 'Cluster', plane: 'Operate', purpose: 'Cluster ops — K3s L0 probe + L1 namespace ensure; nodes, namespaces, workloads via platform-api' },
+  { view: 'Audit', plane: 'Observe', purpose: 'Session & audit — platform-api actuation history (Delivery, Cluster, GitOps, namespace ensure)' },
   { view: 'Milestones', plane: 'Architecture', purpose: 'Milestones, decisions D1–Dn, north star, roadmap (ops-context spine)' },
   { view: 'Promote', plane: 'Operate', purpose: 'Read-only release readiness (flywheel A + B)' },
   { view: 'Deploy Mainline', plane: 'Operate', purpose: 'Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain' },
