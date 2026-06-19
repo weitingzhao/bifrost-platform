@@ -517,6 +517,44 @@ export interface StackAddonsResponse {
   generated_at: string
 }
 
+export type McpToolLevel = 'read' | 'routine' | 'confirm' | 'pr' | 'forbidden'
+
+export interface McpToolView {
+  name: string
+  description: string
+  level: McpToolLevel
+  method?: string
+  route?: string
+  role?: string
+  phase?: string
+  implemented: boolean
+}
+
+export interface McpToolsResponse {
+  server_name: string
+  server_version: string
+  contract_version: string
+  tools: McpToolView[]
+  implemented_count: number
+  generated_at: string
+}
+
+export interface McpStatusResponse {
+  server_name: string
+  server_version: string
+  transport: string
+  platform_api_url: string
+  script_path: string
+  cursor_config: {
+    command: string
+    args: string[]
+    env: string[]
+  }
+  tool_count: number
+  implemented_count: number
+  generated_at: string
+}
+
 export interface DeliveryPipelineView {
   name: string
   namespace: string

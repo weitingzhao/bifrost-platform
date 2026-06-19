@@ -190,7 +190,7 @@ environments_extended:
 tracks:
   build:
     label: "Platform capability extension"
-    current_phase: P4
+    current_phase: P5
     tasks:
       - id: p1-auth-audit
         label: "Auth + audit for all write routes"
@@ -221,7 +221,7 @@ tracks:
         status: done
       - id: p5-mcp-tools
         label: "MCP actuation Tools"
-        status: pending
+        status: done
 
   migrate:
     label: "Legacy retirement & deployment migration"

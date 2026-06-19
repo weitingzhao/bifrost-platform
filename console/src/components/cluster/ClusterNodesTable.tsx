@@ -1,7 +1,18 @@
-import { DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
+import {
+  DenseDataTable,
+  DenseTableHeader,
+  DenseTableBody,
+  DenseTableHeadRow,
+  DenseTableRow,
+  DenseTableHead,
+  DenseTableCell,
+} from '@bifrost/ui'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import type { ClusterNode } from '@/api/types'
+import { ConsoleHostIpLabel } from '@/components/ConsoleHostIpLabel'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
+import { NodeResourceCell } from '@/components/cluster/NodeResourceCell'
+import { NodeVersionInfo } from '@/components/cluster/NodeVersionInfo'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
@@ -15,10 +26,7 @@ interface ClusterNodesTableProps {
   onSelectNode?: (node: ClusterNode) => void
 }
 
-function pctCell(value: number | undefined): string {
-  if (value == null) return '—'
-  return `${value.toFixed(1)}%`
-}
+const NODE_COL_COUNT = 9
 
 export function ClusterNodesTable({
   nodes,
@@ -56,6 +64,17 @@ export function ClusterNodesTable({
       overflow="hidden"
     >
       <DenseDataTable>
+        <colgroup>
+          <col style={{ width: '18%' }} />
+          <col style={{ width: '16%' }} />
+          <col style={{ width: '8%' }} />
+          <col style={{ width: '8%' }} />
+          <col style={{ width: '8%' }} />
+          <col style={{ width: '9%' }} />
+          <col style={{ width: '9%' }} />
+          <col style={{ width: '9%' }} />
+          <col style={{ width: '11%' }} />
+        </colgroup>
         <DenseTableHeader>
           <DenseTableHeadRow>
             <DenseTableHead>Name</DenseTableHead>
@@ -63,19 +82,18 @@ export function ClusterNodesTable({
             <DenseTableHead>Arch</DenseTableHead>
             <DenseTableHead>Workload</DenseTableHead>
             <DenseTableHead>Roles</DenseTableHead>
-            <DenseTableHead>CPU alloc</DenseTableHead>
-            <DenseTableHead>Mem alloc</DenseTableHead>
-            <DenseTableHead>Storage</DenseTableHead>
-            <DenseTableHead>CPU %</DenseTableHead>
-            <DenseTableHead>Mem %</DenseTableHead>
-            <DenseTableHead>Version</DenseTableHead>
+            <DenseTableHead title="Allocatable cores · usage % from metrics-server">CPU</DenseTableHead>
+            <DenseTableHead title="Allocatable memory · usage % from metrics-server">MEM</DenseTableHead>
+            <DenseTableHead title="Ephemeral-storage allocatable for pods; disk fill % is not exposed by metrics-server">
+              Storage
+            </DenseTableHead>
             <DenseTableHead>Internal IP</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
           {nodes.length === 0 ? (
             <DenseTableRow>
-              <DenseTableCell colSpan={12} className="text-[var(--muted-foreground)]">
+              <DenseTableCell colSpan={NODE_COL_COUNT} className="text-[var(--muted-foreground)]">
                 {isLoading ? 'Loading…' : 'No nodes (cluster unreachable or empty)'}
               </DenseTableCell>
             </DenseTableRow>
@@ -86,10 +104,11 @@ export function ClusterNodesTable({
                 className="cursor-pointer hover:bg-[var(--secondary)]/60"
                 onClick={onSelectNode != null ? () => onSelectNode(node) : undefined}
               >
-                <DenseTableCell className="font-mono-tabular">
+                <DenseTableCell className="font-mono-tabular !whitespace-normal">
                   <button
                     type="button"
-                    className="text-left font-mono-tabular text-[var(--primary)] underline-offset-2 hover:underline"
+                    className="block max-w-full truncate text-left font-mono-tabular text-[var(--primary)] underline-offset-2 hover:underline"
+                    title={node.name}
                     onClick={event => {
                       event.stopPropagation()
                       onSelectNode?.(node)
@@ -99,47 +118,45 @@ export function ClusterNodesTable({
                     {selectedNode === node.name ? ' ·' : ''}
                   </button>
                 </DenseTableCell>
-                <DenseTableCell>
-                  <StatusLamp value={node.reachability} kind="reach" />{' '}
-                  <span className="font-mono-tabular">{node.status}</span>
-                  {node.unschedulable ? (
-                    <span className="ml-1 text-dense-caption text-[var(--muted-foreground)]">
-                      cordoned
-                    </span>
-                  ) : null}
+                <DenseTableCell className="!whitespace-normal">
+                  <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5">
+                    <StatusLamp value={node.reachability} kind="reach" />
+                    <span className="font-mono-tabular">{node.status}</span>
+                    {node.unschedulable ? (
+                      <span className="text-dense-caption text-[var(--muted-foreground)]">cordoned</span>
+                    ) : null}
+                  </span>
                 </DenseTableCell>
                 <DenseTableCell>
-                  <NodeArchLabel arch={node.architecture} />
+                  <span className="inline-flex items-center gap-0.5">
+                    <NodeArchLabel arch={node.architecture} showTooltip={false} />
+                    <NodeVersionInfo version={node.version} />
+                  </span>
                 </DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{node.workload_label || '—'}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{node.roles}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{node.cpu_allocatable ?? '—'}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{node.memory_allocatable ?? '—'}</DenseTableCell>
+                <DenseTableCell>
+                  <NodeResourceCell
+                    alloc={node.cpu_allocatable}
+                    pct={node.cpu_usage_percent}
+                    reach={node.cpu_reachability}
+                  />
+                </DenseTableCell>
+                <DenseTableCell>
+                  <NodeResourceCell
+                    alloc={node.memory_allocatable}
+                    pct={node.memory_usage_percent}
+                    reach={node.memory_reachability}
+                  />
+                </DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{node.storage_allocatable ?? '—'}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">
-                  {node.cpu_usage_percent != null ? (
-                    <>
-                      <StatusLamp value={node.cpu_reachability ?? 'ok'} kind="reach" />{' '}
-                      {pctCell(node.cpu_usage_percent)}
-                    </>
+                  {node.internal_ip ? (
+                    <ConsoleHostIpLabel ip={node.internal_ip} compact />
                   ) : (
                     '—'
                   )}
                 </DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">
-                  {node.memory_usage_percent != null ? (
-                    <>
-                      <StatusLamp value={node.memory_reachability ?? 'ok'} kind="reach" />{' '}
-                      {pctCell(node.memory_usage_percent)}
-                    </>
-                  ) : (
-                    '—'
-                  )}
-                </DenseTableCell>
-                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">
-                  {node.version}
-                </DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{node.internal_ip || '—'}</DenseTableCell>
               </DenseTableRow>
             ))
           )}

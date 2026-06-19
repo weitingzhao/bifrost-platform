@@ -14,6 +14,7 @@ import {
   MCP_SERVER_REGISTRY,
   buildMcpContractLlmPack,
 } from '@/lib/standards/mcpContractCatalog'
+import { McpToolsPanel } from '@/components/mcp/McpToolsPanel'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
@@ -34,6 +35,8 @@ export function McpContractPage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
+      <McpToolsPanel />
+
       <OpsSection
         title="MCP Contract"
         description={

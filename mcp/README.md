@@ -1,25 +1,51 @@
-> **Docs staging** — future plan only. Authoritative agent protocol: Ops Console → Architecture → Agent Protocol · `agentProtocolCatalog.ts`
+# bifrost-platform MCP
 
-# bifrost-platform MCP (Phase P2)
+Model Context Protocol bridge for Cursor / Agent — **same contract as platform-api**.
 
-Model Context Protocol tools for Cursor / Ollama agents.
+## mcp-server-platform (P5 — available)
 
-## Planned tools
+Stdio MCP server that proxies `http://127.0.0.1:8780/api/v1/*` with Bearer token auth.
 
-| Tool | Backend | Level |
-|------|---------|-------|
-| `get_connectivity_matrix` | `GET /api/v1/matrix` | L0 |
-| `list_environments` | `GET /api/v1/environments` | L0 |
-| `get_platform_health` | `GET /health` | L0 |
+```bash
+cd mcp/platform
+npm install
+PLATFORM_OPERATOR_TOKEN=platform-operator-dev npm start
+```
 
-## Forbidden tools (by policy)
+Cursor config snippet: **Ops Console → Architecture → MCP Contract → Copy Cursor config**
 
-- Any direct `daemon_control` write
-- Any `ib:operator:cmd` RPC
-- Unauthenticated trade stack mutations
+Or:
 
-## Phase 0
+```json
+{
+  "mcpServers": {
+    "bifrost-platform": {
+      "command": "npx",
+      "args": ["tsx", "/path/to/bifrost-platform/mcp/platform/src/index.ts"],
+      "env": {
+        "PLATFORM_API_URL": "http://127.0.0.1:8780",
+        "PLATFORM_OPERATOR_TOKEN": "platform-operator-dev"
+      }
+    }
+  }
+}
+```
 
-Not implemented. Use HTTP against platform-api (`:8780`) manually or via scripts.
+## API catalog (Console + Agent parity)
 
-Implementation target: TypeScript or Go MCP server in this directory.
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/v1/mcp/tools` | Tool list with permission levels |
+| `GET /api/v1/mcp/status` | Server path + Cursor hints |
+
+## Forbidden (deny-list)
+
+See Ops Console → Architecture → MCP Contract.
+
+- No `ib:operator:cmd` writes
+- No `daemon_control` writes
+- No direct trade order placement
+
+## Future servers
+
+`mcp-server-kubernetes`, `mcp-server-redis`, etc. — see `console/src/lib/standards/mcpContractCatalog.ts`

@@ -15,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
+	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
@@ -27,6 +28,7 @@ type Server struct {
 	console *console.Handler
 	cluster *cluster.Handler
 	gitops  *gitops.Handler
+	mcp     *mcp.Handler
 	stack   *stack.Handler
 	delivery *delivery.Handler
 	promote  *promote.Handler
@@ -48,6 +50,7 @@ func New(cfg *config.Config) *Server {
 		console: console.NewHandler(cfg),
 		cluster: cluster.NewHandler(cfg, audit),
 		gitops:  gitops.NewHandler(cfg, audit),
+		mcp:     mcp.NewHandler(),
 		stack:   stack.NewHandler(cfg, audit),
 		delivery: delivery.NewHandler(cfg, audit),
 		promote:  promote.NewHandler(cfg, audit),
@@ -81,6 +84,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/auth/capabilities", s.auth.Capabilities)
 		r.Get("/audit", s.audit.HandleList)
 		r.Get("/jobs", s.jobs.HandleList)
+		r.Get("/mcp/tools", s.mcp.HandleTools)
+		r.Get("/mcp/status", s.mcp.HandleStatus)
 		r.Get("/gitops/apps", s.gitops.HandleApps)
 		r.Get("/stack/addons", s.stack.HandleAddons)
 		r.Get("/delivery/pipelines", s.delivery.HandlePipelines)

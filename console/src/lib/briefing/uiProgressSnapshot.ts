@@ -97,14 +97,14 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
   {
     area: 'Future',
     item: 'Node agent / MCP',
-    status: 'planned',
-    notes: 'agent/, mcp/ repos — Phase B/P2',
+    status: 'partial',
+    notes: 'mcp-server-platform (stdio) proxies platform-api; Architecture → MCP Contract shows tool catalog + P1–P5 UI acceptance checklist',
   },
   {
-    area: 'Future',
-    item: 'GitOps actuation',
+    area: 'Platform API',
+    item: 'P5 MCP catalog',
     status: 'done',
-    notes: 'Argo sync + rollback + deliver-stg pipeline + stg smoke + release gate API (S3–S6)',
+    notes: 'GET /api/v1/mcp/tools + /mcp/status — tool catalog mirrors actuation routes for Agent parity',
   },
 ]
 

@@ -149,6 +149,8 @@ export const ACTUATION_API_ROUTES: ActuationApiRoute[] = [
   { phase: 'P4', method: 'POST', route: '/api/v1/promote/release-gate?tier=stg|prod', role: 'admin', purpose: 'Run STG or Prod release gate' },
   { phase: 'P4', method: 'GET', route: '/api/v1/promote/tier-b', role: 'viewer', purpose: 'Tier B extended STG acceptance probes + sign-off state' },
   { phase: 'P4', method: 'POST', route: '/api/v1/promote/tier-b/signoff', role: 'admin', purpose: 'Record Tier B Owner sign-off' },
+  { phase: 'P5', method: 'GET', route: '/api/v1/mcp/tools', role: 'viewer', purpose: 'MCP tool catalog (mirrors platform-api)' },
+  { phase: 'P5', method: 'GET', route: '/api/v1/mcp/status', role: 'viewer', purpose: 'MCP server connection hints for Cursor' },
 ]
 
 export type LayerDescription = {
