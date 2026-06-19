@@ -108,8 +108,8 @@ export function DeliveryActiveRunPanel() {
       title={running ? 'Active deliver run' : 'Latest deliver run'}
       description={
         running
-          ? 'Live Tekton logs — bifrost-deliver-stg pipeline in progress (refreshes every 5s).'
-          : 'Most recent bifrost-deliver-stg run. Start a new deliver from Supply chain above.'
+          ? 'Live Tekton steps and console output (auto-refresh).'
+          : 'Most recent bifrost-deliver-stg run — start another from Supply chain above.'
       }
       leading={focusRun != null ? <StatusLamp value={runLamp(focusRun)} kind="reach" /> : undefined}
       actions={
@@ -157,7 +157,7 @@ export function DeliveryActiveRunPanel() {
             namespace={ns}
             pollUntilTerminal={pollSteps}
           />
-          <pre className="llm-content-pre m-0 mt-3 max-h-56 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
+          <pre className="llm-content-pre m-0 mt-3 max-h-80 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
             {logsQuery.isLoading && logsQuery.data == null
               ? 'Loading logs…'
               : logsQuery.data?.logs ?? '(empty)'}
@@ -165,7 +165,7 @@ export function DeliveryActiveRunPanel() {
           {terminal && isPipelineRunSucceeded(focusRun) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Deliver succeeded — verify STG below.
+                Deliver succeeded — verify STG smoke on Observe.
               </span>
               <Button variant="outline" size="sm" asChild>
                 <a href={gatewayUrl} target="_blank" rel="noreferrer">
@@ -176,7 +176,7 @@ export function DeliveryActiveRunPanel() {
           )}
           {terminal && isPipelineRunFailed(focusRun) && (
             <p className="m-0 mt-3 text-[var(--text-dense-meta)] text-[var(--destructive)]">
-              Deliver failed — open Observe → Pipeline runs for full logs and Ask AI triage.
+              Deliver failed — open Observe → Pipeline runs for full history and log triage.
             </p>
           )}
         </>

@@ -154,7 +154,7 @@ export function GitOpsProbePanel({
   })
 
   const actionPending = syncMutation.isPending || rollbackMutation.isPending
-  const showActions = canOperate || canAdmin
+  const showActions = layout === 'operate' && (canOperate || canAdmin)
   const comparisonErrorApps = apps.filter(hasGitOpsComparisonError)
 
   const confirmTitle =
@@ -346,8 +346,8 @@ export function GitOpsProbePanel({
       {selectedApp != null && (
         <GitOpsApplicationDrawer
           app={selectedApp}
-          canOperate={canOperate}
-          canAdmin={canAdmin}
+          canOperate={layout === 'operate' && canOperate}
+          canAdmin={layout === 'operate' && canAdmin}
           actionPending={actionPending}
           onClose={() => setSelectedApp(null)}
           onSync={() => openConfirm({ kind: 'sync', app: selectedApp })}

@@ -1,16 +1,16 @@
 import { useState } from 'react'
-import { DenseTag, SegmentControl, StatusLamp } from '@bifrost/ui'
 import type { ClusterSummary, DeliveryPipelinesResponse, GitOpsAppsResponse, MatrixResponse, OpsContextResponse, ReleaseGateResponse, StackAddonsResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/types'
 import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
-import { DeliveryCouplingGatePanel, DeliveryObserveOverview } from '@/components/delivery/DeliveryObserveOverview'
+import { DeliveryCouplingGatePanel } from '@/components/delivery/DeliveryObserveOverview'
+import { DeliveryObserveView } from '@/components/delivery/DeliveryObserveView'
+import { DeliveryOperateStack } from '@/components/delivery/DeliveryOperateStack'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { DeliveryReleaseWorkflowPanel } from '@/components/delivery/DeliveryReleaseWorkflowPanel'
-import { GitOpsProbePanel } from '@/components/delivery/GitOpsProbePanel'
-import { PipelineRunsPanel } from '@/components/delivery/PipelineRunsPanel'
+import { DeliveryViewShell } from '@/components/delivery/DeliveryViewShell'
+import { GitOpsQuickActionsPanel } from '@/components/delivery/GitOpsQuickActionsPanel'
 import { ProdDeliverPanel } from '@/components/delivery/ProdDeliverPanel'
-import { StgSmokePanel } from '@/components/delivery/StgSmokePanel'
 import { StgTierBChecklistPanel } from '@/components/delivery/StgTierBChecklistPanel'
-import { StackAddonsPanel } from '@/components/delivery/StackAddonsPanel'
+import { StackInstallWizardPanel } from '@/components/delivery/StackInstallWizardPanel'
 import { SupplyChainPanel } from '@/components/delivery/SupplyChainPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { evaluateStgReleaseStatus } from '@/lib/control-room/matrixSummary'
@@ -21,9 +21,9 @@ import {
 } from '@/lib/delivery/deliveryPhase'
 import {
   DEFAULT_DELIVERY_PAGE_TAB,
-  DELIVERY_PAGE_TABS,
   type DeliveryPageTab,
 } from '@/lib/delivery/deliveryPageTabs'
+import { stackNeedsOperatePanel } from '@/lib/delivery/stackWizard'
 
 interface DeliveryPageProps {
   context: OpsContextResponse | undefined
@@ -95,123 +95,91 @@ export function DeliveryPage({
   const stgRelease = evaluateStgReleaseStatus(stgSmoke, lastDeliverSucceeded, stgGate, tierB)
   const ciMode = ciModeLabel(context.deployment.phase)
   const gitOpsPlanned = showGitOpsPlannedBadge(context.deployment)
-  const activeTabMeta = DELIVERY_PAGE_TABS.find(t => t.value === pageTab)
+  const stackAddons = stack?.addons ?? []
+  const showStackOperate =
+    !stackLoading && stack != null && stackNeedsOperatePanel(stackAddons)
 
   return (
     <div
-      className={`flex w-full min-w-0 flex-col gap-4${gitOpsDrawerOpen ? ' cluster-page-shell--node-drawer' : ''}`}
+      className={`flex w-full min-w-0 flex-col${gitOpsDrawerOpen ? ' cluster-page-shell--node-drawer' : ''}`}
     >
-      <OpsSection
-        title="Delivery"
-        description={activeTabMeta?.hint ?? 'STG CI/CD — operate, observe, or review blueprint.'}
-        bodyPadding="default"
-        overflow="visible"
+      <DeliveryViewShell
+        pageTab={pageTab}
+        onPageTabChange={setPageTab}
+        context={context}
+        ciMode={ciMode}
+        gitOpsPlanned={gitOpsPlanned}
+        stgReleaseReady={stgRelease.releaseReady}
+        stgSmokeFails={stgRelease.smokeFails}
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <SegmentControl
-            ariaLabel="Delivery view"
-            value={pageTab}
-            onChange={v => setPageTab(v as DeliveryPageTab)}
-            options={DELIVERY_PAGE_TABS.map(t => ({ value: t.value, label: t.label }))}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <DenseTag variant="category" className="font-mono-tabular">
-              phase: {context.deployment.phase}
-            </DenseTag>
-            <DenseTag variant="category">{ciMode}</DenseTag>
-            <span className="inline-flex items-center gap-1.5 text-[var(--text-dense-meta)]">
-              <StatusLamp
-                value={stgRelease.releaseReady ? 'ok' : stgRelease.smokeFails ? 'fail' : 'degraded'}
-                kind="reach"
+        {pageTab === 'operate' && (
+          <DeliveryOperateStack>
+            <SupplyChainPanel layout="operate" />
+            {showStackOperate && (
+              <StackInstallWizardPanel
+                data={stack}
+                isLoading={stackLoading}
+                errorMessage={stackError}
+                layout="operate"
               />
-              <span>{stgRelease.releaseReady ? 'STG release ready' : 'STG in progress'}</span>
-            </span>
-            {gitOpsPlanned && <DenseTag variant="neutral">GitOps planned</DenseTag>}
-          </div>
-        </div>
-      </OpsSection>
+            )}
+            <DeliveryActiveRunPanel />
+            <GitOpsQuickActionsPanel
+              data={gitops}
+              isLoading={gitopsLoading}
+              errorMessage={gitopsError}
+              onOpenObserve={() => setPageTab('observe')}
+            />
+            <StgTierBChecklistPanel
+              tierB={tierB}
+              tierBLoading={tierBLoading}
+              onOpenPromote={onOpenPromote}
+              layout="operate"
+            />
+            <DeliveryCouplingGatePanel
+              context={context}
+              matrices={matrices}
+              stgSmoke={stgSmoke}
+              lastDeliverSucceeded={lastDeliverSucceeded}
+              stgGate={stgGate}
+              tierB={tierB}
+              onOpenPromote={onOpenPromote}
+              onOpenMilestones={onOpenMilestones}
+              onOpenAudit={onOpenAudit}
+            />
+          </DeliveryOperateStack>
+        )}
 
-      {pageTab === 'operate' && (
-        <>
-          <SupplyChainPanel layout="operate" />
-          <DeliveryActiveRunPanel />
-          <GitOpsProbePanel
-            data={gitops}
-            isLoading={gitopsLoading}
-            errorMessage={gitopsError}
-            layout="operate"
-            onOpenAudit={onOpenAudit}
-            onDrawerOpenChange={setGitOpsDrawerOpen}
-          />
-          <StgSmokePanel
-            data={stgSmoke}
-            isLoading={stgSmokeLoading}
-            isFetching={stgSmokeFetching}
-            errorMessage={stgSmokeError}
-            onRefresh={onRefreshStgSmoke}
-            title="Verify STG"
-            description="Post-deliver HTTP acceptance via nginx gateway (:30880). Refresh after pipeline completes."
-          />
-          <StgTierBChecklistPanel
-            tierB={tierB}
-            tierBLoading={tierBLoading}
-            onOpenPromote={onOpenPromote}
-          />
-          <PipelineRunsPanel
-            pipelines={pipelines}
-            pipelinesLoading={pipelinesLoading}
-            errorMessage={pipelinesError}
-            stgSmokeDetail={stgSmoke?.detail}
-            layout="operate-recent"
-          />
-        </>
-      )}
-
-      {pageTab === 'observe' && (
-        <>
-          <DeliveryObserveOverview
+        {pageTab === 'observe' && (
+          <DeliveryObserveView
             context={context}
-            stgSmoke={stgSmoke}
-            stgSmokeLoading={stgSmokeLoading}
-            lastDeliverSucceeded={lastDeliverSucceeded}
             gitops={gitops}
             gitopsLoading={gitopsLoading}
+            gitopsError={gitopsError}
             stack={stack}
             stackLoading={stackLoading}
+            stackError={stackError}
+            showStackWizard={showStackOperate}
             pipelines={pipelines}
             pipelinesLoading={pipelinesLoading}
-          />
-          <GitOpsProbePanel
-            data={gitops}
-            isLoading={gitopsLoading}
-            errorMessage={gitopsError}
-            layout="observe"
+            pipelinesError={pipelinesError}
+            stgSmoke={stgSmoke}
+            stgSmokeLoading={stgSmokeLoading}
+            stgSmokeFetching={stgSmokeFetching}
+            stgSmokeError={stgSmokeError}
+            lastDeliverSucceeded={lastDeliverSucceeded}
+            tierB={tierB}
+            tierBLoading={tierBLoading}
+            onRefreshStgSmoke={onRefreshStgSmoke}
             onOpenAudit={onOpenAudit}
+            onOpenPlacement={onOpenPlacement}
             onDrawerOpenChange={setGitOpsDrawerOpen}
           />
-          <StackAddonsPanel data={stack} isLoading={stackLoading} errorMessage={stackError} />
-          <StgSmokePanel
-            data={stgSmoke}
-            isLoading={stgSmokeLoading}
-            isFetching={stgSmokeFetching}
-            errorMessage={stgSmokeError}
-            onRefresh={onRefreshStgSmoke}
-          />
-          <PipelineRunsPanel
-            pipelines={pipelines}
-            pipelinesLoading={pipelinesLoading}
-            errorMessage={pipelinesError}
-            stgSmokeDetail={stgSmoke?.detail}
-            onOpenPlacement={onOpenPlacement}
-            layout="observe"
-          />
-          <SupplyChainPanel layout="observe" />
-        </>
-      )}
+        )}
 
-      {pageTab === 'blueprint' && (
-        <>
-          <DeliveryReleaseWorkflowPanel
+        {pageTab === 'blueprint' && (
+          <>
+            <DeliveryReleaseWorkflowPanel
             stgSmoke={stgSmoke}
             lastDeliverSucceeded={lastDeliverSucceeded}
           />
@@ -235,19 +203,9 @@ export function DeliveryPage({
             stack={stack}
             onSelectNode={id => setSelectedNodeId(prev => (prev === id ? null : id))}
           />
-          <DeliveryCouplingGatePanel
-            context={context}
-            matrices={matrices}
-            stgSmoke={stgSmoke}
-            lastDeliverSucceeded={lastDeliverSucceeded}
-            stgGate={stgGate}
-            tierB={tierB}
-            onOpenPromote={onOpenPromote}
-            onOpenMilestones={onOpenMilestones}
-            onOpenAudit={onOpenAudit}
-          />
         </>
-      )}
+        )}
+      </DeliveryViewShell>
     </div>
   )
 }

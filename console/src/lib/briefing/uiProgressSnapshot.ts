@@ -44,7 +44,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Program',
     item: 'Delivery',
     status: 'partial',
-    notes: 'GitOps sync/rollback + Tekton pipeline runs on Operate tab; deliver-stg v2 Kaniko amd64 + preflight; stg overlay amd64 pool (G3)',
+    notes: 'Stack install wizard (Registry→Gitea→Tekton) + GitOps sync/rollback + Tekton pipeline runs on Operate tab; deliver-stg v2',
   },
   {
     area: 'Program',
@@ -87,6 +87,12 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     item: 'P3 GitOps + CI actuation',
     status: 'done',
     notes: 'POST gitops/apps/{name}/sync (operator), rollback (admin), delivery/pipelines/{name}/runs — audit logged',
+  },
+  {
+    area: 'Platform API',
+    item: 'P4 stack actuation',
+    status: 'done',
+    notes: 'POST stack/addons/{name}/install + upgrade (admin) — infra k3s scripts via PLATFORM_STACK_INSTALL_ENABLED',
   },
   {
     area: 'Future',

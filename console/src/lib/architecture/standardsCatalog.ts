@@ -169,7 +169,7 @@ export const OBSERVABILITY_LAYERS: LayerDescription[] = [
     layer: 'B — Probe',
     scope: 'Prometheus, Grafana, Loki, Alertmanager presence',
     dataSource: 'monitoring namespace workloads (substring match)',
-    notes: 'Probe only — full stack install is P4',
+    notes: 'Probe + install/upgrade actuation (P4 wizard) — Registry, Gitea, Tekton in cicd/tekton-pipelines',
   },
 ]
 
