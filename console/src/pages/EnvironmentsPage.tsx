@@ -56,7 +56,7 @@ export function EnvironmentsPage({
         title="Overview"
         description={
           <>
-            Living catalog for Bifrost hardware, CI/CD, K3s target, and trade Dev/Prod paths.
+            WHAT exists — concrete hardware, CI/CD targets, K3s topology, and trade Dev/Prod environment paths.
             Maintained in{' '}
             <code className="font-mono-tabular text-[var(--primary)]">{CATALOG_SOURCE}</code>
             {' '}(v{CATALOG_VERSION}).

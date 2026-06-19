@@ -7,6 +7,7 @@ import {
   Container,
   Hammer,
   LayoutDashboard,
+  LineChart,
   PackageCheck,
   Rocket,
   Server,
@@ -32,6 +33,7 @@ export const LANE_ICONS: Record<LaneId, LucideIcon> = {
   governance: Shield,
   troubleshoot: Bug,
   release: Rocket,
+  'business-advisory': LineChart,
 }
 
 interface BriefingIconBadgeProps {

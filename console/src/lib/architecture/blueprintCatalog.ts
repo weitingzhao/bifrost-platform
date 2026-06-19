@@ -2,7 +2,7 @@
  * Blueprint catalog — North Star, system architecture, design principles.
  *
  * Authoritative source for Ops Console → Architecture → Blueprint.
- * Do not duplicate in docs/ — see docs/STAGING.md.
+ * Single source of truth — do not duplicate elsewhere.
  */
 
 import type { OpsContextResponse } from '@/api/types'
@@ -82,14 +82,14 @@ export type ConsoleViewRow = {
 
 export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Agent Briefing', plane: 'Observe', purpose: 'New-session entry — work-intent picker, UI progress, live snapshot, full LLM briefing pack' },
-  { view: 'Control Room', plane: 'Observe', purpose: 'Dual flywheel bays, program milestone spine, Agent focus dock' },
+  { view: 'Control Room', plane: 'Observe', purpose: 'Observe entry — live KPI strip, matrix summary, dual flywheel bays, milestone spine, Agent focus dock' },
   { view: 'Delivery', plane: 'Operate', purpose: 'CI/CD actuation — Operate / Observe / Blueprint tabs; coupling gate summary' },
   { view: 'Runtime Map', plane: 'Observe', purpose: 'Unified runtime — hardware topology + SCOPE stack + matrix probes + gap analysis' },
   { view: 'Cluster', plane: 'Operate', purpose: 'K3s L0 probe + L1 namespace ensure — nodes, namespaces, workloads via platform-api' },
-  { view: 'Pulse', plane: 'Observe', purpose: 'Table dashboard — matrix summary + spine headline + cluster KPI' },
   { view: 'Milestones', plane: 'Architecture', purpose: 'Milestones, decisions D1–Dn, north star, roadmap (ops-context spine)' },
   { view: 'Promote', plane: 'Operate', purpose: 'Read-only release readiness (flywheel A + B)' },
   { view: 'Deploy Mainline', plane: 'Operate', purpose: 'Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain' },
+  { view: 'Flywheel Vision', plane: 'Architecture', purpose: 'Ultimate North Star — three-layer Agent convergence (Dev / Ops / Business), Redis topology, Dev thin + K3s thick, MCP bridges' },
   { view: 'Architecture catalogs', plane: 'Architecture', purpose: 'Blueprint, Environments, Platform Roadmap, K3s Architecture, K3s Bootstrap, Standards — Copy Prompt for LLM' },
   { view: 'Server Console', plane: 'Operate', purpose: 'SSH/WebSocket server console (Tools)' },
 ]
@@ -154,7 +154,7 @@ export const SUCCESS_CRITERIA: SuccessCriterion[] = [
   { area: 'Cluster', criterion: 'Node join/drain, namespace, workload restart/scale/logs — UI/API only' },
   { area: 'Delivery', criterion: 'Tekton run, Argo sync/rollback — UI/API only' },
   { area: 'Promote', criterion: 'release_gate trigger and results — UI/API only' },
-  { area: 'Runtime', criterion: 'Runtime Map / Pulse / FocusStrip — clickable to executable actions, not read-only' },
+  { area: 'Runtime', criterion: 'Runtime Map / Control Room live strip / FocusStrip — clickable to executable actions, not read-only' },
   { area: 'Spine', criterion: 'GET /api/v1/context + Program page always shows north star' },
   { area: 'MCP', criterion: 'MCP Tools and UI — same permissions, same audit (AI Agent self-interaction loop)' },
 ]
@@ -173,7 +173,9 @@ export const AI_PLATFORM_MISSION =
   'Build an AI-native, self-discovering, self-maintaining, self-healing release and operations environment. ' +
   'Bifrost Trade workloads (frontend, API, Worker, Socket) evolve safely, observably, and rollback-ready on this platform. ' +
   'Two downstream product lines share this unified foundation: (1) page continuous refactoring (Dense UI / frontend migration); ' +
-  '(2) trade review AI (read-only analysis, isolated from trade execution path).'
+  '(2) trade review AI (read-only analysis, isolated from trade execution path). ' +
+  'Ultimate convergence target: see Architecture → Flywheel Vision (dualFlywheelVisionCatalog.ts) — ' +
+  'three-layer Agent (Dev / Ops / Business) unifying code, operations, and trade intelligence in one Cursor window.'
 
 export const AI_MERGE_RATIONALE =
   'Splitting into two projects causes duplicate MCP, context, and gates. Merged: one platform, one Tool contract, one release mainline.'

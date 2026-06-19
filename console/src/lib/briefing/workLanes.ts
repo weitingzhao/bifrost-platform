@@ -14,7 +14,7 @@ import type { TrackId } from '@/lib/briefing/workTracks'
 
 export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops'
 export type MigrateLaneId = 'compose-k3s' | 'legacy-retire' | 'trade-stack'
-export type OperateLaneId = 'governance' | 'troubleshoot' | 'release'
+export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
 export type LaneId = BuildLaneId | MigrateLaneId | OperateLaneId
 
 export type QueueItemStatus =
@@ -67,7 +67,7 @@ const BUILD_LANES: WorkLane[] = [
     track: 'build',
     label: 'GitOps & MCP (P3–P5)',
     shortLabel: 'GitOps',
-    description: 'Argo/Tekton execution, stack install wizard, MCP actuation Tools.',
+    description: 'Argo/Tekton execution, MCP server implementation (per MCP Contract), Agent SDK integration, Vision milestones V1–V5.',
     agentMode: 'Ops',
     workIntent: 'feature',
   },
@@ -109,7 +109,7 @@ const OPERATE_LANES: WorkLane[] = [
     track: 'operate',
     label: 'Governance & spine',
     shortLabel: 'Gov',
-    description: 'Matrix probes, spine milestones, infra YAML, actuation guardrails.',
+    description: 'Matrix probes, spine milestones, infra YAML, actuation guardrails, Vision/Blueprint/MCP Contract alignment.',
     agentMode: 'Ops',
     workIntent: 'ops',
   },
@@ -130,6 +130,15 @@ const OPERATE_LANES: WorkLane[] = [
     description: 'Flywheel readiness, cutover blockers, release gate, prod matrix sign-off.',
     agentMode: 'Promote',
     workIntent: 'release',
+  },
+  {
+    id: 'business-advisory',
+    track: 'operate',
+    label: 'Trade analysis & advisory',
+    shortLabel: 'Biz',
+    description: 'Read-only portfolio/market/strategy analysis; Greeks monitoring, SEPA research, risk advisory via Trade APIs.',
+    agentMode: 'Ops',
+    workIntent: 'business',
   },
 ]
 
@@ -361,6 +370,15 @@ function buildReleaseQueue(context: OpsContextResponse | undefined, matrices: Ma
   return items
 }
 
+function buildBusinessAdvisoryQueue(): QueueItem[] {
+  return [
+    { id: 'biz-positions', label: 'Portfolio & positions analysis', status: 'pending', note: 'Greeks, P&L attribution, risk exposure' },
+    { id: 'biz-market', label: 'Market data & IV analysis', status: 'pending', note: 'Quote stream, IV cone, term structure' },
+    { id: 'biz-sepa', label: 'SEPA research pipeline', status: 'pending', note: 'Screener results, phase scoring, opportunities' },
+    { id: 'biz-strategy', label: 'Strategy & gate review', status: 'pending', note: 'Active instances, gate parameters, structure templates' },
+  ]
+}
+
 export function buildQueueForLane(
   laneId: LaneId,
   context: OpsContextResponse | undefined,
@@ -383,6 +401,8 @@ export function buildQueueForLane(
           return buildTroubleshootQueue(matrices, clusterSummary)
         case 'release':
           return buildReleaseQueue(context, matrices)
+        case 'business-advisory':
+          return buildBusinessAdvisoryQueue()
       }
   }
   return []

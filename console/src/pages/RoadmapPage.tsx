@@ -60,7 +60,7 @@ export function RoadmapPage() {
         title="Overview"
         description={
           <>
-            Docker Compose → K3s phased execution: hardware roles, 2C-B priority, GitOps migration, AI-native ops.
+            WHEN we execute — phased plan from Compose → K3s: hardware roles, 2C-B priority, GitOps migration, AI-native ops.
             Source:{' '}
             <code className="font-mono-tabular text-[var(--primary)]">{ROADMAP_SOURCE}</code>
             {' '}(v{ROADMAP_VERSION}).

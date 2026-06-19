@@ -6,7 +6,6 @@ const TRADE_APP_URL = import.meta.env.VITE_TRADE_FRONTEND_URL ?? 'http://127.0.0
 export type ConsoleViewTab =
   | 'briefing'
   | 'control-room'
-  | 'pulse'
   | 'audit'
   | 'runtime-map'
   | 'cluster'
@@ -20,21 +19,20 @@ export type ConsoleViewTab =
   | 'roadmap'
   | 'k3s-architecture'
   | 'k3s-bootstrap'
+  | 'data-layer'
   | 'platform-standards'
   | 'agent-protocol'
+  | 'mcp-contract'
   | 'design-system'
+  | 'flywheel-vision'
   | 'console'
-
-type DocLink = { id: string; label: string; href: string }
 
 export function ConsoleSidebar({
   activeTab,
   onSelect,
-  docLinks,
 }: {
   activeTab: string
   onSelect: (id: string) => void
-  docLinks: DocLink[]
 }) {
   return (
     <ShellNavSidebar
@@ -48,7 +46,6 @@ export function ConsoleSidebar({
         href: TRADE_APP_URL,
         description: 'Business console · positions, daemon, market',
       }}
-      docLinks={docLinks}
       storageKey="bifrost-ops"
     />
   )

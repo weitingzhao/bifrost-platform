@@ -7,8 +7,11 @@
 import type { OpsContextResponse } from '@/api/types'
 import { buildEnvironmentsLlmContext } from '@/lib/environments-catalog'
 import { buildDesignSystemLlmPack } from '@/lib/standards/designSystemCatalog'
+import { buildMcpContractLlmPack } from '@/lib/standards/mcpContractCatalog'
 import { buildAgentProtocolLlmPack } from './agentProtocolCatalog'
+import { buildDataLayerLlmPack } from './dataLayerCatalog'
 import { buildBlueprintLlmPack } from './blueprintCatalog'
+import { buildDualFlywheelVisionLlmPack } from './dualFlywheelVisionCatalog'
 import { buildK3sArchitectureLlmPack } from './k3sArchitectureCatalog'
 import { buildDeployMainlineLlmPack } from './deployMainlineCatalog'
 import { buildK3sBootstrapLlmPack } from './k3sBootstrapCatalog'
@@ -22,13 +25,16 @@ import { buildStandardsLlmPack } from './standardsCatalog'
 export function buildFullArchitectureLlmPack(spine?: OpsContextResponse): string {
   const sections = [
     buildBlueprintLlmPack(spine),
+    buildDualFlywheelVisionLlmPack(),
     buildEnvironmentsLlmContext(spine),
     buildRoadmapLlmPack(),
     buildK3sArchitectureLlmPack(),
     buildK3sBootstrapLlmPack(),
+    buildDataLayerLlmPack(),
     buildDeployMainlineLlmPack(),
     buildStandardsLlmPack(),
     buildAgentProtocolLlmPack(),
+    buildMcpContractLlmPack(),
     buildDesignSystemLlmPack(),
   ]
   return sections.join('\n\n---\n\n')

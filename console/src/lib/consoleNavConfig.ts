@@ -1,10 +1,10 @@
 import type { ShellNavGroup } from '@bifrost/ui'
 import {
-  Activity,
   BookOpen,
   Boxes,
   ClipboardList,
   Container,
+  Database,
   Eye,
   FileCode2,
   Gauge,
@@ -14,6 +14,8 @@ import {
   MapPinned,
   Milestone,
   Network,
+  Orbit,
+  Plug,
   PlugZap,
   Rocket,
   Ruler,
@@ -65,7 +67,6 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: 'Overview',
         items: [
           { id: 'control-room', label: 'Control Room', icon: Gauge },
-          { id: 'pulse', label: 'Pulse', icon: Activity },
           { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
         ],
       },
@@ -85,10 +86,11 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
       {
         label: 'Governance',
         items: [
+          { id: 'flywheel-vision', label: 'Vision', icon: Orbit },
           { id: 'blueprint', label: 'Blueprint', icon: Boxes },
+          { id: 'roadmap', label: 'Roadmap', icon: MapPinned },
           { id: 'program', label: 'Milestones', icon: Milestone },
           { id: 'environments', label: 'Environments', icon: BookOpen },
-          { id: 'roadmap', label: 'Platform Roadmap', icon: MapPinned },
         ],
       },
       {
@@ -96,6 +98,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         items: [
           { id: 'k3s-architecture', label: 'K3s Architecture', icon: Container },
           { id: 'k3s-bootstrap', label: 'K3s Bootstrap', icon: PlugZap },
+          { id: 'data-layer', label: 'Data Layer', icon: Database },
         ],
       },
       {
@@ -103,6 +106,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         items: [
           { id: 'platform-standards', label: 'Platform', icon: Shield },
           { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
+          { id: 'mcp-contract', label: 'MCP Contract', icon: Plug },
           { id: 'design-system', label: 'Design System', icon: Ruler },
         ],
       },
@@ -119,18 +123,20 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'A
   placement: 'Operate',
   console: 'Operate',
   'control-room': 'Observe',
-  pulse: 'Observe',
   briefing: 'Observe',
   'runtime-map': 'Observe',
   audit: 'Observe',
   blueprint: 'Architecture',
+  'flywheel-vision': 'Architecture',
   program: 'Architecture',
   environments: 'Architecture',
   roadmap: 'Architecture',
   'k3s-architecture': 'Architecture',
   'k3s-bootstrap': 'Architecture',
+  'data-layer': 'Architecture',
   'platform-standards': 'Architecture',
   'agent-protocol': 'Architecture',
+  'mcp-contract': 'Architecture',
   'design-system': 'Architecture',
 }
 

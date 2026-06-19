@@ -2,10 +2,10 @@
  * Agent Protocol catalog — Agent Modes, context packs, forbidden actions.
  *
  * Authoritative source for Ops Console → Architecture → Agent Protocol.
- * Do not duplicate in docs/ — see docs/STAGING.md.
+ * Single source of truth — do not duplicate elsewhere.
  */
 
-export const AGENT_PROTOCOL_VERSION = '2026-06-15'
+export const AGENT_PROTOCOL_VERSION = '2026-06-19'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 export type AgentModeRow = {
@@ -95,15 +95,93 @@ export const MODE_SELECTION_HINTS = [
   'Otherwise → Product',
 ]
 
+// ---------------------------------------------------------------------------
+// Three-layer Agent architecture (from Vision)
+// ---------------------------------------------------------------------------
+
+export type AgentLayerDef = {
+  layer: string
+  persona: string
+  scope: string
+  cursorRole: string
+  k8sRole: string
+  forbiddenActions: string
+}
+
+export const AGENT_LAYERS: AgentLayerDef[] = [
+  {
+    layer: 'Dev Agent',
+    persona: 'Senior engineer assisting Owner in coding, testing, and release',
+    scope: 'Source code, tests, CI/CD pipelines, config YAML, documentation',
+    cursorRole: 'Agent mode — full repo read/write + terminal + MCP tools',
+    k8sRole: 'Trigger Tekton pipelines (build/test/deliver), read Pod logs, read ArgoCD status',
+    forbiddenActions: 'No production cluster mutations; no trade commands; no direct DB DDL in prod',
+  },
+  {
+    layer: 'Ops Agent',
+    persona: 'SRE/DevOps engineer assisting Owner in runtime monitoring and remediation',
+    scope: 'K3s cluster state, Pod health, metrics, alerts, deployment rollouts, scaling',
+    cursorRole: 'Agent mode — read cluster state via MCP + limited L1/L2 actuation',
+    k8sRole: 'rollout restart, scale, drain, ArgoCD sync/rollback, Prometheus query, log tail',
+    forbiddenActions: 'No Trade business decisions; no order placement; no strategy config direct-write',
+  },
+  {
+    layer: 'Business Agent',
+    persona: 'Market analyst providing strategy insights and risk monitoring (read-only)',
+    scope: 'Trade API read endpoints — positions, Greeks, SEPA, market data, strategy status',
+    cursorRole: 'Ask mode (read-only) — fetches via mcp-trade-api, generates analysis',
+    k8sRole: 'None — accesses Trade API HTTP endpoints only, never touches cluster',
+    forbiddenActions: 'No write operations of any kind; no order placement; no config changes; advisory only',
+  },
+]
+
+export type AgentEscalationRule = {
+  from: string
+  to: string
+  trigger: string
+  example: string
+}
+
+export const AGENT_ESCALATION: AgentEscalationRule[] = [
+  { from: 'Dev Agent', to: 'Ops Agent', trigger: 'Deployment failure needs runtime diagnosis', example: 'Build passed but Pod CrashLoopBackOff → Ops Agent inspects logs + events' },
+  { from: 'Ops Agent', to: 'Dev Agent', trigger: 'Root cause is a code bug, not infra', example: 'OOM caused by new feature memory leak → Dev Agent opens fix PR' },
+  { from: 'Business Agent', to: 'Dev Agent', trigger: 'Strategy suggestion requires code change', example: 'Analysis suggests new Gate parameter → Dev Agent prepares PR (Owner approves)' },
+  { from: 'Any Agent', to: 'Owner', trigger: 'L2+ action or ambiguous situation', example: 'Ops Agent wants to rollback prod → confirms with Owner before executing' },
+]
+
+export type AgentModelGuidance = {
+  task: string
+  recommendedModel: string
+  reason: string
+}
+
+export const AGENT_MODEL_GUIDANCE: AgentModelGuidance[] = [
+  { task: 'Complex refactoring / architecture', recommendedModel: 'claude-opus-4 (xhigh thinking)', reason: 'Deep reasoning for multi-file changes' },
+  { task: 'Standard feature development', recommendedModel: 'claude-sonnet-4 (medium thinking)', reason: 'Good balance of speed and quality' },
+  { task: 'Quick fixes / formatting', recommendedModel: 'composer-2.5-fast', reason: 'Low-latency for simple edits' },
+  { task: 'Ops diagnosis / metrics analysis', recommendedModel: 'claude-opus-4 (high thinking)', reason: 'Complex reasoning over live system state' },
+  { task: 'Business analysis / market research', recommendedModel: 'claude-sonnet-4 or gpt-5.5', reason: 'Broad knowledge for financial analysis' },
+]
+
 /** Build LLM-optimized text for the Agent Protocol page. */
 export function buildAgentProtocolLlmPack(): string {
   const lines: string[] = [
-    '# Bifrost Ops — Agent Protocol (Modes & Context Packs)',
+    '# Bifrost Ops — Agent Protocol (Modes, Three-Layer Agents & Context Packs)',
     `# Source: ${AGENT_PROTOCOL_SOURCE} v${AGENT_PROTOCOL_VERSION}`,
     '',
-    '## Agent modes',
+    '## Agent modes (per-session intent)',
     ...AGENT_MODES.map(m =>
       `- **${m.mode}** [${m.flywheel}]: UI=${m.defaultUI} | May: ${m.agentMay} | Must-not: ${m.agentMustNot}`),
+    '',
+    '## Three-layer Agent architecture',
+    ...AGENT_LAYERS.map(a =>
+      `- **${a.layer}** (${a.persona}): scope=${a.scope} | cursor=${a.cursorRole} | k8s=${a.k8sRole} | DENY: ${a.forbiddenActions}`),
+    '',
+    '## Agent escalation',
+    ...AGENT_ESCALATION.map(e => `- ${e.from} → ${e.to}: ${e.trigger} (e.g. ${e.example})`),
+    '',
+    '## Model guidance',
+    ...AGENT_MODEL_GUIDANCE.map(m => `- ${m.task}: ${m.recommendedModel} — ${m.reason}`),
     '',
     '## Mode selection hints',
     ...MODE_SELECTION_HINTS.map(h => `- ${h}`),

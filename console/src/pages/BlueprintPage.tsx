@@ -55,7 +55,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         title="Overview"
         description={
           <>
-            North Star, system architecture, control-plane layers, and design principles.
+            HOW we build it — architectural principles, control-plane layers, authorization model, and design rules toward the Vision.
             Source:{' '}
             <code className="font-mono-tabular text-[var(--primary)]">{BLUEPRINT_SOURCE}</code>
             {' '}(v{BLUEPRINT_VERSION}).

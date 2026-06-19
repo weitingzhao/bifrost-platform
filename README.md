@@ -46,11 +46,10 @@ Edit network layout in `config/topology.yaml` (hosts, edges, K3s roles). Console
 
 ```
 api/       Go control-plane API (:8780)
-console/   React Utility UI (:5180) — Dense UI token style
+console/   React Utility UI (:5180) — Architecture catalogs are the single source of governance truth
 agent/     Node agent (Phase B placeholder)
 mcp/       MCP tools (Phase P2 placeholder)
 config/    environments.yaml + ops-context.yaml (spine) + topology.yaml
-docs/      Staging notes + MkDocs (:8060) — see docs/STAGING.md; governance lives in console/src/lib/architecture/
 ```
 
 ## Design principles
@@ -67,4 +66,4 @@ docs/      Staging notes + MkDocs (:8060) — see docs/STAGING.md; governance li
 | [bifrost-trade-frontend](../bifrost-trade-frontend) | Trade monitoring SPA |
 | [bifrost-trade-api](../bifrost-trade-api) | Business APIs (probed read-only) |
 
-See Ops Console → **Architecture → Blueprint** (includes AI Native Platform goals). Docs staging policy: [docs/STAGING.md](docs/STAGING.md).
+See Ops Console → **Architecture → Vision / Blueprint** (includes AI Native Platform goals). All governance lives in `console/src/lib/architecture/` catalogs.

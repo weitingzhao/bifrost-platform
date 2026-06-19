@@ -6,14 +6,13 @@
 
 与本项目用户的所有对话一律使用中文。
 
-## 文档优先级（Route C）
+## 文档优先级
 
 1. **代码** — `api/`、`console/`、`config/` 为行为与契约的 ground truth
-2. **Ops Console UI** — Architecture 页（Blueprint [含 AI Native Platform] / Environments / Platform Roadmap / K3s Architecture / K3s Bootstrap）+ Program（Deploy Mainline）+ Standards（Platform / Agent Protocol / Design System）由 catalog TS 驱动，贴近生产
+2. **Ops Console UI** — Architecture 页（Vision / Blueprint / Roadmap / Milestones / Environments / K3s / Standards）由 catalog TS 驱动，唯一权威治理源
 3. **Spine** — `GET /api/v1/context`
-4. **`docs/`** — **Staging 区**：Agent 改代码时的草稿说明；Owner 审阅后迁入 Architecture catalog 或删除。见 [docs/STAGING.md](docs/STAGING.md)
 
-**禁止**在 `docs/` 与 Architecture catalog 中重复维护同一治理内容。
+**本 repo 没有 `docs/` 目录** — 所有治理内容由 Architecture catalog（TypeScript）驱动，不使用独立文档站。
 
 ## 职责范围
 
@@ -22,11 +21,10 @@
 | 子目录 | 职责 |
 |--------|------|
 | `api/` | Go — 环境注册、连通性/权限矩阵探测、未来审计 API |
-| `console/` | React **Bifrost Ops Console** :5180 — Pulse, Runtime, Program, Architecture |
+| `console/` | React **Bifrost Ops Console** :5180 — Control Room, Runtime, Program, Architecture |
 | `agent/` | 未来：各节点 Go 探针 |
 | `mcp/` | 未来：Platform MCP Tools（只读矩阵等） |
 | `config/` | `environments.yaml`, **`ops-context.yaml`** (spine), `topology.yaml` |
-| `docs/` | **Staging only** — 未上线计划、待审草稿（非权威治理源） |
 
 **不包含**：交易 daemon、IB Operator、业务 API 实现。
 
@@ -56,7 +54,6 @@ make start        # ./scripts/run_platform.py — frees ports, api + console
 make dev-api      # Go API only
 make dev-console  # Vite console only
 make test         # go test + console type-check
-make docs         # MkDocs staging site :8060 (not authoritative for governance)
 ```
 
 ## 依赖关系
