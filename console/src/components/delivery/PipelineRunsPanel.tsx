@@ -138,7 +138,7 @@ export function PipelineRunsPanel({
   })
 
   const startMutation = useMutation({
-    mutationFn: startPipelineRun,
+    mutationFn: (name: string) => startPipelineRun(name),
     onMutate: name => {
       setRunError(null)
       setStartingPipeline(name)

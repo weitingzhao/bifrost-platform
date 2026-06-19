@@ -3,6 +3,7 @@ import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import type { ClusterSummary, DeliveryPipelinesResponse, GitOpsAppsResponse, MatrixResponse, OpsContextResponse, StackAddonsResponse, StgSmokeResponse } from '@/api/types'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { DeliveryReleaseWorkflowPanel } from '@/components/delivery/DeliveryReleaseWorkflowPanel'
+import { SupplyChainPanel } from '@/components/delivery/SupplyChainPanel'
 import { GitOpsProbePanel } from '@/components/delivery/GitOpsProbePanel'
 import { PipelineRunsPanel } from '@/components/delivery/PipelineRunsPanel'
 import { StgSmokePanel } from '@/components/delivery/StgSmokePanel'
@@ -113,6 +114,8 @@ export function DeliveryPage({
       <StackAddonsPanel data={stack} isLoading={stackLoading} errorMessage={stackError} />
 
       <DeliveryReleaseWorkflowPanel stgSmoke={stgSmoke} />
+
+      <SupplyChainPanel />
 
       <PipelineRunsPanel
         pipelines={pipelines}

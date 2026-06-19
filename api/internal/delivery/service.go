@@ -170,7 +170,7 @@ func (s *Service) PipelineRuns(ctx context.Context, pipelineName string) Pipelin
 	}
 }
 
-func (s *Service) StartPipelineRun(ctx context.Context, pipelineName string) (cluster.ActuationResponse, PipelineRunView, error) {
+func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision string) (cluster.ActuationResponse, PipelineRunView, error) {
 	now := time.Now().UTC()
 	ns := s.PipelinesNamespace()
 	target := fmt.Sprintf("PipelineRun/%s/%s", ns, pipelineName)
@@ -182,6 +182,11 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName string) (cl
 		GeneratedAt: now,
 	}
 	var empty PipelineRunView
+
+	rev := strings.TrimSpace(revision)
+	if rev == "" {
+		rev = "main"
+	}
 
 	dyn, err := s.buildDynamicClient()
 	if err != nil {
@@ -207,6 +212,11 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName string) (cl
 			"name": pipelineName,
 		},
 	}
+	if pipelineName == "bifrost-deliver-stg" {
+		spec["params"] = []map[string]any{
+			{"name": "revision", "value": rev},
+		}
+	}
 	if ws := pipelineRunWorkspaces(pipelineName); len(ws) > 0 {
 		spec["workspaces"] = ws
 	}
@@ -230,6 +240,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName string) (cl
 				"labels": map[string]any{
 					"tekton.dev/pipeline": pipelineName,
 					"bifrost.io/trigger":  "platform-api",
+					"bifrost.io/revision": rev,
 				},
 			},
 			"spec": spec,

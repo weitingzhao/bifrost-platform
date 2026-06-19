@@ -84,6 +84,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/gitops/apps", s.gitops.HandleApps)
 		r.Get("/stack/addons", s.stack.HandleAddons)
 		r.Get("/delivery/pipelines", s.delivery.HandlePipelines)
+		r.Get("/delivery/supply-chain", s.delivery.HandleSupplyChain)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
@@ -93,6 +94,8 @@ func (s *Server) Router() http.Handler {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/gitops/apps/{name}/sync", s.gitops.HandleSyncApp)
 			r.Post("/delivery/pipelines/{name}/runs", s.delivery.HandleStartPipelineRun)
+			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
+			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
 			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
 		})
 		r.Group(func(r chi.Router) {
