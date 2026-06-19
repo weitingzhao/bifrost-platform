@@ -29,7 +29,8 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     summary: 'Commit bifrost-trade-{api,socket,worker,frontend,core} + bifrost-trade-infra. Gitea mirrors pull from GitHub.',
     actions: [
       'git push origin main (each changed repo)',
-      'Optional: make k3s-sync-gitea-mirrors (Platform Makefile or bootstrap-gitea-mirrors.sh)',
+      'Console: Delivery → Supply chain → Sync mirrors',
+      'Optional: make k3s-sync-gitea-mirrors (bootstrap-gitea-mirrors.sh)',
     ],
   },
   {
@@ -54,6 +55,7 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     summary:
       'Pipeline: prepare (mirror-sync + Dockerfile CMs) → Kaniko (9 API + FE + worker/socket) → rollout → verify-stg → Argo sync.',
     actions: [
+      'Console: Delivery → Supply chain (revision + Sync mirrors + Refresh Dockerfile CMs + Run deliver-stg)',
       'Console: Delivery → Pipeline runs → bifrost-deliver-stg → Run',
       'CLI: make k3s-deliver-stg',
       'Preflight: amd64 CI node required (Placement page)',

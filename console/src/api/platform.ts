@@ -19,6 +19,8 @@ import type {
   DeliveryPipelinePreflightResponse,
   DeliveryRunLogsResponse,
   DeliveryStartRunResponse,
+  SupplyChainActuationResponse,
+  SupplyChainResponse,
   StgSmokeResponse,
   ReleaseGateResponse,
   RunReleaseGateResponse,
@@ -177,11 +179,40 @@ export async function fetchPipelineRuns(name: string): Promise<DeliveryPipelineR
   return r.json() as Promise<DeliveryPipelineRunsResponse>
 }
 
-export async function startPipelineRun(name: string): Promise<DeliveryStartRunResponse> {
+export async function fetchSupplyChain(): Promise<SupplyChainResponse> {
+  const r = await fetch('/api/v1/delivery/supply-chain')
+  if (!r.ok) throw new Error(`supply chain: HTTP ${r.status}`)
+  return r.json() as Promise<SupplyChainResponse>
+}
+
+export async function triggerMirrorSync(): Promise<SupplyChainActuationResponse> {
+  const r = await authedFetch('mirror sync', '/api/v1/delivery/supply-chain/mirror-sync', {
+    method: 'POST',
+  })
+  return r.json() as Promise<SupplyChainActuationResponse>
+}
+
+export async function refreshDockerfileConfigMaps(
+  revision = 'main',
+): Promise<SupplyChainActuationResponse> {
+  const r = await authedFetch(
+    'refresh dockerfile configmaps',
+    '/api/v1/delivery/supply-chain/dockerfile-configmaps/refresh',
+    { method: 'POST', body: JSON.stringify({ revision }) },
+  )
+  return r.json() as Promise<SupplyChainActuationResponse>
+}
+
+export async function startPipelineRun(
+  name: string,
+  revision?: string,
+): Promise<DeliveryStartRunResponse> {
+  const body =
+    revision != null && revision.trim() !== '' ? JSON.stringify({ revision: revision.trim() }) : undefined
   const r = await authedFetch(
     'pipeline run',
     `/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`,
-    { method: 'POST' },
+    { method: 'POST', body },
   )
   return r.json() as Promise<DeliveryStartRunResponse>
 }

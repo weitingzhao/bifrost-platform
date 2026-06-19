@@ -505,6 +505,55 @@ export interface DeliveryStartRunResponse extends ActuationResponse {
   run?: DeliveryPipelineRunView
 }
 
+export interface DockerfileConfigMapView {
+  name: string
+  namespace: string
+  present: boolean
+  resource_version?: string
+  updated_at?: string
+  file_keys?: string[]
+  approx_bytes?: number
+  detail?: string
+}
+
+export interface StgWorkloadImageView {
+  deployment: string
+  namespace: string
+  image: string
+}
+
+export interface SupplyChainTaskRunView {
+  name: string
+  namespace: string
+  task: string
+  actuation?: string
+  status: string
+  reason?: string
+  start_time?: string
+  completion_time?: string
+}
+
+export interface SupplyChainResponse {
+  cluster_id: string
+  cicd_namespace: string
+  stg_namespace: string
+  reachability: Reachability
+  detail: string
+  mirror_credentials_configured: boolean
+  default_revision: string
+  tracked_repos: string[]
+  dockerfile_configmaps: DockerfileConfigMapView[]
+  stg_workloads: StgWorkloadImageView[]
+  last_deliver_run?: DeliveryPipelineRunView
+  last_deliver_success?: DeliveryPipelineRunView
+  last_supply_chain_task?: SupplyChainTaskRunView
+  generated_at: string
+}
+
+export interface SupplyChainActuationResponse extends ActuationResponse {
+  run?: SupplyChainTaskRunView
+}
+
 export interface StgSmokeTargetView {
   id: string
   url: string

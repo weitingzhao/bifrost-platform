@@ -49,7 +49,14 @@ func (h *Handler) HandleStartPipelineRun(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "pipeline name required"})
 		return
 	}
-	resp, run, err := h.svc.StartPipelineRun(r.Context(), name)
+	var req StartPipelineRunRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+	}
+	resp, run, err := h.svc.StartPipelineRun(r.Context(), name, req.Revision)
 	status := "ok"
 	if err != nil {
 		status = "failed"
@@ -119,6 +126,54 @@ func (h *Handler) HandleDeletePipelineRun(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleSupplyChain(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.SupplyChain(r.Context()))
+}
+
+func (h *Handler) HandleMirrorSync(w http.ResponseWriter, r *http.Request) {
+	resp, run, err := h.svc.TriggerMirrorSync(r.Context())
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		h.audit.Record(r, resp.Action, resp.Target, status, resp.Message)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{
+			"ok": false, "action": resp.Action, "target": resp.Target, "message": resp.Message,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": resp.OK, "action": resp.Action, "target": resp.Target, "message": resp.Message, "run": run,
+	})
+}
+
+func (h *Handler) HandleRefreshDockerfileCMs(w http.ResponseWriter, r *http.Request) {
+	var req RefreshDockerfileRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+	resp, run, err := h.svc.RefreshDockerfileConfigMaps(r.Context(), req.Revision)
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		h.audit.Record(r, resp.Action, resp.Target, status, resp.Message)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{
+			"ok": false, "action": resp.Action, "target": resp.Target, "message": resp.Message,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": resp.OK, "action": resp.Action, "target": resp.Target, "message": resp.Message, "run": run,
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
