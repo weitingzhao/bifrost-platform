@@ -408,9 +408,16 @@ func isDaemonSetPod(p *corev1.Pod) bool {
 }
 
 func runSSHCommand(ctx context.Context, host string, remoteCmd ...string) (string, error) {
+	return runSSHCommandWithTimeout(ctx, host, 15, remoteCmd...)
+}
+
+func runSSHCommandWithTimeout(ctx context.Context, host string, timeoutSec int, remoteCmd ...string) (string, error) {
+	if timeoutSec <= 0 {
+		timeoutSec = 15
+	}
 	args := []string{
 		"-o", "BatchMode=yes",
-		"-o", "ConnectTimeout=15",
+		"-o", fmt.Sprintf("ConnectTimeout=%d", timeoutSec),
 		"-o", "StrictHostKeyChecking=accept-new",
 		host,
 	}

@@ -95,6 +95,7 @@ type ClusterEntry struct {
 	GitOps              GitOpsConfig       `yaml:"gitops" json:"gitops"`
 	Stack               StackConfig        `yaml:"stack" json:"stack"`
 	StgSmoke            StgSmokeConfig     `yaml:"stg_smoke" json:"stg_smoke"`
+	ProdSmoke           StgSmokeConfig     `yaml:"prod_smoke" json:"prod_smoke"`
 }
 
 type ClustersFile struct {
@@ -256,6 +257,44 @@ func (e *ClusterEntry) ResolvedStgGatewayURL() string {
 	}
 	if e != nil && strings.TrimSpace(e.NodeIP) != "" {
 		return fmt.Sprintf("http://%s:30880", strings.TrimSpace(e.NodeIP))
+	}
+	return ""
+}
+
+func (e *ClusterEntry) ResolvedProdGatewayURL() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_PROD_GATEWAY_URL")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.ProdSmoke.GatewayURL) != "" {
+		return strings.TrimSpace(e.ProdSmoke.GatewayURL)
+	}
+	return "http://192.168.10.70:30881"
+}
+
+func (e *ClusterEntry) ResolvedProdFrontendURL() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_PROD_FRONTEND_URL")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.ProdSmoke.FrontendURL) != "" {
+		return strings.TrimSpace(e.ProdSmoke.FrontendURL)
+	}
+	gw := strings.TrimRight(e.ResolvedProdGatewayURL(), "/")
+	if gw != "" {
+		return gw + "/"
+	}
+	return ""
+}
+
+func (e *ClusterEntry) ResolvedProdAPIMonitorURL() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_PROD_API_MONITOR_URL")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.ProdSmoke.APIMonitorURL) != "" {
+		return strings.TrimSpace(e.ProdSmoke.APIMonitorURL)
+	}
+	gw := strings.TrimRight(e.ResolvedProdGatewayURL(), "/")
+	if gw != "" {
+		return gw + "/api/monitor/status"
 	}
 	return ""
 }

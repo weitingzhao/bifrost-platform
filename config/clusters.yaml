@@ -14,6 +14,7 @@ clusters:
       - data
       - bifrost
       - bifrost-stg
+      - bifrost-prod
       - monitoring
       - ai
       - data-warehouse
@@ -67,3 +68,7 @@ clusters:
       gateway_url: http://192.168.10.73:30880
       api_monitor_url: http://192.168.10.73:30880/api/monitor/status
       frontend_url: http://192.168.10.73:30880/
+    prod_smoke:
+      gateway_url: http://192.168.10.70:30881
+      api_monitor_url: http://192.168.10.70:30881/api/monitor/status
+      frontend_url: http://192.168.10.70:30881/

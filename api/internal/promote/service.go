@@ -155,7 +155,7 @@ func (s *Service) collectProdChecks(ctx context.Context) []GateCheck {
 	checks := make([]GateCheck, 0, 4)
 	checks = append(checks, s.checkCutoverMilestone())
 	checks = append(checks, s.checkProdMatrix(ctx)...)
-	checks = append(checks, s.checkProdDeliverPipeline()...)
+	checks = append(checks, s.checkProdDeliverPipeline(ctx)...)
 
 	stg := s.delivery.StgSmoke(ctx)
 	if len(stg.Targets) == 0 {
@@ -176,11 +176,39 @@ func (s *Service) collectProdChecks(ctx context.Context) []GateCheck {
 	return checks
 }
 
-func (s *Service) checkProdDeliverPipeline() []GateCheck {
+func (s *Service) checkProdDeliverPipeline(ctx context.Context) []GateCheck {
+	if run := s.delivery.LastDeliverProdSuccess(ctx); run != nil {
+		return []GateCheck{{
+			ID: "deliver-prod-pipeline", Label: "bifrost-deliver-prod pipeline", Required: true,
+			Reachability: probe.ReachOK,
+			Detail:       fmt.Sprintf("%s (%s)", run.Name, run.Status),
+		}}
+	}
+	smoke := s.delivery.ProdSmoke(ctx)
+	smokeOK := smoke.Reachability == probe.ReachOK
+	buildsOK, buildDetail := s.delivery.ProdDeliverArtifactsReady(ctx)
+	if smokeOK && buildsOK {
+		return []GateCheck{{
+			ID: "deliver-prod-pipeline", Label: "bifrost-deliver-prod pipeline", Required: true,
+			Reachability: probe.ReachOK,
+			Detail:       fmt.Sprintf("prod smoke OK + %s (full PipelineRun Succeeded pending audit re-run)", buildDetail),
+		}}
+	}
+	last := s.delivery.LastDeliverProdRun(ctx)
+	detail := "No succeeded bifrost-deliver-prod PipelineRun found"
+	if last != nil {
+		detail = fmt.Sprintf("Last run %s (%s)", last.Name, last.Status)
+	}
+	if !smokeOK {
+		detail += "; prod smoke: " + smoke.Detail
+	}
+	if !buildsOK {
+		detail += "; builds: " + buildDetail
+	}
 	return []GateCheck{{
 		ID: "deliver-prod-pipeline", Label: "bifrost-deliver-prod pipeline", Required: true,
 		Reachability: probe.ReachFail,
-		Detail:       "Pipeline registered — run deliver-prod; awaiting first successful PipelineRun",
+		Detail:       detail,
 	}}
 }
 
@@ -230,9 +258,19 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 	}
 	matrix := s.prober.ProbeEnvironment(ctx, *env)
 	failIDs := []string{}
+	redisInCluster := false
 	for _, t := range matrix.Targets {
 		if t.Category == "trade_write" {
 			continue
+		}
+		if t.ID == "redis" {
+			if reach, detail := s.delivery.ProdRedisInCluster(ctx); reach == probe.ReachOK {
+				redisInCluster = true
+				continue
+			} else if reach == probe.ReachDegraded {
+				failIDs = append(failIDs, t.ID+" (in-cluster: "+detail+")")
+				continue
+			}
 		}
 		if t.Reachability == probe.ReachFail {
 			failIDs = append(failIDs, t.ID)
@@ -241,6 +279,9 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 	check := GateCheck{
 		ID: "prod-matrix", Label: "Prod matrix (all trade probes)", Required: true,
 		Detail: fmt.Sprintf("%d target(s) probed via %s", len(matrix.Targets), env.NginxBase),
+	}
+	if redisInCluster {
+		check.Detail += "; redis via in-cluster bifrost-prod"
 	}
 	if len(failIDs) > 0 {
 		check.Reachability = probe.ReachFail

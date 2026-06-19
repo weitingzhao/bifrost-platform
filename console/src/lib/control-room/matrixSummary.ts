@@ -49,6 +49,7 @@ export function prodMatrixHealthy(matrices: MatrixResponse[]): boolean {
   return prod.targets.every(
     t =>
       t.category === 'trade_write' ||
+      t.id === 'redis' ||
       t.reachability === 'ok' ||
       t.reachability === 'degraded' ||
       t.reachability === 'unknown',
@@ -58,7 +59,9 @@ export function prodMatrixHealthy(matrices: MatrixResponse[]): boolean {
 export function hasProdFailures(matrices: MatrixResponse[]): boolean {
   const prod = getProdMatrix(matrices)
   if (!prod) return true
-  return prod.targets.some(t => t.reachability === 'fail')
+  return prod.targets.some(
+    t => t.reachability === 'fail' && t.id !== 'redis' && t.category !== 'trade_write',
+  )
 }
 
 export function filterTargetsForBay(bay: BayDefinition, matrices: MatrixResponse[]): Target[] {
@@ -163,7 +166,9 @@ export function evaluatePromoteStatus(
 export function prodFailingTargetIds(matrices: MatrixResponse[]): string[] {
   const prod = getProdMatrix(matrices)
   if (!prod) return []
-  return prod.targets.filter(t => t.reachability === 'fail').map(t => t.id)
+  return prod.targets
+    .filter(t => t.reachability === 'fail' && t.id !== 'redis' && t.category !== 'trade_write')
+    .map(t => t.id)
 }
 
 export type StgDeliverStatus = {

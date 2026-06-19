@@ -15,10 +15,12 @@ environments:
 
   - id: prod
     label: Production
-    nginx_base: http://192.168.10.70
+    # K3s bifrost-prod nginx NodePort (30880 = stg @ .73, 30881 = prod @ .70)
+    nginx_base: http://192.168.10.70:30881
     postgres:
       host: 192.168.10.80
       port: 5432
+    # Legacy compose exposed host Redis; K3s prod uses in-cluster redis (gate checks via cluster probe).
     redis:
       host: 192.168.10.70
       port: 6379

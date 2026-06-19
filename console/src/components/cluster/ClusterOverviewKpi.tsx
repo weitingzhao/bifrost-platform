@@ -1,4 +1,5 @@
 import type { ClusterMetricsResponse, ClusterSummary, Reachability } from '@/api/types'
+import { DenseTag } from '@bifrost/ui'
 import {
   ClusterRadialGauge,
   ClusterStatTile,
@@ -39,6 +40,8 @@ export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverv
           : 'degraded'
   const failingReach: Reachability = summary.failing_pods > 0 ? 'fail' : 'ok'
   const metricsOk = metrics?.metrics_server_available === true
+  const elasticStandby = summary.elastic_standby ?? 0
+  const elasticDegraded = summary.elastic_degraded ?? 0
 
   return (
     <section className="page-section panel-elevated px-4 py-3">
@@ -48,13 +51,25 @@ export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverv
           value={summary.reachability}
           reach={summary.reachability}
         />
-        <ClusterRadialGauge
-          label="Nodes ready"
-          value={nodePct}
-          display={`${summary.nodes_ready}/${summary.nodes_total}`}
-          sublabel={summary.nodes_total > 0 ? `${nodePct}%` : undefined}
-          reach={nodeReach}
-        />
+        <div className="flex flex-col gap-1">
+          <ClusterRadialGauge
+            label="Core nodes ready"
+            value={nodePct}
+            display={`${summary.nodes_ready}/${summary.nodes_total}`}
+            sublabel={summary.nodes_total > 0 ? `${nodePct}%` : undefined}
+            reach={nodeReach}
+          />
+          {(elasticStandby > 0 || elasticDegraded > 0) && (
+            <div className="flex flex-wrap gap-1 px-1">
+              {elasticStandby > 0 && (
+                <DenseTag variant="neutral">{elasticStandby} elastic standby</DenseTag>
+              )}
+              {elasticDegraded > 0 && (
+                <DenseTag variant="warning">{elasticDegraded} elastic degraded</DenseTag>
+              )}
+            </div>
+          )}
+        </div>
         <ClusterStatTile
           label="Failing pods"
           value={String(summary.failing_pods)}

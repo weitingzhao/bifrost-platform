@@ -1,4 +1,5 @@
 import type { ClusterSummary } from '@/api/types'
+import { DenseTag } from '@bifrost/ui'
 import { StatusLamp } from '@/components/StatusLamp'
 
 interface ClusterHealthStripProps {
@@ -27,10 +28,22 @@ export function ClusterHealthStrip({ summary, isLoading }: ClusterHealthStripPro
         </div>
         <span className="text-[var(--muted-foreground)]">·</span>
         <span>
-          Ready nodes{' '}
+          Core nodes{' '}
           <code className="font-mono-tabular">
             {summary.nodes_ready}/{summary.nodes_total}
           </code>
+          {(summary.elastic_standby ?? 0) > 0 && (
+            <>
+              {' '}
+              <DenseTag variant="neutral">+{summary.elastic_standby} standby</DenseTag>
+            </>
+          )}
+          {(summary.elastic_degraded ?? 0) > 0 && (
+            <>
+              {' '}
+              <DenseTag variant="warning">{summary.elastic_degraded} elastic degraded</DenseTag>
+            </>
+          )}
         </span>
         <span className="text-[var(--muted-foreground)]">·</span>
         <span>

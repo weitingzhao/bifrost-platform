@@ -72,7 +72,6 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 		}
 	}
 
-	ready, total := countReadyNodes(nodes.Items)
 	failing := 0
 	runningPods := 0
 	pendingPods := 0
@@ -82,24 +81,11 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 		runningPods, pendingPods = countPodsByPhase(pods.Items)
 	}
 
+	rollup := s.rollupNodeHealth(ctx, clientset, nodes.Items)
 	cpuAlloc, memAlloc := sumAllocatable(nodes.Items, true)
 
-	reach := probe.ReachOK
-	detail := "cluster API reachable"
-	if ready < total {
-		reach = probe.ReachDegraded
-		detail = fmt.Sprintf("%d/%d nodes ready", ready, total)
-	}
-	if ready == 0 && total > 0 {
-		reach = probe.ReachFail
-		detail = "no nodes ready"
-	}
-	if failing > 0 {
-		if reach == probe.ReachOK {
-			reach = probe.ReachDegraded
-		}
-		detail = fmt.Sprintf("%s; %d failing pods", detail, failing)
-	}
+	reach, detail := summaryReachFromNodes(rollup.CoreReady, rollup.CoreTotal, rollup.ElasticDegraded, failing)
+	detail = appendElasticStandbyDetail(detail, rollup.ElasticStandby)
 
 	return SummaryResponse{
 		ClusterID:         base.ClusterID,
@@ -110,8 +96,12 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 		Reachability:      reach,
 		Detail:            detail,
 		ServerVersion:     version.GitVersion,
-		NodesReady:        ready,
-		NodesTotal:        total,
+		NodesReady:        rollup.CoreReady,
+		NodesTotal:        rollup.CoreTotal,
+		ElasticStandby:    rollup.ElasticStandby,
+		ElasticDegraded:   rollup.ElasticDegraded,
+		NodesRegistered:   rollup.RegisteredTotal,
+		NodesRegisteredReady: rollup.RegisteredReady,
 		FailingPods:       failing,
 		RunningPods:       runningPods,
 		PendingPods:       pendingPods,
@@ -141,10 +131,15 @@ func (s *Service) Nodes(ctx context.Context) NodesResponse {
 		}
 	}
 
+	rollup := s.rollupNodeHealth(ctx, clientset, list.Items)
+
 	views := make([]NodeView, 0, len(list.Items))
 	for _, n := range list.Items {
 		v := nodeView(n)
 		v.ComputeManaged = s.isComputeManaged(n.Name)
+		if mode, ok := rollup.ElasticNodeModes[n.Name]; ok {
+			v = applyElasticReachability(v, mode)
+		}
 		views = append(views, v)
 	}
 
@@ -155,8 +150,8 @@ func (s *Service) Nodes(ctx context.Context) NodesResponse {
 
 	sort.Slice(views, func(i, j int) bool { return views[i].Name < views[j].Name })
 
-	ready, total := countReadyNodes(list.Items)
-	reach, detail := nodeReach(ready, total)
+	reach, detail := summaryReachFromNodes(rollup.CoreReady, rollup.CoreTotal, rollup.ElasticDegraded, 0)
+	detail = appendElasticStandbyDetail(detail, rollup.ElasticStandby)
 
 	return NodesResponse{
 		ClusterID:    base.ClusterID,

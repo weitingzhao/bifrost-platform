@@ -15,8 +15,12 @@ type SummaryResponse struct {
 	Reachability     probe.Reachability `json:"reachability"`
 	Detail           string             `json:"detail"`
 	ServerVersion    string             `json:"server_version,omitempty"`
-	NodesReady       int                `json:"nodes_ready"`
-	NodesTotal       int                `json:"nodes_total"`
+	NodesReady        int `json:"nodes_ready"`
+	NodesTotal        int `json:"nodes_total"`
+	ElasticStandby    int `json:"elastic_standby,omitempty"`
+	ElasticDegraded   int `json:"elastic_degraded,omitempty"`
+	NodesRegistered      int `json:"nodes_registered,omitempty"`
+	NodesRegisteredReady int `json:"nodes_registered_ready,omitempty"`
 	FailingPods      int                `json:"failing_pods"`
 	RunningPods      int                `json:"running_pods"`
 	PendingPods      int                `json:"pending_pods"`
@@ -39,6 +43,7 @@ type NodeView struct {
 	MemoryAllocatable  string             `json:"memory_allocatable,omitempty"`
 	StorageAllocatable string             `json:"storage_allocatable,omitempty"`
 	ComputeManaged     bool               `json:"compute_managed,omitempty"`
+	ElasticMode        string             `json:"elastic_mode,omitempty"`
 	Unschedulable      bool               `json:"unschedulable,omitempty"`
 	CPUUsagePercent    *float64           `json:"cpu_usage_percent,omitempty"`
 	MemoryUsagePercent *float64           `json:"memory_usage_percent,omitempty"`
