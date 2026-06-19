@@ -203,6 +203,7 @@ export interface ClusterSummary {
   api_server: string
   kubeconfig_path: string
   reachability: Reachability
+  api_reachability?: Reachability
   detail: string
   server_version?: string
   nodes_ready: number
@@ -212,11 +213,21 @@ export interface ClusterSummary {
   nodes_registered?: number
   nodes_registered_ready?: number
   failing_pods: number
+  failing_pod_details?: FailingPodView[]
   running_pods: number
   pending_pods: number
   cpu_allocatable?: string
   memory_allocatable?: string
   generated_at: string
+}
+
+export interface FailingPodView {
+  namespace: string
+  name: string
+  phase: string
+  reason: string
+  node?: string
+  age?: string
 }
 
 export interface ClusterNode {
