@@ -117,7 +117,7 @@ export const AGENT_LAYERS: AgentLayerRow[] = [
   {
     layer: 2,
     name: 'Ops Agent',
-    scope: 'Observe → Diagnose → Act → Audit',
+    scope: 'Observe → Diagnosis → Scheduling → Operate → Cluster ops → Audit',
     examples: [
       'AlertManager webhook → read logs/metrics → root cause summary',
       'L1: rollout restart, scale, Celery purge (auto + audit)',

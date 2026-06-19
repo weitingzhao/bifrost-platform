@@ -170,6 +170,7 @@ export function buildPipelineRunAskPack(params: {
       ? `- stg smoke: ${stgSmokeDetail}`
       : '- stg smoke: (not loaded — check Delivery → STG smoke panel)',
     '- verify: Operate → Cluster → bifrost-stg workloads (failing pods)',
+    '- scheduling: Observe → Scheduling → Placement (amd64_ci pool, policy violations)',
     '- gateway: http://192.168.10.73:30880/',
     '',
     '## Log tail (PipelineRun task pods)',

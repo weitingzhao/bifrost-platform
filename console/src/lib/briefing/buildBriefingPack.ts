@@ -411,9 +411,10 @@ export function buildBriefingPack(input: BriefingInputs): string {
     '- Phase 1 trade stack: New Frontend + Legacy API only — do not migrate bifrost-trade-api yet.',
     '',
     '## Related Console views',
-    '- Control Room — governance + scoped packs',
-    '- Runtime Map — hardware + failing probes',
-    '- Cluster — K3s workloads + Layer A/B observability',
+    '- Observe → Diagnosis: Control Room → Runtime Map (business topology + matrix, L0)',
+    '- Observe → Scheduling: Placement (K8s node-pool / policy gap, L0)',
+    '- Operate → Cluster ops: Cluster (L0 read + L1 actuation)',
+    '- Observe → Session & audit: Agent Briefing · Audit (actuation history)',
     '- Architecture → Vision / Blueprint / Data Layer / MCP Contract — governance catalogs',
     '- Architecture Copy All for LLM — full static catalog appendix if needed',
   ].join('\n')

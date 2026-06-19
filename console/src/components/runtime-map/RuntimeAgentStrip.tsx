@@ -43,7 +43,7 @@ export function RuntimeAgentStrip({
       <section className="runtime-agent-strip-collapsed page-section panel-elevated px-4 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Agent context — generate runtime-scoped pack for Cursor
+            Agent context — topology-scoped pack (new sessions → Agent Briefing)
           </span>
           <Button
             variant="ghost"
@@ -66,7 +66,7 @@ export function RuntimeAgentStrip({
             Agent context
           </h3>
           <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Generate runtime-scoped Content for LLM — paste into Cursor to discuss infra next steps.
+            Topology-scoped pack — selection highlights hardware / SCOPE / gap context. New sessions → Agent Briefing.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

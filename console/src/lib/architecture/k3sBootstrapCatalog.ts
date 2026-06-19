@@ -53,7 +53,7 @@ export const SLICE1_CHECKLIST: ChecklistItem[] = [
   { id: 4, check: 'L0 API', command: 'curl -s http://127.0.0.1:8780/api/v1/cluster | jq .reachability → ok' },
   { id: 5, check: 'Layer A read path', command: 'curl .../cluster/metrics | jq .metrics_server_available' },
   { id: 6, check: 'Layer B probe', command: 'curl .../cluster/observability | jq .layer_b_status → not_installed (expected)' },
-  { id: 7, check: 'Console', command: 'Operate → Cluster: 1/1 Ready; Layer B shows Planned' },
+  { id: 7, check: 'Console', command: 'Operate → Cluster ops → Cluster: 1/1 Ready; Layer B shows Planned' },
 ]
 
 export const VERIFY_COMMANDS = [
@@ -72,7 +72,7 @@ export const CONSOLE_CLUSTER_COMMANDS = [
   'cd bifrost-trade-infra && make k3s-fetch-kubeconfig',
   'export PLATFORM_KUBECONFIG=$HOME/.kube/bifrost-k3s.yaml',
   'cd ../bifrost-platform && make start',
-  '# Console → Operate → Cluster',
+  '# Console → Operate → Cluster ops → Cluster',
 ]
 
 export const CONSOLE_VERIFY_API = [

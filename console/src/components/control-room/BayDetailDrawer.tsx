@@ -4,6 +4,7 @@ import { milestoneStatusVariant } from '@/components/FocusStrip'
 import { getBay } from '@/lib/control-room/bayRegistry'
 import { filterTargetsForBay } from '@/lib/control-room/matrixSummary'
 import type { ControlRoomSelection } from '@/components/control-room/DualFlywheelPanel'
+import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 
 const TRADE_APP_URL = import.meta.env.VITE_TRADE_FRONTEND_URL ?? 'http://127.0.0.1:5173'
 
@@ -12,7 +13,7 @@ interface BayDetailDrawerProps {
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
   onClose: () => void
-  onOpenRuntimeMap: () => void
+  onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenProgram: () => void
 }
 
@@ -136,7 +137,7 @@ export function BayDetailDrawer({
       </div>
 
       <footer className="bay-detail-drawer-footer">
-        <Button variant="ghost" size="sm" onClick={onOpenRuntimeMap}>
+        <Button variant="ghost" size="sm" onClick={() => onOpenRuntimeMap()}>
           Open Runtime Map
         </Button>
         <Button variant="ghost" size="sm" onClick={onOpenProgram}>

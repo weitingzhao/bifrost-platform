@@ -21,7 +21,7 @@
 | 子目录 | 职责 |
 |--------|------|
 | `api/` | Go — 环境注册、连通性/权限矩阵探测、未来审计 API |
-| `console/` | React **Bifrost Ops Console** :5180 — Control Room, Runtime, Program, Architecture |
+| `console/` | React **Bifrost Ops Console** :5180 — Observe (Diagnosis · Scheduling · Session & audit), Operate, Architecture |
 | `agent/` | 未来：各节点 Go 探针 |
 | `mcp/` | 未来：Platform MCP Tools（只读矩阵等） |
 | `config/` | `environments.yaml`, **`ops-context.yaml`** (spine), `topology.yaml` |

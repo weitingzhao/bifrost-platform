@@ -9,6 +9,7 @@ import {
 } from '@/components/control-room/DualFlywheelPanel'
 import { PipelineFlow } from '@/components/control-room/PipelineFlow'
 import { OpsSection } from '@/components/layout/OpsSection'
+import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 import { useState } from 'react'
 
 interface ControlRoomPageProps {
@@ -22,7 +23,7 @@ interface ControlRoomPageProps {
   clusterLoading?: boolean
   stgSmoke?: StgSmokeResponse
   stgSmokeLoading?: boolean
-  onOpenRuntimeMap: () => void
+  onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenProgram: () => void
   onOpenDelivery: () => void
   onOpenCluster: () => void

@@ -10,10 +10,13 @@ import {
   StatusLamp,
 } from '@bifrost/ui'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse, StgSmokeResponse } from '@/api/types'
-import { MatrixTable } from '@/components/MatrixTable'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { flywheelLabel } from '@/components/FocusStrip'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
+import {
+  firstFailingTargetId,
+  type OpenRuntimeMapFn,
+} from '@/lib/runtime-map/runtimeMapNavigation'
 
 interface ControlRoomLiveStatusProps {
   context: OpsContextResponse | undefined
@@ -26,7 +29,7 @@ interface ControlRoomLiveStatusProps {
   clusterLoading?: boolean
   stgSmoke?: StgSmokeResponse
   stgSmokeLoading?: boolean
-  onOpenRuntimeMap: () => void
+  onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenProgram: () => void
   onOpenCluster?: () => void
   onOpenDelivery?: () => void
@@ -132,9 +135,9 @@ export function ControlRoomLiveStatus({
 
       <OpsSection
         title="Environment reachability"
-        description="Matrix probe summary — refreshes ~30s."
+        description="Summary only — open Runtime Map for hardware topology and per-target drill-down."
         actions={
-          <Button variant="ghost" size="xs" onClick={onOpenRuntimeMap}>
+          <Button variant="ghost" size="xs" onClick={() => onOpenRuntimeMap()}>
             Open Runtime Map
           </Button>
         }
@@ -156,25 +159,62 @@ export function ControlRoomLiveStatus({
                 <DenseTableHead>Fail</DenseTableHead>
                 <DenseTableHead>Total</DenseTableHead>
                 <DenseTableHead>Probed at</DenseTableHead>
+                <DenseTableHead>Topology</DenseTableHead>
               </DenseTableHeadRow>
             </DenseTableHeader>
             <DenseTableBody>
               {matrices.map(m => {
                 const c = countReach(m)
+                const failingTarget = c.fail > 0 ? firstFailingTargetId(m) : undefined
                 return (
                   <DenseTableRow key={m.environment}>
                     <DenseTableCell>
-                      <span className={`badge-ui badge-env-${m.environment}`}>
-                        {m.environment}
-                      </span>
+                      <button
+                        type="button"
+                        className="focus-strip-link"
+                        onClick={() => onOpenRuntimeMap({ env: m.environment })}
+                      >
+                        <span className={`badge-ui badge-env-${m.environment}`}>
+                          {m.environment}
+                        </span>
+                      </button>
                     </DenseTableCell>
                     <DenseTableCell className="font-mono-tabular lamp-ok">{c.ok}</DenseTableCell>
                     <DenseTableCell className={`font-mono-tabular ${c.fail > 0 ? 'lamp-fail' : ''}`}>
-                      {c.fail}
+                      {c.fail > 0 ? (
+                        <button
+                          type="button"
+                          className="focus-strip-link font-mono-tabular lamp-fail"
+                          onClick={() =>
+                            onOpenRuntimeMap({
+                              env: m.environment,
+                              targetId: failingTarget,
+                            })
+                          }
+                        >
+                          {c.fail}
+                        </button>
+                      ) : (
+                        c.fail
+                      )}
                     </DenseTableCell>
                     <DenseTableCell className="font-mono-tabular">{c.total}</DenseTableCell>
                     <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
                       {m.generated_at}
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() =>
+                          onOpenRuntimeMap({
+                            env: m.environment,
+                            targetId: failingTarget,
+                          })
+                        }
+                      >
+                        {c.fail > 0 ? 'Drill down' : 'Open map'}
+                      </Button>
                     </DenseTableCell>
                   </DenseTableRow>
                 )
@@ -183,19 +223,6 @@ export function ControlRoomLiveStatus({
           </DenseDataTable>
         )}
       </OpsSection>
-
-      {matrices.length > 0 && (
-        <details className="page-section panel-elevated">
-          <summary className="cursor-pointer px-4 py-2 text-sm font-medium">
-            Expand per-target matrix
-          </summary>
-          <div className="flex flex-col gap-4 p-3">
-            {matrices.map(m => (
-              <MatrixTable key={m.environment} matrix={m} />
-            ))}
-          </div>
-        </details>
-      )}
     </div>
   )
 }

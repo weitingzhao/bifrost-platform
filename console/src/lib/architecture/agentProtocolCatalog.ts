@@ -34,7 +34,7 @@ export const AGENT_MODES: AgentModeRow[] = [
   {
     mode: 'Promote',
     flywheel: 'A + B coupling',
-    defaultUI: 'Observe → Control Room · Operate → Promote',
+    defaultUI: 'Observe → Diagnosis · Observe → Scheduling (Placement) · Operate → Cluster ops · Observe → Audit',
     agentMay: 'Single-variable release checks, sign-off docs',
     agentMustNot: 'Skip blockers (D1, gate), mix API + FE in one change',
   },
