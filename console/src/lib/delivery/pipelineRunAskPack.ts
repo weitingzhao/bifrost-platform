@@ -5,9 +5,9 @@ const LOG_TAIL_MAX = 12_000
 const STG_V2_CHECKLIST = [
   'S10 config.stg.yaml + sync_stg_config',
   'S11 worker/socket manifests + Kaniko images',
-  'S12 deliver-stg v2 pipeline (build + rollout worker/socket)',
+  'S12 deliver-stg v2 (prepare → build → rollout → verify-stg → gitops)',
   'S13 bifrost-stg-secrets (MASSIVE_API_KEY) + IB/Massive live',
-  'S14 verify-phase-b-stg-v2 + release gate 9 APIs + frontend',
+  'S14 verify-phase-b-stg-v2 + Stg smoke + release gate',
 ].join('\n- ')
 
 function truncateLogs(logs: string): string {
