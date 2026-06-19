@@ -6,6 +6,7 @@ import {
   DenseTableRow,
   DenseTableHead,
   DenseTableCell,
+  DenseTag,
 } from '@bifrost/ui'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import type { ClusterNode } from '@/api/types'
@@ -124,6 +125,12 @@ export function ClusterNodesTable({
                     <span className="font-mono-tabular">{node.status}</span>
                     {node.unschedulable ? (
                       <span className="text-dense-caption text-[var(--muted-foreground)]">cordoned</span>
+                    ) : null}
+                    {node.elastic_mode === 'standby' ? (
+                      <DenseTag variant="neutral">standby</DenseTag>
+                    ) : null}
+                    {node.elastic_mode === 'degraded' ? (
+                      <DenseTag variant="warning">wake failed</DenseTag>
                     ) : null}
                   </span>
                 </DenseTableCell>

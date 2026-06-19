@@ -545,6 +545,117 @@ func (s *Service) probeStgHTTP(ctx context.Context, id, url string) StgSmokeTarg
 	return StgSmokeTargetView{ID: id, URL: url, Reachability: reach, Detail: detail}
 }
 
+// ProdSmoke HTTP probes for bifrost-prod via nginx NodePort (:30881).
+func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
+	now := time.Now().UTC()
+	out := StgSmokeResponse{
+		ClusterID:    s.clusterID(),
+		Reachability: probe.ReachUnknown,
+		Detail:       "prod smoke probes not configured",
+		Targets:      []StgSmokeTargetView{},
+		GeneratedAt:  now,
+	}
+	if s.entry == nil {
+		out.Detail = "no cluster configured"
+		return out
+	}
+
+	probes := []struct {
+		id  string
+		url string
+	}{}
+
+	if fe := s.entry.ResolvedProdFrontendURL(); fe != "" {
+		probes = append(probes, struct {
+			id  string
+			url string
+		}{id: "prod-frontend", url: fe})
+	}
+
+	gw := strings.TrimRight(s.entry.ResolvedProdGatewayURL(), "/")
+	if gw != "" {
+		for _, domain := range s.entry.ResolvedStgAPIDomains() {
+			probes = append(probes, struct {
+				id  string
+				url string
+			}{
+				id:  "prod-api-" + domain,
+				url: gw + "/api/" + domain + stgAPIProbePath(domain),
+			})
+		}
+	} else if u := s.entry.ResolvedProdAPIMonitorURL(); u != "" {
+		probes = append(probes, struct {
+			id  string
+			url string
+		}{id: "prod-api-monitor", url: u})
+	}
+
+	for _, p := range probes {
+		if p.url == "" {
+			continue
+		}
+		out.Targets = append(out.Targets, s.probeStgHTTP(ctx, p.id, p.url))
+	}
+	if len(out.Targets) == 0 {
+		out.Detail = "configure prod_smoke URLs in clusters.yaml or PLATFORM_PROD_* env"
+		return out
+	}
+
+	fail := 0
+	for _, t := range out.Targets {
+		if t.Reachability == probe.ReachFail {
+			fail++
+		}
+	}
+	if fail == 0 {
+		out.Reachability = probe.ReachOK
+		out.Detail = fmt.Sprintf("%d prod smoke target(s) OK", len(out.Targets))
+	} else {
+		out.Reachability = probe.ReachFail
+		out.Detail = fmt.Sprintf("%d failing prod smoke target(s)", fail)
+	}
+	return out
+}
+
+// ProdDeliverArtifactsReady is true when the latest deliver-prod PipelineRun completed build tasks
+// (rollout may have failed transiently while the cluster later recovered).
+func (s *Service) ProdDeliverArtifactsReady(ctx context.Context) (bool, string) {
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return false, err.Error()
+	}
+	ns := s.PipelinesNamespace()
+	runs, listErr := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
+		LabelSelector: "tekton.dev/pipeline=bifrost-deliver-prod",
+	})
+	if listErr != nil || len(runs.Items) == 0 {
+		return false, "no deliver-prod PipelineRun"
+	}
+	sort.Slice(runs.Items, func(i, j int) bool {
+		return runs.Items[i].GetCreationTimestamp().After(runs.Items[j].GetCreationTimestamp().Time)
+	})
+	prName := runs.Items[0].GetName()
+	buildTasks := []string{"build-all-apis", "build-frontend", "build-worker-socket"}
+	for _, task := range buildTasks {
+		trName := prName + "-" + task
+		tr, trErr := dyn.Resource(taskRunGVR).Namespace(ns).Get(ctx, trName, metav1.GetOptions{})
+		if trErr != nil {
+			return false, trName + " missing"
+		}
+		view := taskRunSummaryFrom(*tr)
+		if !isTaskRunSucceededView(view) {
+			return false, trName + " not succeeded"
+		}
+	}
+	return true, prName + " build tasks succeeded"
+}
+
+func isTaskRunSucceededView(v SupplyChainTaskRunView) bool {
+	st := strings.ToLower(v.Status)
+	re := strings.ToLower(v.Reason)
+	return st == "true" || st == "succeeded" || re == "succeeded" || re == "completed"
+}
+
 func (s *Service) buildDynamicClient() (dynamic.Interface, error) {
 	if s.dynamicFactory != nil {
 		return s.dynamicFactory()

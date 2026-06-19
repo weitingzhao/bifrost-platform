@@ -152,20 +152,60 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 
 // LastDeliverStgSuccess returns the most recent succeeded bifrost-deliver-stg PipelineRun, if any.
 func (s *Service) LastDeliverStgSuccess(ctx context.Context) *PipelineRunView {
+	return s.lastDeliverSuccess(ctx, "bifrost-deliver-stg")
+}
+
+// LastDeliverProdSuccess returns the most recent succeeded bifrost-deliver-prod PipelineRun, if any.
+func (s *Service) LastDeliverProdSuccess(ctx context.Context) *PipelineRunView {
+	return s.lastDeliverSuccess(ctx, "bifrost-deliver-prod")
+}
+
+// LastDeliverProdRun returns the most recent bifrost-deliver-prod PipelineRun regardless of status.
+func (s *Service) LastDeliverProdRun(ctx context.Context) *PipelineRunView {
+	return s.lastDeliverRun(ctx, "bifrost-deliver-prod")
+}
+
+func (s *Service) lastDeliverRun(ctx context.Context, pipelineName string) *PipelineRunView {
 	dyn, err := s.buildDynamicClient()
 	if err != nil {
 		return nil
 	}
 	ns := s.PipelinesNamespace()
 	runs, listErr := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
-		LabelSelector: "tekton.dev/pipeline=bifrost-deliver-stg",
+		LabelSelector: "tekton.dev/pipeline=" + pipelineName,
 	})
 	if listErr != nil || len(runs.Items) == 0 {
 		return nil
 	}
 	var views []PipelineRunView
 	for _, item := range runs.Items {
-		views = append(views, pipelineRunFromUnstructured(item, "bifrost-deliver-stg"))
+		views = append(views, pipelineRunFromUnstructured(item, pipelineName))
+	}
+	sort.Slice(views, func(i, j int) bool {
+		return pipelineRunStartedAt(views[i]) > pipelineRunStartedAt(views[j])
+	})
+	if len(views) == 0 {
+		return nil
+	}
+	last := views[0]
+	return &last
+}
+
+func (s *Service) lastDeliverSuccess(ctx context.Context, pipelineName string) *PipelineRunView {
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return nil
+	}
+	ns := s.PipelinesNamespace()
+	runs, listErr := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
+		LabelSelector: "tekton.dev/pipeline=" + pipelineName,
+	})
+	if listErr != nil || len(runs.Items) == 0 {
+		return nil
+	}
+	var views []PipelineRunView
+	for _, item := range runs.Items {
+		views = append(views, pipelineRunFromUnstructured(item, pipelineName))
 	}
 	sort.Slice(views, func(i, j int) bool {
 		return pipelineRunStartedAt(views[i]) > pipelineRunStartedAt(views[j])
@@ -177,6 +217,31 @@ func (s *Service) LastDeliverStgSuccess(ctx context.Context) *PipelineRunView {
 		}
 	}
 	return nil
+}
+
+// ProdRedisInCluster reports redis deployment readiness in bifrost-prod (K3s in-cluster; no host NodePort).
+func (s *Service) ProdRedisInCluster(ctx context.Context) (probe.Reachability, string) {
+	clientset, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		return probe.ReachFail, "cluster client: " + err.Error()
+	}
+	ns := "bifrost-prod"
+	dep, depErr := clientset.AppsV1().Deployments(ns).Get(ctx, "redis", metav1.GetOptions{})
+	if depErr != nil {
+		return probe.ReachFail, fmt.Sprintf("deployment/redis in %s: %v", ns, depErr)
+	}
+	ready := int32(0)
+	if dep.Status.ReadyReplicas > 0 {
+		ready = dep.Status.ReadyReplicas
+	}
+	desired := dep.Status.Replicas
+	if desired == 0 {
+		desired = *dep.Spec.Replicas
+	}
+	if ready > 0 && ready >= desired {
+		return probe.ReachOK, fmt.Sprintf("bifrost-prod/redis %d/%d ready (in-cluster)", ready, desired)
+	}
+	return probe.ReachDegraded, fmt.Sprintf("bifrost-prod/redis %d/%d ready", ready, desired)
 }
 
 func dockerfileCMFrom(cm *corev1.ConfigMap) DockerfileConfigMapView {

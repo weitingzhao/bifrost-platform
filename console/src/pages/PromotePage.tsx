@@ -7,7 +7,7 @@ import type {
   TierBStatusResponse,
 } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { ReleaseGateSection } from '@/components/promote/ReleaseGateSection'
+import { ReleaseGateCompareSection } from '@/components/promote/ReleaseGateCompareSection'
 import {
   evaluatePromoteStatus,
   evaluateStgReleaseStatus,
@@ -129,23 +129,13 @@ export function PromotePage({
         <PromoteChecklist title="Flywheel B — Runtime & ops" items={FLYWHEEL_B_CHECKS} />
       </div>
 
-      <ReleaseGateSection
-        tier="stg"
-        title="STG release gate"
-        description="Last deliver-stg success + Tier A HTTP smoke (gateway :30880). Run after bifrost-deliver-stg completes."
-        gate={stgGate}
-        gateLoading={stgGateLoading}
-        gateError={stgGateError}
-      />
-
-      <ReleaseGateSection
-        tier="prod"
-        title="Prod cutover gate"
-        description="Cutover milestone, prod matrix, and deliver-prod pipeline (planned). STG checks are informational only."
-        gate={prodGate}
-        gateLoading={prodGateLoading}
-        gateError={prodGateError}
-        showNarrativeReady
+      <ReleaseGateCompareSection
+        stgGate={stgGate}
+        stgGateLoading={stgGateLoading}
+        stgGateError={stgGateError}
+        prodGate={prodGate}
+        prodGateLoading={prodGateLoading}
+        prodGateError={prodGateError}
       />
 
       {staging != null && (

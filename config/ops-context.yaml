@@ -34,9 +34,9 @@ deployment:
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 
 focus:
-  headline: "K3s STG v2 SIGNED (2026-06-18) · Prod overlay + deliver-prod IN_PROGRESS · ops-ui-actuation IN_PROGRESS"
+  headline: "K3s Prod cutover SIGNED (2026-06-19) · prod release gate pass · ops-ui-actuation IN_PROGRESS"
   flywheel_primary: B # A = trade FE, B = runtime/ops
-  blocker: prod-overlay
+  blocker: null
 
 milestones:
   - id: phase-2b
@@ -71,7 +71,8 @@ milestones:
 
   - id: 2c-b-prod-cutover
     label: 2C-B production cutover
-    status: IN_PROGRESS
+    status: SIGNED
+    signed_at: "2026-06-19"
     pipeline_lane: mainline
     pipeline_after: k3s-stg-v2-deliver
     authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
@@ -241,10 +242,10 @@ tracks:
       - id: compose-to-k3s
         label: "Compose to K3s deployment"
         total: 5
-        done: 3
+        done: 4
         status: in_progress
-        next_task: "④ Prod overlay + bifrost-deliver-prod (Console Promote prod gate)"
-        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED 2026-06-18 ✓ · ④ prod overlay · ⑤ HA/validation"
+        next_task: "⑤ HA/validation (optional hardening)"
+        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED 2026-06-18 ✓ ④ prod overlay + deliver-prod SIGNED 2026-06-19 ✓ · ⑤ HA/validation"
       - id: legacy-retirement
         label: "Phase 3 Legacy retirement"
         total: 4

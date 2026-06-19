@@ -34,8 +34,13 @@ export function summarizeCluster(summary: ClusterSummary | undefined): {
       label: `Cluster: ${summary.failing_pods} failing pods`,
     }
   }
+  const standby = summary.elastic_standby ?? 0
+  const label =
+    standby > 0
+      ? `Cluster: ${summary.nodes_ready}/${summary.nodes_total} core Ready (+${standby} standby)`
+      : `Cluster: ${summary.nodes_ready}/${summary.nodes_total} Ready`
   return {
     reach: summary.reachability,
-    label: `Cluster: ${summary.nodes_ready}/${summary.nodes_total} Ready`,
+    label,
   }
 }

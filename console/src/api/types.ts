@@ -207,6 +207,10 @@ export interface ClusterSummary {
   server_version?: string
   nodes_ready: number
   nodes_total: number
+  elastic_standby?: number
+  elastic_degraded?: number
+  nodes_registered?: number
+  nodes_registered_ready?: number
   failing_pods: number
   running_pods: number
   pending_pods: number
@@ -233,6 +237,7 @@ export interface ClusterNode {
   cpu_reachability?: Reachability
   memory_reachability?: Reachability
   compute_managed?: boolean
+  elastic_mode?: 'active' | 'standby' | 'degraded'
   unschedulable?: boolean
 }
 
