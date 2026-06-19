@@ -22,12 +22,14 @@ type GitOpsConfig struct {
 	ArgoCDServerMatch     string `yaml:"argocd_server_match" json:"argocd_server_match"`
 }
 
-// StackAddonSpec — CI/CD stack component probe (P2 L0 read).
+// StackAddonSpec — CI/CD stack component probe (P2 L0 read) + install scripts (P4).
 type StackAddonSpec struct {
-	ID              string `yaml:"id" json:"id"`
-	Label           string `yaml:"label" json:"label"`
-	Match           string `yaml:"match" json:"match"`
-	ProbeNamespace  string `yaml:"probe_namespace" json:"probe_namespace,omitempty"`
+	ID             string `yaml:"id" json:"id"`
+	Label          string `yaml:"label" json:"label"`
+	Match          string `yaml:"match" json:"match"`
+	ProbeNamespace string `yaml:"probe_namespace" json:"probe_namespace,omitempty"`
+	InstallScript  string `yaml:"install_script" json:"install_script,omitempty"`
+	UpgradeScript  string `yaml:"upgrade_script" json:"upgrade_script,omitempty"`
 }
 
 // StackConfig — delivery stack probes in cicd namespace.

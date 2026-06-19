@@ -156,7 +156,7 @@ export function DeliveryCouplingGatePanel({
     <OpsSection
       title="Coupling gate"
       leading={<StatusLamp value={prodLamp} kind="reach" />}
-      description="STG release track vs Prod cutover track — run gates on Promote."
+      description="STG release track vs Prod cutover track — check after deliver, then run gates on Promote."
       bodyPadding="default"
       overflow="visible"
       className="coupling-gate-panel"

@@ -39,7 +39,7 @@ import {
 
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliveryPageTabs'
 
-export type PipelineRunsPanelLayout = 'operate-recent' | 'observe'
+export type PipelineRunsPanelLayout = 'observe' | 'operate'
 
 interface PipelineRunsPanelProps {
   pipelines: DeliveryPipelinesResponse | undefined
@@ -47,7 +47,7 @@ interface PipelineRunsPanelProps {
   errorMessage?: string | null
   stgSmokeDetail?: string | null
   onOpenPlacement?: () => void
-  /** operate-recent: deliver-stg only, last 3 runs; observe: full pipeline explorer */
+  /** observe: history + logs only; operate: includes Run / Delete (operator token) */
   layout?: PipelineRunsPanelLayout
 }
 
@@ -99,7 +99,7 @@ export function PipelineRunsPanel({
   onOpenPlacement,
   layout = 'observe',
 }: PipelineRunsPanelProps) {
-  const isRecent = layout === 'operate-recent'
+  const allowActuation = layout === 'operate'
   const pipelineList = pipelines?.pipelines ?? []
   const defaultPipeline =
     pipelineList.find(p => p.name === DELIVER_STG_PIPELINE)?.name ??
@@ -107,9 +107,7 @@ export function PipelineRunsPanel({
     pipelineList.find(p => p.name === 'bifrost-smoke')?.name ??
     pipelineList[0]?.name ??
     ''
-  const [selectedPipeline, setSelectedPipeline] = useState<string>(
-    isRecent ? DELIVER_STG_PIPELINE : defaultPipeline,
-  )
+  const [selectedPipeline, setSelectedPipeline] = useState<string>(defaultPipeline)
   const [expandedRun, setExpandedRun] = useState<string | null>(null)
   const [askAiRun, setAskAiRun] = useState<string | null>(null)
   const [askAiPack, setAskAiPack] = useState<string | null>(null)
@@ -126,14 +124,10 @@ export function PipelineRunsPanel({
   const activePipeline = selectedPipeline !== '' ? selectedPipeline : defaultPipeline
 
   useEffect(() => {
-    if (isRecent) {
-      setSelectedPipeline(DELIVER_STG_PIPELINE)
-      return
-    }
     if (selectedPipeline === '' && defaultPipeline !== '') {
       setSelectedPipeline(defaultPipeline)
     }
-  }, [defaultPipeline, isRecent, selectedPipeline])
+  }, [defaultPipeline, selectedPipeline])
 
   useEffect(() => {
     setRunSort(defaultPipelineRunSort())
@@ -195,7 +189,7 @@ export function PipelineRunsPanel({
     () => sortPipelineRuns(runs, runSort.key, runSort.dir),
     [runs, runSort],
   )
-  const displayRuns = isRecent ? sortedRuns.slice(0, 3) : sortedRuns
+  const displayRuns = sortedRuns
 
   function handleRunSort(key: PipelineRunSortKey) {
     setRunSort(prev => togglePipelineRunSort(prev, key))
@@ -242,11 +236,11 @@ export function PipelineRunsPanel({
 
   return (
     <OpsSection
-      title={isRecent ? 'Recent deliver runs' : 'Pipeline runs'}
+      title="Pipeline runs"
       description={
-        isRecent
-          ? 'Last three bifrost-deliver-stg runs — open Observe tab for full history.'
-          : undefined
+        allowActuation
+          ? undefined
+          : 'Tekton run history and logs — start deliver on Operate, then inspect here.'
       }
       actions={
         <SectionRefreshButton
@@ -285,7 +279,6 @@ export function PipelineRunsPanel({
       overflow="visible"
       bodyClassName="ops-section-body--table"
     >
-      {!isRecent && (
       <>
       <div className="border-b border-[var(--border)] px-3 py-2">
         <OpsSubsectionTitle>
@@ -298,7 +291,7 @@ export function PipelineRunsPanel({
           <DenseTableHeadRow>
             <DenseTableHead>Pipeline</DenseTableHead>
             <DenseTableHead>Namespace</DenseTableHead>
-            <DenseTableHead>Actions</DenseTableHead>
+            <DenseTableHead>{allowActuation ? 'Actions' : 'Explore'}</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
@@ -338,7 +331,7 @@ export function PipelineRunsPanel({
                     >
                       View runs
                     </Button>
-                    {canOperate && (
+                    {canOperate && allowActuation && (
                       <Button
                         size="sm"
                         disabled={startMutation.isPending || p.build_ready === false}
@@ -359,25 +352,14 @@ export function PipelineRunsPanel({
           )}
         </DenseTableBody>
       </DenseDataTable>
-      </>
-      )}
 
       {activePipeline !== '' && (
         <>
-          {!isRecent && (
           <div className="border-b border-t border-[var(--border)] px-3 py-2">
             <OpsSubsectionTitle>
               Runs — {activePipeline} ({runsQuery.isLoading ? '…' : runs.length})
             </OpsSubsectionTitle>
           </div>
-          )}
-          {isRecent && (
-          <div className="border-b border-[var(--border)] px-3 py-2">
-            <OpsSubsectionTitle>
-              {DELIVER_STG_PIPELINE} ({runsQuery.isLoading ? '…' : displayRuns.length} shown)
-            </OpsSubsectionTitle>
-          </div>
-          )}
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
@@ -396,7 +378,9 @@ export function PipelineRunsPanel({
                   dir={runSort.dir}
                   onSort={handleRunSort}
                 />
-                <DenseTableHead className="min-w-[14rem]">Actions</DenseTableHead>
+                <DenseTableHead className="min-w-[14rem]">
+                  {allowActuation ? 'Actions' : 'Inspect'}
+                </DenseTableHead>
               </DenseTableHeadRow>
             </DenseTableHeader>
             <DenseTableBody>
@@ -409,9 +393,9 @@ export function PipelineRunsPanel({
               ) : displayRuns.length === 0 ? (
                 <DenseTableRow>
                   <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
-                    {isRecent
-                      ? 'No deliver runs yet — use Supply chain → Run deliver-stg'
-                      : 'No runs yet — click Run above (operator token required)'}
+                    {allowActuation
+                      ? 'No runs yet — click Run above (operator token required)'
+                      : 'No runs yet — run deliver on Operate, then refresh here'}
                   </DenseTableCell>
                 </DenseTableRow>
               ) : (
@@ -463,7 +447,7 @@ export function PipelineRunsPanel({
                                     : 'Ask AI'}
                               </Button>
                             )}
-                            {canOperate && (
+                            {canOperate && allowActuation && (
                               <IconActionButton
                                 title="Delete run"
                                 ariaLabel={`Delete pipeline run ${run.name}`}
@@ -537,6 +521,7 @@ export function PipelineRunsPanel({
           </DenseDataTable>
         </>
       )}
+      </>
 
       <ConfirmDialog
         open={deleteTarget != null}

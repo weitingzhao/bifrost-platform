@@ -19,12 +19,16 @@ import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { opsInlineFeedbackClass } from '@/lib/opsSemanticText'
 
+export type StgTierBChecklistLayout = 'observe' | 'operate'
+
 interface StgTierBChecklistPanelProps {
   /** When provided, skip internal fetch (ConsolePage shared query). */
   tierB?: TierBStatusResponse
   tierBLoading?: boolean
   tierBError?: string | null
   onOpenPromote?: () => void
+  /** observe: probe table only; operate: admin sign-off + Promote navigation */
+  layout?: StgTierBChecklistLayout
 }
 
 export function StgTierBChecklistPanel({
@@ -32,7 +36,9 @@ export function StgTierBChecklistPanel({
   tierBLoading = false,
   tierBError = null,
   onOpenPromote,
+  layout = 'observe',
 }: StgTierBChecklistPanelProps) {
+  const allowSignOff = layout === 'operate'
   const { canAdmin } = usePlatformAuth()
   const qc = useQueryClient()
   const [notes, setNotes] = useState('')
@@ -77,7 +83,11 @@ export function StgTierBChecklistPanel({
       leading={
         data != null ? <StatusLamp value={data.ready ? 'ok' : data.reachability} kind="reach" /> : undefined
       }
-      description="Beyond Tier A HTTP smoke: daemon, ops, socket probes + manual IB/Massive verification. Admin sign-off records Owner acceptance."
+      description={
+        allowSignOff
+          ? 'Beyond Tier A HTTP smoke: review probes below, then admin sign-off records Owner acceptance.'
+          : 'Beyond Tier A HTTP smoke: daemon, ops, socket probes + manual IB/Massive verification (read-only). Sign-off on Operate.'
+      }
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {data != null ? (
@@ -147,49 +157,61 @@ export function StgTierBChecklistPanel({
               ))}
             </DenseTableBody>
           </DenseDataTable>
-          <div className="flex flex-col gap-2 border-t border-[var(--border)] px-3 py-3">
-            {canAdmin ? (
-              <>
-                <label className="flex flex-col gap-1 text-[var(--text-dense-meta)]">
-                  <span className="font-medium text-[var(--muted-foreground)]">Sign-off notes (optional)</span>
-                  <textarea
-                    className="min-h-[3rem] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[var(--text-dense-meta)]"
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="IB TWS live · Massive WS quotes verified · …"
-                  />
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" disabled={signMutation.isPending} onClick={() => signMutation.mutate()}>
-                    {signMutation.isPending ? 'Signing…' : 'Sign Tier B (admin)'}
-                  </Button>
-                  {onOpenPromote != null && (
-                    <Button variant="ghost" size="sm" onClick={onOpenPromote}>
-                      Open Promote
+          {allowSignOff ? (
+            <div className="flex flex-col gap-2 border-t border-[var(--border)] px-3 py-3">
+              {canAdmin ? (
+                <>
+                  <label className="flex flex-col gap-1 text-[var(--text-dense-meta)]">
+                    <span className="font-medium text-[var(--muted-foreground)]">Sign-off notes (optional)</span>
+                    <textarea
+                      className="min-h-[3rem] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[var(--text-dense-meta)]"
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
+                      placeholder="IB TWS live · Massive WS quotes verified · …"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" disabled={signMutation.isPending} onClick={() => signMutation.mutate()}>
+                      {signMutation.isPending ? 'Signing…' : 'Sign Tier B (admin)'}
                     </Button>
+                    {onOpenPromote != null && (
+                      <Button variant="ghost" size="sm" onClick={onOpenPromote}>
+                        Open Promote
+                      </Button>
+                    )}
+                  </div>
+                  {signFeedback != null && (
+                    <p
+                      className={`m-0 text-[var(--text-dense-meta)] ${
+                        signFeedback.kind === 'success'
+                          ? opsInlineFeedbackClass('success')
+                          : opsInlineFeedbackClass('error')
+                      }`}
+                    >
+                      {signFeedback.message}
+                    </p>
                   )}
-                </div>
-                {signFeedback != null && (
-                  <p
-                    className={`m-0 text-[var(--text-dense-meta)] ${
-                      signFeedback.kind === 'success' ? opsInlineFeedbackClass('success') : opsInlineFeedbackClass('error')
-                    }`}
-                  >
-                    {signFeedback.message}
+                  <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                    Requires admin token in header (local dev:{' '}
+                    <code className="font-mono-tabular">platform-admin-dev</code>). Operator token can deliver-stg but
+                    cannot sign Tier B.
                   </p>
-                )}
-                <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                  Requires admin token in header (local dev: <code className="font-mono-tabular">platform-admin-dev</code>
-                  ). Operator token can deliver-stg but cannot sign Tier B.
+                </>
+              ) : (
+                <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  Admin token required — use header <strong>Connect</strong> with{' '}
+                  <code className="font-mono-tabular">platform-admin-dev</code> (operator token is not enough).
                 </p>
-              </>
-            ) : (
-              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Admin token required — use header <strong>Connect</strong> with{' '}
-                <code className="font-mono-tabular">platform-admin-dev</code> (operator token is not enough).
+              )}
+            </div>
+          ) : (
+            data != null &&
+            !data.signed_off && (
+              <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                Sign-off pending — switch to Operate after probes look good (admin token required).
               </p>
-            )}
-          </div>
+            )
+          )}
         </>
       )}
     </OpsSection>

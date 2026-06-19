@@ -48,7 +48,7 @@ func New(cfg *config.Config) *Server {
 		console: console.NewHandler(cfg),
 		cluster: cluster.NewHandler(cfg, audit),
 		gitops:  gitops.NewHandler(cfg, audit),
-		stack:   stack.NewHandler(cfg),
+		stack:   stack.NewHandler(cfg, audit),
 		delivery: delivery.NewHandler(cfg, audit),
 		promote:  promote.NewHandler(cfg, audit),
 		auth:    auth,
@@ -103,6 +103,8 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleAdmin))
 			r.Post("/gitops/apps/{name}/rollback", s.gitops.HandleRollbackApp)
+			r.Post("/stack/addons/{name}/install", s.stack.HandleInstallAddon)
+			r.Post("/stack/addons/{name}/upgrade", s.stack.HandleUpgradeAddon)
 			r.Post("/promote/release-gate", s.promote.HandleRunReleaseGate)
 			r.Post("/promote/tier-b/signoff", s.promote.HandleSignTierB)
 		})

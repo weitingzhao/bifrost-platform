@@ -107,7 +107,7 @@ export function SupplyChainPanel({ layout = 'full' }: SupplyChainPanelProps) {
     layout === 'operate' ? 'Supply chain — actuate' : layout === 'observe' ? 'Supply chain — inventory' : 'Supply chain'
   const sectionDescription =
     layout === 'operate'
-      ? 'Push to GitHub first, then sync mirrors, refresh Dockerfile ConfigMaps, and run deliver-stg.'
+      ? 'Revision + mirror sync + deliver-stg. Watch pipeline steps and logs in the panel below.'
       : layout === 'observe'
         ? 'Kaniko Dockerfile ConfigMaps and STG deployment images after deliver.'
         : 'Gitea mirror sources, Kaniko Dockerfile ConfigMaps, and STG deployment images. Manage code revision before deliver-stg.'
@@ -132,13 +132,18 @@ export function SupplyChainPanel({ layout = 'full' }: SupplyChainPanelProps) {
           {actionError != null && (
             <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{actionError}</p>
           )}
-          {!supplyQuery.isLoading && data != null && supplyQuery.error == null && (
+          {!supplyQuery.isLoading && data != null && supplyQuery.error == null && layout !== 'operate' && (
             <p className="m-0 mt-2 flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)]">
               <StatusLamp value={data.reachability} kind="reach" />
               <span>{data.detail}</span>
               <DenseTag variant={data.mirror_credentials_configured ? 'success' : 'warning'}>
                 mirror creds {data.mirror_credentials_configured ? 'OK' : 'missing'}
               </DenseTag>
+            </p>
+          )}
+          {layout === 'operate' && !supplyQuery.isLoading && data != null && !data.mirror_credentials_configured && (
+            <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
+              Mirror credentials missing — sync mirrors will fail until configured.
             </p>
           )}
         </>

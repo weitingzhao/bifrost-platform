@@ -50,13 +50,19 @@ clusters:
         - id: gitea
           label: Gitea
           match: gitea
+          install_script: install-gitea-persistent.sh
+          upgrade_script: install-gitea-persistent.sh
         - id: tekton
           label: Tekton
           match: tekton
           probe_namespace: tekton-pipelines
+          install_script: install-stack-tekton.sh
+          upgrade_script: install-stack-tekton.sh
         - id: registry
           label: Registry
           match: registry
+          install_script: install-stack-registry.sh
+          upgrade_script: install-stack-registry.sh
     stg_smoke:
       gateway_url: http://192.168.10.73:30880
       api_monitor_url: http://192.168.10.73:30880/api/monitor/status

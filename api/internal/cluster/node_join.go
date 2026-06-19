@@ -137,7 +137,7 @@ func (s *Service) JoinNode(ctx context.Context, req JoinNodeRequest) (ActuationR
 		return ActuationResponse{OK: false, Action: "cluster.node.join", Target: profile.ID, Message: err.Error(), GeneratedAt: now}, err
 	}
 
-	absScript := resolveInfraScript("", scriptName)
+	absScript := ResolveInfraScript("", scriptName)
 	if _, statErr := os.Stat(absScript); statErr != nil {
 		msg := fmt.Sprintf("join script not found: %s", absScript)
 		return ActuationResponse{OK: false, Action: "cluster.node.join", Target: profile.ID, Message: msg, GeneratedAt: now}, statErr

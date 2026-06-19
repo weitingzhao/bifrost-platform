@@ -4,17 +4,17 @@ export const DELIVERY_PAGE_TABS: { value: DeliveryPageTab; label: string; hint: 
   {
     value: 'operate',
     label: 'Operate',
-    hint: 'Supply chain actuation, active deliver run, STG verify',
+    hint: 'Run deliver-stg, sync GitOps, sign Tier B (admin), check coupling gate',
   },
   {
     value: 'observe',
     label: 'Observe',
-    hint: 'Health probes, pipeline history, workload images',
+    hint: 'Segmented probes — Overview, STG acceptance, CI/CD stack, runs & inventory',
   },
   {
     value: 'blueprint',
     label: 'Blueprint',
-    hint: 'Release workflow, CI/CD graph, coupling gate rules',
+    hint: 'Release workflow, CI/CD graph, prod deliver strategy',
   },
 ]
 

@@ -20,8 +20,7 @@ func TestEnsureMetricsServerDisabled(t *testing.T) {
 }
 
 func TestDefaultMetricsServerScriptResolves(t *testing.T) {
-	t.Setenv("PLATFORM_METRICS_SERVER_SCRIPT", "")
-	path := defaultMetricsServerScript()
+	path := ResolveInfraScript("", "install-metrics-server.sh")
 	if path == "" {
 		t.Fatal("expected non-empty script path")
 	}

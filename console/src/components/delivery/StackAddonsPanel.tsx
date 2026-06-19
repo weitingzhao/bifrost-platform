@@ -19,6 +19,7 @@ interface StackAddonsPanelProps {
   data: StackAddonsResponse | undefined
   isLoading: boolean
   errorMessage?: string | null
+  layout?: 'observe' | 'operate'
 }
 
 function addonTagVariant(
@@ -37,7 +38,12 @@ function addonStatusLabel(status: StackAddonView['status']): string {
   return 'planned'
 }
 
-export function StackAddonsPanel({ data, isLoading, errorMessage }: StackAddonsPanelProps) {
+export function StackAddonsPanel({
+  data,
+  isLoading,
+  errorMessage,
+  layout = 'observe',
+}: StackAddonsPanelProps) {
   const addons = data?.addons ?? []
   const qc = useQueryClient()
   const stackFetching = useIsFetching({ queryKey: ['stack', 'addons'] }) > 0
@@ -60,6 +66,11 @@ export function StackAddonsPanel({ data, isLoading, errorMessage }: StackAddonsP
             <p className="m-0 mt-2 flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)]">
               <StatusLamp value={data.reachability} kind="reach" />
               <span>{data.detail}</span>
+            </p>
+          )}
+          {layout === 'observe' && (
+            <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Per add-on workload probe — install actions appear here only when stack is incomplete or degraded.
             </p>
           )}
         </>
