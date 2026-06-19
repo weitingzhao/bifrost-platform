@@ -14,13 +14,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Ops',
     item: 'Control Room',
     status: 'done',
-    notes: 'Dual flywheel bays, milestone spine, Agent focus dock (mode packs)',
-  },
-  {
-    area: 'Ops',
-    item: 'Pulse',
-    status: 'done',
-    notes: 'Platform health, matrix summary, spine focus, cluster KPI strip',
+    notes: 'Live KPI strip + matrix summary, dual flywheel bays, milestone spine, Agent focus dock',
   },
   {
     area: 'Ops',

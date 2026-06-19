@@ -21,7 +21,6 @@ import {
 } from '@/api/platform'
 import { consoleNavPlane } from '@/lib/consoleNavConfig'
 import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
-import { DOC_LINKS } from '@/lib/docsLinks'
 import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
 import { PlatformAuthBar } from '@/components/PlatformAuthBar'
@@ -39,13 +38,15 @@ import { EnvironmentsPage } from '@/pages/EnvironmentsPage'
 import { PlacementPage } from '@/pages/PlacementPage'
 import { ProgramPage } from '@/pages/ProgramPage'
 import { PromotePage } from '@/pages/PromotePage'
-import { PulsePage } from '@/pages/PulsePage'
 import { RuntimeMapPage } from '@/pages/RuntimeMapPage'
 import { ServerConsolePage } from '@/pages/ServerConsolePage'
 import { DesignSystemPage } from '@/pages/DesignSystemPage'
 import { K3sArchitecturePage } from '@/pages/K3sArchitecturePage'
 import { K3sBootstrapPage } from '@/pages/K3sBootstrapPage'
 import { RoadmapPage } from '@/pages/RoadmapPage'
+import { DataLayerPage } from '@/pages/DataLayerPage'
+import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
+import { McpContractPage } from '@/pages/McpContractPage'
 import { StandardsPage } from '@/pages/StandardsPage'
 
 const ControlRoomPage = lazy(() =>
@@ -55,7 +56,6 @@ const ControlRoomPage = lazy(() =>
 const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   briefing: 'Agent Briefing',
   'control-room': 'Control Room',
-  pulse: 'Pulse',
   audit: 'Audit',
   'runtime-map': 'Runtime Map',
   cluster: 'Cluster',
@@ -64,13 +64,16 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   program: 'Milestones',
   promote: 'Promote',
   blueprint: 'Blueprint',
+  'flywheel-vision': 'Vision',
   environments: 'Environments',
-  roadmap: 'Platform Roadmap',
+  roadmap: 'Roadmap',
   'k3s-architecture': 'K3s Architecture',
   'k3s-bootstrap': 'K3s Bootstrap',
+  'data-layer': 'Data Layer',
   'deploy-mainline': 'Deploy Mainline',
   'platform-standards': 'Platform',
   'agent-protocol': 'Agent Protocol',
+  'mcp-contract': 'MCP Contract',
   'design-system': 'Design System',
   console: 'Server console',
 }
@@ -78,7 +81,6 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
 const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'briefing',
   'control-room',
-  'pulse',
   'promote',
   'delivery',
   'cluster',
@@ -91,6 +93,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
 const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   topology: 'runtime-map',
   matrix: 'runtime-map',
+  pulse: 'control-room',
 }
 
 export function ConsolePage() {
@@ -130,7 +133,6 @@ export function ConsolePage() {
     enabled:
       viewTab === 'briefing' ||
       viewTab === 'control-room' ||
-      viewTab === 'pulse' ||
       viewTab === 'promote' ||
       viewTab === 'delivery',
   })
@@ -144,7 +146,6 @@ export function ConsolePage() {
       viewTab === 'cluster' ||
       viewTab === 'placement' ||
       viewTab === 'control-room' ||
-      viewTab === 'pulse' ||
       viewTab === 'runtime-map' ||
       viewTab === 'delivery',
   })
@@ -174,7 +175,7 @@ export function ConsolePage() {
     queryKey: ['delivery', 'stg-smoke'],
     queryFn: fetchStgSmoke,
     refetchInterval: 30_000,
-    enabled: viewTab === 'delivery' || viewTab === 'pulse',
+    enabled: viewTab === 'delivery' || viewTab === 'control-room',
   })
 
   const releaseGateStgQuery = useQuery({
@@ -252,7 +253,6 @@ export function ConsolePage() {
     if (
       viewTab === 'briefing' ||
       viewTab === 'control-room' ||
-      viewTab === 'pulse' ||
       viewTab === 'promote' ||
       viewTab === 'delivery'
     ) {
@@ -286,11 +286,13 @@ export function ConsolePage() {
   const [govCopyState, setGovCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const isArchTab =
     viewTab === 'blueprint' ||
+    viewTab === 'flywheel-vision' ||
     viewTab === 'environments' ||
     viewTab === 'roadmap' ||
     viewTab === 'k3s-architecture' ||
-    viewTab === 'k3s-bootstrap'
-  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-protocol' || viewTab === 'design-system'
+    viewTab === 'k3s-bootstrap' ||
+    viewTab === 'data-layer'
+  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-protocol' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
   const handleCopyAllGovernance = async () => {
     let spine = contextQuery.data
@@ -308,17 +310,11 @@ export function ConsolePage() {
     }
   }
 
-  const docLinks = [
-    { id: 'docs-staging', label: 'Docs staging', href: DOC_LINKS.platformHome },
-    { id: 'docs-staging-policy', label: 'Staging policy', href: DOC_LINKS.stagingPolicy },
-    { id: 'docs-infra', label: 'Infra handbook', href: DOC_LINKS.infraHome },
-  ]
 
   const showEnvStrip = viewTab === 'runtime-map'
   const showPageHeader = ![
     'briefing',
     'control-room',
-    'pulse',
     'runtime-map',
     'cluster',
     'delivery',
@@ -329,6 +325,8 @@ export function ConsolePage() {
     'environments',
     'platform-standards',
     'agent-protocol',
+    'mcp-contract',
+    'data-layer',
     'design-system',
     'console',
   ].includes(viewTab)
@@ -343,7 +341,6 @@ export function ConsolePage() {
       <ConsoleSidebar
         activeTab={viewTab}
         onSelect={(id) => setViewTab(id as ConsoleViewTab)}
-        docLinks={docLinks}
       />
       <SidebarInset>
         <div className="sticky top-0 z-20 bg-card">
@@ -412,7 +409,7 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES['control-room']}
-              description="Dual flywheel governance, program milestone spine, and Agent context packs."
+              description="Live runtime health, dual flywheel governance, program milestone spine, and Agent context packs."
             />
             <Suspense fallback={<p className="text-[var(--muted-foreground)]">Loading control room…</p>}>
               <ControlRoomPage
@@ -420,37 +417,19 @@ export function ConsolePage() {
                 contextLoading={contextQuery.isLoading}
                 matrices={pulseMatrices}
                 matrixLoading={matrixForPulse.isLoading}
+                matrixError={matrixForPulse.error as Error | null}
+                platformHealthy={healthQuery.data === true}
+                clusterSummary={clusterQuery.data}
+                clusterLoading={clusterQuery.isLoading}
+                stgSmoke={stgSmokeQuery.data}
+                stgSmokeLoading={stgSmokeQuery.isLoading}
                 onOpenRuntimeMap={openRuntimeMap}
                 onOpenProgram={openProgram}
                 onOpenDelivery={openDelivery}
+                onOpenCluster={openCluster}
                 onOpenAudit={openAudit}
               />
             </Suspense>
-          </>
-        )}
-
-        {viewTab === 'pulse' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES.pulse}
-              description="Live reachability and program focus."
-            />
-            <PulsePage
-              context={contextQuery.data}
-              contextLoading={contextQuery.isLoading}
-              matrices={pulseMatrices}
-              matrixLoading={matrixForPulse.isLoading}
-              matrixError={matrixForPulse.error as Error | null}
-              platformHealthy={healthQuery.data === true}
-              clusterSummary={clusterQuery.data}
-              clusterLoading={clusterQuery.isLoading}
-              stgSmoke={stgSmokeQuery.data}
-              stgSmokeLoading={stgSmokeQuery.isLoading}
-              onOpenRuntimeMap={openRuntimeMap}
-              onOpenProgram={openProgram}
-              onOpenCluster={openCluster}
-              onOpenDelivery={openDelivery}
-            />
           </>
         )}
 
@@ -557,7 +536,7 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES.program}
-              description="Milestones, owner decisions, and roadmap from ops-context spine."
+              description="NOW — Live progress: active milestones, owner decisions, and deployment status from ops-context spine."
             />
             <ProgramPage
               context={contextQuery.data}
@@ -615,13 +594,16 @@ export function ConsolePage() {
             <PageHeader
               title={VIEW_TITLES[viewTab]}
               description={
-                viewTab === 'blueprint' ? 'North Star, system architecture, control-plane layers, and design principles.'
-                  : viewTab === 'environments' ? 'Flows, phases, and LLM catalog — hardware/scope live view is on Runtime Map.'
-                  : viewTab === 'roadmap' ? 'Compose → K3s phased plan: hardware roles, 2C-B priority, GitOps migration, AI ops.'
+                viewTab === 'flywheel-vision' ? 'WHERE — Ultimate destination: Trade + Ops converge into unified AI-native experience via three-layer Agents.'
+                  : viewTab === 'blueprint' ? 'HOW — Architectural principles, control-plane strategy, authorization model, and design rules toward the Vision.'
+                  : viewTab === 'roadmap' ? 'WHEN — Phased execution plan: hardware roles, K3s stages, GitOps migration, AI ops timeline.'
+                  : viewTab === 'environments' ? 'WHAT — Concrete probe targets, IPs, ports, and connectivity for each environment.'
                   : viewTab === 'k3s-architecture' ? 'Target K3s topology, CNPG, GitOps, AI-native ops, and living checkpoints.'
                   : viewTab === 'k3s-bootstrap' ? 'First-node deployment runbook, verification checklist, node join steps, and sign-off.'
+                  : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
-                  : viewTab === 'agent-protocol' ? 'Agent interaction modes, context pack layers, forbidden actions, and session startup.'
+                  : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
+                  : viewTab === 'mcp-contract' ? 'MCP server specification, permission model, deny-list, and decoupling enforcement.'
                   : 'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.'
               }
             />
@@ -638,6 +620,8 @@ export function ConsolePage() {
 
         {viewTab === 'blueprint' && <BlueprintPage context={contextQuery.data} />}
 
+        {viewTab === 'flywheel-vision' && <DualFlywheelVisionPage />}
+
         {viewTab === 'environments' && (
           <EnvironmentsPage
             context={contextQuery.data}
@@ -652,9 +636,13 @@ export function ConsolePage() {
 
         {viewTab === 'k3s-bootstrap' && <K3sBootstrapPage />}
 
+        {viewTab === 'data-layer' && <DataLayerPage />}
+
         {viewTab === 'platform-standards' && <StandardsPage />}
 
         {viewTab === 'agent-protocol' && <AgentProtocolPage />}
+
+        {viewTab === 'mcp-contract' && <McpContractPage />}
 
         {viewTab === 'design-system' && <DesignSystemPage />}
       </PageShell>

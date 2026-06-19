@@ -3,7 +3,10 @@ import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, Den
 import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
+  AGENT_ESCALATION,
+  AGENT_LAYERS,
   AGENT_MODES,
+  AGENT_MODEL_GUIDANCE,
   AGENT_PROTOCOL_SOURCE,
   AGENT_PROTOCOL_VERSION,
   CONTEXT_PACK_BUTTONS,
@@ -78,6 +81,84 @@ export function AgentProtocolPage() {
           </DenseTableBody>
         </DenseDataTable>
       </CatalogSection>
+
+      {/* Three-layer Agent architecture */}
+      <CatalogSection title="Three-layer Agent architecture">
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Layer</DenseTableHead>
+              <DenseTableHead>Persona</DenseTableHead>
+              <DenseTableHead>Scope</DenseTableHead>
+              <DenseTableHead>Cursor role</DenseTableHead>
+              <DenseTableHead>K8s role</DenseTableHead>
+              <DenseTableHead>Forbidden</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {AGENT_LAYERS.map(a => (
+              <DenseTableRow key={a.layer}>
+                <DenseTableCell className="font-medium whitespace-nowrap">
+                  <DenseTag variant={a.layer === 'Dev Agent' ? 'success' : a.layer === 'Ops Agent' ? 'warning' : 'category'}>
+                    {a.layer}
+                  </DenseTag>
+                </DenseTableCell>
+                <DenseTableCell>{a.persona}</DenseTableCell>
+                <DenseTableCell className="text-xs">{a.scope}</DenseTableCell>
+                <DenseTableCell className="text-xs">{a.cursorRole}</DenseTableCell>
+                <DenseTableCell className="text-xs">{a.k8sRole}</DenseTableCell>
+                <DenseTableCell className="text-xs text-[color:var(--destructive)]">{a.forbiddenActions}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Agent escalation */}
+        <CatalogSection title="Agent escalation rules">
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>From → To</DenseTableHead>
+                <DenseTableHead>Trigger</DenseTableHead>
+                <DenseTableHead>Example</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {AGENT_ESCALATION.map((e, i) => (
+                <DenseTableRow key={i}>
+                  <DenseTableCell className="font-medium whitespace-nowrap">{e.from} → {e.to}</DenseTableCell>
+                  <DenseTableCell>{e.trigger}</DenseTableCell>
+                  <DenseTableCell className="text-xs text-[var(--muted-foreground)]">{e.example}</DenseTableCell>
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        </CatalogSection>
+
+        {/* Model guidance */}
+        <CatalogSection title="Model guidance">
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Task</DenseTableHead>
+                <DenseTableHead>Recommended model</DenseTableHead>
+                <DenseTableHead>Reason</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {AGENT_MODEL_GUIDANCE.map(m => (
+                <DenseTableRow key={m.task}>
+                  <DenseTableCell className="font-medium">{m.task}</DenseTableCell>
+                  <DenseTableCell className="font-mono-tabular text-xs">{m.recommendedModel}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{m.reason}</DenseTableCell>
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        </CatalogSection>
+      </div>
 
       {/* Mode selection hints */}
       <CatalogSection title="Mode selection hints">

@@ -38,7 +38,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     '## Your task for this session',
     '',
     `Work intent: **${opt.label}** (${opt.id})`,
-    `Suggested Agent mode: ${opt.agentMode}`,
+    `Agent layer: **${opt.agentLayer} Agent** · Mode: ${opt.agentMode}`,
     '',
     opt.description,
     '',
@@ -49,13 +49,14 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
 
   const readFirst: Record<WorkIntent, string[]> = {
     ops: [
-      'Ops Console → Architecture → Blueprint (console/src/lib/architecture/blueprintCatalog.ts)',
-      'Ops Console → Architecture → Standards (standardsCatalog.ts)',
+      'Ops Console → Architecture → Vision (dualFlywheelVisionCatalog.ts)',
+      'Ops Console → Architecture → Blueprint (blueprintCatalog.ts)',
+      'Ops Console → Architecture → Standards + MCP Contract',
       'GET /api/v1/context',
       'bifrost-trade-infra/docs/MIGRATION_TRACKING.md (trade stack only)',
     ],
     feature: [
-      'Ops Console → Architecture → Blueprint + Standards',
+      'Ops Console → Architecture → Blueprint + Standards + MCP Contract',
       'api/internal/server/server.go — registered /api/v1/* routes',
       'config/ops-context.yaml — milestone ops-ui-actuation',
     ],
@@ -72,6 +73,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
       'decision D1 in ops-context spine',
     ],
     cluster: [
+      'Ops Console → Architecture → K3s → Data Layer (dataLayerCatalog.ts)',
       'Ops Console → Architecture → Standards — cluster actuation + observability layers',
       'api/internal/cluster — implementation',
       'bifrost-platform/config/clusters.yaml',
@@ -81,6 +83,12 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
       '.cursor/rules/migration-protocol.mdc — Phase 1: New FE + Legacy API',
       'bifrost-trade-infra/docs/MIGRATION_TRACKING.md',
       'Never edit bifrost-trader-engine/ (read-only reference)',
+    ],
+    business: [
+      'Ops Console → Architecture → Vision § Agent Layers (Business Agent)',
+      'Ops Console → Architecture → Standards → MCP Contract (permission model + deny-list)',
+      'bifrost-trade-api/CLAUDE.md — 9 API domains (read endpoints)',
+      'bifrost-trade-frontend — existing pages for context on data presentation',
     ],
   }
 
@@ -95,6 +103,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     release: ['Skip D1 or release_gate blockers', 'Mix API migration + FE in one change'],
     cluster: ['Raw kubectl as operator runbook — use platform-api', 'Install kube-prometheus via ad-hoc shell'],
     frontend: ['Change compose/prod cutover', 'Migrate bifrost-trade-api backends'],
+    business: ['Any write operation (orders, config, strategy changes)', 'Direct IB/Redis access — use Trade API read endpoints only', 'Recommend trades without Owner confirmation'],
   }
   for (const rule of avoid[intent]) lines.push(`- ${rule}`)
 
@@ -245,6 +254,9 @@ function suggestedOpening(
         STARTER_PROMPTS.Product +
         ' Work intent: trade frontend migration. One page / one variable; Legacy API only.'
       break
+    case 'business':
+      base = `Mode: Ops (Business Agent layer). Work intent: trade analysis. Read-only access to Trade API domains (positions, Greeks, SEPA, market). Provide advisory analysis; no write operations or order placement. Respect MCP Contract deny-list.`
+      break
     default:
       base = `Mode: ${opt.agentMode}. Work intent: ${intent}.`
   }
@@ -261,6 +273,18 @@ function intentCorePack(intent: WorkIntent, ctx?: OpsContextResponse, matrices: 
 
   if (opt.agentMode === 'Product' || intent === 'frontend') return buildProductPack(ctx)
   if (opt.agentMode === 'Promote' || intent === 'release') return buildPromotePack(ctx, matrices)
+
+  if (intent === 'business') {
+    return [
+      buildOpsPack(ctx, matrices),
+      '',
+      '## Business Agent appendix',
+      'Layer: Business Agent (read-only advisory)',
+      'Access: Trade API read endpoints only (portfolio, market, research, strategy, trading)',
+      'Forbidden: order placement, config writes, daemon control, IB operator commands',
+      'Reference: Ops Console → Architecture → Standards → MCP Contract (deny-list)',
+    ].join('\n')
+  }
 
   const ops = buildOpsPack(ctx, matrices)
   if (intent === 'debug') {
@@ -357,6 +381,7 @@ export function buildBriefingPack(input: BriefingInputs): string {
     '# Bifrost Ops Platform — Agent Session Briefing',
     `Generated: ${now}`,
     `Work track: ${track} · Lane: ${laneMeta.label} (${lane}) · Intent: ${opt.label} (${input.intent})`,
+    `Agent layer: ${opt.agentLayer} Agent · Mode: ${opt.agentMode}`,
     `Agent dialogue language: ${langMeta.agentLabel}`,
     '',
     formatAgentDialogueSection(language),
@@ -389,6 +414,7 @@ export function buildBriefingPack(input: BriefingInputs): string {
     '- Control Room — governance + scoped packs',
     '- Runtime Map — hardware + failing probes',
     '- Cluster — K3s workloads + Layer A/B observability',
-    '- Catalog → Copy for LLM — full static catalog appendix if needed',
+    '- Architecture → Vision / Blueprint / Data Layer / MCP Contract — governance catalogs',
+    '- Architecture Copy All for LLM — full static catalog appendix if needed',
   ].join('\n')
 }

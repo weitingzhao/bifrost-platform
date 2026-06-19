@@ -88,7 +88,7 @@ export const SCOPE_ROWS: ScopeRow[] = [
     component: 'Bifrost Ops Platform (control plane)',
     technology: 'Go API :8780 · React Ops Console :5180 · Dense UI tokens',
     notes:
-      'Phase 0 L0 read-only: Pulse, connectivity matrix, topology, Program spine, Ops auth probe. No daemon_control or ib:operator:cmd. Future: agent/, mcp/.',
+      'Phase 0 L0 read-only: Control Room live strip, connectivity matrix, topology, Program spine, Ops auth probe. No daemon_control or ib:operator:cmd. Future: agent/, mcp/.',
   },
   {
     tag: 'TRADE-FE',

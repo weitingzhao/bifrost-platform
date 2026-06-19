@@ -1,11 +1,21 @@
-import { Button, DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag, StatusLamp } from '@bifrost/ui'
+import {
+  Button,
+  DenseDataTable,
+  DenseTableBody,
+  DenseTableCell,
+  DenseTableHead,
+  DenseTableHeadRow,
+  DenseTableHeader,
+  DenseTableRow,
+  StatusLamp,
+} from '@bifrost/ui'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse, StgSmokeResponse } from '@/api/types'
 import { MatrixTable } from '@/components/MatrixTable'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { flywheelLabel, milestoneStatusVariant } from '@/components/FocusStrip'
+import { flywheelLabel } from '@/components/FocusStrip'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 
-interface PulsePageProps {
+interface ControlRoomLiveStatusProps {
   context: OpsContextResponse | undefined
   contextLoading: boolean
   matrices: MatrixResponse[]
@@ -32,7 +42,7 @@ function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: 
   return { ok, fail, total: matrix.targets.length }
 }
 
-export function PulsePage({
+export function ControlRoomLiveStatus({
   context,
   contextLoading,
   matrices,
@@ -47,24 +57,18 @@ export function PulsePage({
   onOpenProgram,
   onOpenCluster,
   onOpenDelivery,
-}: PulsePageProps) {
+}: ControlRoomLiveStatusProps) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <OpsSection
-        title="Overview"
-        description="Flywheel B runtime health plus spine focus. Refreshes with matrix probes (~30s)."
-        overflow="visible"
-      />
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <PulseCard title="Ops API">
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+        <LiveStatusCard title="Ops API">
           <StatusLamp value={platformHealthy ? 'ok' : 'fail'} kind="reach" />
           <span className="ml-2 text-[var(--text-dense)]">
             platform-api {platformHealthy ? 'healthy' : 'down'}
           </span>
-        </PulseCard>
+        </LiveStatusCard>
 
-        <PulseCard title="Cluster">
+        <LiveStatusCard title="Cluster">
           {clusterLoading ? (
             <span className="text-[var(--muted-foreground)]">…</span>
           ) : onOpenCluster != null ? (
@@ -78,9 +82,9 @@ export function PulsePage({
               <span className="ml-2">{summarizeCluster(clusterSummary).label}</span>
             </>
           )}
-        </PulseCard>
+        </LiveStatusCard>
 
-        <PulseCard title="Deployment">
+        <LiveStatusCard title="Deployment">
           {contextLoading || !context ? (
             <span className="text-[var(--muted-foreground)]">…</span>
           ) : (
@@ -90,17 +94,17 @@ export function PulsePage({
               <code className="font-mono-tabular">{context.deployment.active_track}</code>
             </>
           )}
-        </PulseCard>
+        </LiveStatusCard>
 
-        <PulseCard title="Primary flywheel">
+        <LiveStatusCard title="Primary flywheel">
           {contextLoading || !context ? (
             <span className="text-[var(--muted-foreground)]">…</span>
           ) : (
             <span>{flywheelLabel(context.focus.flywheel_primary)}</span>
           )}
-        </PulseCard>
+        </LiveStatusCard>
 
-        <PulseCard title="Stg smoke">
+        <LiveStatusCard title="Stg smoke">
           {stgSmokeLoading ? (
             <span className="text-[var(--muted-foreground)]">…</span>
           ) : onOpenDelivery != null ? (
@@ -114,7 +118,7 @@ export function PulsePage({
               <span className="ml-2">{stgSmoke?.detail ?? 'not probed'}</span>
             </>
           )}
-        </PulseCard>
+        </LiveStatusCard>
       </div>
 
       {context != null && context.focus.blocker != null && context.focus.blocker !== '' && (
@@ -128,6 +132,7 @@ export function PulsePage({
 
       <OpsSection
         title="Environment reachability"
+        description="Matrix probe summary — refreshes ~30s."
         actions={
           <Button variant="ghost" size="xs" onClick={onOpenRuntimeMap}>
             Open Runtime Map
@@ -179,40 +184,6 @@ export function PulsePage({
         )}
       </OpsSection>
 
-      {context != null && (
-        <OpsSection title="Active milestones (summary)" bodyPadding="none" overflow="hidden">
-          <DenseDataTable>
-            <DenseTableHeader>
-              <DenseTableHeadRow>
-                <DenseTableHead>ID</DenseTableHead>
-                <DenseTableHead>Status</DenseTableHead>
-                <DenseTableHead>Blocker</DenseTableHead>
-              </DenseTableHeadRow>
-            </DenseTableHeader>
-            <DenseTableBody>
-              {context.milestones
-                .filter(m => m.status !== 'CLOSED')
-                .map(m => (
-                  <DenseTableRow key={m.id}>
-                    <DenseTableCell className="font-mono-tabular">{m.id}</DenseTableCell>
-                    <DenseTableCell>
-                      <DenseTag variant={milestoneStatusVariant(m.status)}>{m.status}</DenseTag>
-                    </DenseTableCell>
-                    <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
-                      {m.blocker ?? '—'}
-                    </DenseTableCell>
-                  </DenseTableRow>
-                ))}
-            </DenseTableBody>
-          </DenseDataTable>
-          <div className="border-t border-[var(--border)] px-3 py-2">
-            <Button variant="ghost" size="xs" onClick={onOpenProgram}>
-              Full program & decisions
-            </Button>
-          </div>
-        </OpsSection>
-      )}
-
       {matrices.length > 0 && (
         <details className="page-section panel-elevated">
           <summary className="cursor-pointer px-4 py-2 text-sm font-medium">
@@ -229,7 +200,7 @@ export function PulsePage({
   )
 }
 
-function PulseCard({ title, children }: { title: string; children: React.ReactNode }) {
+function LiveStatusCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <OpsSection title={title} bodyPadding="default" overflow="visible">
       <div className="flex items-center text-[var(--text-dense)]">{children}</div>

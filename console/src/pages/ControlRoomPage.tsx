@@ -1,7 +1,8 @@
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { ClusterSummary, MatrixResponse, OpsContextResponse, StgSmokeResponse } from '@/api/types'
 import { AuditPageLink } from '@/components/AuditPageLink'
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
 import { BayDetailDrawer } from '@/components/control-room/BayDetailDrawer'
+import { ControlRoomLiveStatus } from '@/components/control-room/ControlRoomLiveStatus'
 import {
   DualFlywheelPanel,
   type ControlRoomSelection,
@@ -15,9 +16,16 @@ interface ControlRoomPageProps {
   contextLoading: boolean
   matrices: MatrixResponse[]
   matrixLoading: boolean
+  matrixError: Error | null
+  platformHealthy: boolean
+  clusterSummary?: ClusterSummary
+  clusterLoading?: boolean
+  stgSmoke?: StgSmokeResponse
+  stgSmokeLoading?: boolean
   onOpenRuntimeMap: () => void
   onOpenProgram: () => void
   onOpenDelivery: () => void
+  onOpenCluster: () => void
   onOpenAudit: () => void
 }
 
@@ -26,9 +34,16 @@ export function ControlRoomPage({
   contextLoading,
   matrices,
   matrixLoading,
+  matrixError,
+  platformHealthy,
+  clusterSummary,
+  clusterLoading,
+  stgSmoke,
+  stgSmokeLoading,
   onOpenRuntimeMap,
   onOpenProgram,
   onOpenDelivery,
+  onOpenCluster,
   onOpenAudit,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
@@ -39,6 +54,23 @@ export function ControlRoomPage({
 
   return (
     <div className="control-room-layout flex w-full min-w-0 flex-col gap-4">
+      <ControlRoomLiveStatus
+        context={context}
+        contextLoading={contextLoading}
+        matrices={matrices}
+        matrixLoading={matrixLoading}
+        matrixError={matrixError}
+        platformHealthy={platformHealthy}
+        clusterSummary={clusterSummary}
+        clusterLoading={clusterLoading}
+        stgSmoke={stgSmoke}
+        stgSmokeLoading={stgSmokeLoading}
+        onOpenRuntimeMap={onOpenRuntimeMap}
+        onOpenProgram={onOpenProgram}
+        onOpenCluster={onOpenCluster}
+        onOpenDelivery={onOpenDelivery}
+      />
+
       <OpsSection
         title="Dual flywheel governance"
         description={

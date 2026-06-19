@@ -180,7 +180,7 @@ func (s *Service) checkProdDeliverPipeline() []GateCheck {
 	return []GateCheck{{
 		ID: "deliver-prod-pipeline", Label: "bifrost-deliver-prod pipeline", Required: true,
 		Reachability: probe.ReachFail,
-		Detail:       "Not implemented — prod overlay + pipeline-deliver-prod in progress",
+		Detail:       "Pipeline registered — run deliver-prod; awaiting first successful PipelineRun",
 	}}
 }
 

@@ -1,5 +1,5 @@
 # Bifrost Ops Platform — context spine (authoritative for milestones & decisions).
-# Console Program/Pulse and Copy-for-LLM merge this file via GET /api/v1/context.
+# Console Program/Control Room and Copy-for-LLM merge this file via GET /api/v1/context.
 # Detail: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts) L3
 
 meta:

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>http://127.0.0.1:8060/</loc>
+         <lastmod>2026-06-10</lastmod>
+    </url>
+    <url>
+         <loc>http://127.0.0.1:8060/ARCHITECTURE/</loc>
+         <lastmod>2026-06-10</lastmod>
+    </url>
+    <url>
+         <loc>http://127.0.0.1:8060/TRADE_CONTRACT/</loc>
+         <lastmod>2026-06-10</lastmod>
+    </url>
+    <url>
+         <loc>http://127.0.0.1:8060/overview/</loc>
+         <lastmod>2026-06-10</lastmod>
+    </url>
+    <url>
+         <loc>http://127.0.0.1:8060/agent/</loc>
+         <lastmod>2026-06-10</lastmod>
+    </url>
+    <url>
+         <loc>http://127.0.0.1:8060/mcp/</loc>
+         <lastmod>2026-06-10</lastmod>
+    </url>
+</urlset>

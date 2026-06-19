@@ -2,7 +2,7 @@
  * Standards catalog — Trade Contract + Cluster Actuation.
  *
  * Authoritative source for Ops Console → Architecture → Standards.
- * Do not duplicate in docs/ — see docs/STAGING.md.
+ * Single source of truth — do not duplicate elsewhere.
  */
 
 export const STANDARDS_VERSION = '2026-06-15'
