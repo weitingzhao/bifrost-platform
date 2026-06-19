@@ -163,6 +163,16 @@ export const AGENT_MODEL_GUIDANCE: AgentModelGuidance[] = [
   { task: 'Business analysis / market research', recommendedModel: 'claude-sonnet-4 or gpt-5.5', reason: 'Broad knowledge for financial analysis' },
 ]
 
+/** Vision V2 — Dev Agent closed-loop (push → Tekton → STG verify). */
+export const DEV_AGENT_CLOSED_LOOP = {
+  prePushScript: 'bifrost-trade-frontend/scripts/agent-pre-push.sh',
+  stgPipeline: 'bifrost-deliver-stg',
+  prodPipeline: 'bifrost-deliver-prod',
+  stgSmoke: 'GET /api/v1/delivery/stg/smoke',
+  releaseGate: 'GET /api/v1/promote/release-gate',
+  catalog: 'console/src/lib/architecture/devAgentLoopCatalog.ts',
+} as const
+
 /** Build LLM-optimized text for the Agent Protocol page. */
 export function buildAgentProtocolLlmPack(): string {
   const lines: string[] = [
@@ -197,6 +207,13 @@ export function buildAgentProtocolLlmPack(): string {
     '',
     '## Example opening prompts',
     ...OPENING_PROMPTS.map(p => `- [${p.mode}] "${p.example}"`),
+    '',
+    '## Dev Agent closed loop (Vision V2)',
+    `- Pre-push: \`${DEV_AGENT_CLOSED_LOOP.prePushScript}\``,
+    `- STG pipeline: \`${DEV_AGENT_CLOSED_LOOP.stgPipeline}\` via Console Delivery or POST /delivery/pipelines/{name}/runs`,
+    `- Verify: \`${DEV_AGENT_CLOSED_LOOP.stgSmoke}\``,
+    `- Promote: \`${DEV_AGENT_CLOSED_LOOP.releaseGate}\` before deliver-prod`,
+    `- Catalog: \`${DEV_AGENT_CLOSED_LOOP.catalog}\``,
   ]
   return lines.join('\n')
 }

@@ -30,6 +30,8 @@ import type {
   StgSmokeResponse,
   ReleaseGateResponse,
   RunReleaseGateResponse,
+  RunVisionV1GateResponse,
+  VisionV1GateResponse,
   TierBSignoffResponse,
   TierBStatusResponse,
   EnvironmentSummary,
@@ -296,6 +298,66 @@ export async function signTierB(notes = ''): Promise<TierBSignoffResponse> {
     body: JSON.stringify({ notes }),
   })
   return r.json() as Promise<TierBSignoffResponse>
+}
+
+export async function fetchVisionV1Gate(): Promise<VisionV1GateResponse> {
+  const r = await fetch('/api/v1/vision/v1/gate')
+  if (!r.ok) throw new Error(`vision v1 gate: HTTP ${r.status}`)
+  return r.json() as Promise<VisionV1GateResponse>
+}
+
+export async function runVisionV1Gate(): Promise<RunVisionV1GateResponse> {
+  const r = await authedFetch('vision v1 gate', '/api/v1/vision/v1/gate', { method: 'POST' })
+  return r.json() as Promise<RunVisionV1GateResponse>
+}
+
+export async function signVisionV1(notes = ''): Promise<RunVisionV1GateResponse> {
+  const r = await authedFetch('vision v1 signoff', '/api/v1/vision/v1/signoff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
+  })
+  return r.json() as Promise<RunVisionV1GateResponse>
+}
+
+export async function fetchVisionS3Gate(): Promise<VisionV1GateResponse> {
+  const r = await fetch('/api/v1/vision/s3/gate')
+  if (!r.ok) throw new Error(`vision s3 gate: HTTP ${r.status}`)
+  return r.json() as Promise<VisionV1GateResponse>
+}
+
+export async function runVisionS3Gate(): Promise<RunVisionV1GateResponse> {
+  const r = await authedFetch('vision s3 gate', '/api/v1/vision/s3/gate', { method: 'POST' })
+  return r.json() as Promise<RunVisionV1GateResponse>
+}
+
+export async function signVisionS3(notes = ''): Promise<RunVisionV1GateResponse> {
+  const r = await authedFetch('vision s3 signoff', '/api/v1/vision/s3/signoff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
+  })
+  return r.json() as Promise<RunVisionV1GateResponse>
+}
+
+export async function fetchVisionV2Gate(): Promise<VisionV1GateResponse> {
+  const r = await fetch('/api/v1/vision/v2/gate')
+  if (!r.ok) throw new Error(`vision v2 gate: HTTP ${r.status}`)
+  return r.json() as Promise<VisionV1GateResponse>
+}
+
+export async function runVisionV2Gate(): Promise<RunVisionV1GateResponse> {
+  const r = await authedFetch('vision v2 gate', '/api/v1/vision/v2/gate', { method: 'POST' })
+  return r.json() as Promise<RunVisionV1GateResponse>
+}
+
+export async function signVisionV2(notes = ''): Promise<RunVisionV1GateResponse> {
+  const r = await authedFetch('vision v2 signoff', '/api/v1/vision/v2/signoff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
+  })
+  return r.json() as Promise<RunVisionV1GateResponse>
 }
 
 export async function fetchPipelineRuns(name: string): Promise<DeliveryPipelineRunsResponse> {

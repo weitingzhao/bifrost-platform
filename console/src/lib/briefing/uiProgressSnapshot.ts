@@ -55,8 +55,14 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
   {
     area: 'Program',
     item: 'Promote',
+    status: 'done',
+    notes: 'Flywheel checklist + POST /promote/release-gate + gate checks; prod cutover SIGNED 2026-06-19',
+  },
+  {
+    area: 'Catalog',
+    item: 'Dual Flywheel Vision',
     status: 'partial',
-    notes: 'Flywheel checklist + POST /promote/release-gate + gate checks table (S6); prod cutover IN_PROGRESS — spine blocker prod-overlay',
+    notes: 'V1/V2/V3 gate panels; devAgentLoopCatalog; V1–V5 spine map (visionSpineMap.ts)',
   },
   {
     area: 'Catalog',

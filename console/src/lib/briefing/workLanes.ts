@@ -11,6 +11,7 @@ import {
 } from '@/lib/control-room/matrixSummary'
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 import type { TrackId } from '@/lib/briefing/workTracks'
+import { visionGovernanceQueueItems } from '@/lib/architecture/visionSpineMap'
 
 export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops'
 export type MigrateLaneId = 'compose-k3s' | 'legacy-retire' | 'trade-stack'
@@ -161,6 +162,9 @@ const MIGRATE_STREAM_LANE: Record<string, MigrateLaneId> = {
   'trade-backend': 'trade-stack',
   'trade-frontend': 'trade-stack',
   'compose-to-k3s': 'compose-k3s',
+  'vision-v1-dev': 'compose-k3s',
+  'vision-s3-briefing': 'compose-k3s',
+  'vision-v2-dev-agent': 'compose-k3s',
   'legacy-retirement': 'legacy-retire',
 }
 
@@ -277,6 +281,15 @@ function buildQueueFromMigrateStreams(
 function buildGovernanceQueue(context: OpsContextResponse | undefined): QueueItem[] {
   if (context == null) return []
   const items: QueueItem[] = []
+
+  for (const v of visionGovernanceQueueItems(context)) {
+    items.push({
+      id: v.id,
+      label: v.label,
+      status: v.status === 'done' ? 'closed' : v.status,
+      note: v.note,
+    })
+  }
 
   for (const m of context.milestones) {
     if (m.status === 'IN_PROGRESS' || m.status === 'BLOCKED_ON') {

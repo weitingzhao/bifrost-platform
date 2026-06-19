@@ -744,6 +744,32 @@ export interface RunReleaseGateResponse extends ActuationResponse {
   gate: ReleaseGateResponse
 }
 
+export interface VisionV1GateCheckView {
+  id: string
+  label: string
+  required: boolean
+  reachability: Reachability
+  detail?: string
+}
+
+export interface VisionV1GateResponse {
+  milestone: string
+  result: string
+  ready: boolean
+  blockers?: string[]
+  checks: VisionV1GateCheckView[]
+  at?: string
+  signed_at?: string
+  signed_by?: string
+  reachability: Reachability
+  detail?: string
+  generated_at: string
+}
+
+export interface RunVisionV1GateResponse extends ActuationResponse {
+  gate: VisionV1GateResponse
+}
+
 export interface TierBItemView {
   id: string
   label: string
