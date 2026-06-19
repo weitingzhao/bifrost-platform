@@ -1,0 +1,99 @@
+{
+  "at": "2026-06-19T20:48:27.709911Z",
+  "result": "pass",
+  "checks": [
+    {
+      "id": "v3-prerequisite",
+      "label": "Vision V3 signed (prerequisite)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "V3 SIGNED by admin"
+    },
+    {
+      "id": "business-agent-catalog",
+      "label": "businessAgentLoopCatalog.ts",
+      "required": true,
+      "reachability": "ok",
+      "detail": "7 loop steps, 9 domains"
+    },
+    {
+      "id": "agent-protocol-v4",
+      "label": "Agent Protocol Business Agent closed loop",
+      "required": true,
+      "reachability": "ok",
+      "detail": "agentProtocolCatalog.ts OK"
+    },
+    {
+      "id": "trade-api-domains",
+      "label": "Trade API domains registry (9)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "trade-api-domains.yaml"
+    },
+    {
+      "id": "trade-agent-domains",
+      "label": "Trade Agent domain catalog",
+      "required": true,
+      "reachability": "ok",
+      "detail": "9 domains in tradeagent catalog"
+    },
+    {
+      "id": "daily-brief-spec",
+      "label": "Business Agent brief schedule",
+      "required": true,
+      "reachability": "ok",
+      "detail": "business-agent-brief-schedule.yaml"
+    },
+    {
+      "id": "cursor-mcp-trade",
+      "label": "Cursor MCP trade bridge",
+      "required": true,
+      "reachability": "ok",
+      "detail": "cursor-mcp-trade.json"
+    },
+    {
+      "id": "mcp-trade-script",
+      "label": "mcp-server-trade script",
+      "required": true,
+      "reachability": "ok",
+      "detail": "index.ts (mcp-server-trade)"
+    },
+    {
+      "id": "trade-agent-api",
+      "label": "Trade Agent catalog API",
+      "required": true,
+      "reachability": "ok",
+      "detail": "server.go OK"
+    },
+    {
+      "id": "mcp-trade-readonly",
+      "label": "mcp-trade-api available in contract",
+      "required": true,
+      "reachability": "ok",
+      "detail": "mcpContractCatalog.ts OK"
+    },
+    {
+      "id": "business-agent-boundary",
+      "label": "Business Agent read-only boundary",
+      "required": true,
+      "reachability": "ok",
+      "detail": "dualFlywheelVisionCatalog.ts OK"
+    },
+    {
+      "id": "stg-smoke",
+      "label": "STG smoke (9 APIs)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "10 target(s) ok"
+    },
+    {
+      "id": "spine-vision-v4-business-agent",
+      "label": "Spine milestone: vision-v4-business-agent",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=NOT_STARTED"
+    }
+  ],
+  "triggered_by": "admin",
+  "summary": "Vision V4 gate pass (13 checks)"
+}

@@ -1,0 +1,43 @@
+# Vision V3 — Alertmanager → Ops Agent webhook contract
+# Wire this receiver in monitoring/alertmanager config (K3s monitoring namespace).
+
+version: "2026-06-19"
+authority: config/ops-agent-alertmanager.yaml
+
+webhook:
+  path: /api/v1/ops-agent/alertmanager
+  method: POST
+  auth: bearer_operator
+  note: >
+    Alertmanager http_config bearer_token must match a platform-api operator or admin token.
+    Handler records audit entry and returns L1/L2 action suggestions for Cursor SDK Agent.
+
+cursor_sdk:
+  enabled: true
+  flow: >
+    Alertmanager webhook → platform-api diagnosis JSON → Cursor SDK Agent session
+    (Ops mode) → MCP platform tools for L1 auto-fix → audit trail in Console.
+
+l1_auto_fix:
+  enabled: true
+  allowed_mcp_tools:
+    - rollout_restart_deployment
+    - delete_pod
+    - scale_deployment
+    - gitops_sync_app
+    - start_pipeline_run
+
+l2_owner_confirm:
+  required_for:
+    - drain_node
+    - gitops_rollback_app
+    - poweroff_compute_node
+    - stack_install_addon
+
+alert_routing:
+  - match: alertname=~".*CrashLoop.*|KubePodCrashLooping"
+    suggest_l1: rollout_restart_deployment
+  - match: alertname=~".*PodNotReady.*|KubeDeploymentReplicasMismatch"
+    suggest_l1: get_cluster_workloads
+  - match: alertname=~".*NodeNotReady.*"
+    suggest_l2: drain_node

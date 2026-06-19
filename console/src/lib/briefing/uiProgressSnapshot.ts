@@ -62,7 +62,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Catalog',
     item: 'Dual Flywheel Vision',
     status: 'partial',
-    notes: 'V1/V2/V3 gate panels; devAgentLoopCatalog; V1–V5 spine map (visionSpineMap.ts)',
+    notes: 'V1–V5 gate panels complete; convergenceLoopCatalog; Dual Flywheel vision line SIGNED at V5',
   },
   {
     area: 'Catalog',

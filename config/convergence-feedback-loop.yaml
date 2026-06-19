@@ -1,0 +1,27 @@
+# Vision V5 — Trade insights → platform improvements (closed loop)
+
+version: "2026-06-19"
+authority: config/convergence-feedback-loop.yaml
+
+feedback_sources:
+  - Business Agent daily brief (pre/post-market)
+  - STG smoke + matrix degradation patterns
+  - Ops Agent alert diagnosis summaries
+  - Dev Agent deliver-stg failure reports
+
+platform_targets:
+  - ops-context.yaml focus headline / blockers
+  - Agent Briefing uiProgressSnapshot
+  - architecture catalog gaps (Blueprint / Standards)
+  - gate_safety_* tuning proposals → L3 PR only
+
+loop:
+  - observe: Business Agent reads Trade API + matrix
+  - analyze: Agent identifies recurring friction or risk
+  - propose: Dev Agent opens PR or Ops Agent L1 fix
+  - govern: L3+ changes require Owner PR merge
+
+forbidden:
+  - Direct gate_safety_* write without PR
+  - daemon_control write
+  - ib:operator:cmd

@@ -1,0 +1,92 @@
+{
+  "at": "2026-06-19T20:42:58.795419Z",
+  "result": "pass",
+  "checks": [
+    {
+      "id": "v2-prerequisite",
+      "label": "Vision V2 signed (prerequisite)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "V2 SIGNED by admin"
+    },
+    {
+      "id": "ops-agent-catalog",
+      "label": "opsAgentLoopCatalog.ts",
+      "required": true,
+      "reachability": "ok",
+      "detail": "7 loop steps defined"
+    },
+    {
+      "id": "agent-protocol-v3",
+      "label": "Agent Protocol Ops Agent closed loop",
+      "required": true,
+      "reachability": "ok",
+      "detail": "agentProtocolCatalog.ts OK"
+    },
+    {
+      "id": "mcp-platform-script",
+      "label": "mcp-server-platform script",
+      "required": true,
+      "reachability": "ok",
+      "detail": "index.ts (mcp-server-platform)"
+    },
+    {
+      "id": "mcp-l1-l2-tools",
+      "label": "MCP L1/L2 actuation tools",
+      "required": true,
+      "reachability": "ok",
+      "detail": "29 implemented tools — L1=9 L2=7"
+    },
+    {
+      "id": "cursor-mcp-bridges",
+      "label": "Cursor MCP bridges config",
+      "required": true,
+      "reachability": "ok",
+      "detail": "cursor-mcp-bridges.json"
+    },
+    {
+      "id": "alertmanager-spec",
+      "label": "Alertmanager webhook spec",
+      "required": true,
+      "reachability": "ok",
+      "detail": "ops-agent-alertmanager.yaml"
+    },
+    {
+      "id": "alertmanager-webhook-route",
+      "label": "Ops Agent alertmanager webhook route",
+      "required": true,
+      "reachability": "ok",
+      "detail": "server.go OK"
+    },
+    {
+      "id": "audit-api-route",
+      "label": "Audit log API",
+      "required": true,
+      "reachability": "ok",
+      "detail": "server.go OK"
+    },
+    {
+      "id": "audit-ui",
+      "label": "Audit page in Console",
+      "required": true,
+      "reachability": "ok",
+      "detail": "AuditPage.tsx OK"
+    },
+    {
+      "id": "mcp-contract-l1-l2",
+      "label": "MCP permission L1/L2 in contract",
+      "required": true,
+      "reachability": "ok",
+      "detail": "mcpContractCatalog.ts OK"
+    },
+    {
+      "id": "spine-vision-v3-ops-agent",
+      "label": "Spine milestone: vision-v3-ops-agent",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=NOT_STARTED"
+    }
+  ],
+  "triggered_by": "admin",
+  "summary": "Vision V3 gate pass (12 checks)"
+}

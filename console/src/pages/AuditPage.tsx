@@ -12,7 +12,7 @@ export function AuditPage({ records, isLoading }: AuditPageProps) {
     <div className="flex w-full min-w-0 flex-col gap-4">
       <OpsSection
         title="Overview"
-        description="Single actuation history for platform-api — GitOps sync, cluster workload actions, namespace ensure, and other operator/admin calls. All write actions land here; other pages link here instead of duplicating the table."
+        description="Single actuation history for platform-api — GitOps sync, cluster workload actions, Ops Agent alert webhooks, Vision gate sign-offs, and other operator/admin calls. All write actions land here."
         overflow="visible"
       />
 

@@ -24,6 +24,9 @@ type Service struct {
 	store     *Store
 	s3store   *S3Store
 	v2store   *V2Store
+	v3store   *V3Store
+	v4store   *V4Store
+	v5store   *V5Store
 	delivery  *delivery.Service
 }
 
@@ -37,6 +40,9 @@ func NewService(cfg *config.Config) *Service {
 		store:     NewStore(dir),
 		s3store:   NewS3Store(dir),
 		v2store:   NewV2Store(dir),
+		v3store:   NewV3Store(dir),
+		v4store:   NewV4Store(dir),
+		v5store:   NewV5Store(dir),
 		delivery:  delivery.NewService(entry),
 	}
 }

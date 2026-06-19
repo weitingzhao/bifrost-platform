@@ -1,0 +1,26 @@
+# Vision V5 — Ollama local inference for sensitive Business Agent analysis
+# Strategy/Gate tuning stays on LAN; no cloud egress for trade-sensitive prompts.
+
+version: "2026-06-19"
+authority: config/ollama-agent.yaml
+
+ollama:
+  host: http://127.0.0.1:11434
+  default_model: llama3.2
+  sensitive_models:
+    - llama3.2
+    - mistral
+
+use_cases:
+  - id: gate-parameter-analysis
+    agent: Business Agent
+    trigger: Owner asks for Gate boundary impact review
+    egress: deny
+  - id: strategy-structure-review
+    agent: Business Agent
+    trigger: Pre-trade structure what-if (read-only inputs from Trade API)
+    egress: deny
+
+cursor_integration:
+  mode: optional_local_model
+  note: "Cursor Agent may route sensitive prompts to Ollama via LAN; cloud models for non-sensitive Dev/Ops work"

@@ -16,10 +16,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
+	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
+	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/vision"
 )
 
@@ -34,6 +36,8 @@ type Server struct {
 	delivery *delivery.Handler
 	promote  *promote.Handler
 	vision   *vision.Handler
+	tradeagent *tradeagent.Handler
+	opsagent *opsagent.Handler
 	auth    *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -57,6 +61,8 @@ func New(cfg *config.Config) *Server {
 		delivery: delivery.NewHandler(cfg, audit),
 		promote:  promote.NewHandler(cfg, audit),
 		vision:   vision.NewHandler(cfg, audit),
+		tradeagent: tradeagent.NewHandler(),
+		opsagent: opsagent.NewHandler(audit),
 		auth:    auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -99,6 +105,11 @@ func (s *Server) Router() http.Handler {
 		r.Get("/vision/v1/gate", s.vision.HandleGetV1Gate)
 		r.Get("/vision/s3/gate", s.vision.HandleGetS3Gate)
 		r.Get("/vision/v2/gate", s.vision.HandleGetV2Gate)
+		r.Get("/vision/v3/gate", s.vision.HandleGetV3Gate)
+		r.Get("/vision/v4/gate", s.vision.HandleGetV4Gate)
+		r.Get("/vision/v5/gate", s.vision.HandleGetV5Gate)
+		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
+		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
 		r.Get("/promote/tier-b", s.promote.HandleGetTierB)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
@@ -110,6 +121,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/delivery/pipelines/{name}/runs", s.delivery.HandleStartPipelineRun)
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
+			r.Post("/ops-agent/alertmanager", s.opsagent.HandleAlertmanager)
 			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
 		})
 		r.Group(func(r chi.Router) {
@@ -125,6 +137,12 @@ func (s *Server) Router() http.Handler {
 			r.Post("/vision/s3/signoff", s.vision.HandleSignS3)
 			r.Post("/vision/v2/gate", s.vision.HandleRunV2Gate)
 			r.Post("/vision/v2/signoff", s.vision.HandleSignV2)
+			r.Post("/vision/v3/gate", s.vision.HandleRunV3Gate)
+			r.Post("/vision/v3/signoff", s.vision.HandleSignV3)
+			r.Post("/vision/v4/gate", s.vision.HandleRunV4Gate)
+			r.Post("/vision/v4/signoff", s.vision.HandleSignV4)
+			r.Post("/vision/v5/gate", s.vision.HandleRunV5Gate)
+			r.Post("/vision/v5/signoff", s.vision.HandleSignV5)
 		})
 		r.Get("/console/hosts", s.console.HandleHosts)
 		r.Get("/console/ws", s.console.HandleWebSocket)
