@@ -1,0 +1,92 @@
+{
+  "at": "2026-06-19T20:17:33.276524Z",
+  "result": "pass",
+  "checks": [
+    {
+      "id": "v1-prerequisite",
+      "label": "Vision V1 signed (prerequisite)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "V1 SIGNED by admin"
+    },
+    {
+      "id": "spine-map-catalog",
+      "label": "visionSpineMap.ts (V1–V5 map)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "5 V1–V5 entries in visionSpineMap.ts"
+    },
+    {
+      "id": "briefing-pack-vision",
+      "label": "buildBriefingPack.ts includes vision appendix",
+      "required": true,
+      "reachability": "ok",
+      "detail": "buildBriefingPack.ts OK"
+    },
+    {
+      "id": "alignment-pack-vision",
+      "label": "buildBriefingAlignmentPack references visionSpineMap",
+      "required": true,
+      "reachability": "ok",
+      "detail": "buildBriefingAlignmentPack.ts OK"
+    },
+    {
+      "id": "ui-progress-vision",
+      "label": "uiProgressSnapshot lists Dual Flywheel Vision",
+      "required": true,
+      "reachability": "ok",
+      "detail": "uiProgressSnapshot.ts OK"
+    },
+    {
+      "id": "governance-queue-vision",
+      "label": "workLanes governance uses visionGovernanceQueueItems",
+      "required": true,
+      "reachability": "ok",
+      "detail": "workLanes.ts OK"
+    },
+    {
+      "id": "spine-vision-v1-dev-topology",
+      "label": "Spine milestone: vision-v1-dev-topology",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=SIGNED"
+    },
+    {
+      "id": "spine-vision-s3-briefing-alignment",
+      "label": "Spine milestone: vision-s3-briefing-alignment",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=SIGNED"
+    },
+    {
+      "id": "spine-vision-v2-dev-agent",
+      "label": "Spine milestone: vision-v2-dev-agent",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=NOT_STARTED"
+    },
+    {
+      "id": "spine-vision-v3-ops-agent",
+      "label": "Spine milestone: vision-v3-ops-agent",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=NOT_STARTED"
+    },
+    {
+      "id": "spine-vision-v4-business-agent",
+      "label": "Spine milestone: vision-v4-business-agent",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=NOT_STARTED"
+    },
+    {
+      "id": "spine-vision-v5-convergence",
+      "label": "Spine milestone: vision-v5-convergence",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=NOT_STARTED"
+    }
+  ],
+  "triggered_by": "admin",
+  "summary": "Vision S3 gate pass (12 checks)"
+}

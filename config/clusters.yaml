@@ -13,6 +13,7 @@ clusters:
       - cicd
       - data
       - bifrost
+      - bifrost-dev
       - bifrost-stg
       - bifrost-prod
       - monitoring
@@ -72,3 +73,6 @@ clusters:
       gateway_url: http://192.168.10.70:30881
       api_monitor_url: http://192.168.10.70:30881/api/monitor/status
       frontend_url: http://192.168.10.70:30881/
+    dev_smoke:
+      gateway_url: http://192.168.10.73:30882
+      api_monitor_url: http://192.168.10.73:30882/api/monitor/status

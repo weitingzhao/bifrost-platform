@@ -4,10 +4,12 @@
 environments:
   - id: dev
     label: Development
-    nginx_base: http://127.0.0.1
+    # Vision V1 — K3s bifrost-dev gateway (Mac: Vite + 1 local API; rest via this URL)
+    nginx_base: http://192.168.10.73:30882
     postgres:
       host: 192.168.10.80
       port: 5432
+    # K3s dev uses in-cluster redis (gate checks via cluster probe).
     redis:
       host: 127.0.0.1
       port: 6379

@@ -96,6 +96,7 @@ type ClusterEntry struct {
 	Stack               StackConfig        `yaml:"stack" json:"stack"`
 	StgSmoke            StgSmokeConfig     `yaml:"stg_smoke" json:"stg_smoke"`
 	ProdSmoke           StgSmokeConfig     `yaml:"prod_smoke" json:"prod_smoke"`
+	DevSmoke            StgSmokeConfig     `yaml:"dev_smoke" json:"dev_smoke"`
 }
 
 type ClustersFile struct {
@@ -295,6 +296,19 @@ func (e *ClusterEntry) ResolvedProdAPIMonitorURL() string {
 	gw := strings.TrimRight(e.ResolvedProdGatewayURL(), "/")
 	if gw != "" {
 		return gw + "/api/monitor/status"
+	}
+	return ""
+}
+
+func (e *ClusterEntry) ResolvedDevGatewayURL() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_DEV_GATEWAY_URL")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.DevSmoke.GatewayURL) != "" {
+		return strings.TrimSpace(e.DevSmoke.GatewayURL)
+	}
+	if e != nil && strings.TrimSpace(e.NodeIP) != "" {
+		return fmt.Sprintf("http://%s:30882", strings.TrimSpace(e.NodeIP))
 	}
 	return ""
 }

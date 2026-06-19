@@ -2,6 +2,7 @@ import type { BriefingSnapshotInput } from '@/lib/briefing/briefingSnapshot'
 import { formatBriefingLiveStatus } from '@/lib/briefing/briefingSnapshot'
 import { CATALOG_SOURCE, CATALOG_VERSION } from '@/lib/environments-catalog'
 import { formatUiProgressSection } from '@/lib/briefing/uiProgressSnapshot'
+import { formatVisionBriefingSection, VISION_SPINE_MAP, VISION_SPINE_MAP_SOURCE } from '@/lib/architecture/visionSpineMap'
 
 /** Meta-briefing: task for an Agent to audit and sync Agent Briefing with the live platform. */
 export function buildBriefingAlignmentPack(input: BriefingSnapshotInput): string {
@@ -44,13 +45,14 @@ export function buildBriefingAlignmentPack(input: BriefingSnapshotInput): string
     '3. `console/src/lib/briefing/buildBriefingPack.ts` — readFirst, avoid, appendices, session discipline',
     '4. `console/src/lib/briefing/workTracks.ts` + `workLanes.ts` — build/migrate/operate summaries and lane queues',
     '5. `console/src/lib/briefing/buildBriefingAlignmentPack.ts` — this meta pack (keep checklist current)',
-    '6. `console/src/lib/briefing/workIntents.ts` — work intent labels/descriptions',
-    '7. `console/src/lib/control-room/agentContextPacks.ts` — Ops/Promote/Product packs used by Briefing',
-    '8. `api/internal/server/server.go` — registered /api/v1/* routes',
-    '9. `console/src/lib/architecture/standardsCatalog.ts` + `api/internal/server/server.go` — API contract (UI + code)',
-    '10. `console/src/lib/architecture/blueprintCatalog.ts` + `agentProtocolCatalog.ts` — view matrix + Agent workflow',
-    '11. `config/ops-context.yaml` — spine milestones/focus + tracks (auto in pack; confirm Program UI matches)',
-    `12. ${CATALOG_SOURCE} — CATALOG_VERSION must match ops-context meta.catalog_version (make test runs check_spine_catalog.sh)`,
+    `6. \`${VISION_SPINE_MAP_SOURCE}\` — V1–V5 ↔ spine milestone map (${VISION_SPINE_MAP.length} entries)`,
+    '7. `console/src/lib/briefing/workIntents.ts` — work intent labels/descriptions',
+    '8. `console/src/lib/control-room/agentContextPacks.ts` — Ops/Promote/Product packs used by Briefing',
+    '9. `api/internal/server/server.go` — registered /api/v1/* routes',
+    '10. `console/src/lib/architecture/standardsCatalog.ts` + `api/internal/server/server.go` — API contract (UI + code)',
+    '11. `console/src/lib/architecture/blueprintCatalog.ts` + `agentProtocolCatalog.ts` — view matrix + Agent workflow',
+    '12. `config/ops-context.yaml` — spine milestones/focus + tracks (auto in pack; confirm Program UI matches)',
+    `13. ${CATALOG_SOURCE} — CATALOG_VERSION must match ops-context meta.catalog_version (make test runs check_spine_catalog.sh)`,
     '',
     '## Drift checklist',
     '',
@@ -60,6 +62,9 @@ export function buildBriefingAlignmentPack(input: BriefingSnapshotInput): string
     '- [ ] Cluster appendix mentions current Layer A/B endpoints (GET /cluster/metrics, /cluster/observability)',
     '- [ ] WORK_INTENT_OPTIONS still cover Owner workflows; add intent if a new flywheel dominates',
     '- [ ] Agent Protocol catalog documents Briefing + alignment pack for new sessions',
+    '- [ ] V1–V5 in visionSpineMap.ts each have a matching milestone id in ops-context.yaml',
+    '- [ ] buildBriefingPack includes formatVisionBriefingSection appendix',
+    '- [ ] Governance lane queue lists V1–V5 from visionSpineMap (workLanes.ts)',
     '- [ ] After edits: `cd bifrost-platform && make test` passes',
     '',
     '## Spine milestones needing narrative sync',
@@ -75,6 +80,8 @@ export function buildBriefingAlignmentPack(input: BriefingSnapshotInput): string
     formatBriefingLiveStatus(input),
     '',
     formatUiProgressSection(),
+    '',
+    formatVisionBriefingSection(input.context),
     '',
     '## Related LLM context entry points (keep consistent, not duplicate)',
     '',

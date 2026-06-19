@@ -1,6 +1,9 @@
 import { useCallback, useState } from 'react'
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, DenseTag } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
+import { VisionV1GatePanel } from '@/components/architecture/VisionV1GatePanel'
+import { VisionS3GatePanel } from '@/components/architecture/VisionS3GatePanel'
+import { VisionV2GatePanel } from '@/components/architecture/VisionV2GatePanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   AGENT_LAYERS,
@@ -21,6 +24,8 @@ import {
   VISION_VERSION,
   buildDualFlywheelVisionLlmPack,
 } from '@/lib/architecture/dualFlywheelVisionCatalog'
+import { VISION_SPINE_MAP, VISION_SPINE_MAP_SOURCE, VISION_SPINE_MAP_VERSION } from '@/lib/architecture/visionSpineMap'
+import { DEV_AGENT_LOOP_STEPS, DEV_AGENT_LOOP_SOURCE } from '@/lib/architecture/devAgentLoopCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
@@ -251,7 +256,62 @@ export function DualFlywheelVisionPage() {
         </DenseDataTable>
       </CatalogSection>
 
-      {/* 8 — Convergence milestones */}
+      {/* 8 — Acceptance gates */}
+      <VisionV1GatePanel />
+      <VisionS3GatePanel />
+      <VisionV2GatePanel />
+
+      <CatalogSection title={`Dev Agent loop (${DEV_AGENT_LOOP_SOURCE})`}>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>#</DenseTableHead>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Actor</DenseTableHead>
+              <DenseTableHead>Action</DenseTableHead>
+              <DenseTableHead>Verify</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {DEV_AGENT_LOOP_STEPS.map(step => (
+              <DenseTableRow key={step.order}>
+                <DenseTableCell>{step.order}</DenseTableCell>
+                <DenseTableCell className="font-medium">{step.phase}</DenseTableCell>
+                <DenseTableCell>{step.actor}</DenseTableCell>
+                <DenseTableCell>{step.action}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{step.verify}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title={`Spine map (V1–V5 · ${VISION_SPINE_MAP_SOURCE})`}>
+        <p className="m-0 mb-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Authoritative map for Agent Briefing and governance lane — v{VISION_SPINE_MAP_VERSION}
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Vision</DenseTableHead>
+              <DenseTableHead>Spine milestone</DenseTableHead>
+              <DenseTableHead>Briefing hook</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {VISION_SPINE_MAP.map(row => (
+              <DenseTableRow key={row.visionId}>
+                <DenseTableCell className="font-medium whitespace-nowrap">
+                  <DenseTag variant="success">{row.visionId}</DenseTag> {row.title}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{row.spineMilestoneId}</DenseTableCell>
+                <DenseTableCell>{row.briefingHook}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
       <CatalogSection title="Convergence Milestones (V1–V5)">
         {VISION_MILESTONES.map(m => (
           <div key={m.id} className="border-b border-[var(--border)] last:border-b-0 px-3 py-3">

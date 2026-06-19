@@ -34,8 +34,8 @@ deployment:
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 
 focus:
-  headline: "K3s Prod cutover SIGNED (2026-06-19) · prod release gate pass · ops-ui-actuation IN_PROGRESS"
-  flywheel_primary: B # A = trade FE, B = runtime/ops
+  headline: "Vision V2 Dev Agent loop ready · S3 SIGNED · push → Tekton → STG verify"
+  flywheel_primary: A # A = trade FE, B = runtime/ops
   blocker: null
 
 milestones:
@@ -92,6 +92,50 @@ milestones:
     pipeline_lane: parallel
     pipeline_after: k3s-phase1
     authority: Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts § P5b)
+
+  - id: vision-v1-dev-topology
+    label: Vision V1 — Dev inner-loop on K3s
+    status: SIGNED
+    signed_at: "2026-06-19"
+    pipeline_lane: parallel
+    pipeline_after: k3s-stg-v2-deliver
+    authority: console/src/lib/architecture/dualFlywheelVisionCatalog.ts
+
+  - id: vision-s3-briefing-alignment
+    label: Vision S3 — Briefing ↔ Vision meta alignment
+    status: SIGNED
+    signed_at: "2026-06-19"
+    pipeline_lane: parallel
+    pipeline_after: vision-v1-dev-topology
+    authority: console/src/lib/architecture/visionSpineMap.ts
+
+  - id: vision-v2-dev-agent
+    label: Vision V2 — Dev Agent closed-loop
+    status: IN_PROGRESS
+    pipeline_lane: parallel
+    pipeline_after: vision-s3-briefing-alignment
+    authority: console/src/lib/architecture/devAgentLoopCatalog.ts
+
+  - id: vision-v3-ops-agent
+    label: Vision V3 — Ops Agent L1/L2
+    status: NOT_STARTED
+    pipeline_lane: parallel
+    pipeline_after: vision-v2-dev-agent
+    authority: console/src/lib/architecture/dualFlywheelVisionCatalog.ts
+
+  - id: vision-v4-business-agent
+    label: Vision V4 — Business Agent read-only
+    status: NOT_STARTED
+    pipeline_lane: parallel
+    pipeline_after: vision-v3-ops-agent
+    authority: console/src/lib/architecture/dualFlywheelVisionCatalog.ts
+
+  - id: vision-v5-convergence
+    label: Vision V5 — Full convergence
+    status: NOT_STARTED
+    pipeline_lane: parallel
+    pipeline_after: vision-v4-business-agent
+    authority: console/src/lib/architecture/dualFlywheelVisionCatalog.ts
 
   - id: ops-ui-actuation
     label: Ops UI single-pane actuation (north star)
@@ -245,7 +289,25 @@ tracks:
         done: 4
         status: in_progress
         next_task: "⑤ HA/validation (optional hardening)"
-        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED 2026-06-18 ✓ ④ prod overlay + deliver-prod SIGNED 2026-06-19 ✓ · ⑤ HA/validation"
+        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED 2026-06-18 ✓ ④ prod overlay SIGNED 2026-06-19 ✓ · ⑤ HA/validation · Vision V1 dev @ bifrost-dev :30882"
+      - id: vision-v1-dev
+        label: "Vision V1 — Mac thin + K3s dev thick"
+        total: 3
+        done: 3
+        status: closed
+        note: "SIGNED 2026-06-19 — bifrost-dev :30882 · .env.development.k3s · V1 gate pass"
+      - id: vision-s3-briefing
+        label: "Vision S3 — Briefing ↔ Vision alignment"
+        total: 4
+        done: 4
+        status: closed
+        note: "SIGNED 2026-06-19 — visionSpineMap.ts · briefing appendix · S3 gate"
+      - id: vision-v2-dev-agent
+        label: "Vision V2 — Dev Agent closed-loop"
+        total: 4
+        done: 4
+        status: closed
+        note: "devAgentLoopCatalog · agent-pre-push.sh · Tekton deliver-stg/prod · V2 gate"
       - id: legacy-retirement
         label: "Phase 3 Legacy retirement"
         total: 4

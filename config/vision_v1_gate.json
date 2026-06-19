@@ -1,0 +1,106 @@
+{
+  "at": "2026-06-19T20:17:21.643613Z",
+  "result": "pass",
+  "checks": [
+    {
+      "id": "dev-namespace",
+      "label": "bifrost-dev workloads",
+      "required": true,
+      "reachability": "ok",
+      "detail": "19 deployment(s) ready in bifrost-dev"
+    },
+    {
+      "id": "dev-redis",
+      "label": "In-cluster Redis (bifrost-dev)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "bifrost-dev/redis 1/1 ready (in-cluster)"
+    },
+    {
+      "id": "dev-postgres",
+      "label": "In-cluster PostgreSQL (bifrost-dev)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "bifrost-dev/postgres 1/1 ready (in-cluster)"
+    },
+    {
+      "id": "dev-api-monitor",
+      "label": "dev-api-monitor",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "dev-api-massive",
+      "label": "dev-api-massive",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "dev-api-docs",
+      "label": "dev-api-docs",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "dev-api-ops",
+      "label": "dev-api-ops",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "dev-api-trading",
+      "label": "dev-api-trading",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "dev-api-strategy",
+      "label": "dev-api-strategy",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "dev-api-portfolio",
+      "label": "dev-api-portfolio",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "dev-api-market",
+      "label": "dev-api-market",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "dev-api-research",
+      "label": "dev-api-research",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "dev-matrix",
+      "label": "Dev matrix (K3s gateway)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "no failing dev targets"
+    },
+    {
+      "id": "frontend-env-k3s",
+      "label": "Frontend .env.development.k3s template",
+      "required": true,
+      "reachability": "ok",
+      "detail": "Mac Vite + 1 local API; remaining VITE_API_* → K3s dev gateway (.env.development.k3s)"
+    }
+  ],
+  "triggered_by": "admin",
+  "summary": "Vision V1 gate pass (14 checks)"
+}

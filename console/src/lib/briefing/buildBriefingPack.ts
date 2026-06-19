@@ -21,6 +21,7 @@ import {
   DEFAULT_AGENT_DIALOGUE_LANGUAGE,
   type AgentDialogueLanguage,
 } from '@/lib/briefing/agentDialogueLanguage'
+import { formatVisionBriefingSection } from '@/lib/architecture/visionSpineMap'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
   intent: WorkIntent
@@ -396,6 +397,8 @@ export function buildBriefingPack(input: BriefingInputs): string {
     formatBriefingLiveStatus(input),
     '',
     formatUiProgressSection(),
+    '',
+    formatVisionBriefingSection(input.context),
     '',
     '## Authoritative context (spine + matrix)',
     intentCorePack(input.intent, input.context, input.matrices),

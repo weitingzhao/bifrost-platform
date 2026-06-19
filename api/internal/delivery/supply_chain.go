@@ -244,6 +244,39 @@ func (s *Service) ProdRedisInCluster(ctx context.Context) (probe.Reachability, s
 	return probe.ReachDegraded, fmt.Sprintf("bifrost-prod/redis %d/%d ready", ready, desired)
 }
 
+// DevRedisInCluster reports redis deployment readiness in bifrost-dev.
+func (s *Service) DevRedisInCluster(ctx context.Context) (probe.Reachability, string) {
+	return s.deploymentReadyInNS(ctx, "bifrost-dev", "redis")
+}
+
+// DevPostgresInCluster reports postgres deployment readiness in bifrost-dev.
+func (s *Service) DevPostgresInCluster(ctx context.Context) (probe.Reachability, string) {
+	return s.deploymentReadyInNS(ctx, "bifrost-dev", "postgres")
+}
+
+func (s *Service) deploymentReadyInNS(ctx context.Context, ns, name string) (probe.Reachability, string) {
+	clientset, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		return probe.ReachFail, "cluster client: " + err.Error()
+	}
+	dep, depErr := clientset.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
+	if depErr != nil {
+		return probe.ReachFail, fmt.Sprintf("deployment/%s in %s: %v", name, ns, depErr)
+	}
+	ready := int32(0)
+	if dep.Status.ReadyReplicas > 0 {
+		ready = dep.Status.ReadyReplicas
+	}
+	desired := dep.Status.Replicas
+	if desired == 0 && dep.Spec.Replicas != nil {
+		desired = *dep.Spec.Replicas
+	}
+	if ready > 0 && ready >= desired {
+		return probe.ReachOK, fmt.Sprintf("%s/%s %d/%d ready (in-cluster)", ns, name, ready, desired)
+	}
+	return probe.ReachDegraded, fmt.Sprintf("%s/%s %d/%d ready", ns, name, ready, desired)
+}
+
 func dockerfileCMFrom(cm *corev1.ConfigMap) DockerfileConfigMapView {
 	keys := make([]string, 0, len(cm.Data))
 	for k := range cm.Data {

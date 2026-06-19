@@ -20,6 +20,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
+	"github.com/weitingzhao/bifrost-platform/api/internal/vision"
 )
 
 type Server struct {
@@ -32,6 +33,7 @@ type Server struct {
 	stack   *stack.Handler
 	delivery *delivery.Handler
 	promote  *promote.Handler
+	vision   *vision.Handler
 	auth    *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -54,6 +56,7 @@ func New(cfg *config.Config) *Server {
 		stack:   stack.NewHandler(cfg, audit),
 		delivery: delivery.NewHandler(cfg, audit),
 		promote:  promote.NewHandler(cfg, audit),
+		vision:   vision.NewHandler(cfg, audit),
 		auth:    auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -92,6 +95,10 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/supply-chain", s.delivery.HandleSupplyChain)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
+		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
+		r.Get("/vision/v1/gate", s.vision.HandleGetV1Gate)
+		r.Get("/vision/s3/gate", s.vision.HandleGetS3Gate)
+		r.Get("/vision/v2/gate", s.vision.HandleGetV2Gate)
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
 		r.Get("/promote/tier-b", s.promote.HandleGetTierB)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
@@ -112,6 +119,12 @@ func (s *Server) Router() http.Handler {
 			r.Post("/stack/addons/{name}/upgrade", s.stack.HandleUpgradeAddon)
 			r.Post("/promote/release-gate", s.promote.HandleRunReleaseGate)
 			r.Post("/promote/tier-b/signoff", s.promote.HandleSignTierB)
+			r.Post("/vision/v1/gate", s.vision.HandleRunV1Gate)
+			r.Post("/vision/v1/signoff", s.vision.HandleSignV1)
+			r.Post("/vision/s3/gate", s.vision.HandleRunS3Gate)
+			r.Post("/vision/s3/signoff", s.vision.HandleSignS3)
+			r.Post("/vision/v2/gate", s.vision.HandleRunV2Gate)
+			r.Post("/vision/v2/signoff", s.vision.HandleSignV2)
 		})
 		r.Get("/console/hosts", s.console.HandleHosts)
 		r.Get("/console/ws", s.console.HandleWebSocket)

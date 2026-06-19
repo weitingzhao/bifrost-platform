@@ -86,6 +86,10 @@ func (h *Handler) HandleStgSmoke(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.StgSmoke(r.Context()))
 }
 
+func (h *Handler) HandleDevSmoke(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.DevSmoke(r.Context()))
+}
+
 func (h *Handler) HandleRunLogs(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if id == "" {
