@@ -179,9 +179,37 @@ export function laneById(id: LaneId): WorkLane {
   return ALL_LANES.find(l => l.id === id) ?? ALL_LANES[0]
 }
 
-export function defaultLaneForTrack(track: TrackId): LaneId {
+export function defaultLaneForTrack(
+  track: TrackId,
+  context?: OpsContextResponse,
+  matrices?: MatrixResponse[],
+  clusterSummary?: ClusterSummary,
+): LaneId {
   const lanes = lanesForTrack(track)
-  return lanes[0]?.id ?? 'console-api'
+  const fallback = lanes[0]?.id ?? 'console-api'
+
+  if (track === 'build' && context?.tracks?.build != null) {
+    const activeTask =
+      context.tracks.build.tasks.find(t => t.status === 'in_progress') ??
+      context.tracks.build.tasks.find(t => t.status === 'next')
+    const laneId = activeTask != null ? BUILD_TASK_LANE[activeTask.id] : undefined
+    if (laneId != null) return laneId
+  }
+
+  if (track === 'migrate' && context?.tracks?.migrate != null) {
+    const activeStream = context.tracks.migrate.streams.find(s => s.status === 'in_progress')
+    const laneId = activeStream != null ? MIGRATE_STREAM_LANE[activeStream.id] : undefined
+    if (laneId != null) return laneId
+  }
+
+  if (track === 'operate') {
+    const troubleshoot = buildTroubleshootQueue(matrices ?? [], clusterSummary)
+    if (troubleshoot.some(i => i.status === 'issue')) return 'troubleshoot'
+    if (context?.focus.blocker) return 'release'
+    return 'governance'
+  }
+
+  return fallback
 }
 
 function mapTaskStatus(status: string): QueueItemStatus {
@@ -193,10 +221,20 @@ function mapTaskStatus(status: string): QueueItemStatus {
 }
 
 function mapStreamStatus(status: string): QueueItemStatus {
-  if (status === 'closed') return 'closed'
-  if (status === 'in_progress') return 'in_progress'
-  if (status === 'not_started') return 'pending'
+  const normalized = status.toLowerCase()
+  if (normalized === 'closed' || normalized === 'signed') return 'closed'
+  if (normalized === 'in_progress') return 'in_progress'
+  if (normalized === 'blocked_on') return 'blocked'
+  if (normalized === 'not_started') return 'pending'
   return 'pending'
+}
+
+function mapMilestoneStatus(status: string): QueueItemStatus {
+  if (status === 'BLOCKED_ON') return 'blocked'
+  if (status === 'IN_PROGRESS') return 'in_progress'
+  if (status === 'CLOSED' || status === 'SIGNED') return 'closed'
+  if (status === 'NOT_STARTED') return 'pending'
+  return mapStreamStatus(status)
 }
 
 function buildQueueFromBuildTasks(build: BuildTrack | undefined, laneId: BuildLaneId): QueueItem[] {
@@ -327,19 +365,34 @@ function buildReleaseQueue(context: OpsContextResponse | undefined, matrices: Ma
     items.push({
       id: 'prod-cutover',
       label: cutover.label ?? cutover.id,
-      status: cutover.status === 'BLOCKED_ON' ? 'blocked' : mapStreamStatus(cutover.status.toLowerCase()),
-      note: cutover.blocker ?? undefined,
+      status: mapMilestoneStatus(cutover.status),
+      note: cutover.blocker ?? context?.focus.blocker ?? undefined,
+    })
+  }
+
+  if (context?.focus.blocker) {
+    items.push({
+      id: 'spine-blocker',
+      label: `Spine blocker: ${context.focus.blocker}`,
+      status: 'blocked',
+      note: context.focus.headline,
     })
   }
 
   const gate = context?.promotion.last_gate
   if (gate != null) {
-    const gateOk = gate.result != null && gate.result !== ''
+    const gateResult = gate.result?.trim() ?? ''
+    const gateStatus: QueueItemStatus =
+      gateResult === ''
+        ? 'pending'
+        : gateResult.toLowerCase() === 'fail'
+          ? 'issue'
+          : 'done'
     items.push({
       id: 'release-gate',
       label: 'Release gate recorded',
-      status: gateOk ? 'done' : 'pending',
-      note: gateOk ? `Result: ${gate.result}` : gate.log_path,
+      status: gateStatus,
+      note: gateResult !== '' ? `Result: ${gate.result}` : gate.log_path,
     })
   }
 

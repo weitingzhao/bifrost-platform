@@ -5,10 +5,10 @@
 
 import { NAMESPACE_ALLOCATION, type NamespaceRow } from '@/lib/architecture/k3sArchitectureCatalog'
 
-export const PLACEMENT_CATALOG_VERSION = '2026-06-18-g1'
+export const PLACEMENT_CATALOG_VERSION = '2026-06-19-gpu-server'
 export const PLACEMENT_CATALOG_SOURCE = 'console/src/lib/architecture/workloadPlacementCatalog.ts'
 
-export type NodePoolId = 'amd64_ci' | 'amd64_general' | 'arm64_edge' | 'gpu'
+export type NodePoolId = 'amd64_ci' | 'amd64_general' | 'arm64_edge' | 'gpu' | 'compute_warehouse'
 
 export type WorkloadClass =
   | 'cicd_build'
@@ -17,6 +17,7 @@ export type WorkloadClass =
   | 'data'
   | 'monitoring'
   | 'ai'
+  | 'warehouse'
   | 'frontend_edge'
 
 export type NodePoolDef = {
@@ -32,7 +33,20 @@ export const NODE_POOLS: NodePoolDef[] = [
   { id: 'amd64_ci', label: 'amd64 CI / Kaniko', arch: 'amd64', status: 'live' },
   { id: 'amd64_general', label: 'amd64 general runtime', arch: 'amd64', status: 'live' },
   { id: 'arm64_edge', label: 'arm64 edge / frontend', arch: 'arm64', status: 'live' },
-  { id: 'gpu', label: 'GPU workloads', workloadLabel: 'gpu', status: 'planned', plannedHost: 'gpu-server' },
+  {
+    id: 'compute_warehouse',
+    label: '4090 compute · data warehouse · solution',
+    workloadLabel: 'warehouse',
+    status: 'live',
+    plannedHost: 'gpu-server @ 192.168.10.60',
+  },
+  {
+    id: 'gpu',
+    label: 'GPU / AI inference · heavy CI',
+    workloadLabel: 'gpu',
+    status: 'live',
+    plannedHost: 'gpu-server @ 192.168.10.60',
+  },
 ]
 
 export type PlacementRuleDef = {
@@ -86,12 +100,20 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     plannedBinding: 'mini-pc-c (second batch)',
   },
   {
+    workloadClass: 'warehouse',
+    namespace: 'data',
+    services: 'MinIO · ClickHouse · OLAP · warehouse sync · local analytics',
+    requiredSelector: 'node-role=warehouse',
+    poolId: 'compute_warehouse',
+    plannedBinding: 'gpu-server @ 192.168.10.60',
+  },
+  {
     workloadClass: 'ai',
     namespace: 'ai',
     services: 'Ollama · Open-WebUI',
     requiredSelector: 'workload=gpu',
     poolId: 'gpu',
-    plannedBinding: 'gpu-server',
+    plannedBinding: 'gpu-server @ 192.168.10.60',
   },
   {
     workloadClass: 'frontend_edge',

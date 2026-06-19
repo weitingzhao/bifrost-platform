@@ -62,7 +62,10 @@ export function BriefingPage({
   auditLoading,
 }: BriefingPageProps) {
   const [selectedTrack, setSelectedTrack] = useState<TrackId>('build')
-  const [selectedLane, setSelectedLane] = useState<LaneId>(() => defaultLaneForTrack('build'))
+  const [selectedLane, setSelectedLane] = useState<LaneId>(() =>
+    defaultLaneForTrack('build'),
+  )
+  const [initialLaneSynced, setInitialLaneSynced] = useState(false)
   const [showSessionPack, setShowSessionPack] = useState(false)
   const [showAlignmentPack, setShowAlignmentPack] = useState(false)
   const [sessionCopied, setSessionCopied] = useState(false)
@@ -81,6 +84,19 @@ export function BriefingPage({
     const clusterReach = clusterSummary?.reachability
     return computeAllTracks(context, matrices, clusterFailingPods, clusterReach)
   }, [context, matrices, clusterSummary])
+
+  useEffect(() => {
+    if (!dataReady || initialLaneSynced) return
+    setSelectedLane(defaultLaneForTrack(selectedTrack, context, matrices, clusterSummary))
+    setInitialLaneSynced(true)
+  }, [
+    dataReady,
+    initialLaneSynced,
+    selectedTrack,
+    context,
+    matrices,
+    clusterSummary,
+  ])
 
   const intent: WorkIntent = laneById(selectedLane).workIntent
 
@@ -178,7 +194,7 @@ export function BriefingPage({
         selectedTrack={selectedTrack}
         onSelectTrack={(id) => {
           setSelectedTrack(id)
-          setSelectedLane(defaultLaneForTrack(id))
+          setSelectedLane(defaultLaneForTrack(id, context, matrices, clusterSummary))
           setShowSessionPack(false)
         }}
       />

@@ -120,13 +120,24 @@ export function computeOperateSummary(
         kind: 'promote_blocked',
         label: `Promote blocked: ${cutover.blocker ?? 'decision'}`,
       })
+    } else if (cutover?.status === 'IN_PROGRESS' && context.focus.blocker) {
+      issues.push({
+        kind: 'promote_blocked',
+        label: `Cutover in progress — blocker: ${context.focus.blocker}`,
+      })
     }
 
     const gate = context.promotion.last_gate
-    if (gate.result == null || gate.result === '') {
+    const gateResult = gate.result?.trim() ?? ''
+    if (gateResult === '') {
       issues.push({
         kind: 'gate_missing',
         label: 'Release gate: not recorded',
+      })
+    } else if (gateResult.toLowerCase() === 'fail') {
+      issues.push({
+        kind: 'gate_missing',
+        label: 'Release gate: last run failed',
       })
     }
   }

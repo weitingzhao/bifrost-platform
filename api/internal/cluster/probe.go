@@ -143,7 +143,9 @@ func (s *Service) Nodes(ctx context.Context) NodesResponse {
 
 	views := make([]NodeView, 0, len(list.Items))
 	for _, n := range list.Items {
-		views = append(views, nodeView(n))
+		v := nodeView(n)
+		v.ComputeManaged = s.isComputeManaged(n.Name)
+		views = append(views, v)
 	}
 
 	metricsClient, _ := s.buildMetricsClient()
@@ -467,6 +469,7 @@ func nodeView(n corev1.Node) NodeView {
 		Version:            n.Status.NodeInfo.KubeletVersion,
 		InternalIP:         ip,
 		Reachability:       reach,
+		Unschedulable:      n.Spec.Unschedulable,
 		CPUAllocatable:     formatCPU(cpuAlloc),
 		MemoryAllocatable:  formatMemory(memAlloc),
 		StorageAllocatable: formatMemory(storageAlloc),

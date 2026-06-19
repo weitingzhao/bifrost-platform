@@ -232,6 +232,8 @@ export interface ClusterNode {
   memory_usage_percent?: number
   cpu_reachability?: Reachability
   memory_reachability?: Reachability
+  compute_managed?: boolean
+  unschedulable?: boolean
 }
 
 export interface ClusterNodesResponse {
@@ -240,6 +242,56 @@ export interface ClusterNodesResponse {
   detail: string
   nodes: ClusterNode[]
   generated_at: string
+}
+
+export interface ComputeWorkloadStatus {
+  namespace: string
+  name: string
+  label: string
+  replicas: number
+  ready_replicas: number
+}
+
+export interface NodePowerResponse {
+  cluster_id: string
+  node_name: string
+  compute_managed: boolean
+  node_status: string
+  power_state: 'online' | 'offline' | string
+  wol_mac?: string
+  power_policy?: string
+  power_manager_active?: string
+  pending_compute_pods: number
+  user_pods_on_node: number
+  workloads: ComputeWorkloadStatus[]
+  reachability: Reachability
+  detail: string
+  generated_at: string
+}
+
+export interface JoinProfile {
+  id: string
+  label: string
+  expected_node?: string
+  script: string
+}
+
+export interface JoinProfilesResponse {
+  cluster_id: string
+  profiles: JoinProfile[]
+  enabled: boolean
+  detail?: string
+  generated_at: string
+}
+
+export interface DrainNodeRequest {
+  force?: boolean
+  delete_local_data?: boolean
+  grace_period_seconds?: number
+}
+
+export interface JoinNodeRequest {
+  profile: string
 }
 
 export interface ClusterPlacementPool {

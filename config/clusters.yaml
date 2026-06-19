@@ -16,6 +16,25 @@ clusters:
       - bifrost-stg
       - monitoring
       - ai
+      - data-warehouse
+    compute_nodes:
+      - name: gpu-server
+        ssh_host: vision@192.168.10.60
+        wol_mac: "c8:7f:54:5b:b8:33"
+        wol_ssh_host: vision@192.168.10.73
+        power_manager_unit: bifrost-gpu-power-manager.service
+        workloads:
+          - namespace: ai
+            deployment: ollama
+            label: Ollama
+          - namespace: data-warehouse
+            deployment: minio
+            label: MinIO
+    join_profiles:
+      - id: gpu-server
+        label: K3s agent join — gpu-server (P5a)
+        script: join-gpu-server.sh
+        expected_node: gpu-server
     monitoring_namespace: monitoring
     observability_urls:
       grafana: ""

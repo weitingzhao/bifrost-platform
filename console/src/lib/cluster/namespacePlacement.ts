@@ -18,6 +18,7 @@ function idealLabelForRule(rule: PlacementRuleDef): string | null {
   if (rule.requiredSelector.includes('amd64')) return 'amd64'
   if (rule.requiredSelector.includes('arm64')) return 'arm64'
   if (rule.requiredSelector.includes('gpu')) return 'gpu'
+  if (rule.requiredSelector.includes('warehouse')) return 'warehouse'
   return null
 }
 

@@ -57,9 +57,9 @@ export const HARDWARE_MAPPING: RoadmapHardwareRow[] = [
   },
   {
     device: '4090 server',
-    current: 'Idle',
-    nearTerm: 'Optional local Ollama trial',
-    k3sTarget: 'K3s Agent workload=gpu · Ollama / socket / celery',
+    current: 'K3s P5a — gpu-server @ 192.168.10.60 (WOL eno1)',
+    nearTerm: 'Data warehouse + Ollama trial + Tekton heavy CI',
+    k3sTarget: 'Agent · node-role=warehouse · workload=gpu · bifrost.io/workload-pool=compute',
   },
   {
     device: 'Network',

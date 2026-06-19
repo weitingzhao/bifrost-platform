@@ -10,8 +10,11 @@ import type {
   StackAddonsResponse,
   ClusterNamespacesResponse,
   ClusterNodesResponse,
+  NodePowerResponse,
   ClusterPlacementResponse,
   ClusterSummary,
+  JoinProfilesResponse,
+  DrainNodeRequest,
   ClusterSyncResponse,
   ClusterWorkloadsResponse,
   DeliveryPipelineRunsResponse,
@@ -113,6 +116,74 @@ export async function fetchClusterNodes(): Promise<ClusterNodesResponse> {
   const r = await fetch('/api/v1/cluster/nodes')
   if (!r.ok) throw new Error(`cluster nodes: HTTP ${r.status}`)
   return r.json() as Promise<ClusterNodesResponse>
+}
+
+export async function fetchNodePower(nodeName: string): Promise<NodePowerResponse> {
+  const r = await fetch(`/api/v1/cluster/nodes/${encodeURIComponent(nodeName)}/power`)
+  if (!r.ok) throw new Error(`node power: HTTP ${r.status}`)
+  return r.json() as Promise<NodePowerResponse>
+}
+
+export async function wakeComputeNode(nodeName: string): Promise<ActuationResponse> {
+  const r = await authedFetch(
+    'wake compute node',
+    `/api/v1/cluster/nodes/${encodeURIComponent(nodeName)}/wake`,
+    { method: 'POST' },
+  )
+  return r.json() as Promise<ActuationResponse>
+}
+
+export async function powerOffComputeNode(nodeName: string): Promise<ActuationResponse> {
+  const r = await authedFetch(
+    'power off compute node',
+    `/api/v1/cluster/nodes/${encodeURIComponent(nodeName)}/poweroff`,
+    { method: 'POST' },
+  )
+  return r.json() as Promise<ActuationResponse>
+}
+
+export async function fetchJoinProfiles(): Promise<JoinProfilesResponse> {
+  const r = await fetch('/api/v1/cluster/join-profiles')
+  if (!r.ok) throw new Error(`join profiles: HTTP ${r.status}`)
+  return r.json() as Promise<JoinProfilesResponse>
+}
+
+export async function cordonNode(nodeName: string): Promise<ActuationResponse> {
+  const r = await authedFetch(
+    'cordon node',
+    `/api/v1/cluster/nodes/${encodeURIComponent(nodeName)}/cordon`,
+    { method: 'POST' },
+  )
+  return r.json() as Promise<ActuationResponse>
+}
+
+export async function uncordonNode(nodeName: string): Promise<ActuationResponse> {
+  const r = await authedFetch(
+    'uncordon node',
+    `/api/v1/cluster/nodes/${encodeURIComponent(nodeName)}/uncordon`,
+    { method: 'POST' },
+  )
+  return r.json() as Promise<ActuationResponse>
+}
+
+export async function drainNode(
+  nodeName: string,
+  body: DrainNodeRequest = { delete_local_data: true, force: true, grace_period_seconds: 60 },
+): Promise<ActuationResponse> {
+  const r = await authedFetch(
+    'drain node',
+    `/api/v1/cluster/nodes/${encodeURIComponent(nodeName)}/drain`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+  return r.json() as Promise<ActuationResponse>
+}
+
+export async function joinClusterNode(profile: string): Promise<ActuationResponse> {
+  const r = await authedFetch('join cluster node', '/api/v1/cluster/nodes/join', {
+    method: 'POST',
+    body: JSON.stringify({ profile }),
+  })
+  return r.json() as Promise<ActuationResponse>
 }
 
 export async function fetchClusterPlacement(): Promise<ClusterPlacementResponse> {

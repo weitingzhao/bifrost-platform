@@ -33,8 +33,12 @@ export function ClusterDrawer({
   const reach = workload != null ? workload.reachability : podReachability('Unknown')
 
   return (
-    <aside className="runtime-map-drawer cluster-drawer" aria-label="Pod detail">
-      <header className="runtime-map-drawer__header">
+    <aside
+      className="bay-detail-drawer panel-elevated cluster-drawer"
+      role="dialog"
+      aria-label="Pod detail"
+    >
+      <header className="bay-detail-drawer-header">
         <div>
           <h3 className="m-0 text-sm font-semibold font-mono-tabular">{podName}</h3>
           <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -45,7 +49,7 @@ export function ClusterDrawer({
           Close
         </Button>
       </header>
-      <div className="runtime-map-drawer__body flex flex-col gap-4">
+      <div className="bay-detail-drawer-body flex flex-col gap-4">
         <section>
           <h4 className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Status

@@ -3,14 +3,16 @@ import { AuditPageLink } from '@/components/AuditPageLink'
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
 import { BayDetailDrawer } from '@/components/control-room/BayDetailDrawer'
 import { ControlRoomLiveStatus } from '@/components/control-room/ControlRoomLiveStatus'
+import { WorkTracksStrip } from '@/components/control-room/WorkTracksStrip'
 import {
   DualFlywheelPanel,
   type ControlRoomSelection,
 } from '@/components/control-room/DualFlywheelPanel'
 import { PipelineFlow } from '@/components/control-room/PipelineFlow'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { computeAllTracks } from '@/lib/briefing/workTracks'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 interface ControlRoomPageProps {
   context: OpsContextResponse | undefined
@@ -28,6 +30,7 @@ interface ControlRoomPageProps {
   onOpenDelivery: () => void
   onOpenCluster: () => void
   onOpenAudit: () => void
+  onOpenBriefing: () => void
 }
 
 export function ControlRoomPage({
@@ -46,8 +49,15 @@ export function ControlRoomPage({
   onOpenDelivery,
   onOpenCluster,
   onOpenAudit,
+  onOpenBriefing,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
+
+  const trackSummaries = useMemo(() => {
+    const clusterFailingPods = clusterSummary?.failing_pods
+    const clusterReach = clusterSummary?.reachability
+    return computeAllTracks(context, matrices, clusterFailingPods, clusterReach)
+  }, [context, matrices, clusterSummary])
 
   if (contextLoading || matrixLoading) {
     return <p className="text-[var(--muted-foreground)]">Loading control room…</p>
@@ -71,6 +81,8 @@ export function ControlRoomPage({
         onOpenCluster={onOpenCluster}
         onOpenDelivery={onOpenDelivery}
       />
+
+      <WorkTracksStrip tracks={trackSummaries} onOpenBriefing={onOpenBriefing} />
 
       <OpsSection
         title="Dual flywheel governance"

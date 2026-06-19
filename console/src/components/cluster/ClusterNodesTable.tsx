@@ -9,6 +9,8 @@ interface ClusterNodesTableProps {
   isLoading: boolean
   isFetching?: boolean
   metricsAvailable?: boolean
+  selectedNode?: string | null
+  onSelectNode?: (node: ClusterNode) => void
 }
 
 function pctCell(value: number | undefined): string {
@@ -21,6 +23,8 @@ export function ClusterNodesTable({
   isLoading,
   isFetching = false,
   metricsAvailable,
+  selectedNode = null,
+  onSelectNode,
 }: ClusterNodesTableProps) {
   return (
     <OpsSection
@@ -61,11 +65,32 @@ export function ClusterNodesTable({
             </DenseTableRow>
           ) : (
             nodes.map(node => (
-              <DenseTableRow key={node.name}>
-                <DenseTableCell className="font-mono-tabular">{node.name}</DenseTableCell>
+              <DenseTableRow
+                key={node.name}
+                className="cursor-pointer hover:bg-[var(--secondary)]/60"
+                onClick={onSelectNode != null ? () => onSelectNode(node) : undefined}
+              >
+                <DenseTableCell className="font-mono-tabular">
+                  <button
+                    type="button"
+                    className="text-left font-mono-tabular text-[var(--primary)] underline-offset-2 hover:underline"
+                    onClick={event => {
+                      event.stopPropagation()
+                      onSelectNode?.(node)
+                    }}
+                  >
+                    {node.name}
+                    {selectedNode === node.name ? ' ·' : ''}
+                  </button>
+                </DenseTableCell>
                 <DenseTableCell>
                   <StatusLamp value={node.reachability} kind="reach" />{' '}
                   <span className="font-mono-tabular">{node.status}</span>
+                  {node.unschedulable ? (
+                    <span className="ml-1 text-dense-caption text-[var(--muted-foreground)]">
+                      cordoned
+                    </span>
+                  ) : null}
                 </DenseTableCell>
                 <DenseTableCell>
                   <NodeArchLabel arch={node.architecture} />
