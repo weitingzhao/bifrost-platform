@@ -165,3 +165,36 @@ export function prodFailingTargetIds(matrices: MatrixResponse[]): string[] {
   if (!prod) return []
   return prod.targets.filter(t => t.reachability === 'fail').map(t => t.id)
 }
+
+export type StgDeliverStatus = {
+  ready: boolean
+  smokeOk: boolean
+  smokeFails: boolean
+  deliverSucceeded: boolean
+  reasons: string[]
+}
+
+/** STG deliver track — independent of prod matrix / D1 cutover (see DeliveryReleaseWorkflowPanel). */
+export function evaluateStgDeliverStatus(
+  stgSmoke?: { targets?: { id: string; reachability?: Reachability }[]; reachability?: Reachability },
+  lastDeliverSucceeded = false,
+): StgDeliverStatus {
+  const targets = stgSmoke?.targets ?? []
+  const apiTargets = targets.filter(t => t.id.startsWith('stg-api-'))
+  const feTarget = targets.find(t => t.id === 'stg-frontend')
+  const apiOk =
+    apiTargets.length > 0 &&
+    apiTargets.every(t => t.reachability === 'ok' || t.reachability === 'degraded')
+  const feOk = !feTarget || feTarget.reachability === 'ok' || feTarget.reachability === 'degraded'
+  const smokeOk = apiOk && feOk && targets.length > 0
+  const smokeFails = targets.some(t => t.reachability === 'fail')
+  const ready = smokeOk && lastDeliverSucceeded
+
+  const reasons: string[] = []
+  if (!lastDeliverSucceeded) reasons.push('No recent bifrost-deliver-stg success')
+  if (targets.length === 0) reasons.push('Stg smoke not configured')
+  else if (!smokeOk) reasons.push('Stg smoke incomplete')
+  if (smokeFails) reasons.push('Stg smoke has failing targets')
+
+  return { ready, smokeOk, smokeFails, deliverSucceeded: lastDeliverSucceeded, reasons }
+}

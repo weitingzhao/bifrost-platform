@@ -2,14 +2,14 @@ import { useState } from 'react'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import type { ClusterSummary, DeliveryPipelinesResponse, GitOpsAppsResponse, MatrixResponse, OpsContextResponse, StackAddonsResponse, StgSmokeResponse } from '@/api/types'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
+import { DeliveryReleaseWorkflowPanel } from '@/components/delivery/DeliveryReleaseWorkflowPanel'
 import { GitOpsProbePanel } from '@/components/delivery/GitOpsProbePanel'
 import { PipelineRunsPanel } from '@/components/delivery/PipelineRunsPanel'
 import { StgSmokePanel } from '@/components/delivery/StgSmokePanel'
 import { StackAddonsPanel } from '@/components/delivery/StackAddonsPanel'
 import { AuditPageLink } from '@/components/AuditPageLink'
-import { flywheelLabel } from '@/components/FocusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
+import { evaluatePromoteStatus, evaluateStgDeliverStatus } from '@/lib/control-room/matrixSummary'
 import {
   ciModeLabel,
   DELIVERY_STRATEGY_BULLETS,
@@ -72,6 +72,7 @@ export function DeliveryPage({
   }
 
   const promote = evaluatePromoteStatus(context, matrices)
+  const stgDeliver = evaluateStgDeliverStatus(stgSmoke)
   const lamp = promote.ready ? 'ok' : promote.blockedByDecision || promote.prodFails ? 'fail' : 'degraded'
   const ciMode = ciModeLabel(context.deployment.phase)
   const gitOpsPlanned = showGitOpsPlannedBadge(context.deployment)
@@ -110,6 +111,8 @@ export function DeliveryPage({
       <GitOpsProbePanel data={gitops} isLoading={gitopsLoading} errorMessage={gitopsError} />
 
       <StackAddonsPanel data={stack} isLoading={stackLoading} errorMessage={stackError} />
+
+      <DeliveryReleaseWorkflowPanel stgSmoke={stgSmoke} />
 
       <PipelineRunsPanel
         pipelines={pipelines}
@@ -152,11 +155,17 @@ export function DeliveryPage({
         className="coupling-gate-panel"
       >
         <p className="m-0 text-[var(--text-dense)] font-medium">
-          {promote.ready ? 'Promote ready (narrative)' : 'Promote blocked'}
+          {promote.ready ? 'Prod promote ready (narrative)' : 'Prod promote blocked'}
         </p>
         <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Flywheel primary: {flywheelLabel(context.focus.flywheel_primary)} · Both flywheels must pass
-          before production cutover.
+          STG track:{' '}
+          {stgDeliver.ready
+            ? 'deliver + smoke OK'
+            : stgDeliver.reasons.length > 0
+              ? stgDeliver.reasons.join(' · ')
+              : 'in progress'}
+          {' · '}
+          Prod track requires gate pass + prod matrix + D1 (Deploy Mainline).
         </p>
         {!promote.ready && promote.reasons.length > 0 && (
           <ul className="m-0 mt-2 list-disc px-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

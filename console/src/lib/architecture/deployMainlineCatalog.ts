@@ -22,8 +22,9 @@ export const MAINLINE_PHASES: MainlinePhase[] = [
   { seq: 1, phase: 'Local Prod Final', authority: 'This page', status: 'CLOSED (2026-06-04 Owner L4)' },
   { seq: 2, phase: '2C-B Linux Docker Prod (stability test)', authority: 'PHASE2C_SIGNOFF_MASTER.md §2C-B', status: 'Stability tested (D5); prod cutover pending migration plan' },
   { seq: 3, phase: 'K3s Phase 1 trial', authority: 'Ops Console → Architecture → K3s Architecture §10', status: 'In progress (Owner unlocked 2026-06-04; bootstrap CLOSED 2026-06-14)' },
-  { seq: 4, phase: 'Compose → K3s migration', authority: 'Ops Console → Architecture → Platform Roadmap §5–6', status: 'Pending K3s cluster ready + D1 decision' },
-  { seq: 5, phase: 'Phase 3 Legacy retirement', authority: 'PHASE2C_PROD_DEFERRED.md', status: 'Pending Prod full-stack validation' },
+  { seq: 4, phase: 'K3s STG v2 deliver (bifrost-deliver-stg)', authority: 'Ops Console → Program → Delivery (deliveryMainlineCatalog.ts)', status: 'Active — Tekton prepare/build/verify; prod cutover still D1-blocked' },
+  { seq: 5, phase: 'Compose → K3s migration', authority: 'Ops Console → Architecture → Platform Roadmap §5–6', status: 'Pending K3s cluster ready + D1 decision' },
+  { seq: 6, phase: 'Phase 3 Legacy retirement', authority: 'PHASE2C_PROD_DEFERRED.md', status: 'Pending Prod full-stack validation' },
 ]
 
 export const PHASE_L_CONTEXT = {

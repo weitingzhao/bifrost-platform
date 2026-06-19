@@ -215,6 +215,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName string) (cl
 	}
 	if pipelineName == "bifrost-deliver-stg" {
 		spec["taskRunSpecs"] = []map[string]any{
+			{"pipelineTaskName": "prepare", "serviceAccountName": "tekton-deliver"},
 			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
 			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
 		}
