@@ -38,6 +38,8 @@ type NodeView struct {
 	CPUAllocatable     string             `json:"cpu_allocatable,omitempty"`
 	MemoryAllocatable  string             `json:"memory_allocatable,omitempty"`
 	StorageAllocatable string             `json:"storage_allocatable,omitempty"`
+	ComputeManaged     bool               `json:"compute_managed,omitempty"`
+	Unschedulable      bool               `json:"unschedulable,omitempty"`
 	CPUUsagePercent    *float64           `json:"cpu_usage_percent,omitempty"`
 	MemoryUsagePercent *float64           `json:"memory_usage_percent,omitempty"`
 	CPUReachability    probe.Reachability `json:"cpu_reachability,omitempty"`

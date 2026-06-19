@@ -32,7 +32,7 @@ export type K3sNodeRow = {
 export const HARDWARE_NODES: K3sNodeRow[] = [
   { name: 'mini-pc-a', cpu: 'Ryzen 7 7735HS', ram: '24GB', os: 'Linux', batch: 'First', role: 'K3s Server ① · general services' },
   { name: 'mini-pc-b', cpu: 'Ryzen 7 7735HS', ram: '32GB', os: 'Linux', batch: 'First', role: 'K3s Server ② · database dedicated' },
-  { name: 'gpu-server', cpu: 'Ryzen 9 9500S', ram: '128GB', os: 'Linux', batch: 'First', role: 'K3s Agent · GPU workload node' },
+  { name: 'gpu-server', cpu: 'Ryzen 9 9500S', ram: '128GB', os: 'Linux', batch: 'First', role: 'K3s Agent · data warehouse · compute · GPU @ 192.168.10.60' },
   { name: 'mac-mini-1', cpu: 'Apple M4', ram: '16GB', os: 'macOS + UTM', batch: 'First', role: 'Host for ops-vm-ubt-01 Agent · dev/CI' },
   { name: 'mac-mini-2', cpu: 'Apple M4', ram: '16GB', os: 'macOS + UTM', batch: 'First', role: 'Host for ops-vm-ubt-02 Agent · monitor/CI' },
   { name: 'mini-pc-c', cpu: 'Ryzen 7 7735HS', ram: '32GB', os: 'Linux', batch: 'Second', role: 'K3s Server ③ · monitoring/CI (after Legacy retires)' },
@@ -48,9 +48,9 @@ export const CLUSTER_TOPOLOGY_ASCII = `
 │  API·Redis·Gitea      PG Primary·pgvector   Prometheus·Loki·Grafana            │
 │  ArgoCD·Traefik       Standby→mini-pc-a     Tekton runners                     │
 └─────────────────────────────────────────────────────────────────────────────────┘
-  gpu-server (4090·128GB)              mac-mini-1 / mac-mini-2 (M4·16GB ×2)
-  Agent workload=gpu                 Agent (UTM Ubuntu VM · .54 / .56)
-  Ollama·socket·celery               frontend·light CI·kubectl client
+  gpu-server (4090·128GB @ .60)        mac-mini-1 / mac-mini-2 (M4·16GB ×2)
+  Agent warehouse·compute·gpu          Agent (UTM Ubuntu VM · .54 / .56)
+  WOL eno1 · MinIO/OLAP·Ollama         frontend·light CI·kubectl client
 `.trim()
 
 export type PgPrincipleRow = { layer: string; content: string; note: string }
@@ -129,11 +129,11 @@ export const EXTERNAL_SENTINEL =
 export type NamespaceRow = { namespace: string; services: string; nodeBinding: string }
 
 export const NAMESPACE_ALLOCATION: NamespaceRow[] = [
-  { namespace: 'data', services: 'PostgreSQL Primary/Standby · Redis · MinIO', nodeBinding: 'mini-pc-b / mini-pc-a' },
+  { namespace: 'data', services: 'PostgreSQL · Redis (mini-pc) · Warehouse OLAP · MinIO (4090)', nodeBinding: 'mini-pc-b/a · gpu-server @ .60 (node-role=warehouse)' },
   { namespace: 'cicd', services: 'Gitea · ArgoCD · Tekton · Registry', nodeBinding: 'mini-pc-a' },
   { namespace: 'monitoring', services: 'Prometheus · Loki · Grafana · AlertManager', nodeBinding: 'mini-pc-c (second batch)' },
-  { namespace: 'ai', services: 'Ollama · Open-WebUI · AIOps webhook', nodeBinding: 'gpu-server / mini-pc-c' },
-  { namespace: 'bifrost', services: 'trade-api (×9) · worker · socket', nodeBinding: 'mini-pc-a/b · gpu-server' },
+  { namespace: 'ai', services: 'Ollama · Open-WebUI · AIOps webhook', nodeBinding: 'gpu-server @ 192.168.10.60 / mini-pc-c' },
+  { namespace: 'bifrost', services: 'trade-api (×9) · worker · socket', nodeBinding: 'mini-pc-a/b · ubt-k3s-01' },
   { namespace: 'bifrost', services: 'trade-frontend', nodeBinding: 'ops-vm-ubt-01 (mac-mini-1 UTM)' },
 ]
 
@@ -167,7 +167,7 @@ export const IMPLEMENTATION_PHASES: ImplementationPhase[] = [
     title: 'Stage 1 — K3s foundation',
     items: [
       'mini-pc-a Ubuntu 24.04 + K3s Server (single-node validation)',
-      'gpu-server K3s Agent + workload=gpu label',
+      'gpu-server K3s Agent @ 192.168.10.60 · node-role=warehouse · workload=gpu · WOL eno1',
       'DONE: Mac Mini ×2 UTM Ubuntu → Agent nodes P5b (ops-vm-ubt-01/.54, ops-vm-ubt-02/.56)',
       'mini-pc-b Ubuntu + K3s Server join (HA etcd pending mini-pc-c)',
       'CloudNativePG Operator + PostgreSQL StatefulSet + PVC verify',
@@ -237,7 +237,7 @@ export const STATUS_CHECKPOINTS: StatusCheckpointRow[] = [
     target: 'K3s Agent join scripts',
     planned: 'gpu-server / Mac Mini',
     actual: 'Mac agents Done',
-    notes: 'P5b: ops-vm-ubt-01/.54 + ops-vm-ubt-02/.56 Ready; P5a gpu-server pending',
+    notes: 'P5b: ops-vm-ubt-01/.54 + ops-vm-ubt-02/.56 Ready; P5a gpu-server @ .60 — make k3s-join-gpu-server',
   },
   {
     target: 'K3s HA (3 Server)',

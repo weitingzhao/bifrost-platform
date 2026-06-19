@@ -14,13 +14,13 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Ops',
     item: 'Control Room',
     status: 'done',
-    notes: 'Live KPI strip + matrix summary, dual flywheel bays, milestone spine, Agent focus dock',
+    notes: 'Live KPI strip + matrix summary, work tracks strip (build/migrate/operate), dual flywheel bays, milestone spine, Agent focus dock',
   },
   {
     area: 'Ops',
     item: 'Agent Briefing',
     status: 'done',
-    notes: 'Work-intent picker + session pack + Align Briefing meta pack',
+    notes: 'Work tracks + lane queues (build/migrate/operate), session pack, session delta, Align Briefing meta pack',
   },
   {
     area: 'Runtime',
@@ -32,7 +32,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Runtime',
     item: 'Cluster',
     status: 'partial',
-    notes: 'L0 summary/nodes/NS/workloads; namespace ideal arch + placement gap; Layer A metrics; P1 actuation',
+    notes: 'L0 summary/nodes/NS/workloads; P2 node lifecycle drawer (cordon/uncordon/drain/join); compute WOL; Layer A metrics; P1 workload actuation',
   },
   {
     area: 'Runtime',
@@ -56,7 +56,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Program',
     item: 'Promote',
     status: 'partial',
-    notes: 'Flywheel checklist + POST /promote/release-gate + gate checks table (S6); cutover still BLOCKED_ON D1',
+    notes: 'Flywheel checklist + POST /promote/release-gate + gate checks table (S6); prod cutover IN_PROGRESS — spine blocker prod-overlay',
   },
   {
     area: 'Catalog',
@@ -80,7 +80,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Platform API',
     item: 'L1 cluster actuation',
     status: 'partial',
-    notes: 'ensure namespaces, rollout restart, scale, delete pod — operator token required',
+    notes: 'ensure namespaces, rollout restart, scale, delete pod, cordon/uncordon/drain/join — operator/admin token + audit',
   },
   {
     area: 'Future',

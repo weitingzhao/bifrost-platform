@@ -273,9 +273,9 @@ export const HARDWARE_ROWS: HardwareRow[] = [
   },
   {
     id: 'gpu-server',
-    host: '(LAN TBD)',
-    roleCompose: 'Ollama dev trial only — no Prod Redis',
-    roleK3s: 'Agent workload=gpu · Ollama · socket · celery',
+    host: '192.168.10.60',
+    roleCompose: 'Data warehouse · Ollama dev trial — no Prod Redis',
+    roleK3s: 'Agent compute · warehouse · GPU/AI · Tekton heavy (WOL eno1)',
   },
   {
     id: 'win11-host',

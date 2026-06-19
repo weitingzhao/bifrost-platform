@@ -131,12 +131,18 @@ export const NODE_JOIN_STEPS: NodeJoinStep[] = [
   },
   {
     id: 'P5a',
-    title: 'P5a — gpu-server Agent (priority)',
-    description: 'Join gpu-server as Agent node with GPU workload label',
+    title: 'P5a — gpu-server Agent (4090 @ 192.168.10.60)',
+    description:
+      'Join gpu-server as compute agent: data warehouse · solution workloads · GPU/AI. WOL on eno1 (Marvell 10G).',
     command: [
+      '# From bifrost-trade-infra (interactive sudo on .73 and .60):',
+      'make k3s-join-gpu-server',
+      '',
+      '# Or manual:',
       'sudo K3S_URL=https://192.168.10.73:6443 K3S_TOKEN=<token> \\',
-      '  K3S_NODE_IP=<gpu-lan-ip> K3S_NODE_NAME=gpu-server \\',
-      '  K3S_NODE_LABELS=workload=gpu bash install-agent.sh',
+      '  K3S_NODE_IP=192.168.10.60 K3S_NODE_NAME=gpu-server \\',
+      '  K3S_NODE_LABELS=workload=gpu,node-role=warehouse,bifrost.io/host-id=gpu-server,bifrost.io/workload-pool=compute,bifrost.io/wol=enabled \\',
+      '  bash install-agent.sh',
     ].join('\n'),
   },
   {
@@ -169,6 +175,8 @@ export const NEXT_STAGES = [
   '1. `cicd` namespace: Gitea · Registry · Tekton · ArgoCD',
   '2. `data`: CloudNativePG (coexist with bare .80 PG, pending D2)',
   '3. `monitoring` namespace: kube-prometheus-stack (Layer B — via Platform P4, not ad-hoc shell)',
+  '4. gpu-server compute: make gpu-install-compute-stack (Ollama + MinIO scale-to-zero)',
+  '5. gpu-server power: make gpu-install-power-manager on bootstrap (WOL + idle poweroff)',
 ]
 
 export const COMPOSE_RELATION = [

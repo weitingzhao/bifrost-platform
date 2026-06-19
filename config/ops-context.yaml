@@ -206,13 +206,13 @@ tracks:
         status: done
       - id: p1-track-model
         label: "Work Track model (build/migrate/operate)"
-        status: in_progress
+        status: done
       - id: p2-node-lifecycle
         label: "Node join/drain via platform-api"
-        status: next
+        status: done
       - id: p2-cluster-wizard
         label: "Cluster UI wizard for node operations"
-        status: pending
+        status: in_progress
       - id: p3-gitops-execution
         label: "GitOps + CI execution (Argo/Tekton API)"
         status: in_progress

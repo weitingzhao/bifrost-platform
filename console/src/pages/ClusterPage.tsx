@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { Button } from '@bifrost/ui'
 import {
+  cordonNode,
   deletePod,
+  drainNode,
   ensureBifrostNamespaces,
   ensureMetricsServer,
   fetchCluster,
@@ -13,14 +15,21 @@ import {
   fetchClusterPlacement,
   fetchClusterObservability,
   fetchClusterWorkloads,
+  fetchJoinProfiles,
+  fetchNodePower,
   fetchPodLogs,
+  joinClusterNode,
+  powerOffComputeNode,
   rolloutRestartDeployment,
   scaleDeployment,
   syncClusterKubeconfig,
+  uncordonNode,
+  wakeComputeNode,
 } from '@/api/platform'
-import type { ClusterWorkload } from '@/api/types'
+import type { ClusterNode, ClusterWorkload, ComputeWorkloadStatus } from '@/api/types'
 import { AuditPageLink } from '@/components/AuditPageLink'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
 import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
@@ -58,6 +67,8 @@ export function ClusterPage({
   const [selectedNs, setSelectedNs] = useState<string | null>('bifrost-stg')
   const [selectedPod, setSelectedPod] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [selectedNode, setSelectedNode] = useState<ClusterNode | null>(null)
+  const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
@@ -129,6 +140,19 @@ export function ClusterPage({
     refetchInterval: 30_000,
   })
 
+  const joinProfilesQuery = useQuery({
+    queryKey: ['cluster', 'join-profiles'],
+    queryFn: fetchJoinProfiles,
+    refetchInterval: 60_000,
+  })
+
+  const nodePowerQuery = useQuery({
+    queryKey: ['cluster', 'node-power', selectedNode?.name],
+    queryFn: () => fetchNodePower(selectedNode?.name ?? ''),
+    enabled: nodeDrawerOpen && selectedNode?.compute_managed === true && selectedNode.name != null,
+    refetchInterval: 15_000,
+  })
+
   const syncMutation = useMutation({
     mutationFn: syncClusterKubeconfig,
     onSuccess: data => {
@@ -143,19 +167,19 @@ export function ClusterPage({
   const ensureMutation = useMutation({
     mutationFn: ensureBifrostNamespaces,
     onSuccess: data => handleActuationSuccess(data.message),
-    onError: (err: Error) => setActionError(err.message),
+    onError: handleActuationError,
   })
 
   const metricsServerMutation = useMutation({
     mutationFn: ensureMetricsServer,
     onSuccess: data => handleActuationSuccess(data.message),
-    onError: (err: Error) => setActionError(err.message),
+    onError: handleActuationError,
   })
 
   const restartMutation = useMutation({
     mutationFn: rolloutRestartDeployment,
     onSuccess: data => handleActuationSuccess(data.message),
-    onError: (err: Error) => setActionError(err.message),
+    onError: handleActuationError,
   })
 
   const scaleMutation = useMutation({
@@ -164,7 +188,7 @@ export function ClusterPage({
       setScaleState(null)
       handleActuationSuccess(data.message)
     },
-    onError: (err: Error) => setActionError(err.message),
+    onError: handleActuationError,
   })
 
   const deletePodMutation = useMutation({
@@ -174,7 +198,43 @@ export function ClusterPage({
       setSelectedPod(null)
       handleActuationSuccess(data.message)
     },
-    onError: (err: Error) => setActionError(err.message),
+    onError: handleActuationError,
+  })
+
+  const wakeNodeMutation = useMutation({
+    mutationFn: (nodeName: string) => wakeComputeNode(nodeName),
+    onSuccess: data => handleActuationSuccess(data.message),
+    onError: handleActuationError,
+  })
+
+  const powerOffNodeMutation = useMutation({
+    mutationFn: (nodeName: string) => powerOffComputeNode(nodeName),
+    onSuccess: data => handleActuationSuccess(data.message),
+    onError: handleActuationError,
+  })
+
+  const cordonNodeMutation = useMutation({
+    mutationFn: (nodeName: string) => cordonNode(nodeName),
+    onSuccess: data => handleActuationSuccess(data.message),
+    onError: handleActuationError,
+  })
+
+  const uncordonNodeMutation = useMutation({
+    mutationFn: (nodeName: string) => uncordonNode(nodeName),
+    onSuccess: data => handleActuationSuccess(data.message),
+    onError: handleActuationError,
+  })
+
+  const drainNodeMutation = useMutation({
+    mutationFn: (nodeName: string) => drainNode(nodeName),
+    onSuccess: data => handleActuationSuccess(data.message),
+    onError: handleActuationError,
+  })
+
+  const joinNodeMutation = useMutation({
+    mutationFn: (profile: string) => joinClusterNode(profile),
+    onSuccess: data => handleActuationSuccess(data.message),
+    onError: handleActuationError,
   })
 
   const selectedWorkload = useMemo(() => {
@@ -213,15 +273,107 @@ export function ClusterPage({
     setSyncError(message)
   }
 
+  function handleActuationError(err: Error) {
+    setConfirmState(null)
+    setActionError(err.message)
+  }
+
   function handleSelectNs(name: string) {
     setSelectedNs(name)
     setSelectedPod(null)
     setDrawerOpen(false)
+    setDrawerOpen(false)
+    setNodeDrawerOpen(false)
+    setSelectedNode(null)
   }
 
   function handleSelectPod(name: string) {
     setSelectedPod(name)
     setDrawerOpen(true)
+    setNodeDrawerOpen(false)
+    setSelectedNode(null)
+  }
+
+  function handleSelectNode(node: ClusterNode) {
+    setSelectedNode(node)
+    setNodeDrawerOpen(true)
+    setDrawerOpen(false)
+    setSelectedPod(null)
+  }
+
+  function handleWakeComputeNode() {
+    if (selectedNode == null) return
+    requireConfirm({
+      title: 'Wake compute node',
+      message: `Send Wake-on-LAN to ${selectedNode.name}. The node should appear Ready within a few minutes.`,
+      confirmLabel: 'Wake node',
+      action: () => wakeNodeMutation.mutate(selectedNode.name),
+    })
+  }
+
+  function handlePowerOffComputeNode() {
+    if (selectedNode == null) return
+    requireConfirm({
+      title: 'Power off compute node',
+      message: `Drain ${selectedNode.name} and send systemctl poweroff via SSH. Running workloads will be evicted.`,
+      confirmLabel: 'Power off',
+      action: () => powerOffNodeMutation.mutate(selectedNode.name),
+    })
+  }
+
+  function handleCordonNode() {
+    if (selectedNode == null) return
+    requireConfirm({
+      title: 'Cordon node',
+      message: `Prevent new pods from scheduling on ${selectedNode.name}. Existing pods keep running.`,
+      confirmLabel: 'Cordon',
+      action: () => cordonNodeMutation.mutate(selectedNode.name),
+    })
+  }
+
+  function handleUncordonNode() {
+    if (selectedNode == null) return
+    requireConfirm({
+      title: 'Uncordon node',
+      message: `Re-enable scheduling on ${selectedNode.name}.`,
+      confirmLabel: 'Uncordon',
+      action: () => uncordonNodeMutation.mutate(selectedNode.name),
+    })
+  }
+
+  function handleDrainNode() {
+    if (selectedNode == null) return
+    requireConfirm({
+      title: 'Drain node',
+      message: `Evict user workloads from ${selectedNode.name}. DaemonSets remain. This does not shut down the machine.`,
+      confirmLabel: 'Drain node',
+      action: () => drainNodeMutation.mutate(selectedNode.name),
+    })
+  }
+
+  function handleJoinNode(profileId: string, label: string) {
+    requireConfirm({
+      title: 'Join K3s node',
+      message: `Run join profile "${label}" via infra script. Requires K3S_TOKEN or ~/.bifrost-k3s-node-token and PLATFORM_NODE_JOIN_ENABLED=1 on platform-api.`,
+      confirmLabel: 'Run join',
+      action: () => joinNodeMutation.mutate(profileId),
+    })
+  }
+
+  function handleScaleComputeWorkload(workload: ComputeWorkloadStatus, replicas: number) {
+    const verb = replicas === 0 ? 'Scale down' : 'Scale up'
+    requireConfirm({
+      title: `${verb} ${workload.label}`,
+      message: `Set ${workload.namespace}/${workload.name} replicas to ${replicas}.`,
+      confirmLabel: `${verb}`,
+      action: () =>
+        scaleMutation.mutate({
+          namespace: workload.namespace,
+          kind: 'Deployment',
+          name: workload.name,
+          replicas,
+        }),
+    })
   }
 
   function requireConfirm(next: Omit<ConfirmState, 'open'>) {
@@ -277,7 +429,13 @@ export function ClusterPage({
       metricsServerMutation.isPending ||
       restartMutation.isPending ||
       scaleMutation.isPending ||
-      deletePodMutation.isPending
+      deletePodMutation.isPending ||
+      wakeNodeMutation.isPending ||
+      powerOffNodeMutation.isPending ||
+      cordonNodeMutation.isPending ||
+      uncordonNodeMutation.isPending ||
+      drainNodeMutation.isPending ||
+      joinNodeMutation.isPending
     )
   }
 
@@ -289,7 +447,7 @@ export function ClusterPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              K3s cluster · bifrost-bootstrap · P1 actuation
+              K3s cluster · bifrost-bootstrap · P2 node lifecycle
             </p>
             <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               Auto-refresh every 30s
@@ -367,6 +525,31 @@ export function ClusterPage({
             </Button>
           </div>
         </div>
+        {joinProfilesQuery.data != null && joinProfilesQuery.data.profiles.length > 0 && (
+          <div className="mt-3 border-t border-[var(--border)] pt-3">
+            <p className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Node join (admin)
+            </p>
+            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              {joinProfilesQuery.data.enabled
+                ? 'Run a configured K3s join profile from bifrost-trade-infra scripts.'
+                : (joinProfilesQuery.data.detail ?? 'Join disabled on platform-api.')}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {joinProfilesQuery.data.profiles.map(profile => (
+                <Button
+                  key={profile.id}
+                  variant="outline"
+                  size="sm"
+                  disabled={!canAdmin || !joinProfilesQuery.data?.enabled || joinNodeMutation.isPending}
+                  onClick={() => handleJoinNode(profile.id, profile.label)}
+                >
+                  Join {profile.id}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
         {!canOperate && !capsLoading && (
           <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Dev default token: <code>platform-operator-dev</code> (operator) or{' '}
@@ -406,6 +589,8 @@ cd ../bifrost-platform && make start`}
         isLoading={nodesQuery.isLoading}
         isFetching={nodesQuery.isFetching}
         metricsAvailable={metricsQuery.data?.metrics_server_available}
+        selectedNode={selectedNode?.name ?? null}
+        onSelectNode={handleSelectNode}
       />
 
       <ClusterWorkloadsExplorer
@@ -452,6 +637,29 @@ cd ../bifrost-platform && make start`}
           setDrawerOpen(false)
           setSelectedPod(null)
         }}
+      />
+
+      <ClusterNodeDrawer
+        open={nodeDrawerOpen}
+        node={selectedNode}
+        power={nodePowerQuery.data}
+        powerLoading={nodePowerQuery.isLoading}
+        powerError={nodePowerQuery.error instanceof Error ? nodePowerQuery.error.message : null}
+        canOperate={canOperate}
+        canAdmin={canAdmin}
+        actionPending={actionPending()}
+        onClose={() => {
+          setNodeDrawerOpen(false)
+          setSelectedNode(null)
+        }}
+        onCordon={handleCordonNode}
+        onUncordon={handleUncordonNode}
+        onDrain={handleDrainNode}
+        onWake={selectedNode?.compute_managed ? handleWakeComputeNode : undefined}
+        onPowerOff={selectedNode?.compute_managed ? handlePowerOffComputeNode : undefined}
+        onScaleWorkload={
+          selectedNode?.compute_managed ? handleScaleComputeWorkload : undefined
+        }
       />
 
       <ConfirmDialog

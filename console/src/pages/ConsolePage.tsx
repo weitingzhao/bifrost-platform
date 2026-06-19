@@ -291,6 +291,7 @@ export function ConsolePage() {
   const openCluster = () => setViewTab('cluster')
   const openPlacement = () => setViewTab('placement')
   const openAudit = () => setViewTab('audit')
+  const openBriefing = () => setViewTab('briefing')
   const openBlueprint = () => setViewTab('blueprint')
   const openStandards = () => setViewTab('platform-standards')
   const openEnvironments = () => setViewTab('environments')
@@ -440,6 +441,7 @@ export function ConsolePage() {
                 onOpenDelivery={openDelivery}
                 onOpenCluster={openCluster}
                 onOpenAudit={openAudit}
+                onOpenBriefing={openBriefing}
               />
             </Suspense>
           </>

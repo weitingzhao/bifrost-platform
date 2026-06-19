@@ -44,6 +44,31 @@ type StgSmokeConfig struct {
 	APIDomains    []string `yaml:"api_domains" json:"api_domains"`
 }
 
+// ComputeWorkloadSpec — managed deployment on a compute node (gpu-server).
+type ComputeWorkloadSpec struct {
+	Namespace  string `yaml:"namespace" json:"namespace"`
+	Deployment string `yaml:"deployment" json:"deployment"`
+	Label      string `yaml:"label" json:"label"`
+}
+
+// JoinProfileSpec — K3s agent join script profile (P2 actuation).
+type JoinProfileSpec struct {
+	ID           string `yaml:"id" json:"id"`
+	Label        string `yaml:"label" json:"label"`
+	Script       string `yaml:"script" json:"script"`
+	ExpectedNode string `yaml:"expected_node" json:"expected_node,omitempty"`
+}
+
+// ComputeNodeSpec — on-demand compute node (WOL + poweroff actuation).
+type ComputeNodeSpec struct {
+	Name             string                `yaml:"name" json:"name"`
+	SSHHost          string                `yaml:"ssh_host" json:"ssh_host"`
+	WolMAC           string                `yaml:"wol_mac" json:"wol_mac"`
+	WolSSHHost       string                `yaml:"wol_ssh_host" json:"wol_ssh_host"`
+	PowerManagerUnit string                `yaml:"power_manager_unit" json:"power_manager_unit"`
+	Workloads        []ComputeWorkloadSpec `yaml:"workloads" json:"workloads"`
+}
+
 // DefaultStgAPIDomains — FastAPI domains behind nginx /api/{domain}/.
 func DefaultStgAPIDomains() []string {
 	return []string{
@@ -61,6 +86,8 @@ type ClusterEntry struct {
 	SSHHost             string             `yaml:"ssh_host" json:"ssh_host"`
 	NodeIP              string             `yaml:"node_ip" json:"node_ip"`
 	BifrostNamespaces   []string           `yaml:"bifrost_namespaces" json:"bifrost_namespaces"`
+	ComputeNodes        []ComputeNodeSpec  `yaml:"compute_nodes" json:"compute_nodes"`
+	JoinProfiles        []JoinProfileSpec  `yaml:"join_profiles" json:"join_profiles"`
 	MonitoringNS        string             `yaml:"monitoring_namespace" json:"monitoring_namespace"`
 	ObservabilityURLs   ObservabilityURLs  `yaml:"observability_urls" json:"observability_urls"`
 	GitOps              GitOpsConfig       `yaml:"gitops" json:"gitops"`
@@ -270,6 +297,19 @@ func (e *ClusterEntry) ResolvedStgFrontendURL() string {
 		return strings.TrimRight(gw, "/") + "/"
 	}
 	return ""
+}
+
+func (e *ClusterEntry) ComputeNode(name string) *ComputeNodeSpec {
+	if e == nil || name == "" {
+		return nil
+	}
+	for i := range e.ComputeNodes {
+		if e.ComputeNodes[i].Name == name {
+			cp := e.ComputeNodes[i]
+			return &cp
+		}
+	}
+	return nil
 }
 
 func expandHome(path string) string {
