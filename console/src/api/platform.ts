@@ -19,11 +19,14 @@ import type {
   DeliveryPipelinePreflightResponse,
   DeliveryRunLogsResponse,
   DeliveryStartRunResponse,
+  PipelineRunStepsResponse,
   SupplyChainActuationResponse,
   SupplyChainResponse,
   StgSmokeResponse,
   ReleaseGateResponse,
   RunReleaseGateResponse,
+  TierBSignoffResponse,
+  TierBStatusResponse,
   EnvironmentSummary,
   MatrixResponse,
   OpsContextResponse,
@@ -162,15 +165,34 @@ export async function fetchStgSmoke(): Promise<StgSmokeResponse> {
   return r.json() as Promise<StgSmokeResponse>
 }
 
-export async function fetchReleaseGate(): Promise<ReleaseGateResponse> {
-  const r = await fetch('/api/v1/promote/release-gate')
+export type ReleaseGateTier = 'stg' | 'prod'
+
+export async function fetchReleaseGate(tier: ReleaseGateTier = 'prod'): Promise<ReleaseGateResponse> {
+  const r = await fetch(`/api/v1/promote/release-gate?tier=${tier}`)
   if (!r.ok) throw new Error(`release gate: HTTP ${r.status}`)
   return r.json() as Promise<ReleaseGateResponse>
 }
 
-export async function runReleaseGate(): Promise<RunReleaseGateResponse> {
-  const r = await authedFetch('release gate', '/api/v1/promote/release-gate', { method: 'POST' })
+export async function runReleaseGate(tier: ReleaseGateTier = 'prod'): Promise<RunReleaseGateResponse> {
+  const r = await authedFetch('release gate', `/api/v1/promote/release-gate?tier=${tier}`, {
+    method: 'POST',
+  })
   return r.json() as Promise<RunReleaseGateResponse>
+}
+
+export async function fetchTierBStatus(): Promise<TierBStatusResponse> {
+  const r = await fetch('/api/v1/promote/tier-b')
+  if (!r.ok) throw new Error(`tier b: HTTP ${r.status}`)
+  return r.json() as Promise<TierBStatusResponse>
+}
+
+export async function signTierB(notes = ''): Promise<TierBSignoffResponse> {
+  const r = await authedFetch('tier b signoff', '/api/v1/promote/tier-b/signoff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
+  })
+  return r.json() as Promise<TierBSignoffResponse>
 }
 
 export async function fetchPipelineRuns(name: string): Promise<DeliveryPipelineRunsResponse> {
@@ -225,6 +247,16 @@ export async function fetchPipelineRunLogs(
   const r = await fetch(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/logs${qs}`)
   if (!r.ok) throw new Error(`pipeline logs: HTTP ${r.status}`)
   return r.json() as Promise<DeliveryRunLogsResponse>
+}
+
+export async function fetchPipelineRunSteps(
+  runId: string,
+  namespace?: string,
+): Promise<PipelineRunStepsResponse> {
+  const qs = namespace != null && namespace !== '' ? `?ns=${encodeURIComponent(namespace)}` : ''
+  const r = await fetch(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/steps${qs}`)
+  if (!r.ok) throw new Error(`pipeline steps: HTTP ${r.status}`)
+  return r.json() as Promise<PipelineRunStepsResponse>
 }
 
 export async function deletePipelineRun(

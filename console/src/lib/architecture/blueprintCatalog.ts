@@ -81,17 +81,17 @@ export type ConsoleViewRow = {
 }
 
 export const CONSOLE_VIEWS: ConsoleViewRow[] = [
-  { view: 'Agent Briefing', plane: 'Governance', purpose: 'New-session entry — work-intent picker, UI progress, live snapshot, full LLM briefing pack' },
-  { view: 'Control Room', plane: 'Governance', purpose: 'Dual flywheel bays, program milestone spine, Agent focus dock' },
-  { view: 'Delivery', plane: 'PLAN + LIVE', purpose: 'CI/CD dual track — near-term Mac runner vs target GitOps; coupling gate summary' },
-  { view: 'Runtime Map', plane: 'LIVE + PLAN', purpose: 'Unified runtime — hardware topology + SCOPE stack + matrix probes + gap analysis' },
-  { view: 'Cluster', plane: 'LIVE', purpose: 'K3s L0 probe — nodes, namespaces, workloads via platform-api + local kubeconfig' },
-  { view: 'Pulse', plane: 'LIVE + focus', purpose: 'Table dashboard — matrix summary + spine headline + cluster KPI' },
-  { view: 'Milestones', plane: 'TRACK + PLAN', purpose: 'Milestones, decisions D1–Dn, north star, roadmap (ops-context spine)' },
-  { view: 'Promote', plane: 'Coupling', purpose: 'Read-only release readiness (flywheel A + B)' },
-  { view: 'Architecture', plane: 'PLAN static', purpose: 'Blueprint, Environments, Platform Roadmap, K3s Architecture, K3s Bootstrap — Copy Prompt for LLM' },
-  { view: 'Deploy Mainline', plane: 'TRACK', purpose: 'Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain' },
-  { view: 'Tools', plane: 'B', purpose: 'Server console (SSH/WebSocket)' },
+  { view: 'Agent Briefing', plane: 'Observe', purpose: 'New-session entry — work-intent picker, UI progress, live snapshot, full LLM briefing pack' },
+  { view: 'Control Room', plane: 'Observe', purpose: 'Dual flywheel bays, program milestone spine, Agent focus dock' },
+  { view: 'Delivery', plane: 'Operate', purpose: 'CI/CD actuation — Operate / Observe / Blueprint tabs; coupling gate summary' },
+  { view: 'Runtime Map', plane: 'Observe', purpose: 'Unified runtime — hardware topology + SCOPE stack + matrix probes + gap analysis' },
+  { view: 'Cluster', plane: 'Operate', purpose: 'K3s L0 probe + L1 namespace ensure — nodes, namespaces, workloads via platform-api' },
+  { view: 'Pulse', plane: 'Observe', purpose: 'Table dashboard — matrix summary + spine headline + cluster KPI' },
+  { view: 'Milestones', plane: 'Architecture', purpose: 'Milestones, decisions D1–Dn, north star, roadmap (ops-context spine)' },
+  { view: 'Promote', plane: 'Operate', purpose: 'Read-only release readiness (flywheel A + B)' },
+  { view: 'Deploy Mainline', plane: 'Operate', purpose: 'Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain' },
+  { view: 'Architecture catalogs', plane: 'Architecture', purpose: 'Blueprint, Environments, Platform Roadmap, K3s Architecture, K3s Bootstrap, Standards — Copy Prompt for LLM' },
+  { view: 'Server Console', plane: 'Operate', purpose: 'SSH/WebSocket server console (Tools)' },
 ]
 
 export type AuthorizationLevel = {

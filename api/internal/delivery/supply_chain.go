@@ -10,14 +10,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
-)
-
-var (
-	taskRunGVR = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "taskruns"}
 )
 
 var dockerfileConfigMapNames = []string{
@@ -155,6 +150,35 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 	return out
 }
 
+// LastDeliverStgSuccess returns the most recent succeeded bifrost-deliver-stg PipelineRun, if any.
+func (s *Service) LastDeliverStgSuccess(ctx context.Context) *PipelineRunView {
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return nil
+	}
+	ns := s.PipelinesNamespace()
+	runs, listErr := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
+		LabelSelector: "tekton.dev/pipeline=bifrost-deliver-stg",
+	})
+	if listErr != nil || len(runs.Items) == 0 {
+		return nil
+	}
+	var views []PipelineRunView
+	for _, item := range runs.Items {
+		views = append(views, pipelineRunFromUnstructured(item, "bifrost-deliver-stg"))
+	}
+	sort.Slice(views, func(i, j int) bool {
+		return pipelineRunStartedAt(views[i]) > pipelineRunStartedAt(views[j])
+	})
+	for _, v := range views {
+		if isPipelineRunSucceededView(v) {
+			succ := v
+			return &succ
+		}
+	}
+	return nil
+}
+
 func dockerfileCMFrom(cm *corev1.ConfigMap) DockerfileConfigMapView {
 	keys := make([]string, 0, len(cm.Data))
 	for k := range cm.Data {
@@ -264,7 +288,9 @@ func (s *Service) createSupplyChainTaskRun(
 	}
 	spec := map[string]any{
 		"taskRef": map[string]any{"name": taskName},
-		"taskRunTemplate": amd64CITaskRunTemplate(),
+	}
+	for k, v := range amd64CITaskRunTemplate() {
+		spec[k] = v
 	}
 	if len(specParams) > 0 {
 		spec["params"] = specParams

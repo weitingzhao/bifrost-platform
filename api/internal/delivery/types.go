@@ -127,3 +127,29 @@ type StartPipelineRunRequest struct {
 type RefreshDockerfileRequest struct {
 	Revision string `json:"revision"`
 }
+
+type PipelinePhaseView struct {
+	ID     string `json:"id"`
+	Label  string `json:"label"`
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
+type PipelineTaskRunView struct {
+	PipelineTask string `json:"pipeline_task"`
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	Reason       string `json:"reason,omitempty"`
+}
+
+type PipelineRunStepsResponse struct {
+	ClusterID    string                `json:"cluster_id"`
+	Namespace    string                `json:"namespace"`
+	RunName      string                `json:"run_name"`
+	Pipeline     string                `json:"pipeline"`
+	Reachability probe.Reachability    `json:"reachability"`
+	Detail       string                `json:"detail"`
+	Phases       []PipelinePhaseView   `json:"phases"`
+	Tasks        []PipelineTaskRunView `json:"tasks,omitempty"`
+	GeneratedAt  time.Time             `json:"generated_at"`
+}

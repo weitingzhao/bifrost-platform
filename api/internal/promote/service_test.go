@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opscontext"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
@@ -42,8 +43,23 @@ func TestOverlayContext(t *testing.T) {
 
 func TestNarrativeBlockersGateFail(t *testing.T) {
 	rec := ReleaseGateRecord{Result: "fail"}
-	blockers := narrativeBlockers(nil, rec)
+	blockers := narrativeBlockers(GateTierProd, nil, rec)
 	if len(blockers) != 1 || blockers[0] != "Release gate checks failed" {
 		t.Fatalf("unexpected blockers: %v", blockers)
+	}
+}
+
+func TestNarrativeBlockersStgSkipsCutover(t *testing.T) {
+	rec := ReleaseGateRecord{Result: "pass"}
+	cfg := &config.Config{
+		OpsContext: &opscontext.File{
+			Milestones: []opscontext.Milestone{
+				{ID: "2c-b-prod-cutover", Status: "BLOCKED_ON", Blocker: "decision:D1"},
+			},
+		},
+	}
+	blockers := narrativeBlockers(GateTierStg, cfg, rec)
+	if len(blockers) != 0 {
+		t.Fatalf("stg gate should not include cutover blockers: %v", blockers)
 	}
 }

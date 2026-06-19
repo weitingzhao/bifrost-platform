@@ -5,9 +5,11 @@ import {
   Boxes,
   ClipboardList,
   Container,
+  Eye,
   FileCode2,
   Gauge,
   GitBranch,
+  History,
   Map,
   MapPinned,
   Milestone,
@@ -18,65 +20,120 @@ import {
   Server,
   Shield,
   Terminal,
-  History,
   Workflow,
+  Zap,
 } from 'lucide-react'
 
+/**
+ * Ops Console sidebar — three top-level planes (mirrors Delivery page Operate / Observe / Blueprint).
+ *
+ * | Plane        | Intent                                      |
+ * |--------------|---------------------------------------------|
+ * | Operate      | L1/L2 actuation — release, cluster, tools   |
+ * | Observe      | L0 probes — live status, audit, briefing    |
+ * | Architecture | PLAN static — governance, K3s, standards    |
+ */
 export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
   {
-    label: 'Ops',
-    icon: Activity,
+    label: 'Operate',
+    icon: Zap,
     defaultOpen: true,
-    items: [
-      { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
-      { id: 'control-room', label: 'Control Room', icon: Gauge },
-      { id: 'pulse', label: 'Pulse', icon: Activity },
-      { id: 'audit', label: 'Audit', icon: History },
+    subGroups: [
+      {
+        label: 'Release',
+        items: [
+          { id: 'delivery', label: 'Delivery', icon: Workflow },
+          { id: 'promote', label: 'Promote', icon: Rocket },
+          { id: 'deploy-mainline', label: 'Deploy Mainline', icon: GitBranch },
+        ],
+      },
+      {
+        label: 'Cluster',
+        items: [
+          { id: 'cluster', label: 'Cluster', icon: Server },
+          { id: 'placement', label: 'Placement', icon: Network },
+          { id: 'console', label: 'Server Console', icon: Terminal },
+        ],
+      },
     ],
   },
   {
-    label: 'Runtime',
-    icon: Server,
-    items: [
-      { id: 'runtime-map', label: 'Runtime Map', icon: Map },
-      { id: 'cluster', label: 'Cluster', icon: Server },
-      { id: 'placement', label: 'Placement', icon: Network },
-    ],
-  },
-  {
-    label: 'Program',
-    icon: Milestone,
-    items: [
-      { id: 'delivery', label: 'Delivery', icon: Workflow },
-      { id: 'program', label: 'Milestones', icon: Milestone },
-      { id: 'promote', label: 'Promote', icon: Rocket },
-      { id: 'deploy-mainline', label: 'Deploy Mainline', icon: GitBranch },
+    label: 'Observe',
+    icon: Eye,
+    subGroups: [
+      {
+        label: 'Overview',
+        items: [
+          { id: 'control-room', label: 'Control Room', icon: Gauge },
+          { id: 'pulse', label: 'Pulse', icon: Activity },
+          { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
+        ],
+      },
+      {
+        label: 'Runtime',
+        items: [
+          { id: 'runtime-map', label: 'Runtime Map', icon: Map },
+          { id: 'audit', label: 'Audit', icon: History },
+        ],
+      },
     ],
   },
   {
     label: 'Architecture',
     icon: Boxes,
-    items: [
-      { id: 'blueprint', label: 'Blueprint', icon: Boxes },
-      { id: 'environments', label: 'Environments', icon: BookOpen },
-      { id: 'roadmap', label: 'Platform Roadmap', icon: MapPinned },
-      { id: 'k3s-architecture', label: 'K3s Architecture', icon: Container },
-      { id: 'k3s-bootstrap', label: 'K3s Bootstrap', icon: PlugZap },
+    subGroups: [
+      {
+        label: 'Governance',
+        items: [
+          { id: 'blueprint', label: 'Blueprint', icon: Boxes },
+          { id: 'program', label: 'Milestones', icon: Milestone },
+          { id: 'environments', label: 'Environments', icon: BookOpen },
+          { id: 'roadmap', label: 'Platform Roadmap', icon: MapPinned },
+        ],
+      },
+      {
+        label: 'K3s',
+        items: [
+          { id: 'k3s-architecture', label: 'K3s Architecture', icon: Container },
+          { id: 'k3s-bootstrap', label: 'K3s Bootstrap', icon: PlugZap },
+        ],
+      },
+      {
+        label: 'Standards',
+        items: [
+          { id: 'platform-standards', label: 'Platform', icon: Shield },
+          { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
+          { id: 'design-system', label: 'Design System', icon: Ruler },
+        ],
+      },
     ],
-  },
-  {
-    label: 'Standards',
-    icon: Ruler,
-    items: [
-      { id: 'platform-standards', label: 'Platform', icon: Shield },
-      { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
-      { id: 'design-system', label: 'Design System', icon: Ruler },
-    ],
-  },
-  {
-    label: 'Tools',
-    icon: Terminal,
-    dividerBefore: true,
-    items: [{ id: 'console', label: 'Server Console', icon: Terminal }],
   },
 ]
+
+/** Map view tab id → sidebar plane (for headers, briefing packs, catalog cross-refs). */
+export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'Architecture'> = {
+  delivery: 'Operate',
+  promote: 'Operate',
+  'deploy-mainline': 'Operate',
+  cluster: 'Operate',
+  placement: 'Operate',
+  console: 'Operate',
+  'control-room': 'Observe',
+  pulse: 'Observe',
+  briefing: 'Observe',
+  'runtime-map': 'Observe',
+  audit: 'Observe',
+  blueprint: 'Architecture',
+  program: 'Architecture',
+  environments: 'Architecture',
+  roadmap: 'Architecture',
+  'k3s-architecture': 'Architecture',
+  'k3s-bootstrap': 'Architecture',
+  'platform-standards': 'Architecture',
+  'agent-protocol': 'Architecture',
+  'design-system': 'Architecture',
+}
+
+export function consoleNavPlane(tabId: string): 'Operate' | 'Observe' | 'Architecture' | undefined {
+  return CONSOLE_NAV_PLANE_BY_TAB[tabId]
+}

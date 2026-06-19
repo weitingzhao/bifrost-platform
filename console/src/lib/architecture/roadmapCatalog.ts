@@ -208,7 +208,7 @@ export const RELATED_DOCS: RelatedDocRow[] = [
   { topic: 'AI-native ops north star', authority: 'Ops Console → Architecture → Blueprint § AI Native Platform (blueprintCatalog.ts)' },
   { topic: 'K3s target topology', authority: 'Ops Console → Architecture → K3s Architecture (k3sArchitectureCatalog.ts)' },
   { topic: 'K3s bootstrap runbook', authority: 'Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts)' },
-  { topic: 'Deploy mainline', authority: 'Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)' },
+  { topic: 'Deploy mainline', authority: 'Ops Console → Operate → Deploy Mainline (deployMainlineCatalog.ts)' },
   { topic: '2C-B runbook / sign-off', authority: 'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md' },
   { topic: 'Code migration progress', authority: 'bifrost-trade-infra/docs/MIGRATION_TRACKING.md' },
   { topic: 'Docker build / rebuild', authority: 'bifrost-trade-infra/docs/DOCKER_BUILD.md' },

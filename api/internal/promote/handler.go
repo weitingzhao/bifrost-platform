@@ -23,13 +23,18 @@ func (h *Handler) Store() *Store {
 	return h.store
 }
 
+func (h *Handler) tierFromRequest(r *http.Request) GateTier {
+	return ParseGateTier(r.URL.Query().Get("tier"))
+}
+
 func (h *Handler) HandleGetReleaseGate(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.svc.LastGate(r.Context()))
+	writeJSON(w, http.StatusOK, h.svc.LastGate(r.Context(), h.tierFromRequest(r)))
 }
 
 func (h *Handler) HandleRunReleaseGate(w http.ResponseWriter, r *http.Request) {
+	tier := h.tierFromRequest(r)
 	principal := actuation.PrincipalFromContext(r.Context())
-	resp, err := h.svc.RunReleaseGate(r.Context(), principal.Name)
+	resp, err := h.svc.RunReleaseGate(r.Context(), tier, principal.Name)
 	status := "ok"
 	if err != nil {
 		status = "failed"
@@ -49,11 +54,44 @@ func (h *Handler) HandleRunReleaseGate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	code := http.StatusOK
-	if !resp.OK {
-		code = http.StatusOK // gate ran; result may be fail
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleGetTierB(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.TierBStatus(r.Context()))
+}
+
+type tierBSignoffRequest struct {
+	Notes string `json:"notes"`
+}
+
+func (h *Handler) HandleSignTierB(w http.ResponseWriter, r *http.Request) {
+	var req tierBSignoffRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
 	}
-	writeJSON(w, code, resp)
+	principal := actuation.PrincipalFromContext(r.Context())
+	resp, err := h.svc.SignTierB(r.Context(), req.Notes, principal.Name)
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		msg := resp.Message
+		if err != nil {
+			msg = err.Error()
+		}
+		h.audit.Record(r, resp.Action, resp.Target, status, msg)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok":      false,
+			"action":  "promote.tier-b-signoff",
+			"message": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

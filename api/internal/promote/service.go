@@ -42,23 +42,30 @@ func filepathDir(p string) string {
 	return filepath.Dir(p)
 }
 
-func (s *Service) LastGate(ctx context.Context) ReleaseGateResponse {
+func (s *Service) LastGate(ctx context.Context, tier GateTier) ReleaseGateResponse {
 	now := time.Now().UTC()
-	rec, err := s.store.Load()
+	rec, err := s.store.LoadTier(tier)
 	if err != nil || rec == nil {
 		return ReleaseGateResponse{
+			Tier:         tier,
 			Result:       "",
 			Reachability: probe.ReachUnknown,
-			Detail:       "No release gate recorded yet",
+			Detail:       fmt.Sprintf("No %s release gate recorded yet", tier),
 			GeneratedAt:  now,
 		}
 	}
-	return s.responseFromRecord(ctx, *rec, now)
+	return s.responseFromRecord(ctx, tier, *rec, now)
 }
 
-func (s *Service) RunReleaseGate(ctx context.Context, triggeredBy string) (RunGateResponse, error) {
+func (s *Service) RunReleaseGate(ctx context.Context, tier GateTier, triggeredBy string) (RunGateResponse, error) {
 	now := time.Now().UTC()
-	checks := s.collectChecks(ctx)
+	var checks []GateCheck
+	switch tier {
+	case GateTierStg:
+		checks = s.collectStgChecks(ctx)
+	default:
+		checks = s.collectProdChecks(ctx)
+	}
 	result := "pass"
 	for _, c := range checks {
 		if !c.Required {
@@ -78,27 +85,28 @@ func (s *Service) RunReleaseGate(ctx context.Context, triggeredBy string) (RunGa
 	}
 
 	rec := ReleaseGateRecord{
+		Tier:        tier,
 		At:          now,
 		Result:      result,
 		LogPath:     logPath,
 		Checks:      checks,
 		TriggeredBy: triggeredBy,
-		Summary:     fmt.Sprintf("release gate %s (%d checks)", result, len(checks)),
+		Summary:     fmt.Sprintf("%s release gate %s (%d checks)", tier, result, len(checks)),
 	}
-	if err := s.store.Save(rec); err != nil {
+	if err := s.store.SaveTier(tier, rec); err != nil {
 		return RunGateResponse{}, err
 	}
-	_ = s.store.AppendLog(fmt.Sprintf("%s by %s — %s", result, triggeredBy, rec.Summary))
+	_ = s.store.AppendLog(fmt.Sprintf("%s %s by %s — %s", tier, result, triggeredBy, rec.Summary))
 
-	gate := s.responseFromRecord(ctx, rec, now)
-	msg := fmt.Sprintf("Release gate %s", result)
+	gate := s.responseFromRecord(ctx, tier, rec, now)
+	msg := fmt.Sprintf("%s release gate %s", tier, result)
 	if !gate.Ready {
-		msg += fmt.Sprintf(" (promote narrative blocked: %s)", strings.Join(gate.Blockers, "; "))
+		msg += fmt.Sprintf(" (blocked: %s)", strings.Join(gate.Blockers, "; "))
 	}
 	return RunGateResponse{
 		OK:          result == "pass",
 		Action:      "promote.release-gate",
-		Target:      "release-gate",
+		Target:      string(tier) + "-release-gate",
 		Changed:     true,
 		Message:     msg,
 		Gate:        gate,
@@ -106,22 +114,59 @@ func (s *Service) RunReleaseGate(ctx context.Context, triggeredBy string) (RunGa
 	}, nil
 }
 
-func (s *Service) collectChecks(ctx context.Context) []GateCheck {
-	checks := make([]GateCheck, 0, 4)
+func (s *Service) collectStgChecks(ctx context.Context) []GateCheck {
+	checks := make([]GateCheck, 0, 16)
 
-	checks = append(checks, s.checkCutoverMilestone())
-	checks = append(checks, s.checkProdMatrix(ctx)...)
+	if run := s.delivery.LastDeliverStgSuccess(ctx); run != nil {
+		checks = append(checks, GateCheck{
+			ID: "last-deliver-stg", Label: "Last bifrost-deliver-stg success", Required: true,
+			Reachability: probe.ReachOK,
+			Detail:       fmt.Sprintf("%s (%s)", run.Name, run.Status),
+		})
+	} else {
+		checks = append(checks, GateCheck{
+			ID: "last-deliver-stg", Label: "Last bifrost-deliver-stg success", Required: true,
+			Reachability: probe.ReachFail,
+			Detail:       "No succeeded bifrost-deliver-stg PipelineRun found",
+		})
+	}
 
 	stg := s.delivery.StgSmoke(ctx)
 	if len(stg.Targets) == 0 {
 		checks = append(checks, GateCheck{
-			ID: "stg-smoke", Label: "K3s stg smoke", Required: false,
+			ID: "stg-smoke", Label: "K3s stg smoke", Required: true,
 			Reachability: probe.ReachUnknown,
 			Detail:       "stg smoke URLs not configured",
 		})
-		} else {
+		return checks
+	}
+	for _, t := range stg.Targets {
+		required := t.ID == "stg-frontend" || strings.HasPrefix(t.ID, "stg-api-")
+		checks = append(checks, GateCheck{
+			ID: t.ID, Label: t.ID, Required: required,
+			Reachability: t.Reachability, Detail: t.Detail,
+		})
+	}
+	_ = ctx
+	return checks
+}
+
+func (s *Service) collectProdChecks(ctx context.Context) []GateCheck {
+	checks := make([]GateCheck, 0, 4)
+	checks = append(checks, s.checkCutoverMilestone())
+	checks = append(checks, s.checkProdMatrix(ctx)...)
+	checks = append(checks, s.checkProdDeliverPipeline()...)
+
+	stg := s.delivery.StgSmoke(ctx)
+	if len(stg.Targets) == 0 {
+		checks = append(checks, GateCheck{
+			ID: "stg-smoke", Label: "K3s stg smoke (informational)", Required: false,
+			Reachability: probe.ReachUnknown,
+			Detail:       "stg smoke URLs not configured",
+		})
+	} else {
 		for _, t := range stg.Targets {
-			required := t.ID == "stg-frontend" || strings.HasPrefix(t.ID, "stg-api-")
+			required := false
 			checks = append(checks, GateCheck{
 				ID: t.ID, Label: t.ID, Required: required,
 				Reachability: t.Reachability, Detail: t.Detail,
@@ -129,6 +174,14 @@ func (s *Service) collectChecks(ctx context.Context) []GateCheck {
 		}
 	}
 	return checks
+}
+
+func (s *Service) checkProdDeliverPipeline() []GateCheck {
+	return []GateCheck{{
+		ID: "deliver-prod-pipeline", Label: "bifrost-deliver-prod pipeline", Required: true,
+		Reachability: probe.ReachFail,
+		Detail:       "Not implemented — prod overlay + pipeline-deliver-prod in progress",
+	}}
 }
 
 func (s *Service) checkCutoverMilestone() GateCheck {
@@ -200,8 +253,8 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 	return out
 }
 
-func (s *Service) responseFromRecord(ctx context.Context, rec ReleaseGateRecord, now time.Time) ReleaseGateResponse {
-	blockers := narrativeBlockers(s.cfg, rec)
+func (s *Service) responseFromRecord(ctx context.Context, tier GateTier, rec ReleaseGateRecord, now time.Time) ReleaseGateResponse {
+	blockers := narrativeBlockers(tier, s.cfg, rec)
 	ready := rec.Result == "pass" && len(blockers) == 0
 	reach := probe.ReachOK
 	if rec.Result == "fail" {
@@ -213,10 +266,11 @@ func (s *Service) responseFromRecord(ctx context.Context, rec ReleaseGateRecord,
 	}
 	detail := rec.Summary
 	if detail == "" {
-		detail = fmt.Sprintf("release gate %s", rec.Result)
+		detail = fmt.Sprintf("%s release gate %s", tier, rec.Result)
 	}
 	_ = ctx
 	return ReleaseGateResponse{
+		Tier:         tier,
 		Result:       rec.Result,
 		At:           rec.At,
 		LogPath:      rec.LogPath,
@@ -229,10 +283,13 @@ func (s *Service) responseFromRecord(ctx context.Context, rec ReleaseGateRecord,
 	}
 }
 
-func narrativeBlockers(cfg *config.Config, rec ReleaseGateRecord) []string {
+func narrativeBlockers(tier GateTier, cfg *config.Config, rec ReleaseGateRecord) []string {
 	var blockers []string
 	if rec.Result != "pass" {
 		blockers = append(blockers, "Release gate checks failed")
+	}
+	if tier != GateTierProd {
+		return blockers
 	}
 	if cfg == nil || cfg.OpsContext == nil {
 		return blockers
@@ -250,7 +307,7 @@ func OverlayContext(base *opscontext.File, store *Store) *opscontext.File {
 	if base == nil || store == nil {
 		return base
 	}
-	rec, err := store.Load()
+	rec, err := store.LoadTier(GateTierProd)
 	if err != nil || rec == nil {
 		return base
 	}
@@ -272,12 +329,16 @@ func OverlayContext(base *opscontext.File, store *Store) *opscontext.File {
 			stgSmokeOK = true
 		}
 	}
-	if stgSmokeOK {
+	stgRec, _ := store.LoadTier(GateTierStg)
+	if stgRec != nil && stgRec.Result == "pass" {
 		stg.Status = "IN_PROGRESS"
-		stg.Note = "K3s bifrost-stg smoke OK — release gate records stg-api-monitor"
+		stg.Note = "STG release gate pass — Tier B + Promote prod track separate"
+	} else if stgSmokeOK {
+		stg.Status = "IN_PROGRESS"
+		stg.Note = "K3s bifrost-stg smoke OK — run STG release gate on Promote"
 	} else if rec.Result == "pass" {
 		stg.Status = "IN_PROGRESS"
-		stg.Note = "Release gate pass; verify stg smoke on Delivery"
+		stg.Note = "Prod release gate pass; verify stg on Delivery"
 	}
 	out.EnvironmentsExtended["staging"] = stg
 	return &out

@@ -174,6 +174,13 @@ export type StgDeliverStatus = {
   reasons: string[]
 }
 
+export type StgReleaseStatus = StgDeliverStatus & {
+  gatePass: boolean
+  tierBReady: boolean
+  releaseReady: boolean
+  releaseReasons: string[]
+}
+
 /** STG deliver track — independent of prod matrix / D1 cutover (see DeliveryReleaseWorkflowPanel). */
 export function evaluateStgDeliverStatus(
   stgSmoke?: { targets?: { id: string; reachability?: Reachability }[]; reachability?: Reachability },
@@ -197,4 +204,33 @@ export function evaluateStgDeliverStatus(
   if (smokeFails) reasons.push('Stg smoke has failing targets')
 
   return { ready, smokeOk, smokeFails, deliverSucceeded: lastDeliverSucceeded, reasons }
+}
+
+/** Full STG release track — deliver + STG-tier gate + Tier B sign-off. */
+export function evaluateStgReleaseStatus(
+  stgSmoke?: { targets?: { id: string; reachability?: Reachability }[]; reachability?: Reachability },
+  lastDeliverSucceeded = false,
+  stgGate?: { result?: string; ready?: boolean },
+  tierB?: { ready?: boolean; signed_off?: boolean },
+): StgReleaseStatus {
+  const deliver = evaluateStgDeliverStatus(stgSmoke, lastDeliverSucceeded)
+  const gatePass = stgGate?.result === 'pass' && stgGate?.ready === true
+  const tierBReady = tierB?.ready === true
+  const releaseReady = deliver.ready && gatePass && tierBReady
+
+  const releaseReasons: string[] = [...deliver.reasons]
+  if (!gatePass) releaseReasons.push('STG release gate not pass')
+  if (!tierBReady) {
+    releaseReasons.push(
+      tierB?.signed_off ? 'Tier B auto probes incomplete' : 'Tier B Owner sign-off pending',
+    )
+  }
+
+  return {
+    ...deliver,
+    gatePass,
+    tierBReady,
+    releaseReady,
+    releaseReasons,
+  }
 }
