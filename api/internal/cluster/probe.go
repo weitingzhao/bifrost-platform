@@ -22,62 +22,69 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 	if err != nil {
 		if ce, ok := err.(*ClientError); ok {
 			return SummaryResponse{
-				ClusterID:      base.ClusterID,
-				Label:          base.Label,
-				Distribution:   base.Distribution,
-				APIServer:      base.APIServer,
-				KubeconfigPath: path,
-				Reachability:   ce.Reachability,
-				Detail:         ce.Detail,
-				GeneratedAt:    now,
+				ClusterID:       base.ClusterID,
+				Label:           base.Label,
+				Distribution:    base.Distribution,
+				APIServer:       base.APIServer,
+				KubeconfigPath:  path,
+				APIReachability: ce.Reachability,
+				Reachability:    ce.Reachability,
+				Detail:          ce.Detail,
+				GeneratedAt:     now,
 			}
 		}
 		return SummaryResponse{
-			ClusterID:      base.ClusterID,
-			Label:          base.Label,
-			Distribution:   base.Distribution,
-			APIServer:      base.APIServer,
-			KubeconfigPath: path,
-			Reachability:   probe.ReachFail,
-			Detail:         err.Error(),
-			GeneratedAt:    now,
+			ClusterID:       base.ClusterID,
+			Label:           base.Label,
+			Distribution:    base.Distribution,
+			APIServer:       base.APIServer,
+			KubeconfigPath:  path,
+			APIReachability: probe.ReachFail,
+			Reachability:    probe.ReachFail,
+			Detail:          err.Error(),
+			GeneratedAt:     now,
 		}
 	}
 
 	version, verErr := clientset.Discovery().ServerVersion()
 	if verErr != nil {
 		return SummaryResponse{
-			ClusterID:      base.ClusterID,
-			Label:          base.Label,
-			Distribution:   base.Distribution,
-			APIServer:      base.APIServer,
-			KubeconfigPath: path,
-			Reachability:   probe.ReachFail,
-			Detail:         fmt.Sprintf("API unreachable: %v", verErr),
-			GeneratedAt:    now,
+			ClusterID:       base.ClusterID,
+			Label:           base.Label,
+			Distribution:    base.Distribution,
+			APIServer:       base.APIServer,
+			KubeconfigPath:  path,
+			APIReachability: probe.ReachFail,
+			Reachability:    probe.ReachFail,
+			Detail:          fmt.Sprintf("API unreachable: %v", verErr),
+			GeneratedAt:     now,
 		}
 	}
 
 	nodes, nodeErr := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if nodeErr != nil {
 		return SummaryResponse{
-			ClusterID:      base.ClusterID,
-			Label:          base.Label,
-			Distribution:   base.Distribution,
-			APIServer:      base.APIServer,
-			KubeconfigPath: path,
-			Reachability:   probe.ReachFail,
-			Detail:         fmt.Sprintf("list nodes: %v", nodeErr),
-			GeneratedAt:    now,
+			ClusterID:       base.ClusterID,
+			Label:           base.Label,
+			Distribution:    base.Distribution,
+			APIServer:       base.APIServer,
+			KubeconfigPath:  path,
+			APIReachability: probe.ReachOK,
+			Reachability:    probe.ReachFail,
+			Detail:          fmt.Sprintf("list nodes: %v", nodeErr),
+			ServerVersion:   version.GitVersion,
+			GeneratedAt:     now,
 		}
 	}
 
 	failing := 0
 	runningPods := 0
 	pendingPods := 0
+	var failingDetails []FailingPodView
 	pods, podErr := clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if podErr == nil {
 		failing = countFailingPods(pods.Items)
+		failingDetails = collectFailingPodDetails(pods.Items, now)
 		runningPods, pendingPods = countPodsByPhase(pods.Items)
 	}
 
@@ -88,13 +95,14 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 	detail = appendElasticStandbyDetail(detail, rollup.ElasticStandby)
 
 	return SummaryResponse{
-		ClusterID:         base.ClusterID,
-		Label:             base.Label,
-		Distribution:      base.Distribution,
-		APIServer:         base.APIServer,
-		KubeconfigPath:    path,
-		Reachability:      reach,
-		Detail:            detail,
+		ClusterID:            base.ClusterID,
+		Label:                base.Label,
+		Distribution:         base.Distribution,
+		APIServer:            base.APIServer,
+		KubeconfigPath:       path,
+		APIReachability:      probe.ReachOK,
+		Reachability:         reach,
+		Detail:               detail,
 		ServerVersion:     version.GitVersion,
 		NodesReady:        rollup.CoreReady,
 		NodesTotal:        rollup.CoreTotal,
@@ -102,7 +110,8 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 		ElasticDegraded:   rollup.ElasticDegraded,
 		NodesRegistered:   rollup.RegisteredTotal,
 		NodesRegisteredReady: rollup.RegisteredReady,
-		FailingPods:       failing,
+		FailingPods:          failing,
+		FailingPodDetails:    failingDetails,
 		RunningPods:       runningPods,
 		PendingPods:       pendingPods,
 		CPUAllocatable:    formatCPU(cpuAlloc),
@@ -524,6 +533,61 @@ func podCounts(pods []corev1.Pod) (running, failing int) {
 		}
 	}
 	return running, failing
+}
+
+func collectFailingPodDetails(pods []corev1.Pod, now time.Time) []FailingPodView {
+	var out []FailingPodView
+	for _, p := range pods {
+		if !isFailingPod(p) {
+			continue
+		}
+		reason := failingReason(p)
+		age := ""
+		if !p.CreationTimestamp.IsZero() {
+			d := now.Sub(p.CreationTimestamp.Time)
+			if d < time.Hour {
+				age = fmt.Sprintf("%dm", int(d.Minutes()))
+			} else if d < 24*time.Hour {
+				age = fmt.Sprintf("%dh", int(d.Hours()))
+			} else {
+				age = fmt.Sprintf("%dd", int(d.Hours()/24))
+			}
+		}
+		out = append(out, FailingPodView{
+			Namespace: p.Namespace,
+			Name:      p.Name,
+			Phase:     string(p.Status.Phase),
+			Reason:    reason,
+			Node:      p.Spec.NodeName,
+			Age:       age,
+		})
+	}
+	return out
+}
+
+func failingReason(p corev1.Pod) string {
+	switch p.Status.Phase {
+	case corev1.PodFailed:
+		if p.Status.Reason != "" {
+			return p.Status.Reason
+		}
+		return "Failed"
+	case corev1.PodUnknown:
+		return "Unknown"
+	}
+	for _, cs := range p.Status.ContainerStatuses {
+		if cs.State.Waiting != nil {
+			reason := cs.State.Waiting.Reason
+			if reason == "CrashLoopBackOff" || reason == "ImagePullBackOff" || reason == "ErrImagePull" {
+				msg := reason
+				if cs.State.Waiting.Message != "" {
+					msg += ": " + cs.State.Waiting.Message
+				}
+				return msg
+			}
+		}
+	}
+	return "failing"
 }
 
 func countFailingPods(pods []corev1.Pod) int {

@@ -1,9 +1,22 @@
 import type { ClusterMetricsResponse, ClusterSummary, Reachability } from '@/api/types'
-import { DenseTag } from '@bifrost/ui'
+import { apiReachability, clusterHealthHint } from '@/lib/cluster/clusterHealthHint'
 import {
   ClusterRadialGauge,
   ClusterStatTile,
 } from '@/components/cluster/ClusterKpiGauges'
+
+function buildCoreNodesSublabel(
+  nodePct: number,
+  nodeTotal: number,
+  elasticStandby: number,
+  elasticDegraded: number,
+): string | undefined {
+  if (nodeTotal === 0) return undefined
+  const parts: string[] = [`${nodePct}%`]
+  if (elasticStandby > 0) parts.push(`+${elasticStandby} standby`)
+  if (elasticDegraded > 0) parts.push(`${elasticDegraded} degraded`)
+  return parts.join(' · ')
+}
 
 interface ClusterOverviewKpiProps {
   summary: ClusterSummary | undefined
@@ -42,53 +55,23 @@ export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverv
   const metricsOk = metrics?.metrics_server_available === true
   const elasticStandby = summary.elastic_standby ?? 0
   const elasticDegraded = summary.elastic_degraded ?? 0
+  const apiReach = apiReachability(summary)
+  const healthHint = clusterHealthHint(summary)
 
   return (
     <section className="page-section panel-elevated px-4 py-3">
-      <div className="cluster-kpi-grid">
-        <ClusterStatTile
-          label="API reach"
-          value={summary.reachability}
-          reach={summary.reachability}
-        />
-        <div className="flex flex-col gap-1">
-          <ClusterRadialGauge
-            label="Core nodes ready"
-            value={nodePct}
-            display={`${summary.nodes_ready}/${summary.nodes_total}`}
-            sublabel={summary.nodes_total > 0 ? `${nodePct}%` : undefined}
-            reach={nodeReach}
-          />
-          {(elasticStandby > 0 || elasticDegraded > 0) && (
-            <div className="flex flex-wrap gap-1 px-1">
-              {elasticStandby > 0 && (
-                <DenseTag variant="neutral">{elasticStandby} elastic standby</DenseTag>
-              )}
-              {elasticDegraded > 0 && (
-                <DenseTag variant="warning">{elasticDegraded} elastic degraded</DenseTag>
-              )}
-            </div>
-          )}
-        </div>
-        <ClusterStatTile
-          label="Failing pods"
-          value={String(summary.failing_pods)}
-          reach={failingReach}
-        />
-        <ClusterStatTile
-          label="Metrics server"
-          value={metricsOk ? 'ok' : 'n/a'}
-          reach={metricsLamp(metrics?.metrics_server_available)}
-        />
-        <ClusterStatTile
-          label="Running pods"
-          value={String(summary.running_pods)}
-          reach="ok"
-        />
-        <ClusterStatTile
-          label="Pending pods"
-          value={String(summary.pending_pods)}
-          reach={summary.pending_pods > 0 ? 'degraded' : 'ok'}
+      {/*
+       * Single row: gauges (left, wider) · divider · compact stat columns (right)
+       * Stat columns (importance): connectivity / alerts / workload
+       */}
+      <div className="cluster-kpi-row">
+        <ClusterRadialGauge
+          label="Core nodes ready"
+          value={nodePct}
+          display={`${summary.nodes_ready}/${summary.nodes_total}`}
+          sublabel={buildCoreNodesSublabel(nodePct, summary.nodes_total, elasticStandby, elasticDegraded)}
+          sublabelMode="plain"
+          reach={nodeReach}
         />
         <ClusterRadialGauge
           label="Cluster CPU"
@@ -104,6 +87,51 @@ export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverv
           unavailable={!metricsOk}
           sublabel={summary.memory_allocatable}
         />
+
+        <div className="cluster-kpi-row__divider" aria-hidden="true" />
+
+        <div className="cluster-kpi-stats">
+          <div className="cluster-kpi-stat-col">
+            <ClusterStatTile
+              label="API"
+              value={apiReach}
+              reach={apiReach}
+              hint="K8s API"
+            />
+            <ClusterStatTile
+              label="Health"
+              value={summary.reachability}
+              reach={summary.reachability}
+              hint={healthHint}
+            />
+          </div>
+
+          <div className="cluster-kpi-stat-col">
+            <ClusterStatTile
+              label="Failing"
+              value={String(summary.failing_pods)}
+              reach={failingReach}
+            />
+            <ClusterStatTile
+              label="Metrics"
+              value={metricsOk ? 'ok' : 'n/a'}
+              reach={metricsLamp(metrics?.metrics_server_available)}
+            />
+          </div>
+
+          <div className="cluster-kpi-stat-col">
+            <ClusterStatTile
+              label="Running"
+              value={String(summary.running_pods)}
+              reach="ok"
+            />
+            <ClusterStatTile
+              label="Pending"
+              value={String(summary.pending_pods)}
+              reach={summary.pending_pods > 0 ? 'degraded' : 'ok'}
+            />
+          </div>
+        </div>
       </div>
 
       <p className="cluster-kpi-footer m-0 mt-3 font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

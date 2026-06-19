@@ -32,6 +32,7 @@ import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
 import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPanel'
 import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
+import { ClusterIssuesPanel } from '@/components/cluster/ClusterIssuesPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
 import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabilityPanel'
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
@@ -644,6 +645,16 @@ cd ../bifrost-platform && make start`}
         metrics={metricsQuery.data}
         isLoading={summaryQuery.isLoading || metricsQuery.isLoading}
       />
+
+      {clusterSummary != null && clusterSummary.reachability !== 'ok' && (
+        <ClusterIssuesPanel
+          summary={clusterSummary}
+          onSelectPodNamespace={ns => {
+            setNsFilter('all')
+            handleSelectNs(ns)
+          }}
+        />
+      )}
 
       <ClusterNodeWizardPanel
         flow={wizardFlow}

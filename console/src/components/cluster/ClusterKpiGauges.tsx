@@ -48,6 +48,8 @@ interface ClusterAnalogGaugeProps {
   max?: number
   display?: string
   sublabel?: string
+  /** plain = show sublabel as-is; resource = format CPU/memory alloc suffix */
+  sublabelMode?: 'plain' | 'resource'
   reach?: Reachability
   unavailable?: boolean
 }
@@ -58,6 +60,7 @@ export function ClusterRadialGauge({
   max = 100,
   display,
   sublabel,
+  sublabelMode = 'resource',
   reach = 'ok',
   unavailable = false,
 }: ClusterAnalogGaugeProps) {
@@ -76,7 +79,10 @@ export function ClusterRadialGauge({
   const trackPath = arcPath(GAUGE_CX, GAUGE_CY, GAUGE_R, arcStart, arcEnd)
   const valuePath =
     pct > 0 ? arcPath(GAUGE_CX, GAUGE_CY, GAUGE_R, arcStart, valueEnd) : ''
-  const allocLabel = formatAllocLabel(sublabel?.replace(/ alloc$/, '')) ?? sublabel
+  const allocLabel =
+    sublabelMode === 'plain'
+      ? sublabel
+      : formatAllocLabel(sublabel?.replace(/ alloc$/, '')) ?? sublabel
 
   return (
     <div className="cluster-kpi-gauge cluster-kpi-gauge--analog">

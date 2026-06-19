@@ -11,8 +11,9 @@ type SummaryResponse struct {
 	Label            string             `json:"label"`
 	Distribution     string             `json:"distribution"`
 	APIServer        string             `json:"api_server"`
-	KubeconfigPath   string             `json:"kubeconfig_path"`
-	Reachability     probe.Reachability `json:"reachability"`
+	KubeconfigPath    string             `json:"kubeconfig_path"`
+	APIReachability   probe.Reachability `json:"api_reachability"`
+	Reachability      probe.Reachability `json:"reachability"`
 	Detail           string             `json:"detail"`
 	ServerVersion    string             `json:"server_version,omitempty"`
 	NodesReady        int `json:"nodes_ready"`
@@ -21,9 +22,10 @@ type SummaryResponse struct {
 	ElasticDegraded   int `json:"elastic_degraded,omitempty"`
 	NodesRegistered      int `json:"nodes_registered,omitempty"`
 	NodesRegisteredReady int `json:"nodes_registered_ready,omitempty"`
-	FailingPods      int                `json:"failing_pods"`
-	RunningPods      int                `json:"running_pods"`
-	PendingPods      int                `json:"pending_pods"`
+	FailingPods       int                `json:"failing_pods"`
+	FailingPodDetails []FailingPodView  `json:"failing_pod_details,omitempty"`
+	RunningPods       int               `json:"running_pods"`
+	PendingPods       int               `json:"pending_pods"`
 	CPUAllocatable   string             `json:"cpu_allocatable,omitempty"`
 	MemoryAllocatable string            `json:"memory_allocatable,omitempty"`
 	GeneratedAt      time.Time          `json:"generated_at"`
@@ -165,6 +167,15 @@ type ObservabilityResponse struct {
 	PrometheusURL string                       `json:"prometheus_url,omitempty"`
 	DocsURL       string                       `json:"docs_url,omitempty"`
 	GeneratedAt   time.Time                    `json:"generated_at"`
+}
+
+type FailingPodView struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Phase     string `json:"phase"`
+	Reason    string `json:"reason"`
+	Node      string `json:"node,omitempty"`
+	Age       string `json:"age,omitempty"`
 }
 
 type ClientError struct {
