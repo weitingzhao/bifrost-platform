@@ -32,6 +32,7 @@ export type McpServerDef = {
 }
 
 export const MCP_SERVER_REGISTRY: McpServerDef[] = [
+  { name: 'mcp-server-platform', layer: 'platform', namespace: 'local (stdio)', provides: 'platform-api proxy — matrix, cluster, gitops, stack, delivery actuation', status: 'available' },
   { name: 'mcp-server-kubernetes', layer: 'platform', namespace: 'cicd or ai', provides: 'Pod/Node/Namespace CRUD, logs, events, rollout', status: 'planned' },
   { name: 'mcp-server-redis', layer: 'platform', namespace: 'ai', provides: 'Health keys read, Stream inspect, pub/sub status', status: 'planned' },
   { name: 'mcp-server-postgres', layer: 'platform', namespace: 'ai', provides: 'Schema browse, read queries (allowlist), connection status', status: 'planned' },

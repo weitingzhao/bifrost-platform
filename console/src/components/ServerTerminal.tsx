@@ -3,6 +3,7 @@ import { Button, SegmentControl, cn } from '@bifrost/ui'
 import { X } from 'lucide-react'
 import type { ConsoleHost } from '@/api/console'
 import { ConsoleHostBrandIcon } from '@/components/ConsoleHostBrandIcon'
+import { ConsoleHostIpLabel } from '@/components/ConsoleHostIpLabel'
 import { SshSessionPane, type SshConnState } from '@/components/SshSessionPane'
 
 export type ServerTerminalProps = {
@@ -96,12 +97,12 @@ export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTermin
   const hostOptions = hosts.map(h => ({
     value: h.id,
     label: (
-      <span className="inline-flex items-center gap-1.5">
+      <span
+        className="inline-flex items-center gap-1.5"
+        title={h.jump_label ? `${h.label} · via ${h.jump_label}` : h.label}
+      >
         <ConsoleHostBrandIcon host={h} />
-        <span>
-          {h.label} · {h.host}
-          {h.jump_label ? ` · via ${h.jump_label}` : ''}
-        </span>
+        <ConsoleHostIpLabel ip={h.host} />
       </span>
     ),
   }))
@@ -164,9 +165,16 @@ export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTermin
               >
                 <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--color-surface-elevated)] px-2 py-1">
                   <ConsoleHostBrandIcon host={host} className="size-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate text-dense-body font-semibold text-foreground">
-                    {host.label} · {host.host}
-                    {host.jump_label ? ` · via ${host.jump_label}` : ''}
+                  <span
+                    className="min-w-0 flex-1 truncate text-dense-body font-semibold text-foreground"
+                    title={host.label}
+                  >
+                    <ConsoleHostIpLabel ip={host.host} />
+                    {host.jump_label ? (
+                      <span className="ml-1 text-dense-meta font-normal text-muted-foreground">
+                        via {host.jump_label}
+                      </span>
+                    ) : null}
                   </span>
                   {tab.connState === 'open' && (
                     <span className="inline-flex items-center gap-1 text-dense-label text-[var(--text-dense-meta)]">
@@ -193,7 +201,7 @@ export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTermin
                   <button
                     type="button"
                     className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                    aria-label={`Close ${host.label} session`}
+                    aria-label={`Close ${host.host} session`}
                     onClick={() => closeTab(tab.id)}
                   >
                     <X className="size-3.5" />

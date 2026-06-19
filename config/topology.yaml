@@ -98,6 +98,16 @@ nodes:
     in_k3s_cluster: true   # ops-vm-ubt-02 · K3s node Ready
     grid: { row: 2, col: 2 }
 
+  - id: ubt-k3s-04
+    label: ubt-k3s-04
+    host: 192.168.10.75
+    ssh_port: 22
+    group: linux
+    compose_roles: []
+    k3s_roles: [k3s_agent]
+    in_k3s_cluster: true   # ubt-k3s-04 · K3s node Ready
+    grid: { row: 1, col: 1 }
+
   - id: macbook
     label: MacBook Dev
     host: 127.0.0.1

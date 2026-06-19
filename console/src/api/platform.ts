@@ -8,6 +8,8 @@ import type {
   ClusterObservabilityResponse,
   GitOpsAppsResponse,
   StackAddonsResponse,
+  McpToolsResponse,
+  McpStatusResponse,
   ClusterNamespacesResponse,
   ClusterNodesResponse,
   NodePowerResponse,
@@ -232,6 +234,18 @@ export async function upgradeStackAddon(name: string): Promise<ActuationResponse
     { method: 'POST' },
   )
   return r.json() as Promise<ActuationResponse>
+}
+
+export async function fetchMcpTools(): Promise<McpToolsResponse> {
+  const r = await fetch('/api/v1/mcp/tools')
+  if (!r.ok) throw new Error(`mcp tools: HTTP ${r.status}`)
+  return r.json() as Promise<McpToolsResponse>
+}
+
+export async function fetchMcpStatus(): Promise<McpStatusResponse> {
+  const r = await fetch('/api/v1/mcp/status')
+  if (!r.ok) throw new Error(`mcp status: HTTP ${r.status}`)
+  return r.json() as Promise<McpStatusResponse>
 }
 
 export async function fetchDeliveryPipelines(): Promise<DeliveryPipelinesResponse> {

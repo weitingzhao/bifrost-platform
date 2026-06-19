@@ -27,7 +27,6 @@ import {
   wakeComputeNode,
 } from '@/api/platform'
 import type { ClusterNode, ClusterWorkload, ComputeWorkloadStatus } from '@/api/types'
-import { AuditPageLink } from '@/components/AuditPageLink'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
 import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPanel'
@@ -38,6 +37,7 @@ import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabi
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
 import type { NodeWizardFlow, WizardAction } from '@/lib/cluster/nodeWizard'
 
 type NsFilter = 'all' | 'bifrost'
@@ -500,26 +500,46 @@ export function ClusterPage({
   }
 
   const metricsOk = metricsQuery.data?.metrics_server_available === true
+  const clusterSummary = summaryQuery.data
+  const bifrostNamespaces = namespacesQuery.data?.filter === 'bifrost' ? namespacesQuery.data.namespaces : []
+  const showBootstrapActions = clusterBootstrapNeedsActions(metricsOk, bifrostNamespaces)
+  const clusterStatusLabel = clusterSummary?.label ?? 'Loading…'
+  const clusterUpdatedAt =
+    nodesQuery.dataUpdatedAt > 0 ? formatUpdatedAt(nodesQuery.dataUpdatedAt) : null
+  const clusterAuthLabel = showBootstrapActions
+    ? null
+    : canOperate
+      ? `${caps?.principal ?? 'operator'}${canAdmin ? ' (admin)' : ''}`
+      : capsLoading
+        ? null
+        : 'Authenticate to actuate'
 
   return (
     <div
       className={`flex w-full min-w-0 flex-col gap-4${nodeDrawerOpen ? ' cluster-page-shell--node-drawer' : ''}`}
     >
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              K3s cluster · bifrost-bootstrap · P2 node wizard
-            </p>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Auto-refresh every 30s
-              {nodesQuery.dataUpdatedAt > 0
-                ? ` · Nodes updated ${formatUpdatedAt(nodesQuery.dataUpdatedAt)}`
-                : ''}
-              {clusterFetching ? ' · Refreshing…' : ''}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+      <section className="page-section panel-elevated px-4 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <p className="m-0 min-w-0 flex-1 truncate text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            <span>{clusterStatusLabel}</span>
+            <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
+            <span>{clusterFetching ? 'Refreshing…' : clusterUpdatedAt != null ? `Updated ${clusterUpdatedAt}` : '30s refresh'}</span>
+            {clusterAuthLabel != null && (
+              <>
+                <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
+                <span>{clusterAuthLabel}</span>
+              </>
+            )}
+            {onOpenAudit != null && (
+              <>
+                <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
+                <button type="button" className="focus-strip-link shrink-0" onClick={onOpenAudit}>
+                  Audit
+                </button>
+              </>
+            )}
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
             <Button variant="outline" size="sm" disabled={clusterFetching} onClick={refreshCluster}>
               {clusterFetching ? 'Refreshing…' : 'Refresh'}
             </Button>
@@ -535,71 +555,75 @@ export function ClusterPage({
             </Button>
           </div>
         </div>
-        {syncError != null && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] lamp-fail">{syncError}</p>
-        )}
-        {syncMutation.data?.ok === true && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {syncMutation.data.message}
-          </p>
-        )}
-        {actionError != null && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] lamp-warn">
-            {actionError.includes('401') || actionError.includes('operator token required')
-              ? 'Operator token required. Set PLATFORM_OPERATOR_TOKEN for the API and VITE_PLATFORM_OPERATOR_TOKEN for the console, then restart platform.'
-              : actionError}
-          </p>
-        )}
-        {onOpenAudit != null && (
-          <AuditPageLink
-            onOpenAudit={onOpenAudit}
-            hint="Rollout restart, scale, and pod delete actions are recorded on"
-            className="mt-2"
-          />
+        {(syncError != null || syncMutation.data?.ok === true || actionError != null) && (
+          <div className="mt-1 space-y-0.5">
+            {syncError != null && (
+              <p className="m-0 text-[var(--text-dense-meta)] lamp-fail">{syncError}</p>
+            )}
+            {syncMutation.data?.ok === true && (
+              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                {syncMutation.data.message}
+              </p>
+            )}
+            {actionError != null && (
+              <p className="m-0 text-[var(--text-dense-meta)] lamp-warn">
+                {actionError.includes('401') || actionError.includes('operator token required')
+                  ? 'Operator token required. Set PLATFORM_OPERATOR_TOKEN for the API and VITE_PLATFORM_OPERATOR_TOKEN for the console, then restart platform.'
+                  : actionError}
+              </p>
+            )}
+          </div>
         )}
       </section>
 
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="m-0 text-sm font-semibold">Actions</h2>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              {canOperate
-                ? `Authenticated as ${caps?.principal ?? 'operator'}${canAdmin ? ' (admin)' : ''}`
-                : capsLoading
-                  ? 'Checking operator session…'
-                  : 'Use Authenticate in the header to enable write actions.'}
+      {showBootstrapActions && (
+        <section className="page-section panel-elevated px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="m-0 text-sm font-semibold">Bootstrap shortcuts</h2>
+              <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                One-time cluster setup — hidden once metrics-server and core Bifrost namespaces exist.
+              </p>
+              <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                {canOperate
+                  ? `Authenticated as ${caps?.principal ?? 'operator'}${canAdmin ? ' (admin)' : ''}`
+                  : capsLoading
+                    ? 'Checking operator session…'
+                    : 'Use Authenticate in the header to enable write actions.'}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {!metricsOk && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!canAdmin || metricsServerMutation.isPending}
+                  onClick={handleEnsureMetricsServer}
+                >
+                  {metricsServerMutation.isPending ? 'Installing…' : 'Install metrics-server'}
+                </Button>
+              )}
+              {!bifrostNamespacesReady(bifrostNamespaces) && (
+                <Button size="sm" disabled={!canOperate || ensureMutation.isPending} onClick={handleEnsureNamespaces}>
+                  {ensureMutation.isPending ? 'Ensuring…' : 'Ensure Bifrost namespaces'}
+                </Button>
+              )}
+            </div>
+          </div>
+          {!canOperate && !capsLoading && (
+            <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Dev default token: <code>platform-operator-dev</code> (operator) or{' '}
+              <code>platform-admin-dev</code> (admin + metrics-server). See{' '}
+              <code>config/platform-auth.yaml</code>.
             </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {!metricsOk && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!canAdmin || metricsServerMutation.isPending}
-                onClick={handleEnsureMetricsServer}
-              >
-                {metricsServerMutation.isPending ? 'Installing…' : 'Install metrics-server'}
-              </Button>
-            )}
-            <Button size="sm" disabled={!canOperate || ensureMutation.isPending} onClick={handleEnsureNamespaces}>
-              Ensure Bifrost namespaces
-            </Button>
-          </div>
-        </div>
-        {!canOperate && !capsLoading && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Dev default token: <code>platform-operator-dev</code> (operator) or{' '}
-            <code>platform-admin-dev</code> (admin + metrics-server). See{' '}
-            <code>config/platform-auth.yaml</code>.
-          </p>
-        )}
-        {!metricsOk && canOperate && !canAdmin && !capsLoading && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Install metrics-server requires admin token (<code>platform-admin-dev</code>).
-          </p>
-        )}
-      </section>
+          )}
+          {!metricsOk && canOperate && !canAdmin && !capsLoading && (
+            <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Install metrics-server requires admin token (<code>platform-admin-dev</code>).
+            </p>
+          )}
+        </section>
+      )}
 
       {unreachable && (
         <section className="page-section panel-elevated px-4 py-3 lamp-warn">

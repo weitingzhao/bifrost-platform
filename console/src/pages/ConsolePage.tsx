@@ -486,7 +486,7 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES.cluster}
-              description="K3s cluster nodes, namespaces, and workloads — L0 read-only via platform-api."
+              description="K3s nodes, namespaces, workloads, and platform-api actuation (join, power, rollout)."
             />
             <ClusterPage
               onOpenStandards={openStandards}
@@ -619,7 +619,8 @@ export function ConsolePage() {
                   : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
-                  : viewTab === 'mcp-contract' ? 'MCP server specification, permission model, deny-list, and decoupling enforcement.'
+                  : viewTab === 'mcp-contract'
+                    ? 'MCP tool catalog, Cursor setup, and governance contract (permissions, deny-list).'
                   : 'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.'
               }
             />
