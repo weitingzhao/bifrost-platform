@@ -19,9 +19,11 @@ import {
   startPipelineRun,
   triggerMirrorSync,
 } from '@/api/platform'
+import { DockerfileCmSummary } from '@/components/delivery/DockerfileCmSummary'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { StatusLamp } from '@/components/StatusLamp'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { DELIVERY_FOCUS_RUN_QUERY_KEY } from '@/lib/delivery/deliveryFocusRun'
 import { formatPipelineRunStatus, isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 
 function runStatusVariant(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -38,7 +40,14 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MiB`
 }
 
-export function SupplyChainPanel() {
+export type SupplyChainPanelLayout = 'operate' | 'observe' | 'full'
+
+interface SupplyChainPanelProps {
+  /** operate: actuation bar only; observe: inventory tables; full: all sections */
+  layout?: SupplyChainPanelLayout
+}
+
+export function SupplyChainPanel({ layout = 'full' }: SupplyChainPanelProps) {
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
   const [revision, setRevision] = useState('main')
@@ -73,7 +82,13 @@ export function SupplyChainPanel() {
   const deliverMutation = useMutation({
     mutationFn: (rev: string) => startPipelineRun('bifrost-deliver-stg', rev),
     onMutate: () => setActionError(null),
-    onSuccess: () => {
+    onSuccess: data => {
+      if (data.run?.name) {
+        qc.setQueryData(DELIVERY_FOCUS_RUN_QUERY_KEY, data.run.name)
+        void qc.invalidateQueries({ queryKey: ['delivery', 'steps', data.run.name] })
+      }
+      void qc.invalidateQueries({ queryKey: ['promote', 'release-gate', 'stg'] })
+      void qc.invalidateQueries({ queryKey: ['promote', 'tier-b'] })
       void qc.invalidateQueries({ queryKey: ['delivery', 'runs', 'bifrost-deliver-stg'] })
       void qc.invalidateQueries({ queryKey: ['delivery', 'supply-chain'] })
       void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
@@ -85,10 +100,21 @@ export function SupplyChainPanel() {
   const pending =
     mirrorMutation.isPending || refreshMutation.isPending || deliverMutation.isPending
 
+  const showActuation = layout === 'operate' || layout === 'full'
+  const showInventory = layout === 'observe' || layout === 'full'
+  const sectionTitle =
+    layout === 'operate' ? 'Supply chain — actuate' : layout === 'observe' ? 'Supply chain — inventory' : 'Supply chain'
+  const sectionDescription =
+    layout === 'operate'
+      ? 'Push to GitHub first, then sync mirrors, refresh Dockerfile ConfigMaps, and run deliver-stg.'
+      : layout === 'observe'
+        ? 'Kaniko Dockerfile ConfigMaps and STG deployment images after deliver.'
+        : 'Gitea mirror sources, Kaniko Dockerfile ConfigMaps, and STG deployment images. Manage code revision before deliver-stg.'
+
   return (
     <OpsSection
-      title="Supply chain"
-      description="Gitea mirror sources, Kaniko Dockerfile ConfigMaps, and STG deployment images. Manage code revision before deliver-stg."
+      title={sectionTitle}
+      description={sectionDescription}
       actions={
         <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {supplyQuery.isLoading ? '…' : 'GET /api/v1/delivery/supply-chain'}
@@ -115,11 +141,12 @@ export function SupplyChainPanel() {
           )}
         </>
       }
-      bodyPadding="none"
+      bodyPadding={showInventory ? 'none' : 'default'}
       overflow="visible"
-      bodyClassName="ops-section-body--table"
+      bodyClassName={showInventory ? 'ops-section-body--table' : undefined}
     >
-      <div className="border-b border-[var(--border)] px-3 py-2">
+      {showActuation && (
+      <div className={showInventory ? 'border-b border-[var(--border)] px-3 py-2' : 'px-3 py-2'}>
         <OpsSubsectionTitle>Revision & actuation</OpsSubsectionTitle>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Revision:</span>
@@ -164,7 +191,10 @@ export function SupplyChainPanel() {
             {data.last_supply_chain_task.status}
           </p>
         )}
-        {data?.last_deliver_run != null && (
+        {layout === 'operate' && (
+          <DockerfileCmSummary configmaps={data?.dockerfile_configmaps} loading={supplyQuery.isLoading} />
+        )}
+        {data?.last_deliver_run != null && layout !== 'operate' && (
           <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
             Last deliver: {data.last_deliver_run.name} —{' '}
             <DenseTag variant={runStatusVariant(data.last_deliver_run.status)} className="inline-flex">
@@ -176,7 +206,10 @@ export function SupplyChainPanel() {
           </p>
         )}
       </div>
+      )}
 
+      {showInventory && (
+      <>
       <div className="border-b border-[var(--border)] px-3 py-2">
         <OpsSubsectionTitle>
           Dockerfile ConfigMaps ({supplyQuery.isLoading ? '…' : data?.dockerfile_configmaps.length ?? 0})
@@ -274,6 +307,8 @@ export function SupplyChainPanel() {
             {data.tracked_repos.join(' · ')}
           </p>
         </div>
+      )}
+      </>
       )}
     </OpsSection>
   )

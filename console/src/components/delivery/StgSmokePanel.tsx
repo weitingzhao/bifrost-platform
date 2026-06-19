@@ -18,6 +18,8 @@ interface StgSmokePanelProps {
   isFetching?: boolean
   errorMessage?: string | null
   onRefresh?: () => void
+  title?: string
+  description?: string
 }
 
 export function StgSmokePanel({
@@ -26,11 +28,13 @@ export function StgSmokePanel({
   isFetching = false,
   errorMessage,
   onRefresh,
+  title = 'Stg smoke',
+  description = 'HTTP probes for bifrost-stg via nginx gateway (NodePort :30880). APIs: /health (monitor also /status). Auto-refresh every 30s.',
 }: StgSmokePanelProps) {
   return (
     <OpsSection
-      title="Stg smoke"
-      description="HTTP probes for bifrost-stg via nginx gateway (NodePort :30880). APIs: /health (monitor also /status). Auto-refresh every 30s."
+      title={title}
+      description={description}
       actions={
         onRefresh != null ? (
           <Button variant="outline" size="sm" disabled={isFetching} onClick={onRefresh}>

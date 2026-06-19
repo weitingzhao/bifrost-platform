@@ -1,9 +1,9 @@
 /**
- * STG delivery release workflow — authoritative for Ops Console → Program → Delivery.
+ * STG delivery release workflow — authoritative for Ops Console → Operate → Delivery.
  * Infra detail: bifrost-trade-infra/docs/DELIVER_STG.md
  */
 
-export const DELIVERY_MAINLINE_VERSION = '2026-06-19'
+export const DELIVERY_MAINLINE_VERSION = '2026-06-18'
 export const DELIVERY_MAINLINE_SOURCE = 'console/src/lib/architecture/deliveryMainlineCatalog.ts'
 
 export type DeliveryPhaseStatus = 'done' | 'active' | 'blocked' | 'planned'
@@ -25,11 +25,12 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 1,
     title: 'Push to GitHub',
     owner: 'Developer',
-    status: 'active',
+    status: 'done',
     summary: 'Commit bifrost-trade-{api,socket,worker,frontend,core} + bifrost-trade-infra. Gitea mirrors pull from GitHub.',
     actions: [
-      'git push origin main (each changed repo)',
-      'Console: Delivery → Supply chain → Sync mirrors',
+      'Console: Operate → Delivery → Sync mirrors',
+      'Console: Operate → Delivery → Refresh Dockerfile CMs (4/4 summary)',
+      'Verify Dockerfile CMs: api · frontend · worker · socket tags all green',
       'Optional: make k3s-sync-gitea-mirrors (bootstrap-gitea-mirrors.sh)',
     ],
   },
@@ -38,7 +39,7 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 2,
     title: 'STG config & overlay',
     owner: 'Ops',
-    status: 'active',
+    status: 'done',
     summary: 'IB client_id 210段、Massive delayed WS、Secrets — ConfigMap bifrost-config + bifrost-stg-secrets.',
     actions: [
       'make sync-stg-config (from .env)',
@@ -51,12 +52,13 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 3,
     title: 'bifrost-deliver-stg',
     owner: 'Tekton / Console Delivery',
-    status: 'active',
+    status: 'done',
     summary:
       'Pipeline: prepare (mirror-sync + Dockerfile CMs) → Kaniko (9 API + FE + worker/socket) → rollout → verify-stg → Argo sync.',
     actions: [
-      'Console: Delivery → Supply chain (revision + Sync mirrors + Refresh Dockerfile CMs + Run deliver-stg)',
-      'Console: Delivery → Pipeline runs → bifrost-deliver-stg → Run',
+      'Console: Operate → Delivery (revision + Sync mirrors + Refresh Dockerfile CMs + Run deliver-stg)',
+      'Delivery Operate tab → Active deliver run: 6-phase progress bar (Clone → … → GitOps)',
+      'Console: Operate → Delivery → Observe tab → Pipeline runs (full history + logs)',
       'CLI: make k3s-deliver-stg',
       'Preflight: amd64 CI node required (Placement page)',
     ],
@@ -66,11 +68,11 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 4,
     title: 'STG acceptance',
     owner: 'Ops / Agent',
-    status: 'active',
-    summary: 'Automated HTTP verify runs inside pipeline; extend with manual Tier B (IB/Massive) as needed.',
+    status: 'done',
+    summary: 'Automated HTTP verify runs inside pipeline; Tier B (IB/Massive/Celery) signed off 2026-06-18.',
     actions: [
       'Pipeline task verify-stg (gateway + 9 APIs)',
-      'Delivery → Stg smoke panel refresh',
+      'Operate → Delivery → Verify STG (or Observe tab → Stg smoke)',
       'make k3s-verify-phase-b-stg-v2 (rollout + HTTP)',
       'Seed watchlist if Massive WS empty: scripts/k3s/seed-stg-watchlist.sh',
     ],
@@ -80,10 +82,11 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 5,
     title: 'STG release gate',
     owner: 'Promote (stg tier)',
-    status: 'active',
-    summary: 'STG deliver + smoke green = staging track complete. Does not require prod matrix or D1 cutover.',
+    status: 'done',
+    summary: 'STG deliver + smoke + STG release gate pass + Tier B sign-off — staging track SIGNED 2026-06-18.',
     actions: [
-      'Promote → Run release gate (records stg-api-* checks)',
+      'Promote → Run STG release gate (tier=stg)',
+      'Promote → Tier B sign-off after IB/Massive manual checks',
       'Evaluate stgDeliverReady on Delivery coupling panel',
     ],
   },
@@ -92,16 +95,23 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 6,
     title: 'Prod cutover',
     owner: 'Deploy Mainline / D1',
-    status: 'blocked',
-    summary: 'Separate track: prod matrix + milestone 2c-b-prod-cutover + Owner D1. No bifrost-deliver-prod yet.',
+    status: 'active',
+    summary: 'Prod overlay + bifrost-deliver-prod + prod matrix. Milestone 2c-b-prod-cutover IN_PROGRESS (D1 SIGNED).',
     actions: [
-      'Ops Console → Program → Deploy Mainline',
-      'Resolve D1: K3s migration path vs Compose prod host',
+      'Ops Console → Operate → Deploy Mainline (seq 5 prod overlay)',
+      'Implement pipeline-deliver-prod + k8s/overlays/prod',
+      'Promote → Prod cutover gate (deliver-prod + prod matrix)',
     ],
   },
 ]
 
 export const DELIVERY_PIPELINE_CATALOG = [
+  {
+    name: 'bifrost-deliver-prod',
+    tier: 'planned' as const,
+    purpose: 'Prod stack deliver — symmetric to deliver-stg; IN_PROGRESS (prod overlay)',
+    legacy: false,
+  },
   {
     name: 'bifrost-deliver-stg',
     tier: 'primary' as const,

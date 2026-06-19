@@ -61,6 +61,8 @@ export function DeliveryReleaseWorkflowPanel({
             <code className="text-[var(--text-dense-label)]">{p.name}</code>
             {p.legacy ? (
               <DenseTag variant="neutral">legacy</DenseTag>
+            ) : p.tier === 'planned' ? (
+              <DenseTag variant="warning">planned</DenseTag>
             ) : p.tier === 'primary' ? (
               <DenseTag variant="success">primary</DenseTag>
             ) : (

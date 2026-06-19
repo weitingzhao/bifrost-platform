@@ -101,6 +101,16 @@ func (h *Handler) HandleRunLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, logs)
 }
 
+func (h *Handler) HandleRunSteps(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "run id required"})
+		return
+	}
+	ns := strings.TrimSpace(r.URL.Query().Get("ns"))
+	writeJSON(w, http.StatusOK, h.svc.PipelineRunSteps(r.Context(), ns, id))
+}
+
 func (h *Handler) HandleDeletePipelineRun(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if id == "" {

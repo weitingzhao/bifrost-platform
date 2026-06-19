@@ -34,9 +34,9 @@ deployment:
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 
 focus:
-  headline: "k3s-phase1 CLOSED · P5b Mac agents 2/2 Ready · ops-ui-actuation IN_PROGRESS"
+  headline: "K3s STG v2 SIGNED (2026-06-18) · Prod overlay + deliver-prod IN_PROGRESS · ops-ui-actuation IN_PROGRESS"
   flywheel_primary: B # A = trade FE, B = runtime/ops
-  blocker: decision:D1
+  blocker: prod-overlay
 
 milestones:
   - id: phase-2b
@@ -61,10 +61,19 @@ milestones:
     signed_at: "2026-06-04"
     authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
 
+  - id: k3s-stg-v2-deliver
+    label: K3s STG v2 deliver (bifrost-deliver-stg)
+    status: CLOSED
+    signed_at: "2026-06-18"
+    pipeline_lane: parallel
+    pipeline_after: k3s-mac-agents
+    authority: Ops Console → Operate → Delivery (deliveryMainlineCatalog.ts)
+
   - id: 2c-b-prod-cutover
     label: 2C-B production cutover
-    status: BLOCKED_ON
-    blocker: decision:D1
+    status: IN_PROGRESS
+    pipeline_lane: mainline
+    pipeline_after: k3s-stg-v2-deliver
     authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
 
   - id: k3s-phase1
@@ -175,8 +184,8 @@ promotion:
 
 environments_extended:
   staging:
-    status: IN_PROGRESS
-    note: "K3s bifrost-stg workloads running; release gate via Ops Console Promote (Session S6)"
+    status: SIGNED
+    note: "STG release ready — deliver-stg + Tier A smoke + STG release gate pass + Tier B sign-off (2026-06-18 Owner)"
 
 tracks:
   build:
@@ -206,7 +215,7 @@ tracks:
         status: pending
       - id: p3-gitops-execution
         label: "GitOps + CI execution (Argo/Tekton API)"
-        status: pending
+        status: in_progress
       - id: p4-stack-install
         label: "Platform stack install wizard"
         status: pending
@@ -232,10 +241,10 @@ tracks:
       - id: compose-to-k3s
         label: "Compose to K3s deployment"
         total: 5
-        done: 2
+        done: 3
         status: in_progress
-        next_task: "Phase B stg v2 — full stack on bifrost-stg (worker/socket + Live TWS + Massive); then Legacy UI alignment"
-        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ · ③ stg v2 full stack (P5a deferred) · ④ prod overlay · ⑤ HA/validation"
+        next_task: "④ Prod overlay + bifrost-deliver-prod (Console Promote prod gate)"
+        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED 2026-06-18 ✓ · ④ prod overlay · ⑤ HA/validation"
       - id: legacy-retirement
         label: "Phase 3 Legacy retirement"
         total: 4

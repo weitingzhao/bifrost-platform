@@ -554,6 +554,32 @@ export interface SupplyChainActuationResponse extends ActuationResponse {
   run?: SupplyChainTaskRunView
 }
 
+export interface PipelineRunStepsResponse {
+  cluster_id: string
+  namespace: string
+  run_name: string
+  pipeline: string
+  reachability: Reachability
+  detail: string
+  phases: PipelinePhaseView[]
+  tasks?: PipelineTaskRunView[]
+  generated_at: string
+}
+
+export interface PipelinePhaseView {
+  id: string
+  label: string
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | string
+  detail?: string
+}
+
+export interface PipelineTaskRunView {
+  pipeline_task: string
+  name: string
+  status: string
+  reason?: string
+}
+
 export interface StgSmokeTargetView {
   id: string
   url: string
@@ -578,6 +604,7 @@ export interface ReleaseGateCheckView {
 }
 
 export interface ReleaseGateResponse {
+  tier?: 'stg' | 'prod'
   result: string
   at?: string
   log_path: string
@@ -591,6 +618,32 @@ export interface ReleaseGateResponse {
 
 export interface RunReleaseGateResponse extends ActuationResponse {
   gate: ReleaseGateResponse
+}
+
+export interface TierBItemView {
+  id: string
+  label: string
+  kind: 'auto' | 'manual'
+  required: boolean
+  reachability: Reachability
+  detail: string
+}
+
+export interface TierBStatusResponse {
+  cluster_id?: string
+  items: TierBItemView[]
+  signed_off: boolean
+  signoff_at?: string
+  signed_by?: string
+  notes?: string
+  ready: boolean
+  reachability: Reachability
+  detail: string
+  generated_at: string
+}
+
+export interface TierBSignoffResponse extends ActuationResponse {
+  status: TierBStatusResponse
 }
 
 export interface AuthCapabilities {

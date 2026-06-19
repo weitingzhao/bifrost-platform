@@ -3,11 +3,14 @@ import { Button, SidebarTrigger, SHELL_TOP_BAR_HEIGHT_CLASS, StatusLamp, cn } fr
 
 export function ConsoleHeader({
   title,
+  plane,
   healthy,
   onRefresh,
   children,
 }: {
   title?: string
+  /** Sidebar plane — Operate / Observe / Architecture */
+  plane?: 'Operate' | 'Observe' | 'Architecture'
   healthy: boolean | undefined
   onRefresh: () => void
   /** Right-side slot — e.g. compact PlatformAuthBar */
@@ -23,9 +26,16 @@ export function ConsoleHeader({
       <SidebarTrigger />
 
       {title != null && title !== '' && (
-        <h1 className="min-w-0 truncate text-sm font-semibold text-foreground sm:max-w-[11rem]">
-          {title}
-        </h1>
+        <div className="flex min-w-0 items-baseline gap-2">
+          {plane != null && (
+            <span className="hidden shrink-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+              {plane}
+            </span>
+          )}
+          <h1 className="min-w-0 truncate text-sm font-semibold text-foreground sm:max-w-[11rem]">
+            {title}
+          </h1>
+        </div>
       )}
 
       <div className="flex-1" />

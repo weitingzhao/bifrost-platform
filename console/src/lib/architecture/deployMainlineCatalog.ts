@@ -1,14 +1,14 @@
 /**
  * Deploy Mainline catalog — deployment decision chain & sign-off gates.
  *
- * Authoritative source for Ops Console → Program → Deploy Mainline.
+ * Authoritative source for Ops Console → Operate → Deploy Mainline.
  * Migrated from bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md (2026-06-15).
  */
 
-export const DEPLOY_MAINLINE_VERSION = '2026-06-15'
+export const DEPLOY_MAINLINE_VERSION = '2026-06-18'
 export const DEPLOY_MAINLINE_SOURCE = 'console/src/lib/architecture/deployMainlineCatalog.ts'
 export const DEPLOY_MAINLINE_STATUS =
-  'Local Prod Final CLOSED (2026-06-04). K3s Phase 1 in progress. Prod cutover blocked on D1.'
+  'K3s STG v2 SIGNED (2026-06-18). Prod overlay + deliver-prod IN_PROGRESS. Legacy retirement pending prod validation.'
 
 export type MainlinePhase = {
   seq: number
@@ -22,9 +22,10 @@ export const MAINLINE_PHASES: MainlinePhase[] = [
   { seq: 1, phase: 'Local Prod Final', authority: 'This page', status: 'CLOSED (2026-06-04 Owner L4)' },
   { seq: 2, phase: '2C-B Linux Docker Prod (stability test)', authority: 'PHASE2C_SIGNOFF_MASTER.md §2C-B', status: 'Stability tested (D5); prod cutover pending migration plan' },
   { seq: 3, phase: 'K3s Phase 1 trial', authority: 'Ops Console → Architecture → K3s Architecture §10', status: 'In progress (Owner unlocked 2026-06-04; bootstrap CLOSED 2026-06-14)' },
-  { seq: 4, phase: 'K3s STG v2 deliver (bifrost-deliver-stg)', authority: 'Ops Console → Program → Delivery (deliveryMainlineCatalog.ts)', status: 'Active — Tekton prepare/build/verify; prod cutover still D1-blocked' },
-  { seq: 5, phase: 'Compose → K3s migration', authority: 'Ops Console → Architecture → Platform Roadmap §5–6', status: 'Pending K3s cluster ready + D1 decision' },
-  { seq: 6, phase: 'Phase 3 Legacy retirement', authority: 'PHASE2C_PROD_DEFERRED.md', status: 'Pending Prod full-stack validation' },
+  { seq: 4, phase: 'K3s STG v2 deliver (bifrost-deliver-stg)', authority: 'Ops Console → Operate → Delivery (deliveryMainlineCatalog.ts)', status: 'CLOSED (2026-06-18 — STG release gate + Tier B)' },
+  { seq: 5, phase: 'K3s Prod overlay + deliver-prod', authority: 'Ops Console → Operate → Delivery · k8s/overlays/prod', status: 'Active — prod cutover IN_PROGRESS' },
+  { seq: 6, phase: 'Compose → K3s migration sign-off', authority: 'Ops Console → Architecture → Platform Roadmap §5–6', status: 'Pending prod full-stack validation' },
+  { seq: 7, phase: 'Phase 3 Legacy retirement', authority: 'PHASE2C_PROD_DEFERRED.md', status: 'Pending Prod full-stack validation' },
 ]
 
 export const PHASE_L_CONTEXT = {

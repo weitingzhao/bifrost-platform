@@ -25,6 +25,7 @@ import (
 var (
 	pipelineGVR    = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelines"}
 	pipelineRunGVR = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
+	taskRunGVR     = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "taskruns"}
 )
 
 type Service struct {
@@ -583,9 +584,6 @@ func pipelineRunFromUnstructured(obj unstructured.Unstructured, pipelineName str
 			}
 			if reason, ok := m["reason"].(string); ok {
 				view.Reason = reason
-			}
-			if typ, ok := m["type"].(string); ok && view.Status == "Unknown" {
-				view.Status = typ
 			}
 		}
 	}

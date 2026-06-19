@@ -88,8 +88,10 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
+		r.Get("/promote/tier-b", s.promote.HandleGetTierB)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
+		r.Get("/delivery/runs/{id}/steps", s.delivery.HandleRunSteps)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/gitops/apps/{name}/sync", s.gitops.HandleSyncApp)
@@ -101,6 +103,7 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleAdmin))
 			r.Post("/promote/release-gate", s.promote.HandleRunReleaseGate)
+			r.Post("/promote/tier-b/signoff", s.promote.HandleSignTierB)
 		})
 		r.Get("/console/hosts", s.console.HandleHosts)
 		r.Get("/console/ws", s.console.HandleWebSocket)

@@ -141,7 +141,10 @@ export const ACTUATION_API_ROUTES: ActuationApiRoute[] = [
   { phase: 'P4', method: 'GET', route: '/api/v1/stack/addons', role: 'viewer', purpose: 'Add-on status' },
   { phase: 'P4', method: 'POST', route: '/api/v1/stack/addons/{name}/install', role: 'admin', purpose: 'Install add-on' },
   { phase: 'P4', method: 'POST', route: '/api/v1/stack/addons/{name}/upgrade', role: 'admin', purpose: 'Upgrade add-on' },
-  { phase: 'P4', method: 'POST', route: '/api/v1/promote/release-gate', role: 'admin', purpose: 'Run release gate via API' },
+  { phase: 'P4', method: 'GET', route: '/api/v1/promote/release-gate?tier=stg|prod', role: 'viewer', purpose: 'STG or Prod release gate state' },
+  { phase: 'P4', method: 'POST', route: '/api/v1/promote/release-gate?tier=stg|prod', role: 'admin', purpose: 'Run STG or Prod release gate' },
+  { phase: 'P4', method: 'GET', route: '/api/v1/promote/tier-b', role: 'viewer', purpose: 'Tier B extended STG acceptance probes + sign-off state' },
+  { phase: 'P4', method: 'POST', route: '/api/v1/promote/tier-b/signoff', role: 'admin', purpose: 'Record Tier B Owner sign-off' },
 ]
 
 export type LayerDescription = {

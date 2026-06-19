@@ -36,12 +36,18 @@ import {
   type PipelineRunSortKey,
 } from '@/lib/delivery/pipelineRunAskPack'
 
+import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliveryPageTabs'
+
+export type PipelineRunsPanelLayout = 'operate-recent' | 'observe'
+
 interface PipelineRunsPanelProps {
   pipelines: DeliveryPipelinesResponse | undefined
   pipelinesLoading: boolean
   errorMessage?: string | null
   stgSmokeDetail?: string | null
   onOpenPlacement?: () => void
+  /** operate-recent: deliver-stg only, last 3 runs; observe: full pipeline explorer */
+  layout?: PipelineRunsPanelLayout
 }
 
 function runStatusVariant(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -90,15 +96,19 @@ export function PipelineRunsPanel({
   errorMessage,
   stgSmokeDetail,
   onOpenPlacement,
+  layout = 'observe',
 }: PipelineRunsPanelProps) {
+  const isRecent = layout === 'operate-recent'
   const pipelineList = pipelines?.pipelines ?? []
   const defaultPipeline =
-    pipelineList.find(p => p.name === 'bifrost-deliver-stg')?.name ??
+    pipelineList.find(p => p.name === DELIVER_STG_PIPELINE)?.name ??
     pipelineList.find(p => p.name === 'bifrost-build-stg')?.name ??
     pipelineList.find(p => p.name === 'bifrost-smoke')?.name ??
     pipelineList[0]?.name ??
     ''
-  const [selectedPipeline, setSelectedPipeline] = useState<string>(defaultPipeline)
+  const [selectedPipeline, setSelectedPipeline] = useState<string>(
+    isRecent ? DELIVER_STG_PIPELINE : defaultPipeline,
+  )
   const [expandedRun, setExpandedRun] = useState<string | null>(null)
   const [askAiRun, setAskAiRun] = useState<string | null>(null)
   const [askAiPack, setAskAiPack] = useState<string | null>(null)
@@ -114,10 +124,14 @@ export function PipelineRunsPanel({
   const activePipeline = selectedPipeline !== '' ? selectedPipeline : defaultPipeline
 
   useEffect(() => {
+    if (isRecent) {
+      setSelectedPipeline(DELIVER_STG_PIPELINE)
+      return
+    }
     if (selectedPipeline === '' && defaultPipeline !== '') {
       setSelectedPipeline(defaultPipeline)
     }
-  }, [defaultPipeline, selectedPipeline])
+  }, [defaultPipeline, isRecent, selectedPipeline])
 
   useEffect(() => {
     setRunSort(defaultPipelineRunSort())
@@ -172,6 +186,7 @@ export function PipelineRunsPanel({
     () => sortPipelineRuns(runs, runSort.key, runSort.dir),
     [runs, runSort],
   )
+  const displayRuns = isRecent ? sortedRuns.slice(0, 3) : sortedRuns
 
   function handleRunSort(key: PipelineRunSortKey) {
     setRunSort(prev => togglePipelineRunSort(prev, key))
@@ -218,11 +233,18 @@ export function PipelineRunsPanel({
 
   return (
     <OpsSection
-      title="Pipeline runs"
+      title={isRecent ? 'Recent deliver runs' : 'Pipeline runs'}
+      description={
+        isRecent
+          ? 'Last three bifrost-deliver-stg runs — open Observe tab for full history.'
+          : undefined
+      }
       actions={
+        !isRecent ? (
         <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {pipelinesLoading ? '…' : `GET /api/v1/delivery/pipelines · ns ${pipelines?.namespace ?? 'cicd'}`}
         </span>
+        ) : undefined
       }
       headerExtra={
         <>
@@ -255,6 +277,8 @@ export function PipelineRunsPanel({
       overflow="visible"
       bodyClassName="ops-section-body--table"
     >
+      {!isRecent && (
+      <>
       <div className="border-b border-[var(--border)] px-3 py-2">
         <OpsSubsectionTitle>
           Tekton pipelines ({pipelinesLoading ? '…' : pipelineList.length})
@@ -327,14 +351,25 @@ export function PipelineRunsPanel({
           )}
         </DenseTableBody>
       </DenseDataTable>
+      </>
+      )}
 
       {activePipeline !== '' && (
         <>
+          {!isRecent && (
           <div className="border-b border-t border-[var(--border)] px-3 py-2">
             <OpsSubsectionTitle>
               Runs — {activePipeline} ({runsQuery.isLoading ? '…' : runs.length})
             </OpsSubsectionTitle>
           </div>
+          )}
+          {isRecent && (
+          <div className="border-b border-[var(--border)] px-3 py-2">
+            <OpsSubsectionTitle>
+              {DELIVER_STG_PIPELINE} ({runsQuery.isLoading ? '…' : displayRuns.length} shown)
+            </OpsSubsectionTitle>
+          </div>
+          )}
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
@@ -363,14 +398,16 @@ export function PipelineRunsPanel({
                     Loading runs…
                   </DenseTableCell>
                 </DenseTableRow>
-              ) : runs.length === 0 ? (
+              ) : displayRuns.length === 0 ? (
                 <DenseTableRow>
                   <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
-                    No runs yet — click Run above (operator token required)
+                    {isRecent
+                      ? 'No deliver runs yet — use Supply chain → Run deliver-stg'
+                      : 'No runs yet — click Run above (operator token required)'}
                   </DenseTableCell>
                 </DenseTableRow>
               ) : (
-                sortedRuns.map((run: DeliveryPipelineRunView) => {
+                displayRuns.map((run: DeliveryPipelineRunView) => {
                   const succeeded = isPipelineRunSucceeded(run)
                   return (
                     <Fragment key={run.name}>

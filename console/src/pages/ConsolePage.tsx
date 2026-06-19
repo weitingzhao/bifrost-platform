@@ -14,9 +14,13 @@ import {
   fetchPlatformHealth,
   fetchStgSmoke,
   fetchReleaseGate,
+  fetchSupplyChain,
+  fetchTierBStatus,
   fetchTopology,
   isAllMatrices,
 } from '@/api/platform'
+import { consoleNavPlane } from '@/lib/consoleNavConfig'
+import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 import { DOC_LINKS } from '@/lib/docsLinks'
 import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
@@ -173,12 +177,38 @@ export function ConsolePage() {
     enabled: viewTab === 'delivery' || viewTab === 'pulse',
   })
 
-  const releaseGateQuery = useQuery({
-    queryKey: ['promote', 'release-gate'],
-    queryFn: fetchReleaseGate,
+  const releaseGateStgQuery = useQuery({
+    queryKey: ['promote', 'release-gate', 'stg'],
+    queryFn: () => fetchReleaseGate('stg'),
+    refetchInterval: 30_000,
+    enabled: viewTab === 'promote' || viewTab === 'delivery',
+  })
+
+  const releaseGateProdQuery = useQuery({
+    queryKey: ['promote', 'release-gate', 'prod'],
+    queryFn: () => fetchReleaseGate('prod'),
     refetchInterval: 30_000,
     enabled: viewTab === 'promote',
   })
+
+  const supplyChainQuery = useQuery({
+    queryKey: ['delivery', 'supply-chain'],
+    queryFn: fetchSupplyChain,
+    refetchInterval: 30_000,
+    enabled: viewTab === 'delivery' || viewTab === 'promote',
+  })
+
+  const tierBQuery = useQuery({
+    queryKey: ['promote', 'tier-b'],
+    queryFn: fetchTierBStatus,
+    refetchInterval: 30_000,
+    enabled: viewTab === 'delivery' || viewTab === 'promote',
+  })
+
+  const lastDeliverSucceeded = useMemo(() => {
+    const run = supplyChainQuery.data?.last_deliver_success
+    return run != null && isPipelineRunSucceeded(run)
+  }, [supplyChainQuery.data?.last_deliver_success])
 
   const auditQuery = useQuery({
     queryKey: ['platform', 'audit'],
@@ -244,6 +274,7 @@ export function ConsolePage() {
   const openProgram = () => setViewTab('program')
   const openDelivery = () => setViewTab('delivery')
   const openPromote = () => setViewTab('promote')
+  const openDeployMainline = () => setViewTab('deploy-mainline')
   const openRuntimeMap = () => setViewTab('runtime-map')
   const openCluster = () => setViewTab('cluster')
   const openPlacement = () => setViewTab('placement')
@@ -318,6 +349,7 @@ export function ConsolePage() {
         <div className="sticky top-0 z-20 bg-card">
           <ConsoleHeader
             title={VIEW_TITLES[viewTab]}
+            plane={consoleNavPlane(viewTab)}
             healthy={healthQuery.data}
             onRefresh={refreshAll}
           >
@@ -483,7 +515,7 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES.delivery}
-              description="CI/CD dual track — near-term Mac runner vs target GitOps on K3s."
+              description="STG CI/CD — Operate (deliver), Observe (health & history), Blueprint (workflow & gates)."
             />
             <DeliveryPage
               context={contextQuery.data}
@@ -506,12 +538,17 @@ export function ConsolePage() {
               stgSmokeError={
                 stgSmokeQuery.error instanceof Error ? stgSmokeQuery.error.message : null
               }
+              lastDeliverSucceeded={lastDeliverSucceeded}
+              stgGate={releaseGateStgQuery.data}
+              tierB={tierBQuery.data}
+              tierBLoading={tierBQuery.isLoading}
               onRefreshStgSmoke={() => void stgSmokeQuery.refetch()}
               isLoading={contextQuery.isLoading || matrixForPulse.isLoading}
               onOpenMilestones={openProgram}
               onOpenPromote={openPromote}
               onOpenAudit={openAudit}
               onOpenPlacement={openPlacement}
+              onOpenDeployMainline={openDeployMainline}
             />
           </>
         )}
@@ -535,19 +572,28 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES.promote}
-              description="Read-only promotion readiness across flywheel A and B."
+              description="STG release gate + Tier B vs Prod cutover gate — flywheel A/B checklists."
             />
             <PromotePage
               context={contextQuery.data}
               matrices={pulseMatrices}
-              releaseGate={releaseGateQuery.data}
-              releaseGateLoading={releaseGateQuery.isLoading}
-              releaseGateError={
-                releaseGateQuery.error instanceof Error ? releaseGateQuery.error.message : null
+              stgGate={releaseGateStgQuery.data}
+              stgGateLoading={releaseGateStgQuery.isLoading}
+              stgGateError={
+                releaseGateStgQuery.error instanceof Error ? releaseGateStgQuery.error.message : null
               }
+              prodGate={releaseGateProdQuery.data}
+              prodGateLoading={releaseGateProdQuery.isLoading}
+              prodGateError={
+                releaseGateProdQuery.error instanceof Error ? releaseGateProdQuery.error.message : null
+              }
+              stgSmoke={stgSmokeQuery.data}
+              lastDeliverSucceeded={lastDeliverSucceeded}
+              tierB={tierBQuery.data}
               isLoading={contextQuery.isLoading || matrixForPulse.isLoading}
               onOpenProgram={openProgram}
               onOpenDelivery={openDelivery}
+              onOpenDeployMainline={openDeployMainline}
             />
           </>
         )}

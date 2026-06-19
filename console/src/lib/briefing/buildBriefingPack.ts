@@ -67,7 +67,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     ],
     release: [
       'Ops Console → Architecture → Blueprint — North Star',
-      'Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)',
+      'Ops Console → Operate → Deploy Mainline (deployMainlineCatalog.ts)',
       'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md',
       'decision D1 in ops-context spine',
     ],
