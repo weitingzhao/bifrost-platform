@@ -60,6 +60,29 @@ func (l *AuditLog) Record(r *http.Request, action, target, status, detail string
 	_ = l.persistLocked()
 }
 
+func (l *AuditLog) RecordDirect(actor string, role Role, action, target, status, detail string) {
+	if l == nil {
+		return
+	}
+	record := AuditRecord{
+		ID:     fmt.Sprintf("%d", time.Now().UTC().UnixNano()),
+		At:     time.Now().UTC(),
+		Actor:  actor,
+		Role:   role,
+		Action: action,
+		Target: target,
+		Status: status,
+		Detail: detail,
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.records = append([]AuditRecord{record}, l.records...)
+	if len(l.records) > 500 {
+		l.records = l.records[:500]
+	}
+	_ = l.persistLocked()
+}
+
 func (l *AuditLog) HandleList(w http.ResponseWriter, _ *http.Request) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

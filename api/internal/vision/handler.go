@@ -183,6 +183,168 @@ func (h *Handler) HandleSignV2(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) HandleGetV3Gate(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.V3Gate(r.Context()))
+}
+
+func (h *Handler) HandleRunV3Gate(w http.ResponseWriter, r *http.Request) {
+	principal := actuation.PrincipalFromContext(r.Context())
+	resp, err := h.svc.RunV3Gate(r.Context(), principal.Name)
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		msg := resp.Message
+		if err != nil {
+			msg = err.Error()
+		}
+		h.audit.Record(r, resp.Action, resp.Target, status, msg)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{
+			"ok": false, "action": "vision.v3-gate", "message": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleSignV3(w http.ResponseWriter, r *http.Request) {
+	var req v1SignoffRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+	principal := actuation.PrincipalFromContext(r.Context())
+	resp, err := h.svc.SignV3(r.Context(), req.Notes, principal.Name)
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		msg := resp.Message
+		if err != nil {
+			msg = err.Error()
+		}
+		h.audit.Record(r, resp.Action, resp.Target, status, msg)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok": false, "action": "vision.v3-signoff", "message": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleGetV4Gate(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.V4Gate(r.Context()))
+}
+
+func (h *Handler) HandleRunV4Gate(w http.ResponseWriter, r *http.Request) {
+	principal := actuation.PrincipalFromContext(r.Context())
+	resp, err := h.svc.RunV4Gate(r.Context(), principal.Name)
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		msg := resp.Message
+		if err != nil {
+			msg = err.Error()
+		}
+		h.audit.Record(r, resp.Action, resp.Target, status, msg)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{
+			"ok": false, "action": "vision.v4-gate", "message": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleSignV4(w http.ResponseWriter, r *http.Request) {
+	var req v1SignoffRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+	principal := actuation.PrincipalFromContext(r.Context())
+	resp, err := h.svc.SignV4(r.Context(), req.Notes, principal.Name)
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		msg := resp.Message
+		if err != nil {
+			msg = err.Error()
+		}
+		h.audit.Record(r, resp.Action, resp.Target, status, msg)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok": false, "action": "vision.v4-signoff", "message": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleGetV5Gate(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.V5Gate(r.Context()))
+}
+
+func (h *Handler) HandleRunV5Gate(w http.ResponseWriter, r *http.Request) {
+	principal := actuation.PrincipalFromContext(r.Context())
+	resp, err := h.svc.RunV5Gate(r.Context(), principal.Name)
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		msg := resp.Message
+		if err != nil {
+			msg = err.Error()
+		}
+		h.audit.Record(r, resp.Action, resp.Target, status, msg)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{
+			"ok": false, "action": "vision.v5-gate", "message": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleSignV5(w http.ResponseWriter, r *http.Request) {
+	var req v1SignoffRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+	principal := actuation.PrincipalFromContext(r.Context())
+	resp, err := h.svc.SignV5(r.Context(), req.Notes, principal.Name)
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		msg := resp.Message
+		if err != nil {
+			msg = err.Error()
+		}
+		h.audit.Record(r, resp.Action, resp.Target, status, msg)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok": false, "action": "vision.v5-signoff", "message": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

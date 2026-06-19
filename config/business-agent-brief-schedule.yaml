@@ -1,0 +1,29 @@
+# Vision V4 — Business Agent scheduled brief (Cursor SDK)
+# Triggers read-only Trade API aggregation + matrix context.
+
+version: "2026-06-19"
+authority: config/business-agent-brief-schedule.yaml
+
+agent_mode: Business
+sdk_integration: cursor_scheduled_prompt
+
+schedules:
+  - id: pre-market
+    label: Pre-market brief
+    cron: "0 8 * * 1-5"
+    timezone: America/New_York
+    prompt_template: |
+      Business Agent pre-market brief: daemon status, overnight PnL, open positions Greeks,
+      watchlist IV changes, Celery queue health. Read-only — cite Trade API endpoints.
+  - id: post-market
+    label: Post-market brief
+    cron: "30 16 * * 1-5"
+    timezone: America/New_York
+    prompt_template: |
+      Business Agent post-market brief: day PnL, hedge activity, strategy instance states,
+      SEPA pipeline status. Read-only — no trade execution suggestions without Owner ask.
+
+data_sources:
+  - GET /api/v1/matrix?env=stg
+  - GET /api/v1/trade-agent/domains
+  - mcp-trade-api read tools per domain

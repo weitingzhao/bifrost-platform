@@ -1,0 +1,13 @@
+{
+  "comment": "Vision V4 — Cursor MCP for Business Agent (read-only Trade APIs). Merge into ~/.cursor/mcp.json.",
+  "mcpServers": {
+    "bifrost-trade-api": {
+      "command": "npx",
+      "args": ["tsx", "mcp/trade/src/index.ts"],
+      "env": {
+        "TRADE_API_GATEWAY": "http://192.168.10.73:30880",
+        "TRADE_AGENT_CATALOG_URL": "http://127.0.0.1:8780/api/v1/trade-agent/catalog"
+      }
+    }
+  }
+}

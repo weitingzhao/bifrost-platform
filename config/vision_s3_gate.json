@@ -1,5 +1,5 @@
 {
-  "at": "2026-06-19T20:17:33.276524Z",
+  "at": "2026-06-19T20:46:05.278333Z",
   "result": "pass",
   "checks": [
     {
@@ -63,14 +63,14 @@
       "label": "Spine milestone: vision-v2-dev-agent",
       "required": true,
       "reachability": "ok",
-      "detail": "status=NOT_STARTED"
+      "detail": "status=SIGNED"
     },
     {
       "id": "spine-vision-v3-ops-agent",
       "label": "Spine milestone: vision-v3-ops-agent",
       "required": true,
       "reachability": "ok",
-      "detail": "status=NOT_STARTED"
+      "detail": "status=SIGNED"
     },
     {
       "id": "spine-vision-v4-business-agent",

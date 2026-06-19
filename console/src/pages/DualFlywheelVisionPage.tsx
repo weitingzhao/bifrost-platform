@@ -4,6 +4,9 @@ import { CatalogSection } from '@/components/CatalogSection'
 import { VisionV1GatePanel } from '@/components/architecture/VisionV1GatePanel'
 import { VisionS3GatePanel } from '@/components/architecture/VisionS3GatePanel'
 import { VisionV2GatePanel } from '@/components/architecture/VisionV2GatePanel'
+import { VisionV3GatePanel } from '@/components/architecture/VisionV3GatePanel'
+import { VisionV4GatePanel } from '@/components/architecture/VisionV4GatePanel'
+import { VisionV5GatePanel } from '@/components/architecture/VisionV5GatePanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   AGENT_LAYERS,
@@ -26,6 +29,16 @@ import {
 } from '@/lib/architecture/dualFlywheelVisionCatalog'
 import { VISION_SPINE_MAP, VISION_SPINE_MAP_SOURCE, VISION_SPINE_MAP_VERSION } from '@/lib/architecture/visionSpineMap'
 import { DEV_AGENT_LOOP_STEPS, DEV_AGENT_LOOP_SOURCE } from '@/lib/architecture/devAgentLoopCatalog'
+import { OPS_AGENT_LOOP_STEPS, OPS_AGENT_LOOP_SOURCE } from '@/lib/architecture/opsAgentLoopCatalog'
+import {
+  BUSINESS_AGENT_LOOP_STEPS,
+  BUSINESS_AGENT_LOOP_SOURCE,
+  TRADE_API_DOMAINS,
+} from '@/lib/architecture/businessAgentLoopCatalog'
+import {
+  CONVERGENCE_LOOP_STEPS,
+  CONVERGENCE_LOOP_SOURCE,
+} from '@/lib/architecture/convergenceLoopCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
@@ -260,6 +273,9 @@ export function DualFlywheelVisionPage() {
       <VisionV1GatePanel />
       <VisionS3GatePanel />
       <VisionV2GatePanel />
+      <VisionV3GatePanel />
+      <VisionV4GatePanel />
+      <VisionV5GatePanel />
 
       <CatalogSection title={`Dev Agent loop (${DEV_AGENT_LOOP_SOURCE})`}>
         <DenseDataTable>
@@ -278,6 +294,110 @@ export function DualFlywheelVisionPage() {
                 <DenseTableCell>{step.order}</DenseTableCell>
                 <DenseTableCell className="font-medium">{step.phase}</DenseTableCell>
                 <DenseTableCell>{step.actor}</DenseTableCell>
+                <DenseTableCell>{step.action}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{step.verify}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title={`Ops Agent loop (${OPS_AGENT_LOOP_SOURCE})`}>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>#</DenseTableHead>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Level</DenseTableHead>
+              <DenseTableHead>Actor</DenseTableHead>
+              <DenseTableHead>Action</DenseTableHead>
+              <DenseTableHead>Verify</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {OPS_AGENT_LOOP_STEPS.map(step => (
+              <DenseTableRow key={step.order}>
+                <DenseTableCell>{step.order}</DenseTableCell>
+                <DenseTableCell className="font-medium">{step.phase}</DenseTableCell>
+                <DenseTableCell>
+                  <DenseTag variant={step.level === 'L2' ? 'warning' : step.level === 'L1' ? 'success' : 'neutral'}>
+                    {step.level}
+                  </DenseTag>
+                </DenseTableCell>
+                <DenseTableCell>{step.actor}</DenseTableCell>
+                <DenseTableCell>{step.action}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{step.verify}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title={`Business Agent loop (${BUSINESS_AGENT_LOOP_SOURCE})`}>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>#</DenseTableHead>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Actor</DenseTableHead>
+              <DenseTableHead>Action</DenseTableHead>
+              <DenseTableHead>Verify</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {BUSINESS_AGENT_LOOP_STEPS.map(step => (
+              <DenseTableRow key={step.order}>
+                <DenseTableCell>{step.order}</DenseTableCell>
+                <DenseTableCell className="font-medium">{step.phase}</DenseTableCell>
+                <DenseTableCell>{step.actor}</DenseTableCell>
+                <DenseTableCell>{step.action}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{step.verify}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title="Trade API domains (read-only · Vision V4)">
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Domain</DenseTableHead>
+              <DenseTableHead>Port</DenseTableHead>
+              <DenseTableHead>Probe</DenseTableHead>
+              <DenseTableHead>Read examples</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {TRADE_API_DOMAINS.map(d => (
+              <DenseTableRow key={d.id}>
+                <DenseTableCell className="font-mono-tabular font-medium">{d.id}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{d.port}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{d.probePath}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{d.readExamples}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title={`Full convergence loop (${CONVERGENCE_LOOP_SOURCE})`}>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>#</DenseTableHead>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Agents</DenseTableHead>
+              <DenseTableHead>Action</DenseTableHead>
+              <DenseTableHead>Verify</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {CONVERGENCE_LOOP_STEPS.map(step => (
+              <DenseTableRow key={step.order}>
+                <DenseTableCell>{step.order}</DenseTableCell>
+                <DenseTableCell className="font-medium">{step.phase}</DenseTableCell>
+                <DenseTableCell>{step.agents}</DenseTableCell>
                 <DenseTableCell>{step.action}</DenseTableCell>
                 <DenseTableCell className="text-[var(--muted-foreground)]">{step.verify}</DenseTableCell>
               </DenseTableRow>

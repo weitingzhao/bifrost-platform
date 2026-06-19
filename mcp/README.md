@@ -49,3 +49,20 @@ See Ops Console → Architecture → MCP Contract.
 ## Future servers
 
 `mcp-server-kubernetes`, `mcp-server-redis`, etc. — see `console/src/lib/standards/mcpContractCatalog.ts`
+
+## mcp-server-trade (V4 — available)
+
+Read-only Trade API proxy — 9 domains via nginx gateway.
+
+```bash
+cd mcp/trade
+npm install
+TRADE_API_GATEWAY=http://192.168.10.73:30880 npm start
+```
+
+Cursor config: `config/cursor-mcp-trade.json`
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/v1/trade-agent/domains` | Nine Trade API domains |
+| `GET /api/v1/trade-agent/catalog` | Read-only MCP tool catalog |

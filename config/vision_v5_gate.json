@@ -1,0 +1,141 @@
+{
+  "at": "2026-06-19T20:58:39.886813Z",
+  "result": "pass",
+  "checks": [
+    {
+      "id": "v4-prerequisite",
+      "label": "Vision V4 signed (prerequisite)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "V4 SIGNED by admin"
+    },
+    {
+      "id": "signed-vision-v1-dev-topology",
+      "label": "Signed: vision-v1-dev-topology",
+      "required": true,
+      "reachability": "ok",
+      "detail": "admin"
+    },
+    {
+      "id": "signed-vision-s3-briefing-alignment",
+      "label": "Signed: vision-s3-briefing-alignment",
+      "required": true,
+      "reachability": "ok",
+      "detail": "admin"
+    },
+    {
+      "id": "signed-vision-v2-dev-agent",
+      "label": "Signed: vision-v2-dev-agent",
+      "required": true,
+      "reachability": "ok",
+      "detail": "admin"
+    },
+    {
+      "id": "signed-vision-v3-ops-agent",
+      "label": "Signed: vision-v3-ops-agent",
+      "required": true,
+      "reachability": "ok",
+      "detail": "admin"
+    },
+    {
+      "id": "signed-vision-v4-business-agent",
+      "label": "Signed: vision-v4-business-agent",
+      "required": true,
+      "reachability": "ok",
+      "detail": "admin"
+    },
+    {
+      "id": "convergence-catalog",
+      "label": "convergenceLoopCatalog.ts",
+      "required": true,
+      "reachability": "ok",
+      "detail": "8 convergence steps"
+    },
+    {
+      "id": "agent-protocol-v5",
+      "label": "Agent Protocol convergence closed loop",
+      "required": true,
+      "reachability": "ok",
+      "detail": "agentProtocolCatalog.ts OK"
+    },
+    {
+      "id": "unified-mcp",
+      "label": "Unified Cursor MCP config",
+      "required": true,
+      "reachability": "ok",
+      "detail": "cursor-unified-mcp.json"
+    },
+    {
+      "id": "unified-mcp-trade",
+      "label": "Unified MCP includes trade server",
+      "required": true,
+      "reachability": "ok",
+      "detail": "cursor-unified-mcp.json"
+    },
+    {
+      "id": "ollama-spec",
+      "label": "Ollama local inference spec",
+      "required": true,
+      "reachability": "ok",
+      "detail": "ollama-agent.yaml"
+    },
+    {
+      "id": "feedback-loop",
+      "label": "Convergence feedback loop spec",
+      "required": true,
+      "reachability": "ok",
+      "detail": "convergence-feedback-loop.yaml"
+    },
+    {
+      "id": "dev-agent-catalog-v5",
+      "label": "devAgentLoopCatalog.ts",
+      "required": true,
+      "reachability": "ok",
+      "detail": "OK"
+    },
+    {
+      "id": "ops-agent-catalog-v5",
+      "label": "opsAgentLoopCatalog.ts",
+      "required": true,
+      "reachability": "ok",
+      "detail": "OK"
+    },
+    {
+      "id": "business-agent-catalog-v5",
+      "label": "businessAgentLoopCatalog.ts",
+      "required": true,
+      "reachability": "ok",
+      "detail": "OK"
+    },
+    {
+      "id": "vision-gate-panels",
+      "label": "V1–V5 gate panels in Console",
+      "required": true,
+      "reachability": "ok",
+      "detail": "DualFlywheelVisionPage.tsx OK"
+    },
+    {
+      "id": "l3-boundary",
+      "label": "L3 PR governance boundary",
+      "required": true,
+      "reachability": "ok",
+      "detail": "dualFlywheelVisionCatalog.ts OK"
+    },
+    {
+      "id": "flywheel-convergence",
+      "label": "Dual flywheel convergence thesis",
+      "required": true,
+      "reachability": "ok",
+      "detail": "dualFlywheelVisionCatalog.ts OK"
+    },
+    {
+      "id": "spine-vision-v5-convergence",
+      "label": "Spine milestone: vision-v5-convergence",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=NOT_STARTED"
+    }
+  ],
+  "triggered_by": "admin",
+  "summary": "Vision V5 gate pass (19 checks)"
+}

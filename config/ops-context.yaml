@@ -34,7 +34,7 @@ deployment:
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 
 focus:
-  headline: "Vision V2 Dev Agent loop ready · S3 SIGNED · push → Tekton → STG verify"
+  headline: "Vision V1–V5 convergence COMPLETE (2026-06-19) · Dual Flywheel SIGNED · focus: legacy-retirement + ops-ui-actuation"
   flywheel_primary: A # A = trade FE, B = runtime/ops
   blocker: null
 
@@ -111,31 +111,35 @@ milestones:
 
   - id: vision-v2-dev-agent
     label: Vision V2 — Dev Agent closed-loop
-    status: IN_PROGRESS
+    status: SIGNED
+    signed_at: "2026-06-19"
     pipeline_lane: parallel
     pipeline_after: vision-s3-briefing-alignment
     authority: console/src/lib/architecture/devAgentLoopCatalog.ts
 
   - id: vision-v3-ops-agent
     label: Vision V3 — Ops Agent L1/L2
-    status: NOT_STARTED
+    status: SIGNED
+    signed_at: "2026-06-19"
     pipeline_lane: parallel
     pipeline_after: vision-v2-dev-agent
-    authority: console/src/lib/architecture/dualFlywheelVisionCatalog.ts
+    authority: console/src/lib/architecture/opsAgentLoopCatalog.ts
 
   - id: vision-v4-business-agent
     label: Vision V4 — Business Agent read-only
-    status: NOT_STARTED
+    status: SIGNED
+    signed_at: "2026-06-19"
     pipeline_lane: parallel
     pipeline_after: vision-v3-ops-agent
-    authority: console/src/lib/architecture/dualFlywheelVisionCatalog.ts
+    authority: console/src/lib/architecture/businessAgentLoopCatalog.ts
 
   - id: vision-v5-convergence
     label: Vision V5 — Full convergence
-    status: NOT_STARTED
+    status: SIGNED
+    signed_at: "2026-06-19"
     pipeline_lane: parallel
     pipeline_after: vision-v4-business-agent
-    authority: console/src/lib/architecture/dualFlywheelVisionCatalog.ts
+    authority: console/src/lib/architecture/convergenceLoopCatalog.ts
 
   - id: ops-ui-actuation
     label: Ops UI single-pane actuation (north star)
@@ -308,6 +312,24 @@ tracks:
         done: 4
         status: closed
         note: "devAgentLoopCatalog · agent-pre-push.sh · Tekton deliver-stg/prod · V2 gate"
+      - id: vision-v3-ops-agent
+        label: "Vision V3 — Ops Agent L1/L2"
+        total: 4
+        done: 4
+        status: closed
+        note: "SIGNED 2026-06-19 — opsAgentLoopCatalog · MCP bridges · Alertmanager webhook · V3 gate"
+      - id: vision-v4-business-agent
+        label: "Vision V4 — Business Agent read-only"
+        total: 4
+        done: 4
+        status: closed
+        note: "SIGNED 2026-06-19 — mcp-trade-api · 9 domains · daily brief · V4 gate"
+      - id: vision-v5-convergence
+        label: "Vision V5 — Full convergence"
+        total: 4
+        done: 4
+        status: closed
+        note: "SIGNED 2026-06-19 — unified MCP · Ollama · feedback loop · V1–V5 complete"
       - id: legacy-retirement
         label: "Phase 3 Legacy retirement"
         total: 4

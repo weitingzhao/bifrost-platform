@@ -1,0 +1,85 @@
+{
+  "at": "2026-06-19T20:46:11.660871Z",
+  "result": "pass",
+  "checks": [
+    {
+      "id": "s3-prerequisite",
+      "label": "Vision S3 signed (prerequisite)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "S3 SIGNED by admin"
+    },
+    {
+      "id": "dev-agent-catalog",
+      "label": "devAgentLoopCatalog.ts",
+      "required": true,
+      "reachability": "ok",
+      "detail": "7 loop steps defined"
+    },
+    {
+      "id": "pre-push-script",
+      "label": "Frontend agent-pre-push.sh",
+      "required": true,
+      "reachability": "ok",
+      "detail": "agent-pre-push.sh (lint + build + legacy-css)"
+    },
+    {
+      "id": "agent-protocol-v2",
+      "label": "Agent Protocol Dev Agent closed loop",
+      "required": true,
+      "reachability": "ok",
+      "detail": "agentProtocolCatalog.ts OK"
+    },
+    {
+      "id": "tekton-bifrost-deliver-stg",
+      "label": "Tekton pipeline: bifrost-deliver-stg",
+      "required": true,
+      "reachability": "ok",
+      "detail": "registered in cicd"
+    },
+    {
+      "id": "tekton-bifrost-deliver-prod",
+      "label": "Tekton pipeline: bifrost-deliver-prod",
+      "required": true,
+      "reachability": "ok",
+      "detail": "registered in cicd"
+    },
+    {
+      "id": "deliver-stg-success",
+      "label": "Last deliver-stg success",
+      "required": true,
+      "reachability": "ok",
+      "detail": "bifrost-deliver-stg-1781842288 @ 2026-06-19T04:14:02Z"
+    },
+    {
+      "id": "stg-smoke",
+      "label": "STG smoke (9 APIs)",
+      "required": true,
+      "reachability": "ok",
+      "detail": "10 target(s) ok"
+    },
+    {
+      "id": "promote-gate-route",
+      "label": "Promote release-gate API registered",
+      "required": true,
+      "reachability": "ok",
+      "detail": "server.go OK"
+    },
+    {
+      "id": "delivery-run-route",
+      "label": "Delivery pipeline run API registered",
+      "required": true,
+      "reachability": "ok",
+      "detail": "server.go OK"
+    },
+    {
+      "id": "spine-vision-v2-dev-agent",
+      "label": "Spine milestone: vision-v2-dev-agent",
+      "required": true,
+      "reachability": "ok",
+      "detail": "status=SIGNED"
+    }
+  ],
+  "triggered_by": "admin",
+  "summary": "Vision V2 gate pass (11 checks)"
+}

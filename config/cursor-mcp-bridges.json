@@ -1,0 +1,43 @@
+{
+  "comment": "Vision V3 — Cursor MCP bridges for Ops Agent. Merge mcpServers into ~/.cursor/mcp.json.",
+  "mcpServers": {
+    "bifrost-platform": {
+      "command": "npx",
+      "args": ["tsx", "mcp/platform/src/index.ts"],
+      "env": {
+        "PLATFORM_API_URL": "http://127.0.0.1:8780",
+        "PLATFORM_OPERATOR_TOKEN": "<operator-or-admin-token>"
+      }
+    },
+    "bifrost-kubernetes-bridge": {
+      "comment": "K8s read/actuation via platform-api cluster routes (L0/L1/L2)",
+      "command": "npx",
+      "args": ["tsx", "mcp/platform/src/index.ts"],
+      "env": {
+        "PLATFORM_API_URL": "http://127.0.0.1:8780",
+        "PLATFORM_OPERATOR_TOKEN": "<operator-or-admin-token>",
+        "MCP_BRIDGE_FOCUS": "kubernetes"
+      }
+    },
+    "bifrost-redis-bridge": {
+      "comment": "Redis health via matrix + cluster probes (read-only L0)",
+      "command": "npx",
+      "args": ["tsx", "mcp/platform/src/index.ts"],
+      "env": {
+        "PLATFORM_API_URL": "http://127.0.0.1:8780",
+        "PLATFORM_OPERATOR_TOKEN": "<viewer-or-operator-token>",
+        "MCP_BRIDGE_FOCUS": "redis"
+      }
+    },
+    "bifrost-postgres-bridge": {
+      "comment": "PG connectivity via matrix probes (read-only L0)",
+      "command": "npx",
+      "args": ["tsx", "mcp/platform/src/index.ts"],
+      "env": {
+        "PLATFORM_API_URL": "http://127.0.0.1:8780",
+        "PLATFORM_OPERATOR_TOKEN": "<viewer-or-operator-token>",
+        "MCP_BRIDGE_FOCUS": "postgres"
+      }
+    }
+  }
+}

@@ -173,6 +173,42 @@ export const DEV_AGENT_CLOSED_LOOP = {
   catalog: 'console/src/lib/architecture/devAgentLoopCatalog.ts',
 } as const
 
+/** Vision V3 — Ops Agent L1/L2 (Alertmanager → MCP actuation + audit). */
+export const OPS_AGENT_CLOSED_LOOP = {
+  webhook: 'POST /api/v1/ops-agent/alertmanager',
+  alertmanagerConfig: 'config/ops-agent-alertmanager.yaml',
+  cursorBridges: 'config/cursor-mcp-bridges.json',
+  mcpStatus: 'GET /api/v1/mcp/status',
+  auditLog: 'GET /api/v1/audit',
+  catalog: 'console/src/lib/architecture/opsAgentLoopCatalog.ts',
+} as const
+
+/** Vision V4 — Business Agent read-only (9 Trade API domains + daily brief). */
+export const BUSINESS_AGENT_CLOSED_LOOP = {
+  catalogAPI: 'GET /api/v1/trade-agent/catalog',
+  domainsAPI: 'GET /api/v1/trade-agent/domains',
+  domainsConfig: 'config/trade-api-domains.yaml',
+  briefSchedule: 'config/business-agent-brief-schedule.yaml',
+  cursorMcp: 'config/cursor-mcp-trade.json',
+  mcpServer: 'mcp/trade/src/index.ts',
+  catalog: 'console/src/lib/architecture/businessAgentLoopCatalog.ts',
+} as const
+
+/** Vision V5 — Full convergence (Dev + Ops + Business unified). */
+export const CONVERGENCE_CLOSED_LOOP = {
+  unifiedMcp: 'config/cursor-unified-mcp.json',
+  ollama: 'config/ollama-agent.yaml',
+  feedbackLoop: 'config/convergence-feedback-loop.yaml',
+  catalog: 'console/src/lib/architecture/convergenceLoopCatalog.ts',
+  prerequisites: [
+    'vision-v1-dev-topology',
+    'vision-s3-briefing-alignment',
+    'vision-v2-dev-agent',
+    'vision-v3-ops-agent',
+    'vision-v4-business-agent',
+  ],
+} as const
+
 /** Build LLM-optimized text for the Agent Protocol page. */
 export function buildAgentProtocolLlmPack(): string {
   const lines: string[] = [
@@ -214,6 +250,29 @@ export function buildAgentProtocolLlmPack(): string {
     `- Verify: \`${DEV_AGENT_CLOSED_LOOP.stgSmoke}\``,
     `- Promote: \`${DEV_AGENT_CLOSED_LOOP.releaseGate}\` before deliver-prod`,
     `- Catalog: \`${DEV_AGENT_CLOSED_LOOP.catalog}\``,
+    '',
+    '## Ops Agent closed loop (Vision V3)',
+    `- Webhook: \`${OPS_AGENT_CLOSED_LOOP.webhook}\``,
+    `- Alertmanager: \`${OPS_AGENT_CLOSED_LOOP.alertmanagerConfig}\``,
+    `- Cursor MCP bridges: \`${OPS_AGENT_CLOSED_LOOP.cursorBridges}\``,
+    `- MCP status: \`${OPS_AGENT_CLOSED_LOOP.mcpStatus}\``,
+    `- Audit: \`${OPS_AGENT_CLOSED_LOOP.auditLog}\``,
+    `- Catalog: \`${OPS_AGENT_CLOSED_LOOP.catalog}\``,
+    '',
+    '## Business Agent closed loop (Vision V4)',
+    `- Catalog API: \`${BUSINESS_AGENT_CLOSED_LOOP.catalogAPI}\``,
+    `- Domains: \`${BUSINESS_AGENT_CLOSED_LOOP.domainsConfig}\` (9 read-only domains)`,
+    `- Daily brief: \`${BUSINESS_AGENT_CLOSED_LOOP.briefSchedule}\``,
+    `- Cursor MCP: \`${BUSINESS_AGENT_CLOSED_LOOP.cursorMcp}\``,
+    `- MCP server: \`${BUSINESS_AGENT_CLOSED_LOOP.mcpServer}\``,
+    `- Catalog: \`${BUSINESS_AGENT_CLOSED_LOOP.catalog}\``,
+    '',
+    '## Full convergence (Vision V5)',
+    `- Unified MCP: \`${CONVERGENCE_CLOSED_LOOP.unifiedMcp}\``,
+    `- Ollama (LAN): \`${CONVERGENCE_CLOSED_LOOP.ollama}\``,
+    `- Feedback loop: \`${CONVERGENCE_CLOSED_LOOP.feedbackLoop}\``,
+    `- Catalog: \`${CONVERGENCE_CLOSED_LOOP.catalog}\``,
+    `- Prerequisites: ${CONVERGENCE_CLOSED_LOOP.prerequisites.map(p => `\`${p}\``).join(', ')}`,
   ]
   return lines.join('\n')
 }
