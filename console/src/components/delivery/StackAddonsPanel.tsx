@@ -10,8 +10,10 @@ import {
   StatusLamp,
 } from '@bifrost/ui'
 import type { StackAddonView, StackAddonsResponse } from '@/api/types'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { DeliveryBrandLabel } from '@/components/delivery/DeliveryBrandLabel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
+import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 
 interface StackAddonsPanelProps {
   data: StackAddonsResponse | undefined
@@ -37,14 +39,17 @@ function addonStatusLabel(status: StackAddonView['status']): string {
 
 export function StackAddonsPanel({ data, isLoading, errorMessage }: StackAddonsPanelProps) {
   const addons = data?.addons ?? []
+  const qc = useQueryClient()
+  const stackFetching = useIsFetching({ queryKey: ['stack', 'addons'] }) > 0
 
   return (
     <OpsSection
       title="CI/CD stack"
       actions={
-        <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {isLoading ? '…' : `GET /api/v1/stack/addons · ns ${data?.namespace ?? 'cicd'}`}
-        </span>
+        <SectionRefreshButton
+          isFetching={stackFetching || isLoading}
+          onClick={() => void qc.invalidateQueries({ queryKey: ['stack', 'addons'] })}
+        />
       }
       headerExtra={
         <>

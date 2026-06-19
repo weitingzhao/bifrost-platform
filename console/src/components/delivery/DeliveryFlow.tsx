@@ -109,8 +109,7 @@ export function DeliveryFlow({
       title="CI/CD dual track"
       description={
         <>
-          Near-term Mac runner vs target GitOps on K3s. Target lane uses live{' '}
-          <span className="font-mono-tabular">GET /api/v1/gitops/apps</span> for Argo CD.
+          Near-term Mac runner vs target GitOps on K3s. Target lane uses live Argo CD application status from the cluster.
         </>
       }
       headerExtra={

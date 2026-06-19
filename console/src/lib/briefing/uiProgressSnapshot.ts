@@ -32,7 +32,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Runtime',
     item: 'Cluster',
     status: 'partial',
-    notes: 'L0 summary/nodes/NS/workloads; P2 node lifecycle drawer (cordon/uncordon/drain/join); compute WOL; Layer A metrics; P1 workload actuation',
+    notes: 'P2 node wizard (maintain/compute-off/join flows); node drawer; cordon/drain/uncordon/join + compute WOL; Layer A metrics; P1 workload actuation',
   },
   {
     area: 'Runtime',
@@ -44,7 +44,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Program',
     item: 'Delivery',
     status: 'partial',
-    notes: 'GitOps + deliver-stg v2 — Kaniko amd64 taskRunTemplate + preflight; stg overlay amd64 pool (G3)',
+    notes: 'GitOps sync/rollback + Tekton pipeline runs on Operate tab; deliver-stg v2 Kaniko amd64 + preflight; stg overlay amd64 pool (G3)',
   },
   {
     area: 'Program',
@@ -83,6 +83,12 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     notes: 'ensure namespaces, rollout restart, scale, delete pod, cordon/uncordon/drain/join — operator/admin token + audit',
   },
   {
+    area: 'Platform API',
+    item: 'P3 GitOps + CI actuation',
+    status: 'done',
+    notes: 'POST gitops/apps/{name}/sync (operator), rollback (admin), delivery/pipelines/{name}/runs — audit logged',
+  },
+  {
     area: 'Future',
     item: 'Node agent / MCP',
     status: 'planned',
@@ -91,8 +97,8 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
   {
     area: 'Future',
     item: 'GitOps actuation',
-    status: 'partial',
-    notes: 'GitOps sync + deliver-stg pipeline + stg smoke + release gate API (S3–S6)',
+    status: 'done',
+    notes: 'Argo sync + rollback + deliver-stg pipeline + stg smoke + release gate API (S3–S6)',
   },
 ]
 

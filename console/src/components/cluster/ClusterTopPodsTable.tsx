@@ -1,6 +1,8 @@
 import { DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { ClusterMetricsResponse, ClusterPodMetric } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 
 interface ClusterTopPodsTableProps {
   metrics: ClusterMetricsResponse | undefined
@@ -10,14 +12,22 @@ interface ClusterTopPodsTableProps {
 export function ClusterTopPodsTable({ metrics, isLoading }: ClusterTopPodsTableProps) {
   const pods: ClusterPodMetric[] = metrics?.top_pods ?? []
   const available = metrics?.metrics_server_available === true
+  const qc = useQueryClient()
+  const metricsFetching = useIsFetching({ queryKey: ['cluster', 'metrics'] }) > 0
 
   return (
     <OpsSection
       title="Top pods (Bifrost namespaces)"
       actions={
-        <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {isLoading ? '…' : `${pods.length} pods`}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            {isLoading ? '…' : `${pods.length} pods`}
+          </span>
+          <SectionRefreshButton
+            isFetching={metricsFetching || isLoading}
+            onClick={() => void qc.invalidateQueries({ queryKey: ['cluster', 'metrics'] })}
+          />
+        </div>
       }
       bodyPadding="none"
       overflow="hidden"

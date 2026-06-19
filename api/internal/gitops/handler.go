@@ -46,6 +46,34 @@ func (h *Handler) HandleSyncApp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) HandleRollbackApp(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(chi.URLParam(r, "name"))
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "application name required"})
+		return
+	}
+	var req RollbackRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+	}
+	resp, err := h.svc.RollbackApplication(r.Context(), name, req.Revision)
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	if h.audit != nil {
+		h.audit.Record(r, resp.Action, resp.Target, status, resp.Message)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, resp)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

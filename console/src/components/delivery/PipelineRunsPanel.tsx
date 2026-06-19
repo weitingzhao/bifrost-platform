@@ -10,7 +10,7 @@ import {
   DenseTag,
   IconActionButton,
 } from '@bifrost/ui'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useIsFetching, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { DeliveryPipelineRunView, DeliveryPipelinesResponse } from '@/api/types'
@@ -23,6 +23,7 @@ import {
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeliveryBrandLabel } from '@/components/delivery/DeliveryBrandLabel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
+import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { StatusLamp } from '@/components/StatusLamp'
 import {
@@ -120,6 +121,7 @@ export function PipelineRunsPanel({
   const [runSort, setRunSort] = useState(() => defaultPipelineRunSort())
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
+  const pipelinesFetching = useIsFetching({ queryKey: ['delivery', 'pipelines'] }) > 0
 
   const activePipeline = selectedPipeline !== '' ? selectedPipeline : defaultPipeline
 
@@ -143,6 +145,13 @@ export function PipelineRunsPanel({
     enabled: activePipeline !== '',
     refetchInterval: 10_000,
   })
+
+  const refreshRuns = () => {
+    void qc.invalidateQueries({ queryKey: ['delivery', 'pipelines'] })
+    if (activePipeline !== '') {
+      void qc.invalidateQueries({ queryKey: ['delivery', 'runs', activePipeline] })
+    }
+  }
 
   const logsQuery = useQuery({
     queryKey: ['delivery', 'logs', activePipeline, expandedRun],
@@ -240,11 +249,10 @@ export function PipelineRunsPanel({
           : undefined
       }
       actions={
-        !isRecent ? (
-        <span className="font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {pipelinesLoading ? '…' : `GET /api/v1/delivery/pipelines · ns ${pipelines?.namespace ?? 'cicd'}`}
-        </span>
-        ) : undefined
+        <SectionRefreshButton
+          isFetching={pipelinesFetching || pipelinesLoading || runsQuery.isFetching}
+          onClick={refreshRuns}
+        />
       }
       headerExtra={
         <>

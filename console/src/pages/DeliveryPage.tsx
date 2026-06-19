@@ -86,6 +86,7 @@ export function DeliveryPage({
 }: DeliveryPageProps) {
   const [pageTab, setPageTab] = useState<DeliveryPageTab>(DEFAULT_DELIVERY_PAGE_TAB)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [gitOpsDrawerOpen, setGitOpsDrawerOpen] = useState(false)
 
   if (isLoading || !context) {
     return <p className="text-[var(--muted-foreground)]">Loading delivery context…</p>
@@ -97,7 +98,9 @@ export function DeliveryPage({
   const activeTabMeta = DELIVERY_PAGE_TABS.find(t => t.value === pageTab)
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
+    <div
+      className={`flex w-full min-w-0 flex-col gap-4${gitOpsDrawerOpen ? ' cluster-page-shell--node-drawer' : ''}`}
+    >
       <OpsSection
         title="Delivery"
         description={activeTabMeta?.hint ?? 'STG CI/CD — operate, observe, or review blueprint.'}
@@ -132,6 +135,14 @@ export function DeliveryPage({
         <>
           <SupplyChainPanel layout="operate" />
           <DeliveryActiveRunPanel />
+          <GitOpsProbePanel
+            data={gitops}
+            isLoading={gitopsLoading}
+            errorMessage={gitopsError}
+            layout="operate"
+            onOpenAudit={onOpenAudit}
+            onDrawerOpenChange={setGitOpsDrawerOpen}
+          />
           <StgSmokePanel
             data={stgSmoke}
             isLoading={stgSmokeLoading}
@@ -170,7 +181,14 @@ export function DeliveryPage({
             pipelines={pipelines}
             pipelinesLoading={pipelinesLoading}
           />
-          <GitOpsProbePanel data={gitops} isLoading={gitopsLoading} errorMessage={gitopsError} />
+          <GitOpsProbePanel
+            data={gitops}
+            isLoading={gitopsLoading}
+            errorMessage={gitopsError}
+            layout="observe"
+            onOpenAudit={onOpenAudit}
+            onDrawerOpenChange={setGitOpsDrawerOpen}
+          />
           <StackAddonsPanel data={stack} isLoading={stackLoading} errorMessage={stackError} />
           <StgSmokePanel
             data={stgSmoke}

@@ -1,6 +1,12 @@
 import { Button } from '@bifrost/ui'
 import type { ClusterNode, ComputeWorkloadStatus, NodePowerResponse } from '@/api/types'
+import { NodeObservedStatePanel } from '@/components/cluster/NodeObservedStatePanel'
+import { WizardProcedureSteps } from '@/components/cluster/WizardProcedureSteps'
 import { StatusLamp } from '@/components/StatusLamp'
+import {
+  computeShutdownWizardSteps,
+  maintenanceWizardSteps,
+} from '@/lib/cluster/nodeWizard'
 
 interface ClusterNodeDrawerProps {
   open: boolean
@@ -48,6 +54,10 @@ export function ClusterNodeDrawer({
   const computeManaged = node.compute_managed === true
   const offline = power?.power_state === 'offline' || node.status !== 'Ready'
   const online = power?.power_state === 'online' || node.status === 'Ready'
+  const wizardSteps = computeManaged
+    ? computeShutdownWizardSteps(node, power)
+    : maintenanceWizardSteps(node, power)
+  const procedureLabel = computeManaged ? 'Compute off' : 'Maintain'
 
   return (
     <aside
@@ -68,30 +78,22 @@ export function ClusterNodeDrawer({
       </header>
 
       <div className="bay-detail-drawer-body flex flex-col gap-4">
+        <NodeObservedStatePanel
+          node={node}
+          power={powerLoading && power == null ? undefined : power}
+          layout="column"
+        />
+
+        <WizardProcedureSteps steps={wizardSteps} flowLabel={procedureLabel} />
+
         <section>
           <h4 className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Node status
+            Manual actions
           </h4>
-          <ul className="m-0 list-none space-y-1 text-[var(--text-dense)]">
-            <li>
-              <StatusLamp value={node.reachability} kind="reach" /> Status{' '}
-              <code className="font-mono-tabular">{node.status}</code>
-              {' · '}
-              Roles <code className="font-mono-tabular">{node.roles || '—'}</code>
-            </li>
-            <li>
-              Scheduling{' '}
-              <code className="font-mono-tabular">
-                {node.unschedulable ? 'cordoned (unschedulable)' : 'open'}
-              </code>
-            </li>
-            {node.internal_ip !== '' && (
-              <li>
-                IP <code className="font-mono-tabular">{node.internal_ip}</code>
-              </li>
-            )}
-          </ul>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <p className="m-0 mb-2 text-dense-meta text-[var(--muted-foreground)]">
+            Jump to a specific API call — procedure above shows the recommended order.
+          </p>
+          <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               variant="outline"
@@ -132,7 +134,7 @@ export function ClusterNodeDrawer({
         {computeManaged && (
           <section>
             <h4 className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Power
+              Power detail
             </h4>
             {powerLoading && power == null ? (
               <p className="m-0 text-[var(--muted-foreground)]">Loading power status…</p>
@@ -141,7 +143,7 @@ export function ClusterNodeDrawer({
             ) : (
               <ul className="m-0 list-none space-y-1 text-[var(--text-dense)]">
                 <li>
-                  <StatusLamp value={power?.reachability ?? node.reachability} kind="reach" /> Node{' '}
+                  <StatusLamp value={power?.reachability ?? node.reachability} kind="reach" /> Probe{' '}
                   <code className="font-mono-tabular">{power?.node_status ?? node.status}</code>
                   {' · '}
                   Power <code className="font-mono-tabular">{powerStateLabel(power?.power_state)}</code>

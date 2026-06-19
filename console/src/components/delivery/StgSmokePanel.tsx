@@ -1,5 +1,4 @@
 import {
-  Button,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -10,6 +9,7 @@ import {
 } from '@bifrost/ui'
 import type { StgSmokeResponse } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
 
 interface StgSmokePanelProps {
@@ -37,9 +37,7 @@ export function StgSmokePanel({
       description={description}
       actions={
         onRefresh != null ? (
-          <Button variant="outline" size="sm" disabled={isFetching} onClick={onRefresh}>
-            {isFetching ? 'Refreshing…' : 'Refresh'}
-          </Button>
+          <SectionRefreshButton isFetching={isFetching} onClick={onRefresh} />
         ) : undefined
       }
       headerExtra={

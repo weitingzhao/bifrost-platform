@@ -272,6 +272,7 @@ func applicationFromUnstructured(obj unstructured.Unstructured) ApplicationView 
 	}
 	destNS, _, _ := unstructured.NestedString(obj.Object, "spec", "destination", "namespace")
 	destName, _, _ := unstructured.NestedString(obj.Object, "spec", "destination", "name")
+	view.DestinationNamespace = destNS
 	switch {
 	case destNS != "" && destName != "":
 		view.Destination = destNS + "/" + destName
@@ -280,7 +281,94 @@ func applicationFromUnstructured(obj unstructured.Unstructured) ApplicationView 
 	case destName != "":
 		view.Destination = destName
 	}
+	if repo, ok, _ := unstructured.NestedString(obj.Object, "spec", "source", "repoURL"); ok {
+		view.SourceRepo = repo
+	}
+	if path, ok, _ := unstructured.NestedString(obj.Object, "spec", "source", "path"); ok {
+		view.SourcePath = path
+	}
+	if rev, ok, _ := unstructured.NestedString(obj.Object, "spec", "source", "targetRevision"); ok {
+		view.SourceTargetRevision = rev
+	}
+	if automated, ok, _ := unstructured.NestedMap(obj.Object, "spec", "syncPolicy", "automated"); ok {
+		if prune, found, _ := unstructured.NestedBool(automated, "prune"); found {
+			view.Prune = prune
+		}
+		if selfHeal, found, _ := unstructured.NestedBool(automated, "selfHeal"); found {
+			view.SelfHeal = selfHeal
+		}
+		view.AutomatedSync = true
+	}
+	if history, found, _ := unstructured.NestedSlice(obj.Object, "status", "history"); found {
+		view.HistoryCount = len(history)
+	}
+	view.Conditions = parseApplicationConditions(obj)
+	view.PrimaryCondition = primaryConditionSummary(view.Conditions, view.SyncStatus)
+	if phase, ok, _ := unstructured.NestedString(obj.Object, "status", "operationState", "phase"); ok {
+		view.OperationPhase = phase
+	}
+	if msg, ok, _ := unstructured.NestedString(obj.Object, "status", "operationState", "message"); ok {
+		view.OperationMessage = msg
+	}
 	return view
+}
+
+func parseApplicationConditions(obj unstructured.Unstructured) []ApplicationConditionView {
+	raw, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
+	if err != nil || !found {
+		return nil
+	}
+	out := make([]ApplicationConditionView, 0, len(raw))
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		cond := ApplicationConditionView{}
+		if t, ok, _ := unstructured.NestedString(m, "type"); ok {
+			cond.Type = t
+		}
+		if msg, ok, _ := unstructured.NestedString(m, "message"); ok {
+			cond.Message = msg
+		}
+		if at, ok, _ := unstructured.NestedString(m, "lastTransitionTime"); ok {
+			cond.LastTransitionTime = at
+		}
+		if cond.Type != "" || cond.Message != "" {
+			out = append(out, cond)
+		}
+	}
+	return out
+}
+
+func primaryConditionSummary(conditions []ApplicationConditionView, syncStatus string) string {
+	if len(conditions) == 0 {
+		return ""
+	}
+	priority := []string{"ComparisonError", "SyncError", "UnknownError", "DeletionError"}
+	for _, want := range priority {
+		for _, c := range conditions {
+			if c.Type == want && c.Message != "" {
+				return truncateConditionMessage(c.Message, 240)
+			}
+		}
+	}
+	if strings.EqualFold(syncStatus, "Unknown") {
+		for _, c := range conditions {
+			if c.Message != "" {
+				return truncateConditionMessage(c.Message, 240)
+			}
+		}
+	}
+	return ""
+}
+
+func truncateConditionMessage(msg string, max int) string {
+	msg = strings.TrimSpace(msg)
+	if max <= 0 || len(msg) <= max {
+		return msg
+	}
+	return msg[:max-1] + "…"
 }
 
 func aggregateArgoStatus(
@@ -363,4 +451,95 @@ func (s *Service) SyncApplication(ctx context.Context, name string) (cluster.Act
 	resp.Changed = true
 	resp.Message = fmt.Sprintf("Sync requested for Application %s in %s", name, ns)
 	return resp, nil
+}
+
+func (s *Service) RollbackApplication(ctx context.Context, name, revision string) (cluster.ActuationResponse, error) {
+	now := time.Now().UTC()
+	ns := s.entry.ResolvedApplicationsNamespace()
+	target := fmt.Sprintf("Application/%s/%s", ns, name)
+	resp := cluster.ActuationResponse{
+		OK:          false,
+		Action:      "gitops.rollback",
+		Target:      target,
+		Changed:     false,
+		GeneratedAt: now,
+	}
+
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		resp.Message = err.Error()
+		return resp, err
+	}
+
+	obj, err := dyn.Resource(applicationGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		resp.Message = fmt.Sprintf("application %s not found in %s: %v", name, ns, err)
+		return resp, fmt.Errorf("%s", resp.Message)
+	}
+
+	targetRevision := strings.TrimSpace(revision)
+	if targetRevision == "" {
+		targetRevision, err = previousHistoryRevision(obj)
+		if err != nil {
+			resp.Message = err.Error()
+			return resp, err
+		}
+	}
+
+	patch := map[string]any{
+		"operation": map[string]any{
+			"initiatedBy": map[string]any{
+				"username": "platform-api",
+			},
+			"sync": map[string]any{
+				"revision": targetRevision,
+			},
+		},
+	}
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		resp.Message = err.Error()
+		return resp, err
+	}
+
+	_, err = dyn.Resource(applicationGVR).Namespace(ns).Patch(
+		ctx,
+		name,
+		types.MergePatchType,
+		patchBytes,
+		metav1.PatchOptions{},
+	)
+	if err != nil {
+		resp.Message = fmt.Sprintf("rollback patch failed: %v", err)
+		return resp, err
+	}
+
+	resp.OK = true
+	resp.Changed = true
+	resp.Message = fmt.Sprintf(
+		"Rollback to revision %s requested for Application %s in %s",
+		targetRevision,
+		name,
+		ns,
+	)
+	return resp, nil
+}
+
+func previousHistoryRevision(obj *unstructured.Unstructured) (string, error) {
+	history, found, err := unstructured.NestedSlice(obj.Object, "status", "history")
+	if err != nil {
+		return "", fmt.Errorf("read deployment history: %w", err)
+	}
+	if !found || len(history) < 2 {
+		return "", fmt.Errorf("no previous deployment history (need at least 2 history entries)")
+	}
+	prev, ok := history[len(history)-2].(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("invalid history entry format")
+	}
+	rev, ok, _ := unstructured.NestedString(prev, "revision")
+	if !ok || rev == "" {
+		return "", fmt.Errorf("previous history entry has no revision")
+	}
+	return rev, nil
 }

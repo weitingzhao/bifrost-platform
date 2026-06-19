@@ -102,6 +102,7 @@ func (s *Server) Router() http.Handler {
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleAdmin))
+			r.Post("/gitops/apps/{name}/rollback", s.gitops.HandleRollbackApp)
 			r.Post("/promote/release-gate", s.promote.HandleRunReleaseGate)
 			r.Post("/promote/tier-b/signoff", s.promote.HandleSignTierB)
 		})

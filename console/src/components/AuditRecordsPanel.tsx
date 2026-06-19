@@ -1,6 +1,8 @@
 import { DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, type DenseTagVariant } from '@bifrost/ui'
 import type { AuditRecord } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 
 function relativeTime(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime()
@@ -31,6 +33,8 @@ interface AuditRecordsPanelProps {
   limit?: number
   title?: string
   onViewAll?: () => void
+  /** When false, hide the header refresh control (e.g. embedded preview). */
+  showRefresh?: boolean
 }
 
 export function AuditRecordsPanel({
@@ -39,8 +43,11 @@ export function AuditRecordsPanel({
   limit = 20,
   title = 'Audit',
   onViewAll,
+  showRefresh = true,
 }: AuditRecordsPanelProps) {
   const visible = records.slice(0, limit)
+  const qc = useQueryClient()
+  const auditFetching = useIsFetching({ queryKey: ['platform', 'audit'] }) > 0
 
   return (
     <OpsSection
@@ -50,6 +57,12 @@ export function AuditRecordsPanel({
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             {isLoading ? '...' : `${records.length} records`}
           </span>
+          {showRefresh ? (
+            <SectionRefreshButton
+              isFetching={auditFetching || isLoading}
+              onClick={() => void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })}
+            />
+          ) : null}
           {onViewAll != null && records.length > 0 && (
             <button
               type="button"
