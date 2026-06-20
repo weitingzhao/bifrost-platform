@@ -127,6 +127,7 @@ func (s *Server) Router() http.Handler {
 				r.Get("/{id}", s.remediation.HandleGet)
 				r.Get("/{id}/stream", s.remediation.HandleStream)
 				r.Post("/{id}/cancel", s.remediation.HandleCancel)
+				r.Post("/{id}/respond", s.remediation.HandleRespond)
 			})
 		})
 		r.Group(func(r chi.Router) {

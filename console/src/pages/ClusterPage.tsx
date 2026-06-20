@@ -37,6 +37,9 @@ import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPa
 import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
 import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
+import { ClusterMainView } from '@/components/cluster/ClusterMainView'
+import { ClusterDimensionSummaryGrid } from '@/components/cluster/ClusterDimensionSummaryGrid'
+import { ClusterServiceReadinessStrip } from '@/components/cluster/ClusterServiceReadinessStrip'
 import { ClusterGovernancePanel } from '@/components/cluster/ClusterGovernancePanel'
 import { ClusterIssuesPanel, collectClusterIssues } from '@/components/cluster/ClusterIssuesPanel'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
@@ -48,6 +51,7 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
 import { buildClusterLlmContext } from '@/lib/cluster/buildClusterLlmContext'
 import type { NodeWizardFlow, WizardAction } from '@/lib/cluster/nodeWizard'
+import { DEFAULT_CLUSTER_VIEW_SECTION, type ClusterViewSection } from '@/lib/cluster/clusterViewSections'
 
 type NsFilter = 'all' | 'bifrost'
 type CopyState = 'idle' | 'copied' | 'error'
@@ -69,10 +73,12 @@ export function ClusterPage({
   onOpenStandards,
   onOpenEnvironments,
   onOpenAudit,
+  onOpenServerConsole,
 }: {
   onOpenStandards?: () => void
   onOpenEnvironments?: () => void
   onOpenAudit?: () => void
+  onOpenServerConsole?: () => void
 }) {
   const qc = useQueryClient()
   const [nsFilter, setNsFilter] = useState<NsFilter>('bifrost')
@@ -91,6 +97,7 @@ export function ClusterPage({
   const [remediationPanelOpen, setRemediationPanelOpen] = useState(false)
   const [remediationJobId, setRemediationJobId] = useState<string | null>(null)
   const [remediationJob, setRemediationJob] = useState<RemediationJob | null>(null)
+  const [clusterSection, setClusterSection] = useState<ClusterViewSection>(DEFAULT_CLUSTER_VIEW_SECTION)
 
   const { canOperate, canAdmin, caps, capsLoading } = usePlatformAuth()
 
@@ -642,11 +649,28 @@ export function ClusterPage({
     workloadsQuery.data?.workloads,
   ])
 
+  const handleRemediationComplete = useCallback(
+    (job: RemediationJob) => {
+      setRemediationJob(job)
+      void qc.invalidateQueries({ queryKey: ['cluster'] })
+      void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
+      // K8s summary can lag briefly after pod deletes — follow up once more.
+      window.setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: ['cluster'] })
+      }, 3_000)
+      if (job.status === 'done') {
+        setActionError(null)
+        setSyncError(job.summary ?? 'Remediation completed — cluster data refreshed')
+      }
+    },
+    [qc],
+  )
+
   const sidePanelOpen = nodeDrawerOpen || remediationPanelOpen
 
   return (
     <div
-      className={`flex w-full min-w-0 flex-col gap-4${sidePanelOpen ? ' cluster-page-shell--node-drawer' : ''}${remediationPanelOpen ? ' cluster-page-shell--remediation-drawer' : ''}`}
+      className={`cluster-page-shell flex w-full min-w-0 flex-col gap-2${sidePanelOpen ? ' cluster-page-shell--node-drawer' : ''}${remediationPanelOpen ? ' cluster-page-shell--remediation-drawer' : ''}`}
     >
       <section className="page-section panel-elevated px-4 py-2">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -782,12 +806,7 @@ cd ../bifrost-platform && make start`}
         isLoading={summaryQuery.isLoading || metricsQuery.isLoading}
       />
 
-      <ClusterServiceReadinessPanel
-        data={serviceReadinessQuery.data}
-        isLoading={serviceReadinessQuery.isLoading}
-      />
-
-      {clusterSummary != null && clusterSummary.reachability !== 'ok' && (
+      {clusterSummary != null && (
         <ClusterIssuesPanel
           summary={clusterSummary}
           canOperate={canOperate}
@@ -796,69 +815,109 @@ cd ../bifrost-platform && make start`}
           onSelectPodNamespace={ns => {
             setNsFilter('all')
             handleSelectNs(ns)
+            setClusterSection('workloads')
           }}
         />
       )}
 
-      <ClusterNodeWizardPanel
-        flow={wizardFlow}
-        onFlowChange={setWizardFlow}
-        nodes={nodesQuery.data?.nodes ?? []}
-        selectedNodeName={selectedNodeLive?.name ?? null}
-        onSelectNodeName={handleWizardSelectNodeName}
-        selectedNode={selectedNodeLive}
-        power={nodePowerQuery.data}
-        joinProfiles={joinProfilesQuery.data}
-        selectedJoinProfileId={
-          wizardJoinProfileId ?? joinProfilesQuery.data?.profiles[0]?.id ?? null
+      <section className="page-section panel-elevated cluster-home-summaries px-3 py-2">
+        <ClusterServiceReadinessStrip
+          data={serviceReadinessQuery.data}
+          isLoading={serviceReadinessQuery.isLoading}
+          onNavigate={setClusterSection}
+        />
+        <div className="cluster-home-summaries__divider" aria-hidden="true" />
+        <ClusterDimensionSummaryGrid
+          summary={clusterSummary}
+          summaryLoading={summaryQuery.isLoading}
+          governance={governanceQuery.data}
+          governanceLoading={governanceQuery.isLoading}
+          observability={observabilityQuery.data}
+          observabilityLoading={observabilityQuery.isLoading}
+          metrics={metricsQuery.data}
+          onNavigate={setClusterSection}
+        />
+      </section>
+
+      <ClusterMainView
+        section={clusterSection}
+        onSectionChange={setClusterSection}
+        nodes={
+          <>
+            <ClusterNodeWizardPanel
+              flow={wizardFlow}
+              onFlowChange={setWizardFlow}
+              nodes={nodesQuery.data?.nodes ?? []}
+              selectedNodeName={selectedNodeLive?.name ?? null}
+              onSelectNodeName={handleWizardSelectNodeName}
+              selectedNode={selectedNodeLive}
+              power={nodePowerQuery.data}
+              joinProfiles={joinProfilesQuery.data}
+              selectedJoinProfileId={
+                wizardJoinProfileId ?? joinProfilesQuery.data?.profiles[0]?.id ?? null
+              }
+              onSelectJoinProfileId={setWizardJoinProfileId}
+              canOperate={canOperate}
+              canAdmin={canAdmin}
+              actionPending={actionPending()}
+              onWizardAction={handleWizardAction}
+              onOpenNodeDetails={() => setNodeDrawerOpen(true)}
+            />
+            <ClusterNodesTable
+              nodes={nodesQuery.data?.nodes ?? []}
+              isLoading={nodesQuery.isLoading}
+              isFetching={nodesQuery.isFetching}
+              metricsAvailable={metricsQuery.data?.metrics_server_available}
+              selectedNode={selectedNode?.name ?? null}
+              onSelectNode={handleSelectNode}
+            />
+          </>
         }
-        onSelectJoinProfileId={setWizardJoinProfileId}
-        canOperate={canOperate}
-        canAdmin={canAdmin}
-        actionPending={actionPending()}
-        onWizardAction={handleWizardAction}
-        onOpenNodeDetails={() => setNodeDrawerOpen(true)}
-      />
-
-      <ClusterNodesTable
-        nodes={nodesQuery.data?.nodes ?? []}
-        isLoading={nodesQuery.isLoading}
-        isFetching={nodesQuery.isFetching}
-        metricsAvailable={metricsQuery.data?.metrics_server_available}
-        selectedNode={selectedNode?.name ?? null}
-        onSelectNode={handleSelectNode}
-      />
-
-      <ClusterGovernancePanel data={governanceQuery.data} isLoading={governanceQuery.isLoading} />
-
-      <ClusterWorkloadsExplorer
-        namespaces={namespacesQuery.data?.namespaces ?? []}
-        nsFilter={nsFilter}
-        selectedNs={selectedNs}
-        workloads={workloadsQuery.data?.workloads ?? []}
-        isLoadingNamespaces={namespacesQuery.isLoading}
-        isLoadingWorkloads={workloadsQuery.isLoading}
-        selectedPod={selectedPod}
-        onFilterChange={filter => {
-          setNsFilter(filter)
-          setSelectedPod(null)
-          setDrawerOpen(false)
-        }}
-        onSelectNs={handleSelectNs}
-        onSelectPod={handleSelectPod}
-        onRestartDeployment={handleRestartDeployment}
-        onScaleDeployment={workload => setScaleState({ workload, replicas: 1 })}
-        onDeletePod={handleDeletePod}
-        placementRules={placementQuery.data?.rules}
-      />
-
-      <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
-
-      <ClusterObservabilityPanel
-        data={observabilityQuery.data}
-        isLoading={observabilityQuery.isLoading}
-        onOpenStandards={onOpenStandards}
-        onOpenEnvironments={onOpenEnvironments}
+        workloads={
+          <>
+            <ClusterWorkloadsExplorer
+              namespaces={namespacesQuery.data?.namespaces ?? []}
+              nsFilter={nsFilter}
+              selectedNs={selectedNs}
+              workloads={workloadsQuery.data?.workloads ?? []}
+              isLoadingNamespaces={namespacesQuery.isLoading}
+              isLoadingWorkloads={workloadsQuery.isLoading}
+              selectedPod={selectedPod}
+              onFilterChange={filter => {
+                setNsFilter(filter)
+                setSelectedPod(null)
+                setDrawerOpen(false)
+              }}
+              onSelectNs={handleSelectNs}
+              onSelectPod={handleSelectPod}
+              onRestartDeployment={handleRestartDeployment}
+              onScaleDeployment={workload => setScaleState({ workload, replicas: 1 })}
+              onDeletePod={handleDeletePod}
+              placementRules={placementQuery.data?.rules}
+            />
+            <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
+          </>
+        }
+        platform={
+          <>
+            <ClusterServiceReadinessPanel
+              data={serviceReadinessQuery.data}
+              isLoading={serviceReadinessQuery.isLoading}
+              compact
+            />
+            <ClusterGovernancePanel
+              data={governanceQuery.data}
+              isLoading={governanceQuery.isLoading}
+              compact
+            />
+            <ClusterObservabilityPanel
+              data={observabilityQuery.data}
+              isLoading={observabilityQuery.isLoading}
+              onOpenStandards={onOpenStandards}
+              onOpenEnvironments={onOpenEnvironments}
+            />
+          </>
+        }
       />
 
       <ClusterDrawer
@@ -906,6 +965,8 @@ cd ../bifrost-platform && make start`}
         initialJob={remediationJob}
         stopping={remediationCancelMutation.isPending}
         onStop={id => remediationCancelMutation.mutate(id)}
+        onComplete={handleRemediationComplete}
+        onOpenServerConsole={onOpenServerConsole}
         onClose={() => {
           setRemediationPanelOpen(false)
         }}

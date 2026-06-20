@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { clearPendingOperatorResponse } from './approvals.js'
 import type { RemediationEvent, RemediationJob, RemediationPhase } from './types.js'
 
 type Listener = (event: RemediationEvent) => void
@@ -91,6 +91,7 @@ export function finishJob(
 export function cancelJob(id: string): boolean {
   const job = jobs.get(id)
   if (job == null || job.status !== 'running') return false
+  clearPendingOperatorResponse(id)
   job.abort?.abort()
   finishJob(id, 'cancelled', 'Remediation cancelled by operator.')
   return true

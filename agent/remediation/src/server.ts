@@ -6,6 +6,7 @@ import {
   listJobs,
   subscribe,
 } from './jobs.js'
+import { submitOperatorResponse } from './approvals.js'
 import { runRemediationJob } from './runner.js'
 import type { StartRunRequest } from './types.js'
 
@@ -50,6 +51,24 @@ app.post('/run/:id/cancel', (req, res) => {
     return
   }
   res.json(getJob(req.params.id))
+})
+
+app.post('/run/:id/respond', (req, res) => {
+  const body = req.body as { option_id?: string; note?: string }
+  const optionId = body.option_id?.trim()
+  if (optionId == null || optionId === '') {
+    res.status(400).json({ error: 'option_id required' })
+    return
+  }
+  const ok = submitOperatorResponse(req.params.id, {
+    option_id: optionId,
+    note: body.note?.trim() || undefined,
+  })
+  if (!ok) {
+    res.status(409).json({ error: 'no pending approval for this job' })
+    return
+  }
+  res.json({ ok: true, job: getJob(req.params.id) })
 })
 
 app.get('/run/:id/stream', (req, res) => {

@@ -5,24 +5,26 @@ import "time"
 type Phase string
 
 const (
-	PhaseStarting    Phase = "starting"
-	PhaseDiagnosing  Phase = "diagnosing"
-	PhaseRemediating Phase = "remediating"
-	PhaseVerifying   Phase = "verifying"
-	PhaseDone        Phase = "done"
-	PhaseFailed      Phase = "failed"
-	PhaseCancelled   Phase = "cancelled"
+	PhaseStarting          Phase = "starting"
+	PhaseDiagnosing        Phase = "diagnosing"
+	PhaseAwaitingApproval  Phase = "awaiting_approval"
+	PhaseRemediating       Phase = "remediating"
+	PhaseVerifying         Phase = "verifying"
+	PhaseDone              Phase = "done"
+	PhaseFailed            Phase = "failed"
+	PhaseCancelled         Phase = "cancelled"
 )
 
 type EventType string
 
 const (
-	EventThinking   EventType = "thinking"
-	EventToolCall   EventType = "tool_call"
-	EventToolResult EventType = "tool_result"
-	EventStatus     EventType = "status"
-	EventDone       EventType = "done"
-	EventError      EventType = "error"
+	EventThinking         EventType = "thinking"
+	EventToolCall         EventType = "tool_call"
+	EventToolResult       EventType = "tool_result"
+	EventStatus           EventType = "status"
+	EventApprovalRequest  EventType = "approval_request"
+	EventDone             EventType = "done"
+	EventError            EventType = "error"
 )
 
 type Event struct {
@@ -62,6 +64,11 @@ type StartRequest struct {
 	Governance        any    `json:"governance,omitempty"`
 	Issues            any    `json:"issues,omitempty"`
 	Prompt            string `json:"prompt,omitempty"`
+}
+
+type RespondRequest struct {
+	OptionID string `json:"option_id"`
+	Note     string `json:"note,omitempty"`
 }
 
 type StartRunnerRequest struct {

@@ -664,6 +664,18 @@ export async function cancelRemediationJob(id: string): Promise<RemediationJob> 
   return r.json() as Promise<RemediationJob>
 }
 
+export async function respondRemediationJob(
+  id: string,
+  optionId: string,
+  note?: string,
+): Promise<void> {
+  const r = await authedFetch('remediation respond', `/api/v1/remediation/${encodeURIComponent(id)}/respond`, {
+    method: 'POST',
+    body: JSON.stringify({ option_id: optionId, note: note ?? '' }),
+  })
+  if (!r.ok) throw await parseError('remediation respond', r)
+}
+
 export function remediationStreamUrl(id: string): string {
   return `/api/v1/remediation/${encodeURIComponent(id)}/stream`
 }

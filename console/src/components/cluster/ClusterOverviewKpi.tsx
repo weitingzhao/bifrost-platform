@@ -33,7 +33,7 @@ function metricsLamp(available: boolean | undefined): Reachability {
 export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverviewKpiProps) {
   if (isLoading || summary == null) {
     return (
-      <section className="page-section panel-elevated px-4 py-3">
+      <section className="page-section panel-elevated cluster-kpi-strip px-3 py-2">
         <span className="text-[var(--muted-foreground)]">Loading cluster health…</span>
       </section>
     )
@@ -59,7 +59,7 @@ export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverv
   const healthHint = clusterHealthHint(summary)
 
   return (
-    <section className="page-section panel-elevated px-4 py-3">
+    <section className="page-section panel-elevated cluster-kpi-strip px-3 py-2">
       {/*
        * Single row: gauges (left, wider) · divider · compact stat columns (right)
        * Stat columns (importance): connectivity / alerts / workload
@@ -134,7 +134,7 @@ export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverv
         </div>
       </div>
 
-      <p className="cluster-kpi-footer m-0 mt-3 font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+      <p className="cluster-kpi-footer m-0 mt-2 font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
         Layer A · metrics-server · {summary.distribution.toUpperCase()} @{' '}
         {summary.api_server.replace('https://', '')}
         {summary.server_version != null && summary.server_version !== '' && (

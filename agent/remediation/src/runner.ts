@@ -34,7 +34,7 @@ export async function runRemediationJob(jobId: string, req: StartRunRequest): Pr
 
   const cwd = defaultCwd()
   const prompt = buildRemediationPrompt(req)
-  const customTools = buildCustomTools()
+  const customTools = buildCustomTools(jobId)
   const modelId = process.env.REMEDIATION_MODEL?.trim() || 'composer-2.5'
 
   appendEvent(jobId, makeEvent('status', `Starting agent (cwd=${cwd})`))

@@ -97,6 +97,25 @@ func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, job)
 }
 
+func (h *Handler) HandleRespond(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req RespondRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if req.OptionID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "option_id required"})
+		return
+	}
+	if err := h.runner.Respond(r.Context(), id, req); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	h.audit.Record(r, "remediation.respond", id, req.OptionID, req.Note)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (h *Handler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 

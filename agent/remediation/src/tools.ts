@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { SDKCustomTool } from '@cursor/sdk'
+import { submitOperatorResponse, waitForOperatorResponse } from './approvals.js'
+import { appendEvent, makeEvent, setPhase } from './jobs.js'
 import { jsonText, platformDelete, platformGet, platformPost } from './platformClient.js'
 
 const execFileAsync = promisify(execFile)
@@ -31,8 +33,74 @@ function textResult(text: string, isError = false) {
   return { content: [{ type: 'text' as const, text }], isError }
 }
 
-export function buildCustomTools(): Record<string, SDKCustomTool> {
+export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
   return {
+    request_operator_approval: {
+      description:
+        'Pause remediation and present the operator with choices before destructive or high-impact actions. Required before delete_pod, rollout_restart_deployment, or scale_deployment unless the issue is trivial debug garbage.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Short title for the decision card' },
+          message: { type: 'string', description: 'What you found and what you recommend' },
+          options: {
+            type: 'array',
+            description: '2–4 choices for the operator',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                label: { type: 'string' },
+                description: { type: 'string' },
+                destructive: { type: 'boolean' },
+              },
+              required: ['id', 'label'],
+            },
+          },
+          commands: {
+            type: 'array',
+            description: 'Optional shell/kubectl commands the operator should run manually',
+            items: { type: 'string' },
+          },
+        },
+        required: ['title', 'message', 'options'],
+      },
+      async execute(args) {
+        const title = String(args.title ?? 'Operator decision required')
+        const message = String(args.message ?? '')
+        const options = Array.isArray(args.options) ? args.options : []
+        const commands = Array.isArray(args.commands) ? args.commands.map(String) : []
+        if (options.length === 0) {
+          return textResult('options must be a non-empty array', true)
+        }
+        setPhase(jobId, 'awaiting_approval')
+        appendEvent(
+          jobId,
+          makeEvent('approval_request', message, { title, options, commands }),
+        )
+        try {
+          const decision = await waitForOperatorResponse(jobId)
+          appendEvent(
+            jobId,
+            makeEvent('status', `Operator selected: ${decision.option_id}`, {
+              option_id: decision.option_id,
+              note: decision.note,
+            }),
+          )
+          setPhase(jobId, 'remediating')
+          return textResult(
+            jsonText({
+              selected: decision.option_id,
+              note: decision.note ?? '',
+              proceed: decision.option_id !== 'skip' && decision.option_id !== 'cancel',
+            }),
+          )
+        } catch (err) {
+          setPhase(jobId, 'remediating')
+          return textResult(err instanceof Error ? err.message : String(err), true)
+        }
+      },
+    },
     kubectl_describe_pod: {
       description: 'Describe a pod (read-only diagnosis).',
       inputSchema: {

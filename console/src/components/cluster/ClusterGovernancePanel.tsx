@@ -18,6 +18,7 @@ import { capabilityTagVariant } from '@/lib/cluster/nodeCapabilitiesCatalog'
 interface ClusterGovernancePanelProps {
   data: ClusterGovernanceResponse | undefined
   isLoading: boolean
+  compact?: boolean
 }
 
 function categoryVariant(category: string): 'neutral' | 'category' | 'info' {
@@ -31,7 +32,7 @@ function categoryVariant(category: string): 'neutral' | 'category' | 'info' {
   }
 }
 
-export function ClusterGovernancePanel({ data, isLoading }: ClusterGovernancePanelProps) {
+export function ClusterGovernancePanel({ data, isLoading, compact = false }: ClusterGovernancePanelProps) {
   const qc = useQueryClient()
   const fetching = useIsFetching({ queryKey: ['cluster', 'governance'] }) > 0
   const nodeCoverage = data?.node_coverage ?? []
@@ -46,10 +47,9 @@ export function ClusterGovernancePanel({ data, isLoading }: ClusterGovernancePan
     <OpsSection
       title="Governance · Capabilities"
       description={
-        <>
-          Authoritative K3s prep snapshot — node labels + cluster probes. Confirm host prep and
-          storage here instead of kubectl.
-        </>
+        compact
+          ? 'Node labels and cluster capability probes.'
+          : 'Authoritative K3s prep snapshot — node labels + cluster probes. Confirm host prep and storage here instead of kubectl.'
       }
       actions={
         <div className="flex flex-wrap items-center gap-2">
