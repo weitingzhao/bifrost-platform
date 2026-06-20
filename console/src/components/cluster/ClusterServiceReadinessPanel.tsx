@@ -18,6 +18,7 @@ import { StatusLamp } from '@/components/StatusLamp'
 interface ClusterServiceReadinessPanelProps {
   data: ClusterServiceReadinessResponse | undefined
   isLoading: boolean
+  compact?: boolean
 }
 
 function statusVariant(status: ServiceDomainStatus | string): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -67,7 +68,7 @@ function DependencyList({ domain }: { domain: ServiceDomain }) {
   )
 }
 
-export function ClusterServiceReadinessPanel({ data, isLoading }: ClusterServiceReadinessPanelProps) {
+export function ClusterServiceReadinessPanel({ data, isLoading, compact = false }: ClusterServiceReadinessPanelProps) {
   const qc = useQueryClient()
   const fetching = useIsFetching({ queryKey: ['cluster', 'service-readiness'] }) > 0
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -81,10 +82,9 @@ export function ClusterServiceReadinessPanel({ data, isLoading }: ClusterService
     <OpsSection
       title="Service readiness"
       description={
-        <>
-          Workload-domain view — PostgreSQL, Redis, GPU, warehouse, workers, applications, and CI/CD.
-          Aggregates governance, placement, and live deployments.
-        </>
+        compact
+          ? 'Stack domains — PostgreSQL, Redis, workers, apps, CI/CD.'
+          : 'Workload-domain view — PostgreSQL, Redis, GPU, warehouse, workers, applications, and CI/CD. Aggregates governance, placement, and live deployments.'
       }
       actions={
         <div className="flex flex-wrap items-center gap-2">

@@ -927,6 +927,7 @@ export interface AuditResponse {
 export type RemediationPhase =
   | 'starting'
   | 'diagnosing'
+  | 'awaiting_approval'
   | 'remediating'
   | 'verifying'
   | 'done'
@@ -938,8 +939,16 @@ export type RemediationEventType =
   | 'tool_call'
   | 'tool_result'
   | 'status'
+  | 'approval_request'
   | 'done'
   | 'error'
+
+export interface RemediationApprovalOption {
+  id: string
+  label: string
+  description?: string
+  destructive?: boolean
+}
 
 export interface RemediationEvent {
   id: string

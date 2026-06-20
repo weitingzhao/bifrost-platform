@@ -80,97 +80,107 @@ export function ClusterIssuesPanel({
   remediatePending = false,
 }: ClusterIssuesPanelProps) {
   const issues = collectIssues(summary)
-
-  if (issues.length === 0) {
-    return null
-  }
-
   const pods = summary.failing_pod_details ?? []
+  const healthy = issues.length === 0
 
   return (
     <OpsSection
       title="Cluster issues"
-      leading={<StatusLamp value={summary.reachability} kind="reach" />}
-      description="Non-green indicators — click a namespace to inspect workloads below."
+      leading={<StatusLamp value={healthy ? 'ok' : summary.reachability} kind="reach" />}
+      description={
+        healthy
+          ? 'No failing pods, node readiness, or elastic degradation detected. Run AI Auto-Check to confirm.'
+          : 'Non-green indicators — click a namespace to inspect workloads below.'
+      }
       actions={
         canOperate && onAutoRemediate != null ? (
           <Button variant="default" size="sm" disabled={remediatePending} onClick={onAutoRemediate}>
-            {remediatePending ? 'Starting…' : 'Auto-Remediate'}
+            {remediatePending ? 'Starting…' : healthy ? 'AI Auto-Check' : 'Auto-Remediate'}
           </Button>
         ) : undefined
       }
-      bodyPadding="none"
+      bodyPadding={healthy ? 'default' : 'none'}
       overflow="visible"
-      bodyClassName="ops-section-body--table"
+      bodyClassName={healthy ? undefined : 'ops-section-body--table'}
     >
-      <DenseDataTable>
-        <DenseTableHeader>
-          <DenseTableHeadRow>
-            <DenseTableHead className="w-[6%]" />
-            <DenseTableHead className="w-[12%]">Category</DenseTableHead>
-            <DenseTableHead className="w-[30%]">Issue</DenseTableHead>
-            <DenseTableHead>Detail</DenseTableHead>
-          </DenseTableHeadRow>
-        </DenseTableHeader>
-        <DenseTableBody>
-          {issues.map(issue => (
-            <DenseTableRow key={issue.id}>
-              <DenseTableCell>
-                <StatusLamp value={issue.severity} kind="reach" />
-              </DenseTableCell>
-              <DenseTableCell>
-                <DenseTag variant={issue.severity === 'fail' ? 'danger' : 'warning'}>{issue.category}</DenseTag>
-              </DenseTableCell>
-              <DenseTableCell className="font-medium">{issue.title}</DenseTableCell>
-              <DenseTableCell className="text-[var(--muted-foreground)]">{issue.detail}</DenseTableCell>
-            </DenseTableRow>
-          ))}
-        </DenseTableBody>
-      </DenseDataTable>
-
-      {pods.length > 0 && (
+      {healthy ? (
+        <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          All monitored checks are green. Use <strong className="font-medium text-[var(--foreground)]">AI Auto-Check</strong>{' '}
+          above to run an autonomous health pass — the agent will confirm status or remediate if it finds something the
+          summary missed.
+        </p>
+      ) : (
         <>
-          <div className="border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-label)] font-medium">
-            Failing pods
-          </div>
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
-                <DenseTableHead className="w-[14%]">Namespace</DenseTableHead>
-                <DenseTableHead className="w-[28%]">Pod</DenseTableHead>
-                <DenseTableHead className="w-[8%]">Phase</DenseTableHead>
-                <DenseTableHead>Reason</DenseTableHead>
-                <DenseTableHead className="w-[12%]">Node</DenseTableHead>
-                <DenseTableHead className="w-[6%]">Age</DenseTableHead>
+                <DenseTableHead className="w-[6%]" />
+                <DenseTableHead className="w-[12%]">Category</DenseTableHead>
+                <DenseTableHead className="w-[30%]">Issue</DenseTableHead>
+                <DenseTableHead>Detail</DenseTableHead>
               </DenseTableHeadRow>
             </DenseTableHeader>
             <DenseTableBody>
-              {pods.map(pod => (
-                <DenseTableRow key={`${pod.namespace}/${pod.name}`}>
+              {issues.map(issue => (
+                <DenseTableRow key={issue.id}>
                   <DenseTableCell>
-                    {onSelectPodNamespace != null ? (
-                      <button
-                        type="button"
-                        className="text-[var(--primary)] underline-offset-2 hover:underline"
-                        onClick={() => onSelectPodNamespace(pod.namespace)}
-                      >
-                        {pod.namespace}
-                      </button>
-                    ) : (
-                      pod.namespace
-                    )}
+                    <StatusLamp value={issue.severity} kind="reach" />
                   </DenseTableCell>
-                  <DenseTableCell className="font-mono-tabular">{pod.name}</DenseTableCell>
                   <DenseTableCell>
-                    <DenseTag variant={pod.phase === 'Running' ? 'success' : 'danger'}>{pod.phase}</DenseTag>
+                    <DenseTag variant={issue.severity === 'fail' ? 'danger' : 'warning'}>{issue.category}</DenseTag>
                   </DenseTableCell>
-                  <DenseTableCell className="text-[var(--muted-foreground)]">{pod.reason}</DenseTableCell>
-                  <DenseTableCell className="font-mono-tabular">{pod.node ?? '—'}</DenseTableCell>
-                  <DenseTableCell className="font-mono-tabular">{pod.age ?? '—'}</DenseTableCell>
+                  <DenseTableCell className="font-medium">{issue.title}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{issue.detail}</DenseTableCell>
                 </DenseTableRow>
               ))}
             </DenseTableBody>
           </DenseDataTable>
+
+          {pods.length > 0 && (
+            <>
+              <div className="border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-label)] font-medium">
+                Failing pods
+              </div>
+              <DenseDataTable>
+                <DenseTableHeader>
+                  <DenseTableHeadRow>
+                    <DenseTableHead className="w-[14%]">Namespace</DenseTableHead>
+                    <DenseTableHead className="w-[28%]">Pod</DenseTableHead>
+                    <DenseTableHead className="w-[8%]">Phase</DenseTableHead>
+                    <DenseTableHead>Reason</DenseTableHead>
+                    <DenseTableHead className="w-[12%]">Node</DenseTableHead>
+                    <DenseTableHead className="w-[6%]">Age</DenseTableHead>
+                  </DenseTableHeadRow>
+                </DenseTableHeader>
+                <DenseTableBody>
+                  {pods.map(pod => (
+                    <DenseTableRow key={`${pod.namespace}/${pod.name}`}>
+                      <DenseTableCell>
+                        {onSelectPodNamespace != null ? (
+                          <button
+                            type="button"
+                            className="text-[var(--primary)] underline-offset-2 hover:underline"
+                            onClick={() => onSelectPodNamespace(pod.namespace)}
+                          >
+                            {pod.namespace}
+                          </button>
+                        ) : (
+                          pod.namespace
+                        )}
+                      </DenseTableCell>
+                      <DenseTableCell className="font-mono-tabular">{pod.name}</DenseTableCell>
+                      <DenseTableCell>
+                        <DenseTag variant={pod.phase === 'Running' ? 'success' : 'danger'}>{pod.phase}</DenseTag>
+                      </DenseTableCell>
+                      <DenseTableCell className="text-[var(--muted-foreground)]">{pod.reason}</DenseTableCell>
+                      <DenseTableCell className="font-mono-tabular">{pod.node ?? '—'}</DenseTableCell>
+                      <DenseTableCell className="font-mono-tabular">{pod.age ?? '—'}</DenseTableCell>
+                    </DenseTableRow>
+                  ))}
+                </DenseTableBody>
+              </DenseDataTable>
+            </>
+          )}
         </>
       )}
     </OpsSection>

@@ -156,6 +156,28 @@ func (c *RunnerClient) Stream(ctx context.Context, id string, onLine func([]byte
 	return scanner.Err()
 }
 
+func (c *RunnerClient) Respond(ctx context.Context, id string, body RespondRequest) error {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/run/"+id+"/respond", bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("runner respond: HTTP %d %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	return nil
+}
+
 func (c *RunnerClient) List(ctx context.Context) ([]Job, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/run", nil)
 	if err != nil {

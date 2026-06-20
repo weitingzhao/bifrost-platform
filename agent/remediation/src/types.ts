@@ -1,6 +1,7 @@
 export type RemediationPhase =
   | 'starting'
   | 'diagnosing'
+  | 'awaiting_approval'
   | 'remediating'
   | 'verifying'
   | 'done'
@@ -12,6 +13,7 @@ export type RemediationEventType =
   | 'tool_call'
   | 'tool_result'
   | 'status'
+  | 'approval_request'
   | 'done'
   | 'error'
 

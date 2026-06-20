@@ -492,6 +492,7 @@ export function ConsolePage() {
               onOpenStandards={openStandards}
               onOpenEnvironments={openEnvironments}
               onOpenAudit={openAudit}
+              onOpenServerConsole={() => setViewTab('console')}
             />
           </>
         )}
