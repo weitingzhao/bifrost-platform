@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-console test test-api test-console build-api start check-spine
+.PHONY: dev dev-api dev-console dev-agent start-agent test test-api test-console build-api start check-spine
 
 ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
@@ -11,6 +11,9 @@ dev-api:
 
 dev-console:
 	cd console && npm run dev
+
+dev-agent start-agent:
+	python3 scripts/run_remediation_agent.py --install
 
 test-api:
 	cd api && go test ./...

@@ -230,6 +230,79 @@ export interface FailingPodView {
   age?: string
 }
 
+export interface ClusterNodeCapability {
+  id: string
+  label: string
+  category?: string
+  detail?: string
+}
+
+export interface ClusterCapabilityCoverage {
+  id: string
+  label: string
+  category: string
+  scope: string
+  label_hint?: string
+  required_for?: string
+  nodes_ready: number
+  nodes_total: number
+  node_names: string[]
+  reachability: Reachability
+  gap_reason?: string
+}
+
+export interface ClusterCapabilityProbe {
+  id: string
+  label: string
+  category: string
+  status: string
+  reachability: Reachability
+  detail: string
+}
+
+export interface ClusterGovernanceResponse {
+  cluster_id: string
+  reachability: Reachability
+  detail: string
+  catalog: {
+    id: string
+    label: string
+    category: string
+    scope: string
+    label_hint?: string
+    required_for?: string
+  }[]
+  node_coverage: ClusterCapabilityCoverage[]
+  cluster_capabilities: ClusterCapabilityProbe[]
+  generated_at: string
+}
+
+export type ServiceDomainStatus = 'ready' | 'partial' | 'standby' | 'unavailable'
+
+export interface ServiceDependency {
+  id: string
+  label: string
+  reachability: Reachability
+  detail?: string
+}
+
+export interface ServiceDomain {
+  id: string
+  label: string
+  status: ServiceDomainStatus | string
+  reachability: Reachability
+  summary: string
+  dependencies: ServiceDependency[]
+}
+
+export interface ClusterServiceReadinessResponse {
+  cluster_id: string
+  reachability: Reachability
+  detail: string
+  domains: ServiceDomain[]
+  generated_at: string
+}
+
 export interface ClusterNode {
   name: string
   status: string
@@ -237,6 +310,7 @@ export interface ClusterNode {
   architecture?: string
   os_image?: string
   workload_label?: string
+  capabilities?: ClusterNodeCapability[]
   version: string
   internal_ip: string
   reachability: Reachability
@@ -848,4 +922,57 @@ export interface AuditRecord {
 
 export interface AuditResponse {
   records: AuditRecord[]
+}
+
+export type RemediationPhase =
+  | 'starting'
+  | 'diagnosing'
+  | 'remediating'
+  | 'verifying'
+  | 'done'
+  | 'failed'
+  | 'cancelled'
+
+export type RemediationEventType =
+  | 'thinking'
+  | 'tool_call'
+  | 'tool_result'
+  | 'status'
+  | 'done'
+  | 'error'
+
+export interface RemediationEvent {
+  id: string
+  at: string
+  type: RemediationEventType
+  text: string
+  meta?: Record<string, unknown>
+}
+
+export type RemediationJobStatus = 'running' | 'done' | 'failed' | 'cancelled'
+
+export interface RemediationJob {
+  id: string
+  phase: RemediationPhase
+  status: RemediationJobStatus
+  summary?: string
+  error?: string
+  actor?: string
+  scope?: string
+  created_at: string
+  updated_at: string
+  events?: RemediationEvent[]
+}
+
+export interface RemediationJobsResponse {
+  jobs: RemediationJob[]
+}
+
+export interface StartRemediationRequest {
+  scope?: string
+  cluster_summary?: ClusterSummary
+  service_readiness?: ClusterServiceReadinessResponse
+  governance?: ClusterGovernanceResponse
+  issues?: unknown
+  prompt?: string
 }

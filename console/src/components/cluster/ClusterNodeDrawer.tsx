@@ -1,5 +1,6 @@
 import { Button } from '@bifrost/ui'
 import type { ClusterNode, ComputeWorkloadStatus, NodePowerResponse } from '@/api/types'
+import { NodeCapabilitiesCell } from '@/components/cluster/NodeCapabilitiesCell'
 import { NodeObservedStatePanel } from '@/components/cluster/NodeObservedStatePanel'
 import { WizardProcedureSteps } from '@/components/cluster/WizardProcedureSteps'
 import { StatusLamp } from '@/components/StatusLamp'
@@ -83,6 +84,16 @@ export function ClusterNodeDrawer({
           power={powerLoading && power == null ? undefined : power}
           layout="column"
         />
+
+        <section>
+          <h4 className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Capabilities
+          </h4>
+          <p className="m-0 mb-2 text-dense-meta text-[var(--muted-foreground)]">
+            Derived from Kubernetes node labels after host prep (nfs-common, GPU driver, workload pool).
+          </p>
+          <NodeCapabilitiesCell capabilities={node.capabilities} compact={false} />
+        </section>
 
         <WizardProcedureSteps steps={wizardSteps} flowLabel={procedureLabel} />
 

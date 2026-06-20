@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Button } from '@bifrost/ui'
 import {
   cordonNode,
@@ -9,7 +9,9 @@ import {
   ensureMetricsServer,
   fetchCluster,
   fetchClusterEvents,
+  fetchClusterGovernance,
   fetchClusterMetrics,
+  fetchClusterServiceReadiness,
   fetchClusterNamespaces,
   fetchClusterNodes,
   fetchClusterPlacement,
@@ -25,23 +27,30 @@ import {
   syncClusterKubeconfig,
   uncordonNode,
   wakeComputeNode,
+  startRemediation,
+  cancelRemediationJob,
 } from '@/api/platform'
-import type { ClusterNode, ClusterWorkload, ComputeWorkloadStatus } from '@/api/types'
+import type { ClusterNode, ClusterWorkload, ComputeWorkloadStatus, RemediationJob } from '@/api/types'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
 import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPanel'
 import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
-import { ClusterIssuesPanel } from '@/components/cluster/ClusterIssuesPanel'
+import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
+import { ClusterGovernancePanel } from '@/components/cluster/ClusterGovernancePanel'
+import { ClusterIssuesPanel, collectClusterIssues } from '@/components/cluster/ClusterIssuesPanel'
+import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
 import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabilityPanel'
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
+import { buildClusterLlmContext } from '@/lib/cluster/buildClusterLlmContext'
 import type { NodeWizardFlow, WizardAction } from '@/lib/cluster/nodeWizard'
 
 type NsFilter = 'all' | 'bifrost'
+type CopyState = 'idle' | 'copied' | 'error'
 
 interface ConfirmState {
   open: boolean
@@ -78,6 +87,10 @@ export function ClusterPage({
   const [scaleState, setScaleState] = useState<ScaleState | null>(null)
   const [wizardFlow, setWizardFlow] = useState<NodeWizardFlow>('maintenance')
   const [wizardJoinProfileId, setWizardJoinProfileId] = useState<string | null>(null)
+  const [copyState, setCopyState] = useState<CopyState>('idle')
+  const [remediationPanelOpen, setRemediationPanelOpen] = useState(false)
+  const [remediationJobId, setRemediationJobId] = useState<string | null>(null)
+  const [remediationJob, setRemediationJob] = useState<RemediationJob | null>(null)
 
   const { canOperate, canAdmin, caps, capsLoading } = usePlatformAuth()
 
@@ -110,6 +123,20 @@ export function ClusterPage({
   const observabilityQuery = useQuery({
     queryKey: ['cluster', 'observability'],
     queryFn: fetchClusterObservability,
+    refetchInterval: 30_000,
+    retry: false,
+  })
+
+  const governanceQuery = useQuery({
+    queryKey: ['cluster', 'governance'],
+    queryFn: fetchClusterGovernance,
+    refetchInterval: 30_000,
+    retry: false,
+  })
+
+  const serviceReadinessQuery = useQuery({
+    queryKey: ['cluster', 'service-readiness'],
+    queryFn: fetchClusterServiceReadiness,
     refetchInterval: 30_000,
     retry: false,
   })
@@ -215,6 +242,25 @@ export function ClusterPage({
       handleActuationSuccess(data.message)
     },
     onError: handleActuationError,
+  })
+
+  const remediationStartMutation = useMutation({
+    mutationFn: startRemediation,
+    onSuccess: job => {
+      setRemediationJob(job)
+      setRemediationJobId(job.id)
+      setRemediationPanelOpen(true)
+      setActionError(null)
+    },
+    onError: (err: Error) => setActionError(err.message),
+  })
+
+  const remediationCancelMutation = useMutation({
+    mutationFn: cancelRemediationJob,
+    onSuccess: job => {
+      setRemediationJob(job)
+    },
+    onError: (err: Error) => setActionError(err.message),
   })
 
   const wakeNodeMutation = useMutation({
@@ -515,9 +561,92 @@ export function ClusterPage({
         ? null
         : 'Authenticate to actuate'
 
+  const handleCopyForLlm = useCallback(async () => {
+    let namespaces = namespacesQuery.data?.namespaces
+    if (nsFilter === 'bifrost') {
+      try {
+        const all = await fetchClusterNamespaces('')
+        namespaces = all.namespaces
+      } catch {
+        /* use bifrost subset */
+      }
+    }
+
+    const text = buildClusterLlmContext({
+      summary: summaryQuery.data,
+      nodes: nodesQuery.data?.nodes,
+      governance: governanceQuery.data,
+      serviceReadiness: serviceReadinessQuery.data,
+      metrics: metricsQuery.data,
+      namespaces,
+      placement: placementQuery.data,
+      observability: observabilityQuery.data,
+      selectedNamespace: selectedNs,
+      workloads: workloadsQuery.data?.workloads,
+    })
+
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2000)
+    } catch {
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 3000)
+    }
+  }, [
+    governanceQuery.data,
+    serviceReadinessQuery.data,
+    metricsQuery.data,
+    namespacesQuery.data?.namespaces,
+    nodesQuery.data?.nodes,
+    nsFilter,
+    observabilityQuery.data,
+    placementQuery.data,
+    selectedNs,
+    summaryQuery.data,
+    workloadsQuery.data?.workloads,
+  ])
+
+  const handleAutoRemediate = useCallback(() => {
+    if (clusterSummary == null) return
+    remediationStartMutation.mutate({
+      scope: 'cluster_issues_full_auto',
+      cluster_summary: clusterSummary,
+      service_readiness: serviceReadinessQuery.data,
+      governance: governanceQuery.data,
+      issues: collectClusterIssues(clusterSummary),
+      prompt: buildClusterLlmContext({
+        summary: clusterSummary,
+        nodes: nodesQuery.data?.nodes,
+        governance: governanceQuery.data,
+        serviceReadiness: serviceReadinessQuery.data,
+        metrics: metricsQuery.data,
+        namespaces: namespacesQuery.data?.namespaces,
+        placement: placementQuery.data,
+        observability: observabilityQuery.data,
+        selectedNamespace: selectedNs,
+        workloads: workloadsQuery.data?.workloads,
+      }),
+    })
+  }, [
+    clusterSummary,
+    governanceQuery.data,
+    metricsQuery.data,
+    namespacesQuery.data?.namespaces,
+    nodesQuery.data?.nodes,
+    observabilityQuery.data,
+    placementQuery.data,
+    remediationStartMutation,
+    selectedNs,
+    serviceReadinessQuery.data,
+    workloadsQuery.data?.workloads,
+  ])
+
+  const sidePanelOpen = nodeDrawerOpen || remediationPanelOpen
+
   return (
     <div
-      className={`flex w-full min-w-0 flex-col gap-4${nodeDrawerOpen ? ' cluster-page-shell--node-drawer' : ''}`}
+      className={`flex w-full min-w-0 flex-col gap-4${sidePanelOpen ? ' cluster-page-shell--node-drawer' : ''}${remediationPanelOpen ? ' cluster-page-shell--remediation-drawer' : ''}`}
     >
       <section className="page-section panel-elevated px-4 py-2">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -541,6 +670,13 @@ export function ClusterPage({
             )}
           </p>
           <div className="flex shrink-0 items-center gap-2">
+            <Button size="sm" onClick={() => void handleCopyForLlm()}>
+              {copyState === 'copied'
+                ? 'Copied!'
+                : copyState === 'error'
+                  ? 'Copy failed'
+                  : 'Copy for LLM'}
+            </Button>
             <Button variant="outline" size="sm" disabled={clusterFetching} onClick={refreshCluster}>
               {clusterFetching ? 'Refreshing…' : 'Refresh'}
             </Button>
@@ -646,9 +782,17 @@ cd ../bifrost-platform && make start`}
         isLoading={summaryQuery.isLoading || metricsQuery.isLoading}
       />
 
+      <ClusterServiceReadinessPanel
+        data={serviceReadinessQuery.data}
+        isLoading={serviceReadinessQuery.isLoading}
+      />
+
       {clusterSummary != null && clusterSummary.reachability !== 'ok' && (
         <ClusterIssuesPanel
           summary={clusterSummary}
+          canOperate={canOperate}
+          remediatePending={remediationStartMutation.isPending}
+          onAutoRemediate={handleAutoRemediate}
           onSelectPodNamespace={ns => {
             setNsFilter('all')
             handleSelectNs(ns)
@@ -684,6 +828,8 @@ cd ../bifrost-platform && make start`}
         selectedNode={selectedNode?.name ?? null}
         onSelectNode={handleSelectNode}
       />
+
+      <ClusterGovernancePanel data={governanceQuery.data} isLoading={governanceQuery.isLoading} />
 
       <ClusterWorkloadsExplorer
         namespaces={namespacesQuery.data?.namespaces ?? []}
@@ -752,6 +898,17 @@ cd ../bifrost-platform && make start`}
         onScaleWorkload={
           selectedNode?.compute_managed ? handleScaleComputeWorkload : undefined
         }
+      />
+
+      <RemediationPanel
+        open={remediationPanelOpen}
+        jobId={remediationJobId}
+        initialJob={remediationJob}
+        stopping={remediationCancelMutation.isPending}
+        onStop={id => remediationCancelMutation.mutate(id)}
+        onClose={() => {
+          setRemediationPanelOpen(false)
+        }}
       />
 
       <ConfirmDialog

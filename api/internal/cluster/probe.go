@@ -470,6 +470,7 @@ func nodeView(n corev1.Node) NodeView {
 		Architecture:       arch,
 		OSImage:            n.Status.NodeInfo.OSImage,
 		WorkloadLabel:      n.Labels["workload"],
+		Capabilities:       nodeCapabilities(n.Labels),
 		Version:            n.Status.NodeInfo.KubeletVersion,
 		InternalIP:         ip,
 		Reachability:       reach,
