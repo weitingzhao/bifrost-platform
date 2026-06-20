@@ -34,6 +34,26 @@ func TestEvaluateCriticalViolationWithoutAmd64(t *testing.T) {
 	}
 }
 
+func TestEvaluateNFSPool(t *testing.T) {
+	resp := Evaluate("test", []NodeInput{
+		{Name: "n1", Architecture: "amd64", CapabilityIDs: []string{"nfs-client"}, Reachability: probe.ReachOK},
+		{Name: "n2", Architecture: "amd64", Reachability: probe.ReachOK},
+	})
+	pool := findPool(resp.Pools, "nfs_client")
+	if pool == nil || pool.NodesReady != 1 {
+		t.Fatalf("nfs_client pool: %+v", pool)
+	}
+}
+
+func findPool(pools []PoolView, id string) *PoolView {
+	for i := range pools {
+		if pools[i].ID == id {
+			return &pools[i]
+		}
+	}
+	return nil
+}
+
 func TestCIPreflightReason(t *testing.T) {
 	if r := CIPreflightReason([]NodeInput{{Architecture: "amd64", Reachability: probe.ReachOK}}); r != "" {
 		t.Fatalf("unexpected reason: %s", r)

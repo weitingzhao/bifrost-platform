@@ -12,6 +12,7 @@ import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import type { ClusterNode } from '@/api/types'
 import { ConsoleHostIpLabel } from '@/components/ConsoleHostIpLabel'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
+import { NodeCapabilitiesCell } from '@/components/cluster/NodeCapabilitiesCell'
 import { NodeResourceCell } from '@/components/cluster/NodeResourceCell'
 import { NodeVersionInfo } from '@/components/cluster/NodeVersionInfo'
 import { StatusLamp } from '@/components/StatusLamp'
@@ -27,7 +28,7 @@ interface ClusterNodesTableProps {
   onSelectNode?: (node: ClusterNode) => void
 }
 
-const NODE_COL_COUNT = 9
+const NODE_COL_COUNT = 10
 
 export function ClusterNodesTable({
   nodes,
@@ -66,15 +67,16 @@ export function ClusterNodesTable({
     >
       <DenseDataTable>
         <colgroup>
-          <col style={{ width: '18%' }} />
           <col style={{ width: '16%' }} />
+          <col style={{ width: '14%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '7%' }} />
           <col style={{ width: '8%' }} />
           <col style={{ width: '8%' }} />
           <col style={{ width: '8%' }} />
-          <col style={{ width: '9%' }} />
-          <col style={{ width: '9%' }} />
-          <col style={{ width: '9%' }} />
-          <col style={{ width: '11%' }} />
+          <col style={{ width: '10%' }} />
         </colgroup>
         <DenseTableHeader>
           <DenseTableHeadRow>
@@ -82,6 +84,9 @@ export function ClusterNodesTable({
             <DenseTableHead>Status</DenseTableHead>
             <DenseTableHead>Arch</DenseTableHead>
             <DenseTableHead>Workload</DenseTableHead>
+            <DenseTableHead title="Host prep derived from node labels (storage.nfs/client, workload=gpu, …)">
+              Capabilities
+            </DenseTableHead>
             <DenseTableHead>Roles</DenseTableHead>
             <DenseTableHead title="Allocatable cores · usage % from metrics-server">CPU</DenseTableHead>
             <DenseTableHead title="Allocatable memory · usage % from metrics-server">MEM</DenseTableHead>
@@ -141,6 +146,9 @@ export function ClusterNodesTable({
                   </span>
                 </DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{node.workload_label || '—'}</DenseTableCell>
+                <DenseTableCell className="!whitespace-normal">
+                  <NodeCapabilitiesCell capabilities={node.capabilities} />
+                </DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{node.roles}</DenseTableCell>
                 <DenseTableCell>
                   <NodeResourceCell

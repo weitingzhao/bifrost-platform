@@ -10,6 +10,8 @@ import type {
   StackAddonsResponse,
   McpToolsResponse,
   McpStatusResponse,
+  ClusterGovernanceResponse,
+  ClusterServiceReadinessResponse,
   ClusterNamespacesResponse,
   ClusterNodesResponse,
   NodePowerResponse,
@@ -41,6 +43,9 @@ import type {
   RolloutRestartRequest,
   ScaleRequest,
   TopologyResponse,
+  StartRemediationRequest,
+  RemediationJob,
+  RemediationJobsResponse,
 } from './types'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
@@ -120,6 +125,18 @@ export async function fetchClusterNodes(): Promise<ClusterNodesResponse> {
   const r = await fetch('/api/v1/cluster/nodes')
   if (!r.ok) throw new Error(`cluster nodes: HTTP ${r.status}`)
   return r.json() as Promise<ClusterNodesResponse>
+}
+
+export async function fetchClusterGovernance(): Promise<ClusterGovernanceResponse> {
+  const r = await fetch('/api/v1/cluster/governance')
+  if (!r.ok) throw new Error(`cluster governance: HTTP ${r.status}`)
+  return r.json() as Promise<ClusterGovernanceResponse>
+}
+
+export async function fetchClusterServiceReadiness(): Promise<ClusterServiceReadinessResponse> {
+  const r = await fetch('/api/v1/cluster/service-readiness')
+  if (!r.ok) throw new Error(`cluster service-readiness: HTTP ${r.status}`)
+  return r.json() as Promise<ClusterServiceReadinessResponse>
 }
 
 export async function fetchNodePower(nodeName: string): Promise<NodePowerResponse> {
@@ -620,4 +637,33 @@ export async function fetchPodLogs(
   )
   if (!r.ok) throw await parseError('pod logs', r)
   return r.json() as Promise<PodLogsResponse>
+}
+
+export async function startRemediation(body: StartRemediationRequest): Promise<RemediationJob> {
+  const r = await authedFetch('remediation start', '/api/v1/remediation/start', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<RemediationJob>
+}
+
+export async function fetchRemediationJob(id: string): Promise<RemediationJob> {
+  const r = await authedFetch('remediation job', `/api/v1/remediation/${encodeURIComponent(id)}`)
+  return r.json() as Promise<RemediationJob>
+}
+
+export async function fetchRemediationJobs(): Promise<RemediationJobsResponse> {
+  const r = await authedFetch('remediation jobs', '/api/v1/remediation/')
+  return r.json() as Promise<RemediationJobsResponse>
+}
+
+export async function cancelRemediationJob(id: string): Promise<RemediationJob> {
+  const r = await authedFetch('remediation cancel', `/api/v1/remediation/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+  })
+  return r.json() as Promise<RemediationJob>
+}
+
+export function remediationStreamUrl(id: string): string {
+  return `/api/v1/remediation/${encodeURIComponent(id)}/stream`
 }

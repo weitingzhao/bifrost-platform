@@ -8,10 +8,11 @@ import (
 
 // NodeInput is a placement-neutral node snapshot (avoids import cycle with cluster).
 type NodeInput struct {
-	Name         string
-	Architecture string
+	Name          string
+	Architecture  string
 	WorkloadLabel string
-	Reachability probe.Reachability
+	CapabilityIDs []string
+	Reachability  probe.Reachability
 }
 
 type PoolStatus string

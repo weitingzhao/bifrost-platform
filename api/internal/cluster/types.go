@@ -31,6 +31,7 @@ type SummaryResponse struct {
 	GeneratedAt      time.Time          `json:"generated_at"`
 }
 
+
 type NodeView struct {
 	Name               string             `json:"name"`
 	Status             string             `json:"status"`
@@ -38,6 +39,7 @@ type NodeView struct {
 	Architecture       string             `json:"architecture,omitempty"`
 	OSImage            string             `json:"os_image,omitempty"`
 	WorkloadLabel      string             `json:"workload_label,omitempty"`
+	Capabilities       []NodeCapabilityView `json:"capabilities,omitempty"`
 	Version            string             `json:"version"`
 	InternalIP         string             `json:"internal_ip"`
 	Reachability       probe.Reachability `json:"reachability"`

@@ -821,6 +821,15 @@ html {
   transition: padding-right 0.2s ease;
 }
 
+.remediation-drawer {
+  --bay-detail-drawer-width: min(32rem, 100vw);
+  width: var(--bay-detail-drawer-width);
+}
+
+.cluster-page-shell--remediation-drawer {
+  padding-right: min(32rem, 100vw);
+}
+
 .bay-detail-drawer-header,
 .bay-detail-drawer-footer {
   background: var(--card);

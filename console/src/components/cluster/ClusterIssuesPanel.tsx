@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   Button,
   DenseDataTable,
@@ -17,6 +16,9 @@ import { OpsSection } from '@/components/layout/OpsSection'
 interface ClusterIssuesPanelProps {
   summary: ClusterSummary
   onSelectPodNamespace?: (namespace: string) => void
+  canOperate?: boolean
+  onAutoRemediate?: () => void
+  remediatePending?: boolean
 }
 
 interface IssueRow {
@@ -25,6 +27,10 @@ interface IssueRow {
   severity: 'fail' | 'degraded'
   title: string
   detail: string
+}
+
+export function collectClusterIssues(summary: ClusterSummary): IssueRow[] {
+  return collectIssues(summary)
 }
 
 function collectIssues(summary: ClusterSummary): IssueRow[] {
@@ -66,68 +72,20 @@ function collectIssues(summary: ClusterSummary): IssueRow[] {
   return issues
 }
 
-function buildLlmPrompt(summary: ClusterSummary): string {
-  const lines: string[] = [
-    '## K3s Cluster Health Diagnosis',
-    '',
-    `Cluster: ${summary.label} (${summary.distribution})`,
-    `API Server: ${summary.api_server}`,
-    `Overall Health: ${summary.reachability}`,
-    `API Reachability: ${summary.api_reachability ?? 'ok'}`,
-    `Core Nodes: ${summary.nodes_ready}/${summary.nodes_total} Ready`,
-  ]
-  const elasticStandby = summary.elastic_standby ?? 0
-  const elasticDegraded = summary.elastic_degraded ?? 0
-  if (elasticStandby > 0 || elasticDegraded > 0) {
-    lines.push(`Elastic Nodes: ${elasticStandby} standby, ${elasticDegraded} degraded`)
-  }
-  lines.push(
-    `Pods: ${summary.running_pods} running, ${summary.failing_pods} failing, ${summary.pending_pods} pending`,
-    '',
-  )
-
-  const pods = summary.failing_pod_details ?? []
-  if (pods.length > 0) {
-    lines.push('### Failing Pods')
-    lines.push('')
-    lines.push('| Namespace | Pod | Phase | Reason | Node | Age |')
-    lines.push('|-----------|-----|-------|--------|------|-----|')
-    for (const p of pods) {
-      lines.push(`| ${p.namespace} | ${p.name} | ${p.phase} | ${p.reason} | ${p.node ?? '—'} | ${p.age ?? '—'} |`)
-    }
-    lines.push('')
-  }
-
-  lines.push(
-    '### Request',
-    '',
-    '1. For each failing pod, explain the most likely root cause based on the reason and phase.',
-    '2. Suggest kubectl commands to investigate further (describe, logs, events).',
-    '3. Propose remediation steps ranked by likelihood of success.',
-    '4. If elastic nodes are degraded, explain the wake/join failure path and how to recover.',
-  )
-
-  return lines.join('\n')
-}
-
 export function ClusterIssuesPanel({
   summary,
   onSelectPodNamespace,
+  canOperate = false,
+  onAutoRemediate,
+  remediatePending = false,
 }: ClusterIssuesPanelProps) {
   const issues = collectIssues(summary)
-  const [copiedAt, setCopiedAt] = useState<number | null>(null)
 
   if (issues.length === 0) {
     return null
   }
 
   const pods = summary.failing_pod_details ?? []
-  const copied = copiedAt != null && Date.now() - copiedAt < 2500
-
-  function handleCopyPrompt() {
-    const prompt = buildLlmPrompt(summary)
-    void navigator.clipboard.writeText(prompt).then(() => setCopiedAt(Date.now()))
-  }
 
   return (
     <OpsSection
@@ -135,9 +93,11 @@ export function ClusterIssuesPanel({
       leading={<StatusLamp value={summary.reachability} kind="reach" />}
       description="Non-green indicators — click a namespace to inspect workloads below."
       actions={
-        <Button variant="outline" size="sm" onClick={handleCopyPrompt}>
-          {copied ? 'Copied!' : 'Copy LLM prompt'}
-        </Button>
+        canOperate && onAutoRemediate != null ? (
+          <Button variant="default" size="sm" disabled={remediatePending} onClick={onAutoRemediate}>
+            {remediatePending ? 'Starting…' : 'Auto-Remediate'}
+          </Button>
+        ) : undefined
       }
       bodyPadding="none"
       overflow="visible"

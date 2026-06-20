@@ -37,6 +37,14 @@ func (h *Handler) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Metrics(r.Context(), limit))
 }
 
+func (h *Handler) HandleServiceReadiness(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.ServiceReadiness(r.Context()))
+}
+
+func (h *Handler) HandleGovernance(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.Governance(r.Context()))
+}
+
 func (h *Handler) HandleObservability(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Observability(r.Context()))
 }

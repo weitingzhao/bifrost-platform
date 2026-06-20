@@ -19,6 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
+	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
@@ -37,8 +38,9 @@ type Server struct {
 	promote  *promote.Handler
 	vision   *vision.Handler
 	tradeagent *tradeagent.Handler
-	opsagent *opsagent.Handler
-	auth    *actuation.AuthService
+	opsagent     *opsagent.Handler
+	remediation  *remediation.Handler
+	auth         *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
 }
@@ -62,8 +64,9 @@ func New(cfg *config.Config) *Server {
 		promote:  promote.NewHandler(cfg, audit),
 		vision:   vision.NewHandler(cfg, audit),
 		tradeagent: tradeagent.NewHandler(),
-		opsagent: opsagent.NewHandler(audit),
-		auth:    auth,
+		opsagent:    opsagent.NewHandler(audit),
+		remediation: remediation.NewHandler(audit),
+		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
 	}
@@ -115,6 +118,17 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
 		r.Get("/delivery/runs/{id}/steps", s.delivery.HandleRunSteps)
+		r.Route("/remediation", func(r chi.Router) {
+			r.Get("/health", s.remediation.HandleHealth)
+			r.Group(func(r chi.Router) {
+				r.Use(s.auth.Require(actuation.RoleOperator))
+				r.Get("/", s.remediation.HandleList)
+				r.Post("/start", s.remediation.HandleStart)
+				r.Get("/{id}", s.remediation.HandleGet)
+				r.Get("/{id}/stream", s.remediation.HandleStream)
+				r.Post("/{id}/cancel", s.remediation.HandleCancel)
+			})
+		})
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/gitops/apps/{name}/sync", s.gitops.HandleSyncApp)
@@ -149,6 +163,8 @@ func (s *Server) Router() http.Handler {
 		r.Route("/cluster", func(r chi.Router) {
 			r.Get("/", s.cluster.HandleSummary)
 			r.Get("/nodes", s.cluster.HandleNodes)
+			r.Get("/governance", s.cluster.HandleGovernance)
+			r.Get("/service-readiness", s.cluster.HandleServiceReadiness)
 			r.Get("/join-profiles", s.cluster.HandleJoinProfiles)
 			r.Get("/nodes/{name}/power", s.cluster.HandleNodePower)
 			r.Get("/placement", s.cluster.HandlePlacement)

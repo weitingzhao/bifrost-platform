@@ -14,10 +14,22 @@ func nodeInputsFromViews(views []NodeView) []placement.NodeInput {
 			Name:          n.Name,
 			Architecture:  n.Architecture,
 			WorkloadLabel: n.WorkloadLabel,
+			CapabilityIDs: capabilityIDsFromView(n),
 			Reachability:  n.Reachability,
 		}
 	}
 	return out
+}
+
+func capabilityIDsFromView(n NodeView) []string {
+	if len(n.Capabilities) == 0 {
+		return nil
+	}
+	ids := make([]string, len(n.Capabilities))
+	for i, c := range n.Capabilities {
+		ids[i] = c.ID
+	}
+	return ids
 }
 
 func (s *Service) Placement(ctx context.Context) placement.Response {

@@ -8,12 +8,13 @@ import (
 )
 
 type poolDef struct {
-	id          string
-	label       string
-	arch        string
-	workload    string
-	status      PoolStatus
-	plannedHost string
+	id            string
+	label         string
+	arch          string
+	workload      string
+	capabilityID  string
+	status        PoolStatus
+	plannedHost   string
 }
 
 type ruleDef struct {
@@ -29,6 +30,7 @@ var poolDefs = []poolDef{
 	{id: "amd64_ci", label: "amd64 CI / Kaniko", arch: "amd64", status: PoolStatusLive},
 	{id: "amd64_general", label: "amd64 general runtime", arch: "amd64", status: PoolStatusLive},
 	{id: "arm64_edge", label: "arm64 edge / frontend", arch: "arm64", status: PoolStatusLive},
+	{id: "nfs_client", label: "NFS PV clients", capabilityID: "nfs-client", status: PoolStatusLive},
 	{id: "gpu", label: "GPU workloads", workload: "gpu", status: PoolStatusPlanned, plannedHost: "gpu-server"},
 }
 
@@ -64,6 +66,14 @@ var ruleDefs = []ruleDef{
 		requiredSelector: "node-role=postgres (planned)",
 		poolID:           "amd64_general",
 		plannedBinding:   "mini-pc-b / mini-pc-a",
+	},
+	{
+		workloadClass:    "nfs_storage",
+		namespace:        "kube-system · bifrost-*",
+		services:         "nfs-subdir-provisioner · NFS PVC mounts",
+		requiredSelector: "storage.nfs/client=true",
+		poolID:           "nfs_client",
+		plannedBinding:   "ubt-k3s-01/02/04",
 	},
 	{
 		workloadClass:    "monitoring",
@@ -126,6 +136,14 @@ func evaluatePools(nodes []NodeInput) []PoolView {
 }
 
 func nodeMatchesPool(n NodeInput, def poolDef) bool {
+	if def.capabilityID != "" {
+		for _, id := range n.CapabilityIDs {
+			if id == def.capabilityID {
+				return true
+			}
+		}
+		return false
+	}
 	if def.workload != "" {
 		return n.WorkloadLabel == def.workload
 	}
@@ -200,6 +218,13 @@ func collectViolations(pools []PoolView, rules []RuleView) []ViolationView {
 				Severity: "warning",
 				Code:     "gpu_pool_planned",
 				Message:  "GPU pool not joined yet (P5a gpu-server pending)",
+			})
+		}
+		if !r.Satisfied && r.WorkloadClass == "nfs_storage" {
+			out = append(out, ViolationView{
+				Severity: "warning",
+				Code:     "nfs_client_unavailable",
+				Message:  "No Ready node with storage.nfs/client=true — NFS PVC pods will fail to mount (label nodes after nfs-common install)",
 			})
 		}
 	}
