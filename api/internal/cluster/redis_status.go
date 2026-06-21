@@ -16,7 +16,7 @@ import (
 
 const (
 	redisDataNamespace = "data"
-	redisMigrationStep = 3
+	redisMigrationStep = 5
 	redisMigrationTotal = 7
 	redisTargetPhase   = 6
 )
@@ -127,7 +127,7 @@ func (s *Service) RedisStatus(ctx context.Context) RedisStatusResponse {
 	resp.EnvEndpoints = buildRedisEnvEndpoints(resp.TargetInstances)
 	resp.Embedded = embeddedRedisProbe(snap)
 	for _, e := range resp.Embedded {
-		if e.Reach != probe.ReachOK && !strings.Contains(e.Detail, "removed") {
+		if e.Reach == probe.ReachOK && !strings.Contains(e.Detail, "removed") {
 			resp.EmbeddedActive++
 		}
 	}
