@@ -16,7 +16,7 @@ import (
 
 const (
 	redisDataNamespace = "data"
-	redisMigrationStep = 5
+	redisMigrationStep = 6
 	redisMigrationTotal = 7
 	redisTargetPhase   = 6
 )

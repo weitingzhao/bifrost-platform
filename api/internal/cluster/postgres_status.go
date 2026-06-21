@@ -85,7 +85,7 @@ func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
 	resp := PostgresStatusResponse{
 		ClusterID:      base.ClusterID,
 		MigrationPhase: "data-layer-k3s",
-		MigrationStep:  5,
+		MigrationStep:  6,
 		MigrationTotal: 7,
 		RwService:      fmt.Sprintf("%s-rw.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
 		RoService:      fmt.Sprintf("%s-ro.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
