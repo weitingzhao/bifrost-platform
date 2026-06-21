@@ -43,10 +43,10 @@ export function TrackCardsSection({ tracks, selectedTrack, onSelectTrack }: Trac
       <p className="briefing-section-kicker m-0">1 · Work tracks</p>
       <h2 className="m-0 mt-1 text-sm font-semibold">Where is the project right now?</h2>
       <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-        Three persistent tracks with progress and next steps. Select one to scope your <strong>Session briefing</strong>.
+        Four tracks with progress and next steps. Select one to scope your <strong>Session briefing</strong>.
       </p>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {tracks.map(t => {
           const selected = selectedTrack === t.id
           const reach = trackReach(t)
@@ -80,7 +80,7 @@ export function TrackCardsSection({ tracks, selectedTrack, onSelectTrack }: Trac
                     {t.label}
                   </p>
 
-                  <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  <p className="m-0 mt-1 line-clamp-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                     {t.subtitle}
                   </p>
 

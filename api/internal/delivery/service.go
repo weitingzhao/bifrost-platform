@@ -213,7 +213,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 			"name": pipelineName,
 		},
 	}
-	if pipelineName == "bifrost-deliver-stg" {
+	if pipelineName == "bifrost-deliver-stg" || pipelineName == "bifrost-deliver-platform" {
 		spec["params"] = []map[string]any{
 			{"name": "revision", "value": rev},
 		}
@@ -227,6 +227,12 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 	if pipelineName == "bifrost-deliver-stg" {
 		spec["taskRunSpecs"] = []map[string]any{
 			{"pipelineTaskName": "prepare", "serviceAccountName": "tekton-deliver"},
+			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
+			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
+		}
+	}
+	if pipelineName == "bifrost-deliver-platform" {
+		spec["taskRunSpecs"] = []map[string]any{
 			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
 			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
 		}
@@ -399,6 +405,21 @@ func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 						"storageClassName": "local-path",
 						"resources": map[string]any{
 							"requests": map[string]any{"storage": "10Gi"},
+						},
+					},
+				},
+			},
+		}
+	case "bifrost-deliver-platform":
+		return []map[string]any{
+			map[string]any{
+				"name": "build-context",
+				"volumeClaimTemplate": map[string]any{
+					"spec": map[string]any{
+						"accessModes":      []any{"ReadWriteOnce"},
+						"storageClassName": "local-path",
+						"resources": map[string]any{
+							"requests": map[string]any{"storage": "5Gi"},
 						},
 					},
 				},

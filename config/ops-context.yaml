@@ -393,6 +393,13 @@ tracks:
   automate:
     label: "Autonomous Agent infrastructure"
     streams:
+      - id: platform-gitops
+        label: "Ops Platform GitOps & containerization"
+        total: 7
+        done: 7
+        status: active
+        next_task: "Owner Phase 1 sign-off (Delivery → Platform GitOps panel + Agent Briefing)"
+        note: "Phase 1 code complete in bifrost-trade-infra. Push → make k3s-deliver-platform. Console :30879 API :30878/health. remediation-runner Dockerfile only (Mac Mini, not K3s)."
       - id: agent-infra-bootstrap
         label: "Agent host setup (Hermes + Bridge + tools)"
         total: 5
@@ -400,6 +407,8 @@ tracks:
         status: not_started
         next_task: "Install Hermes Gateway on Mac Mini #1"
         note: "① Hermes install ② cron config ③ iMessage channel ④ Staleguard/ctxharness ⑤ CTRL NODE Bridge"
+        prerequisites:
+          - "platform-gitops Phase 1 Owner sign-off"
       - id: nightly-drift-scan
         label: "Nightly drift detection & remediation"
         total: 4

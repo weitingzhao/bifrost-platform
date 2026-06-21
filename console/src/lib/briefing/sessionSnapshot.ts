@@ -17,6 +17,7 @@ export interface SessionSnapshot {
     reachability: Reachability
   }
   lastAuditAt: string | null
+  trackProgress?: Record<string, Record<string, number>>
 }
 
 export function saveSnapshot(
@@ -53,6 +54,7 @@ export function saveSnapshot(
       reachability: input.clusterSummary?.reachability ?? 'unknown',
     },
     lastAuditAt: auditRecords.length > 0 ? auditRecords[0].at : null,
+    trackProgress: buildTrackProgress(input),
   }
 
   try {
@@ -78,4 +80,42 @@ export function clearSnapshot(): void {
   } catch {
     // ignore
   }
+}
+
+function buildTrackProgress(input: BriefingSnapshotInput): Record<string, Record<string, number>> {
+  const progress: Record<string, Record<string, number>> = {}
+  const tracks = input.context?.tracks
+  if (tracks == null) return progress
+
+  if (tracks.build != null) {
+    const done = tracks.build.tasks.filter(t => t.status === 'done').length
+    progress.build = { _done: done, _total: tracks.build.tasks.length }
+  }
+  if (tracks.migrate != null) {
+    const streamProgress: Record<string, number> = {}
+    let totalDone = 0
+    let totalAll = 0
+    for (const s of tracks.migrate.streams) {
+      streamProgress[s.id] = s.done
+      totalDone += s.done
+      totalAll += s.total
+    }
+    streamProgress._done = totalDone
+    streamProgress._total = totalAll
+    progress.migrate = streamProgress
+  }
+  if (tracks.automate != null) {
+    const streamProgress: Record<string, number> = {}
+    let totalDone = 0
+    let totalAll = 0
+    for (const s of tracks.automate.streams) {
+      streamProgress[s.id] = s.done
+      totalDone += s.done
+      totalAll += s.total
+    }
+    streamProgress._done = totalDone
+    streamProgress._total = totalAll
+    progress.automate = streamProgress
+  }
+  return progress
 }

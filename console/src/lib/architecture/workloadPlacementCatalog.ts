@@ -140,6 +140,7 @@ export const AMD64_CI_TASK_RUN_TEMPLATE = {
 
 export const KANIKO_PIPELINE_NAMES = [
   'bifrost-deliver-stg',
+  'bifrost-deliver-platform',
   'bifrost-build-stg',
   'bifrost-build-frontend-stg',
 ] as const
