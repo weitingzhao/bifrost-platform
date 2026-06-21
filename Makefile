@@ -15,6 +15,15 @@ dev-console:
 dev-agent start-agent:
 	python3 scripts/run_remediation_agent.py --install
 
+bootstrap-agent-host:
+	bash scripts/bootstrap_agent_host.sh
+
+nightly-agent:
+	bash scripts/nightly_agent.sh
+
+drift-scan:
+	python3 agent/drift/scan_layer1.py
+
 test-api:
 	cd api && go test ./...
 

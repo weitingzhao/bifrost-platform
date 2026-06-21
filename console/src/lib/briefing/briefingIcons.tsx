@@ -3,6 +3,7 @@ import {
   Activity,
   Archive,
   ArrowRightLeft,
+  Bot,
   Bug,
   Container,
   Database,
@@ -11,8 +12,10 @@ import {
   LineChart,
   PackageCheck,
   Rocket,
+  ScanSearch,
   Server,
   Shield,
+  Unplug,
   Workflow,
 } from 'lucide-react'
 import type { LaneId } from '@/lib/briefing/workLanes'
@@ -21,6 +24,7 @@ import type { TrackId } from '@/lib/briefing/workTracks'
 export const TRACK_ICONS: Record<TrackId, LucideIcon> = {
   build: Hammer,
   migrate: ArrowRightLeft,
+  automate: Bot,
   operate: Activity,
 }
 
@@ -32,6 +36,9 @@ export const LANE_ICONS: Record<LaneId, LucideIcon> = {
   'data-layer-k3s': Database,
   'legacy-retire': Archive,
   'trade-stack': PackageCheck,
+  'agent-infra': Unplug,
+  'drift-remediation': ScanSearch,
+  'agent-services': Bot,
   governance: Shield,
   troubleshoot: Bug,
   release: Rocket,

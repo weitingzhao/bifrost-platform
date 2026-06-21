@@ -30,11 +30,13 @@ _REMEDIATION_DOTENV_KEYS = frozenset({
     "CURSOR_API_KEY",
     "REMEDIATION_RUNNER_URL",
     "REMEDIATION_RUNNER_PORT",
+    "REMEDIATION_RUNNER_BIND",
     "REMEDIATION_CWD",
     "REMEDIATION_MODEL",
     "PLATFORM_API_URL",
     "PLATFORM_OPERATOR_TOKEN",
     "PLATFORM_ADMIN_TOKEN",
+    "NIGHTLY_SKIP_CLUSTER",
     "KUBECONFIG",
 })
 
@@ -186,7 +188,8 @@ def _ensure_prereqs(install: bool) -> int:
 
 def _print_startup_summary(port: int) -> None:
     has_key = bool(os.environ.get("CURSOR_API_KEY", "").strip())
-    print(f"Starting remediation agent on http://127.0.0.1:{port}")
+    bind = os.environ.get("REMEDIATION_RUNNER_BIND", "127.0.0.1").strip() or "127.0.0.1"
+    print(f"Starting remediation agent on http://{bind}:{port}")
     print(f"  cwd:              {os.environ.get('REMEDIATION_CWD', '(unset)')}")
     print(f"  platform-api:     {os.environ.get('PLATFORM_API_URL', 'http://127.0.0.1:8780')}")
     print(f"  CURSOR_API_KEY:   {'set' if has_key else 'MISSING — jobs will fail until configured'}")

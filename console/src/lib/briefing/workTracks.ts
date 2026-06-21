@@ -1,4 +1,5 @@
 import type {
+  AutomateTrack,
   BuildTrack,
   MatrixResponse,
   MigrateTrack,
@@ -9,7 +10,7 @@ import type {
 } from '@/api/types'
 import { hasProdFailures, prodFailingTargetIds } from '@/lib/control-room/matrixSummary'
 
-export type TrackId = 'build' | 'migrate' | 'operate'
+export type TrackId = 'build' | 'migrate' | 'automate' | 'operate'
 
 export interface TrackProgress {
   done: number
@@ -75,6 +76,35 @@ export function computeMigrateSummary(migrate?: MigrateTrack): Omit<TrackSummary
 
   return {
     label: migrate.label,
+    progress: { done: totalDone, total: totalAll, percent },
+    currentPhase: null,
+    nextStep,
+    issues: [],
+    subtitle,
+  }
+}
+
+export function computeAutomateSummary(automate?: AutomateTrack): Omit<TrackSummary, 'id' | 'agentMode'> {
+  if (automate == null) {
+    return { label: 'Automate', progress: null, currentPhase: null, nextStep: null, issues: [], subtitle: 'No track data' }
+  }
+
+  let totalDone = 0
+  let totalAll = 0
+  for (const s of automate.streams) {
+    totalDone += s.done
+    totalAll += s.total
+  }
+  const percent = totalAll > 0 ? Math.round((totalDone / totalAll) * 100) : 0
+
+  const activeStream = automate.streams.find(s => s.status === 'in_progress')
+  const nextStep = activeStream?.next_task ?? automate.streams.find(s => s.status === 'not_started')?.next_task ?? null
+
+  const closedCount = automate.streams.filter(s => s.status === 'closed').length
+  const subtitle = `${closedCount}/${automate.streams.length} streams closed · ${totalDone}/${totalAll} items`
+
+  return {
+    label: automate.label,
     progress: { done: totalDone, total: totalAll, percent },
     currentPhase: null,
     nextStep,
@@ -176,13 +206,19 @@ export function computeAllTracks(
     ...computeMigrateSummary(tracks?.migrate),
   }
 
+  const automate: TrackSummary = {
+    id: 'automate',
+    agentMode: 'Ops',
+    ...computeAutomateSummary(tracks?.automate),
+  }
+
   const operate: TrackSummary = {
     id: 'operate',
     agentMode: 'Ops',
     ...computeOperateSummary(context, matrices, clusterFailingPods, clusterReachability),
   }
 
-  return [build, migrate, operate]
+  return [build, migrate, automate, operate]
 }
 
 export function trackById(tracks: TrackSummary[], id: TrackId): TrackSummary {

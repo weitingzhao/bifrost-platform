@@ -155,6 +155,13 @@ milestones:
     pipeline_after: k3s-mac-agents
     authority: console/src/lib/architecture/workloadPlacementCatalog.ts
 
+  - id: autonomous-agent-v1
+    label: Autonomous Agent v1 (nightly drift + morning briefing)
+    status: NOT_STARTED
+    pipeline_lane: parallel
+    pipeline_after: vision-v5-convergence
+    authority: console/src/lib/briefing/workLanes.ts
+
   - id: legacy-retirement
     label: Phase 3 Legacy retirement
     status: NOT_STARTED
@@ -382,6 +389,42 @@ tracks:
             label: "Archive bifrost-trader-engine (read-only)"
             status: not_started
             blocked_by: mark-engine-retired
+
+  automate:
+    label: "Autonomous Agent infrastructure"
+    streams:
+      - id: agent-infra-bootstrap
+        label: "Agent host setup (Hermes + Bridge + tools)"
+        total: 5
+        done: 0
+        status: not_started
+        next_task: "Install Hermes Gateway on Mac Mini #1"
+        note: "① Hermes install ② cron config ③ iMessage channel ④ Staleguard/ctxharness ⑤ CTRL NODE Bridge"
+      - id: nightly-drift-scan
+        label: "Nightly drift detection & remediation"
+        total: 4
+        done: 0
+        status: not_started
+        next_task: "Define drift scan skill (Layer 1 deterministic)"
+        note: "① Layer 1 scan skill ② Layer 2 API probe ③ Layer 3 LLM comparison ④ Auto-fix with Owner approval"
+      - id: agent-mcp-integration
+        label: "Hermes ↔ Ops Platform MCP bridge"
+        total: 3
+        done: 0
+        status: not_started
+        note: "① Hermes as MCP Server ② platform-api as MCP client ③ Console 'Ask Agent' button"
+        prerequisites:
+          - "agent-infra-bootstrap stream closed"
+          - "nightly-drift-scan stable (2+ weeks)"
+      - id: agent-trade-advisory
+        label: "Trade advisory autonomous service"
+        total: 3
+        done: 0
+        status: not_started
+        note: "① Morning trade briefing ② Position risk alerts ③ SEPA opportunity notifications"
+        prerequisites:
+          - "agent-mcp-integration stream closed"
+          - "Trade API read endpoints stable"
 
   operate:
     label: "Day-to-day operations"

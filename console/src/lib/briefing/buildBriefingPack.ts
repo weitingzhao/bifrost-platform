@@ -94,6 +94,15 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
       'bifrost-trade-api/CLAUDE.md — 9 API domains (read endpoints)',
       'bifrost-trade-frontend — existing pages for context on data presentation',
     ],
+    automate: [
+      'config/ops-context.yaml — tracks.automate (streams + milestone autonomous-agent-v1)',
+      'Ops Console → Architecture → Vision V5 convergence (convergenceLoopCatalog.ts)',
+      'Ops Console → Architecture → Agent Protocol (agentProtocolCatalog.ts)',
+      'Hermes Agent docs: hermes-agent.nousresearch.com/docs (Gateway, cron, skills, MCP Server)',
+      'CTRL NODE docs: docs.ctrlnode.ai (Bridge, providers, routines, workflows)',
+      'Staleguard / ctxharness — deterministic drift detection CLI tools',
+      'console/src/lib/briefing/uiProgressSnapshot.ts — static catalog example for drift targets',
+    ],
   }
 
   lines.push('### Read first')
@@ -113,6 +122,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     ],
     frontend: ['Change compose/prod cutover', 'Migrate bifrost-trade-api backends'],
     business: ['Any write operation (orders, config, strategy changes)', 'Direct IB/Redis access — use Trade API read endpoints only', 'Recommend trades without Owner confirmation'],
+    automate: ['Edit Ops Console pages or platform-api (separate feature intent)', 'Start Hermes auto-fix before Owner confirms accuracy threshold', 'Expose Agent services to LAN without auth planning'],
   }
   for (const rule of avoid[intent]) lines.push(`- ${rule}`)
 
@@ -266,6 +276,9 @@ function suggestedOpening(
     case 'business':
       base = `Mode: Ops (Business Agent layer). Work intent: trade analysis. Read-only access to Trade API domains (positions, Greeks, SEPA, market). Provide advisory analysis; no write operations or order placement. Respect MCP Contract deny-list.`
       break
+    case 'automate':
+      base = `Mode: Ops. Work intent: autonomous agent infrastructure. Focus on Hermes Gateway setup, nightly drift scan, CTRL NODE Bridge, and self-improving skills on Mac Mini. Reference spine tracks.automate streams and milestone autonomous-agent-v1.`
+      break
     default:
       base = `Mode: ${opt.agentMode}. Work intent: ${intent}.`
   }
@@ -301,6 +314,30 @@ function intentCorePack(
       'Access: Trade API read endpoints only (portfolio, market, research, strategy, trading)',
       'Forbidden: order placement, config writes, daemon control, IB operator commands',
       'Reference: Ops Console → Architecture → Standards → MCP Contract (deny-list)',
+    ].join('\n')
+  }
+
+  if (intent === 'automate') {
+    const automate = ctx.tracks?.automate
+    const streamLines = automate?.streams.map(s =>
+      `- [${s.status}] ${s.label} (${s.done}/${s.total})${s.next_task ? ` — next: ${s.next_task}` : ''}`
+    ) ?? ['(no automate track data in spine)']
+    return [
+      buildOpsPack(ctx, matrices),
+      '',
+      '## Automate appendix',
+      'Milestone: autonomous-agent-v1 (nightly drift + morning briefing)',
+      'Stack: Hermes Gateway + CTRL NODE Bridge + Staleguard/ctxharness + Cursor CLI',
+      'Host: Mac Mini #1 (always-on, iMessage/Telegram channels)',
+      '',
+      '### Streams',
+      ...streamLines,
+      '',
+      '### Key principles',
+      '- Layer 1 (deterministic): broken paths, stale versions, missing exports — ctxharness/Staleguard',
+      '- Layer 2 (API probe): compare catalog text vs live spine/matrix API responses',
+      '- Layer 3 (LLM): semantic drift — description says X but live data says Y',
+      '- Auto-fix requires Owner approval threshold before merging (configurable confidence %)',
     ].join('\n')
   }
 
