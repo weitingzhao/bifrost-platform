@@ -14,6 +14,7 @@ const app = express()
 app.use(express.json({ limit: '2mb' }))
 
 const port = Number(process.env.REMEDIATION_RUNNER_PORT ?? 8781)
+const bindHost = process.env.REMEDIATION_RUNNER_BIND?.trim() || '127.0.0.1'
 
 app.get('/health', (_req, res) => {
   res.json({
@@ -117,6 +118,6 @@ app.get('/run/:id/stream', (req, res) => {
   }
 })
 
-app.listen(port, '127.0.0.1', () => {
-  console.log(`remediation runner listening on http://127.0.0.1:${port}`)
+app.listen(port, bindHost, () => {
+  console.log(`remediation runner listening on http://${bindHost}:${port}`)
 })

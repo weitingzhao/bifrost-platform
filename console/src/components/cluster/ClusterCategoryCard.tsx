@@ -90,7 +90,11 @@ export function ClusterCategoryCard({
       >
         <div className="cluster-category-card__head">
           {Icon != null && <Icon className="cluster-category-card__icon" aria-hidden="true" />}
-          <StatusLamp value={loading ? 'unknown' : reach} kind="reach" />
+          <StatusLamp
+            value={loading ? 'unknown' : reach}
+            kind="reach"
+            variant={selected ? 'filled' : 'outline'}
+          />
           <h4 className="cluster-category-card__title">{title}</h4>
           {selected && <span className="cluster-category-card__active">Active</span>}
         </div>

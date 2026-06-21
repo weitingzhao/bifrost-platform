@@ -175,9 +175,15 @@ export interface OperateTrack {
   note?: string
 }
 
+export interface AutomateTrack {
+  label: string
+  streams: MigrateStream[]
+}
+
 export interface OpsContextTracks {
   build?: BuildTrack
   migrate?: MigrateTrack
+  automate?: AutomateTrack
   operate?: OperateTrack
 }
 

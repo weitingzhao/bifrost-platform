@@ -7,6 +7,7 @@ export type WorkIntent =
   | 'cluster'
   | 'frontend'
   | 'business'
+  | 'automate'
 
 /** Three-layer Agent architecture (from Vision). */
 export type AgentLayer = 'Dev' | 'Ops' | 'Business'
@@ -76,6 +77,14 @@ export const WORK_INTENT_OPTIONS: WorkIntentOption[] = [
     description: 'Read-only market/portfolio/strategy analysis via Trade APIs; Greeks monitoring, SEPA research, risk advisory. No write operations.',
     agentMode: 'Ops',
     agentLayer: 'Business',
+  },
+  {
+    id: 'automate',
+    label: 'Autonomous Agent setup',
+    shortLabel: 'Agent',
+    description: 'Hermes Gateway, nightly drift scan, MCP integration, scheduled routines, self-improving skills on Mac Mini.',
+    agentMode: 'Ops',
+    agentLayer: 'Ops',
   },
 ]
 
