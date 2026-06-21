@@ -261,13 +261,13 @@ export const HARDWARE_ROWS: HardwareRow[] = [
   },
   {
     id: 'mac-mini-1',
-    host: '192.168.10.50 (macOS) · VM 192.168.10.54',
+    host: '192.168.10.50 (macOS · Agent)',
     roleCompose: '24/7 Dev stack docker-compose.dev.yml',
     roleK3s: 'UTM Agent ops-vm-ubt-01 · frontend dev (Ready)',
   },
   {
     id: 'mac-mini-2',
-    host: '192.168.10.52 (macOS) · VM 192.168.10.56',
+    host: '192.168.10.52 (macOS · Agent)',
     roleCompose: 'Git runner · prod-health gate · Uptime Kuma',
     roleK3s: 'UTM Agent ops-vm-ubt-02 · CI · external watchdog (Ready)',
   },
