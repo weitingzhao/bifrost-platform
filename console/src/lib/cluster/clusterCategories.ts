@@ -35,8 +35,8 @@ export const INFRASTRUCTURE_CATEGORY_LABELS: Record<InfrastructureCategory, stri
 
 /** Purpose phrases from platform-api service readiness (finalizeDomain). */
 export const APPLICATION_DOMAIN_PURPOSE: Record<ApplicationDomainCategory, string> = {
-  database: 'Persistent DB on nfs-hot',
-  redis: 'Cache / queue backing store',
+  database: 'CloudNativePG HA @ data NS · local-path + nfs-hot backup',
+  redis: 'Bitnami live/queue @ data NS · per-env isolation (phase ⑥)',
   gpu: 'Elastic compute on gpu-server',
   warehouse: 'MinIO object store on gpu-server',
   workers: 'Daemon · Celery · data pipelines',

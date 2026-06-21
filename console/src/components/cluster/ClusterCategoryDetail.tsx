@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Button } from '@bifrost/ui'
 import {
   categoryDimension,
   INFRASTRUCTURE_CATEGORY_LABELS,
@@ -6,9 +7,13 @@ import {
 } from '@/lib/cluster/clusterCategories'
 import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
 
+type CopyState = 'idle' | 'copied' | 'error'
+
 interface ClusterCategoryDetailProps {
   category: ClusterCategory | null
   title?: string
+  copyState?: CopyState
+  onCopyForLlm?: () => void
   applicationContent: (domainId: string) => ReactNode
   nodesContent: ReactNode
   workloadsContent: ReactNode
@@ -24,9 +29,22 @@ function detailTitle(category: ClusterCategory, titleOverride?: string): string 
   return category
 }
 
+function copyLabel(state: CopyState): string {
+  switch (state) {
+    case 'copied':
+      return 'Copied!'
+    case 'error':
+      return 'Copy failed'
+    default:
+      return 'Copy for LLM'
+  }
+}
+
 export function ClusterCategoryDetail({
   category,
   title,
+  copyState = 'idle',
+  onCopyForLlm,
   applicationContent,
   nodesContent,
   workloadsContent,
@@ -59,11 +77,20 @@ export function ClusterCategoryDetail({
 
   if (body == null) return null
 
+  const resolvedTitle = detailTitle(category, title)
+
   return (
     <section className="cluster-category-detail page-section panel-elevated overflow-visible">
       <header className="cluster-category-detail__header">
-        <span className="cluster-category-detail__label">Detail</span>
-        <h3 className="cluster-category-detail__title">{detailTitle(category, title)}</h3>
+        <div className="cluster-category-detail__heading">
+          <span className="cluster-category-detail__label">Detail</span>
+          <h3 className="cluster-category-detail__title">{resolvedTitle}</h3>
+        </div>
+        {onCopyForLlm != null && (
+          <Button variant="outline" size="sm" onClick={() => onCopyForLlm()}>
+            {copyLabel(copyState)}
+          </Button>
+        )}
       </header>
       <div className="cluster-category-detail__body">{body}</div>
     </section>

@@ -107,7 +107,7 @@ func (s *Service) loadReadinessDeployments(ctx context.Context) (map[string]apps
 	}
 	namespaces := []string{
 		"bifrost-stg", "bifrost-dev", "bifrost-prod",
-		"cicd", "data-warehouse", "ai", "tekton-pipelines",
+		"cicd", "cnpg-system", "data", "data-warehouse", "ai", "tekton-pipelines",
 	}
 	out := make(map[string]appsv1.Deployment)
 	var firstErr error
@@ -140,48 +140,108 @@ func evaluateServiceDomains(snap readinessSnapshot) []ServiceDomainView {
 
 func evalDatabaseDomain(snap readinessSnapshot) ServiceDomainView {
 	deps := []ServiceDependencyView{
-		clusterCapDep(snap, "storage-class-nfs-hot", "StorageClass nfs-hot"),
+		clusterCapDep(snap, "storage-class-local-path", "StorageClass local-path (PGDATA)"),
+		clusterCapDep(snap, "storage-class-nfs-hot", "StorageClass nfs-hot (backups)"),
 		clusterCapDep(snap, "storage-class-nfs-cold", "StorageClass nfs-cold"),
 		clusterCapDep(snap, "nfs-provisioner-hot", "NFS provisioner (hot)"),
 		clusterCapDep(snap, "nfs-provisioner-cold", "NFS provisioner (cold)"),
 		nodeCovDep(snap, "nfs-client", "NFS client nodes"),
+		nodeCovDep(snap, "postgres-role", "PostgreSQL host nodes"),
 		schedulableArchDep(snap, "amd64", "Schedulable amd64 nodes"),
 	}
-	wl := firstReadyDeployment(snap, []deployRef{
+	deps = append(deps, deploymentDep(snap, cnpgOperatorNS, cnpgOperatorDeploy, "CloudNativePG operator"))
+	deps = append(deps, deploymentDep(snap, cnpgNamespace, "minio", "MinIO backup target"))
+
+	embedded := activeEmbeddedPostgresDep(snap)
+	if embedded != nil {
+		deps = append(deps, *embedded)
+	}
+
+	domain := finalizeDomain("database", "PostgreSQL", deps, "CloudNativePG HA @ data NS · local-path PGDATA · nfs-hot backups")
+	if embedded != nil && domain.Status == "ready" {
+		domain.Status = "partial"
+		domain.Reachability = probe.ReachDegraded
+		domain.Summary = "CNPG infra ready · embedded postgres still serving apps (cutover pending)"
+	} else if embedded == nil && domain.Status == "ready" {
+		domain.Summary = "CNPG HA ready · STG on data NS · dev/prod cutover pending"
+	}
+	return domain
+}
+
+func activeEmbeddedPostgresDep(snap readinessSnapshot) *ServiceDependencyView {
+	refs := []deployRef{
 		{"bifrost-stg", "postgres"},
 		{"bifrost-dev", "postgres"},
 		{"bifrost-prod", "postgres"},
-	})
-	if wl != nil {
-		deps = append(deps, *wl)
-	} else {
-		deps = append(deps, ServiceDependencyView{
-			ID: "workload-postgres", Label: "PostgreSQL workload",
-			Reachability: probe.ReachDegraded, Detail: "not deployed in bifrost-stg/dev/prod",
-		})
 	}
-	return finalizeDomain("database", "PostgreSQL", deps, "Persistent DB on nfs-hot (migrate from local-path)")
+	namespaces := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		key := ref.namespace + "/" + ref.name
+		d, ok := snap.deployments[key]
+		if !ok {
+			continue
+		}
+		desired := d.Status.Replicas
+		if desired == 0 && d.Spec.Replicas != nil {
+			desired = *d.Spec.Replicas
+		}
+		if desired == 0 {
+			continue
+		}
+		namespaces = append(namespaces, ref.namespace)
+	}
+	if len(namespaces) == 0 {
+		return nil
+	}
+	return &ServiceDependencyView{
+		ID:           "legacy-embedded-postgres",
+		Label:        "Embedded postgres (app namespaces)",
+		Reachability: probe.ReachDegraded,
+		Detail:       fmt.Sprintf("active in %s — cutover to bifrost-postgres-rw.data.svc", strings.Join(namespaces, ", ")),
+	}
 }
 
 func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 	deps := []ServiceDependencyView{
 		schedulableArchDep(snap, "amd64", "Schedulable amd64 nodes"),
-		clusterCapDep(snap, "storage-class-nfs-hot", "StorageClass nfs-hot (optional PVC)"),
+		clusterCapDep(snap, "storage-class-local-path", "StorageClass local-path (Redis PVC)"),
+		clusterCapDep(snap, "storage-class-nfs-hot", "StorageClass nfs-hot (RDB backup)"),
 	}
-	wl := firstReadyDeployment(snap, []deployRef{
-		{"bifrost-stg", "redis"},
-		{"bifrost-dev", "redis"},
-		{"bifrost-prod", "redis"},
-	})
-	if wl != nil {
-		deps = append(deps, *wl)
+	for _, spec := range redisTargetCatalog {
+		deps = append(deps, redisTargetDep(snap, spec.name, spec.role, spec.environment))
+	}
+	for _, ns := range []string{"bifrost-stg", "bifrost-dev", "bifrost-prod"} {
+		if dep := embeddedRedisDep(snap, ns); dep != nil {
+			deps = append(deps, *dep)
+		}
+	}
+
+	domain := finalizeDomain("redis", "Redis", deps, "Bitnami live/queue @ data NS · per-env isolation")
+	targetsReady := 0
+	embeddedActive := 0
+	for _, d := range deps {
+		if strings.HasPrefix(d.ID, "redis-target-") && d.Reachability == probe.ReachOK {
+			targetsReady++
+		}
+		if strings.HasPrefix(d.ID, "embedded-redis-") {
+			embeddedActive++
+		}
+	}
+	if targetsReady == len(redisTargetCatalog) && embeddedActive == 0 {
+		return domain
+	}
+	if domain.Status == "ready" {
+		domain.Status = "partial"
+		domain.Reachability = probe.ReachDegraded
+	}
+	if embeddedActive > 0 && targetsReady == 0 {
+		domain.Summary = fmt.Sprintf("Embedded redis in %d env(s) · phase ⑥ live/queue @ data NS pending", embeddedActive)
+	} else if targetsReady > 0 {
+		domain.Summary = fmt.Sprintf("%d/%d data NS targets · %d embedded active", targetsReady, len(redisTargetCatalog), embeddedActive)
 	} else {
-		deps = append(deps, ServiceDependencyView{
-			ID: "workload-redis", Label: "Redis workload",
-			Reachability: probe.ReachDegraded, Detail: "not deployed",
-		})
+		domain.Summary = "Embedded redis only · Bitnami split not deployed (phase ⑥)"
 	}
-	return finalizeDomain("redis", "Redis", deps, "Cache / queue backing store")
+	return domain
 }
 
 func evalGPUDomain(snap readinessSnapshot) ServiceDomainView {

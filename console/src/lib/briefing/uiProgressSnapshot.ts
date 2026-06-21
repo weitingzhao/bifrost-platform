@@ -62,7 +62,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Catalog',
     item: 'Data Layer',
     status: 'partial',
-    notes: 'dataLayerCatalog.ts principles + DATA_LAYER_MIGRATION_PHASES; spine stream data-layer-k3s; Briefing cluster/data lane appendix; k8s/data manifests pending in bifrost-trade-infra',
+    notes: 'dataLayerCatalog + k8s/data CNPG manifests + make k3s-install-data-layer-phase0',
   },
   {
     area: 'Catalog',

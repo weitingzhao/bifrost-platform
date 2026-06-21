@@ -16,6 +16,8 @@ import {
 } from '@/lib/cluster/clusterCategories'
 import { categoryIcon } from '@/lib/cluster/clusterCategoryIcons'
 
+type CategoryCopyState = 'idle' | 'copied' | 'error'
+
 interface ClusterCategoryGridProps {
   summary: ClusterSummary | undefined
   summaryLoading?: boolean
@@ -28,6 +30,9 @@ interface ClusterCategoryGridProps {
   metrics: ClusterMetricsResponse | undefined
   selectedCategory: ClusterCategory | null
   onSelectCategory: (category: ClusterCategory) => void
+  categoryCopyId?: ClusterCategory | null
+  categoryCopyState?: CategoryCopyState
+  onCopyCategory?: (category: ClusterCategory, title: string) => void
 }
 
 function domainReach(status: string, reachability: Reachability): Reachability {
@@ -199,6 +204,9 @@ export function ClusterCategoryGrid({
   metrics,
   selectedCategory,
   onSelectCategory,
+  categoryCopyId = null,
+  categoryCopyState = 'idle',
+  onCopyCategory,
 }: ClusterCategoryGridProps) {
   const domains = serviceReadiness?.domains ?? []
   const appCards = domains.map(appDomainCard)
@@ -269,7 +277,11 @@ export function ClusterCategoryGrid({
                 meta={card.meta}
                 icon={card.icon}
                 selected={selectedCategory === card.category}
+                copyState={categoryCopyId === card.category ? categoryCopyState : 'idle'}
                 onSelect={() => onSelectCategory(card.category)}
+                onCopyForLlm={
+                  onCopyCategory != null ? () => onCopyCategory(card.category, card.title) : undefined
+                }
               />
             ))
           )}
@@ -293,7 +305,13 @@ export function ClusterCategoryGrid({
               icon={card.icon}
               loading={card.loading}
               selected={selectedCategory === card.category}
+              copyState={categoryCopyId === card.category ? categoryCopyState : 'idle'}
               onSelect={() => onSelectCategory(card.category)}
+              onCopyForLlm={
+                onCopyCategory != null && !card.loading
+                  ? () => onCopyCategory(card.category, card.title)
+                  : undefined
+              }
             />
           ))}
         </div>

@@ -12,6 +12,8 @@ import {
   fetchClusterGovernance,
   fetchClusterMetrics,
   fetchClusterServiceReadiness,
+  fetchClusterPostgresStatus,
+  fetchClusterRedisStatus,
   fetchClusterNamespaces,
   fetchClusterNodes,
   fetchClusterPlacement,
@@ -20,6 +22,7 @@ import {
   fetchJoinProfiles,
   fetchNodePower,
   fetchPodLogs,
+  fetchContext,
   joinClusterNode,
   powerOffComputeNode,
   rolloutRestartDeployment,
@@ -36,6 +39,8 @@ import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
 import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPanel'
 import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
+import { ClusterPostgresDetailPanel } from '@/components/cluster/ClusterPostgresDetailPanel'
+import { ClusterRedisDetailPanel } from '@/components/cluster/ClusterRedisDetailPanel'
 import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
 import { ClusterCategoryGrid } from '@/components/cluster/ClusterCategoryGrid'
 import { ClusterCategoryDetail } from '@/components/cluster/ClusterCategoryDetail'
@@ -48,7 +53,9 @@ import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
+import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
 import { buildClusterLlmContext } from '@/lib/cluster/buildClusterLlmContext'
+import { buildClusterCategoryLlmContext } from '@/lib/cluster/buildClusterCategoryLlmContext'
 import type { NodeWizardFlow, WizardAction } from '@/lib/cluster/nodeWizard'
 import { useClusterCategory } from '@/hooks/useClusterCategory'
 import {
@@ -97,6 +104,8 @@ export function ClusterPage({
   const [wizardFlow, setWizardFlow] = useState<NodeWizardFlow>('maintenance')
   const [wizardJoinProfileId, setWizardJoinProfileId] = useState<string | null>(null)
   const [copyState, setCopyState] = useState<CopyState>('idle')
+  const [categoryCopyId, setCategoryCopyId] = useState<ClusterCategory | null>(null)
+  const [categoryCopyState, setCategoryCopyState] = useState<CopyState>('idle')
   const [remediationPanelOpen, setRemediationPanelOpen] = useState(false)
   const [remediationJobId, setRemediationJobId] = useState<string | null>(null)
   const [remediationJob, setRemediationJob] = useState<RemediationJob | null>(null)
@@ -147,6 +156,20 @@ export function ClusterPage({
   const serviceReadinessQuery = useQuery({
     queryKey: ['cluster', 'service-readiness'],
     queryFn: fetchClusterServiceReadiness,
+    refetchInterval: 30_000,
+    retry: false,
+  })
+
+  const postgresStatusQuery = useQuery({
+    queryKey: ['cluster', 'postgres'],
+    queryFn: fetchClusterPostgresStatus,
+    refetchInterval: 30_000,
+    retry: false,
+  })
+
+  const redisStatusQuery = useQuery({
+    queryKey: ['cluster', 'redis'],
+    queryFn: fetchClusterRedisStatus,
     refetchInterval: 30_000,
     retry: false,
   })
@@ -578,8 +601,35 @@ export function ClusterPage({
         ? null
         : 'Authenticate to actuate'
 
+  const clusterLlmInput = useMemo(
+    () => ({
+      summary: summaryQuery.data,
+      nodes: nodesQuery.data?.nodes,
+      governance: governanceQuery.data,
+      serviceReadiness: serviceReadinessQuery.data,
+      metrics: metricsQuery.data,
+      namespaces: namespacesQuery.data?.namespaces,
+      placement: placementQuery.data,
+      observability: observabilityQuery.data,
+      selectedNamespace: selectedNs,
+      workloads: workloadsQuery.data?.workloads,
+    }),
+    [
+      governanceQuery.data,
+      serviceReadinessQuery.data,
+      metricsQuery.data,
+      namespacesQuery.data?.namespaces,
+      nodesQuery.data?.nodes,
+      observabilityQuery.data,
+      placementQuery.data,
+      selectedNs,
+      summaryQuery.data,
+      workloadsQuery.data?.workloads,
+    ],
+  )
+
   const handleCopyForLlm = useCallback(async () => {
-    let namespaces = namespacesQuery.data?.namespaces
+    let namespaces = clusterLlmInput.namespaces
     if (nsFilter === 'bifrost') {
       try {
         const all = await fetchClusterNamespaces('')
@@ -590,16 +640,8 @@ export function ClusterPage({
     }
 
     const text = buildClusterLlmContext({
-      summary: summaryQuery.data,
-      nodes: nodesQuery.data?.nodes,
-      governance: governanceQuery.data,
-      serviceReadiness: serviceReadinessQuery.data,
-      metrics: metricsQuery.data,
+      ...clusterLlmInput,
       namespaces,
-      placement: placementQuery.data,
-      observability: observabilityQuery.data,
-      selectedNamespace: selectedNs,
-      workloads: workloadsQuery.data?.workloads,
     })
 
     try {
@@ -610,19 +652,74 @@ export function ClusterPage({
       setCopyState('error')
       window.setTimeout(() => setCopyState('idle'), 3000)
     }
-  }, [
-    governanceQuery.data,
-    serviceReadinessQuery.data,
-    metricsQuery.data,
-    namespacesQuery.data?.namespaces,
-    nodesQuery.data?.nodes,
-    nsFilter,
-    observabilityQuery.data,
-    placementQuery.data,
-    selectedNs,
-    summaryQuery.data,
-    workloadsQuery.data?.workloads,
-  ])
+  }, [clusterLlmInput, nsFilter])
+
+  const handleCopyCategoryForLlm = useCallback(
+    async (category: ClusterCategory, categoryTitle: string) => {
+      let namespaces = clusterLlmInput.namespaces
+      if (nsFilter === 'bifrost') {
+        try {
+          const all = await fetchClusterNamespaces('')
+          namespaces = all.namespaces
+        } catch {
+          /* use bifrost subset */
+        }
+      }
+
+      let opsContext
+      let postgresStatus
+      let redisStatus
+      if (category === 'database' || category === 'redis') {
+        try {
+          opsContext = await fetchContext()
+        } catch {
+          /* live probes only */
+        }
+      }
+      if (category === 'database') {
+        try {
+          postgresStatus = await fetchClusterPostgresStatus()
+        } catch {
+          /* live probes only */
+        }
+      }
+      if (category === 'redis') {
+        try {
+          redisStatus = await fetchClusterRedisStatus()
+        } catch {
+          /* live probes only */
+        }
+      }
+
+      const text = buildClusterCategoryLlmContext({
+        ...clusterLlmInput,
+        namespaces,
+        category,
+        categoryTitle,
+        opsContext,
+        postgresStatus,
+        redisStatus,
+      })
+
+      try {
+        await navigator.clipboard.writeText(text)
+        setCategoryCopyId(category)
+        setCategoryCopyState('copied')
+        window.setTimeout(() => {
+          setCategoryCopyState('idle')
+          setCategoryCopyId(null)
+        }, 2000)
+      } catch {
+        setCategoryCopyId(category)
+        setCategoryCopyState('error')
+        window.setTimeout(() => {
+          setCategoryCopyState('idle')
+          setCategoryCopyId(null)
+        }, 3000)
+      }
+    },
+    [clusterLlmInput, nsFilter],
+  )
 
   const handleAutoRemediate = useCallback(() => {
     if (clusterSummary == null) return
@@ -843,20 +940,47 @@ cd ../bifrost-platform && make start`}
           metrics={metricsQuery.data}
           selectedCategory={selectedCategory}
           onSelectCategory={toggleCategory}
+          categoryCopyId={categoryCopyId}
+          categoryCopyState={categoryCopyState}
+          onCopyCategory={handleCopyCategoryForLlm}
         />
       </section>
 
       <ClusterCategoryDetail
         category={selectedCategory}
         title={selectedCategoryTitle}
-        applicationContent={domainId => (
-          <ClusterServiceReadinessPanel
-            data={serviceReadinessQuery.data}
-            isLoading={serviceReadinessQuery.isLoading}
-            compact
-            domainFilter={domainId}
-          />
-        )}
+        copyState={
+          selectedCategory != null && categoryCopyId === selectedCategory ? categoryCopyState : 'idle'
+        }
+        onCopyForLlm={
+          selectedCategory != null
+            ? () => {
+                void handleCopyCategoryForLlm(selectedCategory, selectedCategoryTitle ?? selectedCategory)
+              }
+            : undefined
+        }
+        applicationContent={domainId =>
+          domainId === 'database' ? (
+            <ClusterPostgresDetailPanel
+              postgres={postgresStatusQuery.data}
+              postgresLoading={postgresStatusQuery.isLoading}
+              serviceReadiness={serviceReadinessQuery.data}
+            />
+          ) : domainId === 'redis' ? (
+            <ClusterRedisDetailPanel
+              redis={redisStatusQuery.data}
+              redisLoading={redisStatusQuery.isLoading}
+              serviceReadiness={serviceReadinessQuery.data}
+            />
+          ) : (
+            <ClusterServiceReadinessPanel
+              data={serviceReadinessQuery.data}
+              isLoading={serviceReadinessQuery.isLoading}
+              compact
+              domainFilter={domainId}
+            />
+          )
+        }
         nodesContent={
           <div className="cluster-view-panels">
             <ClusterNodeWizardPanel

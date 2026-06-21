@@ -310,10 +310,10 @@ tracks:
       - id: data-layer-k3s
         label: "K3s data layer (PG + Redis → data NS)"
         total: 7
-        done: 0
+        done: 3
         status: in_progress
-        next_task: "① Label ubt-k3s-02 postgres-role + deploy CNPG Operator in data NS"
-        note: "Lift PG/Redis from bifrost-{dev,stg,prod}; CNPG 3 DBs (R-DV1); redis-live+queue per env; nfs-hot backups · authority dataLayerCatalog.ts DATA_LAYER_MIGRATION_PHASES"
+        next_task: "④ DEV cutover — bifrost-dev config → data NS; remove bifrost-dev in-ns postgres"
+        note: "① CNPG @ data NS ✓ · ② HA + MinIO ✓ · ③ STG → bifrost-postgres-rw.data.svc ✓ · Primary @ ubt-k3s-04"
         prerequisites:
           - "nfs-hot/nfs-cold provisioners ready"
           - "bifrost-stg full stack stable"

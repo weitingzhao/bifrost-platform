@@ -303,6 +303,106 @@ export interface ClusterServiceReadinessResponse {
   generated_at: string
 }
 
+export interface PostgresInstance {
+  pod_name: string
+  role: string
+  node: string
+  phase: string
+  reachability: Reachability
+  detail?: string
+}
+
+export interface PostgresDatabase {
+  name: string
+  environment: string
+  cr_name?: string
+  reachability: Reachability
+  detail?: string
+}
+
+export interface PostgresLegacyEndpoint {
+  kind: string
+  namespace?: string
+  host?: string
+  reachability: Reachability
+  detail?: string
+}
+
+export interface ClusterPostgresStatusResponse {
+  cluster_id: string
+  reachability: Reachability
+  summary: string
+  migration_phase: string
+  migration_step: number
+  migration_total: number
+  operator: ServiceDependency
+  cnpg_cluster: ServiceDependency
+  instances: PostgresInstance[]
+  instances_spec: number
+  instances_ready: number
+  primary_pod?: string
+  primary_node?: string
+  rw_service: string
+  ro_service: string
+  storage_class: string
+  storage_size: string
+  backup: ServiceDependency
+  minio: ServiceDependency
+  databases: PostgresDatabase[]
+  legacy: PostgresLegacyEndpoint[]
+  embedded: PostgresLegacyEndpoint[]
+  postgres_role: ServiceDependency
+  generated_at: string
+}
+
+export interface RedisTargetInstance {
+  name: string
+  environment: string
+  role: string
+  service: string
+  maxmemory_policy?: string
+  reachability: Reachability
+  detail?: string
+}
+
+export interface RedisEnvEndpoint {
+  environment: string
+  live_service: string
+  queue_service: string
+  live_reachability: Reachability
+  queue_reachability: Reachability
+  network_policy: string
+  detail?: string
+}
+
+export interface RedisEmbeddedEndpoint {
+  namespace: string
+  host: string
+  image?: string
+  reachability: Reachability
+  detail?: string
+}
+
+export interface ClusterRedisStatusResponse {
+  cluster_id: string
+  reachability: Reachability
+  summary: string
+  migration_phase: string
+  migration_step: number
+  migration_total: number
+  migration_redis_step: number
+  targets_ready: number
+  targets_total: number
+  embedded_active: number
+  target_instances: RedisTargetInstance[]
+  env_endpoints: RedisEnvEndpoint[]
+  embedded: RedisEmbeddedEndpoint[]
+  legacy: PostgresLegacyEndpoint[]
+  backup: ServiceDependency
+  minio: ServiceDependency
+  generated_at: string
+}
+
 export interface ClusterNode {
   name: string
   status: string

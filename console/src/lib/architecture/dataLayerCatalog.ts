@@ -165,7 +165,7 @@ export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
     id: 'data-0-cnpg-operator',
     step: 1,
     label: 'Label ubt-k3s-02 postgres-role + deploy CloudNativePG operator + bifrost-postgres cluster (data NS)',
-    repo: 'bifrost-trade-infra/k8s/data/ · bifrost-platform Cluster actuation',
+    repo: 'bifrost-trade-infra/k8s/data/ + scripts/k3s/install-data-layer-phase0.sh',
     verify: 'kubectl get cluster -n data; postgres-role capability ready on ubt-k3s-02',
   },
   {
