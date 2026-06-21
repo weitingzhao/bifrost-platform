@@ -310,10 +310,10 @@ tracks:
       - id: data-layer-k3s
         label: "K3s data layer (PG + Redis → data NS)"
         total: 7
-        done: 5
+        done: 6
         status: in_progress
-        next_task: "⑥ Redis split — Bitnami live/queue @ data NS; Celery → redis-queue only"
-        note: "①–⑤ PG complete ✓ · STG/DEV/PROD K3s → bifrost-postgres-rw · legacy .80 standby · Primary @ ubt-k3s-04"
+        next_task: "⑦ Retire embedded — remove postgres/redis from k8s/base; update environments.yaml matrix"
+        note: "①–⑥ complete ✓ · PG+Redis @ data NS (STG/DEV/PROD) · deliver images for celery_redis_url_from_config"
         prerequisites:
           - "nfs-hot/nfs-cold provisioners ready"
           - "bifrost-stg full stack stable"
