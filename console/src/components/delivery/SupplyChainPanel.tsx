@@ -24,7 +24,8 @@ import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { DELIVERY_FOCUS_RUN_QUERY_KEY } from '@/lib/delivery/deliveryFocusRun'
+import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
+import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliveryPageTabs'
 import { formatPipelineRunStatus, isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 
 function runStatusVariant(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -85,7 +86,7 @@ export function SupplyChainPanel({ layout = 'full' }: SupplyChainPanelProps) {
     onMutate: () => setActionError(null),
     onSuccess: data => {
       if (data.run?.name) {
-        qc.setQueryData(DELIVERY_FOCUS_RUN_QUERY_KEY, data.run.name)
+        qc.setQueryData(deliveryFocusRunQueryKey(DELIVER_STG_PIPELINE), data.run.name)
         void qc.invalidateQueries({ queryKey: ['delivery', 'steps', data.run.name] })
       }
       void qc.invalidateQueries({ queryKey: ['promote', 'release-gate', 'stg'] })
@@ -104,13 +105,17 @@ export function SupplyChainPanel({ layout = 'full' }: SupplyChainPanelProps) {
   const showActuation = layout === 'operate' || layout === 'full'
   const showInventory = layout === 'observe' || layout === 'full'
   const sectionTitle =
-    layout === 'operate' ? 'Supply chain — actuate' : layout === 'observe' ? 'Supply chain — inventory' : 'Supply chain'
+    layout === 'operate'
+      ? 'Trade STG supply chain — actuate'
+      : layout === 'observe'
+        ? 'Supply chain — inventory'
+        : 'Trade STG supply chain'
   const sectionDescription =
     layout === 'operate'
-      ? 'Revision + mirror sync + deliver-stg. Watch pipeline steps and logs in the panel below.'
+      ? 'Revision + mirror sync + deliver-stg. Switch target above for Ops Platform STG.'
       : layout === 'observe'
-        ? 'Kaniko Dockerfile ConfigMaps and STG deployment images after deliver.'
-        : 'Gitea mirror sources, Kaniko Dockerfile ConfigMaps, and STG deployment images. Manage code revision before deliver-stg.'
+        ? 'Kaniko Dockerfile ConfigMaps (Trade + Platform) and STG deployment images.'
+        : 'Gitea mirrors, Dockerfile ConfigMaps, and STG images. Trade deliver-stg + shared CMs for platform.'
 
   return (
     <OpsSection

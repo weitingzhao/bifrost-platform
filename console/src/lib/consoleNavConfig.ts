@@ -48,11 +48,17 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
     defaultOpen: true,
     subGroups: [
       {
-        label: 'Release',
+        label: 'Trade release',
         items: [
           { id: 'delivery', label: 'Delivery', icon: Workflow },
           { id: 'promote', label: 'Promote', icon: Rocket },
           { id: 'deploy-mainline', label: 'Deploy Mainline', icon: GitBranch },
+        ],
+      },
+      {
+        label: 'Platform',
+        items: [
+          { id: 'platform-release', label: 'Platform Release', icon: Container },
         ],
       },
       {
@@ -128,6 +134,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'A
   delivery: 'Operate',
   promote: 'Operate',
   'deploy-mainline': 'Operate',
+  'platform-release': 'Operate',
   cluster: 'Operate',
   placement: 'Observe',
   console: 'Operate',

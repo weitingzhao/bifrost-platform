@@ -35,9 +35,29 @@ var deliverStgPhaseDefs = []struct {
 	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
 }
 
-func aggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView {
-	out := make([]PipelinePhaseView, 0, len(deliverStgPhaseDefs))
-	for _, def := range deliverStgPhaseDefs {
+var deliverPlatformPhaseDefs = []struct {
+	ID    string
+	Label string
+	Tasks []string
+}{
+	{ID: "mirror", Label: "Mirror", Tasks: []string{"mirror-sync"}},
+	{ID: "clone", Label: "Clone", Tasks: []string{"clone-platform", "clone-ui"}},
+	{
+		ID:    "build",
+		Label: "Build",
+		Tasks: []string{"stage-api-dockerfile", "stage-console-dockerfile", "build-platform-api", "build-platform-console"},
+	},
+	{ID: "rollout", Label: "Rollout", Tasks: []string{"rollout"}},
+	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
+}
+
+func aggregateDeliverPhases(defs []struct {
+	ID    string
+	Label string
+	Tasks []string
+}, taskStatus map[string]string) []PipelinePhaseView {
+	out := make([]PipelinePhaseView, 0, len(defs))
+	for _, def := range defs {
 		status, detail := aggregatePhaseStatus(def.Tasks, taskStatus)
 		out = append(out, PipelinePhaseView{
 			ID:     def.ID,
@@ -47,6 +67,14 @@ func aggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView
 		})
 	}
 	return out
+}
+
+func aggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView {
+	return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus)
+}
+
+func aggregateDeliverPlatformPhases(taskStatus map[string]string) []PipelinePhaseView {
+	return aggregateDeliverPhases(deliverPlatformPhaseDefs, taskStatus)
 }
 
 func aggregatePhaseStatus(tasks []string, taskStatus map[string]string) (status, detail string) {
@@ -126,20 +154,34 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	if ns == "" {
 		ns = s.PipelinesNamespace()
 	}
+	pipelineName := "bifrost-deliver-stg"
 	out := PipelineRunStepsResponse{
-		ClusterID:   s.clusterID(),
-		Namespace:   ns,
-		RunName:     runName,
-		Pipeline:    "bifrost-deliver-stg",
+		ClusterID:    s.clusterID(),
+		Namespace:    ns,
+		RunName:      runName,
+		Pipeline:     pipelineName,
 		Reachability: probe.ReachFail,
-		Phases:      aggregateDeliverStgPhases(map[string]string{}),
-		GeneratedAt: now,
+		Phases:       aggregateDeliverStgPhases(map[string]string{}),
+		GeneratedAt:  now,
 	}
 
 	dyn, err := s.buildDynamicClient()
 	if err != nil {
 		out.Detail = err.Error()
 		return out
+	}
+
+	if run, getErr := dyn.Resource(pipelineRunGVR).Namespace(ns).Get(ctx, runName, metav1.GetOptions{}); getErr == nil {
+		if ref, ok, _ := unstructured.NestedString(run.Object, "spec", "pipelineRef", "name"); ok && ref != "" {
+			pipelineName = ref
+			out.Pipeline = pipelineName
+		}
+	}
+	switch pipelineName {
+	case "bifrost-deliver-platform":
+		out.Phases = aggregateDeliverPlatformPhases(map[string]string{})
+	default:
+		out.Phases = aggregateDeliverStgPhases(map[string]string{})
 	}
 
 	list, err := dyn.Resource(taskRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
@@ -184,7 +226,12 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	}
 	sort.Slice(tasks, func(i, j int) bool { return tasks[i].PipelineTask < tasks[j].PipelineTask })
 
-	out.Phases = aggregateDeliverStgPhases(taskStatus)
+	switch pipelineName {
+	case "bifrost-deliver-platform":
+		out.Phases = aggregateDeliverPlatformPhases(taskStatus)
+	default:
+		out.Phases = aggregateDeliverStgPhases(taskStatus)
+	}
 	out.Tasks = tasks
 	out.Reachability = probe.ReachOK
 	out.Detail = fmt.Sprintf("%d task(s) · %d phase(s)", len(tasks), len(out.Phases))

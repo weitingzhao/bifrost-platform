@@ -398,8 +398,8 @@ tracks:
         total: 7
         done: 7
         status: active
-        next_task: "Owner Phase 1 sign-off (Delivery → Platform GitOps panel + Agent Briefing)"
-        note: "Phase 1 code complete in bifrost-trade-infra. Push → make k3s-deliver-platform. Console :30879 API :30878/health. remediation-runner Dockerfile only (Mac Mini, not K3s)."
+        next_task: "make k3s-deliver-platform (build images + rollout); then Owner infra sign-off"
+        note: "UI signed off (Trade release / Platform Release sidebar). Makefile KUBECONFIG fix for k3s-install-platform-stg. Namespace + Argo app applied; pods need first deliver for images."
       - id: agent-infra-bootstrap
         label: "Agent host setup (Hermes + Bridge + tools)"
         total: 5

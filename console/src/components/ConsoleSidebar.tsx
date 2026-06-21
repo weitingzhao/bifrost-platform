@@ -14,6 +14,7 @@ export type ConsoleViewTab =
   | 'program'
   | 'promote'
   | 'deploy-mainline'
+  | 'platform-release'
   | 'blueprint'
   | 'environments'
   | 'roadmap'

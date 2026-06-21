@@ -6,8 +6,8 @@ import { fetchPipelineRunLogs, fetchPipelineRuns } from '@/api/platform'
 import { DeliveryPipelineStepProgress } from '@/components/delivery/DeliveryPipelineStepProgress'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { StatusLamp } from '@/components/StatusLamp'
-import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliveryPageTabs'
-import { DELIVERY_FOCUS_RUN_QUERY_KEY } from '@/lib/delivery/deliveryFocusRun'
+import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
+import type { DeliveryTargetConfig } from '@/lib/delivery/deliveryTargets'
 import {
   formatPipelineRunStatus,
   isPipelineRunFailed,
@@ -27,23 +27,30 @@ function logsNeedPoll(logs: string | undefined): boolean {
   return logs.includes('no pods yet') || logs.includes('no log lines yet')
 }
 
-export function DeliveryActiveRunPanel() {
+interface DeliveryActiveRunPanelProps {
+  target: DeliveryTargetConfig
+}
+
+export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) {
   const qc = useQueryClient()
+  const focusKey = deliveryFocusRunQueryKey(target.pipeline)
+  const pipeline = target.pipeline
+
   const { data: pinnedName = null } = useQuery<string | null>({
-    queryKey: DELIVERY_FOCUS_RUN_QUERY_KEY,
+    queryKey: focusKey,
     queryFn: () => null,
     initialData: null,
     staleTime: Infinity,
   })
 
   const runsQuery = useQuery({
-    queryKey: ['delivery', 'runs', DELIVER_STG_PIPELINE],
-    queryFn: () => fetchPipelineRuns(DELIVER_STG_PIPELINE),
+    queryKey: ['delivery', 'runs', pipeline],
+    queryFn: () => fetchPipelineRuns(pipeline),
     staleTime: 0,
     refetchInterval: () => {
-      const pin = qc.getQueryData<string | null>(DELIVERY_FOCUS_RUN_QUERY_KEY)
-      const runs = qc.getQueryData<{ runs: DeliveryPipelineRunView[] }>(['delivery', 'runs', DELIVER_STG_PIPELINE])
-        ?.runs ?? []
+      const pin = qc.getQueryData<string | null>(focusKey)
+      const runs =
+        qc.getQueryData<{ runs: DeliveryPipelineRunView[] }>(['delivery', 'runs', pipeline])?.runs ?? []
       if (pin != null) {
         const pinned = runs.find(r => r.name === pin)
         if (pinned == null || isPipelineRunRunning(pinned)) return 3_000
@@ -61,17 +68,16 @@ export function DeliveryActiveRunPanel() {
     if (pinnedName) {
       const pinned = runs.find(r => r.name === pinnedName)
       if (pinned != null) return pinned
-      // Run just started — API list may lag behind pin.
       return {
         name: pinnedName,
         namespace: ns,
-        pipeline: DELIVER_STG_PIPELINE,
+        pipeline,
         status: 'Unknown',
         reason: 'Running',
       }
     }
     return runs.find(r => isPipelineRunRunning(r)) ?? runs[0]
-  }, [runs, pinnedName, ns])
+  }, [runs, pinnedName, ns, pipeline])
 
   useEffect(() => {
     if (focusRun?.name == null) return
@@ -81,16 +87,16 @@ export function DeliveryActiveRunPanel() {
   useEffect(() => {
     if (focusRun == null) return
     if (isPipelineRunSucceeded(focusRun) || isPipelineRunFailed(focusRun)) {
-      qc.setQueryData(DELIVERY_FOCUS_RUN_QUERY_KEY, null)
+      qc.setQueryData(focusKey, null)
     }
-  }, [focusRun, qc])
+  }, [focusRun, focusKey, qc])
 
   const running = focusRun != null && isPipelineRunRunning(focusRun)
   const terminal = focusRun != null && (isPipelineRunSucceeded(focusRun) || isPipelineRunFailed(focusRun))
   const pollSteps = pinnedName != null || running || (focusRun != null && !terminal)
 
   const logsQuery = useQuery({
-    queryKey: ['delivery', 'logs', DELIVER_STG_PIPELINE, focusRun?.name, 'active'],
+    queryKey: ['delivery', 'logs', pipeline, focusRun?.name, 'active'],
     queryFn: () => fetchPipelineRunLogs(focusRun!.name, runsQuery.data?.namespace ?? focusRun!.namespace),
     enabled: focusRun != null,
     refetchInterval: query => {
@@ -101,15 +107,13 @@ export function DeliveryActiveRunPanel() {
     },
   })
 
-  const gatewayUrl = 'http://192.168.10.73:30880/'
-
   return (
     <OpsSection
-      title={running ? 'Active deliver run' : 'Latest deliver run'}
+      title={running ? `Active run — ${target.shortLabel}` : `Latest run — ${target.shortLabel}`}
       description={
         running
-          ? 'Live Tekton steps and console output (auto-refresh).'
-          : 'Most recent bifrost-deliver-stg run — start another from Supply chain above.'
+          ? `Live Tekton steps for ${pipeline} (auto-refresh).`
+          : `Most recent ${pipeline} run — start from actuate panel above.`
       }
       leading={focusRun != null ? <StatusLamp value={runLamp(focusRun)} kind="reach" /> : undefined}
       actions={
@@ -137,7 +141,7 @@ export function DeliveryActiveRunPanel() {
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">Loading pipeline runs…</p>
       ) : focusRun == null ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          No deliver runs yet — use Supply chain → Run deliver-stg.
+          No runs yet for {pipeline}.
         </p>
       ) : (
         <>
@@ -165,11 +169,11 @@ export function DeliveryActiveRunPanel() {
           {terminal && isPipelineRunSucceeded(focusRun) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Deliver succeeded — verify STG smoke on Observe.
+                Deliver succeeded — verify smoke on Observe.
               </span>
               <Button variant="outline" size="sm" asChild>
-                <a href={gatewayUrl} target="_blank" rel="noreferrer">
-                  Open STG gateway
+                <a href={target.successLink.href} target="_blank" rel="noreferrer">
+                  {target.successLink.label}
                 </a>
               </Button>
             </div>

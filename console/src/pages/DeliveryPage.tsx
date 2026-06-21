@@ -1,18 +1,12 @@
 import { useState } from 'react'
 import type { ClusterSummary, DeliveryPipelinesResponse, GitOpsAppsResponse, MatrixResponse, OpsContextResponse, ReleaseGateResponse, StackAddonsResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/types'
-import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
-import { DeliveryCouplingGatePanel } from '@/components/delivery/DeliveryObserveOverview'
+import { DeliveryOperateView } from '@/components/delivery/DeliveryOperateView'
 import { DeliveryObserveView } from '@/components/delivery/DeliveryObserveView'
-import { DeliveryOperateStack } from '@/components/delivery/DeliveryOperateStack'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { DeliveryReleaseWorkflowPanel } from '@/components/delivery/DeliveryReleaseWorkflowPanel'
 import { DeliveryViewShell } from '@/components/delivery/DeliveryViewShell'
-import { GitOpsQuickActionsPanel } from '@/components/delivery/GitOpsQuickActionsPanel'
-import { PlatformDeliverPanel } from '@/components/delivery/PlatformDeliverPanel'
 import { ProdDeliverPanel } from '@/components/delivery/ProdDeliverPanel'
-import { StgTierBChecklistPanel } from '@/components/delivery/StgTierBChecklistPanel'
 import { StackInstallWizardPanel } from '@/components/delivery/StackInstallWizardPanel'
-import { SupplyChainPanel } from '@/components/delivery/SupplyChainPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { evaluateStgReleaseStatus } from '@/lib/control-room/matrixSummary'
 import {
@@ -114,9 +108,23 @@ export function DeliveryPage({
         stgSmokeFails={stgRelease.smokeFails}
       >
         {pageTab === 'operate' && (
-          <DeliveryOperateStack>
-            <SupplyChainPanel layout="operate" />
-            <PlatformDeliverPanel />
+          <>
+            <DeliveryOperateView
+              gitops={gitops}
+              gitopsLoading={gitopsLoading}
+              gitopsError={gitopsError}
+              onOpenObserve={() => setPageTab('observe')}
+              context={context}
+              matrices={matrices}
+              stgSmoke={stgSmoke}
+              lastDeliverSucceeded={lastDeliverSucceeded}
+              stgGate={stgGate}
+              tierB={tierB}
+              tierBLoading={tierBLoading}
+              onOpenPromote={onOpenPromote}
+              onOpenMilestones={onOpenMilestones}
+              onOpenAudit={onOpenAudit}
+            />
             {showStackOperate && (
               <StackInstallWizardPanel
                 data={stack}
@@ -125,31 +133,7 @@ export function DeliveryPage({
                 layout="operate"
               />
             )}
-            <DeliveryActiveRunPanel />
-            <GitOpsQuickActionsPanel
-              data={gitops}
-              isLoading={gitopsLoading}
-              errorMessage={gitopsError}
-              onOpenObserve={() => setPageTab('observe')}
-            />
-            <StgTierBChecklistPanel
-              tierB={tierB}
-              tierBLoading={tierBLoading}
-              onOpenPromote={onOpenPromote}
-              layout="operate"
-            />
-            <DeliveryCouplingGatePanel
-              context={context}
-              matrices={matrices}
-              stgSmoke={stgSmoke}
-              lastDeliverSucceeded={lastDeliverSucceeded}
-              stgGate={stgGate}
-              tierB={tierB}
-              onOpenPromote={onOpenPromote}
-              onOpenMilestones={onOpenMilestones}
-              onOpenAudit={onOpenAudit}
-            />
-          </DeliveryOperateStack>
+          </>
         )}
 
         {pageTab === 'observe' && (

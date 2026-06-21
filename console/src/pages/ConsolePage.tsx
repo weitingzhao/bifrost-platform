@@ -37,6 +37,7 @@ import { DeliveryPage } from '@/pages/DeliveryPage'
 import { DeployMainlinePage } from '@/pages/DeployMainlinePage'
 import { EnvironmentsPage } from '@/pages/EnvironmentsPage'
 import { PlacementPage } from '@/pages/PlacementPage'
+import { PlatformReleasePage } from '@/pages/PlatformReleasePage'
 import { ProgramPage } from '@/pages/ProgramPage'
 import { PromotePage } from '@/pages/PromotePage'
 import { RuntimeMapPage } from '@/pages/RuntimeMapPage'
@@ -72,6 +73,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'k3s-bootstrap': 'K3s Bootstrap',
   'data-layer': 'Data Layer',
   'deploy-mainline': 'Deploy Mainline',
+  'platform-release': 'Platform Release',
   'platform-standards': 'Platform',
   'agent-protocol': 'Agent Protocol',
   'mcp-contract': 'MCP Contract',
@@ -84,6 +86,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'control-room',
   'promote',
   'delivery',
+  'platform-release',
   'cluster',
   'placement',
   'runtime-map',
@@ -601,6 +604,16 @@ export function ConsolePage() {
               description="Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain and sign-off gates."
             />
             <DeployMainlinePage />
+          </>
+        )}
+
+        {viewTab === 'platform-release' && (
+          <>
+            <PageHeader
+              title={VIEW_TITLES['platform-release']}
+              description="Ops Platform CI/CD — Kaniko build, rollout to bifrost-platform-stg, Argo sync."
+            />
+            <PlatformReleasePage />
           </>
         )}
 

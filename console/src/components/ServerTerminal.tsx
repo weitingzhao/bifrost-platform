@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, SegmentControl, cn } from '@bifrost/ui'
 import { X } from 'lucide-react'
 import type { ConsoleHost } from '@/api/console'
@@ -33,8 +33,34 @@ function paneMinHeightClass(count: number): string {
   return 'min-h-[260px]'
 }
 
+function isLinuxConsoleHost(host: ConsoleHost): boolean {
+  return host.group === 'linux' || host.group === 'compute'
+}
+
+function isMacConsoleHost(host: ConsoleHost): boolean {
+  return host.group === 'mac'
+}
+
+function hostSegmentOptions(hosts: ConsoleHost[]) {
+  return hosts.map(h => ({
+    value: h.id,
+    label: (
+      <span
+        className="inline-flex items-center gap-1.5"
+        title={h.jump_label ? `${h.label} · via ${h.jump_label}` : h.label}
+      >
+        <ConsoleHostBrandIcon host={h} />
+        <ConsoleHostIpLabel ip={h.host} />
+      </span>
+    ),
+  }))
+}
+
 export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTerminalProps) {
   const [tabs, setTabs] = useState<SessionTab[]>([])
+
+  const linuxHosts = useMemo(() => hosts.filter(isLinuxConsoleHost), [hosts])
+  const macHosts = useMemo(() => hosts.filter(isMacConsoleHost), [hosts])
 
   const pickerHost = hosts.find(h => h.id === selectedId) ?? hosts[0] ?? null
 
@@ -94,61 +120,69 @@ export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTermin
 
   const liveCount = tabs.filter(t => t.connState === 'open').length
 
-  const hostOptions = hosts.map(h => ({
-    value: h.id,
-    label: (
-      <span
-        className="inline-flex items-center gap-1.5"
-        title={h.jump_label ? `${h.label} · via ${h.jump_label}` : h.label}
-      >
-        <ConsoleHostBrandIcon host={h} />
-        <ConsoleHostIpLabel ip={h.host} />
-      </span>
-    ),
-  }))
+  const linuxValue = linuxHosts.some(h => h.id === pickerHost?.id) ? pickerHost!.id : ''
+  const macValue = macHosts.some(h => h.id === pickerHost?.id) ? pickerHost!.id : ''
 
   return (
     <section className="server-console panel-elevated overflow-hidden flex flex-col">
-      <div className="server-console-toolbar flex flex-wrap items-center gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--color-surface-elevated)]">
-        <span className="env-strip-label">Host</span>
+      <div className="server-console-toolbar flex flex-col gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--color-surface-elevated)]">
         {hosts.length > 0 ? (
-          <>
-            <SegmentControl
-              ariaLabel="SSH host"
-              value={pickerHost?.id ?? ''}
-              onChange={handleHostChange}
-              options={hostOptions}
-              size="sm"
-            />
-            {pickerHost != null && (
-              <span
-                className={
-                  pickerHost.reachable
-                    ? 'lamp-ok text-[var(--text-dense-meta)]'
-                    : 'lamp-fail text-[var(--text-dense-meta)]'
-                }
-              >
-                SSH {pickerHost.reachable ? 'reachable' : 'unreachable'}
-              </span>
-            )}
-          </>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div className="flex min-w-0 flex-col gap-2">
+              {linuxHosts.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="env-strip-label shrink-0">Linux</span>
+                  <SegmentControl
+                    ariaLabel="SSH host — Linux K3s cluster"
+                    value={linuxValue}
+                    onChange={handleHostChange}
+                    options={hostSegmentOptions(linuxHosts)}
+                    size="sm"
+                  />
+                </div>
+              )}
+              {macHosts.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="env-strip-label shrink-0">Mac</span>
+                  <SegmentControl
+                    ariaLabel="SSH host — Mac Agent hosts"
+                    value={macValue}
+                    onChange={handleHostChange}
+                    options={hostSegmentOptions(macHosts)}
+                    size="sm"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1 text-[var(--text-dense-meta)]">
+              {pickerHost != null && (
+                <span
+                  className={
+                    pickerHost.reachable
+                      ? 'lamp-ok text-[var(--text-dense-meta)]'
+                      : 'lamp-fail text-[var(--text-dense-meta)]'
+                  }
+                >
+                  SSH {pickerHost.reachable ? 'reachable' : 'unreachable'}
+                </span>
+              )}
+              {tabs.length > 0 && (
+                <span className="text-[var(--muted-foreground)]">
+                  {liveCount} live · {tabs.length} pane{tabs.length === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
+          </div>
         ) : (
           <span className="text-[var(--muted-foreground)] text-[var(--text-dense-meta)]">
             No SSH hosts in topology (set node host in topology.yaml)
           </span>
         )}
-        <div className="ml-auto flex items-center gap-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {tabs.length > 0 && (
-            <span>
-              {liveCount} live · {tabs.length} pane{tabs.length === 1 ? '' : 's'}
-            </span>
-          )}
-        </div>
       </div>
 
       {tabs.length === 0 ? (
         <div className="flex min-h-[420px] items-center justify-center bg-[#0a0c0f] px-6 text-center text-[var(--text-dense-meta)] text-muted-foreground">
-          Select a host above to connect. Choose several hosts to compare consoles side by side.
+          Select a host above to connect. Linux row = K3s cluster nodes; Mac row = Agent hosts (native macOS).
         </div>
       ) : (
         <div className={cn('grid gap-px bg-[var(--border)]', gridColsClass(tabs.length))}>
