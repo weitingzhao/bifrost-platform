@@ -11,6 +11,8 @@ import type {
   McpToolsResponse,
   McpStatusResponse,
   ClusterGovernanceResponse,
+  ClusterPostgresStatusResponse,
+  ClusterRedisStatusResponse,
   ClusterServiceReadinessResponse,
   ClusterNamespacesResponse,
   ClusterNodesResponse,
@@ -137,6 +139,18 @@ export async function fetchClusterServiceReadiness(): Promise<ClusterServiceRead
   const r = await fetch('/api/v1/cluster/service-readiness')
   if (!r.ok) throw new Error(`cluster service-readiness: HTTP ${r.status}`)
   return r.json() as Promise<ClusterServiceReadinessResponse>
+}
+
+export async function fetchClusterPostgresStatus(): Promise<ClusterPostgresStatusResponse> {
+  const r = await fetch('/api/v1/cluster/postgres')
+  if (!r.ok) throw new Error(`cluster postgres: HTTP ${r.status}`)
+  return r.json() as Promise<ClusterPostgresStatusResponse>
+}
+
+export async function fetchClusterRedisStatus(): Promise<ClusterRedisStatusResponse> {
+  const r = await fetch('/api/v1/cluster/redis')
+  if (!r.ok) throw new Error(`cluster redis: HTTP ${r.status}`)
+  return r.json() as Promise<ClusterRedisStatusResponse>
 }
 
 export async function fetchNodePower(nodeName: string): Promise<NodePowerResponse> {

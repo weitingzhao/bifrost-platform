@@ -288,18 +288,65 @@ html {
 }
 
 .cluster-category-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
   min-height: 7.5rem;
-  padding: 0.625rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cluster-category-card__select {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: none;
+  border-radius: inherit;
+  background: transparent;
   cursor: pointer;
   font: inherit;
   text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cluster-category-card__copy {
+  position: absolute;
+  top: 0.375rem;
+  right: 0.375rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: calc(var(--radius) - 2px);
+  background: color-mix(in srgb, var(--card) 92%, var(--background));
+  color: var(--muted-foreground);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.cluster-category-card:hover .cluster-category-card__copy,
+.cluster-category-card--selected .cluster-category-card__copy,
+.cluster-category-card:focus-within .cluster-category-card__copy {
+  opacity: 1;
+}
+
+.cluster-category-card__copy:hover {
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+
+.cluster-category-card__copy-icon {
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
 .cluster-category-card:hover {
@@ -406,10 +453,19 @@ html {
 
 .cluster-category-detail__header {
   display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.5rem 0.75rem 0.625rem;
   border-bottom: 1px solid var(--border);
+}
+
+.cluster-category-detail__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
 }
 
 .cluster-category-detail__label {

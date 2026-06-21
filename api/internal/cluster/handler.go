@@ -41,6 +41,14 @@ func (h *Handler) HandleServiceReadiness(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, h.svc.ServiceReadiness(r.Context()))
 }
 
+func (h *Handler) HandlePostgresStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.PostgresStatus(r.Context()))
+}
+
+func (h *Handler) HandleRedisStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.RedisStatus(r.Context()))
+}
+
 func (h *Handler) HandleGovernance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Governance(r.Context()))
 }

@@ -166,6 +166,8 @@ func (s *Server) Router() http.Handler {
 			r.Get("/nodes", s.cluster.HandleNodes)
 			r.Get("/governance", s.cluster.HandleGovernance)
 			r.Get("/service-readiness", s.cluster.HandleServiceReadiness)
+			r.Get("/postgres", s.cluster.HandlePostgresStatus)
+			r.Get("/redis", s.cluster.HandleRedisStatus)
 			r.Get("/join-profiles", s.cluster.HandleJoinProfiles)
 			r.Get("/nodes/{name}/power", s.cluster.HandleNodePower)
 			r.Get("/placement", s.cluster.HandlePlacement)
