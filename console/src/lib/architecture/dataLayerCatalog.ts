@@ -6,8 +6,12 @@
  * Aligned with Vision § Redis Ideal Topology.
  */
 
-export const DATA_LAYER_VERSION = '2026-06-19'
+import type { OpsContextResponse } from '@/api/types'
+
+export const DATA_LAYER_VERSION = '2026-06-20'
 export const DATA_LAYER_SOURCE = 'console/src/lib/architecture/dataLayerCatalog.ts'
+
+export const DATA_LAYER_MIGRATE_STREAM_ID = 'data-layer-k3s'
 
 // ---------------------------------------------------------------------------
 // Redis architecture
@@ -94,8 +98,8 @@ export type PgPrinciple = {
 
 export const PG_DEPLOY_PRINCIPLES: PgPrinciple[] = [
   { dimension: 'Operator', principle: 'CloudNativePG', note: 'Declarative YAML; operator manages lifecycle + failover' },
-  { dimension: 'Storage', principle: 'local-path PVC on NVMe', note: 'mini-pc-b dedicated DB node for max IO' },
-  { dimension: 'Scheduling', principle: 'nodeAffinity → mini-pc-b', note: 'Primary always on DB node; Standby on mini-pc-a' },
+  { dimension: 'Storage', principle: 'local-path PVC on NVMe', note: 'ubt-k3s-02 prod-pool local disk for max IO — not nfs-hot for PGDATA' },
+  { dimension: 'Scheduling', principle: 'nodeAffinity → ubt-k3s-02 (prod-pool)', note: 'Label node-role=postgres; Standby on ubt-k3s-04 or ubt-k3s-01' },
   { dimension: 'Instances', principle: '2 (Primary + Standby)', note: 'Streaming replication; auto failover' },
   { dimension: 'Backup', principle: 'WAL archive → MinIO (barmanObjectStore)', note: 'PITR capable; daily base backup' },
   { dimension: 'Databases', principle: 'bifrost_dev / bifrost_stg / bifrost_prod (R-DV1)', note: 'Same cluster, logical isolation; apps connect via db name' },
@@ -141,6 +145,132 @@ export const DATA_RESPONSIBILITY: ResponsibilitySplit[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// K3s data layer migration (Agent Briefing + spine stream data-layer-k3s)
+// ---------------------------------------------------------------------------
+
+export type DataLayerPhaseStatus = 'pending' | 'next' | 'in_progress' | 'done'
+
+export type DataLayerMigrationPhase = {
+  id: string
+  step: number
+  label: string
+  repo: string
+  verify: string
+  blockedBy?: string
+}
+
+/** Seven phases — keep in sync with ops-context.yaml tracks.migrate.streams data-layer-k3s total: 7 */
+export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
+  {
+    id: 'data-0-cnpg-operator',
+    step: 1,
+    label: 'Label ubt-k3s-02 postgres-role + deploy CloudNativePG operator + bifrost-postgres cluster (data NS)',
+    repo: 'bifrost-trade-infra/k8s/data/ · bifrost-platform Cluster actuation',
+    verify: 'kubectl get cluster -n data; postgres-role capability ready on ubt-k3s-02',
+  },
+  {
+    id: 'data-1-minio-backup',
+    step: 2,
+    label: 'MinIO backup target (nfs-hot) + CNPG barmanObjectStore WAL archive',
+    repo: 'bifrost-trade-infra/k8s/data/minio/ · nfs-hot StorageClass',
+    verify: 'CNPG backup status OK; test WAL archive to nfs-hot bucket',
+    blockedBy: 'data-0-cnpg-operator',
+  },
+  {
+    id: 'data-2-stg-cutover',
+    step: 3,
+    label: 'STG cutover — apps connect bifrost-postgres-rw.data.svc + redis-live/queue-stg; remove bifrost-stg in-ns postgres/redis',
+    repo: 'bifrost-trade-infra/k8s/overlays/stg/',
+    verify: 'bifrost-stg daemon_control + IB ingestor Stream + deliver-stg smoke pass',
+    blockedBy: 'data-1-minio-backup',
+  },
+  {
+    id: 'data-3-dev-cutover',
+    step: 4,
+    label: 'DEV cutover — bifrost-dev config → data NS endpoints; remove bifrost-dev in-ns postgres/redis',
+    repo: 'bifrost-trade-infra/k8s/overlays/dev/',
+    verify: 'Vision V1 gate :30882 + bifrost_dev schema via CNPG',
+    blockedBy: 'data-2-stg-cutover',
+  },
+  {
+    id: 'data-4-prod-pg',
+    step: 5,
+    label: 'PROD PG migrate — pg_dump legacy .80 → CNPG bifrost_prod; maintenance window + rollback plan',
+    repo: 'bifrost-trade-infra/k8s/overlays/prod/config/',
+    verify: 'make prod-health; monitor daemon_control; D2-prime cutover sign-off',
+    blockedBy: 'data-3-dev-cutover',
+  },
+  {
+    id: 'data-5-redis-split',
+    step: 6,
+    label: 'PROD/STG redis-live + redis-queue split (Bitnami HA); Celery → redis-queue only',
+    repo: 'bifrost-trade-infra/k8s/data/redis/',
+    verify: 'noeviction on live; Celery bars queue isolated; NetworkPolicy per env',
+    blockedBy: 'data-4-prod-pg',
+  },
+  {
+    id: 'data-6-retire-embedded',
+    step: 7,
+    label: 'Retire embedded stateful — remove postgres/redis from bifrost-* base; bare .80 PG standby or offline',
+    repo: 'bifrost-trade-infra/k8s/base/ · bifrost-platform/config/environments.yaml',
+    verify: 'data NS only; matrix probes point at cluster endpoints; legacy .80 read-only or decommissioned',
+    blockedBy: 'data-5-redis-split',
+  },
+]
+
+export const DATA_LAYER_SESSION_CONSTRAINTS: string[] = [
+  'PG hot storage: local-path on postgres node (ubt-k3s-02) — NOT nfs-hot for PGDATA',
+  'NAS nfs-hot / nfs-cold: WAL/RDB backups and cold archive only (Retain reclaim)',
+  'R-DV1: bifrost_dev / bifrost_stg / bifrost_prod (or options_db alias) — separate Redis instances per env',
+  'Single-variable: complete stg cutover before prod PG migration',
+  'Prod PG cutover requires Owner maintenance window — no parallel compose→k3s changes',
+  'Remove per-namespace postgres/redis Deployments from bifrost-{dev,stg,prod} after each env cutover',
+]
+
+/** Index of the active (recommended) phase from spine stream progress (done = completed count). */
+export function activeDataLayerPhaseIndex(ctx?: OpsContextResponse): number {
+  const stream = ctx?.tracks?.migrate?.streams.find(s => s.id === DATA_LAYER_MIGRATE_STREAM_ID)
+  if (stream == null) return 0
+  if (stream.status === 'closed' || stream.status === 'signed') return DATA_LAYER_MIGRATION_PHASES.length
+  return Math.min(Math.max(stream.done, 0), DATA_LAYER_MIGRATION_PHASES.length - 1)
+}
+
+export function activeDataLayerPhase(ctx?: OpsContextResponse): DataLayerMigrationPhase | undefined {
+  const idx = activeDataLayerPhaseIndex(ctx)
+  if (idx >= DATA_LAYER_MIGRATION_PHASES.length) return undefined
+  return DATA_LAYER_MIGRATION_PHASES[idx]
+}
+
+/** Agent Briefing appendix — phased migration queue aligned with spine stream data-layer-k3s. */
+export function formatDataLayerBriefingAppendix(ctx?: OpsContextResponse): string {
+  const stream = ctx?.tracks?.migrate?.streams.find(s => s.id === DATA_LAYER_MIGRATE_STREAM_ID)
+  const activeIdx = activeDataLayerPhaseIndex(ctx)
+  const lines = [
+    '## Data layer migration phases (K3s)',
+    '',
+    `Source: ${DATA_LAYER_SOURCE} · spine stream \`${DATA_LAYER_MIGRATE_STREAM_ID}\``,
+    stream != null
+      ? `Spine progress: ${stream.done}/${stream.total} · status=${stream.status}${stream.next_task != null ? ` · next: ${stream.next_task}` : ''}`
+      : 'Spine stream: (not loaded — use phases below)',
+    '',
+    'Authority: decision **D2-prime** supersedes D2 (.80 bare-metal interim).',
+    '',
+  ]
+  for (let i = 0; i < DATA_LAYER_MIGRATION_PHASES.length; i++) {
+    const p = DATA_LAYER_MIGRATION_PHASES[i]
+    const marker = i === activeIdx && stream?.status !== 'closed' ? ' *(recommended)*' : ''
+    lines.push(`${p.step}. **${p.label}**${marker}`)
+    lines.push(`   - repo: ${p.repo}`)
+    lines.push(`   - verify: ${p.verify}`)
+    if (p.blockedBy) lines.push(`   - blocked_by: ${p.blockedBy}`)
+    lines.push('')
+  }
+  lines.push('### Session constraints')
+  for (const c of DATA_LAYER_SESSION_CONSTRAINTS) lines.push(`- ${c}`)
+  return lines.join('\n')
+}
+
+// ---------------------------------------------------------------------------
 // LLM pack
 // ---------------------------------------------------------------------------
 
@@ -168,6 +298,14 @@ export function buildDataLayerLlmPack(): string {
     '',
     '## Data responsibility split (Redis vs PG)',
     ...DATA_RESPONSIBILITY.map(d => `- **${d.concern}**: Redis=[${d.redis}] | PG=[${d.pg}]`),
+    '',
+    '## Migration phases (data-layer-k3s stream)',
+    ...DATA_LAYER_MIGRATION_PHASES.map(
+      p => `${p.step}. **${p.id}**: ${p.label} · verify: ${p.verify}`,
+    ),
+    '',
+    '## Session constraints',
+    ...DATA_LAYER_SESSION_CONSTRAINTS.map(c => `- ${c}`),
   ]
   return lines.join('\n')
 }

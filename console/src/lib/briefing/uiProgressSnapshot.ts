@@ -20,7 +20,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Ops',
     item: 'Agent Briefing',
     status: 'done',
-    notes: 'Work tracks + lane queues (build/migrate/operate), session pack, session delta, Align Briefing meta pack',
+    notes: 'Work tracks + lane queues (build/migrate/operate), data-layer-k3s migrate lane, session pack, session delta, Align Briefing meta pack',
   },
   {
     area: 'Runtime',
@@ -57,6 +57,12 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     item: 'Promote',
     status: 'done',
     notes: 'Flywheel checklist + POST /promote/release-gate + gate checks; prod cutover SIGNED 2026-06-19',
+  },
+  {
+    area: 'Catalog',
+    item: 'Data Layer',
+    status: 'partial',
+    notes: 'dataLayerCatalog.ts principles + DATA_LAYER_MIGRATION_PHASES; spine stream data-layer-k3s; Briefing cluster/data lane appendix; k8s/data manifests pending in bifrost-trade-infra',
   },
   {
     area: 'Catalog',

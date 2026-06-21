@@ -37,9 +37,8 @@ import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPa
 import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
 import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
-import { ClusterMainView } from '@/components/cluster/ClusterMainView'
-import { ClusterDimensionSummaryGrid } from '@/components/cluster/ClusterDimensionSummaryGrid'
-import { ClusterServiceReadinessStrip } from '@/components/cluster/ClusterServiceReadinessStrip'
+import { ClusterCategoryGrid } from '@/components/cluster/ClusterCategoryGrid'
+import { ClusterCategoryDetail } from '@/components/cluster/ClusterCategoryDetail'
 import { ClusterGovernancePanel } from '@/components/cluster/ClusterGovernancePanel'
 import { ClusterIssuesPanel, collectClusterIssues } from '@/components/cluster/ClusterIssuesPanel'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
@@ -51,7 +50,11 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
 import { buildClusterLlmContext } from '@/lib/cluster/buildClusterLlmContext'
 import type { NodeWizardFlow, WizardAction } from '@/lib/cluster/nodeWizard'
-import { DEFAULT_CLUSTER_VIEW_SECTION, type ClusterViewSection } from '@/lib/cluster/clusterViewSections'
+import { useClusterCategory } from '@/hooks/useClusterCategory'
+import {
+  INFRASTRUCTURE_CATEGORY_LABELS,
+  isInfrastructureCategory,
+} from '@/lib/cluster/clusterCategories'
 
 type NsFilter = 'all' | 'bifrost'
 type CopyState = 'idle' | 'copied' | 'error'
@@ -97,7 +100,7 @@ export function ClusterPage({
   const [remediationPanelOpen, setRemediationPanelOpen] = useState(false)
   const [remediationJobId, setRemediationJobId] = useState<string | null>(null)
   const [remediationJob, setRemediationJob] = useState<RemediationJob | null>(null)
-  const [clusterSection, setClusterSection] = useState<ClusterViewSection>(DEFAULT_CLUSTER_VIEW_SECTION)
+  const { category: selectedCategory, setCategory, toggleCategory } = useClusterCategory()
 
   const { canOperate, canAdmin, caps, capsLoading } = usePlatformAuth()
 
@@ -555,6 +558,13 @@ export function ClusterPage({
 
   const metricsOk = metricsQuery.data?.metrics_server_available === true
   const clusterSummary = summaryQuery.data
+  const selectedCategoryTitle = useMemo(() => {
+    if (selectedCategory == null) return undefined
+    if (isInfrastructureCategory(selectedCategory)) {
+      return INFRASTRUCTURE_CATEGORY_LABELS[selectedCategory]
+    }
+    return serviceReadinessQuery.data?.domains.find(d => d.id === selectedCategory)?.label
+  }, [selectedCategory, serviceReadinessQuery.data?.domains])
   const bifrostNamespaces = namespacesQuery.data?.filter === 'bifrost' ? namespacesQuery.data.namespaces : []
   const showBootstrapActions = clusterBootstrapNeedsActions(metricsOk, bifrostNamespaces)
   const clusterStatusLabel = clusterSummary?.label ?? 'Loading…'
@@ -815,35 +825,40 @@ cd ../bifrost-platform && make start`}
           onSelectPodNamespace={ns => {
             setNsFilter('all')
             handleSelectNs(ns)
-            setClusterSection('workloads')
+            setCategory('workloads')
           }}
         />
       )}
 
       <section className="page-section panel-elevated cluster-home-summaries px-3 py-2">
-        <ClusterServiceReadinessStrip
-          data={serviceReadinessQuery.data}
-          isLoading={serviceReadinessQuery.isLoading}
-          onNavigate={setClusterSection}
-        />
-        <div className="cluster-home-summaries__divider" aria-hidden="true" />
-        <ClusterDimensionSummaryGrid
+        <ClusterCategoryGrid
           summary={clusterSummary}
           summaryLoading={summaryQuery.isLoading}
+          serviceReadiness={serviceReadinessQuery.data}
+          serviceReadinessLoading={serviceReadinessQuery.isLoading}
           governance={governanceQuery.data}
           governanceLoading={governanceQuery.isLoading}
           observability={observabilityQuery.data}
           observabilityLoading={observabilityQuery.isLoading}
           metrics={metricsQuery.data}
-          onNavigate={setClusterSection}
+          selectedCategory={selectedCategory}
+          onSelectCategory={toggleCategory}
         />
       </section>
 
-      <ClusterMainView
-        section={clusterSection}
-        onSectionChange={setClusterSection}
-        nodes={
-          <>
+      <ClusterCategoryDetail
+        category={selectedCategory}
+        title={selectedCategoryTitle}
+        applicationContent={domainId => (
+          <ClusterServiceReadinessPanel
+            data={serviceReadinessQuery.data}
+            isLoading={serviceReadinessQuery.isLoading}
+            compact
+            domainFilter={domainId}
+          />
+        )}
+        nodesContent={
+          <div className="cluster-view-panels">
             <ClusterNodeWizardPanel
               flow={wizardFlow}
               onFlowChange={setWizardFlow}
@@ -871,10 +886,10 @@ cd ../bifrost-platform && make start`}
               selectedNode={selectedNode?.name ?? null}
               onSelectNode={handleSelectNode}
             />
-          </>
+          </div>
         }
-        workloads={
-          <>
+        workloadsContent={
+          <div className="cluster-view-panels">
             <ClusterWorkloadsExplorer
               namespaces={namespacesQuery.data?.namespaces ?? []}
               nsFilter={nsFilter}
@@ -896,27 +911,22 @@ cd ../bifrost-platform && make start`}
               placementRules={placementQuery.data?.rules}
             />
             <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
-          </>
+          </div>
         }
-        platform={
-          <>
-            <ClusterServiceReadinessPanel
-              data={serviceReadinessQuery.data}
-              isLoading={serviceReadinessQuery.isLoading}
-              compact
-            />
-            <ClusterGovernancePanel
-              data={governanceQuery.data}
-              isLoading={governanceQuery.isLoading}
-              compact
-            />
-            <ClusterObservabilityPanel
-              data={observabilityQuery.data}
-              isLoading={observabilityQuery.isLoading}
-              onOpenStandards={onOpenStandards}
-              onOpenEnvironments={onOpenEnvironments}
-            />
-          </>
+        governanceContent={
+          <ClusterGovernancePanel
+            data={governanceQuery.data}
+            isLoading={governanceQuery.isLoading}
+            compact
+          />
+        }
+        observabilityContent={
+          <ClusterObservabilityPanel
+            data={observabilityQuery.data}
+            isLoading={observabilityQuery.isLoading}
+            onOpenStandards={onOpenStandards}
+            onOpenEnvironments={onOpenEnvironments}
+          />
         }
       />
 

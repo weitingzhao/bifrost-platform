@@ -91,8 +91,15 @@ export const L3_DECISIONS: D_Decision[] = [
   {
     id: 'D2',
     draft: 'PG stays on mini-pc-b (.80)',
-    ownerDecision: 'Confirmed: .80 bare-metal PG stays unchanged (until CNPG migration)',
+    ownerDecision: 'Superseded by D2-prime (2026-06-20): interim .80 bare-metal until CNPG cutover complete',
     ownerDate: '2026-06-04',
+  },
+  {
+    id: 'D2-prime',
+    draft: 'PG + Redis on K3s data namespace',
+    ownerDecision:
+      'CloudNativePG in data NS (bifrost_dev/stg/prod); redis-live + redis-queue per env; local-path @ ubt-k3s-02; nfs-hot backups; stg before prod',
+    ownerDate: '2026-06-20',
   },
   {
     id: 'D3',

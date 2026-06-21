@@ -65,6 +65,8 @@ export function buildBriefingAlignmentPack(input: BriefingSnapshotInput): string
     '- [ ] V1–V5 in visionSpineMap.ts each have a matching milestone id in ops-context.yaml',
     '- [ ] buildBriefingPack includes formatVisionBriefingSection appendix',
     '- [ ] Governance lane queue lists V1–V5 from visionSpineMap (workLanes.ts)',
+    '- [ ] data-layer-k3s migrate stream total/done matches DATA_LAYER_MIGRATION_PHASES length in dataLayerCatalog.ts',
+    '- [ ] buildBriefingPack cluster + data-layer-k3s lane includes formatDataLayerBriefingAppendix',
     '- [ ] After edits: `cd bifrost-platform && make test` passes',
     '',
     '## Spine milestones needing narrative sync',
