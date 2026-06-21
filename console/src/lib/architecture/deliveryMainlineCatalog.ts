@@ -107,6 +107,12 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
 
 export const DELIVERY_PIPELINE_CATALOG = [
   {
+    name: 'bifrost-deliver-platform',
+    tier: 'primary' as const,
+    purpose: 'Ops Platform stack: platform-api + platform-console → bifrost-platform-stg',
+    legacy: false,
+  },
+  {
     name: 'bifrost-deliver-prod',
     tier: 'planned' as const,
     purpose: 'Prod stack deliver — symmetric to deliver-stg; IN_PROGRESS (prod overlay)',

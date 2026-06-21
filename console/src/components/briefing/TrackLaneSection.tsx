@@ -90,7 +90,7 @@ function LaneCard({
               {lane.shortLabel}
             </span>
           </div>
-          <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          <p className="m-0 mt-1 line-clamp-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             {lane.description}
           </p>
           {progress != null && (
@@ -174,7 +174,7 @@ export function TrackLaneSection({
         Each lane has its own <strong>task tracking queue</strong> below. This scopes your Session briefing.
       </p>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {lanes.map(lane => {
           const laneQueue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
           const progress = queueProgress(laneQueue)

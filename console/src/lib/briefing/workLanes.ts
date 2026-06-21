@@ -15,7 +15,7 @@ import { visionGovernanceQueueItems } from '@/lib/architecture/visionSpineMap'
 
 export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops'
 export type MigrateLaneId = 'compose-k3s' | 'data-layer-k3s' | 'legacy-retire' | 'trade-stack'
-export type AutomateLaneId = 'agent-infra' | 'drift-remediation' | 'agent-services'
+export type AutomateLaneId = 'platform-gitops' | 'agent-infra' | 'drift-remediation' | 'agent-services'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
 export type LaneId = BuildLaneId | MigrateLaneId | AutomateLaneId | OperateLaneId
 
@@ -117,6 +117,15 @@ const MIGRATE_LANES: WorkLane[] = [
 
 const AUTOMATE_LANES: WorkLane[] = [
   {
+    id: 'platform-gitops',
+    track: 'automate',
+    label: 'Platform GitOps & containerization',
+    shortLabel: 'GitOps',
+    description: 'Gitea mirror for bifrost-platform, Dockerfile (api + runner), K8s overlay, Argo CD Application, Tekton deliver-platform pipeline. Enables Mac Pro Cursor dev → Gitea → K3s auto-deploy.',
+    agentMode: 'Ops',
+    workIntent: 'automate',
+  },
+  {
     id: 'agent-infra',
     track: 'automate',
     label: 'Agent host & Gateway',
@@ -211,6 +220,7 @@ const MIGRATE_STREAM_LANE: Record<string, MigrateLaneId> = {
 }
 
 const AUTOMATE_STREAM_LANE: Record<string, AutomateLaneId> = {
+  'platform-gitops': 'platform-gitops',
   'agent-infra-bootstrap': 'agent-infra',
   'nightly-drift-scan': 'drift-remediation',
   'agent-mcp-integration': 'agent-services',

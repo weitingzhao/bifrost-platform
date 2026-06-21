@@ -20,6 +20,9 @@ var dockerfileConfigMapNames = []string{
 	"bifrost-frontend-stg-dockerfile",
 	"bifrost-worker-stg-dockerfile",
 	"bifrost-socket-stg-dockerfile",
+	"bifrost-platform-api-stg-dockerfile",
+	"bifrost-platform-console-stg-dockerfile",
+	"bifrost-remediation-runner-stg-dockerfile",
 }
 
 var trackedGiteaRepos = []string{
@@ -30,6 +33,7 @@ var trackedGiteaRepos = []string{
 	"bifrost-trade-frontend",
 	"bifrost-trade-infra",
 	"bifrost-ui",
+	"bifrost-platform",
 }
 
 var stgImageDeployments = []string{

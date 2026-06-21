@@ -11,6 +11,7 @@ import (
 // Kaniko pipelines must schedule TaskRuns on amd64 (see workload placement G2).
 var kanikoPipelineNames = map[string]bool{
 	"bifrost-deliver-stg":          true,
+	"bifrost-deliver-platform":     true,
 	"bifrost-build-stg":            true,
 	"bifrost-build-frontend-stg": true,
 }

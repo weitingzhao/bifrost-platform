@@ -8,6 +8,7 @@ import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { DeliveryReleaseWorkflowPanel } from '@/components/delivery/DeliveryReleaseWorkflowPanel'
 import { DeliveryViewShell } from '@/components/delivery/DeliveryViewShell'
 import { GitOpsQuickActionsPanel } from '@/components/delivery/GitOpsQuickActionsPanel'
+import { PlatformDeliverPanel } from '@/components/delivery/PlatformDeliverPanel'
 import { ProdDeliverPanel } from '@/components/delivery/ProdDeliverPanel'
 import { StgTierBChecklistPanel } from '@/components/delivery/StgTierBChecklistPanel'
 import { StackInstallWizardPanel } from '@/components/delivery/StackInstallWizardPanel'
@@ -115,6 +116,7 @@ export function DeliveryPage({
         {pageTab === 'operate' && (
           <DeliveryOperateStack>
             <SupplyChainPanel layout="operate" />
+            <PlatformDeliverPanel />
             {showStackOperate && (
               <StackInstallWizardPanel
                 data={stack}

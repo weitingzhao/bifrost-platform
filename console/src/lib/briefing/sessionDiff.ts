@@ -25,6 +25,14 @@ export interface ClusterChanges {
   reachabilityTo: Reachability
 }
 
+export interface TrackChange {
+  trackId: string
+  label: string
+  doneFrom: number
+  doneTo: number
+  total: number
+}
+
 export interface SessionDelta {
   timeSince: string
   savedAt: string
@@ -37,6 +45,7 @@ export interface SessionDelta {
   matrixChanges: MatrixChange[]
   clusterChanges: ClusterChanges | null
   newAuditRecords: AuditRecord[]
+  trackChanges: TrackChange[]
 }
 
 function formatTimeSince(isoDate: string): string {
@@ -115,6 +124,37 @@ export function computeSessionDelta(
     ? auditRecords.filter(r => r.at > prev.lastAuditAt!)
     : auditRecords
 
+  const trackChanges: TrackChange[] = []
+  const prevTp = prev.trackProgress ?? {}
+  const tracks = current.context?.tracks
+  if (tracks != null) {
+    if (tracks.build != null) {
+      const curDone = tracks.build.tasks.filter(t => t.status === 'done').length
+      const prevDone = prevTp.build?._done ?? 0
+      if (curDone !== prevDone) {
+        trackChanges.push({ trackId: 'build', label: 'Build', doneFrom: prevDone, doneTo: curDone, total: tracks.build.tasks.length })
+      }
+    }
+    if (tracks.migrate != null) {
+      let curDone = 0
+      let curTotal = 0
+      for (const s of tracks.migrate.streams) { curDone += s.done; curTotal += s.total }
+      const prevDone = prevTp.migrate?._done ?? 0
+      if (curDone !== prevDone) {
+        trackChanges.push({ trackId: 'migrate', label: 'Migrate', doneFrom: prevDone, doneTo: curDone, total: curTotal })
+      }
+    }
+    if (tracks.automate != null) {
+      let curDone = 0
+      let curTotal = 0
+      for (const s of tracks.automate.streams) { curDone += s.done; curTotal += s.total }
+      const prevDone = prevTp.automate?._done ?? 0
+      if (curDone !== prevDone) {
+        trackChanges.push({ trackId: 'automate', label: 'Automate', doneFrom: prevDone, doneTo: curDone, total: curTotal })
+      }
+    }
+  }
+
   return {
     timeSince: formatTimeSince(prev.savedAt),
     savedAt: prev.savedAt,
@@ -127,6 +167,7 @@ export function computeSessionDelta(
     matrixChanges,
     clusterChanges,
     newAuditRecords,
+    trackChanges,
   }
 }
 
@@ -138,7 +179,8 @@ export function isEmptyDelta(delta: SessionDelta): boolean {
     delta.milestoneChanges.length === 0 &&
     delta.matrixChanges.length === 0 &&
     delta.clusterChanges == null &&
-    delta.newAuditRecords.length === 0
+    delta.newAuditRecords.length === 0 &&
+    delta.trackChanges.length === 0
   )
 }
 
@@ -184,6 +226,9 @@ export function formatDeltaForPack(delta: SessionDelta): string {
     if (delta.newAuditRecords.length > 5) {
       lines.push(`  - ... and ${delta.newAuditRecords.length - 5} more`)
     }
+  }
+  for (const tc of delta.trackChanges) {
+    lines.push(`- Track ${tc.label}: ${tc.doneFrom}→${tc.doneTo}/${tc.total} items done`)
   }
 
   return lines.join('\n')
