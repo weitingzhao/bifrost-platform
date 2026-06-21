@@ -14,7 +14,7 @@ import type { TrackId } from '@/lib/briefing/workTracks'
 import { visionGovernanceQueueItems } from '@/lib/architecture/visionSpineMap'
 
 export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops'
-export type MigrateLaneId = 'compose-k3s' | 'legacy-retire' | 'trade-stack'
+export type MigrateLaneId = 'compose-k3s' | 'data-layer-k3s' | 'legacy-retire' | 'trade-stack'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
 export type LaneId = BuildLaneId | MigrateLaneId | OperateLaneId
 
@@ -83,6 +83,16 @@ const MIGRATE_LANES: WorkLane[] = [
     description: 'Move trade stack from Docker Compose to K3s bifrost-prod namespace.',
     agentMode: 'Ops',
     workIntent: 'ops',
+  },
+  {
+    id: 'data-layer-k3s',
+    track: 'migrate',
+    label: 'Data layer (PG + Redis)',
+    shortLabel: 'Data',
+    description:
+      'Lift stateful services to data NS: CloudNativePG (R-DV1 DBs), redis-live/queue per env, NAS backups. Spine stream data-layer-k3s.',
+    agentMode: 'Ops',
+    workIntent: 'cluster',
   },
   {
     id: 'legacy-retire',
@@ -162,6 +172,7 @@ const MIGRATE_STREAM_LANE: Record<string, MigrateLaneId> = {
   'trade-backend': 'trade-stack',
   'trade-frontend': 'trade-stack',
   'compose-to-k3s': 'compose-k3s',
+  'data-layer-k3s': 'data-layer-k3s',
   'vision-v1-dev': 'compose-k3s',
   'vision-s3-briefing': 'compose-k3s',
   'vision-v2-dev-agent': 'compose-k3s',

@@ -11,6 +11,9 @@ import {
   REDIS_DEPLOY_PRINCIPLES,
   REDIS_ENV_ISOLATION,
   REDIS_INSTANCES,
+  DATA_LAYER_MIGRATION_PHASES,
+  DATA_LAYER_SESSION_CONSTRAINTS,
+  DATA_LAYER_MIGRATE_STREAM_ID,
   buildDataLayerLlmPack,
 } from '@/lib/architecture/dataLayerCatalog'
 
@@ -180,6 +183,42 @@ export function DataLayerPage() {
             ))}
           </DenseTableBody>
         </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title={`K3s migration phases (spine stream ${DATA_LAYER_MIGRATE_STREAM_ID})`}>
+        <p className="px-3 py-2 text-xs text-[var(--muted-foreground)]">
+          Agent Briefing migrate lane <strong>Data layer (PG + Redis)</strong> and cluster intent appendix use these
+          phases. Progress: update <code className="font-mono-tabular">ops-context.yaml</code> stream{' '}
+          <code className="font-mono-tabular">done/total</code> as each phase completes.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Step</DenseTableHead>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Primary repo</DenseTableHead>
+              <DenseTableHead>Verify</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {DATA_LAYER_MIGRATION_PHASES.map(p => (
+              <DenseTableRow key={p.id}>
+                <DenseTableCell className="font-mono-tabular whitespace-nowrap">{p.step}</DenseTableCell>
+                <DenseTableCell>
+                  <div className="font-medium">{p.label}</div>
+                  <div className="mt-0.5 font-mono text-[10px] text-[var(--muted-foreground)]">{p.id}</div>
+                </DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{p.repo}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{p.verify}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+        <ul className="list-disc space-y-1 px-6 py-3 text-xs text-[var(--muted-foreground)]">
+          {DATA_LAYER_SESSION_CONSTRAINTS.map(c => (
+            <li key={c}>{c}</li>
+          ))}
+        </ul>
       </CatalogSection>
     </div>
   )

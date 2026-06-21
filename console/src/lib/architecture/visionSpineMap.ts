@@ -43,7 +43,7 @@ export const VISION_SPINE_MAP: VisionSpineEntry[] = [
     title: 'Ops Agent L1/L2',
     spineMilestoneId: 'vision-v3-ops-agent',
     spineLabel: 'Vision V3 — Ops Agent L1/L2',
-    briefingHook: 'MCP K8s/Redis/PG + AlertManager webhook → Agent diagnosis',
+    briefingHook: 'data NS CNPG + redis-live/queue · MCP PG/Redis · AlertManager → Ops Agent',
     nextAfter: 'vision-v2-dev-agent',
   },
   {

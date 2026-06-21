@@ -3,8 +3,8 @@
 # Detail: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts) L3
 
 meta:
-  version: "2026-06-15-p5b"
-  catalog_version: "2026-06-15-p5b"
+  version: "2026-06-20-data-layer"
+  catalog_version: "2026-06-20-data-layer"
 
 # Ultimate goal (Strategy C hybrid) — authoritative for Agent / Program UI.
 # Detail: Ops Console → Architecture → Blueprint · console/src/lib/architecture/blueprintCatalog.ts · decision D6
@@ -34,7 +34,7 @@ deployment:
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 
 focus:
-  headline: "Vision V1–V5 convergence COMPLETE (2026-06-19) · Dual Flywheel SIGNED · focus: legacy-retirement + ops-ui-actuation"
+  headline: "K3s data layer IN_PROGRESS · lift PG/Redis to data NS (CNPG + redis-live/queue) · legacy-retirement blocked on stable K3s stack"
   flywheel_primary: A # A = trade FE, B = runtime/ops
   blocker: null
 
@@ -160,6 +160,13 @@ milestones:
     status: NOT_STARTED
     authority: bifrost-trade-infra/docs/PHASE2C_PROD_DEFERRED.md
 
+  - id: k3s-data-layer
+    label: K3s data layer (PG + Redis → data namespace)
+    status: IN_PROGRESS
+    pipeline_lane: mainline
+    pipeline_after: 2c-b-prod-cutover
+    authority: console/src/lib/architecture/dataLayerCatalog.ts
+
 decisions:
   - id: D1
     status: SIGNED
@@ -170,10 +177,17 @@ decisions:
 
   - id: D2
     status: SIGNED
-    topic: PostgreSQL host
+    topic: PostgreSQL host (superseded by D2-prime)
     conclusion: "Keep bare-metal PG on mini-pc-b (.80) until CloudNativePG migration"
     signed_at: "2026-06-04"
     authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
+
+  - id: D2-prime
+    status: SIGNED
+    topic: PostgreSQL + Redis on K3s data namespace
+    conclusion: "CloudNativePG cluster in data NS (bifrost_dev/stg/prod DBs, R-DV1); redis-live + redis-queue per env; PG hot data on local-path @ ubt-k3s-02; NAS nfs-hot for backups only; stg before prod; supersede bare .80 after prod cutover"
+    signed_at: "2026-06-20"
+    authority: console/src/lib/architecture/dataLayerCatalog.ts
 
   - id: D3
     status: SIGNED
@@ -290,10 +304,20 @@ tracks:
       - id: compose-to-k3s
         label: "Compose to K3s deployment"
         total: 5
-        done: 4
+        done: 5
+        status: closed
+        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED ✓ ④ prod overlay SIGNED ✓ ⑤ HA/validation deferred · Vision V1 dev @ bifrost-dev :30882"
+      - id: data-layer-k3s
+        label: "K3s data layer (PG + Redis → data NS)"
+        total: 7
+        done: 0
         status: in_progress
-        next_task: "⑤ HA/validation (optional hardening)"
-        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED 2026-06-18 ✓ ④ prod overlay SIGNED 2026-06-19 ✓ · ⑤ HA/validation · Vision V1 dev @ bifrost-dev :30882"
+        next_task: "① Label ubt-k3s-02 postgres-role + deploy CNPG Operator in data NS"
+        note: "Lift PG/Redis from bifrost-{dev,stg,prod}; CNPG 3 DBs (R-DV1); redis-live+queue per env; nfs-hot backups · authority dataLayerCatalog.ts DATA_LAYER_MIGRATION_PHASES"
+        prerequisites:
+          - "nfs-hot/nfs-cold provisioners ready"
+          - "bifrost-stg full stack stable"
+          - "decision D2-prime signed"
       - id: vision-v1-dev
         label: "Vision V1 — Mac thin + K3s dev thick"
         total: 3
@@ -338,6 +362,7 @@ tracks:
         next_task: "UI experience alignment — Design System-led visual polish with Legacy side-by-side"
         prerequisites:
           - "compose→k3s migration stable"
+          - "data-layer-k3s stream closed (PG/Redis in data NS)"
           - "UI experience alignment Owner sign-off (must complete while Legacy is still running)"
         note: "① UI experience alignment (Design System + Legacy reference) ② stop Legacy daemon/API/frontend ③ MIGRATION_TRACKING.md mark retired ④ archive bifrost-trader-engine"
         tasks:

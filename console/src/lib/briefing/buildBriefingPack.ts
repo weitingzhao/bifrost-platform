@@ -22,6 +22,7 @@ import {
   type AgentDialogueLanguage,
 } from '@/lib/briefing/agentDialogueLanguage'
 import { formatVisionBriefingSection } from '@/lib/architecture/visionSpineMap'
+import { formatDataLayerBriefingAppendix } from '@/lib/architecture/dataLayerCatalog'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
   intent: WorkIntent
@@ -75,6 +76,8 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     ],
     cluster: [
       'Ops Console → Architecture → K3s → Data Layer (dataLayerCatalog.ts)',
+      'config/ops-context.yaml — tracks.migrate.streams data-layer-k3s + decision D2-prime',
+      'bifrost-trade-infra/k8s/data/ (CNPG, Redis, MinIO — to be added)',
       'Ops Console → Architecture → Standards — cluster actuation + observability layers',
       'api/internal/cluster — implementation',
       'bifrost-platform/config/clusters.yaml',
@@ -102,7 +105,12 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     feature: ['Mix trade-frontend + infra in one task', 'Skip audit/auth for write routes'],
     debug: ['Apply prod actuation without operator token', 'Restart trading daemon via platform'],
     release: ['Skip D1 or release_gate blockers', 'Mix API migration + FE in one change'],
-    cluster: ['Raw kubectl as operator runbook — use platform-api', 'Install kube-prometheus via ad-hoc shell'],
+    cluster: [
+      'Raw kubectl as operator runbook — use platform-api',
+      'Install kube-prometheus via ad-hoc shell',
+      'Put PG primary PVC on nfs-hot (use local-path on postgres node only)',
+      'Prod PG cutover from .80 without stg validation or Owner maintenance window',
+    ],
     frontend: ['Change compose/prod cutover', 'Migrate bifrost-trade-api backends'],
     business: ['Any write operation (orders, config, strategy changes)', 'Direct IB/Redis access — use Trade API read endpoints only', 'Recommend trades without Owner confirmation'],
   }
@@ -248,7 +256,7 @@ function suggestedOpening(
       base = `Mode: Promote. Work intent: release. Assess flywheel A/B readiness from spine + matrix. List all blockers (especially D1). Do not recommend cutover until blockers are explicit.`
       break
     case 'cluster':
-      base = `Mode: Ops. Work intent: cluster/K3s. Review Cluster page Layer A (metrics-server) vs Layer B (observability stack). Propose next step for k3s-phase1 milestone without skipping kubeconfig guardrails.`
+      base = `Mode: Ops. Work intent: cluster/K3s data layer. Follow spine stream data-layer-k3s and DATA_LAYER_MIGRATION_PHASES in dataLayerCatalog.ts — stg cutover before prod PG. Review Cluster Layer A/B; label ubt-k3s-02 postgres-role for CNPG Primary.`
       break
     case 'frontend':
       base =
@@ -268,7 +276,16 @@ function suggestedOpening(
   return base + firstReplyHint
 }
 
-function intentCorePack(intent: WorkIntent, ctx?: OpsContextResponse, matrices: MatrixResponse[] = []): string {
+function shouldIncludeDataLayerAppendix(intent: WorkIntent, lane: LaneId): boolean {
+  return intent === 'cluster' || lane === 'data-layer-k3s'
+}
+
+function intentCorePack(
+  intent: WorkIntent,
+  ctx?: OpsContextResponse,
+  matrices: MatrixResponse[] = [],
+  lane: LaneId = 'console-api',
+): string {
   const opt = workIntentById(intent)
   if (!ctx) return buildProductPack(ctx)
 
@@ -305,7 +322,7 @@ function intentCorePack(intent: WorkIntent, ctx?: OpsContextResponse, matrices: 
       .join('\n')
   }
   if (intent === 'cluster' && matrices.length >= 0) {
-    return [
+    const sections = [
       ops,
       '',
       '## Cluster appendix',
@@ -313,7 +330,14 @@ function intentCorePack(intent: WorkIntent, ctx?: OpsContextResponse, matrices: 
       'Layer B: GET /cluster/observability — Prometheus/Grafana/Loki/Alertmanager in monitoring NS.',
       'P1 actuation: ensure namespaces, rollout restart, scale, delete pod (operator token).',
       'Reference: Ops Console → Architecture → Standards (cluster actuation + observability layers).',
-    ].join('\n')
+    ]
+    if (shouldIncludeDataLayerAppendix(intent, lane)) {
+      sections.push('', formatDataLayerBriefingAppendix(ctx))
+    }
+    return sections.join('\n')
+  }
+  if (shouldIncludeDataLayerAppendix(intent, lane)) {
+    return [ops, '', formatDataLayerBriefingAppendix(ctx)].join('\n')
   }
   return ops
 }
@@ -401,7 +425,7 @@ export function buildBriefingPack(input: BriefingInputs): string {
     formatVisionBriefingSection(input.context),
     '',
     '## Authoritative context (spine + matrix)',
-    intentCorePack(input.intent, input.context, input.matrices),
+    intentCorePack(input.intent, input.context, input.matrices, lane),
     '',
     '## Suggested opening message (paste to Agent)',
     opening,

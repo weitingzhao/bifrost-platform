@@ -10,7 +10,7 @@
 import type { DenseTagVariant } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 
-export const CATALOG_VERSION = '2026-06-15-p5b'
+export const CATALOG_VERSION = '2026-06-20-data-layer'
 export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
 
 /** Scope row — one logical component in the Bifrost stack. */

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   DenseDataTable,
   DenseTableBody,
@@ -19,6 +19,8 @@ interface ClusterServiceReadinessPanelProps {
   data: ClusterServiceReadinessResponse | undefined
   isLoading: boolean
   compact?: boolean
+  /** When set, show only this domain and auto-expand dependencies. */
+  domainFilter?: string
 }
 
 function statusVariant(status: ServiceDomainStatus | string): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -68,11 +70,26 @@ function DependencyList({ domain }: { domain: ServiceDomain }) {
   )
 }
 
-export function ClusterServiceReadinessPanel({ data, isLoading, compact = false }: ClusterServiceReadinessPanelProps) {
+export function ClusterServiceReadinessPanel({
+  data,
+  isLoading,
+  compact = false,
+  domainFilter,
+}: ClusterServiceReadinessPanelProps) {
   const qc = useQueryClient()
   const fetching = useIsFetching({ queryKey: ['cluster', 'service-readiness'] }) > 0
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const domains = data?.domains ?? []
+  const [expandedId, setExpandedId] = useState<string | null>(domainFilter ?? null)
+  const allDomains = data?.domains ?? []
+  const domains =
+    domainFilter != null ? allDomains.filter(d => d.id === domainFilter) : allDomains
+  const filteredDomain = domainFilter != null ? domains[0] : undefined
+  const isFiltered = domainFilter != null
+
+  useEffect(() => {
+    if (domainFilter != null) {
+      setExpandedId(domainFilter)
+    }
+  }, [domainFilter])
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['cluster', 'service-readiness'] })
@@ -80,11 +97,13 @@ export function ClusterServiceReadinessPanel({ data, isLoading, compact = false 
 
   return (
     <OpsSection
-      title="Service readiness"
+      title={filteredDomain != null ? filteredDomain.label : 'Service readiness'}
       description={
-        compact
-          ? 'Stack domains — PostgreSQL, Redis, workers, apps, CI/CD.'
-          : 'Workload-domain view — PostgreSQL, Redis, GPU, warehouse, workers, applications, and CI/CD. Aggregates governance, placement, and live deployments.'
+        isFiltered
+          ? filteredDomain?.summary ?? 'Domain dependencies and reachability.'
+          : compact
+            ? 'Stack domains — PostgreSQL, Redis, workers, apps, CI/CD.'
+            : 'Workload-domain view — PostgreSQL, Redis, GPU, warehouse, workers, applications, and CI/CD. Aggregates governance, placement, and live deployments.'
       }
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -118,12 +137,16 @@ export function ClusterServiceReadinessPanel({ data, isLoading, compact = false 
             </DenseTableRow>
           ) : (
             domains.flatMap(domain => {
-              const expanded = expandedId === domain.id
+              const expanded = isFiltered || expandedId === domain.id
               const rows = [
                 <DenseTableRow
                   key={domain.id}
-                  className="cursor-pointer hover:bg-[var(--secondary)]/60"
-                  onClick={() => setExpandedId(expanded ? null : domain.id)}
+                  className={isFiltered ? undefined : 'cursor-pointer hover:bg-[var(--secondary)]/60'}
+                  onClick={
+                    isFiltered
+                      ? undefined
+                      : () => setExpandedId(expanded ? null : domain.id)
+                  }
                 >
                   <DenseTableCell className="font-medium">{domain.label}</DenseTableCell>
                   <DenseTableCell>
@@ -137,7 +160,7 @@ export function ClusterServiceReadinessPanel({ data, isLoading, compact = false 
                   </DenseTableCell>
                   <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
                     {domain.dependencies.length}
-                    {expanded ? ' ▾' : ' ▸'}
+                    {!isFiltered && (expanded ? ' ▾' : ' ▸')}
                   </DenseTableCell>
                 </DenseTableRow>,
               ]
