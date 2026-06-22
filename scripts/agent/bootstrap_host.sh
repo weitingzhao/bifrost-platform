@@ -6,7 +6,7 @@
 #
 # Usage (on agent host via Screen Sharing):
 #   curl -fsSL ...  OR  scp from Mac Pro then:
-#   bash scripts/bootstrap_agent_host.sh
+#   bash scripts/agent/bootstrap_host.sh
 #
 # After bootstrap:
 #   1. Sync ~/Desktop/stocks (at least bifrost-platform + bifrost-trade-infra)
@@ -86,7 +86,7 @@ Next steps (Owner):
 
 3. Start remediation runner (LAN-visible for Mac Pro platform-api):
    cd ~/Desktop/stocks/bifrost-platform
-   make dev-agent
+   python scripts/run_agent.py start
 
 4. On Mac Pro bifrost-platform/.env add:
    REMEDIATION_RUNNER_URL=http://${AGENT_IP_HINT}:8781

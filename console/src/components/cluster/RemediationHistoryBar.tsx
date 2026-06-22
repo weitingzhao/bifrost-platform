@@ -2,6 +2,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@bifrost/ui'
 import { fetchRemediationJobs } from '@/api/platform'
 import type { RemediationJob } from '@/api/types'
+import {
+  formatRemediationJobWhen,
+  remediationJobStatusLabel,
+} from '@/lib/remediation/remediationJobDisplay'
 
 interface RemediationHistoryBarProps {
   open: boolean
@@ -9,27 +13,6 @@ interface RemediationHistoryBarProps {
   liveJobId: string | null
   onSelectJob: (job: RemediationJob) => void
   onBackToLive: () => void
-}
-
-function formatJobWhen(at: string): string {
-  try {
-    return new Date(at).toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  } catch {
-    return at
-  }
-}
-
-function jobStatusLabel(job: RemediationJob): string {
-  if (job.status === 'done') return 'Done'
-  if (job.status === 'failed') return 'Failed'
-  if (job.status === 'cancelled') return 'Cancelled'
-  if (job.phase === 'awaiting_approval') return 'Awaiting you'
-  return 'Running'
 }
 
 export function RemediationHistoryBar({
@@ -85,9 +68,11 @@ export function RemediationHistoryBar({
               >
                 <span className="remediation-history-chip__id">{job.id.slice(0, 8)}</span>
                 <span className={`remediation-history-chip__status remediation-history-chip__status--${job.status}`}>
-                  {isLive ? 'Live' : jobStatusLabel(job)}
+                  {isLive ? 'Live' : remediationJobStatusLabel(job)}
                 </span>
-                <span className="remediation-history-chip__when">{formatJobWhen(job.created_at)}</span>
+                <span className="remediation-history-chip__when">
+                  {formatRemediationJobWhen(job.created_at)}
+                </span>
               </button>
             )
           })

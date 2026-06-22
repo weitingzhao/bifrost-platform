@@ -15,13 +15,14 @@ interface AgentFocusDockProps {
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
   selection: ControlRoomSelection
+  onOpenAgentDesk?: () => void
 }
 
 async function copyText(text: string): Promise<void> {
   await navigator.clipboard.writeText(text)
 }
 
-export function AgentFocusDock({ context, matrices, selection }: AgentFocusDockProps) {
+export function AgentFocusDock({ context, matrices, selection, onOpenAgentDesk }: AgentFocusDockProps) {
   const [copied, setCopied] = useState<AgentMode | 'session' | 'scoped' | null>(null)
   const [showPrompts, setShowPrompts] = useState(false)
   const [showLlmPanel, setShowLlmPanel] = useState(false)
@@ -95,6 +96,11 @@ export function AgentFocusDock({ context, matrices, selection }: AgentFocusDockP
       <Button size="sm" onClick={handleGenerate} disabled={!context}>
         Generate for LLM
       </Button>
+      {onOpenAgentDesk != null && (
+        <Button variant="outline" size="sm" onClick={onOpenAgentDesk}>
+          Agent Desk
+        </Button>
+      )}
       <CopyButton
         label="Session"
         onClick={() => void handleCopySession()}

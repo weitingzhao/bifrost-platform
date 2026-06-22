@@ -194,6 +194,22 @@ server.tool(
     ),
 )
 
+server.tool('get_agent_bridge', 'Agent host + MCP bridge status', {}, async () =>
+  jsonResult(await platformGet('/api/v1/agent/bridge')),
+)
+
+server.tool('get_agent_nightly_report', 'Nightly drift report from agent host', {}, async () =>
+  jsonResult(await platformGet('/api/v1/agent/nightly-report')),
+)
+
+server.tool('get_remediation_health', 'Remediation runner health', {}, async () =>
+  jsonResult(await platformGet('/api/v1/remediation/health')),
+)
+
+server.tool('list_remediation_jobs', 'List remediation / agent tasks (operator)', {}, async () =>
+  jsonResult(await platformGet('/api/v1/remediation/')),
+)
+
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)

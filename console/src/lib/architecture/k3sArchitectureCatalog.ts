@@ -133,8 +133,10 @@ export const NAMESPACE_ALLOCATION: NamespaceRow[] = [
   { namespace: 'cicd', services: 'Gitea · ArgoCD · Tekton · Registry', nodeBinding: 'mini-pc-a' },
   { namespace: 'monitoring', services: 'Prometheus · Loki · Grafana · AlertManager', nodeBinding: 'mini-pc-c (second batch)' },
   { namespace: 'ai', services: 'Ollama · Open-WebUI · AIOps webhook', nodeBinding: 'gpu-server @ 192.168.10.60 / mini-pc-c' },
-  { namespace: 'bifrost', services: 'trade-api (×9) · worker · socket', nodeBinding: 'mini-pc-a/b · ubt-k3s-01' },
-  { namespace: 'bifrost', services: 'trade-frontend', nodeBinding: 'ops-vm-ubt-01 (mac-mini-1 UTM)' },
+  { namespace: 'bifrost-stg', services: 'Trade stack STG — 9 APIs · worker · socket · frontend', nodeBinding: 'amd64 pool · ubt-k3s-01/02/04' },
+  { namespace: 'bifrost-dev', services: 'Trade stack Dev', nodeBinding: 'amd64 pool' },
+  { namespace: 'bifrost-prod', services: 'Trade stack Prod', nodeBinding: 'amd64 pool · prod-pool taint' },
+  { namespace: 'bifrost-platform-stg', services: 'Ops Platform — platform-api · platform-console', nodeBinding: 'amd64 pool' },
 ]
 
 export type ComposeMapRow = { compose: string; k8s: string }

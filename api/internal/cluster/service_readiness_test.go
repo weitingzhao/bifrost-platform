@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -67,6 +68,47 @@ func TestEvalDatabaseDomainWithCaps(t *testing.T) {
 }
 
 func int32Ptr(v int32) *int32 { return &v }
+
+func TestEvalApplicationsDomainAmd64OnlyNoArm64(t *testing.T) {
+	snap := readinessSnapshot{
+		nodes: []NodeView{
+			{Name: "n1", Architecture: "amd64", Status: "Ready", Reachability: probe.ReachOK},
+			{Name: "n2", Architecture: "amd64", Status: "Ready", Reachability: probe.ReachOK},
+		},
+		pools: map[string]placement.PoolView{
+			"arm64_edge": {ID: "arm64_edge", NodesReady: 0, NodesTotal: 0, Status: placement.PoolStatusLive},
+		},
+		deployments: map[string]appsv1.Deployment{
+			"bifrost-stg/nginx": {
+				ObjectMeta: metav1.ObjectMeta{Name: "nginx", Namespace: "bifrost-stg"},
+				Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
+				Spec:       appsv1.DeploymentSpec{Replicas: int32Ptr(1)},
+			},
+			"bifrost-stg/frontend": {
+				ObjectMeta: metav1.ObjectMeta{Name: "frontend", Namespace: "bifrost-stg"},
+				Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
+				Spec:       appsv1.DeploymentSpec{Replicas: int32Ptr(1)},
+			},
+		},
+	}
+	d := evalApplicationsDomain(snap)
+	if strings.Contains(d.Summary, "arm64") {
+		t.Fatalf("optional arm64 pool must not block domain summary: %s", d.Summary)
+	}
+	var arm64Dep *ServiceDependencyView
+	for i := range d.Dependencies {
+		if d.Dependencies[i].ID == "pool-arm64_edge" {
+			arm64Dep = &d.Dependencies[i]
+			break
+		}
+	}
+	if arm64Dep == nil {
+		t.Fatal("missing arm64 optional dep")
+	}
+	if arm64Dep.Reachability != probe.ReachOK {
+		t.Fatalf("optional arm64 pool should be ok when absent, got %s", arm64Dep.Reachability)
+	}
+}
 
 func TestServiceReadinessMissingKubeconfig(t *testing.T) {
 	t.Setenv("PLATFORM_KUBECONFIG", t.TempDir()+"/missing.yaml")

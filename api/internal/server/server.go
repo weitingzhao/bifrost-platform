@@ -10,10 +10,14 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
@@ -40,6 +44,10 @@ type Server struct {
 	tradeagent *tradeagent.Handler
 	opsagent     *opsagent.Handler
 	remediation  *remediation.Handler
+	agentreport  *agentreport.Handler
+	agentbridge  *agentbridge.Handler
+	agentdeploy  *agentdeploy.Handler
+	driftproposal *driftproposal.Handler
 	auth         *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -66,6 +74,10 @@ func New(cfg *config.Config) *Server {
 		tradeagent: tradeagent.NewHandler(),
 		opsagent:    opsagent.NewHandler(audit),
 		remediation: remediation.NewHandler(audit),
+		agentreport: agentreport.NewHandler(),
+		agentbridge: agentbridge.NewHandler(),
+		agentdeploy: agentdeploy.NewHandler(audit),
+		driftproposal: driftproposal.NewHandler(audit),
 		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -98,6 +110,24 @@ func (s *Server) Router() http.Handler {
 		r.Get("/jobs", s.jobs.HandleList)
 		r.Get("/mcp/tools", s.mcp.HandleTools)
 		r.Get("/mcp/status", s.mcp.HandleStatus)
+		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
+		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
+		r.Get("/agent/deploy", s.agentdeploy.HandleStatus)
+		r.Group(func(r chi.Router) {
+			r.Use(s.auth.Require(actuation.RoleOperator))
+			r.Post("/agent/nightly-run", s.agentreport.HandleTriggerNightly)
+			r.Post("/agent/deploy", s.agentdeploy.HandleStart)
+		})
+		r.Route("/agent/drift-proposals", func(r chi.Router) {
+			r.Get("/", s.driftproposal.HandleList)
+			r.Get("/{id}", s.driftproposal.HandleGet)
+			r.Group(func(r chi.Router) {
+				r.Use(s.auth.Require(actuation.RoleOperator))
+				r.Post("/", s.driftproposal.HandleCreate)
+				r.Post("/{id}/approve", s.driftproposal.HandleApprove)
+				r.Post("/{id}/reject", s.driftproposal.HandleReject)
+			})
+		})
 		r.Get("/gitops/apps", s.gitops.HandleApps)
 		r.Get("/stack/addons", s.stack.HandleAddons)
 		r.Get("/delivery/pipelines", s.delivery.HandlePipelines)

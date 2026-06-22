@@ -29,6 +29,10 @@ export interface RemediationJob {
   id: string
   phase: RemediationPhase
   status: 'running' | 'done' | 'failed' | 'cancelled'
+  scope?: string
+  actor?: string
+  /** Operator-visible mission brief captured at job start (user prompt, issues, cluster context). */
+  init_brief?: string
   summary?: string
   error?: string
   created_at: string

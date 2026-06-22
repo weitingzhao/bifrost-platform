@@ -8,9 +8,10 @@ import { isEmptyDelta } from '@/lib/briefing/sessionDiff'
 interface SessionDeltaPanelProps {
   delta: SessionDelta | null
   hasBaseline: boolean
+  onOpenAgentDesk?: (jobId?: string) => void
 }
 
-export function SessionDeltaPanel({ delta, hasBaseline }: SessionDeltaPanelProps) {
+export function SessionDeltaPanel({ delta, hasBaseline, onOpenAgentDesk }: SessionDeltaPanelProps) {
   const [expanded, setExpanded] = useState(false)
 
   if (!hasBaseline) {
@@ -100,6 +101,9 @@ export function SessionDeltaPanel({ delta, hasBaseline }: SessionDeltaPanelProps
           {delta.newAuditRecords.length > 0 && (
             <DeltaChip label="Actions" detail={`${delta.newAuditRecords.length} new`} />
           )}
+          {delta.agentTasksSince.length > 0 && (
+            <AgentTasksDetail tasks={delta.agentTasksSince} onOpenAgentDesk={onOpenAgentDesk} />
+          )}
         </div>
       )}
     </section>
@@ -155,6 +159,9 @@ function buildSummaryChips(delta: SessionDelta): { label: string; variant: ChipV
     chips.push({ label: 'Cluster', variant })
   }
   if (delta.newAuditRecords.length > 0) chips.push({ label: `${delta.newAuditRecords.length} action`, variant: 'neutral' })
+  if (delta.agentTasksSince.length > 0) {
+    chips.push({ label: `${delta.agentTasksSince.length} agent task`, variant: 'category' })
+  }
   return chips
 }
 
@@ -168,5 +175,47 @@ function countChanges(delta: SessionDelta): number {
   count += delta.trackChanges.length
   if (delta.clusterChanges != null) count++
   count += delta.newAuditRecords.length
+  count += delta.agentTasksSince.length
   return count
+}
+
+function AgentTasksDetail({
+  tasks,
+  onOpenAgentDesk,
+}: {
+  tasks: SessionDelta['agentTasksSince']
+  onOpenAgentDesk?: (jobId?: string) => void
+}) {
+  return (
+    <div className="col-span-full flex flex-col gap-1.5 text-[var(--text-dense-meta)]">
+      <div className="flex items-center gap-1.5">
+        <span className="font-semibold text-[var(--foreground)]">Agent tasks:</span>
+        <span className="text-[var(--muted-foreground)]">
+          {tasks.length} since last session (archived on platform-api / runner host)
+        </span>
+      </div>
+      <ul className="m-0 list-none flex flex-col gap-1 pl-0">
+        {tasks.map(t => (
+          <li key={t.id} className="flex flex-wrap items-center gap-2">
+            <DenseTag variant={t.status === 'done' ? 'success' : t.status === 'failed' ? 'danger' : 'warning'} className="text-[10px]">
+              {t.status}
+            </DenseTag>
+            <code className="font-mono-tabular text-[10px]">{t.scope ?? 'task'}</code>
+            {t.summaryPreview != null && (
+              <span className="truncate max-w-[320px] text-[var(--muted-foreground)]">{t.summaryPreview}</span>
+            )}
+            {onOpenAgentDesk != null && (
+              <button
+                type="button"
+                className="text-[10px] font-medium text-[var(--primary)] hover:underline"
+                onClick={() => onOpenAgentDesk(t.id)}
+              >
+                View in Agent Desk
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }

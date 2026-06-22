@@ -148,7 +148,7 @@ const AUTOMATE_LANES: WorkLane[] = [
     track: 'automate',
     label: 'Agent services (MCP + Trade)',
     shortLabel: 'Services',
-    description: 'Hermes MCP Server mode, platform-api integration, Trade advisory autonomous notifications.',
+    description: 'Agent Desk in Console, Hermes MCP bridge, Trade advisory notifications.',
     agentMode: 'Ops',
     workIntent: 'automate',
   },

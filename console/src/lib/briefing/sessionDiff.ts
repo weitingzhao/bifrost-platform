@@ -1,4 +1,4 @@
-import type { AuditRecord, Reachability } from '@/api/types'
+import type { AuditRecord, Reachability, RemediationJob } from '@/api/types'
 import type { BriefingSnapshotInput } from '@/lib/briefing/briefingSnapshot'
 import type { SessionSnapshot } from '@/lib/briefing/sessionSnapshot'
 
@@ -33,6 +33,14 @@ export interface TrackChange {
   total: number
 }
 
+export interface AgentTaskSince {
+  id: string
+  scope?: string
+  status: string
+  summaryPreview?: string
+  created_at: string
+}
+
 export interface SessionDelta {
   timeSince: string
   savedAt: string
@@ -46,6 +54,7 @@ export interface SessionDelta {
   clusterChanges: ClusterChanges | null
   newAuditRecords: AuditRecord[]
   trackChanges: TrackChange[]
+  agentTasksSince: AgentTaskSince[]
 }
 
 function formatTimeSince(isoDate: string): string {
@@ -64,7 +73,9 @@ export function computeSessionDelta(
   prev: SessionSnapshot,
   current: BriefingSnapshotInput,
   auditRecords: AuditRecord[],
+  remediationJobs: RemediationJob[] = [],
 ): SessionDelta {
+  const savedMs = new Date(prev.savedAt).getTime()
   const currentVersion = current.context?.meta.version ?? ''
   const spineVersionChanged = prev.contextMetaVersion !== '' && prev.contextMetaVersion !== currentVersion
 
@@ -155,6 +166,17 @@ export function computeSessionDelta(
     }
   }
 
+  const agentTasksSince: AgentTaskSince[] = remediationJobs
+    .filter(j => new Date(j.created_at).getTime() > savedMs)
+    .slice(0, 12)
+    .map(j => ({
+      id: j.id,
+      scope: j.scope,
+      status: j.status,
+      summaryPreview: j.summary?.slice(0, 120),
+      created_at: j.created_at,
+    }))
+
   return {
     timeSince: formatTimeSince(prev.savedAt),
     savedAt: prev.savedAt,
@@ -168,6 +190,7 @@ export function computeSessionDelta(
     clusterChanges,
     newAuditRecords,
     trackChanges,
+    agentTasksSince,
   }
 }
 
@@ -180,7 +203,8 @@ export function isEmptyDelta(delta: SessionDelta): boolean {
     delta.matrixChanges.length === 0 &&
     delta.clusterChanges == null &&
     delta.newAuditRecords.length === 0 &&
-    delta.trackChanges.length === 0
+    delta.trackChanges.length === 0 &&
+    delta.agentTasksSince.length === 0
   )
 }
 
@@ -229,6 +253,17 @@ export function formatDeltaForPack(delta: SessionDelta): string {
   }
   for (const tc of delta.trackChanges) {
     lines.push(`- Track ${tc.label}: ${tc.doneFrom}→${tc.doneTo}/${tc.total} items done`)
+  }
+  if (delta.agentTasksSince.length > 0) {
+    lines.push(`- Agent tasks since last session: ${delta.agentTasksSince.length}`)
+    for (const t of delta.agentTasksSince.slice(0, 5)) {
+      const scope = t.scope ?? 'task'
+      const preview = t.summaryPreview ? ` — ${t.summaryPreview}` : ''
+      lines.push(`  - [${t.created_at}] ${scope} (${t.status}) id=${t.id}${preview}`)
+    }
+    if (delta.agentTasksSince.length > 5) {
+      lines.push(`  - ... and ${delta.agentTasksSince.length - 5} more`)
+    }
   }
 
   return lines.join('\n')

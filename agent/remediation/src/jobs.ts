@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto'
 import { clearPendingOperatorResponse } from './approvals.js'
+import { loadPersistedJobs, persistJob } from './jobPersistence.js'
 import type { RemediationEvent, RemediationJob, RemediationPhase } from './types.js'
 
 type Listener = (event: RemediationEvent) => void
@@ -9,6 +11,13 @@ interface JobRecord extends RemediationJob {
 }
 
 const jobs = new Map<string, JobRecord>()
+
+for (const persisted of loadPersistedJobs()) {
+  jobs.set(persisted.id, {
+    ...persisted,
+    listeners: new Set(),
+  })
+}
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -31,12 +40,21 @@ export function getJob(id: string): RemediationJob | undefined {
   return rest
 }
 
-export function createJob(): JobRecord {
+function snapshotJob(id: string): void {
+  const job = getJob(id)
+  if (job != null) persistJob(job)
+}
+
+export function createJob(scope?: string, actor?: string, initBrief?: string): JobRecord {
   const ts = nowIso()
+  const brief = initBrief?.trim() ?? ''
   const job: JobRecord = {
     id: randomUUID(),
     phase: 'starting',
     status: 'running',
+    scope: scope?.trim() || undefined,
+    actor: actor?.trim() || undefined,
+    init_brief: brief !== '' ? brief : undefined,
     created_at: ts,
     updated_at: ts,
     events: [],
@@ -44,6 +62,7 @@ export function createJob(): JobRecord {
     abort: new AbortController(),
   }
   jobs.set(job.id, job)
+  snapshotJob(job.id)
   return job
 }
 
@@ -86,6 +105,7 @@ export function finishJob(
   job.updated_at = nowIso()
   const type = status === 'done' ? 'done' : 'error'
   appendEvent(id, makeEvent(type, summary, error != null ? { error } : undefined))
+  snapshotJob(id)
 }
 
 export function cancelJob(id: string): boolean {

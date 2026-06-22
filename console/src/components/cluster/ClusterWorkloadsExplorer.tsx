@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   DenseDataTable,
   DenseTableBody,
@@ -10,36 +10,149 @@ import {
   DenseTableRow,
   IconActionButton,
   SegmentControl,
+  segmentButtonClass,
+  segmentGroupClass,
 } from '@bifrost/ui'
-import { RotateCw, Scaling, Trash2 } from 'lucide-react'
+import {
+  BarChart3,
+  Cpu,
+  Database,
+  GitBranch,
+  LayoutGrid,
+  LayoutPanelLeft,
+  RotateCw,
+  Scaling,
+  Server,
+  Trash2,
+} from 'lucide-react'
 import type { ClusterNamespace, ClusterWorkload } from '@/api/types'
 import { groupNeedsAttention, groupWorkloadsByDeployment } from '@/lib/cluster/workloadTree'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { WorkloadExpandToggle } from '@/components/cluster/WorkloadExpandToggle'
-import { NamespaceIdealArchStrip } from '@/components/cluster/NamespaceIdealArchStrip'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
-import type { ClusterPlacementRule } from '@/api/types'
 import { getNamespacePlacementSummary } from '@/lib/cluster/namespacePlacement'
+import {
+  allowedNamespaceNames,
+  NS_FILTER_LABELS,
+  namespaceDisplayLabel,
+  namespaceShowsK8sHint,
+  type NsFilterType,
+} from '@/lib/cluster/namespaceCatalog'
+import { namespaceIcon } from '@/lib/cluster/namespaceIcons'
 
-type NsFilter = 'all' | 'bifrost'
+export type { NsFilterType } from '@/lib/cluster/namespaceCatalog'
+export {
+  DEPRECATED_NAMESPACES,
+  NS_DISPLAY_LABELS,
+  NS_FILTER_GROUPS,
+  NS_GROUPS,
+} from '@/lib/cluster/namespaceCatalog'
+
+function segmentTab(icon: ReactNode, label: string) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {icon}
+      <span>{label}</span>
+    </span>
+  )
+}
+
+const NS_FILTER_SEGMENT_OPTIONS: { value: NsFilterType; label: ReactNode }[] = [
+  {
+    value: 'trade',
+    label: segmentTab(<BarChart3 className="size-3 shrink-0 opacity-80" aria-hidden />, NS_FILTER_LABELS.trade),
+  },
+  {
+    value: 'platform',
+    label: segmentTab(
+      <LayoutPanelLeft className="size-3 shrink-0 opacity-80" aria-hidden />,
+      NS_FILTER_LABELS.platform,
+    ),
+  },
+  {
+    value: 'storage',
+    label: segmentTab(<Database className="size-3 shrink-0 opacity-80" aria-hidden />, NS_FILTER_LABELS.storage),
+  },
+  {
+    value: 'gpu',
+    label: segmentTab(<Cpu className="size-3 shrink-0 opacity-80" aria-hidden />, NS_FILTER_LABELS.gpu),
+  },
+  {
+    value: 'cicd',
+    label: segmentTab(<GitBranch className="size-3 shrink-0 opacity-80" aria-hidden />, NS_FILTER_LABELS.cicd),
+  },
+  {
+    value: 'infra',
+    label: segmentTab(<Server className="size-3 shrink-0 opacity-80" aria-hidden />, NS_FILTER_LABELS.infra),
+  },
+  {
+    value: 'all',
+    label: segmentTab(<LayoutGrid className="size-3 shrink-0 opacity-80" aria-hidden />, 'All'),
+  },
+]
+
+/** Visual groups: Trade·Platform | Storage·GPU | CI/CD·Infra | All */
+const NS_FILTER_SEGMENT_GROUPS: NsFilterType[][] = [
+  ['trade', 'platform'],
+  ['storage', 'gpu'],
+  ['cicd', 'infra'],
+  ['all'],
+]
+
+const NS_FILTER_OPTION_BY_VALUE = new Map(NS_FILTER_SEGMENT_OPTIONS.map(opt => [opt.value, opt]))
+
+function GroupedNsFilterControl({
+  value,
+  onChange,
+}: {
+  value: NsFilterType
+  onChange: (filter: NsFilterType) => void
+}) {
+  return (
+    <div className={segmentGroupClass('sm')} role="group" aria-label="Namespace category">
+      {NS_FILTER_SEGMENT_GROUPS.map((group, groupIndex) => (
+        <Fragment key={group.join('-')}>
+          {groupIndex > 0 ? (
+            <span className="mx-0.5 h-4 w-px shrink-0 self-center bg-[var(--border)]" aria-hidden />
+          ) : null}
+          {group.map(filter => {
+            const opt = NS_FILTER_OPTION_BY_VALUE.get(filter)
+            if (opt == null) return null
+            return (
+              <button
+                key={filter}
+                type="button"
+                className={segmentButtonClass(value === filter, 'sm')}
+                aria-pressed={value === filter}
+                onClick={() => onChange(filter)}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </Fragment>
+      ))}
+    </div>
+  )
+}
+
 type WorkloadView = 'tree' | 'standalone'
 
 interface ClusterWorkloadsExplorerProps {
   namespaces: ClusterNamespace[]
-  nsFilter: NsFilter
+  nsFilter: NsFilterType
   selectedNs: string | null
   workloads: ClusterWorkload[]
   isLoadingNamespaces: boolean
   isLoadingWorkloads: boolean
   selectedPod: string | null
-  onFilterChange: (filter: NsFilter) => void
+  onFilterChange: (filter: NsFilterType) => void
   onSelectNs: (name: string) => void
   onSelectPod: (name: string) => void
   onRestartDeployment: (workload: ClusterWorkload) => void
   onScaleDeployment: (workload: ClusterWorkload) => void
   onDeletePod: (workload: ClusterWorkload) => void
-  placementRules?: ClusterPlacementRule[]
 }
 
 function NsChipStats({
@@ -80,13 +193,17 @@ function NamespaceIdealArchCell({
 }: {
   summary: ReturnType<typeof getNamespacePlacementSummary> | null
 }) {
-  if (summary == null || !summary.mapped || summary.idealArchs.length === 0) {
+  if (summary == null || !summary.mapped) {
+    return <DenseTableCell className="text-[var(--muted-foreground)]">—</DenseTableCell>
+  }
+  const archs = summary.idealArchs.filter(arch => arch !== 'amd64')
+  if (archs.length === 0) {
     return <DenseTableCell className="text-[var(--muted-foreground)]">—</DenseTableCell>
   }
   return (
     <DenseTableCell>
       <span className="inline-flex flex-wrap items-center gap-1">
-        {summary.idealArchs.map(arch => (
+        {archs.map(arch => (
           <NodeArchLabel key={arch} arch={arch} showTooltip={false} />
         ))}
       </span>
@@ -130,10 +247,16 @@ export function ClusterWorkloadsExplorer({
   onRestartDeployment,
   onScaleDeployment,
   onDeletePod,
-  placementRules = [],
 }: ClusterWorkloadsExplorerProps) {
   const [workloadView, setWorkloadView] = useState<WorkloadView>('tree')
   const [expandedDeployments, setExpandedDeployments] = useState<Set<string>>(new Set())
+
+  const visibleNamespaces = useMemo(() => {
+    const allowed = allowedNamespaceNames(nsFilter)
+    if (allowed == null) return namespaces
+    const set = new Set(allowed)
+    return namespaces.filter(ns => set.has(ns.name))
+  }, [namespaces, nsFilter])
 
   const selectedNamespace = useMemo(
     () => namespaces.find(ns => ns.name === selectedNs),
@@ -174,44 +297,28 @@ export function ClusterWorkloadsExplorer({
     [selectedNs],
   )
 
-  const liveRulesForSelectedNs = useMemo(
-    () => (selectedNs != null ? placementRules.filter(r => r.namespace === selectedNs) : []),
-    [placementRules, selectedNs],
-  )
-
-  const primaryLiveRule = liveRulesForSelectedNs[0]
-
   const colSpan = 7
 
   return (
     <OpsSection
       title="Namespaces & workloads"
       description="Deployments own their pods — expand a deployment to inspect pods, logs, and pod-level actions."
-      actions={
-        <SegmentControl
-          value={nsFilter}
-          onChange={v => onFilterChange(v as NsFilter)}
-          options={[
-            { value: 'all', label: 'All NS' },
-            { value: 'bifrost', label: 'Bifrost' },
-          ]}
-          size="sm"
-        />
-      }
+      actions={<GroupedNsFilterControl value={nsFilter} onChange={onFilterChange} />}
       bodyPadding="none"
       overflow="hidden"
       bodyClassName="ops-section-body--table"
     >
       <div className="cluster-explorer-toolbar">
         <div className="cluster-explorer-ns-rail" role="tablist" aria-label="Namespaces">
-          {isLoadingNamespaces && namespaces.length === 0 ? (
-            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">Loading namespaces…</span>
-          ) : namespaces.length === 0 ? (
-            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">No namespaces</span>
+          {isLoadingNamespaces && visibleNamespaces.length === 0 ? (
+            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)] px-3">Loading namespaces…</span>
+          ) : visibleNamespaces.length === 0 ? (
+            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)] px-3">No namespaces</span>
           ) : (
-            namespaces.map(ns => {
+            visibleNamespaces.map(ns => {
               const active = selectedNs === ns.name
               const hasFailing = ns.failing_pods > 0
+              const NsIcon = namespaceIcon(ns.name)
               return (
                 <button
                   key={ns.name}
@@ -220,10 +327,13 @@ export function ClusterWorkloadsExplorer({
                   aria-selected={active}
                   className={`cluster-ns-chip${active ? ' cluster-ns-chip--active' : ''}${hasFailing ? ' cluster-ns-chip--warn' : ''}`}
                   onClick={() => onSelectNs(ns.name)}
+                  title={namespaceShowsK8sHint(ns.name) ? `K8s namespace: ${ns.name}` : undefined}
                 >
-                  <span className="cluster-ns-chip__name">{ns.name}</span>
+                  <span className="cluster-ns-chip__name">
+                    <NsIcon className="cluster-ns-chip__icon" aria-hidden />
+                    {namespaceDisplayLabel(ns.name)}
+                  </span>
                   <NsChipStats running={ns.running_pods} total={ns.pod_count} failing={ns.failing_pods} />
-                  <NamespaceIdealArchStrip namespace={ns.name} compact />
                 </button>
               )
             })
@@ -234,7 +344,20 @@ export function ClusterWorkloadsExplorer({
       {selectedNs != null && (
         <div className="cluster-explorer-subtoolbar">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="cluster-explorer-ns-label font-mono-tabular">{selectedNs}</span>
+            {(() => {
+              const SelectedNsIcon = namespaceIcon(selectedNs)
+              return (
+                <span className="cluster-explorer-ns-label inline-flex items-center gap-1.5 font-mono-tabular">
+                  <SelectedNsIcon className="cluster-ns-chip__icon cluster-ns-chip__icon--subtoolbar" aria-hidden />
+                  {namespaceDisplayLabel(selectedNs)}
+                </span>
+              )
+            })()}
+            {namespaceShowsK8sHint(selectedNs) ? (
+              <span className="text-dense-meta text-[var(--muted-foreground)] font-mono-tabular" title="K8s namespace">
+                ({selectedNs})
+              </span>
+            ) : null}
             {selectedNamespace != null && (
               <span className="cluster-explorer-ns-summary font-mono-tabular">
                 <span className="cluster-explorer-ns-summary__total">{selectedNamespace.pod_count} pods</span>
@@ -249,9 +372,6 @@ export function ClusterWorkloadsExplorer({
                   </>
                 ) : null}
               </span>
-            )}
-            {selectedNs != null && (
-              <NamespaceIdealArchStrip namespace={selectedNs} liveRule={primaryLiveRule} />
             )}
           </div>
           <SegmentControl

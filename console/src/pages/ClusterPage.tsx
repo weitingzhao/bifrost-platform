@@ -32,14 +32,24 @@ import {
   wakeComputeNode,
   startRemediation,
   cancelRemediationJob,
+  fetchRemediationJobs,
 } from '@/api/platform'
 import type { ClusterNode, ClusterWorkload, ComputeWorkloadStatus, RemediationJob } from '@/api/types'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
 import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPanel'
-import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
+import {
+  ClusterWorkloadsExplorer,
+  DEPRECATED_NAMESPACES,
+} from '@/components/cluster/ClusterWorkloadsExplorer'
+import {
+  allowedNamespaceNames,
+  nsFilterForNamespace,
+  type NsFilterType,
+} from '@/lib/cluster/namespaceCatalog'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
 import { ClusterPostgresDetailPanel } from '@/components/cluster/ClusterPostgresDetailPanel'
+import { ClusterApplicationsDetailPanel } from '@/components/cluster/ClusterApplicationsDetailPanel'
 import { ClusterRedisDetailPanel } from '@/components/cluster/ClusterRedisDetailPanel'
 import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
 import { ClusterCategoryGrid } from '@/components/cluster/ClusterCategoryGrid'
@@ -58,12 +68,12 @@ import { buildClusterLlmContext } from '@/lib/cluster/buildClusterLlmContext'
 import { buildClusterCategoryLlmContext } from '@/lib/cluster/buildClusterCategoryLlmContext'
 import type { NodeWizardFlow, WizardAction } from '@/lib/cluster/nodeWizard'
 import { useClusterCategory } from '@/hooks/useClusterCategory'
+import { findActiveRemediationJob } from '@/lib/remediation/remediationJobDisplay'
 import {
   INFRASTRUCTURE_CATEGORY_LABELS,
   isInfrastructureCategory,
 } from '@/lib/cluster/clusterCategories'
 
-type NsFilter = 'all' | 'bifrost'
 type CopyState = 'idle' | 'copied' | 'error'
 
 interface ConfirmState {
@@ -84,14 +94,16 @@ export function ClusterPage({
   onOpenEnvironments,
   onOpenAudit,
   onOpenServerConsole,
+  onOpenAgentDesk,
 }: {
   onOpenStandards?: () => void
   onOpenEnvironments?: () => void
   onOpenAudit?: () => void
   onOpenServerConsole?: () => void
+  onOpenAgentDesk?: (jobId: string) => void
 }) {
   const qc = useQueryClient()
-  const [nsFilter, setNsFilter] = useState<NsFilter>('bifrost')
+  const [nsFilter, setNsFilter] = useState<NsFilterType>('trade')
   const [selectedNs, setSelectedNs] = useState<string | null>('bifrost-stg')
   const [selectedPod, setSelectedPod] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -174,6 +186,17 @@ export function ClusterPage({
     retry: false,
   })
 
+  const remediationJobsQuery = useQuery({
+    queryKey: ['remediation', 'jobs'],
+    queryFn: fetchRemediationJobs,
+    refetchInterval: 15_000,
+  })
+
+  const activeRemediationJob = useMemo(
+    () => findActiveRemediationJob(remediationJobsQuery.data?.jobs ?? []),
+    [remediationJobsQuery.data?.jobs],
+  )
+
   const clusterFetching =
     summaryQuery.isFetching ||
     nodesQuery.isFetching ||
@@ -181,8 +204,8 @@ export function ClusterPage({
     observabilityQuery.isFetching
 
   const namespacesQuery = useQuery({
-    queryKey: ['cluster', 'namespaces', nsFilter],
-    queryFn: () => fetchClusterNamespaces(nsFilter === 'bifrost' ? 'bifrost' : ''),
+    queryKey: ['cluster', 'namespaces'],
+    queryFn: () => fetchClusterNamespaces(''),
     refetchInterval: 30_000,
   })
 
@@ -280,6 +303,12 @@ export function ClusterPage({
   const remediationStartMutation = useMutation({
     mutationFn: startRemediation,
     onSuccess: job => {
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      if (onOpenAgentDesk != null) {
+        onOpenAgentDesk(job.id)
+        setActionError(null)
+        return
+      }
       setRemediationJob(job)
       setRemediationJobId(job.id)
       setRemediationPanelOpen(true)
@@ -588,7 +617,18 @@ export function ClusterPage({
     }
     return serviceReadinessQuery.data?.domains.find(d => d.id === selectedCategory)?.label
   }, [selectedCategory, serviceReadinessQuery.data?.domains])
-  const bifrostNamespaces = namespacesQuery.data?.filter === 'bifrost' ? namespacesQuery.data.namespaces : []
+  const bifrostNamespaces = namespacesQuery.data?.namespaces.filter(ns => ns.name.startsWith('bifrost')) ?? []
+  const visibleNamespaces = useMemo(
+    () => (namespacesQuery.data?.namespaces ?? []).filter(ns => !DEPRECATED_NAMESPACES.has(ns.name)),
+    [namespacesQuery.data?.namespaces],
+  )
+
+  function selectFirstNsInFilter(filter: NsFilterType) {
+    const allowed = allowedNamespaceNames(filter)
+    const pool =
+      allowed == null ? visibleNamespaces : visibleNamespaces.filter(ns => allowed.includes(ns.name))
+    setSelectedNs(pool[0]?.name ?? null)
+  }
   const showBootstrapActions = clusterBootstrapNeedsActions(metricsOk, bifrostNamespaces)
   const clusterStatusLabel = clusterSummary?.label ?? 'Loading…'
   const clusterUpdatedAt =
@@ -629,15 +669,7 @@ export function ClusterPage({
   )
 
   const handleCopyForLlm = useCallback(async () => {
-    let namespaces = clusterLlmInput.namespaces
-    if (nsFilter === 'bifrost') {
-      try {
-        const all = await fetchClusterNamespaces('')
-        namespaces = all.namespaces
-      } catch {
-        /* use bifrost subset */
-      }
-    }
+    const namespaces = clusterLlmInput.namespaces
 
     const text = buildClusterLlmContext({
       ...clusterLlmInput,
@@ -652,19 +684,11 @@ export function ClusterPage({
       setCopyState('error')
       window.setTimeout(() => setCopyState('idle'), 3000)
     }
-  }, [clusterLlmInput, nsFilter])
+  }, [clusterLlmInput])
 
   const handleCopyCategoryForLlm = useCallback(
     async (category: ClusterCategory, categoryTitle: string) => {
-      let namespaces = clusterLlmInput.namespaces
-      if (nsFilter === 'bifrost') {
-        try {
-          const all = await fetchClusterNamespaces('')
-          namespaces = all.namespaces
-        } catch {
-          /* use bifrost subset */
-        }
-      }
+      const namespaces = clusterLlmInput.namespaces
 
       let opsContext
       let postgresStatus
@@ -718,7 +742,7 @@ export function ClusterPage({
         }, 3000)
       }
     },
-    [clusterLlmInput, nsFilter],
+    [clusterLlmInput],
   )
 
   const handleAutoRemediate = useCallback(() => {
@@ -728,7 +752,11 @@ export function ClusterPage({
       cluster_summary: clusterSummary,
       service_readiness: serviceReadinessQuery.data,
       governance: governanceQuery.data,
-      issues: collectClusterIssues(clusterSummary),
+      issues: collectClusterIssues({
+        summary: clusterSummary,
+        serviceReadiness: serviceReadinessQuery.data,
+        postgresStatus: postgresStatusQuery.data,
+      }),
       prompt: buildClusterLlmContext({
         summary: clusterSummary,
         nodes: nodesQuery.data?.nodes,
@@ -750,16 +778,36 @@ export function ClusterPage({
     nodesQuery.data?.nodes,
     observabilityQuery.data,
     placementQuery.data,
+    postgresStatusQuery.data,
     remediationStartMutation,
     selectedNs,
     serviceReadinessQuery.data,
     workloadsQuery.data?.workloads,
   ])
 
+  const handleOpenRemediationSession = useCallback(
+    (jobId: string) => {
+      const job =
+        remediationJobsQuery.data?.jobs?.find(j => j.id === jobId) ??
+        (remediationJobId === jobId ? remediationJob : null)
+      if (onOpenAgentDesk != null) {
+        onOpenAgentDesk(jobId)
+        setActionError(null)
+        return
+      }
+      if (job != null) setRemediationJob(job)
+      setRemediationJobId(jobId)
+      setRemediationPanelOpen(true)
+      setActionError(null)
+    },
+    [onOpenAgentDesk, remediationJob, remediationJobId, remediationJobsQuery.data?.jobs],
+  )
+
   const handleRemediationComplete = useCallback(
     (job: RemediationJob) => {
       setRemediationJob(job)
       void qc.invalidateQueries({ queryKey: ['cluster'] })
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
       void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
       // K8s summary can lag briefly after pod deletes — follow up once more.
       window.setTimeout(() => {
@@ -916,11 +964,15 @@ cd ../bifrost-platform && make start`}
       {clusterSummary != null && (
         <ClusterIssuesPanel
           summary={clusterSummary}
+          serviceReadiness={serviceReadinessQuery.data}
+          postgresStatus={postgresStatusQuery.data}
           canOperate={canOperate}
           remediatePending={remediationStartMutation.isPending}
+          activeRemediationJob={activeRemediationJob}
+          onOpenRemediationSession={handleOpenRemediationSession}
           onAutoRemediate={handleAutoRemediate}
           onSelectPodNamespace={ns => {
-            setNsFilter('all')
+            setNsFilter(nsFilterForNamespace(ns))
             handleSelectNs(ns)
             setCategory('workloads')
           }}
@@ -972,6 +1024,11 @@ cd ../bifrost-platform && make start`}
               redisLoading={redisStatusQuery.isLoading}
               serviceReadiness={serviceReadinessQuery.data}
             />
+          ) : domainId === 'applications' ? (
+            <ClusterApplicationsDetailPanel
+              serviceReadiness={serviceReadinessQuery.data}
+              isLoading={serviceReadinessQuery.isLoading}
+            />
           ) : (
             <ClusterServiceReadinessPanel
               data={serviceReadinessQuery.data}
@@ -1015,7 +1072,7 @@ cd ../bifrost-platform && make start`}
         workloadsContent={
           <div className="cluster-view-panels">
             <ClusterWorkloadsExplorer
-              namespaces={namespacesQuery.data?.namespaces ?? []}
+              namespaces={visibleNamespaces}
               nsFilter={nsFilter}
               selectedNs={selectedNs}
               workloads={workloadsQuery.data?.workloads ?? []}
@@ -1026,13 +1083,22 @@ cd ../bifrost-platform && make start`}
                 setNsFilter(filter)
                 setSelectedPod(null)
                 setDrawerOpen(false)
+                const allowed = allowedNamespaceNames(filter)
+                if (allowed == null) {
+                  if (selectedNs == null && visibleNamespaces.length > 0) {
+                    setSelectedNs(visibleNamespaces[0]!.name)
+                  }
+                  return
+                }
+                if (selectedNs == null || !allowed.includes(selectedNs)) {
+                  selectFirstNsInFilter(filter)
+                }
               }}
               onSelectNs={handleSelectNs}
               onSelectPod={handleSelectPod}
               onRestartDeployment={handleRestartDeployment}
               onScaleDeployment={workload => setScaleState({ workload, replicas: 1 })}
               onDeletePod={handleDeletePod}
-              placementRules={placementQuery.data?.rules}
             />
             <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
           </div>

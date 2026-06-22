@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
@@ -14,14 +13,14 @@ import (
 type Handler struct {
 	runner *RunnerClient
 	audit  *actuation.AuditLog
-	store  *Store
+	store  *JobStore
 }
 
 func NewHandler(audit *actuation.AuditLog) *Handler {
 	return &Handler{
 		runner: NewRunnerClient(),
 		audit:  audit,
-		store:  NewStore(),
+		store:  NewJobStore(),
 	}
 }
 
@@ -66,24 +65,36 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	job, err := h.runner.Get(r.Context(), id)
 	if err != nil {
+		if stored, ok := h.store.Get(id); ok {
+			writeJSON(w, http.StatusOK, stored)
+			return
+		}
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	if job == nil {
+		if stored, ok := h.store.Get(id); ok {
+			writeJSON(w, http.StatusOK, stored)
+			return
+		}
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
 		return
 	}
+	h.store.Put(*job)
 	writeJSON(w, http.StatusOK, job)
 }
 
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
+	stored := h.store.List()
 	jobs, err := h.runner.List(r.Context())
 	if err != nil {
-		// Fall back to local store when runner is down.
-		writeJSON(w, http.StatusOK, map[string]any{"jobs": h.store.List()})
+		writeJSON(w, http.StatusOK, map[string]any{"jobs": stored, "source": "archive"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"jobs": jobs})
+	for _, j := range jobs {
+		h.store.Put(j)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"jobs": mergeJobs(jobs, stored)})
 }
 
 func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
@@ -194,28 +205,4 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-type Store struct {
-	jobs map[string]Job
-}
-
-func NewStore() *Store {
-	return &Store{jobs: make(map[string]Job)}
-}
-
-func (s *Store) Put(job Job) {
-	if job.CreatedAt.IsZero() {
-		job.CreatedAt = time.Now().UTC()
-	}
-	job.UpdatedAt = time.Now().UTC()
-	s.jobs[job.ID] = job
-}
-
-func (s *Store) List() []Job {
-	out := make([]Job, 0, len(s.jobs))
-	for _, j := range s.jobs {
-		out = append(out, j)
-	}
-	return out
 }

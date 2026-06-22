@@ -1,7 +1,104 @@
 import type { StartRunRequest } from './types.js'
 
+function issueRowBrief(issue: unknown): string {
+  if (typeof issue !== 'object' || issue == null) return `- ${String(issue)}`
+  const row = issue as Record<string, unknown>
+  const category = row.category != null ? String(row.category) : '?'
+  const title = row.title != null ? String(row.title) : row.id != null ? String(row.id) : 'issue'
+  const detail = row.detail != null ? String(row.detail) : ''
+  return detail !== '' ? `- [${category}] ${title} — ${detail}` : `- [${category}] ${title}`
+}
+
+/** Human-readable mission brief shown in Ops Console (not the full agent system prompt). */
+export function buildOperatorInitBrief(req: StartRunRequest): string {
+  const lines: string[] = []
+  const scope = req.scope?.trim()
+  if (scope != null && scope !== '') {
+    lines.push(`Scope: ${scope}`, '')
+  }
+
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix') {
+    const userPrompt = req.prompt?.trim() ?? ''
+    if (userPrompt !== '') lines.push(userPrompt)
+    return lines.join('\n').trim()
+  }
+
+  const issues = Array.isArray(req.issues) ? req.issues : []
+  if (issues.length > 0) {
+    lines.push('Reported issues:', ...issues.map(issueRowBrief), '')
+  } else {
+    lines.push('Reported issues: none (health verification pass)', '')
+  }
+
+  const context = req.prompt?.trim() ?? ''
+  if (context !== '') {
+    lines.push('Cluster context:', context)
+  }
+
+  return lines.join('\n').trim()
+}
+
+function buildAgentDeskPrompt(req: StartRunRequest): string {
+  const userPrompt = req.prompt?.trim() ?? ''
+  const lines: string[] = [
+    'You are the Bifrost Ops Platform agent — SRE assistant for the Owner.',
+    'You have kubectl read access and safe actuation via platform-api custom tools.',
+    'North star: routine ops through Console + platform-api with audit; no speculative destructive actions.',
+    '',
+    '## Operator request',
+    userPrompt !== '' ? userPrompt : '(empty request — ask the operator what they need)',
+    '',
+    '## Guidelines',
+    '- Prefer read-only diagnosis first; use tools when data is needed.',
+    '- Before delete_pod, rollout_restart_deployment, or scale_deployment call request_operator_approval.',
+    '- When the operator must check or fix something on a host (NAS mount, ssh, login item): call request_operator_manual_steps with a checklist and commands[].',
+    '- Read operator notes from approval responses — they paste command output in the notes field.',
+    '- Keep responses concise; surface blockers and recommended next steps.',
+    '- Reference spine/milestone context when relevant to the question.',
+    '',
+  ]
+
+  if (req.cluster_summary != null) {
+    lines.push('## Cluster snapshot', '', '```json', JSON.stringify(req.cluster_summary, null, 2), '```', '')
+  }
+
+  if (req.governance != null) {
+    lines.push('## Governance', '', '```json', JSON.stringify(req.governance, null, 2), '```', '')
+  }
+
+  lines.push('Begin now. Work autonomously until done or blocked on operator approval.')
+  return lines.join('\n')
+}
+
+function buildNightlyDriftAutofixPrompt(req: StartRunRequest): string {
+  const body = req.prompt?.trim() ?? ''
+  const lines: string[] = [
+    'You are a bifrost-platform engineering agent. The Owner approved this nightly drift auto-fix.',
+    '',
+    '## Rules',
+    '- Edit bifrost-platform only (catalog TS, ops-context.yaml, drift scanners, docs paths).',
+    '- Do NOT apply cluster changes (no delete_pod, rollout, drain).',
+    '- Create git branch `agent/drift-YYYYMMDD`, commit with clear messages.',
+    '- If git remote exists, push and print `gh pr create` command or PR URL.',
+    '- If unsure, document recommended manual fix instead of guessing.',
+    '',
+    '## Approved task',
+    body !== '' ? body : '(missing proposal body)',
+    '',
+    'Complete the fix and report: branch, commits, PR steps.',
+  ]
+  return lines.join('\n')
+}
+
 export function buildRemediationPrompt(req: StartRunRequest): string {
-  const issueList = req.issues ?? []
+  if (req.scope === 'agent-desk') {
+    return buildAgentDeskPrompt(req)
+  }
+  if (req.scope === 'nightly-drift-autofix') {
+    return buildNightlyDriftAutofixPrompt(req)
+  }
+
+  const issueList = Array.isArray(req.issues) ? req.issues : []
   const hasReportedIssues = issueList.length > 0
 
   const lines: string[] = [
@@ -13,11 +110,12 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   if (hasReportedIssues) {
     lines.push(
       '## Your Task',
-      '1. Diagnose each failing pod (kubectl describe, logs, events).',
+      '1. Diagnose each reported issue (cluster summary, service readiness, kubectl describe/logs/events).',
       '2. Determine root cause.',
       '3. Execute safe remediation (delete garbage/debug pods, rollout restart deployments when appropriate).',
-      '4. Verify fix (re-check pod status via get_cluster_summary or kubectl_get_pods).',
-      '5. Report final status with a concise summary.',
+      '4. For data-layer gaps (MinIO, CNPG, Redis, NFS PVCs): inspect data namespace pods, PVCs, StorageClasses, and node labels before acting.',
+      '5. Verify fix (re-check via get_cluster_summary and get_service_readiness).',
+      '6. Report final status with a concise summary.',
       '',
     )
   } else {
@@ -38,9 +136,13 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
     '- Deleting Failed/Completed/debug pods (e.g. node-debugger-*) is always safe when they are clearly garbage.',
     '- rollout restart is safe for bifrost-stg/prod Deployments when pods are crash-looping.',
     '- Tekton PipelineRun step pods may fail due to upstream build issues — diagnose logs before deleting.',
+    '- MinIO (data/minio): often Pending due to nfs-hot PVC or postgres-role node binding — check events before restart.',
+    '- CNPG (bifrost-postgres-*): second instance may be forming; do not delete primary without operator approval.',
     '- **Before** delete_pod, rollout_restart_deployment, or scale_deployment you MUST call request_operator_approval with 2–4 options (include skip/cancel).',
-    '- If the operator must run manual steps (ssh, apply a fix outside platform-api), include commands[] in request_operator_approval.',
-    '- Proceed with the selected option only; if skip/cancel, report findings without destructive action.',
+    '- If the operator must run manual steps (NAS, ssh, host checks, kubectl outside platform-api): call **request_operator_manual_steps** with checklist[] and commands[].',
+    '- Operator notes: the Console shows a notes field; read `note` from the approval tool result (paste describe/events output there).',
+    '- If operator selects manual_still_blocked, use their note and re-diagnose; do not treat as cancel.',
+    '- Proceed with the selected option only; if skip/cancel/stop, report findings without further destructive action.',
     '- When no issues were reported and verification passes, prefer **no action** over speculative fixes.',
     '',
   )

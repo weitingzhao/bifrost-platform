@@ -52,6 +52,7 @@ type Job struct {
 	Error     string    `json:"error,omitempty"`
 	Actor     string    `json:"actor,omitempty"`
 	Scope     string    `json:"scope,omitempty"`
+	InitBrief string    `json:"init_brief,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Events    []Event   `json:"events,omitempty"`

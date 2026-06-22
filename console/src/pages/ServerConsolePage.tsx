@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@bifrost/ui'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { fetchConsoleHosts } from '@/api/console'
+import { fetchClusterNodes } from '@/api/platform'
 import { ServerTerminal } from '@/components/ServerTerminal'
 
 export function ServerConsolePage() {
@@ -11,6 +12,22 @@ export function ServerConsolePage() {
     refetchInterval: 30_000,
   })
 
+  const clusterNodesQuery = useQuery({
+    queryKey: ['cluster', 'nodes'],
+    queryFn: fetchClusterNodes,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+
+  const k8sNodeByIp = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const node of clusterNodesQuery.data?.nodes ?? []) {
+      const ip = node.internal_ip?.trim()
+      if (ip !== '') map[ip] = node.name
+    }
+    return map
+  }, [clusterNodesQuery.data?.nodes])
+
   const hosts = hostsQuery.data ?? []
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const effectiveId = selectedId ?? hosts[0]?.id ?? null
@@ -19,7 +36,7 @@ export function ServerConsolePage() {
     <div className="flex w-full min-w-0 flex-col gap-4">
       <PageHeader
         title="Server console"
-        description="Interactive SSH via Platform API (topology allowlist). Linux row = K3s cluster nodes; Mac row = native macOS Agent hosts. Open several panes for side-by-side sessions."
+        description="Interactive SSH via Platform API (topology allowlist). Linux row = K3s cluster nodes (K8s node name + IP); Mac row = native macOS Agent hosts. Open several panes for side-by-side sessions."
       />
 
       {hostsQuery.isLoading && (
@@ -33,6 +50,7 @@ export function ServerConsolePage() {
         hosts={hosts}
         selectedId={effectiveId}
         onSelectHost={setSelectedId}
+        k8sNodeByIp={k8sNodeByIp}
       />
     </div>
   )

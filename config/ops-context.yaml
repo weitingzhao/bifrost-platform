@@ -397,34 +397,34 @@ tracks:
         label: "Ops Platform GitOps & containerization"
         total: 7
         done: 7
-        status: active
-        next_task: "make k3s-deliver-platform (build images + rollout); then Owner infra sign-off"
-        note: "UI signed off (Trade release / Platform Release sidebar). Makefile KUBECONFIG fix for k3s-install-platform-stg. Namespace + Argo app applied; pods need first deliver for images."
+        status: closed
+        next_task: ""
+        note: "Phase 1 CLOSED — Owner signed. Sidebar refactored (Trade release / Platform / Cluster ops). ARM nodes retired. Platform Release page live."
       - id: agent-infra-bootstrap
         label: "Agent host setup (Hermes + Bridge + tools)"
         total: 5
-        done: 0
-        status: not_started
-        next_task: "Install Hermes Gateway on Mac Mini #1"
-        note: "① Hermes install ② cron config ③ iMessage channel ④ Staleguard/ctxharness ⑤ CTRL NODE Bridge"
+        done: 5
+        status: closed
+        next_task: ""
+        note: "CLOSED — runner on .50:8781, bridge OK, launchd nightly-drift 3:00 AM. Jobs/reports on NAS smb://192.168.10.20/ops-agent (Mini symlinks). Cluster Auto Remediate deferred."
         prerequisites:
-          - "platform-gitops Phase 1 Owner sign-off"
+          - "platform-gitops Phase 1 Owner sign-off ✓"
       - id: nightly-drift-scan
         label: "Nightly drift detection & remediation"
         total: 4
-        done: 0
-        status: not_started
-        next_task: "Define drift scan skill (Layer 1 deterministic)"
-        note: "① Layer 1 scan skill ② Layer 2 API probe ③ Layer 3 LLM comparison ④ Auto-fix with Owner approval"
+        done: 4
+        status: closed
+        next_task: ""
+        note: "① Layer 1 catalog scan ✓ ② Layer 2 API probes ✓ ③ Layer 3 spine semantic ✓ ④ Layer 4 Owner approval gate + auto-fix remediation ✓ · Briefing DriftProposalPanel · Session delta lists agent tasks since last copy"
       - id: agent-mcp-integration
-        label: "Hermes ↔ Ops Platform MCP bridge"
+        label: "Agent Desk + MCP bridge"
         total: 3
-        done: 0
-        status: not_started
-        note: "① Hermes as MCP Server ② platform-api as MCP client ③ Console 'Ask Agent' button"
+        done: 3
+        status: closed
+        next_task: ""
+        note: "① Agent Desk UI ✓ ② platform MCP agent tools + bridge API ✓ ③ Console MCP panel on Agent Desk ✓ · Hermes MCP URL optional via HERMES_MCP_URL"
         prerequisites:
           - "agent-infra-bootstrap stream closed"
-          - "nightly-drift-scan stable (2+ weeks)"
       - id: agent-trade-advisory
         label: "Trade advisory autonomous service"
         total: 3

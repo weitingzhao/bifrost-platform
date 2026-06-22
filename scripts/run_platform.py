@@ -57,6 +57,14 @@ _PLATFORM_DOTENV_KEYS = frozenset({
     "PLATFORM_ADMIN_TOKEN",
     "PLATFORM_LISTEN",
     "PLATFORM_CONFIG",
+    "REMEDIATION_RUNNER_URL",
+    "REMEDIATION_RUNNER_PORT",
+    "REMEDIATION_RUNNER_BIND",
+    "REMEDIATION_RUNNER_AUTOSTART",
+    "REMEDIATION_CWD",
+    "REMEDIATION_MODEL",
+    "CURSOR_API_KEY",
+    "PLATFORM_API_URL",
 })
 
 
@@ -165,6 +173,57 @@ def _free_port(port: int, label: str, wait_sec: float = 0.6) -> bool:
     return True
 
 
+def _runner_autostart_enabled() -> bool:
+    flag = os.environ.get("REMEDIATION_RUNNER_AUTOSTART", "1").strip().lower()
+    if flag in ("0", "false", "no", "off"):
+        return False
+    url = os.environ.get("REMEDIATION_RUNNER_URL", "").strip()
+    if not url:
+        os.environ.setdefault("REMEDIATION_RUNNER_URL", "http://127.0.0.1:8781")
+        return True
+    lowered = url.lower()
+    return "127.0.0.1" in lowered or "localhost" in lowered
+
+
+def _remediation_runner_port() -> int:
+    url = os.environ.get("REMEDIATION_RUNNER_URL", "http://127.0.0.1:8781").strip()
+    if not url:
+        return 8781
+    if "://" not in url:
+        url = f"http://{url}"
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.port is not None:
+        return parsed.port
+    return 8781
+
+
+def _spawn_remediation_runner(env: dict[str, str]) -> subprocess.Popen[bytes] | None:
+    if not _runner_autostart_enabled():
+        return None
+    port = _remediation_runner_port()
+    if _pids_on_port(port):
+        print(f"Remediation runner already on :{port} (skip autostart)")
+        return None
+    remediation_dir = _PROJECT_ROOT / "agent" / "remediation"
+    agent_script = _PROJECT_ROOT / "scripts" / "run_agent.py"
+    if not remediation_dir.is_dir() or not agent_script.is_file():
+        return None
+    if not (remediation_dir / "node_modules").is_dir():
+        print(
+            "Remediation runner not installed — Agent Desk needs `make dev-agent` "
+            "(or cd agent/remediation && npm install)"
+        )
+        return None
+    print(f"Starting remediation runner on :{port} (sidecar)")
+    return subprocess.Popen(
+        [sys.executable, str(agent_script), "start", "--no-watch"],
+        cwd=_PROJECT_ROOT,
+        env=env,
+    )
+
+
 def _ensure_prereqs() -> int:
     if not shutil_which("go"):
         print("Error: go not found. Install: brew install go", file=sys.stderr)
@@ -236,7 +295,12 @@ def main() -> int:
         return 1
 
     env = _child_env()
+    os.environ.setdefault("REMEDIATION_RUNNER_URL", "http://127.0.0.1:8781")
     children: list[subprocess.Popen[bytes]] = []
+
+    runner_proc = _spawn_remediation_runner(env)
+    if runner_proc is not None:
+        children.append(runner_proc)
 
     def shutdown(signum: int | None = None, _frame: object | None = None) -> None:
         if signum is not None:
