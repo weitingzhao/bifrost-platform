@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useQueries } from '@tanstack/react-query'
 import {
   DenseDataTable,
   DenseTableBody,
@@ -26,7 +27,19 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { ClusterNamespace, ClusterWorkload } from '@/api/types'
+import { fetchClusterWorkloads } from '@/api/platform'
 import { groupNeedsAttention, groupWorkloadsByDeployment } from '@/lib/cluster/workloadTree'
+import { buildNamespacePodInventory } from '@/lib/cluster/workloadPodInventory'
+import {
+  aggregateCategoryDeployStats,
+  computeNamespaceReadyStats,
+  computeReadyTones,
+  namespaceNamesForFilter,
+  type CategoryDeployStats,
+  type NamespaceReadyStats,
+  type ReadyCount,
+  type ReadyTone,
+} from '@/lib/cluster/workloadReadyStats'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { WorkloadExpandToggle } from '@/components/cluster/WorkloadExpandToggle'
@@ -105,9 +118,11 @@ const NS_FILTER_OPTION_BY_VALUE = new Map(NS_FILTER_SEGMENT_OPTIONS.map(opt => [
 function GroupedNsFilterControl({
   value,
   onChange,
+  categoryDeployStats,
 }: {
   value: NsFilterType
   onChange: (filter: NsFilterType) => void
+  categoryDeployStats: Record<NsFilterType, CategoryDeployStats>
 }) {
   return (
     <div className={segmentGroupClass('sm')} role="group" aria-label="Namespace category">
@@ -119,6 +134,7 @@ function GroupedNsFilterControl({
           {group.map(filter => {
             const opt = NS_FILTER_OPTION_BY_VALUE.get(filter)
             if (opt == null) return null
+            const deployStats = categoryDeployStats[filter]
             return (
               <button
                 key={filter}
@@ -126,8 +142,16 @@ function GroupedNsFilterControl({
                 className={segmentButtonClass(value === filter, 'sm')}
                 aria-pressed={value === filter}
                 onClick={() => onChange(filter)}
+                title={
+                  deployStats.loading
+                    ? 'Loading deployment ready stats…'
+                    : `${deployStats.ok} deployment${deployStats.ok === 1 ? '' : 's'} ready · ${deployStats.failed} not ready`
+                }
               >
-                {opt.label}
+                <span className="inline-flex items-center gap-1">
+                  {opt.label}
+                  <CategoryDeployBadge stats={deployStats} />
+                </span>
               </button>
             )
           })}
@@ -155,24 +179,179 @@ interface ClusterWorkloadsExplorerProps {
   onDeletePod: (workload: ClusterWorkload) => void
 }
 
-function NsChipStats({
-  running,
-  total,
-  failing,
-}: {
-  running: number
-  total: number
-  failing: number
-}) {
+function NsChipPodTotal({ total, failing }: { total: number; failing: number }) {
   return (
-    <span className="cluster-ns-chip__stats font-mono-tabular">
-      <span className={running > 0 ? 'cluster-ns-chip__running' : 'cluster-ns-chip__idle'}>{running}</span>
-      <span className="cluster-ns-chip__sep">/</span>
+    <span className="cluster-ns-chip__pods-total font-mono-tabular">
       <span className="cluster-ns-chip__total">{total}</span>
+      <span className="cluster-ns-chip__suffix"> pods</span>
       {failing > 0 ? (
         <>
           <span className="cluster-ns-chip__sep">·</span>
           <span className="cluster-ns-chip__failing">{failing} fail</span>
+        </>
+      ) : null}
+    </span>
+  )
+}
+
+function ReadyFraction({
+  label,
+  count,
+  tone,
+  loading,
+}: {
+  label: string
+  count: ReadyCount
+  tone: ReadyTone
+  loading?: boolean
+}) {
+  if (loading) {
+    return (
+      <span className="cluster-ns-chip__ready-row">
+        <span className="cluster-ns-chip__ready-label">{label}</span>
+        <span className="cluster-ns-chip__ready-val cluster-ns-chip__ready-val--idle">…</span>
+      </span>
+    )
+  }
+  if (tone === 'idle' || count.planned === 0) {
+    return (
+      <span className="cluster-ns-chip__ready-row">
+        <span className="cluster-ns-chip__ready-label">{label}</span>
+        <span className="cluster-ns-chip__ready-val cluster-ns-chip__ready-val--idle">—</span>
+      </span>
+    )
+  }
+  return (
+    <span className="cluster-ns-chip__ready-row">
+      <span className="cluster-ns-chip__ready-label">{label}</span>
+      <span className={`cluster-ns-chip__ready-val cluster-ns-chip__ready-val--${tone}`}>
+        {count.actual}/{count.planned}
+      </span>
+    </span>
+  )
+}
+
+function CategoryDeployBadge({ stats }: { stats: CategoryDeployStats }) {
+  if (stats.loading) {
+    return <span className="segment-deploy-stats segment-deploy-stats--loading">…</span>
+  }
+  if (stats.ok === 0 && stats.failed === 0) {
+    return null
+  }
+  return (
+    <span className="segment-deploy-stats font-mono-tabular">
+      <span className="segment-deploy-stats__ok">{stats.ok}</span>
+      {stats.failed > 0 ? (
+        <>
+          <span className="segment-deploy-stats__sep">/</span>
+          <span className="segment-deploy-stats__fail">{stats.failed}</span>
+        </>
+      ) : null}
+    </span>
+  )
+}
+
+function NsChipReadySummary({
+  stats,
+  tones,
+  loading,
+  totalPods,
+  failingPods,
+}: {
+  stats: NamespaceReadyStats | undefined
+  tones: { deployment: ReadyTone; standalone: ReadyTone } | undefined
+  loading: boolean
+  totalPods: number
+  failingPods: number
+}) {
+  return (
+    <span className="cluster-ns-chip__ready-block">
+      <ReadyFraction
+        label="Deploy"
+        count={stats?.deploymentReady ?? { actual: 0, planned: 0 }}
+        tone={tones?.deployment ?? 'idle'}
+        loading={loading}
+      />
+      <ReadyFraction
+        label="Standalone"
+        count={stats?.standaloneReady ?? { actual: 0, planned: 0 }}
+        tone={tones?.standalone ?? 'idle'}
+        loading={loading}
+      />
+      <NsChipPodTotal total={totalPods} failing={failingPods} />
+    </span>
+  )
+}
+
+function nsChipTitle(ns: ClusterNamespace): string | undefined {
+  const parts: string[] = []
+  if (namespaceShowsK8sHint(ns.name)) parts.push(`K8s namespace: ${ns.name}`)
+  parts.push(`${ns.pod_count} Pod objects (deployments, jobs, CI builds, etc.)`)
+  return parts.join(' · ')
+}
+
+function NamespacePodInventoryBar({
+  inventory,
+  loading,
+}: {
+  inventory: ReturnType<typeof buildNamespacePodInventory> | null
+  loading: boolean
+}) {
+  if (inventory == null) return null
+
+  const { totalPods, deploymentCount, standalonePodCount, phases, failingPods } = inventory
+  const hasPhaseDetail =
+    !loading &&
+    (phases.running > 0 || phases.succeeded > 0 || phases.pending > 0 || phases.failed > 0 || phases.other > 0)
+
+  return (
+    <span className="cluster-explorer-ns-inventory font-mono-tabular" title="All Pod objects in this namespace">
+      <span className="cluster-explorer-ns-inventory__total">{totalPods} pods total</span>
+      {!loading ? (
+        <>
+          <span className="cluster-explorer-ns-inventory__sep">·</span>
+          <span>{deploymentCount} deployments</span>
+          <span className="cluster-explorer-ns-inventory__sep">·</span>
+          <span>{standalonePodCount} standalone</span>
+        </>
+      ) : (
+        <>
+          <span className="cluster-explorer-ns-inventory__sep">·</span>
+          <span className="cluster-explorer-ns-inventory__loading">loading breakdown…</span>
+        </>
+      )}
+      {hasPhaseDetail ? (
+        <>
+          {phases.running > 0 ? (
+            <>
+              <span className="cluster-explorer-ns-inventory__sep">·</span>
+              <span className="cluster-explorer-ns-inventory__running">{phases.running} running</span>
+            </>
+          ) : null}
+          {phases.succeeded > 0 ? (
+            <>
+              <span className="cluster-explorer-ns-inventory__sep">·</span>
+              <span className="cluster-explorer-ns-inventory__succeeded">{phases.succeeded} succeeded</span>
+            </>
+          ) : null}
+          {phases.pending > 0 ? (
+            <>
+              <span className="cluster-explorer-ns-inventory__sep">·</span>
+              <span className="cluster-explorer-ns-inventory__pending">{phases.pending} pending</span>
+            </>
+          ) : null}
+          {phases.failed > 0 ? (
+            <>
+              <span className="cluster-explorer-ns-inventory__sep">·</span>
+              <span className="cluster-explorer-ns-inventory__failing">{phases.failed} failed</span>
+            </>
+          ) : null}
+        </>
+      ) : null}
+      {failingPods > 0 && phases.failed === 0 ? (
+        <>
+          <span className="cluster-explorer-ns-inventory__sep">·</span>
+          <span className="cluster-explorer-ns-inventory__failing">{failingPods} failing</span>
         </>
       ) : null}
     </span>
@@ -258,6 +437,49 @@ export function ClusterWorkloadsExplorer({
     return namespaces.filter(ns => set.has(ns.name))
   }, [namespaces, nsFilter])
 
+  const allNamespaceNames = useMemo(() => namespaces.map(ns => ns.name), [namespaces])
+
+  const workloadQueries = useQueries({
+    queries: allNamespaceNames.map(name => ({
+      queryKey: ['cluster', 'workloads', name],
+      queryFn: () => fetchClusterWorkloads(name),
+      staleTime: 30_000,
+      enabled: allNamespaceNames.length > 0,
+    })),
+  })
+
+  const { readyStatsByNs, readyTonesByNs, loadingNsNames } = useMemo(() => {
+    const statsMap = new Map<string, NamespaceReadyStats>()
+    const tonesMap = new Map<string, { deployment: ReadyTone; standalone: ReadyTone }>()
+    const loading = new Set<string>()
+
+    allNamespaceNames.forEach((name, index) => {
+      const query = workloadQueries[index]
+      if (query?.isLoading && query.data == null) {
+        loading.add(name)
+        return
+      }
+      let wls = query?.data?.workloads
+      if (name === selectedNs && workloads.length > 0) wls = workloads
+      if (wls == null) return
+      const stats = computeNamespaceReadyStats(wls)
+      statsMap.set(name, stats)
+      tonesMap.set(name, computeReadyTones(wls, stats))
+    })
+
+    return { readyStatsByNs: statsMap, readyTonesByNs: tonesMap, loadingNsNames: loading }
+  }, [allNamespaceNames, workloadQueries, selectedNs, workloads])
+
+  const categoryDeployStats = useMemo(() => {
+    const filters: NsFilterType[] = ['trade', 'platform', 'storage', 'gpu', 'cicd', 'infra', 'all']
+    const result = {} as Record<NsFilterType, CategoryDeployStats>
+    for (const filter of filters) {
+      const names = namespaceNamesForFilter(filter, allNamespaceNames)
+      result[filter] = aggregateCategoryDeployStats(names, readyStatsByNs, loadingNsNames)
+    }
+    return result
+  }, [allNamespaceNames, readyStatsByNs, loadingNsNames])
+
   const selectedNamespace = useMemo(
     () => namespaces.find(ns => ns.name === selectedNs),
     [namespaces, selectedNs],
@@ -297,13 +519,24 @@ export function ClusterWorkloadsExplorer({
     [selectedNs],
   )
 
+  const podInventory = useMemo(
+    () => buildNamespacePodInventory(workloads, selectedNamespace ?? null),
+    [workloads, selectedNamespace],
+  )
+
   const colSpan = 7
 
   return (
     <OpsSection
       title="Namespaces & workloads"
-      description="Deployments own their pods — expand a deployment to inspect pods, logs, and pod-level actions."
-      actions={<GroupedNsFilterControl value={nsFilter} onChange={onFilterChange} />}
+      description="Pod counts include every Pod object in the namespace (deployments, jobs, CI builds). Browse long-running services under By deployment; orphaned pods under Standalone."
+      actions={
+        <GroupedNsFilterControl
+          value={nsFilter}
+          onChange={onFilterChange}
+          categoryDeployStats={categoryDeployStats}
+        />
+      }
       bodyPadding="none"
       overflow="hidden"
       bodyClassName="ops-section-body--table"
@@ -319,21 +552,30 @@ export function ClusterWorkloadsExplorer({
               const active = selectedNs === ns.name
               const hasFailing = ns.failing_pods > 0
               const NsIcon = namespaceIcon(ns.name)
+              const nsLoading = loadingNsNames.has(ns.name)
+              const nsStats = readyStatsByNs.get(ns.name)
+              const nsTones = readyTonesByNs.get(ns.name)
               return (
                 <button
                   key={ns.name}
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  className={`cluster-ns-chip${active ? ' cluster-ns-chip--active' : ''}${hasFailing ? ' cluster-ns-chip--warn' : ''}`}
+                  className={`cluster-ns-chip${active ? ' cluster-ns-chip--active' : ''}${hasFailing || (nsStats?.deploymentFailed ?? 0) > 0 ? ' cluster-ns-chip--warn' : ''}`}
                   onClick={() => onSelectNs(ns.name)}
-                  title={namespaceShowsK8sHint(ns.name) ? `K8s namespace: ${ns.name}` : undefined}
+                  title={nsChipTitle(ns)}
                 >
                   <span className="cluster-ns-chip__name">
                     <NsIcon className="cluster-ns-chip__icon" aria-hidden />
                     {namespaceDisplayLabel(ns.name)}
                   </span>
-                  <NsChipStats running={ns.running_pods} total={ns.pod_count} failing={ns.failing_pods} />
+                  <NsChipReadySummary
+                    stats={nsStats}
+                    tones={nsTones}
+                    loading={nsLoading}
+                    totalPods={ns.pod_count}
+                    failingPods={ns.failing_pods}
+                  />
                 </button>
               )
             })
@@ -358,21 +600,31 @@ export function ClusterWorkloadsExplorer({
                 ({selectedNs})
               </span>
             ) : null}
-            {selectedNamespace != null && (
-              <span className="cluster-explorer-ns-summary font-mono-tabular">
-                <span className="cluster-explorer-ns-summary__total">{selectedNamespace.pod_count} pods</span>
-                <span className="cluster-explorer-ns-summary__sep">·</span>
-                <span className="cluster-explorer-ns-summary__running">{selectedNamespace.running_pods} running</span>
-                {selectedNamespace.failing_pods > 0 ? (
-                  <>
-                    <span className="cluster-explorer-ns-summary__sep">·</span>
-                    <span className="cluster-explorer-ns-summary__failing">
-                      {selectedNamespace.failing_pods} failing
-                    </span>
-                  </>
-                ) : null}
+            <NamespacePodInventoryBar inventory={podInventory} loading={isLoadingWorkloads} />
+            {selectedNs != null && readyStatsByNs.has(selectedNs) ? (
+              <span className="cluster-explorer-ns-inventory font-mono-tabular">
+                <span className="cluster-explorer-ns-inventory__sep">·</span>
+                <span>
+                  Deploy ready{' '}
+                  <span
+                    className={`cluster-explorer-ns-inventory__${readyTonesByNs.get(selectedNs)?.deployment === 'ok' ? 'running' : readyTonesByNs.get(selectedNs)?.deployment === 'fail' ? 'failing' : 'pending'}`}
+                  >
+                    {readyStatsByNs.get(selectedNs)?.deploymentReady.actual}/
+                    {readyStatsByNs.get(selectedNs)?.deploymentReady.planned}
+                  </span>
+                </span>
+                <span className="cluster-explorer-ns-inventory__sep">·</span>
+                <span>
+                  Standalone ready{' '}
+                  <span
+                    className={`cluster-explorer-ns-inventory__${readyTonesByNs.get(selectedNs)?.standalone === 'ok' ? 'running' : readyTonesByNs.get(selectedNs)?.standalone === 'fail' ? 'failing' : 'pending'}`}
+                  >
+                    {readyStatsByNs.get(selectedNs)?.standaloneReady.actual}/
+                    {readyStatsByNs.get(selectedNs)?.standaloneReady.planned}
+                  </span>
+                </span>
               </span>
-            )}
+            ) : null}
           </div>
           <SegmentControl
             value={workloadView}
@@ -544,12 +796,6 @@ export function ClusterWorkloadsExplorer({
           )}
         </DenseTableBody>
       </DenseDataTable>
-
-      {selectedNs != null && workloadView === 'tree' && orphanPods.length > 0 && (
-        <p className="cluster-explorer-footnote">
-          {orphanPods.length} pod{orphanPods.length === 1 ? '' : 's'} not owned by a deployment — see Standalone tab.
-        </p>
-      )}
     </OpsSection>
   )
 }
