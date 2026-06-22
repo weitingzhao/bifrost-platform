@@ -40,7 +40,7 @@ export const APPLICATION_DOMAIN_PURPOSE: Record<ApplicationDomainCategory, strin
   gpu: 'Elastic compute on gpu-server',
   warehouse: 'MinIO object store on gpu-server',
   workers: 'Daemon · Celery · data pipelines',
-  applications: 'Frontend · nginx · 9 API domains',
+  applications: 'amd64 Trade stack · nginx · frontend · 9 API domains',
   cicd: 'Gitea · Registry · Tekton builds',
 }
 

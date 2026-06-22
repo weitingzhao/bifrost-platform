@@ -9,11 +9,15 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import type { ClusterGovernanceResponse } from '@/api/types'
+import type {
+  ClusterCapabilityCoverage,
+  ClusterCapabilityProbe,
+  ClusterGovernanceResponse,
+  Reachability,
+} from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
-import { capabilityTagVariant } from '@/lib/cluster/nodeCapabilitiesCatalog'
 
 interface ClusterGovernancePanelProps {
   data: ClusterGovernanceResponse | undefined
@@ -21,15 +25,145 @@ interface ClusterGovernancePanelProps {
   compact?: boolean
 }
 
-function categoryVariant(category: string): 'neutral' | 'category' | 'info' {
-  switch (category) {
-    case 'storage':
-      return 'info'
-    case 'placement':
-      return 'category'
+type GovernanceCategory = 'storage' | 'placement' | 'compute' | 'infra'
+
+interface GovernanceGroup {
+  key: GovernanceCategory
+  title: string
+  description: string
+  clusterCaps: ClusterCapabilityProbe[]
+  nodeCoverage: ClusterCapabilityCoverage[]
+}
+
+const GROUP_META: Record<GovernanceCategory, { title: string; description: string }> = {
+  storage: { title: 'NFS / Storage', description: 'NFS client nodes, provisioners, StorageClass, data roles' },
+  placement: { title: 'Scheduling / Placement', description: 'Elastic compute and production pool taints' },
+  compute: { title: 'GPU / Compute', description: 'NVIDIA device plugin, GPU pool node labels' },
+  infra: { title: 'Infrastructure', description: 'Control plane, bootstrap, Wake-on-LAN, metrics' },
+}
+
+const GROUP_ORDER: GovernanceCategory[] = ['storage', 'placement', 'compute', 'infra']
+
+function buildGroups(
+  clusterCaps: ClusterCapabilityProbe[],
+  nodeCoverage: ClusterCapabilityCoverage[],
+): GovernanceGroup[] {
+  const groups: GovernanceGroup[] = GROUP_ORDER.map(key => ({
+    key,
+    ...GROUP_META[key],
+    clusterCaps: [],
+    nodeCoverage: [],
+  }))
+
+  const groupMap = new Map(groups.map(g => [g.key, g]))
+
+  for (const cap of clusterCaps) {
+    const g = groupMap.get(cap.category as GovernanceCategory)
+    if (g) g.clusterCaps.push(cap)
+    else groupMap.get('infra')!.clusterCaps.push(cap)
+  }
+
+  for (const cov of nodeCoverage) {
+    const g = groupMap.get(cov.category as GovernanceCategory)
+    if (g) g.nodeCoverage.push(cov)
+    else groupMap.get('infra')!.nodeCoverage.push(cov)
+  }
+
+  return groups
+}
+
+function reachVariant(reach: Reachability): 'success' | 'warning' | 'danger' | 'neutral' {
+  switch (reach) {
+    case 'ok':
+      return 'success'
+    case 'degraded':
+      return 'warning'
+    case 'fail':
+      return 'danger'
     default:
       return 'neutral'
   }
+}
+
+function groupSummary(group: GovernanceGroup): { total: number; gaps: number; reach: Reachability } {
+  let total = 0
+  let gaps = 0
+  for (const cap of group.clusterCaps) {
+    total++
+    if (cap.reachability !== 'ok') gaps++
+  }
+  for (const cov of group.nodeCoverage) {
+    total++
+    if (cov.reachability !== 'ok') gaps++
+  }
+  const reach: Reachability = gaps === 0 ? 'ok' : gaps === total ? 'fail' : 'degraded'
+  return { total, gaps, reach }
+}
+
+function GroupCard({ group, compact }: { group: GovernanceGroup; compact: boolean }) {
+  const { gaps, reach } = groupSummary(group)
+  const isEmpty = group.clusterCaps.length === 0 && group.nodeCoverage.length === 0
+  if (isEmpty) return null
+
+  return (
+    <OpsSection
+      title={group.title}
+      description={compact ? undefined : group.description}
+      leading={<StatusLamp value={reach} kind="reach" />}
+      headerExtra={
+        gaps > 0 ? (
+          <DenseTag variant={reachVariant(reach)}>{gaps} gap{gaps > 1 ? 's' : ''}</DenseTag>
+        ) : null
+      }
+      bodyPadding="none"
+    >
+      <DenseDataTable>
+        <DenseTableHeader>
+          <DenseTableHeadRow>
+            <DenseTableHead className="w-5" />
+            <DenseTableHead>Capability</DenseTableHead>
+            <DenseTableHead>Coverage</DenseTableHead>
+            <DenseTableHead>Detail</DenseTableHead>
+          </DenseTableHeadRow>
+        </DenseTableHeader>
+        <DenseTableBody>
+          {group.clusterCaps.map(cap => (
+            <DenseTableRow key={cap.id}>
+              <DenseTableCell className="w-5 pr-0">
+                <StatusLamp value={cap.reachability} kind="reach" />
+              </DenseTableCell>
+              <DenseTableCell className="font-medium whitespace-nowrap">{cap.label}</DenseTableCell>
+              <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
+                {cap.status}
+              </DenseTableCell>
+              <DenseTableCell className="text-[var(--muted-foreground)] max-w-[20rem]">
+                {cap.detail}
+              </DenseTableCell>
+            </DenseTableRow>
+          ))}
+          {group.nodeCoverage.map(cov => (
+            <DenseTableRow key={cov.id}>
+              <DenseTableCell className="w-5 pr-0">
+                <StatusLamp value={cov.reachability} kind="reach" />
+              </DenseTableCell>
+              <DenseTableCell className="font-medium whitespace-nowrap">{cov.label}</DenseTableCell>
+              <DenseTableCell className="font-mono-tabular">
+                {cov.nodes_ready}/{cov.nodes_total} nodes
+                {cov.node_names.length > 0 && (
+                  <span className="text-[var(--muted-foreground)] ml-1" title={cov.node_names.join(', ')}>
+                    ({cov.node_names.join(', ')})
+                  </span>
+                )}
+              </DenseTableCell>
+              <DenseTableCell className="text-[var(--muted-foreground)] max-w-[20rem]">
+                {cov.gap_reason ?? (cov.reachability === 'ok' ? 'Ready' : '—')}
+              </DenseTableCell>
+            </DenseTableRow>
+          ))}
+        </DenseTableBody>
+      </DenseDataTable>
+    </OpsSection>
+  )
 }
 
 export function ClusterGovernancePanel({ data, isLoading, compact = false }: ClusterGovernancePanelProps) {
@@ -43,124 +177,74 @@ export function ClusterGovernancePanel({ data, isLoading, compact = false }: Clu
     void qc.invalidateQueries({ queryKey: ['cluster', 'nodes'] })
   }
 
-  return (
-    <OpsSection
-      title="Governance · Capabilities"
-      description={
-        compact
-          ? 'Node labels and cluster capability probes.'
-          : 'Authoritative K3s prep snapshot — node labels + cluster probes. Confirm host prep and storage here instead of kubectl.'
-      }
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          {data != null && (
-            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)] inline-flex items-center gap-1">
-              <StatusLamp value={data.reachability} kind="reach" />
-              {data.detail}
-            </span>
-          )}
-          <SectionRefreshButton isFetching={fetching || isLoading} onClick={refresh} />
-        </div>
-      }
-      bodyPadding="none"
-      overflow="hidden"
-    >
-      <div className="flex flex-col gap-0 divide-y divide-[var(--border)]">
-        <section className="px-3 py-2">
-          <h4 className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Cluster capabilities
-          </h4>
-          <DenseDataTable>
-            <DenseTableHeader>
-              <DenseTableHeadRow>
-                <DenseTableHead>Capability</DenseTableHead>
-                <DenseTableHead>Category</DenseTableHead>
-                <DenseTableHead>Status</DenseTableHead>
-                <DenseTableHead>Detail</DenseTableHead>
-              </DenseTableHeadRow>
-            </DenseTableHeader>
-            <DenseTableBody>
-              {clusterCaps.length === 0 ? (
-                <DenseTableRow>
-                  <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
-                    {isLoading ? 'Loading…' : 'Cluster unreachable'}
-                  </DenseTableCell>
-                </DenseTableRow>
-              ) : (
-                clusterCaps.map(cap => (
-                  <DenseTableRow key={cap.id}>
-                    <DenseTableCell className="font-medium">{cap.label}</DenseTableCell>
-                    <DenseTableCell>
-                      <DenseTag variant={categoryVariant(cap.category)}>{cap.category}</DenseTag>
-                    </DenseTableCell>
-                    <DenseTableCell>
-                      <span className="inline-flex items-center gap-1">
-                        <StatusLamp value={cap.reachability} kind="reach" />
-                        <span className="font-mono-tabular">{cap.status}</span>
-                      </span>
-                    </DenseTableCell>
-                    <DenseTableCell className="text-[var(--muted-foreground)] max-w-md">
-                      {cap.detail}
-                    </DenseTableCell>
-                  </DenseTableRow>
-                ))
-              )}
-            </DenseTableBody>
-          </DenseDataTable>
-        </section>
+  const groups = buildGroups(clusterCaps, nodeCoverage)
+  const totalGaps = groups.reduce((sum, g) => sum + groupSummary(g).gaps, 0)
+  const overallReach: Reachability = data?.reachability ?? 'unknown'
 
-        <section className="px-3 py-2">
-          <h4 className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Node capability coverage
-          </h4>
-          <DenseDataTable>
-            <DenseTableHeader>
-              <DenseTableHeadRow>
-                <DenseTableHead>Capability</DenseTableHead>
-                <DenseTableHead>Label</DenseTableHead>
-                <DenseTableHead>Ready</DenseTableHead>
-                <DenseTableHead>Nodes</DenseTableHead>
-                <DenseTableHead>Reach</DenseTableHead>
-              </DenseTableHeadRow>
-            </DenseTableHeader>
-            <DenseTableBody>
-              {nodeCoverage.length === 0 ? (
-                <DenseTableRow>
-                  <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
-                    {isLoading ? 'Loading…' : 'No node catalog'}
-                  </DenseTableCell>
-                </DenseTableRow>
-              ) : (
-                nodeCoverage.map(row => (
-                  <DenseTableRow key={row.id}>
-                    <DenseTableCell>
-                      <span className="inline-flex flex-wrap items-center gap-1">
-                        <DenseTag variant={capabilityTagVariant(row.id)}>{row.label}</DenseTag>
-                        <DenseTag variant={categoryVariant(row.category)}>{row.category}</DenseTag>
-                      </span>
-                    </DenseTableCell>
-                    <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
-                      {row.label_hint ?? '—'}
-                    </DenseTableCell>
-                    <DenseTableCell className="font-mono-tabular">
-                      {row.nodes_ready}/{row.nodes_total}
-                    </DenseTableCell>
-                    <DenseTableCell className="font-mono-tabular max-w-[14rem] truncate" title={row.node_names.join(', ')}>
-                      {row.node_names.length > 0 ? row.node_names.join(', ') : '—'}
-                    </DenseTableCell>
-                    <DenseTableCell>
-                      <span className="inline-flex items-center gap-1" title={row.gap_reason}>
-                        <StatusLamp value={row.reachability} kind="reach" />
-                        <span className="font-mono-tabular">{row.reachability}</span>
-                      </span>
-                    </DenseTableCell>
-                  </DenseTableRow>
-                ))
-              )}
-            </DenseTableBody>
-          </DenseDataTable>
+  if (isLoading && data == null) {
+    return <p className="m-0 px-3 py-4 text-dense-meta text-[var(--muted-foreground)]">Loading governance snapshot…</p>
+  }
+
+  if (data == null) {
+    return (
+      <p className="m-0 px-3 py-4 text-dense-meta text-[var(--muted-foreground)]">
+        Cluster unreachable — cannot load governance.
+      </p>
+    )
+  }
+
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-3 p-3">
+        <section className="rounded-md border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusLamp value={overallReach} kind="reach" />
+            <span className="text-dense-label font-semibold">
+              Governance snapshot {totalGaps === 0 ? 'ok' : `${totalGaps} gap${totalGaps > 1 ? 's' : ''}`}
+            </span>
+            <SectionRefreshButton isFetching={fetching || isLoading} onClick={refresh} />
+          </div>
         </section>
+        {groups.map(g => (
+          <GroupCard key={g.key} group={g} compact />
+        ))}
       </div>
-    </OpsSection>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <section className="rounded-md border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusLamp value={overallReach} kind="reach" />
+            <span className="text-dense-label font-semibold">
+              Governance snapshot {totalGaps === 0 ? 'ok' : `${totalGaps} gap${totalGaps > 1 ? 's' : ''}`}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {groups.map(g => {
+              const { gaps, reach } = groupSummary(g)
+              if (g.clusterCaps.length === 0 && g.nodeCoverage.length === 0) return null
+              return (
+                <DenseTag key={g.key} variant={gaps > 0 ? reachVariant(reach) : 'success'}>
+                  {g.title} {gaps > 0 ? `${gaps} gap` : '✓'}
+                </DenseTag>
+              )
+            })}
+            <SectionRefreshButton isFetching={fetching || isLoading} onClick={refresh} />
+          </div>
+        </div>
+        {data.detail !== '' && (
+          <p className="m-0 mt-1 text-dense-meta text-[var(--muted-foreground)]">{data.detail}</p>
+        )}
+      </section>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {groups.map(g => (
+          <GroupCard key={g.key} group={g} compact={false} />
+        ))}
+      </div>
+    </div>
   )
 }

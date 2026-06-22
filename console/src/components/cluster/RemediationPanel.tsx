@@ -5,12 +5,16 @@ import type { RemediationEvent, RemediationJob, RemediationPhase } from '@/api/t
 import { fetchRemediationJob, respondRemediationJob } from '@/api/platform'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { RemediationHistoryBar } from '@/components/cluster/RemediationHistoryBar'
+import { RemediationInitBrief } from '@/components/cluster/RemediationInitBrief'
 import { useRemediationStream } from '@/hooks/useRemediationStream'
 
 interface RemediationPanelProps {
   open: boolean
   jobId: string | null
   initialJob?: RemediationJob | null
+  variant?: 'cluster' | 'desk'
+  /** Session fallback when job.init_brief is missing (e.g. Agent Desk composer text). */
+  initBriefFallback?: string
   onClose: () => void
   onStop?: (jobId: string) => void
   onComplete?: (job: RemediationJob) => void
@@ -64,6 +68,46 @@ function durationLabel(start: string, end: string): string {
   } catch {
     return ''
   }
+}
+
+function buildRemediationCopyText(job: RemediationJob | null, events: RemediationEvent[]): string {
+  const lines: string[] = []
+  if (job != null) {
+    lines.push(`Job ${job.id}`)
+    if (job.scope != null && job.scope !== '') lines.push(`Scope: ${job.scope}`)
+    if (job.init_brief != null && job.init_brief.trim() !== '') {
+      lines.push('')
+      lines.push('--- Init brief ---')
+      lines.push(job.init_brief.trim())
+    }
+    lines.push(`Status: ${job.status} · phase: ${job.phase ?? '—'}`)
+    if (job.created_at != null) lines.push(`Created: ${job.created_at}`)
+  }
+  if (job?.summary != null && job.summary.trim() !== '') {
+    lines.push('')
+    lines.push('--- Summary ---')
+    lines.push(job.summary.trim())
+  }
+  if (job?.error != null && job.error.trim() !== '') {
+    lines.push('')
+    lines.push('--- Error ---')
+    lines.push(job.error.trim())
+  }
+  const bodyEvents = events.filter(
+    e =>
+      e.type === 'done' ||
+      e.type === 'error' ||
+      (e.type === 'tool_result' && e.text.trim() !== '') ||
+      (e.type === 'thinking' && e.text.trim() !== ''),
+  )
+  if (bodyEvents.length > 0) {
+    lines.push('')
+    lines.push('--- Event log ---')
+    for (const e of bodyEvents) {
+      lines.push(`[${e.type}] ${e.text.trim()}`)
+    }
+  }
+  return lines.join('\n').trim()
 }
 
 interface GroupedBlock {
@@ -162,10 +206,10 @@ function ToolBlock({ block }: { block: GroupedBlock }) {
       {expanded && (
         <>
           {call != null && call.text.trim() !== '' && (
-            <pre className="remediation-block-code remediation-block-code--call">{call.text}</pre>
+            <pre className="remediation-block-code remediation-block-code--call dense-scroll-y">{call.text}</pre>
           )}
           {result != null && result.text.trim() !== '' && (
-            <pre className="remediation-block-code remediation-block-code--result">{result.text}</pre>
+            <pre className="remediation-block-code remediation-block-code--result dense-scroll-y">{result.text}</pre>
           )}
         </>
       )}
@@ -218,6 +262,8 @@ export function RemediationPanel({
   open,
   jobId,
   initialJob,
+  variant = 'cluster',
+  initBriefFallback,
   onClose,
   onStop,
   onComplete,
@@ -226,7 +272,7 @@ export function RemediationPanel({
 }: RemediationPanelProps) {
   const qc = useQueryClient()
   const [viewJobId, setViewJobId] = useState<string | null>(jobId)
-  const logRef = useRef<HTMLDivElement>(null)
+  const activityLogRef = useRef<HTMLDivElement>(null)
   const completedJobRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -253,13 +299,18 @@ export function RemediationPanel({
   const isHistorical = viewJobId != null && !isLiveView
 
   const respondMutation = useMutation({
-    mutationFn: ({ id, optionId }: { id: string; optionId: string }) => respondRemediationJob(id, optionId),
+    mutationFn: ({ id, optionId, note }: { id: string; optionId: string; note?: string }) =>
+      respondRemediationJob(id, optionId, note),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
     },
   })
 
   const blocks = useMemo(() => groupEvents(events), [events])
+  const activityBlocks = useMemo(
+    () => blocks.filter(block => block.type !== 'approval'),
+    [blocks],
+  )
 
   const pendingApproval = useMemo(() => {
     if (job?.phase !== 'awaiting_approval' || !isLiveView) return null
@@ -276,6 +327,21 @@ export function RemediationPanel({
     return { toolCalls }
   }, [events])
 
+  const copyableReport = useMemo(() => buildRemediationCopyText(job, events), [job, events])
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+
+  async function handleCopyReport() {
+    if (copyableReport === '') return
+    try {
+      await navigator.clipboard.writeText(copyableReport)
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2000)
+    } catch {
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 3000)
+    }
+  }
+
   useEffect(() => {
     completedJobRef.current = null
   }, [jobId])
@@ -291,8 +357,8 @@ export function RemediationPanel({
 
   useEffect(() => {
     if (pendingApproval != null) return
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' })
-  }, [blocks.length, job?.status, pendingApproval])
+    activityLogRef.current?.scrollTo({ top: activityLogRef.current.scrollHeight, behavior: 'smooth' })
+  }, [activityBlocks.length, job?.status, pendingApproval])
 
   if (!open) return null
 
@@ -302,19 +368,27 @@ export function RemediationPanel({
       ? durationLabel(job.created_at, job.updated_at)
       : null
 
+  const panelTitle =
+    variant === 'desk'
+      ? isHistorical
+        ? 'Task report'
+        : 'Agent task'
+      : isHistorical
+        ? 'Run report'
+        : 'Auto-Remediate'
+  const panelAria = variant === 'desk' ? 'Agent task' : 'Auto-remediation'
+
   return (
     <aside
       className="bay-detail-drawer panel-elevated cluster-drawer remediation-drawer"
       role="dialog"
-      aria-label="Auto-remediation"
+      aria-label={panelAria}
     >
       <header className="bay-detail-drawer-header remediation-header">
         <div className="flex min-w-0 items-center gap-2">
           <StatusLamp value={reachabilityFromJob(job)} kind="reach" />
           <div className="min-w-0">
-            <h3 className="m-0 text-sm font-semibold">
-              {isHistorical ? 'Run report' : 'Auto-Remediate'}
-            </h3>
+            <h3 className="m-0 text-sm font-semibold">{panelTitle}</h3>
             <p className="m-0 mt-0.5 flex flex-wrap items-center gap-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
               {viewJobId != null && (
                 <span className="font-mono-tabular" title={viewJobId}>
@@ -328,9 +402,23 @@ export function RemediationPanel({
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={onClose}>
-          Close
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={copyableReport === ''}
+            onClick={() => void handleCopyReport()}
+          >
+            {copyState === 'copied'
+              ? 'Copied!'
+              : copyState === 'error'
+                ? 'Copy failed'
+                : 'Copy report'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        </div>
       </header>
 
       <RemediationHistoryBar
@@ -341,11 +429,58 @@ export function RemediationPanel({
         onBackToLive={() => jobId != null && setViewJobId(jobId)}
       />
 
+      <RemediationInitBrief job={job} fallbackBrief={initBriefFallback} />
+
       <div className="remediation-progress-bar">
         <PhaseStepper currentPhase={job?.phase} failed={failed} />
       </div>
 
-      <div ref={logRef} className="bay-detail-drawer-body remediation-log">
+      <section
+        className={
+          pendingApproval != null
+            ? 'remediation-decision-zone remediation-decision-zone--active'
+            : 'remediation-decision-zone remediation-decision-zone--idle'
+        }
+        aria-label="Operator decision"
+      >
+        <p className="remediation-decision-zone__title">
+          {pendingApproval != null ? (
+          pendingApproval.meta?.kind === 'manual_steps'
+            ? 'Your action — manual steps required'
+            : 'Your decision — action required'
+          ) : 'Your decision'}
+        </p>
+        {pendingApproval != null && viewJobId != null ? (
+          <RemediationApprovalBlock
+            event={pendingApproval}
+            submitting={respondMutation.isPending}
+            onOpenServerConsole={onOpenServerConsole}
+            onRespond={(optionId, note) =>
+              respondMutation.mutate({ id: viewJobId, optionId, note })
+            }
+          />
+        ) : job?.phase === 'awaiting_approval' && isLiveView ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Waiting for agent to present options…
+          </p>
+        ) : (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            No pending choice. Tool calls and reasoning stream in Activity below.
+          </p>
+        )}
+      </section>
+
+      <div ref={activityLogRef} className="bay-detail-drawer-body remediation-activity-log dense-scroll-y">
+        <div className="remediation-activity-log__head">
+          <p className="remediation-activity-log__title">Activity</p>
+          <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            {stats.toolCalls > 0
+              ? `${stats.toolCalls} tool call${stats.toolCalls > 1 ? 's' : ''}`
+              : isRunning
+                ? 'Running…'
+                : '—'}
+          </span>
+        </div>
         {isHistorical && snapshotQuery.isLoading && (
           <p className="m-0 px-1 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Loading report…
@@ -356,16 +491,6 @@ export function RemediationPanel({
             <span className="remediation-block-kicker remediation-block-kicker--error">Connection</span>
             <p className="remediation-block-body remediation-block-body--error">{error}</p>
           </div>
-        )}
-        {pendingApproval != null && viewJobId != null && (
-          <RemediationApprovalBlock
-            event={pendingApproval}
-            submitting={respondMutation.isPending}
-            onOpenServerConsole={onOpenServerConsole}
-            onRespond={optionId =>
-              respondMutation.mutate({ id: viewJobId, optionId })
-            }
-          />
         )}
         {events.length === 0 && isRunning && (
           <p className="m-0 px-1 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -387,8 +512,7 @@ export function RemediationPanel({
             )}
           </div>
         )}
-        {blocks.map((block, i) => {
-          if (block.type === 'approval') return null
+        {activityBlocks.map((block, i) => {
           if (block.type === 'thinking') return <ThinkingBlock key={i} events={block.events} />
           if (block.type === 'tool') return <ToolBlock key={i} block={block} />
           if (block.type === 'status') return <StatusBlock key={i} event={block.events[0]} />
@@ -402,6 +526,14 @@ export function RemediationPanel({
           {job?.updated_at != null ? `Updated ${new Date(job.updated_at).toLocaleTimeString()}` : '—'}
         </span>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={copyableReport === ''}
+            onClick={() => void handleCopyReport()}
+          >
+            {copyState === 'copied' ? 'Copied!' : 'Copy report'}
+          </Button>
           {isRunning && jobId != null && onStop != null && (
             <Button
               variant="destructive"

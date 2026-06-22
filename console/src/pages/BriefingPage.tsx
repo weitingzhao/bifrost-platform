@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
-import { fetchClusterObservability } from '@/api/platform'
+import { fetchClusterObservability, fetchRemediationJobs } from '@/api/platform'
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, SegmentControl } from '@bifrost/ui'
 import { StatusLamp } from '@/components/StatusLamp'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
+import { NightlyBriefingPanel } from '@/components/briefing/NightlyBriefingPanel'
 import { TrackCardsSection } from '@/components/briefing/TrackCardsSection'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
@@ -38,6 +39,7 @@ interface BriefingPageProps {
   platformHealthy: boolean | undefined
   auditRecords: AuditRecord[]
   auditLoading: boolean
+  onOpenAgentDesk?: (jobId?: string) => void
 }
 
 async function copyText(text: string): Promise<void> {
@@ -60,6 +62,7 @@ export function BriefingPage({
   platformHealthy,
   auditRecords,
   auditLoading,
+  onOpenAgentDesk,
 }: BriefingPageProps) {
   const [selectedTrack, setSelectedTrack] = useState<TrackId>('build')
   const [selectedLane, setSelectedLane] = useState<LaneId>(() =>
@@ -77,7 +80,15 @@ export function BriefingPage({
   const [previousSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
 
-  const dataReady = !contextLoading && !matrixLoading && !auditLoading
+  const remediationJobsQuery = useQuery({
+    queryKey: ['remediation', 'jobs'],
+    queryFn: fetchRemediationJobs,
+    refetchInterval: 30_000,
+  })
+
+  const remediationJobs = remediationJobsQuery.data?.jobs ?? []
+
+  const dataReady = !contextLoading && !matrixLoading && !auditLoading && !remediationJobsQuery.isLoading
 
   const trackSummaries = useMemo(() => {
     const clusterFailingPods = clusterSummary?.failing_pods
@@ -111,14 +122,16 @@ export function BriefingPage({
       previousSnapshot,
       { context, matrices, clusterSummary, platformHealthy },
       auditRecords,
+      remediationJobs,
     )
     setSessionDelta(delta)
-  }, [dataReady, previousSnapshot, context, matrices, clusterSummary, platformHealthy, auditRecords])
+  }, [dataReady, previousSnapshot, context, matrices, clusterSummary, platformHealthy, auditRecords, remediationJobs])
 
   function handleSaveSnapshot() {
     saveSnapshot(
       { context, matrices, clusterSummary, platformHealthy },
       auditRecords,
+      remediationJobs,
     )
   }
 
@@ -187,7 +200,12 @@ export function BriefingPage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <SessionDeltaPanel delta={sessionDelta} hasBaseline={previousSnapshot != null} />
+      <NightlyBriefingPanel onOpenAgentDesk={onOpenAgentDesk} />
+      <SessionDeltaPanel
+        delta={sessionDelta}
+        hasBaseline={previousSnapshot != null}
+        onOpenAgentDesk={onOpenAgentDesk}
+      />
 
       <TrackCardsSection
         tracks={trackSummaries}

@@ -48,6 +48,15 @@ import type {
   StartRemediationRequest,
   RemediationJob,
   RemediationJobsResponse,
+  AgentNightlyReportResponse,
+  NightlyTriggerResponse,
+  AgentDeployStatusResponse,
+  AgentDeployStartResponse,
+  RemediationHealthResponse,
+  AgentBridgeResponse,
+  DriftProposal,
+  DriftProposalsResponse,
+  ApproveDriftProposalResponse,
 } from './types'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
@@ -58,8 +67,21 @@ function operatorToken(): string {
 async function parseError(prefix: string, r: Response): Promise<Error> {
   let detail = `HTTP ${r.status}`
   try {
-    const body = (await r.json()) as { error?: string; message?: string }
-    detail = body.error ?? body.message ?? detail
+    const body = (await r.json()) as {
+      error?: string
+      message?: string
+      detail?: string
+      hint?: string
+    }
+    const head = body.error ?? body.message ?? detail
+    const parts = [head]
+    if (body.detail != null && body.detail.trim() !== '' && body.detail !== head) {
+      parts.push(body.detail.trim())
+    }
+    if (body.hint != null && body.hint.trim() !== '') {
+      parts.push(body.hint.trim())
+    }
+    detail = parts.join(' — ')
   } catch {
     // keep status detail
   }
@@ -692,4 +714,73 @@ export async function respondRemediationJob(
 
 export function remediationStreamUrl(id: string): string {
   return `/api/v1/remediation/${encodeURIComponent(id)}/stream`
+}
+
+export async function fetchAgentNightlyReport(): Promise<AgentNightlyReportResponse> {
+  const r = await fetch('/api/v1/agent/nightly-report')
+  if (!r.ok) throw await parseError('agent nightly-report', r)
+  return r.json() as Promise<AgentNightlyReportResponse>
+}
+
+export async function triggerNightlyDriftScan(): Promise<NightlyTriggerResponse> {
+  const r = await authedFetch('agent nightly-run', '/api/v1/agent/nightly-run', { method: 'POST' })
+  return r.json() as Promise<NightlyTriggerResponse>
+}
+
+export async function fetchAgentDeployStatus(): Promise<AgentDeployStatusResponse> {
+  const r = await fetch('/api/v1/agent/deploy')
+  if (!r.ok) throw await parseError('agent deploy status', r)
+  return r.json() as Promise<AgentDeployStatusResponse>
+}
+
+export async function startAgentDeploy(remote?: string): Promise<AgentDeployStartResponse> {
+  const body =
+    remote != null && remote.trim() !== '' ? JSON.stringify({ remote: remote.trim() }) : '{}'
+  const r = await authedFetch('agent deploy', '/api/v1/agent/deploy', {
+    method: 'POST',
+    body,
+  })
+  return r.json() as Promise<AgentDeployStartResponse>
+}
+
+export async function fetchRemediationHealth(): Promise<RemediationHealthResponse> {
+  const r = await fetch('/api/v1/remediation/health')
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as RemediationHealthResponse
+    return { status: 'unavailable', error: body.error ?? r.statusText }
+  }
+  return r.json() as Promise<RemediationHealthResponse>
+}
+
+export async function fetchAgentBridge(): Promise<AgentBridgeResponse> {
+  const r = await fetch('/api/v1/agent/bridge')
+  if (!r.ok) throw await parseError('agent bridge', r)
+  return r.json() as Promise<AgentBridgeResponse>
+}
+
+export async function fetchDriftProposals(): Promise<DriftProposalsResponse> {
+  const r = await fetch('/api/v1/agent/drift-proposals')
+  if (!r.ok) throw await parseError('drift proposals', r)
+  return r.json() as Promise<DriftProposalsResponse>
+}
+
+export async function approveDriftProposal(id: string): Promise<ApproveDriftProposalResponse> {
+  const r = await authedFetch(
+    'drift proposal approve',
+    `/api/v1/agent/drift-proposals/${encodeURIComponent(id)}/approve`,
+    { method: 'POST' },
+  )
+  return r.json() as Promise<ApproveDriftProposalResponse>
+}
+
+export async function rejectDriftProposal(id: string, note?: string): Promise<DriftProposal> {
+  const r = await authedFetch(
+    'drift proposal reject',
+    `/api/v1/agent/drift-proposals/${encodeURIComponent(id)}/reject`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ note: note ?? '' }),
+    },
+  )
+  return r.json() as Promise<DriftProposal>
 }

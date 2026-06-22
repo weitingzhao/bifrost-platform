@@ -59,7 +59,7 @@ export type ContextPackLayer = {
 }
 
 export const CONTEXT_PACK_LAYERS: ContextPackLayer[] = [
-  { order: 0, name: 'Agent Briefing', description: 'Ops Console → Agent Briefing → pick intent → Generate → Copy all (new sessions)' },
+  { order: 0, name: 'Agent Briefing', description: 'Briefing → session pack; Copy session pack saves snapshot; Since your last session shows matrix/cluster deltas + agent tasks (archived on NAS + platform-api)' },
   { order: 1, name: 'Discipline', description: 'Workspace rules, migration-protocol, dense-ui-system' },
   { order: 2, name: 'Spine', description: 'GET /api/v1/context or Ops Console → Catalog → Copy for LLM' },
   { order: 3, name: 'Task scope', description: 'One milestone id, one env (dev/prod), one repo' },

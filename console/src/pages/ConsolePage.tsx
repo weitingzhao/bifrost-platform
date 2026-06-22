@@ -28,6 +28,7 @@ import { PlatformAuthBar } from '@/components/PlatformAuthBar'
 import { ConsoleHeader, OpsContextBar } from '@/components/ConsoleHeader'
 import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
+import { AgentDeskPage } from '@/pages/AgentDeskPage'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { BlueprintPage } from '@/pages/BlueprintPage'
@@ -56,6 +57,7 @@ const ControlRoomPage = lazy(() =>
 )
 
 const VIEW_TITLES: Record<ConsoleViewTab, string> = {
+  'agent-desk': 'Agent Desk',
   briefing: 'Agent Briefing',
   'control-room': 'Control Room',
   audit: 'Audit',
@@ -82,6 +84,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
 }
 
 const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
+  'agent-desk',
   'briefing',
   'control-room',
   'promote',
@@ -103,6 +106,7 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
 export function ConsolePage() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('prod')
   const [viewTab, setViewTab] = useState<ConsoleViewTab>('control-room')
+  const [agentDeskJobId, setAgentDeskJobId] = useState<string | null>(null)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
   const qc = useQueryClient()
 
@@ -295,6 +299,10 @@ export function ConsolePage() {
   const openPlacement = () => setViewTab('placement')
   const openAudit = () => setViewTab('audit')
   const openBriefing = () => setViewTab('briefing')
+  const openAgentDesk = useCallback((jobId?: string) => {
+    if (jobId != null) setAgentDeskJobId(jobId)
+    setViewTab('agent-desk')
+  }, [])
   const openBlueprint = () => setViewTab('blueprint')
   const openStandards = () => setViewTab('platform-standards')
   const openEnvironments = () => setViewTab('environments')
@@ -401,6 +409,23 @@ export function ConsolePage() {
           />
         )}
 
+        {viewTab === 'agent-desk' && (
+          <>
+            <PageHeader
+              title={VIEW_TITLES['agent-desk']}
+              description="Owner agent control plane — chat requests, remediation task stream, and operator approvals via platform-api."
+            />
+            <AgentDeskPage
+              context={contextQuery.data}
+              initialJobId={agentDeskJobId}
+              onInitialJobConsumed={() => setAgentDeskJobId(null)}
+              onOpenBriefing={openBriefing}
+              onOpenCluster={openCluster}
+              onOpenMcpContract={() => setViewTab('mcp-contract')}
+            />
+          </>
+        )}
+
         {viewTab === 'briefing' && (
           <>
             <PageHeader
@@ -417,6 +442,7 @@ export function ConsolePage() {
               platformHealthy={healthQuery.data}
               auditRecords={auditRecords}
               auditLoading={auditQuery.isLoading}
+              onOpenAgentDesk={openAgentDesk}
             />
           </>
         )}
@@ -445,6 +471,7 @@ export function ConsolePage() {
                 onOpenCluster={openCluster}
                 onOpenAudit={openAudit}
                 onOpenBriefing={openBriefing}
+                onOpenAgentDesk={() => openAgentDesk()}
               />
             </Suspense>
           </>
@@ -496,6 +523,7 @@ export function ConsolePage() {
               onOpenEnvironments={openEnvironments}
               onOpenAudit={openAudit}
               onOpenServerConsole={() => setViewTab('console')}
+              onOpenAgentDesk={openAgentDesk}
             />
           </>
         )}

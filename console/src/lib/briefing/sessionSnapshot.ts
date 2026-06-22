@@ -1,4 +1,4 @@
-import type { AuditRecord, Reachability } from '@/api/types'
+import type { AuditRecord, Reachability, RemediationJob } from '@/api/types'
 import type { BriefingSnapshotInput } from '@/lib/briefing/briefingSnapshot'
 
 const STORAGE_KEY = 'bifrost_session_snapshot'
@@ -18,11 +18,15 @@ export interface SessionSnapshot {
   }
   lastAuditAt: string | null
   trackProgress?: Record<string, Record<string, number>>
+  /** Latest remediation job timestamp at snapshot save (Session agent archive). */
+  lastAgentJobAt: string | null
+  agentJobCount: number
 }
 
 export function saveSnapshot(
   input: BriefingSnapshotInput,
   auditRecords: AuditRecord[],
+  remediationJobs: RemediationJob[] = [],
 ): void {
   const milestoneStatuses: Record<string, string> = {}
   if (input.context != null) {
@@ -55,6 +59,13 @@ export function saveSnapshot(
     },
     lastAuditAt: auditRecords.length > 0 ? auditRecords[0].at : null,
     trackProgress: buildTrackProgress(input),
+    lastAgentJobAt:
+      remediationJobs.length > 0
+        ? remediationJobs.reduce((latest, j) =>
+            j.created_at > latest ? j.created_at : latest,
+          remediationJobs[0].created_at)
+        : null,
+    agentJobCount: remediationJobs.length,
   }
 
   try {

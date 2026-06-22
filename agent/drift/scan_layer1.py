@@ -34,6 +34,8 @@ CANONICAL_PORTS: dict[int, str] = {
     8771: "api-portfolio",
     8772: "api-market",
     8773: "api-research",
+    30878: "platform-console-stg NodePort",
+    30879: "platform-api-stg NodePort",
 }
 
 # Ports allowed in catalog strings without flagging (SSH, PG, Redis, HTTP alt)
@@ -48,6 +50,25 @@ PATH_PATTERNS = [
 ]
 
 PORT_PATTERN = re.compile(r":(\d{4,5})\b")
+
+# Tekton pipeline slugs in API routes — not repo paths (e.g. bifrost-deliver-stg/runs)
+TEKTON_PIPELINE_REF = re.compile(r"^bifrost-deliver-[a-z0-9-]+/")
+
+
+def should_skip_path_ref(line: str, ref: str, match_start: int) -> bool:
+    """Filter provenance comments and API route fragments."""
+    if TEKTON_PIPELINE_REF.match(ref):
+        return True
+    if "Migrated from" in line and ref in line:
+        return True
+    prefix = line[max(0, match_start - 80):match_start]
+    if "/api/" in prefix or "/pipelines/" in prefix:
+        return True
+    # JSDoc provenance lines only document migration source, not live links
+    stripped = line.strip()
+    if stripped.startswith("*") and "docs/" in ref:
+        return True
+    return False
 
 
 @dataclass
@@ -136,6 +157,8 @@ def scan_file(stocks: Path, path: Path, findings: list[Finding]) -> None:
                         prefix = line[max(0, start - 40):start]
                         if "bifrost-" in prefix:
                             continue
+                    if should_skip_path_ref(line, ref, match.start()):
+                        continue
                     resolved = resolve_candidate(stocks, ref)
                     if resolved is None and not ref.endswith("/"):
                         findings.append(

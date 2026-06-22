@@ -6,6 +6,12 @@
 config/release_gate_state.json
 config/release_gate.log
 
+# Drift proposal runtime JSON (created by nightly agent / API)
+agent/drift-proposals/*.json
+
+# Agent remediation job archives (full task log + summary)
+agent/remediation-jobs/*.json
+
 # Go
 api/bin/
 api/platform-api

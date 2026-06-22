@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bifrost.remediation-runner</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>source /Users/vision/bifrost-agent/config/env.sh &amp;&amp; source /Users/vision/bifrost-agent/config/.env 2>/dev/null; cd /Users/vision/bifrost-agent/src &amp;&amp; exec /opt/homebrew/bin/npx tsx src/server.ts</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/vision/bifrost-agent/src</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>/Users/vision</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/vision/bifrost-agent/logs/runner.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/vision/bifrost-agent/logs/runner.err</string>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>

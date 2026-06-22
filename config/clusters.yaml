@@ -12,7 +12,6 @@ clusters:
     bifrost_namespaces:
       - cicd
       - data
-      - bifrost
       - bifrost-dev
       - bifrost-stg
       - bifrost-prod

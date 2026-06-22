@@ -51,6 +51,10 @@ func Catalog() []ToolView {
 		tool("gitops_rollback_app", "Rollback Argo CD app to previous revision", "confirm", "POST", "/api/v1/gitops/apps/{name}/rollback", "admin", "P3", true),
 		tool("stack_install_addon", "Install CI/CD stack add-on", "confirm", "POST", "/api/v1/stack/addons/{name}/install", "admin", "P4", true),
 		tool("stack_upgrade_addon", "Upgrade/reinstall stack add-on", "confirm", "POST", "/api/v1/stack/addons/{name}/upgrade", "admin", "P4", true),
+		tool("get_agent_bridge", "Agent host + MCP bridge status (runner, Hermes slot, platform MCP)", "read", "GET", "/api/v1/agent/bridge", "viewer", "Agent", true),
+		tool("get_agent_nightly_report", "Nightly drift scan report from agent host", "read", "GET", "/api/v1/agent/nightly-report", "viewer", "Agent", true),
+		tool("get_remediation_health", "Remediation runner health on agent host", "read", "GET", "/api/v1/remediation/health", "viewer", "Agent", true),
+		tool("list_remediation_jobs", "Recent agent remediation tasks", "read", "GET", "/api/v1/remediation/", "operator", "Agent", true),
 		tool("run_release_gate", "Run STG or Prod release gate", "confirm", "POST", "/api/v1/promote/release-gate", "admin", "P4", false),
 		tool("sign_tier_b", "Record Tier B Owner sign-off", "confirm", "POST", "/api/v1/promote/tier-b/signoff", "admin", "P4", false),
 	}

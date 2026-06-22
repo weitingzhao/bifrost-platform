@@ -1,5 +1,6 @@
 import { Button } from '@bifrost/ui'
 import type { ClusterEvent, ClusterWorkload } from '@/api/types'
+import { StaticLogConsole } from '@/components/log/StaticLogConsole'
 import { StatusLamp } from '@/components/StatusLamp'
 import { podReachability } from '@/lib/cluster/clusterHealth'
 
@@ -75,21 +76,17 @@ export function ClusterDrawer({
           )}
         </section>
 
-        <section>
+        <section className="min-w-0">
           <h4 className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Pod logs
           </h4>
-          {logsLoading ? (
-            <p className="m-0 text-[var(--muted-foreground)]">Loading logs…</p>
-          ) : logsError != null ? (
-            <p className="m-0 lamp-warn">{logsError}</p>
-          ) : logs == null || logs === '' ? (
-            <p className="m-0 text-[var(--muted-foreground)]">No log lines returned</p>
-          ) : (
-            <pre className="max-h-72 overflow-auto rounded border border-[var(--border)] bg-[var(--background)] p-2 text-dense-meta leading-relaxed font-mono-tabular whitespace-pre-wrap">
-              {logs}
-            </pre>
-          )}
+          <StaticLogConsole
+            logs={logs}
+            loading={logsLoading}
+            error={logsError}
+            emptyMessage="No log lines returned"
+            defaultHeight={320}
+          />
         </section>
 
         <section>

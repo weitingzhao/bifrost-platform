@@ -31,6 +31,7 @@ interface ControlRoomPageProps {
   onOpenCluster: () => void
   onOpenAudit: () => void
   onOpenBriefing: () => void
+  onOpenAgentDesk?: () => void
 }
 
 export function ControlRoomPage({
@@ -50,6 +51,7 @@ export function ControlRoomPage({
   onOpenCluster,
   onOpenAudit,
   onOpenBriefing,
+  onOpenAgentDesk,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
 
@@ -116,7 +118,12 @@ export function ControlRoomPage({
         />
       )}
 
-      <AgentFocusDock context={context} matrices={matrices} selection={selection} />
+      <AgentFocusDock
+        context={context}
+        matrices={matrices}
+        selection={selection}
+        onOpenAgentDesk={onOpenAgentDesk}
+      />
 
       <BayDetailDrawer
         selection={selection}

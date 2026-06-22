@@ -69,7 +69,7 @@ func (c *RunnerClient) Start(ctx context.Context, body StartRunnerRequest) (*Job
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("runner start: HTTP %d %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		return nil, fmt.Errorf("runner start: HTTP %d %s", resp.StatusCode, trimRunnerErrorBody(raw, resp.StatusCode))
 	}
 	var job Job
 	if err := json.Unmarshal(raw, &job); err != nil {
@@ -199,4 +199,59 @@ func (c *RunnerClient) List(ctx context.Context) ([]Job, error) {
 		return nil, err
 	}
 	return out.Jobs, nil
+}
+
+type NightlyRunResponse struct {
+	Status     string `json:"status"`
+	Script     string `json:"script,omitempty"`
+	LogPath    string `json:"log_path,omitempty"`
+	ReportsDir string `json:"reports_dir,omitempty"`
+	Hint       string `json:"hint,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+func (c *RunnerClient) TriggerNightly(ctx context.Context) (*NightlyRunResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/nightly/run", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("runner nightly: HTTP %d %s", resp.StatusCode, trimRunnerErrorBody(raw, resp.StatusCode))
+	}
+	var out NightlyRunResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func trimRunnerErrorBody(raw []byte, status int) string {
+	s := strings.TrimSpace(string(raw))
+	if strings.HasPrefix(s, "<") {
+		if idx := strings.Index(s, "ReferenceError:"); idx >= 0 {
+			chunk := s[idx:]
+			if end := strings.Index(chunk, "<"); end > 0 {
+				chunk = chunk[:end]
+			}
+			return strings.TrimSpace(chunk)
+		}
+		if idx := strings.Index(s, "Error:"); idx >= 0 {
+			chunk := s[idx:]
+			if end := strings.Index(chunk, "<"); end > 0 {
+				chunk = chunk[:end]
+			}
+			return strings.TrimSpace(chunk)
+		}
+		return fmt.Sprintf("runner error (HTTP %d)", status)
+	}
+	if len(s) > 400 {
+		return s[:400] + "…"
+	}
+	return s
 }

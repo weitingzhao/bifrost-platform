@@ -32,7 +32,7 @@ export type McpServerDef = {
 }
 
 export const MCP_SERVER_REGISTRY: McpServerDef[] = [
-  { name: 'mcp-server-platform', layer: 'platform', namespace: 'local (stdio)', provides: 'platform-api proxy — matrix, cluster, gitops, stack, delivery actuation', status: 'available' },
+  { name: 'mcp-server-platform', layer: 'platform', namespace: 'local (stdio)', provides: 'platform-api proxy — matrix, cluster, gitops, agent bridge, remediation probes', status: 'available' },
   { name: 'mcp-server-kubernetes', layer: 'platform', namespace: 'local (stdio bridge)', provides: 'K8s via platform-api cluster routes — workloads, logs, L1 rollout/scale/delete', status: 'available' },
   { name: 'mcp-server-redis', layer: 'platform', namespace: 'local (stdio bridge)', provides: 'Redis reachability via matrix + dev in-cluster probes (read L0)', status: 'available' },
   { name: 'mcp-server-postgres', layer: 'platform', namespace: 'local (stdio bridge)', provides: 'PostgreSQL reachability via matrix probes (read L0)', status: 'available' },

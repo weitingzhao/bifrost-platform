@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
-"""Start bifrost-platform remediation Agent sidecar (dev).
+"""Bifrost autonomous agent — single entry (mirrors run_platform.py).
 
-Frees listen port if occupied, loads repo .env, then starts:
-  - remediation runner  default :8781  (REMEDIATION_RUNNER_PORT)
+Subcommands:
+  start       remediation runner dev sidecar (default)
+  drift       Layer 1–3 scan, no report file
+  nightly     nightly drift report + optional Cursor briefing
+  deploy      deploy runner + nightly to Mac Mini [user@host]
+  bootstrap   one-time Mac Mini host bootstrap (run on Mini via Screen Sharing)
 
-Usage (from repo root or anywhere):
-  python scripts/run_remediation_agent.py
-  ./scripts/run_remediation_agent.py
+Usage:
+  python scripts/run_agent.py start
+  python scripts/run_agent.py drift
+  python scripts/run_agent.py nightly
+  python scripts/run_agent.py deploy vision@192.168.10.50
+  python scripts/run_agent.py bootstrap
 
-Install once:
+Install once (for start):
   cd agent/remediation && npm install
 """
 
@@ -24,6 +31,7 @@ from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _AGENT_DIR = _PROJECT_ROOT / "agent" / "remediation"
+_AGENT_SCRIPTS = _PROJECT_ROOT / "scripts" / "agent"
 _DEFAULT_INFRA = _PROJECT_ROOT.parent / "bifrost-trade-infra"
 
 _REMEDIATION_DOTENV_KEYS = frozenset({
@@ -38,6 +46,7 @@ _REMEDIATION_DOTENV_KEYS = frozenset({
     "PLATFORM_ADMIN_TOKEN",
     "NIGHTLY_SKIP_CLUSTER",
     "KUBECONFIG",
+    "BIFROST_AGENT_ROOT",
 })
 
 
@@ -83,7 +92,6 @@ def _normalize_remediation_env() -> None:
         elif _DEFAULT_INFRA.is_dir():
             os.environ["REMEDIATION_CWD"] = str(_DEFAULT_INFRA.resolve())
 
-    # Sidecar reads PLATFORM_OPERATOR_TOKEN; fall back to dev placeholder from platform-auth.yaml.
     if not os.environ.get("PLATFORM_OPERATOR_TOKEN", "").strip():
         os.environ.setdefault("PLATFORM_OPERATOR_TOKEN", "platform-operator-dev")
 
@@ -174,11 +182,11 @@ def _ensure_prereqs(install: bool) -> int:
             print(
                 "Error: agent/remediation/node_modules missing. "
                 "Run: cd agent/remediation && npm install\n"
-                "Or rerun with --install",
+                "Or: python scripts/run_agent.py start --install",
                 file=sys.stderr,
             )
             return 1
-        print("[remediation-agent] Installing npm dependencies...")
+        print("[run_agent] Installing npm dependencies...")
         proc = subprocess.run(["npm", "install"], cwd=_AGENT_DIR, check=False)
         if proc.returncode != 0:
             print("Error: npm install failed", file=sys.stderr)
@@ -186,32 +194,23 @@ def _ensure_prereqs(install: bool) -> int:
     return 0
 
 
-def _print_startup_summary(port: int) -> None:
-    has_key = bool(os.environ.get("CURSOR_API_KEY", "").strip())
-    bind = os.environ.get("REMEDIATION_RUNNER_BIND", "127.0.0.1").strip() or "127.0.0.1"
-    print(f"Starting remediation agent on http://{bind}:{port}")
-    print(f"  cwd:              {os.environ.get('REMEDIATION_CWD', '(unset)')}")
-    print(f"  platform-api:     {os.environ.get('PLATFORM_API_URL', 'http://127.0.0.1:8780')}")
-    print(f"  CURSOR_API_KEY:   {'set' if has_key else 'MISSING — jobs will fail until configured'}")
-    if not has_key:
-        print("  hint: add CURSOR_API_KEY to bifrost-platform/.env")
-    print("Press Ctrl+C to stop.")
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Start bifrost remediation Agent sidecar")
-    parser.add_argument(
-        "--install",
-        action="store_true",
-        help="Run npm install if node_modules is missing",
+def _run_shell(script_name: str, *args: str) -> int:
+    _load_dotenv()
+    _normalize_remediation_env()
+    script = _AGENT_SCRIPTS / script_name
+    if not script.is_file():
+        print(f"Error: missing {script}", file=sys.stderr)
+        return 1
+    proc = subprocess.run(
+        ["bash", str(script), *args],
+        cwd=_PROJECT_ROOT,
+        env=os.environ.copy(),
+        check=False,
     )
-    parser.add_argument(
-        "--no-watch",
-        action="store_true",
-        help="Use tsx src/server.ts instead of tsx watch (no hot reload)",
-    )
-    args = parser.parse_args()
+    return proc.returncode
 
+
+def cmd_start(args: argparse.Namespace) -> int:
     _load_dotenv()
     _normalize_remediation_env()
 
@@ -221,24 +220,26 @@ def main() -> int:
     if _ensure_prereqs(install=args.install) != 0:
         return 1
 
-    if not _free_port(port, "remediation-agent"):
+    if not _free_port(port, "run_agent"):
         return 1
 
     npm_script = "start" if args.no_watch else "dev"
     env = os.environ.copy()
     env["PLATFORM_PROJECT_ROOT"] = str(_PROJECT_ROOT)
 
-    _print_startup_summary(port)
+    bind = os.environ.get("REMEDIATION_RUNNER_BIND", "127.0.0.1").strip() or "127.0.0.1"
+    has_key = bool(os.environ.get("CURSOR_API_KEY", "").strip())
+    print(f"Starting remediation runner on http://{bind}:{port}")
+    print(f"  cwd:          {os.environ.get('REMEDIATION_CWD', '(unset)')}")
+    print(f"  platform-api: {os.environ.get('PLATFORM_API_URL', 'http://127.0.0.1:8780')}")
+    print(f"  CURSOR_API_KEY: {'set' if has_key else 'MISSING'}")
+    print("Press Ctrl+C to stop.")
 
-    child = subprocess.Popen(
-        ["npm", "run", npm_script],
-        cwd=_AGENT_DIR,
-        env=env,
-    )
+    child = subprocess.Popen(["npm", "run", npm_script], cwd=_AGENT_DIR, env=env)
 
     def shutdown(signum: int | None = None, _frame: object | None = None) -> None:
         if signum is not None:
-            print("\nShutting down remediation agent...")
+            print("\nShutting down remediation runner...")
         if child.poll() is None:
             child.terminate()
             deadline = time.time() + 3.0
@@ -256,6 +257,44 @@ def main() -> int:
             print(f"Process exited with code {child.returncode}", file=sys.stderr)
             shutdown()
         time.sleep(0.5)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Bifrost autonomous agent (single entry)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    start_p = sub.add_parser("start", help="remediation runner dev sidecar (default)")
+    start_p.add_argument("--install", action="store_true", help="npm install if needed")
+    start_p.add_argument("--no-watch", action="store_true", help="no tsx watch / hot reload")
+    start_p.set_defaults(func=cmd_start)
+
+    sub.add_parser("drift", help="Layer 1–3 drift scan").set_defaults(
+        func=lambda _a: _run_shell("drift_scan.sh")
+    )
+    sub.add_parser("nightly", help="nightly drift report").set_defaults(
+        func=lambda _a: _run_shell("nightly_drift.sh")
+    )
+
+    deploy_p = sub.add_parser("deploy", help="deploy to Mac Mini agent host")
+    deploy_p.add_argument("remote", nargs="?", default="vision@192.168.10.50")
+    deploy_p.set_defaults(func=lambda a: _run_shell("deploy_mac_mini.sh", a.remote))
+
+    sub.add_parser("bootstrap", help="one-time Mac Mini bootstrap (run on Mini)").set_defaults(
+        func=lambda _a: _run_shell("bootstrap_host.sh")
+    )
+
+    args = parser.parse_args()
+    if args.command is None:
+        args.command = "start"
+        args.func = cmd_start
+        args.install = False
+        args.no_watch = False
+
+    return args.func(args)
 
 
 if __name__ == "__main__":

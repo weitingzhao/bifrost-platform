@@ -3,13 +3,14 @@ import { Button, SegmentControl, cn } from '@bifrost/ui'
 import { X } from 'lucide-react'
 import type { ConsoleHost } from '@/api/console'
 import { ConsoleHostBrandIcon } from '@/components/ConsoleHostBrandIcon'
-import { ConsoleHostIpLabel } from '@/components/ConsoleHostIpLabel'
+import { ConsoleHostSegmentLabel } from '@/components/ConsoleHostSegmentLabel'
 import { SshSessionPane, type SshConnState } from '@/components/SshSessionPane'
 
 export type ServerTerminalProps = {
   hosts: ConsoleHost[]
   selectedId: string | null
   onSelectHost: (id: string) => void
+  k8sNodeByIp?: Record<string, string>
 }
 
 type SessionTab = {
@@ -41,22 +42,14 @@ function isMacConsoleHost(host: ConsoleHost): boolean {
   return host.group === 'mac'
 }
 
-function hostSegmentOptions(hosts: ConsoleHost[]) {
+function hostSegmentOptions(hosts: ConsoleHost[], k8sNodeByIp?: Record<string, string>) {
   return hosts.map(h => ({
     value: h.id,
-    label: (
-      <span
-        className="inline-flex items-center gap-1.5"
-        title={h.jump_label ? `${h.label} · via ${h.jump_label}` : h.label}
-      >
-        <ConsoleHostBrandIcon host={h} />
-        <ConsoleHostIpLabel ip={h.host} />
-      </span>
-    ),
+    label: <ConsoleHostSegmentLabel host={h} k8sNodeByIp={k8sNodeByIp} />,
   }))
 }
 
-export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTerminalProps) {
+export function ServerTerminal({ hosts, selectedId, onSelectHost, k8sNodeByIp }: ServerTerminalProps) {
   const [tabs, setTabs] = useState<SessionTab[]>([])
 
   const linuxHosts = useMemo(() => hosts.filter(isLinuxConsoleHost), [hosts])
@@ -136,7 +129,7 @@ export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTermin
                     ariaLabel="SSH host — Linux K3s cluster"
                     value={linuxValue}
                     onChange={handleHostChange}
-                    options={hostSegmentOptions(linuxHosts)}
+                    options={hostSegmentOptions(linuxHosts, k8sNodeByIp)}
                     size="sm"
                   />
                 </div>
@@ -148,7 +141,7 @@ export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTermin
                     ariaLabel="SSH host — Mac Agent hosts"
                     value={macValue}
                     onChange={handleHostChange}
-                    options={hostSegmentOptions(macHosts)}
+                    options={hostSegmentOptions(macHosts, k8sNodeByIp)}
                     size="sm"
                   />
                 </div>
@@ -203,12 +196,7 @@ export function ServerTerminal({ hosts, selectedId, onSelectHost }: ServerTermin
                     className="min-w-0 flex-1 truncate text-dense-body font-semibold text-foreground"
                     title={host.label}
                   >
-                    <ConsoleHostIpLabel ip={host.host} />
-                    {host.jump_label ? (
-                      <span className="ml-1 text-dense-meta font-normal text-muted-foreground">
-                        via {host.jump_label}
-                      </span>
-                    ) : null}
+                    <ConsoleHostSegmentLabel host={host} k8sNodeByIp={k8sNodeByIp} />
                   </span>
                   {tab.connState === 'open' && (
                     <span className="inline-flex items-center gap-1 text-dense-label text-[var(--text-dense-meta)]">

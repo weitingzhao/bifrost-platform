@@ -31,11 +31,17 @@ export function NamespaceIdealArchStrip({
   compact?: boolean
 }) {
   const summary = getNamespacePlacementSummary(namespace)
+  const displayArchs = summary.idealArchs.filter(arch => arch !== 'amd64')
   if (!summary.mapped) {
     return compact ? null : (
       <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">Ideal arch: unmapped</span>
     )
   }
+
+  const showArchs = displayArchs.length > 0
+  const showLiveRule = !compact && liveRule != null
+  if (!showArchs && !showLiveRule) return null
+  if (compact && !showArchs) return null
 
   const tooltipBody = (
     <div className="flex max-w-xs flex-col gap-1 text-left">
@@ -63,8 +69,8 @@ export function NamespaceIdealArchStrip({
           : 'inline-flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)]'
       }
     >
-      {!compact && <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">Ideal</span>}
-      <IdealArchChips archs={summary.idealArchs} />
+      {!compact && showArchs && <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">Ideal</span>}
+      {showArchs ? <IdealArchChips archs={displayArchs} /> : null}
       {!compact && liveRule != null && (
         <>
           <StatusLamp value={liveRule.reachability} kind="reach" />

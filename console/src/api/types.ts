@@ -1074,6 +1074,8 @@ export interface RemediationJob {
   error?: string
   actor?: string
   scope?: string
+  /** Operator-visible mission brief at job start (prompt, issues, cluster context). */
+  init_brief?: string
   created_at: string
   updated_at: string
   events?: RemediationEvent[]
@@ -1090,4 +1092,123 @@ export interface StartRemediationRequest {
   governance?: ClusterGovernanceResponse
   issues?: unknown
   prompt?: string
+}
+
+export interface AgentNightlyReportResponse {
+  available: boolean
+  content?: string
+  source?: string
+  generated_at?: string
+  hint?: string
+}
+
+export interface NightlyTriggerResponse {
+  status: string
+  script?: string
+  log_path?: string
+  reports_dir?: string
+  hint?: string
+  error?: string
+}
+
+export interface AgentDeployJob {
+  id: string
+  status: 'running' | 'done' | 'failed'
+  remote: string
+  started_at: string
+  finished_at?: string
+  exit_code?: number
+  log: string
+  error?: string
+}
+
+export interface AgentDeployStatusResponse {
+  enabled: boolean
+  remote: string
+  script_path?: string
+  hint?: string
+  current?: AgentDeployJob
+  last?: AgentDeployJob
+}
+
+export interface AgentDeployStartResponse {
+  status: string
+  job?: AgentDeployJob
+  error?: string
+}
+
+export interface RemediationHealthResponse {
+  status: string
+  error?: string
+  service?: string
+  cursor_api_key?: boolean
+}
+
+export type DriftProposalStatus =
+  | 'pending_approval'
+  | 'approved'
+  | 'rejected'
+  | 'running'
+  | 'done'
+  | 'failed'
+
+export interface DriftProposal {
+  id: string
+  status: DriftProposalStatus
+  host?: string
+  platform_api?: string
+  report_source?: string
+  layers_failed: string[]
+  findings_count: number
+  summary: string
+  created_at: string
+  updated_at: string
+  remediation_job_id?: string
+  approved_by?: string
+  approved_at?: string
+  rejected_by?: string
+  rejected_at?: string
+  reject_note?: string
+  error?: string
+}
+
+export interface DriftProposalsResponse {
+  proposals: DriftProposal[]
+}
+
+export interface ApproveDriftProposalResponse {
+  proposal: DriftProposal
+  remediation_job: RemediationJob
+}
+
+export interface AgentBridgeResponse {
+  generated_at: string
+  remediation_runner: {
+    url: string
+    status: string
+    cursor_api_key?: boolean
+    service?: string
+    error?: string
+  }
+  hermes_mcp: {
+    url?: string
+    status: string
+    error?: string
+    note?: string
+  }
+  platform_mcp: {
+    server_name: string
+    server_version: string
+    tool_count: number
+    implemented_count: number
+    agent_tool_count: number
+    transport: string
+    script_path: string
+  }
+  nightly_report: {
+    available: boolean
+    generated_at?: string
+    source?: string
+    hint?: string
+  }
 }

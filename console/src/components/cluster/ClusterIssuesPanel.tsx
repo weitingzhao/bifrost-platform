@@ -10,107 +10,163 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
-import type { ClusterSummary } from '@/api/types'
+import type {
+  ClusterPostgresStatusResponse,
+  ClusterServiceReadinessResponse,
+  ClusterSummary,
+  RemediationJob,
+} from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  collectClusterIssues,
+  clusterIssuesReachability,
+} from '@/lib/cluster/collectClusterIssues'
+import {
+  formatRemediationJobWhen,
+  remediationJobReachability,
+  remediationJobStatusLabel,
+  remediationScopeShortLabel,
+} from '@/lib/remediation/remediationJobDisplay'
 
 interface ClusterIssuesPanelProps {
   summary: ClusterSummary
+  serviceReadiness?: ClusterServiceReadinessResponse
+  postgresStatus?: ClusterPostgresStatusResponse
   onSelectPodNamespace?: (namespace: string) => void
   canOperate?: boolean
   onAutoRemediate?: () => void
   remediatePending?: boolean
+  activeRemediationJob?: RemediationJob | null
+  onOpenRemediationSession?: (jobId: string) => void
 }
 
-interface IssueRow {
-  id: string
-  category: 'pods' | 'nodes' | 'elastic'
-  severity: 'fail' | 'degraded'
-  title: string
-  detail: string
-}
-
-export function collectClusterIssues(summary: ClusterSummary): IssueRow[] {
-  return collectIssues(summary)
-}
-
-function collectIssues(summary: ClusterSummary): IssueRow[] {
-  const issues: IssueRow[] = []
-
-  if (summary.failing_pods > 0) {
-    const pods = summary.failing_pod_details ?? []
-    const reasons = [...new Set(pods.map(p => p.reason))]
-    issues.push({
-      id: 'failing-pods',
-      category: 'pods',
-      severity: 'fail',
-      title: `${summary.failing_pods} failing pod${summary.failing_pods === 1 ? '' : 's'}`,
-      detail: reasons.length > 0 ? reasons.join(', ') : 'CrashLoopBackOff or Failed phase',
-    })
-  }
-
-  if (summary.nodes_total > 0 && summary.nodes_ready < summary.nodes_total) {
-    issues.push({
-      id: 'core-nodes',
-      category: 'nodes',
-      severity: summary.nodes_ready === 0 ? 'fail' : 'degraded',
-      title: `${summary.nodes_ready}/${summary.nodes_total} core nodes ready`,
-      detail: 'One or more core (non-elastic) nodes are NotReady',
-    })
-  }
-
-  const elasticDegraded = summary.elastic_degraded ?? 0
-  if (elasticDegraded > 0) {
-    issues.push({
-      id: 'elastic-degraded',
-      category: 'elastic',
-      severity: 'degraded',
-      title: `${elasticDegraded} elastic node${elasticDegraded === 1 ? '' : 's'} degraded`,
-      detail: 'On-demand node needed but not Ready — pending compute workloads or host online but K3s agent down',
-    })
-  }
-
-  return issues
-}
+export { collectClusterIssues, type ClusterIssueRow } from '@/lib/cluster/collectClusterIssues'
 
 export function ClusterIssuesPanel({
   summary,
+  serviceReadiness,
+  postgresStatus,
   onSelectPodNamespace,
   canOperate = false,
   onAutoRemediate,
   remediatePending = false,
+  activeRemediationJob = null,
+  onOpenRemediationSession,
 }: ClusterIssuesPanelProps) {
-  const issues = collectIssues(summary)
+  const issues = collectClusterIssues({
+    summary,
+    serviceReadiness,
+    postgresStatus,
+  })
   const pods = summary.failing_pod_details ?? []
   const healthy = issues.length === 0
+  const issueReach = clusterIssuesReachability(issues)
+  const sessionActive = activeRemediationJob?.status === 'running'
+  const sessionReach = sessionActive ? remediationJobReachability(activeRemediationJob) : 'unknown'
+  const sessionStatusLabel = sessionActive ? remediationJobStatusLabel(activeRemediationJob) : ''
+  const sessionScopeLabel = sessionActive
+    ? remediationScopeShortLabel(activeRemediationJob.scope)
+    : ''
+
+  const remediateActions =
+    canOperate && onAutoRemediate != null
+      ? sessionActive && onOpenRemediationSession != null
+        ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div
+                className="cluster-remediation-session-chip"
+                title={`${sessionScopeLabel} · ${activeRemediationJob.id} · started ${formatRemediationJobWhen(activeRemediationJob.created_at)}`}
+              >
+                <StatusLamp value={sessionReach} kind="reach" />
+                <span className="cluster-remediation-session-chip__title">Debug session</span>
+                <span className="cluster-remediation-session-chip__meta">{sessionStatusLabel}</span>
+                <span className="cluster-remediation-session-chip__scope">{sessionScopeLabel}</span>
+              </div>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => onOpenRemediationSession(activeRemediationJob.id)}
+              >
+                Open session
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={remediatePending}
+                title="Another remediation job is already running"
+                onClick={onAutoRemediate}
+              >
+                {remediatePending ? 'Starting…' : healthy ? 'New auto-check' : 'New remediate'}
+              </Button>
+            </div>
+          )
+        : (
+            <Button variant="default" size="sm" disabled={remediatePending} onClick={onAutoRemediate}>
+              {remediatePending ? 'Starting…' : healthy ? 'AI Auto-Check' : 'Auto-Remediate'}
+            </Button>
+          )
+      : undefined
 
   return (
     <OpsSection
       title="Cluster issues"
-      leading={<StatusLamp value={healthy ? 'ok' : summary.reachability} kind="reach" />}
+      leading={<StatusLamp value={healthy ? 'ok' : issueReach} kind="reach" />}
       description={
-        healthy
-          ? 'No failing pods, node readiness, or elastic degradation detected. Run AI Auto-Check to confirm.'
-          : 'Non-green indicators — click a namespace to inspect workloads below.'
+        sessionActive
+          ? `Agent debug session in progress (${sessionStatusLabel.toLowerCase()}). Open it to approve steps or read activity — do not start a duplicate unless you intend a parallel run.`
+          : healthy
+            ? 'No failing pods, node readiness, elastic degradation, or data-layer gaps detected. Run AI Auto-Check to confirm.'
+            : 'Pods, nodes, elastic hosts, and data-layer readiness (PostgreSQL, MinIO, Redis, …). Click a namespace to inspect workloads below.'
       }
-      actions={
-        canOperate && onAutoRemediate != null ? (
-          <Button variant="default" size="sm" disabled={remediatePending} onClick={onAutoRemediate}>
-            {remediatePending ? 'Starting…' : healthy ? 'AI Auto-Check' : 'Auto-Remediate'}
-          </Button>
-        ) : undefined
-      }
+      actions={remediateActions}
       bodyPadding={healthy ? 'default' : 'none'}
       overflow="visible"
       bodyClassName={healthy ? undefined : 'ops-section-body--table'}
     >
       {healthy ? (
-        <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          All monitored checks are green. Use <strong className="font-medium text-[var(--foreground)]">AI Auto-Check</strong>{' '}
-          above to run an autonomous health pass — the agent will confirm status or remediate if it finds something the
-          summary missed.
-        </p>
+        <>
+          {sessionActive && onOpenRemediationSession != null && (
+            <button
+              type="button"
+              className="cluster-remediation-session-banner cluster-remediation-session-banner--inset"
+              onClick={() => onOpenRemediationSession(activeRemediationJob.id)}
+            >
+              <StatusLamp value={sessionReach} kind="reach" />
+              <span className="cluster-remediation-session-banner__text">
+                <strong>Agent debug session active</strong>
+                <span className="cluster-remediation-session-banner__detail">
+                  {sessionScopeLabel} · {sessionStatusLabel} · {activeRemediationJob.id.slice(0, 8)}
+                </span>
+              </span>
+              <span className="cluster-remediation-session-banner__cta">Open session →</span>
+            </button>
+          )}
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            All monitored checks are green. Use{' '}
+            <strong className="font-medium text-[var(--foreground)]">AI Auto-Check</strong> above to run an
+            autonomous health pass — the agent will confirm status or remediate if it finds something the summary
+            missed.
+          </p>
+        </>
       ) : (
         <>
+          {sessionActive && onOpenRemediationSession != null && (
+            <button
+              type="button"
+              className="cluster-remediation-session-banner"
+              onClick={() => onOpenRemediationSession(activeRemediationJob.id)}
+            >
+              <StatusLamp value={sessionReach} kind="reach" />
+              <span className="cluster-remediation-session-banner__text">
+                <strong>Agent debug session active</strong>
+                <span className="cluster-remediation-session-banner__detail">
+                  {sessionScopeLabel} · {sessionStatusLabel} · {activeRemediationJob.id.slice(0, 8)} ·{' '}
+                  {formatRemediationJobWhen(activeRemediationJob.created_at)}
+                </span>
+              </span>
+              <span className="cluster-remediation-session-banner__cta">Open session →</span>
+            </button>
+          )}
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>

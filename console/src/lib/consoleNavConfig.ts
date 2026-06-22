@@ -2,6 +2,7 @@ import type { ShellNavGroup } from '@bifrost/ui'
 import {
   BookOpen,
   Boxes,
+  Bot,
   ClipboardList,
   Container,
   Database,
@@ -88,6 +89,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
       {
         label: 'Session & audit',
         items: [
+          { id: 'agent-desk', label: 'Agent Desk', icon: Bot },
           { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
           { id: 'audit', label: 'Audit', icon: History },
         ],
@@ -139,6 +141,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'A
   placement: 'Observe',
   console: 'Operate',
   'control-room': 'Observe',
+  'agent-desk': 'Observe',
   briefing: 'Observe',
   'runtime-map': 'Observe',
   audit: 'Observe',

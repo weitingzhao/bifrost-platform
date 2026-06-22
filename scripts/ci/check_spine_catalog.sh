@@ -2,7 +2,7 @@
 # Ensure ops-context.yaml catalog_version matches environments-catalog.ts CATALOG_VERSION.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../" && pwd)"
 YAML="${ROOT}/config/ops-context.yaml"
 CATALOG_TS="${ROOT}/console/src/lib/environments-catalog.ts"
 

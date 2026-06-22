@@ -171,7 +171,7 @@ function relatedNamespacesForDomain(domainId: string): string[] {
     case 'workers':
       return ['bifrost-dev', 'bifrost-stg', 'bifrost-prod']
     case 'applications':
-      return ['bifrost-dev', 'bifrost-stg', 'bifrost-prod', 'bifrost']
+      return ['bifrost-dev', 'bifrost-stg', 'bifrost-prod']
     case 'cicd':
       return ['cicd', 'tekton-pipelines', 'gitea']
     default:

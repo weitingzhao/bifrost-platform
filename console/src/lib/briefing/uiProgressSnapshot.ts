@@ -20,7 +20,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Ops',
     item: 'Agent Briefing',
     status: 'done',
-    notes: 'Work tracks + lane queues (build/migrate/operate), data-layer-k3s migrate lane, session pack, session delta, Align Briefing meta pack',
+    notes: 'Work tracks + lane queues, session pack + delta (incl. agent tasks on NAS), nightly DriftProposalPanel, Align Briefing meta pack',
   },
   {
     area: 'Runtime',

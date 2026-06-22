@@ -115,14 +115,6 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     poolId: 'gpu',
     plannedBinding: 'gpu-server @ 192.168.10.60',
   },
-  {
-    workloadClass: 'frontend_edge',
-    namespace: 'bifrost',
-    services: 'trade-frontend (edge)',
-    requiredSelector: 'kubernetes.io/arch=arm64 (optional)',
-    poolId: 'arm64_edge',
-    plannedBinding: 'ops-vm-ubt-01',
-  },
 ]
 
 export { NAMESPACE_ALLOCATION, type NamespaceRow }

@@ -310,17 +310,19 @@ func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
 func evalApplicationsDomain(snap readinessSnapshot) ServiceDomainView {
 	deps := []ServiceDependencyView{
 		schedulableAnyDep(snap, "Schedulable nodes"),
-		poolDep(snap, "arm64_edge", "arm64 edge pool (optional)"),
+		optionalPoolDep(snap, "arm64_edge", "arm64 edge pool (optional)"),
 	}
-	deps = append(deps, deploymentDep(snap, "bifrost-stg", "nginx", "Ingress nginx"))
-	deps = append(deps, deploymentDep(snap, "bifrost-stg", "frontend", "Trade frontend"))
+	deps = append(deps, deploymentDep(snap, "bifrost-stg", "nginx", "Ingress nginx (stg)"))
+	deps = append(deps, deploymentDep(snap, "bifrost-stg", "frontend", "Trade frontend (stg)"))
 	apiReady, apiDetail := countReadyDeployments(snap, "bifrost-stg", "api-")
 	deps = append(deps, ServiceDependencyView{
-		ID: "apis", Label: "FastAPI services",
+		ID: "apis", Label: "FastAPI services (stg)",
 		Reachability: apiReadyReach(apiReady),
 		Detail:       apiDetail,
 	})
-	return finalizeDomain("applications", "General applications", deps, "Frontend · nginx · 9 API domains")
+	deps = append(deps, deploymentDep(snap, "bifrost-dev", "nginx", "Ingress nginx (dev)"))
+	deps = append(deps, deploymentDep(snap, "bifrost-prod", "nginx", "Ingress nginx (prod)"))
+	return finalizeDomain("applications", "General applications", deps, "amd64 Trade stack · nginx · frontend · 9 API domains")
 }
 
 func evalCICDDomain(snap readinessSnapshot) ServiceDomainView {
@@ -453,6 +455,26 @@ func poolDep(snap readinessSnapshot, id, label string) ServiceDependencyView {
 		reach = probe.ReachFail
 	}
 	return ServiceDependencyView{ID: "pool-" + id, Label: label, Reachability: reach, Detail: detail}
+}
+
+// optionalPoolDep — edge/arm pools the Owner may omit (amd64-only topology). Zero nodes = OK, not a blocker.
+func optionalPoolDep(snap readinessSnapshot, id, label string) ServiceDependencyView {
+	p, ok := snap.pools[id]
+	if !ok {
+		return ServiceDependencyView{
+			ID: "pool-" + id, Label: label,
+			Reachability: probe.ReachOK,
+			Detail:       "optional — not in cluster (amd64-only topology)",
+		}
+	}
+	if p.NodesReady == 0 {
+		return ServiceDependencyView{
+			ID: "pool-" + id, Label: label,
+			Reachability: probe.ReachOK,
+			Detail:       fmt.Sprintf("optional — 0/%d nodes (not required for amd64 Trade stack)", p.NodesTotal),
+		}
+	}
+	return poolDep(snap, id, label)
 }
 
 func schedulableArchDep(snap readinessSnapshot, arch, label string) ServiceDependencyView {

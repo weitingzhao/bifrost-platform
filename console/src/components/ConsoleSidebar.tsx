@@ -4,6 +4,7 @@ import { CONSOLE_NAV_GROUPS } from '@/lib/consoleNavConfig'
 const TRADE_APP_URL = import.meta.env.VITE_TRADE_FRONTEND_URL ?? 'http://127.0.0.1:5173'
 
 export type ConsoleViewTab =
+  | 'agent-desk'
   | 'briefing'
   | 'control-room'
   | 'audit'
