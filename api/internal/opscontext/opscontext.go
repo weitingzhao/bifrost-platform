@@ -179,3 +179,71 @@ func ResolvePath(configPath string) string {
 	}
 	return ContextPathFromConfigDir(filepath.Dir(configPath))
 }
+
+// UpdateLastGate writes the gate result back to the YAML spine file
+// using yaml.Node for surgical editing that preserves comments and formatting.
+func UpdateLastGate(path string, at string, result string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read spine for gate write-back: %w", err)
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return fmt.Errorf("parse spine yaml node: %w", err)
+	}
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return fmt.Errorf("spine yaml: unexpected document structure")
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return fmt.Errorf("spine yaml: root is not a mapping")
+	}
+
+	promoNode := findMapValue(root, "promotion")
+	if promoNode == nil {
+		return fmt.Errorf("spine yaml: promotion key not found")
+	}
+	lgNode := findMapValue(promoNode, "last_gate")
+	if lgNode == nil {
+		return fmt.Errorf("spine yaml: promotion.last_gate key not found")
+	}
+	setMapScalar(lgNode, "at", at)
+	setMapScalar(lgNode, "result", result)
+
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return fmt.Errorf("marshal spine yaml: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+		return fmt.Errorf("write spine tmp: %w", err)
+	}
+	return os.Rename(tmp, path)
+}
+
+func findMapValue(mapping *yaml.Node, key string) *yaml.Node {
+	if mapping.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func setMapScalar(mapping *yaml.Node, key, value string) {
+	if mapping.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			mapping.Content[i+1].Kind = yaml.ScalarNode
+			mapping.Content[i+1].Tag = "!!str"
+			mapping.Content[i+1].Value = value
+			return
+		}
+	}
+}

@@ -1,12 +1,14 @@
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliveryPageTabs'
 import {
   DELIVER_PLATFORM_PIPELINE,
+  DELIVER_PLATFORM_PROD_PIPELINE,
   PLATFORM_DOCKERFILE_CONFIGMAPS,
+  PLATFORM_PROD_URLS,
   PLATFORM_STG_URLS,
 } from '@/lib/delivery/deliverPlatformPhases'
 import { EXPECTED_DOCKERFILE_CONFIGMAPS } from '@/lib/delivery/deliverStgPhases'
 
-export type DeliveryTargetId = 'trade-stg' | 'platform-stg'
+export type DeliveryTargetId = 'trade-stg' | 'platform-stg' | 'platform-prod'
 
 export type DeliveryTargetConfig = {
   id: DeliveryTargetId
@@ -52,6 +54,18 @@ export const DELIVERY_TARGETS: DeliveryTargetConfig[] = [
     successLink: { href: PLATFORM_STG_URLS.console, label: 'Open Ops Console STG' },
     actuateDescription:
       'Gitea mirror → Kaniko (platform-api + platform-console) → rollout bifrost-platform-stg → Argo sync.',
+  },
+  {
+    id: 'platform-prod',
+    label: 'Ops Platform PROD',
+    shortLabel: 'Platform PROD',
+    pipeline: DELIVER_PLATFORM_PROD_PIPELINE,
+    namespace: 'bifrost-platform-prod',
+    dockerfileConfigMaps: PLATFORM_DOCKERFILE_CONFIGMAPS,
+    mirrorRepos: ['bifrost-platform', 'bifrost-ui'],
+    successLink: { href: PLATFORM_PROD_URLS.console, label: 'Open Ops Console PROD' },
+    actuateDescription:
+      'STG preflight → Kaniko (:prod) → rollout HA ×2 bifrost-platform-prod → Argo sync.',
   },
 ]
 

@@ -169,6 +169,21 @@ func (s *Service) LastDeliverProdRun(ctx context.Context) *PipelineRunView {
 	return s.lastDeliverRun(ctx, "bifrost-deliver-prod")
 }
 
+// LastDeliverPlatformStgSuccess returns the most recent succeeded bifrost-deliver-platform PipelineRun.
+func (s *Service) LastDeliverPlatformStgSuccess(ctx context.Context) *PipelineRunView {
+	return s.lastDeliverSuccess(ctx, "bifrost-deliver-platform")
+}
+
+// LastDeliverPlatformProdSuccess returns the most recent succeeded bifrost-deliver-platform-prod PipelineRun.
+func (s *Service) LastDeliverPlatformProdSuccess(ctx context.Context) *PipelineRunView {
+	return s.lastDeliverSuccess(ctx, "bifrost-deliver-platform-prod")
+}
+
+// LastDeliverPlatformProdRun returns the most recent bifrost-deliver-platform-prod PipelineRun.
+func (s *Service) LastDeliverPlatformProdRun(ctx context.Context) *PipelineRunView {
+	return s.lastDeliverRun(ctx, "bifrost-deliver-platform-prod")
+}
+
 func (s *Service) lastDeliverRun(ctx context.Context, pipelineName string) *PipelineRunView {
 	dyn, err := s.buildDynamicClient()
 	if err != nil {

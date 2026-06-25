@@ -10,6 +10,7 @@ import {
   DenseTableRow,
   DenseTag,
 } from '@bifrost/ui'
+import { SelfHealthPanel } from '@/components/architecture/SelfHealthPanel'
 import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
@@ -270,6 +271,8 @@ export function CicdBootstrapPage() {
           </DenseTableBody>
         </DenseDataTable>
       </CatalogSection>
+
+      <SelfHealthPanel />
     </div>
   )
 }

@@ -109,7 +109,13 @@ export const DELIVERY_PIPELINE_CATALOG = [
   {
     name: 'bifrost-deliver-platform',
     tier: 'primary' as const,
-    purpose: 'Ops Platform stack: platform-api + platform-console → bifrost-platform-stg',
+    purpose: 'Ops Platform STG: platform-api + platform-console → bifrost-platform-stg',
+    legacy: false,
+  },
+  {
+    name: 'bifrost-deliver-platform-prod',
+    tier: 'primary' as const,
+    purpose: 'Ops Platform PROD: STG preflight → build :prod → rollout HA ×2 → Argo sync bifrost-platform-prod',
     legacy: false,
   },
   {

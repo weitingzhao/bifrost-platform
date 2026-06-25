@@ -36,6 +36,7 @@ import type {
   RunReleaseGateResponse,
   RunVisionV1GateResponse,
   VisionV1GateResponse,
+  GateHistoryResponse,
   TierBSignoffResponse,
   TierBStatusResponse,
   EnvironmentSummary,
@@ -59,6 +60,7 @@ import type {
   ApproveDriftProposalResponse,
   BuildPhaseGateResponse,
   RunBuildPhaseGateResponse,
+  SelfHealthResponse,
 } from './types'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
@@ -269,6 +271,12 @@ export async function fetchGitOpsApps(): Promise<GitOpsAppsResponse> {
   return r.json() as Promise<GitOpsAppsResponse>
 }
 
+export async function fetchSelfHealth(): Promise<SelfHealthResponse> {
+  const r = await fetch('/api/v1/self-health')
+  if (!r.ok) throw new Error(`self-health: HTTP ${r.status}`)
+  return r.json() as Promise<SelfHealthResponse>
+}
+
 export async function fetchStackAddons(): Promise<StackAddonsResponse> {
   const r = await fetch('/api/v1/stack/addons')
   if (!r.ok) throw new Error(`stack addons: HTTP ${r.status}`)
@@ -325,7 +333,7 @@ export async function fetchStgSmoke(): Promise<StgSmokeResponse> {
   return r.json() as Promise<StgSmokeResponse>
 }
 
-export type ReleaseGateTier = 'stg' | 'prod'
+export type ReleaseGateTier = 'stg' | 'prod' | 'platform-stg' | 'platform-prod'
 
 export async function fetchReleaseGate(tier: ReleaseGateTier = 'prod'): Promise<ReleaseGateResponse> {
   const r = await fetch(`/api/v1/promote/release-gate?tier=${tier}`)
@@ -338,6 +346,12 @@ export async function runReleaseGate(tier: ReleaseGateTier = 'prod'): Promise<Ru
     method: 'POST',
   })
   return r.json() as Promise<RunReleaseGateResponse>
+}
+
+export async function fetchGateHistory(tier: ReleaseGateTier = 'prod'): Promise<GateHistoryResponse> {
+  const r = await fetch(`/api/v1/promote/gate-history?tier=${tier}`)
+  if (!r.ok) throw new Error(`gate history: HTTP ${r.status}`)
+  return r.json() as Promise<GateHistoryResponse>
 }
 
 export async function fetchTierBStatus(): Promise<TierBStatusResponse> {

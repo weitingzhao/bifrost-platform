@@ -3,6 +3,7 @@ package promote
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,6 +64,10 @@ func (s *Service) RunReleaseGate(ctx context.Context, tier GateTier, triggeredBy
 	switch tier {
 	case GateTierStg:
 		checks = s.collectStgChecks(ctx)
+	case GateTierPlatformStg:
+		checks = s.collectPlatformStgChecks(ctx)
+	case GateTierPlatformProd:
+		checks = s.collectPlatformProdChecks(ctx)
 	default:
 		checks = s.collectProdChecks(ctx)
 	}
@@ -96,7 +101,11 @@ func (s *Service) RunReleaseGate(ctx context.Context, tier GateTier, triggeredBy
 	if err := s.store.SaveTier(tier, rec); err != nil {
 		return RunGateResponse{}, err
 	}
+	_ = s.store.AppendHistory(tier, rec)
 	_ = s.store.AppendLog(fmt.Sprintf("%s %s by %s — %s", tier, result, triggeredBy, rec.Summary))
+	if !IsPlatformTier(tier) {
+		s.writeBackSpine(rec)
+	}
 
 	gate := s.responseFromRecord(ctx, tier, rec, now)
 	msg := fmt.Sprintf("%s release gate %s", tier, result)
@@ -294,6 +303,141 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 	return out
 }
 
+func (s *Service) collectPlatformStgChecks(ctx context.Context) []GateCheck {
+	checks := make([]GateCheck, 0, 6)
+
+	if run := s.delivery.LastDeliverPlatformStgSuccess(ctx); run != nil {
+		checks = append(checks, GateCheck{
+			ID: "platform-deliver-stg", Label: "Last bifrost-deliver-platform success", Required: true,
+			Reachability: probe.ReachOK,
+			Detail:       fmt.Sprintf("%s (%s)", run.Name, run.Status),
+		})
+	} else {
+		checks = append(checks, GateCheck{
+			ID: "platform-deliver-stg", Label: "Last bifrost-deliver-platform success", Required: true,
+			Reachability: probe.ReachFail,
+			Detail:       "No succeeded bifrost-deliver-platform PipelineRun found",
+		})
+	}
+
+	checks = append(checks, s.probePlatformHTTP(ctx, "platform-stg-console", s.platformStgConsoleURL())...)
+	checks = append(checks, s.probePlatformHTTP(ctx, "platform-stg-api", s.platformStgAPIURL())...)
+	return checks
+}
+
+func (s *Service) collectPlatformProdChecks(ctx context.Context) []GateCheck {
+	checks := make([]GateCheck, 0, 8)
+
+	if run := s.delivery.LastDeliverPlatformProdSuccess(ctx); run != nil {
+		checks = append(checks, GateCheck{
+			ID: "platform-deliver-prod", Label: "Last bifrost-deliver-platform-prod success", Required: true,
+			Reachability: probe.ReachOK,
+			Detail:       fmt.Sprintf("%s (%s)", run.Name, run.Status),
+		})
+	} else {
+		last := s.delivery.LastDeliverPlatformProdRun(ctx)
+		detail := "No succeeded bifrost-deliver-platform-prod PipelineRun found"
+		if last != nil {
+			detail = fmt.Sprintf("Last run %s (%s)", last.Name, last.Status)
+		}
+		checks = append(checks, GateCheck{
+			ID: "platform-deliver-prod", Label: "Last bifrost-deliver-platform-prod success", Required: true,
+			Reachability: probe.ReachFail,
+			Detail:       detail,
+		})
+	}
+
+	checks = append(checks, s.probePlatformHTTP(ctx, "platform-prod-console", s.platformProdConsoleURL())...)
+	checks = append(checks, s.probePlatformHTTP(ctx, "platform-prod-api", s.platformProdAPIURL())...)
+
+	stgRec, _ := s.store.LoadTier(GateTierPlatformStg)
+	stgCheck := GateCheck{
+		ID: "platform-stg-gate", Label: "Platform STG gate pass", Required: true,
+	}
+	if stgRec != nil && stgRec.Result == "pass" {
+		stgCheck.Reachability = probe.ReachOK
+		stgCheck.Detail = fmt.Sprintf("STG gate pass at %s", stgRec.At.Format(time.RFC3339))
+	} else {
+		stgCheck.Reachability = probe.ReachFail
+		stgCheck.Detail = "Platform STG gate not yet passed"
+		if stgRec != nil {
+			stgCheck.Detail = fmt.Sprintf("Platform STG gate %s at %s", stgRec.Result, stgRec.At.Format(time.RFC3339))
+		}
+	}
+	checks = append(checks, stgCheck)
+
+	return checks
+}
+
+func (s *Service) probePlatformHTTP(ctx context.Context, id, url string) []GateCheck {
+	if url == "" {
+		return []GateCheck{{
+			ID: id, Label: id, Required: true,
+			Reachability: probe.ReachUnknown,
+			Detail:       "URL not configured",
+		}}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return []GateCheck{{
+			ID: id, Label: id, Required: true,
+			Reachability: probe.ReachFail,
+			Detail:       fmt.Sprintf("build request: %v", err),
+		}}
+	}
+	client := &http.Client{Timeout: 6 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return []GateCheck{{
+			ID: id, Label: id, Required: true,
+			Reachability: probe.ReachFail,
+			Detail:       fmt.Sprintf("HTTP probe failed: %v", err),
+		}}
+	}
+	defer resp.Body.Close()
+	reach := probe.ReachOK
+	if resp.StatusCode >= 400 {
+		reach = probe.ReachFail
+	}
+	return []GateCheck{{
+		ID: id, Label: id, Required: true,
+		Reachability: reach,
+		Detail:       fmt.Sprintf("HTTP %d from %s", resp.StatusCode, url),
+	}}
+}
+
+func (s *Service) platformStgConsoleURL() string {
+	e := s.cfg.DefaultCluster()
+	if e != nil && e.StgSmoke.PlatformConsoleURL != "" {
+		return e.StgSmoke.PlatformConsoleURL
+	}
+	return "http://192.168.10.73:30879"
+}
+
+func (s *Service) platformStgAPIURL() string {
+	e := s.cfg.DefaultCluster()
+	if e != nil && e.StgSmoke.PlatformAPIHealthURL != "" {
+		return e.StgSmoke.PlatformAPIHealthURL
+	}
+	return "http://192.168.10.73:30878/health"
+}
+
+func (s *Service) platformProdConsoleURL() string {
+	e := s.cfg.DefaultCluster()
+	if e != nil && e.ProdSmoke.PlatformConsoleURL != "" {
+		return e.ProdSmoke.PlatformConsoleURL
+	}
+	return "http://192.168.10.73:30877"
+}
+
+func (s *Service) platformProdAPIURL() string {
+	e := s.cfg.DefaultCluster()
+	if e != nil && e.ProdSmoke.PlatformAPIHealthURL != "" {
+		return e.ProdSmoke.PlatformAPIHealthURL
+	}
+	return "http://192.168.10.73:30876/health"
+}
+
 func (s *Service) responseFromRecord(ctx context.Context, tier GateTier, rec ReleaseGateRecord, now time.Time) ReleaseGateResponse {
 	blockers := narrativeBlockers(tier, s.cfg, rec)
 	ready := rec.Result == "pass" && len(blockers) == 0
@@ -324,10 +468,26 @@ func (s *Service) responseFromRecord(ctx context.Context, tier GateTier, rec Rel
 	}
 }
 
+func (s *Service) writeBackSpine(rec ReleaseGateRecord) {
+	if s.cfg == nil || s.cfg.ConfigPath == "" {
+		return
+	}
+	spinePath := opscontext.ResolvePath(s.cfg.ConfigPath)
+	at := rec.At.UTC().Format(time.RFC3339)
+	_ = opscontext.UpdateLastGate(spinePath, at, rec.Result)
+}
+
+func (s *Service) GateHistory(tier GateTier) ([]ReleaseGateRecord, error) {
+	return s.store.LoadHistory(tier)
+}
+
 func narrativeBlockers(tier GateTier, cfg *config.Config, rec ReleaseGateRecord) []string {
 	var blockers []string
 	if rec.Result != "pass" {
 		blockers = append(blockers, "Release gate checks failed")
+	}
+	if IsPlatformTier(tier) {
+		return blockers
 	}
 	if tier != GateTierProd {
 		return blockers

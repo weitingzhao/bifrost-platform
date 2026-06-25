@@ -1,5 +1,5 @@
 {
-  "at": "2026-06-25T08:08:17.110377Z",
+  "at": "2026-06-25T08:26:05.455412Z",
   "phase": "P6",
   "result": "incomplete",
   "checks": [
@@ -34,16 +34,16 @@
     {
       "id": "p6-platform-prod",
       "label": "Platform prod overlay + HA + minimal kubeconfig (L1 prod化)",
-      "status": "in_progress",
+      "status": "pass",
       "required": true,
-      "detail": "work in progress"
+      "detail": "completed per spine"
     },
     {
       "id": "p6-self-health",
       "label": "Platform self-health probe (L1 control plane liveness in Console)",
-      "status": "pending",
+      "status": "in_progress",
       "required": true,
-      "detail": "not yet started"
+      "detail": "work in progress"
     },
     {
       "id": "p6-gate-spine-closure",
