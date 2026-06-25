@@ -22,6 +22,16 @@ func TestNodeCapabilitiesGPU(t *testing.T) {
 	}
 }
 
+func TestNodeCapabilitiesGeneralPool(t *testing.T) {
+	caps := nodeCapabilities(map[string]string{
+		"bifrost.io/workload-pool": "general",
+		"storage.nfs/client":       "true",
+	})
+	if len(caps) != 2 {
+		t.Fatalf("got %d capabilities want 2 (general-pool + nfs-client): %+v", len(caps), caps)
+	}
+}
+
 func TestNodeCapabilitiesEmpty(t *testing.T) {
 	if caps := nodeCapabilities(nil); caps != nil {
 		t.Fatalf("expected nil, got %+v", caps)

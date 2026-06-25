@@ -19,16 +19,16 @@ export function ProdDeliverPanel({
 
   return (
     <OpsSection
-      title="Prod deliver — in progress"
-      leading={<StatusLamp value={blocked ? 'fail' : inProgress ? 'degraded' : 'unknown'} kind="reach" />}
-      description="STG track SIGNED. Prod overlay + bifrost-deliver-prod pipeline is the active workstream (2c-b-prod-cutover IN_PROGRESS)."
+      title="Prod deliver"
+      leading={<StatusLamp value={blocked ? 'fail' : inProgress ? 'degraded' : 'ok'} kind="reach" />}
+      description="bifrost-deliver-prod pipeline ready. STG preflight gate → build prod images → rollout → verify → Argo sync."
       actions={
         inProgress ? (
           <DenseTag variant="warning">IN_PROGRESS</DenseTag>
         ) : blocked ? (
           <DenseTag variant="danger">Blocked</DenseTag>
         ) : (
-          <DenseTag variant="neutral">Planned</DenseTag>
+          <DenseTag variant="success">Ready</DenseTag>
         )
       }
       bodyPadding="default"
@@ -36,10 +36,16 @@ export function ProdDeliverPanel({
     >
       <ul className="m-0 list-disc px-5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
         <li>
-          Pipeline <code className="font-mono-tabular">bifrost-deliver-prod</code> — Tekton + Console actuation (next)
+          Pipeline <code className="font-mono-tabular">bifrost-deliver-prod</code> — trigger via
+          Operate → Pipelines tab (select pipeline → Run)
         </li>
-        <li>Prod overlay rollout + prod registry tags (symmetric to bifrost-deliver-stg)</li>
-        <li>Prod-tier release gate requires deliver-prod success + prod matrix (cutover milestone unblocked)</li>
+        <li>
+          <strong>STG preflight gate</strong> — automatically verifies STG health before any prod build;
+          blocks deployment if STG is unhealthy
+        </li>
+        <li>Prod images tagged <code className="font-mono-tabular">:prod</code> in internal registry (symmetric to <code className="font-mono-tabular">:stg</code>)</li>
+        <li>Post-deploy verification: HTTP smoke against <code className="font-mono-tabular">nginx.bifrost-prod.svc</code> (gateway + 9 API domains)</li>
+        <li>Argo sync: <code className="font-mono-tabular">bifrost-prod</code> Application drift reconciliation</li>
         {cutover?.blocker != null && (
           <li>
             Milestone blocker:{' '}
@@ -58,7 +64,7 @@ export function ProdDeliverPanel({
           <button type="button" className="focus-strip-link" onClick={onOpenPromote}>
             Promote
           </button>{' '}
-          — STG release gate passed; Prod cutover gate pending deliver-prod + prod matrix.
+          — STG release gate passed; Prod cutover gate pending deliver-prod success + prod matrix.
         </p>
       )}
     </OpsSection>

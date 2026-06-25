@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
+	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
@@ -40,7 +41,8 @@ type Server struct {
 	stack   *stack.Handler
 	delivery *delivery.Handler
 	promote  *promote.Handler
-	vision   *vision.Handler
+	vision    *vision.Handler
+	buildgate *buildgate.Handler
 	tradeagent *tradeagent.Handler
 	opsagent     *opsagent.Handler
 	remediation  *remediation.Handler
@@ -70,7 +72,8 @@ func New(cfg *config.Config) *Server {
 		stack:   stack.NewHandler(cfg, audit),
 		delivery: delivery.NewHandler(cfg, audit),
 		promote:  promote.NewHandler(cfg, audit),
-		vision:   vision.NewHandler(cfg, audit),
+		vision:    vision.NewHandler(cfg, audit),
+		buildgate: buildgate.NewHandler(cfg, audit),
 		tradeagent: tradeagent.NewHandler(),
 		opsagent:    opsagent.NewHandler(audit),
 		remediation: remediation.NewHandler(audit),
@@ -135,6 +138,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
+		r.Get("/build-phase", s.buildgate.HandleListPhases)
+		r.Get("/build-phase/{phase}/gate", s.buildgate.HandleGetGate)
 		r.Get("/vision/v1/gate", s.vision.HandleGetV1Gate)
 		r.Get("/vision/s3/gate", s.vision.HandleGetS3Gate)
 		r.Get("/vision/v2/gate", s.vision.HandleGetV2Gate)
@@ -176,6 +181,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/stack/addons/{name}/upgrade", s.stack.HandleUpgradeAddon)
 			r.Post("/promote/release-gate", s.promote.HandleRunReleaseGate)
 			r.Post("/promote/tier-b/signoff", s.promote.HandleSignTierB)
+			r.Post("/build-phase/{phase}/gate", s.buildgate.HandleRunGate)
+			r.Post("/build-phase/{phase}/signoff", s.buildgate.HandleSignoff)
 			r.Post("/vision/v1/gate", s.vision.HandleRunV1Gate)
 			r.Post("/vision/v1/signoff", s.vision.HandleSignV1)
 			r.Post("/vision/s3/gate", s.vision.HandleRunS3Gate)

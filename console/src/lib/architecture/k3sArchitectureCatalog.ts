@@ -36,6 +36,8 @@ export const HARDWARE_NODES: K3sNodeRow[] = [
   { name: 'mac-mini-1', cpu: 'Apple M4', ram: '16GB', os: 'macOS + UTM', batch: 'First', role: 'Host for ops-vm-ubt-01 Agent · dev/CI' },
   { name: 'mac-mini-2', cpu: 'Apple M4', ram: '16GB', os: 'macOS + UTM', batch: 'First', role: 'Host for ops-vm-ubt-02 Agent · monitor/CI' },
   { name: 'mini-pc-c', cpu: 'Ryzen 7 7735HS', ram: '32GB', os: 'Linux', batch: 'Second', role: 'K3s Server ③ · monitoring/CI (after Legacy retires)' },
+  { name: 'ubt-k3s-04', cpu: 'Ryzen 7', ram: '32GB', os: 'Linux', batch: 'Third', role: 'K3s Agent · CNPG primary · data-primary @ .75' },
+  { name: 'ubt-k3s-05', cpu: 'Ryzen 7', ram: '22GB', os: 'Linux', batch: 'Third', role: 'K3s Agent · general pool · stg/CI offload @ .77' },
 ]
 
 export const HARDWARE_NOTE =
@@ -133,7 +135,7 @@ export const NAMESPACE_ALLOCATION: NamespaceRow[] = [
   { namespace: 'cicd', services: 'Gitea · ArgoCD · Tekton · Registry', nodeBinding: 'mini-pc-a' },
   { namespace: 'monitoring', services: 'Prometheus · Loki · Grafana · AlertManager', nodeBinding: 'mini-pc-c (second batch)' },
   { namespace: 'ai', services: 'Ollama · Open-WebUI · AIOps webhook', nodeBinding: 'gpu-server @ 192.168.10.60 / mini-pc-c' },
-  { namespace: 'bifrost-stg', services: 'Trade stack STG — 9 APIs · worker · socket · frontend', nodeBinding: 'amd64 pool · ubt-k3s-01/02/04' },
+  { namespace: 'bifrost-stg', services: 'Trade stack STG — 9 APIs · worker · socket · frontend', nodeBinding: 'amd64 pool · ubt-k3s-01/02/04/05' },
   { namespace: 'bifrost-dev', services: 'Trade stack Dev', nodeBinding: 'amd64 pool' },
   { namespace: 'bifrost-prod', services: 'Trade stack Prod', nodeBinding: 'amd64 pool · prod-pool taint' },
   { namespace: 'bifrost-platform-stg', services: 'Ops Platform — platform-api · platform-console', nodeBinding: 'amd64 pool' },

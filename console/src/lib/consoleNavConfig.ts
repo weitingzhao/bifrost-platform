@@ -115,6 +115,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         items: [
           { id: 'k3s-architecture', label: 'K3s Architecture', icon: Container },
           { id: 'k3s-bootstrap', label: 'K3s Bootstrap', icon: PlugZap },
+          { id: 'cicd-bootstrap', label: 'CI/CD Bootstrap', icon: GitBranch },
           { id: 'data-layer', label: 'Data Layer', icon: Database },
         ],
       },
@@ -152,6 +153,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'A
   roadmap: 'Architecture',
   'k3s-architecture': 'Architecture',
   'k3s-bootstrap': 'Architecture',
+  'cicd-bootstrap': 'Architecture',
   'data-layer': 'Architecture',
   'platform-standards': 'Architecture',
   'agent-protocol': 'Architecture',

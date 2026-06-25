@@ -114,8 +114,8 @@ export const DELIVERY_PIPELINE_CATALOG = [
   },
   {
     name: 'bifrost-deliver-prod',
-    tier: 'planned' as const,
-    purpose: 'Prod stack deliver — symmetric to deliver-stg; IN_PROGRESS (prod overlay)',
+    tier: 'primary' as const,
+    purpose: 'Prod stack deliver — STG preflight gate → build → rollout → verify-prod → Argo sync',
     legacy: false,
   },
   {
@@ -140,6 +140,24 @@ export const DELIVERY_PIPELINE_CATALOG = [
     name: 'bifrost-smoke',
     tier: 'auxiliary' as const,
     purpose: 'CI stack health check',
+    legacy: false,
+  },
+  {
+    name: 'bifrost-ci-python',
+    tier: 'primary' as const,
+    purpose: 'CI gate for Python Trade repos (core/api/worker/socket): lint + test on push',
+    legacy: false,
+  },
+  {
+    name: 'bifrost-ci-frontend',
+    tier: 'primary' as const,
+    purpose: 'CI gate for frontend + bifrost-ui: lint + build + legacy-css check on push',
+    legacy: false,
+  },
+  {
+    name: 'bifrost-ci-platform',
+    tier: 'primary' as const,
+    purpose: 'CI gate for Ops Platform (L1): go test + tsc type-check + spine catalog check on push',
     legacy: false,
   },
 ]

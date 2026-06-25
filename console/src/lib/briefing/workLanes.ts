@@ -13,7 +13,7 @@ import type { WorkIntent } from '@/lib/briefing/workIntents'
 import type { TrackId } from '@/lib/briefing/workTracks'
 import { visionGovernanceQueueItems } from '@/lib/architecture/visionSpineMap'
 
-export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops'
+export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops' | 'cicd-delivery'
 export type MigrateLaneId = 'compose-k3s' | 'data-layer-k3s' | 'legacy-retire' | 'trade-stack'
 export type AutomateLaneId = 'platform-gitops' | 'agent-infra' | 'drift-remediation' | 'agent-services'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
@@ -70,6 +70,15 @@ const BUILD_LANES: WorkLane[] = [
     label: 'GitOps & MCP (P3–P5)',
     shortLabel: 'GitOps',
     description: 'Argo/Tekton execution, MCP server implementation (per MCP Contract), Agent SDK integration, Vision milestones V1–V5.',
+    agentMode: 'Ops',
+    workIntent: 'feature',
+  },
+  {
+    id: 'cicd-delivery',
+    track: 'build',
+    label: 'CI/CD bootstrap (P6)',
+    shortLabel: 'CI/CD',
+    description: 'L0/L1/L2 bootstrap model — CI gates (Tekton Trigger), deliver-prod pipeline, platform prod overlay, self-health probe, gate→spine closure, escape hatch runbook.',
     agentMode: 'Ops',
     workIntent: 'feature',
   },
@@ -206,6 +215,14 @@ const BUILD_TASK_LANE: Record<string, BuildLaneId> = {
   'p3-gitops-execution': 'mcp-gitops',
   'p4-stack-install': 'mcp-gitops',
   'p5-mcp-tools': 'mcp-gitops',
+  'p6-bootstrap-model': 'cicd-delivery',
+  'p6-ci-gate-trade': 'cicd-delivery',
+  'p6-ci-gate-platform': 'cicd-delivery',
+  'p6-deliver-prod': 'cicd-delivery',
+  'p6-platform-prod': 'cluster-infra',
+  'p6-self-health': 'console-api',
+  'p6-gate-spine-closure': 'console-api',
+  'p6-escape-hatch': 'cluster-infra',
 }
 
 const MIGRATE_STREAM_LANE: Record<string, MigrateLaneId> = {

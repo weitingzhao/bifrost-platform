@@ -1212,3 +1212,30 @@ export interface AgentBridgeResponse {
     hint?: string
   }
 }
+
+export interface BuildPhaseGateCheck {
+  id: string
+  label: string
+  status: 'pass' | 'in_progress' | 'pending' | 'blocked'
+  required: boolean
+  detail?: string
+}
+
+export interface BuildPhaseGateResponse {
+  phase: string
+  total_tasks: number
+  done_tasks: number
+  ready: boolean
+  result: string
+  checks: BuildPhaseGateCheck[]
+  blockers?: string[]
+  signed_at?: string
+  signed_by?: string
+  last_run_at?: string
+  last_run_result?: string
+  generated_at: string
+}
+
+export interface RunBuildPhaseGateResponse extends ActuationResponse {
+  gate: BuildPhaseGateResponse
+}
