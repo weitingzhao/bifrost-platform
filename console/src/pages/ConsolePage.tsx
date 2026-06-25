@@ -46,6 +46,7 @@ import { ServerConsolePage } from '@/pages/ServerConsolePage'
 import { DesignSystemPage } from '@/pages/DesignSystemPage'
 import { K3sArchitecturePage } from '@/pages/K3sArchitecturePage'
 import { K3sBootstrapPage } from '@/pages/K3sBootstrapPage'
+import { CicdBootstrapPage } from '@/pages/CicdBootstrapPage'
 import { RoadmapPage } from '@/pages/RoadmapPage'
 import { DataLayerPage } from '@/pages/DataLayerPage'
 import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
@@ -73,6 +74,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   roadmap: 'Roadmap',
   'k3s-architecture': 'K3s Architecture',
   'k3s-bootstrap': 'K3s Bootstrap',
+  'cicd-bootstrap': 'CI/CD Bootstrap',
   'data-layer': 'Data Layer',
   'deploy-mainline': 'Deploy Mainline',
   'platform-release': 'Platform Release',
@@ -315,6 +317,7 @@ export function ConsolePage() {
     viewTab === 'roadmap' ||
     viewTab === 'k3s-architecture' ||
     viewTab === 'k3s-bootstrap' ||
+    viewTab === 'cicd-bootstrap' ||
     viewTab === 'data-layer'
   const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-protocol' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
@@ -658,6 +661,7 @@ export function ConsolePage() {
                   : viewTab === 'environments' ? 'WHAT — Concrete probe targets, IPs, ports, and connectivity for each environment.'
                   : viewTab === 'k3s-architecture' ? 'Target K3s topology, CNPG, GitOps, AI-native ops, and living checkpoints.'
                   : viewTab === 'k3s-bootstrap' ? 'First-node deployment runbook, verification checklist, node join steps, and sign-off.'
+                  : viewTab === 'cicd-bootstrap' ? 'L0/L1/L2 self-hosting bootstrap model — CI/CD rules, recovery paths, and P6 gap tracking.'
                   : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
@@ -694,6 +698,8 @@ export function ConsolePage() {
         {viewTab === 'k3s-architecture' && <K3sArchitecturePage onOpenPlacement={openPlacement} />}
 
         {viewTab === 'k3s-bootstrap' && <K3sBootstrapPage />}
+
+        {viewTab === 'cicd-bootstrap' && <CicdBootstrapPage />}
 
         {viewTab === 'data-layer' && <DataLayerPage />}
 

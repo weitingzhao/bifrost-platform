@@ -104,12 +104,24 @@ var capabilityDefs = []capabilityDef{
 		},
 	},
 	{
-		id: "prod-pool", label: "Prod pool", category: "placement",
-		labelHint: "bifrost.io/workload-pool=prod",
-		requiredFor: "Production runtime binding (mini-pc-a)",
+		id: "general-pool", label: "General runtime pool", category: "placement",
+		labelHint: "bifrost.io/workload-pool=general",
+		requiredFor: "amd64 general runtime — stg · dev · platform · CI offload",
 		match: func(labels map[string]string) (bool, string) {
-			if labels["bifrost.io/workload-pool"] == "prod" {
-				return true, "bifrost.io/workload-pool=prod"
+			if labels["bifrost.io/workload-pool"] == "general" {
+				return true, "bifrost.io/workload-pool=general — amd64 general workload pool"
+			}
+			return false, ""
+		},
+	},
+	{
+		id: "prod-pool", label: "Prod pool", category: "placement",
+		labelHint: "bifrost.io/workload-pool=prod|prod-pool",
+		requiredFor: "Production runtime binding (mini-pc-a / ubt-k3s-02)",
+		match: func(labels map[string]string) (bool, string) {
+			pool := labels["bifrost.io/workload-pool"]
+			if pool == "prod" || pool == "prod-pool" {
+				return true, "bifrost.io/workload-pool=" + pool
 			}
 			return false, ""
 		},

@@ -21,6 +21,7 @@ export type ConsoleViewTab =
   | 'roadmap'
   | 'k3s-architecture'
   | 'k3s-bootstrap'
+  | 'cicd-bootstrap'
   | 'data-layer'
   | 'platform-standards'
   | 'agent-protocol'

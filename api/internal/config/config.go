@@ -111,6 +111,10 @@ func defaultConfigPath() string {
 	return "config/environments.yaml"
 }
 
+func (c *Config) ConfigDir() string {
+	return TopologyDirFromConfigPath(c.ConfigPath)
+}
+
 func (c *Config) GetEnvironment(id string) (*Environment, bool) {
 	for i := range c.Environments {
 		if c.Environments[i].ID == id {

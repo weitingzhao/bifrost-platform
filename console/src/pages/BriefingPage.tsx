@@ -7,6 +7,7 @@ import { StatusLamp } from '@/components/StatusLamp'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
 import { NightlyBriefingPanel } from '@/components/briefing/NightlyBriefingPanel'
 import { TrackCardsSection } from '@/components/briefing/TrackCardsSection'
+import { BuildPhaseGatePanel } from '@/components/briefing/BuildPhaseGatePanel'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
 import {
@@ -216,6 +217,8 @@ export function BriefingPage({
           setShowSessionPack(false)
         }}
       />
+
+      {selectedTrack === 'build' && <BuildPhaseGatePanel />}
 
       <TrackLaneSection
         track={selectedTrack}

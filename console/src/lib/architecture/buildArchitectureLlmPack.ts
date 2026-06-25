@@ -9,6 +9,7 @@ import { buildEnvironmentsLlmContext } from '@/lib/environments-catalog'
 import { buildDesignSystemLlmPack } from '@/lib/standards/designSystemCatalog'
 import { buildMcpContractLlmPack } from '@/lib/standards/mcpContractCatalog'
 import { buildAgentProtocolLlmPack } from './agentProtocolCatalog'
+import { buildCicdBootstrapLlmPack } from './cicdBootstrapCatalog'
 import { buildDataLayerLlmPack } from './dataLayerCatalog'
 import { buildBlueprintLlmPack } from './blueprintCatalog'
 import { buildDualFlywheelVisionLlmPack } from './dualFlywheelVisionCatalog'
@@ -31,6 +32,7 @@ export function buildFullArchitectureLlmPack(spine?: OpsContextResponse): string
     buildK3sArchitectureLlmPack(),
     buildK3sBootstrapLlmPack(),
     buildDataLayerLlmPack(),
+    buildCicdBootstrapLlmPack(),
     buildDeployMainlineLlmPack(),
     buildStandardsLlmPack(),
     buildAgentProtocolLlmPack(),

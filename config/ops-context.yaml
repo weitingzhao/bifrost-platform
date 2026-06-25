@@ -3,8 +3,8 @@
 # Detail: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts) L3
 
 meta:
-  version: "2026-06-20-data-layer"
-  catalog_version: "2026-06-20-data-layer"
+  version: "2026-06-25-cicd-bootstrap"
+  catalog_version: "2026-06-25-cicd-bootstrap"
 
 # Ultimate goal (Strategy C hybrid) — authoritative for Agent / Program UI.
 # Detail: Ops Console → Architecture → Blueprint · console/src/lib/architecture/blueprintCatalog.ts · decision D6
@@ -34,8 +34,8 @@ deployment:
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 
 focus:
-  headline: "K3s data layer IN_PROGRESS · lift PG/Redis to data NS (CNPG + redis-live/queue) · legacy-retirement blocked on stable K3s stack"
-  flywheel_primary: A # A = trade FE, B = runtime/ops
+  headline: "P6 CI/CD bootstrap completeness — L0/L1/L2 model formalization → CI gate → deliver-prod → platform-prod · data-layer ⑦ retire embedded pending"
+  flywheel_primary: B # A = trade FE, B = runtime/ops
   blocker: null
 
 milestones:
@@ -260,7 +260,7 @@ environments_extended:
 tracks:
   build:
     label: "Platform capability extension"
-    current_phase: P5
+    current_phase: P6
     tasks:
       - id: p1-auth-audit
         label: "Auth + audit for all write routes"
@@ -292,6 +292,31 @@ tracks:
       - id: p5-mcp-tools
         label: "MCP actuation Tools"
         status: done
+      # P6 — CI/CD bootstrap completeness (L0/L1/L2 model)
+      - id: p6-bootstrap-model
+        label: "L0/L1/L2 bootstrap model — architecture catalog + spine formalization"
+        status: done
+      - id: p6-ci-gate-trade
+        label: "CI gate — Tekton Trigger for Trade stack (L2 push→test+build)"
+        status: done
+      - id: p6-ci-gate-platform
+        label: "CI gate — Tekton Trigger for Platform (L1 push→test+build)"
+        status: done
+      - id: p6-deliver-prod
+        label: "deliver-prod pipeline落地 (L2 trade prod cutover)"
+        status: done
+      - id: p6-platform-prod
+        label: "Platform prod overlay + HA + minimal kubeconfig (L1 prod化)"
+        status: next
+      - id: p6-self-health
+        label: "Platform self-health probe (L1 control plane liveness in Console)"
+        status: pending
+      - id: p6-gate-spine-closure
+        label: "Release gate → spine promotion.last_gate closure"
+        status: pending
+      - id: p6-escape-hatch
+        label: "L0 escape hatch runbook + Console recovery visibility"
+        status: pending
 
   migrate:
     label: "Legacy retirement & deployment migration"

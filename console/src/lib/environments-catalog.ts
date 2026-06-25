@@ -10,7 +10,7 @@
 import type { DenseTagVariant } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 
-export const CATALOG_VERSION = '2026-06-20-data-layer'
+export const CATALOG_VERSION = '2026-06-25-cicd-bootstrap'
 export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
 
 /** Scope row — one logical component in the Bifrost stack. */
@@ -276,6 +276,18 @@ export const HARDWARE_ROWS: HardwareRow[] = [
     host: '192.168.10.60',
     roleCompose: 'Data warehouse · Ollama dev trial — no Prod Redis',
     roleK3s: 'Agent compute · warehouse · GPU/AI · Tekton heavy (WOL eno1)',
+  },
+  {
+    id: 'ubt-k3s-04',
+    host: '192.168.10.75',
+    roleCompose: '—',
+    roleK3s: 'Agent · CNPG primary · data-primary pool · NFS client',
+  },
+  {
+    id: 'ubt-k3s-05',
+    host: '192.168.10.77',
+    roleCompose: '—',
+    roleK3s: 'Agent · general runtime pool · stg/dev/CI offload · NFS client',
   },
   {
     id: 'win11-host',
