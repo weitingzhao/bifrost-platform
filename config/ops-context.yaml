@@ -307,16 +307,19 @@ tracks:
         status: done
       - id: p6-platform-prod
         label: "Platform prod overlay + HA + minimal kubeconfig (L1 prod化)"
-        status: next
+        status: done
       - id: p6-self-health
         label: "Platform self-health probe (L1 control plane liveness in Console)"
-        status: pending
+        status: done
       - id: p6-gate-spine-closure
         label: "Release gate → spine promotion.last_gate closure"
-        status: pending
+        status: done
+      - id: p6-platform-e2e-cicd
+        label: "Platform Release page end-to-end CI/CD (deliver + gate + health + history)"
+        status: done
       - id: p6-escape-hatch
         label: "L0 escape hatch runbook + Console recovery visibility"
-        status: pending
+        status: next
 
   migrate:
     label: "Legacy retirement & deployment migration"

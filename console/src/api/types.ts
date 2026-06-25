@@ -924,6 +924,21 @@ export interface RunReleaseGateResponse extends ActuationResponse {
   gate: ReleaseGateResponse
 }
 
+export interface GateHistoryEntry {
+  tier?: 'stg' | 'prod'
+  at: string
+  result: string
+  log_path: string
+  checks: ReleaseGateCheckView[]
+  triggered_by?: string
+  summary?: string
+}
+
+export interface GateHistoryResponse {
+  tier: 'stg' | 'prod'
+  entries: GateHistoryEntry[]
+}
+
 export interface VisionV1GateCheckView {
   id: string
   label: string
@@ -1238,4 +1253,23 @@ export interface BuildPhaseGateResponse {
 
 export interface RunBuildPhaseGateResponse extends ActuationResponse {
   gate: BuildPhaseGateResponse
+}
+
+// Self-health probe (L1 control plane liveness)
+export type SelfHealthProbeStatus = 'ok' | 'degraded' | 'fail' | 'unknown'
+
+export interface SelfHealthProbe {
+  id: string
+  category: string
+  env: string
+  url?: string
+  status: SelfHealthProbeStatus
+  detail: string
+  latency_ms: number
+}
+
+export interface SelfHealthResponse {
+  generated_at: string
+  probes: SelfHealthProbe[]
+  overall: SelfHealthProbeStatus
 }

@@ -40,10 +40,12 @@ type StackConfig struct {
 
 // StgSmokeConfig — HTTP probes for bifrost-stg workloads (Session S5 / Phase B v2).
 type StgSmokeConfig struct {
-	GatewayURL    string   `yaml:"gateway_url" json:"gateway_url"`
-	APIMonitorURL string   `yaml:"api_monitor_url" json:"api_monitor_url"`
-	FrontendURL   string   `yaml:"frontend_url" json:"frontend_url"`
-	APIDomains    []string `yaml:"api_domains" json:"api_domains"`
+	GatewayURL           string   `yaml:"gateway_url" json:"gateway_url"`
+	APIMonitorURL        string   `yaml:"api_monitor_url" json:"api_monitor_url"`
+	FrontendURL          string   `yaml:"frontend_url" json:"frontend_url"`
+	APIDomains           []string `yaml:"api_domains" json:"api_domains"`
+	PlatformConsoleURL   string   `yaml:"platform_console_url" json:"platform_console_url,omitempty"`
+	PlatformAPIHealthURL string   `yaml:"platform_api_health_url" json:"platform_api_health_url,omitempty"`
 }
 
 // ComputeWorkloadSpec — managed deployment on a compute node (gpu-server).

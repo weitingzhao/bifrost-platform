@@ -21,6 +21,9 @@ func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 	return &Handler{svc: NewService(entry), audit: audit}
 }
 
+// Service returns the underlying gitops service for reuse by other packages.
+func (h *Handler) Service() *Service { return h.svc }
+
 func (h *Handler) HandleApps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Apps(r.Context()))
 }

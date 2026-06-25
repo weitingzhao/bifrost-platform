@@ -356,6 +356,7 @@ export function ConsolePage() {
     'data-layer',
     'design-system',
     'console',
+    'platform-release',
   ].includes(viewTab)
 
   const runtimeLoading = topologyQuery.isLoading || runtimeMatrixQuery.isLoading
@@ -642,7 +643,7 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES['platform-release']}
-              description="Ops Platform CI/CD — Kaniko build, rollout to bifrost-platform-stg, Argo sync."
+              description="End-to-end Platform CI/CD — follow the flow: Staging deploy → gate → Production deploy → gate."
             />
             <PlatformReleasePage />
           </>

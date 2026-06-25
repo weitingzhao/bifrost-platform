@@ -19,8 +19,14 @@ import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
 import {
   PLATFORM_GITOPS_PHASE1_ITEMS,
   PLATFORM_STG_URLS,
+  PLATFORM_PROD_URLS,
 } from '@/lib/delivery/deliverPlatformPhases'
 import type { DeliveryTargetConfig } from '@/lib/delivery/deliveryTargets'
+
+const SMOKE_URLS: Record<string, { console: string; apiHealth: string }> = {
+  'platform-stg': PLATFORM_STG_URLS,
+  'platform-prod': PLATFORM_PROD_URLS,
+}
 
 interface PlatformDeliverActuatePanelProps {
   target: DeliveryTargetConfig
@@ -60,10 +66,13 @@ export function PlatformDeliverActuatePanel({ target }: PlatformDeliverActuatePa
   const cmAllOk = cmCount === target.dockerfileConfigMaps.length
   const mirrorsOk = target.mirrorRepos.every(repo => supplyChain?.tracked_repos?.includes(repo))
 
+  const smokeUrls = SMOKE_URLS[target.id] ?? PLATFORM_STG_URLS
+  const isProd = target.id === 'platform-prod'
+
   return (
     <OpsSection
-      title="Ops Platform STG — actuate"
-      description="Run bifrost-deliver-platform after Dockerfile ConfigMaps are present (use Trade supply chain → Refresh Dockerfile CMs for all 7 CMs)."
+      title={`${target.shortLabel} — deliver`}
+      description={target.actuateDescription}
     >
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -99,23 +108,25 @@ export function PlatformDeliverActuatePanel({ target }: PlatformDeliverActuatePa
 
         <p className="text-dense-meta text-muted-foreground m-0">
           Smoke:{' '}
-          <a href={PLATFORM_STG_URLS.console} className="text-primary underline" target="_blank" rel="noreferrer">
-            Console {PLATFORM_STG_URLS.console}
+          <a href={smokeUrls.console} className="text-primary underline" target="_blank" rel="noreferrer">
+            Console {smokeUrls.console}
           </a>
           ·{' '}
-          <a href={PLATFORM_STG_URLS.apiHealth} className="text-primary underline" target="_blank" rel="noreferrer">
+          <a href={smokeUrls.apiHealth} className="text-primary underline" target="_blank" rel="noreferrer">
             API /health
           </a>
         </p>
 
-        <details className="text-dense-meta text-muted-foreground">
-          <summary className="cursor-pointer text-dense-label text-foreground">Phase 1 checklist (Owner sign-off)</summary>
-          <ul className="mt-2 list-disc pl-4 space-y-0.5">
-            {PLATFORM_GITOPS_PHASE1_ITEMS.map(item => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </details>
+        {!isProd && (
+          <details className="text-dense-meta text-muted-foreground">
+            <summary className="cursor-pointer text-dense-label text-foreground">Phase 1 checklist (Owner sign-off)</summary>
+            <ul className="mt-2 list-disc pl-4 space-y-0.5">
+              {PLATFORM_GITOPS_PHASE1_ITEMS.map(item => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </details>
+        )}
 
         {canOperate && (
           <div className="flex flex-wrap items-center gap-2">

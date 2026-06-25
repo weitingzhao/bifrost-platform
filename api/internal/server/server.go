@@ -25,6 +25,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
@@ -50,6 +51,7 @@ type Server struct {
 	agentbridge  *agentbridge.Handler
 	agentdeploy  *agentdeploy.Handler
 	driftproposal *driftproposal.Handler
+	selfhealth   *selfhealth.Handler
 	auth         *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -62,12 +64,13 @@ func New(cfg *config.Config) *Server {
 	}
 	audit := actuation.NewAuditLog("")
 	jobs := actuation.NewJobStore()
+	gitopsH := gitops.NewHandler(cfg, audit)
 	return &Server{
 		cfg:     cfg,
 		prober:  probe.NewProber(),
 		console: console.NewHandler(cfg),
 		cluster: cluster.NewHandler(cfg, audit),
-		gitops:  gitops.NewHandler(cfg, audit),
+		gitops:  gitopsH,
 		mcp:     mcp.NewHandler(),
 		stack:   stack.NewHandler(cfg, audit),
 		delivery: delivery.NewHandler(cfg, audit),
@@ -81,6 +84,7 @@ func New(cfg *config.Config) *Server {
 		agentbridge: agentbridge.NewHandler(),
 		agentdeploy: agentdeploy.NewHandler(audit),
 		driftproposal: driftproposal.NewHandler(audit),
+		selfhealth: selfhealth.NewHandler(cfg, gitopsH.Service()),
 		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -106,6 +110,7 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
+		r.Get("/self-health", s.selfhealth.HandleSelfHealth)
 		r.Get("/topology", s.handleTopology)
 		r.Get("/context", s.handleContext)
 		r.Get("/auth/capabilities", s.auth.Capabilities)
@@ -149,6 +154,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
+		r.Get("/promote/gate-history", s.promote.HandleGetGateHistory)
 		r.Get("/promote/tier-b", s.promote.HandleGetTierB)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)

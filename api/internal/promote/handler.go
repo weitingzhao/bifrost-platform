@@ -57,6 +57,24 @@ func (h *Handler) HandleRunReleaseGate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) HandleGetGateHistory(w http.ResponseWriter, r *http.Request) {
+	tier := h.tierFromRequest(r)
+	history, err := h.svc.GateHistory(tier)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": err.Error(),
+		})
+		return
+	}
+	if history == nil {
+		history = []ReleaseGateRecord{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"tier":    tier,
+		"entries": history,
+	})
+}
+
 func (h *Handler) HandleGetTierB(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.TierBStatus(r.Context()))
 }

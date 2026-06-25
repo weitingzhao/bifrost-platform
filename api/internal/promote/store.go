@@ -32,11 +32,17 @@ func (s *Store) Path() string {
 }
 
 func (s *Store) tierPath(tier GateTier) string {
-	if tier == GateTierStg {
-		base := strings.TrimSuffix(s.path, filepath.Ext(s.path))
+	base := strings.TrimSuffix(s.path, filepath.Ext(s.path))
+	switch tier {
+	case GateTierStg:
 		return base + "_stg.json"
+	case GateTierPlatformStg:
+		return base + "_platform_stg.json"
+	case GateTierPlatformProd:
+		return base + "_platform_prod.json"
+	default:
+		return s.path
 	}
-	return s.path
 }
 
 func (s *Store) tierBPath() string {
@@ -136,6 +142,71 @@ func (s *Store) SaveTierB(rec TierBSignoffRecord) error {
 		return fmt.Errorf("write tier b signoff: %w", err)
 	}
 	return os.Rename(tmp, path)
+}
+
+func (s *Store) historyPath(tier GateTier) string {
+	base := strings.TrimSuffix(s.path, filepath.Ext(s.path))
+	switch tier {
+	case GateTierStg:
+		return base + "_stg_history.json"
+	case GateTierPlatformStg:
+		return base + "_platform_stg_history.json"
+	case GateTierPlatformProd:
+		return base + "_platform_prod_history.json"
+	default:
+		return base + "_history.json"
+	}
+}
+
+func (s *Store) AppendHistory(tier GateTier, rec ReleaseGateRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	path := s.historyPath(tier)
+	var history []ReleaseGateRecord
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &history)
+	}
+	history = append(history, rec)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("mkdir gate history dir: %w", err)
+	}
+	data, err := json.MarshalIndent(history, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write gate history: %w", err)
+	}
+	return os.Rename(tmp, path)
+}
+
+const maxHistoryEntries = 50
+
+func (s *Store) LoadHistory(tier GateTier) ([]ReleaseGateRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	path := s.historyPath(tier)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read gate history: %w", err)
+	}
+	var history []ReleaseGateRecord
+	if err := json.Unmarshal(data, &history); err != nil {
+		return nil, fmt.Errorf("parse gate history: %w", err)
+	}
+	if len(history) > maxHistoryEntries {
+		history = history[len(history)-maxHistoryEntries:]
+	}
+	// Return in reverse chronological order.
+	for i, j := 0, len(history)-1; i < j; i, j = i+1, j-1 {
+		history[i], history[j] = history[j], history[i]
+	}
+	return history, nil
 }
 
 func (s *Store) AppendLog(line string) error {
