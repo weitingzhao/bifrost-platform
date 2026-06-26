@@ -18,6 +18,7 @@ type ReleaseGateRecord struct {
 	Tier        GateTier    `json:"tier,omitempty"`
 	At          time.Time   `json:"at"`
 	Result      string      `json:"result"`
+	Revision    string      `json:"revision,omitempty"`
 	LogPath     string      `json:"log_path"`
 	Checks      []GateCheck `json:"checks"`
 	TriggeredBy string      `json:"triggered_by,omitempty"`
@@ -66,6 +67,7 @@ type ReleaseGateResponse struct {
 	Tier         GateTier           `json:"tier"`
 	ClusterID   string             `json:"cluster_id,omitempty"`
 	Result      string             `json:"result"`
+	Revision    string             `json:"revision,omitempty"`
 	At          time.Time          `json:"at"`
 	LogPath     string             `json:"log_path"`
 	Checks      []GateCheck        `json:"checks"`
@@ -84,4 +86,31 @@ type RunGateResponse struct {
 	Message     string    `json:"message"`
 	Gate        ReleaseGateResponse `json:"gate"`
 	GeneratedAt time.Time `json:"generated_at"`
+}
+
+type ReleaseStageState struct {
+	Revision string     `json:"revision,omitempty"`
+	Status   string     `json:"status"`
+	At       *time.Time `json:"at,omitempty"`
+	Detail   string     `json:"detail,omitempty"`
+}
+
+type ReleaseAction struct {
+	Action      string `json:"action"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+	MCPTool     string `json:"mcp_tool,omitempty"`
+	Params      map[string]string `json:"params,omitempty"`
+}
+
+type ReleaseStateResponse struct {
+	StgDeploy        ReleaseStageState `json:"stg_deploy"`
+	StgGate          ReleaseStageState `json:"stg_gate"`
+	ProdDeploy       ReleaseStageState `json:"prod_deploy"`
+	ProdGate         ReleaseStageState `json:"prod_gate"`
+	Consistent       bool              `json:"consistent"`
+	Warnings         []string          `json:"warnings,omitempty"`
+	NextAction       *ReleaseAction    `json:"next_action,omitempty"`
+	AvailableActions []ReleaseAction   `json:"available_actions"`
+	GeneratedAt      time.Time         `json:"generated_at"`
 }

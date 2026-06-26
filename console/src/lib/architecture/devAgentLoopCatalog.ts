@@ -5,7 +5,7 @@
  * and Agent Briefing Dev-layer release discipline.
  */
 
-export const DEV_AGENT_LOOP_VERSION = '2026-06-19'
+export const DEV_AGENT_LOOP_VERSION = '2026-06-26'
 export const DEV_AGENT_LOOP_SOURCE = 'console/src/lib/architecture/devAgentLoopCatalog.ts'
 
 export const DEV_AGENT_LOOP_STATEMENT =
@@ -58,16 +58,41 @@ export const DEV_AGENT_LOOP_STEPS: DevAgentLoopStep[] = [
   },
   {
     order: 6,
-    phase: 'Promote (optional)',
-    actor: 'Promote mode Agent',
-    action: 'POST deliver-prod after GET /api/v1/promote/release-gate pass + Owner sign-off',
-    verify: 'Prod smoke + matrix green',
+    phase: 'Promote — Query State',
+    actor: 'Promote Agent',
+    action: 'GET /api/v1/promote/release-state → read next_action + available_actions',
+    verify: 'consistent: true, stg_gate: pass',
+  },
+  {
+    order: 7,
+    phase: 'Promote — Deploy PROD',
+    actor: 'Promote Agent',
+    action: 'POST deliver-prod with same revision as STG (from release-state)',
+    verify: 'PipelineRun Succeeded + prod smoke',
+  },
+  {
+    order: 8,
+    phase: 'Promote — PROD Gate',
+    actor: 'Promote Agent',
+    action: 'POST /api/v1/promote/release-gate?tier=platform-prod (admin)',
+    verify: 'Gate pass + release-state all stages pass with same revision',
   },
 ]
 
 export const DEV_AGENT_TEKTON_PIPELINES = {
   stg: 'bifrost-deliver-stg',
   prod: 'bifrost-deliver-prod',
+  platformStg: 'bifrost-deliver-platform',
+  platformProd: 'bifrost-deliver-platform-prod',
+} as const
+
+export const DEV_AGENT_MCP_TOOLS = {
+  deployPipeline: 'start_pipeline_run',
+  releaseState: 'get_release_state',
+  releaseGate: 'get_release_gate',
+  runReleaseGate: 'run_release_gate',
+  stgSmoke: 'get_stg_smoke',
+  revisions: 'get_delivery_revisions',
 } as const
 
 export const DEV_AGENT_PRE_PUSH_SCRIPT = 'bifrost-trade-frontend/scripts/agent-pre-push.sh'
@@ -86,6 +111,16 @@ export function buildDevAgentLoopLlmPack(): string {
     '## Tekton pipelines',
     `- STG: \`${DEV_AGENT_TEKTON_PIPELINES.stg}\``,
     `- PROD: \`${DEV_AGENT_TEKTON_PIPELINES.prod}\``,
+    `- Platform STG: \`${DEV_AGENT_TEKTON_PIPELINES.platformStg}\``,
+    `- Platform PROD: \`${DEV_AGENT_TEKTON_PIPELINES.platformProd}\``,
+    '',
+    '## MCP tools for release workflow',
+    `- Deploy: \`${DEV_AGENT_MCP_TOOLS.deployPipeline}\` (name, revision?)`,
+    `- Release state: \`${DEV_AGENT_MCP_TOOLS.releaseState}\` (tier?) → next_action + available_actions`,
+    `- Gate status: \`${DEV_AGENT_MCP_TOOLS.releaseGate}\` (tier?)`,
+    `- Run gate: \`${DEV_AGENT_MCP_TOOLS.runReleaseGate}\` (tier?) — admin only`,
+    `- STG smoke: \`${DEV_AGENT_MCP_TOOLS.stgSmoke}\``,
+    `- Available tags: \`${DEV_AGENT_MCP_TOOLS.revisions}\` (repos?)`,
     '',
     '## Pre-push script',
     `- \`${DEV_AGENT_PRE_PUSH_SCRIPT}\` — mandatory before push on trade-frontend changes`,

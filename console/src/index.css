@@ -2439,6 +2439,38 @@ html {
   font-weight: 500;
 }
 
+/* Release Command Center — Platform Release page focal section */
+.release-cc__accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  z-index: 1;
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.release-cc__accent--stg {
+  background: var(--color-lamp-yellow);
+  box-shadow: 3px 0 14px color-mix(in srgb, var(--color-lamp-yellow) 8%, transparent);
+}
+
+.release-cc__accent--prod {
+  background: var(--color-lamp-red);
+  box-shadow: 3px 0 14px color-mix(in srgb, var(--color-lamp-red) 8%, transparent);
+}
+
+.release-cc__action-zone {
+  background: color-mix(in srgb, var(--secondary) 40%, transparent);
+}
+
+.release-cc__step-label {
+  font-size: var(--text-dense-body);
+  font-weight: 600;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+
 @keyframes pipeline-pulse {
   0%,
   100% {

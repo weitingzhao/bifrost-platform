@@ -75,6 +75,14 @@ func (h *Handler) HandleGetGateHistory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) HandleGetReleaseState(w http.ResponseWriter, r *http.Request) {
+	tier := r.URL.Query().Get("tier")
+	if tier == "" {
+		tier = "platform"
+	}
+	writeJSON(w, http.StatusOK, h.svc.ReleaseState(r.Context(), tier))
+}
+
 func (h *Handler) HandleGetTierB(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.TierBStatus(r.Context()))
 }

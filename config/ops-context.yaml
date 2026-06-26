@@ -3,479 +3,435 @@
 # Detail: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts) L3
 
 meta:
-  version: "2026-06-25-cicd-bootstrap"
-  catalog_version: "2026-06-25-cicd-bootstrap"
-
+    version: "2026-06-25-cicd-bootstrap"
+    catalog_version: "2026-06-25-cicd-bootstrap"
 # Ultimate goal (Strategy C hybrid) — authoritative for Agent / Program UI.
 # Detail: Ops Console → Architecture → Blueprint · console/src/lib/architecture/blueprintCatalog.ts · decision D6
 north_star:
-  id: ops-ui-single-pane
-  statement: >
-    All environment, cluster, release, and routine ops actions are performed through
-    Bifrost Ops Console and platform-api. The Owner only restarts the Ops Platform
-    process outside the UI (cold start / control-plane upgrade).
-  strategy: hybrid_c
-  principles:
-    - "Single pane — Console + platform-api (+ future MCP) is the only interaction surface"
-    - "Scripts are executors behind API — not operator runbooks; no routine ssh/kubectl/Makefile"
-    - "L0/L1/L2 actuation with audit; identical contract for human UI and AI Agent"
-    - "Hybrid backends — client-go, Argo CD, Tekton, SSH whitelist; embed mature tools, do not fork K8s UIs"
-  owner_exception: "Restart bifrost-platform (make start) when control plane is down or upgraded"
-  authority: console/src/lib/architecture/blueprintCatalog.ts
-  success_criteria:
-    - "Cluster join/drain/workload/gitops runnable from Cluster + Delivery pages only"
-    - "Program page and GET /api/v1/context expose north_star on every Agent session"
-    - "MCP Tools mirror UI capabilities with same auth and audit trail"
+    id: ops-ui-single-pane
+    statement: >
+        All environment, cluster, release, and routine ops actions are performed through Bifrost Ops Console and platform-api. The Owner only restarts the Ops Platform process outside the UI (cold start / control-plane upgrade).
 
+    strategy: hybrid_c
+    principles:
+        - "Single pane — Console + platform-api (+ future MCP) is the only interaction surface"
+        - "Scripts are executors behind API — not operator runbooks; no routine ssh/kubectl/Makefile"
+        - "L0/L1/L2 actuation with audit; identical contract for human UI and AI Agent"
+        - "Hybrid backends — client-go, Argo CD, Tekton, SSH whitelist; embed mature tools, do not fork K8s UIs"
+    owner_exception: "Restart bifrost-platform (make start) when control plane is down or upgraded"
+    authority: console/src/lib/architecture/blueprintCatalog.ts
+    success_criteria:
+        - "Cluster join/drain/workload/gitops runnable from Cluster + Delivery pages only"
+        - "Program page and GET /api/v1/context expose north_star on every Agent session"
+        - "MCP Tools mirror UI capabilities with same auth and audit trail"
 deployment:
-  phase: k3s_partial # compose | k3s_partial | k3s_ha
-  active_track: ops_ui_actuation
-
+    phase: k3s_partial # compose | k3s_partial | k3s_ha
+    active_track: ops_ui_actuation
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
-
 focus:
-  headline: "P6 CI/CD bootstrap completeness — L0/L1/L2 model formalization → CI gate → deliver-prod → platform-prod · data-layer ⑦ retire embedded pending"
-  flywheel_primary: B # A = trade FE, B = runtime/ops
-  blocker: null
-
+    headline: "P6 CI/CD bootstrap completeness — L0/L1/L2 model formalization → CI gate → deliver-prod → platform-prod · data-layer ⑦ retire embedded pending"
+    flywheel_primary: B # A = trade FE, B = runtime/ops
+    blocker: null
 milestones:
-  - id: phase-2b
-    label: Phase 2B API + FE cutover
-    status: CLOSED
-    authority: bifrost-trade-infra/docs/MIGRATION_TRACKING.md
-
-  - id: phase-2c-a
-    label: Phase 2C-A Session 0–9
-    status: CLOSED
-    authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
-
-  - id: local-prod-final
-    label: Local Prod Final
-    status: CLOSED
-    signed_at: "2026-06-04"
-    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
-
-  - id: 2c-b-stable-test
-    label: 2C-B Linux Docker stable test
-    status: SIGNED
-    signed_at: "2026-06-04"
-    authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
-
-  - id: k3s-stg-v2-deliver
-    label: K3s STG v2 deliver (bifrost-deliver-stg)
-    status: CLOSED
-    signed_at: "2026-06-18"
-    pipeline_lane: parallel
-    pipeline_after: k3s-mac-agents
-    authority: Ops Console → Operate → Delivery (deliveryMainlineCatalog.ts)
-
-  - id: 2c-b-prod-cutover
-    label: 2C-B production cutover
-    status: SIGNED
-    signed_at: "2026-06-19"
-    pipeline_lane: mainline
-    pipeline_after: k3s-stg-v2-deliver
-    authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
-
-  - id: k3s-phase1
-    label: K3s phase 1 bootstrap
-    status: CLOSED
-    signed_at: "2026-06-14"
-    pipeline_lane: parallel
-    pipeline_after: 2c-b-stable-test
-    authority: Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts)
-
-  - id: k3s-mac-agents
-    label: K3s Mac Mini agents (P5b · UTM Ubuntu)
-    status: CLOSED
-    signed_at: "2026-06-15"
-    pipeline_lane: parallel
-    pipeline_after: k3s-phase1
-    authority: Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts § P5b)
-
-  - id: vision-v1-dev-topology
-    label: Vision V1 — Dev inner-loop on K3s
-    status: SIGNED
-    signed_at: "2026-06-19"
-    pipeline_lane: parallel
-    pipeline_after: k3s-stg-v2-deliver
-    authority: console/src/lib/architecture/dualFlywheelVisionCatalog.ts
-
-  - id: vision-s3-briefing-alignment
-    label: Vision S3 — Briefing ↔ Vision meta alignment
-    status: SIGNED
-    signed_at: "2026-06-19"
-    pipeline_lane: parallel
-    pipeline_after: vision-v1-dev-topology
-    authority: console/src/lib/architecture/visionSpineMap.ts
-
-  - id: vision-v2-dev-agent
-    label: Vision V2 — Dev Agent closed-loop
-    status: SIGNED
-    signed_at: "2026-06-19"
-    pipeline_lane: parallel
-    pipeline_after: vision-s3-briefing-alignment
-    authority: console/src/lib/architecture/devAgentLoopCatalog.ts
-
-  - id: vision-v3-ops-agent
-    label: Vision V3 — Ops Agent L1/L2
-    status: SIGNED
-    signed_at: "2026-06-19"
-    pipeline_lane: parallel
-    pipeline_after: vision-v2-dev-agent
-    authority: console/src/lib/architecture/opsAgentLoopCatalog.ts
-
-  - id: vision-v4-business-agent
-    label: Vision V4 — Business Agent read-only
-    status: SIGNED
-    signed_at: "2026-06-19"
-    pipeline_lane: parallel
-    pipeline_after: vision-v3-ops-agent
-    authority: console/src/lib/architecture/businessAgentLoopCatalog.ts
-
-  - id: vision-v5-convergence
-    label: Vision V5 — Full convergence
-    status: SIGNED
-    signed_at: "2026-06-19"
-    pipeline_lane: parallel
-    pipeline_after: vision-v4-business-agent
-    authority: console/src/lib/architecture/convergenceLoopCatalog.ts
-
-  - id: ops-ui-actuation
-    label: Ops UI single-pane actuation (north star)
-    status: IN_PROGRESS
-    pipeline_lane: parallel
-    pipeline_after: k3s-phase1
-    authority: console/src/lib/architecture/blueprintCatalog.ts
-
-  - id: workload-placement-governance
-    label: K8s workload placement governance (G1–G5)
-    status: IN_PROGRESS
-    pipeline_lane: parallel
-    pipeline_after: k3s-mac-agents
-    authority: console/src/lib/architecture/workloadPlacementCatalog.ts
-
-  - id: autonomous-agent-v1
-    label: Autonomous Agent v1 (nightly drift + morning briefing)
-    status: NOT_STARTED
-    pipeline_lane: parallel
-    pipeline_after: vision-v5-convergence
-    authority: console/src/lib/briefing/workLanes.ts
-
-  - id: legacy-retirement
-    label: Phase 3 Legacy retirement
-    status: NOT_STARTED
-    authority: bifrost-trade-infra/docs/PHASE2C_PROD_DEFERRED.md
-
-  - id: k3s-data-layer
-    label: K3s data layer (PG + Redis → data namespace)
-    status: IN_PROGRESS
-    pipeline_lane: mainline
-    pipeline_after: 2c-b-prod-cutover
-    authority: console/src/lib/architecture/dataLayerCatalog.ts
-
+    - id: phase-2b
+      label: Phase 2B API + FE cutover
+      status: CLOSED
+      authority: bifrost-trade-infra/docs/MIGRATION_TRACKING.md
+    - id: phase-2c-a
+      label: Phase 2C-A Session 0–9
+      status: CLOSED
+      authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
+    - id: local-prod-final
+      label: Local Prod Final
+      status: CLOSED
+      signed_at: "2026-06-04"
+      authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
+    - id: 2c-b-stable-test
+      label: 2C-B Linux Docker stable test
+      status: SIGNED
+      signed_at: "2026-06-04"
+      authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
+    - id: k3s-stg-v2-deliver
+      label: K3s STG v2 deliver (bifrost-deliver-stg)
+      status: CLOSED
+      signed_at: "2026-06-18"
+      pipeline_lane: parallel
+      pipeline_after: k3s-mac-agents
+      authority: Ops Console → Operate → Delivery (deliveryMainlineCatalog.ts)
+    - id: 2c-b-prod-cutover
+      label: 2C-B production cutover
+      status: SIGNED
+      signed_at: "2026-06-19"
+      pipeline_lane: mainline
+      pipeline_after: k3s-stg-v2-deliver
+      authority: bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md
+    - id: k3s-phase1
+      label: K3s phase 1 bootstrap
+      status: CLOSED
+      signed_at: "2026-06-14"
+      pipeline_lane: parallel
+      pipeline_after: 2c-b-stable-test
+      authority: Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts)
+    - id: k3s-mac-agents
+      label: K3s Mac Mini agents (P5b · UTM Ubuntu)
+      status: CLOSED
+      signed_at: "2026-06-15"
+      pipeline_lane: parallel
+      pipeline_after: k3s-phase1
+      authority: Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts § P5b)
+    - id: vision-v1-dev-topology
+      label: Vision V1 — Dev inner-loop on K3s
+      status: SIGNED
+      signed_at: "2026-06-19"
+      pipeline_lane: parallel
+      pipeline_after: k3s-stg-v2-deliver
+      authority: console/src/lib/architecture/dualFlywheelVisionCatalog.ts
+    - id: vision-s3-briefing-alignment
+      label: Vision S3 — Briefing ↔ Vision meta alignment
+      status: SIGNED
+      signed_at: "2026-06-19"
+      pipeline_lane: parallel
+      pipeline_after: vision-v1-dev-topology
+      authority: console/src/lib/architecture/visionSpineMap.ts
+    - id: vision-v2-dev-agent
+      label: Vision V2 — Dev Agent closed-loop
+      status: SIGNED
+      signed_at: "2026-06-19"
+      pipeline_lane: parallel
+      pipeline_after: vision-s3-briefing-alignment
+      authority: console/src/lib/architecture/devAgentLoopCatalog.ts
+    - id: vision-v3-ops-agent
+      label: Vision V3 — Ops Agent L1/L2
+      status: SIGNED
+      signed_at: "2026-06-19"
+      pipeline_lane: parallel
+      pipeline_after: vision-v2-dev-agent
+      authority: console/src/lib/architecture/opsAgentLoopCatalog.ts
+    - id: vision-v4-business-agent
+      label: Vision V4 — Business Agent read-only
+      status: SIGNED
+      signed_at: "2026-06-19"
+      pipeline_lane: parallel
+      pipeline_after: vision-v3-ops-agent
+      authority: console/src/lib/architecture/businessAgentLoopCatalog.ts
+    - id: vision-v5-convergence
+      label: Vision V5 — Full convergence
+      status: SIGNED
+      signed_at: "2026-06-19"
+      pipeline_lane: parallel
+      pipeline_after: vision-v4-business-agent
+      authority: console/src/lib/architecture/convergenceLoopCatalog.ts
+    - id: ops-ui-actuation
+      label: Ops UI single-pane actuation (north star)
+      status: IN_PROGRESS
+      pipeline_lane: parallel
+      pipeline_after: k3s-phase1
+      authority: console/src/lib/architecture/blueprintCatalog.ts
+    - id: workload-placement-governance
+      label: K8s workload placement governance (G1–G5)
+      status: IN_PROGRESS
+      pipeline_lane: parallel
+      pipeline_after: k3s-mac-agents
+      authority: console/src/lib/architecture/workloadPlacementCatalog.ts
+    - id: autonomous-agent-v1
+      label: Autonomous Agent v1 (nightly drift + morning briefing)
+      status: NOT_STARTED
+      pipeline_lane: parallel
+      pipeline_after: vision-v5-convergence
+      authority: console/src/lib/briefing/workLanes.ts
+    - id: legacy-retirement
+      label: Phase 3 Legacy retirement
+      status: NOT_STARTED
+      authority: bifrost-trade-infra/docs/PHASE2C_PROD_DEFERRED.md
+    - id: k3s-data-layer
+      label: K3s data layer (PG + Redis → data namespace)
+      status: IN_PROGRESS
+      pipeline_lane: mainline
+      pipeline_after: 2c-b-prod-cutover
+      authority: console/src/lib/architecture/dataLayerCatalog.ts
 decisions:
-  - id: D1
-    status: SIGNED
-    topic: Prod host & migration path
-    conclusion: "K3s first; compose→k3s path TBD after cluster ready (do not lock .70 as sole prod target)"
-    signed_at: "2026-06-04"
-    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
-
-  - id: D2
-    status: SIGNED
-    topic: PostgreSQL host (superseded by D2-prime)
-    conclusion: "Keep bare-metal PG on mini-pc-b (.80) until CloudNativePG migration"
-    signed_at: "2026-06-04"
-    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
-
-  - id: D2-prime
-    status: SIGNED
-    topic: PostgreSQL + Redis on K3s data namespace
-    conclusion: "CloudNativePG cluster in data NS (bifrost_dev/stg/prod DBs, R-DV1); redis-live + redis-queue per env; PG hot data on local-path @ ubt-k3s-02; NAS nfs-hot for backups only; stg before prod; supersede bare .80 after prod cutover"
-    signed_at: "2026-06-20"
-    authority: console/src/lib/architecture/dataLayerCatalog.ts
-
-  - id: D3
-    status: SIGNED
-    topic: TWS placement
-    conclusion: "TWS Host + Secondary on Win11; IB_HOST per account"
-    signed_at: "2026-06-04"
-    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
-
-  - id: D4
-    status: SIGNED
-    topic: R-DV3 auto-order
-    conclusion: "Deferred — no auto-order requirement at current milestone"
-    signed_at: "2026-06-04"
-    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
-
-  - id: D5
-    status: SIGNED
-    topic: K3s vs 2C-B sequencing
-    conclusion: "2C-B stable test signed; K3s env setup may start in parallel with compose stable state"
-    signed_at: "2026-06-04"
-    authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
-
-  - id: D6
-    status: SIGNED
-    topic: Ops Platform ultimate goal — Strategy C hybrid single pane
-    conclusion: "All routine ops via Ops Console/API only; hybrid embed Argo/Tekton/K8s executors behind platform-api; Owner exception is restarting Ops Platform itself"
-    signed_at: "2026-06-15"
-    authority: console/src/lib/architecture/blueprintCatalog.ts
-
+    - id: D1
+      status: SIGNED
+      topic: Prod host & migration path
+      conclusion: "K3s first; compose→k3s path TBD after cluster ready (do not lock .70 as sole prod target)"
+      signed_at: "2026-06-04"
+      authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
+    - id: D2
+      status: SIGNED
+      topic: PostgreSQL host (superseded by D2-prime)
+      conclusion: "Keep bare-metal PG on mini-pc-b (.80) until CloudNativePG migration"
+      signed_at: "2026-06-04"
+      authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
+    - id: D2-prime
+      status: SIGNED
+      topic: PostgreSQL + Redis on K3s data namespace
+      conclusion: "CloudNativePG cluster in data NS (bifrost_dev/stg/prod DBs, R-DV1); redis-live + redis-queue per env; PG hot data on local-path @ ubt-k3s-02; NAS nfs-hot for backups only; stg before prod; supersede bare .80 after prod cutover"
+      signed_at: "2026-06-20"
+      authority: console/src/lib/architecture/dataLayerCatalog.ts
+    - id: D3
+      status: SIGNED
+      topic: TWS placement
+      conclusion: "TWS Host + Secondary on Win11; IB_HOST per account"
+      signed_at: "2026-06-04"
+      authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
+    - id: D4
+      status: SIGNED
+      topic: R-DV3 auto-order
+      conclusion: "Deferred — no auto-order requirement at current milestone"
+      signed_at: "2026-06-04"
+      authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
+    - id: D5
+      status: SIGNED
+      topic: K3s vs 2C-B sequencing
+      conclusion: "2C-B stable test signed; K3s env setup may start in parallel with compose stable state"
+      signed_at: "2026-06-04"
+      authority: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts)
+    - id: D6
+      status: SIGNED
+      topic: Ops Platform ultimate goal — Strategy C hybrid single pane
+      conclusion: "All routine ops via Ops Console/API only; hybrid embed Argo/Tekton/K8s executors behind platform-api; Owner exception is restarting Ops Platform itself"
+      signed_at: "2026-06-15"
+      authority: console/src/lib/architecture/blueprintCatalog.ts
 platform_phases:
-  - id: A
-    label: Gate
-    timeframe: "now ~3mo"
-    deliverables: "2C-B Docker Prod · release_gate.sh · Mac Mini #2 CI · MkDocs Goal"
-
-  - id: B
-    label: GitOps
-    timeframe: "3–9mo"
-    deliverables: "Gitea · Tekton · ArgoCD · k8s/base/ · FE staging on K3s"
-
-  - id: C
-    label: Closed loop
-    timeframe: "9–18mo"
-    deliverables: "Single-pane actuation P1–P5 · Prometheus/Loki/Grafana · bifrost-ops-mcp · Agent self-interaction"
-
+    - id: A
+      label: Gate
+      timeframe: "now ~3mo"
+      deliverables: "2C-B Docker Prod · release_gate.sh · Mac Mini #2 CI · MkDocs Goal"
+    - id: B
+      label: GitOps
+      timeframe: "3–9mo"
+      deliverables: "Gitea · Tekton · ArgoCD · k8s/base/ · FE staging on K3s"
+    - id: C
+      label: Closed loop
+      timeframe: "9–18mo"
+      deliverables: "Single-pane actuation P1–P5 · Prometheus/Loki/Grafana · bifrost-ops-mcp · Agent self-interaction"
 coupling_surfaces:
-  - api_nginx_paths
-  - vite_api_env
-  - ops_auth_capabilities
-  - ib_client_id
-
+    - api_nginx_paths
+    - vite_api_env
+    - ops_auth_capabilities
+    - ib_client_id
 promotion:
-  last_gate:
-    at: null
-    result: null
-    log_path: bifrost-trade-infra/scripts/release_gate.log
-
+    last_gate:
+        at: "2026-06-25T16:16:40Z"
+        result: fail
+        log_path: bifrost-trade-infra/scripts/release_gate.log
 environments_extended:
-  staging:
-    status: SIGNED
-    note: "STG release ready — deliver-stg + Tier A smoke + STG release gate pass + Tier B sign-off (2026-06-18 Owner)"
-
+    staging:
+        status: SIGNED
+        note: "STG release ready — deliver-stg + Tier A smoke + STG release gate pass + Tier B sign-off (2026-06-18 Owner)"
 tracks:
-  build:
-    label: "Platform capability extension"
-    current_phase: P6
-    tasks:
-      - id: p1-auth-audit
-        label: "Auth + audit for all write routes"
-        status: done
-      - id: p1-workload-actuation
-        label: "Cluster workload actuation (restart/scale/delete)"
-        status: done
-      - id: p1-pod-logs
-        label: "Pod log streaming in Cluster page"
-        status: done
-      - id: p1-session-loop
-        label: "Briefing session delta + Control Room recent actions"
-        status: done
-      - id: p1-track-model
-        label: "Work Track model (build/migrate/operate)"
-        status: done
-      - id: p2-node-lifecycle
-        label: "Node join/drain via platform-api"
-        status: done
-      - id: p2-cluster-wizard
-        label: "Cluster UI wizard for node operations"
-        status: done
-      - id: p3-gitops-execution
-        label: "GitOps + CI execution (Argo/Tekton API)"
-        status: done
-      - id: p4-stack-install
-        label: "Platform stack install wizard"
-        status: done
-      - id: p5-mcp-tools
-        label: "MCP actuation Tools"
-        status: done
-      # P6 — CI/CD bootstrap completeness (L0/L1/L2 model)
-      - id: p6-bootstrap-model
-        label: "L0/L1/L2 bootstrap model — architecture catalog + spine formalization"
-        status: done
-      - id: p6-ci-gate-trade
-        label: "CI gate — Tekton Trigger for Trade stack (L2 push→test+build)"
-        status: done
-      - id: p6-ci-gate-platform
-        label: "CI gate — Tekton Trigger for Platform (L1 push→test+build)"
-        status: done
-      - id: p6-deliver-prod
-        label: "deliver-prod pipeline落地 (L2 trade prod cutover)"
-        status: done
-      - id: p6-platform-prod
-        label: "Platform prod overlay + HA + minimal kubeconfig (L1 prod化)"
-        status: done
-      - id: p6-self-health
-        label: "Platform self-health probe (L1 control plane liveness in Console)"
-        status: done
-      - id: p6-gate-spine-closure
-        label: "Release gate → spine promotion.last_gate closure"
-        status: done
-      - id: p6-platform-e2e-cicd
-        label: "Platform Release page end-to-end CI/CD (deliver + gate + health + history)"
-        status: done
-      - id: p6-escape-hatch
-        label: "L0 escape hatch runbook + Console recovery visibility"
-        status: next
-
-  migrate:
-    label: "Legacy retirement & deployment migration"
-    streams:
-      - id: trade-backend
-        label: "Trade backend (core/socket/worker/api)"
-        total: 4
-        done: 4
-        status: closed
-        note: "All repos VERIFIED + Phase 2B CUTOVER"
-      - id: trade-frontend
-        label: "Trade frontend pages"
-        total: 45
-        done: 45
-        status: closed
-        note: "Phase 1 + 2B CLOSED — Owner signed"
-      - id: compose-to-k3s
-        label: "Compose to K3s deployment"
-        total: 5
-        done: 5
-        status: closed
-        note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED ✓ ④ prod overlay SIGNED ✓ ⑤ HA/validation deferred · Vision V1 dev @ bifrost-dev :30882"
-      - id: data-layer-k3s
-        label: "K3s data layer (PG + Redis → data NS)"
-        total: 7
-        done: 6
-        status: in_progress
-        next_task: "⑦ Retire embedded — remove postgres/redis from k8s/base; update environments.yaml matrix"
-        note: "①–⑥ complete ✓ · PG+Redis @ data NS (STG/DEV/PROD) · deliver images for celery_redis_url_from_config"
-        prerequisites:
-          - "nfs-hot/nfs-cold provisioners ready"
-          - "bifrost-stg full stack stable"
-          - "decision D2-prime signed"
-      - id: vision-v1-dev
-        label: "Vision V1 — Mac thin + K3s dev thick"
-        total: 3
-        done: 3
-        status: closed
-        note: "SIGNED 2026-06-19 — bifrost-dev :30882 · .env.development.k3s · V1 gate pass"
-      - id: vision-s3-briefing
-        label: "Vision S3 — Briefing ↔ Vision alignment"
-        total: 4
-        done: 4
-        status: closed
-        note: "SIGNED 2026-06-19 — visionSpineMap.ts · briefing appendix · S3 gate"
-      - id: vision-v2-dev-agent
-        label: "Vision V2 — Dev Agent closed-loop"
-        total: 4
-        done: 4
-        status: closed
-        note: "devAgentLoopCatalog · agent-pre-push.sh · Tekton deliver-stg/prod · V2 gate"
-      - id: vision-v3-ops-agent
-        label: "Vision V3 — Ops Agent L1/L2"
-        total: 4
-        done: 4
-        status: closed
-        note: "SIGNED 2026-06-19 — opsAgentLoopCatalog · MCP bridges · Alertmanager webhook · V3 gate"
-      - id: vision-v4-business-agent
-        label: "Vision V4 — Business Agent read-only"
-        total: 4
-        done: 4
-        status: closed
-        note: "SIGNED 2026-06-19 — mcp-trade-api · 9 domains · daily brief · V4 gate"
-      - id: vision-v5-convergence
-        label: "Vision V5 — Full convergence"
-        total: 4
-        done: 4
-        status: closed
-        note: "SIGNED 2026-06-19 — unified MCP · Ollama · feedback loop · V1–V5 complete"
-      - id: legacy-retirement
-        label: "Phase 3 Legacy retirement"
-        total: 4
-        done: 0
-        status: not_started
-        next_task: "UI experience alignment — Design System-led visual polish with Legacy side-by-side"
-        prerequisites:
-          - "compose→k3s migration stable"
-          - "data-layer-k3s stream closed (PG/Redis in data NS)"
-          - "UI experience alignment Owner sign-off (must complete while Legacy is still running)"
-        note: "① UI experience alignment (Design System + Legacy reference) ② stop Legacy daemon/API/frontend ③ MIGRATION_TRACKING.md mark retired ④ archive bifrost-trader-engine"
+    build:
+        label: "Platform capability extension"
+        current_phase: P6
         tasks:
-          - id: ui-experience-alignment
-            label: "UI experience alignment — Design System visual polish"
-            status: not_started
-            note: "Token density tuning + per-page polish using Legacy as side-by-side reference; Owner sign-off required before Legacy shutdown"
-          - id: stop-legacy-runtime
-            label: "Stop Legacy daemon, API, frontend"
-            status: not_started
-            blocked_by: ui-experience-alignment
-          - id: mark-engine-retired
-            label: "MIGRATION_TRACKING.md mark engine retired"
-            status: not_started
-            blocked_by: stop-legacy-runtime
-          - id: archive-engine-repo
-            label: "Archive bifrost-trader-engine (read-only)"
-            status: not_started
-            blocked_by: mark-engine-retired
-
-  automate:
-    label: "Autonomous Agent infrastructure"
-    streams:
-      - id: platform-gitops
-        label: "Ops Platform GitOps & containerization"
-        total: 7
-        done: 7
-        status: closed
-        next_task: ""
-        note: "Phase 1 CLOSED — Owner signed. Sidebar refactored (Trade release / Platform / Cluster ops). ARM nodes retired. Platform Release page live."
-      - id: agent-infra-bootstrap
-        label: "Agent host setup (Hermes + Bridge + tools)"
-        total: 5
-        done: 5
-        status: closed
-        next_task: ""
-        note: "CLOSED — runner on .50:8781, bridge OK, launchd nightly-drift 3:00 AM. Jobs/reports on NAS smb://192.168.10.20/ops-agent (Mini symlinks). Cluster Auto Remediate deferred."
-        prerequisites:
-          - "platform-gitops Phase 1 Owner sign-off ✓"
-      - id: nightly-drift-scan
-        label: "Nightly drift detection & remediation"
-        total: 4
-        done: 4
-        status: closed
-        next_task: ""
-        note: "① Layer 1 catalog scan ✓ ② Layer 2 API probes ✓ ③ Layer 3 spine semantic ✓ ④ Layer 4 Owner approval gate + auto-fix remediation ✓ · Briefing DriftProposalPanel · Session delta lists agent tasks since last copy"
-      - id: agent-mcp-integration
-        label: "Agent Desk + MCP bridge"
-        total: 3
-        done: 3
-        status: closed
-        next_task: ""
-        note: "① Agent Desk UI ✓ ② platform MCP agent tools + bridge API ✓ ③ Console MCP panel on Agent Desk ✓ · Hermes MCP URL optional via HERMES_MCP_URL"
-        prerequisites:
-          - "agent-infra-bootstrap stream closed"
-      - id: agent-trade-advisory
-        label: "Trade advisory autonomous service"
-        total: 3
-        done: 0
-        status: not_started
-        note: "① Morning trade briefing ② Position risk alerts ③ SEPA opportunity notifications"
-        prerequisites:
-          - "agent-mcp-integration stream closed"
-          - "Trade API read endpoints stable"
-
-  operate:
-    label: "Day-to-day operations"
-    note: "Event-driven — status computed from live matrix, cluster, and audit data"
-
+            - id: p1-auth-audit
+              label: "Auth + audit for all write routes"
+              status: done
+            - id: p1-workload-actuation
+              label: "Cluster workload actuation (restart/scale/delete)"
+              status: done
+            - id: p1-pod-logs
+              label: "Pod log streaming in Cluster page"
+              status: done
+            - id: p1-session-loop
+              label: "Briefing session delta + Control Room recent actions"
+              status: done
+            - id: p1-track-model
+              label: "Work Track model (build/migrate/operate)"
+              status: done
+            - id: p2-node-lifecycle
+              label: "Node join/drain via platform-api"
+              status: done
+            - id: p2-cluster-wizard
+              label: "Cluster UI wizard for node operations"
+              status: done
+            - id: p3-gitops-execution
+              label: "GitOps + CI execution (Argo/Tekton API)"
+              status: done
+            - id: p4-stack-install
+              label: "Platform stack install wizard"
+              status: done
+            - id: p5-mcp-tools
+              label: "MCP actuation Tools"
+              status: done
+            # P6 — CI/CD bootstrap completeness (L0/L1/L2 model)
+            - id: p6-bootstrap-model
+              label: "L0/L1/L2 bootstrap model — architecture catalog + spine formalization"
+              status: done
+            - id: p6-ci-gate-trade
+              label: "CI gate — Tekton Trigger for Trade stack (L2 push→test+build)"
+              status: done
+            - id: p6-ci-gate-platform
+              label: "CI gate — Tekton Trigger for Platform (L1 push→test+build)"
+              status: done
+            - id: p6-deliver-prod
+              label: "deliver-prod pipeline落地 (L2 trade prod cutover)"
+              status: done
+            - id: p6-platform-prod
+              label: "Platform prod overlay + HA + minimal kubeconfig (L1 prod化)"
+              status: done
+            - id: p6-self-health
+              label: "Platform self-health probe (L1 control plane liveness in Console)"
+              status: done
+            - id: p6-gate-spine-closure
+              label: "Release gate → spine promotion.last_gate closure"
+              status: done
+            - id: p6-platform-e2e-cicd
+              label: "Platform Release page end-to-end CI/CD (deliver + gate + health + history)"
+              status: done
+            - id: p6-escape-hatch
+              label: "L0 escape hatch runbook + Console recovery visibility"
+              status: next
+    migrate:
+        label: "Legacy retirement & deployment migration"
+        streams:
+            - id: trade-backend
+              label: "Trade backend (core/socket/worker/api)"
+              total: 4
+              done: 4
+              status: closed
+              note: "All repos VERIFIED + Phase 2B CUTOVER"
+            - id: trade-frontend
+              label: "Trade frontend pages"
+              total: 45
+              done: 45
+              status: closed
+              note: "Phase 1 + 2B CLOSED — Owner signed"
+            - id: compose-to-k3s
+              label: "Compose to K3s deployment"
+              total: 5
+              done: 5
+              status: closed
+              note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED ✓ ④ prod overlay SIGNED ✓ ⑤ HA/validation deferred · Vision V1 dev @ bifrost-dev :30882"
+            - id: data-layer-k3s
+              label: "K3s data layer (PG + Redis → data NS)"
+              total: 7
+              done: 6
+              status: in_progress
+              next_task: "⑦ Retire embedded — remove postgres/redis from k8s/base; update environments.yaml matrix"
+              note: "①–⑥ complete ✓ · PG+Redis @ data NS (STG/DEV/PROD) · deliver images for celery_redis_url_from_config"
+              prerequisites:
+                - "nfs-hot/nfs-cold provisioners ready"
+                - "bifrost-stg full stack stable"
+                - "decision D2-prime signed"
+            - id: vision-v1-dev
+              label: "Vision V1 — Mac thin + K3s dev thick"
+              total: 3
+              done: 3
+              status: closed
+              note: "SIGNED 2026-06-19 — bifrost-dev :30882 · .env.development.k3s · V1 gate pass"
+            - id: vision-s3-briefing
+              label: "Vision S3 — Briefing ↔ Vision alignment"
+              total: 4
+              done: 4
+              status: closed
+              note: "SIGNED 2026-06-19 — visionSpineMap.ts · briefing appendix · S3 gate"
+            - id: vision-v2-dev-agent
+              label: "Vision V2 — Dev Agent closed-loop"
+              total: 4
+              done: 4
+              status: closed
+              note: "devAgentLoopCatalog · agent-pre-push.sh · Tekton deliver-stg/prod · V2 gate"
+            - id: vision-v3-ops-agent
+              label: "Vision V3 — Ops Agent L1/L2"
+              total: 4
+              done: 4
+              status: closed
+              note: "SIGNED 2026-06-19 — opsAgentLoopCatalog · MCP bridges · Alertmanager webhook · V3 gate"
+            - id: vision-v4-business-agent
+              label: "Vision V4 — Business Agent read-only"
+              total: 4
+              done: 4
+              status: closed
+              note: "SIGNED 2026-06-19 — mcp-trade-api · 9 domains · daily brief · V4 gate"
+            - id: vision-v5-convergence
+              label: "Vision V5 — Full convergence"
+              total: 4
+              done: 4
+              status: closed
+              note: "SIGNED 2026-06-19 — unified MCP · Ollama · feedback loop · V1–V5 complete"
+            - id: legacy-retirement
+              label: "Phase 3 Legacy retirement"
+              total: 4
+              done: 0
+              status: not_started
+              next_task: "UI experience alignment — Design System-led visual polish with Legacy side-by-side"
+              prerequisites:
+                - "compose→k3s migration stable"
+                - "data-layer-k3s stream closed (PG/Redis in data NS)"
+                - "UI experience alignment Owner sign-off (must complete while Legacy is still running)"
+              note: "① UI experience alignment (Design System + Legacy reference) ② stop Legacy daemon/API/frontend ③ MIGRATION_TRACKING.md mark retired ④ archive bifrost-trader-engine"
+              tasks:
+                - id: ui-experience-alignment
+                  label: "UI experience alignment — Design System visual polish"
+                  status: not_started
+                  note: "Token density tuning + per-page polish using Legacy as side-by-side reference; Owner sign-off required before Legacy shutdown"
+                - id: stop-legacy-runtime
+                  label: "Stop Legacy daemon, API, frontend"
+                  status: not_started
+                  blocked_by: ui-experience-alignment
+                - id: mark-engine-retired
+                  label: "MIGRATION_TRACKING.md mark engine retired"
+                  status: not_started
+                  blocked_by: stop-legacy-runtime
+                - id: archive-engine-repo
+                  label: "Archive bifrost-trader-engine (read-only)"
+                  status: not_started
+                  blocked_by: mark-engine-retired
+    automate:
+        label: "Autonomous Agent infrastructure"
+        streams:
+            - id: platform-gitops
+              label: "Ops Platform GitOps & containerization"
+              total: 7
+              done: 7
+              status: closed
+              next_task: ""
+              note: "Phase 1 CLOSED — Owner signed. Sidebar refactored (Trade release / Platform / Cluster ops). ARM nodes retired. Platform Release page live."
+            - id: agent-infra-bootstrap
+              label: "Agent host setup (Hermes + Bridge + tools)"
+              total: 5
+              done: 5
+              status: closed
+              next_task: ""
+              note: "CLOSED — runner on .50:8781, bridge OK, launchd nightly-drift 3:00 AM. Jobs/reports on NAS smb://192.168.10.20/ops-agent (Mini symlinks). Cluster Auto Remediate deferred."
+              prerequisites:
+                - "platform-gitops Phase 1 Owner sign-off ✓"
+            - id: nightly-drift-scan
+              label: "Nightly drift detection & remediation"
+              total: 4
+              done: 4
+              status: closed
+              next_task: ""
+              note: "① Layer 1 catalog scan ✓ ② Layer 2 API probes ✓ ③ Layer 3 spine semantic ✓ ④ Layer 4 Owner approval gate + auto-fix remediation ✓ · Briefing DriftProposalPanel · Session delta lists agent tasks since last copy"
+            - id: agent-mcp-integration
+              label: "Agent Desk + MCP bridge"
+              total: 3
+              done: 3
+              status: closed
+              next_task: ""
+              note: "① Agent Desk UI ✓ ② platform MCP agent tools + bridge API ✓ ③ Console MCP panel on Agent Desk ✓ · Hermes MCP URL optional via HERMES_MCP_URL"
+              prerequisites:
+                - "agent-infra-bootstrap stream closed"
+            - id: agent-trade-advisory
+              label: "Trade advisory autonomous service"
+              total: 3
+              done: 0
+              status: not_started
+              note: "① Morning trade briefing ② Position risk alerts ③ SEPA opportunity notifications"
+              prerequisites:
+                - "agent-mcp-integration stream closed"
+                - "Trade API read endpoints stable"
+    operate:
+        label: "Day-to-day operations"
+        note: "Event-driven — status computed from live matrix, cluster, and audit data"
 probe_hints:
-  - target_id: api-market
-    trade_route: /market/live
-    hint: "Market SSE and live quotes"
-
-  - target_id: api-monitor
-    trade_route: /operations/daemon
-    hint: "Daemon status and control overview"
-
-  - target_id: api-ops
-    trade_route: /operations/celery
-    hint: "Celery workers and queues"
+    - target_id: api-market
+      trade_route: /market/live
+      hint: "Market SSE and live quotes"
+    - target_id: api-monitor
+      trade_route: /operations/daemon
+      hint: "Daemon status and control overview"
+    - target_id: api-ops
+      trade_route: /operations/celery
+      hint: "Celery workers and queues"

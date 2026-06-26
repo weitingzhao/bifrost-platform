@@ -61,6 +61,8 @@ import type {
   BuildPhaseGateResponse,
   RunBuildPhaseGateResponse,
   SelfHealthResponse,
+  RevisionsResponse,
+  ReleaseStateResponse,
 } from './types'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
@@ -354,6 +356,12 @@ export async function fetchGateHistory(tier: ReleaseGateTier = 'prod'): Promise<
   return r.json() as Promise<GateHistoryResponse>
 }
 
+export async function fetchReleaseState(tier = 'platform'): Promise<ReleaseStateResponse> {
+  const r = await fetch(`/api/v1/promote/release-state?tier=${tier}`)
+  if (!r.ok) throw new Error(`release state: HTTP ${r.status}`)
+  return r.json() as Promise<ReleaseStateResponse>
+}
+
 export async function fetchTierBStatus(): Promise<TierBStatusResponse> {
   const r = await fetch('/api/v1/promote/tier-b')
   if (!r.ok) throw new Error(`tier b: HTTP ${r.status}`)
@@ -499,6 +507,13 @@ export async function fetchSupplyChain(): Promise<SupplyChainResponse> {
   const r = await fetch('/api/v1/delivery/supply-chain')
   if (!r.ok) throw new Error(`supply chain: HTTP ${r.status}`)
   return r.json() as Promise<SupplyChainResponse>
+}
+
+export async function fetchRevisions(repos?: string[]): Promise<RevisionsResponse> {
+  const params = repos?.length ? `?repos=${repos.join(',')}` : ''
+  const r = await fetch(`/api/v1/delivery/revisions${params}`)
+  if (!r.ok) throw new Error(`revisions: HTTP ${r.status}`)
+  return r.json() as Promise<RevisionsResponse>
 }
 
 export async function triggerMirrorSync(): Promise<SupplyChainActuationResponse> {

@@ -23,6 +23,7 @@ import {
   Server,
   Shield,
   Terminal,
+  Wifi,
   Workflow,
   Zap,
 } from 'lucide-react'
@@ -117,6 +118,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
           { id: 'k3s-bootstrap', label: 'K3s Bootstrap', icon: PlugZap },
           { id: 'cicd-bootstrap', label: 'CI/CD Bootstrap', icon: GitBranch },
           { id: 'data-layer', label: 'Data Layer', icon: Database },
+          { id: 'network-upgrade', label: 'Network Upgrade', icon: Wifi },
         ],
       },
       {
@@ -155,6 +157,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'A
   'k3s-bootstrap': 'Architecture',
   'cicd-bootstrap': 'Architecture',
   'data-layer': 'Architecture',
+  'network-upgrade': 'Architecture',
   'platform-standards': 'Architecture',
   'agent-protocol': 'Architecture',
   'mcp-contract': 'Architecture',

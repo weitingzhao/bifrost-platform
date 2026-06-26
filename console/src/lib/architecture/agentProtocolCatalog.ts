@@ -5,7 +5,7 @@
  * Single source of truth — do not duplicate elsewhere.
  */
 
-export const AGENT_PROTOCOL_VERSION = '2026-06-19'
+export const AGENT_PROTOCOL_VERSION = '2026-06-26'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 export type AgentModeRow = {
@@ -34,9 +34,9 @@ export const AGENT_MODES: AgentModeRow[] = [
   {
     mode: 'Promote',
     flywheel: 'A + B coupling',
-    defaultUI: 'Observe → Diagnosis · Observe → Scheduling (Placement) · Operate → Cluster ops · Observe → Audit',
-    agentMay: 'Single-variable release checks, sign-off docs',
-    agentMustNot: 'Skip blockers (D1, gate), mix API + FE in one change',
+    defaultUI: 'Promote → Platform Release · Observe → Audit',
+    agentMay: 'Query release-state, deploy via start_pipeline_run, run gates, verify smoke; follow next_action guidance',
+    agentMustNot: 'Skip blockers (D1, gate), deploy PROD with different revision than STG, bypass admin role for gates',
   },
 ]
 
@@ -170,7 +170,16 @@ export const DEV_AGENT_CLOSED_LOOP = {
   prodPipeline: 'bifrost-deliver-prod',
   stgSmoke: 'GET /api/v1/delivery/stg/smoke',
   releaseGate: 'GET /api/v1/promote/release-gate',
+  releaseState: 'GET /api/v1/promote/release-state',
   catalog: 'console/src/lib/architecture/devAgentLoopCatalog.ts',
+  mcpTools: {
+    deploy: 'start_pipeline_run (name, revision?)',
+    queryState: 'get_release_state (tier?)',
+    queryGate: 'get_release_gate (tier?)',
+    runGate: 'run_release_gate (tier?) — admin',
+    smoke: 'get_stg_smoke',
+    revisions: 'get_delivery_revisions (repos?)',
+  },
 } as const
 
 /** Vision V3 — Ops Agent L1/L2 (Alertmanager → MCP actuation + audit). */
@@ -246,9 +255,11 @@ export function buildAgentProtocolLlmPack(): string {
     '',
     '## Dev Agent closed loop (Vision V2)',
     `- Pre-push: \`${DEV_AGENT_CLOSED_LOOP.prePushScript}\``,
-    `- STG pipeline: \`${DEV_AGENT_CLOSED_LOOP.stgPipeline}\` via Console Delivery or POST /delivery/pipelines/{name}/runs`,
-    `- Verify: \`${DEV_AGENT_CLOSED_LOOP.stgSmoke}\``,
-    `- Promote: \`${DEV_AGENT_CLOSED_LOOP.releaseGate}\` before deliver-prod`,
+    `- STG pipeline: \`${DEV_AGENT_CLOSED_LOOP.stgPipeline}\` via Console Delivery or MCP \`start_pipeline_run\``,
+    `- Verify: \`${DEV_AGENT_CLOSED_LOOP.stgSmoke}\` or MCP \`get_stg_smoke\``,
+    `- Release state: \`${DEV_AGENT_CLOSED_LOOP.releaseState}\` or MCP \`get_release_state\` → next_action guidance`,
+    `- Promote: \`${DEV_AGENT_CLOSED_LOOP.releaseGate}\` or MCP \`run_release_gate\` before deliver-prod`,
+    `- Available tags: MCP \`get_delivery_revisions\` — select revision for deploys`,
     `- Catalog: \`${DEV_AGENT_CLOSED_LOOP.catalog}\``,
     '',
     '## Ops Agent closed loop (Vision V3)',

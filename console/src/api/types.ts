@@ -781,6 +781,7 @@ export interface DeliveryPipelineRunView {
   name: string
   namespace: string
   pipeline: string
+  revision?: string
   status: string
   reason?: string
   start_time?: string
@@ -858,6 +859,22 @@ export interface SupplyChainActuationResponse extends ActuationResponse {
   run?: SupplyChainTaskRunView
 }
 
+export interface GiteaTagView {
+  name: string
+  repo: string
+  commit?: string
+}
+
+export interface RevisionsResponse {
+  cluster_id: string
+  repos: string[]
+  default_ref: string
+  tags: GiteaTagView[]
+  reachability: Reachability
+  detail: string
+  generated_at: string
+}
+
 export interface PipelineRunStepsResponse {
   cluster_id: string
   namespace: string
@@ -908,8 +925,9 @@ export interface ReleaseGateCheckView {
 }
 
 export interface ReleaseGateResponse {
-  tier?: 'stg' | 'prod'
+  tier?: 'stg' | 'prod' | 'platform-stg' | 'platform-prod'
   result: string
+  revision?: string
   at?: string
   log_path: string
   checks: ReleaseGateCheckView[]
@@ -928,6 +946,7 @@ export interface GateHistoryEntry {
   tier?: 'stg' | 'prod'
   at: string
   result: string
+  revision?: string
   log_path: string
   checks: ReleaseGateCheckView[]
   triggered_by?: string
@@ -937,6 +956,33 @@ export interface GateHistoryEntry {
 export interface GateHistoryResponse {
   tier: 'stg' | 'prod'
   entries: GateHistoryEntry[]
+}
+
+export interface ReleaseStageState {
+  revision?: string
+  status: string
+  at?: string
+  detail?: string
+}
+
+export interface ReleaseAction {
+  action: string
+  label: string
+  description: string
+  mcp_tool?: string
+  params?: Record<string, string>
+}
+
+export interface ReleaseStateResponse {
+  stg_deploy: ReleaseStageState
+  stg_gate: ReleaseStageState
+  prod_deploy: ReleaseStageState
+  prod_gate: ReleaseStageState
+  consistent: boolean
+  warnings?: string[]
+  next_action?: ReleaseAction
+  available_actions: ReleaseAction[]
+  generated_at: string
 }
 
 export interface VisionV1GateCheckView {

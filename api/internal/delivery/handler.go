@@ -142,6 +142,18 @@ func (h *Handler) HandleDeletePipelineRun(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) HandleRevisions(w http.ResponseWriter, r *http.Request) {
+	var repos []string
+	if q := strings.TrimSpace(r.URL.Query().Get("repos")); q != "" {
+		for _, s := range strings.Split(q, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				repos = append(repos, s)
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, h.svc.Revisions(r.Context(), repos))
+}
+
 func (h *Handler) HandleSupplyChain(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.SupplyChain(r.Context()))
 }

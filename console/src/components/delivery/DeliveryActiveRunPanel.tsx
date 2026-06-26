@@ -1,6 +1,6 @@
 import { Button, DenseTag } from '@bifrost/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { DeliveryPipelineRunView } from '@/api/types'
 import { fetchPipelineRunLogs, fetchPipelineRuns } from '@/api/platform'
 import { DeliveryPipelineStepProgress } from '@/components/delivery/DeliveryPipelineStepProgress'
@@ -9,10 +9,12 @@ import { StatusLamp } from '@/components/StatusLamp'
 import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
 import type { DeliveryTargetConfig } from '@/lib/delivery/deliveryTargets'
 import {
+  buildPipelineRunAskPack,
   formatPipelineRunStatus,
   isPipelineRunFailed,
   isPipelineRunRunning,
   isPipelineRunSucceeded,
+  platformDeliverAskContext,
 } from '@/lib/delivery/pipelineRunAskPack'
 
 function runLamp(run: { status: string; reason?: string }): 'ok' | 'fail' | 'degraded' | 'unknown' {
@@ -95,6 +97,20 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
   const terminal = focusRun != null && (isPipelineRunSucceeded(focusRun) || isPipelineRunFailed(focusRun))
   const pollSteps = pinnedName != null || running || (focusRun != null && !terminal)
 
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+
+  const isPlatformTarget = target.id === 'platform-stg' || target.id === 'platform-prod'
+
+  const buildAskPack = (logsText: string): string =>
+    buildPipelineRunAskPack({
+      pipeline,
+      run: focusRun!,
+      logs: logsText,
+      context: isPlatformTarget
+        ? platformDeliverAskContext({ shortLabel: target.shortLabel, namespace: target.namespace })
+        : undefined,
+    })
+
   const logsQuery = useQuery({
     queryKey: ['delivery', 'logs', pipeline, focusRun?.name, 'active'],
     queryFn: () => fetchPipelineRunLogs(focusRun!.name, runsQuery.data?.namespace ?? focusRun!.namespace),
@@ -106,6 +122,37 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
       return false
     },
   })
+
+  const handleAskAi = async () => {
+    if (focusRun == null) return
+    // Pull the freshest logs so the bundle is complete even mid-failure.
+    let logsText = logsQuery.data?.logs ?? ''
+    try {
+      const res = await fetchPipelineRunLogs(focusRun.name, ns)
+      logsText = res.logs
+    } catch {
+      /* fall back to cached logs */
+    }
+    try {
+      await navigator.clipboard.writeText(buildAskPack(logsText))
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2500)
+    } catch {
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 2500)
+    }
+  }
+
+  const handleDownload = () => {
+    if (focusRun == null) return
+    const blob = new Blob([buildAskPack(logsQuery.data?.logs ?? '')], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `deliver-debug-${focusRun.name}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <OpsSection
@@ -160,6 +207,13 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
             runName={focusRun.name}
             namespace={ns}
             pollUntilTerminal={pollSteps}
+            runTerminal={
+              terminal
+                ? isPipelineRunSucceeded(focusRun)
+                  ? 'succeeded'
+                  : 'failed'
+                : undefined
+            }
           />
           <pre className="llm-content-pre m-0 mt-3 max-h-80 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
             {logsQuery.isLoading && logsQuery.data == null
@@ -179,9 +233,28 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
             </div>
           )}
           {terminal && isPipelineRunFailed(focusRun) && (
-            <p className="m-0 mt-3 text-[var(--text-dense-meta)] text-[var(--destructive)]">
-              Deliver failed — open Observe → Pipeline runs for full history and log triage.
-            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">
+                Deliver failed{focusRun.reason != null && focusRun.reason !== '' ? `: ${focusRun.reason}` : ''} — export the full context below for AI triage.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" onClick={() => void handleAskAi()}>
+                  {copyState === 'copied'
+                    ? 'Copied — paste into AI'
+                    : copyState === 'error'
+                      ? 'Copy failed'
+                      : 'Ask AI for Help'}
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleDownload}>
+                  Download log
+                </Button>
+              </div>
+              {copyState === 'copied' && (
+                <p className="m-0 text-[var(--text-dense-meta)] text-[var(--success)]">
+                  Debug bundle (run status, reason, pipeline tasks, log tail) copied — paste it into your AI assistant.
+                </p>
+              )}
+            </div>
           )}
         </>
       )}

@@ -30,12 +30,15 @@ interface DeliveryPipelineStepProgressProps {
   namespace?: string
   /** Poll every 3s until all phases reach succeeded/failed. */
   pollUntilTerminal: boolean
+  /** When the PipelineRun is already terminal, suppress misleading "in progress" labels. */
+  runTerminal?: 'succeeded' | 'failed'
 }
 
 export function DeliveryPipelineStepProgress({
   runName,
   namespace,
   pollUntilTerminal,
+  runTerminal,
 }: DeliveryPipelineStepProgressProps) {
   const stepsQuery = useQuery({
     queryKey: ['delivery', 'steps', runName, namespace],
@@ -82,10 +85,16 @@ export function DeliveryPipelineStepProgress({
     <div className="mb-3">
       <p className="m-0 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
         <span>Pipeline phases</span>
-        {pollUntilTerminal && !phasesTerminal(phases) && (
+        {pollUntilTerminal && runTerminal == null && !phasesTerminal(phases) && (
           <span className="normal-case text-[var(--warning)]">· updating every 3s</span>
         )}
-        {currentIdx >= 0 && phases[currentIdx]?.status === 'running' && (
+        {runTerminal === 'succeeded' && (
+          <span className="normal-case text-[var(--success)]">· completed</span>
+        )}
+        {runTerminal === 'failed' && (
+          <span className="normal-case text-[var(--destructive)]">· failed</span>
+        )}
+        {runTerminal == null && currentIdx >= 0 && phases[currentIdx]?.status === 'running' && (
           <span className="normal-case">· {phases[currentIdx].label} in progress</span>
         )}
         {updatedAt != null && (
