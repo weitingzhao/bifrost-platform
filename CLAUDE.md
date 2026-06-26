@@ -1,5 +1,7 @@
 # CLAUDE.md — bifrost-platform (Bifrost Ops Platform)
 
+> **Console version**: `0.2.0` — Platform Release UI polish, quiet-success design, action-first layout.
+
 > **North star (终极目标)**: Ops Console → **Architecture → Blueprint** · `console/src/lib/architecture/blueprintCatalog.ts` · spine `config/ops-context.yaml` → `north_star` · decision **D6** · milestone **ops-ui-actuation**.
 
 > AI-native **control plane** for Bifrost Trade dev/prod environments. AI Native Platform goal integrated into Blueprint § AI Native Platform.
