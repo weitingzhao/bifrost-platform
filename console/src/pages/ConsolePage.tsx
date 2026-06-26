@@ -51,6 +51,7 @@ import { RoadmapPage } from '@/pages/RoadmapPage'
 import { DataLayerPage } from '@/pages/DataLayerPage'
 import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
 import { McpContractPage } from '@/pages/McpContractPage'
+import { NetworkUpgradePage } from '@/pages/NetworkUpgradePage'
 import { StandardsPage } from '@/pages/StandardsPage'
 
 const ControlRoomPage = lazy(() =>
@@ -82,6 +83,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'agent-protocol': 'Agent Protocol',
   'mcp-contract': 'MCP Contract',
   'design-system': 'Design System',
+  'network-upgrade': 'Network Upgrade',
   console: 'Server console',
 }
 
@@ -318,7 +320,8 @@ export function ConsolePage() {
     viewTab === 'k3s-architecture' ||
     viewTab === 'k3s-bootstrap' ||
     viewTab === 'cicd-bootstrap' ||
-    viewTab === 'data-layer'
+    viewTab === 'data-layer' ||
+    viewTab === 'network-upgrade'
   const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-protocol' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
   const handleCopyAllGovernance = async () => {
@@ -664,6 +667,7 @@ export function ConsolePage() {
                   : viewTab === 'k3s-bootstrap' ? 'First-node deployment runbook, verification checklist, node join steps, and sign-off.'
                   : viewTab === 'cicd-bootstrap' ? 'L0/L1/L2 self-hosting bootstrap model — CI/CD rules, recovery paths, and P6 gap tracking.'
                   : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
+                  : viewTab === 'network-upgrade' ? 'Home network backbone upgrade — VLAN redesign, UniFi migration plan, hardware BOM, and research checklist.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
                   : viewTab === 'mcp-contract'
@@ -703,6 +707,8 @@ export function ConsolePage() {
         {viewTab === 'cicd-bootstrap' && <CicdBootstrapPage />}
 
         {viewTab === 'data-layer' && <DataLayerPage />}
+
+        {viewTab === 'network-upgrade' && <NetworkUpgradePage />}
 
         {viewTab === 'platform-standards' && <StandardsPage />}
 

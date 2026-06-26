@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -213,7 +214,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 			"name": pipelineName,
 		},
 	}
-	if pipelineName == "bifrost-deliver-stg" || pipelineName == "bifrost-deliver-platform" {
+	if pipelineName == "bifrost-deliver-stg" || pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" {
 		spec["params"] = []map[string]any{
 			{"name": "revision", "value": rev},
 		}
@@ -231,7 +232,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
 		}
 	}
-	if pipelineName == "bifrost-deliver-platform" {
+	if pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" {
 		spec["taskRunSpecs"] = []map[string]any{
 			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
 			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
@@ -410,7 +411,7 @@ func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 				},
 			},
 		}
-	case "bifrost-deliver-platform":
+	case "bifrost-deliver-platform", "bifrost-deliver-platform-prod":
 		return []map[string]any{
 			map[string]any{
 				"name": "build-context",
@@ -754,6 +755,24 @@ func pipelineRunFromUnstructured(obj unstructured.Unstructured, pipelineName str
 	if ref, ok, _ := unstructured.NestedString(obj.Object, "spec", "pipelineRef", "name"); ok && ref != "" {
 		view.Pipeline = ref
 	}
+	if labels := obj.GetLabels(); labels != nil {
+		if rev, ok := labels["bifrost.io/revision"]; ok && rev != "" {
+			view.Revision = rev
+		}
+	}
+	if view.Revision == "" {
+		if params, found, _ := unstructured.NestedSlice(obj.Object, "spec", "params"); found {
+			for _, p := range params {
+				if pm, ok := p.(map[string]any); ok {
+					if name, _ := pm["name"].(string); name == "revision" {
+						if val, _ := pm["value"].(string); val != "" {
+							view.Revision = val
+						}
+					}
+				}
+			}
+		}
+	}
 	cond, found, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
 	if found && len(cond) > 0 {
 		if m, ok := cond[0].(map[string]any); ok {
@@ -806,4 +825,122 @@ func (s *Service) SetClientsetForTest(clientset kubernetes.Interface) {
 		return clientset, "fake", nil
 	})
 	s.cluster = cs
+}
+
+const (
+	giteaInClusterBase = "http://gitea.cicd.svc.cluster.local:3000"
+	giteaOrg           = "bifrost"
+	giteaSecretName    = "gitea-bootstrap"
+)
+
+func (s *Service) Revisions(ctx context.Context, repos []string) RevisionsResponse {
+	now := time.Now().UTC()
+	ns := s.PipelinesNamespace()
+	out := RevisionsResponse{
+		ClusterID:    s.clusterID(),
+		Repos:        repos,
+		DefaultRef:   "main",
+		Tags:         []GiteaTagView{},
+		Reachability: probe.ReachFail,
+		GeneratedAt:  now,
+	}
+
+	if len(repos) == 0 {
+		repos = trackedGiteaRepos
+		out.Repos = repos
+	}
+
+	clientset, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		out.Detail = "cluster client: " + err.Error()
+		return out
+	}
+
+	user, pass := s.giteaCredentials(ctx, clientset, ns)
+
+	seen := map[string]bool{}
+	var allTags []GiteaTagView
+	var errors []string
+
+	for _, repo := range repos {
+		tags, fetchErr := s.fetchGiteaTags(ctx, repo, user, pass)
+		if fetchErr != nil {
+			errors = append(errors, repo+": "+fetchErr.Error())
+			continue
+		}
+		for _, t := range tags {
+			key := t.Name + "/" + t.Repo
+			if !seen[key] {
+				seen[key] = true
+				allTags = append(allTags, t)
+			}
+		}
+	}
+
+	out.Tags = allTags
+	if len(errors) > 0 {
+		out.Reachability = probe.ReachDegraded
+		out.Detail = strings.Join(errors, "; ")
+	} else {
+		out.Reachability = probe.ReachOK
+		out.Detail = fmt.Sprintf("%d tag(s) across %d repo(s)", len(allTags), len(repos))
+	}
+	return out
+}
+
+func (s *Service) giteaCredentials(ctx context.Context, clientset kubernetes.Interface, ns string) (string, string) {
+	secret, err := clientset.CoreV1().Secrets(ns).Get(ctx, giteaSecretName, metav1.GetOptions{})
+	if err != nil {
+		return "", ""
+	}
+	user := string(secret.Data["username"])
+	pass := string(secret.Data["password"])
+	return user, pass
+}
+
+func (s *Service) fetchGiteaTags(ctx context.Context, repo, user, pass string) ([]GiteaTagView, error) {
+	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/tags?limit=50", giteaInClusterBase, giteaOrg, repo)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if user != "" && pass != "" {
+		req.SetBasicAuth(user, pass)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	if err != nil {
+		return nil, err
+	}
+
+	var raw []struct {
+		Name   string `json:"name"`
+		Commit struct {
+			SHA string `json:"sha"`
+		} `json:"commit"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("json: %w", err)
+	}
+
+	tags := make([]GiteaTagView, 0, len(raw))
+	for _, t := range raw {
+		tags = append(tags, GiteaTagView{
+			Name:   t.Name,
+			Repo:   repo,
+			Commit: t.Commit.SHA,
+		})
+	}
+	return tags, nil
 }

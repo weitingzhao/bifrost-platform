@@ -14,13 +14,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import {
   fetchGateHistory,
+  fetchPipelineRuns,
   fetchReleaseGate,
+  fetchSelfHealth,
   runReleaseGate,
   type ReleaseGateTier,
 } from '@/api/platform'
 import type { GateHistoryEntry, ReleaseGateCheckView } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { deliveryTargetById, type DeliveryTargetId } from '@/lib/delivery/deliveryTargets'
+import { buildGateDebugBundle } from '@/lib/promote/buildGateDebugBundle'
 
 const STG_TIER: ReleaseGateTier = 'platform-stg'
 const PROD_TIER: ReleaseGateTier = 'platform-prod'
@@ -75,21 +79,72 @@ function CheckRow({ check }: { check: ReleaseGateCheckView }) {
 interface PlatformStageGatePanelProps {
   tier: ReleaseGateTier
   label: string
+  hideActions?: boolean
 }
 
-export function PlatformStageGatePanel({ tier, label }: PlatformStageGatePanelProps) {
+type CopyState = 'idle' | 'copied' | 'error'
+
+export function PlatformStageGatePanel({ tier, label, hideActions }: PlatformStageGatePanelProps) {
   const { canAdmin } = usePlatformAuth()
+  const target = deliveryTargetById(tier as DeliveryTargetId)
+  const pipeline = target.pipeline
+  const namespace = target.namespace
 
   const gateQuery = useQuery({
     queryKey: ['promote', 'release-gate', tier],
     queryFn: () => fetchReleaseGate(tier),
     refetchInterval: 30_000,
   })
+  const selfHealthQuery = useQuery({
+    queryKey: ['platform', 'self-health'],
+    queryFn: fetchSelfHealth,
+    refetchInterval: 30_000,
+  })
+  const runsQuery = useQuery({
+    queryKey: ['delivery', 'runs', pipeline],
+    queryFn: () => fetchPipelineRuns(pipeline),
+    refetchInterval: 15_000,
+  })
 
   const gate = gateQuery.data
   const result = gate?.result ?? ''
   const { mutation, runError } = useRunGate(tier)
   const checks = gate?.checks ?? []
+
+  const [copyState, setCopyState] = useState<CopyState>('idle')
+  const failed = result === 'fail' || (gate?.blockers?.length ?? 0) > 0
+
+  const buildBundle = () =>
+    buildGateDebugBundle({
+      tier,
+      label,
+      pipeline,
+      namespace,
+      gate,
+      runs: runsQuery.data,
+      selfHealth: selfHealthQuery.data,
+    })
+
+  const handleAskAi = async () => {
+    try {
+      await navigator.clipboard.writeText(buildBundle())
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2500)
+    } catch {
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 2500)
+    }
+  }
+
+  const handleDownload = () => {
+    const blob = new Blob([buildBundle()], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `gate-debug-${tier}-${Date.now()}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const resultTag = result === 'pass'
     ? <DenseTag variant="success">pass</DenseTag>
@@ -110,20 +165,49 @@ export function PlatformStageGatePanel({ tier, label }: PlatformStageGatePanelPr
               {gate.ready ? 'ready' : 'blocked'}
             </DenseTag>
           )}
+          {gate?.revision && (
+            <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-dense-caption font-semibold text-primary">
+              {gate.revision}
+            </span>
+          )}
           {gate?.at && (
             <span className="text-dense-caption text-muted-foreground font-mono-tabular">
               {formatGateTime(gate.at)}
             </span>
           )}
         </div>
-        {canAdmin && (
-          <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-            {mutation.isPending ? 'Running…' : `Run ${label} gate`}
-          </Button>
+        {!hideActions && (
+          <div className="flex flex-wrap items-center gap-2">
+            {failed && (
+              <>
+                <Button size="sm" onClick={() => void handleAskAi()}>
+                  {copyState === 'copied'
+                    ? 'Copied — paste into AI'
+                    : copyState === 'error'
+                      ? 'Copy failed'
+                      : 'Ask AI for Help'}
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleDownload}>
+                  Download log
+                </Button>
+              </>
+            )}
+            {canAdmin && (
+              <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+                {mutation.isPending ? 'Running…' : `Run ${label} gate`}
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
-      {runError && (
+      {!hideActions && failed && copyState === 'copied' && (
+        <p className="m-0 text-dense-meta text-success">
+          Debug bundle copied — paste it into your AI assistant to diagnose the failure.
+        </p>
+      )}
+
+      {!hideActions && runError && (
         <p className="m-0 text-dense-meta text-destructive">{runError}</p>
       )}
 
@@ -207,10 +291,11 @@ export function PlatformGateHistorySection() {
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
-              <DenseTableHead className="w-[22%]">Time</DenseTableHead>
+              <DenseTableHead className="w-[20%]">Time</DenseTableHead>
               <DenseTableHead className="w-[10%]">Result</DenseTableHead>
+              <DenseTableHead className="w-[12%]">Revision</DenseTableHead>
               <DenseTableHead className="w-[12%]">Triggered by</DenseTableHead>
-              <DenseTableHead className="w-[10%]">Checks</DenseTableHead>
+              <DenseTableHead className="w-[8%]">Checks</DenseTableHead>
               <DenseTableHead>Summary</DenseTableHead>
             </DenseTableHeadRow>
           </DenseTableHeader>
@@ -224,6 +309,9 @@ export function PlatformGateHistorySection() {
                   <DenseTag variant={entry.result === 'pass' ? 'success' : 'danger'}>
                     {entry.result}
                   </DenseTag>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono text-[var(--text-dense-meta)] text-[var(--primary)]">
+                  {entry.revision ?? '—'}
                 </DenseTableCell>
                 <DenseTableCell className="text-[var(--text-dense-meta)]">
                   {entry.triggered_by ?? '—'}

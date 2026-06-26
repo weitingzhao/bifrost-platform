@@ -19,7 +19,7 @@ export async function platformGet(path: string): Promise<unknown> {
 
 export async function platformPost(path: string, body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = {
-    ...authHeaders(),
+    ...(authHeaders() as Record<string, string>),
     'Content-Type': 'application/json',
   }
   const r = await fetch(`${base}${path}`, {

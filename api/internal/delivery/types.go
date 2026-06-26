@@ -43,12 +43,13 @@ type PipelineRunsResponse struct {
 }
 
 type PipelineRunView struct {
-	Name         string `json:"name"`
-	Namespace    string `json:"namespace"`
-	Pipeline     string `json:"pipeline"`
-	Status       string `json:"status"`
-	Reason       string `json:"reason,omitempty"`
-	StartTime    string `json:"start_time,omitempty"`
+	Name           string `json:"name"`
+	Namespace      string `json:"namespace"`
+	Pipeline       string `json:"pipeline"`
+	Revision       string `json:"revision,omitempty"`
+	Status         string `json:"status"`
+	Reason         string `json:"reason,omitempty"`
+	StartTime      string `json:"start_time,omitempty"`
 	CompletionTime string `json:"completion_time,omitempty"`
 }
 
@@ -126,6 +127,22 @@ type StartPipelineRunRequest struct {
 
 type RefreshDockerfileRequest struct {
 	Revision string `json:"revision"`
+}
+
+type GiteaTagView struct {
+	Name   string `json:"name"`
+	Repo   string `json:"repo"`
+	Commit string `json:"commit,omitempty"`
+}
+
+type RevisionsResponse struct {
+	ClusterID    string         `json:"cluster_id"`
+	Repos        []string       `json:"repos"`
+	DefaultRef   string         `json:"default_ref"`
+	Tags         []GiteaTagView `json:"tags"`
+	Reachability probe.Reachability `json:"reachability"`
+	Detail       string         `json:"detail"`
+	GeneratedAt  time.Time      `json:"generated_at"`
 }
 
 type PipelinePhaseView struct {

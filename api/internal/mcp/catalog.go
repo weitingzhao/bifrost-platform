@@ -55,7 +55,12 @@ func Catalog() []ToolView {
 		tool("get_agent_nightly_report", "Nightly drift scan report from agent host", "read", "GET", "/api/v1/agent/nightly-report", "viewer", "Agent", true),
 		tool("get_remediation_health", "Remediation runner health on agent host", "read", "GET", "/api/v1/remediation/health", "viewer", "Agent", true),
 		tool("list_remediation_jobs", "Recent agent remediation tasks", "read", "GET", "/api/v1/remediation/", "operator", "Agent", true),
-		tool("run_release_gate", "Run STG or Prod release gate", "confirm", "POST", "/api/v1/promote/release-gate", "admin", "P4", false),
+		tool("get_release_state", "Aggregated release state across STG/PROD stages with next-action guidance", "read", "GET", "/api/v1/promote/release-state", "viewer", "P4", true),
+		tool("get_release_gate", "Current release gate result, checks, and blockers", "read", "GET", "/api/v1/promote/release-gate", "viewer", "P4", true),
+		tool("get_gate_history", "Chronological gate run history for a tier", "read", "GET", "/api/v1/promote/gate-history", "viewer", "P4", true),
+		tool("get_stg_smoke", "STG environment HTTP smoke probes", "read", "GET", "/api/v1/delivery/stg/smoke", "viewer", "P4", true),
+		tool("get_delivery_revisions", "Available Gitea tags for deploy revision selection", "read", "GET", "/api/v1/delivery/revisions", "viewer", "P4", true),
+		tool("run_release_gate", "Run STG or Prod release gate", "confirm", "POST", "/api/v1/promote/release-gate", "admin", "P4", true),
 		tool("sign_tier_b", "Record Tier B Owner sign-off", "confirm", "POST", "/api/v1/promote/tier-b/signoff", "admin", "P4", false),
 	}
 }

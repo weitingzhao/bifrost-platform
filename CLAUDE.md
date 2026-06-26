@@ -4,7 +4,7 @@
 
 > AI-native **control plane** for Bifrost Trade dev/prod environments. AI Native Platform goal integrated into Blueprint § AI Native Platform.
 
-与本项目用户的所有对话一律使用中文。
+与本项目用户对话一律使用中文回复（无论用户用何种语言提问）；UI 字符串与代码标识符使用 English。
 
 ## 文档优先级
 

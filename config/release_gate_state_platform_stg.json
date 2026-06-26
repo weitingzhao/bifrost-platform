@@ -1,0 +1,31 @@
+{
+  "tier": "platform-stg",
+  "at": "2026-06-25T18:27:38.009768Z",
+  "result": "pass",
+  "log_path": "bifrost-trade-infra/scripts/release_gate.log",
+  "checks": [
+    {
+      "id": "platform-deliver-stg",
+      "label": "Last bifrost-deliver-platform success",
+      "required": true,
+      "reachability": "ok",
+      "detail": "bifrost-deliver-platform-1782409698 (True)"
+    },
+    {
+      "id": "platform-stg-console",
+      "label": "platform-stg-console",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200 from http://192.168.10.73:30879"
+    },
+    {
+      "id": "platform-stg-api",
+      "label": "platform-stg-api",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200 from http://192.168.10.73:30878/health"
+    }
+  ],
+  "triggered_by": "admin",
+  "summary": "platform-stg release gate pass (3 checks)"
+}

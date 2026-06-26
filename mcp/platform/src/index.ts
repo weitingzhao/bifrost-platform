@@ -98,10 +98,14 @@ server.tool(
 
 server.tool(
   'start_pipeline_run',
-  'Start Tekton PipelineRun (operator)',
-  { name: z.string() },
-  async ({ name }) =>
-    jsonResult(await platformPost(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`)),
+  'Start Tekton PipelineRun (operator). Pass revision (Gitea tag) to pin deploy version.',
+  { name: z.string(), revision: z.string().optional() },
+  async ({ name, revision }) =>
+    jsonResult(
+      await platformPost(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`, {
+        revision: revision ?? '',
+      }),
+    ),
 )
 
 server.tool(
@@ -208,6 +212,62 @@ server.tool('get_remediation_health', 'Remediation runner health', {}, async () 
 
 server.tool('list_remediation_jobs', 'List remediation / agent tasks (operator)', {}, async () =>
   jsonResult(await platformGet('/api/v1/remediation/')),
+)
+
+// --- Promote / Release tools (P4) ---
+
+server.tool(
+  'get_release_state',
+  'Aggregated release state across STG/PROD with next-action guidance for agent-driven releases',
+  { tier: z.string().optional().describe('platform (default) or trade') },
+  async ({ tier }) => {
+    const t = tier ?? 'platform'
+    return jsonResult(await platformGet(`/api/v1/promote/release-state?tier=${encodeURIComponent(t)}`))
+  },
+)
+
+server.tool(
+  'get_release_gate',
+  'Current release gate result, checks, blockers, and linked revision',
+  { tier: z.string().optional().describe('stg | prod | platform-stg | platform-prod') },
+  async ({ tier }) => {
+    const qs = tier != null && tier !== '' ? `?tier=${encodeURIComponent(tier)}` : ''
+    return jsonResult(await platformGet(`/api/v1/promote/release-gate${qs}`))
+  },
+)
+
+server.tool(
+  'get_gate_history',
+  'Chronological gate run history for a tier',
+  { tier: z.string().optional().describe('stg | prod | platform-stg | platform-prod') },
+  async ({ tier }) => {
+    const qs = tier != null && tier !== '' ? `?tier=${encodeURIComponent(tier)}` : ''
+    return jsonResult(await platformGet(`/api/v1/promote/gate-history${qs}`))
+  },
+)
+
+server.tool('get_stg_smoke', 'STG environment HTTP smoke probes', {}, async () =>
+  jsonResult(await platformGet('/api/v1/delivery/stg/smoke')),
+)
+
+server.tool(
+  'get_delivery_revisions',
+  'Available Gitea tags for deploy revision selection',
+  { repos: z.string().optional().describe('Comma-separated repo names') },
+  async ({ repos }) => {
+    const qs = repos != null && repos !== '' ? `?repos=${encodeURIComponent(repos)}` : ''
+    return jsonResult(await platformGet(`/api/v1/delivery/revisions${qs}`))
+  },
+)
+
+server.tool(
+  'run_release_gate',
+  'Run STG or PROD release gate (admin). Validates deploy health, captures revision, persists result.',
+  { tier: z.string().optional().describe('stg | prod | platform-stg | platform-prod') },
+  async ({ tier }) => {
+    const qs = tier != null && tier !== '' ? `?tier=${encodeURIComponent(tier)}` : ''
+    return jsonResult(await platformPost(`/api/v1/promote/release-gate${qs}`))
+  },
 )
 
 async function main() {

@@ -12,7 +12,7 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { fetchSupplyChain, startPipelineRun } from '@/api/platform'
+import { fetchRevisions, fetchSupplyChain, startPipelineRun } from '@/api/platform'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
@@ -30,12 +30,14 @@ const SMOKE_URLS: Record<string, { console: string; apiHealth: string }> = {
 
 interface PlatformDeliverActuatePanelProps {
   target: DeliveryTargetConfig
+  hideActions?: boolean
 }
 
-export function PlatformDeliverActuatePanel({ target }: PlatformDeliverActuatePanelProps) {
+export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDeliverActuatePanelProps) {
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
   const [revision, setRevision] = useState('main')
+  const [customRevision, setCustomRevision] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const supplyQuery = useQuery({
@@ -44,6 +46,12 @@ export function PlatformDeliverActuatePanel({ target }: PlatformDeliverActuatePa
     refetchInterval: 15_000,
   })
   const supplyChain = supplyQuery.data
+
+  const revisionsQuery = useQuery({
+    queryKey: ['delivery', 'revisions', target.mirrorRepos],
+    queryFn: () => fetchRevisions(target.mirrorRepos),
+    staleTime: 60_000,
+  })
 
   const deliverMutation = useMutation({
     mutationFn: (rev: string) => startPipelineRun(target.pipeline, rev),
@@ -128,17 +136,56 @@ export function PlatformDeliverActuatePanel({ target }: PlatformDeliverActuatePa
           </details>
         )}
 
-        {canOperate && (
+        {!hideActions && canOperate && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-dense-label text-muted-foreground shrink-0">Revision:</span>
-            <Input
-              className="h-8 w-28 text-dense-body"
-              value={revision}
-              onChange={e => setRevision(e.target.value)}
-            />
+            {customRevision ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  className="h-8 w-36 text-dense-body"
+                  value={revision}
+                  onChange={e => setRevision(e.target.value)}
+                  placeholder="branch or sha"
+                />
+                <button
+                  type="button"
+                  className="text-dense-meta text-primary underline shrink-0"
+                  onClick={() => { setCustomRevision(false); setRevision('main') }}
+                >
+                  tags
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <select
+                  className="h-8 rounded-md border border-input bg-background px-2 text-dense-body focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={revision}
+                  onChange={e => setRevision(e.target.value)}
+                >
+                  <option value="main">main (default)</option>
+                  {revisionsQuery.data?.tags
+                    ?.filter((t, i, arr) => arr.findIndex(x => x.name === t.name) === i)
+                    .map(tag => (
+                      <option key={tag.name} value={tag.name}>
+                        {tag.name}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  type="button"
+                  className="text-dense-meta text-primary underline shrink-0"
+                  onClick={() => setCustomRevision(true)}
+                >
+                  custom
+                </button>
+                {revisionsQuery.isLoading && (
+                  <span className="text-dense-meta text-muted-foreground">loading tags…</span>
+                )}
+              </div>
+            )}
             <Button
               size="sm"
-              disabled={deliverMutation.isPending || !cmAllOk}
+              disabled={deliverMutation.isPending || !cmAllOk || !revision.trim()}
               onClick={() => deliverMutation.mutate(revision)}
             >
               {deliverMutation.isPending ? 'Starting…' : `Run ${target.pipeline}`}
@@ -151,7 +198,7 @@ export function PlatformDeliverActuatePanel({ target }: PlatformDeliverActuatePa
           </div>
         )}
 
-        {actionError && <p className="text-dense-meta text-destructive m-0">{actionError}</p>}
+        {!hideActions && actionError && <p className="text-dense-meta text-destructive m-0">{actionError}</p>}
       </div>
     </OpsSection>
   )

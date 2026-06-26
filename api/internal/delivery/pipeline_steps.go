@@ -51,6 +51,35 @@ var deliverPlatformPhaseDefs = []struct {
 	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
 }
 
+// deliverPlatformProdPhaseDefs — bifrost-deliver-platform-prod (preflight STG before prod deploy).
+var deliverPlatformProdPhaseDefs = []struct {
+	ID    string
+	Label string
+	Tasks []string
+}{
+	{ID: "preflight", Label: "Preflight", Tasks: []string{"preflight-stg"}},
+	{ID: "mirror", Label: "Mirror", Tasks: []string{"mirror-sync"}},
+	{ID: "clone", Label: "Clone", Tasks: []string{"clone-platform", "clone-ui"}},
+	{
+		ID:    "build",
+		Label: "Build",
+		Tasks: []string{"stage-api-dockerfile", "stage-console-dockerfile", "build-platform-api", "build-platform-console"},
+	},
+	{ID: "rollout", Label: "Rollout", Tasks: []string{"rollout"}},
+	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
+}
+
+func aggregatePhasesForPipeline(pipelineName string, taskStatus map[string]string) []PipelinePhaseView {
+	switch pipelineName {
+	case "bifrost-deliver-platform":
+		return aggregateDeliverPhases(deliverPlatformPhaseDefs, taskStatus)
+	case "bifrost-deliver-platform-prod":
+		return aggregateDeliverPhases(deliverPlatformProdPhaseDefs, taskStatus)
+	default:
+		return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus)
+	}
+}
+
 func aggregateDeliverPhases(defs []struct {
 	ID    string
 	Label string
@@ -75,6 +104,10 @@ func aggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView
 
 func aggregateDeliverPlatformPhases(taskStatus map[string]string) []PipelinePhaseView {
 	return aggregateDeliverPhases(deliverPlatformPhaseDefs, taskStatus)
+}
+
+func aggregateDeliverPlatformProdPhases(taskStatus map[string]string) []PipelinePhaseView {
+	return aggregateDeliverPhases(deliverPlatformProdPhaseDefs, taskStatus)
 }
 
 func aggregatePhaseStatus(tasks []string, taskStatus map[string]string) (status, detail string) {
@@ -178,8 +211,8 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 		}
 	}
 	switch pipelineName {
-	case "bifrost-deliver-platform":
-		out.Phases = aggregateDeliverPlatformPhases(map[string]string{})
+	case "bifrost-deliver-platform", "bifrost-deliver-platform-prod":
+		out.Phases = aggregatePhasesForPipeline(pipelineName, map[string]string{})
 	default:
 		out.Phases = aggregateDeliverStgPhases(map[string]string{})
 	}
@@ -226,12 +259,7 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	}
 	sort.Slice(tasks, func(i, j int) bool { return tasks[i].PipelineTask < tasks[j].PipelineTask })
 
-	switch pipelineName {
-	case "bifrost-deliver-platform":
-		out.Phases = aggregateDeliverPlatformPhases(taskStatus)
-	default:
-		out.Phases = aggregateDeliverStgPhases(taskStatus)
-	}
+	out.Phases = aggregatePhasesForPipeline(pipelineName, taskStatus)
 	out.Tasks = tasks
 	out.Reachability = probe.ReachOK
 	out.Detail = fmt.Sprintf("%d task(s) · %d phase(s)", len(tasks), len(out.Phases))

@@ -28,6 +28,7 @@ export type ConsoleViewTab =
   | 'mcp-contract'
   | 'design-system'
   | 'flywheel-vision'
+  | 'network-upgrade'
   | 'console'
 
 export function ConsoleSidebar({
