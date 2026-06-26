@@ -39,6 +39,7 @@ import {
   isPipelineRunSucceeded,
 } from '@/lib/delivery/pipelineRunAskPack'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { buildDeployDebugBundle } from '@/lib/delivery/buildDeployDebugBundle'
 import { buildGateDebugBundle } from '@/lib/promote/buildGateDebugBundle'
 
 const PLATFORM_STG_TARGET = deliveryTargetById('platform-stg')
@@ -380,6 +381,34 @@ function DeployActionBar({ target }: { target: DeliveryTargetConfig }) {
     staleTime: 60_000,
   })
 
+  const runsQuery = useQuery({
+    queryKey: ['delivery', 'runs', target.pipeline],
+    queryFn: () => fetchPipelineRuns(target.pipeline),
+    refetchInterval: 15_000,
+  })
+  const selfHealthQuery = useQuery({
+    queryKey: ['platform', 'self-health'],
+    queryFn: fetchSelfHealth,
+    refetchInterval: 30_000,
+  })
+  const releaseStateQuery = useQuery({
+    queryKey: ['promote', 'release-state'],
+    queryFn: () => fetchReleaseState(),
+    refetchInterval: 30_000,
+  })
+
+  const latestRun = runsQuery.data?.runs?.[0]
+  const latestRunFailed = latestRun != null && isPipelineRunFailed(latestRun)
+
+  const latestRunStepsQuery = useQuery({
+    queryKey: ['delivery', 'steps', latestRun?.name, latestRun?.namespace],
+    queryFn: () => fetchPipelineRunSteps(latestRun!.name, latestRun!.namespace),
+    enabled: latestRunFailed && latestRun != null,
+    staleTime: 30_000,
+  })
+
+  const hasError = !!actionError || latestRunFailed
+
   const deliverMutation = useMutation({
     mutationFn: (rev: string) => startPipelineRun(target.pipeline, rev),
     onMutate: () => setActionError(null),
@@ -394,6 +423,44 @@ function DeployActionBar({ target }: { target: DeliveryTargetConfig }) {
     },
     onError: (err: Error) => setActionError(err.message),
   })
+
+  const [copyState, setCopyState] = useState<CopyState>('idle')
+
+  const buildBundle = () =>
+    buildDeployDebugBundle({
+      target: target.shortLabel,
+      pipeline: target.pipeline,
+      namespace: target.namespace,
+      revision,
+      actionError,
+      run: latestRun,
+      runs: runsQuery.data,
+      steps: latestRunStepsQuery.data,
+      supplyChain: supplyQuery.data,
+      releaseState: releaseStateQuery.data,
+      selfHealth: selfHealthQuery.data,
+    })
+
+  const handleAskAi = async () => {
+    try {
+      await navigator.clipboard.writeText(buildBundle())
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2500)
+    } catch {
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 2500)
+    }
+  }
+
+  const handleDownload = () => {
+    const blob = new Blob([buildBundle()], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `deploy-debug-${target.shortLabel.toLowerCase()}-${Date.now()}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -454,11 +521,30 @@ function DeployActionBar({ target }: { target: DeliveryTargetConfig }) {
           >
             {deliverMutation.isPending ? 'Starting…' : `Deploy to ${target.shortLabel}`}
           </Button>
+          {hasError && (
+            <>
+              <Button size="sm" variant="outline" onClick={() => void handleAskAi()}>
+                {copyState === 'copied'
+                  ? 'Copied — paste into AI'
+                  : copyState === 'error'
+                    ? 'Copy failed'
+                    : 'Issue for AI'}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={handleDownload}>
+                Download log
+              </Button>
+            </>
+          )}
         </div>
       ) : (
         <span className="text-dense-caption text-muted-foreground">Authenticate as operator to deploy.</span>
       )}
       {actionError && <p className="m-0 text-dense-caption text-destructive">{actionError}</p>}
+      {copyState === 'copied' && (
+        <p className="m-0 text-dense-caption text-success">
+          Debug bundle copied — paste it into your AI assistant to diagnose the failure.
+        </p>
+      )}
     </div>
   )
 }

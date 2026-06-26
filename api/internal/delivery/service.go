@@ -29,6 +29,27 @@ var (
 	taskRunGVR     = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "taskruns"}
 )
 
+// sanitizeLabelValue converts a Git ref (e.g. "feature/release-ui-polish")
+// into a valid K8s label value by replacing illegal characters with '-'.
+// K8s labels: [a-zA-Z0-9._-], max 63 chars, must start/end alphanumeric.
+func sanitizeLabelValue(v string) string {
+	var b strings.Builder
+	for _, r := range v {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	s := b.String()
+	s = strings.Trim(s, "-._")
+	if len(s) > 63 {
+		s = s[:63]
+		s = strings.TrimRight(s, "-._")
+	}
+	return s
+}
+
 type Service struct {
 	entry          *config.ClusterEntry
 	cluster        *cluster.Service
@@ -245,11 +266,11 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 			"metadata": map[string]any{
 				"name":      runName,
 				"namespace": ns,
-				"labels": map[string]any{
-					"tekton.dev/pipeline": pipelineName,
-					"bifrost.io/trigger":  "platform-api",
-					"bifrost.io/revision": rev,
-				},
+			"labels": map[string]any{
+				"tekton.dev/pipeline": pipelineName,
+				"bifrost.io/trigger":  "platform-api",
+				"bifrost.io/revision": sanitizeLabelValue(rev),
+			},
 			},
 			"spec": spec,
 		},
@@ -755,21 +776,21 @@ func pipelineRunFromUnstructured(obj unstructured.Unstructured, pipelineName str
 	if ref, ok, _ := unstructured.NestedString(obj.Object, "spec", "pipelineRef", "name"); ok && ref != "" {
 		view.Pipeline = ref
 	}
-	if labels := obj.GetLabels(); labels != nil {
-		if rev, ok := labels["bifrost.io/revision"]; ok && rev != "" {
-			view.Revision = rev
+	if params, found, _ := unstructured.NestedSlice(obj.Object, "spec", "params"); found {
+		for _, p := range params {
+			if pm, ok := p.(map[string]any); ok {
+				if name, _ := pm["name"].(string); name == "revision" {
+					if val, _ := pm["value"].(string); val != "" {
+						view.Revision = val
+					}
+				}
+			}
 		}
 	}
 	if view.Revision == "" {
-		if params, found, _ := unstructured.NestedSlice(obj.Object, "spec", "params"); found {
-			for _, p := range params {
-				if pm, ok := p.(map[string]any); ok {
-					if name, _ := pm["name"].(string); name == "revision" {
-						if val, _ := pm["value"].(string); val != "" {
-							view.Revision = val
-						}
-					}
-				}
+		if labels := obj.GetLabels(); labels != nil {
+			if rev, ok := labels["bifrost.io/revision"]; ok && rev != "" {
+				view.Revision = rev
 			}
 		}
 	}
