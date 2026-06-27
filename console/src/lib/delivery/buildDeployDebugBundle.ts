@@ -38,6 +38,8 @@ export function buildDeployDebugBundle(input: DeployDebugBundleInput): string {
     supplyChain, releaseState, selfHealth,
   } = input
 
+  const effectiveRevision = (run?.revision?.trim() || revision.trim()) || 'unknown'
+
   const lines: string[] = [
     `# Platform deploy debug bundle — ${target}`,
     '',
@@ -45,7 +47,7 @@ export function buildDeployDebugBundle(input: DeployDebugBundleInput): string {
     'Mode: Ops',
     'Source: Ops Console → Operate → Platform Release',
     `Target: ${target} · Pipeline: ${pipeline} · Namespace: ${namespace}`,
-    `Revision: ${revision}`,
+    `Revision: ${effectiveRevision}`,
   ]
 
   if (actionError) {
@@ -175,7 +177,7 @@ export function buildDeployDebugBundle(input: DeployDebugBundleInput): string {
   lines.push(
     '',
     '## Ask',
-    `The Platform ${target} deploy failed with revision "${revision}". ` +
+    `The ${target} deploy failed with revision "${effectiveRevision}". ` +
       (actionError
         ? 'The deploy action itself returned an error before the PipelineRun could start. '
         : 'The PipelineRun was created but failed during execution. ') +

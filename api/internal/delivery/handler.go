@@ -154,6 +154,16 @@ func (h *Handler) HandleRevisions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Revisions(r.Context(), repos))
 }
 
+func (h *Handler) HandleRefPreflight(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(chi.URLParam(r, "name"))
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "pipeline name required"})
+		return
+	}
+	rev := strings.TrimSpace(r.URL.Query().Get("revision"))
+	writeJSON(w, http.StatusOK, h.svc.RefPreflight(r.Context(), name, rev))
+}
+
 func (h *Handler) HandleSupplyChain(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.SupplyChain(r.Context()))
 }

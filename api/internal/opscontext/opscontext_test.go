@@ -49,6 +49,24 @@ func TestLoadFixture(t *testing.T) {
 	if !foundCutover {
 		t.Error("2c-b-prod-cutover milestone missing")
 	}
+	if f.Tracks == nil || f.Tracks.Automate == nil {
+		t.Fatal("tracks.automate missing from ops-context.yaml")
+	}
+	if len(f.Tracks.Automate.Streams) < 5 {
+		t.Errorf("expected >= 5 automate streams, got %d", len(f.Tracks.Automate.Streams))
+	}
+	foundRetrospective := false
+	for _, s := range f.Tracks.Automate.Streams {
+		if s.ID == "retrospective-agent" {
+			foundRetrospective = true
+			if s.Status != "not_started" {
+				t.Errorf("retrospective-agent status = %q", s.Status)
+			}
+		}
+	}
+	if !foundRetrospective {
+		t.Error("retrospective-agent stream missing from tracks.automate")
+	}
 }
 
 func TestValidateRequired(t *testing.T) {

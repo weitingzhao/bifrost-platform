@@ -192,6 +192,14 @@ app.get('/run/:id/stream', (req, res) => {
 
   send({ type: 'job', job })
 
+  let heartbeat: ReturnType<typeof setInterval> | undefined
+
+  function cleanup() {
+    if (heartbeat != null) clearInterval(heartbeat)
+    unsubscribe()
+    res.end()
+  }
+
   const unsubscribe = subscribe(req.params.id, event => {
     send({ type: 'event', event })
     const current = getJob(req.params.id)
@@ -201,15 +209,9 @@ app.get('/run/:id/stream', (req, res) => {
     }
   })
 
-  const heartbeat = setInterval(() => {
+  heartbeat = setInterval(() => {
     res.write(': ping\n\n')
   }, 15_000)
-
-  function cleanup() {
-    clearInterval(heartbeat)
-    unsubscribe()
-    res.end()
-  }
 
   req.on('close', cleanup)
 

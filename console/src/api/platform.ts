@@ -62,6 +62,7 @@ import type {
   RunBuildPhaseGateResponse,
   SelfHealthResponse,
   RevisionsResponse,
+  RefPreflightResponse,
   ReleaseStateResponse,
 } from './types'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
@@ -514,6 +515,16 @@ export async function fetchRevisions(repos?: string[]): Promise<RevisionsRespons
   const r = await fetch(`/api/v1/delivery/revisions${params}`)
   if (!r.ok) throw new Error(`revisions: HTTP ${r.status}`)
   return r.json() as Promise<RevisionsResponse>
+}
+
+export async function fetchRefPreflight(
+  pipeline: string,
+  revision: string,
+): Promise<RefPreflightResponse> {
+  const params = new URLSearchParams({ revision })
+  const r = await fetch(`/api/v1/delivery/pipelines/${pipeline}/ref-preflight?${params}`)
+  if (!r.ok) throw new Error(`ref preflight: HTTP ${r.status}`)
+  return r.json() as Promise<RefPreflightResponse>
 }
 
 export async function triggerMirrorSync(): Promise<SupplyChainActuationResponse> {

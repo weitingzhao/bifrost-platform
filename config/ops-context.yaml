@@ -422,6 +422,62 @@ tracks:
               prerequisites:
                 - "agent-mcp-integration stream closed"
                 - "Trade API read endpoints stable"
+            - id: release-agent-task
+              label: "Release Agent Task — one-click platform release"
+              total: 3
+              done: 2
+              status: in_progress
+              note: "① P1 delivery/promote custom tools for runner ✓ ② P2 release scope prompt + cwd + admin token ✓ ③ P3 Agent Desk quick prompt + end-to-end validation"
+              prerequisites:
+                - "agent-infra-bootstrap stream closed"
+                - "p6-platform-e2e-cicd done"
+            - id: retrospective-agent
+              label: "Retrospective Agent — self-evolving platform"
+              total: 5
+              done: 0
+              status: not_started
+              note: "AI agent that analyzes remediation job history to identify systemic platform defects. ① Cross-job pattern clustering (recurring pod/namespace/error) ② Root-cause classification (transient vs platform-defect vs config-drift) ③ Platform defect report generation with code-level attribution ④ Ops Console Defects dashboard ⑤ Autonomous fix-PR proposal for identified platform bugs"
+              prerequisites:
+                - "nightly-drift-scan stream closed"
+                - "agent-mcp-integration stream closed"
+                - "Sufficient remediation job history (10+ runs)"
+    infra:
+        label: "Infrastructure & network evolution"
+        streams:
+            - id: network-upgrade-core
+              label: "Network upgrade — server LAN (UCG Max + USW-Pro-Max-24)"
+              total: 6
+              done: 1
+              status: in_progress
+              note: "① Hardware selection & purchase ✓ ② UCG Max initial setup (VLAN 10/20/50, IDS/IPS, Controller) ③ USW-Pro-Max-24 swap (cable migration, VLAN trunk, 2.5G uplinks) ④ K3s node connectivity validation (all nodes stable, kube-vip VIP) ⑤ UniFi API → MCP Server integration (read-only network diagnostics) ⑥ UniFi API write actuation (port restart, firewall rule, client isolation)"
+              prerequisites:
+                - "Hardware delivered (UCG Max + USW-Pro-Max-24)"
+            - id: network-upgrade-wifi
+              label: "Network upgrade — WiFi (U7 Pro + U6 Mesh, replace Eero)"
+              total: 5
+              done: 0
+              status: not_started
+              note: "① AP hardware purchase ② WiFiman baseline benchmark ③ Per-floor AP rollout (MoCA backhaul, VLAN SSIDs) ④ B1/garage mesh AP deployment ⑤ Eero decommission + coverage verification"
+              prerequisites:
+                - "network-upgrade-core stream ③ switch swap complete"
+            - id: unifi-mcp-server
+              label: "UniFi MCP Server — AI network management"
+              total: 4
+              done: 0
+              status: not_started
+              note: "① UniFi REST API client library ② MCP Server read tools (device status, port stats, DPI, firewall rules) ③ Ops Console Network Health panel ④ MCP Server write tools (port restart, client isolate, firewall CRUD)"
+              prerequisites:
+                - "network-upgrade-core stream ② UCG Max setup complete"
+                - "agent-mcp-integration stream closed"
+            - id: ai-home-network
+              label: "AI home network autonomy — full coverage"
+              total: 5
+              done: 0
+              status: not_started
+              note: "① Home Assistant + UniFi presence detection ② Automated network anomaly response (isolate + alert) ③ Ops Console unified Network dashboard (LAN + WiFi + IoT) ④ Predictive maintenance (node connectivity pattern → preemptive fix) ⑤ Self-healing network (auto-restart port, re-route traffic, failover)"
+              prerequisites:
+                - "unifi-mcp-server stream closed"
+                - "network-upgrade-wifi stream closed"
     operate:
         label: "Day-to-day operations"
         note: "Event-driven — status computed from live matrix, cluster, and audit data"

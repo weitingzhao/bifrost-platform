@@ -1,4 +1,4 @@
-import { DenseTag } from '@bifrost/ui'
+import { cn, DenseTag } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPipelineRunSteps } from '@/api/platform'
 import type { PipelinePhaseView } from '@/api/types'
@@ -11,11 +11,22 @@ function phasesTerminal(phases: PipelinePhaseView[]): boolean {
 
 function PhaseChip({ phase, active }: { phase: PipelinePhaseView; active: boolean }) {
   const status = phase.status as 'pending' | 'running' | 'succeeded' | 'failed'
+  const isRunning = status === 'running'
   return (
     <div
-      className={`flex min-w-0 flex-col items-center gap-1 rounded-md p-1 ${active ? 'ring-1 ring-[var(--warning)] bg-[var(--secondary)]/50' : ''}`}
+      className={cn(
+        'flex min-w-0 flex-col items-center gap-1 rounded-md p-1',
+        active && isRunning && 'ring-1 ring-primary/50 bg-primary/5',
+        active && !isRunning && 'ring-1 ring-[var(--warning)] bg-[var(--secondary)]/50',
+      )}
     >
-      <DenseTag variant={phaseStatusVariant(status)} className="w-full justify-center font-mono-tabular">
+      <DenseTag
+        variant={phaseStatusVariant(status)}
+        className={cn(
+          'w-full justify-center font-mono-tabular',
+          isRunning && active && 'release-cc__running-phase',
+        )}
+      >
         {phase.label}
       </DenseTag>
       <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)] tabular-nums">
@@ -32,6 +43,8 @@ interface DeliveryPipelineStepProgressProps {
   pollUntilTerminal: boolean
   /** When the PipelineRun is already terminal, suppress misleading "in progress" labels. */
   runTerminal?: 'succeeded' | 'failed'
+  /** PipelineRun still active — show live phase animation. */
+  runRunning?: boolean
 }
 
 export function DeliveryPipelineStepProgress({
@@ -39,6 +52,7 @@ export function DeliveryPipelineStepProgress({
   namespace,
   pollUntilTerminal,
   runTerminal,
+  runRunning = false,
 }: DeliveryPipelineStepProgressProps) {
   const stepsQuery = useQuery({
     queryKey: ['delivery', 'steps', runName, namespace],
@@ -85,7 +99,13 @@ export function DeliveryPipelineStepProgress({
     <div className="mb-3">
       <p className="m-0 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
         <span>Pipeline phases</span>
-        {pollUntilTerminal && runTerminal == null && !phasesTerminal(phases) && (
+        {pollUntilTerminal && runRunning && !phasesTerminal(phases) && (
+          <span className="normal-case inline-flex items-center gap-1 text-primary">
+            <span className="release-cc__running-dot scale-75" aria-hidden />
+            live · 3s
+          </span>
+        )}
+        {pollUntilTerminal && runTerminal == null && !runRunning && !phasesTerminal(phases) && (
           <span className="normal-case text-[var(--warning)]">· updating every 3s</span>
         )}
         {runTerminal === 'succeeded' && (

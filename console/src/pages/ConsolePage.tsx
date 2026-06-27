@@ -107,19 +107,42 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   pulse: 'control-room',
 }
 
+function isConsoleViewTab(value: string): value is ConsoleViewTab {
+  return Object.prototype.hasOwnProperty.call(VIEW_TITLES, value)
+}
+
+/** Resolve the active tab from the URL hash so refresh/deep-link stays put. */
+function tabFromHash(): ConsoleViewTab | null {
+  const hash = window.location.hash.replace(/^#/, '')
+  if (!hash) return null
+  if (isConsoleViewTab(hash)) return hash
+  return LEGACY_RUNTIME_HASHES[hash] ?? null
+}
+
 export function ConsolePage() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('prod')
-  const [viewTab, setViewTab] = useState<ConsoleViewTab>('control-room')
+  const [viewTab, setViewTabState] = useState<ConsoleViewTab>(() => tabFromHash() ?? 'control-room')
   const [agentDeskJobId, setAgentDeskJobId] = useState<string | null>(null)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
   const qc = useQueryClient()
 
   const envForRuntime = envFilter === 'all' ? 'prod' : envFilter
 
+  const setViewTab = useCallback((tab: ConsoleViewTab) => {
+    setViewTabState(tab)
+    const nextHash = `#${tab}`
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, '', nextHash)
+    }
+  }, [])
+
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#/, '')
-    const legacy = LEGACY_RUNTIME_HASHES[hash]
-    if (legacy != null) setViewTab(legacy)
+    const onHashChange = () => {
+      const t = tabFromHash()
+      if (t != null) setViewTabState(t)
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
   const contextQuery = useQuery({

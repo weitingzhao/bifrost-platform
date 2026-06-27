@@ -24,10 +24,13 @@ interface AgentDeskPageProps {
   onOpenMcpContract?: () => void
 }
 
+type AgentScope = 'agent-desk' | 'release'
+
 interface QuickPrompt {
   id: string
   label: string
   prompt: string
+  scope?: AgentScope
 }
 
 const QUICK_PROMPTS: QuickPrompt[] = [
@@ -49,6 +52,13 @@ const QUICK_PROMPTS: QuickPrompt[] = [
     prompt:
       'Review the latest nightly drift scan context (read-only). Summarize Layer 1–3 findings from live scans and reports. Do NOT apply fixes or run Layer 4 auto-fix — report only.',
   },
+  {
+    id: 'release',
+    label: 'Platform release',
+    prompt:
+      'Deploy latest changes to prod. Scan all repos for uncommitted changes, commit and push, then run the full STG → Prod pipeline.',
+    scope: 'release',
+  },
 ]
 
 function runnerReachability(status: string | undefined): 'ok' | 'degraded' | 'fail' | 'unknown' {
@@ -68,6 +78,7 @@ export function AgentDeskPage({
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
   const [composerText, setComposerText] = useState('')
+  const [selectedScope, setSelectedScope] = useState<AgentScope>('agent-desk')
   const [jobId, setJobId] = useState<string | null>(null)
   const [initialJob, setInitialJob] = useState<RemediationJob | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
@@ -104,15 +115,15 @@ export function AgentDeskPage({
   }, [jobsQuery.data?.jobs])
 
   const startMutation = useMutation({
-    mutationFn: async (prompt: string) => {
+    mutationFn: async ({ prompt, scope }: { prompt: string; scope: AgentScope }) => {
       const spineNote =
         context?.focus?.headline != null ? `Spine focus: ${context.focus.headline}\n\n` : ''
       return startRemediation({
-        scope: 'agent-desk',
+        scope,
         prompt: `${spineNote}${prompt.trim()}`,
       })
     },
-    onSuccess: (job, prompt) => {
+    onSuccess: (job, { prompt }) => {
       setUserPrompts(prev => ({ ...prev, [job.id]: prompt }))
       setInitialJob(job)
       setJobId(job.id)
@@ -134,12 +145,12 @@ export function AgentDeskPage({
   const runnerWarnCursor = runnerHealthy && !runnerHasCursorKey
 
   const handleSend = useCallback(
-    (text: string) => {
+    (text: string, scopeOverride?: AgentScope) => {
       const trimmed = text.trim()
       if (trimmed === '' || !canOperate || runnerBlocked) return
-      startMutation.mutate(trimmed)
+      startMutation.mutate({ prompt: trimmed, scope: scopeOverride ?? selectedScope })
     },
-    [canOperate, runnerBlocked, startMutation],
+    [canOperate, runnerBlocked, startMutation, selectedScope],
   )
 
   const activeUserPrompt = jobId != null ? userPrompts[jobId] : undefined
@@ -246,10 +257,10 @@ export function AgentDeskPage({
               <Button
                 key={item.id}
                 type="button"
-                variant="outline"
+                variant={item.scope === 'release' ? 'default' : 'outline'}
                 size="sm"
                 disabled={!canOperate || startMutation.isPending || runnerBlocked}
-                onClick={() => handleSend(item.prompt)}
+                onClick={() => handleSend(item.prompt, item.scope)}
               >
                 {item.label}
               </Button>
@@ -278,7 +289,9 @@ export function AgentDeskPage({
             <textarea
               className="agent-desk-composer__input"
               rows={3}
-              placeholder="Ask the ops agent…"
+              placeholder={selectedScope === 'release'
+                ? 'Describe what to release (or use the Platform release quick prompt)…'
+                : 'Ask the ops agent…'}
               value={composerText}
               disabled={!canOperate || startMutation.isPending || runnerBlocked}
               onChange={e => setComposerText(e.target.value)}
@@ -290,6 +303,19 @@ export function AgentDeskPage({
               }}
             />
             <div className="agent-desk-composer__actions">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">Scope:</span>
+                {(['agent-desk', 'release'] as const).map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`agent-desk-scope-chip${selectedScope === s ? ' agent-desk-scope-chip--active' : ''}`}
+                    onClick={() => setSelectedScope(s)}
+                  >
+                    {s === 'agent-desk' ? 'Ops' : 'Release'}
+                  </button>
+                ))}
+              </div>
               <Button
                 type="button"
                 size="sm"

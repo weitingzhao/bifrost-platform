@@ -135,14 +135,44 @@ type GiteaTagView struct {
 	Commit string `json:"commit,omitempty"`
 }
 
+type GiteaBranchView struct {
+	Name   string `json:"name"`
+	Repo   string `json:"repo"`
+	Commit string `json:"commit,omitempty"`
+}
+
 type RevisionsResponse struct {
-	ClusterID    string         `json:"cluster_id"`
-	Repos        []string       `json:"repos"`
-	DefaultRef   string         `json:"default_ref"`
-	Tags         []GiteaTagView `json:"tags"`
+	ClusterID    string              `json:"cluster_id"`
+	Repos        []string            `json:"repos"`
+	DefaultRef   string              `json:"default_ref"`
+	Tags         []GiteaTagView      `json:"tags"`
+	Branches   []GiteaBranchView  `json:"branches"`
+	// CommonRefs are ref names present in every tracked repo (safe for multi-repo deploy).
+	CommonRefs   []string            `json:"common_refs"`
+	Reachability probe.Reachability  `json:"reachability"`
+	Detail       string              `json:"detail"`
+	GeneratedAt  time.Time           `json:"generated_at"`
+}
+
+type RepoRefStatus struct {
+	Repo   string `json:"repo"`
+	Exists bool   `json:"exists"`
+	// Kind is "branch", "tag", "commit", or "missing".
+	Kind   string `json:"kind"`
+	Commit string `json:"commit,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
+type RefPreflightResponse struct {
+	ClusterID    string             `json:"cluster_id"`
+	Pipeline     string             `json:"pipeline"`
+	Revision     string             `json:"revision"`
+	Repos        []RepoRefStatus    `json:"repos"`
+	Missing      []string           `json:"missing"`
+	Ready        bool               `json:"ready"`
 	Reachability probe.Reachability `json:"reachability"`
-	Detail       string         `json:"detail"`
-	GeneratedAt  time.Time      `json:"generated_at"`
+	Detail       string             `json:"detail"`
+	GeneratedAt  time.Time          `json:"generated_at"`
 }
 
 type PipelinePhaseView struct {
