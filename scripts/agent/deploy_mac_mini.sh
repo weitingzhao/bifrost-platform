@@ -90,9 +90,9 @@ ENVEOF
 "
 
 if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
-  echo "==> Syncing CURSOR_API_KEY + PLATFORM_OPERATOR_TOKEN to remote .env"
+  echo "==> Syncing secrets + bridge config to remote .env"
   TMP_ENV="$(mktemp)"
-  grep -E '^(CURSOR_API_KEY|PLATFORM_OPERATOR_TOKEN)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
+  grep -E '^(CURSOR_API_KEY|PLATFORM_OPERATOR_TOKEN|PLATFORM_ADMIN_TOKEN|GIT_BRIDGE_URL)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
   if [[ -s "${TMP_ENV}" ]]; then
     TMP_OUT="$(mktemp)"
     while IFS= read -r line; do

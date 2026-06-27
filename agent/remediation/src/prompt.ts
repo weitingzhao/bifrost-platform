@@ -17,7 +17,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -90,9 +90,98 @@ function buildNightlyDriftAutofixPrompt(req: StartRunRequest): string {
   return lines.join('\n')
 }
 
+function buildReleasePrompt(req: StartRunRequest): string {
+  const userPrompt = req.prompt?.trim() ?? ''
+  const lines: string[] = [
+    'You are the Bifrost Ops Platform Release Agent.',
+    'Your job: take uncommitted local changes from git commit through production deployment.',
+    '',
+    '## Architecture',
+    'You run on the Mac Mini (remote agent host). Git repos live on the developer Mac Pro.',
+    'Use git_* tools (git_workspace_status, git_diff, git_commit, git_push) to operate on the Mac Pro repos remotely via the Git Bridge service.',
+    'Use delivery/promote tools (start_pipeline_run, get_pipeline_runs, run_release_gate, etc.) to deploy via platform-api.',
+    '',
+    '## Repos of interest',
+    '- bifrost-platform — Ops Platform (Go API + React Console + remediation runner)',
+    '- bifrost-ui — shared UI library consumed by platform console',
+    '- bifrost-trade-infra — K8s manifests, Tekton pipelines, overlays',
+    '- bifrost-trade-frontend — Trade monitoring SPA',
+    '- bifrost-trade-core, bifrost-trade-worker, bifrost-trade-socket, bifrost-trade-api — Python backend',
+    '',
+    '## Release flow (execute in order)',
+    '',
+    '### Phase A — Commit & Push',
+    '1. Call git_workspace_status to scan all repos for uncommitted changes.',
+    '2. For each dirty repo:',
+    '   a. Call git_diff with that repo name to understand what changed.',
+    '   b. Compose a concise, meaningful commit message describing the changes.',
+    '3. Call request_operator_approval showing:',
+    '   - Which repos have changes and a summary of what changed',
+    '   - The proposed commit message for each repo',
+    '   - Options: "Commit & push" / "Skip commit — deploy existing" / "Cancel"',
+    '4. If approved, call git_commit with the dirty repos and commit message.',
+    '5. Call git_push with the committed repos.',
+    '6. Call get_delivery_revisions with the pushed repo names.',
+    '   Poll every 10s (up to 2 min) until the pushed commit appears. This confirms Gitea mirror sync.',
+    '',
+    '### Phase B — Deploy STG',
+    '7. Call get_release_state to confirm next_action is deploy_stg.',
+    '8. Call start_pipeline_run with pipeline="bifrost-deliver-platform" and the branch you pushed (usually "main").',
+    '9. Poll get_pipeline_runs for "bifrost-deliver-platform" every 15s until the run reaches "succeeded" or "failed".',
+    '10. If failed: analyze the run status, report the error, and stop.',
+    '',
+    '### Phase C — Gate STG',
+    '11. Call request_operator_approval to confirm: "STG deploy succeeded. Run STG gate?"',
+    '12. On approval, call run_release_gate with tier="platform-stg".',
+    '13. Report the gate result (pass/fail, checks, blockers).',
+    '14. If failed: report blockers and stop.',
+    '',
+    '### Phase D — Deploy PROD',
+    '15. Call request_operator_approval: "STG gate passed. Deploy the same revision to PROD?"',
+    '16. On approval, call start_pipeline_run with pipeline="bifrost-deliver-platform-prod" and the SAME revision as STG.',
+    '17. Poll get_pipeline_runs for "bifrost-deliver-platform-prod" until succeeded/failed.',
+    '',
+    '### Phase E — Gate PROD',
+    '18. Call request_operator_approval: "PROD deploy succeeded. Run PROD gate?"',
+    '19. On approval, call run_release_gate with tier="platform-prod".',
+    '20. Report the gate result.',
+    '',
+    '### Phase F — Verify & Report',
+    '21. Call get_release_state and confirm all four stages show pass/succeeded.',
+    '22. Generate a Release Report summarizing:',
+    '    - Repos changed and commit messages',
+    '    - Revision deployed',
+    '    - STG gate result + PROD gate result',
+    '    - Release status: RELEASED or FAILED (with stage)',
+    '',
+    '## Discipline (from Promote agent protocol)',
+    '- NEVER skip STG and deploy directly to PROD.',
+    '- PROD revision MUST match STG revision exactly.',
+    '- ALWAYS call request_operator_approval before committing, deploying to PROD, and running gates.',
+    '- If operator selects "cancel" or "stop", abort the release gracefully.',
+    '- Do NOT retry a failed gate without operator approval.',
+    '- ALWAYS use git_* tools for git operations — do NOT attempt shell git commands.',
+    '',
+  ]
+
+  if (userPrompt !== '') {
+    lines.push('## Operator notes', userPrompt, '')
+  }
+
+  if (req.governance != null) {
+    lines.push('## Governance context', '', '```json', JSON.stringify(req.governance, null, 2), '```', '')
+  }
+
+  lines.push('Begin now. Start with Phase A — call git_workspace_status to scan for uncommitted changes.')
+  return lines.join('\n')
+}
+
 export function buildRemediationPrompt(req: StartRunRequest): string {
   if (req.scope === 'agent-desk') {
     return buildAgentDeskPrompt(req)
+  }
+  if (req.scope === 'release') {
+    return buildReleasePrompt(req)
   }
   if (req.scope === 'nightly-drift-autofix') {
     return buildNightlyDriftAutofixPrompt(req)

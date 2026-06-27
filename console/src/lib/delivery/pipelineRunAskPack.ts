@@ -124,6 +124,54 @@ export function formatPipelineRunStatus(run: DeliveryPipelineRunView): string {
   return run.status
 }
 
+const ROLLOUT_WAIT_RE = /Waiting for deployment.*rollout to finish/i
+
+/** Explain kubectl rollout status lines that look like a hang but are normal progress output. */
+export function rolloutLogTailHint(
+  logs: string | undefined,
+  run: DeliveryPipelineRunView,
+): { tone: 'info' | 'warning' | 'success'; message: string } | null {
+  if (logs == null || logs === '' || !ROLLOUT_WAIT_RE.test(logs)) return null
+
+  if (isPipelineRunSucceeded(run)) {
+    return {
+      tone: 'success',
+      message:
+        'PipelineRun succeeded — rollout finished. Lines ending with "Waiting for deployment…" are kubectl rollout status progress captured during the deploy, not an active hang.',
+    }
+  }
+  if (isPipelineRunRunning(run)) {
+    return {
+      tone: 'info',
+      message:
+        'Rollout in progress — kubectl is waiting for new replicas to become Ready (image pull, probes). Normal for 1–5+ minutes per deployment; logs refresh every 5s while the run is active.',
+    }
+  }
+  if (isPipelineRunFailed(run)) {
+    return {
+      tone: 'warning',
+      message:
+        'Run failed while rollout was waiting for replicas. Check pod events: Operate → Cluster → target namespace (ImagePullBackOff, CrashLoop, probe failures).',
+    }
+  }
+  return null
+}
+
+export function runElapsedLabel(run: DeliveryPipelineRunView): string | null {
+  if (run.start_time == null || run.start_time === '') return null
+  const start = new Date(run.start_time).getTime()
+  if (Number.isNaN(start)) return null
+  const end =
+    run.completion_time != null && run.completion_time !== ''
+      ? new Date(run.completion_time).getTime()
+      : Date.now()
+  const sec = Math.max(0, Math.floor((end - start) / 1000))
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m === 0) return `${s}s`
+  return `${m}m ${s}s`
+}
+
 export type PipelineRunSortKey = 'status' | 'started'
 export type PipelineRunSortDir = 'asc' | 'desc'
 

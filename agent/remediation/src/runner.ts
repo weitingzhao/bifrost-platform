@@ -15,6 +15,17 @@ function defaultCwd(): string {
   return path.resolve(__dirname, '../../../../bifrost-trade-infra')
 }
 
+function cwdForScope(scope: string | undefined): string {
+  if (scope === 'release') {
+    const releaseCwd = process.env.RELEASE_CWD?.trim()
+    if (releaseCwd != null && releaseCwd !== '') {
+      return releaseCwd.replace(/^~/, process.env.HOME ?? '')
+    }
+    return path.resolve(__dirname, '../../../..')
+  }
+  return defaultCwd()
+}
+
 function stringifyUnknown(value: unknown): string {
   if (value == null) return ''
   if (typeof value === 'string') return value
@@ -32,7 +43,7 @@ export async function runRemediationJob(jobId: string, req: StartRunRequest): Pr
     return
   }
 
-  const cwd = defaultCwd()
+  const cwd = cwdForScope(req.scope)
   const prompt = buildRemediationPrompt(req)
   const customTools = buildCustomTools(jobId)
   const modelId = process.env.REMEDIATION_MODEL?.trim() || 'composer-2.5'

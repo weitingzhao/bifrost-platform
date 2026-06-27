@@ -142,6 +142,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/supply-chain", s.delivery.HandleSupplyChain)
 		r.Get("/delivery/revisions", s.delivery.HandleRevisions)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
+		r.Get("/delivery/pipelines/{name}/ref-preflight", s.delivery.HandleRefPreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/build-phase", s.buildgate.HandleListPhases)

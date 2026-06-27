@@ -1,4 +1,4 @@
-import { Button, DenseTag } from '@bifrost/ui'
+import { Button, cn, DenseTag } from '@bifrost/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import type { DeliveryPipelineRunView } from '@/api/types'
@@ -15,6 +15,8 @@ import {
   isPipelineRunRunning,
   isPipelineRunSucceeded,
   platformDeliverAskContext,
+  rolloutLogTailHint,
+  runElapsedLabel,
 } from '@/lib/delivery/pipelineRunAskPack'
 
 function runLamp(run: { status: string; reason?: string }): 'ok' | 'fail' | 'degraded' | 'unknown' {
@@ -154,6 +156,13 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
     URL.revokeObjectURL(url)
   }
 
+  const logsText = logsQuery.data?.logs ?? ''
+  const logHint = focusRun != null ? rolloutLogTailHint(logsText, focusRun) : null
+  const elapsed = focusRun != null ? runElapsedLabel(focusRun) : null
+  const logsUpdatedAt = logsQuery.dataUpdatedAt
+    ? new Date(logsQuery.dataUpdatedAt).toLocaleTimeString()
+    : null
+
   return (
     <OpsSection
       title={running ? `Active run — ${target.shortLabel}` : `Latest run — ${target.shortLabel}`}
@@ -176,8 +185,13 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
             {runsQuery.error.message}
           </p>
         ) : running ? (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Pipeline running — status and logs update automatically.
+          <p className="m-0 mt-2 inline-flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            <span className="inline-flex items-center gap-1.5 font-medium text-primary">
+              <span className="release-cc__running-dot" aria-hidden />
+              Live
+            </span>
+            <span>Pipeline + logs auto-refresh (5s)</span>
+            {elapsed != null && <span>· elapsed {elapsed}</span>}
           </p>
         ) : null
       }
@@ -200,8 +214,11 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
             {focusRun.completion_time != null && focusRun.completion_time !== ''
               ? ` · Completed ${new Date(focusRun.completion_time).toLocaleString()}`
               : running
-                ? ' · Running'
+                ? ` · Running${elapsed != null ? ` (${elapsed})` : ''}`
                 : ''}
+            {elapsed != null && !running && focusRun.completion_time != null && focusRun.completion_time !== ''
+              ? ` · Duration ${elapsed}`
+              : ''}
           </p>
           <DeliveryPipelineStepProgress
             runName={focusRun.name}
@@ -214,11 +231,38 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
                   : 'failed'
                 : undefined
             }
+            runRunning={running}
           />
-          <pre className="llm-content-pre m-0 mt-3 max-h-80 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+              Log tail
+            </span>
+            <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+              {running && (
+                <span className="mr-2 inline-flex items-center gap-1 text-primary">
+                  <span className="release-cc__running-dot scale-75" aria-hidden />
+                  live
+                </span>
+              )}
+              {logsUpdatedAt != null ? `refreshed ${logsUpdatedAt}` : '—'}
+            </span>
+          </div>
+          {logHint != null && (
+            <p
+              className={cn(
+                'm-0 mt-2 rounded-md border px-2.5 py-2 text-[var(--text-dense-caption)]',
+                logHint.tone === 'success' && 'border-success/30 bg-success/5 text-success',
+                logHint.tone === 'info' && 'border-primary/30 bg-primary/5 text-foreground/80',
+                logHint.tone === 'warning' && 'border-warning/30 bg-warning/5 text-warning',
+              )}
+            >
+              {logHint.message}
+            </p>
+          )}
+          <pre className="llm-content-pre m-0 mt-2 max-h-80 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
             {logsQuery.isLoading && logsQuery.data == null
               ? 'Loading logs…'
-              : logsQuery.data?.logs ?? '(empty)'}
+              : logsText !== '' ? logsText : '(empty)'}
           </pre>
           {terminal && isPipelineRunSucceeded(focusRun) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -1,0 +1,21 @@
+{
+  "name": "bifrost-git-bridge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Lightweight HTTP bridge for git operations on the local Mac — called by the remote remediation runner during Platform releases",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.14.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}

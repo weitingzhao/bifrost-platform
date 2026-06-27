@@ -3,7 +3,8 @@ import { promisify } from 'node:util'
 import type { SDKCustomTool } from '@cursor/sdk'
 import { submitOperatorResponse, waitForOperatorResponse } from './approvals.js'
 import { appendEvent, makeEvent, setPhase } from './jobs.js'
-import { jsonText, platformDelete, platformGet, platformPost } from './platformClient.js'
+import { gitBridgeGet, gitBridgePost } from './gitBridgeClient.js'
+import { jsonText, platformDelete, platformGet, platformPost, platformPostAdmin } from './platformClient.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -437,6 +438,199 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       inputSchema: { type: 'object', properties: {} },
       async execute() {
         const data = await platformGet('/api/v1/cluster/service-readiness')
+        return textResult(jsonText(data))
+      },
+    },
+
+    // ── Git Bridge tools (Release Agent — Phase A) ──
+
+    git_workspace_status: {
+      description:
+        'Scan all managed repos on the developer Mac for uncommitted changes. Returns per-repo branch, dirty flag, modified/untracked file lists, and ahead count. Use at the start of a release to decide what to commit.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await gitBridgeGet('/status')
+        return textResult(jsonText(data))
+      },
+    },
+
+    git_diff: {
+      description:
+        'Get a diff summary for specific repos (or all dirty repos). Use to understand what changed before composing a commit message.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repos: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Repo names to diff. Omit for all dirty repos.',
+          },
+        },
+      },
+      async execute(args) {
+        const repos = Array.isArray(args.repos) ? args.repos.map(String) : undefined
+        const data = await gitBridgePost('/diff', { repos })
+        return textResult(jsonText(data))
+      },
+    },
+
+    git_commit: {
+      description:
+        'Stage all changes and commit in the specified repos on the developer Mac. The commit message should describe all changes across the listed repos.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repos: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Repo names to commit (e.g. ["bifrost-platform", "bifrost-ui"])',
+          },
+          message: {
+            type: 'string',
+            description: 'Commit message (1–3 sentences)',
+          },
+        },
+        required: ['repos', 'message'],
+      },
+      async execute(args) {
+        const repos = Array.isArray(args.repos) ? args.repos.map(String) : []
+        const message = String(args.message ?? '')
+        const data = await gitBridgePost('/commit', { repos, message })
+        return textResult(jsonText(data))
+      },
+    },
+
+    git_push: {
+      description:
+        'Push committed changes to origin for the specified repos. Call after git_commit succeeds.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repos: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Repo names to push. Omit to push all repos that are ahead.',
+          },
+        },
+      },
+      async execute(args) {
+        const repos = Array.isArray(args.repos) ? args.repos.map(String) : undefined
+        const data = await gitBridgePost('/push', { repos })
+        return textResult(jsonText(data))
+      },
+    },
+
+    // ── Delivery / Promote tools (Release Agent — Phase B–F) ──
+
+    get_release_state: {
+      description:
+        'Fetch the four-stage release state machine (stg_deploy → stg_gate → prod_deploy → prod_gate) with next_action guidance. Use this to decide what to do next in a release flow.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tier: {
+            type: 'string',
+            description: '"platform" (default) or omit for unified state',
+          },
+        },
+      },
+      async execute(args) {
+        const tier = args.tier != null ? `?tier=${encodeURIComponent(String(args.tier))}` : ''
+        const data = await platformGet(`/api/v1/promote/release-state${tier}`)
+        return textResult(jsonText(data))
+      },
+    },
+
+    start_pipeline_run: {
+      description:
+        'Start a Tekton pipeline run (deploy). Requires operator role. Returns the created PipelineRun name.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pipeline: {
+            type: 'string',
+            description: 'Pipeline name, e.g. "bifrost-deliver-platform" or "bifrost-deliver-platform-prod"',
+          },
+          revision: {
+            type: 'string',
+            description: 'Git revision (branch name or commit SHA) to deploy',
+          },
+        },
+        required: ['pipeline', 'revision'],
+      },
+      async execute(args) {
+        const pipeline = String(args.pipeline ?? '')
+        const revision = String(args.revision ?? 'main')
+        const data = await platformPost(
+          `/api/v1/delivery/pipelines/${encodeURIComponent(pipeline)}/runs`,
+          { revision },
+        )
+        return textResult(jsonText(data))
+      },
+    },
+
+    get_pipeline_runs: {
+      description:
+        'List recent PipelineRun history for a pipeline. Use to poll whether a deploy has completed (check status field).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pipeline: {
+            type: 'string',
+            description: 'Pipeline name to query runs for',
+          },
+        },
+        required: ['pipeline'],
+      },
+      async execute(args) {
+        const pipeline = String(args.pipeline ?? '')
+        const data = await platformGet(
+          `/api/v1/delivery/pipelines/${encodeURIComponent(pipeline)}/runs`,
+        )
+        return textResult(jsonText(data))
+      },
+    },
+
+    run_release_gate: {
+      description:
+        'Execute a release gate check (admin role required). Evaluates health probes, deploy status, and blockers. Returns pass/fail with details.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tier: {
+            type: 'string',
+            description: '"platform-stg" or "platform-prod"',
+          },
+        },
+        required: ['tier'],
+      },
+      async execute(args) {
+        const tier = String(args.tier ?? 'platform-stg')
+        const data = await platformPostAdmin(
+          `/api/v1/promote/release-gate?tier=${encodeURIComponent(tier)}`,
+        )
+        return textResult(jsonText(data))
+      },
+    },
+
+    get_delivery_revisions: {
+      description:
+        'Fetch available git revisions (branches/tags) from Gitea mirror for given repos. Use to verify a pushed commit is visible before deploying.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repos: {
+            type: 'string',
+            description: 'Comma-separated repo names, e.g. "bifrost-platform,bifrost-ui"',
+          },
+        },
+        required: ['repos'],
+      },
+      async execute(args) {
+        const repos = String(args.repos ?? '')
+        const data = await platformGet(
+          `/api/v1/delivery/revisions?repos=${encodeURIComponent(repos)}`,
+        )
         return textResult(jsonText(data))
       },
     },

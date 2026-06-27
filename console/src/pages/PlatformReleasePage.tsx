@@ -1,6 +1,6 @@
-import { Button, cn, Input, StatusLamp } from '@bifrost/ui'
+import { Button, cn, StatusLamp } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, CheckCircle2, Circle, Copy, ExternalLink, XCircle } from 'lucide-react'
+import { ArrowRight, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Loader2, XCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import {
@@ -24,6 +24,8 @@ import type {
 } from '@/api/types'
 import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
 import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
+import { isRevisionDeployReady, RevisionPicker } from '@/components/delivery/RevisionPicker'
+import { isRefDeployBlocked, RefPreflightStatus, useRefPreflight } from '@/components/delivery/RefPreflightPanel'
 import {
   PlatformGateHistorySection,
   PlatformStageGatePanel,
@@ -229,21 +231,18 @@ function ReleaseStateBanner() {
 
   if (isLoading || data == null) return null
 
-  const warnings = data.warnings ?? []
   const next = data.next_action
-  const hasIssue = !data.consistent || warnings.length > 0
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <ReleaseStateStage stageKey="stg_deploy" stage={data.stg_deploy} />
+        <span className="text-muted-foreground/30">→</span>
         <ReleaseStateStage stageKey="stg_gate" stage={data.stg_gate} />
-        <span className="text-border">│</span>
+        <span className="text-border mx-1">│</span>
         <ReleaseStateStage stageKey="prod_deploy" stage={data.prod_deploy} />
+        <span className="text-muted-foreground/30">→</span>
         <ReleaseStateStage stageKey="prod_gate" stage={data.prod_gate} />
-        {!data.consistent && (
-          <span className="text-dense-micro font-medium text-warning">⚠ version mismatch</span>
-        )}
       </div>
       {next && (
         <div className="flex items-center gap-1.5 text-dense-caption text-muted-foreground/70">
@@ -252,15 +251,170 @@ function ReleaseStateBanner() {
           {next.description && <span>— {next.description}</span>}
         </div>
       )}
-      {hasIssue && warnings.length > 0 && (
-        <div className="text-dense-caption text-warning/80">
-          {warnings.map((w, i) => (
-            <span key={i}>{i > 0 && ' · '}{w}</span>
-          ))}
-        </div>
-      )}
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Release identity — answers "which branch is this release?"
+// ---------------------------------------------------------------------------
+
+interface ReleaseIdentity {
+  revision: string | null
+  hint: string
+  mismatch: boolean
+}
+
+function deriveReleaseIdentity(
+  stgRun: DeliveryPipelineRunView | undefined,
+  prodRun: DeliveryPipelineRunView | undefined,
+  stgGate: ReleaseGateResponse | undefined,
+  prodGate: ReleaseGateResponse | undefined,
+): ReleaseIdentity {
+  const stgRev = stgRun?.revision?.trim() || stgGate?.revision?.trim() || ''
+  const prodRev = prodRun?.revision?.trim() || prodGate?.revision?.trim() || ''
+
+  if (stgRev && prodRev && stgRev !== prodRev) {
+    return {
+      revision: stgRev,
+      hint: `PROD is on ${prodRev} — promote ${stgRev} or re-deploy PROD`,
+      mismatch: true,
+    }
+  }
+  if (stgRev) {
+    return {
+      revision: stgRev,
+      hint: prodRev ? 'Same revision across STG and PROD' : 'Release pipeline based on this revision',
+      mismatch: false,
+    }
+  }
+  if (prodRev) {
+    return { revision: prodRev, hint: 'Production revision (no STG deploy recorded)', mismatch: false }
+  }
+  return {
+    revision: null,
+    hint: 'Pick a revision in Staging Deploy to start a release',
+    mismatch: false,
+  }
+}
+
+interface ReleaseOutcome {
+  kind: 'released' | 'in_progress' | 'failed' | 'idle'
+  label: string
+  detail: string
+}
+
+// Roll the four step statuses into a single end-to-end release verdict so the
+// header answers "is the whole release done, and what's the result?".
+function deriveReleaseOutcome(steps: FlowStep[]): ReleaseOutcome {
+  const doneCount = steps.filter(s => s.status === 'done').length
+  const failedIdx = steps.findIndex(s => s.status === 'error')
+  const activeIdx = steps.findIndex(s => s.status === 'active')
+
+  if (failedIdx >= 0) {
+    return {
+      kind: 'failed',
+      label: 'Failed',
+      detail: `${steps[failedIdx].label} failed`,
+    }
+  }
+  if (activeIdx >= 0) {
+    return {
+      kind: 'in_progress',
+      label: 'In progress',
+      detail: `${steps[activeIdx].label} running · ${doneCount}/${steps.length} done`,
+    }
+  }
+  if (doneCount === steps.length) {
+    return { kind: 'released', label: 'Released', detail: 'All stages passed — release complete' }
+  }
+  if (doneCount === 0) {
+    return { kind: 'idle', label: 'Not started', detail: 'No stage completed yet' }
+  }
+  const nextPending = steps.find(s => s.status === 'pending')
+  return {
+    kind: 'in_progress',
+    label: 'In progress',
+    detail: `${doneCount}/${steps.length} done${nextPending ? ` · ${nextPending.label} next` : ''}`,
+  }
+}
+
+const RELEASE_OUTCOME_BADGE: Record<ReleaseOutcome['kind'], string> = {
+  released: 'border-success/40 bg-success/10 text-success',
+  in_progress: 'border-primary/40 bg-primary/10 text-primary',
+  failed: 'border-destructive/40 bg-destructive/10 text-destructive',
+  idle: 'border-border bg-secondary/40 text-muted-foreground',
+}
+
+function ReleaseIdentityHeader({
+  steps,
+  stgRun,
+  prodRun,
+  stgGate,
+  prodGate,
+}: {
+  steps: FlowStep[]
+  stgRun: DeliveryPipelineRunView | undefined
+  prodRun: DeliveryPipelineRunView | undefined
+  stgGate: ReleaseGateResponse | undefined
+  prodGate: ReleaseGateResponse | undefined
+}) {
+  const identity = deriveReleaseIdentity(stgRun, prodRun, stgGate, prodGate)
+  const outcome = deriveReleaseOutcome(steps)
+
+  return (
+    <div className="release-cc__identity border-b border-border px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="shrink-0 text-dense-label font-semibold uppercase tracking-wider text-muted-foreground">
+            Release
+          </span>
+          {identity.revision != null ? (
+            <span className="truncate font-mono text-[15px] font-semibold tracking-tight text-foreground">
+              {identity.revision}
+            </span>
+          ) : (
+            <span className="text-dense-caption italic text-muted-foreground">Not started</span>
+          )}
+          <span className={cn(
+            'inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-dense-caption font-semibold',
+            RELEASE_OUTCOME_BADGE[outcome.kind],
+          )}>
+            {outcome.kind === 'released' && <CheckCircle2 className="h-3.5 w-3.5" />}
+            {outcome.kind === 'in_progress' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {outcome.kind === 'failed' && <XCircle className="h-3.5 w-3.5" />}
+            {outcome.kind === 'idle' && <Circle className="h-3.5 w-3.5" />}
+            {outcome.label}
+          </span>
+        </div>
+        <span className={cn(
+          'text-dense-caption',
+          identity.mismatch ? 'font-medium text-warning' : 'text-muted-foreground/70',
+        )}>
+          {identity.mismatch ? `⚠ ${identity.hint}` : outcome.detail}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function stepRevisionForIndex(
+  index: number,
+  stgRun: DeliveryPipelineRunView | undefined,
+  prodRun: DeliveryPipelineRunView | undefined,
+  stgGate: ReleaseGateResponse | undefined,
+  prodGate: ReleaseGateResponse | undefined,
+): string | undefined {
+  switch (index) {
+    case 0:
+      return stgRun?.revision?.trim() || undefined
+    case 1:
+      return stgGate?.revision?.trim() || stgRun?.revision?.trim() || undefined
+    case 2:
+      return prodRun?.revision?.trim() || undefined
+    default:
+      return prodGate?.revision?.trim() || prodRun?.revision?.trim() || undefined
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +517,6 @@ function DeployActionBar({ target }: { target: DeliveryTargetConfig }) {
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
   const [revision, setRevision] = useState('main')
-  const [customRevision, setCustomRevision] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const supplyQuery = useQuery({
@@ -426,12 +579,13 @@ function DeployActionBar({ target }: { target: DeliveryTargetConfig }) {
 
   const [copyState, setCopyState] = useState<CopyState>('idle')
 
-  const buildBundle = () =>
-    buildDeployDebugBundle({
+  const buildBundle = () => {
+    const effectiveRevision = latestRun?.revision?.trim() || revision.trim()
+    return buildDeployDebugBundle({
       target: target.shortLabel,
       pipeline: target.pipeline,
       namespace: target.namespace,
-      revision,
+      revision: effectiveRevision,
       actionError,
       run: latestRun,
       runs: runsQuery.data,
@@ -440,6 +594,7 @@ function DeployActionBar({ target }: { target: DeliveryTargetConfig }) {
       releaseState: releaseStateQuery.data,
       selfHealth: selfHealthQuery.data,
     })
+  }
 
   const handleAskAi = async () => {
     try {
@@ -462,78 +617,58 @@ function DeployActionBar({ target }: { target: DeliveryTargetConfig }) {
     URL.revokeObjectURL(url)
   }
 
+  const refPreflight = useRefPreflight(target.pipeline, revision)
+  const deployBlockedByRef = isRefDeployBlocked(refPreflight.data)
+
   return (
     <div className="flex flex-col gap-2">
       {!cmAllOk && (
         <span className="text-dense-caption text-warning">⚠ Dockerfile ConfigMaps not ready</span>
       )}
       {canOperate ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-dense-caption text-muted-foreground shrink-0">Revision</span>
-          {customRevision ? (
-            <div className="flex items-center gap-1.5">
-              <Input
-                className="h-8 w-36 text-dense-body"
-                value={revision}
-                onChange={e => setRevision(e.target.value)}
-                placeholder="branch or sha"
-              />
-              <button
-                type="button"
-                className="text-dense-caption text-muted-foreground hover:text-primary shrink-0"
-                onClick={() => { setCustomRevision(false); setRevision('main') }}
-              >
-                ← tags
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <select
-                className="h-8 rounded-md border border-input bg-background px-2 text-dense-body focus:outline-none focus:ring-1 focus:ring-ring"
-                value={revision}
-                onChange={e => setRevision(e.target.value)}
-              >
-                <option value="main">main (default)</option>
-                {revisionsQuery.data?.tags
-                  ?.filter((t, i, arr) => arr.findIndex(x => x.name === t.name) === i)
-                  .map(tag => (
-                    <option key={tag.name} value={tag.name}>
-                      {tag.name}
-                    </option>
-                  ))}
-              </select>
-              <button
-                type="button"
-                className="text-dense-caption text-muted-foreground hover:text-primary shrink-0"
-                onClick={() => setCustomRevision(true)}
-              >
-                custom
-              </button>
-              {revisionsQuery.isLoading && (
-                <span className="text-dense-caption text-muted-foreground">loading…</span>
-              )}
-            </div>
-          )}
-          <Button
-            disabled={deliverMutation.isPending || !cmAllOk || !revision.trim()}
-            onClick={() => deliverMutation.mutate(revision)}
-            className="shadow-sm"
-          >
-            {deliverMutation.isPending ? 'Starting…' : `Deploy to ${target.shortLabel}`}
-          </Button>
-          {hasError && (
-            <>
-              <Button size="sm" variant="outline" onClick={() => void handleAskAi()}>
-                {copyState === 'copied'
-                  ? 'Copied — paste into AI'
-                  : copyState === 'error'
-                    ? 'Copy failed'
-                    : 'Issue for AI'}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleDownload}>
-                Download log
-              </Button>
-            </>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-start gap-3">
+            <span className="text-dense-caption text-muted-foreground shrink-0 pt-2">Revision</span>
+            <RevisionPicker
+              value={revision}
+              onChange={setRevision}
+              revisions={revisionsQuery.data}
+              isLoading={revisionsQuery.isLoading}
+              repoLabels={target.mirrorRepos}
+            />
+            <Button
+              disabled={
+                deliverMutation.isPending
+                || !cmAllOk
+                || !isRevisionDeployReady(revision)
+                || deployBlockedByRef
+              }
+              onClick={() => deliverMutation.mutate(revision.trim())}
+              className="shadow-sm mt-0.5"
+            >
+              {deliverMutation.isPending ? 'Starting…' : `Deploy to ${target.shortLabel}`}
+            </Button>
+            {hasError && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => void handleAskAi()}>
+                  {copyState === 'copied'
+                    ? 'Copied — paste into AI'
+                    : copyState === 'error'
+                      ? 'Copy failed'
+                      : 'Issue for AI'}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={handleDownload}>
+                  Download log
+                </Button>
+              </>
+            )}
+          </div>
+          {target.mirrorRepos.length > 1 && (
+            <RefPreflightStatus
+              data={refPreflight.data}
+              isLoading={refPreflight.isLoading}
+              revision={revision}
+            />
           )}
         </div>
       ) : (
@@ -717,7 +852,12 @@ function InlinePhaseProgress({ run }: { run: DeliveryPipelineRunView }) {
         {phases.map((phase, i) => (
           <span key={phase.id} className="inline-flex items-center">
             {i > 0 && <span className="text-border mx-0.5">→</span>}
-            <span className={PHASE_TEXT_CLASS[phase.status] ?? 'text-muted-foreground/30'}>
+            <span
+              className={cn(
+                PHASE_TEXT_CLASS[phase.status] ?? 'text-muted-foreground/30',
+                phase.status === 'running' && 'release-cc__running-phase',
+              )}
+            >
               {phase.label}
             </span>
           </span>
@@ -758,6 +898,7 @@ function DeployStepSummary({ run }: { run: DeliveryPipelineRunView | undefined }
         <span className={cn('inline-flex items-center gap-1 text-dense-caption font-medium', statusClass)}>
           {ok && <CheckCircle2 className="h-3 w-3 text-success/50" />}
           {failed && <XCircle className="h-3 w-3" />}
+          {running && <span className="release-cc__running-dot" aria-hidden />}
           {statusText}
         </span>
         {run.revision && (
@@ -863,14 +1004,7 @@ function StepCommandCenter({
   const isStg = activeIndex < 2
   const accentClass = isStg ? 'release-cc__accent--stg' : 'release-cc__accent--prod'
 
-  const stgDeployRev = stgRun?.revision
-  const prodDeployRev = prodRun?.revision
-  const stgGateRev = stgGate?.revision
-  const prodGateRev = prodGate?.revision
-
-  const knownRevisions = [stgDeployRev, stgGateRev, prodDeployRev, prodGateRev].filter(Boolean) as string[]
-  const uniqueRevisions = [...new Set(knownRevisions)]
-  const revisionMismatch = uniqueRevisions.length > 1
+  const stepRevision = stepRevisionForIndex(activeIndex, stgRun, prodRun, stgGate, prodGate)
 
   let summary: ReactNode
   switch (activeIndex) {
@@ -892,32 +1026,30 @@ function StepCommandCenter({
     <div className="relative overflow-hidden rounded-lg border border-border bg-card">
       <div className={cn('release-cc__accent', accentClass)} />
 
+      <ReleaseIdentityHeader
+        steps={steps}
+        stgRun={stgRun}
+        prodRun={prodRun}
+        stgGate={stgGate}
+        prodGate={prodGate}
+      />
+
       <FlowStepper steps={steps} activeIndex={activeIndex} onSelect={onSelect} />
 
       <div className="border-t border-border">
         {/* Action area — the visual hero */}
         <div className="release-cc__action-zone px-4 py-3">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="release-cc__step-label">{STEP_LABELS[activeIndex]}</span>
-            <span className={cn(
-              'rounded px-1 py-px text-dense-micro font-bold uppercase tracking-wider',
-              isStg
-                ? 'text-warning/60'
-                : 'text-destructive/60',
-            )}>
-              {isStg ? 'STG' : 'PROD'}
-            </span>
-          </div>
+          <StepStatusBanner
+            label={STEP_LABELS[activeIndex]}
+            env={isStg ? 'STG' : 'PROD'}
+            status={steps[activeIndex].status}
+            statusLabel={steps[activeIndex].statusLabel}
+            stepRevision={stepRevision}
+            nextStep={steps[activeIndex + 1]}
+            onContinue={() => onSelect(activeIndex + 1)}
+          />
 
-          {revisionMismatch && (
-            <div className="mb-2 text-dense-caption text-warning/80">
-              ⚠ Version mismatch: {uniqueRevisions.map((r, i) => (
-                <span key={r}>{i > 0 && ', '}<span className="font-mono font-semibold">{r}</span></span>
-              ))}
-            </div>
-          )}
-
-          <StepActions activeIndex={activeIndex} />
+          <StepActionZone activeIndex={activeIndex} status={steps[activeIndex].status} />
         </div>
 
         {/* Summary — quiet reference info below */}
@@ -927,6 +1059,98 @@ function StepCommandCenter({
       </div>
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Step status banner — answers "is this step done?" + "how do I proceed?"
+// ---------------------------------------------------------------------------
+
+function StepStatusBanner({
+  label,
+  env,
+  status,
+  statusLabel,
+  stepRevision,
+  nextStep,
+  onContinue,
+}: {
+  label: string
+  env: 'STG' | 'PROD'
+  status: StepStatus
+  statusLabel: string
+  stepRevision?: string
+  nextStep: FlowStep | undefined
+  onContinue: () => void
+}) {
+  const banner = STEP_BANNER_CONFIG[status]
+  return (
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn('inline-flex items-center gap-1.5', banner.textClass)}>
+          {status === 'done' && <CheckCircle2 className="h-4 w-4 text-success" />}
+          {status === 'active' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+          {status === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
+          {status === 'pending' && <Circle className="h-4 w-4 text-muted-foreground/40" />}
+          <span className="release-cc__step-label">{label}</span>
+        </span>
+        <span className={cn(
+          'rounded px-1 py-px text-dense-micro font-bold uppercase tracking-wider',
+          env === 'STG' ? 'text-warning/60' : 'text-destructive/60',
+        )}>
+          {env}
+        </span>
+        <span className={cn('text-dense-caption font-medium', banner.textClass)}>
+          {banner.prefix}{statusLabel}
+        </span>
+        {stepRevision != null && stepRevision !== '' && (
+          <>
+            <span className="text-muted-foreground/30">·</span>
+            <span className="font-mono text-dense-caption text-muted-foreground">{stepRevision}</span>
+          </>
+        )}
+      </div>
+
+      {status === 'done' && nextStep != null && (
+        <Button size="sm" onClick={onContinue} className="shadow-sm">
+          Continue to {nextStep.label}
+          <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        </Button>
+      )}
+      {status === 'done' && nextStep == null && (
+        <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-success">
+          <CheckCircle2 className="h-4 w-4" />
+          Release complete
+        </span>
+      )}
+    </div>
+  )
+}
+
+const STEP_BANNER_CONFIG: Record<StepStatus, { textClass: string; prefix: string }> = {
+  done: { textClass: 'text-success', prefix: '' },
+  active: { textClass: 'text-primary', prefix: '' },
+  error: { textClass: 'text-destructive', prefix: '' },
+  pending: { textClass: 'text-muted-foreground', prefix: 'Ready · ' },
+}
+
+// When a step is already done, demote its action (re-run/re-deploy) into a
+// collapsed disclosure so the "Continue" CTA stays the clear primary path.
+function StepActionZone({ activeIndex, status }: { activeIndex: number; status: StepStatus }) {
+  if (status === 'done') {
+    const isDeployStep = activeIndex === 0 || activeIndex === 2
+    return (
+      <details className="group rounded-md border border-border/50 bg-background/40">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
+          <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          {isDeployStep ? 'Re-deploy with a different revision' : 'Re-run this gate'}
+        </summary>
+        <div className="border-t border-border/50 px-3 py-2.5">
+          <StepActions activeIndex={activeIndex} />
+        </div>
+      </details>
+    )
+  }
+  return <StepActions activeIndex={activeIndex} />
 }
 
 // ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@
 
 export const NET_UPGRADE_VERSION = '2026-06-26-v1'
 export const NET_UPGRADE_SOURCE = 'console/src/lib/architecture/networkUpgradeCatalog.ts'
-export const NET_UPGRADE_STATUS = 'RESEARCH — plan finalized, awaiting hardware purchase and MoCA VLAN-tag verification'
+export const NET_UPGRADE_STATUS = 'ORDERED — router + switch ordered (2026-06-27); AP deferred; awaiting delivery'
 
 /* ─── Current topology ─── */
 
@@ -120,9 +120,9 @@ export const FIREWALL_RULES: FirewallRuleRow[] = [
 export const TARGET_TOPOLOGY_ASCII = `
 Internet (1Gbps now → 2.5G future)
   │
-UCG Ultra (192.168.10.1) ── VLAN 10/20/50 routing, IDS/IPS, UniFi Controller
-  │ trunk
-USW-24 (24-port, no PoE) ── replaces SG116E
+UCG Max (192.168.10.1) ── 4×2.5G LAN, 2.3Gbps IDS/IPS, UniFi Controller, REST API
+  │ 2.5G trunk
+USW-Pro-Max-24 (8×2.5G + 16×1G + 2×10G SFP+, L3) ── replaces SG116E
   ├── [VLAN 10] K3s nodes (.70/.73/.75/.77) + NAS + GPU + Work Mac
   ├── [trunk → MoCA] → coax → MoCA → U7 Pro (3F) ─WiFi→ "Bifrost"(V20) + "Home"(V50)
   ├── [trunk → MoCA] → coax → MoCA → U7 Pro (2F) ─WiFi→ "Bifrost"(V20) + "Home"(V50)
@@ -141,12 +141,12 @@ export type BomRow = {
   qty: number
   unitPrice: number
   purpose: string
-  status: 'to-buy' | 'owned' | 'sell'
+  status: 'to-buy' | 'ordered' | 'owned' | 'sell'
 }
 
 export const HARDWARE_BOM: BomRow[] = [
-  { category: 'Router/Gateway', model: 'UCG Ultra', qty: 1, unitPrice: 129, purpose: '2.5G WAN, VLAN routing, IDS/IPS, built-in UniFi Controller', status: 'to-buy' },
-  { category: 'Switch', model: 'USW-24 (no PoE)', qty: 1, unitPrice: 199, purpose: '24-port managed, replaces SG116E (16-port full)', status: 'to-buy' },
+  { category: 'Router/Gateway', model: 'UCG Max (no storage)', qty: 1, unitPrice: 199, purpose: '2.5G WAN + 4×2.5G LAN, 2.3Gbps IDS/IPS, full UniFi suite (Protect-ready), REST API', status: 'ordered' },
+  { category: 'Switch', model: 'USW-Pro-Max-24 (no PoE)', qty: 1, unitPrice: 449, purpose: '8×2.5G + 16×1G + 2×10G SFP+, Layer 3, Etherlighting, replaces SG116E', status: 'ordered' },
   { category: 'AP (main floors)', model: 'U7 Pro', qty: 3, unitPrice: 189, purpose: 'WiFi 7 tri-band, wall-mount, MoCA wired backhaul (1F/2F/3F)', status: 'to-buy' },
   { category: 'AP (basement+garage)', model: 'U6 Mesh', qty: 2, unitPrice: 159, purpose: 'WiFi 6, desktop/wall, wireless mesh backhaul (B1 + garage)', status: 'to-buy' },
   { category: 'Sell', model: 'Eero 6 Pro (3-pack)', qty: 1, unitPrice: -100, purpose: 'Recoup cost — no VLAN support, incompatible with UniFi mesh', status: 'sell' },

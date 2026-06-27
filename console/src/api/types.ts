@@ -163,6 +163,7 @@ export interface MigrateStream {
   status: string
   next_task?: string | null
   note?: string
+  prerequisites?: string[]
 }
 
 export interface MigrateTrack {
@@ -180,10 +181,16 @@ export interface AutomateTrack {
   streams: MigrateStream[]
 }
 
+export interface InfraTrack {
+  label: string
+  streams: MigrateStream[]
+}
+
 export interface OpsContextTracks {
   build?: BuildTrack
   migrate?: MigrateTrack
   automate?: AutomateTrack
+  infra?: InfraTrack
   operate?: OperateTrack
 }
 
@@ -865,11 +872,41 @@ export interface GiteaTagView {
   commit?: string
 }
 
+export interface GiteaBranchView {
+  name: string
+  repo: string
+  commit?: string
+}
+
 export interface RevisionsResponse {
   cluster_id: string
   repos: string[]
   default_ref: string
   tags: GiteaTagView[]
+  branches: GiteaBranchView[]
+  /** Ref names present in every tracked repo (safe for multi-repo deploy). */
+  common_refs: string[]
+  reachability: Reachability
+  detail: string
+  generated_at: string
+}
+
+export interface RepoRefStatus {
+  repo: string
+  exists: boolean
+  /** "branch" | "tag" | "commit" | "missing" */
+  kind: string
+  commit?: string
+  detail?: string
+}
+
+export interface RefPreflightResponse {
+  cluster_id: string
+  pipeline: string
+  revision: string
+  repos: RepoRefStatus[]
+  missing: string[]
+  ready: boolean
   reachability: Reachability
   detail: string
   generated_at: string

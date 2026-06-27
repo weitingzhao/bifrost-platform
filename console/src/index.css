@@ -1410,7 +1410,33 @@ html {
 
 .agent-desk-composer__actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.agent-desk-scope-chip {
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: var(--text-dense-caption);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.agent-desk-scope-chip:hover {
+  border-color: var(--ring);
+  color: var(--foreground);
+}
+.agent-desk-scope-chip--active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+.agent-desk-scope-chip--active:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
 }
 
 .agent-desk-history {
@@ -2464,11 +2490,61 @@ html {
   background: color-mix(in srgb, var(--secondary) 40%, transparent);
 }
 
+.release-cc__identity {
+  background: color-mix(in srgb, var(--secondary) 25%, transparent);
+}
+
 .release-cc__step-label {
   font-size: var(--text-dense-body);
   font-weight: 600;
   color: var(--foreground);
   letter-spacing: -0.01em;
+}
+
+/* Live deploy indicators — pulsing dot + blinking running phase. */
+@keyframes release-running-dot {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
+    opacity: 1;
+  }
+  70% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 0%, transparent);
+    opacity: 0.85;
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);
+    opacity: 1;
+  }
+}
+
+.release-cc__running-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--primary);
+  animation: release-running-dot 1.4s ease-out infinite;
+}
+
+@keyframes release-running-phase {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.release-cc__running-phase {
+  animation: release-running-phase 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .release-cc__running-dot,
+  .release-cc__running-phase {
+    animation: none;
+  }
 }
 
 @keyframes pipeline-pulse {

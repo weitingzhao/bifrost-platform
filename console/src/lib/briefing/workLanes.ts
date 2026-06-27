@@ -16,8 +16,9 @@ import { visionGovernanceQueueItems } from '@/lib/architecture/visionSpineMap'
 export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops' | 'cicd-delivery'
 export type MigrateLaneId = 'compose-k3s' | 'data-layer-k3s' | 'legacy-retire' | 'trade-stack'
 export type AutomateLaneId = 'platform-gitops' | 'agent-infra' | 'drift-remediation' | 'agent-services'
+export type InfraLaneId = 'network-server' | 'network-wifi' | 'ai-network'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
-export type LaneId = BuildLaneId | MigrateLaneId | AutomateLaneId | OperateLaneId
+export type LaneId = BuildLaneId | MigrateLaneId | AutomateLaneId | InfraLaneId | OperateLaneId
 
 export type QueueItemStatus =
   | 'done'
@@ -33,6 +34,10 @@ export interface QueueItem {
   label: string
   status: QueueItemStatus
   note?: string
+  /** Milestone progress: done / total (from spine stream). */
+  progress?: { done: number; total: number }
+  /** Prerequisites from spine stream (human-readable conditions). */
+  prerequisites?: string[]
 }
 
 export interface WorkLane {
@@ -148,7 +153,7 @@ const AUTOMATE_LANES: WorkLane[] = [
     track: 'automate',
     label: 'Drift detection & remediation',
     shortLabel: 'Drift',
-    description: 'Nightly catalog drift scan, deterministic + LLM comparison, auto-fix PR, Owner morning briefing.',
+    description: 'Nightly catalog drift scan, deterministic + LLM comparison, auto-fix PR, Owner morning briefing. Retrospective Agent: cross-job pattern analysis → identify systemic platform defects → self-evolving fix proposals.',
     agentMode: 'Ops',
     workIntent: 'automate',
   },
@@ -158,6 +163,36 @@ const AUTOMATE_LANES: WorkLane[] = [
     label: 'Agent services (MCP + Trade)',
     shortLabel: 'Services',
     description: 'Agent Desk in Console, Hermes MCP bridge, Trade advisory notifications.',
+    agentMode: 'Ops',
+    workIntent: 'automate',
+  },
+]
+
+const INFRA_LANES: WorkLane[] = [
+  {
+    id: 'network-server',
+    track: 'infra',
+    label: 'Server LAN upgrade (router + switch)',
+    shortLabel: 'Server LAN',
+    description: 'UCG Max + USW-Pro-Max-24 deployment: VLAN 10/20/50, 2.5G uplinks, K3s node validation, kube-vip VIP.',
+    agentMode: 'Ops',
+    workIntent: 'ops',
+  },
+  {
+    id: 'network-wifi',
+    track: 'infra',
+    label: 'WiFi upgrade (U7 Pro + U6 Mesh)',
+    shortLabel: 'WiFi',
+    description: 'Replace Eero with UniFi APs: per-floor rollout, MoCA backhaul, VLAN SSIDs (Bifrost/Home), coverage benchmark.',
+    agentMode: 'Ops',
+    workIntent: 'ops',
+  },
+  {
+    id: 'ai-network',
+    track: 'infra',
+    label: 'AI network autonomy',
+    shortLabel: 'AI Net',
+    description: 'UniFi MCP Server (REST API read/write), Ops Console Network dashboard, anomaly auto-response, predictive maintenance, self-healing network.',
     agentMode: 'Ops',
     workIntent: 'automate',
   },
@@ -202,7 +237,7 @@ const OPERATE_LANES: WorkLane[] = [
   },
 ]
 
-const ALL_LANES: WorkLane[] = [...BUILD_LANES, ...MIGRATE_LANES, ...AUTOMATE_LANES, ...OPERATE_LANES]
+const ALL_LANES: WorkLane[] = [...BUILD_LANES, ...MIGRATE_LANES, ...AUTOMATE_LANES, ...INFRA_LANES, ...OPERATE_LANES]
 
 const BUILD_TASK_LANE: Record<string, BuildLaneId> = {
   'p1-auth-audit': 'console-api',
@@ -233,6 +268,9 @@ const MIGRATE_STREAM_LANE: Record<string, MigrateLaneId> = {
   'vision-v1-dev': 'compose-k3s',
   'vision-s3-briefing': 'compose-k3s',
   'vision-v2-dev-agent': 'compose-k3s',
+  'vision-v3-ops-agent': 'compose-k3s',
+  'vision-v4-business-agent': 'compose-k3s',
+  'vision-v5-convergence': 'compose-k3s',
   'legacy-retirement': 'legacy-retire',
 }
 
@@ -240,8 +278,17 @@ const AUTOMATE_STREAM_LANE: Record<string, AutomateLaneId> = {
   'platform-gitops': 'platform-gitops',
   'agent-infra-bootstrap': 'agent-infra',
   'nightly-drift-scan': 'drift-remediation',
+  'release-agent-task': 'agent-services',
+  'retrospective-agent': 'drift-remediation',
   'agent-mcp-integration': 'agent-services',
   'agent-trade-advisory': 'agent-services',
+}
+
+const INFRA_STREAM_LANE: Record<string, InfraLaneId> = {
+  'network-upgrade-core': 'network-server',
+  'network-upgrade-wifi': 'network-wifi',
+  'unifi-mcp-server': 'ai-network',
+  'ai-home-network': 'ai-network',
 }
 
 export function lanesForTrack(track: TrackId): WorkLane[] {
@@ -252,6 +299,8 @@ export function lanesForTrack(track: TrackId): WorkLane[] {
       return MIGRATE_LANES
     case 'automate':
       return AUTOMATE_LANES
+    case 'infra':
+      return INFRA_LANES
     case 'operate':
       return OPERATE_LANES
   }
@@ -287,6 +336,12 @@ export function defaultLaneForTrack(
   if (track === 'automate' && context?.tracks?.automate != null) {
     const activeStream = context.tracks.automate.streams.find(s => s.status === 'in_progress')
     const laneId = activeStream != null ? AUTOMATE_STREAM_LANE[activeStream.id] : undefined
+    if (laneId != null) return laneId
+  }
+
+  if (track === 'infra' && context?.tracks?.infra != null) {
+    const activeStream = context.tracks.infra.streams.find(s => s.status === 'in_progress')
+    const laneId = activeStream != null ? INFRA_STREAM_LANE[activeStream.id] : undefined
     if (laneId != null) return laneId
   }
 
@@ -338,10 +393,10 @@ function buildQueueFromBuildTasks(build: BuildTrack | undefined, laneId: BuildLa
 
 function streamToQueueItem(stream: MigrateStream): QueueItem {
   const status = mapStreamStatus(stream.status)
-  const progress = `${stream.done}/${stream.total}`
+  const progressStr = `${stream.done}/${stream.total}`
   let label = stream.label
   if (status !== 'closed') {
-    label = `${stream.label} (${progress})`
+    label = `${stream.label} (${progressStr})`
   }
   const note = stream.next_task ?? stream.note
   return {
@@ -349,6 +404,8 @@ function streamToQueueItem(stream: MigrateStream): QueueItem {
     label,
     status,
     note: note ?? undefined,
+    progress: { done: stream.done, total: stream.total },
+    prerequisites: stream.prerequisites,
   }
 }
 
@@ -539,6 +596,16 @@ function buildQueueFromAutomateStreams(
     .map(streamToQueueItem)
 }
 
+function buildQueueFromInfraStreams(
+  infra: { streams: MigrateStream[] } | undefined,
+  laneId: InfraLaneId,
+): QueueItem[] {
+  if (infra == null) return []
+  return infra.streams
+    .filter(s => INFRA_STREAM_LANE[s.id] === laneId)
+    .map(streamToQueueItem)
+}
+
 export function buildQueueForLane(
   laneId: LaneId,
   context: OpsContextResponse | undefined,
@@ -555,6 +622,8 @@ export function buildQueueForLane(
       return buildQueueFromMigrateStreams(tracks?.migrate, laneId as MigrateLaneId)
     case 'automate':
       return buildQueueFromAutomateStreams(tracks?.automate, laneId as AutomateLaneId)
+    case 'infra':
+      return buildQueueFromInfraStreams(tracks?.infra, laneId as InfraLaneId)
     case 'operate':
       switch (laneId as OperateLaneId) {
         case 'governance':
