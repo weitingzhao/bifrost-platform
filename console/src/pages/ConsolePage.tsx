@@ -52,6 +52,11 @@ import { DataLayerPage } from '@/pages/DataLayerPage'
 import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
 import { McpContractPage } from '@/pages/McpContractPage'
 import { NetworkUpgradePage } from '@/pages/NetworkUpgradePage'
+import { OperatorPlanePage } from '@/pages/OperatorPlanePage'
+import { AutonomousSkillsPage } from '@/pages/AutonomousSkillsPage'
+import { ExecutionLogPage } from '@/pages/ExecutionLogPage'
+import { AgentGovernancePage } from '@/pages/AgentGovernancePage'
+import { DefectsPage } from '@/pages/DefectsPage'
 import { StandardsPage } from '@/pages/StandardsPage'
 
 const ControlRoomPage = lazy(() =>
@@ -61,6 +66,10 @@ const ControlRoomPage = lazy(() =>
 const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'agent-desk': 'Agent Desk',
   briefing: 'Agent Briefing',
+  'autonomous-skills': 'Skills & Schedules',
+  'execution-log': 'Execution Log',
+  'agent-governance': 'Trust & Autonomy',
+  'operator-plane': 'Operator Plane',
   'control-room': 'Control Room',
   audit: 'Audit',
   'runtime-map': 'Runtime Map',
@@ -85,11 +94,18 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'design-system': 'Design System',
   'network-upgrade': 'Network Upgrade',
   console: 'Server console',
+  defects: 'Defects',
 }
 
 const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'agent-desk',
+  'autonomous-skills',
+  'execution-log',
+  'agent-governance',
+  'operator-plane',
+  'audit',
   'briefing',
+  'console',
   'control-room',
   'promote',
   'delivery',
@@ -123,6 +139,7 @@ export function ConsolePage() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('prod')
   const [viewTab, setViewTabState] = useState<ConsoleViewTab>(() => tabFromHash() ?? 'control-room')
   const [agentDeskJobId, setAgentDeskJobId] = useState<string | null>(null)
+  const [agentDeskPrefill, setAgentDeskPrefill] = useState<string | null>(null)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
   const qc = useQueryClient()
 
@@ -284,19 +301,6 @@ export function ConsolePage() {
     return data
   }, [runtimeMatrixQuery.data])
 
-  const matrixUpdatedAt = useMemo(() => {
-    if (viewTab === 'runtime-map') return runtimeMatrix?.generated_at ?? null
-    if (
-      viewTab === 'briefing' ||
-      viewTab === 'control-room' ||
-      viewTab === 'promote' ||
-      viewTab === 'delivery'
-    ) {
-      if (pulseMatrices.length === 0) return null
-      return pulseMatrices[0]?.generated_at ?? null
-    }
-    return null
-  }, [viewTab, pulseMatrices, runtimeMatrix])
 
   function refreshAll() {
     void qc.invalidateQueries({ queryKey: ['matrix'] })
@@ -326,8 +330,13 @@ export function ConsolePage() {
   const openPlacement = () => setViewTab('placement')
   const openAudit = () => setViewTab('audit')
   const openBriefing = () => setViewTab('briefing')
-  const openAgentDesk = useCallback((jobId?: string) => {
-    if (jobId != null) setAgentDeskJobId(jobId)
+  const openOperatorPlane = () => setViewTab('operator-plane')
+  const openAgentDesk = useCallback((jobIdOrOpts?: string | { prefill: string }) => {
+    if (typeof jobIdOrOpts === 'string') {
+      setAgentDeskJobId(jobIdOrOpts)
+    } else if (jobIdOrOpts != null && 'prefill' in jobIdOrOpts) {
+      setAgentDeskPrefill(jobIdOrOpts.prefill)
+    }
     setViewTab('agent-desk')
   }, [])
   const openBlueprint = () => setViewTab('blueprint')
@@ -366,7 +375,12 @@ export function ConsolePage() {
 
   const showEnvStrip = viewTab === 'runtime-map'
   const showPageHeader = ![
+    'agent-desk',
     'briefing',
+    'autonomous-skills',
+    'execution-log',
+    'agent-governance',
+    'operator-plane',
     'control-room',
     'runtime-map',
     'cluster',
@@ -383,6 +397,7 @@ export function ConsolePage() {
     'design-system',
     'console',
     'platform-release',
+    'defects',
   ].includes(viewTab)
 
   const runtimeLoading = topologyQuery.isLoading || runtimeMatrixQuery.isLoading
@@ -409,14 +424,8 @@ export function ConsolePage() {
           {OPS_CONTEXT_TABS.includes(viewTab) && (
             <OpsContextBar>
               <FocusStrip
-                context={contextQuery.data}
-                isLoading={contextQuery.isLoading}
-                matrixUpdatedAt={matrixUpdatedAt}
-                clusterSummary={clusterQuery.data}
-                clusterLoading={clusterQuery.isLoading}
-                onOpenProgram={openProgram}
-                onOpenDelivery={openDelivery}
-                onOpenCluster={openCluster}
+                onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
+                onOpenAgentDeskWithPrefill={prefill => openAgentDesk({ prefill })}
               />
             </OpsContextBar>
           )}
@@ -440,21 +449,31 @@ export function ConsolePage() {
         )}
 
         {viewTab === 'agent-desk' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES['agent-desk']}
-              description="Owner agent control plane — chat requests, remediation task stream, and operator approvals via platform-api."
-            />
-            <AgentDeskPage
-              context={contextQuery.data}
-              initialJobId={agentDeskJobId}
-              onInitialJobConsumed={() => setAgentDeskJobId(null)}
-              onOpenBriefing={openBriefing}
-              onOpenCluster={openCluster}
-              onOpenMcpContract={() => setViewTab('mcp-contract')}
-            />
-          </>
+          <AgentDeskPage
+            context={contextQuery.data}
+            initialJobId={agentDeskJobId}
+            prefillPrompt={agentDeskPrefill}
+            onInitialJobConsumed={() => setAgentDeskJobId(null)}
+            onPrefillConsumed={() => setAgentDeskPrefill(null)}
+            onOpenBriefing={openBriefing}
+            onOpenCluster={openCluster}
+            onOpenMcpContract={() => setViewTab('mcp-contract')}
+            onOpenOperatorPlane={openOperatorPlane}
+          />
         )}
+
+        {viewTab === 'operator-plane' && (
+          <OperatorPlanePage
+            onOpenMcpContract={() => setViewTab('mcp-contract')}
+            onOpenBriefing={openBriefing}
+          />
+        )}
+
+        {viewTab === 'autonomous-skills' && <AutonomousSkillsPage />}
+
+        {viewTab === 'execution-log' && <ExecutionLogPage />}
+
+        {viewTab === 'agent-governance' && <AgentGovernancePage />}
 
         {viewTab === 'briefing' && (
           <>
@@ -479,11 +498,7 @@ export function ConsolePage() {
 
         {viewTab === 'control-room' && (
           <>
-            <PageHeader
-              title={VIEW_TITLES['control-room']}
-              description="Live runtime summary (deep-link to Runtime Map for topology), dual flywheel governance, and Agent focus dock."
-            />
-            <Suspense fallback={<p className="text-[var(--muted-foreground)]">Loading control room…</p>}>
+            <Suspense fallback={<p className="text-[var(--muted-foreground)]">Loading mission control…</p>}>
               <ControlRoomPage
                 context={contextQuery.data}
                 contextLoading={contextQuery.isLoading}
@@ -501,7 +516,8 @@ export function ConsolePage() {
                 onOpenCluster={openCluster}
                 onOpenAudit={openAudit}
                 onOpenBriefing={openBriefing}
-                onOpenAgentDesk={() => openAgentDesk()}
+                onOpenAgentDesk={(opts) => openAgentDesk(opts)}
+                onOpenPlatformRelease={() => setViewTab('platform-release')}
               />
             </Suspense>
           </>
@@ -516,6 +532,8 @@ export function ConsolePage() {
             <AuditPage records={auditRecords} isLoading={auditQuery.isLoading} />
           </>
         )}
+
+        {viewTab === 'defects' && <DefectsPage />}
 
         {viewTab === 'runtime-map' && (
           <>

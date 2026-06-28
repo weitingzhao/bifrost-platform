@@ -4,7 +4,7 @@
 
 meta:
     version: "2026-06-25-cicd-bootstrap"
-    catalog_version: "2026-06-25-cicd-bootstrap"
+    catalog_version: "2026-06-28-nous-hermes-integration"
 # Ultimate goal (Strategy C hybrid) — authoritative for Agent / Program UI.
 # Detail: Ops Console → Architecture → Blueprint · console/src/lib/architecture/blueprintCatalog.ts · decision D6
 north_star:
@@ -192,6 +192,12 @@ decisions:
       conclusion: "All routine ops via Ops Console/API only; hybrid embed Argo/Tekton/K8s executors behind platform-api; Owner exception is restarting Ops Platform itself"
       signed_at: "2026-06-15"
       authority: console/src/lib/architecture/blueprintCatalog.ts
+    - id: D7
+      status: SIGNED
+      topic: Agent Out-of-Band Operator Plane (L-1) — fate isolation & engineer model
+      conclusion: "The AI Agent that recovers L0–L2 runs OUTSIDE K8s on dual Mac Minis (primary .50 + standby .52) with a launchd mutual watchdog + platform-api failover — it automates the Owner's only out-of-band action (D6). Mental model: Ops Platform = rocket, Trade = payload, Agent = engineer on the ground. Layered: out-of-band minimal recovery (L-1) vs in-band rich capabilities (three-layer Agent). Agent release discipline is monorepo-first; repo extraction deferred until trigger conditions fire."
+      signed_at: "2026-06-27"
+      authority: "console/src/lib/architecture/cicdBootstrapCatalog.ts (L-1) + dualFlywheelVisionCatalog.ts (operator plane) + blueprintCatalog.ts (principle 6)"
 platform_phases:
     - id: A
       label: Gate
@@ -431,16 +437,69 @@ tracks:
               prerequisites:
                 - "agent-infra-bootstrap stream closed"
                 - "p6-platform-e2e-cicd done"
+            - id: mission-auto-remediation
+              label: "Mission Status → Agent auto-remediation closed loop"
+              total: 5
+              done: 3
+              status: in_progress
+              note: "① buildDiagnosticPrompt — snapshot→structured prompt ✓ ② Diagnose & Fix button (Mission Board + FocusStrip) with composer prefill ✓ ③ Trade on K3s — deploy payload workloads to cluster so Agent kubectl/platform-api tools cover full stack ④ Mutual Watchdog — dual Mac Mini peer health monitor (restart_peer_agent tool + symmetric peer_watchdog launchd, platform-api primary+standby failover) ✓ see mutual-watchdog stream ⑤ Autonomous fix validation — Agent re-probes mission snapshot after remediation, confirms NOMINAL before closing job"
+              prerequisites:
+                - "agent-mcp-integration stream closed"
+                - "release-agent-task stream closed"
+            - id: trade-k8s-migration
+              label: "Trade payload K3s migration — Docker Compose → K8s Deployments"
+              total: 6
+              done: 0
+              status: not_started
+              note: "Move Trade services into K3s so Ops Agent has full actuation. ① Trade API Dockerfiles + K8s manifests (9 FastAPI domains) ② Trade Worker Deployment (daemon + celery) ③ Trade Socket Deployment (IB edge + massive) ④ Trade Frontend Deployment (nginx + SPA) ⑤ Tekton CI/CD pipeline for Trade (bifrost-deliver-trade) ⑥ Matrix probe expansion — Trade targets become K8s service-readiness (Agent rollout_restart/delete_pod covers payload)"
+              prerequisites:
+                - "migrate track: trade-backend + trade-frontend streams closed"
+                - "p6-platform-e2e-cicd done"
+            - id: mutual-watchdog
+              label: "Dual Mac Mini mutual watchdog — self-healing agent layer"
+              total: 4
+              done: 4
+              status: closed
+              note: "① restart_peer_agent + peer_agent_health custom tools (Runner ssh-kickstarts peer, vice versa) ✓ ② Symmetric launchd probe — peer_watchdog.sh + com.bifrost.peer-watchdog.plist on BOTH Minis, polls peer :8781/health every 60s, 3×5s retry then ssh kickstart ✓ ③ platform-api primary+standby failover — RunnerClient HealthAll dual-heartbeat, prefer-primary auto fail-back; REMEDIATION_RUNNER_STANDBY_URL=.52 ✓ (platform-api-on-K3s restartPolicy still pending trade-k8s-migration) ④ Console dual heartbeat — bridge runners[] (role/active) + AgentMcpPanel per-runner tags + agentSignal HA logic ✓. Deployed: .50 primary (ops-mac-agent-02, runner+watchdog+nightly), .52 standby (ops-mac-agent-01, runner+watchdog, nightly disabled), mutual SSH ed25519 trust. Verified: failover (bootout primary → standby active), auto fail-back, watchdog ssh-restart (PID 56331→56373), real 60s watchdog auto-recovery in logs."
+              prerequisites:
+                - "agent-infra-bootstrap stream closed"
+                - "Mac Mini #2 (.52) bootstrap_host.sh deployed"
+            - id: agent-release-discipline
+              label: "Agent release discipline — lifecycle independence (monorepo-first)"
+              total: 5
+              done: 5
+              status: closed
+              note: "Give the Agent its own release lifecycle WITHOUT splitting repo yet (monorepo-first, extract-when-stable). ① Versioning — agent/remediation package.json version + AGENT_VERSION in /health + Console shows per-Mini version ② Standby-first canary deploy — reuse dual Mini: Update standby(.52) → smoke → confirm → Update primary(.50), primary uninterrupted ③ Post-deploy self-smoke — after deploy run tool dry-run (health + key tools), abort promote on failure ④ Layering decision record — out-of-band minimal recovery layer (stays on Macs, mutual watchdog) vs in-band rich capability layer (may go K3s) ⑤ Extraction triggers documented — split to bifrost-agent repo only when: drift scanner no longer reads platform catalogs (reads via API), tools↔platform-api contract stable, independent owner/cadence, Agent serves beyond platform (Trade payload), or supply-chain isolation required. Metaphor: rocket=Ops Platform, payload=Trade, Agent=ground/mission crew that maintains+upgrades both — crew must stand on solid ground OUTSIDE the rocket (bootstrap paradox) and be certified before touching it (this stream)."
+              prerequisites:
+                - "mutual-watchdog stream closed"
             - id: retrospective-agent
               label: "Retrospective Agent — self-evolving platform"
               total: 5
-              done: 0
-              status: not_started
-              note: "AI agent that analyzes remediation job history to identify systemic platform defects. ① Cross-job pattern clustering (recurring pod/namespace/error) ② Root-cause classification (transient vs platform-defect vs config-drift) ③ Platform defect report generation with code-level attribution ④ Ops Console Defects dashboard ⑤ Autonomous fix-PR proposal for identified platform bugs"
+              done: 2
+              status: in_progress
+              note: "AI agent that analyzes remediation job history to identify systemic platform defects. ① Cross-job pattern clustering (recurring pod/namespace/error) ✓ — Go analyzer reads JobStore, extracts scope/namespace/tool patterns, computes health score + insights; /api/v1/agent/retrospective/{report,patterns,insights} endpoints; Console Defects page (Observe → Diagnosis → Defects) with StatsCards, InsightsPanel, PatternsTable, ScopeBreakdown, ToolUsage, NamespaceActivity ② Root-cause classification ✓ — Multi-signal fusion classifier (8 signal categories: tool-pattern, scope-based, error-text, init-brief, summary, temporal, approval, failure-rate); ClassificationSignal + confidence score on PatternCluster; Console RootCauseDistBar (stacked bar + legend); expandable signal detail rows in PatternsTable; enhanced Insights with confidence % and platform-defect recommendations ③ Platform defect report generation with code-level attribution ④ Ops Console Defects dashboard (done as part of ①) ⑤ Autonomous fix-PR proposal for identified platform bugs"
               prerequisites:
                 - "nightly-drift-scan stream closed"
                 - "agent-mcp-integration stream closed"
                 - "Sufficient remediation job history (10+ runs)"
+            - id: hermes-gateway-integration
+              label: "Nous Hermes Agent integration — LLM-powered autonomous engineer"
+              total: 6
+              done: 5
+              status: in_progress
+              note: "Elevate Agent from on-demand Dispatch (Cursor Runner) to LLM-powered autonomous engineer (Nous Research Hermes Agent v0.17.0). Mental model: Runner = on-call engineer you page; Hermes = full-time AI engineer with 72 bundled skills, MCP tool access, persistent memory, cron scheduling, and a web dashboard. ① Nous Hermes Agent installed on Mac Mini primary (.50) ✓ — v0.17.0 with uv+Python 3.11+Playwright, ~/.hermes/ config directory, gateway as launchd ai.hermes.gateway, dashboard on :9119 with basic auth ② bifrost-platform MCP server synced to Mac Mini ✓ — mcp-server-platform (35 ops tools) via stdio, config in ~/.hermes/config.yaml mcp_servers.bifrost-platform, hermes mcp test passed all 35 tools ③ platform-api agent bridge probeNousHermes ✓ — NOUS_HERMES_URL/NOUS_HERMES_USER/NOUS_HERMES_PASS env vars, bridge.nous_hermes status block in /api/v1/agent/bridge ④ Console Operator Plane shows Hermes Agent status ✓ — version/gateway-state/dashboard-link, legacy scheduler dimmed (opacity-60) ⑤ Self-built bifrost-hermes-gateway retired ✓ — com.bifrost.hermes-gateway launchd bootout, plist removed, deploy_mac_mini.sh updated to sync MCP server instead ⑥ LLM API key provisioning + first autonomous task — configure Anthropic/OpenRouter key, run first Hermes Agent session with bifrost-platform MCP tools, verify end-to-end AI-driven ops"
+              prerequisites:
+                - "agent-release-discipline stream closed"
+                - "mutual-watchdog stream closed"
+            - id: flight-director-governance
+              label: "Flight Director governance — Owner manages Agent, not just dispatches"
+              total: 5
+              done: 0
+              status: not_started
+              note: "Transform Owner from hands-on engineer / task dispatcher to Mission Director who governs the Agent team. Spine decision D8 (pending). ① Console Governance page — Agent performance dashboard (success rate, MTTR, intervention rate over 7/30d windows) ② Trust & Autonomy matrix — per-Skill actuation level (L0 auto / L1 confirm / L2 escalate), adjustable in UI ③ Capability Map — Hermes Skills × MCP tools × Mission Status coverage; gap highlighting ④ Earned autonomy engine — if Skill succeeds N consecutive times at L1, suggest promotion to L0; if failure rate rises, auto-demote to L1 ⑤ Flight Director Briefing — daily digest of what Agent did autonomously, what it escalated, and what failed; replaces Owner checking Audit page manually"
+              prerequisites:
+                - "hermes-gateway-integration stream ③ skills API done"
+                - "retrospective-agent stream closed"
     infra:
         label: "Infrastructure & network evolution"
         streams:

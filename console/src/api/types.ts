@@ -1213,6 +1213,7 @@ export interface AgentDeployJob {
   id: string
   status: 'running' | 'done' | 'failed'
   remote: string
+  role?: 'primary' | 'standby' | 'custom'
   started_at: string
   finished_at?: string
   exit_code?: number
@@ -1220,9 +1221,18 @@ export interface AgentDeployJob {
   error?: string
 }
 
+export interface AgentDeployTarget {
+  id: string
+  role: 'primary' | 'standby'
+  remote: string
+  peer_ssh?: string
+  peer_url?: string
+}
+
 export interface AgentDeployStatusResponse {
   enabled: boolean
   remote: string
+  targets?: AgentDeployTarget[]
   script_path?: string
   hint?: string
   current?: AgentDeployJob
@@ -1279,13 +1289,27 @@ export interface ApproveDriftProposalResponse {
   remediation_job: RemediationJob
 }
 
+export interface RunnerStatus {
+  url: string
+  role?: 'primary' | 'standby'
+  status: string
+  version?: string
+  active?: boolean
+  cursor_api_key?: boolean
+  service?: string
+  error?: string
+}
+
 export interface AgentBridgeResponse {
   generated_at: string
-  remediation_runner: {
-    url: string
+  remediation_runner: RunnerStatus
+  runners?: RunnerStatus[]
+  git_bridge: {
+    url?: string
     status: string
-    cursor_api_key?: boolean
-    service?: string
+    workspace?: string
+    repo_count?: number
+    dirty_repos?: number
     error?: string
   }
   hermes_mcp: {
@@ -1293,6 +1317,19 @@ export interface AgentBridgeResponse {
     status: string
     error?: string
     note?: string
+  }
+  nous_hermes: {
+    url?: string
+    status: string
+    version?: string
+    release_date?: string
+    gateway_running: boolean
+    gateway_state?: string
+    active_agents: number
+    active_sessions: number
+    mcp_tool_count: number
+    dashboard_url?: string
+    error?: string
   }
   platform_mcp: {
     server_name: string
@@ -1336,6 +1373,224 @@ export interface BuildPhaseGateResponse {
 
 export interface RunBuildPhaseGateResponse extends ActuationResponse {
   gate: BuildPhaseGateResponse
+}
+
+// Hermes Gateway — Autonomous Agent types
+
+export type HermesSkillTrigger = 'cron' | 'webhook' | 'manual'
+export type HermesSkillStatus = 'enabled' | 'disabled' | 'error'
+export type HermesActuationLevel = 'L0' | 'L1' | 'L2'
+
+export interface HermesSkill {
+  id: string
+  label: string
+  description: string
+  trigger: HermesSkillTrigger
+  schedule?: string
+  actuation_level: HermesActuationLevel
+  status: HermesSkillStatus
+  last_run_at?: string
+  last_result?: 'success' | 'failure' | 'skipped'
+  tags?: string[]
+}
+
+export interface HermesSchedule {
+  skill_id: string
+  cron: string
+  enabled: boolean
+  next_run_at?: string
+  timezone?: string
+}
+
+export type HermesExecutionResult = 'success' | 'failure' | 'escalated' | 'skipped'
+
+export interface HermesExecution {
+  id: string
+  skill_id: string
+  skill_label: string
+  trigger: HermesSkillTrigger
+  result: HermesExecutionResult
+  started_at: string
+  finished_at?: string
+  duration_ms?: number
+  summary?: string
+  error?: string
+  escalated_to?: string
+}
+
+export interface HermesSkillsResponse {
+  gateway_status: string
+  skills: HermesSkill[]
+  generated_at: string
+}
+
+export interface HermesSchedulesResponse {
+  schedules: HermesSchedule[]
+  generated_at: string
+}
+
+export interface HermesExecutionsResponse {
+  executions: HermesExecution[]
+  total: number
+  generated_at: string
+}
+
+export interface RunnerSmokeCheck {
+  id: string
+  label: string
+  status: 'pass' | 'fail'
+  detail?: string
+}
+
+export interface RunnerSmokeResponse {
+  status: 'pass' | 'fail'
+  version: string
+  role: string
+  checks: RunnerSmokeCheck[]
+}
+
+export interface HermesGatewayHealth {
+  status: string
+  version?: string
+  skill_count?: number
+  uptime_seconds?: number
+  error?: string
+}
+
+// Agent Governance — Flight Director types
+
+export interface AgentPerformanceWindow {
+  window: '7d' | '30d'
+  total_executions: number
+  success_count: number
+  failure_count: number
+  escalation_count: number
+  success_rate: number
+  mean_duration_ms: number
+  intervention_rate: number
+}
+
+export interface AgentPerformanceResponse {
+  windows: AgentPerformanceWindow[]
+  mttr_seconds?: number
+  generated_at: string
+}
+
+export interface TrustMatrixEntry {
+  skill_id: string
+  skill_label: string
+  current_level: HermesActuationLevel
+  consecutive_successes: number
+  promotion_eligible: boolean
+  demotion_triggered: boolean
+  last_override_at?: string
+  last_override_by?: string
+}
+
+export interface TrustMatrixResponse {
+  entries: TrustMatrixEntry[]
+  generated_at: string
+}
+
+// Retrospective Agent — cross-job pattern analysis
+
+export type RetrospectiveRootCause =
+  | 'transient'
+  | 'platform_defect'
+  | 'config_drift'
+  | 'resource_limit'
+  | 'external'
+  | 'unknown'
+
+export type RetrospectiveSeverity = 'critical' | 'high' | 'medium' | 'low'
+
+export interface RetrospectiveComponentRef {
+  namespace?: string
+  deployment?: string
+  pod?: string
+  pipeline?: string
+  service?: string
+}
+
+export interface RetrospectiveActionTaken {
+  tool: string
+  count: number
+}
+
+export interface RetrospectiveJobRef {
+  id: string
+  scope: string
+  status: string
+  created_at: string
+}
+
+export interface RetrospectiveClassificationSignal {
+  name: string
+  weight: number
+  cause: RetrospectiveRootCause
+  detail?: string
+}
+
+export interface RetrospectivePatternCluster {
+  id: string
+  label: string
+  description: string
+  root_cause: RetrospectiveRootCause
+  confidence: number
+  signals?: RetrospectiveClassificationSignal[]
+  severity: RetrospectiveSeverity
+  component: RetrospectiveComponentRef
+  occurrences: number
+  first_seen: string
+  last_seen: string
+  jobs: RetrospectiveJobRef[]
+  top_actions: RetrospectiveActionTaken[]
+  success_rate: number
+  avg_duration_seconds: number
+  trending: 'up' | 'stable' | 'down'
+}
+
+export interface RetrospectiveRootCauseDistribution {
+  cause: RetrospectiveRootCause
+  count: number
+  fraction: number
+}
+
+export interface RetrospectiveScopeStats {
+  scope: string
+  total: number
+  done: number
+  failed: number
+  cancelled: number
+  running: number
+  success_rate: number
+  avg_duration_seconds: number
+}
+
+export interface RetrospectiveToolUsage {
+  tool: string
+  count: number
+  jobs: number
+}
+
+export interface RetrospectiveNamespaceActivity {
+  namespace: string
+  tool_calls: number
+  jobs: number
+  top_actions: RetrospectiveActionTaken[]
+}
+
+export interface RetrospectiveReport {
+  generated_at: string
+  total_jobs: number
+  analysis_window: string
+  patterns: RetrospectivePatternCluster[]
+  root_cause_distribution: RetrospectiveRootCauseDistribution[]
+  scope_stats: RetrospectiveScopeStats[]
+  tool_usage: RetrospectiveToolUsage[]
+  namespaces: RetrospectiveNamespaceActivity[]
+  health_score: number
+  insights: string[]
 }
 
 // Self-health probe (L1 control plane liveness)

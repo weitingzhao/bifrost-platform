@@ -143,6 +143,9 @@ function QueueItemRow({ item }: { item: QueueItem }) {
         <StatusLamp value={queueItemReach(item.status)} kind="reach" />
         <div className="min-w-0 flex-1">
           <p className="m-0 text-[var(--text-dense)]">{item.label}</p>
+          <code className="mt-0.5 inline-block rounded bg-[var(--secondary)] px-1 py-px font-mono text-dense-caption text-[var(--muted-foreground)]">
+            {item.id}
+          </code>
           {!expanded && parsed != null && parsed.preamble !== '' && (
             <p className="m-0 mt-0.5 line-clamp-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
               {parsed.preamble}

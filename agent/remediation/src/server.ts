@@ -2,6 +2,7 @@ import express from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
 import {
   cancelJob,
   createJob,
@@ -14,16 +15,23 @@ import { buildOperatorInitBrief } from './prompt.js'
 import { runRemediationJob } from './runner.js'
 import type { StartRunRequest } from './types.js'
 
+const require = createRequire(import.meta.url)
+const pkg = require('../package.json') as { version: string }
+const AGENT_VERSION = pkg.version
+
 const app = express()
 app.use(express.json({ limit: '2mb' }))
 
 const port = Number(process.env.REMEDIATION_RUNNER_PORT ?? 8781)
 const bindHost = process.env.REMEDIATION_RUNNER_BIND?.trim() || '127.0.0.1'
+const agentRole = process.env.AGENT_ROLE?.trim() || 'primary'
 
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: 'bifrost-remediation-runner',
+    version: AGENT_VERSION,
+    role: agentRole,
     cursor_api_key: Boolean(process.env.CURSOR_API_KEY?.trim()),
   })
 })
@@ -125,6 +133,50 @@ app.get('/reports/latest', (_req, res) => {
   })
 })
 
+app.get('/smoke', async (_req, res) => {
+  const checks: { id: string; label: string; status: 'pass' | 'fail'; detail?: string }[] = []
+  const check = (id: string, label: string, fn: () => Promise<string | null>) =>
+    fn().then(
+      err => checks.push({ id, label, status: err == null ? 'pass' : 'fail', detail: err ?? undefined }),
+      e => checks.push({ id, label, status: 'fail', detail: (e as Error).message }),
+    )
+
+  await check('health', 'Runner health', async () => null)
+  await check('cursor_key', 'Cursor API key configured', async () =>
+    process.env.CURSOR_API_KEY?.trim() ? null : 'CURSOR_API_KEY not set',
+  )
+  await check('platform_api', 'Platform API reachable', async () => {
+    const url = process.env.PLATFORM_API_URL?.trim()
+    if (!url) return 'PLATFORM_API_URL not set'
+    const r = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5000) })
+    return r.ok ? null : `HTTP ${r.status}`
+  })
+  await check('kubeconfig', 'Kubeconfig present', async () => {
+    const kc = process.env.KUBECONFIG?.trim()?.replace(/^~/, process.env.HOME ?? '')
+    if (!kc) return 'KUBECONFIG not set'
+    const { existsSync } = await import('node:fs')
+    return existsSync(kc) ? null : `${kc} not found`
+  })
+  await check('kubectl', 'kubectl cluster reachable', async () => {
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const exec = promisify(execFile)
+    const env = { ...process.env }
+    const kc = env.KUBECONFIG?.trim()
+    if (kc) env.KUBECONFIG = kc.replace(/^~/, process.env.HOME ?? '')
+    const { stdout } = await exec('kubectl', ['cluster-info', '--request-timeout=5s'], { env, timeout: 10_000 })
+    return stdout.includes('running') ? null : 'cluster-info did not report running'
+  })
+
+  const passed = checks.every(c => c.status === 'pass')
+  res.json({
+    status: passed ? 'pass' : 'fail',
+    version: AGENT_VERSION,
+    role: agentRole,
+    checks,
+  })
+})
+
 app.get('/run', (_req, res) => {
   res.json({ jobs: listJobs() })
 })
@@ -223,5 +275,5 @@ app.get('/run/:id/stream', (req, res) => {
 })
 
 app.listen(port, bindHost, () => {
-  console.log(`remediation runner listening on http://${bindHost}:${port}`)
+  console.log(`remediation runner v${AGENT_VERSION} (${agentRole}) listening on http://${bindHost}:${port}`)
 })

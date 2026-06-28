@@ -168,8 +168,23 @@ export function AgentMcpPanel({
 
       {bridge != null && (
         <div className="flex flex-wrap gap-2">
-          <DenseTag variant={bridgeStatusVariant(bridge.remediation_runner.status)}>
-            Runner {bridge.remediation_runner.status}
+          {bridge.runners != null && bridge.runners.length > 0 ? (
+            bridge.runners.map(r => (
+              <DenseTag key={r.url} variant={bridgeStatusVariant(r.status)}>
+                Runner {r.role ?? ''} {r.status}
+                {r.active ? ' · active' : ''}
+              </DenseTag>
+            ))
+          ) : (
+            <DenseTag variant={bridgeStatusVariant(bridge.remediation_runner.status)}>
+              Runner {bridge.remediation_runner.status}
+            </DenseTag>
+          )}
+          <DenseTag variant={bridgeStatusVariant(bridge.git_bridge.status)}>
+            Git Bridge {bridge.git_bridge.status}
+            {bridge.git_bridge.status === 'ok' && bridge.git_bridge.dirty_repos != null && bridge.git_bridge.dirty_repos > 0
+              ? ` · ${bridge.git_bridge.dirty_repos} dirty`
+              : ''}
           </DenseTag>
           <DenseTag variant={bridgeStatusVariant(bridge.hermes_mcp.status)}>
             Hermes MCP {bridge.hermes_mcp.status}
@@ -181,6 +196,37 @@ export function AgentMcpPanel({
             <DenseTag variant="neutral">Nightly report on runner</DenseTag>
           )}
         </div>
+      )}
+
+      {bridge != null && bridge.git_bridge.status === 'ok' && (
+        <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+          Git Bridge on {bridge.git_bridge.url} — {bridge.git_bridge.repo_count ?? 0} repos, workspace{' '}
+          <code className="font-mono-tabular">{bridge.git_bridge.workspace}</code>
+          {bridge.git_bridge.dirty_repos != null && bridge.git_bridge.dirty_repos > 0 && (
+            <span> · <strong>{bridge.git_bridge.dirty_repos} repos with uncommitted changes</strong></span>
+          )}
+        </p>
+      )}
+
+      {bridge != null && bridge.git_bridge.status === 'unavailable' && (
+        <OpsFeedback variant="warning" title="Git Bridge unreachable — Release Agent cannot commit">
+          The Release Agent needs Git Bridge on the developer Mac to commit and push changes.
+          Start it with <code className="font-mono-tabular">./start.sh daemon</code> in{' '}
+          <code className="font-mono-tabular">agent/git-bridge/</code>.
+          {bridge.git_bridge.url != null && (
+            <span className="mt-1 block font-mono-tabular text-[var(--text-dense-caption)]">
+              {bridge.git_bridge.url}
+              {bridge.git_bridge.error != null && ` — ${bridge.git_bridge.error}`}
+            </span>
+          )}
+        </OpsFeedback>
+      )}
+
+      {bridge != null && bridge.git_bridge.status === 'not_configured' && (
+        <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+          Git Bridge not configured — set <code className="font-mono-tabular">GIT_BRIDGE_URL</code> in{' '}
+          platform-api env to enable Release Agent git operations.
+        </p>
       )}
 
       {bridge != null && bridge.hermes_mcp.status === 'not_configured' && bridge.hermes_mcp.note != null && (

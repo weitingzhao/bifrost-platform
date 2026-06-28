@@ -10,7 +10,7 @@
 import type { DenseTagVariant } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 
-export const CATALOG_VERSION = '2026-06-25-cicd-bootstrap'
+export const CATALOG_VERSION = '2026-06-27-agent-operator-plane'
 export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
 
 /** Scope row — one logical component in the Bifrost stack. */
@@ -171,6 +171,13 @@ export const SCOPE_ROWS: ScopeRow[] = [
     technology: 'Ollama on gpu-server (4090) · mcp-server-kubernetes · bifrost-ops-mcp',
     notes: 'L0/L1 ops only; research RAG CronJob read-only. Forbidden: trade write paths for platform AI.',
   },
+  {
+    tag: 'AGENT',
+    component: 'Out-of-Band Operator Plane (L-1)',
+    technology: 'Dual Mac Mini Remediation Runners (primary .50 + standby .52) · launchd peer watchdog · Git Bridge (Mac Pro, Dev-only)',
+    notes:
+      'The engineer on the ground — recovers Ops Platform (rocket) + Trade (payload) from OUTSIDE K8s; never an in-cluster Pod. Mutual watchdog + platform-api failover. See K3s Bootstrap L-1 + Flywheel Vision.',
+  },
 ]
 
 export const FLOW_ROWS: FlowRow[] = [
@@ -262,14 +269,14 @@ export const HARDWARE_ROWS: HardwareRow[] = [
   {
     id: 'mac-mini-1',
     host: '192.168.10.50 (macOS · Agent)',
-    roleCompose: '24/7 Dev stack docker-compose.dev.yml',
-    roleK3s: 'UTM Agent ops-vm-ubt-01 · frontend dev (Ready)',
+    roleCompose: '24/7 Dev stack · Remediation Runner PRIMARY (L-1) · peer watchdog → .52',
+    roleK3s: 'UTM Agent ops-vm-ubt-01 · frontend dev (Ready) · runner stays OUTSIDE cluster',
   },
   {
     id: 'mac-mini-2',
     host: '192.168.10.52 (macOS · Agent)',
-    roleCompose: 'Git runner · prod-health gate · Uptime Kuma',
-    roleK3s: 'UTM Agent ops-vm-ubt-02 · CI · external watchdog (Ready)',
+    roleCompose: 'Git runner · prod-health gate · Remediation Runner STANDBY (L-1) · peer watchdog → .50',
+    roleK3s: 'UTM Agent ops-vm-ubt-02 · CI · external watchdog (Ready) · runner stays OUTSIDE cluster',
   },
   {
     id: 'gpu-server',

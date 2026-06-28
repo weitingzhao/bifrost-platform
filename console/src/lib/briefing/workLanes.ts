@@ -282,6 +282,12 @@ const AUTOMATE_STREAM_LANE: Record<string, AutomateLaneId> = {
   'retrospective-agent': 'drift-remediation',
   'agent-mcp-integration': 'agent-services',
   'agent-trade-advisory': 'agent-services',
+  'mission-auto-remediation': 'agent-services',
+  'trade-k8s-migration': 'agent-services',
+  'mutual-watchdog': 'agent-infra',
+  'agent-release-discipline': 'agent-services',
+  'hermes-gateway-integration': 'agent-infra',
+  'flight-director-governance': 'agent-services',
 }
 
 const INFRA_STREAM_LANE: Record<string, InfraLaneId> = {

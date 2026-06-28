@@ -45,6 +45,195 @@ html {
   font-family: var(--font-sans);
 }
 
+/* ── FocusStrip: collapsible ops context bar ── */
+/* ── Cockpit status strip (business modules) ── */
+.cockpit-strip {
+  display: flex;
+  flex-direction: column;
+}
+.cockpit-strip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.25rem;
+}
+.cockpit-group {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.cockpit-spacer { flex: 1 1 0; }
+.cockpit-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.125rem 0.25rem;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* module pill — icon carries the status color */
+.cockpit-mod {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.125rem 0.5rem;
+  border: none;
+  background: transparent;
+  border-radius: 9999px;
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+}
+.cockpit-mod--clickable { cursor: pointer; }
+.cockpit-mod--clickable:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+.cockpit-mod-icon { flex-shrink: 0; }
+.cockpit-mod-name {
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  color: var(--foreground);
+}
+.cockpit-mod-val {
+  font-size: var(--text-dense-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+/* payload — Trade satellite, two env mini-chips */
+.cockpit-payload { gap: 0.3rem; }
+.cockpit-env {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.0625rem 0.3rem;
+  border: none;
+  background: transparent;
+  border-radius: 9999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-dense-caption);
+  color: var(--muted-foreground);
+  transition: background 0.12s ease;
+}
+.cockpit-env:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
+.cockpit-env-dot { font-size: 0.55rem; line-height: 1; }
+
+.cockpit-strip-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.125rem;
+  border: none;
+  background: transparent;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+.cockpit-strip-toggle:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+}
+.cockpit-strip-chevron {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+.cockpit-strip-chevron--open { transform: rotate(90deg); }
+
+.cockpit-strip-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding-top: 0.375rem;
+  padding-left: 0.5rem;
+}
+.cockpit-detail-group-label {
+  font-size: var(--text-dense-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  margin-top: 0.25rem;
+}
+.cockpit-detail-group-label:first-child { margin-top: 0; }
+.cockpit-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--text-dense-caption);
+  color: var(--muted-foreground);
+}
+.cockpit-detail-dot { font-size: 0.55rem; line-height: 1; flex-shrink: 0; }
+.cockpit-detail-id {
+  font-weight: 600;
+  color: var(--foreground);
+  min-width: 5rem;
+}
+.cockpit-detail-text { color: var(--muted-foreground); }
+.cockpit-detail-ts {
+  font-size: var(--text-dense-micro);
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  padding-top: 0.125rem;
+}
+
+.cockpit-fix-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-lamp-yellow) 50%, var(--border));
+  background: color-mix(in srgb, var(--color-lamp-yellow) 8%, transparent);
+  border-radius: 9999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  color: var(--color-lamp-yellow);
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  flex-shrink: 0;
+  animation: cockpit-fix-pulse 2s ease-in-out infinite;
+}
+.cockpit-fix-btn:hover {
+  background: color-mix(in srgb, var(--color-lamp-yellow) 18%, transparent);
+  border-color: var(--color-lamp-yellow);
+}
+.cockpit-fix-icon { flex-shrink: 0; }
+@keyframes cockpit-fix-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+.cockpit-room-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+  border-radius: 9999px;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  flex-shrink: 0;
+}
+.cockpit-room-entry:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+.cockpit-room-entry-label {
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
 .focus-strip-link {
   border: none;
   background: none;
@@ -54,6 +243,181 @@ html {
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* ── Mission Control Room ── */
+.mission-board {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--secondary) 60%, var(--card));
+}
+.mission-board-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.mission-board-label {
+  font-size: var(--text-dense-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+}
+.mission-board-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.mission-board-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 2rem;
+  background: var(--border);
+  flex-shrink: 0;
+}
+.mission-board-segment {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.mission-board-seg-label {
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.mission-board-seg-val {
+  font-size: var(--text-dense-meta);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.mission-board-focus {
+  flex: 1 1 12rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+}
+.mission-board-focus-label {
+  font-size: var(--text-dense-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+.mission-board-focus-text {
+  font-size: var(--text-dense-caption);
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mission-board-fix {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--color-lamp-yellow) 50%, var(--border));
+  background: color-mix(in srgb, var(--color-lamp-yellow) 10%, transparent);
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  color: var(--color-lamp-yellow);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  animation: mission-fix-pulse 2s ease-in-out infinite;
+}
+.mission-board-fix:hover {
+  background: color-mix(in srgb, var(--color-lamp-yellow) 20%, transparent);
+  border-color: var(--color-lamp-yellow);
+}
+@keyframes mission-fix-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.mission-board-ts {
+  margin-left: auto;
+  font-size: var(--text-dense-micro);
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+.mission-blocker {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-lamp-red) 45%, var(--border));
+  background: color-mix(in srgb, var(--color-lamp-red) 8%, var(--card));
+  font-size: var(--text-dense-caption);
+  color: var(--color-lamp-red);
+}
+
+.mission-rocket-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+@media (max-width: 900px) {
+  .mission-rocket-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .mission-rocket-grid { grid-template-columns: 1fr; }
+}
+.mission-rocket-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--background);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.mission-rocket-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: color-mix(in srgb, var(--foreground) 3%, var(--background));
+}
+.mission-rocket-card-icon { flex-shrink: 0; margin-top: 0.125rem; }
+.mission-rocket-card-body { min-width: 0; }
+.mission-rocket-card-name {
+  font-size: var(--text-dense-meta);
+  font-weight: 700;
+  color: var(--foreground);
+}
+.mission-rocket-card-val {
+  font-size: var(--text-dense-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+  margin-top: 0.0625rem;
+}
+.mission-rocket-card-role {
+  font-size: var(--text-dense-micro);
+  color: var(--muted-foreground);
+  opacity: 0.85;
+  margin-top: 0.25rem;
+  line-height: 1.35;
+}
+
+.mission-env-link {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.mission-env-badge {
+  font-size: var(--text-dense-caption);
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 /* Ops Console — unified section chrome (all pages) */
@@ -1354,69 +1718,50 @@ html {
   padding-right: min(56rem, 94vw);
 }
 
+/* ── Agent Desk ── */
+
 .agent-desk-shell {
   position: relative;
   width: 100%;
   min-width: 0;
   transition: padding-right 0.2s ease;
 }
-
 .agent-desk-shell--panel-open {
   padding-right: min(56rem, 94vw);
 }
 
-.agent-desk-user-bubble {
-  border-radius: 0.5rem;
-  border: 1px solid var(--border);
-  background: var(--secondary);
-  padding: 0.625rem 0.75rem;
+/* Hero: title + status bar */
+.agent-desk-hero {
+  padding: 0.75rem 1rem 0.625rem;
 }
-
-.agent-desk-user-bubble__label {
-  margin: 0;
+.agent-desk-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.agent-desk-spine-hint {
+  margin: 0.375rem 0 0;
   font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
+  line-height: 1.4;
 }
 
-.agent-desk-user-bubble__body {
-  margin: 0.25rem 0 0;
-  font-size: var(--text-dense-meta);
-  color: var(--foreground);
-  white-space: pre-wrap;
-}
-
-.agent-desk-composer {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.agent-desk-composer__input {
-  width: 100%;
-  min-height: 4.5rem;
-  resize: vertical;
-  border-radius: 0.5rem;
+/* Composer section */
+.agent-desk-composer-section {
+  border-radius: 0.625rem;
   border: 1px solid var(--border);
-  background: var(--background);
-  padding: 0.625rem 0.75rem;
-  font-size: var(--text-dense-meta);
-  color: var(--foreground);
+  background: var(--card);
+  padding: 0.75rem 1rem;
 }
-
-.agent-desk-composer__input:focus {
-  outline: 2px solid color-mix(in srgb, var(--ring) 50%, transparent);
-  outline-offset: 1px;
-}
-
-.agent-desk-composer__actions {
+.agent-desk-quick-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.625rem;
 }
-
-.agent-desk-scope-chip {
-  padding: 0.15rem 0.5rem;
-  border-radius: 0.25rem;
+.agent-desk-quick-btn {
+  padding: 0.2rem 0.6rem;
+  border-radius: 1rem;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted-foreground);
@@ -1424,65 +1769,190 @@ html {
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.agent-desk-scope-chip:hover {
-  border-color: var(--ring);
+.agent-desk-quick-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--foreground) 25%, var(--border));
   color: var(--foreground);
+}
+.agent-desk-quick-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.agent-desk-quick-btn--accent {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  color: var(--primary);
+}
+.agent-desk-quick-btn--accent:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.agent-desk-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.agent-desk-composer__input {
+  width: 100%;
+  min-height: 4rem;
+  resize: vertical;
+  border-radius: 0.5rem 0.5rem 0 0;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--background);
+  padding: 0.625rem 0.75rem;
+  font-size: var(--text-dense-body);
+  color: var(--foreground);
+  line-height: 1.5;
+}
+.agent-desk-composer__input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--ring) 60%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+.agent-desk-composer__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 0 0 0.5rem 0.5rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--secondary) 50%, var(--card));
+  padding: 0.35rem 0.625rem;
+}
+.agent-desk-scope-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.agent-desk-scope-chip {
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: var(--text-dense-caption);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.agent-desk-scope-chip:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 .agent-desk-scope-chip--active {
   background: var(--primary);
-  border-color: var(--primary);
   color: var(--primary-foreground);
+  border-color: var(--primary);
 }
 .agent-desk-scope-chip--active:hover {
   background: var(--primary);
-  border-color: var(--primary);
   color: var(--primary-foreground);
 }
 
+/* User bubble */
+.agent-desk-user-bubble {
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--secondary) 40%, var(--card));
+  padding: 0.5rem 0.75rem;
+}
+.agent-desk-user-bubble__label {
+  margin: 0;
+  font-size: var(--text-dense-micro);
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.agent-desk-user-bubble__body {
+  margin: 0.2rem 0 0;
+  font-size: var(--text-dense-meta);
+  color: var(--foreground);
+  white-space: pre-wrap;
+}
+
+/* Tasks section */
+.agent-desk-tasks-section {
+  padding: 0.5rem 1rem;
+}
+.agent-desk-section-title {
+  margin: 0;
+  font-size: var(--text-dense-label);
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
 .agent-desk-history {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
 }
-
 .agent-desk-history-chip {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.15rem;
-  padding: 0.35rem 0.55rem;
+  gap: 0.1rem;
+  padding: 0.3rem 0.5rem;
   border-radius: 0.375rem;
-  border: 1px solid var(--border);
-  background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: transparent;
   font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
   cursor: pointer;
+  transition: all 0.12s ease;
 }
-
 .agent-desk-history-chip:hover {
-  border-color: color-mix(in srgb, var(--foreground) 20%, var(--border));
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--secondary) 30%, transparent);
 }
-
 .agent-desk-history-chip--active {
   border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 8%, var(--card));
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
 }
-
-.agent-desk-history-chip__status--running {
-  color: var(--warning);
-}
-
-.agent-desk-history-chip__status--done {
-  color: var(--success);
-}
-
-.agent-desk-history-chip__status--failed {
-  color: var(--destructive);
-}
-
+.agent-desk-history-chip__status--running { color: var(--warning); }
+.agent-desk-history-chip__status--done { color: var(--success); }
+.agent-desk-history-chip__status--failed { color: var(--destructive); }
 .agent-desk-history-chip__scope {
   font-size: var(--text-dense-micro);
-  opacity: 0.85;
+  opacity: 0.7;
+}
+
+/* Infrastructure collapsible */
+.agent-desk-infra-section {
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  padding-top: 0.5rem;
+}
+.agent-desk-infra-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: 100%;
+  padding: 0.375rem 1rem;
+  background: transparent;
+  border: none;
+  color: var(--muted-foreground);
+  font-size: var(--text-dense-label);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+.agent-desk-infra-toggle:hover {
+  color: var(--foreground);
+}
+.agent-desk-infra-chevron {
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+.agent-desk-infra-chevron--open {
+  transform: rotate(90deg);
+}
+.agent-desk-infra-summary {
+  margin-left: auto;
+  font-size: var(--text-dense-caption);
+  font-weight: 400;
+  opacity: 0.7;
+}
+.agent-desk-infra-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.5rem 0;
 }
 
 .cluster-remediation-session-chip {
@@ -2459,10 +2929,6 @@ html {
 .delivery-node--decision {
   border-style: dashed;
   border-color: var(--color-lamp-red);
-}
-
-.focus-strip-ci-mode {
-  font-weight: 500;
 }
 
 /* Release Command Center — Platform Release page focal section */

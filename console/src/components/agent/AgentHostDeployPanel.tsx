@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Button, ConfirmDialog, DenseTag, StatusLamp } from '@bifrost/ui'
-import type { AgentDeployJob, AgentDeployStatusResponse } from '@/api/types'
+import type { AgentDeployJob, AgentDeployStatusResponse, AgentDeployTarget } from '@/api/types'
 import { fetchAgentDeployStatus, startAgentDeploy } from '@/api/platform'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -18,7 +18,7 @@ function jobReach(job: AgentDeployJob | undefined): 'ok' | 'degraded' | 'fail' |
 export function AgentHostDeployPanel() {
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
-  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmTarget, setConfirmTarget] = useState<AgentDeployTarget | null>(null)
   const logRef = useRef<HTMLPreElement>(null)
 
   const statusQuery = useQuery({
@@ -32,7 +32,8 @@ export function AgentHostDeployPanel() {
   })
 
   const deployMutation = useMutation({
-    mutationFn: () => startAgentDeploy(),
+    mutationFn: (target?: AgentDeployTarget) =>
+      startAgentDeploy(target != null ? { target: target.id } : undefined),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['agent', 'deploy'] })
       void qc.invalidateQueries({ queryKey: ['remediation', 'health'] })
@@ -65,39 +66,30 @@ export function AgentHostDeployPanel() {
     }
   }, [logText, isRunning])
 
-  const deployDisabled =
-    !canOperate || !data?.enabled || isRunning
+  const deployDisabled = !canOperate || !data?.enabled || isRunning
+
+  const targets: AgentDeployTarget[] =
+    data?.targets != null && data.targets.length > 0
+      ? data.targets
+      : data?.remote != null
+        ? [{ id: 'primary', role: 'primary', remote: data.remote }]
+        : []
+
+  // Which target does the running/last job belong to (match by remote)?
+  const activeJobRemote = displayJob?.remote
 
   return (
     <OpsSection
-      title="Agent host (Mini)"
+      title="Agent hosts (Mini — primary + standby)"
       leading={<StatusLamp value={jobReach(displayJob)} kind="reach" />}
       description={
         data?.hint ??
-        'Push remediation-runner code to Mac Mini and restart launchd — same as deploy_mac_mini.sh.'
-      }
-      actions={
-        canOperate ? (
-          <Button
-            variant="default"
-            size="sm"
-            disabled={deployDisabled}
-            onClick={() => setConfirmOpen(true)}
-          >
-            {isRunning ? 'Updating…' : 'Update agent on Mini'}
-          </Button>
-        ) : undefined
+        'Push remediation-runner code to each Mac Mini and restart launchd — same as deploy_mac_mini.sh. Standby also installs the peer watchdog.'
       }
       bodyPadding="compact"
       overflow="visible"
     >
       <div className="flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)]">
-        <span>
-          Target:{' '}
-          <code className="font-mono-tabular text-[var(--text-dense-caption)]">
-            {data?.remote ?? 'vision@192.168.10.50'}
-          </code>
-        </span>
         {data?.enabled ? (
           <DenseTag variant="success">deploy enabled</DenseTag>
         ) : (
@@ -113,6 +105,7 @@ export function AgentHostDeployPanel() {
                   : 'warning'
             }
           >
+            {displayJob.role != null ? `${displayJob.role} ` : ''}
             {displayJob.status}
           </DenseTag>
         )}
@@ -122,6 +115,39 @@ export function AgentHostDeployPanel() {
           </span>
         )}
       </div>
+
+      {targets.length > 0 && (
+        <div className="mt-2 flex flex-col gap-1.5">
+          {targets.map(t => {
+            const isThisRunning = isRunning && activeJobRemote === t.remote
+            return (
+              <div
+                key={t.id}
+                className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-2 py-1.5"
+              >
+                <DenseTag variant={t.role === 'primary' ? 'success' : 'neutral'}>{t.role}</DenseTag>
+                <code className="font-mono-tabular text-[var(--text-dense-caption)]">{t.remote}</code>
+                {t.peer_url != null && t.peer_url !== '' && (
+                  <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                    watchdog → {t.peer_ssh}
+                  </span>
+                )}
+                <span className="grow" />
+                {canOperate && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={deployDisabled}
+                    onClick={() => setConfirmTarget(t)}
+                  >
+                    {isThisRunning ? 'Updating…' : `Update ${t.role}`}
+                  </Button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {!data?.enabled && (
         <OpsFeedback variant="warning" title="Enable deploy on platform-api" className="mt-2">
@@ -171,16 +197,21 @@ export function AgentHostDeployPanel() {
       )}
 
       <ConfirmDialog
-        open={confirmOpen}
-        title="Update agent on Mini"
-        message={`This runs deploy_mac_mini.sh from platform-api → ${data?.remote ?? 'vision@192.168.10.50'}: rsync remediation src, npm install, sync kubeconfig, restart launchd runner (~1–3 min).`}
+        open={confirmTarget != null}
+        title={`Update ${confirmTarget?.role ?? 'agent'} on Mini`}
+        message={
+          confirmTarget != null
+            ? `This runs deploy_mac_mini.sh from platform-api → ${confirmTarget.remote} (role=${confirmTarget.role}${confirmTarget.peer_ssh != null && confirmTarget.peer_ssh !== '' ? `, watchdog peer ${confirmTarget.peer_ssh}` : ''}): rsync remediation src, npm install, sync kubeconfig, restart launchd runner${confirmTarget.role === 'standby' ? ' + peer watchdog (nightly-drift disabled)' : ' + peer watchdog'} (~1–3 min).`
+            : ''
+        }
         confirmLabel="Update agent"
         confirming={deployMutation.isPending}
         onConfirm={() => {
-          setConfirmOpen(false)
-          deployMutation.mutate()
+          const t = confirmTarget
+          setConfirmTarget(null)
+          if (t != null) deployMutation.mutate(t)
         }}
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => setConfirmTarget(null)}
       />
     </OpsSection>
   )
