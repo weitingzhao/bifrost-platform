@@ -81,6 +81,27 @@ func (h *Handler) HandleSyncKubeconfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.SyncKubeconfig())
 }
 
+func (h *Handler) HandleEnsureKubeconfigSecret(w http.ResponseWriter, r *http.Request) {
+	var req EnsureKubeconfigSecretRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+	}
+	resp, err := h.svc.EnsureKubeconfigSecret(r.Context(), req)
+	h.recordAudit(r, resp.Action, resp.Target, auditStatus(err), resp.Message)
+	if err != nil {
+		resp.OK = false
+		if resp.Message == "" {
+			resp.Message = err.Error()
+		}
+		writeJSON(w, http.StatusBadGateway, resp)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (h *Handler) HandleEnsureMetricsServer(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.EnsureMetricsServer()
 	h.recordAudit(r, resp.Action, resp.Target, auditStatus(err), resp.Message)

@@ -270,6 +270,30 @@ server.tool(
   },
 )
 
+server.tool(
+  'ensure_kubeconfig_secret',
+  'Sync kubeconfig and ensure bifrost-platform-kubeconfig Secret in platform STG/PROD namespaces (admin). ' +
+    'Use when cluster reachability is "fail" due to missing kubeconfig secret.',
+  {
+    namespaces: z
+      .array(z.string())
+      .optional()
+      .describe('Target namespaces (default: bifrost-platform-stg, bifrost-platform-prod)'),
+    sync_first: z
+      .boolean()
+      .optional()
+      .describe('Fetch kubeconfig from K3s server before creating secret'),
+  },
+  async ({ namespaces, sync_first }) => {
+    const body: Record<string, unknown> = {}
+    if (namespaces != null) body.namespaces = namespaces
+    if (sync_first != null) body.sync_first = sync_first
+    return jsonResult(
+      await platformPost('/api/v1/cluster/kubeconfig-secret/ensure', body),
+    )
+  },
+)
+
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)
