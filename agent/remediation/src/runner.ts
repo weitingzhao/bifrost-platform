@@ -16,7 +16,7 @@ function defaultCwd(): string {
 }
 
 function cwdForScope(scope: string | undefined): string {
-  if (scope === 'release') {
+  if (scope === 'release' || scope === 'release-fix') {
     const releaseCwd = process.env.RELEASE_CWD?.trim()
     if (releaseCwd != null && releaseCwd !== '') {
       return releaseCwd.replace(/^~/, process.env.HOME ?? '')

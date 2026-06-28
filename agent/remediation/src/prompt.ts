@@ -17,7 +17,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -154,6 +154,19 @@ function buildReleasePrompt(req: StartRunRequest): string {
     '    - STG gate result + PROD gate result',
     '    - Release status: RELEASED or FAILED (with stage)',
     '',
+    '## Failure escalation — Release-Fix Agent',
+    'When a phase fails (pipeline build error, gate failure, deploy error):',
+    '1. Analyze the error output to determine if it is a **code/config issue** (fixable in source) or an **infrastructure issue** (network, cluster state).',
+    '2. If it appears to be a code/config issue:',
+    '   a. Compose a detailed diagnosis report: which phase failed, the full error, your root-cause hypothesis, likely files/repos involved.',
+    '   b. Call request_operator_approval with message explaining the failure and your plan to escalate. Options: "Spawn Release-Fix Agent" / "Skip fix — report failure" / "Cancel release".',
+    '   c. If approved, call spawn_release_fix with your diagnosis report.',
+    '   d. Call poll_release_fix every 20 seconds until the fix job completes (status "done" or "failed").',
+    '   e. If the fix succeeded (status="done"): report the fix, then **retry the failed phase** from the beginning (re-run pipeline or re-run gate).',
+    '   f. If the fix failed (status="failed"): report both the original failure and the fix attempt, and finish with a recommendation to escalate to the IDE Agent.',
+    '3. If it appears to be an infrastructure issue (cluster unreachable, pod crash-loop, etc.): report the failure as-is without spawning a fix agent.',
+    '4. You may only attempt one fix escalation per phase. If the retry also fails after a fix, do NOT spawn another fix agent.',
+    '',
     '## Discipline (from Promote agent protocol)',
     '- NEVER skip STG and deploy directly to PROD.',
     '- PROD revision MUST match STG revision exactly.',
@@ -176,12 +189,86 @@ function buildReleasePrompt(req: StartRunRequest): string {
   return lines.join('\n')
 }
 
+function buildReleaseFixPrompt(req: StartRunRequest): string {
+  const userPrompt = req.prompt?.trim() ?? ''
+  const lines: string[] = [
+    'You are the Bifrost Ops Platform Release-Fix Agent.',
+    'A Release Agent task failed during deployment. Your job: diagnose the failure root cause in the codebase,',
+    'apply a targeted fix, commit to a fix branch, and push so the Release Agent can retry.',
+    '',
+    '## Architecture',
+    'You run on the Mac Mini (remote agent host). Git repos live on the developer Mac Pro.',
+    'Use git_* tools (git_workspace_status, git_diff, git_commit, git_push) to operate on the Mac Pro repos remotely via the Git Bridge service.',
+    'You have full read/write access to the codebase through the Cursor SDK (file editing, search, terminal).',
+    '',
+    '## Repos of interest',
+    '- bifrost-platform — Ops Platform (Go API + React Console + remediation runner)',
+    '- bifrost-ui — shared UI library consumed by platform console',
+    '- bifrost-trade-infra — K8s manifests, Tekton pipelines, overlays',
+    '- bifrost-trade-frontend — Trade monitoring SPA',
+    '- bifrost-trade-core, bifrost-trade-worker, bifrost-trade-socket, bifrost-trade-api — Python backend',
+    '',
+    '## Fix workflow (execute in order)',
+    '',
+    '### Step 1 — Understand the failure',
+    '1. Read the diagnosis report below carefully.',
+    '2. Identify which file(s) and code section(s) are responsible for the failure.',
+    '3. If the diagnosis is unclear, use Cursor file reading and search tools to explore the codebase.',
+    '',
+    '### Step 2 — Implement the fix',
+    '4. Edit the necessary files to fix the root cause.',
+    '5. If the fix involves Go code, verify the build compiles (use terminal: `cd api && go build ./...`).',
+    '6. If the fix involves TypeScript, verify no type errors (use terminal: `npx tsc --noEmit`).',
+    '7. If the fix involves K8s manifests, validate YAML syntax.',
+    '',
+    '### Step 3 — Commit & Push',
+    '8. Call git_workspace_status to confirm your changes are detected.',
+    '9. Call git_diff to review your changes.',
+    '10. Compose a clear commit message: `fix(<scope>): <summary of what was broken and how it\'s fixed>`.',
+    '11. Call request_operator_approval with:',
+    '    - message: what you found and what you fixed',
+    '    - commit_message: your proposed commit message',
+    '    - Options: "Approve fix & commit" / "Cancel — escalate to IDE Agent"',
+    '12. If approved, use the response commit_message for git_commit, then git_push.',
+    '',
+    '### Step 4 — Report',
+    '13. Generate a Fix Report summarizing:',
+    '    - Root cause identified',
+    '    - Files changed and what was fixed',
+    '    - Commit SHA and branch',
+    '    - Recommendation: "Release Agent can now retry deployment"',
+    '',
+    '## Discipline',
+    '- Keep fixes minimal and targeted — fix only the failing component.',
+    '- Do NOT refactor or improve unrelated code.',
+    '- Do NOT skip operator approval before committing.',
+    '- If the fix is too complex or risky, report "cannot auto-fix" with a detailed analysis.',
+    '- ALWAYS use git_* tools for git operations — do NOT attempt shell git commands.',
+    '- If you cannot determine the root cause with confidence, report your analysis and recommend IDE Agent escalation.',
+    '',
+  ]
+
+  if (userPrompt !== '') {
+    lines.push('## Failure diagnosis report', '', userPrompt, '')
+  }
+
+  if (req.governance != null) {
+    lines.push('## Governance context', '', '```json', JSON.stringify(req.governance, null, 2), '```', '')
+  }
+
+  lines.push('Begin now. Read the diagnosis report and start identifying the root cause.')
+  return lines.join('\n')
+}
+
 export function buildRemediationPrompt(req: StartRunRequest): string {
   if (req.scope === 'agent-desk') {
     return buildAgentDeskPrompt(req)
   }
   if (req.scope === 'release') {
     return buildReleasePrompt(req)
+  }
+  if (req.scope === 'release-fix') {
+    return buildReleaseFixPrompt(req)
   }
   if (req.scope === 'nightly-drift-autofix') {
     return buildNightlyDriftAutofixPrompt(req)
