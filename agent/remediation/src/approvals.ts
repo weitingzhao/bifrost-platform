@@ -1,6 +1,8 @@
 export interface OperatorResponse {
   option_id: string
   note?: string
+  /** Operator-edited commit message (returned only when the approval card included a proposed commit_message). */
+  commit_message?: string
 }
 
 interface PendingWait {

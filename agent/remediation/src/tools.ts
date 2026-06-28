@@ -120,6 +120,7 @@ async function runOperatorApproval(
     checklist?: string[]
     kind?: 'manual_steps' | 'decision'
     note_hint?: string
+    commit_message?: string
   },
 ) {
   const {
@@ -130,6 +131,7 @@ async function runOperatorApproval(
     checklist = [],
     kind = 'decision',
     note_hint,
+    commit_message,
   } = params
 
   if (options.length === 0) {
@@ -137,17 +139,18 @@ async function runOperatorApproval(
   }
 
   setPhase(jobId, 'awaiting_approval')
-  appendEvent(
-    jobId,
-    makeEvent('approval_request', message, {
-      title,
-      options,
-      commands,
-      checklist,
-      kind,
-      note_hint,
-    }),
-  )
+  const meta: Record<string, unknown> = {
+    title,
+    options,
+    commands,
+    checklist,
+    kind,
+    note_hint,
+  }
+  if (commit_message != null && commit_message.trim() !== '') {
+    meta.commit_message = commit_message.trim()
+  }
+  appendEvent(jobId, makeEvent('approval_request', message, meta))
 
   try {
     const decision = await waitForOperatorResponse(jobId)
@@ -160,17 +163,20 @@ async function runOperatorApproval(
       makeEvent('status', statusText, {
         option_id: decision.option_id,
         note: decision.note,
+        commit_message: decision.commit_message,
       }),
     )
     setPhase(jobId, 'remediating')
-    return textResult(
-      jsonText({
-        selected: decision.option_id,
-        note: decision.note ?? '',
-        proceed: approvalShouldProceed(decision.option_id),
-        still_blocked: decision.option_id === 'manual_still_blocked',
-      }),
-    )
+    const result: Record<string, unknown> = {
+      selected: decision.option_id,
+      note: decision.note ?? '',
+      proceed: approvalShouldProceed(decision.option_id),
+      still_blocked: decision.option_id === 'manual_still_blocked',
+    }
+    if (decision.commit_message != null && decision.commit_message.trim() !== '') {
+      result.commit_message = decision.commit_message.trim()
+    }
+    return textResult(jsonText(result))
   } catch (err) {
     setPhase(jobId, 'remediating')
     return textResult(err instanceof Error ? err.message : String(err), true)
@@ -215,6 +221,10 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
             type: 'string',
             description: 'Placeholder hint for the operator notes field',
           },
+          commit_message: {
+            type: 'string',
+            description: 'Proposed git commit message. When provided, the approval card shows an editable commit-message field pre-filled with this text. The operator can review and edit it. The final (possibly edited) message is returned in the response commit_message field — use it for git_commit.',
+          },
         },
         required: ['title', 'message', 'options'],
       },
@@ -228,6 +238,7 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
           checklist: parseStringList(args.checklist),
           kind: 'decision',
           note_hint: args.note_hint != null ? String(args.note_hint) : undefined,
+          commit_message: args.commit_message != null ? String(args.commit_message) : undefined,
         })
       },
     },

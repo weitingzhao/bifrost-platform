@@ -755,10 +755,15 @@ export async function respondRemediationJob(
   id: string,
   optionId: string,
   note?: string,
+  commitMessage?: string,
 ): Promise<void> {
+  const payload: Record<string, string> = { option_id: optionId, note: note ?? '' }
+  if (commitMessage != null && commitMessage.trim() !== '') {
+    payload.commit_message = commitMessage.trim()
+  }
   const r = await authedFetch('remediation respond', `/api/v1/remediation/${encodeURIComponent(id)}/respond`, {
     method: 'POST',
-    body: JSON.stringify({ option_id: optionId, note: note ?? '' }),
+    body: JSON.stringify(payload),
   })
   if (!r.ok) throw await parseError('remediation respond', r)
 }

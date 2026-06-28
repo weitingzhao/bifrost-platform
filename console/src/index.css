@@ -2614,6 +2614,38 @@ html {
   flex-shrink: 0;
 }
 
+.remediation-approval-commit-msg {
+  margin: 0.625rem 0 0.5rem;
+}
+
+.remediation-approval-commit-msg__label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.remediation-approval-commit-msg__input {
+  width: 100%;
+  min-height: 4rem;
+  resize: vertical;
+  border-radius: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: var(--background);
+  padding: 0.5rem 0.625rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-dense-meta);
+  line-height: 1.5;
+  color: var(--foreground);
+  tab-size: 2;
+}
+
+.remediation-approval-commit-msg__input:focus {
+  outline: 2px solid color-mix(in srgb, var(--primary) 50%, transparent);
+  outline-offset: 1px;
+}
+
 .remediation-approval-note {
   margin: 0.5rem 0 0.625rem;
 }
