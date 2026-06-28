@@ -470,6 +470,44 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       },
     },
 
+    sync_cluster_kubeconfig: {
+      description:
+        'Ensure the bifrost-platform-kubeconfig Secret exists in platform STG/PROD namespaces. ' +
+        'Optionally syncs the kubeconfig from the K3s server first (sync_first=true). ' +
+        'Admin role required. Use when cluster reachability is "fail" due to missing kubeconfig secret. ' +
+        'IMPORTANT: call request_operator_approval BEFORE using this tool.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          namespaces: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Target namespaces (default: ["bifrost-platform-stg","bifrost-platform-prod"])',
+          },
+          sync_first: {
+            type: 'boolean',
+            description:
+              'If true, fetch kubeconfig from K3s server before creating the secret (requires SSH + PLATFORM_CLUSTER_SYNC_ENABLED=1)',
+          },
+        },
+      },
+      async execute(args) {
+        const body: Record<string, unknown> = {}
+        if (Array.isArray(args.namespaces)) {
+          body.namespaces = args.namespaces.map(v => String(v))
+        }
+        if (args.sync_first != null) {
+          body.sync_first = Boolean(args.sync_first)
+        }
+        const data = await platformPostAdmin(
+          '/api/v1/cluster/kubeconfig-secret/ensure',
+          body,
+        )
+        return textResult(jsonText(data))
+      },
+    },
+
     // ── Mutual watchdog tools (dual Mac Mini self-healing) ──
 
     peer_agent_health: {

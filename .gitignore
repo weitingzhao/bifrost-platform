@@ -12,6 +12,10 @@ agent/drift-proposals/*.json
 # Agent remediation job archives (full task log + summary)
 agent/remediation-jobs/*.json
 
+# Python
+__pycache__/
+*.pyc
+
 # Go
 api/bin/
 api/platform-api

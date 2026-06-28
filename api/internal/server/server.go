@@ -253,6 +253,7 @@ func (s *Server) Router() http.Handler {
 			})
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleAdmin))
+				r.Post("/kubeconfig-secret/ensure", s.cluster.HandleEnsureKubeconfigSecret)
 				r.Post("/addons/metrics-server/ensure", s.cluster.HandleEnsureMetricsServer)
 				r.Post("/nodes/join", s.cluster.HandleJoinNode)
 				r.Post("/nodes/{name}/drain", s.cluster.HandleDrainNode)

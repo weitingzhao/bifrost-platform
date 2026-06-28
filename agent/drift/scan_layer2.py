@@ -30,6 +30,7 @@ class Probe:
     required_keys: tuple[str, ...] = ()
     expect_status: int = 200
     optional: bool = False  # warn only — e.g. remediation bridge when runner is off-cluster
+    assert_field: tuple[str, str] | None = None  # (json_key, expected_value) — fail if mismatch
 
 
 @dataclass
@@ -50,6 +51,12 @@ def build_probes(platform_base: str, runner_base: str) -> list[Probe]:
         Probe("GET /api/v1/topology", f"{base}/api/v1/topology"),
         Probe("GET /api/v1/environments", f"{base}/api/v1/environments"),
         Probe("GET /api/v1/cluster", f"{base}/api/v1/cluster", optional=True),
+        Probe(
+            "cluster reachability (kubeconfig secret)",
+            f"{base}/api/v1/cluster",
+            assert_field=("reachability", "ok"),
+            optional=False,
+        ),
         Probe("GET /api/v1/cluster/nodes", f"{base}/api/v1/cluster/nodes", optional=True),
         Probe("GET /api/v1/mcp/tools", f"{base}/api/v1/mcp/tools"),
         Probe("GET /api/v1/mcp/status", f"{base}/api/v1/mcp/status"),
@@ -102,6 +109,17 @@ def run_probe(probe: Probe) -> ProbeResult:
     for key in probe.required_keys:
         if key not in data:
             return ProbeResult(probe, False, status, f"missing JSON key `{key}`", probe.optional)
+    if probe.assert_field is not None:
+        key, expected = probe.assert_field
+        actual = data.get(key) if isinstance(data, dict) else None
+        if str(actual) != expected:
+            return ProbeResult(
+                probe,
+                False,
+                status,
+                f"`{key}` is `{actual}`, expected `{expected}`",
+                probe.optional,
+            )
     return ProbeResult(probe, True, status, "ok", False)
 
 

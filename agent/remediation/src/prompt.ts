@@ -227,6 +227,7 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
     '- Tekton PipelineRun step pods may fail due to upstream build issues — diagnose logs before deleting.',
     '- MinIO (data/minio): often Pending due to nfs-hot PVC or postgres-role node binding — check events before restart.',
     '- CNPG (bifrost-postgres-*): second instance may be forming; do not delete primary without operator approval.',
+    '- Kubeconfig secret missing (reachability "fail", detail mentions "/var/kubeconfig"): call sync_cluster_kubeconfig to create the bifrost-platform-kubeconfig Secret. Requires operator approval first.',
     '- **Before** delete_pod, rollout_restart_deployment, or scale_deployment you MUST call request_operator_approval with 2–4 options (include skip/cancel).',
     '- If the operator must run manual steps (NAS, ssh, host checks, kubectl outside platform-api): call **request_operator_manual_steps** with checklist[] and commands[].',
     '- Operator notes: the Console shows a notes field; read `note` from the approval tool result (paste describe/events output there).',
