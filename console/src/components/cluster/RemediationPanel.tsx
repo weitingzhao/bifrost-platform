@@ -2,11 +2,12 @@ import { useMemo, useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, StatusLamp } from '@bifrost/ui'
 import type { RemediationEvent, RemediationJob, RemediationPhase } from '@/api/types'
-import { fetchRemediationJob, respondRemediationJob } from '@/api/platform'
+import { fetchRemediationJob, respondRemediationJob, cancelRemediationJob } from '@/api/platform'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { RemediationHistoryBar } from '@/components/cluster/RemediationHistoryBar'
 import { RemediationInitBrief } from '@/components/cluster/RemediationInitBrief'
 import { useRemediationStream } from '@/hooks/useRemediationStream'
+import { isRemediationStreamOrphanError } from '@/lib/remediation/remediationJobDisplay'
 
 interface RemediationPanelProps {
   open: boolean
@@ -17,6 +18,7 @@ interface RemediationPanelProps {
   initBriefFallback?: string
   onClose: () => void
   onStop?: (jobId: string) => void
+  onDismiss?: () => void
   onComplete?: (job: RemediationJob) => void
   onOpenServerConsole?: () => void
   stopping?: boolean
@@ -343,21 +345,26 @@ export function RemediationPanel({
   initBriefFallback,
   onClose,
   onStop,
+  onDismiss,
   onComplete,
   onOpenServerConsole,
   stopping = false,
 }: RemediationPanelProps) {
   const qc = useQueryClient()
   const [viewJobId, setViewJobId] = useState<string | null>(jobId)
+  const [streamOrphan, setStreamOrphan] = useState(false)
+  const [dismissError, setDismissError] = useState<string | null>(null)
   const activityLogRef = useRef<HTMLDivElement>(null)
   const completedJobRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (jobId != null) setViewJobId(jobId)
+    setStreamOrphan(false)
+    setDismissError(null)
   }, [jobId])
 
   const isLiveView = viewJobId != null && viewJobId === jobId
-  const streamEnabled = open && isLiveView && jobId != null
+  const streamEnabled = open && isLiveView && jobId != null && !streamOrphan
 
   const { job: streamJob, events: liveEvents, connected, error, stop } = useRemediationStream(
     streamEnabled ? jobId : null,
@@ -366,14 +373,58 @@ export function RemediationPanel({
   const snapshotQuery = useQuery({
     queryKey: ['remediation', 'job', viewJobId],
     queryFn: () => fetchRemediationJob(viewJobId!),
-    enabled: open && viewJobId != null && !streamEnabled,
+    enabled: open && viewJobId != null && (!streamEnabled || streamOrphan),
   })
 
-  const job: RemediationJob | null =
-    (isLiveView ? streamJob ?? initialJob : snapshotQuery.data) ?? null
-  const events: RemediationEvent[] = isLiveView ? liveEvents : (snapshotQuery.data?.events ?? [])
-  const isRunning = job?.status === 'running' && isLiveView
+  const baseJob: RemediationJob | null =
+    (isLiveView ? streamJob ?? initialJob ?? snapshotQuery.data : snapshotQuery.data) ?? null
+
+  const job: RemediationJob | null = useMemo(() => {
+    if (baseJob == null) return null
+    const orphaned =
+      streamOrphan ||
+      baseJob.error === 'orphaned' ||
+      (baseJob.status === 'running' && isRemediationStreamOrphanError(error))
+    if (!orphaned) return baseJob
+    return {
+      ...baseJob,
+      status: 'cancelled',
+      phase: 'cancelled',
+      error: 'orphaned',
+      summary:
+        baseJob.summary ||
+        'Job lost contact with the remediation runner (stale "running" state).',
+    }
+  }, [baseJob, streamOrphan, error])
+
+  const events: RemediationEvent[] = isLiveView && !streamOrphan ? liveEvents : (snapshotQuery.data?.events ?? liveEvents)
+  const isRunning = job?.status === 'running' && isLiveView && !streamOrphan
   const isHistorical = viewJobId != null && !isLiveView
+
+  useEffect(() => {
+    if (!isLiveView || error == null) return
+    if (!isRemediationStreamOrphanError(error)) return
+    setStreamOrphan(true)
+  }, [error, isLiveView])
+
+  const dismissMutation = useMutation({
+    mutationFn: cancelRemediationJob,
+    onSuccess: () => {
+      setStreamOrphan(false)
+      setDismissError(null)
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      void qc.invalidateQueries({ queryKey: ['remediation', 'job', viewJobId] })
+      onDismiss?.()
+    },
+    onError: err => {
+      setDismissError(err instanceof Error ? err.message : 'Failed to dismiss job')
+    },
+  })
+
+  const showOrphanBanner =
+    streamOrphan ||
+    job?.error === 'orphaned' ||
+    (initialJob?.status === 'running' && isRemediationStreamOrphanError(error))
 
   const respondMutation = useMutation({
     mutationFn: ({
@@ -548,6 +599,29 @@ export function RemediationPanel({
 
       <RemediationInitBrief job={job} fallbackBrief={initBriefFallback} />
 
+      {showOrphanBanner ? (
+        <div className="remediation-orphan-banner">
+          <p className="remediation-orphan-banner__title">This job is not running on the remediation runner</p>
+          <p className="remediation-orphan-banner__body">
+            The timeline showed a stale &quot;running&quot; state — usually after a runner restart. Dismiss it to
+            clear the record, or read any archived report below.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={dismissMutation.isPending || viewJobId == null}
+              onClick={() => viewJobId != null && dismissMutation.mutate(viewJobId)}
+            >
+              {dismissMutation.isPending ? 'Dismissing…' : 'Dismiss stale job'}
+            </Button>
+            {dismissError != null ? (
+              <span className="text-[var(--text-dense-meta)] text-destructive">{dismissError}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className="remediation-progress-bar">
         <PhaseStepper currentPhase={job?.phase} failed={failed} />
       </div>
@@ -603,7 +677,7 @@ export function RemediationPanel({
             Loading report…
           </p>
         )}
-        {error != null && error !== 'unexpected EOF' && isLiveView && (
+        {error != null && error !== 'unexpected EOF' && isLiveView && !showOrphanBanner && (
           <div className="remediation-block remediation-block--error">
             <span className="remediation-block-kicker remediation-block-kicker--error">Connection</span>
             <p className="remediation-block-body remediation-block-body--error">{error}</p>
@@ -671,6 +745,16 @@ export function RemediationPanel({
               }}
             >
               {stopping ? 'Stopping…' : 'Stop'}
+            </Button>
+          )}
+          {showOrphanBanner && viewJobId != null && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={dismissMutation.isPending}
+              onClick={() => dismissMutation.mutate(viewJobId)}
+            >
+              {dismissMutation.isPending ? 'Dismissing…' : 'Dismiss stale job'}
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={onClose}>

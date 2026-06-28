@@ -30,6 +30,7 @@ import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
+import { AgentSystemPage } from '@/pages/AgentSystemPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { BlueprintPage } from '@/pages/BlueprintPage'
 import { BriefingPage } from '@/pages/BriefingPage'
@@ -69,6 +70,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'autonomous-skills': 'Skills & Schedules',
   'execution-log': 'Execution Log',
   'agent-governance': 'Trust & Autonomy',
+  'agent-system': 'Agent System',
   'operator-plane': 'Operator Plane',
   'control-room': 'Control Room',
   audit: 'Audit',
@@ -354,7 +356,7 @@ export function ConsolePage() {
     viewTab === 'cicd-bootstrap' ||
     viewTab === 'data-layer' ||
     viewTab === 'network-upgrade'
-  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-protocol' || viewTab === 'mcp-contract' || viewTab === 'design-system'
+  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-system' || viewTab === 'agent-protocol' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
   const handleCopyAllGovernance = async () => {
     let spine = contextQuery.data
@@ -459,6 +461,7 @@ export function ConsolePage() {
             onOpenCluster={openCluster}
             onOpenMcpContract={() => setViewTab('mcp-contract')}
             onOpenAgentProtocol={() => setViewTab('agent-protocol')}
+            onOpenAgentSystem={() => setViewTab('agent-system')}
             onOpenOperatorPlane={openOperatorPlane}
           />
         )}
@@ -711,6 +714,8 @@ export function ConsolePage() {
                   : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
                   : viewTab === 'network-upgrade' ? 'Home network backbone upgrade — VLAN redesign, UniFi migration plan, hardware BOM, and research checklist.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
+                  : viewTab === 'agent-system'
+                    ? 'Single runtime, capability domains, task chains, and registry — the map before Agent Protocol and MCP Contract.'
                   : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
                   : viewTab === 'mcp-contract'
                     ? 'MCP tool catalog, Cursor setup, and governance contract (permissions, deny-list).'
@@ -753,6 +758,12 @@ export function ConsolePage() {
         {viewTab === 'network-upgrade' && <NetworkUpgradePage />}
 
         {viewTab === 'platform-standards' && <StandardsPage />}
+
+        {viewTab === 'agent-system' && (
+          <AgentSystemPage
+            onOpenDoctrine={tab => setViewTab(tab === 'mcp-contract' ? 'mcp-contract' : 'agent-protocol')}
+          />
+        )}
 
         {viewTab === 'agent-protocol' && <AgentProtocolPage />}
 

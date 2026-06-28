@@ -113,3 +113,32 @@ func mergeJobs(runner []Job, stored []Job) []Job {
 	sortJobsByUpdated(out)
 	return out
 }
+
+const orphanJobSummary = "Orphaned — task is not active on the remediation runner."
+
+// ReconcileOrphanedJobs marks stale "running" jobs cancelled when the runner is not
+// actively executing them (runner restart, archive-only copy, HA failover, etc.).
+func ReconcileOrphanedJobs(runner []Job, stored []Job) []Job {
+	runnerRunning := make(map[string]struct{})
+	for _, j := range runner {
+		if j.Status == JobRunning {
+			runnerRunning[j.ID] = struct{}{}
+		}
+	}
+	merged := mergeJobs(runner, stored)
+	now := time.Now().UTC()
+	for i := range merged {
+		if merged[i].Status != JobRunning {
+			continue
+		}
+		if _, active := runnerRunning[merged[i].ID]; active {
+			continue
+		}
+		merged[i].Status = JobCancelled
+		merged[i].Phase = PhaseCancelled
+		merged[i].Summary = orphanJobSummary
+		merged[i].Error = "orphaned"
+		merged[i].UpdatedAt = now
+	}
+	return merged
+}

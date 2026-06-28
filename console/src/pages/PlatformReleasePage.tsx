@@ -92,13 +92,13 @@ function HealthStrip() {
       </span>
       {stg.length > 0 && (
         <span className="inline-flex items-center gap-1.5">
-          <span className="font-medium">STG</span>
+          <span className="font-medium text-env-stg">STG</span>
           {stg.map(p => <ProbeIndicator key={p.id} probe={p} />)}
         </span>
       )}
       {prod.length > 0 && (
         <span className="inline-flex items-center gap-1.5">
-          <span className="font-medium">PROD</span>
+          <span className="font-medium text-env-prod">PROD</span>
           {prod.map(p => <ProbeIndicator key={p.id} probe={p} />)}
         </span>
       )}
@@ -115,7 +115,6 @@ interface EnvAccess {
   label: string
   console: string
   apiHealth: string
-  variant: 'warning' | 'danger'
 }
 
 const ENV_ACCESS: EnvAccess[] = [
@@ -124,14 +123,12 @@ const ENV_ACCESS: EnvAccess[] = [
     label: 'Ops Console STG',
     console: PLATFORM_STG_URLS.console,
     apiHealth: PLATFORM_STG_URLS.apiHealth,
-    variant: 'warning',
   },
   {
     env: 'PROD',
     label: 'Ops Console PROD',
     console: PLATFORM_PROD_URLS.console,
     apiHealth: PLATFORM_PROD_URLS.apiHealth,
-    variant: 'danger',
   },
 ]
 
@@ -150,7 +147,7 @@ function EnvAccessLink({ item }: { item: EnvAccess }) {
     <span className="inline-flex items-center gap-1.5 text-dense-meta">
       <span className={cn(
         'text-dense-micro font-bold uppercase tracking-wider',
-        item.env === 'PROD' ? 'text-destructive/70' : 'text-warning/70',
+        item.env === 'PROD' ? 'text-env-prod' : 'text-env-stg',
       )}>
         {item.env}
       </span>
@@ -1095,7 +1092,7 @@ function StepStatusBanner({
         </span>
         <span className={cn(
           'rounded px-1 py-px text-dense-micro font-bold uppercase tracking-wider',
-          env === 'STG' ? 'text-warning/60' : 'text-destructive/60',
+          env === 'STG' ? 'text-env-stg' : 'text-env-prod',
         )}>
           {env}
         </span>

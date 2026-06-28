@@ -15,6 +15,7 @@ type DoctrineTab = (typeof AGENT_TASK_DOCTRINE_LINKS)[number]['tab']
 
 interface AgentTaskCatalogPanelProps {
   onOpenDoctrine?: (tab: DoctrineTab) => void
+  onOpenAgentSystem?: () => void
 }
 
 function tierVariant(tier: AgentTaskTier): 'success' | 'warning' | 'category' {
@@ -52,7 +53,7 @@ function catalogRoots(): AgentTaskEntry[] {
   return AGENT_TASK_CATALOG.filter(t => t.tier !== 'escalation')
 }
 
-export function AgentTaskCatalogPanel({ onOpenDoctrine }: AgentTaskCatalogPanelProps) {
+export function AgentTaskCatalogPanel({ onOpenDoctrine, onOpenAgentSystem }: AgentTaskCatalogPanelProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -67,15 +68,23 @@ export function AgentTaskCatalogPanel({ onOpenDoctrine }: AgentTaskCatalogPanelP
         <span>Task capabilities</span>
         <span className="agent-task-catalog__summary">
           {manualAgentTasks().length} manual · {AGENT_TASK_CATALOG.filter(t => t.tier === 'automated').length}{' '}
-          scheduled · Release → Release Fix escalation
+          scheduled · Platform · Release → Release Fix
         </span>
       </button>
 
       {open && (
         <div className="agent-task-catalog__body">
           <p className="agent-task-catalog__intro">
-            <strong>Agent Desk</strong> exposes top-level scopes only (Ops, Release). Secondary tasks spawn from
-            other pages or from a running Release when a phase fails.
+            <strong>Agent Desk</strong> exposes top-level scopes only (Ops · Session, Platform · Release). Secondary
+            tasks spawn from other pages or from a running Release when a phase fails. Full map:{' '}
+            {onOpenAgentSystem != null ? (
+              <button type="button" className="agent-task-catalog__inline-link" onClick={onOpenAgentSystem}>
+                Agent System
+              </button>
+            ) : (
+              'Agent → Doctrine → Agent System'
+            )}
+            .
           </p>
 
           <div className="agent-task-catalog__tree">
