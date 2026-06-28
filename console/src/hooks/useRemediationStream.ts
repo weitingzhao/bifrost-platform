@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RemediationEvent, RemediationJob } from '@/api/types'
+import type { RemediationEvent, RemediationJob, RemediationPhase } from '@/api/types'
 import { remediationStreamUrl } from '@/api/platform'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
+
+const KNOWN_PHASES = new Set<string>([
+  'starting',
+  'diagnosing',
+  'awaiting_approval',
+  'remediating',
+  'verifying',
+  'done',
+  'failed',
+  'cancelled',
+])
 
 interface StreamEnvelope {
   type: 'job' | 'event' | 'error'
@@ -106,6 +117,16 @@ export function useRemediationStream(jobId: string | null): UseRemediationStream
                   if (prev.some(e => e.id === payload.event!.id)) return prev
                   return [...prev, payload.event!]
                 })
+                if (
+                  payload.event.type === 'status' &&
+                  typeof payload.event.meta?.phase === 'string' &&
+                  KNOWN_PHASES.has(payload.event.meta.phase)
+                ) {
+                  const phase = payload.event.meta.phase as RemediationPhase
+                  setJob(prev =>
+                    prev != null && prev.phase !== phase ? { ...prev, phase, updated_at: payload.event!.at } : prev,
+                  )
+                }
               } else if (payload.type === 'error' && payload.text != null) {
                 setError(payload.text)
               }

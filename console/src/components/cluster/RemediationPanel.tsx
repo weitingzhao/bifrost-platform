@@ -376,8 +376,17 @@ export function RemediationPanel({
   const isHistorical = viewJobId != null && !isLiveView
 
   const respondMutation = useMutation({
-    mutationFn: ({ id, optionId, note }: { id: string; optionId: string; note?: string }) =>
-      respondRemediationJob(id, optionId, note),
+    mutationFn: ({
+      id,
+      optionId,
+      note,
+      commitMessage,
+    }: {
+      id: string
+      optionId: string
+      note?: string
+      commitMessage?: string
+    }) => respondRemediationJob(id, optionId, note, commitMessage),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
     },
@@ -563,8 +572,8 @@ export function RemediationPanel({
             event={pendingApproval}
             submitting={respondMutation.isPending}
             onOpenServerConsole={onOpenServerConsole}
-            onRespond={(optionId, note) =>
-              respondMutation.mutate({ id: viewJobId, optionId, note })
+            onRespond={(optionId, note, commitMessage) =>
+              respondMutation.mutate({ id: viewJobId, optionId, note, commitMessage })
             }
           />
         ) : job?.phase === 'awaiting_approval' && isLiveView ? (

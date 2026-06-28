@@ -209,7 +209,7 @@ app.post('/run/:id/cancel', (req, res) => {
 })
 
 app.post('/run/:id/respond', (req, res) => {
-  const body = req.body as { option_id?: string; note?: string }
+  const body = req.body as { option_id?: string; note?: string; commit_message?: string }
   const optionId = body.option_id?.trim()
   if (optionId == null || optionId === '') {
     res.status(400).json({ error: 'option_id required' })
@@ -218,6 +218,7 @@ app.post('/run/:id/respond', (req, res) => {
   const ok = submitOperatorResponse(req.params.id, {
     option_id: optionId,
     note: body.note?.trim() || undefined,
+    commit_message: body.commit_message?.trim() || undefined,
   })
   if (!ok) {
     res.status(409).json({ error: 'no pending approval for this job' })
@@ -255,8 +256,13 @@ app.get('/run/:id/stream', (req, res) => {
   const unsubscribe = subscribe(req.params.id, event => {
     send({ type: 'event', event })
     const current = getJob(req.params.id)
-    if (current != null && current.status !== 'running') {
+    if (current == null) return
+
+    const isPhaseChange = event.type === 'status' && event.meta?.phase != null
+    if (isPhaseChange || current.status !== 'running') {
       send({ type: 'job', job: current })
+    }
+    if (current.status !== 'running') {
       cleanup()
     }
   })
