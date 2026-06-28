@@ -83,6 +83,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
       {
         label: 'Doctrine',
         items: [
+          { id: 'agent-system', label: 'Agent System', icon: Boxes },
           { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
           { id: 'mcp-contract', label: 'MCP Contract', icon: Plug },
         ],
@@ -190,6 +191,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'autonomous-skills': 'Agent',
   'execution-log': 'Agent',
   'agent-governance': 'Agent',
+  'agent-system': 'Agent',
   'agent-protocol': 'Agent',
   'mcp-contract': 'Agent',
   'operator-plane': 'Agent',

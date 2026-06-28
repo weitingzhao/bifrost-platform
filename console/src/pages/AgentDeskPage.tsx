@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Square } from 'lucide-react'
 import type { AgentBridgeResponse, OpsContextResponse, RemediationJob } from '@/api/types'
 import {
   cancelRemediationJob,
@@ -10,13 +10,16 @@ import {
   fetchRemediationJobs,
   startRemediation,
 } from '@/api/platform'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { AgentTaskCatalogPanel } from '@/components/agent/AgentTaskCatalogPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import {
   formatRemediationJobWhen,
-  remediationScopeShortLabel,
+  groupRemediationJobsByScope,
+  remediationJobStatusLabel,
+  remediationTimelineCellStatus,
 } from '@/lib/remediation/remediationJobDisplay'
 
 interface AgentDeskPageProps {
@@ -29,6 +32,7 @@ interface AgentDeskPageProps {
   onOpenCluster?: () => void
   onOpenMcpContract?: () => void
   onOpenAgentProtocol?: () => void
+  onOpenAgentSystem?: () => void
   onOpenOperatorPlane?: () => void
 }
 
@@ -109,6 +113,7 @@ export function AgentDeskPage({
   onOpenCluster,
   onOpenMcpContract,
   onOpenAgentProtocol,
+  onOpenAgentSystem,
   onOpenOperatorPlane,
 }: AgentDeskPageProps) {
   const qc = useQueryClient()
@@ -119,6 +124,7 @@ export function AgentDeskPage({
   const [initialJob, setInitialJob] = useState<RemediationJob | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const [userPrompts, setUserPrompts] = useState<Record<string, string>>({})
+  const [stopConfirm, setStopConfirm] = useState<{ jobId: string; label: string } | null>(null)
 
   useEffect(() => {
     if (initialJobId == null) return
@@ -151,10 +157,10 @@ export function AgentDeskPage({
     refetchInterval: panelOpen ? 15_000 : 60_000,
   })
 
-  const recentJobs = useMemo(() => {
-    const jobs = jobsQuery.data?.jobs ?? []
-    return [...jobs].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, 12)
-  }, [jobsQuery.data?.jobs])
+  const jobGroups = useMemo(
+    () => groupRemediationJobsByScope(jobsQuery.data?.jobs ?? []),
+    [jobsQuery.data?.jobs],
+  )
 
   const startMutation = useMutation({
     mutationFn: async ({ prompt, scope }: { prompt: string; scope: AgentScope }) => {
@@ -177,7 +183,11 @@ export function AgentDeskPage({
 
   const cancelMutation = useMutation({
     mutationFn: cancelRemediationJob,
-    onSuccess: job => setInitialJob(job),
+    onSuccess: job => {
+      setInitialJob(job)
+      setStopConfirm(null)
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+    },
   })
 
   const runnerStatus = healthQuery.data?.status
@@ -335,6 +345,7 @@ export function AgentDeskPage({
         </section>
 
         <AgentTaskCatalogPanel
+          onOpenAgentSystem={onOpenAgentSystem}
           onOpenDoctrine={tab => {
             if (tab === 'mcp-contract') onOpenMcpContract?.()
             else onOpenAgentProtocol?.()
@@ -345,45 +356,112 @@ export function AgentDeskPage({
         <section className="agent-desk-tasks-section">
           <div className="flex items-center justify-between">
             <h3 className="agent-desk-section-title">Recent tasks</h3>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-[var(--text-dense-caption)]"
-              onClick={() => void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })}
-            >
-              Refresh
-            </Button>
+            <div className="flex items-center gap-3">
+              <div className="agent-desk-timeline-legend">
+                <span className="agent-desk-timeline-legend__item">
+                  <i className="agent-desk-timeline-swatch agent-desk-timeline-swatch--done" /> ok
+                </span>
+                <span className="agent-desk-timeline-legend__item">
+                  <i className="agent-desk-timeline-swatch agent-desk-timeline-swatch--failed" /> failed
+                </span>
+                <span className="agent-desk-timeline-legend__item">
+                  <i className="agent-desk-timeline-swatch agent-desk-timeline-swatch--running" /> running
+                </span>
+                <span className="agent-desk-timeline-legend__item">
+                  <i className="agent-desk-timeline-swatch agent-desk-timeline-swatch--cancelled" /> cancelled
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-[var(--text-dense-caption)]"
+                onClick={() => void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })}
+              >
+                Refresh
+              </Button>
+            </div>
           </div>
-          <div className="agent-desk-history">
-            {recentJobs.length === 0 && (
+          <div className="agent-desk-timeline">
+            {jobGroups.length === 0 && (
               <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                 No tasks yet
               </span>
             )}
-            {recentJobs.map(job => (
-              <button
-                key={job.id}
-                type="button"
-                className={`agent-desk-history-chip${job.id === jobId ? ' agent-desk-history-chip--active' : ''}`}
-                onClick={() => {
-                  setJobId(job.id)
-                  setPanelOpen(true)
-                }}
-              >
-                <span className="font-mono-tabular">{job.id.slice(0, 8)}</span>
-                <span className={`agent-desk-history-chip__status agent-desk-history-chip__status--${job.status}`}>
-                  {job.status}
-                </span>
-                <span className="agent-desk-history-chip__scope">
-                  {remediationScopeShortLabel(job.scope)}
-                  {job.scope === 'release-fix' ? ' · escalation' : ''}
-                </span>
-                <span className="agent-desk-history-chip__when font-mono-tabular">
-                  {formatRemediationJobWhen(job.created_at)}
-                </span>
-              </button>
-            ))}
+            {jobGroups.map(group => {
+              const liveRunningJob = group.jobs.find(
+                j => remediationTimelineCellStatus(j) === 'running',
+              )
+              return (
+              <div key={group.scope} className="agent-desk-timeline-group">
+                <div className="agent-desk-timeline-group__head">
+                  <span className="agent-desk-timeline-group__label">
+                    {group.label}
+                    {group.scope === 'release-fix' && (
+                      <span className="agent-desk-timeline-group__tier">escalation</span>
+                    )}
+                  </span>
+                  <span className="agent-desk-timeline-group__counts">
+                    {group.doneCount > 0 && (
+                      <span className="agent-desk-timeline-count agent-desk-timeline-count--done">
+                        {group.doneCount} ok
+                      </span>
+                    )}
+                    {group.failedCount > 0 && (
+                      <span className="agent-desk-timeline-count agent-desk-timeline-count--failed">
+                        {group.failedCount} failed
+                      </span>
+                    )}
+                    {group.runningCount > 0 && (
+                      <span className="agent-desk-timeline-count agent-desk-timeline-count--running">
+                        {group.runningCount} running
+                      </span>
+                    )}
+                    {group.cancelledCount > 0 && (
+                      <span className="agent-desk-timeline-count agent-desk-timeline-count--cancelled">
+                        {group.cancelledCount} cancelled
+                      </span>
+                    )}
+                    {canOperate && liveRunningJob != null && (
+                      <button
+                        type="button"
+                        className="agent-desk-timeline-stop"
+                        title={`Stop ${group.label} (${liveRunningJob.id.slice(0, 8)})`}
+                        disabled={cancelMutation.isPending}
+                        onClick={() =>
+                          setStopConfirm({ jobId: liveRunningJob.id, label: group.label })
+                        }
+                      >
+                        <Square size={9} /> Stop
+                      </button>
+                    )}
+                  </span>
+                </div>
+                <div className="agent-desk-timeline-track">
+                  <span className="agent-desk-timeline-track__now">now</span>
+                  {group.jobs.map(job => (
+                    <button
+                      key={job.id}
+                      type="button"
+                      title={`${job.id.slice(0, 8)} · ${remediationJobStatusLabel(job)} · ${formatRemediationJobWhen(job.created_at)}`}
+                      aria-label={`${group.label} ${remediationJobStatusLabel(job)} ${formatRemediationJobWhen(job.created_at)}`}
+                      className={[
+                        'agent-desk-timeline-cell',
+                        `agent-desk-timeline-cell--${remediationTimelineCellStatus(job)}`,
+                        job.phase === 'awaiting_approval' ? ' agent-desk-timeline-cell--attn' : '',
+                        job.id === jobId ? ' agent-desk-timeline-cell--active' : '',
+                      ].join(' ')}
+                      onClick={() => {
+                        setInitialJob(job)
+                        setJobId(job.id)
+                        setPanelOpen(true)
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+              )
+            })}
           </div>
         </section>
 
@@ -421,11 +499,30 @@ export function AgentDeskPage({
         stopping={cancelMutation.isPending}
         onStop={id => cancelMutation.mutate(id)}
         onClose={() => setPanelOpen(false)}
+        onDismiss={() => {
+          void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+        }}
         onComplete={job => {
           setInitialJob(job)
           void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
           void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
         }}
+      />
+
+      <ConfirmDialog
+        open={stopConfirm != null}
+        title="Stop running task"
+        message={
+          stopConfirm != null
+            ? `Stop the running ${stopConfirm.label} task? The agent run will abort immediately. You can start a new task afterward.`
+            : ''
+        }
+        confirmLabel="Stop task"
+        confirming={cancelMutation.isPending}
+        onConfirm={() => {
+          if (stopConfirm != null) cancelMutation.mutate(stopConfirm.jobId)
+        }}
+        onCancel={() => setStopConfirm(null)}
       />
     </div>
   )

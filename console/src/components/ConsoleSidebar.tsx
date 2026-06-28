@@ -9,6 +9,7 @@ export type ConsoleViewTab =
   | 'autonomous-skills'
   | 'execution-log'
   | 'agent-governance'
+  | 'agent-system'
   | 'operator-plane'
   | 'control-room'
   | 'audit'

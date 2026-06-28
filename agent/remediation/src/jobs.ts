@@ -15,8 +15,21 @@ const jobs = new Map<string, JobRecord>()
 for (const persisted of loadPersistedJobs()) {
   jobs.set(persisted.id, {
     ...persisted,
+    // Persisted JSON may omit events; finishJob/appendEvent need a real array.
+    events: Array.isArray(persisted.events) ? persisted.events : [],
     listeners: new Set(),
   })
+}
+
+// Jobs left as "running" on disk were interrupted by a runner restart — no live agent.
+for (const [id, record] of jobs) {
+  if (record.status === 'running') {
+    finishJob(
+      id,
+      'cancelled',
+      'Orphaned — remediation runner restarted while this task was in progress.',
+    )
+  }
 }
 
 function nowIso(): string {
@@ -77,6 +90,7 @@ export function subscribe(id: string, listener: Listener): () => void {
 export function appendEvent(id: string, event: RemediationEvent): void {
   const job = jobs.get(id)
   if (job == null) return
+  if (!Array.isArray(job.events)) job.events = []
   job.events.push(event)
   job.updated_at = nowIso()
   for (const listener of job.listeners) listener(event)
