@@ -9,7 +9,7 @@
  * Single source of truth — do not duplicate elsewhere.
  */
 
-export const VISION_VERSION = '2026-06-19'
+export const VISION_VERSION = '2026-06-28'
 export const VISION_SOURCE = 'console/src/lib/architecture/dualFlywheelVisionCatalog.ts'
 
 // ---------------------------------------------------------------------------
@@ -20,7 +20,11 @@ export const VISION_STATEMENT =
   'Mac Pro is the eyes and mouth (observe + decide); K3s is the body (run everything); ' +
   'AI Agents are the hands and brain (execute + analyze). The Owner decides — Agents execute — ' +
   'from writing code to releasing to production to intraday monitoring to strategy advice, ' +
-  'all through one Cursor window.'
+  'all through one Cursor window. ' +
+  'Mental model: Ops Platform is the rocket, Trade is the payload satellite, and the AI Agent is the ' +
+  'engineer crew standing on the ground — it builds, launches, monitors and repairs both, yet stands ' +
+  'OUTSIDE the rocket so it never falls with it. This out-of-band stance is the human-replacement for the ' +
+  'bootstrap escape hatch (see Architecture → K3s Bootstrap, layer L-1).'
 
 export const FLYWHEEL_CONVERGENCE =
   'Trade (Flywheel A) and Ops Platform (Flywheel B) accelerate each other: every Trade feature shipped ' +
@@ -141,6 +145,57 @@ export const AGENT_LAYERS: AgentLayerRow[] = [
     cursorRole: 'IDE chat (ad-hoc Q&A) + SDK (scheduled daily brief)',
     k8sRole: 'Read Trade API (9 domains) + Redis live quotes + PG positions',
     forbidden: 'Write ib:operator:cmd; modify daemon_control; auto-place orders',
+  },
+]
+
+// ---------------------------------------------------------------------------
+// Out-of-band operator plane (L-1) — where the engineer stands
+// ---------------------------------------------------------------------------
+
+export const AGENT_PLANE_STATEMENT =
+  'The three Agent layers describe WHAT the Agent does (code / ops / business). This section describes ' +
+  'WHERE the Agent stands. The Agent is not a passenger inside the rocket — it is the engineer crew on the ground. ' +
+  'Its execution substrate (Remediation Runners) lives OUTSIDE the K8s cluster, on dedicated Mac hosts, so it can ' +
+  'recover the cluster, the control plane, and the workloads even when they are down. This is the L-1 ' +
+  'Out-of-Band Operator Plane in the bootstrap model — fate-isolated from everything it services.'
+
+export type AgentPlaneRow = {
+  dimension: string
+  reality: string
+}
+
+export const AGENT_PLANE: AgentPlaneRow[] = [
+  {
+    dimension: 'Where it runs',
+    reality: 'Dual Mac Mini Remediation Runners — primary .50 + standby .52; Git Bridge on Mac Pro (Dev-only). Never an in-cluster Pod.',
+  },
+  {
+    dimension: 'Why outside K8s',
+    reality: 'Bootstrap paradox: the layer that restarts the rocket cannot ride the rocket. Fate isolation is mandatory.',
+  },
+  {
+    dimension: 'Self-healing',
+    reality: 'Mutual watchdog (launchd com.bifrost.peer-watchdog, 60s) — each Mini launchctl-kickstarts its peer; platform-api primary/standby failover.',
+  },
+  {
+    dimension: 'Own lifecycle',
+    reality: 'Agent release discipline (monorepo-first): versioned, standby-first canary, post-deploy self-smoke. The engineer must be certified before servicing the rocket.',
+  },
+  {
+    dimension: 'Future extraction',
+    reality: 'Stays in-monorepo until triggers fire (Agent serves >1 product line / independent release cadence / external consumers). Then split into its own repo.',
+  },
+  {
+    dimension: 'Boundary',
+    reality: 'Recovers Ops Platform (rocket) and Trade (payload) but never violates trade write paths (R-DV3, ib:operator:cmd, daemon_control).',
+  },
+  {
+    dimension: 'Dispatch → Autonomous',
+    reality: 'Runner = on-call engineer you page (Dispatch mode, ad-hoc). Hermes Gateway = full-time engineer with a shift roster (Autonomous mode, cron/webhook/manual Skills). Both share the L-1 substrate and MCP tools.',
+  },
+  {
+    dimension: 'Flight Director governance',
+    reality: 'Owner transitions from hands-on dispatcher to Mission Director: sets policies, monitors KPIs (success rate, MTTR), adjusts per-Skill trust level (L0 auto / L1 confirm / L2 escalate). Earned autonomy — successes promote trust; failures demote.',
   },
 ]
 
@@ -430,6 +485,10 @@ export function buildDualFlywheelVisionLlmPack(): string {
       `Forbidden: ${l.forbidden}`,
       ...l.examples.map(e => `- ${e}`),
     ]),
+    '',
+    '## Out-of-band operator plane (L-1 — where the engineer stands)',
+    AGENT_PLANE_STATEMENT,
+    ...AGENT_PLANE.map(r => `- **${r.dimension}**: ${r.reality}`),
     '',
     '## Unified experience (one Cursor window)',
     ...EXPERIENCE_EXAMPLES.map(e =>

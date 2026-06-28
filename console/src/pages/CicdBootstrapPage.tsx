@@ -27,7 +27,8 @@ import type { BootstrapLayerId, DeploymentStatus, RuleStatus, StepStatus } from 
 
 type CopyState = 'idle' | 'copied' | 'error'
 
-const LAYER_TAG_VARIANT: Record<BootstrapLayerId, 'warning' | 'info' | 'success'> = {
+const LAYER_TAG_VARIANT: Record<BootstrapLayerId, 'warning' | 'info' | 'success' | 'neutral'> = {
+  'L-1': 'neutral',
   L0: 'warning',
   L1: 'info',
   L2: 'success',
@@ -67,11 +68,12 @@ export function CicdBootstrapPage() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <OpsSection
-        title="CI/CD Bootstrap Model (L0 / L1 / L2)"
+        title="CI/CD Bootstrap Model (L-1 / L0 / L1 / L2)"
         description={
           <>
             Self-hosting bootstrap architecture — resolves the paradox of a control plane managing
-            the cluster it runs on. Source:{' '}
+            the cluster it runs on. L-1 is the out-of-band Agent (the engineer on the ground) that
+            recovers everything else from outside the cluster. Source:{' '}
             <code className="font-mono-tabular text-[var(--primary)]">{CICD_BOOTSTRAP_SOURCE}</code>
             {' '}(v{CICD_BOOTSTRAP_VERSION}).
           </>
@@ -171,7 +173,7 @@ export function CicdBootstrapPage() {
 
       {/* CI/CD rules per layer */}
       <CatalogSection title="CI/CD rules per layer">
-        {(['L0', 'L1', 'L2'] as BootstrapLayerId[]).map(layer => {
+        {(['L-1', 'L0', 'L1', 'L2'] as BootstrapLayerId[]).map(layer => {
           const rules = CICD_LAYER_RULES.filter(r => r.layer === layer)
           const layerDef = BOOTSTRAP_LAYERS.find(l => l.id === layer)!
           return (

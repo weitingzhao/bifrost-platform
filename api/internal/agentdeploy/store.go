@@ -9,6 +9,7 @@ type Job struct {
 	ID         string     `json:"id"`
 	Status     string     `json:"status"`
 	Remote     string     `json:"remote"`
+	Role       string     `json:"role,omitempty"` // primary | standby | custom
 	StartedAt  time.Time  `json:"started_at"`
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	ExitCode   *int       `json:"exit_code,omitempty"`
@@ -50,7 +51,7 @@ func (s *Store) IsRunning() bool {
 	return s.current != nil && s.current.Status == "running"
 }
 
-func (s *Store) Start(id, remote string) (*Job, bool) {
+func (s *Store) Start(id, remote, role string) (*Job, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.current != nil && s.current.Status == "running" {
@@ -61,6 +62,7 @@ func (s *Store) Start(id, remote string) (*Job, bool) {
 		ID:        id,
 		Status:    "running",
 		Remote:    remote,
+		Role:      role,
 		StartedAt: now,
 	}
 	s.current = job

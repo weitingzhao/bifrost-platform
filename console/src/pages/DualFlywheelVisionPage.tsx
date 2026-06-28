@@ -10,6 +10,8 @@ import { VisionV5GatePanel } from '@/components/architecture/VisionV5GatePanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   AGENT_LAYERS,
+  AGENT_PLANE,
+  AGENT_PLANE_STATEMENT,
   DECOUPLING_RULES,
   DECOUPLING_STATEMENT,
   DEV_TOPOLOGY,
@@ -138,6 +140,31 @@ export function DualFlywheelVisionPage() {
             </div>
           </div>
         ))}
+      </CatalogSection>
+
+      {/* 3b — Out-of-band operator plane (L-1) */}
+      <CatalogSection title="Out-of-Band Operator Plane (L-1 — Where the Engineer Stands)">
+        <div className="px-3 py-3 text-[var(--text-dense)] flex flex-col gap-3">
+          <p className="m-0 leading-relaxed text-[var(--muted-foreground)]">{AGENT_PLANE_STATEMENT}</p>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead className="w-40">Dimension</DenseTableHead>
+                <DenseTableHead>Reality</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {AGENT_PLANE.map(r => (
+                <DenseTableRow key={r.dimension}>
+                  <DenseTableCell className="font-medium whitespace-nowrap">
+                    <DenseTag variant="neutral" className="mr-1.5">L-1</DenseTag>{r.dimension}
+                  </DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">{r.reality}</DenseTableCell>
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        </div>
       </CatalogSection>
 
       {/* 3 — Unified experience */}

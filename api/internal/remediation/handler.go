@@ -24,6 +24,9 @@ func NewHandler(audit *actuation.AuditLog) *Handler {
 	}
 }
 
+// Store returns the underlying JobStore for cross-package consumers (e.g. retrospective analyzer).
+func (h *Handler) Store() *JobStore { return h.store }
+
 func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	var req StartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
