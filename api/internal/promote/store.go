@@ -18,11 +18,11 @@ type Store struct {
 func NewStore(configDir string) *Store {
 	path := os.Getenv("PLATFORM_RELEASE_GATE_STATE")
 	if path == "" {
-		if configDir != "" {
-			path = filepath.Join(configDir, "release_gate_state.json")
-		} else {
-			path = "config/release_gate_state.json"
+		dataDir := os.Getenv("PLATFORM_DATA_DIR")
+		if dataDir == "" {
+			dataDir = filepath.Join(configDir, "..", "data")
 		}
+		path = filepath.Join(dataDir, "release_gate_state.json")
 	}
 	return &Store{path: path}
 }

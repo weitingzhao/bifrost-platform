@@ -11,8 +11,13 @@ import {
   startRemediation,
 } from '@/api/platform'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
+import { AgentTaskCatalogPanel } from '@/components/agent/AgentTaskCatalogPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import {
+  formatRemediationJobWhen,
+  remediationScopeShortLabel,
+} from '@/lib/remediation/remediationJobDisplay'
 
 interface AgentDeskPageProps {
   context: OpsContextResponse | undefined
@@ -23,6 +28,7 @@ interface AgentDeskPageProps {
   onOpenBriefing?: () => void
   onOpenCluster?: () => void
   onOpenMcpContract?: () => void
+  onOpenAgentProtocol?: () => void
   onOpenOperatorPlane?: () => void
 }
 
@@ -101,6 +107,8 @@ export function AgentDeskPage({
   onPrefillConsumed,
   onOpenBriefing,
   onOpenCluster,
+  onOpenMcpContract,
+  onOpenAgentProtocol,
   onOpenOperatorPlane,
 }: AgentDeskPageProps) {
   const qc = useQueryClient()
@@ -326,6 +334,13 @@ export function AgentDeskPage({
           )}
         </section>
 
+        <AgentTaskCatalogPanel
+          onOpenDoctrine={tab => {
+            if (tab === 'mcp-contract') onOpenMcpContract?.()
+            else onOpenAgentProtocol?.()
+          }}
+        />
+
         {/* ── Recent tasks ── */}
         <section className="agent-desk-tasks-section">
           <div className="flex items-center justify-between">
@@ -360,9 +375,13 @@ export function AgentDeskPage({
                 <span className={`agent-desk-history-chip__status agent-desk-history-chip__status--${job.status}`}>
                   {job.status}
                 </span>
-                {job.scope != null && job.scope !== '' && (
-                  <span className="agent-desk-history-chip__scope">{job.scope}</span>
-                )}
+                <span className="agent-desk-history-chip__scope">
+                  {remediationScopeShortLabel(job.scope)}
+                  {job.scope === 'release-fix' ? ' · escalation' : ''}
+                </span>
+                <span className="agent-desk-history-chip__when font-mono-tabular">
+                  {formatRemediationJobWhen(job.created_at)}
+                </span>
               </button>
             ))}
           </div>

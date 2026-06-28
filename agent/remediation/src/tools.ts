@@ -519,6 +519,120 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       },
     },
 
+    // ── Release-Fix escalation (Release Agent → Release-Fix Agent) ──
+
+    spawn_release_fix: {
+      description:
+        'Escalate a release failure to a Release-Fix Agent. Starts a new agent task with scope "release-fix" that will ' +
+        'attempt to diagnose and fix the root cause in the codebase. Returns the spawned job ID. ' +
+        'After spawning, use poll_release_fix to wait for the result. ' +
+        'Use this when a release phase fails (gate failure, build error, deploy error) and the error appears fixable in code/config.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          diagnosis: {
+            type: 'string',
+            description:
+              'Detailed diagnosis report for the Release-Fix Agent. Include: which phase failed, the full error message/logs, ' +
+              'what you believe the root cause is, which files/repos are likely involved, and any relevant context.',
+          },
+        },
+        required: ['diagnosis'],
+      },
+      async execute(args) {
+        const diagnosis = String(args.diagnosis ?? '')
+        if (diagnosis.trim() === '') {
+          return textResult('diagnosis must be a non-empty string describing the failure', true)
+        }
+        setPhase(jobId, 'awaiting_approval')
+        appendEvent(jobId, makeEvent('status', 'Escalating to Release-Fix Agent…', {
+          phase: 'awaiting_approval',
+          escalation: 'release-fix',
+        }))
+
+        const runnerBase =
+          process.env.REMEDIATION_RUNNER_URL?.replace(/\/$/, '') ??
+          `http://127.0.0.1:${process.env.REMEDIATION_RUNNER_PORT ?? '8781'}`
+        try {
+          const resp = await fetch(`${runnerBase}/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              scope: 'release-fix',
+              actor: 'release-agent',
+              prompt: diagnosis,
+            }),
+          })
+          if (!resp.ok) {
+            const errText = await resp.text()
+            setPhase(jobId, 'remediating')
+            return textResult(`Failed to spawn release-fix: HTTP ${resp.status} ${errText}`, true)
+          }
+          const job = (await resp.json()) as { id: string; status: string }
+          appendEvent(jobId, makeEvent('status', `Release-Fix Agent spawned: ${job.id}`, {
+            release_fix_job_id: job.id,
+          }))
+          setPhase(jobId, 'remediating')
+          return textResult(jsonText({ spawned: true, release_fix_job_id: job.id, status: job.status }))
+        } catch (err) {
+          setPhase(jobId, 'remediating')
+          return textResult(`Failed to spawn release-fix: ${err instanceof Error ? err.message : String(err)}`, true)
+        }
+      },
+    },
+
+    poll_release_fix: {
+      description:
+        'Poll a Release-Fix Agent job for completion. Returns the job status, phase, summary, and error. ' +
+        'Call this in a loop (every 15–30s) after spawn_release_fix until status is "done" or "failed". ' +
+        'If done: the fix has been committed and pushed — you can retry the failed release phase. ' +
+        'If failed: the fix could not be applied automatically — report to the operator for IDE Agent escalation.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          job_id: {
+            type: 'string',
+            description: 'The release-fix job ID returned by spawn_release_fix',
+          },
+        },
+        required: ['job_id'],
+      },
+      async execute(args) {
+        const fixJobId = String(args.job_id ?? '')
+        if (fixJobId.trim() === '') {
+          return textResult('job_id is required', true)
+        }
+        const runnerBase =
+          process.env.REMEDIATION_RUNNER_URL?.replace(/\/$/, '') ??
+          `http://127.0.0.1:${process.env.REMEDIATION_RUNNER_PORT ?? '8781'}`
+        try {
+          const resp = await fetch(`${runnerBase}/run/${encodeURIComponent(fixJobId)}`)
+          if (!resp.ok) {
+            const errText = await resp.text()
+            return textResult(`Failed to poll release-fix job: HTTP ${resp.status} ${errText}`, true)
+          }
+          const job = (await resp.json()) as {
+            id: string
+            status: string
+            phase: string
+            summary?: string
+            error?: string
+          }
+          return textResult(jsonText({
+            job_id: job.id,
+            status: job.status,
+            phase: job.phase,
+            summary: job.summary ?? null,
+            error: job.error ?? null,
+            completed: job.status !== 'running',
+            fix_succeeded: job.status === 'done',
+          }))
+        } catch (err) {
+          return textResult(`Failed to poll release-fix job: ${err instanceof Error ? err.message : String(err)}`, true)
+        }
+      },
+    },
+
     // ── Mutual watchdog tools (dual Mac Mini self-healing) ──
 
     peer_agent_health: {

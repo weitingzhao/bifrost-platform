@@ -458,6 +458,7 @@ export function ConsolePage() {
             onOpenBriefing={openBriefing}
             onOpenCluster={openCluster}
             onOpenMcpContract={() => setViewTab('mcp-contract')}
+            onOpenAgentProtocol={() => setViewTab('agent-protocol')}
             onOpenOperatorPlane={openOperatorPlane}
           />
         )}

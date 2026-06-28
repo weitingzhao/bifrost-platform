@@ -12,7 +12,10 @@ export function remediationScopeShortLabel(scope?: string): string {
   if (scope == null || scope === '') return 'Agent session'
   if (scope === 'cluster_issues_full_auto') return 'Cluster auto-remediate'
   if (scope === 'agent-desk') return 'Agent task'
+  if (scope === 'release') return 'Release'
+  if (scope === 'release-fix') return 'Release Fix'
   if (scope === 'nightly-health-check') return 'Nightly health check'
+  if (scope === 'nightly-drift-autofix') return 'Drift auto-fix'
   if (scope.startsWith('cluster')) return 'Cluster'
   return scope.replace(/_/g, ' ')
 }
