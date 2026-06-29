@@ -35,7 +35,7 @@ export const HARDWARE_NODES: K3sNodeRow[] = [
   { name: 'gpu-server', cpu: 'Ryzen 9 9500S', ram: '128GB', os: 'Linux', batch: 'First', role: 'K3s Agent · data warehouse · compute · GPU @ 192.168.10.60' },
   { name: 'mac-mini-1', cpu: 'Apple M4', ram: '16GB', os: 'macOS + UTM', batch: 'First', role: 'Host for ops-vm-ubt-01 Agent · dev/CI' },
   { name: 'mac-mini-2', cpu: 'Apple M4', ram: '16GB', os: 'macOS + UTM', batch: 'First', role: 'Host for ops-vm-ubt-02 Agent · monitor/CI' },
-  { name: 'mini-pc-c', cpu: 'Ryzen 7 7735HS', ram: '32GB', os: 'Linux', batch: 'Second', role: 'K3s Server ③ · monitoring/CI (after Legacy retires)' },
+  { name: 'mini-pc-c', cpu: 'Ryzen 7 7735HS', ram: '32GB', os: 'Linux', batch: 'Second', role: 'K3s Server ③ · monitoring/CI (Legacy retired ✓; 3-Server HA join pending)' },
   { name: 'ubt-k3s-04', cpu: 'Ryzen 7', ram: '32GB', os: 'Linux', batch: 'Third', role: 'K3s Agent · CNPG primary · data-primary @ .75' },
   { name: 'ubt-k3s-05', cpu: 'Ryzen 7', ram: '22GB', os: 'Linux', batch: 'Third', role: 'K3s Agent · general pool · stg/CI offload @ .77' },
 ]
@@ -201,12 +201,12 @@ export const IMPLEMENTATION_PHASES: ImplementationPhase[] = [
   },
   {
     id: 'stage-4',
-    title: 'Stage 4 — mini-pc-c join (after Legacy retires)',
+    title: 'Stage 4 — mini-pc-c join → 3-Server HA (Legacy retired ✓ 2026-06-29)',
     items: [
-      'Legacy migration verified stable',
-      'mini-pc-c joins → full 3-Server HA',
-      'Monitoring stack moves to mini-pc-c',
-      'Legacy Linux server retires or becomes spare',
+      'Legacy migration verified stable ✓ — Phase 3 retirement SIGNED (decision D8)',
+      'mini-pc-c joins → full 3-Server HA (pending — k3s_ha phase)',
+      'Monitoring stack moves to mini-pc-c (pending)',
+      'Legacy Linux server retired ✓ — host freed / spare',
     ],
   },
 ]
