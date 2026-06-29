@@ -6,6 +6,11 @@ const TRADE_APP_URL = import.meta.env.VITE_TRADE_FRONTEND_URL ?? 'http://127.0.0
 export type ConsoleViewTab =
   | 'agent-desk'
   | 'briefing'
+  | 'autonomous-skills'
+  | 'execution-log'
+  | 'agent-governance'
+  | 'agent-system'
+  | 'operator-plane'
   | 'control-room'
   | 'audit'
   | 'runtime-map'
@@ -29,7 +34,9 @@ export type ConsoleViewTab =
   | 'design-system'
   | 'flywheel-vision'
   | 'network-upgrade'
+  | 'ai-compute'
   | 'console'
+  | 'defects'
 
 export function ConsoleSidebar({
   activeTab,

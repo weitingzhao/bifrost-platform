@@ -21,6 +21,7 @@ const (
 	cnpgNamespace      = "data"
 	cnpgOperatorNS     = "cnpg-system"
 	cnpgOperatorDeploy = "cnpg-controller-manager"
+	cnpgLanServiceName = "bifrost-postgres-lan"
 )
 
 var cnpgClusterGVR = schema.GroupVersionResource{
@@ -52,6 +53,18 @@ type PostgresLegacyView struct {
 	Detail    string             `json:"detail,omitempty"`
 }
 
+// PostgresLanAccessView surfaces the LAN NodePort entry point for external SQL
+// clients (DBeaver). The NodePort is provisioned by bifrost-postgres-lan Service.
+type PostgresLanAccessView struct {
+	Available bool               `json:"available"`
+	Host      string             `json:"host,omitempty"`
+	NodePort  int                `json:"node_port,omitempty"`
+	Endpoint  string             `json:"endpoint,omitempty"`
+	User      string             `json:"user,omitempty"`
+	Reach     probe.Reachability `json:"reachability"`
+	Detail    string             `json:"detail,omitempty"`
+}
+
 type PostgresStatusResponse struct {
 	ClusterID      string                 `json:"cluster_id"`
 	Reachability   probe.Reachability     `json:"reachability"`
@@ -68,6 +81,7 @@ type PostgresStatusResponse struct {
 	PrimaryNode    string                 `json:"primary_node,omitempty"`
 	RwService      string                 `json:"rw_service"`
 	RoService      string                 `json:"ro_service"`
+	LanAccess      PostgresLanAccessView  `json:"lan_access"`
 	StorageClass   string                 `json:"storage_class"`
 	StorageSize    string                 `json:"storage_size"`
 	Backup         ServiceDependencyView  `json:"backup"`
@@ -109,6 +123,7 @@ func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
 
 	resp.Operator = operatorDep(ctx, clientset)
 	resp.MinIO = minioDep(snap)
+	resp.LanAccess = lanAccessProbe(ctx, clientset)
 
 	dyn, dynErr := s.buildDynamicClient()
 	if dynErr != nil {
@@ -167,6 +182,72 @@ func operatorDep(ctx context.Context, clientset kubernetes.Interface) ServiceDep
 
 func minioDep(snap readinessSnapshot) ServiceDependencyView {
 	return deploymentDep(snap, cnpgNamespace, "minio", "MinIO backup (nfs-hot)")
+}
+
+// lanAccessProbe reads the bifrost-postgres-lan NodePort Service and pairs it
+// with a Ready node InternalIP so the UI can show a copy-paste DBeaver endpoint.
+func lanAccessProbe(ctx context.Context, clientset kubernetes.Interface) PostgresLanAccessView {
+	view := PostgresLanAccessView{User: "bifrost", Reach: probe.ReachDegraded}
+
+	svc, err := clientset.CoreV1().Services(cnpgNamespace).Get(ctx, cnpgLanServiceName, metav1.GetOptions{})
+	if err != nil {
+		view.Detail = "NodePort service bifrost-postgres-lan not found — apply k8s/data/postgres-nodeport.yaml"
+		return view
+	}
+
+	var nodePort int32
+	for _, p := range svc.Spec.Ports {
+		if p.Name == "postgres" || p.Port == 5432 {
+			nodePort = p.NodePort
+			break
+		}
+	}
+	if nodePort == 0 {
+		view.Detail = "bifrost-postgres-lan has no NodePort assigned"
+		return view
+	}
+	view.NodePort = int(nodePort)
+
+	host := firstReadyNodeInternalIP(ctx, clientset)
+	if host == "" {
+		view.Detail = fmt.Sprintf("NodePort %d ready; no Ready node IP resolved", nodePort)
+		return view
+	}
+
+	view.Available = true
+	view.Host = host
+	view.Endpoint = fmt.Sprintf("%s:%d", host, nodePort)
+	view.Reach = probe.ReachOK
+	view.Detail = "LAN-only — do not expose to public internet"
+	return view
+}
+
+func firstReadyNodeInternalIP(ctx context.Context, clientset kubernetes.Interface) string {
+	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return ""
+	}
+	for _, n := range nodes.Items {
+		if n.Spec.Unschedulable {
+			continue
+		}
+		ready := false
+		for _, c := range n.Status.Conditions {
+			if c.Type == corev1.NodeReady && c.Status == corev1.ConditionTrue {
+				ready = true
+				break
+			}
+		}
+		if !ready {
+			continue
+		}
+		for _, a := range n.Status.Addresses {
+			if a.Type == corev1.NodeInternalIP && a.Address != "" {
+				return a.Address
+			}
+		}
+	}
+	return ""
 }
 
 func cnpgClusterProbe(

@@ -145,6 +145,8 @@ export type AgentEscalationRule = {
 export const AGENT_ESCALATION: AgentEscalationRule[] = [
   { from: 'Dev Agent', to: 'Ops Agent', trigger: 'Deployment failure needs runtime diagnosis', example: 'Build passed but Pod CrashLoopBackOff → Ops Agent inspects logs + events' },
   { from: 'Ops Agent', to: 'Dev Agent', trigger: 'Root cause is a code bug, not infra', example: 'OOM caused by new feature memory leak → Dev Agent opens fix PR' },
+  { from: 'Release Agent', to: 'Release-Fix Agent', trigger: 'Gate/build/deploy failure caused by code/config bug', example: 'STG gate returns 502 due to read-only FS write → Release-Fix Agent patches store.go + manifest, commits, pushes → Release Agent retries gate' },
+  { from: 'Release-Fix Agent', to: 'IDE Agent (Owner)', trigger: 'Auto-fix too complex or too risky', example: 'Fix requires multi-repo architectural change → Release-Fix reports analysis, Owner uses IDE Agent' },
   { from: 'Business Agent', to: 'Dev Agent', trigger: 'Strategy suggestion requires code change', example: 'Analysis suggests new Gate parameter → Dev Agent prepares PR (Owner approves)' },
   { from: 'Any Agent', to: 'Owner', trigger: 'L2+ action or ambiguous situation', example: 'Ops Agent wants to rollback prod → confirms with Owner before executing' },
 ]

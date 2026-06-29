@@ -8,12 +8,13 @@ import {
   DenseTableHeader,
   DenseTableRow,
   DenseTag,
-  Input,
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { fetchRevisions, fetchSupplyChain, startPipelineRun } from '@/api/platform'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { isRevisionDeployReady, RevisionPicker } from '@/components/delivery/RevisionPicker'
+import { isRefDeployBlocked, RefPreflightStatus, useRefPreflight } from '@/components/delivery/RefPreflightPanel'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
 import {
@@ -37,7 +38,6 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
   const [revision, setRevision] = useState('main')
-  const [customRevision, setCustomRevision] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const supplyQuery = useQuery({
@@ -67,6 +67,9 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
     },
     onError: (err: Error) => setActionError(err.message),
   })
+
+  const refPreflight = useRefPreflight(target.pipeline, revision)
+  const deployBlockedByRef = isRefDeployBlocked(refPreflight.data)
 
   const cmPresent = (name: string) =>
     supplyChain?.dockerfile_configmaps?.some(cm => cm.name === name && cm.present) ?? false
@@ -137,63 +140,41 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
         )}
 
         {!hideActions && canOperate && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-dense-label text-muted-foreground shrink-0">Revision:</span>
-            {customRevision ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  className="h-8 w-36 text-dense-body"
-                  value={revision}
-                  onChange={e => setRevision(e.target.value)}
-                  placeholder="branch or sha"
-                />
-                <button
-                  type="button"
-                  className="text-dense-meta text-primary underline shrink-0"
-                  onClick={() => { setCustomRevision(false); setRevision('main') }}
-                >
-                  tags
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1">
-                <select
-                  className="h-8 rounded-md border border-input bg-background px-2 text-dense-body focus:outline-none focus:ring-1 focus:ring-ring"
-                  value={revision}
-                  onChange={e => setRevision(e.target.value)}
-                >
-                  <option value="main">main (default)</option>
-                  {revisionsQuery.data?.tags
-                    ?.filter((t, i, arr) => arr.findIndex(x => x.name === t.name) === i)
-                    .map(tag => (
-                      <option key={tag.name} value={tag.name}>
-                        {tag.name}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  type="button"
-                  className="text-dense-meta text-primary underline shrink-0"
-                  onClick={() => setCustomRevision(true)}
-                >
-                  custom
-                </button>
-                {revisionsQuery.isLoading && (
-                  <span className="text-dense-meta text-muted-foreground">loading tags…</span>
-                )}
-              </div>
-            )}
-            <Button
-              size="sm"
-              disabled={deliverMutation.isPending || !cmAllOk || !revision.trim()}
-              onClick={() => deliverMutation.mutate(revision)}
-            >
-              {deliverMutation.isPending ? 'Starting…' : `Run ${target.pipeline}`}
-            </Button>
-            {!cmAllOk && (
-              <span className="text-dense-meta text-muted-foreground">
-                Operate → Trade STG → Refresh Dockerfile CMs (includes platform CMs).
-              </span>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-start gap-2">
+              <span className="text-dense-label text-muted-foreground shrink-0 pt-2">Revision:</span>
+              <RevisionPicker
+                value={revision}
+                onChange={setRevision}
+                revisions={revisionsQuery.data}
+                isLoading={revisionsQuery.isLoading}
+                repoLabels={target.mirrorRepos}
+              />
+              <Button
+                size="sm"
+                className="mt-0.5"
+                disabled={
+                  deliverMutation.isPending
+                  || !cmAllOk
+                  || !isRevisionDeployReady(revision)
+                  || deployBlockedByRef
+                }
+                onClick={() => deliverMutation.mutate(revision.trim())}
+              >
+                {deliverMutation.isPending ? 'Starting…' : `Run ${target.pipeline}`}
+              </Button>
+              {!cmAllOk && (
+                <span className="text-dense-meta text-muted-foreground">
+                  Operate → Trade STG → Refresh Dockerfile CMs (includes platform CMs).
+                </span>
+              )}
+            </div>
+            {target.mirrorRepos.length > 1 && (
+              <RefPreflightStatus
+                data={refPreflight.data}
+                isLoading={refPreflight.isLoading}
+                revision={revision}
+              />
             )}
           </div>
         )}

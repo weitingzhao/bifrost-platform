@@ -1,6 +1,7 @@
 import type {
   AutomateTrack,
   BuildTrack,
+  InfraTrack,
   MatrixResponse,
   MigrateTrack,
   OpsContextResponse,
@@ -10,7 +11,7 @@ import type {
 } from '@/api/types'
 import { hasProdFailures, prodFailingTargetIds } from '@/lib/control-room/matrixSummary'
 
-export type TrackId = 'build' | 'migrate' | 'automate' | 'operate'
+export type TrackId = 'build' | 'migrate' | 'automate' | 'infra' | 'operate'
 
 export interface TrackProgress {
   done: number
@@ -186,6 +187,35 @@ export function computeOperateSummary(
   }
 }
 
+export function computeInfraSummary(infra?: InfraTrack): Omit<TrackSummary, 'id' | 'agentMode'> {
+  if (infra == null) {
+    return { label: 'Infrastructure', progress: null, currentPhase: null, nextStep: null, issues: [], subtitle: 'No track data' }
+  }
+
+  let totalDone = 0
+  let totalAll = 0
+  for (const s of infra.streams) {
+    totalDone += s.done
+    totalAll += s.total
+  }
+  const percent = totalAll > 0 ? Math.round((totalDone / totalAll) * 100) : 0
+
+  const activeStream = infra.streams.find(s => s.status === 'in_progress')
+  const nextStep = activeStream?.next_task ?? activeStream?.note ?? null
+
+  const closedCount = infra.streams.filter(s => s.status === 'closed').length
+  const subtitle = `${closedCount}/${infra.streams.length} streams closed · ${totalDone}/${totalAll} items`
+
+  return {
+    label: infra.label,
+    progress: { done: totalDone, total: totalAll, percent },
+    currentPhase: null,
+    nextStep,
+    issues: [],
+    subtitle,
+  }
+}
+
 export function computeAllTracks(
   context: OpsContextResponse | undefined,
   matrices: MatrixResponse[],
@@ -212,13 +242,19 @@ export function computeAllTracks(
     ...computeAutomateSummary(tracks?.automate),
   }
 
+  const infra: TrackSummary = {
+    id: 'infra',
+    agentMode: 'Ops',
+    ...computeInfraSummary(tracks?.infra),
+  }
+
   const operate: TrackSummary = {
     id: 'operate',
     agentMode: 'Ops',
     ...computeOperateSummary(context, matrices, clusterFailingPods, clusterReachability),
   }
 
-  return [build, migrate, automate, operate]
+  return [build, migrate, automate, infra, operate]
 }
 
 export function trackById(tracks: TrackSummary[], id: TrackId): TrackSummary {

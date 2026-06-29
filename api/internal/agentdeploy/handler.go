@@ -16,7 +16,20 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
-const defaultRemote = "vision@192.168.10.50"
+const (
+	defaultRemote        = "vision@192.168.10.50"
+	defaultStandbyRemote = "vision@192.168.10.52"
+)
+
+// DeployTarget describes one deployable agent host (primary or standby) with
+// its mutual-watchdog peer wiring, surfaced to Console for per-host deploy.
+type DeployTarget struct {
+	ID      string `json:"id"`   // primary | standby
+	Role    string `json:"role"` // primary | standby
+	Remote  string `json:"remote"`
+	PeerSSH string `json:"peer_ssh,omitempty"`
+	PeerURL string `json:"peer_url,omitempty"`
+}
 
 // Handler runs deploy_mac_mini.sh from platform-api host (Mac Pro) over SSH to agent Mini.
 type Handler struct {
@@ -32,12 +45,13 @@ func NewHandler(audit *actuation.AuditLog) *Handler {
 }
 
 type StatusResponse struct {
-	Enabled    bool   `json:"enabled"`
-	Remote     string `json:"remote"`
-	ScriptPath string `json:"script_path,omitempty"`
-	Hint       string `json:"hint,omitempty"`
-	Current    *Job   `json:"current,omitempty"`
-	Last       *Job   `json:"last,omitempty"`
+	Enabled    bool           `json:"enabled"`
+	Remote     string         `json:"remote"`
+	Targets    []DeployTarget `json:"targets,omitempty"`
+	ScriptPath string         `json:"script_path,omitempty"`
+	Hint       string         `json:"hint,omitempty"`
+	Current    *Job           `json:"current,omitempty"`
+	Last       *Job           `json:"last,omitempty"`
 }
 
 type StartResponse struct {
@@ -51,6 +65,7 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, StatusResponse{
 		Enabled:    enabled,
 		Remote:     defaultRemoteTarget(),
+		Targets:    deployTargets(),
 		ScriptPath: script,
 		Hint:       hint,
 		Current:    h.store.Current(),
@@ -76,9 +91,9 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	remote := defaultRemoteTarget()
 	var body struct {
 		Remote string `json:"remote"`
+		Target string `json:"target"`
 	}
 	if r.Body != nil {
 		dec := json.NewDecoder(r.Body)
@@ -88,10 +103,41 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if strings.TrimSpace(body.Remote) != "" {
-		remote = strings.TrimSpace(body.Remote)
+
+	// Resolve the selected target (primary/standby) for role + peer wiring.
+	targets := deployTargets()
+	selected := targets[0] // default: primary
+	if t := strings.TrimSpace(body.Target); t != "" {
+		found := false
+		for _, dt := range targets {
+			if dt.ID == t {
+				selected = dt
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeJSON(w, http.StatusBadRequest, StartResponse{
+				Status: "error",
+				Error:  fmt.Sprintf("unknown deploy target %q", t),
+			})
+			return
+		}
+	} else if rmt := strings.TrimSpace(body.Remote); rmt != "" {
+		matched := false
+		for _, dt := range targets {
+			if dt.Remote == rmt {
+				selected = dt
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			selected = DeployTarget{ID: "custom", Role: "primary", Remote: rmt}
+		}
 	}
-	remote, remoteErr := sanitizeDeployRemote(remote)
+
+	remote, remoteErr := sanitizeDeployRemote(selected.Remote)
 	if remoteErr != nil {
 		writeJSON(w, http.StatusBadRequest, StartResponse{
 			Status: "error",
@@ -101,7 +147,7 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := time.Now().UTC().Format("20060102T150405.000Z")
-	job, ok := h.store.Start(id, remote)
+	job, ok := h.store.Start(id, remote, selected.Role)
 	if !ok {
 		writeJSON(w, http.StatusConflict, StartResponse{
 			Status: "error",
@@ -110,7 +156,7 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	h.store.AppendLog(fmt.Sprintf("==> Deploy started %s → %s\n", id, remote))
+	h.store.AppendLog(fmt.Sprintf("==> Deploy started %s → %s (role=%s)\n", id, remote, selected.Role))
 
 	h.audit.RecordDirect(
 		"agent-deploy",
@@ -118,10 +164,10 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		"agent.deploy.start",
 		remote,
 		"running",
-		fmt.Sprintf("job=%s script=%s", id, script),
+		fmt.Sprintf("job=%s role=%s script=%s", id, selected.Role, script),
 	)
 
-	go h.runDeploy(id, script, remote, principal.Role)
+	go h.runDeploy(id, script, remote, selected.Role, selected.PeerSSH, selected.PeerURL, principal.Role)
 
 	writeJSON(w, http.StatusAccepted, StartResponse{
 		Status: "accepted",
@@ -141,10 +187,20 @@ func (w *logWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func (h *Handler) runDeploy(id, script, remote string, role actuation.Role) {
+func (h *Handler) runDeploy(id, script, remote, agentRole, peerSSH, peerURL string, principalRole actuation.Role) {
 	// script -q gives the child a pseudo-TTY so rsync/ssh line-buffer into our pipe (live log in Console).
 	cmd := exec.Command("script", "-q", "/dev/null", "bash", script, remote)
-	cmd.Env = append(os.Environ(), deployExtraEnv()...)
+	env := append(os.Environ(), deployExtraEnv()...)
+	if agentRole != "" {
+		env = append(env, "AGENT_ROLE="+agentRole)
+	}
+	if peerSSH != "" {
+		env = append(env, "PEER_SSH="+peerSSH)
+	}
+	if peerURL != "" {
+		env = append(env, "PEER_URL="+peerURL)
+	}
+	cmd.Env = env
 
 	var buf bytes.Buffer
 	writer := &logWriter{store: h.store, buf: &buf}
@@ -176,7 +232,7 @@ func (h *Handler) runDeploy(id, script, remote string, role actuation.Role) {
 			detail = errMsg
 		}
 	}
-	h.audit.RecordDirect("agent-deploy", role, "agent.deploy.finish", remote, status, detail)
+	h.audit.RecordDirect("agent-deploy", principalRole, "agent.deploy.finish", remote, status, detail)
 
 	_ = job
 }
@@ -204,6 +260,65 @@ func defaultRemoteTarget() string {
 		}
 	}
 	return defaultRemote
+}
+
+func standbyRemoteTarget() string {
+	v := strings.TrimSpace(os.Getenv("AGENT_DEPLOY_STANDBY_REMOTE"))
+	if v == "" {
+		v = defaultStandbyRemote
+	}
+	if clean, err := sanitizeDeployRemote(v); err == nil {
+		return clean
+	}
+	return ""
+}
+
+// remoteHostPart extracts the host from an SSH target (user@host -> host).
+func remoteHostPart(remote string) string {
+	s := strings.TrimSpace(remote)
+	if i := strings.LastIndex(s, "@"); i >= 0 {
+		return s[i+1:]
+	}
+	return s
+}
+
+// remoteToRunnerURL maps an SSH target to its runner base URL for peer wiring.
+func remoteToRunnerURL(remote string) string {
+	host := remoteHostPart(remote)
+	if host == "" {
+		return ""
+	}
+	port := strings.TrimSpace(os.Getenv("REMEDIATION_RUNNER_PORT"))
+	if port == "" {
+		port = "8781"
+	}
+	return fmt.Sprintf("http://%s:%s", host, port)
+}
+
+// deployTargets returns primary + standby hosts with cross-wired watchdog peers.
+// Standby is omitted only if its remote is invalid/empty.
+func deployTargets() []DeployTarget {
+	primary := defaultRemoteTarget()
+	standby := standbyRemoteTarget()
+
+	targets := []DeployTarget{}
+	p := DeployTarget{ID: "primary", Role: "primary", Remote: primary}
+	if standby != "" && standby != primary {
+		p.PeerSSH = standby
+		p.PeerURL = remoteToRunnerURL(standby)
+	}
+	targets = append(targets, p)
+
+	if standby != "" && standby != primary {
+		targets = append(targets, DeployTarget{
+			ID:      "standby",
+			Role:    "standby",
+			Remote:  standby,
+			PeerSSH: primary,
+			PeerURL: remoteToRunnerURL(primary),
+		})
+	}
+	return targets
 }
 
 // sanitizeDeployRemote strips inline # comments (common .env mistake) and validates SSH target shape.

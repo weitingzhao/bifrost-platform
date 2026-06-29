@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { StatusLamp } from '@/components/StatusLamp'
 import { BriefingIconBadge, LANE_ICONS, TRACK_ICONS } from '@/lib/briefing/briefingIcons'
 import {
@@ -102,6 +103,133 @@ function LaneCard({
   )
 }
 
+/**
+ * Parse spine note that uses circled-number milestones: "preamble ① foo ② bar ③ baz"
+ * Returns { preamble, milestones[] } — milestones empty if no ①②③ pattern found.
+ */
+function parseNoteMilestones(note: string): { preamble: string; milestones: string[] } {
+  const circled = /[\u2460-\u2473]/g
+  const matches = [...note.matchAll(circled)]
+  if (matches.length === 0) return { preamble: note.trim(), milestones: [] }
+
+  const preamble = note.slice(0, matches[0].index).trim()
+  const milestones: string[] = []
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i].index! + 1
+    const end = i + 1 < matches.length ? matches[i + 1].index! : note.length
+    const text = note.slice(start, end).trim()
+    if (text !== '') milestones.push(text)
+  }
+  return { preamble, milestones }
+}
+
+function QueueItemRow({ item }: { item: QueueItem }) {
+  const hasDetail =
+    (item.note != null && item.note !== '') ||
+    (item.prerequisites != null && item.prerequisites.length > 0)
+  const [expanded, setExpanded] = useState(false)
+
+  const parsed = item.note != null ? parseNoteMilestones(item.note) : null
+  const hasMilestones = parsed != null && parsed.milestones.length > 0
+
+  return (
+    <li className="border-b border-[var(--border)] last:border-b-0">
+      <button
+        type="button"
+        className="flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--secondary)]/40"
+        disabled={!hasDetail}
+        onClick={() => hasDetail && setExpanded(!expanded)}
+      >
+        <StatusLamp value={queueItemReach(item.status)} kind="reach" />
+        <div className="min-w-0 flex-1">
+          <p className="m-0 text-[var(--text-dense)]">{item.label}</p>
+          <code className="mt-0.5 inline-block rounded bg-[var(--secondary)] px-1 py-px font-mono text-dense-caption text-[var(--muted-foreground)]">
+            {item.id}
+          </code>
+          {!expanded && parsed != null && parsed.preamble !== '' && (
+            <p className="m-0 mt-0.5 line-clamp-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              {parsed.preamble}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {item.progress != null && item.progress.total > 0 && (
+            <span className="font-mono text-dense-caption text-[var(--muted-foreground)]">
+              {item.progress.done}/{item.progress.total}
+            </span>
+          )}
+          <span className="font-mono text-dense-caption uppercase text-[var(--muted-foreground)]">
+            {statusLabel(item.status)}
+          </span>
+          {hasDetail && (
+            <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              {expanded ? '▾' : '▸'}
+            </span>
+          )}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-8">
+          {parsed != null && parsed.preamble !== '' && (
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--foreground)]">
+              {parsed.preamble}
+            </p>
+          )}
+
+          {hasMilestones && (
+            <div className="mt-2">
+              <p className="m-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                Milestones
+              </p>
+              <ol className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
+                {parsed.milestones.map((ms, i) => {
+                  const done = item.progress != null && i < item.progress.done
+                  return (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className={`mt-px text-[var(--text-dense-caption)] ${done ? 'text-[var(--success)]' : 'text-[var(--muted-foreground)]'}`}>
+                        {done ? '✓' : '○'}
+                      </span>
+                      <span className={`text-[var(--text-dense-meta)] ${done ? 'text-[var(--muted-foreground)] line-through' : ''}`}>
+                        {ms}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          )}
+
+          {!hasMilestones && item.note != null && item.note !== '' && parsed?.preamble === item.note.trim() && null}
+
+          {item.prerequisites != null && item.prerequisites.length > 0 && (
+            <div className="mt-2">
+              <p className="m-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                Prerequisites
+              </p>
+              <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">
+                {item.prerequisites.map((pre, i) => {
+                  const met = pre.includes('✓') || pre.toLowerCase().includes('closed')
+                  return (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className={`mt-px text-[var(--text-dense-caption)] ${met ? 'text-[var(--success)]' : 'text-[var(--muted-foreground)]'}`}>
+                        {met ? '✓' : '○'}
+                      </span>
+                      <span className={`text-[var(--text-dense-meta)] ${met ? 'text-[var(--muted-foreground)]' : ''}`}>
+                        {pre}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </li>
+  )
+}
+
 function TaskQueuePanel({ items, lane }: { items: QueueItem[]; lane: WorkLane }) {
   if (items.length === 0) {
     return (
@@ -126,23 +254,7 @@ function TaskQueuePanel({ items, lane }: { items: QueueItem[]; lane: WorkLane })
       </header>
       <ul className="m-0 flex list-none flex-col p-0">
         {items.map(item => (
-          <li
-            key={item.id}
-            className="flex items-start gap-2 border-b border-[var(--border)] px-3 py-2 last:border-b-0"
-          >
-            <StatusLamp value={queueItemReach(item.status)} kind="reach" />
-            <div className="min-w-0 flex-1">
-              <p className="m-0 text-[var(--text-dense)]">{item.label}</p>
-              {item.note && (
-                <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                  {item.note}
-                </p>
-              )}
-            </div>
-            <span className="shrink-0 font-mono text-dense-caption uppercase text-[var(--muted-foreground)]">
-              {statusLabel(item.status)}
-            </span>
-          </li>
+          <QueueItemRow key={item.id} item={item} />
         ))}
       </ul>
     </div>

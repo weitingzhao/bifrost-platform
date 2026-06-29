@@ -1,8 +1,8 @@
-import type { ClusterSummary, MatrixResponse, OpsContextResponse, StgSmokeResponse } from '@/api/types'
+import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import { AuditPageLink } from '@/components/AuditPageLink'
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
 import { BayDetailDrawer } from '@/components/control-room/BayDetailDrawer'
-import { ControlRoomLiveStatus } from '@/components/control-room/ControlRoomLiveStatus'
+import { MissionControlHeader } from '@/components/control-room/MissionControlHeader'
 import { WorkTracksStrip } from '@/components/control-room/WorkTracksStrip'
 import {
   DualFlywheelPanel,
@@ -10,6 +10,7 @@ import {
 } from '@/components/control-room/DualFlywheelPanel'
 import { PipelineFlow } from '@/components/control-room/PipelineFlow'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { computeAllTracks } from '@/lib/briefing/workTracks'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 import { useMemo, useState } from 'react'
@@ -21,9 +22,9 @@ interface ControlRoomPageProps {
   matrixLoading: boolean
   matrixError: Error | null
   platformHealthy: boolean
-  clusterSummary?: ClusterSummary
+  clusterSummary?: import('@/api/types').ClusterSummary
   clusterLoading?: boolean
-  stgSmoke?: StgSmokeResponse
+  stgSmoke?: import('@/api/types').StgSmokeResponse
   stgSmokeLoading?: boolean
   onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenProgram: () => void
@@ -31,7 +32,8 @@ interface ControlRoomPageProps {
   onOpenCluster: () => void
   onOpenAudit: () => void
   onOpenBriefing: () => void
-  onOpenAgentDesk?: () => void
+  onOpenAgentDesk?: (opts?: { prefill: string }) => void
+  onOpenPlatformRelease?: () => void
 }
 
 export function ControlRoomPage({
@@ -40,11 +42,7 @@ export function ControlRoomPage({
   matrices,
   matrixLoading,
   matrixError,
-  platformHealthy,
   clusterSummary,
-  clusterLoading,
-  stgSmoke,
-  stgSmokeLoading,
   onOpenRuntimeMap,
   onOpenProgram,
   onOpenDelivery,
@@ -52,8 +50,10 @@ export function ControlRoomPage({
   onOpenAudit,
   onOpenBriefing,
   onOpenAgentDesk,
+  onOpenPlatformRelease,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
+  const { snapshot, matrices: liveMatrices, dataUpdatedAt, isLoading: missionLoading } = useMissionSnapshot()
 
   const trackSummaries = useMemo(() => {
     const clusterFailingPods = clusterSummary?.failing_pods
@@ -61,27 +61,30 @@ export function ControlRoomPage({
     return computeAllTracks(context, matrices, clusterFailingPods, clusterReach)
   }, [context, matrices, clusterSummary])
 
-  if (contextLoading || matrixLoading) {
-    return <p className="text-[var(--muted-foreground)]">Loading control room…</p>
+  if (contextLoading || matrixLoading || missionLoading) {
+    return <p className="text-[var(--muted-foreground)]">Loading mission control…</p>
+  }
+
+  if (matrixError != null) {
+    return (
+      <p className="lamp-fail">
+        Failed to load matrix: {matrixError.message}
+      </p>
+    )
   }
 
   return (
     <div className="control-room-layout flex w-full min-w-0 flex-col gap-4">
-      <ControlRoomLiveStatus
+      <MissionControlHeader
+        snapshot={snapshot}
+        matrices={liveMatrices.length > 0 ? liveMatrices : matrices}
         context={context}
-        contextLoading={contextLoading}
-        matrices={matrices}
-        matrixLoading={matrixLoading}
-        matrixError={matrixError}
-        platformHealthy={platformHealthy}
-        clusterSummary={clusterSummary}
-        clusterLoading={clusterLoading}
-        stgSmoke={stgSmoke}
-        stgSmokeLoading={stgSmokeLoading}
+        dataUpdatedAt={dataUpdatedAt}
         onOpenRuntimeMap={onOpenRuntimeMap}
-        onOpenProgram={onOpenProgram}
         onOpenCluster={onOpenCluster}
         onOpenDelivery={onOpenDelivery}
+        onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
+        onOpenAgentDesk={onOpenAgentDesk ?? (() => undefined)}
       />
 
       <WorkTracksStrip tracks={trackSummaries} onOpenBriefing={onOpenBriefing} />
@@ -90,11 +93,12 @@ export function ControlRoomPage({
         title="Dual flywheel governance"
         description={
           <>
-            Program milestone spine, bay lamps, and Agent context packs. CI/CD path diagram lives on{' '}
+            Flywheel A (product iteration) ↔ Coupling (release gate) ↔ Flywheel B (runtime stability).
+            Ops Platform is the rocket; Trade is the payload. CI/CD path diagram lives on{' '}
             <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
               Delivery
             </button>
-            . Read-only probes — no write actions (L0).
+            .
           </>
         }
         headerExtra={<AuditPageLink onOpenAudit={onOpenAudit} className="mt-2" />}

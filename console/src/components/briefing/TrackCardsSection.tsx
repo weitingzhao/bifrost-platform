@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { TrackSummary, TrackId } from '@/lib/briefing/workTracks'
 import { BriefingIconBadge, TRACK_ICONS } from '@/lib/briefing/briefingIcons'
 import { StatusLamp } from '@/components/StatusLamp'
@@ -38,15 +39,17 @@ function ProgressBar({ done, total, percent }: { done: number; total: number; pe
 }
 
 export function TrackCardsSection({ tracks, selectedTrack, onSelectTrack }: TrackCardsSectionProps) {
+  const [expandedNext, setExpandedNext] = useState<Record<string, boolean>>({})
+
   return (
     <section className="page-section panel-elevated px-4 py-3">
       <p className="briefing-section-kicker m-0">1 · Work tracks</p>
       <h2 className="m-0 mt-1 text-sm font-semibold">Where is the project right now?</h2>
       <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-        Four tracks with progress and next steps. Select one to scope your <strong>Session briefing</strong>.
+        Five tracks with progress and next steps. Select one to scope your <strong>Session briefing</strong>.
       </p>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {tracks.map(t => {
           const selected = selectedTrack === t.id
           const reach = trackReach(t)
@@ -107,10 +110,37 @@ export function TrackCardsSection({ tracks, selectedTrack, onSelectTrack }: Trac
                   )}
 
                   {t.nextStep && (
-                    <p className="m-0 mt-2 text-[var(--text-dense-meta)]">
-                      <span className="text-[var(--muted-foreground)]">Next: </span>
-                      <span className="text-[var(--foreground)]">{t.nextStep}</span>
-                    </p>
+                    <div className="mt-2 border-l-2 border-[var(--border)] pl-2">
+                      <p
+                        className={[
+                          'm-0 text-[var(--text-dense-meta)]',
+                          expandedNext[t.id] ? '' : 'line-clamp-1',
+                        ].join(' ')}
+                      >
+                        <span className="text-[var(--muted-foreground)]">Next: </span>
+                        <span className="text-[var(--foreground)]">{t.nextStep}</span>
+                      </p>
+                      {t.nextStep.length > 36 && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="mt-0.5 inline-block cursor-pointer text-dense-caption font-medium text-[var(--primary)] hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setExpandedNext(prev => ({ ...prev, [t.id]: !prev[t.id] }))
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setExpandedNext(prev => ({ ...prev, [t.id]: !prev[t.id] }))
+                            }
+                          }}
+                        >
+                          {expandedNext[t.id] ? 'Show less' : '… more'}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
@@ -23,6 +24,9 @@ func NewHandler(audit *actuation.AuditLog) *Handler {
 		store:  NewJobStore(),
 	}
 }
+
+// Store returns the underlying JobStore for cross-package consumers (e.g. retrospective analyzer).
+func (h *Handler) Store() *JobStore { return h.store }
 
 func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	var req StartRequest
@@ -88,22 +92,40 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	stored := h.store.List()
 	jobs, err := h.runner.List(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"jobs": stored, "source": "archive"})
+		reconciled := ReconcileOrphanedJobs(nil, stored)
+		for _, j := range reconciled {
+			h.store.Put(j)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"jobs": reconciled, "source": "archive"})
 		return
 	}
-	for _, j := range jobs {
+	merged := ReconcileOrphanedJobs(jobs, stored)
+	for _, j := range merged {
 		h.store.Put(j)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"jobs": mergeJobs(jobs, stored)})
+	writeJSON(w, http.StatusOK, map[string]any{"jobs": merged})
 }
 
 func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	job, err := h.runner.Cancel(r.Context(), id)
 	if err != nil {
+		if stored, ok := h.store.Get(id); ok && stored.Status == JobRunning {
+			now := time.Now().UTC()
+			stored.Status = JobCancelled
+			stored.Phase = PhaseCancelled
+			stored.Summary = orphanJobSummary
+			stored.Error = "orphaned"
+			stored.UpdatedAt = now
+			h.store.Put(*stored)
+			h.audit.Record(r, "remediation.cancel", id, "orphan_dismissed", "")
+			writeJSON(w, http.StatusOK, stored)
+			return
+		}
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
+	h.store.Put(*job)
 	h.audit.Record(r, "remediation.cancel", id, "cancelled", "")
 	writeJSON(w, http.StatusOK, job)
 }

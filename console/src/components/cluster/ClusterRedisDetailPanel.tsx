@@ -18,6 +18,7 @@ import type {
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
+import { CopyChip } from '@/components/cluster/CopyChip'
 import { REDIS_INSTANCES } from '@/lib/architecture/dataLayerCatalog'
 
 interface ClusterRedisDetailPanelProps {
@@ -55,6 +56,62 @@ function DepRow({ label, dep }: { label: string; dep: { reachability: Reachabili
 
 function redisDomain(readiness: ClusterServiceReadinessResponse | undefined): ServiceDomain | undefined {
   return readiness?.domains.find(d => d.id === 'redis')
+}
+
+function roleVariant(role: string): 'info' | 'neutral' | 'category' {
+  if (role === 'live') return 'info'
+  if (role === 'queue') return 'neutral'
+  return 'category'
+}
+
+function RedisLanAccessSection({ endpoints }: { endpoints: ClusterRedisStatusResponse['lan_endpoints'] }) {
+  const list = endpoints ?? []
+  const anyAvailable = list.some(ep => ep.available)
+
+  return (
+    <OpsSection
+      title="LAN access (Redis Insight / redis-cli)"
+      description="NodePort entry points for external clients on the local network — no port-forward needed"
+      bodyPadding="compact"
+    >
+      {list.length === 0 ? (
+        <p className="m-0 text-dense-meta text-[var(--muted-foreground)]">
+          LAN endpoints not reported — restart platform-api after upgrade, or apply k8s/data/redis/redis-nodeport.yaml.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {list.map(ep => (
+            <div
+              key={ep.name}
+              className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--background)]/40 px-2 py-1.5"
+            >
+              <StatusLamp value={ep.reachability} kind="reach" />
+              <span className="font-mono-tabular text-dense-meta min-w-[9rem]">{ep.name}</span>
+              <DenseTag variant="category">{ep.environment}</DenseTag>
+              <DenseTag variant={roleVariant(ep.role)}>{ep.role}</DenseTag>
+              {ep.available && ep.host != null && ep.node_port != null ? (
+                <>
+                  <CopyChip label="Host" value={ep.host} />
+                  <CopyChip label="Port" value={String(ep.node_port)} />
+                  {ep.endpoint != null ? <CopyChip label="URL" value={`redis://${ep.endpoint}`} /> : null}
+                </>
+              ) : (
+                <span className="text-dense-meta text-[var(--muted-foreground)]">{ep.detail ?? 'unavailable'}</span>
+              )}
+              {ep.database != null && ep.database !== '' ? (
+                <span className="text-dense-caption text-[var(--muted-foreground)]">{ep.database}</span>
+              ) : null}
+            </div>
+          ))}
+          <p className="m-0 text-dense-caption text-[var(--muted-foreground)]">
+            {anyAvailable
+              ? 'No requirepass on phase-⑥ instances — leave Redis Insight password empty. LAN only; do not expose NodePorts to the public internet. Any Ready k3s node IP works if the listed host is unreachable.'
+              : 'NodePorts not resolved yet — once available, connect Redis Insight with the listed host/port (no password).'}
+          </p>
+        </div>
+      )}
+    </OpsSection>
+  )
 }
 
 export function ClusterRedisDetailPanel({
@@ -170,6 +227,8 @@ export function ClusterRedisDetailPanel({
           </DenseDataTable>
         </OpsSection>
       </div>
+
+      <RedisLanAccessSection endpoints={redis.lan_endpoints} />
 
       <OpsSection title="Data namespace targets" description="Expected Services @ data · k8s/data/redis/" bodyPadding="none">
         <DenseDataTable>

@@ -1,0 +1,31 @@
+skills:
+  - id: peer-watchdog
+    label: "Peer Watchdog"
+    description: "Mutual health check between primary (.50) and standby (.52) Mac Minis — restarts peer Remediation Runner if unresponsive"
+    trigger: cron
+    schedule: "*/5 * * * *"
+    actuation_level: L0
+    status: enabled
+    script: "../../scripts/agent/peer_watchdog.sh"
+    timeout_ms: 30000
+    tags: ["self-healing", "agent-infra"]
+
+  - id: nightly-drift-scan
+    label: "Nightly Drift Scan"
+    description: "Pre-market infrastructure drift scan — checks K3s cluster, services, configs against expected state and generates a report"
+    trigger: cron
+    schedule: "0 6 * * 1-5"
+    actuation_level: L1
+    status: enabled
+    script: "../../scripts/agent/nightly_drift.sh"
+    timeout_ms: 300000
+    tags: ["observability", "drift"]
+
+  - id: morning-briefing
+    label: "Morning Briefing"
+    description: "Scheduled pre-market summary — spine progress, drift findings, Trade positions overview pushed to Console"
+    trigger: cron
+    schedule: "30 6 * * 1-5"
+    actuation_level: L0
+    status: disabled
+    tags: ["briefing", "scheduled"]

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn, DenseTag, StatusLamp } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
+import { TradeEnvAccessBar } from '@/components/delivery/TradeEnvAccessBar'
 import {
   DELIVERY_PAGE_TABS,
   type DeliveryPageTab,
@@ -49,6 +50,8 @@ export function DeliveryViewShell({
             {gitOpsPlanned && <DenseTag variant="neutral">GitOps planned</DenseTag>}
           </div>
         </div>
+
+        <TradeEnvAccessBar />
 
         <nav className="delivery-view-shell__tabs" aria-label="Delivery view">
           {DELIVERY_PAGE_TABS.map(tab => {

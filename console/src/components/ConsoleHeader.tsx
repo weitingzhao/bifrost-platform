@@ -9,8 +9,8 @@ export function ConsoleHeader({
   children,
 }: {
   title?: string
-  /** Sidebar plane — Operate / Observe / Architecture */
-  plane?: 'Operate' | 'Observe' | 'Architecture'
+  /** Sidebar plane — Agent / Operate / Observe / Architecture */
+  plane?: 'Agent' | 'Operate' | 'Observe' | 'Architecture'
   healthy: boolean | undefined
   onRefresh: () => void
   /** Right-side slot — e.g. compact PlatformAuthBar */
@@ -52,9 +52,9 @@ export function ConsoleHeader({
   )
 }
 
-/** Second chrome row — spine / matrix context (below title bar). */
+/** Second chrome row — spine / matrix context (below title bar). Compact single-line by default. */
 export function OpsContextBar({ children }: { children: ReactNode }) {
   return (
-    <div className="border-b border-border bg-secondary/60 px-3 py-2">{children}</div>
+    <div className="border-b border-border bg-secondary/40 px-3 py-1.5">{children}</div>
   )
 }

@@ -1,4 +1,5 @@
 import type { RemediationJob } from '@/api/types'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 
 export function remediationJobStatusLabel(job: RemediationJob): string {
   if (job.status === 'done') return 'Done'
@@ -8,13 +9,13 @@ export function remediationJobStatusLabel(job: RemediationJob): string {
   return 'Running'
 }
 
+/**
+ * Display label for a job scope. Delegates to the single authoritative naming
+ * table in agentTaskCatalog so the timeline, init brief and capabilities panel
+ * never drift apart. Add new scope→label mappings in AGENT_TASK_CATALOG only.
+ */
 export function remediationScopeShortLabel(scope?: string): string {
-  if (scope == null || scope === '') return 'Agent session'
-  if (scope === 'cluster_issues_full_auto') return 'Cluster auto-remediate'
-  if (scope === 'agent-desk') return 'Agent task'
-  if (scope === 'nightly-health-check') return 'Nightly health check'
-  if (scope.startsWith('cluster')) return 'Cluster'
-  return scope.replace(/_/g, ' ')
+  return scopeToLabel(scope)
 }
 
 export function remediationJobReachability(job: RemediationJob): 'ok' | 'degraded' | 'fail' | 'unknown' {
@@ -24,6 +25,20 @@ export function remediationJobReachability(job: RemediationJob): 'ok' | 'degrade
   if (job.phase === 'awaiting_approval') return 'degraded'
   if (job.status === 'running') return 'degraded'
   return 'unknown'
+}
+
+/** Timeline cell color — orphaned jobs are not live on the runner. */
+export function remediationTimelineCellStatus(job: RemediationJob): RemediationJob['status'] {
+  if (job.error === 'orphaned' || (job.status === 'running' && job.summary?.includes('Orphaned'))) {
+    return 'cancelled'
+  }
+  return job.status
+}
+
+export function isRemediationStreamOrphanError(error: string | null | undefined): boolean {
+  if (error == null || error.trim() === '') return false
+  const lower = error.toLowerCase()
+  return lower.includes('not found') || lower.includes('not running')
 }
 
 /** Latest remediation job that is still in progress (runner active or waiting on operator). */
@@ -38,6 +53,55 @@ export function findActiveRemediationJob(jobs: RemediationJob[]): RemediationJob
       j.scope === 'nightly-health-check',
   )
   return clusterScoped ?? sorted[0]
+}
+
+export type RemediationScopeGroup = {
+  scope: string
+  label: string
+  jobs: RemediationJob[]
+  doneCount: number
+  failedCount: number
+  runningCount: number
+  cancelledCount: number
+  /** Most recent job in the group (jobs[0]). */
+  latest: RemediationJob
+}
+
+/**
+ * Group jobs by scope, newest-first within each group, and order groups by
+ * their most recent activity (most recently active group first).
+ */
+export function groupRemediationJobsByScope(
+  jobs: RemediationJob[],
+  perGroupLimit = 24,
+): RemediationScopeGroup[] {
+  const buckets = new Map<string, RemediationJob[]>()
+  for (const job of jobs) {
+    const key = job.scope != null && job.scope !== '' ? job.scope : 'agent-desk'
+    const list = buckets.get(key)
+    if (list == null) buckets.set(key, [job])
+    else list.push(job)
+  }
+
+  const groups: RemediationScopeGroup[] = []
+  for (const [scope, list] of buckets) {
+    const sorted = [...list].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    const capped = sorted.slice(0, perGroupLimit)
+    groups.push({
+      scope,
+      label: remediationScopeShortLabel(scope),
+      jobs: capped,
+      doneCount: sorted.filter(j => j.status === 'done').length,
+      failedCount: sorted.filter(j => j.status === 'failed').length,
+      runningCount: sorted.filter(j => remediationTimelineCellStatus(j) === 'running').length,
+      cancelledCount: sorted.filter(j => remediationTimelineCellStatus(j) === 'cancelled').length,
+      latest: sorted[0],
+    })
+  }
+
+  return groups.sort(
+    (a, b) => Date.parse(b.latest.created_at) - Date.parse(a.latest.created_at),
+  )
 }
 
 export function formatRemediationJobWhen(at: string): string {

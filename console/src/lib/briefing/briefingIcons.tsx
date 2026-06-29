@@ -9,15 +9,18 @@ import {
   Database,
   GitBranch,
   GitPullRequestArrow,
+  Globe,
   Hammer,
   LayoutDashboard,
   LineChart,
+  Network,
   PackageCheck,
   Rocket,
   ScanSearch,
   Server,
   Shield,
   Unplug,
+  Wifi,
   Workflow,
 } from 'lucide-react'
 import type { LaneId } from '@/lib/briefing/workLanes'
@@ -27,6 +30,7 @@ export const TRACK_ICONS: Record<TrackId, LucideIcon> = {
   build: Hammer,
   migrate: ArrowRightLeft,
   automate: Bot,
+  infra: Network,
   operate: Activity,
 }
 
@@ -43,6 +47,9 @@ export const LANE_ICONS: Record<LaneId, LucideIcon> = {
   'agent-infra': Unplug,
   'drift-remediation': ScanSearch,
   'agent-services': Bot,
+  'network-server': Server,
+  'network-wifi': Wifi,
+  'ai-network': Globe,
   governance: Shield,
   troubleshoot: Bug,
   release: Rocket,
