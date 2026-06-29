@@ -321,10 +321,10 @@ tracks:
             - id: trade-k8s-native
               label: "Trade stack K8s-native refactor + IB Edge Gateway"
               total: 12
-              done: 1
+              done: 2
               status: in_progress
-              next_task: "W1 DELIVERED — awaiting Owner sign-off (Traefik IngressRoute replaces nginx; trade-*.bifrost.lan @ :80). Next after sign-off: W2 api-ops kubernetes executor"
-              note: "W0 ✓ signed (dev IB mock). W1 shipped: k8s/base/ingress + per-env IngressRoute; nginx retired. Authority: tradeK8sNativeCatalog.ts"
+              next_task: "W2 DELIVERED — awaiting Owner sign-off (api-ops kubernetes executor; celery-worker Deployment restored). Next after sign-off: W3 Kustomize API component"
+              note: "W0 ✓ W1 ✓ signed (Traefik Ingress). W2 shipped: KubernetesExecutor + api-ops RBAC; subprocess patch removed. Authority: tradeK8sNativeCatalog.ts"
               prerequisites:
                 - "compose-to-k3s stream closed"
                 - "data-layer-k3s PG+Redis in data NS (step ⑦ in progress)"

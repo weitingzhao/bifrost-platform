@@ -103,7 +103,7 @@ export type GapRow = { area: string; current: string; ideal: string; priority: '
 
 export const COMPOSE_ON_K8S_GAPS: GapRow[] = [
   { area: 'Ingress', current: 'Traefik IngressRoute + stripPrefix (W1); nginx retired', ideal: 'Traefik Ingress + ClusterIP; NodePort bootstrap-only', priority: 'P0' },
-  { area: 'Ops control', current: 'celery-worker replicas:0; api-ops subprocess', ideal: 'executor_mode: kubernetes; scale/restart Deployments', priority: 'P0' },
+  { area: 'Ops control', current: 'executor_mode kubernetes + api-ops RBAC (W2); celery-worker Deployment restored', ideal: 'Typed worker profiles via per-queue Deployments (future)', priority: 'P0' },
   { area: 'IB HA', current: 'Deployment replicas:1 Recreate', ideal: 'StatefulSet + Lease; standby hot, active-only eConnect', priority: 'P0' },
   { area: 'IB client budget', current: '6 roles/env × 3 env risk = 18 IDs', ideal: '3 gateways/env; dev mock; Lease prevents double-connect', priority: 'P0' },
   { area: 'Config', current: 'prod aliases config.stg.yaml mount path', ideal: 'Per-env config keys; BIFROST_ENV consistent', priority: 'P1' },
@@ -154,11 +154,11 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     repo: 'bifrost-trade-infra/k8s/base + overlays',
     verify: 'STG/PROD via Ingress host; SSE buffering off; NodePort bootstrap-only',
     blockedBy: 'data-layer-k3s step ⑦ (optional parallel on STG)',
-    delivery: 'ready_for_signoff',
+    delivery: 'signed',
     delivered:
       'Retired in-cluster nginx Deployment; Traefik IngressRoute + stripPrefix middlewares per API; ' +
       'SSE flushInterval on market/monitor paths; hosts trade-{stg,dev}.bifrost.lan / trade.bifrost.lan @ :80; ' +
-      'smoke scripts + platform clusters.yaml ingress_base; kustomize build stg|prod|dev.',
+      'smoke scripts + platform clusters.yaml ingress_base; kustomize build stg|prod|dev; cluster verify PASS.',
   },
   {
     id: 'w2-ops-k8s-executor',
@@ -166,6 +166,11 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     label: 'api-ops executor_mode kubernetes — restore celery-worker Deployment',
     repo: 'bifrost-trade-api + bifrost-trade-infra/k8s/overlays',
     verify: 'Ops Celery page starts worker pod; api-ops-celery.patch replicas≠0; no subprocess',
+    delivery: 'ready_for_signoff',
+    delivered:
+      'KubernetesExecutor (scale/restart Deployments, delete celery pods); ops.executor_mode kubernetes in stg|prod|dev; ' +
+      'api-ops ServiceAccount + Role (deployments patch, pods delete); celery-worker replicas restored (removed B1 patch); ' +
+      '/health exposes k8s_reachable + k8s_namespace; market ingest runtime_kind kubernetes.',
   },
   {
     id: 'w3-manifest-refactor',

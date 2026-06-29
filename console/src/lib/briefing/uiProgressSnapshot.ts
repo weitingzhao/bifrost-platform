@@ -68,7 +68,7 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Catalog',
     item: 'Trade K8s-native + IB Edge',
     status: 'partial',
-    notes: 'tradeK8sNativeCatalog.ts — W0 ✓ signed; W1 Traefik Ingress DELIVERED (awaiting sign-off); TRADE_GATEWAY_INGRESS hosts in catalog appendix',
+    notes: 'tradeK8sNativeCatalog.ts — W0–W1 ✓ signed; W2 kubernetes executor DELIVERED (awaiting sign-off); TRADE_GATEWAY_INGRESS hosts in catalog appendix',
   },
   {
     area: 'Catalog',
