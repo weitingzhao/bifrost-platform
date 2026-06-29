@@ -141,7 +141,10 @@ milestones:
       authority: console/src/lib/briefing/workLanes.ts
     - id: legacy-retirement
       label: Phase 3 Legacy retirement
-      status: NOT_STARTED
+      status: SIGNED
+      signed_at: "2026-06-29"
+      pipeline_lane: mainline
+      pipeline_after: k3s-data-layer
       authority: bifrost-trade-infra/docs/PHASE2C_PROD_DEFERRED.md
     - id: k3s-data-layer
       label: K3s data layer (PG + Redis → data namespace)
@@ -198,6 +201,12 @@ decisions:
       conclusion: "The AI Agent that recovers L0–L2 runs OUTSIDE K8s on dual Mac Minis (primary .50 + standby .52) with a launchd mutual watchdog + platform-api failover — it automates the Owner's only out-of-band action (D6). Mental model: Ops Platform = rocket, Trade = payload, Agent = engineer on the ground. Layered: out-of-band minimal recovery (L-1) vs in-band rich capabilities (three-layer Agent). Agent release discipline is monorepo-first; repo extraction deferred until trigger conditions fire."
       signed_at: "2026-06-27"
       authority: "console/src/lib/architecture/cicdBootstrapCatalog.ts (L-1) + dualFlywheelVisionCatalog.ts (operator plane) + blueprintCatalog.ts (principle 6)"
+    - id: D8
+      status: SIGNED
+      topic: Legacy Trade Engine retirement — drop UI side-by-side gate
+      conclusion: "Owner dropped the ui-experience-alignment prerequisite for Phase 3: Legacy runtime is already stopped (.70/.73/.50 clean) so side-by-side comparison is no longer possible, and Phase 2B already signed off 9/9 domains as business-equivalent. Ongoing UI polish continues as ordinary Design System work, not a retirement blocker. bifrost-trader-engine is NAS-archived (read-only) and removed from the workspace. legacy-retirement milestone → SIGNED/closed."
+      signed_at: "2026-06-29"
+      authority: bifrost-trade-infra/docs/PHASE2C_PROD_DEFERRED.md
 platform_phases:
     - id: A
       label: Gate
@@ -358,32 +367,24 @@ tracks:
               note: "SIGNED 2026-06-19 — unified MCP · Ollama · feedback loop · V1–V5 complete"
             - id: legacy-retirement
               label: "Phase 3 Legacy retirement"
-              total: 4
-              done: 0
-              status: not_started
-              next_task: "UI experience alignment — Design System-led visual polish with Legacy side-by-side"
+              total: 3
+              done: 3
+              status: closed
+              next_task: ""
               prerequisites:
                 - "compose→k3s migration stable"
                 - "data-layer-k3s stream closed (PG/Redis in data NS)"
-                - "UI experience alignment Owner sign-off (must complete while Legacy is still running)"
-              note: "① UI experience alignment (Design System + Legacy reference) ② stop Legacy daemon/API/frontend ③ MIGRATION_TRACKING.md mark retired ④ archive bifrost-trader-engine"
+              note: "SIGNED 2026-06-29 (decision D8) — Owner dropped the UI side-by-side gate: Legacy already stopped so side-by-side is impossible, and Phase 2B signed 9/9 domains business-equivalent; UI polish continues as ordinary Design System work, not a retirement blocker. ① stop Legacy runtime ✓ (.70/.73/.50 clean) ② MIGRATION_TRACKING marked retired ✓ ③ bifrost-trader-engine NAS-archived read-only + removed from workspace ✓"
               tasks:
-                - id: ui-experience-alignment
-                  label: "UI experience alignment — Design System visual polish"
-                  status: not_started
-                  note: "Token density tuning + per-page polish using Legacy as side-by-side reference; Owner sign-off required before Legacy shutdown"
                 - id: stop-legacy-runtime
                   label: "Stop Legacy daemon, API, frontend"
-                  status: not_started
-                  blocked_by: ui-experience-alignment
+                  status: done
                 - id: mark-engine-retired
                   label: "MIGRATION_TRACKING.md mark engine retired"
-                  status: not_started
-                  blocked_by: stop-legacy-runtime
+                  status: done
                 - id: archive-engine-repo
                   label: "Archive bifrost-trader-engine (read-only)"
-                  status: not_started
-                  blocked_by: mark-engine-retired
+                  status: done
     automate:
         label: "Autonomous Agent infrastructure"
         streams:

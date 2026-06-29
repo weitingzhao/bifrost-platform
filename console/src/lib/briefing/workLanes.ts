@@ -114,7 +114,7 @@ const MIGRATE_LANES: WorkLane[] = [
     track: 'migrate',
     label: 'Legacy retirement (Phase 3)',
     shortLabel: 'Retire',
-    description: 'UI experience alignment (Design System polish with Legacy side-by-side, Owner sign-off required) → then shut down bifrost-trader-engine and compose prod after K3s is stable.',
+    description: 'SIGNED 2026-06-29 (decision D8): UI side-by-side gate dropped (Legacy already stopped; Phase 2B 9/9 domains business-equivalent). Legacy runtime stopped, bifrost-trader-engine NAS-archived read-only. UI polish continues as ordinary Design System work.',
     agentMode: 'Ops',
     workIntent: 'ops',
   },
@@ -573,10 +573,16 @@ function buildReleaseQueue(context: OpsContextResponse | undefined, matrices: Ma
 
   const legacy = context?.milestones.find(m => m.id === 'legacy-retirement')
   if (legacy != null) {
+    const legacyStatus =
+      legacy.status === 'SIGNED' || legacy.status === 'CLOSED'
+        ? 'done'
+        : legacy.status === 'NOT_STARTED'
+          ? 'pending'
+          : 'in_progress'
     items.push({
       id: 'legacy-retirement',
       label: legacy.label ?? legacy.id,
-      status: legacy.status === 'NOT_STARTED' ? 'pending' : 'in_progress',
+      status: legacyStatus,
     })
   }
 
