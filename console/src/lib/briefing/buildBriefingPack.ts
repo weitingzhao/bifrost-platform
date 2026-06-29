@@ -23,6 +23,7 @@ import {
 } from '@/lib/briefing/agentDialogueLanguage'
 import { formatVisionBriefingSection } from '@/lib/architecture/visionSpineMap'
 import { formatDataLayerBriefingAppendix } from '@/lib/architecture/dataLayerCatalog'
+import { formatTradeK8sNativeBriefingAppendix } from '@/lib/architecture/tradeK8sNativeCatalog'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
   intent: WorkIntent
@@ -76,8 +77,9 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     ],
     cluster: [
       'Ops Console → Architecture → K3s → Data Layer (dataLayerCatalog.ts)',
-      'config/ops-context.yaml — tracks.migrate.streams data-layer-k3s + decision D2-prime',
-      'bifrost-trade-infra/k8s/data/ (CNPG, Redis, MinIO — to be added)',
+      'Ops Console → Architecture → tradeK8sNativeCatalog.ts — IB Edge + K8s-native waves W0–W11',
+      'config/ops-context.yaml — tracks.migrate.streams trade-k8s-native + data-layer-k3s',
+      'bifrost-trade-infra/k8s/ (base + overlays/dev|stg|prod)',
       'Ops Console → Architecture → Standards — cluster actuation + observability layers',
       'api/internal/cluster — implementation',
       'bifrost-platform/config/clusters.yaml',
@@ -294,6 +296,10 @@ function shouldIncludeDataLayerAppendix(intent: WorkIntent, lane: LaneId): boole
   return intent === 'cluster' || lane === 'data-layer-k3s'
 }
 
+function shouldIncludeTradeK8sNativeAppendix(intent: WorkIntent, lane: LaneId): boolean {
+  return lane === 'trade-k8s-native' || lane === 'compose-k3s' || intent === 'cluster'
+}
+
 function intentCorePack(
   intent: WorkIntent,
   ctx?: OpsContextResponse,
@@ -382,10 +388,20 @@ function intentCorePack(
     if (shouldIncludeDataLayerAppendix(intent, lane)) {
       sections.push('', formatDataLayerBriefingAppendix(ctx))
     }
+    if (shouldIncludeTradeK8sNativeAppendix(intent, lane)) {
+      sections.push('', formatTradeK8sNativeBriefingAppendix(ctx))
+    }
     return sections.join('\n')
   }
+  const appendixSections: string[] = [ops]
   if (shouldIncludeDataLayerAppendix(intent, lane)) {
-    return [ops, '', formatDataLayerBriefingAppendix(ctx)].join('\n')
+    appendixSections.push('', formatDataLayerBriefingAppendix(ctx))
+  }
+  if (shouldIncludeTradeK8sNativeAppendix(intent, lane)) {
+    appendixSections.push('', formatTradeK8sNativeBriefingAppendix(ctx))
+  }
+  if (appendixSections.length > 1) {
+    return appendixSections.join('\n')
   }
   return ops
 }

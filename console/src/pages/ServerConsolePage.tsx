@@ -36,7 +36,7 @@ export function ServerConsolePage() {
     <div className="flex w-full min-w-0 flex-col gap-4">
       <PageHeader
         title="Server console"
-        description="Interactive SSH via Platform API (topology allowlist). Linux row = K3s cluster nodes (K8s node name + IP); Mac row = native macOS Agent hosts. Open several panes for side-by-side sessions."
+        description="Interactive SSH via Platform API. Linux row follows live K3s nodes (name + IP); Mac row = native macOS Agent hosts from topology. Open several panes for side-by-side sessions."
       />
 
       {hostsQuery.isLoading && (

@@ -71,11 +71,12 @@ func New(cfg *config.Config) *Server {
 	gitopsH := gitops.NewHandler(cfg, audit)
 	remediationH := remediation.NewHandler(audit)
 	retroAnalyzer := retrospective.NewAnalyzer(remediationH.Store())
+	clusterH := cluster.NewHandler(cfg, audit)
 	return &Server{
 		cfg:     cfg,
 		prober:  probe.NewProber(),
-		console: console.NewHandler(cfg),
-		cluster: cluster.NewHandler(cfg, audit),
+		console: console.NewHandlerWithCluster(cfg, clusterH),
+		cluster: clusterH,
 		gitops:  gitopsH,
 		mcp:     mcp.NewHandler(),
 		stack:   stack.NewHandler(cfg, audit),

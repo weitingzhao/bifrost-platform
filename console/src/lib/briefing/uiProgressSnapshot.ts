@@ -62,7 +62,13 @@ export const CONSOLE_UI_PROGRESS: UiProgressItem[] = [
     area: 'Catalog',
     item: 'Data Layer',
     status: 'partial',
-    notes: 'dataLayerCatalog + k8s/data CNPG manifests + make k3s-install-data-layer-phase0',
+    notes: 'dataLayerCatalog + k8s/data CNPG manifests + make k8s-install-data-layer-phase0',
+  },
+  {
+    area: 'Catalog',
+    item: 'Trade K8s-native + IB Edge',
+    status: 'partial',
+    notes: 'tradeK8sNativeCatalog.ts — W0 ✓ signed; W1 Traefik Ingress DELIVERED (awaiting sign-off); TRADE_GATEWAY_INGRESS hosts in catalog appendix',
   },
   {
     area: 'Catalog',

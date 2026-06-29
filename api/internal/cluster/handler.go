@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -26,6 +27,11 @@ func (h *Handler) HandleSummary(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) HandleNodes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Nodes(r.Context()))
+}
+
+// ClusterNodes exposes node inventory for other packages (e.g. console SSH host row).
+func (h *Handler) ClusterNodes(ctx context.Context) NodesResponse {
+	return h.svc.Nodes(ctx)
 }
 
 func (h *Handler) HandlePlacement(w http.ResponseWriter, r *http.Request) {
