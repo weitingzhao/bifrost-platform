@@ -341,6 +341,16 @@ export interface PostgresLegacyEndpoint {
   detail?: string
 }
 
+export interface PostgresLanAccess {
+  available: boolean
+  host?: string
+  node_port?: number
+  endpoint?: string
+  user?: string
+  reachability: Reachability
+  detail?: string
+}
+
 export interface ClusterPostgresStatusResponse {
   cluster_id: string
   reachability: Reachability
@@ -357,6 +367,7 @@ export interface ClusterPostgresStatusResponse {
   primary_node?: string
   rw_service: string
   ro_service: string
+  lan_access: PostgresLanAccess
   storage_class: string
   storage_size: string
   backup: ServiceDependency
@@ -396,6 +407,19 @@ export interface RedisEmbeddedEndpoint {
   detail?: string
 }
 
+export interface RedisLanEndpoint {
+  name: string
+  environment: string
+  role: string
+  host?: string
+  node_port?: number
+  endpoint?: string
+  database?: string
+  available: boolean
+  reachability: Reachability
+  detail?: string
+}
+
 export interface ClusterRedisStatusResponse {
   cluster_id: string
   reachability: Reachability
@@ -409,6 +433,7 @@ export interface ClusterRedisStatusResponse {
   embedded_active: number
   target_instances: RedisTargetInstance[]
   env_endpoints: RedisEnvEndpoint[]
+  lan_endpoints: RedisLanEndpoint[]
   embedded: RedisEmbeddedEndpoint[]
   legacy: PostgresLegacyEndpoint[]
   backup: ServiceDependency

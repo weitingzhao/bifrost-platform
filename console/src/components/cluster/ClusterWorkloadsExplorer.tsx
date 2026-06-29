@@ -9,6 +9,7 @@ import {
   DenseTableHeadRow,
   DenseTableHeader,
   DenseTableRow,
+  DenseTableSubheadRow,
   IconActionButton,
   SegmentControl,
   segmentButtonClass,
@@ -19,8 +20,10 @@ import {
   Cpu,
   Database,
   GitBranch,
+  HardDrive,
   LayoutGrid,
   LayoutPanelLeft,
+  Layers,
   RotateCw,
   Scaling,
   Server,
@@ -53,6 +56,16 @@ import {
   type NsFilterType,
 } from '@/lib/cluster/namespaceCatalog'
 import { namespaceIcon } from '@/lib/cluster/namespaceIcons'
+import {
+  aggregateStorageCategoryDeployStats,
+  buildCnpgServiceView,
+  collectWorkloadsForStorageService,
+  computeStorageServiceChipStats,
+  getStorageService,
+  STORAGE_SERVICES,
+  storageServiceChipTitle,
+  type StorageServiceId,
+} from '@/lib/cluster/storageServiceCatalog'
 
 export type { NsFilterType } from '@/lib/cluster/namespaceCatalog'
 export {
@@ -167,13 +180,15 @@ interface ClusterWorkloadsExplorerProps {
   namespaces: ClusterNamespace[]
   nsFilter: NsFilterType
   selectedNs: string | null
+  selectedStorageService: StorageServiceId | null
   workloads: ClusterWorkload[]
   isLoadingNamespaces: boolean
   isLoadingWorkloads: boolean
   selectedPod: string | null
   onFilterChange: (filter: NsFilterType) => void
   onSelectNs: (name: string) => void
-  onSelectPod: (name: string) => void
+  onSelectStorageService: (id: StorageServiceId) => void
+  onSelectPod: (workload: ClusterWorkload) => void
   onRestartDeployment: (workload: ClusterWorkload) => void
   onScaleDeployment: (workload: ClusterWorkload) => void
   onDeletePod: (workload: ClusterWorkload) => void
@@ -290,6 +305,120 @@ function nsChipTitle(ns: ClusterNamespace): string | undefined {
   return parts.join(' · ')
 }
 
+const STORAGE_SERVICE_ICONS = {
+  cnpg: Database,
+  redis: Layers,
+  minio: HardDrive,
+} as const
+
+function StorageServiceChip({
+  serviceId,
+  active,
+  stats,
+  loading,
+  onSelect,
+}: {
+  serviceId: StorageServiceId
+  active: boolean
+  stats: ReturnType<typeof computeStorageServiceChipStats> | null
+  loading: boolean
+  onSelect: () => void
+}) {
+  const service = getStorageService(serviceId)
+  const Icon = STORAGE_SERVICE_ICONS[serviceId]
+  const hasFailing = (stats?.failingPods ?? 0) > 0 || (stats?.readyStats.deploymentFailed ?? 0) > 0
+
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      className={`cluster-ns-chip cluster-ns-chip--service${active ? ' cluster-ns-chip--active' : ''}${hasFailing ? ' cluster-ns-chip--warn' : ''}`}
+      onClick={onSelect}
+      title={stats != null ? storageServiceChipTitle(service, stats) : service.description}
+    >
+      <span className="cluster-ns-chip__name">
+        <Icon className="cluster-ns-chip__icon" aria-hidden />
+        <span className="inline-flex min-w-0 flex-col items-start gap-0.5 text-left">
+          <span>{service.label}</span>
+          <span className="text-dense-caption font-normal normal-case tracking-normal text-[var(--muted-foreground)]">
+            {service.role}
+          </span>
+        </span>
+      </span>
+      {stats != null ? (
+        <NsChipReadySummary
+          stats={stats.readyStats}
+          tones={stats.readyTones}
+          loading={loading}
+          totalPods={stats.podCount}
+          failingPods={stats.failingPods}
+        />
+      ) : loading ? (
+        <span className="text-dense-meta text-[var(--muted-foreground)] px-1">…</span>
+      ) : null}
+    </button>
+  )
+}
+
+function StorageServiceInventoryBar({
+  serviceId,
+  workloads,
+  loading,
+}: {
+  serviceId: StorageServiceId
+  workloads: ClusterWorkload[]
+  loading: boolean
+}) {
+  const service = getStorageService(serviceId)
+  const inventory = buildNamespacePodInventory(workloads, null)
+  if (inventory == null) return null
+
+  const cnpgView = serviceId === 'cnpg' ? buildCnpgServiceView(workloads) : null
+
+  return (
+    <span className="cluster-explorer-ns-inventory font-mono-tabular">
+      <span className="cluster-explorer-ns-inventory__total">{inventory.totalPods} pods in service</span>
+      {!loading ? (
+        <>
+          {serviceId === 'cnpg' && cnpgView != null ? (
+            <>
+              <span className="cluster-explorer-ns-inventory__sep">·</span>
+              <span>
+                {cnpgView.operator != null ? '1 operator' : '0 operator'}
+                <span className="cluster-explorer-ns-inventory__sep"> · </span>
+                {cnpgView.instances.length} instance{cnpgView.instances.length === 1 ? '' : 's'}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="cluster-explorer-ns-inventory__sep">·</span>
+              <span>{inventory.deploymentCount} deployments</span>
+            </>
+          )}
+          <span className="cluster-explorer-ns-inventory__sep">·</span>
+          <span className="text-dense-meta text-[var(--muted-foreground)]" title="K8s namespaces">
+            {service.sourceNamespaces.join(', ')}
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="cluster-explorer-ns-inventory__sep">·</span>
+          <span className="cluster-explorer-ns-inventory__loading">loading breakdown…</span>
+        </>
+      )}
+    </span>
+  )
+}
+
+function K8sNamespaceHint({ namespace }: { namespace: string }) {
+  return (
+    <span className="text-dense-caption font-mono-tabular text-[var(--muted-foreground)]" title="K8s namespace">
+      {namespace}
+    </span>
+  )
+}
+
 function NamespacePodInventoryBar({
   inventory,
   loading,
@@ -367,12 +496,9 @@ function WorkloadStatusCell({ workload }: { workload: ClusterWorkload }) {
   )
 }
 
-function NamespaceIdealArchCell({
-  summary,
-}: {
-  summary: ReturnType<typeof getNamespacePlacementSummary> | null
-}) {
-  if (summary == null || !summary.mapped) {
+function NamespaceIdealArchCell({ namespace }: { namespace: string }) {
+  const summary = getNamespacePlacementSummary(namespace)
+  if (!summary.mapped) {
     return <DenseTableCell className="text-[var(--muted-foreground)]">—</DenseTableCell>
   }
   const archs = summary.idealArchs.filter(arch => arch !== 'amd64')
@@ -416,12 +542,14 @@ export function ClusterWorkloadsExplorer({
   namespaces,
   nsFilter,
   selectedNs,
+  selectedStorageService,
   workloads,
   isLoadingNamespaces,
   isLoadingWorkloads,
   selectedPod,
   onFilterChange,
   onSelectNs,
+  onSelectStorageService,
   onSelectPod,
   onRestartDeployment,
   onScaleDeployment,
@@ -429,6 +557,7 @@ export function ClusterWorkloadsExplorer({
 }: ClusterWorkloadsExplorerProps) {
   const [workloadView, setWorkloadView] = useState<WorkloadView>('tree')
   const [expandedDeployments, setExpandedDeployments] = useState<Set<string>>(new Set())
+  const isStorageMode = nsFilter === 'storage'
 
   const visibleNamespaces = useMemo(() => {
     const allowed = allowedNamespaceNames(nsFilter)
@@ -448,6 +577,17 @@ export function ClusterWorkloadsExplorer({
     })),
   })
 
+  const workloadsByNamespace = useMemo(() => {
+    const map = new Map<string, ClusterWorkload[]>()
+    allNamespaceNames.forEach((name, index) => {
+      const query = workloadQueries[index]
+      let wls = query?.data?.workloads ?? []
+      if (name === selectedNs && workloads.length > 0) wls = workloads
+      map.set(name, wls)
+    })
+    return map
+  }, [allNamespaceNames, workloadQueries, selectedNs, workloads])
+
   const { readyStatsByNs, readyTonesByNs, loadingNsNames } = useMemo(() => {
     const statsMap = new Map<string, NamespaceReadyStats>()
     const tonesMap = new Map<string, { deployment: ReadyTone; standalone: ReadyTone }>()
@@ -459,8 +599,7 @@ export function ClusterWorkloadsExplorer({
         loading.add(name)
         return
       }
-      let wls = query?.data?.workloads
-      if (name === selectedNs && workloads.length > 0) wls = workloads
+      const wls = workloadsByNamespace.get(name)
       if (wls == null) return
       const stats = computeNamespaceReadyStats(wls)
       statsMap.set(name, stats)
@@ -468,24 +607,59 @@ export function ClusterWorkloadsExplorer({
     })
 
     return { readyStatsByNs: statsMap, readyTonesByNs: tonesMap, loadingNsNames: loading }
-  }, [allNamespaceNames, workloadQueries, selectedNs, workloads])
+  }, [allNamespaceNames, workloadQueries, workloadsByNamespace])
 
   const categoryDeployStats = useMemo(() => {
     const filters: NsFilterType[] = ['trade', 'platform', 'storage', 'gpu', 'cicd', 'infra', 'all']
     const result = {} as Record<NsFilterType, CategoryDeployStats>
     for (const filter of filters) {
+      if (filter === 'storage') {
+        result[filter] = aggregateStorageCategoryDeployStats(workloadsByNamespace, loadingNsNames)
+        continue
+      }
       const names = namespaceNamesForFilter(filter, allNamespaceNames)
       result[filter] = aggregateCategoryDeployStats(names, readyStatsByNs, loadingNsNames)
     }
     return result
-  }, [allNamespaceNames, readyStatsByNs, loadingNsNames])
+  }, [allNamespaceNames, readyStatsByNs, loadingNsNames, workloadsByNamespace])
 
   const selectedNamespace = useMemo(
     () => namespaces.find(ns => ns.name === selectedNs),
     [namespaces, selectedNs],
   )
 
-  const { groups, orphanPods } = useMemo(() => groupWorkloadsByDeployment(workloads), [workloads])
+  const storageServiceWorkloads = useMemo(() => {
+    if (!isStorageMode || selectedStorageService == null) return []
+    return collectWorkloadsForStorageService(workloadsByNamespace, selectedStorageService)
+  }, [isStorageMode, selectedStorageService, workloadsByNamespace])
+
+  const storageServiceStatsById = useMemo(() => {
+    const stats = new Map<StorageServiceId, ReturnType<typeof computeStorageServiceChipStats>>()
+    for (const service of STORAGE_SERVICES) {
+      const serviceWorkloads = collectWorkloadsForStorageService(workloadsByNamespace, service.id)
+      stats.set(service.id, computeStorageServiceChipStats(serviceWorkloads))
+    }
+    return stats
+  }, [workloadsByNamespace])
+
+  const activeWorkloads = isStorageMode ? storageServiceWorkloads : workloads
+  const isActiveWorkloadsLoading = isStorageMode
+    ? getStorageService(selectedStorageService ?? 'cnpg').sourceNamespaces.some(namespace =>
+        loadingNsNames.has(namespace),
+      )
+    : isLoadingWorkloads
+
+  const { groups, orphanPods } = useMemo(
+    () => groupWorkloadsByDeployment(activeWorkloads),
+    [activeWorkloads],
+  )
+
+  const cnpgView = useMemo(() => {
+    if (!isStorageMode || selectedStorageService !== 'cnpg') return null
+    return buildCnpgServiceView(storageServiceWorkloads)
+  }, [isStorageMode, selectedStorageService, storageServiceWorkloads])
+
+  const showStandaloneToggle = !isStorageMode || selectedStorageService !== 'cnpg'
 
   useEffect(() => {
     const next = new Set<string>()
@@ -494,8 +668,15 @@ export function ClusterWorkloadsExplorer({
         next.add(group.deployment.name)
       }
     }
+    if (isStorageMode && selectedStorageService === 'cnpg' && cnpgView?.operator != null) {
+      next.add(cnpgView.operator.deployment.name)
+    }
     setExpandedDeployments(next)
-  }, [selectedNs, groups])
+  }, [selectedNs, selectedStorageService, groups, isStorageMode, cnpgView])
+
+  useEffect(() => {
+    if (isStorageMode) setWorkloadView('tree')
+  }, [isStorageMode, selectedStorageService])
 
   function toggleDeployment(name: string) {
     setExpandedDeployments(prev => {
@@ -514,22 +695,27 @@ export function ClusterWorkloadsExplorer({
     [groups.length, orphanPods.length],
   )
 
-  const selectedPlacementSummary = useMemo(
-    () => (selectedNs != null ? getNamespacePlacementSummary(selectedNs) : null),
-    [selectedNs],
-  )
-
-  const podInventory = useMemo(
-    () => buildNamespacePodInventory(workloads, selectedNamespace ?? null),
-    [workloads, selectedNamespace],
-  )
+  const podInventory = useMemo(() => {
+    if (isStorageMode) {
+      return buildNamespacePodInventory(storageServiceWorkloads, null)
+    }
+    return buildNamespacePodInventory(workloads, selectedNamespace ?? null)
+  }, [isStorageMode, storageServiceWorkloads, workloads, selectedNamespace])
 
   const colSpan = 7
+  const selectedService =
+    isStorageMode && selectedStorageService != null
+      ? getStorageService(selectedStorageService)
+      : null
 
   return (
     <OpsSection
       title="Namespaces & workloads"
-      description="Pod counts include every Pod object in the namespace (deployments, jobs, CI builds). Browse long-running services under By deployment; orphaned pods under Standalone."
+      description={
+        isStorageMode
+          ? 'Storage services grouped by persistence role — CNPG (SQL), Redis (cache & queue), MinIO (object store). K8s namespace names appear as technical detail only.'
+          : 'Pod counts include every Pod object in the namespace (deployments, jobs, CI builds). Browse long-running services under By deployment; orphaned pods under Standalone.'
+      }
       actions={
         <GroupedNsFilterControl
           value={nsFilter}
@@ -542,8 +728,27 @@ export function ClusterWorkloadsExplorer({
       bodyClassName="ops-section-body--table"
     >
       <div className="cluster-explorer-toolbar">
-        <div className="cluster-explorer-ns-rail" role="tablist" aria-label="Namespaces">
-          {isLoadingNamespaces && visibleNamespaces.length === 0 ? (
+        <div
+          className="cluster-explorer-ns-rail"
+          role="tablist"
+          aria-label={isStorageMode ? 'Storage services' : 'Namespaces'}
+        >
+          {isStorageMode ? (
+            STORAGE_SERVICES.map(service => {
+              const active = selectedStorageService === service.id
+              const serviceLoading = service.sourceNamespaces.some(namespace => loadingNsNames.has(namespace))
+              return (
+                <StorageServiceChip
+                  key={service.id}
+                  serviceId={service.id}
+                  active={active}
+                  stats={storageServiceStatsById.get(service.id) ?? null}
+                  loading={serviceLoading}
+                  onSelect={() => onSelectStorageService(service.id)}
+                />
+              )
+            })
+          ) : isLoadingNamespaces && visibleNamespaces.length === 0 ? (
             <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)] px-3">Loading namespaces…</span>
           ) : visibleNamespaces.length === 0 ? (
             <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)] px-3">No namespaces</span>
@@ -583,59 +788,97 @@ export function ClusterWorkloadsExplorer({
         </div>
       </div>
 
-      {selectedNs != null && (
+      {(isStorageMode ? selectedStorageService != null : selectedNs != null) && (
         <div className="cluster-explorer-subtoolbar">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {(() => {
-              const SelectedNsIcon = namespaceIcon(selectedNs)
-              return (
-                <span className="cluster-explorer-ns-label inline-flex items-center gap-1.5 font-mono-tabular">
-                  <SelectedNsIcon className="cluster-ns-chip__icon cluster-ns-chip__icon--subtoolbar" aria-hidden />
-                  {namespaceDisplayLabel(selectedNs)}
-                </span>
-              )
-            })()}
-            {namespaceShowsK8sHint(selectedNs) ? (
-              <span className="text-dense-meta text-[var(--muted-foreground)] font-mono-tabular" title="K8s namespace">
-                ({selectedNs})
-              </span>
-            ) : null}
-            <NamespacePodInventoryBar inventory={podInventory} loading={isLoadingWorkloads} />
-            {selectedNs != null && readyStatsByNs.has(selectedNs) ? (
-              <span className="cluster-explorer-ns-inventory font-mono-tabular">
-                <span className="cluster-explorer-ns-inventory__sep">·</span>
-                <span>
-                  Deploy ready{' '}
-                  <span
-                    className={`cluster-explorer-ns-inventory__${readyTonesByNs.get(selectedNs)?.deployment === 'ok' ? 'running' : readyTonesByNs.get(selectedNs)?.deployment === 'fail' ? 'failing' : 'pending'}`}
-                  >
-                    {readyStatsByNs.get(selectedNs)?.deploymentReady.actual}/
-                    {readyStatsByNs.get(selectedNs)?.deploymentReady.planned}
+            {isStorageMode && selectedService != null ? (
+              <>
+                <span className="cluster-explorer-ns-label inline-flex items-center gap-1.5">
+                  {(() => {
+                    const ServiceIcon = STORAGE_SERVICE_ICONS[selectedService.id]
+                    return <ServiceIcon className="cluster-ns-chip__icon cluster-ns-chip__icon--subtoolbar" aria-hidden />
+                  })()}
+                  <span className="inline-flex min-w-0 flex-col">
+                    <span>{selectedService.label}</span>
+                    <span className="text-dense-caption font-normal text-[var(--muted-foreground)]">
+                      {selectedService.role}
+                    </span>
                   </span>
                 </span>
-                <span className="cluster-explorer-ns-inventory__sep">·</span>
-                <span>
-                  Standalone ready{' '}
-                  <span
-                    className={`cluster-explorer-ns-inventory__${readyTonesByNs.get(selectedNs)?.standalone === 'ok' ? 'running' : readyTonesByNs.get(selectedNs)?.standalone === 'fail' ? 'failing' : 'pending'}`}
-                  >
-                    {readyStatsByNs.get(selectedNs)?.standaloneReady.actual}/
-                    {readyStatsByNs.get(selectedNs)?.standaloneReady.planned}
+                <StorageServiceInventoryBar
+                  serviceId={selectedService.id}
+                  workloads={storageServiceWorkloads}
+                  loading={isActiveWorkloadsLoading}
+                />
+              </>
+            ) : selectedNs != null ? (
+              <>
+                {(() => {
+                  const SelectedNsIcon = namespaceIcon(selectedNs)
+                  return (
+                    <span className="cluster-explorer-ns-label inline-flex items-center gap-1.5 font-mono-tabular">
+                      <SelectedNsIcon className="cluster-ns-chip__icon cluster-ns-chip__icon--subtoolbar" aria-hidden />
+                      {namespaceDisplayLabel(selectedNs)}
+                    </span>
+                  )
+                })()}
+                {namespaceShowsK8sHint(selectedNs) ? (
+                  <span className="text-dense-meta text-[var(--muted-foreground)] font-mono-tabular" title="K8s namespace">
+                    ({selectedNs})
                   </span>
-                </span>
-              </span>
+                ) : null}
+                <NamespacePodInventoryBar inventory={podInventory} loading={isLoadingWorkloads} />
+                {readyStatsByNs.has(selectedNs) ? (
+                  <span className="cluster-explorer-ns-inventory font-mono-tabular">
+                    <span className="cluster-explorer-ns-inventory__sep">·</span>
+                    <span>
+                      Deploy ready{' '}
+                      <span
+                        className={`cluster-explorer-ns-inventory__${readyTonesByNs.get(selectedNs)?.deployment === 'ok' ? 'running' : readyTonesByNs.get(selectedNs)?.deployment === 'fail' ? 'failing' : 'pending'}`}
+                      >
+                        {readyStatsByNs.get(selectedNs)?.deploymentReady.actual}/
+                        {readyStatsByNs.get(selectedNs)?.deploymentReady.planned}
+                      </span>
+                    </span>
+                    <span className="cluster-explorer-ns-inventory__sep">·</span>
+                    <span>
+                      Standalone ready{' '}
+                      <span
+                        className={`cluster-explorer-ns-inventory__${readyTonesByNs.get(selectedNs)?.standalone === 'ok' ? 'running' : readyTonesByNs.get(selectedNs)?.standalone === 'fail' ? 'failing' : 'pending'}`}
+                      >
+                        {readyStatsByNs.get(selectedNs)?.standaloneReady.actual}/
+                        {readyStatsByNs.get(selectedNs)?.standaloneReady.planned}
+                      </span>
+                    </span>
+                  </span>
+                ) : null}
+              </>
             ) : null}
           </div>
-          <SegmentControl
-            value={workloadView}
-            onChange={v => setWorkloadView(v as WorkloadView)}
-            options={viewOptions}
-            size="sm"
-          />
+          {showStandaloneToggle ? (
+            <SegmentControl
+              value={workloadView}
+              onChange={v => setWorkloadView(v as WorkloadView)}
+              options={viewOptions}
+              size="sm"
+            />
+          ) : null}
         </div>
       )}
 
-      <DenseDataTable wrapClassName="cluster-explorer-table-scroll dense-scroll-x">
+      <DenseDataTable
+        wrapClassName="cluster-explorer-table-scroll dense-scroll-x"
+        tableClassName="cluster-explorer-table"
+      >
+        <colgroup>
+          <col className="cluster-col-workload" />
+          <col className="cluster-col-arch" />
+          <col className="cluster-col-ready" />
+          <col className="cluster-col-status" />
+          <col className="cluster-col-restarts" />
+          <col className="cluster-col-age" />
+          <col className="cluster-col-actions" />
+        </colgroup>
         <DenseTableHeader>
           <DenseTableHeadRow>
             <DenseTableHead>Workload</DenseTableHead>
@@ -644,41 +887,191 @@ export function ClusterWorkloadsExplorer({
             <DenseTableHead>Status</DenseTableHead>
             <DenseTableHead>Restarts</DenseTableHead>
             <DenseTableHead>Age</DenseTableHead>
-            <DenseTableHead className="w-[3rem]">Pod</DenseTableHead>
+            <DenseTableHead title="Pod actions" aria-label="Pod actions">Pod</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
-          {selectedNs == null ? (
+          {(isStorageMode ? selectedStorageService == null : selectedNs == null) ? (
             <DenseTableRow>
               <DenseTableCell colSpan={colSpan} className="text-[var(--muted-foreground)]">
-                Select a namespace above
+                {isStorageMode ? 'Select a storage service above' : 'Select a namespace above'}
               </DenseTableCell>
             </DenseTableRow>
-          ) : isLoadingWorkloads ? (
+          ) : isActiveWorkloadsLoading ? (
             <DenseTableRow>
               <DenseTableCell colSpan={colSpan} className="text-[var(--muted-foreground)]">
                 Loading workloads…
               </DenseTableCell>
             </DenseTableRow>
+          ) : isStorageMode && selectedStorageService === 'cnpg' && cnpgView != null ? (
+            <>
+              <DenseTableSubheadRow>
+                <DenseTableCell colSpan={colSpan} className="font-semibold uppercase tracking-wide">
+                  Control plane
+                </DenseTableCell>
+              </DenseTableSubheadRow>
+              {cnpgView.operator == null ? (
+                <DenseTableRow>
+                  <DenseTableCell colSpan={colSpan} className="text-[var(--muted-foreground)]">
+                    CNPG operator deployment not found in cnpg-system
+                  </DenseTableCell>
+                </DenseTableRow>
+              ) : (
+                <>
+                  {(() => {
+                    const { deployment, pods } = cnpgView.operator
+                    const expanded = expandedDeployments.has(deployment.name)
+                    const hasPods = pods.length > 0
+                    return (
+                      <Fragment key={deployment.name}>
+                        <DenseTableRow className="cluster-deployment-parent-row">
+                          <DenseTableCell>
+                            <div className="cluster-deployment-row">
+                              <WorkloadExpandToggle
+                                expanded={expanded}
+                                disabled={!hasPods}
+                                label={hasPods ? `Toggle pods for ${deployment.name}` : `No pods for ${deployment.name}`}
+                                onToggle={() => toggleDeployment(deployment.name)}
+                              />
+                              <div className="cluster-deployment-row__identity min-w-0">
+                                <span className="cluster-deployment-row__name font-mono-tabular" title={deployment.name}>
+                                  {deployment.name}
+                                </span>
+                                <span className="cluster-deployment-row__kind inline-flex flex-wrap items-center gap-1">
+                                  CNPG operator
+                                  <K8sNamespaceHint namespace={deployment.namespace} />
+                                </span>
+                                {hasPods ? (
+                                  <span className="cluster-deployment-row__pod-count font-mono-tabular">
+                                    {pods.length} {pods.length === 1 ? 'pod' : 'pods'}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="cluster-deployment-row__actions">
+                                <IconActionButton
+                                  title="Rollout restart"
+                                  ariaLabel={`Restart ${deployment.name}`}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    onRestartDeployment(deployment)
+                                  }}
+                                >
+                                  <RotateCw className="size-3.5" />
+                                </IconActionButton>
+                                <IconActionButton
+                                  title="Scale replicas"
+                                  ariaLabel={`Scale ${deployment.name}`}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    onScaleDeployment(deployment)
+                                  }}
+                                >
+                                  <Scaling className="size-3.5" />
+                                </IconActionButton>
+                              </div>
+                            </div>
+                          </DenseTableCell>
+                          <NamespaceIdealArchCell namespace={deployment.namespace} />
+                          <DenseTableCell className="font-mono-tabular">{deployment.ready}</DenseTableCell>
+                          <DenseTableCell>
+                            <WorkloadStatusCell workload={deployment} />
+                          </DenseTableCell>
+                          <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">—</DenseTableCell>
+                          <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{deployment.age}</DenseTableCell>
+                          <DenseTableCell />
+                        </DenseTableRow>
+                        {expanded &&
+                          pods.map(pod => (
+                            <DenseTableDetailRow
+                              key={pod.name}
+                              className={selectedPod === pod.name ? 'dense-table__row--selected' : ''}
+                            >
+                              <DenseTableCell className="cursor-pointer" onClick={() => onSelectPod(pod)}>
+                                <div className="cluster-pod-row">
+                                  <span className="cluster-pod-row__branch" aria-hidden />
+                                  <span className="cluster-pod-row__name font-mono-tabular truncate" title={pod.name}>
+                                    {pod.name}
+                                  </span>
+                                </div>
+                              </DenseTableCell>
+                              <NamespaceIdealArchCell namespace={pod.namespace} />
+                              <DenseTableCell className="font-mono-tabular">{pod.ready}</DenseTableCell>
+                              <DenseTableCell>
+                                <WorkloadStatusCell workload={pod} />
+                              </DenseTableCell>
+                              <DenseTableCell className="font-mono-tabular">{pod.restarts}</DenseTableCell>
+                              <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{pod.age}</DenseTableCell>
+                              <DenseTableCell>
+                                <PodActionsCell pod={pod} onDeletePod={onDeletePod} />
+                              </DenseTableCell>
+                            </DenseTableDetailRow>
+                          ))}
+                      </Fragment>
+                    )
+                  })()}
+                </>
+              )}
+              <DenseTableSubheadRow>
+                <DenseTableCell colSpan={colSpan} className="font-semibold uppercase tracking-wide">
+                  Database cluster · bifrost-postgres
+                </DenseTableCell>
+              </DenseTableSubheadRow>
+              {cnpgView.instances.length === 0 ? (
+                <DenseTableRow>
+                  <DenseTableCell colSpan={colSpan} className="text-[var(--muted-foreground)]">
+                    No bifrost-postgres instances found in data namespace
+                  </DenseTableCell>
+                </DenseTableRow>
+              ) : (
+                cnpgView.instances.map(pod => (
+                  <DenseTableRow
+                    key={pod.name}
+                    className={selectedPod === pod.name ? 'dense-table__row--selected' : ''}
+                    onClick={() => onSelectPod(pod)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <DenseTableCell className="font-mono-tabular break-words [overflow-wrap:anywhere] whitespace-normal" title={pod.name}>
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span>{pod.name}</span>
+                        <span className="cluster-deployment-row__kind inline-flex flex-wrap items-center gap-1 normal-case">
+                          Cluster instance
+                          <K8sNamespaceHint namespace={pod.namespace} />
+                        </span>
+                      </div>
+                    </DenseTableCell>
+                    <NamespaceIdealArchCell namespace={pod.namespace} />
+                    <DenseTableCell className="font-mono-tabular">{pod.ready}</DenseTableCell>
+                    <DenseTableCell>
+                      <WorkloadStatusCell workload={pod} />
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular">{pod.restarts}</DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{pod.age}</DenseTableCell>
+                    <DenseTableCell>
+                      <PodActionsCell pod={pod} onDeletePod={onDeletePod} />
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))
+              )}
+            </>
           ) : workloadView === 'standalone' ? (
             orphanPods.length === 0 ? (
               <DenseTableRow>
                 <DenseTableCell colSpan={colSpan} className="text-[var(--muted-foreground)]">
-                  No standalone pods — every pod is owned by a deployment in this namespace.
+                  No standalone pods — every pod is owned by a deployment in this scope.
                 </DenseTableCell>
               </DenseTableRow>
             ) : (
               orphanPods.map(pod => (
                 <DenseTableRow
-                  key={pod.name}
+                  key={`${pod.namespace}/${pod.name}`}
                   className={selectedPod === pod.name ? 'dense-table__row--selected' : ''}
-                  onClick={() => onSelectPod(pod.name)}
+                  onClick={() => onSelectPod(pod)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <DenseTableCell className="font-mono-tabular max-w-[18rem] truncate" title={pod.name}>
+                  <DenseTableCell className="font-mono-tabular break-words [overflow-wrap:anywhere] whitespace-normal" title={pod.name}>
                     {pod.name}
                   </DenseTableCell>
-                  <NamespaceIdealArchCell summary={selectedPlacementSummary} />
+                  <NamespaceIdealArchCell namespace={pod.namespace} />
                   <DenseTableCell className="font-mono-tabular">{pod.ready}</DenseTableCell>
                   <DenseTableCell>
                     <WorkloadStatusCell workload={pod} />
@@ -694,7 +1087,7 @@ export function ClusterWorkloadsExplorer({
           ) : groups.length === 0 ? (
             <DenseTableRow>
               <DenseTableCell colSpan={colSpan} className="text-[var(--muted-foreground)]">
-                No deployments in this namespace
+                {isStorageMode ? 'No deployments in this storage service' : 'No deployments in this namespace'}
               </DenseTableCell>
             </DenseTableRow>
           ) : (
@@ -703,7 +1096,7 @@ export function ClusterWorkloadsExplorer({
               const expanded = expandedDeployments.has(deployment.name)
               const hasPods = pods.length > 0
               return (
-                <Fragment key={deployment.name}>
+                <Fragment key={`${deployment.namespace}/${deployment.name}`}>
                   <DenseTableRow className="cluster-deployment-parent-row">
                     <DenseTableCell>
                       <div className="cluster-deployment-row">
@@ -717,7 +1110,10 @@ export function ClusterWorkloadsExplorer({
                           <span className="cluster-deployment-row__name font-mono-tabular" title={deployment.name}>
                             {deployment.name}
                           </span>
-                          <span className="cluster-deployment-row__kind">Deployment</span>
+                          <span className="cluster-deployment-row__kind inline-flex flex-wrap items-center gap-1">
+                            Deployment
+                            {isStorageMode ? <K8sNamespaceHint namespace={deployment.namespace} /> : null}
+                          </span>
                           {hasPods ? (
                             <span className="cluster-deployment-row__pod-count font-mono-tabular">
                               {pods.length} {pods.length === 1 ? 'pod' : 'pods'}
@@ -752,7 +1148,7 @@ export function ClusterWorkloadsExplorer({
                         </div>
                       </div>
                     </DenseTableCell>
-                    <NamespaceIdealArchCell summary={selectedPlacementSummary} />
+                    <NamespaceIdealArchCell namespace={deployment.namespace} />
                     <DenseTableCell className="font-mono-tabular">{deployment.ready}</DenseTableCell>
                     <DenseTableCell>
                       <WorkloadStatusCell workload={deployment} />
@@ -767,10 +1163,7 @@ export function ClusterWorkloadsExplorer({
                         key={pod.name}
                         className={selectedPod === pod.name ? 'dense-table__row--selected' : ''}
                       >
-                        <DenseTableCell
-                          className="cursor-pointer"
-                          onClick={() => onSelectPod(pod.name)}
-                        >
+                        <DenseTableCell className="cursor-pointer" onClick={() => onSelectPod(pod)}>
                           <div className="cluster-pod-row">
                             <span className="cluster-pod-row__branch" aria-hidden />
                             <span className="cluster-pod-row__name font-mono-tabular truncate" title={pod.name}>
@@ -778,7 +1171,7 @@ export function ClusterWorkloadsExplorer({
                             </span>
                           </div>
                         </DenseTableCell>
-                        <NamespaceIdealArchCell summary={selectedPlacementSummary} />
+                        <NamespaceIdealArchCell namespace={pod.namespace} />
                         <DenseTableCell className="font-mono-tabular">{pod.ready}</DenseTableCell>
                         <DenseTableCell>
                           <WorkloadStatusCell workload={pod} />

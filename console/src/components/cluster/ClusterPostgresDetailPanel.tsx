@@ -9,6 +9,7 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import { useQueryClient } from '@tanstack/react-query'
+import { CopyChip } from '@/components/cluster/CopyChip'
 import type {
   ClusterPostgresStatusResponse,
   ClusterServiceReadinessResponse,
@@ -54,6 +55,61 @@ function DepRow({ label, dep }: { label: string; dep: { reachability: Reachabili
 
 function databaseDomain(readiness: ClusterServiceReadinessResponse | undefined): ServiceDomain | undefined {
   return readiness?.domains.find(d => d.id === 'database')
+}
+
+function PostgresLanAccessSection({ lan }: { lan: ClusterPostgresStatusResponse['lan_access'] }) {
+  const dbName = 'bifrost_dev'
+  const jdbc =
+    lan.available && lan.endpoint != null
+      ? `jdbc:postgresql://${lan.endpoint}/${dbName}`
+      : ''
+
+  return (
+    <OpsSection
+      title="LAN access (DBeaver / SQL clients)"
+      description="NodePort entry point for external clients on the local network — no port-forward needed"
+      bodyPadding="compact"
+    >
+      {!lan.available ? (
+        <div className="flex items-start gap-2 text-dense-meta">
+          <StatusLamp value={lan.reachability} kind="reach" />
+          <span>
+            <span className="font-medium">NodePort not available</span>
+            {lan.detail != null && lan.detail !== '' ? (
+              <span className="text-[var(--muted-foreground)]"> — {lan.detail}</span>
+            ) : null}
+          </span>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <CopyChip label="Host" value={lan.host ?? ''} />
+            <CopyChip label="Port" value={String(lan.node_port ?? '')} />
+            <CopyChip label="User" value={lan.user ?? 'bifrost'} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <CopyChip label="JDBC" value={jdbc} />
+          </div>
+          <dl className="m-0 grid gap-1 text-dense-meta">
+            <div className="flex flex-wrap items-center gap-1">
+              <dt className="text-[var(--muted-foreground)]">Databases</dt>
+              <dd className="m-0 font-mono-tabular">bifrost_dev · bifrost_stg · bifrost_prod</dd>
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <dt className="text-[var(--muted-foreground)]">Password</dt>
+              <dd className="m-0 font-mono-tabular">
+                kubectl get secret bifrost-postgres-app -n data -o jsonpath=&apos;{'{.data.password}'}&apos; | base64 -d
+              </dd>
+            </div>
+          </dl>
+          <p className="m-0 text-dense-caption text-[var(--muted-foreground)]">
+            LAN only — do not expose port {lan.node_port} to the public internet. JDBC shows bifrost_dev; swap the database
+            name for stg/prod.
+          </p>
+        </div>
+      )}
+    </OpsSection>
+  )
 }
 
 export function ClusterPostgresDetailPanel({
@@ -171,6 +227,8 @@ export function ClusterPostgresDetailPanel({
           </dl>
         </OpsSection>
       </div>
+
+      <PostgresLanAccessSection lan={postgres.lan_access} />
 
       <div className="grid gap-3 lg:grid-cols-2">
         <OpsSection title="Backup path" description="WAL/base → MinIO on nfs-hot (not PGDATA)" bodyPadding="compact">

@@ -4,7 +4,7 @@
 
 meta:
     version: "2026-06-25-cicd-bootstrap"
-    catalog_version: "2026-06-28-nous-hermes-integration"
+    catalog_version: "2026-06-29-ai-compute-strategy"
 # Ultimate goal (Strategy C hybrid) — authoritative for Agent / Program UI.
 # Detail: Ops Console → Architecture → Blueprint · console/src/lib/architecture/blueprintCatalog.ts · decision D6
 north_star:
@@ -537,6 +537,14 @@ tracks:
               prerequisites:
                 - "unifi-mcp-server stream closed"
                 - "network-upgrade-wifi stream closed"
+            - id: ai-compute-strategy
+              label: "AI compute strategy — tiered model sourcing & inference hardware"
+              total: 5
+              done: 1
+              status: in_progress
+              note: "Compute-layer reasoning for the AI Native Platform (which models power Hermes / Remediation Runner / Trade advisory, and how to source compute economically). Authoritative catalog: Ops Console → Architecture → AI → AI Compute Strategy (console/src/lib/architecture/aiComputeStrategyCatalog.ts). ① Strategy framework documented ✓ — tiered compute (Cursor tokens / OpenAI-Claude API / RTX 4090 in-cluster / future AMD AI Max / cloud rent for fine-tune), token sourcing economics, inference-vs-finetune-vs-train ladder, hardware comparison (Mac Studio vs AMD 395 vs DGX Spark vs RTX 4090), bucket principle (memory>bandwidth>>compute), quantization sweet spot (4-bit), MoE for big memory, macOS-cannot-join-K8s constraint, demand-driven purchase signals ② Gating experiment — run Qwen2.5-32B on RTX 4090 (.60), wire Hermes to it, measure 35-MCP-tool reliability in multi-turn loops ③ Tiered routing config — route each task to cheapest-sufficient tier (small-model→4090, top reasoning→API, coding→Cursor) ④ Hardware purchase (AMD AI Max 395 128G → join K3s as ai-gpu node) WHEN a buy-signal fires (32B insufficient / API cost / concurrency / local-only requirement) ⑤ Self-hosted endpoint as cluster-managed inference service (vLLM/Ollama, OpenAI-compatible, fed to Hermes + Trade)"
+              prerequisites:
+                - "hermes-gateway-integration stream ⑥ first autonomous task done"
     operate:
         label: "Day-to-day operations"
         note: "Event-driven — status computed from live matrix, cluster, and audit data"

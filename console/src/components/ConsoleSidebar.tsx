@@ -34,6 +34,7 @@ export type ConsoleViewTab =
   | 'design-system'
   | 'flywheel-vision'
   | 'network-upgrade'
+  | 'ai-compute'
   | 'console'
   | 'defects'
 
