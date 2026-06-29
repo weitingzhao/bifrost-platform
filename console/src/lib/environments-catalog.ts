@@ -62,23 +62,31 @@ export const PLATFORM_PORTS = {
   platformDocs: 8060,
 } as const
 
-/** Registered trade environments (mirrors config/environments.yaml). */
+/** Registered trade environments (mirrors config/environments.yaml + K3s data layer). */
 export const TRADE_ENVIRONMENTS = [
   {
     id: 'dev',
     label: 'Development',
-    nginx: 'http://127.0.0.1',
-    postgres: '192.168.10.80:5432 (bifrost_dev)',
-    redis: '127.0.0.1:6379 (local or Mac Mini #1)',
-    host: 'MacBook / Mac Mini #1 — docker-compose.dev.yml',
+    nginx: 'http://192.168.10.73:30882',
+    postgres: 'bifrost-postgres-rw.data.svc:5432 (bifrost_dev @ CNPG)',
+    redis: 'redis-dev.data.svc:6379',
+    host: 'K3s bifrost-dev ns (Vision V1)',
+  },
+  {
+    id: 'stg',
+    label: 'Staging',
+    nginx: 'http://192.168.10.73:30880',
+    postgres: 'bifrost-postgres-rw.data.svc:5432 (bifrost_stg @ CNPG)',
+    redis: 'redis-live-stg.data.svc / redis-queue-stg.data.svc:6379',
+    host: 'K3s bifrost-stg ns',
   },
   {
     id: 'prod',
     label: 'Production',
-    nginx: 'http://192.168.10.70',
-    postgres: '192.168.10.80:5432 (bifrost_prod)',
-    redis: '192.168.10.70:6379',
-    host: 'Linux mini-pc-a — docker-compose.yml (2C-B) → K3s bifrost ns',
+    nginx: 'http://192.168.10.70:30881',
+    postgres: 'bifrost-postgres-rw.data.svc:5432 (bifrost_prod @ CNPG)',
+    redis: 'redis-live-prod.data.svc:6379',
+    host: 'K3s bifrost-prod ns',
   },
 ] as const
 
