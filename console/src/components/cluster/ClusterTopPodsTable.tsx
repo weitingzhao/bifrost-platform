@@ -17,7 +17,9 @@ export function ClusterTopPodsTable({ metrics, isLoading }: ClusterTopPodsTableP
 
   return (
     <OpsSection
-      title="Top pods (Bifrost namespaces)"
+      className="cluster-global-top-pods__section"
+      title="Top pods by usage"
+      description="Global · all Bifrost namespaces · not filtered by the category tab below"
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

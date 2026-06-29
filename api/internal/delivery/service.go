@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,6 +29,27 @@ var (
 	pipelineRunGVR = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
 	taskRunGVR     = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "taskruns"}
 )
+
+// sanitizeLabelValue converts a Git ref (e.g. "feature/release-ui-polish")
+// into a valid K8s label value by replacing illegal characters with '-'.
+// K8s labels: [a-zA-Z0-9._-], max 63 chars, must start/end alphanumeric.
+func sanitizeLabelValue(v string) string {
+	var b strings.Builder
+	for _, r := range v {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	s := b.String()
+	s = strings.Trim(s, "-._")
+	if len(s) > 63 {
+		s = s[:63]
+		s = strings.TrimRight(s, "-._")
+	}
+	return s
+}
 
 type Service struct {
 	entry          *config.ClusterEntry
@@ -189,6 +211,21 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 	if rev == "" {
 		rev = "main"
 	}
+	if err := validateRevision(rev); err != nil {
+		resp.Message = err.Error()
+		return resp, empty, fmt.Errorf("%s", resp.Message)
+	}
+
+	// Multi-repo guard: refuse to start if the revision is genuinely missing in
+	// any repo the pipeline clones — otherwise it fails halfway at a clone-*
+	// task. Only block when probes had full visibility (reachability ok); never
+	// block on network/probe uncertainty.
+	if pf := s.RefPreflight(ctx, pipelineName, rev); pf.Reachability == probe.ReachOK && len(pf.Missing) > 0 {
+		resp.Message = fmt.Sprintf(
+			"revision %q is missing in: %s — create the same branch/tag in those repos (or deploy a ref present in all)",
+			rev, strings.Join(pf.Missing, ", "))
+		return resp, empty, fmt.Errorf("%s", resp.Message)
+	}
 
 	dyn, err := s.buildDynamicClient()
 	if err != nil {
@@ -245,11 +282,11 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 			"metadata": map[string]any{
 				"name":      runName,
 				"namespace": ns,
-				"labels": map[string]any{
-					"tekton.dev/pipeline": pipelineName,
-					"bifrost.io/trigger":  "platform-api",
-					"bifrost.io/revision": rev,
-				},
+			"labels": map[string]any{
+				"tekton.dev/pipeline": pipelineName,
+				"bifrost.io/trigger":  "platform-api",
+				"bifrost.io/revision": sanitizeLabelValue(rev),
+			},
 			},
 			"spec": spec,
 		},
@@ -755,21 +792,21 @@ func pipelineRunFromUnstructured(obj unstructured.Unstructured, pipelineName str
 	if ref, ok, _ := unstructured.NestedString(obj.Object, "spec", "pipelineRef", "name"); ok && ref != "" {
 		view.Pipeline = ref
 	}
-	if labels := obj.GetLabels(); labels != nil {
-		if rev, ok := labels["bifrost.io/revision"]; ok && rev != "" {
-			view.Revision = rev
+	if params, found, _ := unstructured.NestedSlice(obj.Object, "spec", "params"); found {
+		for _, p := range params {
+			if pm, ok := p.(map[string]any); ok {
+				if name, _ := pm["name"].(string); name == "revision" {
+					if val, _ := pm["value"].(string); val != "" {
+						view.Revision = val
+					}
+				}
+			}
 		}
 	}
 	if view.Revision == "" {
-		if params, found, _ := unstructured.NestedSlice(obj.Object, "spec", "params"); found {
-			for _, p := range params {
-				if pm, ok := p.(map[string]any); ok {
-					if name, _ := pm["name"].(string); name == "revision" {
-						if val, _ := pm["value"].(string); val != "" {
-							view.Revision = val
-						}
-					}
-				}
+		if labels := obj.GetLabels(); labels != nil {
+			if rev, ok := labels["bifrost.io/revision"]; ok && rev != "" {
+				view.Revision = rev
 			}
 		}
 	}
@@ -833,6 +870,50 @@ const (
 	giteaSecretName    = "gitea-bootstrap"
 )
 
+// giteaBaseURL returns the Gitea API base. In-cluster it resolves the internal
+// service DNS; for local dev set GITEA_BASE (e.g. http://localhost:3000 paired
+// with `kubectl -n cicd port-forward svc/gitea 3000:3000`).
+func giteaBaseURL() string {
+	if v := strings.TrimSpace(os.Getenv("GITEA_BASE")); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	return giteaInClusterBase
+}
+
+func validateRevision(rev string) error {
+	if len(rev) > 256 {
+		return fmt.Errorf("revision too long (max 256 characters)")
+	}
+	if strings.ContainsAny(rev, "\n\r\t") {
+		return fmt.Errorf("revision cannot contain whitespace")
+	}
+	if strings.HasPrefix(rev, "#") || strings.Contains(rev, "## ") {
+		return fmt.Errorf("invalid revision — looks like pasted text, not a git ref")
+	}
+	return nil
+}
+
+func intersectRefSets(sets []map[string]bool) []string {
+	if len(sets) == 0 {
+		return nil
+	}
+	out := make([]string, 0)
+	for name := range sets[0] {
+		ok := true
+		for i := 1; i < len(sets); i++ {
+			if !sets[i][name] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (s *Service) Revisions(ctx context.Context, repos []string) RevisionsResponse {
 	now := time.Now().UTC()
 	ns := s.PipelinesNamespace()
@@ -841,6 +922,8 @@ func (s *Service) Revisions(ctx context.Context, repos []string) RevisionsRespon
 		Repos:        repos,
 		DefaultRef:   "main",
 		Tags:         []GiteaTagView{},
+		Branches:     []GiteaBranchView{},
+		CommonRefs:   []string{},
 		Reachability: probe.ReachFail,
 		GeneratedAt:  now,
 	}
@@ -858,48 +941,97 @@ func (s *Service) Revisions(ctx context.Context, repos []string) RevisionsRespon
 
 	user, pass := s.giteaCredentials(ctx, clientset, ns)
 
-	seen := map[string]bool{}
+	seenTag := map[string]bool{}
 	var allTags []GiteaTagView
+	seenBranch := map[string]bool{}
+	var allBranches []GiteaBranchView
 	var errors []string
+	branchSets := make([]map[string]bool, 0, len(repos))
+	tagSets := make([]map[string]bool, 0, len(repos))
 
 	for _, repo := range repos {
 		tags, fetchErr := s.fetchGiteaTags(ctx, repo, user, pass)
 		if fetchErr != nil {
-			errors = append(errors, repo+": "+fetchErr.Error())
-			continue
-		}
-		for _, t := range tags {
-			key := t.Name + "/" + t.Repo
-			if !seen[key] {
-				seen[key] = true
-				allTags = append(allTags, t)
+			errors = append(errors, repo+" tags: "+fetchErr.Error())
+		} else {
+			tagSet := map[string]bool{}
+			for _, t := range tags {
+				tagSet[t.Name] = true
+				key := t.Name + "/" + t.Repo
+				if !seenTag[key] {
+					seenTag[key] = true
+					allTags = append(allTags, t)
+				}
 			}
+			tagSets = append(tagSets, tagSet)
+		}
+
+		branches, fetchErr := s.fetchGiteaBranches(ctx, repo, user, pass)
+		if fetchErr != nil {
+			errors = append(errors, repo+" branches: "+fetchErr.Error())
+		} else {
+			branchSet := map[string]bool{}
+			for _, b := range branches {
+				branchSet[b.Name] = true
+				key := b.Name + "/" + b.Repo
+				if !seenBranch[key] {
+					seenBranch[key] = true
+					allBranches = append(allBranches, b)
+				}
+			}
+			branchSets = append(branchSets, branchSet)
 		}
 	}
 
 	out.Tags = allTags
+	out.Branches = allBranches
+
+	common := map[string]bool{}
+	for _, name := range intersectRefSets(branchSets) {
+		common[name] = true
+	}
+	for _, name := range intersectRefSets(tagSets) {
+		common[name] = true
+	}
+	commonList := make([]string, 0, len(common))
+	for name := range common {
+		commonList = append(commonList, name)
+	}
+	sort.Strings(commonList)
+	out.CommonRefs = commonList
+
 	if len(errors) > 0 {
 		out.Reachability = probe.ReachDegraded
 		out.Detail = strings.Join(errors, "; ")
 	} else {
 		out.Reachability = probe.ReachOK
-		out.Detail = fmt.Sprintf("%d tag(s) across %d repo(s)", len(allTags), len(repos))
+		out.Detail = fmt.Sprintf("%d branch(es), %d tag(s), %d common ref(s) across %d repo(s)",
+			len(allBranches), len(allTags), len(commonList), len(repos))
 	}
 	return out
 }
 
+// giteaCredentials resolves basic-auth credentials for the Gitea REST API.
+// The gitea-bootstrap secret stores an admin token (no username/password), so we
+// fall back to using the token as the basic-auth username, which Gitea accepts.
+// Without this, REST calls are unauthenticated and Gitea returns 404 for private
+// repos — which previously left branch/tag listings and ref preflight empty.
 func (s *Service) giteaCredentials(ctx context.Context, clientset kubernetes.Interface, ns string) (string, string) {
 	secret, err := clientset.CoreV1().Secrets(ns).Get(ctx, giteaSecretName, metav1.GetOptions{})
 	if err != nil {
 		return "", ""
 	}
-	user := string(secret.Data["username"])
-	pass := string(secret.Data["password"])
-	return user, pass
+	if user := string(secret.Data["username"]); user != "" {
+		return user, string(secret.Data["password"])
+	}
+	if token := strings.TrimSpace(string(secret.Data["gitea_admin_token"])); token != "" {
+		return token, "x-oauth-basic"
+	}
+	return "", ""
 }
 
 func (s *Service) fetchGiteaTags(ctx context.Context, repo, user, pass string) ([]GiteaTagView, error) {
-	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/tags?limit=50", giteaInClusterBase, giteaOrg, repo)
+	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/tags?limit=50", giteaBaseURL(), giteaOrg, repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -943,4 +1075,51 @@ func (s *Service) fetchGiteaTags(ctx context.Context, repo, user, pass string) (
 		})
 	}
 	return tags, nil
+}
+
+func (s *Service) fetchGiteaBranches(ctx context.Context, repo, user, pass string) ([]GiteaBranchView, error) {
+	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/branches?limit=50", giteaBaseURL(), giteaOrg, repo)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if user != "" && pass != "" {
+		req.SetBasicAuth(user, pass)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	if err != nil {
+		return nil, err
+	}
+
+	var raw []struct {
+		Name   string `json:"name"`
+		Commit struct {
+			ID string `json:"id"`
+		} `json:"commit"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("json: %w", err)
+	}
+
+	branches := make([]GiteaBranchView, 0, len(raw))
+	for _, b := range raw {
+		branches = append(branches, GiteaBranchView{
+			Name:   b.Name,
+			Repo:   repo,
+			Commit: b.Commit.ID,
+		})
+	}
+	return branches, nil
 }

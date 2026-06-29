@@ -7,7 +7,7 @@
 
 import type { OpsContextResponse } from '@/api/types'
 
-export const BLUEPRINT_VERSION = '2026-06-15'
+export const BLUEPRINT_VERSION = '2026-06-28'
 export const BLUEPRINT_SOURCE = 'console/src/lib/architecture/blueprintCatalog.ts'
 
 export const NORTH_STAR_STATEMENT =
@@ -58,6 +58,10 @@ export const STRATEGY_C_LAYERS: StrategyCLayer[] = [
     layer: 'Infra scripts',
     responsibility: 'install-server.sh, fetch-kubeconfig.sh, etc. — executor implementation only, operators do not run manually',
   },
+  {
+    layer: 'Out-of-band Operator Plane (L-1)',
+    responsibility: 'AI Agent runners (dual Mac Mini, outside K8s) + mutual watchdog — automate the Owner out-of-band action: recover the platform/cluster when the single pane itself is down. Fate-isolated; see K3s Bootstrap L-1.',
+  },
 ]
 
 export type DesignPrinciple = {
@@ -72,6 +76,35 @@ export const DESIGN_PRINCIPLES: DesignPrinciple[] = [
   { id: 3, title: 'Graduated actuation', description: 'L0 diagnose → L1 safe retry → L2 Owner confirm; all leave audit trail.' },
   { id: 4, title: 'LLM-ready context', description: 'Every operation produces structured action/target/status/detail, feedable into spine and Agent packs.' },
   { id: 5, title: 'Forbidden unchanged', description: 'daemon_control write, ib:operator:cmd, R-DV3 auto-order bypass — never exposed to platform AI.' },
+  { id: 6, title: 'Out-of-band recovery never shares fate', description: 'The Agent that recovers the platform/cluster (L-1 Operator Plane) runs OUTSIDE K8s on dual Mac Minis with a mutual watchdog; it must never be scheduled into the cluster it recovers. The engineer stands on the ground, not inside the rocket.' },
+  { id: 7, title: 'Earned autonomy over granted trust', description: 'Agent Skills start at L1 (confirm); consecutive successes earn L0 (auto); failure spikes trigger demotion back to L1. Owner governs via policy, not per-action approval — Flight Director model.' },
+]
+
+export type AgentLayeringRecord = {
+  layer: string
+  substrate: string
+  lifecycle: string
+  extractionTriggers?: string[]
+}
+
+export const AGENT_LAYERING: AgentLayeringRecord[] = [
+  {
+    layer: 'L-1 Out-of-Band (Operator Plane)',
+    substrate: 'Dual Mac Minis (.50 primary / .52 standby) · launchd · mutual watchdog',
+    lifecycle: 'Monorepo-first (bifrost-platform/agent/). Versioned independently via package.json; deployed per-Mini with standby-first canary + post-deploy smoke. Stays on bare Mac — never scheduled into K8s.',
+  },
+  {
+    layer: 'L0–L2 In-Band (future rich capability)',
+    substrate: 'May run inside K3s (sidecar, CronJob) for deeper cluster integration',
+    lifecycle: 'TBD — will share fate with cluster; limited to non-recovery tasks (observability, routine maintenance)',
+    extractionTriggers: [
+      'Drift scanner reads platform catalogs via API (not filesystem)',
+      'tools↔platform-api contract is stable (≥2 months without breaking change)',
+      'Agent has independent release cadence / Owner from platform',
+      'Agent serves Trade payload (not just Ops Platform)',
+      'Supply-chain isolation required (separate CI, audit, compliance)',
+    ],
+  },
 ]
 
 export type ConsoleViewRow = {
@@ -81,7 +114,14 @@ export type ConsoleViewRow = {
 }
 
 export const CONSOLE_VIEWS: ConsoleViewRow[] = [
-  { view: 'Agent Briefing', plane: 'Observe', purpose: 'New-session entry — work-intent picker, UI progress, live snapshot, full LLM briefing pack' },
+  { view: 'Agent Desk', plane: 'Agent', purpose: 'Engineer workspace — composer + run history; the actor that services rocket (Ops) + payload (Trade)' },
+  { view: 'Agent Briefing', plane: 'Agent', purpose: 'New-session entry — work-intent picker, UI progress, live snapshot, full LLM briefing pack' },
+  { view: 'Agent Protocol', plane: 'Agent', purpose: 'Doctrine — interaction modes, three-layer architecture, context pack layers, forbidden actions' },
+  { view: 'MCP Contract', plane: 'Agent', purpose: 'Doctrine — Agent tool contract (read / routine / confirm / forbidden) mirrored UI + MCP' },
+  { view: 'Skills & Schedules', plane: 'Agent', purpose: 'Autonomous — Hermes Gateway registered skills, cron/webhook/manual triggers, per-skill actuation level (L0/L1/L2)' },
+  { view: 'Execution Log', plane: 'Agent', purpose: 'Autonomous — Hermes execution history; trigger, result, duration, summary for all autonomous and dispatched runs' },
+  { view: 'Trust & Autonomy', plane: 'Agent', purpose: 'Governance — Flight Director performance KPIs (success rate, MTTR, intervention rate), earned autonomy trust matrix' },
+  { view: 'Operator Plane (L-1)', plane: 'Agent', purpose: 'Infrastructure — Runner + Hermes Gateway heartbeats, dual Mac Mini deploy, watchdog; fate-isolated (D7)' },
   { view: 'Control Room', plane: 'Observe', purpose: 'Diagnosis step 1 — live KPI + matrix summary; deep-link to Runtime Map; dual flywheel + Agent focus dock' },
   { view: 'Delivery', plane: 'Operate', purpose: 'CI/CD actuation — Operate / Observe / Blueprint tabs; coupling gate summary' },
   { view: 'Runtime Map', plane: 'Observe', purpose: 'Diagnosis step 2 — topology-first hardware + SCOPE stack, per-target drawer, gap analysis, runtime-scoped Agent pack' },

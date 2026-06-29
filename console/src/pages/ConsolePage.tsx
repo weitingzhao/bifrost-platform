@@ -30,6 +30,7 @@ import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
+import { AgentSystemPage } from '@/pages/AgentSystemPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { BlueprintPage } from '@/pages/BlueprintPage'
 import { BriefingPage } from '@/pages/BriefingPage'
@@ -52,6 +53,12 @@ import { DataLayerPage } from '@/pages/DataLayerPage'
 import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
 import { McpContractPage } from '@/pages/McpContractPage'
 import { NetworkUpgradePage } from '@/pages/NetworkUpgradePage'
+import { AiComputeStrategyPage } from '@/pages/AiComputeStrategyPage'
+import { OperatorPlanePage } from '@/pages/OperatorPlanePage'
+import { AutonomousSkillsPage } from '@/pages/AutonomousSkillsPage'
+import { ExecutionLogPage } from '@/pages/ExecutionLogPage'
+import { AgentGovernancePage } from '@/pages/AgentGovernancePage'
+import { DefectsPage } from '@/pages/DefectsPage'
 import { StandardsPage } from '@/pages/StandardsPage'
 
 const ControlRoomPage = lazy(() =>
@@ -61,6 +68,11 @@ const ControlRoomPage = lazy(() =>
 const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'agent-desk': 'Agent Desk',
   briefing: 'Agent Briefing',
+  'autonomous-skills': 'Skills & Schedules',
+  'execution-log': 'Execution Log',
+  'agent-governance': 'Trust & Autonomy',
+  'agent-system': 'Agent System',
+  'operator-plane': 'Operator Plane',
   'control-room': 'Control Room',
   audit: 'Audit',
   'runtime-map': 'Runtime Map',
@@ -84,12 +96,20 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'mcp-contract': 'MCP Contract',
   'design-system': 'Design System',
   'network-upgrade': 'Network Upgrade',
+  'ai-compute': 'AI Compute Strategy',
   console: 'Server console',
+  defects: 'Defects',
 }
 
 const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'agent-desk',
+  'autonomous-skills',
+  'execution-log',
+  'agent-governance',
+  'operator-plane',
+  'audit',
   'briefing',
+  'console',
   'control-room',
   'promote',
   'delivery',
@@ -107,19 +127,43 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   pulse: 'control-room',
 }
 
+function isConsoleViewTab(value: string): value is ConsoleViewTab {
+  return Object.prototype.hasOwnProperty.call(VIEW_TITLES, value)
+}
+
+/** Resolve the active tab from the URL hash so refresh/deep-link stays put. */
+function tabFromHash(): ConsoleViewTab | null {
+  const hash = window.location.hash.replace(/^#/, '')
+  if (!hash) return null
+  if (isConsoleViewTab(hash)) return hash
+  return LEGACY_RUNTIME_HASHES[hash] ?? null
+}
+
 export function ConsolePage() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('prod')
-  const [viewTab, setViewTab] = useState<ConsoleViewTab>('control-room')
+  const [viewTab, setViewTabState] = useState<ConsoleViewTab>(() => tabFromHash() ?? 'control-room')
   const [agentDeskJobId, setAgentDeskJobId] = useState<string | null>(null)
+  const [agentDeskPrefill, setAgentDeskPrefill] = useState<string | null>(null)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
   const qc = useQueryClient()
 
   const envForRuntime = envFilter === 'all' ? 'prod' : envFilter
 
+  const setViewTab = useCallback((tab: ConsoleViewTab) => {
+    setViewTabState(tab)
+    const nextHash = `#${tab}`
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, '', nextHash)
+    }
+  }, [])
+
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#/, '')
-    const legacy = LEGACY_RUNTIME_HASHES[hash]
-    if (legacy != null) setViewTab(legacy)
+    const onHashChange = () => {
+      const t = tabFromHash()
+      if (t != null) setViewTabState(t)
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
   const contextQuery = useQuery({
@@ -261,19 +305,6 @@ export function ConsolePage() {
     return data
   }, [runtimeMatrixQuery.data])
 
-  const matrixUpdatedAt = useMemo(() => {
-    if (viewTab === 'runtime-map') return runtimeMatrix?.generated_at ?? null
-    if (
-      viewTab === 'briefing' ||
-      viewTab === 'control-room' ||
-      viewTab === 'promote' ||
-      viewTab === 'delivery'
-    ) {
-      if (pulseMatrices.length === 0) return null
-      return pulseMatrices[0]?.generated_at ?? null
-    }
-    return null
-  }, [viewTab, pulseMatrices, runtimeMatrix])
 
   function refreshAll() {
     void qc.invalidateQueries({ queryKey: ['matrix'] })
@@ -303,8 +334,13 @@ export function ConsolePage() {
   const openPlacement = () => setViewTab('placement')
   const openAudit = () => setViewTab('audit')
   const openBriefing = () => setViewTab('briefing')
-  const openAgentDesk = useCallback((jobId?: string) => {
-    if (jobId != null) setAgentDeskJobId(jobId)
+  const openOperatorPlane = () => setViewTab('operator-plane')
+  const openAgentDesk = useCallback((jobIdOrOpts?: string | { prefill: string }) => {
+    if (typeof jobIdOrOpts === 'string') {
+      setAgentDeskJobId(jobIdOrOpts)
+    } else if (jobIdOrOpts != null && 'prefill' in jobIdOrOpts) {
+      setAgentDeskPrefill(jobIdOrOpts.prefill)
+    }
     setViewTab('agent-desk')
   }, [])
   const openBlueprint = () => setViewTab('blueprint')
@@ -321,8 +357,9 @@ export function ConsolePage() {
     viewTab === 'k3s-bootstrap' ||
     viewTab === 'cicd-bootstrap' ||
     viewTab === 'data-layer' ||
-    viewTab === 'network-upgrade'
-  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-protocol' || viewTab === 'mcp-contract' || viewTab === 'design-system'
+    viewTab === 'network-upgrade' ||
+    viewTab === 'ai-compute'
+  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-system' || viewTab === 'agent-protocol' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
   const handleCopyAllGovernance = async () => {
     let spine = contextQuery.data
@@ -343,7 +380,12 @@ export function ConsolePage() {
 
   const showEnvStrip = viewTab === 'runtime-map'
   const showPageHeader = ![
+    'agent-desk',
     'briefing',
+    'autonomous-skills',
+    'execution-log',
+    'agent-governance',
+    'operator-plane',
     'control-room',
     'runtime-map',
     'cluster',
@@ -360,6 +402,7 @@ export function ConsolePage() {
     'design-system',
     'console',
     'platform-release',
+    'defects',
   ].includes(viewTab)
 
   const runtimeLoading = topologyQuery.isLoading || runtimeMatrixQuery.isLoading
@@ -386,14 +429,8 @@ export function ConsolePage() {
           {OPS_CONTEXT_TABS.includes(viewTab) && (
             <OpsContextBar>
               <FocusStrip
-                context={contextQuery.data}
-                isLoading={contextQuery.isLoading}
-                matrixUpdatedAt={matrixUpdatedAt}
-                clusterSummary={clusterQuery.data}
-                clusterLoading={clusterQuery.isLoading}
-                onOpenProgram={openProgram}
-                onOpenDelivery={openDelivery}
-                onOpenCluster={openCluster}
+                onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
+                onOpenAgentDeskWithPrefill={prefill => openAgentDesk({ prefill })}
               />
             </OpsContextBar>
           )}
@@ -417,21 +454,33 @@ export function ConsolePage() {
         )}
 
         {viewTab === 'agent-desk' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES['agent-desk']}
-              description="Owner agent control plane — chat requests, remediation task stream, and operator approvals via platform-api."
-            />
-            <AgentDeskPage
-              context={contextQuery.data}
-              initialJobId={agentDeskJobId}
-              onInitialJobConsumed={() => setAgentDeskJobId(null)}
-              onOpenBriefing={openBriefing}
-              onOpenCluster={openCluster}
-              onOpenMcpContract={() => setViewTab('mcp-contract')}
-            />
-          </>
+          <AgentDeskPage
+            context={contextQuery.data}
+            initialJobId={agentDeskJobId}
+            prefillPrompt={agentDeskPrefill}
+            onInitialJobConsumed={() => setAgentDeskJobId(null)}
+            onPrefillConsumed={() => setAgentDeskPrefill(null)}
+            onOpenBriefing={openBriefing}
+            onOpenCluster={openCluster}
+            onOpenMcpContract={() => setViewTab('mcp-contract')}
+            onOpenAgentProtocol={() => setViewTab('agent-protocol')}
+            onOpenAgentSystem={() => setViewTab('agent-system')}
+            onOpenOperatorPlane={openOperatorPlane}
+          />
         )}
+
+        {viewTab === 'operator-plane' && (
+          <OperatorPlanePage
+            onOpenMcpContract={() => setViewTab('mcp-contract')}
+            onOpenBriefing={openBriefing}
+          />
+        )}
+
+        {viewTab === 'autonomous-skills' && <AutonomousSkillsPage />}
+
+        {viewTab === 'execution-log' && <ExecutionLogPage />}
+
+        {viewTab === 'agent-governance' && <AgentGovernancePage />}
 
         {viewTab === 'briefing' && (
           <>
@@ -456,11 +505,7 @@ export function ConsolePage() {
 
         {viewTab === 'control-room' && (
           <>
-            <PageHeader
-              title={VIEW_TITLES['control-room']}
-              description="Live runtime summary (deep-link to Runtime Map for topology), dual flywheel governance, and Agent focus dock."
-            />
-            <Suspense fallback={<p className="text-[var(--muted-foreground)]">Loading control room…</p>}>
+            <Suspense fallback={<p className="text-[var(--muted-foreground)]">Loading mission control…</p>}>
               <ControlRoomPage
                 context={contextQuery.data}
                 contextLoading={contextQuery.isLoading}
@@ -478,7 +523,8 @@ export function ConsolePage() {
                 onOpenCluster={openCluster}
                 onOpenAudit={openAudit}
                 onOpenBriefing={openBriefing}
-                onOpenAgentDesk={() => openAgentDesk()}
+                onOpenAgentDesk={(opts) => openAgentDesk(opts)}
+                onOpenPlatformRelease={() => setViewTab('platform-release')}
               />
             </Suspense>
           </>
@@ -493,6 +539,8 @@ export function ConsolePage() {
             <AuditPage records={auditRecords} isLoading={auditQuery.isLoading} />
           </>
         )}
+
+        {viewTab === 'defects' && <DefectsPage />}
 
         {viewTab === 'runtime-map' && (
           <>
@@ -668,7 +716,10 @@ export function ConsolePage() {
                   : viewTab === 'cicd-bootstrap' ? 'L0/L1/L2 self-hosting bootstrap model — CI/CD rules, recovery paths, and P6 gap tracking.'
                   : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
                   : viewTab === 'network-upgrade' ? 'Home network backbone upgrade — VLAN redesign, UniFi migration plan, hardware BOM, and research checklist.'
+                  : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
+                  : viewTab === 'agent-system'
+                    ? 'Single runtime, capability domains, task chains, and registry — the map before Agent Protocol and MCP Contract.'
                   : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
                   : viewTab === 'mcp-contract'
                     ? 'MCP tool catalog, Cursor setup, and governance contract (permissions, deny-list).'
@@ -710,7 +761,15 @@ export function ConsolePage() {
 
         {viewTab === 'network-upgrade' && <NetworkUpgradePage />}
 
+        {viewTab === 'ai-compute' && <AiComputeStrategyPage />}
+
         {viewTab === 'platform-standards' && <StandardsPage />}
+
+        {viewTab === 'agent-system' && (
+          <AgentSystemPage
+            onOpenDoctrine={tab => setViewTab(tab === 'mcp-contract' ? 'mcp-contract' : 'agent-protocol')}
+          />
+        )}
 
         {viewTab === 'agent-protocol' && <AgentProtocolPage />}
 

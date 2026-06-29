@@ -5,10 +5,10 @@
  * Migrated from bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md (2026-06-15).
  */
 
-export const DEPLOY_MAINLINE_VERSION = '2026-06-18'
+export const DEPLOY_MAINLINE_VERSION = '2026-06-29'
 export const DEPLOY_MAINLINE_SOURCE = 'console/src/lib/architecture/deployMainlineCatalog.ts'
 export const DEPLOY_MAINLINE_STATUS =
-  'K3s STG v2 SIGNED (2026-06-18). Prod overlay + deliver-prod IN_PROGRESS. Legacy retirement pending prod validation.'
+  'K3s STG v2 SIGNED (2026-06-18). Data layer on CNPG (bare-metal .80 retired). Phase 3 Legacy retirement SIGNED (2026-06-29, decision D8).'
 
 export type MainlinePhase = {
   seq: number
@@ -25,7 +25,7 @@ export const MAINLINE_PHASES: MainlinePhase[] = [
   { seq: 4, phase: 'K3s STG v2 deliver (bifrost-deliver-stg)', authority: 'Ops Console → Operate → Delivery (deliveryMainlineCatalog.ts)', status: 'CLOSED (2026-06-18 — STG release gate + Tier B)' },
   { seq: 5, phase: 'K3s Prod overlay + deliver-prod', authority: 'Ops Console → Operate → Delivery · k8s/overlays/prod', status: 'Active — prod cutover IN_PROGRESS' },
   { seq: 6, phase: 'Compose → K3s migration sign-off', authority: 'Ops Console → Architecture → Platform Roadmap §5–6', status: 'Pending prod full-stack validation' },
-  { seq: 7, phase: 'Phase 3 Legacy retirement', authority: 'PHASE2C_PROD_DEFERRED.md', status: 'Pending Prod full-stack validation' },
+  { seq: 7, phase: 'Phase 3 Legacy retirement', authority: 'PHASE2C_PROD_DEFERRED.md', status: 'SIGNED (2026-06-29 — D8: UI side-by-side gate dropped; runtime stopped; engine NAS-archived)' },
 ]
 
 export const PHASE_L_CONTEXT = {
@@ -157,13 +157,14 @@ export const COMPOSE_REFERENCE_COMMANDS = [
 
 export const MIGRATION_SEQUENCE = [
   'data → socket/worker → api → frontend (Platform Roadmap)',
-  'Legacy retirement: Phase 3, requires K3s or Compose Prod full-stack validation',
+  'Legacy retirement: Phase 3 SIGNED (2026-06-29, D8) — Legacy runtime stopped, bifrost-trader-engine NAS-archived',
   'Auto-trade / R-DV3: Owner deferred, not in current milestone scope',
 ]
 
 export type ChangeLogEntry = { date: string; content: string }
 
 export const CHANGE_LOG: ChangeLogEntry[] = [
+  { date: '2026-06-29', content: 'Phase 3 Legacy retirement SIGNED (decision D8): UI side-by-side gate dropped (Legacy already stopped; Phase 2B 9/9 domains business-equivalent); engine NAS-archived read-only; data layer on CNPG (.80 retired)' },
   { date: '2026-06-08', content: 'Created; Agent prod-health + verify-2c-a1 revalidation passed' },
   { date: '2026-06-04', content: 'Owner L2 Sessions 0–3/8 + L2.8; L3 D1–D5 revised; L4 CLOSED; K3s Phase 1 unlocked' },
 ]

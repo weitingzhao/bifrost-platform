@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bifrost.hermes-gateway</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>source /Users/vision/bifrost-agent/config/env.sh &amp;&amp; source /Users/vision/bifrost-agent/config/.env 2>/dev/null; cd /Users/vision/bifrost-agent/hermes-gateway &amp;&amp; exec /opt/homebrew/bin/npx tsx src/server.ts</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/vision/bifrost-agent/hermes-gateway</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>/Users/vision</string>
+    <key>HERMES_GATEWAY_PORT</key>
+    <string>8782</string>
+    <key>HERMES_GATEWAY_BIND</key>
+    <string>0.0.0.0</string>
+    <key>HERMES_SKILLS_YAML</key>
+    <string>/Users/vision/bifrost-agent/hermes-gateway/skills.yaml</string>
+    <key>HERMES_DATA_DIR</key>
+    <string>/Users/vision/bifrost-agent/hermes</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/vision/bifrost-agent/logs/hermes-gateway.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/vision/bifrost-agent/logs/hermes-gateway.err</string>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>

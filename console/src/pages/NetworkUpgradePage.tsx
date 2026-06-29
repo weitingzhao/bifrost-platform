@@ -50,6 +50,7 @@ function researchVariant(status: string): DenseTagVariant {
 }
 
 function bomStatusVariant(status: string): DenseTagVariant {
+  if (status === 'ordered') return 'info'
   if (status === 'to-buy') return 'warning'
   if (status === 'owned') return 'success'
   return 'neutral'

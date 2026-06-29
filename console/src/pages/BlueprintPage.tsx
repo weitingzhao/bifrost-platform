@@ -17,6 +17,7 @@ import {
   BLUEPRINT_VERSION,
   CONFIG_FILES,
   CONSOLE_VIEWS,
+  AGENT_LAYERING,
   DESIGN_PRINCIPLES,
   NORTH_STAR_DECISION,
   NORTH_STAR_STATEMENT,
@@ -130,6 +131,35 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
             </li>
           ))}
         </ul>
+      </CatalogSection>
+
+      {/* 4b — Agent layering */}
+      <CatalogSection title="Agent layering (monorepo-first)">
+        <div className="flex flex-col gap-3 py-2">
+          {AGENT_LAYERING.map(l => (
+            <div key={l.layer} className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <strong className="text-[var(--text-dense-label)]">{l.layer}</strong>
+              </div>
+              <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                {l.substrate}
+              </p>
+              <p className="m-0 mt-0.5 text-[var(--text-dense-meta)]">{l.lifecycle}</p>
+              {l.extractionTriggers != null && l.extractionTriggers.length > 0 && (
+                <div className="mt-1.5">
+                  <span className="text-[var(--text-dense-caption)] font-medium text-[var(--muted-foreground)]">
+                    Extraction triggers (any one fires → split repo):
+                  </span>
+                  <ul className="m-0 mt-0.5 flex flex-col gap-0.5 pl-4 text-[var(--text-dense-meta)]">
+                    {l.extractionTriggers.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">

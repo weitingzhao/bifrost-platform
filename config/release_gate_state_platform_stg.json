@@ -1,7 +1,8 @@
 {
   "tier": "platform-stg",
-  "at": "2026-06-25T18:27:38.009768Z",
+  "at": "2026-06-27T00:59:37.203869Z",
   "result": "pass",
+  "revision": "feature/release-ui-polish",
   "log_path": "bifrost-trade-infra/scripts/release_gate.log",
   "checks": [
     {
@@ -9,7 +10,7 @@
       "label": "Last bifrost-deliver-platform success",
       "required": true,
       "reachability": "ok",
-      "detail": "bifrost-deliver-platform-1782409698 (True)"
+      "detail": "bifrost-deliver-platform-1782520543 (True)"
     },
     {
       "id": "platform-stg-console",

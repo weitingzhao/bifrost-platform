@@ -20,11 +20,13 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
+	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/retrospective"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
@@ -50,9 +52,11 @@ type Server struct {
 	agentreport  *agentreport.Handler
 	agentbridge  *agentbridge.Handler
 	agentdeploy  *agentdeploy.Handler
-	driftproposal *driftproposal.Handler
-	selfhealth   *selfhealth.Handler
-	auth         *actuation.AuthService
+	driftproposal  *driftproposal.Handler
+	hermesgateway  *hermesgateway.Handler
+	retrospective  *retrospective.Handler
+	selfhealth     *selfhealth.Handler
+	auth           *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
 }
@@ -65,6 +69,8 @@ func New(cfg *config.Config) *Server {
 	audit := actuation.NewAuditLog("")
 	jobs := actuation.NewJobStore()
 	gitopsH := gitops.NewHandler(cfg, audit)
+	remediationH := remediation.NewHandler(audit)
+	retroAnalyzer := retrospective.NewAnalyzer(remediationH.Store())
 	return &Server{
 		cfg:     cfg,
 		prober:  probe.NewProber(),
@@ -79,12 +85,14 @@ func New(cfg *config.Config) *Server {
 		buildgate: buildgate.NewHandler(cfg, audit),
 		tradeagent: tradeagent.NewHandler(),
 		opsagent:    opsagent.NewHandler(audit),
-		remediation: remediation.NewHandler(audit),
+		remediation: remediationH,
 		agentreport: agentreport.NewHandler(),
 		agentbridge: agentbridge.NewHandler(),
 		agentdeploy: agentdeploy.NewHandler(audit),
-		driftproposal: driftproposal.NewHandler(audit),
-		selfhealth: selfhealth.NewHandler(cfg, gitopsH.Service()),
+		driftproposal:  driftproposal.NewHandler(audit),
+		hermesgateway:  hermesgateway.NewHandler(),
+		retrospective:  retrospective.NewHandler(retroAnalyzer),
+		selfhealth:     selfhealth.NewHandler(cfg, gitopsH.Service()),
 		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -120,11 +128,20 @@ func (s *Server) Router() http.Handler {
 		r.Get("/mcp/status", s.mcp.HandleStatus)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
+		r.Get("/agent/smoke", s.agentbridge.HandleSmoke)
 		r.Get("/agent/deploy", s.agentdeploy.HandleStatus)
+		r.Get("/agent/hermes/health", s.hermesgateway.HandleHealth)
+		r.Get("/agent/skills", s.hermesgateway.HandleSkills)
+		r.Get("/agent/schedules", s.hermesgateway.HandleSchedules)
+		r.Get("/agent/executions", s.hermesgateway.HandleExecutions)
+		r.Get("/agent/retrospective/report", s.retrospective.HandleReport)
+		r.Get("/agent/retrospective/patterns", s.retrospective.HandlePatterns)
+		r.Get("/agent/retrospective/insights", s.retrospective.HandleInsights)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/agent/nightly-run", s.agentreport.HandleTriggerNightly)
 			r.Post("/agent/deploy", s.agentdeploy.HandleStart)
+			r.Put("/agent/skills/{id}/actuation-level", s.hermesgateway.HandleSkillActuationLevel)
 		})
 		r.Route("/agent/drift-proposals", func(r chi.Router) {
 			r.Get("/", s.driftproposal.HandleList)
@@ -142,6 +159,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/supply-chain", s.delivery.HandleSupplyChain)
 		r.Get("/delivery/revisions", s.delivery.HandleRevisions)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
+		r.Get("/delivery/pipelines/{name}/ref-preflight", s.delivery.HandleRefPreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/build-phase", s.buildgate.HandleListPhases)
@@ -235,6 +253,7 @@ func (s *Server) Router() http.Handler {
 			})
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleAdmin))
+				r.Post("/kubeconfig-secret/ensure", s.cluster.HandleEnsureKubeconfigSecret)
 				r.Post("/addons/metrics-server/ensure", s.cluster.HandleEnsureMetricsServer)
 				r.Post("/nodes/join", s.cluster.HandleJoinNode)
 				r.Post("/nodes/{name}/drain", s.cluster.HandleDrainNode)

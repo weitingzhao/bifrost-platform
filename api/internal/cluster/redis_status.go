@@ -64,6 +64,20 @@ type RedisEnvEndpointView struct {
 	Detail        string             `json:"detail,omitempty"`
 }
 
+// RedisLanEndpointView surfaces NodePort entry points for LAN Redis Insight clients.
+type RedisLanEndpointView struct {
+	Name        string             `json:"name"`
+	Environment string             `json:"environment"`
+	Role        string             `json:"role"`
+	Host        string             `json:"host,omitempty"`
+	NodePort    int                `json:"node_port,omitempty"`
+	Endpoint    string             `json:"endpoint,omitempty"`
+	Database    string             `json:"database,omitempty"`
+	Available   bool               `json:"available"`
+	Reach       probe.Reachability `json:"reachability"`
+	Detail      string             `json:"detail,omitempty"`
+}
+
 type RedisStatusResponse struct {
 	ClusterID          string                    `json:"cluster_id"`
 	Reachability       probe.Reachability        `json:"reachability"`
@@ -77,6 +91,7 @@ type RedisStatusResponse struct {
 	EmbeddedActive     int                       `json:"embedded_active"`
 	TargetInstances    []RedisTargetInstanceView `json:"target_instances"`
 	EnvEndpoints       []RedisEnvEndpointView    `json:"env_endpoints"`
+	LanEndpoints       []RedisLanEndpointView    `json:"lan_endpoints"`
 	Embedded           []RedisEmbeddedView       `json:"embedded"`
 	Legacy             []PostgresLegacyView      `json:"legacy"`
 	Backup             ServiceDependencyView     `json:"backup"`
@@ -125,6 +140,7 @@ func (s *Service) RedisStatus(ctx context.Context) RedisStatusResponse {
 	}
 
 	resp.EnvEndpoints = buildRedisEnvEndpoints(resp.TargetInstances)
+	resp.LanEndpoints = redisLanAccessProbe(ctx, clientset)
 	resp.Embedded = embeddedRedisProbe(snap)
 	for _, e := range resp.Embedded {
 		if e.Reach == probe.ReachOK && !strings.Contains(e.Detail, "removed") {
@@ -304,6 +320,73 @@ func redisBackupDep(snap readinessSnapshot, minioReach probe.Reachability) Servi
 	return ServiceDependencyView{
 		ID: "redis-backup", Label: "RDB backup (nfs-hot)", Reachability: reach, Detail: detail,
 	}
+}
+
+type redisLanSpec struct {
+	lanService string
+	targetName string
+	environment string
+	role       string
+	database   string
+}
+
+var redisLanCatalog = []redisLanSpec{
+	{lanService: "redis-dev-lan", targetName: "redis-dev", environment: "dev", role: "live+queue", database: "db=0 live · db=1 queue"},
+	{lanService: "redis-live-stg-lan", targetName: "redis-live-stg", environment: "stg", role: "live", database: "db=0"},
+	{lanService: "redis-queue-stg-lan", targetName: "redis-queue-stg", environment: "stg", role: "queue", database: "db=0"},
+	{lanService: "redis-live-prod-lan", targetName: "redis-live-prod", environment: "prod", role: "live", database: "db=0"},
+	{lanService: "redis-queue-prod-lan", targetName: "redis-queue-prod", environment: "prod", role: "queue", database: "db=0"},
+}
+
+func redisLanAccessProbe(ctx context.Context, clientset kubernetes.Interface) []RedisLanEndpointView {
+	host := firstReadyNodeInternalIP(ctx, clientset)
+	out := make([]RedisLanEndpointView, 0, len(redisLanCatalog))
+
+	for _, spec := range redisLanCatalog {
+		view := RedisLanEndpointView{
+			Name:        spec.targetName,
+			Environment: spec.environment,
+			Role:        spec.role,
+			Database:    spec.database,
+			Reach:       probe.ReachDegraded,
+		}
+
+		svc, err := clientset.CoreV1().Services(redisDataNamespace).Get(ctx, spec.lanService, metav1.GetOptions{})
+		if err != nil {
+			view.Detail = fmt.Sprintf("NodePort service %s not found — apply k8s/data/redis/redis-nodeport.yaml", spec.lanService)
+			out = append(out, view)
+			continue
+		}
+
+		var nodePort int32
+		for _, p := range svc.Spec.Ports {
+			if p.Name == "redis" || p.Port == 6379 {
+				nodePort = p.NodePort
+				break
+			}
+		}
+		if nodePort == 0 {
+			view.Detail = fmt.Sprintf("%s has no NodePort assigned", spec.lanService)
+			out = append(out, view)
+			continue
+		}
+		view.NodePort = int(nodePort)
+
+		if host == "" {
+			view.Detail = fmt.Sprintf("NodePort %d ready; no Ready node IP resolved", nodePort)
+			out = append(out, view)
+			continue
+		}
+
+		view.Available = true
+		view.Host = host
+		view.Endpoint = fmt.Sprintf("%s:%d", host, nodePort)
+		view.Reach = probe.ReachOK
+		view.Detail = "LAN-only · no password on phase-⑥ instances"
+		out = append(out, view)
+	}
+
+	return out
 }
 
 func summarizeRedisStatus(r RedisStatusResponse) (probe.Reachability, string) {

@@ -5,7 +5,7 @@
  * Migrated from bifrost-trade-infra/docs/PLATFORM_ROADMAP.md (2026-06-15).
  */
 
-export const ROADMAP_VERSION = '2026-06-15'
+export const ROADMAP_VERSION = '2026-06-27'
 export const ROADMAP_SOURCE = 'console/src/lib/architecture/roadmapCatalog.ts'
 
 export const ROADMAP_STATUS =
@@ -72,6 +72,7 @@ export const HARDWARE_MAPPING: RoadmapHardwareRow[] = [
 export const HARDWARE_NOTES = [
   'K3s doc lists three Mini PCs; current reality is two Linux Minis live + mini-pc-c as second batch (K3s §9 stage 4).',
   'TWS runs on Win11 (not Mac Mini) — socket connects via IB_HOST on LAN; same principle as ARCHITECTURE §2.',
+  'The two Mac Minis (.50 primary / .52 standby) double as the L-1 Out-of-Band Operator Plane: AI Remediation Runners + launchd mutual watchdog, living OUTSIDE K8s so they can recover the cluster. Fate-isolated by design — see Architecture → K3s Bootstrap (L-1) and Flywheel Vision.',
 ]
 
 export type MilestoneBaselineRow = {
@@ -104,14 +105,14 @@ export type MacMiniRoleRow = { machine: string; service: string; connection: str
 
 export const PHASE_A_MAC_MINI: MacMiniRoleRow[] = [
   {
-    machine: 'Mac Mini #1',
-    service: 'docker-compose.dev.yml all-day Dev stack',
-    connection: 'bifrost_dev @ .80; Dev client_id → Win11',
+    machine: 'Mac Mini #1 (.50)',
+    service: 'docker-compose.dev.yml all-day Dev stack + Remediation Runner PRIMARY (nightly-drift)',
+    connection: 'bifrost_dev @ .80; Dev client_id → Win11; peer watchdog → .52',
   },
   {
-    machine: 'Mac Mini #2',
-    service: 'Git runner + make prod-health release gate',
-    connection: 'Auto verify before tag; optional Uptime Kuma',
+    machine: 'Mac Mini #2 (.52)',
+    service: 'Git runner + make prod-health release gate + Remediation Runner STANDBY (failover)',
+    connection: 'Auto verify before tag; optional Uptime Kuma; peer watchdog → .50',
   },
 ]
 

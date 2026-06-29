@@ -1,18 +1,23 @@
 import type { ShellNavGroup } from '@bifrost/ui'
 import {
+  Activity,
   BookOpen,
   Boxes,
   Bot,
+  CalendarClock,
   ClipboardList,
   Container,
+  Cpu,
   Database,
   Eye,
   FileCode2,
   Gauge,
   GitBranch,
   History,
+  LifeBuoy,
   Map,
   MapPinned,
+  Microscope,
   Milestone,
   Network,
   Orbit,
@@ -22,6 +27,7 @@ import {
   Ruler,
   Server,
   Shield,
+  ShieldCheck,
   Terminal,
   Wifi,
   Workflow,
@@ -29,25 +35,71 @@ import {
 } from 'lucide-react'
 
 /**
- * Ops Console sidebar — three top-level planes (mirrors Delivery page Operate / Observe / Blueprint).
+ * Ops Console sidebar — four top-level groups.
  *
- * | Plane        | Intent                                      |
- * |--------------|---------------------------------------------|
- * | Operate      | L1/L2 actuation — release, cluster, tools   |
- * | Observe      | L0 probes — live status, audit, briefing    |
- * | Architecture | PLAN static — governance, K3s, standards    |
+ * Three are LENSES on the managed system (rocket = Ops Platform, payload = Trade);
+ * one is the ACTOR's own home (engineer = AI Agent). The lenses describe what the
+ * Owner does to the system; the Agent plane is everything ABOUT the engineer itself.
  *
- * Runtime escalation (L0 Observe → L1 Operate; mirrors Architecture → Governance ordered chains):
- *   Observe → Diagnosis: Control Room → Runtime Map (business topology + matrix, L0)
- *   Observe → Scheduling: Placement (K8s node-pool / policy gap, L0)
- *   Observe → Session & audit: Agent Briefing · Audit (session entry + actuation history)
- *   Operate → Cluster ops: Cluster → Server Console (L0 read + L1 actuation + shell)
+ * | Group        | Axis    | Intent                                              |
+ * |--------------|---------|-----------------------------------------------------|
+ * | Agent        | actor   | The engineer's home — workspace, doctrine, L-1 plane|
+ * | Operate      | lens    | L1/L2 actuation — release, cluster, tools           |
+ * | Observe      | lens    | L0 probes — live status, audit                      |
+ * | Architecture | lens    | PLAN static — rocket governance, K3s, standards     |
+ *
+ * Agent is fate-isolated from the system it services (bootstrap paradox, decision D7):
+ *   Agent → Workspace: Agent Desk (dispatch) · Agent Briefing (session entry)
+ *   Agent → Autonomous: Skills (Hermes scheduled) · Execution Log (history)
+ *   Agent → Governance: Performance (KPIs) · Trust & Autonomy (per-Skill L0/L1/L2)
+ *   Agent → Doctrine: Agent Protocol (modes) · MCP Contract (tool contract)
+ *   Agent → Operator Plane (L-1): runner + Hermes heartbeats, dual-Mini deploy, watchdog
  */
 export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
   {
+    label: 'Agent',
+    icon: Bot,
+    defaultOpen: true,
+    subGroups: [
+      {
+        label: 'Workspace',
+        items: [
+          { id: 'agent-desk', label: 'Agent Desk', icon: Bot },
+          { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
+        ],
+      },
+      {
+        label: 'Autonomous',
+        items: [
+          { id: 'autonomous-skills', label: 'Skills & Schedules', icon: CalendarClock },
+          { id: 'execution-log', label: 'Execution Log', icon: Activity },
+        ],
+      },
+      {
+        label: 'Governance',
+        items: [
+          { id: 'agent-governance', label: 'Trust & Autonomy', icon: ShieldCheck },
+        ],
+      },
+      {
+        label: 'Doctrine',
+        items: [
+          { id: 'agent-system', label: 'Agent System', icon: Boxes },
+          { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
+          { id: 'mcp-contract', label: 'MCP Contract', icon: Plug },
+        ],
+      },
+      {
+        label: 'Operator Plane (L-1)',
+        items: [
+          { id: 'operator-plane', label: 'Operator Plane', icon: LifeBuoy },
+        ],
+      },
+    ],
+  },
+  {
     label: 'Operate',
     icon: Zap,
-    defaultOpen: true,
     subGroups: [
       {
         label: 'Trade release',
@@ -81,6 +133,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         items: [
           { id: 'control-room', label: 'Control Room', icon: Gauge },
           { id: 'runtime-map', label: 'Runtime Map', icon: Map },
+          { id: 'defects', label: 'Defects', icon: Microscope },
         ],
       },
       {
@@ -88,10 +141,8 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         items: [{ id: 'placement', label: 'Placement', icon: Network }],
       },
       {
-        label: 'Session & audit',
+        label: 'Audit',
         items: [
-          { id: 'agent-desk', label: 'Agent Desk', icon: Bot },
-          { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
           { id: 'audit', label: 'Audit', icon: History },
         ],
       },
@@ -122,11 +173,15 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         ],
       },
       {
+        label: 'AI',
+        items: [
+          { id: 'ai-compute', label: 'AI Compute Strategy', icon: Cpu },
+        ],
+      },
+      {
         label: 'Standards',
         items: [
           { id: 'platform-standards', label: 'Platform', icon: Shield },
-          { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
-          { id: 'mcp-contract', label: 'MCP Contract', icon: Plug },
           { id: 'design-system', label: 'Design System', icon: Ruler },
         ],
       },
@@ -134,8 +189,19 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
   },
 ]
 
+export type ConsoleNavPlane = 'Agent' | 'Operate' | 'Observe' | 'Architecture'
+
 /** Map view tab id → sidebar plane (for headers, briefing packs, catalog cross-refs). */
-export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'Architecture'> = {
+export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
+  'agent-desk': 'Agent',
+  briefing: 'Agent',
+  'autonomous-skills': 'Agent',
+  'execution-log': 'Agent',
+  'agent-governance': 'Agent',
+  'agent-system': 'Agent',
+  'agent-protocol': 'Agent',
+  'mcp-contract': 'Agent',
+  'operator-plane': 'Agent',
   delivery: 'Operate',
   promote: 'Operate',
   'deploy-mainline': 'Operate',
@@ -144,10 +210,9 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'A
   placement: 'Observe',
   console: 'Operate',
   'control-room': 'Observe',
-  'agent-desk': 'Observe',
-  briefing: 'Observe',
   'runtime-map': 'Observe',
   audit: 'Observe',
+  defects: 'Observe',
   blueprint: 'Architecture',
   'flywheel-vision': 'Architecture',
   program: 'Architecture',
@@ -158,12 +223,11 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, 'Operate' | 'Observe' | 'A
   'cicd-bootstrap': 'Architecture',
   'data-layer': 'Architecture',
   'network-upgrade': 'Architecture',
+  'ai-compute': 'Architecture',
   'platform-standards': 'Architecture',
-  'agent-protocol': 'Architecture',
-  'mcp-contract': 'Architecture',
   'design-system': 'Architecture',
 }
 
-export function consoleNavPlane(tabId: string): 'Operate' | 'Observe' | 'Architecture' | undefined {
+export function consoleNavPlane(tabId: string): ConsoleNavPlane | undefined {
   return CONSOLE_NAV_PLANE_BY_TAB[tabId]
 }

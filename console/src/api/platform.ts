@@ -62,7 +62,17 @@ import type {
   RunBuildPhaseGateResponse,
   SelfHealthResponse,
   RevisionsResponse,
+  RefPreflightResponse,
   ReleaseStateResponse,
+  HermesSkillsResponse,
+  HermesSchedulesResponse,
+  HermesExecutionsResponse,
+  HermesGatewayHealth,
+  AgentPerformanceResponse,
+  TrustMatrixResponse,
+  HermesActuationLevel,
+  RunnerSmokeResponse,
+  RetrospectiveReport,
 } from './types'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
@@ -516,6 +526,16 @@ export async function fetchRevisions(repos?: string[]): Promise<RevisionsRespons
   return r.json() as Promise<RevisionsResponse>
 }
 
+export async function fetchRefPreflight(
+  pipeline: string,
+  revision: string,
+): Promise<RefPreflightResponse> {
+  const params = new URLSearchParams({ revision })
+  const r = await fetch(`/api/v1/delivery/pipelines/${pipeline}/ref-preflight?${params}`)
+  if (!r.ok) throw new Error(`ref preflight: HTTP ${r.status}`)
+  return r.json() as Promise<RefPreflightResponse>
+}
+
 export async function triggerMirrorSync(): Promise<SupplyChainActuationResponse> {
   const r = await authedFetch('mirror sync', '/api/v1/delivery/supply-chain/mirror-sync', {
     method: 'POST',
@@ -735,10 +755,15 @@ export async function respondRemediationJob(
   id: string,
   optionId: string,
   note?: string,
+  commitMessage?: string,
 ): Promise<void> {
+  const payload: Record<string, string> = { option_id: optionId, note: note ?? '' }
+  if (commitMessage != null && commitMessage.trim() !== '') {
+    payload.commit_message = commitMessage.trim()
+  }
   const r = await authedFetch('remediation respond', `/api/v1/remediation/${encodeURIComponent(id)}/respond`, {
     method: 'POST',
-    body: JSON.stringify({ option_id: optionId, note: note ?? '' }),
+    body: JSON.stringify(payload),
   })
   if (!r.ok) throw await parseError('remediation respond', r)
 }
@@ -764,12 +789,16 @@ export async function fetchAgentDeployStatus(): Promise<AgentDeployStatusRespons
   return r.json() as Promise<AgentDeployStatusResponse>
 }
 
-export async function startAgentDeploy(remote?: string): Promise<AgentDeployStartResponse> {
-  const body =
-    remote != null && remote.trim() !== '' ? JSON.stringify({ remote: remote.trim() }) : '{}'
+export async function startAgentDeploy(opts?: {
+  target?: string
+  remote?: string
+}): Promise<AgentDeployStartResponse> {
+  const payload: { target?: string; remote?: string } = {}
+  if (opts?.target != null && opts.target.trim() !== '') payload.target = opts.target.trim()
+  if (opts?.remote != null && opts.remote.trim() !== '') payload.remote = opts.remote.trim()
   const r = await authedFetch('agent deploy', '/api/v1/agent/deploy', {
     method: 'POST',
-    body,
+    body: JSON.stringify(payload),
   })
   return r.json() as Promise<AgentDeployStartResponse>
 }
@@ -840,4 +869,73 @@ export async function signBuildPhase(phase: string, notes = ''): Promise<RunBuil
     body: JSON.stringify({ notes }),
   })
   return r.json() as Promise<RunBuildPhaseGateResponse>
+}
+
+// Runner smoke test
+
+export async function fetchRunnerSmoke(): Promise<RunnerSmokeResponse> {
+  const r = await fetch('/api/v1/agent/smoke')
+  if (!r.ok) throw new Error(`runner smoke: HTTP ${r.status}`)
+  return r.json() as Promise<RunnerSmokeResponse>
+}
+
+// Hermes Gateway — Autonomous Agent
+
+export async function fetchHermesGatewayHealth(): Promise<HermesGatewayHealth> {
+  const r = await fetch('/api/v1/agent/hermes/health')
+  if (!r.ok) throw new Error(`hermes health: HTTP ${r.status}`)
+  return r.json() as Promise<HermesGatewayHealth>
+}
+
+export async function fetchHermesSkills(): Promise<HermesSkillsResponse> {
+  const r = await fetch('/api/v1/agent/skills')
+  if (!r.ok) throw new Error(`hermes skills: HTTP ${r.status}`)
+  return r.json() as Promise<HermesSkillsResponse>
+}
+
+export async function fetchHermesSchedules(): Promise<HermesSchedulesResponse> {
+  const r = await fetch('/api/v1/agent/schedules')
+  if (!r.ok) throw new Error(`hermes schedules: HTTP ${r.status}`)
+  return r.json() as Promise<HermesSchedulesResponse>
+}
+
+export async function fetchHermesExecutions(limit = 50): Promise<HermesExecutionsResponse> {
+  const r = await fetch(`/api/v1/agent/executions?limit=${limit}`)
+  if (!r.ok) throw new Error(`hermes executions: HTTP ${r.status}`)
+  return r.json() as Promise<HermesExecutionsResponse>
+}
+
+export async function updateSkillActuationLevel(
+  skillId: string,
+  level: HermesActuationLevel,
+): Promise<void> {
+  await authedFetch('skill actuation level', `/api/v1/agent/skills/${skillId}/actuation-level`, {
+    method: 'PUT',
+    body: JSON.stringify({ level }),
+  })
+}
+
+// Agent Governance — Flight Director
+
+export async function fetchAgentPerformance(): Promise<AgentPerformanceResponse> {
+  const r = await fetch('/api/v1/agent/governance/performance')
+  if (!r.ok) throw new Error(`agent performance: HTTP ${r.status}`)
+  return r.json() as Promise<AgentPerformanceResponse>
+}
+
+export async function fetchTrustMatrix(): Promise<TrustMatrixResponse> {
+  const r = await fetch('/api/v1/agent/governance/trust-matrix')
+  if (!r.ok) throw new Error(`trust matrix: HTTP ${r.status}`)
+  return r.json() as Promise<TrustMatrixResponse>
+}
+
+// Retrospective Agent — cross-job pattern analysis
+
+export async function fetchRetrospectiveReport(refresh = false): Promise<RetrospectiveReport> {
+  const url = refresh
+    ? '/api/v1/agent/retrospective/report?refresh=true'
+    : '/api/v1/agent/retrospective/report'
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`retrospective report: HTTP ${r.status}`)
+  return r.json() as Promise<RetrospectiveReport>
 }

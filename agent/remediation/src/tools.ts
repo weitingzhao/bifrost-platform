@@ -3,7 +3,8 @@ import { promisify } from 'node:util'
 import type { SDKCustomTool } from '@cursor/sdk'
 import { submitOperatorResponse, waitForOperatorResponse } from './approvals.js'
 import { appendEvent, makeEvent, setPhase } from './jobs.js'
-import { jsonText, platformDelete, platformGet, platformPost } from './platformClient.js'
+import { gitBridgeGet, gitBridgePost } from './gitBridgeClient.js'
+import { jsonText, platformDelete, platformGet, platformPost, platformPostAdmin } from './platformClient.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -20,6 +21,34 @@ async function kubectl(args: string[], timeoutMs = 120_000): Promise<string> {
   const { stdout, stderr } = await execFileAsync('kubectl', args, {
     env: kubeEnv(),
     maxBuffer: 4 * 1024 * 1024,
+    timeout: timeoutMs,
+  })
+  const out = stdout.trim()
+  const err = stderr.trim()
+  if (out === '' && err !== '') return err
+  if (err !== '') return `${out}\n\nstderr:\n${err}`
+  return out
+}
+
+// Resolve the SSH target of the peer agent host (the other Mac Mini).
+// PEER_AGENT_SSH e.g. "vision@192.168.10.52". Used by the mutual watchdog
+// to restart a downed peer runner.
+function peerSshTarget(explicit?: string): string | null {
+  const candidate = (explicit ?? process.env.PEER_AGENT_SSH ?? '').trim()
+  return candidate !== '' ? candidate : null
+}
+
+async function ssh(target: string, remoteCmd: string, timeoutMs = 30_000): Promise<string> {
+  const args = [
+    '-o', 'BatchMode=yes',
+    '-o', 'StrictHostKeyChecking=accept-new',
+    '-o', 'ConnectTimeout=8',
+    target,
+    remoteCmd,
+  ]
+  const { stdout, stderr } = await execFileAsync('ssh', args, {
+    env: process.env,
+    maxBuffer: 1024 * 1024,
     timeout: timeoutMs,
   })
   const out = stdout.trim()
@@ -91,6 +120,7 @@ async function runOperatorApproval(
     checklist?: string[]
     kind?: 'manual_steps' | 'decision'
     note_hint?: string
+    commit_message?: string
   },
 ) {
   const {
@@ -101,6 +131,7 @@ async function runOperatorApproval(
     checklist = [],
     kind = 'decision',
     note_hint,
+    commit_message,
   } = params
 
   if (options.length === 0) {
@@ -108,17 +139,18 @@ async function runOperatorApproval(
   }
 
   setPhase(jobId, 'awaiting_approval')
-  appendEvent(
-    jobId,
-    makeEvent('approval_request', message, {
-      title,
-      options,
-      commands,
-      checklist,
-      kind,
-      note_hint,
-    }),
-  )
+  const meta: Record<string, unknown> = {
+    title,
+    options,
+    commands,
+    checklist,
+    kind,
+    note_hint,
+  }
+  if (commit_message != null && commit_message.trim() !== '') {
+    meta.commit_message = commit_message.trim()
+  }
+  appendEvent(jobId, makeEvent('approval_request', message, meta))
 
   try {
     const decision = await waitForOperatorResponse(jobId)
@@ -131,17 +163,20 @@ async function runOperatorApproval(
       makeEvent('status', statusText, {
         option_id: decision.option_id,
         note: decision.note,
+        commit_message: decision.commit_message,
       }),
     )
     setPhase(jobId, 'remediating')
-    return textResult(
-      jsonText({
-        selected: decision.option_id,
-        note: decision.note ?? '',
-        proceed: approvalShouldProceed(decision.option_id),
-        still_blocked: decision.option_id === 'manual_still_blocked',
-      }),
-    )
+    const result: Record<string, unknown> = {
+      selected: decision.option_id,
+      note: decision.note ?? '',
+      proceed: approvalShouldProceed(decision.option_id),
+      still_blocked: decision.option_id === 'manual_still_blocked',
+    }
+    if (decision.commit_message != null && decision.commit_message.trim() !== '') {
+      result.commit_message = decision.commit_message.trim()
+    }
+    return textResult(jsonText(result))
   } catch (err) {
     setPhase(jobId, 'remediating')
     return textResult(err instanceof Error ? err.message : String(err), true)
@@ -186,6 +221,10 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
             type: 'string',
             description: 'Placeholder hint for the operator notes field',
           },
+          commit_message: {
+            type: 'string',
+            description: 'Proposed git commit message. When provided, the approval card shows an editable commit-message field pre-filled with this text. The operator can review and edit it. The final (possibly edited) message is returned in the response commit_message field — use it for git_commit.',
+          },
         },
         required: ['title', 'message', 'options'],
       },
@@ -199,6 +238,7 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
           checklist: parseStringList(args.checklist),
           kind: 'decision',
           note_hint: args.note_hint != null ? String(args.note_hint) : undefined,
+          commit_message: args.commit_message != null ? String(args.commit_message) : undefined,
         })
       },
     },
@@ -437,6 +477,417 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       inputSchema: { type: 'object', properties: {} },
       async execute() {
         const data = await platformGet('/api/v1/cluster/service-readiness')
+        return textResult(jsonText(data))
+      },
+    },
+
+    sync_cluster_kubeconfig: {
+      description:
+        'Ensure the bifrost-platform-kubeconfig Secret exists in platform STG/PROD namespaces. ' +
+        'Optionally syncs the kubeconfig from the K3s server first (sync_first=true). ' +
+        'Admin role required. Use when cluster reachability is "fail" due to missing kubeconfig secret. ' +
+        'IMPORTANT: call request_operator_approval BEFORE using this tool.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          namespaces: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Target namespaces (default: ["bifrost-platform-stg","bifrost-platform-prod"])',
+          },
+          sync_first: {
+            type: 'boolean',
+            description:
+              'If true, fetch kubeconfig from K3s server before creating the secret (requires SSH + PLATFORM_CLUSTER_SYNC_ENABLED=1)',
+          },
+        },
+      },
+      async execute(args) {
+        const body: Record<string, unknown> = {}
+        if (Array.isArray(args.namespaces)) {
+          body.namespaces = args.namespaces.map(v => String(v))
+        }
+        if (args.sync_first != null) {
+          body.sync_first = Boolean(args.sync_first)
+        }
+        const data = await platformPostAdmin(
+          '/api/v1/cluster/kubeconfig-secret/ensure',
+          body,
+        )
+        return textResult(jsonText(data))
+      },
+    },
+
+    // ── Release-Fix escalation (Release Agent → Release-Fix Agent) ──
+
+    spawn_release_fix: {
+      description:
+        'Escalate a release failure to a Release-Fix Agent. Starts a new agent task with scope "release-fix" that will ' +
+        'attempt to diagnose and fix the root cause in the codebase. Returns the spawned job ID. ' +
+        'After spawning, use poll_release_fix to wait for the result. ' +
+        'Use this when a release phase fails (gate failure, build error, deploy error) and the error appears fixable in code/config.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          diagnosis: {
+            type: 'string',
+            description:
+              'Detailed diagnosis report for the Release-Fix Agent. Include: which phase failed, the full error message/logs, ' +
+              'what you believe the root cause is, which files/repos are likely involved, and any relevant context.',
+          },
+        },
+        required: ['diagnosis'],
+      },
+      async execute(args) {
+        const diagnosis = String(args.diagnosis ?? '')
+        if (diagnosis.trim() === '') {
+          return textResult('diagnosis must be a non-empty string describing the failure', true)
+        }
+        setPhase(jobId, 'awaiting_approval')
+        appendEvent(jobId, makeEvent('status', 'Escalating to Release-Fix Agent…', {
+          phase: 'awaiting_approval',
+          escalation: 'release-fix',
+        }))
+
+        const runnerBase =
+          process.env.REMEDIATION_RUNNER_URL?.replace(/\/$/, '') ??
+          `http://127.0.0.1:${process.env.REMEDIATION_RUNNER_PORT ?? '8781'}`
+        try {
+          const resp = await fetch(`${runnerBase}/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              scope: 'release-fix',
+              actor: 'release-agent',
+              prompt: diagnosis,
+            }),
+          })
+          if (!resp.ok) {
+            const errText = await resp.text()
+            setPhase(jobId, 'remediating')
+            return textResult(`Failed to spawn release-fix: HTTP ${resp.status} ${errText}`, true)
+          }
+          const job = (await resp.json()) as { id: string; status: string }
+          appendEvent(jobId, makeEvent('status', `Release-Fix Agent spawned: ${job.id}`, {
+            release_fix_job_id: job.id,
+          }))
+          setPhase(jobId, 'remediating')
+          return textResult(jsonText({ spawned: true, release_fix_job_id: job.id, status: job.status }))
+        } catch (err) {
+          setPhase(jobId, 'remediating')
+          return textResult(`Failed to spawn release-fix: ${err instanceof Error ? err.message : String(err)}`, true)
+        }
+      },
+    },
+
+    poll_release_fix: {
+      description:
+        'Poll a Release-Fix Agent job for completion. Returns the job status, phase, summary, and error. ' +
+        'Call this in a loop (every 15–30s) after spawn_release_fix until status is "done" or "failed". ' +
+        'If done: the fix has been committed and pushed — you can retry the failed release phase. ' +
+        'If failed: the fix could not be applied automatically — report to the operator for IDE Agent escalation.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          job_id: {
+            type: 'string',
+            description: 'The release-fix job ID returned by spawn_release_fix',
+          },
+        },
+        required: ['job_id'],
+      },
+      async execute(args) {
+        const fixJobId = String(args.job_id ?? '')
+        if (fixJobId.trim() === '') {
+          return textResult('job_id is required', true)
+        }
+        const runnerBase =
+          process.env.REMEDIATION_RUNNER_URL?.replace(/\/$/, '') ??
+          `http://127.0.0.1:${process.env.REMEDIATION_RUNNER_PORT ?? '8781'}`
+        try {
+          const resp = await fetch(`${runnerBase}/run/${encodeURIComponent(fixJobId)}`)
+          if (!resp.ok) {
+            const errText = await resp.text()
+            return textResult(`Failed to poll release-fix job: HTTP ${resp.status} ${errText}`, true)
+          }
+          const job = (await resp.json()) as {
+            id: string
+            status: string
+            phase: string
+            summary?: string
+            error?: string
+          }
+          return textResult(jsonText({
+            job_id: job.id,
+            status: job.status,
+            phase: job.phase,
+            summary: job.summary ?? null,
+            error: job.error ?? null,
+            completed: job.status !== 'running',
+            fix_succeeded: job.status === 'done',
+          }))
+        } catch (err) {
+          return textResult(`Failed to poll release-fix job: ${err instanceof Error ? err.message : String(err)}`, true)
+        }
+      },
+    },
+
+    // ── Mutual watchdog tools (dual Mac Mini self-healing) ──
+
+    peer_agent_health: {
+      description:
+        'Check the peer agent runner health over the LAN (the other Mac Mini). Returns the /health JSON or an unreachable error. Use to confirm whether the peer is actually down before restarting it.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          peer_url: {
+            type: 'string',
+            description: 'Peer runner base URL, e.g. http://192.168.10.52:8781. Defaults to PEER_AGENT_URL env.',
+          },
+        },
+      },
+      async execute(args) {
+        const url = String(args.peer_url ?? process.env.PEER_AGENT_URL ?? '').trim().replace(/\/$/, '')
+        if (url === '') {
+          return textResult('peer_url not provided and PEER_AGENT_URL not set', true)
+        }
+        try {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), 8_000)
+          const resp = await fetch(`${url}/health`, { signal: controller.signal })
+          clearTimeout(timer)
+          if (!resp.ok) {
+            return textResult(`peer ${url} unhealthy: HTTP ${resp.status}`, true)
+          }
+          const body = await resp.text()
+          return textResult(`peer ${url} healthy: ${body}`)
+        } catch (err) {
+          return textResult(`peer ${url} unreachable: ${err instanceof Error ? err.message : String(err)}`, true)
+        }
+      },
+    },
+
+    restart_peer_agent: {
+      description:
+        'Restart the remediation runner on the peer Mac Mini via SSH (launchctl kickstart). Use ONLY when peer_agent_health confirms the peer runner is down and the launchd watchdog has not recovered it. Requires passwordless SSH to PEER_AGENT_SSH (e.g. vision@192.168.10.52).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          peer_ssh: {
+            type: 'string',
+            description: 'SSH target, e.g. vision@192.168.10.52. Defaults to PEER_AGENT_SSH env.',
+          },
+        },
+      },
+      async execute(args) {
+        const target = peerSshTarget(args.peer_ssh != null ? String(args.peer_ssh) : undefined)
+        if (target == null) {
+          return textResult('peer_ssh not provided and PEER_AGENT_SSH not set', true)
+        }
+        try {
+          const cmd =
+            'launchctl kickstart -k "gui/$(id -u)/com.bifrost.remediation-runner" && sleep 2 && curl -s -m 5 http://127.0.0.1:8781/health'
+          const out = await ssh(target, cmd)
+          return textResult(`Restarted peer runner on ${target}:\n${out}`)
+        } catch (err) {
+          return textResult(
+            `Failed to restart peer runner on ${target}: ${err instanceof Error ? err.message : String(err)}`,
+            true,
+          )
+        }
+      },
+    },
+
+    // ── Git Bridge tools (Release Agent — Phase A) ──
+
+    git_workspace_status: {
+      description:
+        'Scan all managed repos on the developer Mac for uncommitted changes. Returns per-repo branch, dirty flag, modified/untracked file lists, and ahead count. Use at the start of a release to decide what to commit.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await gitBridgeGet('/status')
+        return textResult(jsonText(data))
+      },
+    },
+
+    git_diff: {
+      description:
+        'Get a diff summary for specific repos (or all dirty repos). Use to understand what changed before composing a commit message.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repos: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Repo names to diff. Omit for all dirty repos.',
+          },
+        },
+      },
+      async execute(args) {
+        const repos = Array.isArray(args.repos) ? args.repos.map(String) : undefined
+        const data = await gitBridgePost('/diff', { repos })
+        return textResult(jsonText(data))
+      },
+    },
+
+    git_commit: {
+      description:
+        'Stage all changes and commit in the specified repos on the developer Mac. The commit message should describe all changes across the listed repos.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repos: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Repo names to commit (e.g. ["bifrost-platform", "bifrost-ui"])',
+          },
+          message: {
+            type: 'string',
+            description: 'Commit message (1–3 sentences)',
+          },
+        },
+        required: ['repos', 'message'],
+      },
+      async execute(args) {
+        const repos = Array.isArray(args.repos) ? args.repos.map(String) : []
+        const message = String(args.message ?? '')
+        const data = await gitBridgePost('/commit', { repos, message })
+        return textResult(jsonText(data))
+      },
+    },
+
+    git_push: {
+      description:
+        'Push committed changes to origin for the specified repos. Call after git_commit succeeds.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repos: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Repo names to push. Omit to push all repos that are ahead.',
+          },
+        },
+      },
+      async execute(args) {
+        const repos = Array.isArray(args.repos) ? args.repos.map(String) : undefined
+        const data = await gitBridgePost('/push', { repos })
+        return textResult(jsonText(data))
+      },
+    },
+
+    // ── Delivery / Promote tools (Release Agent — Phase B–F) ──
+
+    get_release_state: {
+      description:
+        'Fetch the four-stage release state machine (stg_deploy → stg_gate → prod_deploy → prod_gate) with next_action guidance. Use this to decide what to do next in a release flow.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tier: {
+            type: 'string',
+            description: '"platform" (default) or omit for unified state',
+          },
+        },
+      },
+      async execute(args) {
+        const tier = args.tier != null ? `?tier=${encodeURIComponent(String(args.tier))}` : ''
+        const data = await platformGet(`/api/v1/promote/release-state${tier}`)
+        return textResult(jsonText(data))
+      },
+    },
+
+    start_pipeline_run: {
+      description:
+        'Start a Tekton pipeline run (deploy). Requires operator role. Returns the created PipelineRun name.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pipeline: {
+            type: 'string',
+            description: 'Pipeline name, e.g. "bifrost-deliver-platform" or "bifrost-deliver-platform-prod"',
+          },
+          revision: {
+            type: 'string',
+            description: 'Git revision (branch name or commit SHA) to deploy',
+          },
+        },
+        required: ['pipeline', 'revision'],
+      },
+      async execute(args) {
+        const pipeline = String(args.pipeline ?? '')
+        const revision = String(args.revision ?? 'main')
+        const data = await platformPost(
+          `/api/v1/delivery/pipelines/${encodeURIComponent(pipeline)}/runs`,
+          { revision },
+        )
+        return textResult(jsonText(data))
+      },
+    },
+
+    get_pipeline_runs: {
+      description:
+        'List recent PipelineRun history for a pipeline. Use to poll whether a deploy has completed (check status field).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pipeline: {
+            type: 'string',
+            description: 'Pipeline name to query runs for',
+          },
+        },
+        required: ['pipeline'],
+      },
+      async execute(args) {
+        const pipeline = String(args.pipeline ?? '')
+        const data = await platformGet(
+          `/api/v1/delivery/pipelines/${encodeURIComponent(pipeline)}/runs`,
+        )
+        return textResult(jsonText(data))
+      },
+    },
+
+    run_release_gate: {
+      description:
+        'Execute a release gate check (admin role required). Evaluates health probes, deploy status, and blockers. Returns pass/fail with details.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tier: {
+            type: 'string',
+            description: '"platform-stg" or "platform-prod"',
+          },
+        },
+        required: ['tier'],
+      },
+      async execute(args) {
+        const tier = String(args.tier ?? 'platform-stg')
+        const data = await platformPostAdmin(
+          `/api/v1/promote/release-gate?tier=${encodeURIComponent(tier)}`,
+        )
+        return textResult(jsonText(data))
+      },
+    },
+
+    get_delivery_revisions: {
+      description:
+        'Fetch available git revisions (branches/tags) from Gitea mirror for given repos. Use to verify a pushed commit is visible before deploying.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repos: {
+            type: 'string',
+            description: 'Comma-separated repo names, e.g. "bifrost-platform,bifrost-ui"',
+          },
+        },
+        required: ['repos'],
+      },
+      async execute(args) {
+        const repos = String(args.repos ?? '')
+        const data = await platformGet(
+          `/api/v1/delivery/revisions?repos=${encodeURIComponent(repos)}`,
+        )
         return textResult(jsonText(data))
       },
     },

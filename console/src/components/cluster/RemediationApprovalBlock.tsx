@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { Button } from '@bifrost/ui'
 import type { RemediationApprovalOption, RemediationEvent } from '@/api/types'
 
-export type RemediationApprovalRespond = (optionId: string, note?: string) => void
+export type RemediationApprovalRespond = (
+  optionId: string,
+  note?: string,
+  commitMessage?: string,
+) => void
 
 interface RemediationApprovalBlockProps {
   event: RemediationEvent
@@ -32,6 +36,12 @@ function parseCommands(meta: Record<string, unknown> | undefined): string[] {
 function parseChecklist(meta: Record<string, unknown> | undefined): string[] {
   if (meta?.checklist == null || !Array.isArray(meta.checklist)) return []
   return meta.checklist.map(String).filter(c => c.trim() !== '')
+}
+
+function parseCommitMessage(meta: Record<string, unknown> | undefined): string | null {
+  if (typeof meta?.commit_message !== 'string') return null
+  const msg = meta.commit_message.trim()
+  return msg !== '' ? msg : null
 }
 
 function approvalKind(meta: Record<string, unknown> | undefined): 'manual_steps' | 'decision' {
@@ -69,8 +79,10 @@ export function RemediationApprovalBlock({
   const options = parseOptions(event.meta)
   const commands = parseCommands(event.meta)
   const checklist = parseChecklist(event.meta)
+  const proposedCommitMsg = parseCommitMessage(event.meta)
   const [commandsOpen, setCommandsOpen] = useState(kind === 'manual_steps' && commands.length > 0)
   const [note, setNote] = useState('')
+  const [commitMsg, setCommitMsg] = useState(proposedCommitMsg ?? '')
   const [checkedSteps, setCheckedSteps] = useState<Record<number, boolean>>({})
 
   function toggleStep(index: number) {
@@ -78,7 +90,9 @@ export function RemediationApprovalBlock({
   }
 
   function handleRespond(optionId: string) {
-    onRespond(optionId, note.trim() !== '' ? note.trim() : undefined)
+    const finalNote = note.trim() !== '' ? note.trim() : undefined
+    const finalCommitMsg = proposedCommitMsg != null && commitMsg.trim() !== '' ? commitMsg.trim() : undefined
+    onRespond(optionId, finalNote, finalCommitMsg)
   }
 
   return (
@@ -149,6 +163,25 @@ export function RemediationApprovalBlock({
         <Button variant="outline" size="sm" className="mb-2" onClick={onOpenServerConsole}>
           Open Server Console
         </Button>
+      )}
+
+      {proposedCommitMsg != null && (
+        <div className="remediation-approval-commit-msg">
+          <label
+            className="remediation-approval-commit-msg__label"
+            htmlFor={`approval-commit-msg-${event.id}`}
+          >
+            Commit message
+          </label>
+          <textarea
+            id={`approval-commit-msg-${event.id}`}
+            className="remediation-approval-commit-msg__input"
+            rows={Math.min(Math.max(commitMsg.split('\n').length + 1, 3), 12)}
+            value={commitMsg}
+            disabled={submitting}
+            onChange={e => setCommitMsg(e.target.value)}
+          />
+        </div>
       )}
 
       <div className="remediation-approval-note">

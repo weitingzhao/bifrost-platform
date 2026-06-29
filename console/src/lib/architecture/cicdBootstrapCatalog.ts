@@ -10,14 +10,17 @@
  * (STG/prod release phases), workloadPlacementCatalog.ts (CI node placement).
  */
 
-export const CICD_BOOTSTRAP_VERSION = '2026-06-25.1'
+export const CICD_BOOTSTRAP_VERSION = '2026-06-27.1'
 export const CICD_BOOTSTRAP_SOURCE = 'console/src/lib/architecture/cicdBootstrapCatalog.ts'
 
 // ---------------------------------------------------------------------------
 // Layer definitions
 // ---------------------------------------------------------------------------
 
-export type BootstrapLayerId = 'L0' | 'L1' | 'L2'
+// L-1 is the out-of-band operator plane — the "engineer on the ground" that
+// recovers L0–L2 while living OUTSIDE the cluster. It is the human-replacement
+// for the bootstrap escape hatch: who restarts the rocket when the rocket is down.
+export type BootstrapLayerId = 'L-1' | 'L0' | 'L1' | 'L2'
 
 export type DeploymentStatus = 'deployed' | 'partial' | 'planned'
 
@@ -37,6 +40,28 @@ export type BootstrapLayerDef = {
 }
 
 export const BOOTSTRAP_LAYERS: BootstrapLayerDef[] = [
+  {
+    id: 'L-1',
+    label: 'Out-of-Band Operator Plane (带外操作面)',
+    scope:
+      'AI Agent that recovers L0–L2 — lives OUTSIDE the K8s cluster on dedicated Mac hosts. ' +
+      'The "engineer standing on the ground next to the rocket": boards and repairs the rocket (Ops Platform) ' +
+      'and payload (Trade), but never shares fate with what it services. Resolves "who restarts the rocket when the rocket is down".',
+    ownership: 'Dual Mac Mini Remediation Runners (primary .50 + standby .52) + launchd peer watchdog + Owner last-resort SSH',
+    cicdRule:
+      'Agent release discipline (monorepo-first): versioned, standby-first canary, post-deploy self-smoke; ' +
+      'deployed via deploy_mac_mini.sh (rsync + npm) — NEVER scheduled into K8s, NEVER an in-cluster Pod',
+    recoveryPath:
+      'Mutual watchdog: each Mini launchctl-kickstarts its peer; platform-api primary/standby failover (REMEDIATION_RUNNER_*_URL); Owner SSH as final fallback',
+    components: [
+      { name: 'Remediation Runner primary (mac-mini-1 .50)', status: 'deployed' },
+      { name: 'Remediation Runner standby (mac-mini-2 .52)', status: 'deployed' },
+      { name: 'launchd peer watchdog (com.bifrost.peer-watchdog, 60s interval)', status: 'deployed' },
+      { name: 'platform-api primary/standby failover (RunnerClient HealthAll)', status: 'deployed' },
+      { name: 'Git Bridge (Dev-only, Mac Pro)', status: 'deployed' },
+      { name: 'Agent release discipline (versioning + standby canary + self-smoke)', status: 'planned' },
+    ],
+  },
   {
     id: 'L0',
     label: 'Foundation (底座)',
@@ -182,6 +207,13 @@ export type CicdLayerRule = {
 }
 
 export const CICD_LAYER_RULES: CicdLayerRule[] = [
+  { layer: 'L-1', dimension: 'Trigger', rule: 'launchd peer watchdog every 60s + platform-api health failover; Console Agent Desk per-role manual deploy', status: 'active' },
+  { layer: 'L-1', dimension: 'Testing', rule: 'Post-deploy self-smoke + standby-first canary before promoting primary (agent release discipline)', status: 'planned' },
+  { layer: 'L-1', dimension: 'Build', rule: 'Monorepo agent/ delivered via deploy_mac_mini.sh (rsync + npm) — no Kaniko, no in-cluster image', status: 'active' },
+  { layer: 'L-1', dimension: 'Deploy', rule: 'Per-role (primary .50 / standby .52); injects AGENT_ROLE / PEER_SSH / PEER_URL; nightly-drift on primary only', status: 'active' },
+  { layer: 'L-1', dimension: 'Rollback', rule: 'Redeploy prior agent ref to standby first → verify → swap primary; peer keeps remediation alive during the swap', status: 'active' },
+  { layer: 'L-1', dimension: 'Fate isolation', rule: 'MANDATORY — runners never scheduled into K8s; the recovery layer must never share fate with L0–L2 it recovers', status: 'active' },
+
   { layer: 'L0', dimension: 'Trigger', rule: 'Manual only — Owner runs install/upgrade scripts', status: 'active' },
   { layer: 'L0', dimension: 'Testing', rule: 'Pre-upgrade checklist (node drain, etcd backup); no automated test gate', status: 'active' },
   { layer: 'L0', dimension: 'Build', rule: 'Helm chart / raw YAML apply; no Kaniko image build', status: 'active' },
@@ -342,8 +374,11 @@ export function buildCicdBootstrapLlmPack(): string {
     '## Core principle',
     '',
     'The Ops Platform runs on the K3s cluster it governs (self-hosting).',
-    'To resolve the bootstrap paradox, the stack is split into three layers',
+    'To resolve the bootstrap paradox, the stack is split into layers',
     'with strictly different CI/CD rules and recovery paths.',
+    'L-1 (Out-of-Band Operator Plane) is the AI Agent that lives OUTSIDE the cluster',
+    '(dual Mac Mini runners + watchdog) and recovers L0–L2 — the engineer on the ground,',
+    'never sharing fate with the rocket (Ops Platform) or payload (Trade) it services.',
     '',
     '## Layer definitions',
     '',
@@ -364,7 +399,7 @@ export function buildCicdBootstrapLlmPack(): string {
     '',
     '## CI/CD rules per layer',
     '',
-    ...(['L0', 'L1', 'L2'] as BootstrapLayerId[]).map(layer => {
+    ...(['L-1', 'L0', 'L1', 'L2'] as BootstrapLayerId[]).map(layer => {
       const rules = CICD_LAYER_RULES.filter(r => r.layer === layer)
       return [
         `### ${layer}`,

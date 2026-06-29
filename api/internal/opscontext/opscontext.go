@@ -95,16 +95,22 @@ type BuildTrack struct {
 }
 
 type MigrateStream struct {
-	ID       string  `yaml:"id" json:"id"`
-	Label    string  `yaml:"label" json:"label"`
-	Total    int     `yaml:"total" json:"total"`
-	Done     int     `yaml:"done" json:"done"`
-	Status   string  `yaml:"status" json:"status"`
-	NextTask *string `yaml:"next_task,omitempty" json:"next_task,omitempty"`
-	Note     string  `yaml:"note,omitempty" json:"note,omitempty"`
+	ID            string   `yaml:"id" json:"id"`
+	Label         string   `yaml:"label" json:"label"`
+	Total         int      `yaml:"total" json:"total"`
+	Done          int      `yaml:"done" json:"done"`
+	Status        string   `yaml:"status" json:"status"`
+	NextTask      *string  `yaml:"next_task,omitempty" json:"next_task,omitempty"`
+	Note          string   `yaml:"note,omitempty" json:"note,omitempty"`
+	Prerequisites []string `yaml:"prerequisites,omitempty" json:"prerequisites,omitempty"`
 }
 
 type MigrateTrack struct {
+	Label   string          `yaml:"label" json:"label"`
+	Streams []MigrateStream `yaml:"streams" json:"streams"`
+}
+
+type AutomateTrack struct {
 	Label   string          `yaml:"label" json:"label"`
 	Streams []MigrateStream `yaml:"streams" json:"streams"`
 }
@@ -114,10 +120,17 @@ type OperateTrack struct {
 	Note  string `yaml:"note,omitempty" json:"note,omitempty"`
 }
 
+type InfraTrack struct {
+	Label   string          `yaml:"label" json:"label"`
+	Streams []MigrateStream `yaml:"streams" json:"streams"`
+}
+
 type Tracks struct {
-	Build   *BuildTrack   `yaml:"build,omitempty" json:"build,omitempty"`
-	Migrate *MigrateTrack `yaml:"migrate,omitempty" json:"migrate,omitempty"`
-	Operate *OperateTrack `yaml:"operate,omitempty" json:"operate,omitempty"`
+	Build    *BuildTrack    `yaml:"build,omitempty" json:"build,omitempty"`
+	Migrate  *MigrateTrack  `yaml:"migrate,omitempty" json:"migrate,omitempty"`
+	Automate *AutomateTrack `yaml:"automate,omitempty" json:"automate,omitempty"`
+	Infra    *InfraTrack    `yaml:"infra,omitempty" json:"infra,omitempty"`
+	Operate  *OperateTrack  `yaml:"operate,omitempty" json:"operate,omitempty"`
 }
 
 type File struct {

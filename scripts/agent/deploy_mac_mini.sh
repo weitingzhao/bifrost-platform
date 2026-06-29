@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# Deploy remediation-runner + nightly drift to Mac Mini. Invoked by: python scripts/run_agent.py deploy
+# Deploy agent stack (remediation-runner + Nous Hermes MCP + nightly drift) to Mac Mini.
+# Invoked by: python scripts/run_agent.py deploy
 set -euo pipefail
 
 REMOTE="${1:-vision@192.168.10.50}"
 REMOTE_DIR="/Users/vision/bifrost-agent"
+# Mutual-watchdog / Active-Standby config (env-driven, optional):
+#   AGENT_ROLE  primary | standby   (default primary; standby disables nightly-drift)
+#   PEER_SSH    vision@192.168.10.52 (peer SSH target for watchdog restart)
+#   PEER_URL    http://192.168.10.52:8781 (peer runner base URL for health probe)
+AGENT_ROLE="${AGENT_ROLE:-primary}"
+PEER_SSH="${PEER_SSH:-}"
+PEER_URL="${PEER_URL:-}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLATFORM_LOCAL="$(cd "${SCRIPT_DIR}/../../" && pwd)"
 AGENT_SRC="${PLATFORM_LOCAL}/agent/remediation"
@@ -89,10 +97,19 @@ ENVEOF
   fi
 "
 
+echo "==> config/env.local.sh (role + peer watchdog config, always rewritten)"
+run_remote "cat > ${REMOTE_DIR}/config/env.local.sh << 'ENVEOF'
+# Managed by deploy_mac_mini.sh — role + mutual-watchdog peer config.
+export AGENT_ROLE=${AGENT_ROLE}
+export PEER_AGENT_SSH=${PEER_SSH}
+export PEER_AGENT_URL=${PEER_URL}
+ENVEOF
+echo '  wrote env.local.sh (role=${AGENT_ROLE} peer_ssh=${PEER_SSH} peer_url=${PEER_URL})'"
+
 if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
-  echo "==> Syncing CURSOR_API_KEY + PLATFORM_OPERATOR_TOKEN to remote .env"
+  echo "==> Syncing secrets + bridge config to remote .env"
   TMP_ENV="$(mktemp)"
-  grep -E '^(CURSOR_API_KEY|PLATFORM_OPERATOR_TOKEN)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
+  grep -E '^(CURSOR_API_KEY|PLATFORM_OPERATOR_TOKEN|PLATFORM_ADMIN_TOKEN|GIT_BRIDGE_URL)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
   if [[ -s "${TMP_ENV}" ]]; then
     TMP_OUT="$(mktemp)"
     while IFS= read -r line; do
@@ -118,8 +135,103 @@ ssh "${REMOTE}" "chmod +x ${REMOTE_DIR}/nightly_drift.sh"
 
 run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.remediation-runner 2>/dev/null || true"
 run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.remediation-runner.plist"
-run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.nightly-drift 2>/dev/null || true"
-run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.nightly-drift.plist"
+
+# nightly-drift runs on the PRIMARY only; standby keeps it disabled to avoid
+# duplicate scans / NAS write contention.
+if [[ "${AGENT_ROLE}" == "standby" ]]; then
+  echo "==> AGENT_ROLE=standby — disabling nightly-drift on this host"
+  run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.nightly-drift 2>/dev/null || true"
+else
+  run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.nightly-drift 2>/dev/null || true"
+  run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.nightly-drift.plist"
+fi
+
+# Mutual watchdog — only install if peer config is provided.
+if [[ -n "${PEER_SSH}" && -n "${PEER_URL}" ]]; then
+  echo "==> Installing peer watchdog (peer=${PEER_URL})"
+  scp "${SCRIPT_DIR}/peer_watchdog.sh" "${REMOTE}:${REMOTE_DIR}/peer_watchdog.sh"
+  ssh "${REMOTE}" "chmod +x ${REMOTE_DIR}/peer_watchdog.sh"
+  scp "${DEPLOY_DIR}/com.bifrost.peer-watchdog.plist" "${REMOTE}:~/Library/LaunchAgents/"
+  run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.peer-watchdog 2>/dev/null || true"
+  run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.peer-watchdog.plist"
+else
+  echo "==> No PEER_SSH/PEER_URL — skipping peer watchdog install"
+fi
+
+echo "==> Syncing Bifrost MCP server (for Nous Hermes Agent)"
+MCP_SRC="${PLATFORM_LOCAL}/mcp/platform"
+run_remote "mkdir -p ${REMOTE_DIR}/mcp-platform"
+rsync -az --delete \
+  --exclude='node_modules' \
+  "${MCP_SRC}/" "${REMOTE}:${REMOTE_DIR}/mcp-platform/"
+run_remote "cd ${REMOTE_DIR}/mcp-platform && npm install --no-audit --no-fund"
+
+echo "==> Post-deploy health smoke"
+RUNNER_PORT="${RUNNER_PORT:-8781}"
+HEALTH_URL="http://$(echo "${REMOTE}" | cut -d@ -f2):${RUNNER_PORT}/health"
+SMOKE_OK=false
+for i in 1 2 3 4 5; do
+  sleep 2
+  if curl -sf --max-time 5 "${HEALTH_URL}" > /dev/null 2>&1; then
+    HEALTH_JSON="$(curl -sf --max-time 5 "${HEALTH_URL}")"
+    RUNNER_VER="$(echo "${HEALTH_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo '?')"
+    echo "  ✓ Runner healthy (v${RUNNER_VER}) on attempt ${i}"
+    SMOKE_OK=true
+    break
+  fi
+  echo "  attempt ${i}/5 — waiting for runner on ${HEALTH_URL}…"
+done
+if [[ "${SMOKE_OK}" != "true" ]]; then
+  echo "  ✗ SMOKE FAILED — runner did not respond to ${HEALTH_URL} after 5 attempts"
+  exit 1
+fi
+
+echo "==> Post-deploy tool smoke"
+SMOKE_URL="http://$(echo "${REMOTE}" | cut -d@ -f2):${RUNNER_PORT}/smoke"
+SMOKE_JSON="$(curl -sf --max-time 30 "${SMOKE_URL}" 2>/dev/null || echo '{}')"
+SMOKE_STATUS="$(echo "${SMOKE_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("status","unknown"))' 2>/dev/null || echo 'unknown')"
+if [[ "${SMOKE_STATUS}" == "pass" ]]; then
+  echo "  ✓ All tool dry-run checks passed"
+else
+  echo "  ⚠ Some checks failed (non-blocking):"
+  echo "${SMOKE_JSON}" | python3 -c '
+import sys, json
+data = json.load(sys.stdin)
+for c in data.get("checks", []):
+    mark = "✓" if c["status"] == "pass" else "✗"
+    detail = f" — {c.get(\"detail\",\"\")}" if c.get("detail") else ""
+    print(f"    {mark} {c[\"label\"]}{detail}")
+' 2>/dev/null || echo "    (could not parse smoke results)"
+fi
+
+echo "==> Post-deploy Nous Hermes Agent health probe"
+HERMES_DASHBOARD_PORT="${HERMES_DASHBOARD_PORT:-9119}"
+HERMES_DASHBOARD_URL="http://$(echo "${REMOTE}" | cut -d@ -f2):${HERMES_DASHBOARD_PORT}/api/status"
+HERMES_OK=false
+for i in 1 2 3; do
+  sleep 2
+  HERMES_JSON="$(curl -sf --max-time 5 -u "${NOUS_HERMES_USER:-bifrost}:${NOUS_HERMES_PASS:-bifrost-ops-2026}" "${HERMES_DASHBOARD_URL}" 2>/dev/null || echo '')"
+  if [[ -n "${HERMES_JSON}" ]]; then
+    HERMES_VER="$(echo "${HERMES_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo '?')"
+    HERMES_GW="$(echo "${HERMES_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("gateway_state","?"))' 2>/dev/null || echo '?')"
+    echo "  ✓ Nous Hermes Agent v${HERMES_VER} (gateway: ${HERMES_GW}) on attempt ${i}"
+    HERMES_OK=true
+    break
+  fi
+  echo "  attempt ${i}/3 — waiting for Hermes dashboard on port ${HERMES_DASHBOARD_PORT}…"
+done
+if [[ "${HERMES_OK}" != "true" ]]; then
+  echo "  ⚠ Nous Hermes Agent dashboard not reachable (non-blocking)"
+fi
 
 echo ""
-echo "==> Done. Nightly 3:00 AM → ${REMOTE_DIR}/nightly_drift.sh"
+echo "==> Done. role=${AGENT_ROLE} version=${RUNNER_VER}"
+if [[ "${AGENT_ROLE}" != "standby" ]]; then
+  echo "    Nightly 3:00 AM → ${REMOTE_DIR}/nightly_drift.sh"
+fi
+if [[ "${HERMES_OK}" == "true" ]]; then
+  echo "    Nous Hermes Agent v${HERMES_VER} → http://$(echo "${REMOTE}" | cut -d@ -f2):${HERMES_DASHBOARD_PORT} (gateway: ${HERMES_GW})"
+fi
+if [[ -n "${PEER_SSH}" && -n "${PEER_URL}" ]]; then
+  echo "    Peer watchdog every 60s → ${PEER_URL} (restart via ${PEER_SSH})"
+fi

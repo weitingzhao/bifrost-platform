@@ -1,33 +1,48 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, StatusLamp } from '@bifrost/ui'
+import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { OpsContextResponse, RemediationJob } from '@/api/types'
+import { ChevronRight, Square } from 'lucide-react'
+import type { AgentBridgeResponse, OpsContextResponse, RemediationJob } from '@/api/types'
 import {
   cancelRemediationJob,
-  fetchAgentNightlyReport,
+  fetchAgentBridge,
   fetchRemediationHealth,
   fetchRemediationJobs,
   startRemediation,
 } from '@/api/platform'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
-import { AgentMcpPanel } from '@/components/agent/AgentMcpPanel'
-import { AgentHostDeployPanel } from '@/components/agent/AgentHostDeployPanel'
+import { AgentTaskCatalogPanel } from '@/components/agent/AgentTaskCatalogPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import {
+  formatRemediationJobWhen,
+  groupRemediationJobsByScope,
+  remediationJobStatusLabel,
+  remediationTimelineCellStatus,
+} from '@/lib/remediation/remediationJobDisplay'
 
 interface AgentDeskPageProps {
   context: OpsContextResponse | undefined
   initialJobId?: string | null
+  prefillPrompt?: string | null
   onInitialJobConsumed?: () => void
+  onPrefillConsumed?: () => void
   onOpenBriefing?: () => void
   onOpenCluster?: () => void
   onOpenMcpContract?: () => void
+  onOpenAgentProtocol?: () => void
+  onOpenAgentSystem?: () => void
+  onOpenOperatorPlane?: () => void
 }
+
+type AgentScope = 'agent-desk' | 'release'
 
 interface QuickPrompt {
   id: string
   label: string
   prompt: string
+  scope?: AgentScope
 }
 
 const QUICK_PROMPTS: QuickPrompt[] = [
@@ -49,7 +64,21 @@ const QUICK_PROMPTS: QuickPrompt[] = [
     prompt:
       'Review the latest nightly drift scan context (read-only). Summarize Layer 1–3 findings from live scans and reports. Do NOT apply fixes or run Layer 4 auto-fix — report only.',
   },
+  {
+    id: 'release',
+    label: 'Platform release',
+    prompt:
+      'Deploy latest changes to prod. Scan all repos for uncommitted changes, commit and push, then run the full STG → Prod pipeline.',
+    scope: 'release',
+  },
 ]
+
+function statusVariant(s: string | undefined): 'success' | 'warning' | 'neutral' | 'danger' {
+  if (s === 'ok') return 'success'
+  if (s === 'unavailable') return 'danger'
+  if (s === 'not_configured') return 'neutral'
+  return 'warning'
+}
 
 function runnerReachability(status: string | undefined): 'ok' | 'degraded' | 'fail' | 'unknown' {
   if (status === 'ok') return 'ok'
@@ -57,21 +86,45 @@ function runnerReachability(status: string | undefined): 'ok' | 'degraded' | 'fa
   return 'unknown'
 }
 
+/** Collapsed Infrastructure summary for runner(s) — shows HA state when a standby exists. */
+function runnerSummary(bridge: AgentBridgeResponse): string {
+  const runners = bridge.runners ?? []
+  if (runners.length >= 2) {
+    const up = runners.filter(r => r.status === 'ok').length
+    if (up === runners.length) return `Runners ${up}/${runners.length} (HA)`
+    if (up === 0) return 'Runners down'
+    return `Runners ${up}/${runners.length} — failover`
+  }
+  if (runners.length === 1) {
+    return runners[0].status === 'ok' ? 'Runner ok (no standby)' : `Runner ${runners[0].status}`
+  }
+  return bridge.remediation_runner.status === 'ok'
+    ? 'Runner ok'
+    : `Runner ${bridge.remediation_runner.status}`
+}
+
 export function AgentDeskPage({
   context,
   initialJobId,
+  prefillPrompt,
   onInitialJobConsumed,
+  onPrefillConsumed,
   onOpenBriefing,
   onOpenCluster,
   onOpenMcpContract,
+  onOpenAgentProtocol,
+  onOpenAgentSystem,
+  onOpenOperatorPlane,
 }: AgentDeskPageProps) {
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
   const [composerText, setComposerText] = useState('')
+  const [selectedScope, setSelectedScope] = useState<AgentScope>('agent-desk')
   const [jobId, setJobId] = useState<string | null>(null)
   const [initialJob, setInitialJob] = useState<RemediationJob | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const [userPrompts, setUserPrompts] = useState<Record<string, string>>({})
+  const [stopConfirm, setStopConfirm] = useState<{ jobId: string; label: string } | null>(null)
 
   useEffect(() => {
     if (initialJobId == null) return
@@ -80,16 +133,22 @@ export function AgentDeskPage({
     onInitialJobConsumed?.()
   }, [initialJobId, onInitialJobConsumed])
 
+  useEffect(() => {
+    if (prefillPrompt == null || prefillPrompt === '') return
+    setComposerText(prefillPrompt)
+    onPrefillConsumed?.()
+  }, [prefillPrompt, onPrefillConsumed])
+
   const healthQuery = useQuery({
     queryKey: ['remediation', 'health'],
     queryFn: fetchRemediationHealth,
     refetchInterval: 60_000,
   })
 
-  const nightlyQuery = useQuery({
-    queryKey: ['agent', 'nightly-report'],
-    queryFn: fetchAgentNightlyReport,
-    staleTime: 120_000,
+  const bridgeQuery = useQuery({
+    queryKey: ['agent', 'bridge'],
+    queryFn: fetchAgentBridge,
+    refetchInterval: 60_000,
   })
 
   const jobsQuery = useQuery({
@@ -98,21 +157,21 @@ export function AgentDeskPage({
     refetchInterval: panelOpen ? 15_000 : 60_000,
   })
 
-  const recentJobs = useMemo(() => {
-    const jobs = jobsQuery.data?.jobs ?? []
-    return [...jobs].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, 12)
-  }, [jobsQuery.data?.jobs])
+  const jobGroups = useMemo(
+    () => groupRemediationJobsByScope(jobsQuery.data?.jobs ?? []),
+    [jobsQuery.data?.jobs],
+  )
 
   const startMutation = useMutation({
-    mutationFn: async (prompt: string) => {
+    mutationFn: async ({ prompt, scope }: { prompt: string; scope: AgentScope }) => {
       const spineNote =
         context?.focus?.headline != null ? `Spine focus: ${context.focus.headline}\n\n` : ''
       return startRemediation({
-        scope: 'agent-desk',
+        scope,
         prompt: `${spineNote}${prompt.trim()}`,
       })
     },
-    onSuccess: (job, prompt) => {
+    onSuccess: (job, { prompt }) => {
       setUserPrompts(prev => ({ ...prev, [job.id]: prompt }))
       setInitialJob(job)
       setJobId(job.id)
@@ -124,7 +183,11 @@ export function AgentDeskPage({
 
   const cancelMutation = useMutation({
     mutationFn: cancelRemediationJob,
-    onSuccess: job => setInitialJob(job),
+    onSuccess: job => {
+      setInitialJob(job)
+      setStopConfirm(null)
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+    },
   })
 
   const runnerStatus = healthQuery.data?.status
@@ -133,152 +196,108 @@ export function AgentDeskPage({
   const runnerBlocked = !runnerHealthy
   const runnerWarnCursor = runnerHealthy && !runnerHasCursorKey
 
+  const bridge = bridgeQuery.data
+  const gitBridgeStatus = bridge?.git_bridge?.status
+
   const handleSend = useCallback(
-    (text: string) => {
+    (text: string, scopeOverride?: AgentScope) => {
       const trimmed = text.trim()
       if (trimmed === '' || !canOperate || runnerBlocked) return
-      startMutation.mutate(trimmed)
+      startMutation.mutate({ prompt: trimmed, scope: scopeOverride ?? selectedScope })
     },
-    [canOperate, runnerBlocked, startMutation],
+    [canOperate, runnerBlocked, startMutation, selectedScope],
   )
 
   const activeUserPrompt = jobId != null ? userPrompts[jobId] : undefined
 
-  const runnerStatusClass =
-    runnerStatus === 'ok'
-      ? 'text-semantic-success'
-      : runnerStatus === 'unavailable'
-        ? 'text-semantic-error'
-        : 'text-semantic-warning'
-
   return (
-    <div
-      className={`agent-desk-shell${panelOpen ? ' agent-desk-shell--panel-open' : ''}`}
-    >
+    <div className={`agent-desk-shell${panelOpen ? ' agent-desk-shell--panel-open' : ''}`}>
       <div className="agent-desk-main flex min-w-0 flex-col gap-3">
-        <section className="panel-elevated px-4 py-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="briefing-section-kicker m-0">Owner control plane</p>
-              <h2 className="m-0 mt-1 text-sm font-semibold">Agent Desk</h2>
-              <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Chat-style requests routed through platform-api → remediation runner on the agent
-                host. Task stream, approvals, and history share the same remediation pipeline as
-                Cluster auto-remediate.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 text-[var(--text-dense-meta)]">
+
+        {/* ── Hero: Title + Status bar ── */}
+        <section className="agent-desk-hero">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <h2 className="m-0 text-base font-semibold">Agent Desk</h2>
+              <div className="agent-desk-status-bar">
                 <StatusLamp value={runnerReachability(runnerStatus)} kind="reach" />
-                <span className={runnerStatusClass}>
-                  Runner {runnerStatus ?? (healthQuery.isLoading ? '…' : 'unknown')}
-                </span>
+                <DenseTag variant={statusVariant(runnerStatus)}>
+                  Runner
+                </DenseTag>
+                <DenseTag variant={statusVariant(gitBridgeStatus)}>
+                  Git Bridge
+                  {gitBridgeStatus === 'ok' && bridge?.git_bridge?.dirty_repos != null && bridge.git_bridge.dirty_repos > 0
+                    ? ` · ${bridge.git_bridge.dirty_repos}`
+                    : ''}
+                </DenseTag>
               </div>
+            </div>
+            <div className="flex items-center gap-1.5">
               {onOpenBriefing != null && (
-                <Button type="button" variant="outline" size="sm" onClick={onOpenBriefing}>
-                  Briefing packs
+                <Button type="button" variant="ghost" size="sm" onClick={onOpenBriefing}>
+                  Briefing
                 </Button>
               )}
               {onOpenCluster != null && (
-                <Button type="button" variant="outline" size="sm" onClick={onOpenCluster}>
+                <Button type="button" variant="ghost" size="sm" onClick={onOpenCluster}>
                   Cluster
                 </Button>
               )}
             </div>
           </div>
           {context?.focus?.headline != null && (
-            <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              <span className="text-[var(--foreground)]">Now:</span> {context.focus.headline}
-            </p>
-          )}
-          {nightlyQuery.data?.available && nightlyQuery.data.generated_at != null && (
-            <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              Nightly report {new Date(nightlyQuery.data.generated_at).toLocaleString()}
+            <p className="agent-desk-spine-hint">
+              {context.focus.headline}
             </p>
           )}
         </section>
 
-        <AgentHostDeployPanel />
-
-        <AgentMcpPanel onOpenMcpContract={onOpenMcpContract} onOpenBriefing={onOpenBriefing} />
-
+        {/* ── Alerts (only when something is wrong) ── */}
         {runnerBlocked && (
-          <OpsFeedback variant="error" title="Remediation runner unavailable">
-            Agent tasks cannot start until platform-api can reach the remediation runner.
-            <ul className="m-0 mt-2 list-disc pl-4">
-              <li>
-                Local dev: run <code className="font-mono-tabular">make start</code> (auto-starts
-                runner) or <code className="font-mono-tabular">make dev-agent</code> in another
-                terminal.
-              </li>
-              <li>
-                Mac Mini agent: set <code className="font-mono-tabular">REMEDIATION_RUNNER_URL</code>{' '}
-                in <code className="font-mono-tabular">.env</code> (e.g.{' '}
-                <code className="font-mono-tabular">http://192.168.10.50:8781</code>) and restart
-                platform-api.
-              </li>
-            </ul>
+          <OpsFeedback variant="error" title="Runner unreachable — agent tasks blocked">
+            Start with <code className="font-mono-tabular">make start</code> or set{' '}
+            <code className="font-mono-tabular">REMEDIATION_RUNNER_URL</code> in{' '}
+            <code className="font-mono-tabular">.env</code>.
             {healthQuery.data?.error != null && healthQuery.data.error !== '' && (
-              <p className="m-0 mt-2 font-mono-tabular text-[var(--text-dense-caption)]">
+              <span className="mt-1 block font-mono-tabular text-[var(--text-dense-caption)]">
                 {healthQuery.data.error}
-              </p>
+              </span>
             )}
           </OpsFeedback>
         )}
-
         {runnerWarnCursor && (
-          <OpsFeedback variant="warning" title="CURSOR_API_KEY not configured on runner">
-            The runner is up but agent runs will fail until{' '}
-            <code className="font-mono-tabular">CURSOR_API_KEY</code> is set in bifrost-platform{' '}
-            <code className="font-mono-tabular">.env</code> and the runner is restarted.
+          <OpsFeedback variant="warning" title="CURSOR_API_KEY not set on runner">
+            Agent runs will fail — add key to <code className="font-mono-tabular">.env</code>.
+          </OpsFeedback>
+        )}
+        {!canOperate && (
+          <OpsFeedback variant="warning" title="Authenticate as operator to use Agent Desk">
+            Use the header auth button before starting agent tasks.
           </OpsFeedback>
         )}
 
-        <section className="panel-elevated flex min-h-0 flex-1 flex-col px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[var(--text-dense-label)] font-medium text-[var(--muted-foreground)]">
-              Quick prompts
-            </span>
-            <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              AI brief only — deterministic scan: MCP Bridge → Run drift scan now · report: Agent Briefing
-            </span>
+        {/* ── Composer: the primary interaction ── */}
+        <section className="agent-desk-composer-section">
+          <div className="agent-desk-quick-row">
             {QUICK_PROMPTS.map(item => (
-              <Button
+              <button
                 key={item.id}
                 type="button"
-                variant="outline"
-                size="sm"
+                className={`agent-desk-quick-btn${item.scope === 'release' ? ' agent-desk-quick-btn--accent' : ''}`}
                 disabled={!canOperate || startMutation.isPending || runnerBlocked}
-                onClick={() => handleSend(item.prompt)}
+                onClick={() => handleSend(item.prompt, item.scope)}
               >
                 {item.label}
-              </Button>
+              </button>
             ))}
           </div>
-
-          {activeUserPrompt != null && (
-            <div className="agent-desk-user-bubble mt-3">
-              <p className="agent-desk-user-bubble__label">Your request</p>
-              <p className="agent-desk-user-bubble__body">{activeUserPrompt}</p>
-            </div>
-          )}
-
-          {!canOperate && (
-            <OpsFeedback variant="warning" title="Operator authentication required" className="mt-3">
-              Authenticate as operator in the header before starting agent tasks.
-            </OpsFeedback>
-          )}
-          {startMutation.isError && (
-            <OpsFeedback variant="error" title="Task failed to start" className="mt-3">
-              {(startMutation.error as Error).message}
-            </OpsFeedback>
-          )}
-
-          <div className="agent-desk-composer mt-3">
+          <div className="agent-desk-composer">
             <textarea
               className="agent-desk-composer__input"
               rows={3}
-              placeholder="Ask the ops agent…"
+              placeholder={selectedScope === 'release'
+                ? 'Describe what to release…'
+                : 'Ask the ops agent…'}
               value={composerText}
               disabled={!canOperate || startMutation.isPending || runnerBlocked}
               onChange={e => setComposerText(e.target.value)}
@@ -289,68 +308,185 @@ export function AgentDeskPage({
                 }
               }}
             />
-            <div className="agent-desk-composer__actions">
+            <div className="agent-desk-composer__footer">
+              <div className="agent-desk-scope-row">
+                {(['agent-desk', 'release'] as const).map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`agent-desk-scope-chip${selectedScope === s ? ' agent-desk-scope-chip--active' : ''}`}
+                    onClick={() => setSelectedScope(s)}
+                  >
+                    {s === 'agent-desk' ? 'Ops' : 'Release'}
+                  </button>
+                ))}
+              </div>
               <Button
                 type="button"
                 size="sm"
-                disabled={
-                  !canOperate ||
-                  startMutation.isPending ||
-                  runnerBlocked ||
-                  composerText.trim() === ''
-                }
+                disabled={!canOperate || startMutation.isPending || runnerBlocked || composerText.trim() === ''}
                 onClick={() => handleSend(composerText)}
               >
                 {startMutation.isPending ? 'Starting…' : 'Send'}
               </Button>
             </div>
           </div>
+          {startMutation.isError && (
+            <OpsFeedback variant="error" title="Task failed to start" className="mt-2">
+              {(startMutation.error as Error).message}
+            </OpsFeedback>
+          )}
+          {activeUserPrompt != null && (
+            <div className="agent-desk-user-bubble mt-2">
+              <p className="agent-desk-user-bubble__label">Your request</p>
+              <p className="agent-desk-user-bubble__body">{activeUserPrompt}</p>
+            </div>
+          )}
         </section>
 
-        <section className="panel-elevated px-4 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="m-0 text-sm font-semibold">Recent tasks</h3>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })}
-            >
-              Refresh
-            </Button>
+        <AgentTaskCatalogPanel
+          onOpenAgentSystem={onOpenAgentSystem}
+          onOpenDoctrine={tab => {
+            if (tab === 'mcp-contract') onOpenMcpContract?.()
+            else onOpenAgentProtocol?.()
+          }}
+        />
+
+        {/* ── Recent tasks ── */}
+        <section className="agent-desk-tasks-section">
+          <div className="flex items-center justify-between">
+            <h3 className="agent-desk-section-title">Recent tasks</h3>
+            <div className="flex items-center gap-3">
+              <div className="agent-desk-timeline-legend">
+                <span className="agent-desk-timeline-legend__item">
+                  <i className="agent-desk-timeline-swatch agent-desk-timeline-swatch--done" /> ok
+                </span>
+                <span className="agent-desk-timeline-legend__item">
+                  <i className="agent-desk-timeline-swatch agent-desk-timeline-swatch--failed" /> failed
+                </span>
+                <span className="agent-desk-timeline-legend__item">
+                  <i className="agent-desk-timeline-swatch agent-desk-timeline-swatch--running" /> running
+                </span>
+                <span className="agent-desk-timeline-legend__item">
+                  <i className="agent-desk-timeline-swatch agent-desk-timeline-swatch--cancelled" /> cancelled
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-[var(--text-dense-caption)]"
+                onClick={() => void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })}
+              >
+                Refresh
+              </Button>
+            </div>
           </div>
-          <div className="agent-desk-history mt-2 dense-scroll-x">
-            {recentJobs.length === 0 && (
+          <div className="agent-desk-timeline">
+            {jobGroups.length === 0 && (
               <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                No agent tasks yet.
+                No tasks yet
               </span>
             )}
-            {recentJobs.map(job => (
-              <button
-                key={job.id}
-                type="button"
-                className={`agent-desk-history-chip${job.id === jobId ? ' agent-desk-history-chip--active' : ''}`}
-                onClick={() => {
-                  setJobId(job.id)
-                  setPanelOpen(true)
-                }}
-              >
-                <span className="font-mono-tabular">{job.id.slice(0, 8)}</span>
-                <span className={`agent-desk-history-chip__status agent-desk-history-chip__status--${job.status}`}>
-                  {job.status}
-                </span>
-                {job.scope != null && job.scope !== '' && (
-                  <span className="agent-desk-history-chip__scope">{job.scope}</span>
-                )}
-              </button>
-            ))}
+            {jobGroups.map(group => {
+              const liveRunningJob = group.jobs.find(
+                j => remediationTimelineCellStatus(j) === 'running',
+              )
+              return (
+              <div key={group.scope} className="agent-desk-timeline-group">
+                <div className="agent-desk-timeline-group__head">
+                  <span className="agent-desk-timeline-group__label">
+                    {group.label}
+                    {group.scope === 'release-fix' && (
+                      <span className="agent-desk-timeline-group__tier">escalation</span>
+                    )}
+                  </span>
+                  <span className="agent-desk-timeline-group__counts">
+                    {group.doneCount > 0 && (
+                      <span className="agent-desk-timeline-count agent-desk-timeline-count--done">
+                        {group.doneCount} ok
+                      </span>
+                    )}
+                    {group.failedCount > 0 && (
+                      <span className="agent-desk-timeline-count agent-desk-timeline-count--failed">
+                        {group.failedCount} failed
+                      </span>
+                    )}
+                    {group.runningCount > 0 && (
+                      <span className="agent-desk-timeline-count agent-desk-timeline-count--running">
+                        {group.runningCount} running
+                      </span>
+                    )}
+                    {group.cancelledCount > 0 && (
+                      <span className="agent-desk-timeline-count agent-desk-timeline-count--cancelled">
+                        {group.cancelledCount} cancelled
+                      </span>
+                    )}
+                    {canOperate && liveRunningJob != null && (
+                      <button
+                        type="button"
+                        className="agent-desk-timeline-stop"
+                        title={`Stop ${group.label} (${liveRunningJob.id.slice(0, 8)})`}
+                        disabled={cancelMutation.isPending}
+                        onClick={() =>
+                          setStopConfirm({ jobId: liveRunningJob.id, label: group.label })
+                        }
+                      >
+                        <Square size={9} /> Stop
+                      </button>
+                    )}
+                  </span>
+                </div>
+                <div className="agent-desk-timeline-track">
+                  <span className="agent-desk-timeline-track__now">now</span>
+                  {group.jobs.map(job => (
+                    <button
+                      key={job.id}
+                      type="button"
+                      title={`${job.id.slice(0, 8)} · ${remediationJobStatusLabel(job)} · ${formatRemediationJobWhen(job.created_at)}`}
+                      aria-label={`${group.label} ${remediationJobStatusLabel(job)} ${formatRemediationJobWhen(job.created_at)}`}
+                      className={[
+                        'agent-desk-timeline-cell',
+                        `agent-desk-timeline-cell--${remediationTimelineCellStatus(job)}`,
+                        job.phase === 'awaiting_approval' ? ' agent-desk-timeline-cell--attn' : '',
+                        job.id === jobId ? ' agent-desk-timeline-cell--active' : '',
+                      ].join(' ')}
+                      onClick={() => {
+                        setInitialJob(job)
+                        setJobId(job.id)
+                        setPanelOpen(true)
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+              )
+            })}
           </div>
-          {recentJobs.length > 0 && !panelOpen && (
-            <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              Closed the task drawer? Click a chip above to reopen the report — use Copy report in the
-              drawer before closing if you need the text elsewhere.
-            </p>
-          )}
+        </section>
+
+        {/* ── Infrastructure → moved to Operator Plane (L-1) ── */}
+        <section className="agent-desk-infra-section">
+          <button
+            type="button"
+            className="agent-desk-infra-toggle"
+            onClick={() => onOpenOperatorPlane?.()}
+            disabled={onOpenOperatorPlane == null}
+          >
+            <ChevronRight size={14} />
+            <span>Operator Plane (L-1)</span>
+            {bridge != null && (
+              <span className="agent-desk-infra-summary">
+                {[
+                  runnerSummary(bridge),
+                  bridge.git_bridge.status === 'ok'
+                    ? `Git Bridge ok · ${bridge.git_bridge.repo_count ?? 0} repos`
+                    : `Git Bridge ${bridge.git_bridge.status}`,
+                  `${bridge.platform_mcp.implemented_count} MCP tools`,
+                ].join(' · ')}
+              </span>
+            )}
+          </button>
         </section>
       </div>
 
@@ -363,11 +499,30 @@ export function AgentDeskPage({
         stopping={cancelMutation.isPending}
         onStop={id => cancelMutation.mutate(id)}
         onClose={() => setPanelOpen(false)}
+        onDismiss={() => {
+          void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+        }}
         onComplete={job => {
           setInitialJob(job)
           void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
           void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
         }}
+      />
+
+      <ConfirmDialog
+        open={stopConfirm != null}
+        title="Stop running task"
+        message={
+          stopConfirm != null
+            ? `Stop the running ${stopConfirm.label} task? The agent run will abort immediately. You can start a new task afterward.`
+            : ''
+        }
+        confirmLabel="Stop task"
+        confirming={cancelMutation.isPending}
+        onConfirm={() => {
+          if (stopConfirm != null) cancelMutation.mutate(stopConfirm.jobId)
+        }}
+        onCancel={() => setStopConfirm(null)}
       />
     </div>
   )

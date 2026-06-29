@@ -2,11 +2,12 @@ import { useMemo, useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, StatusLamp } from '@bifrost/ui'
 import type { RemediationEvent, RemediationJob, RemediationPhase } from '@/api/types'
-import { fetchRemediationJob, respondRemediationJob } from '@/api/platform'
+import { fetchRemediationJob, respondRemediationJob, cancelRemediationJob } from '@/api/platform'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { RemediationHistoryBar } from '@/components/cluster/RemediationHistoryBar'
 import { RemediationInitBrief } from '@/components/cluster/RemediationInitBrief'
 import { useRemediationStream } from '@/hooks/useRemediationStream'
+import { isRemediationStreamOrphanError } from '@/lib/remediation/remediationJobDisplay'
 
 interface RemediationPanelProps {
   open: boolean
@@ -17,6 +18,7 @@ interface RemediationPanelProps {
   initBriefFallback?: string
   onClose: () => void
   onStop?: (jobId: string) => void
+  onDismiss?: () => void
   onComplete?: (job: RemediationJob) => void
   onOpenServerConsole?: () => void
   stopping?: boolean
@@ -107,6 +109,83 @@ function buildRemediationCopyText(job: RemediationJob | null, events: Remediatio
       lines.push(`[${e.type}] ${e.text.trim()}`)
     }
   }
+  return lines.join('\n').trim()
+}
+
+/**
+ * Build a complete, AI-ready dump of the task: metadata, init brief, the live
+ * stream/connection error (which Copy report omits), summary, job error and the
+ * FULL unfiltered event log. Prefixed with an instruction so the operator can
+ * paste it straight into an AI agent to diagnose and fix the cluster issue.
+ */
+function buildAskAiPrompt(
+  job: RemediationJob | null,
+  events: RemediationEvent[],
+  streamError: string | null,
+): string {
+  const lines: string[] = []
+
+  lines.push(
+    'You are helping debug a Bifrost Ops Platform agent task (auto-remediation) that ran against a K3s cluster.',
+    'Analyze the full log and errors below, identify the root cause, and give me concrete step-by-step commands or config changes to fix it.',
+  )
+
+  lines.push('')
+  lines.push('=== Task metadata ===')
+  if (job != null) {
+    lines.push(`Job: ${job.id}`)
+    if (job.scope != null && job.scope !== '') lines.push(`Scope: ${job.scope}`)
+    lines.push(`Status: ${job.status} · Phase: ${job.phase ?? '—'}`)
+    if (job.actor != null && job.actor !== '') lines.push(`Actor: ${job.actor}`)
+    if (job.created_at != null) lines.push(`Created: ${job.created_at}`)
+    if (job.updated_at != null) lines.push(`Updated: ${job.updated_at}`)
+  } else {
+    lines.push('(no job snapshot available)')
+  }
+
+  if (job?.init_brief != null && job.init_brief.trim() !== '') {
+    lines.push('')
+    lines.push('=== Init brief ===')
+    lines.push(job.init_brief.trim())
+  }
+
+  if (streamError != null && streamError.trim() !== '') {
+    lines.push('')
+    lines.push('=== Connection / stream error ===')
+    lines.push(streamError.trim())
+  }
+
+  if (job?.summary != null && job.summary.trim() !== '') {
+    lines.push('')
+    lines.push('=== Summary ===')
+    lines.push(job.summary.trim())
+  }
+
+  if (job?.error != null && job.error.trim() !== '') {
+    lines.push('')
+    lines.push('=== Job error ===')
+    lines.push(job.error.trim())
+  }
+
+  lines.push('')
+  lines.push(`=== Full event log (${events.length} event${events.length === 1 ? '' : 's'}) ===`)
+  if (events.length === 0) {
+    lines.push('(no events captured)')
+  } else {
+    for (const e of events) {
+      const toolName = typeof e.meta?.name === 'string' ? e.meta.name : null
+      const head = `[${formatTime(e.at)}] [${e.type}]${toolName != null ? ` (tool: ${toolName})` : ''}`
+      const text = e.text.trim()
+      lines.push(text !== '' ? `${head} ${text}` : head)
+    }
+  }
+
+  lines.push('')
+  lines.push('=== What I need ===')
+  lines.push(
+    'Pinpoint the root cause from the evidence above and provide an actionable fix (exact kubectl / config / file edits). Flag anything that needs more info.',
+  )
+
   return lines.join('\n').trim()
 }
 
@@ -266,21 +345,26 @@ export function RemediationPanel({
   initBriefFallback,
   onClose,
   onStop,
+  onDismiss,
   onComplete,
   onOpenServerConsole,
   stopping = false,
 }: RemediationPanelProps) {
   const qc = useQueryClient()
   const [viewJobId, setViewJobId] = useState<string | null>(jobId)
+  const [streamOrphan, setStreamOrphan] = useState(false)
+  const [dismissError, setDismissError] = useState<string | null>(null)
   const activityLogRef = useRef<HTMLDivElement>(null)
   const completedJobRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (jobId != null) setViewJobId(jobId)
+    setStreamOrphan(false)
+    setDismissError(null)
   }, [jobId])
 
   const isLiveView = viewJobId != null && viewJobId === jobId
-  const streamEnabled = open && isLiveView && jobId != null
+  const streamEnabled = open && isLiveView && jobId != null && !streamOrphan
 
   const { job: streamJob, events: liveEvents, connected, error, stop } = useRemediationStream(
     streamEnabled ? jobId : null,
@@ -289,18 +373,71 @@ export function RemediationPanel({
   const snapshotQuery = useQuery({
     queryKey: ['remediation', 'job', viewJobId],
     queryFn: () => fetchRemediationJob(viewJobId!),
-    enabled: open && viewJobId != null && !streamEnabled,
+    enabled: open && viewJobId != null && (!streamEnabled || streamOrphan),
   })
 
-  const job: RemediationJob | null =
-    (isLiveView ? streamJob ?? initialJob : snapshotQuery.data) ?? null
-  const events: RemediationEvent[] = isLiveView ? liveEvents : (snapshotQuery.data?.events ?? [])
-  const isRunning = job?.status === 'running' && isLiveView
+  const baseJob: RemediationJob | null =
+    (isLiveView ? streamJob ?? initialJob ?? snapshotQuery.data : snapshotQuery.data) ?? null
+
+  const job: RemediationJob | null = useMemo(() => {
+    if (baseJob == null) return null
+    const orphaned =
+      streamOrphan ||
+      baseJob.error === 'orphaned' ||
+      (baseJob.status === 'running' && isRemediationStreamOrphanError(error))
+    if (!orphaned) return baseJob
+    return {
+      ...baseJob,
+      status: 'cancelled',
+      phase: 'cancelled',
+      error: 'orphaned',
+      summary:
+        baseJob.summary ||
+        'Job lost contact with the remediation runner (stale "running" state).',
+    }
+  }, [baseJob, streamOrphan, error])
+
+  const events: RemediationEvent[] = isLiveView && !streamOrphan ? liveEvents : (snapshotQuery.data?.events ?? liveEvents)
+  const isRunning = job?.status === 'running' && isLiveView && !streamOrphan
   const isHistorical = viewJobId != null && !isLiveView
 
+  useEffect(() => {
+    if (!isLiveView || error == null) return
+    if (!isRemediationStreamOrphanError(error)) return
+    setStreamOrphan(true)
+  }, [error, isLiveView])
+
+  const dismissMutation = useMutation({
+    mutationFn: cancelRemediationJob,
+    onSuccess: () => {
+      setStreamOrphan(false)
+      setDismissError(null)
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      void qc.invalidateQueries({ queryKey: ['remediation', 'job', viewJobId] })
+      onDismiss?.()
+    },
+    onError: err => {
+      setDismissError(err instanceof Error ? err.message : 'Failed to dismiss job')
+    },
+  })
+
+  const showOrphanBanner =
+    streamOrphan ||
+    job?.error === 'orphaned' ||
+    (initialJob?.status === 'running' && isRemediationStreamOrphanError(error))
+
   const respondMutation = useMutation({
-    mutationFn: ({ id, optionId, note }: { id: string; optionId: string; note?: string }) =>
-      respondRemediationJob(id, optionId, note),
+    mutationFn: ({
+      id,
+      optionId,
+      note,
+      commitMessage,
+    }: {
+      id: string
+      optionId: string
+      note?: string
+      commitMessage?: string
+    }) => respondRemediationJob(id, optionId, note, commitMessage),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
     },
@@ -339,6 +476,24 @@ export function RemediationPanel({
     } catch {
       setCopyState('error')
       window.setTimeout(() => setCopyState('idle'), 3000)
+    }
+  }
+
+  const askAiPrompt = useMemo(
+    () => buildAskAiPrompt(job, events, isLiveView ? error : null),
+    [job, events, error, isLiveView],
+  )
+  const [askAiState, setAskAiState] = useState<'idle' | 'copied' | 'error'>('idle')
+
+  async function handleAskAi() {
+    if (askAiPrompt === '') return
+    try {
+      await navigator.clipboard.writeText(askAiPrompt)
+      setAskAiState('copied')
+      window.setTimeout(() => setAskAiState('idle'), 2000)
+    } catch {
+      setAskAiState('error')
+      window.setTimeout(() => setAskAiState('idle'), 3000)
     }
   }
 
@@ -404,6 +559,19 @@ export function RemediationPanel({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button
+            variant="default"
+            size="sm"
+            disabled={askAiPrompt === ''}
+            title="Copy full logs + errors as an AI-ready prompt"
+            onClick={() => void handleAskAi()}
+          >
+            {askAiState === 'copied'
+              ? 'Copied for AI!'
+              : askAiState === 'error'
+                ? 'Copy failed'
+                : 'Ask AI to resolve'}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             disabled={copyableReport === ''}
@@ -425,11 +593,35 @@ export function RemediationPanel({
         open={open}
         activeJobId={viewJobId}
         liveJobId={jobId}
+        scope={job?.scope ?? initialJob?.scope ?? null}
         onSelectJob={j => setViewJobId(j.id)}
         onBackToLive={() => jobId != null && setViewJobId(jobId)}
       />
 
       <RemediationInitBrief job={job} fallbackBrief={initBriefFallback} />
+
+      {showOrphanBanner ? (
+        <div className="remediation-orphan-banner">
+          <p className="remediation-orphan-banner__title">This job is not running on the remediation runner</p>
+          <p className="remediation-orphan-banner__body">
+            The timeline showed a stale &quot;running&quot; state — usually after a runner restart. Dismiss it to
+            clear the record, or read any archived report below.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={dismissMutation.isPending || viewJobId == null}
+              onClick={() => viewJobId != null && dismissMutation.mutate(viewJobId)}
+            >
+              {dismissMutation.isPending ? 'Dismissing…' : 'Dismiss stale job'}
+            </Button>
+            {dismissError != null ? (
+              <span className="text-[var(--text-dense-meta)] text-destructive">{dismissError}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="remediation-progress-bar">
         <PhaseStepper currentPhase={job?.phase} failed={failed} />
@@ -455,8 +647,8 @@ export function RemediationPanel({
             event={pendingApproval}
             submitting={respondMutation.isPending}
             onOpenServerConsole={onOpenServerConsole}
-            onRespond={(optionId, note) =>
-              respondMutation.mutate({ id: viewJobId, optionId, note })
+            onRespond={(optionId, note, commitMessage) =>
+              respondMutation.mutate({ id: viewJobId, optionId, note, commitMessage })
             }
           />
         ) : job?.phase === 'awaiting_approval' && isLiveView ? (
@@ -486,7 +678,7 @@ export function RemediationPanel({
             Loading report…
           </p>
         )}
-        {error != null && error !== 'unexpected EOF' && isLiveView && (
+        {error != null && error !== 'unexpected EOF' && isLiveView && !showOrphanBanner && (
           <div className="remediation-block remediation-block--error">
             <span className="remediation-block-kicker remediation-block-kicker--error">Connection</span>
             <p className="remediation-block-body remediation-block-body--error">{error}</p>
@@ -527,6 +719,15 @@ export function RemediationPanel({
         </span>
         <div className="flex items-center gap-2">
           <Button
+            variant="default"
+            size="sm"
+            disabled={askAiPrompt === ''}
+            title="Copy full logs + errors as an AI-ready prompt"
+            onClick={() => void handleAskAi()}
+          >
+            {askAiState === 'copied' ? 'Copied for AI!' : 'Ask AI to resolve'}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             disabled={copyableReport === ''}
@@ -545,6 +746,16 @@ export function RemediationPanel({
               }}
             >
               {stopping ? 'Stopping…' : 'Stop'}
+            </Button>
+          )}
+          {showOrphanBanner && viewJobId != null && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={dismissMutation.isPending}
+              onClick={() => dismissMutation.mutate(viewJobId)}
+            >
+              {dismissMutation.isPending ? 'Dismissing…' : 'Dismiss stale job'}
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={onClose}>

@@ -23,7 +23,7 @@ fi
 RESPONSE=$(curl -sf -X POST "${RUNNER_URL}/run" \
   -H "Content-Type: application/json" \
   -d '{
-    "scope": "Nightly scheduled health verification",
+    "scope": "nightly-health-check",
     "actor": "launchd/nightly-health-check"
   }')
 
