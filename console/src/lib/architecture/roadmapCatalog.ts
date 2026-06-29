@@ -5,11 +5,11 @@
  * Migrated from bifrost-trade-infra/docs/PLATFORM_ROADMAP.md (2026-06-15).
  */
 
-export const ROADMAP_VERSION = '2026-06-27'
+export const ROADMAP_VERSION = '2026-06-29'
 export const ROADMAP_SOURCE = 'console/src/lib/architecture/roadmapCatalog.ts'
 
 export const ROADMAP_STATUS =
-  'In progress — 2C-A CLOSED, 2C-B / K3s phased; k3s-phase1 bootstrap CLOSED @ .73'
+  'K3s is prod runtime — data layer on CNPG (.80 retired), dev/stg/prod on K3s; Phase 3 Legacy retirement SIGNED (2026-06-29, decision D8). Phase B/C below is the original Compose→K3s journey, kept for context.'
 
 export type RoadmapHardwareRow = {
   device: string
@@ -27,20 +27,20 @@ export const HARDWARE_MAPPING: RoadmapHardwareRow[] = [
   },
   {
     device: 'Linux mini-pc-a',
-    current: 'Legacy Prod .70',
-    nearTerm: 'New Docker Prod (2C-B primary host)',
+    current: 'K3s Server ① · API / Redis / Ingress / Gitea / ArgoCD (Legacy compose retired)',
+    nearTerm: 'K3s prod runtime — Trade dev/stg/prod served from cluster',
     k3sTarget: 'K3s Server ① · API / Redis / Ingress / Gitea / ArgoCD',
   },
   {
     device: 'Linux mini-pc-b',
-    current: 'PG dedicated .80',
-    nearTerm: 'PostgreSQL bifrost_prod / bifrost_dev',
+    current: 'Bare-metal PG .80 decommissioned (2026-06-29) → CNPG @ data NS',
+    nearTerm: 'CloudNativePG bifrost-postgres-rw.data.svc (bifrost_dev/stg/prod)',
     k3sTarget: 'K3s Server ② · CloudNativePG Primary',
   },
   {
     device: 'Linux mini-pc-c',
-    current: 'Planned / idle until Legacy retires',
-    nearTerm: 'Staging or idle',
+    current: 'K3s Server (ubt-k3s-01 @ .73) · monitoring / Tekton bootstrap',
+    nearTerm: 'K3s Server ③ · monitoring / Tekton / AIOps',
     k3sTarget: 'K3s Server ③ · monitoring / Tekton / AIOps',
   },
   {
@@ -85,12 +85,13 @@ export const SOFTWARE_BASELINE: MilestoneBaselineRow[] = [
   { milestone: 'Phase 2B', status: 'CLOSED', meaning: 'New frontend + new API (Dev 8765–8773)' },
   { milestone: '2C-A', status: 'CLOSED', meaning: 'Mac localhost compose + Session 0–9' },
   { milestone: '2C-A.1', status: 'Owner verified', meaning: 'Ops docker executor · Socket/Celery control plane' },
-  { milestone: '2C-B', status: 'Planning', meaning: 'New Docker Prod on Linux · Legacy retire' },
-  { milestone: 'K3s', status: 'Partial', meaning: 'Bootstrap @ .73 CLOSED; full migration not blocking app code' },
+  { milestone: '2C-B', status: 'SIGNED', meaning: 'Prod stable test + cutover; superseded by K3s prod runtime' },
+  { milestone: 'K3s', status: 'Prod runtime', meaning: 'dev/stg/prod on K3s; CNPG data layer; bootstrap @ .73 CLOSED' },
+  { milestone: 'Phase 3 Legacy retirement', status: 'SIGNED', meaning: 'Decision D8 (2026-06-29) — Legacy runtime stopped, engine NAS-archived' },
 ]
 
 export const PHASE_OVERVIEW =
-  'Phase A (now): 2C-B Docker Prod → Legacy retire → Mac Mini Dev+CI. Phase B (3–9mo): K3s bootstrap + GitOps + Compose→Helm. Phase C (9–18mo): observability + AI ops platform + downstream page refactor / replay AI.'
+  'Phase A (DONE): Prod cutover + Legacy retire + Mac Mini Dev+CI. Phase B (mostly DONE): K3s bootstrap + GitOps + CNPG data layer + dev/stg/prod on cluster. Phase C (in progress): observability + AI ops platform + downstream page refactor / replay AI. (Sections below preserve the original Compose→K3s plan for context.)'
 
 export type StepRow = { step: string; action: string }
 
@@ -130,7 +131,7 @@ export const PHASE_A_DELIVERABLES: DeliverableRow[] = [
 ]
 
 export const PHASE_A_EXIT =
-  'Legacy retired; .70 runs New compose only; Dev/CI separated from Prod; Win11 TWS-only.'
+  'DONE (2026-06-29, decision D8): Legacy retired; prod runs on K3s (compose superseded); Dev/CI separated from Prod; Win11 TWS-only.'
 
 export const PHASE_B_PREREQ =
   'Phase A stable ≥2 weeks; bifrost-trade-* images reproducibly buildable.'
@@ -143,10 +144,9 @@ export const PHASE_B_BOOTSTRAP = [
 ]
 
 export const PHASE_B_DATA_MIGRATION = [
-  'CloudNativePG bifrost-postgres on mini-pc-b (see K3s Architecture catalog)',
-  'pg_dump/pg_restore from bare .80; apps connect bifrost-postgres-rw.data.svc',
-  'After stable: bare .80 PG becomes standby or retires',
-  'Redis: Bitnami Helm in data NS, or short-term .70 host Redis (single-variable)',
+  'DONE: CloudNativePG bifrost-postgres in data NS (apps connect bifrost-postgres-rw.data.svc)',
+  'DONE: data restored from bare .80; bare-metal .80 PG decommissioned 2026-06-29',
+  'DONE: Redis in data NS — redis-live/redis-queue per env (dev/stg/prod)',
 ]
 
 export const PHASE_B_APP_ORDER =
@@ -195,11 +195,10 @@ export const OPTIONAL_HARDWARE: OptionalHardwareRow[] = [
 ]
 
 export const OWNER_CHECKLIST: string[] = [
-  '2C-B Prod host = mini-pc-a (.70)?',
-  'PG short-term stays bare .80; K3s CNPG in Phase B?',
-  'Mac Mini #1 = Dev compose, #2 = CI?',
-  'K3s agents: Mac Mini UTM Done (P5b); gpu-server (P5a) and mini-pc-a/b Server join still pending?',
-  'Platform priority: 2C-B + release_gate before K3s single-node?',
+  'RESOLVED: Prod runtime = K3s (decision D1/D2-prime); compose retired',
+  'RESOLVED: PG on CNPG @ data NS; bare .80 decommissioned 2026-06-29',
+  'RESOLVED: Phase 3 Legacy retirement SIGNED 2026-06-29 (decision D8)',
+  'Mac Mini #1 = Dev + Remediation Runner primary, #2 = CI + standby?',
   'Replay AI: pgvector vs Qdrant? (see Goal §10)',
 ]
 
