@@ -121,29 +121,33 @@ export function ServerTerminal({ hosts, selectedId, onSelectHost, k8sNodeByIp }:
       <div className="server-console-toolbar flex flex-col gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--color-surface-elevated)]">
         {hosts.length > 0 ? (
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-            <div className="flex min-w-0 flex-col gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
               {linuxHosts.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span className="env-strip-label shrink-0">Linux</span>
-                  <SegmentControl
-                    ariaLabel="SSH host — Linux K3s cluster"
-                    value={linuxValue}
-                    onChange={handleHostChange}
-                    options={hostSegmentOptions(linuxHosts, k8sNodeByIp)}
-                    size="sm"
-                  />
+                  <div className="min-w-0 overflow-x-auto dense-scroll-x pb-0.5">
+                    <SegmentControl
+                      ariaLabel="SSH host — Linux K3s cluster"
+                      value={linuxValue}
+                      onChange={handleHostChange}
+                      options={hostSegmentOptions(linuxHosts, k8sNodeByIp)}
+                      size="sm"
+                    />
+                  </div>
                 </div>
               )}
               {macHosts.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span className="env-strip-label shrink-0">Mac</span>
-                  <SegmentControl
-                    ariaLabel="SSH host — Mac Agent hosts"
-                    value={macValue}
-                    onChange={handleHostChange}
-                    options={hostSegmentOptions(macHosts, k8sNodeByIp)}
-                    size="sm"
-                  />
+                  <div className="min-w-0 overflow-x-auto dense-scroll-x pb-0.5">
+                    <SegmentControl
+                      ariaLabel="SSH host — Mac Agent hosts"
+                      value={macValue}
+                      onChange={handleHostChange}
+                      options={hostSegmentOptions(macHosts, k8sNodeByIp)}
+                      size="sm"
+                    />
+                  </div>
                 </div>
               )}
             </div>

@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +18,9 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
 var upgrader = websocket.Upgrader{
@@ -64,16 +67,62 @@ type resizeMsg struct {
 }
 
 type Handler struct {
-	cfg *config.Config
-	ssh SSHSettings
+	cfg     *config.Config
+	ssh     SSHSettings
+	cluster ClusterNodesSource
+}
+
+// ClusterNodesSource supplies live K8s node inventory for the Linux SSH row.
+type ClusterNodesSource interface {
+	FetchClusterNodes(ctx context.Context) ([]LiveClusterNode, bool)
+}
+
+type clusterNodesAdapter struct {
+	handler *cluster.Handler
+}
+
+func (a *clusterNodesAdapter) FetchClusterNodes(ctx context.Context) ([]LiveClusterNode, bool) {
+	resp := a.handler.ClusterNodes(ctx)
+	if resp.Reachability == probe.ReachFail || len(resp.Nodes) == 0 {
+		return nil, false
+	}
+	out := make([]LiveClusterNode, 0, len(resp.Nodes))
+	for _, n := range resp.Nodes {
+		out = append(out, LiveClusterNode{
+			Name:       n.Name,
+			InternalIP: n.InternalIP,
+			Status:     n.Status,
+		})
+	}
+	return out, true
 }
 
 func NewHandler(cfg *config.Config) *Handler {
 	return &Handler{cfg: cfg, ssh: SSHSettingsFromEnv()}
 }
 
-func (h *Handler) HandleHosts(w http.ResponseWriter, _ *http.Request) {
-	hosts := ListHosts(h.cfg.Topology, h.ssh.User, h.ssh.AllowLocalhost)
+func NewHandlerWithCluster(cfg *config.Config, clusterHandler *cluster.Handler) *Handler {
+	h := NewHandler(cfg)
+	if clusterHandler != nil {
+		h.cluster = &clusterNodesAdapter{handler: clusterHandler}
+	}
+	return h
+}
+
+func (h *Handler) resolveHosts(ctx context.Context) []Host {
+	live, ok := h.fetchLiveClusterNodes(ctx)
+	return ListHostsDynamic(h.cfg.Topology, live, ok, h.ssh.User, h.ssh.AllowLocalhost)
+}
+
+func (h *Handler) fetchLiveClusterNodes(ctx context.Context) ([]LiveClusterNode, bool) {
+	if h.cluster == nil {
+		return nil, false
+	}
+	return h.cluster.FetchClusterNodes(ctx)
+}
+
+func (h *Handler) HandleHosts(w http.ResponseWriter, r *http.Request) {
+	hosts := h.resolveHosts(r.Context())
 	type row struct {
 		Host
 		Reachable bool `json:"reachable"`
@@ -96,7 +145,8 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	nodeID := r.URL.Query().Get("node")
 	hostQ := r.URL.Query().Get("host")
-	target, ok := FindHost(h.cfg.Topology, nodeID, hostQ, h.ssh.User, h.ssh.AllowLocalhost)
+	hosts := h.resolveHosts(r.Context())
+	target, ok := FindHostInList(hosts, nodeID, hostQ)
 	if !ok {
 		http.Error(w, "host not in allowlist", http.StatusForbidden)
 		return

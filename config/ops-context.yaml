@@ -29,7 +29,7 @@ deployment:
     active_track: ops_ui_actuation
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 focus:
-    headline: "P6 CI/CD bootstrap completeness — L0/L1/L2 model formalization → CI gate → deliver-prod → platform-prod · data-layer ⑦ retire embedded pending"
+    headline: "Trade K8s-native W1 DELIVERED (Traefik Ingress) awaiting sign-off → W2 Ops kubernetes executor · data-layer ⑦ retire embedded"
     flywheel_primary: B # A = trade FE, B = runtime/ops
     blocker: null
 milestones:
@@ -313,11 +313,22 @@ tracks:
               status: closed
               note: "Phase 1 + 2B CLOSED — Owner signed"
             - id: compose-to-k3s
-              label: "Compose to K3s deployment"
+              label: "Compose to K3s deployment (lift-and-shift)"
               total: 5
               done: 5
               status: closed
-              note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED ✓ ④ prod overlay SIGNED ✓ ⑤ HA/validation deferred · Vision V1 dev @ bifrost-dev :30882"
+              note: "① bootstrap @ .73 ✓ ② P5b Mac agents ✓ ③ stg v2 SIGNED ✓ ④ prod overlay SIGNED ✓ ⑤ HA deferred to trade-k8s-native · Native refactor NOT in scope — see trade-k8s-native stream"
+            - id: trade-k8s-native
+              label: "Trade stack K8s-native refactor + IB Edge Gateway"
+              total: 12
+              done: 1
+              status: in_progress
+              next_task: "W1 DELIVERED — awaiting Owner sign-off (Traefik IngressRoute replaces nginx; trade-*.bifrost.lan @ :80). Next after sign-off: W2 api-ops kubernetes executor"
+              note: "W0 ✓ signed (dev IB mock). W1 shipped: k8s/base/ingress + per-env IngressRoute; nginx retired. Authority: tradeK8sNativeCatalog.ts"
+              prerequisites:
+                - "compose-to-k3s stream closed"
+                - "data-layer-k3s PG+Redis in data NS (step ⑦ in progress)"
+                - "R-DV3 prod auto-trade cutover deferred (Owner)"
             - id: data-layer-k3s
               label: "K3s data layer (PG + Redis → data NS)"
               total: 7
@@ -448,11 +459,12 @@ tracks:
                 - "agent-mcp-integration stream closed"
                 - "release-agent-task stream closed"
             - id: trade-k8s-migration
-              label: "Trade payload K3s migration — Docker Compose → K8s Deployments"
+              label: "Trade payload K8s migration — Docker Compose → K8s Deployments"
               total: 6
-              done: 0
-              status: not_started
-              note: "Move Trade services into K3s so Ops Agent has full actuation. ① Trade API Dockerfiles + K8s manifests (9 FastAPI domains) ② Trade Worker Deployment (daemon + celery) ③ Trade Socket Deployment (IB edge + massive) ④ Trade Frontend Deployment (nginx + SPA) ⑤ Tekton CI/CD pipeline for Trade (bifrost-deliver-trade) ⑥ Matrix probe expansion — Trade targets become K8s service-readiness (Agent rollout_restart/delete_pod covers payload)"
+              done: 5
+              status: in_progress
+              next_task: "⑥ Matrix probe expansion — full K8s service-readiness actuation"
+              note: "Lift-and-shift DONE (manifests + Tekton deliver-stg/prod). Remaining: matrix probes + native refactor → migrate stream trade-k8s-native (IB Lease, Ingress, Ops executor)"
               prerequisites:
                 - "migrate track: trade-backend + trade-frontend streams closed"
                 - "p6-platform-e2e-cicd done"

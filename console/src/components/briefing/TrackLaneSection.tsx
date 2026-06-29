@@ -45,12 +45,12 @@ function statusLabel(status: QueueItemStatus): string {
 
 function ProgressBar({ done, total, percent }: { done: number; total: number; percent: number }) {
   return (
-    <div className="mt-1.5">
-      <div className="flex items-center justify-between text-dense-caption text-[var(--muted-foreground)]">
+    <div className="mt-2">
+      <div className="flex items-center justify-between text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
         <span>{done}/{total}</span>
         <span>{percent}%</span>
       </div>
-      <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-[var(--border)]">
+      <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-[var(--border)]">
         <div
           className="h-full rounded-full bg-[var(--primary)] transition-all"
           style={{ width: `${percent}%` }}
@@ -58,6 +58,13 @@ function ProgressBar({ done, total, percent }: { done: number; total: number; pe
       </div>
     </div>
   )
+}
+
+function laneReach(progress: ReturnType<typeof queueProgress>): 'ok' | 'degraded' | 'fail' | 'unknown' {
+  if (progress == null) return 'unknown'
+  if (progress.percent === 100) return 'ok'
+  if (progress.percent > 0) return 'degraded'
+  return 'unknown'
 }
 
 function LaneCard({
@@ -71,23 +78,25 @@ function LaneCard({
   progress: ReturnType<typeof queueProgress>
   onSelect: () => void
 }) {
+  const reach = laneReach(progress)
   return (
     <button
       type="button"
       className={[
-        'rounded-lg border px-3 py-2 text-left transition-colors',
+        'flex flex-col rounded-lg border px-3 py-2.5 text-left transition-colors',
         selected
           ? 'border-[var(--primary)] bg-[var(--secondary)]'
           : 'border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)]',
       ].join(' ')}
       onClick={onSelect}
     >
-      <div className="flex items-center gap-2">
-        <BriefingIconBadge icon={LANE_ICONS[lane.id]} selected={selected} size="sm" />
+      <div className="flex items-start gap-2.5">
+        <BriefingIconBadge icon={LANE_ICONS[lane.id]} selected={selected} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">{lane.label}</span>
-            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            <StatusLamp value={reach} kind="reach" />
+            <span className="min-w-0 flex-1 text-sm font-semibold">{lane.label}</span>
+            <span className="shrink-0 rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
               {lane.shortLabel}
             </span>
           </div>
@@ -286,7 +295,7 @@ export function TrackLaneSection({
         Each lane has its own <strong>task tracking queue</strong> below. This scopes your Session briefing.
       </p>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {lanes.map(lane => {
           const laneQueue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
           const progress = queueProgress(laneQueue)

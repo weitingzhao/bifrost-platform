@@ -12,9 +12,13 @@ import {
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 import type { TrackId } from '@/lib/briefing/workTracks'
 import { visionGovernanceQueueItems } from '@/lib/architecture/visionSpineMap'
+import {
+  TRADE_K8S_NATIVE_MIGRATE_STREAM_ID,
+  TRADE_K8S_NATIVE_WAVES,
+} from '@/lib/architecture/tradeK8sNativeCatalog'
 
 export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops' | 'cicd-delivery'
-export type MigrateLaneId = 'compose-k3s' | 'data-layer-k3s' | 'legacy-retire' | 'trade-stack'
+export type MigrateLaneId = 'compose-k3s' | 'trade-k8s-native' | 'data-layer-k3s' | 'legacy-retire' | 'trade-stack'
 export type AutomateLaneId = 'platform-gitops' | 'agent-infra' | 'drift-remediation' | 'agent-services'
 export type InfraLaneId = 'network-server' | 'network-wifi' | 'ai-network'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
@@ -93,11 +97,21 @@ const MIGRATE_LANES: WorkLane[] = [
   {
     id: 'compose-k3s',
     track: 'migrate',
-    label: 'Compose → K3s deployment',
+    label: 'Compose → K3s lift-and-shift',
     shortLabel: 'K3s',
-    description: 'Move trade stack from Docker Compose to K3s bifrost-prod namespace.',
+    description: 'STG v2 + prod overlay on K3s (CLOSED). Native refactor → trade-k8s-native lane.',
     agentMode: 'Ops',
     workIntent: 'ops',
+  },
+  {
+    id: 'trade-k8s-native',
+    track: 'migrate',
+    label: 'Trade K8s-native + IB Edge',
+    shortLabel: 'K8s native',
+    description:
+      'Ideal K8s runtime: Traefik Ingress, Ops kubernetes executor, IB Lease active-standby, 3 gateways/env, dev mock. Authority: tradeK8sNativeCatalog.ts.',
+    agentMode: 'Ops',
+    workIntent: 'cluster',
   },
   {
     id: 'data-layer-k3s',
@@ -264,6 +278,7 @@ const MIGRATE_STREAM_LANE: Record<string, MigrateLaneId> = {
   'trade-backend': 'trade-stack',
   'trade-frontend': 'trade-stack',
   'compose-to-k3s': 'compose-k3s',
+  'trade-k8s-native': 'trade-k8s-native',
   'data-layer-k3s': 'data-layer-k3s',
   'vision-v1-dev': 'compose-k3s',
   'vision-s3-briefing': 'compose-k3s',
@@ -413,6 +428,36 @@ function streamToQueueItem(stream: MigrateStream): QueueItem {
     progress: { done: stream.done, total: stream.total },
     prerequisites: stream.prerequisites,
   }
+}
+
+function buildTradeK8sNativeQueue(context: OpsContextResponse | undefined): QueueItem[] {
+  const stream = context?.tracks?.migrate?.streams.find(s => s.id === TRADE_K8S_NATIVE_MIGRATE_STREAM_ID)
+  const doneCount = stream?.done ?? 0
+
+  return TRADE_K8S_NATIVE_WAVES.map((wave, index) => {
+    let status: QueueItemStatus = 'pending'
+    if (index < doneCount) status = 'done'
+    else if (index === doneCount && stream?.status === 'in_progress') status = 'next'
+    else if (index === doneCount && stream?.status === 'closed') status = 'done'
+
+    // Delivered-but-unsigned waves surface as in_progress with an explicit sign-off note,
+    // so the Owner can confirm via UI before the spine `done` count advances.
+    let note = wave.blockedBy != null ? `blocked_by: ${wave.blockedBy}` : `verify: ${wave.verify}`
+    if (wave.delivery === 'signed') {
+      status = 'done'
+    } else if (wave.delivery === 'ready_for_signoff' && status !== 'done') {
+      status = 'in_progress'
+      note = `✅ DELIVERED — awaiting Owner sign-off · verify: ${wave.verify}`
+    }
+
+    return {
+      id: wave.id,
+      label: `${wave.wave} — ${wave.label}`,
+      status,
+      note,
+      progress: stream != null ? { done: stream.done, total: stream.total } : undefined,
+    }
+  })
 }
 
 function buildQueueFromMigrateStreams(
@@ -631,6 +676,9 @@ export function buildQueueForLane(
     case 'build':
       return buildQueueFromBuildTasks(tracks?.build, laneId as BuildLaneId)
     case 'migrate':
+      if (laneId === 'trade-k8s-native') {
+        return buildTradeK8sNativeQueue(context)
+      }
       return buildQueueFromMigrateStreams(tracks?.migrate, laneId as MigrateLaneId)
     case 'automate':
       return buildQueueFromAutomateStreams(tracks?.automate, laneId as AutomateLaneId)

@@ -17,6 +17,7 @@ import { buildK3sArchitectureLlmPack } from './k3sArchitectureCatalog'
 import { buildDeployMainlineLlmPack } from './deployMainlineCatalog'
 import { buildK3sBootstrapLlmPack } from './k3sBootstrapCatalog'
 import { buildRoadmapLlmPack } from './roadmapCatalog'
+import { buildTradeK8sNativeLlmPack } from './tradeK8sNativeCatalog'
 import { buildStandardsLlmPack } from './standardsCatalog'
 
 /**
@@ -32,6 +33,7 @@ export function buildFullArchitectureLlmPack(spine?: OpsContextResponse): string
     buildK3sArchitectureLlmPack(),
     buildK3sBootstrapLlmPack(),
     buildDataLayerLlmPack(),
+    buildTradeK8sNativeLlmPack(),
     buildCicdBootstrapLlmPack(),
     buildDeployMainlineLlmPack(),
     buildStandardsLlmPack(),
