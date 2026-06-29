@@ -593,6 +593,7 @@ export function RemediationPanel({
         open={open}
         activeJobId={viewJobId}
         liveJobId={jobId}
+        scope={job?.scope ?? initialJob?.scope ?? null}
         onSelectJob={j => setViewJobId(j.id)}
         onBackToLive={() => jobId != null && setViewJobId(jobId)}
       />

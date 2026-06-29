@@ -53,6 +53,7 @@ import { DataLayerPage } from '@/pages/DataLayerPage'
 import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
 import { McpContractPage } from '@/pages/McpContractPage'
 import { NetworkUpgradePage } from '@/pages/NetworkUpgradePage'
+import { AiComputeStrategyPage } from '@/pages/AiComputeStrategyPage'
 import { OperatorPlanePage } from '@/pages/OperatorPlanePage'
 import { AutonomousSkillsPage } from '@/pages/AutonomousSkillsPage'
 import { ExecutionLogPage } from '@/pages/ExecutionLogPage'
@@ -95,6 +96,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'mcp-contract': 'MCP Contract',
   'design-system': 'Design System',
   'network-upgrade': 'Network Upgrade',
+  'ai-compute': 'AI Compute Strategy',
   console: 'Server console',
   defects: 'Defects',
 }
@@ -355,7 +357,8 @@ export function ConsolePage() {
     viewTab === 'k3s-bootstrap' ||
     viewTab === 'cicd-bootstrap' ||
     viewTab === 'data-layer' ||
-    viewTab === 'network-upgrade'
+    viewTab === 'network-upgrade' ||
+    viewTab === 'ai-compute'
   const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-system' || viewTab === 'agent-protocol' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
   const handleCopyAllGovernance = async () => {
@@ -713,6 +716,7 @@ export function ConsolePage() {
                   : viewTab === 'cicd-bootstrap' ? 'L0/L1/L2 self-hosting bootstrap model — CI/CD rules, recovery paths, and P6 gap tracking.'
                   : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
                   : viewTab === 'network-upgrade' ? 'Home network backbone upgrade — VLAN redesign, UniFi migration plan, hardware BOM, and research checklist.'
+                  : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-system'
                     ? 'Single runtime, capability domains, task chains, and registry — the map before Agent Protocol and MCP Contract.'
@@ -756,6 +760,8 @@ export function ConsolePage() {
         {viewTab === 'data-layer' && <DataLayerPage />}
 
         {viewTab === 'network-upgrade' && <NetworkUpgradePage />}
+
+        {viewTab === 'ai-compute' && <AiComputeStrategyPage />}
 
         {viewTab === 'platform-standards' && <StandardsPage />}
 

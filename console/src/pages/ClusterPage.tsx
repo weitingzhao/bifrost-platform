@@ -47,6 +47,10 @@ import {
   nsFilterForNamespace,
   type NsFilterType,
 } from '@/lib/cluster/namespaceCatalog'
+import {
+  DEFAULT_STORAGE_SERVICE,
+  type StorageServiceId,
+} from '@/lib/cluster/storageServiceCatalog'
 import { ClusterDrawer } from '@/components/cluster/ClusterDrawer'
 import { ClusterPostgresDetailPanel } from '@/components/cluster/ClusterPostgresDetailPanel'
 import { ClusterApplicationsDetailPanel } from '@/components/cluster/ClusterApplicationsDetailPanel'
@@ -105,7 +109,10 @@ export function ClusterPage({
   const qc = useQueryClient()
   const [nsFilter, setNsFilter] = useState<NsFilterType>('trade')
   const [selectedNs, setSelectedNs] = useState<string | null>('bifrost-stg')
+  const [selectedStorageService, setSelectedStorageService] =
+    useState<StorageServiceId>(DEFAULT_STORAGE_SERVICE)
   const [selectedPod, setSelectedPod] = useState<string | null>(null)
+  const [pinnedWorkload, setPinnedWorkload] = useState<ClusterWorkload | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedNode, setSelectedNode] = useState<ClusterNode | null>(null)
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false)
@@ -362,9 +369,18 @@ export function ClusterPage({
   })
 
   const selectedWorkload = useMemo(() => {
-    if (selectedPod == null) return undefined
-    return workloadsQuery.data?.workloads.find(w => w.name === selectedPod)
-  }, [workloadsQuery.data, selectedPod])
+    if (selectedPod == null || selectedNs == null) return undefined
+    if (
+      pinnedWorkload != null &&
+      pinnedWorkload.name === selectedPod &&
+      pinnedWorkload.namespace === selectedNs
+    ) {
+      return pinnedWorkload
+    }
+    return workloadsQuery.data?.workloads.find(
+      workload => workload.name === selectedPod && workload.namespace === selectedNs,
+    )
+  }, [workloadsQuery.data, selectedNs, selectedPod, pinnedWorkload])
 
   const podEvents = useMemo(() => {
     if (selectedPod == null) return []
@@ -405,14 +421,17 @@ export function ClusterPage({
   function handleSelectNs(name: string) {
     setSelectedNs(name)
     setSelectedPod(null)
+    setPinnedWorkload(null)
     setDrawerOpen(false)
     setDrawerOpen(false)
     setNodeDrawerOpen(false)
     setSelectedNode(null)
   }
 
-  function handleSelectPod(name: string) {
-    setSelectedPod(name)
+  function handleSelectPod(workload: ClusterWorkload) {
+    setSelectedNs(workload.namespace)
+    setSelectedPod(workload.name)
+    setPinnedWorkload(workload)
     setDrawerOpen(true)
     setNodeDrawerOpen(false)
     setSelectedNode(null)
@@ -961,6 +980,13 @@ cd ../bifrost-platform && make start`}
         isLoading={summaryQuery.isLoading || metricsQuery.isLoading}
       />
 
+      <section
+        className="cluster-global-top-pods page-section"
+        aria-label="Cluster-wide pod resource usage"
+      >
+        <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
+      </section>
+
       {clusterSummary != null && (
         <ClusterIssuesPanel
           summary={clusterSummary}
@@ -1075,6 +1101,7 @@ cd ../bifrost-platform && make start`}
               namespaces={visibleNamespaces}
               nsFilter={nsFilter}
               selectedNs={selectedNs}
+              selectedStorageService={nsFilter === 'storage' ? selectedStorageService : null}
               workloads={workloadsQuery.data?.workloads ?? []}
               isLoadingNamespaces={namespacesQuery.isLoading}
               isLoadingWorkloads={workloadsQuery.isLoading}
@@ -1082,7 +1109,12 @@ cd ../bifrost-platform && make start`}
               onFilterChange={filter => {
                 setNsFilter(filter)
                 setSelectedPod(null)
+                setPinnedWorkload(null)
                 setDrawerOpen(false)
+                if (filter === 'storage') {
+                  setSelectedStorageService(DEFAULT_STORAGE_SERVICE)
+                  return
+                }
                 const allowed = allowedNamespaceNames(filter)
                 if (allowed == null) {
                   if (selectedNs == null && visibleNamespaces.length > 0) {
@@ -1095,12 +1127,12 @@ cd ../bifrost-platform && make start`}
                 }
               }}
               onSelectNs={handleSelectNs}
+              onSelectStorageService={setSelectedStorageService}
               onSelectPod={handleSelectPod}
               onRestartDeployment={handleRestartDeployment}
               onScaleDeployment={workload => setScaleState({ workload, replicas: 1 })}
               onDeletePod={handleDeletePod}
             />
-            <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
           </div>
         }
         governanceContent={
@@ -1133,6 +1165,7 @@ cd ../bifrost-platform && make start`}
         onClose={() => {
           setDrawerOpen(false)
           setSelectedPod(null)
+          setPinnedWorkload(null)
         }}
       />
 

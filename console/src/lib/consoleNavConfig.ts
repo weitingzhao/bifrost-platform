@@ -7,6 +7,7 @@ import {
   CalendarClock,
   ClipboardList,
   Container,
+  Cpu,
   Database,
   Eye,
   FileCode2,
@@ -172,6 +173,12 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         ],
       },
       {
+        label: 'AI',
+        items: [
+          { id: 'ai-compute', label: 'AI Compute Strategy', icon: Cpu },
+        ],
+      },
+      {
         label: 'Standards',
         items: [
           { id: 'platform-standards', label: 'Platform', icon: Shield },
@@ -216,6 +223,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'cicd-bootstrap': 'Architecture',
   'data-layer': 'Architecture',
   'network-upgrade': 'Architecture',
+  'ai-compute': 'Architecture',
   'platform-standards': 'Architecture',
   'design-system': 'Architecture',
 }

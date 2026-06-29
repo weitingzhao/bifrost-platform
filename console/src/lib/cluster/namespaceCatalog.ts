@@ -1,4 +1,4 @@
-/** Workload explorer — flat category tabs. */
+/** Workload explorer — flat category tabs. Storage tab uses `storageServiceCatalog` service chips instead of namespace chips. */
 export type NsFilterType = 'trade' | 'platform' | 'storage' | 'gpu' | 'cicd' | 'infra' | 'all'
 
 export const NS_FILTER_GROUPS: Record<Exclude<NsFilterType, 'all'>, string[]> = {
@@ -30,8 +30,8 @@ export const NS_DISPLAY_LABELS: Record<string, string> = {
   'bifrost-stg': 'trade-stg',
   'bifrost-prod': 'trade-prod',
   'bifrost-platform-stg': 'ops-stg',
-  'cnpg-system': 'PgSQL',
-  data: 'Redis',
+  'cnpg-system': 'CNPG operator',
+  data: 'Data',
   ai: 'RTX4090',
 }
 

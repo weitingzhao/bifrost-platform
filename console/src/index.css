@@ -653,6 +653,23 @@ html {
   overflow: visible;
 }
 
+/* Global top pods — detached from category Detail (not filtered by Trade/Storage tab) */
+.cluster-global-top-pods {
+  margin-block: 0.75rem 1rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--background);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.cluster-global-top-pods__section.ops-section {
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+
 .cluster-home-summaries__divider {
   height: 1px;
   margin: 0.5rem 0;
@@ -1162,6 +1179,19 @@ html {
   background: color-mix(in srgb, var(--primary) 12%, var(--card));
 }
 
+.cluster-ns-chip--service {
+  min-width: 11rem;
+  max-width: 16rem;
+}
+
+.cluster-ns-chip--service .cluster-ns-chip__name {
+  align-items: flex-start;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  font-family: inherit;
+}
+
 .cluster-ns-chip--warn:not(.cluster-ns-chip--active) {
   border-color: color-mix(in srgb, var(--color-lamp-yellow) 45%, var(--border));
 }
@@ -1427,12 +1457,57 @@ html {
   border-radius: 0;
 }
 
+/* Sticky header for the workloads explorer. This must win over the generic
+   `.ops-section-body--table ... thead th { position: static }` rule, so it is
+   scoped to the explorer wrapper (same specificity, declared later). */
+.ops-section-body--table .cluster-explorer-table-scroll table thead th,
 .cluster-explorer-table-scroll table thead th {
   position: sticky;
   top: 0;
   z-index: 2;
   background: var(--card);
   box-shadow: 0 1px 0 var(--border);
+}
+
+/* Fixed column layout: Workload gets the lion's share so names render in full;
+   the trailing metric columns are sized to their (short) content instead of
+   eating leftover width. table-layout:fixed makes these <col> widths authoritative. */
+.cluster-explorer-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.cluster-explorer-table .cluster-col-workload {
+  width: auto;
+}
+.cluster-explorer-table .cluster-col-arch {
+  width: 9rem;
+}
+.cluster-explorer-table .cluster-col-ready {
+  width: 6rem;
+}
+.cluster-explorer-table .cluster-col-status {
+  width: 8rem;
+}
+.cluster-explorer-table .cluster-col-restarts {
+  width: 6rem;
+}
+.cluster-explorer-table .cluster-col-age {
+  width: 5rem;
+}
+.cluster-explorer-table .cluster-col-actions {
+  width: 3.5rem;
+}
+
+/* Workload column: allow names to render in full instead of being clipped to
+   "accoun…". Keep a sensible floor so the column never collapses. */
+.cluster-explorer-table th:first-child,
+.cluster-explorer-table td:first-child {
+  min-width: 16rem;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
 }
 
 .cluster-explorer-footnote {
@@ -1487,9 +1562,10 @@ html {
 .cluster-deployment-row__name {
   font-weight: 600;
   font-size: var(--text-dense-label);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .cluster-deployment-row__kind {
@@ -2989,75 +3065,32 @@ html {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted-foreground);
+}
+
+.remediation-history-bar__scope {
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.remediation-history-bar__counts {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   margin-right: auto;
 }
 
-.remediation-history-bar__list {
+.remediation-history-bar__actions {
   display: flex;
+  align-items: center;
   gap: 0.375rem;
-  overflow-x: auto;
+}
+
+.remediation-history-bar__track {
   padding-bottom: 0.125rem;
 }
 
 .remediation-history-bar__empty {
-  font-size: var(--text-dense-caption);
-  color: var(--muted-foreground);
-}
-
-.remediation-history-chip {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.125rem;
-  flex-shrink: 0;
-  padding: 0.375rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--card);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  min-width: 6.5rem;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.remediation-history-chip:hover {
-  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
-}
-
-.remediation-history-chip--active {
-  border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 8%, var(--card));
-}
-
-.remediation-history-chip__id {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--text-dense-caption);
-  font-weight: 600;
-}
-
-.remediation-history-chip__status {
-  font-size: var(--text-dense-caption);
-  font-weight: 600;
-}
-
-.remediation-history-chip__status--done {
-  color: #22c55e;
-}
-
-.remediation-history-chip__status--failed {
-  color: var(--destructive);
-}
-
-.remediation-history-chip__status--cancelled {
-  color: #f59e0b;
-}
-
-.remediation-history-chip__status--running {
-  color: #38bdf8;
-}
-
-.remediation-history-chip__when {
   font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
 }
