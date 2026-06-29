@@ -31,13 +31,15 @@ nodes:
     in_k3s_cluster: true
     grid: { row: 1, col: 0 }
 
-  - id: mini-pc-b
-    label: mini-pc-b
-    host: 192.168.10.80
+  - id: ubt-k3s-06
+    # Reinstalled former bare-metal PG box (.80 decommissioned 2026-06-29 → CNPG @ data NS).
+    label: ubt-k3s-06
+    host: 192.168.10.79
+    ssh_port: 22
     group: linux
-    compose_roles: [postgres]
-    k3s_roles: [k3s_server_2, postgres_primary, cnpg]
-    in_k3s_cluster: true
+    compose_roles: []
+    k3s_roles: [k3s_agent]
+    in_k3s_cluster: true   # ubt-k3s-06 · K3s node Ready · general pool (16 vCPU / 32GB)
     grid: { row: 1, col: 2 }
 
   - id: mini-pc-c
@@ -111,8 +113,8 @@ nodes:
 edges:
   - id: prod-app-to-pg
     from: mini-pc-a
-    to: mini-pc-b
-    label: PostgreSQL
+    to: mini-pc-a
+    label: PostgreSQL (CNPG @ data NS)
     kind: data
     environments: [prod, dev]
     matrix_target: postgres
