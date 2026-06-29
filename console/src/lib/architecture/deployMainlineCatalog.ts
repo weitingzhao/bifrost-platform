@@ -24,7 +24,7 @@ export const MAINLINE_PHASES: MainlinePhase[] = [
   { seq: 3, phase: 'K3s Phase 1 trial', authority: 'Ops Console → Architecture → K3s Architecture §10', status: 'In progress (Owner unlocked 2026-06-04; bootstrap CLOSED 2026-06-14)' },
   { seq: 4, phase: 'K3s STG v2 deliver (bifrost-deliver-stg)', authority: 'Ops Console → Operate → Delivery (deliveryMainlineCatalog.ts)', status: 'CLOSED (2026-06-18 — STG release gate + Tier B)' },
   { seq: 5, phase: 'K3s Prod overlay + deliver-prod', authority: 'Ops Console → Operate → Delivery · k8s/overlays/prod', status: 'Active — prod cutover IN_PROGRESS' },
-  { seq: 6, phase: 'Compose → K3s native sign-off', authority: 'tradeK8sNativeCatalog.ts · ops-context trade-k8s-native', status: 'IN_PROGRESS — W1 Traefik Ingress (awaiting sign-off)' },
+  { seq: 6, phase: 'Compose → K3s native sign-off', authority: 'tradeK8sNativeCatalog.ts · ops-context trade-k8s-native', status: 'IN_PROGRESS — W2 kubernetes executor (awaiting sign-off)' },
   { seq: 7, phase: 'Phase 3 Legacy retirement', authority: 'PHASE2C_PROD_DEFERRED.md', status: 'SIGNED (2026-06-29 — D8: UI side-by-side gate dropped; runtime stopped; engine NAS-archived)' },
 ]
 
