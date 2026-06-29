@@ -39,6 +39,7 @@
   --color-success: var(--color-lamp-green);
   --color-danger: var(--color-lamp-red);
   /* Environment tier labels — identity colors, NOT health status (avoid destructive/warning semantics) */
+  --color-env-dev: #34d399;
   --color-env-stg: #38bdf8;
   --color-env-prod: #a78bfa;
   --radius-lg: var(--radius);
