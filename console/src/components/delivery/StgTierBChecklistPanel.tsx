@@ -167,7 +167,7 @@ export function StgTierBChecklistPanel({
                       className="min-h-[3rem] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[var(--text-dense-meta)]"
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
-                      placeholder="IB TWS live · Massive WS quotes verified · …"
+                      placeholder="IB TWS live · Massive REST/Celery OK (Starter) or WS quotes (Developer+) · …"
                     />
                   </label>
                   <div className="flex flex-wrap gap-2">
