@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,6 +42,7 @@ type StackConfig struct {
 // StgSmokeConfig — HTTP probes for bifrost-stg workloads (Session S5 / Phase B v2).
 type StgSmokeConfig struct {
 	GatewayURL           string   `yaml:"gateway_url" json:"gateway_url"`
+	GatewayHost          string   `yaml:"gateway_host" json:"gateway_host,omitempty"`
 	APIMonitorURL        string   `yaml:"api_monitor_url" json:"api_monitor_url"`
 	FrontendURL          string   `yaml:"frontend_url" json:"frontend_url"`
 	APIDomains           []string `yaml:"api_domains" json:"api_domains"`
@@ -248,6 +250,26 @@ func (e *ClusterEntry) ResolvedStackAddons() []StackAddonSpec {
 		{ID: "gitea", Label: "Gitea", Match: "gitea"},
 		{ID: "tekton", Label: "Tekton", Match: "tekton"},
 		{ID: "registry", Label: "Registry", Match: "registry"},
+	}
+}
+
+func (e *ClusterEntry) ResolvedStgGatewayHost() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_STG_GATEWAY_HOST")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.StgSmoke.GatewayHost) != "" {
+		return strings.TrimSpace(e.StgSmoke.GatewayHost)
+	}
+	return ""
+}
+
+func (e *ClusterEntry) ApplyStgGatewayHost(req *http.Request) {
+	if req == nil || e == nil {
+		return
+	}
+	if h := e.ResolvedStgGatewayHost(); h != "" {
+		req.Host = h
+		req.Header.Set("Host", h)
 	}
 }
 

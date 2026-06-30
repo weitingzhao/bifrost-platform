@@ -575,6 +575,9 @@ func (s *Service) probeStgHTTP(ctx context.Context, id, url string) StgSmokeTarg
 			Detail: "request error: " + err.Error(),
 		}
 	}
+	if s.entry != nil {
+		s.entry.ApplyStgGatewayHost(req)
+	}
 	client := s.httpClient
 	if client == nil {
 		client = &http.Client{Timeout: 8 * time.Second}

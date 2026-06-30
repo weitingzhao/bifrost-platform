@@ -110,8 +110,8 @@ export const COMPOSE_ON_K8S_GAPS: GapRow[] = [
   { area: 'Config', current: 'prod aliases config.stg.yaml mount path', ideal: 'Per-env config keys; BIFROST_ENV consistent', priority: 'P1' },
   { area: 'Manifests', current: 'apis/manifest.yaml 673-line copy-paste', ideal: 'Kustomize component; single bifrost-api image + args', priority: 'P1' },
   { area: 'Probes', current: 'API only; socket/worker/daemon missing', ideal: 'readiness/liveness all workloads', priority: 'P1' },
-  { area: 'Security', current: 'No NetworkPolicy', ideal: 'LAN-only egress; env isolation dev/stg/prod', priority: 'P2' },
-  { area: 'Observability', current: 'No Flower; CNPG PodMonitor off', ideal: 'Celery metrics; ib_active_data_lines gauge', priority: 'P2' },
+  { area: 'Security', current: 'Redis ingress per env + IB socket LAN egress (W9)', ideal: 'LAN-only egress; env isolation dev/stg/prod', priority: 'P2' },
+  { area: 'Observability', current: 'Flower Deployment :5555; ib_active_data_lines gauge in gateway logs + Redis health (W10)', ideal: 'Celery metrics; ib_active_data_lines gauge', priority: 'P2' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -248,6 +248,19 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     label: 'Probes + initContainers — socket/worker wait CNPG/Redis ready',
     repo: 'bifrost-trade-infra/k8s/base',
     verify: 'rollout restart during data maintenance — no crashloop before data ready',
+    delivered:
+      'New scripts/wait_for_data.py (stdlib + yaml, identical in bifrost-trade-socket & ' +
+      'bifrost-trade-worker): reads BIFROST_CONFIG and TCP-waits CNPG postgres + Redis ' +
+      '(redis live, +redis_queue with --queue, --no-pg for redis-only services); --once = ' +
+      'single check for probe mode. Wired as a wait-for-data initContainer (blocking) + an ' +
+      'exec readinessProbe (--once) on all 7 data-plane workloads: socket ib-market-gateway / ' +
+      'ib-account-agent (pg+redis), ib-operator / massive-ws (--no-pg, redis only), worker ' +
+      'daemon / celery-worker (--queue) and account-sync (pg+redis). Endpoints come from the ' +
+      'mounted config so dev/stg/prod work without per-overlay env wiring; kustomize images ' +
+      'transformer rewrites the init image alongside the app container. Effect: a pod stays in ' +
+      'Init (then NotReady) — instead of crashlooping — while CNPG/Redis are unavailable during ' +
+      'data maintenance, and recovers automatically once data is Ready. kustomize build ' +
+      'dev|stg|prod green; socket 68 + worker 194 tests pass (incl. new test_wait_for_data).',
   },
   {
     id: 'w8-daemon-lease',
@@ -256,6 +269,18 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     label: 'Daemon Deployment + Lease — single active auto-trade (R-DV3)',
     repo: 'bifrost-trade-worker + k8s/base/worker',
     verify: '2 daemon pods; only Lease holder runs FSM trading loop',
+    delivered:
+      'bifrost_worker.daemon.lease — coordination.k8s.io/Lease active-standby for GsTrading ' +
+      '(mirrors W4 socket library): LeaderElector + KubernetesLeaseBackend + ' +
+      'get_daemon_lease_settings (daemon.lease YAML / BIFROST_DAEMON_LEASE_* env; default ' +
+      'bifrost-daemon Lease name, separate from IB Leases). entry.run_daemon gates the FSM ' +
+      'via run_daemon_with_lease — standby pods block in acquire() without starting GsTrading; ' +
+      'on leadership loss app.stop() then process exits for K8s restart. k8s/base/worker: ' +
+      'daemon Deployment replicas:2 RollingUpdate (maxSurge:0 maxUnavailable:1), ' +
+      'serviceAccountName daemon-worker, BIFROST_DAEMON_LEASE_ENABLED=1 + POD_NAME/POD_NAMESPACE; ' +
+      'new daemon-rbac.yaml (ServiceAccount + Lease Role/RoleBinding). Worker Dockerfiles install ' +
+      'kubernetes>=27. pyproject [k8s] extra. kustomize build dev|stg|prod green; worker 199 tests ' +
+      'pass (incl. test_daemon_lease two-pod single-leader invariant).',
   },
   {
     id: 'w9-network-policy',
@@ -264,6 +289,17 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     label: 'NetworkPolicy — env isolation + IB LAN egress allowlist',
     repo: 'bifrost-trade-infra/k8s/base',
     verify: 'bifrost-stg cannot reach bifrost-prod redis; socket reaches .30/.33:7496',
+    delivered:
+      'k8s/data/redis/network-policies.yaml — 5 ingress NetworkPolicies (redis-live/queue ' +
+      'stg|prod + redis-dev): TCP 6379 only from matching Trade namespace via ' +
+      'kubernetes.io/metadata.name selector (bifrost-stg/prod/dev). Enforces R-DV1 Redis ' +
+      'isolation per dataLayerCatalog. k8s/base/network-policies/ib-socket-egress.yaml — ' +
+      'egress for ib-market-gateway / ib-account-agent / ib-operator: all in-cluster ' +
+      'namespaces (DNS, Redis @ data, K8s Lease API) + ipBlock 192.168.10.30/32 and ' +
+      '.33/32 on TWS/Gateway ports 7496/7497/4001/4002; massive-ws excluded (Polygon wss). ' +
+      'Wired into data/redis + base kustomization. scripts/k3s/verify-w9-network-policies.sh ' +
+      '(manifest check + optional RUN_NETPOL_PROBE=1 live redis/TCP probes). kustomize build ' +
+      'dev|stg|prod + k8s/data green.',
   },
   {
     id: 'w10-observability',
@@ -272,6 +308,16 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     label: 'IB data-line budget ConfigMap + Celery/Flower metrics',
     repo: 'bifrost-trade-infra/k8s + bifrost-trade-worker',
     verify: 'Grafana or logs show ib_active_data_lines; Flower or celery_exporter',
+    delivered:
+      'k8s/base/observability/ib-data-line-budget.yaml — ConfigMap (account_budget=100, ' +
+      'gateway_max_subscriptions=200, reserved_tws_ui_lines=10) mounted on ib-market-gateway ' +
+      'at /etc/bifrost/ib-data-line-budget. bifrost_socket.ib.data_line_budget loader; ' +
+      'IbIngestor logs ib_active_data_lines=N data_line_budget=M account_budget=A on each ' +
+      'subscription refresh and writes ib_active_data_lines/data_line_budget/account_budget ' +
+      'to Redis health hash. k8s/base/worker: Flower Deployment + Service :5555 (celery -A ' +
+      'bifrost_worker.celery.celery_app flower, ClusterIP :5555). ' +
+      'scripts/k3s/verify-w10-observability.sh (manifest + optional RUN_W10_PROBE=1). ' +
+      'kustomize build dev|stg|prod green; socket +3 tests (test_data_line_budget).',
   },
   {
     id: 'w11-signoff',
@@ -280,7 +326,15 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     label: 'STG Tier A/B + deliver-prod gate — Compose→K3s native sign-off',
     repo: 'bifrost-platform + bifrost-trade-infra',
     verify: 'make k3s-verify-phase-b-stg-v2; deliver-prod blocked if STG unhealthy',
-    blockedBy: 'w1–w8 minimum for prod cutover',
+    delivered:
+      'verify-phase-b-stg-v2.sh — Tier A updated for W5 StatefulSet socket rollouts + W10 Flower ' +
+      'Deployment; Tier A HTTP via Traefik Host header (W1). scripts/k3s/verify-w11-trade-k8s-native.sh ' +
+      '+ make k3s-verify-w11-trade-k8s-native — kustomize + Tier A HTTP + W9/W10 manifests + ' +
+      'deliver-prod preflight gate (in-cluster traefik.kube-system + Host trade-stg.bifrost.lan). ' +
+      'Tekton: bifrost-verify-stg/prod-deliver + pipeline-deliver-prod preflight-stg migrated from ' +
+      'dead nginx.bifrost-stg svc to Traefik (BLOCKED if STG HTTP fails). Tier B unchanged in ' +
+      'platform-api promote/tier-b (daemon/ops/socket auto probes + Owner manual sign-off). ' +
+      'Compose→K8s native refactor stream complete at W11 — prod cutover remains Owner + deliver-prod.',
   },
 ]
 
