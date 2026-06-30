@@ -1,6 +1,10 @@
 package migratewave
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/opscontext"
+)
 
 func TestProjectWaveStatus(t *testing.T) {
 	cases := []struct {
@@ -32,6 +36,29 @@ func TestDeriveTradeK8sNextTask(t *testing.T) {
 	got2 := deriveTradeK8sNextTask(3, 1, "in_progress")
 	if got2 == "" || got2[:2] != "W3" {
 		t.Errorf("delivered next task should start with W3 DELIVERED, got %q", got2)
+	}
+}
+
+func TestDeriveFocusHeadlineClosedStream(t *testing.T) {
+	ctx := &opscontext.File{
+		Tracks: &opscontext.Tracks{
+			Migrate: &opscontext.MigrateTrack{
+				Streams: []opscontext.MigrateStream{
+					{
+						ID:              TradeK8sNativeStreamID,
+						Total:           12,
+						Done:            12,
+						ReadyForSignoff: 0,
+						Status:          "closed",
+					},
+				},
+			},
+		},
+	}
+	got := deriveFocusHeadline(ctx)
+	want := "Trade K8s-native CLOSED — (W0–W11 signed)"
+	if got != want {
+		t.Errorf("deriveFocusHeadline(closed) = %q, want %q", got, want)
 	}
 }
 

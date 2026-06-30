@@ -119,6 +119,9 @@ func (s *Service) Signoff(streamID, waveID, notes, actor string) (ActuationRespo
 	note := appendSignedNote(stream.Note, wave.Code, notes)
 	patchCtx := cloneContextWithStream(ctx, streamID, newDone, newReady, status, nextTask, note)
 	headline := deriveFocusHeadline(patchCtx)
+	if headline == "" && ctx.Focus.Headline != "" {
+		headline = ctx.Focus.Headline
+	}
 
 	if err := s.applyPatch(streamID, newDone, newReady, status, nextTask, note, headline); err != nil {
 		return ActuationResponse{}, err

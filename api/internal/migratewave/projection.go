@@ -107,8 +107,17 @@ func deriveFocusHeadline(ctx *opscontext.File) string {
 
 	for i := range ctx.Tracks.Migrate.Streams {
 		s := &ctx.Tracks.Migrate.Streams[i]
-		if s.ID != TradeK8sNativeStreamID || strings.ToLower(s.Status) == "closed" {
+		if s.ID != TradeK8sNativeStreamID {
 			continue
+		}
+		status := strings.ToLower(s.Status)
+		if status == "closed" {
+			if nt := deriveStreamNextTask(TradeK8sNativeStreamID, s.Done, s.ReadyForSignoff, s.Status); nt != "" {
+				parts = append(parts, fmt.Sprintf("Trade K8s-native %s", nt))
+			} else {
+				parts = append(parts, "Trade K8s-native CLOSED")
+			}
+			break
 		}
 		ready := s.ReadyForSignoff
 		readyWaves := make([]Wave, 0)

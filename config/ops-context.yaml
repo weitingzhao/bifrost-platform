@@ -30,7 +30,7 @@ deployment:
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 focus:
     # Derived from active spine streams (deriveFocusHeadline) — do not hand-edit; must contain active wave id (D-D).
-    headline: "Trade K8s-native W5/W6 DELIVERED awaiting sign-off → W7 Probes + initContainers — socket/worker wait CNPG/Redis ready"
+    headline: "Trade K8s-native CLOSED — (W0–W11 signed)"
     flywheel_primary: B # A = trade FE, B = runtime/ops
     blocker: null
 milestones:
@@ -322,11 +322,11 @@ tracks:
             - id: trade-k8s-native
               label: "Trade stack K8s-native refactor + IB Edge Gateway"
               total: 12
-              done: 5
-              ready_for_signoff: 2
-              status: in_progress
-              next_task: "W5/W6 DELIVERED awaiting sign-off → W7 NEXT — Probes + initContainers — socket/worker wait CNPG/Redis ready"
-              note: "W0 ✓ W1 ✓ W2 ✓ signed (W2 STG verify PASS: executor_mode=kubernetes, k8s_reachable, celery-worker 1/1, no subprocess). Authority: tradeK8sNativeCatalog.ts · W3 ✓ signed (Owner sign-off via Briefing queue) · W4 ✓ signed (Owner sign-off via Briefing queue)"
+              done: 12
+              ready_for_signoff: 0
+              status: closed
+              next_task: "CLOSED — (W0–W11 signed)"
+              note: "W0 ✓ W1 ✓ W2 ✓ signed (W2 STG verify PASS: executor_mode=kubernetes, k8s_reachable, celery-worker 1/1, no subprocess). Authority: tradeK8sNativeCatalog.ts · W3 ✓ signed (Owner sign-off via Briefing queue) · W4 ✓ signed (Owner sign-off via Briefing queue) · W5 ✓ signed (Owner sign-off via Briefing queue) · W6 ✓ signed (Owner sign-off via Briefing queue) · W7 ✓ signed (Owner sign-off via Briefing queue) · W8 ✓ signed (Owner sign-off via Briefing queue) · W9 ✓ signed (Owner sign-off via Briefing queue) · W10 ✓ signed (Owner sign-off via Briefing queue) · W11 ✓ signed (Owner sign-off via Briefing queue)"
               prerequisites:
                 - "compose-to-k3s stream closed"
                 - "data-layer-k3s PG+Redis in data NS (step ⑦ in progress)"

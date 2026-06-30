@@ -125,8 +125,8 @@ func (s *Service) tierBAutoProbes() []struct {
 	}
 	return []struct{ id, label, url string }{
 		{id: "tierb-daemon", label: "Daemon status (monitor API)", url: gw + "/api/monitor/status"},
-		{id: "tierb-ops", label: "Ops API health", url: gw + "/api/ops/status"},
-		{id: "tierb-socket-massive", label: "Socket ingest services (ops)", url: gw + "/api/ops/market-ingest/services"},
+		{id: "tierb-ops", label: "Ops API health", url: gw + "/api/ops/health"},
+		{id: "tierb-socket-massive", label: "Socket ingest services (ops)", url: gw + "/api/ops/ops/market-ingest/services"},
 	}
 }
 
@@ -142,6 +142,11 @@ func (s *Service) probeTierBHTTP(ctx context.Context, id, label, url string) Tie
 		return TierBItemView{
 			ID: id, Label: label, Kind: "auto", Required: true,
 			Reachability: probe.ReachFail, Detail: err.Error(),
+		}
+	}
+	if s.cfg != nil {
+		if entry := s.cfg.DefaultCluster(); entry != nil {
+			entry.ApplyStgGatewayHost(req)
 		}
 	}
 	client := &http.Client{Timeout: 8 * time.Second}

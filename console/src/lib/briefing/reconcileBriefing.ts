@@ -112,17 +112,30 @@ export function deriveFocusHeadline(ctx?: OpsContextResponse): string {
   const parts: string[] = []
 
   const stream = tradeK8sStream(ctx)
-  if (stream != null && stream.status.toLowerCase() !== 'closed') {
-    const ready = TRADE_K8S_NATIVE_WAVES.filter(
-      w => waveProjectionFor(ctx, w.spineIndex) === 'ready_for_signoff',
-    )
-    const nextWave = TRADE_K8S_NATIVE_WAVES.find(w => waveProjectionFor(ctx, w.spineIndex) === 'next')
-    if (ready.length > 0) {
-      const readyIds = ready.map(w => w.wave).join('/')
-      const tail = nextWave != null ? ` → ${nextWave.wave} ${nextWave.label}` : ''
-      parts.push(`Trade K8s-native ${readyIds} DELIVERED awaiting sign-off${tail}`)
-    } else if (nextWave != null) {
-      parts.push(`Trade K8s-native ${nextWave.wave} NEXT — ${nextWave.label}`)
+  if (stream != null) {
+    if (stream.status.toLowerCase() === 'closed') {
+      const nt = deriveStreamNextTask(
+        TRADE_K8S_NATIVE_WAVES.map(w => ({
+          code: w.wave,
+          label: w.label,
+          spineIndex: w.spineIndex,
+        })),
+        streamProjectionInput(stream),
+        'trade',
+      )
+      parts.push(nt !== '' ? `Trade K8s-native ${nt}` : 'Trade K8s-native CLOSED')
+    } else {
+      const ready = TRADE_K8S_NATIVE_WAVES.filter(
+        w => waveProjectionFor(ctx, w.spineIndex) === 'ready_for_signoff',
+      )
+      const nextWave = TRADE_K8S_NATIVE_WAVES.find(w => waveProjectionFor(ctx, w.spineIndex) === 'next')
+      if (ready.length > 0) {
+        const readyIds = ready.map(w => w.wave).join('/')
+        const tail = nextWave != null ? ` → ${nextWave.wave} ${nextWave.label}` : ''
+        parts.push(`Trade K8s-native ${readyIds} DELIVERED awaiting sign-off${tail}`)
+      } else if (nextWave != null) {
+        parts.push(`Trade K8s-native ${nextWave.wave} NEXT — ${nextWave.label}`)
+      }
     }
   }
 
