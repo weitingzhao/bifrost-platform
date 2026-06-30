@@ -113,7 +113,7 @@ export function DeliveryObserveView({
               errorMessage={stgSmokeError}
               onRefresh={onRefreshStgSmoke}
               title="Verify STG"
-              description="Post-deliver HTTP acceptance via nginx gateway (:30880). Run deliver on Operate, then refresh here."
+              description="Post-deliver HTTP acceptance via Traefik gateway (trade-stg.bifrost.lan). Run deliver on Operate, then refresh here."
             />
             <StgTierBChecklistPanel tierB={tierB} tierBLoading={tierBLoading} layout="observe" />
           </>

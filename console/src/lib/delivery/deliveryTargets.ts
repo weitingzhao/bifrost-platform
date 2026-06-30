@@ -39,7 +39,7 @@ export const DELIVERY_TARGETS: DeliveryTargetConfig[] = [
       'bifrost-trade-infra',
       'bifrost-ui',
     ],
-    successLink: { href: 'http://192.168.10.73:30880/', label: 'Open Trade STG gateway' },
+    successLink: { href: 'http://trade-stg.bifrost.lan/', label: 'Open Trade STG gateway' },
     actuateDescription:
       'Gitea mirror → Kaniko (9 APIs + frontend + worker/socket) → rollout bifrost-stg → verify → Argo sync.',
   },

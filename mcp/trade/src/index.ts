@@ -30,7 +30,8 @@ server.tool('trade_mcp_health', 'MCP server health — read-only mode enforced',
     server: SERVER_NAME,
     version: SERVER_VERSION,
     mode: 'read_only',
-    gateway: process.env.TRADE_API_GATEWAY ?? 'http://127.0.0.1:30880',
+    gateway: process.env.TRADE_API_GATEWAY ?? 'http://127.0.0.1:80',
+    gatewayHost: process.env.TRADE_API_GATEWAY_HOST ?? '',
   }),
 )
 

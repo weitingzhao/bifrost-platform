@@ -43,7 +43,7 @@ const TRADE_STG_ASK_CONTEXT: PipelineRunAskContext = {
   clusterSignals: [
     'verify: Operate → Cluster → bifrost-stg workloads (failing pods)',
     'scheduling: Observe → Scheduling → Placement (amd64_ci pool, policy violations)',
-    'gateway: http://192.168.10.73:30880/',
+    'gateway: http://trade-stg.bifrost.lan/ (Traefik Host ingress)',
   ],
   acceptanceHint: 'How to confirm S12/S14 acceptance after the fix.',
 }

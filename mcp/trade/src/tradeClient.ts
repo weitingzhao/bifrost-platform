@@ -1,8 +1,15 @@
-const gateway = () => (process.env.TRADE_API_GATEWAY ?? 'http://127.0.0.1:30880').replace(/\/$/, '')
+const gateway = () => (process.env.TRADE_API_GATEWAY ?? 'http://127.0.0.1:80').replace(/\/$/, '')
+
+const gatewayHost = () => process.env.TRADE_API_GATEWAY_HOST?.trim() ?? ''
 
 export async function tradeGet(path: string): Promise<unknown> {
   const url = path.startsWith('http') ? path : `${gateway()}${path.startsWith('/') ? path : `/${path}`}`
-  const res = await fetch(url, { method: 'GET' })
+  const headers: Record<string, string> = {}
+  const host = gatewayHost()
+  if (host) {
+    headers.Host = host
+  }
+  const res = await fetch(url, { method: 'GET', headers })
   if (!res.ok) {
     throw new Error(`Trade API GET ${url}: HTTP ${res.status}`)
   }
