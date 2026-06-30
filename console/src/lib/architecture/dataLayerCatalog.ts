@@ -7,6 +7,7 @@
  */
 
 import type { OpsContextResponse } from '@/api/types'
+import { projectWaveStatus } from '@/lib/briefing/waveProjection'
 
 export const DATA_LAYER_VERSION = '2026-06-20'
 export const DATA_LAYER_SOURCE = 'console/src/lib/architecture/dataLayerCatalog.ts'
@@ -153,6 +154,10 @@ export type DataLayerPhaseStatus = 'pending' | 'next' | 'in_progress' | 'done'
 export type DataLayerMigrationPhase = {
   id: string
   step: number
+  /** D-C: position in spine done count (step - 1). */
+  spineIndex: number
+  /** Display prefix in queue / next_task (①..⑦). */
+  displayCode: string
   label: string
   repo: string
   verify: string
@@ -164,6 +169,8 @@ export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
   {
     id: 'data-0-cnpg-operator',
     step: 1,
+    spineIndex: 0,
+    displayCode: '①',
     label: 'Label ubt-k3s-02 postgres-role + deploy CloudNativePG operator + bifrost-postgres cluster (data NS)',
     repo: 'bifrost-trade-infra/k8s/data/ + scripts/k3s/install-data-layer-phase0.sh',
     verify: 'kubectl get cluster -n data; postgres-role capability ready on ubt-k3s-02',
@@ -171,6 +178,8 @@ export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
   {
     id: 'data-1-minio-backup',
     step: 2,
+    spineIndex: 1,
+    displayCode: '②',
     label: 'MinIO backup target (nfs-hot) + CNPG barmanObjectStore WAL archive',
     repo: 'bifrost-trade-infra/k8s/data/minio/ · nfs-hot StorageClass',
     verify: 'CNPG backup status OK; test WAL archive to nfs-hot bucket',
@@ -179,6 +188,8 @@ export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
   {
     id: 'data-2-stg-cutover',
     step: 3,
+    spineIndex: 2,
+    displayCode: '③',
     label: 'STG cutover — apps connect bifrost-postgres-rw.data.svc + redis-live/queue-stg; remove bifrost-stg in-ns postgres/redis',
     repo: 'bifrost-trade-infra/k8s/overlays/stg/',
     verify: 'bifrost-stg daemon_control + IB ingestor Stream + deliver-stg smoke pass',
@@ -187,6 +198,8 @@ export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
   {
     id: 'data-3-dev-cutover',
     step: 4,
+    spineIndex: 3,
+    displayCode: '④',
     label: 'DEV cutover — bifrost-dev config → data NS endpoints; remove bifrost-dev in-ns postgres/redis',
     repo: 'bifrost-trade-infra/k8s/overlays/dev/',
     verify: 'Vision V1 gate :30882 + bifrost_dev schema via CNPG',
@@ -195,6 +208,8 @@ export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
   {
     id: 'data-4-prod-pg',
     step: 5,
+    spineIndex: 4,
+    displayCode: '⑤',
     label: 'PROD PG migrate — pg_dump legacy .80 → CNPG bifrost_prod; maintenance window + rollback plan',
     repo: 'bifrost-trade-infra/k8s/overlays/prod/config/',
     verify: 'make prod-health; monitor daemon_control; D2-prime cutover sign-off',
@@ -203,6 +218,8 @@ export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
   {
     id: 'data-5-redis-split',
     step: 6,
+    spineIndex: 5,
+    displayCode: '⑥',
     label: 'PROD/STG redis-live + redis-queue split (Bitnami HA); Celery → redis-queue only',
     repo: 'bifrost-trade-infra/k8s/data/redis/',
     verify: 'noeviction on live; Celery bars queue isolated; NetworkPolicy per env',
@@ -211,6 +228,8 @@ export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
   {
     id: 'data-6-retire-embedded',
     step: 7,
+    spineIndex: 6,
+    displayCode: '⑦',
     label: 'Retire embedded stateful — remove postgres/redis from bifrost-* base; bare .80 PG standby or offline',
     repo: 'bifrost-trade-infra/k8s/base/ · bifrost-platform/config/environments.yaml',
     verify: 'data NS only; matrix probes point at cluster endpoints; legacy .80 read-only or decommissioned',
@@ -244,7 +263,6 @@ export function activeDataLayerPhase(ctx?: OpsContextResponse): DataLayerMigrati
 /** Agent Briefing appendix — phased migration queue aligned with spine stream data-layer-k3s. */
 export function formatDataLayerBriefingAppendix(ctx?: OpsContextResponse): string {
   const stream = ctx?.tracks?.migrate?.streams.find(s => s.id === DATA_LAYER_MIGRATE_STREAM_ID)
-  const activeIdx = activeDataLayerPhaseIndex(ctx)
   const lines = [
     '## Data layer migration phases (K3s)',
     '',
@@ -255,16 +273,33 @@ export function formatDataLayerBriefingAppendix(ctx?: OpsContextResponse): strin
     '',
     'Authority: decision **D2-prime** supersedes D2 (.80 bare-metal interim).',
     '',
+    '### Phases (①–⑦)',
   ]
-  for (let i = 0; i < DATA_LAYER_MIGRATION_PHASES.length; i++) {
-    const p = DATA_LAYER_MIGRATION_PHASES[i]
-    const marker = i === activeIdx && stream?.status !== 'closed' ? ' *(recommended)*' : ''
-    lines.push(`${p.step}. **${p.label}**${marker}`)
-    lines.push(`   - repo: ${p.repo}`)
+
+  for (const p of DATA_LAYER_MIGRATION_PHASES) {
+    const projected =
+      stream != null
+        ? projectWaveStatus(p.spineIndex, {
+            done: stream.done,
+            readyForSignoff: stream.ready_for_signoff ?? 0,
+            streamStatus: stream.status,
+          })
+        : 'pending'
+    const marker =
+      projected === 'next'
+        ? ' *(spine next)*'
+        : projected === 'ready_for_signoff'
+          ? ' — ✅ DELIVERED, awaiting Owner sign-off'
+          : projected === 'done'
+            ? ' — ✔ signed'
+            : ''
+    lines.push(`${p.displayCode}. **${p.label}**${marker}`)
+    lines.push(`   - id: ${p.id} · repo: ${p.repo}`)
     lines.push(`   - verify: ${p.verify}`)
     if (p.blockedBy) lines.push(`   - blocked_by: ${p.blockedBy}`)
     lines.push('')
   }
+
   lines.push('### Session constraints')
   for (const c of DATA_LAYER_SESSION_CONSTRAINTS) lines.push(`- ${c}`)
   return lines.join('\n')

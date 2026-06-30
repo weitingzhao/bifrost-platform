@@ -21,6 +21,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
+	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -46,6 +47,7 @@ type Server struct {
 	promote  *promote.Handler
 	vision    *vision.Handler
 	buildgate *buildgate.Handler
+	migratewave *migratewave.Handler
 	tradeagent *tradeagent.Handler
 	opsagent     *opsagent.Handler
 	remediation  *remediation.Handler
@@ -84,6 +86,7 @@ func New(cfg *config.Config) *Server {
 		promote:  promote.NewHandler(cfg, audit),
 		vision:    vision.NewHandler(cfg, audit),
 		buildgate: buildgate.NewHandler(cfg, audit),
+		migratewave: migratewave.NewHandler(cfg, audit),
 		tradeagent: tradeagent.NewHandler(),
 		opsagent:    opsagent.NewHandler(audit),
 		remediation: remediationH,
@@ -210,6 +213,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/promote/tier-b/signoff", s.promote.HandleSignTierB)
 			r.Post("/build-phase/{phase}/gate", s.buildgate.HandleRunGate)
 			r.Post("/build-phase/{phase}/signoff", s.buildgate.HandleSignoff)
+			r.Post("/migrate-streams/{streamId}/waves/{waveId}/deliver", s.migratewave.HandleDeliver)
+			r.Post("/migrate-streams/{streamId}/waves/{waveId}/signoff", s.migratewave.HandleSignoff)
 			r.Post("/vision/v1/gate", s.vision.HandleRunV1Gate)
 			r.Post("/vision/v1/signoff", s.vision.HandleSignV1)
 			r.Post("/vision/s3/gate", s.vision.HandleRunS3Gate)

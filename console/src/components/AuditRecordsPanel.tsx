@@ -1,5 +1,24 @@
-import { DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, type DenseTagVariant } from '@bifrost/ui'
+import { useMemo, useState } from 'react'
+import {
+  DenseTag,
+  DenseDataTable,
+  DenseTableHeader,
+  DenseTableBody,
+  DenseTableHeadRow,
+  DenseTableRow,
+  DenseTableHead,
+  DenseTableCell,
+  SegmentControl,
+  type DenseTagVariant,
+} from '@bifrost/ui'
 import type { AuditRecord } from '@/api/types'
+import {
+  ACTUATION_CATEGORY_OPTIONS,
+  filterAuditByCategory,
+  formatMigrateWaveAuditLabel,
+  isMigrateWaveAudit,
+  type ActuationCategory,
+} from '@/lib/audit/actuationCatalog'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
@@ -27,6 +46,11 @@ function statusVariant(status: string): DenseTagVariant {
   return STATUS_VARIANT[status.toLowerCase()] ?? 'category'
 }
 
+function actionLabel(record: AuditRecord): string {
+  if (isMigrateWaveAudit(record)) return formatMigrateWaveAuditLabel(record)
+  return record.action
+}
+
 interface AuditRecordsPanelProps {
   records: AuditRecord[]
   isLoading: boolean
@@ -35,6 +59,10 @@ interface AuditRecordsPanelProps {
   onViewAll?: () => void
   /** When false, hide the header refresh control (e.g. embedded preview). */
   showRefresh?: boolean
+  /** Initial category filter (e.g. migrate-wave on Audit page deep link). */
+  initialCategory?: ActuationCategory
+  /** Show category filter chips. */
+  showCategoryFilter?: boolean
 }
 
 export function AuditRecordsPanel({
@@ -44,8 +72,15 @@ export function AuditRecordsPanel({
   title = 'Audit',
   onViewAll,
   showRefresh = true,
+  initialCategory = 'all',
+  showCategoryFilter = true,
 }: AuditRecordsPanelProps) {
-  const visible = records.slice(0, limit)
+  const [category, setCategory] = useState<ActuationCategory>(initialCategory)
+  const filtered = useMemo(
+    () => filterAuditByCategory(records, category),
+    [records, category],
+  )
+  const visible = filtered.slice(0, limit)
   const qc = useQueryClient()
   const auditFetching = useIsFetching({ queryKey: ['platform', 'audit'] }) > 0
 
@@ -55,7 +90,7 @@ export function AuditRecordsPanel({
       actions={
         <div className="flex items-center gap-3">
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {isLoading ? '...' : `${records.length} records`}
+            {isLoading ? '...' : `${filtered.length}${category !== 'all' ? ` / ${records.length}` : ''} records`}
           </span>
           {showRefresh ? (
             <SectionRefreshButton
@@ -78,6 +113,16 @@ export function AuditRecordsPanel({
       overflow="visible"
       bodyClassName="ops-section-body--table"
     >
+      {showCategoryFilter && (
+        <div className="border-b border-[var(--border)] px-3 py-2">
+          <SegmentControl
+            value={category}
+            onChange={v => setCategory(v as ActuationCategory)}
+            options={ACTUATION_CATEGORY_OPTIONS.map(o => ({ value: o.id, label: o.label }))}
+            size="sm"
+          />
+        </div>
+      )}
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>
@@ -93,7 +138,7 @@ export function AuditRecordsPanel({
           {visible.length === 0 ? (
             <DenseTableRow>
               <DenseTableCell colSpan={6} className="text-[var(--muted-foreground)]">
-                {isLoading ? 'Loading...' : 'No actuation records yet'}
+                {isLoading ? 'Loading...' : category === 'all' ? 'No actuation records yet' : 'No records in this category'}
               </DenseTableCell>
             </DenseTableRow>
           ) : (
@@ -103,7 +148,7 @@ export function AuditRecordsPanel({
                   {relativeTime(record.at)}
                 </DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{record.actor}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{record.action}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{actionLabel(record)}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{record.target}</DenseTableCell>
                 <DenseTableCell>
                   <DenseTag variant={statusVariant(record.status)}>{record.status}</DenseTag>

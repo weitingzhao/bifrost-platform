@@ -10,8 +10,14 @@
 import type { DenseTagVariant } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 
-export const CATALOG_VERSION = '2026-06-27-agent-operator-plane'
+export const CATALOG_VERSION = '2026-06-29-ai-compute-strategy'
 export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
+
+/** True when spine meta.catalog_version matches this catalog (CI: check_spine_catalog.sh). */
+export function isCatalogVersionSynced(ctx?: OpsContextResponse): boolean {
+  const spineVer = ctx?.meta?.catalog_version
+  return spineVer != null && spineVer === CATALOG_VERSION
+}
 
 /** Scope row — one logical component in the Bifrost stack. */
 export type ScopeRow = {

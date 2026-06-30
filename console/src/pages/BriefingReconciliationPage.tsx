@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Button,
   DenseTag,
@@ -12,11 +12,13 @@ import {
 } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { BriefingSyncLoopPanel } from '@/components/briefing/BriefingSyncLoopPanel'
 import type { OpsContextResponse } from '@/api/types'
 import {
   ANTI_PATTERNS,
   BRIEFING_RECONCILIATION_SOURCE,
   BRIEFING_RECONCILIATION_VERSION,
+  BRIEFING_SYNC_LOOP_STEPS,
   CROSS_REFERENCES,
   DESIGN_DECISIONS,
   DRIFT_LAYER_MAP,
@@ -29,11 +31,14 @@ import {
   WRITE_PATHS,
   buildBriefingReconciliationLlmPack,
 } from '@/lib/architecture/briefingReconciliationCatalog'
+import { reconcileBriefing } from '@/lib/briefing/reconcileBriefing'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
 export function BriefingReconciliationPage({ context }: { context?: OpsContextResponse }) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
+
+  const reconcileFindings = useMemo(() => reconcileBriefing(context), [context])
 
   const handleCopyForLlm = useCallback(async () => {
     const text = buildBriefingReconciliationLlmPack(context)
@@ -72,6 +77,35 @@ export function BriefingReconciliationPage({ context }: { context?: OpsContextRe
         }
         overflow="visible"
       />
+
+      <BriefingSyncLoopPanel context={context} reconcileFindings={reconcileFindings} />
+
+      <CatalogSection title="Automation loop (catalog spec)">
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Step</DenseTableHead>
+              <DenseTableHead>Agent task</DenseTableHead>
+              <DenseTableHead>Scanner / path</DenseTableHead>
+              <DenseTableHead>Description</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {BRIEFING_SYNC_LOOP_STEPS.map(row => (
+              <DenseTableRow key={row.id}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{row.label}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-xs">
+                  {row.agentTaskId ?? '—'}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-xs text-[var(--muted-foreground)]">
+                  {row.scanner ?? '—'}
+                </DenseTableCell>
+                <DenseTableCell>{row.description}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
 
       <CatalogSection title="Design decisions (Owner-ratified)">
         <DenseDataTable>

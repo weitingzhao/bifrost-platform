@@ -99,6 +99,7 @@ type MigrateStream struct {
 	Label         string   `yaml:"label" json:"label"`
 	Total         int      `yaml:"total" json:"total"`
 	Done          int      `yaml:"done" json:"done"`
+	ReadyForSignoff int    `yaml:"ready_for_signoff,omitempty" json:"ready_for_signoff,omitempty"`
 	Status        string   `yaml:"status" json:"status"`
 	NextTask      *string  `yaml:"next_task,omitempty" json:"next_task,omitempty"`
 	Note          string   `yaml:"note,omitempty" json:"note,omitempty"`

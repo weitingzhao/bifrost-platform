@@ -9,6 +9,7 @@
  */
 
 import type { OpsContextResponse } from '@/api/types'
+import { projectWaveStatus } from '@/lib/briefing/waveProjection'
 
 export const TRADE_K8S_NATIVE_VERSION = '2026-06-29'
 export const TRADE_K8S_NATIVE_SOURCE = 'console/src/lib/architecture/tradeK8sNativeCatalog.ts'
@@ -117,19 +118,16 @@ export const COMPOSE_ON_K8S_GAPS: GapRow[] = [
 // Migration waves (spine stream progress = done count of 12)
 // ---------------------------------------------------------------------------
 
-/** Per-wave delivery state. Spine `done` only increments after Owner sign-off. */
-export type WaveDelivery = 'ready_for_signoff' | 'signed'
-
 export type TradeK8sNativeWave = {
   id: string
   wave: string
+  /** D-C: position in the spine `done` count. Status is projected from spine, never held here. */
+  spineIndex: number
   label: string
   repo: string
   verify: string
   blockedBy?: string
-  /** Set when the agent has shipped the change and it awaits / passed Owner sign-off. */
-  delivery?: WaveDelivery
-  /** Short summary of what shipped — shown in the sign-off UI and briefing appendix. */
+  /** Short summary of what shipped — spec text for the briefing appendix (NOT a progress field). */
   delivered?: string
 }
 
@@ -137,10 +135,10 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w0-dev-mock',
     wave: 'W0',
+    spineIndex: 0,
     label: 'Dev IB Mock Gateway — zero live TWS client_id on bifrost-dev',
     repo: 'bifrost-trade-socket + bifrost-trade-infra/k8s/overlays/dev',
     verify: 'bifrost-dev stack healthy; no eConnect to .30/.33; market pages use redis-replay',
-    delivery: 'signed',
     delivered:
       'config get_ib_mode + ib.mode:mock; MockIbGateway for ingestor/account/operator ' +
       '(no eConnect, client_id=0, health mode=mock, synthetic STK quotes); ' +
@@ -150,11 +148,11 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w1-ingress',
     wave: 'W1',
+    spineIndex: 1,
     label: 'Traefik Ingress replaces in-cluster nginx gateway',
     repo: 'bifrost-trade-infra/k8s/base + overlays',
     verify: 'STG/PROD via Ingress host; SSE buffering off; NodePort bootstrap-only',
     blockedBy: 'data-layer-k3s step ⑦ (optional parallel on STG)',
-    delivery: 'signed',
     delivered:
       'Retired in-cluster nginx Deployment; Traefik IngressRoute + stripPrefix middlewares per API; ' +
       'SSE flushInterval on market/monitor paths; hosts trade-{stg,dev}.bifrost.lan / trade.bifrost.lan @ :80; ' +
@@ -163,10 +161,10 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w2-ops-k8s-executor',
     wave: 'W2',
+    spineIndex: 2,
     label: 'api-ops executor_mode kubernetes — restore celery-worker Deployment',
     repo: 'bifrost-trade-api + bifrost-trade-infra/k8s/overlays',
     verify: 'Ops Celery page starts worker pod; api-ops-celery.patch replicas≠0; no subprocess',
-    delivery: 'signed',
     delivered:
       'KubernetesExecutor (scale/restart Deployments, delete celery pods); ops.executor_mode kubernetes in stg|prod|dev; ' +
       'api-ops ServiceAccount + Role (deployments patch, pods delete); celery-worker replicas restored (removed B1 patch); ' +
@@ -176,6 +174,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w3-manifest-refactor',
     wave: 'W3',
+    spineIndex: 3,
     label: 'Kustomize API component + single image; fix prod config mount alias',
     repo: 'bifrost-trade-infra/k8s',
     verify: 'kustomize build overlays/stg|prod; 9 domains from one image tag',
@@ -183,6 +182,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w4-ib-lease-lib',
     wave: 'W4',
+    spineIndex: 4,
     label: 'K8s Lease leader election module in bifrost-trade-socket',
     repo: 'bifrost-trade-socket',
     verify: 'Unit tests + STG: scale socket to 2 pods — only one holds IB connection',
@@ -190,6 +190,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w5-ib-statefulset',
     wave: 'W5',
+    spineIndex: 5,
     label: 'IB socket StatefulSet + ServiceAccount/RBAC for Lease',
     repo: 'bifrost-trade-infra/k8s/base/socket',
     verify: 'kubectl get sts -n bifrost-stg; failover <20s; Error 326 never in logs',
@@ -197,6 +198,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w6-ib-gateway-merge',
     wave: 'W6',
+    spineIndex: 6,
     label: 'Merge ingestor+listener+worker_market → ib-market-gateway (3 gateways total)',
     repo: 'bifrost-trade-socket + config',
     verify: '3 client_id per TWS per env; parity smoke on /market/live',
@@ -205,6 +207,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w7-probes-init',
     wave: 'W7',
+    spineIndex: 7,
     label: 'Probes + initContainers — socket/worker wait CNPG/Redis ready',
     repo: 'bifrost-trade-infra/k8s/base',
     verify: 'rollout restart during data maintenance — no crashloop before data ready',
@@ -212,6 +215,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w8-daemon-lease',
     wave: 'W8',
+    spineIndex: 8,
     label: 'Daemon Deployment + Lease — single active auto-trade (R-DV3)',
     repo: 'bifrost-trade-worker + k8s/base/worker',
     verify: '2 daemon pods; only Lease holder runs FSM trading loop',
@@ -219,6 +223,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w9-network-policy',
     wave: 'W9',
+    spineIndex: 9,
     label: 'NetworkPolicy — env isolation + IB LAN egress allowlist',
     repo: 'bifrost-trade-infra/k8s/base',
     verify: 'bifrost-stg cannot reach bifrost-prod redis; socket reaches .30/.33:7496',
@@ -226,6 +231,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w10-observability',
     wave: 'W10',
+    spineIndex: 10,
     label: 'IB data-line budget ConfigMap + Celery/Flower metrics',
     repo: 'bifrost-trade-infra/k8s + bifrost-trade-worker',
     verify: 'Grafana or logs show ib_active_data_lines; Flower or celery_exporter',
@@ -233,6 +239,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
   {
     id: 'w11-signoff',
     wave: 'W11',
+    spineIndex: 11,
     label: 'STG Tier A/B + deliver-prod gate — Compose→K3s native sign-off',
     repo: 'bifrost-platform + bifrost-trade-infra',
     verify: 'make k3s-verify-phase-b-stg-v2; deliver-prod blocked if STG unhealthy',
@@ -255,7 +262,6 @@ export const TRADE_K8S_NATIVE_SESSION_CONSTRAINTS = [
 
 export function formatTradeK8sNativeBriefingAppendix(ctx?: OpsContextResponse): string {
   const stream = ctx?.tracks?.migrate?.streams.find(s => s.id === TRADE_K8S_NATIVE_MIGRATE_STREAM_ID)
-  const activeIdx = stream != null ? Math.min(stream.done, TRADE_K8S_NATIVE_WAVES.length - 1) : 0
 
   const lines = [
     '## Trade K8s-native refactor appendix',
@@ -288,16 +294,25 @@ export function formatTradeK8sNativeBriefingAppendix(ctx?: OpsContextResponse): 
     '### Waves (W0–W11)',
   ]
 
-  for (let i = 0; i < TRADE_K8S_NATIVE_WAVES.length; i++) {
-    const w = TRADE_K8S_NATIVE_WAVES[i]
-    const marker = i === activeIdx && stream?.status !== 'closed' ? ' *(spine next)*' : ''
-    const deliveryMarker =
-      w.delivery === 'ready_for_signoff'
-        ? ' — ✅ DELIVERED, awaiting Owner sign-off'
-        : w.delivery === 'signed'
-          ? ' — ✔ signed'
-          : ''
-    lines.push(`${w.wave}. **${w.label}**${marker}${deliveryMarker}`)
+  for (const w of TRADE_K8S_NATIVE_WAVES) {
+    // Status projected from spine (D-A/D-C) — same projectWaveStatus as the lane queue.
+    const projected =
+      stream != null
+        ? projectWaveStatus(w.spineIndex, {
+            done: stream.done,
+            readyForSignoff: stream.ready_for_signoff ?? 0,
+            streamStatus: stream.status,
+          })
+        : 'pending'
+    const marker =
+      projected === 'next'
+        ? ' *(spine next)*'
+        : projected === 'ready_for_signoff'
+          ? ' — ✅ DELIVERED, awaiting Owner sign-off'
+          : projected === 'done'
+            ? ' — ✔ signed'
+            : ''
+    lines.push(`${w.wave}. **${w.label}**${marker}`)
     lines.push(`   - id: ${w.id} · repo: ${w.repo}`)
     if (w.delivered) lines.push(`   - delivered: ${w.delivered}`)
     lines.push(`   - verify: ${w.verify}`)

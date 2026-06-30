@@ -16,6 +16,11 @@ import {
   TRADE_K8S_NATIVE_MIGRATE_STREAM_ID,
   TRADE_K8S_NATIVE_WAVES,
 } from '@/lib/architecture/tradeK8sNativeCatalog'
+import {
+  DATA_LAYER_MIGRATE_STREAM_ID,
+  DATA_LAYER_MIGRATION_PHASES,
+} from '@/lib/architecture/dataLayerCatalog'
+import { projectWaveStatus } from '@/lib/briefing/waveProjection'
 
 export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops' | 'cicd-delivery'
 export type MigrateLaneId = 'compose-k3s' | 'trade-k8s-native' | 'data-layer-k3s' | 'legacy-retire' | 'trade-stack'
@@ -27,6 +32,7 @@ export type LaneId = BuildLaneId | MigrateLaneId | AutomateLaneId | InfraLaneId 
 export type QueueItemStatus =
   | 'done'
   | 'in_progress'
+  | 'ready_for_signoff'
   | 'next'
   | 'pending'
   | 'blocked'
@@ -42,6 +48,10 @@ export interface QueueItem {
   progress?: { done: number; total: number }
   /** Prerequisites from spine stream (human-readable conditions). */
   prerequisites?: string[]
+  /** Spine migrate stream for wave SYNC actuation (trade-k8s-native lane). */
+  migrateStreamId?: string
+  /** Owner UI: mark delivered or sign-off (WRITE_PATHS — ArgoCD SYNC paradigm). */
+  waveActuation?: 'deliver' | 'signoff'
 }
 
 export interface WorkLane {
@@ -432,22 +442,38 @@ function streamToQueueItem(stream: MigrateStream): QueueItem {
 
 function buildTradeK8sNativeQueue(context: OpsContextResponse | undefined): QueueItem[] {
   const stream = context?.tracks?.migrate?.streams.find(s => s.id === TRADE_K8S_NATIVE_MIGRATE_STREAM_ID)
-  const doneCount = stream?.done ?? 0
 
-  return TRADE_K8S_NATIVE_WAVES.map((wave, index) => {
-    let status: QueueItemStatus = 'pending'
-    if (index < doneCount) status = 'done'
-    else if (index === doneCount && stream?.status === 'in_progress') status = 'next'
-    else if (index === doneCount && stream?.status === 'closed') status = 'done'
+  return TRADE_K8S_NATIVE_WAVES.map(wave => {
+    // Status projected from spine (D-A/D-C) — same projectWaveStatus as the briefing appendix.
+    const projected =
+      stream != null
+        ? projectWaveStatus(wave.spineIndex, {
+            done: stream.done,
+            readyForSignoff: stream.ready_for_signoff ?? 0,
+            streamStatus: stream.status,
+          })
+        : 'pending'
 
-    // Delivered-but-unsigned waves surface as in_progress with an explicit sign-off note,
-    // so the Owner can confirm via UI before the spine `done` count advances.
+    let status: QueueItemStatus
     let note = wave.blockedBy != null ? `blocked_by: ${wave.blockedBy}` : `verify: ${wave.verify}`
-    if (wave.delivery === 'signed') {
-      status = 'done'
-    } else if (wave.delivery === 'ready_for_signoff' && status !== 'done') {
-      status = 'in_progress'
-      note = `✅ DELIVERED — awaiting Owner sign-off · verify: ${wave.verify}`
+    let waveActuation: QueueItem['waveActuation']
+    switch (projected) {
+      case 'done':
+        status = 'done'
+        break
+      case 'ready_for_signoff':
+        status = 'ready_for_signoff'
+        note = `✅ DELIVERED — awaiting Owner sign-off · verify: ${wave.verify}`
+        if (stream != null && wave.spineIndex === stream.done) {
+          waveActuation = 'signoff'
+        }
+        break
+      case 'next':
+        status = 'next'
+        waveActuation = 'deliver'
+        break
+      default:
+        status = 'pending'
     }
 
     return {
@@ -456,6 +482,55 @@ function buildTradeK8sNativeQueue(context: OpsContextResponse | undefined): Queu
       status,
       note,
       progress: stream != null ? { done: stream.done, total: stream.total } : undefined,
+      migrateStreamId: TRADE_K8S_NATIVE_MIGRATE_STREAM_ID,
+      waveActuation,
+    }
+  })
+}
+
+function buildDataLayerK3sQueue(context: OpsContextResponse | undefined): QueueItem[] {
+  const stream = context?.tracks?.migrate?.streams.find(s => s.id === DATA_LAYER_MIGRATE_STREAM_ID)
+
+  return DATA_LAYER_MIGRATION_PHASES.map(phase => {
+    const projected =
+      stream != null
+        ? projectWaveStatus(phase.spineIndex, {
+            done: stream.done,
+            readyForSignoff: stream.ready_for_signoff ?? 0,
+            streamStatus: stream.status,
+          })
+        : 'pending'
+
+    let status: QueueItemStatus
+    let note = phase.blockedBy != null ? `blocked_by: ${phase.blockedBy}` : `verify: ${phase.verify}`
+    let waveActuation: QueueItem['waveActuation']
+    switch (projected) {
+      case 'done':
+        status = 'done'
+        break
+      case 'ready_for_signoff':
+        status = 'ready_for_signoff'
+        note = `✅ DELIVERED — awaiting Owner sign-off · verify: ${phase.verify}`
+        if (stream != null && phase.spineIndex === stream.done) {
+          waveActuation = 'signoff'
+        }
+        break
+      case 'next':
+        status = 'next'
+        waveActuation = 'deliver'
+        break
+      default:
+        status = 'pending'
+    }
+
+    return {
+      id: phase.id,
+      label: `${phase.displayCode} — ${phase.label}`,
+      status,
+      note,
+      progress: stream != null ? { done: stream.done, total: stream.total } : undefined,
+      migrateStreamId: DATA_LAYER_MIGRATE_STREAM_ID,
+      waveActuation,
     }
   })
 }
@@ -678,6 +753,9 @@ export function buildQueueForLane(
     case 'migrate':
       if (laneId === 'trade-k8s-native') {
         return buildTradeK8sNativeQueue(context)
+      }
+      if (laneId === 'data-layer-k3s') {
+        return buildDataLayerK3sQueue(context)
       }
       return buildQueueFromMigrateStreams(tracks?.migrate, laneId as MigrateLaneId)
     case 'automate':

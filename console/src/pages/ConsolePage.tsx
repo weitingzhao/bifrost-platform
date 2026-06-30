@@ -502,6 +502,7 @@ export function ConsolePage() {
               auditRecords={auditRecords}
               auditLoading={auditQuery.isLoading}
               onOpenAgentDesk={openAgentDesk}
+              onOpenAudit={openAudit}
             />
           </>
         )}

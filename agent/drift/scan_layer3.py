@@ -23,7 +23,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 DEFAULT_PLATFORM_API = "http://127.0.0.1:8780"
 
@@ -61,6 +61,35 @@ def read_vision_spine_ids(platform: Path) -> list[str]:
         return []
     text = path.read_text(encoding="utf-8")
     return re.findall(r"spineMilestoneId:\s*'([^']+)'", text)
+
+
+def read_trade_k8s_waves(platform: Path) -> list[tuple[str, int]]:
+    """Ordered (wave id, spineIndex) pairs from tradeK8sNativeCatalog.ts (D-C).
+
+    Mirrors TRADE_K8S_NATIVE_WAVES so the offline scan reconciles the SAME
+    catalog spineIndex that the runtime projectWaveStatus consumes.
+    """
+    path = platform / "console/src/lib/architecture/tradeK8sNativeCatalog.ts"
+    if not path.is_file():
+        return []
+    text = path.read_text(encoding="utf-8")
+    pairs = re.findall(r"wave:\s*'(W\d+)',\s*\n\s*spineIndex:\s*(\d+)", text)
+    return [(wave, int(idx)) for wave, idx in pairs]
+
+
+def project_wave_status(spine_index: int, done: int, ready: int, status: str) -> str:
+    """Offline mirror of waveProjection.ts projectWaveStatus (D-A/D-C)."""
+    s = (status or "").lower()
+    is_closed = s in ("closed", "signed")
+    if spine_index < done:
+        return "done"
+    if spine_index < done + ready:
+        return "ready_for_signoff"
+    if is_closed:
+        return "done"
+    if spine_index == done + ready and s == "in_progress":
+        return "next"
+    return "pending"
 
 
 def read_yaml_stream(platform: Path, stream_id: str) -> dict[str, Any] | None:
@@ -105,6 +134,165 @@ def find_automate_stream(context: dict[str, Any], stream_id: str) -> dict[str, A
         if s.get("id") == stream_id:
             return s
     return None
+
+
+def find_migrate_stream(context: dict[str, Any], stream_id: str) -> dict[str, Any] | None:
+    tracks = context.get("tracks") or {}
+    migrate = tracks.get("migrate") or {}
+    streams = migrate.get("streams") or []
+    for s in streams:
+        if s.get("id") == stream_id:
+            return s
+    return None
+
+
+def read_data_layer_phases(platform: Path) -> list[tuple[str, int, str]]:
+    """Ordered (phase id, spineIndex, displayCode) from dataLayerCatalog.ts (D-C)."""
+    path = platform / "console/src/lib/architecture/dataLayerCatalog.ts"
+    if not path.is_file():
+        return []
+    text = path.read_text(encoding="utf-8")
+    blocks = re.findall(
+        r"id:\s*'(data-[^']+)',\s*\n\s*step:\s*\d+,\s*\n\s*spineIndex:\s*(\d+),"
+        r"\s*\n\s*displayCode:\s*'([^']+)'",
+        text,
+    )
+    return [(pid, int(idx), code) for pid, idx, code in blocks]
+
+
+def check_migrate_stream_reconcile(
+    context: dict[str, Any],
+    stream_id: str,
+    waves: list[tuple[str, int]],
+    headline_code_at: Callable[[int], str] | None = None,
+) -> list[Finding]:
+    """Shared reconcile gate for a migrate stream catalog (trade-k8s-native, data-layer-k3s)."""
+    findings: list[Finding] = []
+    stream = find_migrate_stream(context, stream_id)
+    if stream is None:
+        return findings
+
+    wave_ids = [w for w, _ in waves]
+    idx_by_wave = {w: idx for w, idx in waves}
+    total = stream.get("total")
+    done = stream.get("done") or 0
+    ready = stream.get("ready_for_signoff") or 0
+    status = (stream.get("status") or "").lower()
+    headline = ((context.get("focus") or {}).get("headline")) or ""
+
+    if wave_ids and total is not None and len(wave_ids) != total:
+        findings.append(
+            Finding(
+                "briefing_reconcile",
+                f"{stream_id} gate-wave-count-vs-total: catalog has {len(wave_ids)} waves "
+                f"but spine total={total}",
+            )
+        )
+
+    if waves:
+        indices = sorted(idx for _, idx in waves)
+        if indices != list(range(len(indices))):
+            findings.append(
+                Finding(
+                    "briefing_reconcile",
+                    f"{stream_id} gate-spineindex-contiguous: spineIndex not 0..{len(indices) - 1} "
+                    f"(got {indices})",
+                )
+            )
+
+    if total is not None and done + ready > total:
+        findings.append(
+            Finding(
+                "briefing_reconcile",
+                f"{stream_id} gate-done-ready-bounds: done({done}) + ready_for_signoff({ready}) "
+                f"> total({total})",
+            )
+        )
+
+    if waves:
+        projected = {w: project_wave_status(idx, done, ready, status) for w, idx in waves}
+        for w, v in projected.items():
+            if v == "done" and idx_by_wave[w] >= done and status not in ("closed", "signed"):
+                findings.append(
+                    Finding(
+                        "briefing_reconcile",
+                        f"{stream_id} gate-queue-vs-spine-done: {w} projected done but spineIndex "
+                        f"{idx_by_wave[w]} >= done({done})",
+                    )
+                )
+
+        if status not in ("closed", "signed"):
+            done_count = sum(1 for v in projected.values() if v == "done")
+            ready_count = sum(1 for v in projected.values() if v == "ready_for_signoff")
+            next_count = sum(1 for v in projected.values() if v == "next")
+            if done_count != done:
+                findings.append(
+                    Finding(
+                        "briefing_reconcile",
+                        f"{stream_id} gate-appendix-vs-queue: projected done={done_count} "
+                        f"≠ spine.done({done})",
+                    )
+                )
+            if ready_count != ready:
+                findings.append(
+                    Finding(
+                        "briefing_reconcile",
+                        f"{stream_id} gate-appendix-vs-queue: projected ready_for_signoff="
+                        f"{ready_count} ≠ spine.ready_for_signoff({ready})",
+                    )
+                )
+            if next_count > 1:
+                findings.append(
+                    Finding(
+                        "briefing_reconcile",
+                        f"{stream_id} gate-appendix-vs-queue: {next_count} waves projected next "
+                        f"(expected <=1)",
+                    )
+                )
+
+    if wave_ids and status == "in_progress" and headline_code_at is not None:
+        active_idx = done + ready
+        if 0 <= active_idx < len(wave_ids):
+            active_code = headline_code_at(active_idx)
+            if active_code not in headline:
+                findings.append(
+                    Finding(
+                        "briefing_reconcile",
+                        f"{stream_id} gate-headline-vs-next-task: focus.headline missing active "
+                        f"code `{active_code}` (D-D)",
+                    )
+                )
+
+    return findings
+
+
+def check_trade_k8s_reconcile(
+    context: dict[str, Any], platform: Path
+) -> list[Finding]:
+    """Briefing reconcile gate (offline) — full parity with reconcileBriefing.ts."""
+    waves = sorted(read_trade_k8s_waves(platform), key=lambda t: t[1])
+    wave_ids = [w for w, _ in waves]
+    return check_migrate_stream_reconcile(
+        context,
+        "trade-k8s-native",
+        waves,
+        headline_code_at=lambda i: wave_ids[i] if i < len(wave_ids) else "",
+    )
+
+
+def check_data_layer_reconcile(
+    context: dict[str, Any], platform: Path
+) -> list[Finding]:
+    """Briefing reconcile gate for data-layer-k3s — parity with reconcileBriefing.ts S13."""
+    phases = sorted(read_data_layer_phases(platform), key=lambda t: t[1])
+    waves = [(pid, idx) for pid, idx, _ in phases]
+    codes = [code for _, _, code in phases]
+    return check_migrate_stream_reconcile(
+        context,
+        "data-layer-k3s",
+        waves,
+        headline_code_at=lambda i: codes[i] if i < len(codes) else "",
+    )
 
 
 def format_report(findings: list[Finding], platform: Path, api_base: str) -> str:
@@ -198,6 +386,10 @@ def main() -> int:
                             "(platform-api may need restart to reload ops-context.yaml)",
                         )
                     )
+
+        # Briefing reconcile gate (DRIFT_LAYER_MAP L3 — full SYNC parity)
+        findings.extend(check_trade_k8s_reconcile(context, platform))
+        findings.extend(check_data_layer_reconcile(context, platform))
 
     report = format_report(findings, platform, args.platform_api)
     print(report)

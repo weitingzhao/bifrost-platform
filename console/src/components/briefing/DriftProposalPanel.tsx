@@ -26,10 +26,21 @@ function pickLatestDriftTask(jobs: RemediationJob[]): RemediationJob | null {
 }
 
 function extractJobIdFromNightlyReport(content: string): string | null {
-  const clusterBlock = content.indexOf('## Cluster verification')
-  if (clusterBlock < 0) return null
-  const slice = content.slice(clusterBlock)
-  const match = slice.match(/"id"\s*:\s*"([0-9a-f-]{36})"/i)
+  for (const marker of ['## Agent remediation', '## Cluster verification']) {
+    const blockStart = content.indexOf(marker)
+    if (blockStart < 0) continue
+    const slice = content.slice(blockStart)
+    const match = slice.match(/"id"\s*:\s*"([0-9a-f-]{36})"/i)
+    if (match?.[1] != null) return match[1]
+  }
+  return null
+}
+
+function extractProposalApiFromNightlyReport(content: string): string | null {
+  const blockStart = content.indexOf('## Layer 4')
+  if (blockStart < 0) return null
+  const slice = content.slice(blockStart, blockStart + 4000)
+  const match = slice.match(/"platform_api"\s*:\s*"([^"]+)"/)
   return match?.[1] ?? null
 }
 
@@ -61,7 +72,7 @@ export function DriftProposalPanel({ onOpenAgentDesk }: DriftProposalPanelProps)
   const proposalsQuery = useQuery({
     queryKey: ['agent', 'drift-proposals'],
     queryFn: fetchDriftProposals,
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,
   })
 
   const nightlyQuery = useQuery({
@@ -70,10 +81,18 @@ export function DriftProposalPanel({ onOpenAgentDesk }: DriftProposalPanelProps)
     staleTime: 60_000,
   })
 
+  const proposals = proposalsQuery.data?.proposals ?? []
+  const pending = proposals.filter(p => p.status === 'pending_approval')
+
   const jobsQuery = useQuery({
     queryKey: ['remediation', 'jobs'],
     queryFn: fetchRemediationJobs,
-    staleTime: 30_000,
+    staleTime: 15_000,
+    refetchInterval:
+      pending.length > 0 ||
+      proposals.some(p => p.status === 'running' || p.status === 'approved')
+        ? 5_000
+        : 30_000,
   })
 
   const latestDriftTask = useMemo(() => {
@@ -87,8 +106,23 @@ export function DriftProposalPanel({ onOpenAgentDesk }: DriftProposalPanelProps)
     return null
   }, [jobsQuery.data?.jobs, nightlyQuery.data?.content])
 
+  const activeFixProposal = proposals.find(
+    p => p.status === 'running' || (p.status === 'approved' && p.remediation_job_id != null),
+  )
+  const activeFixJob =
+    activeFixProposal?.remediation_job_id != null
+      ? (jobsQuery.data?.jobs ?? []).find(j => j.id === activeFixProposal.remediation_job_id)
+      : null
+
   const nightlyLayer4Hint = useMemo(() => {
     const content = nightlyQuery.data?.content ?? ''
+    const l4Start = content.indexOf('## Layer 4')
+    const l4End = content.indexOf('## Runner health', l4Start)
+    const l4Block =
+      l4Start >= 0 ? content.slice(l4Start, l4End > l4Start ? l4End : l4Start + 8000) : ''
+    if (l4Block.includes('POST failed')) {
+      return 'post_failed'
+    }
     if (content.includes('No drift — skipping Layer 4 proposal')) {
       return 'no_drift'
     }
@@ -101,11 +135,17 @@ export function DriftProposalPanel({ onOpenAgentDesk }: DriftProposalPanelProps)
     return null
   }, [nightlyQuery.data?.content])
 
+  const proposalTargetApi = useMemo(
+    () => extractProposalApiFromNightlyReport(nightlyQuery.data?.content ?? ''),
+    [nightlyQuery.data?.content],
+  )
+
   const approveMutation = useMutation({
     mutationFn: approveDriftProposal,
     onSuccess: data => {
       void qc.invalidateQueries({ queryKey: ['agent', 'drift-proposals'] })
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
       setApproveOpen(false)
       setApproveTarget(null)
       if (onOpenAgentDesk != null && data.remediation_job?.id != null) {
@@ -123,11 +163,8 @@ export function DriftProposalPanel({ onOpenAgentDesk }: DriftProposalPanelProps)
     },
   })
 
-  const proposals = proposalsQuery.data?.proposals ?? []
-  const pending = proposals.filter(p => p.status === 'pending_approval')
-
   return (
-    <section className="page-section panel-elevated px-4 py-3 mt-3">
+    <section id="drift-proposals" className="page-section panel-elevated px-4 py-3 mt-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="briefing-section-kicker m-0">Layer 4 · Owner gate</p>
@@ -169,6 +206,33 @@ export function DriftProposalPanel({ onOpenAgentDesk }: DriftProposalPanelProps)
         </div>
       </div>
 
+      {activeFixProposal != null && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+          <DenseTag variant={statusVariant(activeFixProposal.status)}>
+            L4 fix · {activeFixProposal.status}
+          </DenseTag>
+          <span className="text-[var(--text-dense-meta)]">
+            {activeFixProposal.layers_failed.join(', ')} · {activeFixProposal.findings_count} findings
+          </span>
+          {activeFixJob != null && (
+            <span className="font-mono-tabular text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              job {activeFixJob.id.slice(0, 8)} · {activeFixJob.status}
+            </span>
+          )}
+          {onOpenAgentDesk != null && activeFixProposal.remediation_job_id != null && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-auto px-0 py-0"
+              onClick={() => onOpenAgentDesk(activeFixProposal.remediation_job_id)}
+            >
+              Track in Agent Desk →
+            </Button>
+          )}
+        </div>
+      )}
+
       {proposalsQuery.isLoading && (
         <p className="m-0 mt-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           Loading proposals…
@@ -206,11 +270,21 @@ export function DriftProposalPanel({ onOpenAgentDesk }: DriftProposalPanelProps)
               the scan.
             </OpsFeedback>
           )}
+          {nightlyLayer4Hint === 'post_failed' && (
+            <OpsFeedback variant="warning" title="Layer 4 proposal POST failed" className="mt-2">
+              The scan detected drift but could not create a proposal on platform-api. Check agent host{' '}
+              <code className="font-mono-tabular">PLATFORM_OPERATOR_TOKEN</code> and network reachability
+              to the target API.
+            </OpsFeedback>
+          )}
           {nightlyLayer4Hint === 'posted' && (
-            <p className="m-0 mt-2">
-              Report says a proposal was posted — click Refresh. If still empty, Console may be on a different
-              platform-api than the scan targeted (local :8780 vs K3s :30878).
-            </p>
+            <OpsFeedback variant="warning" title="Proposal on a different platform-api" className="mt-2">
+              Report shows a proposal was created on{' '}
+              <code className="font-mono-tabular">{proposalTargetApi ?? 'remote platform-api'}</code>.
+              This Console reads proposals from the local dev API (<code className="font-mono-tabular">:8780</code>
+              ). Open the matching Ops Console (K3s ingress) to approve, or re-run scan with{' '}
+              <code className="font-mono-tabular">PLATFORM_API_URL</code> pointing here.
+            </OpsFeedback>
           )}
         </div>
       )}
