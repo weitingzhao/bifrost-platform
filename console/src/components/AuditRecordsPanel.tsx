@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
   DenseTag,
   DenseDataTable,
@@ -8,6 +9,7 @@ import {
   DenseTableRow,
   DenseTableHead,
   DenseTableCell,
+  DenseTableDetailRow,
   SegmentControl,
   type DenseTagVariant,
 } from '@bifrost/ui'
@@ -76,6 +78,14 @@ export function AuditRecordsPanel({
   showCategoryFilter = true,
 }: AuditRecordsPanelProps) {
   const [category, setCategory] = useState<ActuationCategory>(initialCategory)
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const toggleExpanded = (id: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   const filtered = useMemo(
     () => filterAuditByCategory(records, category),
     [records, category],
@@ -126,36 +136,67 @@ export function AuditRecordsPanel({
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>
-            <DenseTableHead>Time</DenseTableHead>
-            <DenseTableHead>Actor</DenseTableHead>
-            <DenseTableHead>Action</DenseTableHead>
-            <DenseTableHead>Target</DenseTableHead>
-            <DenseTableHead>Status</DenseTableHead>
-            <DenseTableHead>Detail</DenseTableHead>
+            <DenseTableHead className="w-[5%] whitespace-nowrap" />
+            <DenseTableHead className="w-[12%] whitespace-nowrap">Time</DenseTableHead>
+            <DenseTableHead className="w-[14%] whitespace-nowrap">Actor</DenseTableHead>
+            <DenseTableHead className="w-[16%] whitespace-nowrap">Action</DenseTableHead>
+            <DenseTableHead className="w-[16%] whitespace-nowrap">Target</DenseTableHead>
+            <DenseTableHead className="w-[10%] whitespace-nowrap">Status</DenseTableHead>
+            <DenseTableHead className="w-[27%]">Detail</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
           {visible.length === 0 ? (
             <DenseTableRow>
-              <DenseTableCell colSpan={6} className="text-[var(--muted-foreground)]">
+              <DenseTableCell colSpan={7} className="text-[var(--muted-foreground)]">
                 {isLoading ? 'Loading...' : category === 'all' ? 'No actuation records yet' : 'No records in this category'}
               </DenseTableCell>
             </DenseTableRow>
           ) : (
-            visible.map(record => (
-              <DenseTableRow key={record.id}>
-                <DenseTableCell className="font-mono-tabular whitespace-nowrap" title={new Date(record.at).toLocaleString()}>
-                  {relativeTime(record.at)}
-                </DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{record.actor}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{actionLabel(record)}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{record.target}</DenseTableCell>
-                <DenseTableCell>
-                  <DenseTag variant={statusVariant(record.status)}>{record.status}</DenseTag>
-                </DenseTableCell>
-                <DenseTableCell>{record.detail}</DenseTableCell>
-              </DenseTableRow>
-            ))
+            visible.map(record => {
+              const detail = record.detail ?? ''
+              const isExpanded = expanded.has(record.id)
+              const hasDetail = detail.trim().length > 0
+              return (
+                <Fragment key={record.id}>
+                  <DenseTableRow
+                    className={hasDetail ? 'cursor-pointer' : undefined}
+                    onClick={hasDetail ? () => toggleExpanded(record.id) : undefined}
+                  >
+                    <DenseTableCell className="text-center align-middle text-[var(--muted-foreground)]">
+                      {hasDetail ? (
+                        isExpanded ? (
+                          <ChevronDown className="inline h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronRight className="inline h-3.5 w-3.5" />
+                        )
+                      ) : null}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular whitespace-nowrap" title={new Date(record.at).toLocaleString()}>
+                      {relativeTime(record.at)}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular truncate" title={record.actor}>{record.actor}</DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular truncate" title={actionLabel(record)}>{actionLabel(record)}</DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular truncate" title={record.target}>{record.target}</DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag variant={statusVariant(record.status)}>{record.status}</DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell className="truncate text-[var(--muted-foreground)]" title={hasDetail ? detail : undefined}>
+                      {hasDetail ? detail.replace(/\s+/g, ' ').trim() : '—'}
+                    </DenseTableCell>
+                  </DenseTableRow>
+                  {hasDetail && isExpanded && (
+                    <DenseTableDetailRow>
+                      <DenseTableCell colSpan={7}>
+                        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-[var(--text-dense-meta)] leading-relaxed text-[var(--foreground)]">
+                          {detail}
+                        </pre>
+                      </DenseTableCell>
+                    </DenseTableDetailRow>
+                  )}
+                </Fragment>
+              )
+            })
           )}
         </DenseTableBody>
       </DenseDataTable>
