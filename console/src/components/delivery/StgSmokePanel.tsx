@@ -29,7 +29,7 @@ export function StgSmokePanel({
   errorMessage,
   onRefresh,
   title = 'Stg smoke',
-  description = 'HTTP probes for bifrost-stg via nginx gateway (NodePort :30880). APIs: /health (monitor also /status). Auto-refresh every 30s.',
+  description = 'HTTP probes for bifrost-stg via Traefik gateway (Host: trade-stg.bifrost.lan). APIs: /health (monitor also /status). Auto-refresh every 30s.',
 }: StgSmokePanelProps) {
   return (
     <OpsSection

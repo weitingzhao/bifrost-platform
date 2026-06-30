@@ -4,10 +4,10 @@
  * Mirrors the Platform Release `PLATFORM_*_URLS` pattern so the Trade Release →
  * Delivery view can show always-visible external entrypoints.
  *
- * Today each gateway resolves to a K3s node IP + nginx NodePort:
- *   - DEV  → node .73 : 30882
- *   - STG  → node .73 : 30880
- *   - PROD → node .70 : 30881
+ * Today each gateway resolves to a K3s node IP + ingress:
+ *   - DEV  → node .73 : 30882 (nginx NodePort)
+ *   - STG  → Traefik @ .73 : 80, Host trade-stg.bifrost.lan
+ *   - PROD → node .70 : 30881 (nginx NodePort)
  *
  * VLAN / kube-vip migration (see architecture → networkUpgradeCatalog):
  *   When the LAN gets a single virtual IP (kube-vip), set `TRADE_INGRESS_VIP`
@@ -24,15 +24,17 @@ export type TradeEnvTier = 'DEV' | 'STG' | 'PROD'
 interface TradeEnvDef {
   env: TradeEnvTier
   label: string
-  /** Current K3s node IP that serves this gateway NodePort (ignored when a VIP is set). */
+  /** Current K3s node IP that serves this gateway (ignored when a VIP is set). */
   nodeHost: string
-  /** nginx gateway NodePort. */
+  /** Gateway port (Traefik :80 for STG; nginx NodePort for dev/prod). */
   port: number
+  /** Traefik Host-based ingress hostname (STG). Browser URL uses this when set. */
+  ingressHost?: string
 }
 
 const TRADE_ENV_DEFS: readonly TradeEnvDef[] = [
   { env: 'DEV', label: 'Trade DEV', nodeHost: '192.168.10.73', port: 30882 },
-  { env: 'STG', label: 'Trade STG', nodeHost: '192.168.10.73', port: 30880 },
+  { env: 'STG', label: 'Trade STG', nodeHost: '192.168.10.73', port: 80, ingressHost: 'trade-stg.bifrost.lan' },
   { env: 'PROD', label: 'Trade PROD', nodeHost: '192.168.10.70', port: 30881 },
 ] as const
 
@@ -51,11 +53,14 @@ function resolveHost(def: TradeEnvDef): string {
 
 export const TRADE_ENV_ACCESS: readonly TradeEnvAccess[] = TRADE_ENV_DEFS.map(def => {
   const host = resolveHost(def)
+  const gateway = def.ingressHost
+    ? `http://${def.ingressHost}/`
+    : `http://${host}:${def.port}/`
   return {
     env: def.env,
     label: def.label,
-    gateway: `http://${host}:${def.port}/`,
-    host,
+    gateway,
+    host: def.ingressHost ?? host,
   }
 })
 
