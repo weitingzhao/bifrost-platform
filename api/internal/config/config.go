@@ -124,6 +124,20 @@ func (c *Config) GetEnvironment(id string) (*Environment, bool) {
 	return nil, false
 }
 
+// ReloadOpsContext re-reads ops-context.yaml into memory after actuation writes.
+func (c *Config) ReloadOpsContext() error {
+	path := c.OpsContextPath
+	if path == "" {
+		path = opscontext.ResolvePath(c.ConfigPath)
+	}
+	ctx, err := opscontext.Load(path)
+	if err != nil {
+		return err
+	}
+	c.OpsContext = ctx
+	return nil
+}
+
 func (e *Environment) OpsToken() string {
 	if e.OpsTokenEnv == "" {
 		return ""

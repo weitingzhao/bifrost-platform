@@ -160,6 +160,8 @@ export interface MigrateStream {
   label: string
   total: number
   done: number
+  /** D-A: delivered-but-unsigned waves (spineIndex in [done, done+ready_for_signoff)). */
+  ready_for_signoff?: number
   status: string
   next_task?: string | null
   note?: string
@@ -1398,6 +1400,11 @@ export interface BuildPhaseGateResponse {
 
 export interface RunBuildPhaseGateResponse extends ActuationResponse {
   gate: BuildPhaseGateResponse
+}
+
+export interface MigrateWaveActuationResponse extends ActuationResponse {
+  stream: MigrateStream
+  headline: string
 }
 
 // Hermes Gateway — Autonomous Agent types

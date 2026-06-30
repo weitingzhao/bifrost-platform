@@ -202,9 +202,10 @@ export const RECONCILE_GATE_RULES: ReconcileGateRule[] = [
   {
     id: 'gate-migrate-next-vs-lane',
     kind: 'stream_next_task',
-    condition: 'Migrate track Next ≠ selected lane stream.next_task',
+    condition:
+      'Selected lane stream is primary in_progress migrate stream AND lane next ≠ spine stream.next_task (runtime only)',
     severity: 'warning',
-    emit: 'BRIEFING_STALE — track next/lane stream mismatch',
+    emit: 'BRIEFING_STALE — track/lane next mismatch for active stream',
   },
 ]
 
@@ -241,7 +242,7 @@ export type WritePathRow = {
 export const WRITE_PATHS: WritePathRow[] = [
   {
     actor: 'Owner UI sign-off',
-    path: 'Console → wave sign-off → platform-api PATCH ops-context.yaml stream.done',
+    path: 'Console → Wave verify gate → ConfirmDialog → Mark delivered / Sign off → platform-api PATCH ops-context.yaml',
     mayWriteProgress: true,
     audit: 'platform-api actuation log',
   },
@@ -292,10 +293,10 @@ export const DRIFT_LAYER_MAP: DriftLayerMapRow[] = [
   {
     layer: 'L3 Semantic',
     scanner: 'agent/drift/scan_layer3.py',
-    scope: 'catalog_version, vision spine ids, one hardcoded stream',
-    coversBriefingReconcile: 'Partial SYNC — file vs API spine',
+    scope: 'catalog_version, vision spine ids, trade-k8s reconcile gates',
+    coversBriefingReconcile: 'Full SYNC parity — nightly scan = Console SYNC banner',
     targetExtension:
-      'All migrate streams done/next_task; trade-k8s queue vs appendix; headline vs next_task',
+      'Covered: spineIndex contiguity, queue/appendix projection parity, queue-vs-done, headline-vs-next, migrate-next-vs-lane',
   },
   {
     layer: 'L4 Remediation',
@@ -303,6 +304,48 @@ export const DRIFT_LAYER_MAP: DriftLayerMapRow[] = [
     scope: 'Owner-approved auto-fix PR',
     coversBriefingReconcile: 'Incremental spine/catalog fixes',
     targetExtension: 'Never rewrite entire briefing generator in one PR',
+  },
+]
+
+export type BriefingSyncLoopStepSpec = {
+  id: string
+  label: string
+  agentTaskId?: string
+  scanner?: string
+  description: string
+}
+
+/** Owner-visible automation loop — detect → propose → approve → fix (S10-B). */
+export const BRIEFING_SYNC_LOOP_STEPS: BriefingSyncLoopStepSpec[] = [
+  {
+    id: 'runtime-sync',
+    label: 'Runtime SYNC',
+    description:
+      'Console reconcile gate (reconcileBriefing.ts) — same rules as pack generation and lane SYNC banner',
+  },
+  {
+    id: 'nightly-scan',
+    label: 'Nightly scan L1–L3',
+    agentTaskId: 'drift-brief',
+    scanner: 'scan_layer1.py · scan_layer2.py · scan_layer3.py',
+    description: 'Scheduled Drift · Brief — catalog integrity, API probes, briefing reconcile parity',
+  },
+  {
+    id: 'l4-proposal',
+    label: 'L4 proposal',
+    scanner: 'scan_layer4.py → POST /api/v1/agent/drift-proposals',
+    description: 'Packages Layer 1–3 failures into an Owner-reviewable proposal',
+  },
+  {
+    id: 'owner-approval',
+    label: 'Owner approval',
+    description: 'DriftProposalPanel — fixes never run unattended (WRITE_PATHS governance)',
+  },
+  {
+    id: 'drift-fix',
+    label: 'Drift · Fix',
+    agentTaskId: 'drift-autofix',
+    description: 'Remediation runner patches catalog/YAML on agent/drift-* branch after approval',
   },
 ]
 

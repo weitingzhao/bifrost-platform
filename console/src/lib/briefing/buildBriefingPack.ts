@@ -24,6 +24,12 @@ import {
 import { formatVisionBriefingSection } from '@/lib/architecture/visionSpineMap'
 import { formatDataLayerBriefingAppendix } from '@/lib/architecture/dataLayerCatalog'
 import { formatTradeK8sNativeBriefingAppendix } from '@/lib/architecture/tradeK8sNativeCatalog'
+import {
+  formatReconcileFindings,
+  hasBlockingFindings,
+  buildReconcileBriefingOptions,
+  reconcileBriefing,
+} from '@/lib/briefing/reconcileBriefing'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
   intent: WorkIntent
@@ -466,9 +472,34 @@ export function buildBriefingPack(input: BriefingInputs): string {
       ? 'Reply in **Chinese** for dialogue with the Owner.'
       : 'Reply in **English** for dialogue with the Owner.'
 
+  // Reconcile gate (D-B): blocker findings hard-block the pack; warnings stamp a banner.
+  const migrateTrack = input.trackSummaries?.find(t => t.id === 'migrate')
+  const findings = reconcileBriefing(
+    input.context,
+    buildReconcileBriefingOptions({
+      context: input.context,
+      selectedLane: input.selectedLane,
+      laneQueue: input.laneQueue,
+      migrateTrackNext: migrateTrack?.nextStep ?? null,
+    }),
+  )
+  if (hasBlockingFindings(findings)) {
+    return [
+      '# Bifrost Ops Platform — Agent Session Briefing',
+      `Generated: ${now}`,
+      '',
+      formatReconcileFindings(findings),
+      '',
+      'Pack generation halted. Resolve the blockers above (spine ↔ catalog) and regenerate.',
+      'Doctrine: Ops Console → Agent → Doctrine → Briefing Reconciliation.',
+    ].join('\n')
+  }
+  const staleBanner = findings.length > 0 ? formatReconcileFindings(findings) : null
+
   return [
     '# Bifrost Ops Platform — Agent Session Briefing',
     `Generated: ${now}`,
+    ...(staleBanner != null ? ['', staleBanner, ''] : []),
     `Work track: ${track} · Lane: ${laneMeta.label} (${lane}) · Intent: ${opt.label} (${input.intent})`,
     `Agent layer: ${opt.agentLayer} Agent · Mode: ${opt.agentMode}`,
     `Agent dialogue language: ${langMeta.agentLabel}`,

@@ -8,6 +8,7 @@ import {
   AUTHORIZATION_LEVELS,
   CATALOG_SOURCE,
   CATALOG_VERSION,
+  isCatalogVersionSynced,
   FLOW_ROWS,
   flowStatusVariant,
   HARDWARE_ROWS,
@@ -59,7 +60,16 @@ export function EnvironmentsPage({
             WHAT exists — concrete hardware, CI/CD targets, K3s topology, and trade Dev/Prod environment paths.
             Maintained in{' '}
             <code className="font-mono-tabular text-[var(--primary)]">{CATALOG_SOURCE}</code>
-            {' '}(v{CATALOG_VERSION}).
+            {' '}(v{CATALOG_VERSION}
+            {context != null && (
+              <>
+                {' · '}
+                <DenseTag variant={isCatalogVersionSynced(context) ? 'success' : 'warning'}>
+                  {isCatalogVersionSynced(context) ? 'Spine synced' : 'Spine drift'}
+                </DenseTag>
+              </>
+            )}
+            ).
           </>
         }
         actions={

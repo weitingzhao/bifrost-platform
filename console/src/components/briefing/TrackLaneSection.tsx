@@ -1,5 +1,18 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
 import { StatusLamp } from '@/components/StatusLamp'
+import { BriefingSyncBanner } from '@/components/briefing/BriefingSyncBanner'
+import { BriefingWaveAuditPanel } from '@/components/briefing/BriefingWaveAuditPanel'
+import { WaveVerifyGateCard } from '@/components/briefing/WaveVerifyGateCard'
+import { deliverMigrateWave, signoffMigrateWave } from '@/api/platform'
+import type { AuditRecord } from '@/api/types'
+import {
+  buildReconcileBriefingOptions,
+  MIGRATE_LANE_STREAM_IDS,
+  reconcileBriefing,
+} from '@/lib/briefing/reconcileBriefing'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { BriefingIconBadge, LANE_ICONS, TRACK_ICONS } from '@/lib/briefing/briefingIcons'
 import {
   buildQueueForLane,
@@ -21,6 +34,10 @@ interface TrackLaneSectionProps {
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
   clusterSummary: ClusterSummary | undefined
+  migrateTrackNext?: string | null
+  auditRecords?: AuditRecord[]
+  auditLoading?: boolean
+  onOpenAudit?: () => void
 }
 
 function queueItemReach(status: QueueItemStatus): 'ok' | 'degraded' | 'fail' | 'unknown' {
@@ -30,6 +47,7 @@ function queueItemReach(status: QueueItemStatus): 'ok' | 'degraded' | 'fail' | '
       return 'ok'
     case 'in_progress':
     case 'next':
+    case 'ready_for_signoff':
       return 'degraded'
     case 'issue':
     case 'blocked':
@@ -40,6 +58,7 @@ function queueItemReach(status: QueueItemStatus): 'ok' | 'degraded' | 'fail' | '
 }
 
 function statusLabel(status: QueueItemStatus): string {
+  if (status === 'ready_for_signoff') return 'ready for sign-off'
   return status.replace('_', ' ')
 }
 
@@ -132,51 +151,156 @@ function parseNoteMilestones(note: string): { preamble: string; milestones: stri
   return { preamble, milestones }
 }
 
-function QueueItemRow({ item }: { item: QueueItem }) {
+function QueueItemRow({
+  item,
+  canAdmin,
+  reconcileFindings,
+}: {
+  item: QueueItem
+  canAdmin: boolean
+  reconcileFindings: ReturnType<typeof reconcileBriefing>
+}) {
+  const qc = useQueryClient()
+  const [expanded, setExpanded] = useState(false)
+  const [deliverConfirmOpen, setDeliverConfirmOpen] = useState(false)
+  const [signConfirmOpen, setSignConfirmOpen] = useState(false)
+  const [actError, setActError] = useState<string | null>(null)
+  const [gateReady, setGateReady] = useState(false)
+
+  const invalidateSpine = () => {
+    void qc.invalidateQueries({ queryKey: ['context'] })
+    void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
+  }
+
+  const deliverMutation = useMutation({
+    mutationFn: () => deliverMigrateWave(item.migrateStreamId!, item.id),
+    onMutate: () => setActError(null),
+    onSuccess: () => {
+      setDeliverConfirmOpen(false)
+      invalidateSpine()
+    },
+    onError: (err: Error) => setActError(err.message),
+  })
+
+  const signoffMutation = useMutation({
+    mutationFn: () => signoffMigrateWave(item.migrateStreamId!, item.id, 'Owner sign-off via Briefing queue'),
+    onMutate: () => setActError(null),
+    onSuccess: () => {
+      setSignConfirmOpen(false)
+      invalidateSpine()
+    },
+    onError: (err: Error) => setActError(err.message),
+  })
+
   const hasDetail =
     (item.note != null && item.note !== '') ||
     (item.prerequisites != null && item.prerequisites.length > 0)
-  const [expanded, setExpanded] = useState(false)
-
   const parsed = item.note != null ? parseNoteMilestones(item.note) : null
   const hasMilestones = parsed != null && parsed.milestones.length > 0
+  const actuationBusy = deliverMutation.isPending || signoffMutation.isPending
+  const showActuation = canAdmin && item.waveActuation != null && item.migrateStreamId != null
 
   return (
     <li className="border-b border-[var(--border)] last:border-b-0">
-      <button
-        type="button"
-        className="flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--secondary)]/40"
-        disabled={!hasDetail}
-        onClick={() => hasDetail && setExpanded(!expanded)}
-      >
-        <StatusLamp value={queueItemReach(item.status)} kind="reach" />
-        <div className="min-w-0 flex-1">
-          <p className="m-0 text-[var(--text-dense)]">{item.label}</p>
-          <code className="mt-0.5 inline-block rounded bg-[var(--secondary)] px-1 py-px font-mono text-dense-caption text-[var(--muted-foreground)]">
-            {item.id}
-          </code>
-          {!expanded && parsed != null && parsed.preamble !== '' && (
-            <p className="m-0 mt-0.5 line-clamp-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              {parsed.preamble}
-            </p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {item.progress != null && item.progress.total > 0 && (
-            <span className="font-mono text-dense-caption text-[var(--muted-foreground)]">
-              {item.progress.done}/{item.progress.total}
+      <div className="flex w-full items-start gap-2 px-3 py-2">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-start gap-2 text-left transition-colors hover:bg-[var(--secondary)]/40 disabled:cursor-default"
+          disabled={!hasDetail}
+          onClick={() => hasDetail && setExpanded(!expanded)}
+        >
+          <StatusLamp value={queueItemReach(item.status)} kind="reach" />
+          <div className="min-w-0 flex-1">
+            <p className="m-0 text-[var(--text-dense)]">{item.label}</p>
+            <code className="mt-0.5 inline-block rounded bg-[var(--secondary)] px-1 py-px font-mono text-dense-caption text-[var(--muted-foreground)]">
+              {item.id}
+            </code>
+            {!expanded && parsed != null && parsed.preamble !== '' && (
+              <p className="m-0 mt-0.5 line-clamp-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                {parsed.preamble}
+              </p>
+            )}
+            {actError != null && (
+              <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--destructive)]">{actError}</p>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {item.progress != null && item.progress.total > 0 && (
+              <span className="font-mono text-dense-caption text-[var(--muted-foreground)]">
+                {item.progress.done}/{item.progress.total}
+              </span>
+            )}
+            {item.status === 'ready_for_signoff' ? (
+              <DenseTag variant="warning">delivered</DenseTag>
+            ) : null}
+            <span className="font-mono text-dense-caption uppercase text-[var(--muted-foreground)]">
+              {statusLabel(item.status)}
             </span>
-          )}
-          <span className="font-mono text-dense-caption uppercase text-[var(--muted-foreground)]">
-            {statusLabel(item.status)}
-          </span>
-          {hasDetail && (
-            <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              {expanded ? '▾' : '▸'}
-            </span>
-          )}
+            {hasDetail && (
+              <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                {expanded ? '▾' : '▸'}
+              </span>
+            )}
+          </div>
+        </button>
+      </div>
+
+      {showActuation && item.waveActuation != null && (
+        <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-8">
+          <WaveVerifyGateCard
+            item={item}
+            actuation={item.waveActuation}
+            reconcileFindings={reconcileFindings}
+            onReadyChange={setGateReady}
+          />
+          <div className="mt-2 flex flex-wrap gap-2">
+            {item.waveActuation === 'deliver' && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={!gateReady || actuationBusy}
+                title={!gateReady ? 'Run verify gate and complete Owner checklist first' : undefined}
+                onClick={() => setDeliverConfirmOpen(true)}
+              >
+                {deliverMutation.isPending ? 'Marking…' : 'Mark delivered'}
+              </Button>
+            )}
+            {item.waveActuation === 'signoff' && (
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                disabled={!gateReady || actuationBusy}
+                title={!gateReady ? 'Run verify gate and complete Owner checklist first' : undefined}
+                onClick={() => setSignConfirmOpen(true)}
+              >
+                Sign off
+              </Button>
+            )}
+          </div>
         </div>
-      </button>
+      )}
+
+      <ConfirmDialog
+        open={deliverConfirmOpen}
+        title="Mark wave delivered"
+        message={`Marks ${item.label} as DELIVERED (increments ready_for_signoff). The wave awaits a separate Owner sign-off before spine done advances. Headline and queue projection update atomically.`}
+        confirmLabel={deliverMutation.isPending ? 'Marking…' : 'Confirm deliver'}
+        confirming={deliverMutation.isPending}
+        onConfirm={() => deliverMutation.mutate()}
+        onCancel={() => setDeliverConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={signConfirmOpen}
+        title="Sign off wave"
+        message={`Increments spine done for ${item.label} and clears the ready_for_signoff slot. Briefing headline and queue projection update atomically.`}
+        confirmLabel={signoffMutation.isPending ? 'Signing…' : 'Confirm sign-off'}
+        confirming={signoffMutation.isPending}
+        onConfirm={() => signoffMutation.mutate()}
+        onCancel={() => setSignConfirmOpen(false)}
+      />
 
       {expanded && (
         <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-8">
@@ -239,7 +363,42 @@ function QueueItemRow({ item }: { item: QueueItem }) {
   )
 }
 
-function TaskQueuePanel({ items, lane }: { items: QueueItem[]; lane: WorkLane }) {
+function TaskQueuePanel({
+  items,
+  lane,
+  context,
+  canAdmin,
+  migrateTrackNext,
+  auditRecords,
+  auditLoading,
+  onOpenAudit,
+}: {
+  items: QueueItem[]
+  lane: WorkLane
+  context: OpsContextResponse | undefined
+  canAdmin: boolean
+  migrateTrackNext?: string | null
+  auditRecords: AuditRecord[]
+  auditLoading?: boolean
+  onOpenAudit?: () => void
+}) {
+  const isWaveLane = MIGRATE_LANE_STREAM_IDS[lane.id] != null
+  const laneReconcileOptions = useMemo(
+    () =>
+      buildReconcileBriefingOptions({
+        context,
+        selectedLane: lane.id,
+        laneQueue: items,
+        migrateTrackNext,
+      }),
+    [context, lane.id, items, migrateTrackNext],
+  )
+  const laneFindings = useMemo(
+    () => reconcileBriefing(context, laneReconcileOptions),
+    [context, laneReconcileOptions],
+  )
+  const streamId = MIGRATE_LANE_STREAM_IDS[lane.id]
+
   if (items.length === 0) {
     return (
       <p className="m-0 mt-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -261,11 +420,31 @@ function TaskQueuePanel({ items, lane }: { items: QueueItem[]; lane: WorkLane })
           {items.length} item{items.length > 1 ? 's' : ''}
         </span>
       </header>
+      {isWaveLane && (
+        <div className="border-b border-[var(--border)] px-3 py-2">
+          <BriefingSyncBanner context={context} options={laneReconcileOptions} />
+        </div>
+      )}
       <ul className="m-0 flex list-none flex-col p-0">
         {items.map(item => (
-          <QueueItemRow key={item.id} item={item} />
+          <QueueItemRow
+            key={item.id}
+            item={item}
+            canAdmin={canAdmin}
+            reconcileFindings={laneFindings}
+          />
         ))}
       </ul>
+      {isWaveLane && streamId != null && (
+        <div className="border-t border-[var(--border)] px-3 py-2">
+          <BriefingWaveAuditPanel
+            streamId={streamId}
+            records={auditRecords}
+            isLoading={auditLoading}
+            onOpenAudit={onOpenAudit}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -277,10 +456,15 @@ export function TrackLaneSection({
   context,
   matrices,
   clusterSummary,
+  migrateTrackNext,
+  auditRecords = [],
+  auditLoading,
+  onOpenAudit,
 }: TrackLaneSectionProps) {
   const lanes = lanesForTrack(track)
   const activeLane = laneById(selectedLane)
   const queue = buildQueueForLane(selectedLane, context, matrices, clusterSummary)
+  const { canAdmin } = usePlatformAuth()
 
   return (
     <section className="page-section panel-elevated px-4 py-3">
@@ -311,7 +495,16 @@ export function TrackLaneSection({
         })}
       </div>
 
-      <TaskQueuePanel items={queue} lane={activeLane} />
+      <TaskQueuePanel
+        items={queue}
+        lane={activeLane}
+        context={context}
+        canAdmin={canAdmin}
+        migrateTrackNext={migrateTrackNext}
+        auditRecords={auditRecords}
+        auditLoading={auditLoading}
+        onOpenAudit={onOpenAudit}
+      />
     </section>
   )
 }

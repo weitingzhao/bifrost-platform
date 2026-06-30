@@ -19,6 +19,15 @@ import { computeSessionDelta, type SessionDelta } from '@/lib/briefing/sessionDi
 import { loadSnapshot, saveSnapshot } from '@/lib/briefing/sessionSnapshot'
 import { CONSOLE_UI_PROGRESS, type UiItemStatus } from '@/lib/briefing/uiProgressSnapshot'
 import { TrackLaneSection } from '@/components/briefing/TrackLaneSection'
+import { BriefingSyncLoopPanel } from '@/components/briefing/BriefingSyncLoopPanel'
+import { BriefingReconcilePanel } from '@/components/briefing/BriefingReconcilePanel'
+import { BriefingHealthBanner } from '@/components/briefing/BriefingHealthBanner'
+import {
+  buildReconcileBriefingOptions,
+  deriveFocusHeadline,
+  hasBlockingFindings,
+  reconcileBriefing,
+} from '@/lib/briefing/reconcileBriefing'
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 import {
   buildQueueForLane,
@@ -29,6 +38,7 @@ import {
 import { computeAllTracks, type TrackId } from '@/lib/briefing/workTracks'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
+import { CATALOG_VERSION } from '@/lib/environments-catalog'
 
 interface BriefingPageProps {
   context: OpsContextResponse | undefined
@@ -40,7 +50,8 @@ interface BriefingPageProps {
   platformHealthy: boolean | undefined
   auditRecords: AuditRecord[]
   auditLoading: boolean
-  onOpenAgentDesk?: (jobId?: string) => void
+  onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
+  onOpenAudit?: () => void
 }
 
 async function copyText(text: string): Promise<void> {
@@ -64,6 +75,7 @@ export function BriefingPage({
   auditRecords,
   auditLoading,
   onOpenAgentDesk,
+  onOpenAudit,
 }: BriefingPageProps) {
   const [selectedTrack, setSelectedTrack] = useState<TrackId>('build')
   const [selectedLane, setSelectedLane] = useState<LaneId>(() =>
@@ -116,6 +128,39 @@ export function BriefingPage({
     () => buildQueueForLane(selectedLane, context, matrices, clusterSummary),
     [selectedLane, context, matrices, clusterSummary],
   )
+
+  const migrateTrackNext = useMemo(
+    () => trackSummaries.find(t => t.id === 'migrate')?.nextStep ?? null,
+    [trackSummaries],
+  )
+
+  const packReconcileOptions = useMemo(
+    () =>
+      buildReconcileBriefingOptions({
+        context,
+        selectedLane,
+        laneQueue,
+        migrateTrackNext,
+      }),
+    [laneQueue, selectedLane, migrateTrackNext, context],
+  )
+
+  const packFindings = useMemo(
+    () => reconcileBriefing(context, packReconcileOptions),
+    [context, packReconcileOptions],
+  )
+
+  const packBlocked = hasBlockingFindings(packFindings)
+
+  const derivedFocusHeadline = useMemo(() => deriveFocusHeadline(context), [context])
+  const focusHeadlineDrift =
+    context != null &&
+    derivedFocusHeadline.length > 0 &&
+    context.focus.headline !== derivedFocusHeadline
+
+  const catalogVersionSynced =
+    context?.meta?.catalog_version != null &&
+    context.meta.catalog_version === CATALOG_VERSION
 
   useEffect(() => {
     if (!dataReady || previousSnapshot == null) return
@@ -201,6 +246,11 @@ export function BriefingPage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
+      <BriefingSyncLoopPanel
+        context={context}
+        reconcileFindings={packFindings}
+        onOpenAgentDesk={onOpenAgentDesk}
+      />
       <NightlyBriefingPanel onOpenAgentDesk={onOpenAgentDesk} />
       <SessionDeltaPanel
         delta={sessionDelta}
@@ -230,6 +280,10 @@ export function BriefingPage({
         context={context}
         matrices={matrices}
         clusterSummary={clusterSummary}
+        migrateTrackNext={migrateTrackNext}
+        auditRecords={auditRecords}
+        auditLoading={auditLoading}
+        onOpenAudit={onOpenAudit}
       />
 
       <section className="page-section panel-elevated px-4 py-3">
@@ -275,15 +329,29 @@ export function BriefingPage({
                 ({laneQueue.length} queue item{laneQueue.length !== 1 ? 's' : ''})
               </span>
             </p>
+            <BriefingReconcilePanel
+              context={context}
+              options={packReconcileOptions}
+              variant="pack"
+            />
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
-              disabled={!dataReady}
+              disabled={!dataReady || packBlocked}
               onClick={() => setShowSessionPack(true)}
+              title={
+                packBlocked
+                  ? 'Resolve pack reconcile blockers before generating'
+                  : undefined
+              }
             >
-              {dataReady ? 'Generate session briefing' : 'Loading spine & matrix…'}
+              {packBlocked
+                ? 'Pack blocked (reconcile)'
+                : dataReady
+                  ? 'Generate session briefing'
+                  : 'Loading spine & matrix…'}
             </Button>
             {showSessionPack && (
               <Button variant="outline" size="sm" onClick={() => void handleCopySession()}>
@@ -306,18 +374,60 @@ export function BriefingPage({
       <section className="page-section panel-elevated px-4 py-3">
         <h2 className="m-0 text-sm font-semibold">Live snapshot</h2>
         <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Embedded in both packs below when you generate.
+          Embedded in both packs below when you generate. SYNC (pack reconcile) and HEALTH (operational
+          probes) are independent axes — see Doctrine → Briefing Reconciliation.
         </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <BriefingHealthBanner
+          matrices={matrices}
+          clusterSummary={clusterSummary}
+          platformHealthy={platformHealthy}
+          loading={matrixLoading || clusterLoading}
+        />
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <SnapshotTile
             label="Platform API"
             reach={platformHealthy === true ? 'ok' : platformHealthy === false ? 'fail' : 'unknown'}
             detail={platformHealthy === true ? 'healthy' : 'unreachable'}
           />
           <SnapshotTile
+            label="Catalog version"
+            reach={
+              contextLoading
+                ? 'unknown'
+                : catalogVersionSynced
+                  ? 'ok'
+                  : context?.meta?.catalog_version != null
+                    ? 'degraded'
+                    : 'unknown'
+            }
+            detail={contextLoading ? 'Loading…' : CATALOG_VERSION}
+            subdetail={
+              catalogVersionSynced
+                ? 'Spine + environments-catalog aligned'
+                : context?.meta?.catalog_version != null
+                  ? `Spine: ${context.meta.catalog_version} — run check_spine_catalog.sh`
+                  : undefined
+            }
+          />
+          <SnapshotTile
             label="Spine focus"
-            reach={context != null ? 'ok' : 'unknown'}
-            detail={contextLoading ? 'Loading…' : (context?.focus.headline ?? '—')}
+            reach={
+              focusHeadlineDrift
+                ? 'degraded'
+                : context != null
+                  ? 'ok'
+                  : 'unknown'
+            }
+            detail={
+              contextLoading
+                ? 'Loading…'
+                : (context?.focus.headline ?? '—')
+            }
+            subdetail={
+              focusHeadlineDrift
+                ? `Derived: ${derivedFocusHeadline} (D-D drift — run wave SYNC or patch headline)`
+                : undefined
+            }
           />
           <SnapshotTile
             label="Cluster"
@@ -454,10 +564,12 @@ function SnapshotTile({
   label,
   reach,
   detail,
+  subdetail,
 }: {
   label: string
   reach: 'ok' | 'degraded' | 'fail' | 'unknown'
   detail: string
+  subdetail?: string
 }) {
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
@@ -468,6 +580,9 @@ function SnapshotTile({
         </span>
       </div>
       <p className="m-0 mt-1 text-[var(--text-dense)]">{detail}</p>
+      {subdetail != null && (
+        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--warning)]">{subdetail}</p>
+      )}
     </div>
   )
 }
