@@ -16,7 +16,7 @@ var tierBManualItems = []struct {
 	label string
 }{
 	{id: "ib-tws-live", label: "IB TWS live connection verified (manual)"},
-	{id: "massive-ws-quotes", label: "Massive WS receiving option quotes (manual)"},
+	{id: "massive-ws-quotes", label: "Massive option data: REST/Celery OK for Options Starter; live WS quotes require Developer+ (manual)"},
 	{id: "celery-workers", label: "Celery workers processing tasks (manual)"},
 }
 
