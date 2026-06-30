@@ -163,7 +163,7 @@ export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
     tier: 'manual',
     entryPoint: 'Agent Briefing → approve drift proposal',
     trigger: 'Owner approves a nightly drift Layer-4 proposal',
-    description: 'Edit bifrost-platform catalog/YAML/scanners; branch agent/drift-YYYYMMDD, commit, push.',
+    description: 'Edit bifrost-platform catalog/YAML/scanners per briefingReconciliationCatalog WRITE_PATHS; branch agent/drift-YYYYMMDD, commit, push.',
   },
   {
     id: 'drift-brief',
@@ -174,7 +174,7 @@ export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
     tier: 'automated',
     entryPoint: 'Agent Briefing · nightly_drift.sh',
     trigger: 'Scheduled nightly scan (primary runner)',
-    description: 'Read-only Layer 1–3 drift summary — report only, no fixes.',
+    description: 'Read-only Layer 1–3 drift summary — report only, no fixes. L3 extends per briefingReconciliationCatalog DRIFT_LAYER_MAP.',
   },
   {
     id: 'nightly-health',

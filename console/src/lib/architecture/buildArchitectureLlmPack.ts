@@ -9,6 +9,7 @@ import { buildEnvironmentsLlmContext } from '@/lib/environments-catalog'
 import { buildDesignSystemLlmPack } from '@/lib/standards/designSystemCatalog'
 import { buildMcpContractLlmPack } from '@/lib/standards/mcpContractCatalog'
 import { buildAgentProtocolLlmPack } from './agentProtocolCatalog'
+import { buildBriefingReconciliationLlmPack } from './briefingReconciliationCatalog'
 import { buildCicdBootstrapLlmPack } from './cicdBootstrapCatalog'
 import { buildDataLayerLlmPack } from './dataLayerCatalog'
 import { buildBlueprintLlmPack } from './blueprintCatalog'
@@ -38,6 +39,7 @@ export function buildFullArchitectureLlmPack(spine?: OpsContextResponse): string
     buildDeployMainlineLlmPack(),
     buildStandardsLlmPack(),
     buildAgentProtocolLlmPack(),
+    buildBriefingReconciliationLlmPack(spine),
     buildMcpContractLlmPack(),
     buildDesignSystemLlmPack(),
   ]

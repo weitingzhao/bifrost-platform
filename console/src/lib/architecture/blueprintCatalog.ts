@@ -117,6 +117,7 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Agent Desk', plane: 'Agent', purpose: 'Engineer workspace — composer + run history; the actor that services rocket (Ops) + payload (Trade)' },
   { view: 'Agent Briefing', plane: 'Agent', purpose: 'New-session entry — work-intent picker, UI progress, live snapshot, full LLM briefing pack' },
   { view: 'Agent Protocol', plane: 'Agent', purpose: 'Doctrine — interaction modes, three-layer architecture, context pack layers, forbidden actions' },
+  { view: 'Briefing Reconciliation', plane: 'Agent', purpose: 'Doctrine — spine projection rules, reconcile gate (BRIEFING_STALE), Sync vs Health, drift layer map' },
   { view: 'MCP Contract', plane: 'Agent', purpose: 'Doctrine — Agent tool contract (read / routine / confirm / forbidden) mirrored UI + MCP' },
   { view: 'Skills & Schedules', plane: 'Agent', purpose: 'Autonomous — Hermes Gateway registered skills, cron/webhook/manual triggers, per-skill actuation level (L0/L1/L2)' },
   { view: 'Execution Log', plane: 'Agent', purpose: 'Autonomous — Hermes execution history; trigger, result, duration, summary for all autonomous and dispatched runs' },
@@ -241,6 +242,7 @@ export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
       'Build & test via Tekton Pipeline (lint / pytest / npm build)',
       'Release via ArgoCD GitOps; release_gate.sh aggregates prod-health',
       'Config drift detection via ArgoCD diff + periodic make prod-health',
+      'Agent Briefing reconcile gate — briefingReconciliationCatalog.ts (queue ≟ spine ≟ appendix)',
     ],
   },
   {

@@ -30,6 +30,7 @@ export type ConsoleViewTab =
   | 'data-layer'
   | 'platform-standards'
   | 'agent-protocol'
+  | 'briefing-reconciliation'
   | 'mcp-contract'
   | 'design-system'
   | 'flywheel-vision'
