@@ -186,6 +186,18 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     label: 'K8s Lease leader election module in bifrost-trade-socket',
     repo: 'bifrost-trade-socket',
     verify: 'Unit tests + STG: scale socket to 2 pods — only one holds IB connection',
+    delivered:
+      'bifrost_socket.ib.lease — coordination.k8s.io/Lease active-standby library: ' +
+      'LeaseRecord + LeaseBackend protocol (InMemory for tests, lazy KubernetesLeaseBackend ' +
+      'via CoordinationV1Api with optimistic-concurrency CAS); LeaderElector with a pure ' +
+      'try_acquire_or_renew(now) core (acquire/renew/takeover-on-expiry/step-down) + async ' +
+      'acquire()/renew_until_lost(); run_with_leadership (OnStoppedLeading=exit pattern so ' +
+      'standby never eConnects and a lost leader exits for K8s restart). config.get_ib_lease_settings ' +
+      '(ib.lease.enabled default false; POD_NAME/POD_NAMESPACE/BIFROST_IB_LEASE_* env overrides; ' +
+      'per-role default lease names bifrost-ib-{ingestor,account,operator}); run_ib_* scripts gated via ' +
+      'run_async_ib_service / run_sync_ib_service (transparent passthrough when disabled). ' +
+      'pyproject [k8s] extra (kubernetes>=27). 17 lease unit tests green (single-leader invariant, ' +
+      'expiry takeover, renew-deadline step-down, standby never starts service); 63/63 socket tests pass.',
   },
   {
     id: 'w5-ib-statefulset',
@@ -194,6 +206,20 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     label: 'IB socket StatefulSet + ServiceAccount/RBAC for Lease',
     repo: 'bifrost-trade-infra/k8s/base/socket',
     verify: 'kubectl get sts -n bifrost-stg; failover <20s; Error 326 never in logs',
+    delivered:
+      'k8s/base/socket: ib-ingestor/ib-account-agent/ib-operator migrated Deployment→StatefulSet ' +
+      '(headless Service each, serviceName, podManagementPolicy=Parallel for hot standby, replicas:1 ' +
+      'default — scale to 2 for Active-Standby). Each IB pod gets serviceAccountName ib-socket + ' +
+      'BIFROST_IB_LEASE_ENABLED=1 + POD_NAME/POD_NAMESPACE (downward API) so bifrost_socket.ib.lease ' +
+      'elects one Lease holder per env (W4). New ib-socket-rbac.yaml: ServiceAccount ib-socket + Role ' +
+      'ib-socket-lease (coordination.k8s.io/leases get/list/watch/create/update/patch) + RoleBinding; ' +
+      'wired into base kustomization. massive-ws stays a Deployment (Polygon, no IB clientId). socket ' +
+      'image Dockerfiles install kubernetes>=27 (stg CI + prod-local + base). api-ops kept consistent: ' +
+      'api-ops-rbac Role gains statefulsets verbs and KubernetesExecutor is workload-kind aware ' +
+      '(Deployment→StatefulSet 404 fallback) so W2 Ops Market Ingest control of IB units survives the ' +
+      'kind change. kustomize build dev|stg|prod green; 8 api executor tests (incl. STS fallback) + ' +
+      '63 socket tests pass. Deploy note: replacing a Deployment with a same-named StatefulSet requires ' +
+      'pruning the old Deployment (GitOps prune / kubectl delete deploy) before apply.',
   },
   {
     id: 'w6-ib-gateway-merge',
@@ -203,6 +229,17 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     repo: 'bifrost-trade-socket + config',
     verify: '3 client_id per TWS per env; parity smoke on /market/live',
     blockedBy: 'w4-ib-lease-lib, w5-ib-statefulset',
+    delivered:
+      'W6 gateway merge: ib-ingestor K8s workload → ib-market-gateway StatefulSet ' +
+      '(run_ib_market_gateway.py; run_ib_ingestor.py kept as deprecated alias). ' +
+      'Config ib.host.client_id.market_gateway replaces separate ingestor/listener/worker_market ' +
+      'slots when set (stg 250 / prod 50 / dev mock 50); bifrost_core + bifrost_socket resolve ' +
+      'client_id_market_gateway and alias listener/worker_market/ingestor to the same ID. ' +
+      'Celery historical bars: ib_operator.use_for_celery_bars=true on k8s overlays — no direct ' +
+      'worker_market TWS socket. Lease role ib_market_gateway → bifrost-ib-market (ib_ingestor alias). ' +
+      'Redis health key bifrost:health:ws_ib_ingestor + Ops service id ib_ingestor unchanged for ' +
+      'Monitor/API/Frontend compat. api-ops maps bifrost-ib-market-gateway + legacy bifrost-ib-ingestor ' +
+      '→ ib-market-gateway workload. kustomize build dev|stg|prod green; core+socket+api tests pass.',
   },
   {
     id: 'w7-probes-init',
