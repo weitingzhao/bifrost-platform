@@ -30,6 +30,7 @@ import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
+import { BriefingReconciliationPage } from '@/pages/BriefingReconciliationPage'
 import { AgentSystemPage } from '@/pages/AgentSystemPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { BlueprintPage } from '@/pages/BlueprintPage'
@@ -93,6 +94,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'platform-release': 'Platform Release',
   'platform-standards': 'Platform',
   'agent-protocol': 'Agent Protocol',
+  'briefing-reconciliation': 'Briefing Reconciliation',
   'mcp-contract': 'MCP Contract',
   'design-system': 'Design System',
   'network-upgrade': 'Network Upgrade',
@@ -359,7 +361,7 @@ export function ConsolePage() {
     viewTab === 'data-layer' ||
     viewTab === 'network-upgrade' ||
     viewTab === 'ai-compute'
-  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-system' || viewTab === 'agent-protocol' || viewTab === 'mcp-contract' || viewTab === 'design-system'
+  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-system' || viewTab === 'agent-protocol' || viewTab === 'briefing-reconciliation' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
   const handleCopyAllGovernance = async () => {
     let spine = contextQuery.data
@@ -397,6 +399,7 @@ export function ConsolePage() {
     'environments',
     'platform-standards',
     'agent-protocol',
+    'briefing-reconciliation',
     'mcp-contract',
     'data-layer',
     'design-system',
@@ -721,6 +724,8 @@ export function ConsolePage() {
                   : viewTab === 'agent-system'
                     ? 'Single runtime, capability domains, task chains, and registry — the map before Agent Protocol and MCP Contract.'
                   : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
+                  : viewTab === 'briefing-reconciliation'
+                    ? 'Spine projection discipline — source of truth layers, reconcile gate (BRIEFING_STALE), Sync vs Health, drift layer map.'
                   : viewTab === 'mcp-contract'
                     ? 'MCP tool catalog, Cursor setup, and governance contract (permissions, deny-list).'
                   : 'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.'
@@ -772,6 +777,10 @@ export function ConsolePage() {
         )}
 
         {viewTab === 'agent-protocol' && <AgentProtocolPage />}
+
+        {viewTab === 'briefing-reconciliation' && (
+          <BriefingReconciliationPage context={contextQuery.data} />
+        )}
 
         {viewTab === 'mcp-contract' && <McpContractPage />}
 

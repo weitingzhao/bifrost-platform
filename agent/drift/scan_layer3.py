@@ -5,6 +5,9 @@ Compares spine/catalog authority files with GET /api/v1/context and
 visionSpineMap milestone IDs. Surfaces semantic drift where Console
 catalogs and runtime spine disagree.
 
+Authority for briefing content drift extensions:
+  console/src/lib/architecture/briefingReconciliationCatalog.ts (DRIFT_LAYER_MAP)
+
 Stdout: markdown report. Exit 0 if no findings, 1 if drift detected.
 """
 

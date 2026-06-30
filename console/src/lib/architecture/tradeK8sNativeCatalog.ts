@@ -166,11 +166,12 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     label: 'api-ops executor_mode kubernetes — restore celery-worker Deployment',
     repo: 'bifrost-trade-api + bifrost-trade-infra/k8s/overlays',
     verify: 'Ops Celery page starts worker pod; api-ops-celery.patch replicas≠0; no subprocess',
-    delivery: 'ready_for_signoff',
+    delivery: 'signed',
     delivered:
       'KubernetesExecutor (scale/restart Deployments, delete celery pods); ops.executor_mode kubernetes in stg|prod|dev; ' +
       'api-ops ServiceAccount + Role (deployments patch, pods delete); celery-worker replicas restored (removed B1 patch); ' +
-      '/health exposes k8s_reachable + k8s_namespace; market ingest runtime_kind kubernetes.',
+      '/health exposes k8s_reachable + k8s_namespace; market ingest runtime_kind kubernetes. ' +
+      'STG cluster verify PASS: health executor_mode=kubernetes k8s_reachable=true; celery-worker 1/1; no subprocess; in-pod executor smoke OK.',
   },
   {
     id: 'w3-manifest-refactor',
