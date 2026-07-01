@@ -514,6 +514,7 @@ export function ConsolePage() {
               auditLoading={auditQuery.isLoading}
               onOpenAgentDesk={openAgentDesk}
               onOpenAudit={openAudit}
+              onOpenTrustAutonomy={() => setViewTab('agent-governance')}
             />
           </>
         )}

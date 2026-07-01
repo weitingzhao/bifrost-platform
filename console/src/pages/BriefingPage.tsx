@@ -12,6 +12,7 @@ import { BriefingPhase1SignoffPanel } from '@/components/briefing/BriefingPhase1
 import { BriefingPhase2SignoffPanel } from '@/components/briefing/BriefingPhase2SignoffPanel'
 import { BriefingPhase3SignoffPanel } from '@/components/briefing/BriefingPhase3SignoffPanel'
 import { BriefingPhase4SignoffPanel } from '@/components/briefing/BriefingPhase4SignoffPanel'
+import { FlightDirectorBriefingPanel } from '@/components/briefing/FlightDirectorBriefingPanel'
 import { BriefingRoadmapStatusStrip } from '@/components/briefing/BriefingRoadmapStatusStrip'
 import { BriefingSessionResultsPanel } from '@/components/briefing/BriefingSessionResultsPanel'
 import { BriefingFoldableSection } from '@/components/briefing/BriefingFoldableSection'
@@ -77,6 +78,7 @@ interface BriefingPageProps {
   auditLoading: boolean
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenAudit?: () => void
+  onOpenTrustAutonomy?: () => void
 }
 
 async function copyText(text: string): Promise<void> {
@@ -101,6 +103,7 @@ export function BriefingPage({
   auditLoading,
   onOpenAgentDesk,
   onOpenAudit,
+  onOpenTrustAutonomy,
 }: BriefingPageProps) {
   const initialUrl = useMemo(() => parseBriefingUrlState(), [])
   const [selectedTrack, setSelectedTrack] = useState<TrackId>(initialUrl.track ?? 'build')
@@ -351,6 +354,8 @@ export function BriefingPage({
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <BriefingRoadmapStatusStrip />
+
+      <FlightDirectorBriefingPanel onOpenTrustAutonomy={onOpenTrustAutonomy} />
 
       <TrackCardsSection
         tracks={trackSummaries}

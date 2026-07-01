@@ -78,3 +78,27 @@ func TestComputePerformance_Windows(t *testing.T) {
 		t.Fatalf("total %d", resp.Windows[0].TotalExecutions)
 	}
 }
+
+func TestApplyTrustOverrides_Level(t *testing.T) {
+	raw := computeTrustMatrixRaw(nil)
+	overrides := map[string]TrustOverride{
+		"release": {
+			SkillID: "release", Level: "L0", AppliedBy: "owner",
+			AppliedAt: time.Now().UTC(),
+		},
+	}
+	merged := ApplyTrustOverrides(raw, overrides)
+	var release *TrustMatrixEntry
+	for i := range merged.Entries {
+		if merged.Entries[i].SkillID == "release" {
+			release = &merged.Entries[i]
+			break
+		}
+	}
+	if release == nil || release.CurrentLevel != "L0" {
+		t.Fatalf("override level %v", release)
+	}
+	if release.LastOverrideBy != "owner" {
+		t.Fatalf("override by %q", release.LastOverrideBy)
+	}
+}

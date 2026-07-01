@@ -10,6 +10,8 @@ import { CommandIntentStrip } from '@/components/control-room/CommandIntentStrip
 import { ControlRoomPhase3SignoffPanel } from '@/components/control-room/ControlRoomPhase3SignoffPanel'
 import { ControlRoomPhase4SignoffPanel } from '@/components/control-room/ControlRoomPhase4SignoffPanel'
 import { ControlRoomPhase5SignoffPanel } from '@/components/control-room/ControlRoomPhase5SignoffPanel'
+import { MissionSignalPhase7SignoffPanel } from '@/components/control-room/MissionSignalPhase7SignoffPanel'
+import { MissionSignalPhase6SignoffPanel } from '@/components/control-room/MissionSignalPhase6SignoffPanel'
 import { MissionSignalPhase5SignoffPanel } from '@/components/control-room/MissionSignalPhase5SignoffPanel'
 import { MissionSignalPhase4SignoffPanel } from '@/components/control-room/MissionSignalPhase4SignoffPanel'
 import { MissionSignalPhase3SignoffPanel } from '@/components/control-room/MissionSignalPhase3SignoffPanel'
@@ -309,6 +311,8 @@ export function ControlRoomPage({
         </div>
       </ProgramContextSection>
 
+      <MissionSignalPhase7SignoffPanel />
+      <MissionSignalPhase6SignoffPanel />
       <MissionSignalPhase5SignoffPanel />
       <MissionSignalPhase4SignoffPanel />
       <MissionSignalPhase3SignoffPanel />

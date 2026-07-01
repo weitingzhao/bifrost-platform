@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
 import {
   DenseDataTable,
@@ -8,10 +9,24 @@ import {
   DenseTableRow,
   DenseTableCell,
   DenseTag,
+  SegmentControl,
+  Button,
 } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { fetchAgentPerformance, fetchCapabilityMap, fetchTrustMatrix } from '@/api/platform'
+import {
+  fetchAgentPerformance,
+  fetchCapabilityMap,
+  fetchTrustMatrix,
+  putTrustOverride,
+} from '@/api/platform'
 import type { AgentPerformanceWindow, HermesActuationLevel } from '@/api/types'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+
+const LEVEL_OPTIONS: { value: HermesActuationLevel; label: string }[] = [
+  { value: 'L0', label: 'L0' },
+  { value: 'L1', label: 'L1' },
+  { value: 'L2', label: 'L2' },
+]
 
 function levelTag(level: HermesActuationLevel) {
   switch (level) {
@@ -77,6 +92,10 @@ function PerformanceSection({ window: w }: { window: AgentPerformanceWindow }) {
 }
 
 export function AgentGovernancePage() {
+  const { caps } = usePlatformAuth()
+  const queryClient = useQueryClient()
+  const appliedBy = caps?.principal ?? caps?.role ?? 'operator'
+
   const perfQuery = useQuery({
     queryKey: ['agent', 'governance', 'performance'],
     queryFn: fetchAgentPerformance,
@@ -95,6 +114,16 @@ export function AgentGovernancePage() {
     refetchInterval: 120_000,
   })
 
+  const overrideMut = useMutation({
+    mutationFn: (args: { skillId: string; body: Parameters<typeof putTrustOverride>[1] }) =>
+      putTrustOverride(args.skillId, args.body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agent', 'governance', 'trust-matrix'] })
+      void queryClient.invalidateQueries({ queryKey: ['cockpit', 'flight-director-snapshot'] })
+      void queryClient.invalidateQueries({ queryKey: ['briefing', 'flight-director-snapshot'] })
+    },
+  })
+
   const windows = perfQuery.data?.windows ?? []
   const entries = trustQuery.data?.entries ?? []
   const capEntries = capQuery.data?.entries ?? []
@@ -107,15 +136,14 @@ export function AgentGovernancePage() {
         description={
           <>
             Flight Director governance — monitor Agent performance and manage per-Skill trust levels.
-            KPIs sourced from <strong>remediation runner JobStore</strong> (Hermes/GPU path optional).
-            The <strong>earned autonomy engine</strong> promotes tasks with consecutive successes
-            from L1→L0 and flags demotion on failure spikes.
+            KPIs sourced from <strong>remediation runner JobStore</strong>. Owner overrides persist via{' '}
+            <code className="font-mono text-[var(--text-dense-caption)]">PUT /agent/governance/trust-overrides</code>{' '}
+            (Mission Signal Phase 6).
           </>
         }
         overflow="visible"
       />
 
-      {/* Performance KPIs */}
       <OpsSection title="Performance" overflow="visible">
         {perfQuery.isLoading && (
           <p className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">Loading performance data…</p>
@@ -152,11 +180,15 @@ export function AgentGovernancePage() {
         )}
       </OpsSection>
 
-      {/* Trust Matrix */}
       <OpsSection title="Trust Matrix" overflow="visible">
         {trustQuery.error != null && (
           <p className="text-[var(--text-dense-meta)] text-[var(--destructive)]">
             Failed to load trust matrix: {(trustQuery.error as Error).message}
+          </p>
+        )}
+        {trustQuery.data?.data_source != null && (
+          <p className="mb-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Data source: {trustQuery.data.data_source}
           </p>
         )}
       </OpsSection>
@@ -165,9 +197,9 @@ export function AgentGovernancePage() {
           <DenseTableHeadRow>
             <DenseTableHead>Skill</DenseTableHead>
             <DenseTableHead>Current Level</DenseTableHead>
+            <DenseTableHead>Set level</DenseTableHead>
             <DenseTableHead>Consecutive Successes</DenseTableHead>
-            <DenseTableHead>Promotion Eligible</DenseTableHead>
-            <DenseTableHead>Demotion Triggered</DenseTableHead>
+            <DenseTableHead>Earned autonomy</DenseTableHead>
             <DenseTableHead>Last Override</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
@@ -193,21 +225,62 @@ export function AgentGovernancePage() {
               </DenseTableCell>
               <DenseTableCell>{levelTag(entry.current_level)}</DenseTableCell>
               <DenseTableCell>
+                <SegmentControl
+                  value={entry.current_level}
+                  options={LEVEL_OPTIONS}
+                  onChange={level => {
+                    const next = level as HermesActuationLevel
+                    overrideMut.mutate({
+                      skillId: entry.skill_id,
+                      body: { level: next, applied_by: appliedBy, reason: 'Owner manual actuation level' },
+                    })
+                  }}
+                />
+              </DenseTableCell>
+              <DenseTableCell>
                 <span className="font-mono tabular-nums">{entry.consecutive_successes}</span>
               </DenseTableCell>
               <DenseTableCell>
-                {entry.promotion_eligible ? (
-                  <DenseTag variant="success">eligible</DenseTag>
-                ) : (
-                  <span className="text-[var(--muted-foreground)]">—</span>
-                )}
-              </DenseTableCell>
-              <DenseTableCell>
-                {entry.demotion_triggered ? (
-                  <DenseTag variant="danger">triggered</DenseTag>
-                ) : (
-                  <span className="text-[var(--muted-foreground)]">—</span>
-                )}
+                <div className="flex flex-wrap items-center gap-1">
+                  {entry.promotion_eligible && (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      disabled={overrideMut.isPending}
+                      onClick={() =>
+                        overrideMut.mutate({
+                          skillId: entry.skill_id,
+                          body: { action: 'accept_promotion', applied_by: appliedBy },
+                        })
+                      }
+                    >
+                      Accept promotion
+                    </Button>
+                  )}
+                  {entry.demotion_triggered && entry.suggested_level != null && (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      disabled={overrideMut.isPending}
+                      onClick={() =>
+                        overrideMut.mutate({
+                          skillId: entry.skill_id,
+                          body: { action: 'apply_demotion', applied_by: appliedBy },
+                        })
+                      }
+                    >
+                      Apply demotion
+                    </Button>
+                  )}
+                  {!entry.promotion_eligible && !entry.demotion_triggered && (
+                    <span className="text-[var(--muted-foreground)]">—</span>
+                  )}
+                  {entry.suggested_level_reason != null && (
+                    <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                      {entry.suggested_level_reason}
+                    </span>
+                  )}
+                </div>
               </DenseTableCell>
               <DenseTableCell>
                 <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
