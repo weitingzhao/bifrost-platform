@@ -1,0 +1,88 @@
+{
+  "tier": "stg",
+  "at": "2026-06-30T22:14:58.910334Z",
+  "result": "pass",
+  "revision": "main",
+  "log_path": "bifrost-trade-infra/scripts/release_gate.log",
+  "checks": [
+    {
+      "id": "last-deliver-stg",
+      "label": "Last bifrost-deliver-stg success",
+      "required": true,
+      "reachability": "ok",
+      "detail": "bifrost-deliver-stg-1782849874 (True)"
+    },
+    {
+      "id": "stg-frontend",
+      "label": "stg-frontend",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "stg-api-monitor",
+      "label": "stg-api-monitor",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "stg-api-massive",
+      "label": "stg-api-massive",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "stg-api-docs",
+      "label": "stg-api-docs",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "stg-api-ops",
+      "label": "stg-api-ops",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "stg-api-trading",
+      "label": "stg-api-trading",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "stg-api-strategy",
+      "label": "stg-api-strategy",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "stg-api-portfolio",
+      "label": "stg-api-portfolio",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "stg-api-market",
+      "label": "stg-api-market",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "stg-api-research",
+      "label": "stg-api-research",
+      "required": true,
+      "reachability": "ok",
+      "detail": "HTTP 200"
+    }
+  ],
+  "triggered_by": "admin",
+  "summary": "stg release gate pass (11 checks)"
+}
