@@ -347,8 +347,10 @@ function intentCorePack(
   ctx?: OpsContextResponse,
   matrices: MatrixResponse[] = [],
   lane: LaneId = 'console-api',
+  packSize: BriefingPackSize = 'full',
 ): string {
   const opt = workIntentById(intent)
+  const compact = packSize === 'compact'
   if (!ctx) return buildProductPack(ctx)
 
   if (opt.agentMode === 'Product' || intent === 'frontend') return buildProductPack(ctx)
@@ -356,7 +358,7 @@ function intentCorePack(
 
   if (intent === 'business') {
     return [
-      buildOpsPack(ctx, matrices),
+      buildOpsPack(ctx, matrices, { compact }),
       '',
       '## Business Agent appendix',
       'Layer: Business Agent (read-only advisory)',
@@ -368,11 +370,21 @@ function intentCorePack(
 
   if (intent === 'automate') {
     const automate = ctx.tracks?.automate
-    const streamLines = automate?.streams.map(s =>
-      `- [${s.status}] ${s.label} (${s.done}/${s.total})${s.next_task ? ` — next: ${s.next_task}` : ''}`
-    ) ?? ['(no automate track data in spine)']
+    const allStreams = automate?.streams ?? []
+    const streams = compact
+      ? allStreams.filter(s => s.status !== 'closed')
+      : allStreams
+    const closedCount = allStreams.length - streams.length
+    const streamLines = streams.length > 0
+      ? streams.map(s =>
+          `- [${s.status}] ${s.label} (${s.done}/${s.total})${s.next_task ? ` — next: ${s.next_task}` : ''}`
+        )
+      : ['(no active automate streams)']
+    if (compact && closedCount > 0) {
+      streamLines.unshift(`- (${closedCount} closed streams omitted)`)
+    }
     return [
-      buildOpsPack(ctx, matrices),
+      buildOpsPack(ctx, matrices, { compact }),
       '',
       '## Automate appendix',
       'Milestone: autonomous-agent-v1 (nightly drift + morning briefing)',
@@ -400,7 +412,7 @@ function intentCorePack(
     ].join('\n')
   }
 
-  const ops = buildOpsPack(ctx, matrices)
+  const ops = buildOpsPack(ctx, matrices, { compact })
   if (intent === 'debug') {
     const status = evaluatePromoteStatus(ctx, matrices)
     const fails = prodFailingTargetIds(matrices)
@@ -586,7 +598,7 @@ export function buildBriefingPack(input: BriefingInputs): string {
 
   sections.push(
     '## Authoritative context (spine + matrix)',
-    intentCorePack(input.intent, input.context, input.matrices, lane),
+    intentCorePack(input.intent, input.context, input.matrices, lane, packSize),
     '',
     '## Suggested opening message (paste to Agent)',
     opening,

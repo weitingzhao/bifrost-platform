@@ -365,7 +365,13 @@ export const AUTHORIZATION_LEVELS = [
 ]
 
 /** Spine section from GET /api/v1/context (authoritative milestones). */
-export function formatSpineContextSection(ctx: OpsContextResponse): string {
+const CLOSED_MILESTONE_STATUSES = new Set(['CLOSED', 'SIGNED'])
+
+export function formatSpineContextSection(
+  ctx: OpsContextResponse,
+  options?: { compact?: boolean },
+): string {
+  const compact = options?.compact === true
   const lines: string[] = [
     '## Ops context spine (authoritative)',
     `Spine version: ${ctx.meta.version} · catalog_version: ${ctx.meta.catalog_version}`,
@@ -395,17 +401,46 @@ export function formatSpineContextSection(ctx: OpsContextResponse): string {
     `- phase: ${ctx.deployment.phase}`,
     `- active_track: ${ctx.deployment.active_track}`,
     '',
-    '### Milestones',
-    ...ctx.milestones.map(
-      m =>
-        `- **${m.id}** ${m.label ?? ''}: ${m.status}${m.blocker != null ? ` (blocker: ${m.blocker})` : ''}${m.signed_at != null ? ` signed ${m.signed_at}` : ''}`,
-    ),
-    '',
-    '### Owner decisions',
-    ...ctx.decisions.map(
-      d => `- **${d.id}** (${d.status}${d.signed_at != null ? ` ${d.signed_at}` : ''}): ${d.conclusion}`,
-    ),
-    '',
+  )
+
+  if (compact) {
+    const active = ctx.milestones.filter(m => !CLOSED_MILESTONE_STATUSES.has(m.status))
+    const closedCount = ctx.milestones.length - active.length
+    lines.push('### Milestones (active only)')
+    if (closedCount > 0) {
+      lines.push(`- (${closedCount} completed milestones omitted)`)
+    }
+    lines.push(
+      ...active.map(
+        m =>
+          `- **${m.id}** ${m.label ?? ''}: ${m.status}${m.blocker != null ? ` (blocker: ${m.blocker})` : ''}`,
+      ),
+      '',
+    )
+    const signedCount = ctx.decisions.length
+    lines.push(
+      '### Owner decisions',
+      `- (${signedCount} signed decisions omitted — use full pack for history)`,
+      '',
+    )
+  } else {
+    lines.push(
+      '### Milestones',
+      ...ctx.milestones.map(
+        m =>
+          `- **${m.id}** ${m.label ?? ''}: ${m.status}${m.blocker != null ? ` (blocker: ${m.blocker})` : ''}${m.signed_at != null ? ` signed ${m.signed_at}` : ''}`,
+      ),
+      '',
+      '### Owner decisions',
+      ...ctx.decisions.map(
+        d =>
+          `- **${d.id}** (${d.status}${d.signed_at != null ? ` ${d.signed_at}` : ''}): ${d.conclusion}`,
+      ),
+      '',
+    )
+  }
+
+  lines.push(
     '### Promotion / staging',
     `- last_gate: ${ctx.promotion.last_gate.result ?? 'not recorded'}`,
     `- staging: ${ctx.environments_extended.staging?.status ?? 'unknown'}`,
