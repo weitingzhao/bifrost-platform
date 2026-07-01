@@ -71,6 +71,8 @@ import type {
   HermesGatewayHealth,
   AgentPerformanceResponse,
   TrustMatrixResponse,
+  TrustMatrixEntry,
+  TrustOverrideRequest,
   CapabilityMapResponse,
   FlightDirectorSnapshotResponse,
   HermesActuationLevel,
@@ -1007,6 +1009,17 @@ export async function fetchFlightDirectorSnapshot(): Promise<FlightDirectorSnaps
   const r = await fetch('/api/v1/agent/governance/snapshot')
   if (!r.ok) throw new Error(`flight-director-snapshot: HTTP ${r.status}`)
   return r.json() as Promise<FlightDirectorSnapshotResponse>
+}
+
+export async function putTrustOverride(
+  skillId: string,
+  body: TrustOverrideRequest,
+): Promise<TrustMatrixEntry> {
+  const r = await authedFetch('trust override', `/api/v1/agent/governance/trust-overrides/${skillId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<TrustMatrixEntry>
 }
 
 // Retrospective Agent — cross-job pattern analysis

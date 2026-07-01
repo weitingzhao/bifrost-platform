@@ -18,7 +18,9 @@ import {
   HERMES_FIRST_TASK_MCP,
   HERMES_FIRST_TASK_STEPS,
   FLIGHT_DIRECTOR_MCP,
+  FLIGHT_DIRECTOR_OPS_STEPS,
   FLIGHT_DIRECTOR_STEPS,
+  MISSION_SIGNAL_CLOSURE_STEPS,
   MODE_SELECTION_HINTS,
   OPENING_PROMPTS,
   buildAgentProtocolLlmPack,
@@ -343,6 +345,60 @@ export function AgentProtocolPage() {
           </DenseTableHeader>
           <DenseTableBody>
             {FLIGHT_DIRECTOR_STEPS.map(s => (
+              <DenseTableRow key={s.step}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{s.step}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{s.tool}</DenseTableCell>
+                <DenseTableCell>{s.required ? 'Yes' : 'No'}</DenseTableCell>
+                <DenseTableCell>{s.detail}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title="Flight Director operations (Mission Signal Phase 6)">
+        <p className="m-0 mb-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Daily digest on Agent Briefing + Owner trust overrides via{' '}
+          <code className="font-mono-tabular">PUT /api/v1/agent/governance/trust-overrides/&#123;skill_id&#125;</code>.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Step</DenseTableHead>
+              <DenseTableHead>Tool</DenseTableHead>
+              <DenseTableHead>Required</DenseTableHead>
+              <DenseTableHead>Detail</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {FLIGHT_DIRECTOR_OPS_STEPS.map(s => (
+              <DenseTableRow key={s.step}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{s.step}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{s.tool}</DenseTableCell>
+                <DenseTableCell>{s.required ? 'Yes' : 'No'}</DenseTableCell>
+                <DenseTableCell>{s.detail}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title="Mission Signal Program closure (Phase 7)">
+        <p className="m-0 mb-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Final closure after Phases 1–6 Owner sign-off — program enters maintenance mode; Control Room Phase 7
+          panel records MISSION SIGNAL PROGRAM COMPLETE.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Step</DenseTableHead>
+              <DenseTableHead>Tool</DenseTableHead>
+              <DenseTableHead>Required</DenseTableHead>
+              <DenseTableHead>Detail</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {MISSION_SIGNAL_CLOSURE_STEPS.map(s => (
               <DenseTableRow key={s.step}>
                 <DenseTableCell className="font-medium whitespace-nowrap">{s.step}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{s.tool}</DenseTableCell>

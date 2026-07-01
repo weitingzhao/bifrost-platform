@@ -158,6 +158,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/agent/governance/trust-matrix", s.agentgovernance.HandleTrustMatrix)
 		r.Get("/agent/governance/capability-map", s.agentgovernance.HandleCapabilityMap)
 		r.Get("/agent/governance/snapshot", s.agentgovernance.HandleSnapshot)
+		r.Get("/agent/governance/trust-overrides", s.agentgovernance.HandleTrustOverrides)
 		r.Get("/agent/smoke", s.agentbridge.HandleSmoke)
 		r.Get("/agent/deploy", s.agentdeploy.HandleStatus)
 		r.Get("/agent/hermes/health", s.hermesgateway.HandleHealth)
@@ -174,6 +175,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/session-snapshots", s.sessionsnapshot.HandleSave)
 			r.Post("/briefing/session-results", s.briefing.HandleCloseSession)
 			r.Put("/agent/skills/{id}/actuation-level", s.hermesgateway.HandleSkillActuationLevel)
+			r.Put("/agent/governance/trust-overrides/{skill_id}", s.agentgovernance.HandlePutTrustOverride)
 		})
 		r.Route("/agent/drift-proposals", func(r chi.Router) {
 			r.Get("/", s.driftproposal.HandleList)

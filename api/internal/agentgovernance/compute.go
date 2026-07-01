@@ -96,6 +96,10 @@ func countEscalations(j remediation.Job) int {
 }
 
 func ComputeTrustMatrix(jobs []remediation.Job) TrustMatrixResponse {
+	return ApplyTrustOverrides(computeTrustMatrixRaw(jobs), nil)
+}
+
+func computeTrustMatrixRaw(jobs []remediation.Job) TrustMatrixResponse {
 	now := time.Now().UTC()
 	byScope := groupJobsByScope(jobs)
 	entries := make([]TrustMatrixEntry, 0, len(TaskCatalog()))
@@ -109,6 +113,46 @@ func ComputeTrustMatrix(jobs []remediation.Job) TrustMatrixResponse {
 		Entries:     entries,
 		DataSource:  "remediation_jobs+catalog",
 	}
+}
+
+func ApplyTrustOverrides(resp TrustMatrixResponse, overrides map[string]TrustOverride) TrustMatrixResponse {
+	if len(overrides) == 0 {
+		return resp
+	}
+	out := resp
+	out.Entries = make([]TrustMatrixEntry, len(resp.Entries))
+	copy(out.Entries, resp.Entries)
+	for i := range out.Entries {
+		o, ok := overrides[out.Entries[i].SkillID]
+		if !ok {
+			continue
+		}
+		if o.Level == "L0" || o.Level == "L1" || o.Level == "L2" {
+			out.Entries[i].CurrentLevel = o.Level
+		}
+		if !o.AppliedAt.IsZero() {
+			out.Entries[i].LastOverrideAt = o.AppliedAt.UTC().Format(time.RFC3339)
+		}
+		out.Entries[i].LastOverrideBy = o.AppliedBy
+		// Recompute promotion eligibility against effective level.
+		e := &out.Entries[i]
+		e.PromotionEligible = e.CurrentLevel == "L1" && e.ConsecutiveSuccesses >= PromotionThreshold && !e.DemotionTriggered
+		if e.PromotionEligible {
+			e.SuggestedLevel = "L0"
+			if o.Reason == "" {
+				e.SuggestedLevelReason = "Earned autonomy — consecutive successes at L1"
+			}
+		} else if e.DemotionTriggered && e.CurrentLevel == "L0" {
+			e.SuggestedLevel = "L1"
+			if o.Reason == "" {
+				e.SuggestedLevelReason = "Failure spike — demote to confirm before auto actuation"
+			}
+		} else {
+			e.SuggestedLevel = ""
+		}
+	}
+	out.DataSource = resp.DataSource + "+owner_overrides"
+	return out
 }
 
 func groupJobsByScope(jobs []remediation.Job) map[string][]remediation.Job {

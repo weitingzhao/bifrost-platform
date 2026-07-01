@@ -45,6 +45,18 @@ type TrustMatrixResponse struct {
 	DataSource    string             `json:"data_source"`
 }
 
+type TrustOverridesResponse struct {
+	GeneratedAt time.Time                  `json:"generated_at"`
+	Overrides   map[string]TrustOverride   `json:"overrides"`
+}
+
+type TrustOverrideRequest struct {
+	Level     string `json:"level,omitempty"`
+	Action    string `json:"action,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	AppliedBy string `json:"applied_by,omitempty"`
+}
+
 type CapabilityMapEntry struct {
 	TaskScope        string   `json:"task_scope"`
 	TaskLabel        string   `json:"task_label"`

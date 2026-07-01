@@ -1519,6 +1519,15 @@ export interface TrustMatrixEntry {
   demotion_triggered: boolean
   last_override_at?: string
   last_override_by?: string
+  suggested_level?: HermesActuationLevel
+  suggested_level_reason?: string
+}
+
+export interface TrustOverrideRequest {
+  level?: HermesActuationLevel
+  action?: 'accept_promotion' | 'apply_demotion'
+  reason?: string
+  applied_by?: string
 }
 
 export interface TrustMatrixResponse {

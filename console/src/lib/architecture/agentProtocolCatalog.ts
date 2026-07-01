@@ -250,6 +250,50 @@ export const FLIGHT_DIRECTOR_STEPS: FlightDirectorStep[] = [
   },
 ]
 
+/** Mission Signal Phase 6 — Flight Director daily ops (briefing digest + trust overrides). */
+export const FLIGHT_DIRECTOR_OPS_STEPS: FlightDirectorStep[] = [
+  {
+    step: '1. Daily digest',
+    tool: 'get_flight_director_snapshot',
+    required: true,
+    detail: 'Agent Briefing → Flight Director 24h panel; review completed/failed/escalations before opening Cursor.',
+  },
+  {
+    step: '2. Trust override',
+    tool: 'PUT /api/v1/agent/governance/trust-overrides/{skill_id}',
+    required: true,
+    detail: 'Owner sets L0/L1/L2 per skill; accept_promotion / apply_demotion actions apply earned autonomy suggestions.',
+  },
+  {
+    step: '3. Verify matrix',
+    tool: 'get_trust_matrix',
+    required: true,
+    detail: 'data_source includes owner_overrides after Owner actuation.',
+  },
+]
+
+/** Mission Signal Phase 7 — Program closure (maintenance mode). */
+export const MISSION_SIGNAL_CLOSURE_STEPS: FlightDirectorStep[] = [
+  {
+    step: '1. Program status',
+    tool: 'Control Room → Mission Signal strip',
+    required: true,
+    detail: 'P1–P6 tags show ✓ when Owner signed each phase panel; all six unlock Phase 7 closure.',
+  },
+  {
+    step: '2. Doctrine reference',
+    tool: 'Agent Protocol',
+    required: true,
+    detail: 'Phases 1–6 playbooks + this closure section — single Mission Signal arc for Agent modes.',
+  },
+  {
+    step: '3. Maintenance mode',
+    tool: 'Owner sign-off Phase 7',
+    required: true,
+    detail: 'After MISSION SIGNAL PROGRAM COMPLETE — signal fixes are event-driven patches, not new program phases.',
+  },
+]
+
 export type OpeningPrompt = {
   mode: string
   example: string
@@ -447,6 +491,15 @@ export function buildAgentProtocolLlmPack(): string {
     `- Snapshot: \`${FLIGHT_DIRECTOR_MCP.snapshot}\` (includes capability map + 24h briefing)`,
     ...FLIGHT_DIRECTOR_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
     '- Data source: remediation runner JobStore (Hermes/GPU LLM path optional — bypass OK for governance KPIs).',
+    '',
+    '## Flight Director operations (Mission Signal Phase 6)',
+    '- Trust override: PUT /api/v1/agent/governance/trust-overrides/{skill_id} — level or action accept_promotion / apply_demotion.',
+    ...FLIGHT_DIRECTOR_OPS_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
+    '',
+    '## Mission Signal Program closure (Phase 7)',
+    '- Control Room status strip: P1 Signal Truth → P6 Flight Director Ops — all signed before program closure.',
+    ...MISSION_SIGNAL_CLOSURE_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
+    '- After Owner sign-off: Mission Signal enters maintenance mode; new work is scoped patches, not program phases.',
     '',
     '## Example opening prompts',
     ...OPENING_PROMPTS.map(p => `- [${p.mode}] "${p.example}"`),
