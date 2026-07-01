@@ -16,6 +16,12 @@ import { fetchContext, fetchMcpTools } from '@/api/platform'
 import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { BlueprintPhase1SignoffPanel } from '@/components/architecture/BlueprintPhase1SignoffPanel'
+import { BlueprintGovernanceZone } from '@/components/architecture/BlueprintGovernanceZone'
+import { BlueprintZoneNav } from '@/components/architecture/BlueprintZoneNav'
+import { GovernancePhase3SignoffPanel } from '@/components/architecture/GovernancePhase3SignoffPanel'
+import { GovernancePhase5SignoffPanel } from '@/components/architecture/GovernancePhase5SignoffPanel'
+import { GovernancePhase7SignoffPanel } from '@/components/architecture/GovernancePhase7SignoffPanel'
+import { GovernanceProgramStatusStrip } from '@/components/architecture/GovernanceProgramStatusStrip'
 import {
   AI_MERGE_RATIONALE,
   AI_PLATFORM_BOUNDARIES,
@@ -32,6 +38,7 @@ import {
   DESIGN_PRINCIPLES,
   GOVERNANCE_LAYER_CONSTITUTION,
   GOVERNANCE_LAYER_PROJECTION,
+  GOVERNANCE_LAYER_SPINE,
   GOVERNANCE_LAYERS,
   NORTH_STAR_DECISION,
   NORTH_STAR_STATEMENT,
@@ -42,6 +49,14 @@ import {
   buildBlueprintLlmPack,
 } from '@/lib/architecture/blueprintCatalog'
 import {
+  SPINE_MILESTONE_STATUS_DEFINITIONS,
+  SPINE_STATUS_SEMANTICS_NOTE,
+} from '@/lib/architecture/spineSemantics'
+import {
+  BLUEPRINT_ZONE_ANCHORS,
+} from '@/lib/architecture/blueprintZones'
+
+import {
   PROJECTION_AUTHORITY,
   actuationPhaseProgress,
   buildBlueprintProjectionPack,
@@ -49,20 +64,6 @@ import {
 } from '@/lib/architecture/blueprintProjection'
 
 type CopyState = 'idle' | 'copied' | 'error'
-
-function LayerBanner({ layer }: { layer: typeof GOVERNANCE_LAYER_CONSTITUTION | typeof GOVERNANCE_LAYER_PROJECTION }) {
-  const meta = GOVERNANCE_LAYERS.find(l => l.layer === layer)
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--secondary)]/50 px-3 py-2">
-      <DenseTag variant={layer === GOVERNANCE_LAYER_CONSTITUTION ? 'category' : 'neutral'}>{layer}</DenseTag>
-      {meta != null && (
-        <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {meta.changeRate} · {meta.authority}
-        </span>
-      )}
-    </div>
-  )
-}
 
 export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
@@ -118,7 +119,15 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         overflow="visible"
       />
 
+      <GovernanceProgramStatusStrip />
+
       <BlueprintPhase1SignoffPanel />
+
+      <GovernancePhase3SignoffPanel />
+
+      <GovernancePhase5SignoffPanel />
+
+      <GovernancePhase7SignoffPanel />
 
       {/* Governance boundary */}
       <CatalogSection title="Governance boundary">
@@ -153,7 +162,9 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </ul>
       </CatalogSection>
 
-      <LayerBanner layer={GOVERNANCE_LAYER_CONSTITUTION} />
+      <BlueprintZoneNav />
+
+      <BlueprintGovernanceZone layer={GOVERNANCE_LAYER_CONSTITUTION} anchorId={BLUEPRINT_ZONE_ANCHORS.constitution}>
 
       {/* North Star */}
       <CatalogSection title="North Star">
@@ -423,7 +434,55 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </DenseDataTable>
       </CatalogSection>
 
-      <LayerBanner layer={GOVERNANCE_LAYER_PROJECTION} />
+      </BlueprintGovernanceZone>
+
+      <BlueprintGovernanceZone layer={GOVERNANCE_LAYER_SPINE} anchorId={BLUEPRINT_ZONE_ANCHORS.spine}>
+
+      <CatalogSection title="Spine milestone semantics">
+        <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          {SPINE_STATUS_SEMANTICS_NOTE} Authoritative definitions also in{' '}
+          <code className="font-mono-tabular">config/ops-context.yaml</code> file header. Full milestone
+          list: Architecture →{' '}
+          <a href="#program" className="text-[var(--primary)] underline-offset-2 hover:underline">
+            Milestones
+          </a>
+          .
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Status</DenseTableHead>
+              <DenseTableHead>Meaning (Spine)</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {SPINE_MILESTONE_STATUS_DEFINITIONS.map(row => (
+              <DenseTableRow key={row.status}>
+                <DenseTableCell className="font-mono-tabular font-medium">{row.status}</DenseTableCell>
+                <DenseTableCell>{row.meaning}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      {context != null && (
+        <CatalogSection title="Spine snapshot (live)">
+          <div className="px-3 py-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] flex flex-col gap-1">
+            <p className="m-0">phase: {context.deployment.phase}</p>
+            <p className="m-0">active_track: {context.deployment.active_track}</p>
+            <p className="m-0">focus: {context.focus.headline}</p>
+            <p className="m-0 mt-2 text-[var(--text-dense-caption)]">
+              Milestone SIGNED = historical Owner sign-off; live gate readiness from Projection (matrix /
+              Promote).
+            </p>
+          </div>
+        </CatalogSection>
+      )}
+
+      </BlueprintGovernanceZone>
+
+      <BlueprintGovernanceZone layer={GOVERNANCE_LAYER_PROJECTION} anchorId={BLUEPRINT_ZONE_ANCHORS.projection}>
 
       <CatalogSection title="Projection — API & actuation authority">
         <div className="flex flex-col gap-3 px-3 py-3 text-[var(--text-dense)]">
@@ -483,18 +542,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </CatalogSection>
       )}
 
-      {context != null && (
-        <CatalogSection title="Spine snapshot (live)">
-          <div className="px-3 py-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] flex flex-col gap-1">
-            <p className="m-0">phase: {context.deployment.phase}</p>
-            <p className="m-0">active_track: {context.deployment.active_track}</p>
-            <p className="m-0">focus: {context.focus.headline}</p>
-            <p className="m-0 mt-2 text-[var(--text-dense-caption)]">
-              Milestone SIGNED = historical Owner sign-off; live gate readiness from Projection (matrix / Promote).
-            </p>
-          </div>
-        </CatalogSection>
-      )}
+      </BlueprintGovernanceZone>
     </div>
   )
 }

@@ -1,5 +1,7 @@
 /** Governance boundary program — Phase 1 Constitution purification delivery checklist. */
 
+import { notifyGovernanceSignoffChanged } from './governanceSignoffEvents'
+
 export const GOVERNANCE_PHASE1_VERSION = '2026-07-01'
 
 export interface GovernancePhase1DeliveryItem {
@@ -125,6 +127,7 @@ export function loadGovernancePhase1SignoffState(): GovernancePhase1SignoffState
 export function saveGovernancePhase1SignoffState(state: GovernancePhase1SignoffState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    notifyGovernanceSignoffChanged()
   } catch {
     // storage unavailable
   }

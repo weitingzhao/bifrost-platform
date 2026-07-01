@@ -1,5 +1,7 @@
 /** Governance boundary program — Phase 2 Projection placement delivery checklist. */
 
+import { notifyGovernanceSignoffChanged } from './governanceSignoffEvents'
+
 export const GOVERNANCE_PHASE2_VERSION = '2026-07-01'
 
 export interface GovernancePhase2DeliveryItem {
@@ -121,6 +123,7 @@ export function loadGovernancePhase2SignoffState(): GovernancePhase2SignoffState
 export function saveGovernancePhase2SignoffState(state: GovernancePhase2SignoffState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    notifyGovernanceSignoffChanged()
   } catch {
     // storage unavailable
   }

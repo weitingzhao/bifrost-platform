@@ -280,6 +280,145 @@ def check_trade_k8s_reconcile(
     )
 
 
+def read_ts_string_constants(platform: Path, *rel_paths: str) -> dict[str, str]:
+    """Parse `export const NAME = 'value'` from TypeScript files."""
+    constants: dict[str, str] = {}
+    for rel in rel_paths:
+        path = platform / rel
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for name, value in re.findall(
+            r"export const (\w+)\s*=\s*'([^']+)'", text
+        ):
+            constants[name] = value
+    return constants
+
+
+def read_deploy_mainline_spine_bindings(platform: Path) -> list[tuple[int, str]]:
+    """(seq, resolved milestone id) from MAINLINE_PHASE_DEFINITIONS — Governance Phase 6."""
+    path = platform / "console/src/lib/architecture/deployMainlineCatalog.ts"
+    if not path.is_file():
+        return []
+    text = path.read_text(encoding="utf-8")
+    constants = read_ts_string_constants(
+        platform,
+        "console/src/lib/architecture/spineProjection.ts",
+        "console/src/lib/architecture/deployMainlineCatalog.ts",
+    )
+    expected = {
+        4: "k3s-stg-v2-deliver",
+        5: "2c-b-prod-cutover",
+        7: "legacy-retirement",
+    }
+
+    def resolve_milestone(raw: str) -> str:
+        raw = raw.strip().rstrip(",")
+        if raw.startswith("'") and raw.endswith("'"):
+            return raw[1:-1]
+        return constants.get(raw, raw)
+
+    rows: list[tuple[int, str]] = []
+    for block in re.finditer(r"\{\s*seq:\s*(\d+),[^}]+\}", text, re.DOTALL):
+        seq = int(block.group(1))
+        if seq not in expected:
+            continue
+        chunk = block.group(0)
+        m = re.search(r"spineMilestoneId:\s*([^,\n}]+)", chunk)
+        if m is None:
+            continue
+        mid = resolve_milestone(m.group(1))
+        rows.append((seq, mid))
+    return rows
+
+
+def read_deploy_mainline_progress_prose(platform: Path) -> list[tuple[int, str]]:
+    """Detect historicalNote / status fields with live progress on spine-bound rows."""
+    path = platform / "console/src/lib/architecture/deployMainlineCatalog.ts"
+    if not path.is_file():
+        return []
+    text = path.read_text(encoding="utf-8")
+    spine_bound_seqs = {4, 5, 7}
+    findings: list[tuple[int, str]] = []
+    progress_re = re.compile(
+        r"\bIN_PROGRESS\b|IN PROGRESS|\bACTIVE\s*[—-]|\bCLOSED\b|\bSIGNED\b", re.I
+    )
+    for block in re.finditer(r"\{\s*seq:\s*(\d+),[^}]+\}", text, re.DOTALL):
+        seq = int(block.group(1))
+        if seq not in spine_bound_seqs:
+            continue
+        chunk = block.group(0)
+        if "spineMilestoneId" not in chunk:
+            continue
+        for field in ("historicalNote", "status"):
+            m = re.search(rf"{field}:\s*'([^']*)'", chunk)
+            if m and progress_re.search(m.group(1)):
+                findings.append((seq, f"{field}={m.group(1)[:55]}"))
+    return findings
+
+
+def read_architecture_milestone_refs(platform: Path) -> list[str]:
+    """Milestone ids referenced by Delivery + Vision catalogs (must exist on spine)."""
+    refs: set[str] = {"k3s-stg-v2-deliver", "2c-b-prod-cutover", "legacy-retirement"}
+    refs.update(read_vision_spine_ids(platform))
+    return sorted(refs)
+
+
+def check_deploy_mainline_spine_parity(
+    context: dict[str, Any], platform: Path
+) -> list[Finding]:
+    """Mirror catalogSpineParity.ts — Constitution check on spine-bound catalog rows."""
+    findings: list[Finding] = []
+    expected_bindings = {
+        4: "k3s-stg-v2-deliver",
+        5: "2c-b-prod-cutover",
+        7: "legacy-retirement",
+    }
+    bindings = {seq: mid for seq, mid in read_deploy_mainline_spine_bindings(platform)}
+
+    for seq, expected_mid in expected_bindings.items():
+        actual = bindings.get(seq)
+        if actual is None:
+            findings.append(
+                Finding(
+                    "catalog_spine_parity",
+                    f"deployMainline seq {seq}: missing spineMilestoneId `{expected_mid}` "
+                    "in MAINLINE_PHASE_DEFINITIONS",
+                )
+            )
+        elif actual != expected_mid:
+            findings.append(
+                Finding(
+                    "catalog_spine_parity",
+                    f"deployMainline seq {seq}: spineMilestoneId `{actual}` ≠ expected `{expected_mid}`",
+                )
+            )
+
+    for seq, detail in read_deploy_mainline_progress_prose(platform):
+        findings.append(
+            Finding(
+                "catalog_spine_parity",
+                f"deployMainline seq {seq}: catalog embeds progress prose ({detail}) — use Projection only",
+            )
+        )
+
+    return findings
+
+
+def check_catalog_milestone_refs(context: dict[str, Any], platform: Path) -> list[Finding]:
+    spine_ids = {m.get("id") for m in context.get("milestones") or []}
+    findings: list[Finding] = []
+    for ref in read_architecture_milestone_refs(platform):
+        if ref not in spine_ids:
+            findings.append(
+                Finding(
+                    "catalog_milestone_refs",
+                    f"Architecture catalog references `{ref}` missing from spine milestones",
+                )
+            )
+    return findings
+
+
 def check_data_layer_reconcile(
     context: dict[str, Any], platform: Path
 ) -> list[Finding]:
@@ -390,6 +529,8 @@ def main() -> int:
         # Briefing reconcile gate (DRIFT_LAYER_MAP L3 — full SYNC parity)
         findings.extend(check_trade_k8s_reconcile(context, platform))
         findings.extend(check_data_layer_reconcile(context, platform))
+        findings.extend(check_deploy_mainline_spine_parity(context, platform))
+        findings.extend(check_catalog_milestone_refs(context, platform))
 
     report = format_report(findings, platform, args.platform_api)
     print(report)

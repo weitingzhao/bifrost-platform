@@ -3,30 +3,103 @@
  *
  * Authoritative source for Ops Console → Operate → Deploy Mainline.
  * Migrated from bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md (2026-06-15).
+ *
+ * Spine-bound rows (seq 4/5/7): structure only — live status from Projection (resolveMainlinePhases).
  */
 
-export const DEPLOY_MAINLINE_VERSION = '2026-06-29'
+import type { OpsContextResponse } from '@/api/types'
+import {
+  PROD_CUTOVER_MILESTONE_ID,
+  STG_DELIVER_MILESTONE_ID,
+  findSpineMilestone,
+} from './spineProjection'
+import { formatSpineStatusLabel } from './spineSemantics'
+
+export const DEPLOY_MAINLINE_VERSION = '2026-07-01'
 export const DEPLOY_MAINLINE_SOURCE = 'console/src/lib/architecture/deployMainlineCatalog.ts'
 export const DEPLOY_MAINLINE_STATUS =
-  'K3s STG v2 SIGNED (2026-06-18). Data layer on CNPG (bare-metal .80 retired). Phase 3 Legacy retirement SIGNED (2026-06-29, decision D8).'
+  'Constitution catalog — live milestone progress from spine (Projection). Historical notes on unbound rows only.'
 
-export type MainlinePhase = {
+export const LEGACY_RETIREMENT_MILESTONE_ID = 'legacy-retirement'
+
+/** Constitution — phase structure; spine-bound rows omit progress prose. */
+export type MainlinePhaseDefinition = {
   seq: number
   phase: string
   authority: string
-  status: string
+  /** Historical archive note for unbound rows (not live progress). */
+  historicalNote?: string
+  /** Spine-bound — status resolved at render time via GET /api/v1/context. */
+  spineMilestoneId?: string
 }
 
-export const MAINLINE_PHASES: MainlinePhase[] = [
-  { seq: 0, phase: 'Phase 2B + 2C-A Session 0–9', authority: 'PHASE2C_SIGNOFF_MASTER.md', status: 'CLOSED (2026-06-08)' },
-  { seq: 1, phase: 'Local Prod Final', authority: 'This page', status: 'CLOSED (2026-06-04 Owner L4)' },
-  { seq: 2, phase: '2C-B Linux Docker Prod (stability test)', authority: 'PHASE2C_SIGNOFF_MASTER.md §2C-B', status: 'Stability tested (D5); prod cutover pending migration plan' },
-  { seq: 3, phase: 'K3s Phase 1 trial', authority: 'Ops Console → Architecture → K3s Architecture §10', status: 'In progress (Owner unlocked 2026-06-04; bootstrap CLOSED 2026-06-14)' },
-  { seq: 4, phase: 'K3s STG v2 deliver (bifrost-deliver-stg)', authority: 'Ops Console → Operate → Delivery (deliveryMainlineCatalog.ts)', status: 'CLOSED (2026-06-18 — STG release gate + Tier B)' },
-  { seq: 5, phase: 'K3s Prod overlay + deliver-prod', authority: 'Ops Console → Operate → Delivery · k8s/overlays/prod', status: 'Active — prod cutover IN_PROGRESS' },
-  { seq: 6, phase: 'Compose → K3s native sign-off', authority: 'tradeK8sNativeCatalog.ts · ops-context trade-k8s-native', status: 'IN_PROGRESS — W0–W2 signed; W3 Kustomize API component next' },
-  { seq: 7, phase: 'Phase 3 Legacy retirement', authority: 'PHASE2C_PROD_DEFERRED.md', status: 'SIGNED (2026-06-29 — D8: UI side-by-side gate dropped; runtime stopped; engine NAS-archived)' },
+export type MainlinePhase = MainlinePhaseDefinition & {
+  statusLabel: string
+  spineStatus?: string
+}
+
+export const MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] = [
+  { seq: 0, phase: 'Phase 2B + 2C-A Session 0–9', authority: 'PHASE2C_SIGNOFF_MASTER.md', historicalNote: 'CLOSED (2026-06-08)' },
+  { seq: 1, phase: 'Local Prod Final', authority: 'This page', historicalNote: 'CLOSED (2026-06-04 Owner L4)' },
+  {
+    seq: 2,
+    phase: '2C-B Linux Docker Prod (stability test)',
+    authority: 'PHASE2C_SIGNOFF_MASTER.md §2C-B',
+    historicalNote: 'Stability tested (D5); prod cutover pending migration plan',
+  },
+  {
+    seq: 3,
+    phase: 'K3s Phase 1 trial',
+    authority: 'Ops Console → Architecture → K3s Architecture §10',
+    historicalNote: 'Bootstrap CLOSED 2026-06-14; cluster build ongoing',
+  },
+  {
+    seq: 4,
+    phase: 'K3s STG v2 deliver (bifrost-deliver-stg)',
+    authority: 'Ops Console → Operate → Delivery (deliveryMainlineCatalog.ts)',
+    spineMilestoneId: STG_DELIVER_MILESTONE_ID,
+  },
+  {
+    seq: 5,
+    phase: 'K3s Prod overlay + deliver-prod',
+    authority: 'Ops Console → Operate → Delivery · k8s/overlays/prod',
+    spineMilestoneId: PROD_CUTOVER_MILESTONE_ID,
+  },
+  {
+    seq: 6,
+    phase: 'Compose → K3s native sign-off',
+    authority: 'tradeK8sNativeCatalog.ts · ops-context trade-k8s-native',
+    historicalNote: 'W0–W2 signed; W3 Kustomize API component next (see trade-k8s-native stream)',
+  },
+  {
+    seq: 7,
+    phase: 'Phase 3 Legacy retirement',
+    authority: 'PHASE2C_PROD_DEFERRED.md',
+    spineMilestoneId: LEGACY_RETIREMENT_MILESTONE_ID,
+  },
 ]
+
+/** @deprecated Use resolveMainlinePhases(context) — static export kept for LLM pack fallback only. */
+export const MAINLINE_PHASES: Array<MainlinePhaseDefinition & { status: string }> =
+  MAINLINE_PHASE_DEFINITIONS.map(def => ({
+    ...def,
+    status: def.historicalNote ?? (def.spineMilestoneId != null ? 'Projection (spine)' : '—'),
+  }))
+
+export function resolveMainlinePhases(context?: OpsContextResponse): MainlinePhase[] {
+  return MAINLINE_PHASE_DEFINITIONS.map(def => {
+    if (def.spineMilestoneId != null) {
+      const spine = findSpineMilestone(context, def.spineMilestoneId)
+      const spineStatus = spine?.status
+      const statusLabel =
+        spineStatus != null && spineStatus !== ''
+          ? formatSpineStatusLabel(spineStatus)
+          : '— (spine unavailable)'
+      return { ...def, statusLabel, spineStatus }
+    }
+    return { ...def, statusLabel: def.historicalNote ?? '—' }
+  })
+}
 
 export const PHASE_L_CONTEXT = {
   relation: '2C-A (2026-06-08): Sessions 0–9 all Owner signed, CLOSED.',
@@ -164,19 +237,31 @@ export const MIGRATION_SEQUENCE = [
 export type ChangeLogEntry = { date: string; content: string }
 
 export const CHANGE_LOG: ChangeLogEntry[] = [
+  {
+    date: '2026-07-01',
+    content:
+      'Governance Phase 6 — seq 4/5/7 spineMilestoneId only; resolveMainlinePhases(context) for live Projection; removed hardcoded IN_PROGRESS on 2c-b-prod-cutover',
+  },
   { date: '2026-06-29', content: 'Phase 3 Legacy retirement SIGNED (decision D8): UI side-by-side gate dropped (Legacy already stopped; Phase 2B 9/9 domains business-equivalent); engine NAS-archived read-only; data layer on CNPG (.80 retired)' },
   { date: '2026-06-08', content: 'Created; Agent prod-health + verify-2c-a1 revalidation passed' },
   { date: '2026-06-04', content: 'Owner L2 Sessions 0–3/8 + L2.8; L3 D1–D5 revised; L4 CLOSED; K3s Phase 1 unlocked' },
 ]
 
-export function buildDeployMainlineLlmPack(): string {
+export function buildDeployMainlineLlmPack(context?: OpsContextResponse): string {
+  const phases = resolveMainlinePhases(context)
   const lines: string[] = [
     '# Bifrost Ops — Deploy Mainline (Decision Chain & Sign-off Gates)',
     `# Source: ${DEPLOY_MAINLINE_SOURCE} v${DEPLOY_MAINLINE_VERSION}`,
     `Status: ${DEPLOY_MAINLINE_STATUS}`,
     '',
-    '## Mainline phases',
-    ...MAINLINE_PHASES.map(p => `${p.seq}. **${p.phase}** — ${p.status} (authority: ${p.authority})`),
+    '## Mainline phases (Projection ← spine for seq 4/5/7)',
+    ...phases.map(p => {
+      const spine =
+        p.spineMilestoneId != null && p.spineStatus != null
+          ? ` spine:${p.spineMilestoneId}=${p.spineStatus}`
+          : ''
+      return `${p.seq}. **${p.phase}** — ${p.statusLabel}${spine} (authority: ${p.authority})`
+    }),
     '',
     '## Phase L — Local Prod Final (2C-B pre-gate)',
     `Relation: ${PHASE_L_CONTEXT.relation}`,

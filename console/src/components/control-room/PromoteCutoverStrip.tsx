@@ -7,6 +7,8 @@ import {
   stashPromotePreflightPack,
 } from '@/lib/control-room/promoteCutover'
 import type { Signal } from '@/lib/control-room/missionSignals'
+import { MilestoneSpineDualTags } from '@/components/architecture/MilestoneSpineDualTags'
+import { shouldShowMilestoneDualLabels } from '@/lib/architecture/spineSemantics'
 
 interface PromoteCutoverStripProps {
   context?: OpsContextResponse
@@ -78,6 +80,10 @@ export function PromoteCutoverStrip({
     )
   }
 
+  const cutover = context.milestones.find(m => m.id === '2c-b-prod-cutover')
+  const showCutoverDualLabels =
+    cutover != null && shouldShowMilestoneDualLabels(cutover.status, model.promote.ready)
+
   async function handleCopyPreflight() {
     await navigator.clipboard.writeText(model!.preflightPack)
     setCopied(true)
@@ -111,6 +117,15 @@ export function PromoteCutoverStrip({
       </div>
 
       <div className="promote-cutover-strip__spine">
+        {showCutoverDualLabels && cutover != null && (
+          <div className="promote-cutover-strip__dual mb-2 flex flex-wrap items-center gap-2">
+            <MilestoneSpineDualTags
+              milestoneId={cutover.id}
+              milestoneStatus={cutover.status}
+              gateReady={model.promote.ready}
+            />
+          </div>
+        )}
         {model.spine.focusHeadline != null && (
           <p className="promote-cutover-strip__focus m-0">
             <span className="promote-cutover-strip__focus-label">Spine focus:</span>{' '}

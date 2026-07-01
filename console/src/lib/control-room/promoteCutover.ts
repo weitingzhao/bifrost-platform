@@ -91,11 +91,15 @@ export function buildSpineBlockerAlignment(
   const focusHeadline = context.focus.headline?.trim() || null
   const focusBlocker = context.focus.blocker?.trim() || null
   const milestoneBlocker = promote.cutoverBlocker?.trim() || null
+  const cutover = context.milestones.find(m => m.id === '2c-b-prod-cutover')
 
   let aligned = true
   let note = 'Spine focus and coupling gate use the same promote evaluation.'
 
-  if (promote.blockedByDecision && milestoneBlocker != null) {
+  if (cutover?.status === 'SIGNED' && !promote.ready) {
+    note =
+      'Milestone SIGNED (historically) — live Prod cutover gate still pending (Projection: matrix / release gate).'
+  } else if (promote.blockedByDecision && milestoneBlocker != null) {
     if (focusBlocker == null || focusBlocker === '') {
       aligned = false
       note = `Milestone blocked on ${milestoneBlocker} — spine focus has no blocker field.`
