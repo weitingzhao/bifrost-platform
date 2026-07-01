@@ -1506,6 +1506,8 @@ export interface AgentPerformanceResponse {
   windows: AgentPerformanceWindow[]
   mttr_seconds?: number
   generated_at: string
+  data_source?: string
+  job_count?: number
 }
 
 export interface TrustMatrixEntry {
@@ -1522,6 +1524,46 @@ export interface TrustMatrixEntry {
 export interface TrustMatrixResponse {
   entries: TrustMatrixEntry[]
   generated_at: string
+  data_source?: string
+}
+
+export interface CapabilityMapEntry {
+  task_scope: string
+  task_label: string
+  autonomy: string
+  mcp_tools: string[]
+  mission_signals: string[]
+  has_gap: boolean
+  gap_detail?: string
+}
+
+export interface CapabilityMapResponse {
+  generated_at: string
+  entries: CapabilityMapEntry[]
+  gap_count: number
+  mcp_tool_count: number
+}
+
+export interface FlightDirectorBriefing {
+  period_hours: number
+  jobs_completed: number
+  jobs_failed: number
+  escalations: number
+  promotion_pending: number
+  demotions: number
+  summary: string
+}
+
+export interface FlightDirectorSnapshotResponse {
+  generated_at: string
+  hermes_available: boolean
+  data_sources: string[]
+  performance: AgentPerformanceResponse & { data_source?: string; job_count?: number }
+  trust_matrix: TrustMatrixResponse
+  capability_map: CapabilityMapResponse
+  briefing: FlightDirectorBriefing
+  program_complete: boolean
+  note?: string
 }
 
 export type RetrospectiveRootCause =
