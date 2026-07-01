@@ -15,6 +15,8 @@ import {
   MISSION_DIAGNOSTIC_MCP,
   MISSION_DIAGNOSTIC_PLAYBOOKS,
   MISSION_POST_FIX_LOOP,
+  HERMES_FIRST_TASK_MCP,
+  HERMES_FIRST_TASK_STEPS,
   MODE_SELECTION_HINTS,
   OPENING_PROMPTS,
   buildAgentProtocolLlmPack,
@@ -283,6 +285,35 @@ export function AgentProtocolPage() {
           </DenseTableHeader>
           <DenseTableBody>
             {MISSION_POST_FIX_LOOP.map(s => (
+              <DenseTableRow key={s.step}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{s.step}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{s.tool}</DenseTableCell>
+                <DenseTableCell>{s.required ? 'Yes' : 'No'}</DenseTableCell>
+                <DenseTableCell>{s.detail}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      {/* 4d — Hermes First Task */}
+      <CatalogSection title="Hermes First Task (L0 — Mission Signal Phase 4)">
+        <p className="m-0 mb-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          MCP: <code className="font-mono-tabular">{HERMES_FIRST_TASK_MCP.readiness}</code> — gate before first
+          autonomous Hermes session. Prompt via{' '}
+          <code className="font-mono-tabular">{HERMES_FIRST_TASK_MCP.firstTask}</code>.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Step</DenseTableHead>
+              <DenseTableHead>Tool</DenseTableHead>
+              <DenseTableHead>Required</DenseTableHead>
+              <DenseTableHead>Detail</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {HERMES_FIRST_TASK_STEPS.map(s => (
               <DenseTableRow key={s.step}>
                 <DenseTableCell className="font-medium whitespace-nowrap">{s.step}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{s.tool}</DenseTableCell>

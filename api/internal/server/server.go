@@ -23,6 +23,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
+	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
@@ -59,6 +60,7 @@ type Server struct {
 	agentdeploy  *agentdeploy.Handler
 	driftproposal  *driftproposal.Handler
 	hermesgateway  *hermesgateway.Handler
+	hermesreadiness *hermesreadiness.Handler
 	retrospective  *retrospective.Handler
 	selfhealth     *selfhealth.Handler
 	sessionsnapshot *sessionsnapshot.Handler
@@ -102,6 +104,7 @@ func New(cfg *config.Config) *Server {
 		agentdeploy: agentdeploy.NewHandler(audit),
 		driftproposal:  driftproposal.NewHandler(audit),
 		hermesgateway:  hermesgateway.NewHandler(),
+		hermesreadiness: hermesreadiness.NewHandler(),
 		retrospective:  retrospective.NewHandler(retroAnalyzer),
 		selfhealth:     selfhealth.NewHandler(cfg, gitopsH.Service()),
 		sessionsnapshot: sessionsnapshot.NewHandler(),
@@ -146,6 +149,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/mcp/status", s.mcp.HandleStatus)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
+		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)
+		r.Get("/agent/hermes/first-task", s.hermesreadiness.HandleFirstTask)
 		r.Get("/agent/smoke", s.agentbridge.HandleSmoke)
 		r.Get("/agent/deploy", s.agentdeploy.HandleStatus)
 		r.Get("/agent/hermes/health", s.hermesgateway.HandleHealth)

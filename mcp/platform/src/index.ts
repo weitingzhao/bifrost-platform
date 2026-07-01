@@ -259,6 +259,20 @@ server.tool('get_agent_bridge', 'Agent host + MCP bridge status', {}, async () =
   jsonResult(await platformGet('/api/v1/agent/bridge')),
 )
 
+server.tool(
+  'get_hermes_readiness',
+  'Hermes gateway + LLM key + platform MCP readiness for first L0 task',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/agent/hermes/readiness')),
+)
+
+server.tool(
+  'get_hermes_first_task',
+  'Canonical Hermes First Task prompt (L0 read-only Mission health pass)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/agent/hermes/first-task')),
+)
+
 server.tool('get_agent_nightly_report', 'Nightly drift report from agent host', {}, async () =>
   jsonResult(await platformGet('/api/v1/agent/nightly-report')),
 )
