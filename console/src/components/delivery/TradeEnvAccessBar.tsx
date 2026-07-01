@@ -14,6 +14,11 @@ const ENV_COLOR: Record<TradeEnvTier, string> = {
   PROD: 'text-env-prod',
 }
 
+function formatGatewayLabel(item: TradeEnvAccess): string {
+  if (item.port === 80) return item.nodeHost
+  return `${item.nodeHost}:${item.port}`
+}
+
 function TradeEnvAccessLink({ item }: { item: TradeEnvAccess }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = async () => {
@@ -22,7 +27,7 @@ function TradeEnvAccessLink({ item }: { item: TradeEnvAccess }) {
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
     } catch {
-      /* clipboard unavailable — link is still clickable */
+      /* clipboard unavailable */
     }
   }
   return (
@@ -34,9 +39,10 @@ function TradeEnvAccessLink({ item }: { item: TradeEnvAccess }) {
         href={item.gateway}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-primary hover:underline"
+        title={item.ingressHost ? `IP gateway · hostname: ${item.ingressHost}` : item.gateway}
+        className="inline-flex items-center gap-0.5 font-mono text-muted-foreground hover:text-primary hover:underline"
       >
-        {item.gateway.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+        {formatGatewayLabel(item)}
         <ExternalLink className="h-2.5 w-2.5" />
       </a>
       <button
@@ -51,19 +57,24 @@ function TradeEnvAccessLink({ item }: { item: TradeEnvAccess }) {
   )
 }
 
-/** Always-visible Trade gateway entrypoints (DEV / STG / PROD), mirroring Platform Release's EnvAccessBar. */
+/** Always-visible Trade gateway entrypoints (DEV / STG / PROD) — IP:port, no /etc/hosts. */
 export function TradeEnvAccessBar() {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-dense-meta text-muted-foreground">
-      <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
-        Entrypoints
-      </span>
-      {TRADE_ENV_ACCESS.map(item => (
-        <TradeEnvAccessLink key={item.env} item={item} />
-      ))}
-      {TRADE_INGRESS_USES_VIP && (
-        <span className="text-dense-micro font-semibold uppercase tracking-wider text-primary">VIP</span>
-      )}
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-dense-meta text-muted-foreground">
+        <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
+          Entrypoints
+        </span>
+        {TRADE_ENV_ACCESS.map(item => (
+          <TradeEnvAccessLink key={item.env} item={item} />
+        ))}
+        {TRADE_INGRESS_USES_VIP && (
+          <span className="text-dense-micro font-semibold uppercase tracking-wider text-primary">VIP</span>
+        )}
+      </div>
+      <p className="text-dense-micro text-muted-foreground/70">
+        Direct IP access — no /etc/hosts. Hostnames (trade-*.bifrost.lan) optional after UniFi DNS.
+      </p>
     </div>
   )
 }

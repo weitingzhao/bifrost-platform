@@ -267,6 +267,9 @@ func (e *ClusterEntry) ApplyStgGatewayHost(req *http.Request) {
 	if req == nil || e == nil {
 		return
 	}
+	if !NeedsTraefikHostHeader(e.ResolvedStgGatewayURL()) {
+		return
+	}
 	if h := e.ResolvedStgGatewayHost(); h != "" {
 		req.Host = h
 		req.Header.Set("Host", h)
@@ -285,6 +288,9 @@ func (e *ClusterEntry) ResolvedProdGatewayHost() string {
 
 func (e *ClusterEntry) ApplyProdGatewayHost(req *http.Request) {
 	if req == nil || e == nil {
+		return
+	}
+	if !NeedsTraefikHostHeader(e.ResolvedProdGatewayURL()) {
 		return
 	}
 	if h := e.ResolvedProdGatewayHost(); h != "" {
@@ -355,6 +361,32 @@ func (e *ClusterEntry) ResolvedDevGatewayURL() string {
 		return fmt.Sprintf("http://%s:30882", strings.TrimSpace(e.NodeIP))
 	}
 	return ""
+}
+
+func (e *ClusterEntry) ResolvedDevGatewayHost() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_DEV_GATEWAY_HOST")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.DevSmoke.GatewayHost) != "" {
+		return strings.TrimSpace(e.DevSmoke.GatewayHost)
+	}
+	return "trade-dev.bifrost.lan"
+}
+
+func (e *ClusterEntry) ApplyDevGatewayHost(req *http.Request) {
+	if req == nil {
+		return
+	}
+	if e == nil {
+		return
+	}
+	if !NeedsTraefikHostHeader(e.ResolvedDevGatewayURL()) {
+		return
+	}
+	if h := e.ResolvedDevGatewayHost(); h != "" {
+		req.Host = h
+		req.Header.Set("Host", h)
+	}
 }
 
 func (e *ClusterEntry) ResolvedStgAPIDomains() []string {

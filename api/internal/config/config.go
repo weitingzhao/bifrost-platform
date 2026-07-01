@@ -149,9 +149,28 @@ func (e *Environment) OpsToken() string {
 	return os.Getenv(e.OpsTokenEnv)
 }
 
+// NeedsTraefikHostHeader is false for IP NodePort gateways (:30880/:30882) and bare-IP :80 routes.
+func NeedsTraefikHostHeader(gatewayURL string) bool {
+	u := strings.TrimSpace(gatewayURL)
+	if u == "" {
+		return false
+	}
+	if strings.Contains(u, ":30880") || strings.Contains(u, ":30882") {
+		return false
+	}
+	// Prod Traefik matches Host(`192.168.10.70`) — IP URL needs no Host header.
+	if strings.Contains(u, "192.168.10.70") {
+		return false
+	}
+	return true
+}
+
 // ApplyIngressHost sets Traefik Host routing when nginx_base is an IP but ingress uses a hostname.
 func (e *Environment) ApplyIngressHost(req *http.Request) {
 	if req == nil || e == nil {
+		return
+	}
+	if !NeedsTraefikHostHeader(e.NginxBase) {
 		return
 	}
 	h := strings.TrimSpace(e.IngressHost)

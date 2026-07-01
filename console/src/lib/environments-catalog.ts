@@ -81,7 +81,7 @@ export const TRADE_ENVIRONMENTS = [
   {
     id: 'stg',
     label: 'Staging',
-    nginx: 'http://trade-stg.bifrost.lan/',
+    nginx: 'http://192.168.10.73:30880/',
     postgres: 'bifrost-postgres-rw.data.svc:5432 (bifrost_stg @ CNPG)',
     redis: 'redis-live-stg.data.svc / redis-queue-stg.data.svc:6379',
     host: 'K3s bifrost-stg ns',
@@ -89,7 +89,7 @@ export const TRADE_ENVIRONMENTS = [
   {
     id: 'prod',
     label: 'Production',
-    nginx: 'http://trade.bifrost.lan/',
+    nginx: 'http://192.168.10.70/',
     postgres: 'bifrost-postgres-rw.data.svc:5432 (bifrost_prod @ CNPG)',
     redis: 'redis-live-prod.data.svc:6379',
     host: 'K3s bifrost-prod ns',
