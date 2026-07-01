@@ -66,10 +66,10 @@ clusters:
           install_script: install-stack-registry.sh
           upgrade_script: install-stack-registry.sh
     stg_smoke:
-      gateway_url: http://192.168.10.73
+      gateway_url: http://192.168.10.73:30880
       gateway_host: trade-stg.bifrost.lan
-      api_monitor_url: http://192.168.10.73/api/monitor/status
-      frontend_url: http://192.168.10.73/
+      api_monitor_url: http://192.168.10.73:30880/api/monitor/status
+      frontend_url: http://192.168.10.73:30880/
       platform_console_url: http://192.168.10.73:30879
       platform_api_health_url: http://192.168.10.73:30878/health
     prod_smoke:
@@ -79,4 +79,6 @@ clusters:
       frontend_url: http://192.168.10.70/
     dev_smoke:
       gateway_url: http://192.168.10.73:30882
+      gateway_host: trade-dev.bifrost.lan
       api_monitor_url: http://192.168.10.73:30882/api/monitor/status
+      frontend_url: http://192.168.10.73:30882/
