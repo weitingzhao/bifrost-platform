@@ -7,7 +7,7 @@
  * Today each gateway resolves to a K3s node IP + ingress:
  *   - DEV  → node .73 : 30882 (nginx NodePort)
  *   - STG  → Traefik @ .73 : 80, Host trade-stg.bifrost.lan
- *   - PROD → node .70 : 30881 (nginx NodePort)
+ *   - PROD → Traefik @ .70 : 80, Host trade.bifrost.lan
  *
  * VLAN / kube-vip migration (see architecture → networkUpgradeCatalog):
  *   When the LAN gets a single virtual IP (kube-vip), set `TRADE_INGRESS_VIP`
@@ -35,7 +35,7 @@ interface TradeEnvDef {
 const TRADE_ENV_DEFS: readonly TradeEnvDef[] = [
   { env: 'DEV', label: 'Trade DEV', nodeHost: '192.168.10.73', port: 30882 },
   { env: 'STG', label: 'Trade STG', nodeHost: '192.168.10.73', port: 80, ingressHost: 'trade-stg.bifrost.lan' },
-  { env: 'PROD', label: 'Trade PROD', nodeHost: '192.168.10.70', port: 30881 },
+  { env: 'PROD', label: 'Trade PROD', nodeHost: '192.168.10.70', port: 80, ingressHost: 'trade.bifrost.lan' },
 ] as const
 
 export interface TradeEnvAccess {

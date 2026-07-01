@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/opscontext"
 	"gopkg.in/yaml.v3"
@@ -15,12 +17,14 @@ type HostPort struct {
 }
 
 type Environment struct {
-	ID          string   `yaml:"id" json:"id"`
-	Label       string   `yaml:"label" json:"label"`
-	NginxBase   string   `yaml:"nginx_base" json:"nginx_base"`
-	Postgres    HostPort `yaml:"postgres" json:"postgres"`
-	Redis       HostPort `yaml:"redis" json:"redis"`
-	OpsTokenEnv string   `yaml:"ops_token_env" json:"ops_token_env,omitempty"`
+	ID            string   `yaml:"id" json:"id"`
+	Label         string   `yaml:"label" json:"label"`
+	NginxBase     string   `yaml:"nginx_base" json:"nginx_base"`
+	IngressHost   string   `yaml:"ingress_host" json:"ingress_host,omitempty"`
+	IngressNodeIP string   `yaml:"ingress_node_ip" json:"ingress_node_ip,omitempty"`
+	Postgres      HostPort `yaml:"postgres" json:"postgres"`
+	Redis         HostPort `yaml:"redis" json:"redis"`
+	OpsTokenEnv   string   `yaml:"ops_token_env" json:"ops_token_env,omitempty"`
 }
 
 type File struct {
@@ -143,4 +147,17 @@ func (e *Environment) OpsToken() string {
 		return ""
 	}
 	return os.Getenv(e.OpsTokenEnv)
+}
+
+// ApplyIngressHost sets Traefik Host routing when nginx_base is an IP but ingress uses a hostname.
+func (e *Environment) ApplyIngressHost(req *http.Request) {
+	if req == nil || e == nil {
+		return
+	}
+	h := strings.TrimSpace(e.IngressHost)
+	if h == "" {
+		return
+	}
+	req.Host = h
+	req.Header.Set("Host", h)
 }

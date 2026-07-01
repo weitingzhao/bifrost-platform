@@ -66,7 +66,7 @@ func (p *Prober) ProbeEnvironment(ctx context.Context, env config.Environment) M
 
 	for _, ep := range tradeAPIEndpoints {
 		url := base + ep.Path
-		targets = append(targets, p.probeHTTP(ctx, ep.ID, ep.Category, url, ""))
+		targets = append(targets, p.probeHTTP(ctx, ep.ID, ep.Category, url, "", env))
 	}
 
 	targets = append(targets, p.probeTCP(ctx, "postgres", "datastore",
@@ -87,7 +87,7 @@ func (p *Prober) ProbeEnvironment(ctx context.Context, env config.Environment) M
 			URL:                capURL,
 		})
 	} else {
-		targets = append(targets, p.probeCapabilities(ctx, capURL, token))
+		targets = append(targets, p.probeCapabilities(ctx, capURL, token, env))
 	}
 
 	targets = append(targets, policyBlockedTargets...)
@@ -104,7 +104,7 @@ func (p *Prober) ProbeEnvironment(ctx context.Context, env config.Environment) M
 	}
 }
 
-func (p *Prober) probeHTTP(ctx context.Context, id, category, url, bearer string) Target {
+func (p *Prober) probeHTTP(ctx context.Context, id, category, url, bearer string, env config.Environment) Target {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Target{
@@ -116,6 +116,7 @@ func (p *Prober) probeHTTP(ctx context.Context, id, category, url, bearer string
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
+	env.ApplyIngressHost(req)
 
 	resp, err := p.Client.Do(req)
 	if err != nil {
@@ -167,7 +168,7 @@ func (p *Prober) probeTCP(ctx context.Context, id, category, addr string) Target
 	}
 }
 
-func (p *Prober) probeCapabilities(ctx context.Context, url, token string) Target {
+func (p *Prober) probeCapabilities(ctx context.Context, url, token string, env config.Environment) Target {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Target{
@@ -177,6 +178,7 @@ func (p *Prober) probeCapabilities(ctx context.Context, url, token string) Targe
 		}
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	env.ApplyIngressHost(req)
 
 	resp, err := p.Client.Do(req)
 	if err != nil {

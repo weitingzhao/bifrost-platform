@@ -18,8 +18,10 @@ environments:
 
   - id: prod
     label: Production
-    # K3s bifrost-prod nginx NodePort (30880 = stg @ .73, 30881 = prod @ .70)
-    nginx_base: http://192.168.10.70:30881
+    # W2 Traefik Ingress — Host trade.bifrost.lan @ K3s prod node :80
+    nginx_base: http://192.168.10.70
+    ingress_host: trade.bifrost.lan
+    ingress_node_ip: 192.168.10.70
     # CNPG @ data NS (legacy bare-metal .80 decommissioned 2026-06-29)
     postgres:
       host: bifrost-postgres-rw.data.svc.cluster.local
