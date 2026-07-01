@@ -33,9 +33,28 @@ func TestProbeHTTP_OK(t *testing.T) {
 	defer srv.Close()
 
 	p := NewProber()
-	target := p.probeHTTP(context.Background(), "test", "trade_api", srv.URL, "")
+	target := p.probeHTTP(context.Background(), "test", "trade_api", srv.URL, "", config.Environment{})
 	if target.Reachability != ReachOK {
 		t.Fatalf("reachability: %s", target.Reachability)
+	}
+}
+
+func TestProbeHTTP_IngressHost(t *testing.T) {
+	var gotHost string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHost = r.Host
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	p := NewProber()
+	env := config.Environment{IngressHost: "trade.bifrost.lan"}
+	target := p.probeHTTP(context.Background(), "test", "trade_api", srv.URL, "", env)
+	if target.Reachability != ReachOK {
+		t.Fatalf("reachability: %s", target.Reachability)
+	}
+	if gotHost != "trade.bifrost.lan" {
+		t.Fatalf("Host header: got %q want trade.bifrost.lan", gotHost)
 	}
 }
 
@@ -51,7 +70,7 @@ func TestProbeCapabilities_Authenticated(t *testing.T) {
 	defer srv.Close()
 
 	p := NewProber()
-	target := p.probeCapabilities(context.Background(), srv.URL, "secret")
+	target := p.probeCapabilities(context.Background(), srv.URL, "secret", config.Environment{})
 	if target.Auth != AuthOK {
 		t.Fatalf("auth: %s detail=%s", target.Auth, target.Detail)
 	}

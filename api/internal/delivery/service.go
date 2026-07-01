@@ -607,7 +607,47 @@ func (s *Service) probeStgHTTP(ctx context.Context, id, url string) StgSmokeTarg
 	return StgSmokeTargetView{ID: id, URL: url, Reachability: reach, Detail: detail}
 }
 
-// ProdSmoke HTTP probes for bifrost-prod via nginx NodePort (:30881).
+func (s *Service) probeProdHTTP(ctx context.Context, id, url string) StgSmokeTargetView {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return StgSmokeTargetView{
+			ID: id, URL: url, Reachability: probe.ReachFail,
+			Detail: "request error: " + err.Error(),
+		}
+	}
+	if s.entry != nil {
+		s.entry.ApplyProdGatewayHost(req)
+	}
+	client := s.httpClient
+	if client == nil {
+		client = &http.Client{Timeout: 8 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return StgSmokeTargetView{
+			ID: id, URL: url, Reachability: probe.ReachFail,
+			Detail: err.Error(),
+		}
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	reach := probe.ReachOK
+	detail := fmt.Sprintf("HTTP %d", resp.StatusCode)
+	switch {
+	case resp.StatusCode == 200:
+		reach = probe.ReachOK
+	case resp.StatusCode == 503:
+		reach = probe.ReachDegraded
+	case resp.StatusCode >= 400:
+		reach = probe.ReachFail
+	default:
+		reach = probe.ReachUnknown
+	}
+	return StgSmokeTargetView{ID: id, URL: url, Reachability: reach, Detail: detail}
+}
+
+// ProdSmoke HTTP probes for bifrost-prod via Traefik @ :80 (Host trade.bifrost.lan).
 func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 	now := time.Now().UTC()
 	out := StgSmokeResponse{
@@ -656,7 +696,7 @@ func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 		if p.url == "" {
 			continue
 		}
-		out.Targets = append(out.Targets, s.probeStgHTTP(ctx, p.id, p.url))
+		out.Targets = append(out.Targets, s.probeProdHTTP(ctx, p.id, p.url))
 	}
 	if len(out.Targets) == 0 {
 		out.Detail = "configure prod_smoke URLs in clusters.yaml or PLATFORM_PROD_* env"

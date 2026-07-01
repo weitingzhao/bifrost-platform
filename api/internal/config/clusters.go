@@ -273,6 +273,26 @@ func (e *ClusterEntry) ApplyStgGatewayHost(req *http.Request) {
 	}
 }
 
+func (e *ClusterEntry) ResolvedProdGatewayHost() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_PROD_GATEWAY_HOST")); v != "" {
+		return v
+	}
+	if e != nil && strings.TrimSpace(e.ProdSmoke.GatewayHost) != "" {
+		return strings.TrimSpace(e.ProdSmoke.GatewayHost)
+	}
+	return ""
+}
+
+func (e *ClusterEntry) ApplyProdGatewayHost(req *http.Request) {
+	if req == nil || e == nil {
+		return
+	}
+	if h := e.ResolvedProdGatewayHost(); h != "" {
+		req.Host = h
+		req.Header.Set("Host", h)
+	}
+}
+
 func (e *ClusterEntry) ResolvedStgGatewayURL() string {
 	if v := strings.TrimSpace(os.Getenv("PLATFORM_STG_GATEWAY_URL")); v != "" {
 		return v
@@ -293,7 +313,7 @@ func (e *ClusterEntry) ResolvedProdGatewayURL() string {
 	if e != nil && strings.TrimSpace(e.ProdSmoke.GatewayURL) != "" {
 		return strings.TrimSpace(e.ProdSmoke.GatewayURL)
 	}
-	return "http://192.168.10.70:30881"
+	return "http://192.168.10.70"
 }
 
 func (e *ClusterEntry) ResolvedProdFrontendURL() string {
