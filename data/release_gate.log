@@ -8,3 +8,5 @@
 [2026-07-01T02:53:35Z] prod fail by admin — prod release gate fail (13 checks)
 [2026-07-01T02:54:47Z] prod pass by admin — prod release gate pass (13 checks)
 [2026-07-01T02:55:02Z] prod pass by admin — prod release gate pass (13 checks)
+[2026-07-01T16:31:03Z] platform-stg pass by admin — platform-stg release gate pass (3 checks)
+[2026-07-01T16:31:17Z] platform-prod pass by admin — platform-prod release gate pass (4 checks)

@@ -40,8 +40,12 @@ export function buildProductPack(ctx?: OpsContextResponse): string {
   return lines.join('\n')
 }
 
-export function buildOpsPack(ctx: OpsContextResponse, matrices: MatrixResponse[]): string {
-  const spine = formatSpineContextSection(ctx)
+export function buildOpsPack(
+  ctx: OpsContextResponse,
+  matrices: MatrixResponse[],
+  options?: { compact?: boolean },
+): string {
+  const spine = formatSpineContextSection(ctx, { compact: options?.compact })
   const matrixLines: string[] = ['## Matrix summary']
   for (const m of matrices) {
     const s = summarizeMatrix(m)
