@@ -1,5 +1,7 @@
 /** Control Room Phase 1 delivery checklist — Operate Loop (triangle closure). */
 
+import { notifyControlRoomSignoffChanged } from './controlRoomSignoffEvents'
+
 export const CONTROL_ROOM_PHASE1_VERSION = '2026-07-01'
 
 export interface ControlRoomPhase1DeliveryItem {
@@ -115,6 +117,7 @@ export function loadPhase1SignoffState(): ControlRoomPhase1SignoffState {
 export function savePhase1SignoffState(state: ControlRoomPhase1SignoffState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    notifyControlRoomSignoffChanged()
   } catch {
     // storage unavailable
   }

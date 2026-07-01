@@ -1,5 +1,7 @@
 /** Control Room Phase 5 delivery checklist — Promote / cutover (launch window). */
 
+import { notifyControlRoomSignoffChanged } from './controlRoomSignoffEvents'
+
 export const CONTROL_ROOM_PHASE5_VERSION = '2026-07-01'
 
 export interface ControlRoomPhase5DeliveryItem {
@@ -115,6 +117,7 @@ export function loadPhase5SignoffState(): ControlRoomPhase5SignoffState {
 export function savePhase5SignoffState(state: ControlRoomPhase5SignoffState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    notifyControlRoomSignoffChanged()
   } catch {
     // storage unavailable
   }

@@ -1,6 +1,8 @@
 /** Control Room Phase 0 delivery checklist — Owner verifies then signs off in UI. */
 
-export const CONTROL_ROOM_PHASE0_VERSION = '2026-07-01'
+import { notifyControlRoomSignoffChanged } from './controlRoomSignoffEvents'
+
+export const CONTROL_ROOM_PHASE0_VERSION = '2026-07-02'
 
 export interface ControlRoomPhase0DeliveryItem {
   id: 'P0-1' | 'P0-2' | 'P0-3'
@@ -104,9 +106,14 @@ export function loadPhase0SignoffState(): ControlRoomPhase0SignoffState {
 export function savePhase0SignoffState(state: ControlRoomPhase0SignoffState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    notifyControlRoomSignoffChanged()
   } catch {
     // storage unavailable
   }
+}
+
+export function isControlRoomPhase0SignedOff(): boolean {
+  return loadPhase0SignoffState().signedOffAt != null
 }
 
 export function allPhase0ItemsVerified(state: ControlRoomPhase0SignoffState): boolean {

@@ -11,9 +11,11 @@ import {
   savePhase1SignoffState,
   type ControlRoomPhase1SignoffState,
 } from '@/lib/control-room/controlRoomPhase1Delivery'
+import { isControlRoomPhase0SignedOff } from '@/lib/control-room/controlRoomPhase0Delivery'
 
 export function ControlRoomPhase1SignoffPanel() {
   const { canAdmin, caps } = usePlatformAuth()
+  const phase0Signed = isControlRoomPhase0SignedOff()
   const [state, setState] = useState<ControlRoomPhase1SignoffState>(() => loadPhase1SignoffState())
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [signConfirmOpen, setSignConfirmOpen] = useState(false)
@@ -29,7 +31,7 @@ export function ControlRoomPhase1SignoffPanel() {
   }, [])
 
   function toggleVerified(itemId: string) {
-    if (signed) return
+    if (signed || !phase0Signed) return
     const current = state.items[itemId]
     const nextVerified = !current?.verified
     persist({
@@ -90,6 +92,11 @@ export function ControlRoomPhase1SignoffPanel() {
 
       {panelExpanded && (
         <div className="mt-3 flex flex-col gap-3">
+          {!phase0Signed && (
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--warning)]">
+              Sign off Phase 0 (Control Room structure) before verifying Phase 1 items.
+            </p>
+          )}
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Verify the Rocket ↔ Payload ↔ Agent triangle loop in Control Room, then sign off to unlock Phase 2
             (Payload depth). Stored in local storage (v{CONTROL_ROOM_PHASE1_VERSION}).
@@ -121,7 +128,7 @@ export function ControlRoomPhase1SignoffPanel() {
                     <Button
                       variant={verified ? 'secondary' : 'outline'}
                       size="xs"
-                      disabled={signed}
+                      disabled={signed || !phase0Signed}
                       onClick={() => toggleVerified(item.id)}
                     >
                       {verified ? 'Verified' : 'Mark verified'}
@@ -159,12 +166,17 @@ export function ControlRoomPhase1SignoffPanel() {
                 <Button
                   variant="default"
                   size="sm"
-                  disabled={!allVerified}
+                  disabled={!allVerified || !phase0Signed}
                   onClick={() => setSignConfirmOpen(true)}
                 >
                   Sign off Phase 1 delivery
                 </Button>
-                {!allVerified && (
+                {!phase0Signed && (
+                  <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                    Complete Phase 0 sign-off first.
+                  </span>
+                )}
+                {phase0Signed && !allVerified && (
                   <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
                     Mark all {counts.total} items verified to enable sign-off.
                   </span>
