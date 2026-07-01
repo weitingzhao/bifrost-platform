@@ -12,7 +12,9 @@ import {
   DenseTableRow,
   Button,
 } from '@bifrost/ui'
+import { useQuery } from '@tanstack/react-query'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import { fetchVerifyPayload } from '@/api/platform'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   buildControlRoomDispatchPack,
@@ -75,10 +77,17 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
   const rocketMission = missionStatus(snapshot.rocketOverall)
   const payloadMission = missionStatus(snapshot.payloadOverall)
 
+  const verifyQ = useQuery({
+    queryKey: ['cockpit', 'verify-payload'],
+    queryFn: fetchVerifyPayload,
+    refetchInterval: 20_000,
+  })
+
   const diagnosticPrompt = buildControlRoomDispatchPack({
     snapshot,
     matrices,
     context,
+    verify: verifyQ.data,
   })
 
   return (

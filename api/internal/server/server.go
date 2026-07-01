@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -78,7 +79,7 @@ func New(cfg *config.Config) *Server {
 	remediationH := remediation.NewHandler(audit)
 	retroAnalyzer := retrospective.NewAnalyzer(remediationH.Store())
 	clusterH := cluster.NewHandler(cfg, audit)
-	promoteH := promote.NewHandler(cfg, audit)
+	promoteH := promote.NewHandler(cfg, audit, clusterH)
 	prober := probe.NewProber()
 	return &Server{
 		cfg:     cfg,
@@ -104,7 +105,7 @@ func New(cfg *config.Config) *Server {
 		retrospective:  retrospective.NewHandler(retroAnalyzer),
 		selfhealth:     selfhealth.NewHandler(cfg, gitopsH.Service()),
 		sessionsnapshot: sessionsnapshot.NewHandler(),
-		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store()),
+		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store(), clusterH),
 		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -130,6 +131,7 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
+		r.Get("/mission/verify-payload", s.handleVerifyPayload)
 		r.Get("/self-health", s.selfhealth.HandleSelfHealth)
 		r.Get("/topology", s.handleTopology)
 		r.Get("/context", s.handleContext)
@@ -305,6 +307,7 @@ func (s *Server) handleEnvironments(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleMatrix(w http.ResponseWriter, r *http.Request) {
 	envID := r.URL.Query().Get("env")
 	ctx := r.Context()
+	ds := s.datastoreSnapshot(ctx)
 
 	if envID != "" {
 		env, ok := s.cfg.GetEnvironment(envID)
@@ -314,7 +317,7 @@ func (s *Server) handleMatrix(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		writeJSON(w, http.StatusOK, s.prober.ProbeEnvironment(ctx, *env))
+		writeJSON(w, http.StatusOK, s.prober.ProbeEnvironmentWithDatastore(ctx, *env, ds))
 		return
 	}
 
@@ -324,12 +327,35 @@ func (s *Server) handleMatrix(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func(idx int, e config.Environment) {
 			defer wg.Done()
-			results[idx] = s.prober.ProbeEnvironment(ctx, e)
+			results[idx] = s.prober.ProbeEnvironmentWithDatastore(ctx, e, ds)
 		}(i, env)
 	}
 	wg.Wait()
 
 	writeJSON(w, http.StatusOK, map[string]any{"matrices": results})
+}
+
+func (s *Server) datastoreSnapshot(ctx context.Context) *probe.DatastoreSnapshot {
+	if s.cluster == nil {
+		return nil
+	}
+	snap := s.cluster.DatastoreSnapshot(ctx)
+	return &snap
+}
+
+func (s *Server) handleVerifyPayload(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	dsSnap := probe.DatastoreSnapshot{}
+	if snap := s.datastoreSnapshot(ctx); snap != nil {
+		dsSnap = *snap
+	}
+
+	matrices := make([]probe.MatrixResponse, 0, len(s.cfg.Environments))
+	for _, env := range s.cfg.Environments {
+		matrices = append(matrices, s.prober.ProbeEnvironmentWithDatastore(ctx, env, &dsSnap))
+	}
+
+	writeJSON(w, http.StatusOK, probe.VerifyPayload(s.cfg.Environments, matrices, dsSnap))
 }
 
 func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
@@ -356,7 +382,7 @@ func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	matrix := s.prober.ProbeEnvironment(r.Context(), *env)
+	matrix := s.prober.ProbeEnvironmentWithDatastore(r.Context(), *env, s.datastoreSnapshot(r.Context()))
 	resp := topology.Build(s.cfg.Topology, *env, matrix)
 	writeJSON(w, http.StatusOK, resp)
 }

@@ -7,14 +7,14 @@ environments:
     nginx_base: http://192.168.10.73:30882
     ingress_host: trade-dev.bifrost.lan
     ingress_node_ip: 192.168.10.73
-    # CNPG @ data NS (legacy bare-metal .80 decommissioned 2026-06-29)
+    # Matrix probe: primary signal from cluster/postgres API; LAN NodePort fallback when cluster API unavailable.
     postgres:
-      host: bifrost-postgres-rw.data.svc.cluster.local
-      port: 5432
-    # K3s dev uses in-cluster redis (gate checks via cluster probe).
+      host: 192.168.10.73
+      port: 30432
+    # Matrix probe: primary signal from cluster/redis API; dev LAN NodePort fallback.
     redis:
-      host: redis-dev.data.svc.cluster.local
-      port: 6379
+      host: 192.168.10.73
+      port: 30379
     ops_token_env: BIFROST_DEV_OPS_TOKEN
 
   - id: stg
@@ -23,11 +23,11 @@ environments:
     ingress_host: trade-stg.bifrost.lan
     ingress_node_ip: 192.168.10.73
     postgres:
-      host: bifrost-postgres-rw.data.svc.cluster.local
-      port: 5432
+      host: 192.168.10.73
+      port: 30432
     redis:
-      host: redis-live-stg.data.svc.cluster.local
-      port: 6379
+      host: 192.168.10.73
+      port: 30380
     ops_token_env: BIFROST_STG_OPS_TOKEN
 
   - id: prod
@@ -36,12 +36,11 @@ environments:
     nginx_base: http://192.168.10.70
     ingress_host: trade.bifrost.lan
     ingress_node_ip: 192.168.10.70
-    # CNPG @ data NS (legacy bare-metal .80 decommissioned 2026-06-29)
+    # CNPG @ data NS — matrix uses cluster API; LAN NodePort fallback below.
     postgres:
-      host: bifrost-postgres-rw.data.svc.cluster.local
-      port: 5432
-    # Legacy compose exposed host Redis; K3s prod uses in-cluster redis (gate checks via cluster probe).
+      host: 192.168.10.73
+      port: 30432
     redis:
-      host: redis-live-prod.data.svc.cluster.local
-      port: 6379
+      host: 192.168.10.73
+      port: 30382
     ops_token_env: BIFROST_PROD_OPS_TOKEN

@@ -1524,15 +1524,49 @@ export interface TrustMatrixResponse {
   generated_at: string
 }
 
-// Retrospective Agent — cross-job pattern analysis
-
 export type RetrospectiveRootCause =
   | 'transient'
+  | 'probe_drift'
   | 'platform_defect'
   | 'config_drift'
   | 'resource_limit'
   | 'external'
   | 'unknown'
+
+export type PayloadClassification = 'NOMINAL' | 'PROBE_DRIFT' | 'DATA_LAYER' | 'HTTP_FAIL' | 'UNKNOWN'
+
+export interface DatastoreComponentVerification {
+  matrix_reachability: Reachability
+  cluster_reachability: Reachability
+  classification: PayloadClassification
+  detail: string
+}
+
+export interface EnvPayloadVerification {
+  environment: string
+  label: string
+  classification: PayloadClassification
+  postgres: DatastoreComponentVerification
+  redis: DatastoreComponentVerification
+  http_failures: string[]
+  detail: string
+}
+
+export interface VerifyPayloadSummary {
+  overall: PayloadClassification
+  probe_drift_count: number
+  data_layer_count: number
+  http_fail_count: number
+  nominal_count: number
+}
+
+export interface VerifyPayloadResponse {
+  generated_at: string
+  environments: EnvPayloadVerification[]
+  summary: VerifyPayloadSummary
+}
+
+// Retrospective Agent — cross-job pattern analysis
 
 export type RetrospectiveSeverity = 'critical' | 'high' | 'medium' | 'low'
 

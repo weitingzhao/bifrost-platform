@@ -613,7 +613,15 @@ func classifyRootCauseMultiSignal(ca *clusterAccum) (RootCause, float64, []Class
 			emit(RootCauseExternal, 3.0, "error_connectivity", truncate(e, 80))
 		}
 		if strings.Contains(lower, "dns") || strings.Contains(lower, "name or service not known") || strings.Contains(lower, "resolve") {
-			emit(RootCauseConfigDrift, 2.5, "error_dns_resolve", truncate(e, 80))
+			if strings.Contains(lower, "svc.cluster.local") {
+				emit(RootCauseProbeDrift, 3.5, "error_probe_drift_dns",
+					"in-cluster DNS probe from Mac host — matrix vs cluster contradiction")
+			} else {
+				emit(RootCauseConfigDrift, 2.5, "error_dns_resolve", truncate(e, 80))
+			}
+		}
+		if strings.Contains(lower, "probe_drift") || (strings.Contains(lower, "cluster_api") && strings.Contains(lower, "matrix fail")) {
+			emit(RootCauseProbeDrift, 3.0, "error_probe_drift", truncate(e, 80))
 		}
 		if strings.Contains(lower, "permission") || strings.Contains(lower, "owner") || strings.Contains(lower, "forbidden") {
 			emit(RootCausePlatformDefect, 3.0, "error_permission", truncate(e, 80))

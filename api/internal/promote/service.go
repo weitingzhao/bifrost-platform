@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opscontext"
@@ -16,20 +17,25 @@ import (
 )
 
 type Service struct {
-	cfg      *config.Config
-	prober   *probe.Prober
-	store    *Store
-	delivery *delivery.Service
+	cfg               *config.Config
+	prober            *probe.Prober
+	store             *Store
+	delivery          *delivery.Service
+	datastoreSnapshot func(context.Context) probe.DatastoreSnapshot
 }
 
-func NewService(cfg *config.Config) *Service {
+func NewService(cfg *config.Config, cluster *cluster.Handler) *Service {
 	entry := cfg.DefaultCluster()
-	return &Service{
+	svc := &Service{
 		cfg:      cfg,
 		prober:   probe.NewProber(),
 		store:    NewStore(configDirFrom(cfg)),
 		delivery: delivery.NewService(entry),
 	}
+	if cluster != nil {
+		svc.datastoreSnapshot = cluster.DatastoreSnapshot
+	}
+	return svc
 }
 
 func configDirFrom(cfg *config.Config) string {
@@ -41,6 +47,15 @@ func configDirFrom(cfg *config.Config) string {
 
 func filepathDir(p string) string {
 	return filepath.Dir(p)
+}
+
+func (s *Service) probeEnvironment(ctx context.Context, env config.Environment) probe.MatrixResponse {
+	var ds *probe.DatastoreSnapshot
+	if s.datastoreSnapshot != nil {
+		snap := s.datastoreSnapshot(ctx)
+		ds = &snap
+	}
+	return s.prober.ProbeEnvironmentWithDatastore(ctx, env, ds)
 }
 
 func (s *Service) LastGate(ctx context.Context, tier GateTier) ReleaseGateResponse {
@@ -268,7 +283,7 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 			Reachability: probe.ReachFail, Detail: "prod environment not configured",
 		}}
 	}
-	matrix := s.prober.ProbeEnvironment(ctx, *env)
+	matrix := s.probeEnvironment(ctx, *env)
 	failIDs := []string{}
 	redisInCluster := false
 	postgresInCluster := false

@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag } from '@bifrost/ui'
 import { Command, Copy, Check } from 'lucide-react'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import { fetchVerifyPayload } from '@/api/platform'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import type { TrackId } from '@/lib/briefing/workTracks'
 import { buildCommandIntentStripModel, type CommandIntentChip } from '@/lib/control-room/commandIntent'
@@ -30,9 +32,15 @@ export function CommandIntentStrip({
   onOpenDelivery,
   onOpenPromote,
 }: CommandIntentStripProps) {
+  const verifyQ = useQuery({
+    queryKey: ['cockpit', 'verify-payload'],
+    queryFn: fetchVerifyPayload,
+    refetchInterval: 20_000,
+  })
+
   const model = useMemo(
-    () => buildCommandIntentStripModel({ snapshot, matrices, context }),
-    [snapshot, matrices, context],
+    () => buildCommandIntentStripModel({ snapshot, matrices, context, verify: verifyQ.data }),
+    [snapshot, matrices, context, verifyQ.data],
   )
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 

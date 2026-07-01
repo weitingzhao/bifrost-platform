@@ -2,7 +2,7 @@
  * Control Room Operate Loop — dispatch packs for Agent Desk / remediation runner.
  */
 
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { MatrixResponse, OpsContextResponse, VerifyPayloadResponse } from '@/api/types'
 import { buildOpsPack } from '@/lib/control-room/agentContextPacks'
 import {
   buildDiagnosticPrompt,
@@ -53,8 +53,9 @@ export function buildControlRoomDispatchPack(input: {
   snapshot: MissionSnapshot
   matrices: MatrixResponse[]
   context?: OpsContextResponse
+  verify?: VerifyPayloadResponse
 }): string | null {
-  const base = buildDiagnosticPrompt(input.snapshot)
+  const base = buildDiagnosticPrompt(input.snapshot, input.verify)
   if (base == null) return null
 
   const lines: string[] = [

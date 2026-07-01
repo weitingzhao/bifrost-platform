@@ -38,6 +38,7 @@ function severityVariant(s: RetrospectiveSeverity) {
 function rootCauseLabel(r: string) {
   switch (r) {
     case 'transient': return 'Transient'
+    case 'probe_drift': return 'Probe drift'
     case 'platform_defect': return 'Platform defect'
     case 'config_drift': return 'Config drift'
     case 'resource_limit': return 'Resource limit'
@@ -49,6 +50,7 @@ function rootCauseLabel(r: string) {
 function rootCauseColor(r: RetrospectiveRootCause) {
   switch (r) {
     case 'platform_defect': return 'bg-red-500/80'
+    case 'probe_drift': return 'bg-orange-500/80'
     case 'config_drift': return 'bg-amber-500/80'
     case 'resource_limit': return 'bg-purple-500/80'
     case 'external': return 'bg-blue-500/80'

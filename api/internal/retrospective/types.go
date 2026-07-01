@@ -7,6 +7,7 @@ type RootCause string
 
 const (
 	RootCauseTransient     RootCause = "transient"      // one-off restart fixed it
+	RootCauseProbeDrift    RootCause = "probe_drift"     // matrix vs cluster contradiction (sensor false negative)
 	RootCausePlatformDefect RootCause = "platform_defect" // code/config bug in platform
 	RootCauseConfigDrift   RootCause = "config_drift"    // environment drifted from desired
 	RootCauseResourceLimit RootCause = "resource_limit"  // OOM, disk, quota

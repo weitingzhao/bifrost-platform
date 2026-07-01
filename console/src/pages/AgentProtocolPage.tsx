@@ -12,6 +12,8 @@ import {
   CONTEXT_PACK_BUTTONS,
   CONTEXT_PACK_LAYERS,
   FORBIDDEN_ACTIONS,
+  MISSION_DIAGNOSTIC_MCP,
+  MISSION_DIAGNOSTIC_PLAYBOOKS,
   MODE_SELECTION_HINTS,
   OPENING_PROMPTS,
   buildAgentProtocolLlmPack,
@@ -227,6 +229,36 @@ export function AgentProtocolPage() {
               <DenseTableRow key={i}>
                 <DenseTableCell className="text-[color:var(--destructive)]">{f.action}</DenseTableCell>
                 <DenseTableCell>{f.scope}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      {/* 4b — Mission diagnostic playbooks */}
+      <CatalogSection title="Mission diagnostic playbooks (verify_payload)">
+        <p className="m-0 mb-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          MCP: <code className="font-mono-tabular">{MISSION_DIAGNOSTIC_MCP.verifyPayload}</code> — classify before
+          remediating PG/Redis or trade HTTP targets.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Class</DenseTableHead>
+              <DenseTableHead>Autonomy</DenseTableHead>
+              <DenseTableHead>Trigger</DenseTableHead>
+              <DenseTableHead>Agent action</DenseTableHead>
+              <DenseTableHead>Must not</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {MISSION_DIAGNOSTIC_PLAYBOOKS.map(p => (
+              <DenseTableRow key={p.classification}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{p.classification}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular">{p.autonomy}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{p.trigger}</DenseTableCell>
+                <DenseTableCell>{p.agentAction}</DenseTableCell>
+                <DenseTableCell className="text-[color:var(--destructive)]">{p.mustNot}</DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>
