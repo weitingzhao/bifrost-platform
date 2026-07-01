@@ -208,6 +208,48 @@ export const HERMES_FIRST_TASK_STEPS: HermesFirstTaskStep[] = [
   },
 ]
 
+/** Mission Signal Phase 5 — Flight Director governance (remediation JobStore; Hermes optional). */
+export type FlightDirectorStep = {
+  step: string
+  tool: string
+  required: boolean
+  detail: string
+}
+
+export const FLIGHT_DIRECTOR_MCP = {
+  performance: 'get_agent_performance — GET /api/v1/agent/governance/performance',
+  trustMatrix: 'get_trust_matrix — GET /api/v1/agent/governance/trust-matrix',
+  snapshot: 'get_flight_director_snapshot — GET /api/v1/agent/governance/snapshot',
+  capabilityMap: 'GET /api/v1/agent/governance/capability-map',
+} as const
+
+export const FLIGHT_DIRECTOR_STEPS: FlightDirectorStep[] = [
+  {
+    step: '1. Performance KPIs',
+    tool: 'get_agent_performance',
+    required: true,
+    detail: '7d/30d success rate, intervention rate, MTTR from remediation JobStore.',
+  },
+  {
+    step: '2. Trust matrix',
+    tool: 'get_trust_matrix',
+    required: true,
+    detail: 'Per-task L0/L1/L2, consecutive successes, promotion_eligible, demotion_triggered.',
+  },
+  {
+    step: '3. Capability gaps',
+    tool: 'get_flight_director_snapshot',
+    required: true,
+    detail: 'Task scope × MCP tools × mission signals; highlight gaps before expanding autonomy.',
+  },
+  {
+    step: '4. Owner briefing',
+    tool: 'Control Room / Trust & Autonomy',
+    required: true,
+    detail: '24h digest: jobs completed/failed, escalations, promotion/demotion flags — replaces manual Audit scanning.',
+  },
+]
+
 export type OpeningPrompt = {
   mode: string
   example: string
@@ -398,6 +440,13 @@ export function buildAgentProtocolLlmPack(): string {
     `- Readiness: \`${HERMES_FIRST_TASK_MCP.readiness}\``,
     `- Prompt: \`${HERMES_FIRST_TASK_MCP.firstTask}\` — task id hermes-mission-health-l0`,
     ...HERMES_FIRST_TASK_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
+    '',
+    '## Flight Director governance (Mission Signal Phase 5)',
+    `- Performance: \`${FLIGHT_DIRECTOR_MCP.performance}\``,
+    `- Trust: \`${FLIGHT_DIRECTOR_MCP.trustMatrix}\``,
+    `- Snapshot: \`${FLIGHT_DIRECTOR_MCP.snapshot}\` (includes capability map + 24h briefing)`,
+    ...FLIGHT_DIRECTOR_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
+    '- Data source: remediation runner JobStore (Hermes/GPU LLM path optional — bypass OK for governance KPIs).',
     '',
     '## Example opening prompts',
     ...OPENING_PROMPTS.map(p => `- [${p.mode}] "${p.example}"`),

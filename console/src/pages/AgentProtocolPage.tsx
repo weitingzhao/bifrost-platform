@@ -17,6 +17,8 @@ import {
   MISSION_POST_FIX_LOOP,
   HERMES_FIRST_TASK_MCP,
   HERMES_FIRST_TASK_STEPS,
+  FLIGHT_DIRECTOR_MCP,
+  FLIGHT_DIRECTOR_STEPS,
   MODE_SELECTION_HINTS,
   OPENING_PROMPTS,
   buildAgentProtocolLlmPack,
@@ -314,6 +316,33 @@ export function AgentProtocolPage() {
           </DenseTableHeader>
           <DenseTableBody>
             {HERMES_FIRST_TASK_STEPS.map(s => (
+              <DenseTableRow key={s.step}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{s.step}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{s.tool}</DenseTableCell>
+                <DenseTableCell>{s.required ? 'Yes' : 'No'}</DenseTableCell>
+                <DenseTableCell>{s.detail}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title="Flight Director governance (Mission Signal Phase 5)">
+        <p className="m-0 mb-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          MCP: <code className="font-mono-tabular">{FLIGHT_DIRECTOR_MCP.snapshot}</code> — KPIs from remediation
+          JobStore; Hermes/GPU optional.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Step</DenseTableHead>
+              <DenseTableHead>Tool</DenseTableHead>
+              <DenseTableHead>Required</DenseTableHead>
+              <DenseTableHead>Detail</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {FLIGHT_DIRECTOR_STEPS.map(s => (
               <DenseTableRow key={s.step}>
                 <DenseTableCell className="font-medium whitespace-nowrap">{s.step}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{s.tool}</DenseTableCell>

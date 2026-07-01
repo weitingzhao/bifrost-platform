@@ -10,7 +10,7 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { fetchAgentPerformance, fetchTrustMatrix } from '@/api/platform'
+import { fetchAgentPerformance, fetchCapabilityMap, fetchTrustMatrix } from '@/api/platform'
 import type { AgentPerformanceWindow, HermesActuationLevel } from '@/api/types'
 
 function levelTag(level: HermesActuationLevel) {
@@ -89,8 +89,15 @@ export function AgentGovernancePage() {
     refetchInterval: 60_000,
   })
 
+  const capQuery = useQuery({
+    queryKey: ['agent', 'governance', 'capability-map'],
+    queryFn: fetchCapabilityMap,
+    refetchInterval: 120_000,
+  })
+
   const windows = perfQuery.data?.windows ?? []
   const entries = trustQuery.data?.entries ?? []
+  const capEntries = capQuery.data?.entries ?? []
   const mttr = perfQuery.data?.mttr_seconds
 
   return (
@@ -100,8 +107,9 @@ export function AgentGovernancePage() {
         description={
           <>
             Flight Director governance — monitor Agent performance and manage per-Skill trust levels.
-            The <strong>earned autonomy engine</strong> promotes skills with consecutive successes
-            from L1→L0 and auto-demotes on failure spikes.
+            KPIs sourced from <strong>remediation runner JobStore</strong> (Hermes/GPU path optional).
+            The <strong>earned autonomy engine</strong> promotes tasks with consecutive successes
+            from L1→L0 and flags demotion on failure spikes.
           </>
         }
         overflow="visible"
@@ -139,7 +147,7 @@ export function AgentGovernancePage() {
         )}
         {!perfQuery.isLoading && windows.length === 0 && perfQuery.error == null && (
           <p className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            No performance data yet. Data will appear once Hermes executes Skills.
+            No remediation job history yet. KPIs will populate after Agent Desk / runner jobs complete.
           </p>
         )}
       </OpsSection>
@@ -174,7 +182,7 @@ export function AgentGovernancePage() {
           {!trustQuery.isLoading && entries.length === 0 && (
             <DenseTableRow>
               <DenseTableCell colSpan={6} className="text-center text-[var(--muted-foreground)]">
-                No trust data yet. Matrix populates when Hermes Skills are registered.
+                No trust data yet. Matrix shows catalog defaults until remediation jobs accumulate per scope.
               </DenseTableCell>
             </DenseTableRow>
           )}
@@ -207,6 +215,59 @@ export function AgentGovernancePage() {
                     ? `${new Date(entry.last_override_at).toLocaleString()} by ${entry.last_override_by ?? '—'}`
                     : '—'}
                 </span>
+              </DenseTableCell>
+            </DenseTableRow>
+          ))}
+        </DenseTableBody>
+      </DenseDataTable>
+
+      <OpsSection title="Capability map" overflow="visible">
+        {capQuery.error != null && (
+          <p className="text-[var(--text-dense-meta)] text-[var(--destructive)]">
+            Failed to load capability map: {(capQuery.error as Error).message}
+          </p>
+        )}
+        {capQuery.data != null && (
+          <p className="mb-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Task scopes × MCP tools × mission signals — {capQuery.data.gap_count} gap(s) of{' '}
+            {capQuery.data.entries.length} tasks.
+          </p>
+        )}
+      </OpsSection>
+      <DenseDataTable>
+        <DenseTableHeader>
+          <DenseTableHeadRow>
+            <DenseTableHead>Task</DenseTableHead>
+            <DenseTableHead>Autonomy</DenseTableHead>
+            <DenseTableHead>MCP tools</DenseTableHead>
+            <DenseTableHead>Mission signals</DenseTableHead>
+            <DenseTableHead>Gap</DenseTableHead>
+          </DenseTableHeadRow>
+        </DenseTableHeader>
+        <DenseTableBody>
+          {capQuery.isLoading && (
+            <DenseTableRow>
+              <DenseTableCell colSpan={5} className="text-center text-[var(--muted-foreground)]">
+                Loading capability map…
+              </DenseTableCell>
+            </DenseTableRow>
+          )}
+          {capEntries.map(row => (
+            <DenseTableRow key={row.task_scope}>
+              <DenseTableCell className="font-medium">{row.task_label}</DenseTableCell>
+              <DenseTableCell className="font-mono tabular-nums">{row.autonomy}</DenseTableCell>
+              <DenseTableCell className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                {row.mcp_tools.join(', ')}
+              </DenseTableCell>
+              <DenseTableCell className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                {row.mission_signals.join(', ')}
+              </DenseTableCell>
+              <DenseTableCell>
+                {row.has_gap ? (
+                  <DenseTag variant="warning">{row.gap_detail ?? 'gap'}</DenseTag>
+                ) : (
+                  <DenseTag variant="success">ok</DenseTag>
+                )}
               </DenseTableCell>
             </DenseTableRow>
           ))}

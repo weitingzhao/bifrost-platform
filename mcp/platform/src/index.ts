@@ -273,6 +273,27 @@ server.tool(
   async () => jsonResult(await platformGet('/api/v1/agent/hermes/first-task')),
 )
 
+server.tool(
+  'get_agent_performance',
+  'Flight Director — agent performance KPIs (7d/30d windows)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/agent/governance/performance')),
+)
+
+server.tool(
+  'get_trust_matrix',
+  'Flight Director — trust & autonomy matrix with earned autonomy hints',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/agent/governance/trust-matrix')),
+)
+
+server.tool(
+  'get_flight_director_snapshot',
+  'Flight Director snapshot — performance + trust + capability + briefing digest',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/agent/governance/snapshot')),
+)
+
 server.tool('get_agent_nightly_report', 'Nightly drift report from agent host', {}, async () =>
   jsonResult(await platformGet('/api/v1/agent/nightly-report')),
 )

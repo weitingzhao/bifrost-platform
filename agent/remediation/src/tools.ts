@@ -515,6 +515,30 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
         return textResult(jsonText(data))
       },
     },
+    get_agent_performance: {
+      description: 'Flight Director — agent performance KPIs (7d/30d) from remediation JobStore.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/agent/governance/performance')
+        return textResult(jsonText(data))
+      },
+    },
+    get_trust_matrix: {
+      description: 'Flight Director — trust & autonomy matrix with earned autonomy hints.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/agent/governance/trust-matrix')
+        return textResult(jsonText(data))
+      },
+    },
+    get_flight_director_snapshot: {
+      description: 'Flight Director snapshot — performance + trust + capability + 24h briefing.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/agent/governance/snapshot')
+        return textResult(jsonText(data))
+      },
+    },
 
     sync_cluster_kubeconfig: {
       description:

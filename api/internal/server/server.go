@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/briefing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
@@ -57,6 +58,7 @@ type Server struct {
 	remediation  *remediation.Handler
 	agentreport  *agentreport.Handler
 	agentbridge  *agentbridge.Handler
+	agentgovernance *agentgovernance.Handler
 	agentdeploy  *agentdeploy.Handler
 	driftproposal  *driftproposal.Handler
 	hermesgateway  *hermesgateway.Handler
@@ -101,6 +103,7 @@ func New(cfg *config.Config) *Server {
 		remediation: remediationH,
 		agentreport: agentreport.NewHandler(),
 		agentbridge: agentbridge.NewHandler(),
+		agentgovernance: agentgovernance.NewHandler(remediationH.Store()),
 		agentdeploy: agentdeploy.NewHandler(audit),
 		driftproposal:  driftproposal.NewHandler(audit),
 		hermesgateway:  hermesgateway.NewHandler(),
@@ -151,6 +154,10 @@ func (s *Server) Router() http.Handler {
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
 		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)
 		r.Get("/agent/hermes/first-task", s.hermesreadiness.HandleFirstTask)
+		r.Get("/agent/governance/performance", s.agentgovernance.HandlePerformance)
+		r.Get("/agent/governance/trust-matrix", s.agentgovernance.HandleTrustMatrix)
+		r.Get("/agent/governance/capability-map", s.agentgovernance.HandleCapabilityMap)
+		r.Get("/agent/governance/snapshot", s.agentgovernance.HandleSnapshot)
 		r.Get("/agent/smoke", s.agentbridge.HandleSmoke)
 		r.Get("/agent/deploy", s.agentdeploy.HandleStatus)
 		r.Get("/agent/hermes/health", s.hermesgateway.HandleHealth)
