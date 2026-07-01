@@ -446,9 +446,10 @@ tracks:
             - id: release-agent-task
               label: "Release Agent Task — one-click platform release"
               total: 3
-              done: 2
-              status: in_progress
-              note: "① P1 delivery/promote custom tools for runner ✓ ② P2 release scope prompt + cwd + admin token ✓ ③ P3 Agent Desk quick prompt + end-to-end validation"
+              done: 3
+              status: closed
+              next_task: ""
+              note: "P1–P3 ✓ Owner E2E sign-off 2026-07-01 — Agent Desk release scope → git scan + skip-commit path → STG/PROD gates pass → PROD deploy bifrost-deliver-platform-prod-1782923108 · job c5de2ba2 · K3s release-state released"
               prerequisites:
                 - "agent-infra-bootstrap stream closed"
                 - "p6-platform-e2e-cicd done"

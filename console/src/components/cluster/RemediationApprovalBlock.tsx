@@ -57,6 +57,41 @@ function optionVariant(
   return 'default'
 }
 
+const CONTEXT_LINE_THRESHOLD = 5
+const CONTEXT_CHAR_THRESHOLD = 320
+const CONTEXT_PREVIEW_LINES = 4
+
+function ApprovalContextMessage({ text }: { text: string }) {
+  const lines = text.split('\n')
+  const isLong = lines.length > CONTEXT_LINE_THRESHOLD || text.length > CONTEXT_CHAR_THRESHOLD
+  const [expanded, setExpanded] = useState(false)
+
+  if (!isLong) {
+    return <p className="remediation-approval-message">{text}</p>
+  }
+
+  const previewLines = lines.slice(0, CONTEXT_PREVIEW_LINES)
+  const preview =
+    previewLines.join('\n') + (lines.length > CONTEXT_PREVIEW_LINES ? '\n…' : '')
+
+  return (
+    <div className="remediation-approval-message-wrap">
+      <p className="remediation-approval-message">
+        {expanded ? text : preview}
+      </p>
+      <button
+        type="button"
+        className="remediation-approval-context-toggle"
+        onClick={() => setExpanded(prev => !prev)}
+      >
+        {expanded
+          ? 'Show less'
+          : `Show full context (${lines.length} line${lines.length === 1 ? '' : 's'})`}
+      </button>
+    </div>
+  )
+}
+
 export function RemediationApprovalBlock({
   event,
   submitting = false,
@@ -101,120 +136,127 @@ export function RemediationApprovalBlock({
         kind === 'manual_steps' ? ' remediation-block--approval-manual' : ''
       }`}
     >
-      <p className="remediation-approval-title">{title}</p>
-      <p className="remediation-approval-message">{event.text}</p>
+      <div className="remediation-approval-context dense-scroll-y">
+        <p className="remediation-approval-context__kicker">Agent context</p>
+        <p className="remediation-approval-title">{title}</p>
+        <ApprovalContextMessage text={event.text} />
 
-      {checklist.length > 0 && (
-        <div className="remediation-approval-checklist">
-          <p className="remediation-approval-checklist__title">Checklist</p>
-          <ul className="remediation-approval-checklist__list">
-            {checklist.map((item, index) => (
-              <li key={index} className="remediation-approval-checklist__item">
-                <label className="remediation-approval-checklist__label">
-                  <input
-                    type="checkbox"
-                    className="remediation-approval-checklist__checkbox"
-                    checked={checkedSteps[index] === true}
-                    disabled={submitting}
-                    onChange={() => toggleStep(index)}
-                  />
-                  <span>{item}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {checklist.length > 0 && (
+          <div className="remediation-approval-checklist">
+            <p className="remediation-approval-checklist__title">Checklist</p>
+            <ul className="remediation-approval-checklist__list">
+              {checklist.map((item, index) => (
+                <li key={index} className="remediation-approval-checklist__item">
+                  <label className="remediation-approval-checklist__label">
+                    <input
+                      type="checkbox"
+                      className="remediation-approval-checklist__checkbox"
+                      checked={checkedSteps[index] === true}
+                      disabled={submitting}
+                      onChange={() => toggleStep(index)}
+                    />
+                    <span>{item}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      {commands.length > 0 && (
-        <div className="remediation-approval-console">
-          <button
-            type="button"
-            className="remediation-approval-console-toggle"
-            onClick={() => setCommandsOpen(!commandsOpen)}
-          >
-            Commands {commandsOpen ? '▾' : '▸'} ({commands.length})
-          </button>
-          {commandsOpen && (
-            <div className="remediation-approval-console-body">
-              <pre className="remediation-block-code remediation-block-code--result dense-scroll-y">
-                {commands.join('\n')}
-              </pre>
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void navigator.clipboard.writeText(commands.join('\n'))}
-                >
-                  Copy commands
-                </Button>
-                {onOpenServerConsole != null && (
-                  <Button variant="outline" size="sm" onClick={onOpenServerConsole}>
-                    Open Server Console
+        {commands.length > 0 && (
+          <div className="remediation-approval-console">
+            <button
+              type="button"
+              className="remediation-approval-console-toggle"
+              onClick={() => setCommandsOpen(!commandsOpen)}
+            >
+              Commands {commandsOpen ? '▾' : '▸'} ({commands.length})
+            </button>
+            {commandsOpen && (
+              <div className="remediation-approval-console-body">
+                <pre className="remediation-block-code remediation-block-code--result dense-scroll-y">
+                  {commands.join('\n')}
+                </pre>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void navigator.clipboard.writeText(commands.join('\n'))}
+                  >
+                    Copy commands
                   </Button>
-                )}
+                  {onOpenServerConsole != null && (
+                    <Button variant="outline" size="sm" onClick={onOpenServerConsole}>
+                      Open Server Console
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
 
-      {onOpenServerConsole != null && commands.length === 0 && kind === 'manual_steps' && (
-        <Button variant="outline" size="sm" className="mb-2" onClick={onOpenServerConsole}>
-          Open Server Console
-        </Button>
-      )}
-
-      {proposedCommitMsg != null && (
-        <div className="remediation-approval-commit-msg">
-          <label
-            className="remediation-approval-commit-msg__label"
-            htmlFor={`approval-commit-msg-${event.id}`}
-          >
-            Commit message
-          </label>
-          <textarea
-            id={`approval-commit-msg-${event.id}`}
-            className="remediation-approval-commit-msg__input"
-            rows={Math.min(Math.max(commitMsg.split('\n').length + 1, 3), 12)}
-            value={commitMsg}
-            disabled={submitting}
-            onChange={e => setCommitMsg(e.target.value)}
-          />
-        </div>
-      )}
-
-      <div className="remediation-approval-note">
-        <label className="remediation-approval-note__label" htmlFor={`approval-note-${event.id}`}>
-          Your notes
-        </label>
-        <textarea
-          id={`approval-note-${event.id}`}
-          className="remediation-approval-note__input"
-          rows={kind === 'manual_steps' ? 4 : 3}
-          placeholder={noteHint}
-          value={note}
-          disabled={submitting}
-          onChange={e => setNote(e.target.value)}
-        />
+        {onOpenServerConsole != null && commands.length === 0 && kind === 'manual_steps' && (
+          <Button variant="outline" size="sm" className="mb-2" onClick={onOpenServerConsole}>
+            Open Server Console
+          </Button>
+        )}
       </div>
 
-      <div className="remediation-approval-options">
-        {options.map(opt => (
-          <Button
-            key={opt.id}
-            variant={optionVariant(opt, kind)}
-            size="sm"
+      <div className="remediation-approval-actions">
+        <p className="remediation-approval-actions__kicker">Your response</p>
+
+        {proposedCommitMsg != null && (
+          <div className="remediation-approval-commit-msg">
+            <label
+              className="remediation-approval-commit-msg__label"
+              htmlFor={`approval-commit-msg-${event.id}`}
+            >
+              Commit message
+            </label>
+            <textarea
+              id={`approval-commit-msg-${event.id}`}
+              className="remediation-approval-commit-msg__input"
+              rows={Math.min(Math.max(commitMsg.split('\n').length + 1, 3), 8)}
+              value={commitMsg}
+              disabled={submitting}
+              onChange={e => setCommitMsg(e.target.value)}
+            />
+          </div>
+        )}
+
+        <div className="remediation-approval-note">
+          <label className="remediation-approval-note__label" htmlFor={`approval-note-${event.id}`}>
+            Your notes
+          </label>
+          <textarea
+            id={`approval-note-${event.id}`}
+            className="remediation-approval-note__input"
+            rows={kind === 'manual_steps' ? 3 : 2}
+            placeholder={noteHint}
+            value={note}
             disabled={submitting}
-            className="remediation-approval-option"
-            onClick={() => handleRespond(opt.id)}
-          >
-            <span className="remediation-approval-option__label">{opt.label}</span>
-            {opt.description != null && opt.description !== '' && (
-              <span className="remediation-approval-option__desc">{opt.description}</span>
-            )}
-          </Button>
-        ))}
+            onChange={e => setNote(e.target.value)}
+          />
+        </div>
+
+        <div className="remediation-approval-options">
+          {options.map(opt => (
+            <Button
+              key={opt.id}
+              variant={optionVariant(opt, kind)}
+              size="sm"
+              disabled={submitting}
+              className="remediation-approval-option"
+              onClick={() => handleRespond(opt.id)}
+            >
+              <span className="remediation-approval-option__label">{opt.label}</span>
+              {opt.description != null && opt.description !== '' && (
+                <span className="remediation-approval-option__desc">{opt.description}</span>
+              )}
+            </Button>
+          ))}
+        </div>
       </div>
     </div>
   )

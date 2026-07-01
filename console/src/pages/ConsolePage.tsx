@@ -540,6 +540,7 @@ export function ConsolePage() {
                 onOpenBriefing={openBriefing}
                 onOpenAgentDesk={(opts) => openAgentDesk(opts)}
                 onOpenPlatformRelease={() => setViewTab('platform-release')}
+                onOpenPromote={openPromote}
               />
             </Suspense>
           </>

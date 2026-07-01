@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, LayoutDashboard, Server, Rocket, Radar, Bot, Satellite, Wrench, type LucideIcon } from 'lucide-react'
-import type { DenseTagVariant } from '@bifrost/ui'
+import { ChevronRight, LayoutDashboard, Satellite, Wrench } from 'lucide-react'
 import { cn } from '@bifrost/ui'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import {
@@ -8,11 +7,11 @@ import {
   missionStatus,
   missionStatusColor,
   signalColor,
-  type ModuleState,
-  type Signal,
 } from '@/lib/control-room/missionSignals'
 
 /* ─────────── re-exported helpers (used by other components) ─────────── */
+
+import type { DenseTagVariant } from '@bifrost/ui'
 
 const STATUS_VARIANT: Record<string, DenseTagVariant> = {
   CLOSED: 'neutral',
@@ -33,35 +32,15 @@ export function flywheelLabel(code: string): string {
   return code
 }
 
-/* ─────────── module pill ─────────── */
-
-function Module({
-  icon: Icon,
-  name,
-  state,
-  onClick,
+function DetailRow({
+  signal,
+  id,
+  text,
 }: {
-  icon: LucideIcon
-  name: string
-  state: ModuleState
-  onClick?: () => void
+  signal: import('@/lib/control-room/missionSignals').Signal
+  id: string
+  text: string
 }) {
-  const Tag = onClick != null ? 'button' : 'span'
-  return (
-    <Tag
-      type={onClick != null ? 'button' : undefined}
-      onClick={onClick}
-      title={`${name} — ${state.detail}`}
-      className={cn('cockpit-mod', onClick != null && 'cockpit-mod--clickable')}
-    >
-      <Icon size={13} style={{ color: signalColor(state.signal) }} className="cockpit-mod-icon" />
-      <span className="cockpit-mod-name">{name}</span>
-      <span className="cockpit-mod-val">{state.value}</span>
-    </Tag>
-  )
-}
-
-function DetailRow({ signal, id, text }: { signal: Signal; id: string; text: string }) {
   return (
     <div className="cockpit-detail-row">
       <span className="cockpit-detail-dot" style={{ color: signalColor(signal) }}>
@@ -81,8 +60,6 @@ function formatAge(epoch: number): string {
   return `${Math.floor(min / 60)}h ago`
 }
 
-/* ─────────── main component ─────────── */
-
 interface FocusStripProps {
   onNavigate?: (tab: string) => void
   onOpenAgentDeskWithPrefill?: (prefill: string) => void
@@ -93,27 +70,12 @@ export function FocusStrip({ onNavigate, onOpenAgentDeskWithPrefill }: FocusStri
   const { snapshot, dataUpdatedAt } = useMissionSnapshot()
   const nav = (tab: string) => () => onNavigate?.(tab)
 
-  const subsystems = [
-    { key: 'infra', icon: Server, name: 'Infra', state: snapshot.infra, onClick: nav('cluster') },
-    { key: 'release', icon: Rocket, name: 'Release', state: snapshot.release, onClick: nav('delivery') },
-    { key: 'control', icon: Radar, name: 'Control', state: snapshot.control, onClick: nav('platform-release') },
-    { key: 'agent', icon: Bot, name: 'Agent', state: snapshot.agent, onClick: nav('agent-desk') },
-  ] as const
-
   const mission = missionStatus(snapshot.missionOverall)
   const diagnosticPrompt = buildDiagnosticPrompt(snapshot)
 
   return (
     <div className="cockpit-strip">
       <div className="cockpit-strip-row">
-        <div className="cockpit-group">
-          {subsystems.map(s => (
-            <Module key={s.key} icon={s.icon} name={s.name} state={s.state} onClick={s.onClick} />
-          ))}
-        </div>
-
-        <span className="cockpit-divider" aria-hidden />
-
         <div className="cockpit-group cockpit-payload">
           <Satellite
             size={13}
@@ -143,6 +105,15 @@ export function FocusStrip({ onNavigate, onOpenAgentDeskWithPrefill }: FocusStri
             </span>
             prod
           </button>
+        </div>
+
+        <span className="cockpit-divider" aria-hidden />
+
+        <div className="cockpit-group cockpit-mission-inline">
+          <span className="cockpit-mission-label">Mission</span>
+          <span className="cockpit-mission-value" style={{ color: missionStatusColor(mission) }}>
+            {mission}
+          </span>
         </div>
 
         <div className="cockpit-spacer" />
@@ -184,13 +155,16 @@ export function FocusStrip({ onNavigate, onOpenAgentDeskWithPrefill }: FocusStri
 
       {expanded && (
         <div className="cockpit-strip-detail">
-          <div className="cockpit-detail-group-label">Rocket — Ops Platform subsystems</div>
-          {subsystems.map(s => (
-            <DetailRow key={s.key} signal={s.state.signal} id={s.name} text={s.state.detail} />
-          ))}
           <div className="cockpit-detail-group-label">Payload — Trade satellite</div>
           <DetailRow signal={snapshot.tradeDev.signal} id="Trade · dev" text={snapshot.tradeDev.detail} />
           <DetailRow signal={snapshot.tradeProd.signal} id="Trade · prod" text={snapshot.tradeProd.detail} />
+          <p className="cockpit-detail-hint m-0">
+            Rocket subsystem telemetry lives in{' '}
+            <button type="button" className="focus-strip-link" onClick={nav('control-room')}>
+              Control Room
+            </button>
+            .
+          </p>
           <div className="cockpit-detail-ts">
             {dataUpdatedAt > 0 ? `Last probe ${formatAge(dataUpdatedAt)}` : 'Probing…'}
           </div>

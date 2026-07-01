@@ -1,11 +1,6 @@
 import {
-  Bot,
-  Radar,
-  Rocket,
   Satellite,
-  Server,
   Wrench,
-  type LucideIcon,
 } from 'lucide-react'
 import {
   DenseDataTable,
@@ -20,64 +15,33 @@ import {
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
-  buildDiagnosticPrompt,
+  buildControlRoomDispatchPack,
+} from '@/lib/control-room/controlRoomOperatePack'
+import {
   missionStatus,
   missionStatusColor,
   signalColor,
   type MissionSnapshot,
-  type ModuleState,
   type Signal,
 } from '@/lib/control-room/missionSignals'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
+import { PayloadDepthPanel } from '@/components/control-room/PayloadDepthPanel'
+import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystemsGrid'
 
 interface MissionControlHeaderProps {
   snapshot: MissionSnapshot
   matrices: MatrixResponse[]
   context?: OpsContextResponse
   dataUpdatedAt: number
+  /** When false, rocket subsystem cards are omitted (shown under Program context). */
+  showRocketSubsystems?: boolean
   onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenCluster: () => void
   onOpenDelivery: () => void
+  onOpenProgram?: () => void
   onOpenPlatformRelease: () => void
   onOpenAgentDesk: (opts?: { prefill: string }) => void
 }
-
-const ROCKET_MODULES: Array<{
-  key: keyof Pick<MissionSnapshot, 'infra' | 'release' | 'control' | 'agent'>
-  icon: LucideIcon
-  name: string
-  role: string
-  onOpen: (p: MissionControlHeaderProps) => () => void
-}> = [
-  {
-    key: 'infra',
-    icon: Server,
-    name: 'Infra',
-    role: 'Runtime foundation — K3s cluster, nodes, workloads',
-    onOpen: p => p.onOpenCluster,
-  },
-  {
-    key: 'release',
-    icon: Rocket,
-    name: 'Release',
-    role: 'Launch pipeline — CI/CD, deliver, STG smoke',
-    onOpen: p => p.onOpenDelivery,
-  },
-  {
-    key: 'control',
-    icon: Radar,
-    name: 'Control',
-    role: 'Flight computer — platform-api, console, GitOps',
-    onOpen: p => p.onOpenPlatformRelease,
-  },
-  {
-    key: 'agent',
-    icon: Bot,
-    name: 'Agent',
-    role: 'Autopilot — remediation runner, git bridge, drift repair',
-    onOpen: p => p.onOpenAgentDesk,
-  },
-]
 
 function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: number } {
   let ok = 0
@@ -89,31 +53,6 @@ function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: 
   return { ok, fail, total: matrix.targets.length }
 }
 
-function RocketModuleCard({
-  icon: Icon,
-  name,
-  role,
-  state,
-  onClick,
-}: {
-  icon: LucideIcon
-  name: string
-  role: string
-  state: ModuleState
-  onClick: () => void
-}) {
-  return (
-    <button type="button" className="mission-rocket-card" onClick={onClick} title={state.detail}>
-      <Icon size={20} style={{ color: signalColor(state.signal) }} className="mission-rocket-card-icon" />
-      <div className="mission-rocket-card-body">
-        <div className="mission-rocket-card-name">{name}</div>
-        <div className="mission-rocket-card-val">{state.value}</div>
-        <div className="mission-rocket-card-role">{role}</div>
-      </div>
-    </button>
-  )
-}
-
 function formatAge(epoch: number): string {
   const ms = Date.now() - epoch
   if (ms < 60_000) return 'just now'
@@ -123,16 +62,26 @@ function formatAge(epoch: number): string {
 }
 
 export function MissionControlHeader(props: MissionControlHeaderProps) {
-  const { snapshot, matrices, context, dataUpdatedAt, onOpenAgentDesk } = props
+  const {
+    snapshot,
+    matrices,
+    context,
+    dataUpdatedAt,
+    showRocketSubsystems = true,
+    onOpenAgentDesk,
+  } = props
   const mission = missionStatus(snapshot.missionOverall)
   const rocketMission = missionStatus(snapshot.rocketOverall)
   const payloadMission = missionStatus(snapshot.payloadOverall)
 
-  const diagnosticPrompt = buildDiagnosticPrompt(snapshot)
+  const diagnosticPrompt = buildControlRoomDispatchPack({
+    snapshot,
+    matrices,
+    context,
+  })
 
   return (
     <div className="mission-control flex w-full min-w-0 flex-col gap-4">
-      {/* ── Mission status board ── */}
       <section className="mission-board">
         <div className="mission-board-status">
           <span className="mission-board-label">Mission status</span>
@@ -142,7 +91,6 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
         </div>
         <div className="mission-board-divider" aria-hidden />
         <div className="mission-board-segment">
-          <Rocket size={16} style={{ color: missionStatusColor(rocketMission) }} />
           <span className="mission-board-seg-label">Rocket</span>
           <span className="mission-board-seg-val" style={{ color: missionStatusColor(rocketMission) }}>
             {rocketMission}
@@ -189,28 +137,23 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
         </section>
       )}
 
-      {/* ── Rocket subsystems ── */}
-      <OpsSection
-        title="Rocket — Ops Platform subsystems"
-        description="The launch vehicle that carries Trade. Each subsystem provides a layer of support for payload operations."
-        bodyPadding="compact"
-        overflow="visible"
-      >
-        <div className="mission-rocket-grid">
-          {ROCKET_MODULES.map(mod => (
-            <RocketModuleCard
-              key={mod.key}
-              icon={mod.icon}
-              name={mod.name}
-              role={mod.role}
-              state={snapshot[mod.key]}
-              onClick={mod.onOpen(props)}
-            />
-          ))}
-        </div>
-      </OpsSection>
+      {showRocketSubsystems && (
+        <OpsSection
+          title="Rocket — Ops Platform subsystems"
+          description="The launch vehicle that carries Trade. Each subsystem provides a layer of support for payload operations."
+          bodyPadding="compact"
+          overflow="visible"
+        >
+          <RocketSubsystemsGrid
+            snapshot={snapshot}
+            onOpenCluster={props.onOpenCluster}
+            onOpenDelivery={props.onOpenDelivery}
+            onOpenPlatformRelease={props.onOpenPlatformRelease}
+            onOpenAgentDesk={() => onOpenAgentDesk()}
+          />
+        </OpsSection>
+      )}
 
-      {/* ── Payload telemetry ── */}
       <OpsSection
         title="Payload — Trade satellite"
         description="Business stack reachability. Ops Platform exists to keep this payload stable, released, and maintained."
@@ -281,6 +224,16 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
             )}
           </DenseTableBody>
         </DenseDataTable>
+
+        <div className="payload-depth-inset">
+          <PayloadDepthPanel
+            matrices={matrices}
+            context={context}
+            onOpenRuntimeMap={props.onOpenRuntimeMap}
+            onOpenDelivery={props.onOpenDelivery}
+            onOpenProgram={props.onOpenProgram}
+          />
+        </div>
       </OpsSection>
     </div>
   )
