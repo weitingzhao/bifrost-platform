@@ -7,8 +7,55 @@
 
 import type { OpsContextResponse } from '@/api/types'
 
-export const BLUEPRINT_VERSION = '2026-06-28'
+export const BLUEPRINT_VERSION = '2026-07-01'
 export const BLUEPRINT_SOURCE = 'console/src/lib/architecture/blueprintCatalog.ts'
+
+/** Slow-changing principles — North Star, design rules, forbidden actions. */
+export const GOVERNANCE_LAYER_CONSTITUTION = 'Constitution' as const
+/** Owner sign-off milestones — ops-context.yaml via GET /api/v1/context. */
+export const GOVERNANCE_LAYER_SPINE = 'Spine' as const
+/** Live capability — platform-api routes, MCP tools, matrix/gate verdicts. */
+export const GOVERNANCE_LAYER_PROJECTION = 'Projection' as const
+
+export type GovernanceLayerRow = {
+  layer: typeof GOVERNANCE_LAYER_CONSTITUTION | typeof GOVERNANCE_LAYER_SPINE | typeof GOVERNANCE_LAYER_PROJECTION
+  changeRate: string
+  authority: string
+  content: string
+}
+
+export const GOVERNANCE_LAYERS: GovernanceLayerRow[] = [
+  {
+    layer: GOVERNANCE_LAYER_CONSTITUTION,
+    changeRate: 'Slow (months / Owner principle changes)',
+    authority: 'Blueprint + Agent Protocol catalogs',
+    content: 'North Star, Strategy C, design principles, L0/L1/L2/forbidden, AI boundaries',
+  },
+  {
+    layer: GOVERNANCE_LAYER_SPINE,
+    changeRate: 'Medium (milestone sign-off)',
+    authority: 'config/ops-context.yaml → GET /api/v1/context',
+    content: 'Milestones, decisions, focus, streams — SIGNED = historical Owner approval, not live gate ready',
+  },
+  {
+    layer: GOVERNANCE_LAYER_PROJECTION,
+    changeRate: 'Fast (PR / deploy)',
+    authority: 'platform-api + GET /api/v1/mcp/tools',
+    content: 'Implemented routes, MCP tools, matrix/gate verdicts, UI delivery sign-offs',
+  },
+]
+
+export type BoundaryRuleRow = {
+  question: string
+  answerLayer: typeof GOVERNANCE_LAYER_CONSTITUTION | typeof GOVERNANCE_LAYER_SPINE | typeof GOVERNANCE_LAYER_PROJECTION
+}
+
+export const BOUNDARY_RULES: BoundaryRuleRow[] = [
+  { question: 'Can we do X / is X implemented?', answerLayer: GOVERNANCE_LAYER_PROJECTION },
+  { question: 'Should we do X / what is forbidden?', answerLayer: GOVERNANCE_LAYER_CONSTITUTION },
+  { question: 'Was milestone M historically signed off?', answerLayer: GOVERNANCE_LAYER_SPINE },
+  { question: 'Is Promote / cutover ready right now?', answerLayer: GOVERNANCE_LAYER_PROJECTION },
+]
 
 export const NORTH_STAR_STATEMENT =
   'All routine environment, cluster, release, and ops actions go through Bifrost Ops Console and platform-api; infra scripts run only as API executors. The Owner\'s only out-of-band action is restarting the Ops Platform itself.'
@@ -114,27 +161,27 @@ export type ConsoleViewRow = {
 }
 
 export const CONSOLE_VIEWS: ConsoleViewRow[] = [
-  { view: 'Agent Desk', plane: 'Agent', purpose: 'Engineer workspace — composer + run history; the actor that services rocket (Ops) + payload (Trade)' },
-  { view: 'Agent Briefing', plane: 'Agent', purpose: 'New-session entry — work-intent picker, UI progress, live snapshot, full LLM briefing pack' },
-  { view: 'Agent Protocol', plane: 'Agent', purpose: 'Doctrine — interaction modes, three-layer architecture, context pack layers, forbidden actions' },
-  { view: 'Briefing Reconciliation', plane: 'Agent', purpose: 'Doctrine — spine projection rules, reconcile gate (BRIEFING_STALE), Sync vs Health, drift layer map' },
-  { view: 'MCP Contract', plane: 'Agent', purpose: 'Doctrine — Agent tool contract (read / routine / confirm / forbidden) mirrored UI + MCP' },
-  { view: 'Skills & Schedules', plane: 'Agent', purpose: 'Autonomous — Hermes Gateway registered skills, cron/webhook/manual triggers, per-skill actuation level (L0/L1/L2)' },
-  { view: 'Execution Log', plane: 'Agent', purpose: 'Autonomous — Hermes execution history; trigger, result, duration, summary for all autonomous and dispatched runs' },
-  { view: 'Trust & Autonomy', plane: 'Agent', purpose: 'Governance — Flight Director performance KPIs (success rate, MTTR, intervention rate), earned autonomy trust matrix' },
-  { view: 'Operator Plane (L-1)', plane: 'Agent', purpose: 'Infrastructure — Runner + Hermes Gateway heartbeats, dual Mac Mini deploy, watchdog; fate-isolated (D7)' },
-  { view: 'Control Room', plane: 'Observe', purpose: 'Diagnosis step 1 — live KPI + matrix summary; deep-link to Runtime Map; dual flywheel + Agent focus dock' },
-  { view: 'Delivery', plane: 'Operate', purpose: 'CI/CD actuation — Operate / Observe / Blueprint tabs; coupling gate summary' },
-  { view: 'Runtime Map', plane: 'Observe', purpose: 'Diagnosis step 2 — topology-first hardware + SCOPE stack, per-target drawer, gap analysis, runtime-scoped Agent pack' },
-  { view: 'Placement', plane: 'Observe', purpose: 'Scheduling — node pools, workload placement policy matrix, violations; CI preflight for Delivery; workloadPlacementCatalog live evaluation' },
-  { view: 'Cluster', plane: 'Operate', purpose: 'Cluster ops — K3s L0 probe + L1 namespace ensure; nodes, namespaces, workloads via platform-api' },
-  { view: 'Audit', plane: 'Observe', purpose: 'Session & audit — platform-api actuation history (Delivery, Cluster, GitOps, namespace ensure)' },
-  { view: 'Milestones', plane: 'Architecture', purpose: 'Milestones, decisions D1–Dn, north star, roadmap (ops-context spine)' },
-  { view: 'Promote', plane: 'Operate', purpose: 'Read-only release readiness (flywheel A + B)' },
-  { view: 'Deploy Mainline', plane: 'Operate', purpose: 'Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain' },
-  { view: 'Flywheel Vision', plane: 'Architecture', purpose: 'Ultimate North Star — three-layer Agent convergence (Dev / Ops / Business), Redis topology, Dev thin + K3s thick, MCP bridges' },
-  { view: 'Architecture catalogs', plane: 'Architecture', purpose: 'Blueprint, Environments, Platform Roadmap, K3s Architecture, K3s Bootstrap, Standards — Copy Prompt for LLM' },
-  { view: 'Server Console', plane: 'Operate', purpose: 'SSH/WebSocket server console (Tools)' },
+  { view: 'Agent Desk', plane: 'Agent', purpose: 'Engineer workspace — Ops + Trade payload actor' },
+  { view: 'Agent Briefing', plane: 'Agent', purpose: 'New-session entry — work intent, progress, briefing pack' },
+  { view: 'Agent Protocol', plane: 'Agent', purpose: 'Agent doctrine — modes, architecture, forbidden actions' },
+  { view: 'Briefing Reconciliation', plane: 'Agent', purpose: 'Spine projection rules and drift reconciliation' },
+  { view: 'MCP Contract', plane: 'Agent', purpose: 'Agent tool contract — read / routine / confirm / forbidden' },
+  { view: 'Skills & Schedules', plane: 'Agent', purpose: 'Autonomous skill registry and triggers' },
+  { view: 'Execution Log', plane: 'Agent', purpose: 'Autonomous execution history' },
+  { view: 'Trust & Autonomy', plane: 'Agent', purpose: 'Earned autonomy KPIs and trust matrix' },
+  { view: 'Operator Plane (L-1)', plane: 'Agent', purpose: 'Out-of-band runner infrastructure (fate-isolated)' },
+  { view: 'Control Room', plane: 'Observe', purpose: 'Mission diagnosis — KPIs, matrix, flywheels, commander cockpit' },
+  { view: 'Delivery', plane: 'Operate', purpose: 'CI/CD pipelines and release coupling' },
+  { view: 'Runtime Map', plane: 'Observe', purpose: 'Topology-first runtime diagnosis' },
+  { view: 'Placement', plane: 'Observe', purpose: 'Workload placement policy and violations' },
+  { view: 'Cluster', plane: 'Operate', purpose: 'Cluster operations' },
+  { view: 'Audit', plane: 'Observe', purpose: 'Platform actuation audit history' },
+  { view: 'Milestones', plane: 'Architecture', purpose: 'Spine milestones, decisions, focus' },
+  { view: 'Promote', plane: 'Operate', purpose: 'Release readiness (flywheels A + B)' },
+  { view: 'Deploy Mainline', plane: 'Operate', purpose: 'Deployment decision chain' },
+  { view: 'Flywheel Vision', plane: 'Architecture', purpose: 'Three-layer Agent convergence vision' },
+  { view: 'Architecture catalogs', plane: 'Architecture', purpose: 'Governance catalogs and Copy Prompt' },
+  { view: 'Server Console', plane: 'Operate', purpose: 'Remote server console (Tools)' },
 ]
 
 export type AuthorizationLevel = {
@@ -144,48 +191,9 @@ export type AuthorizationLevel = {
 
 export const BLUEPRINT_AUTHORIZATION_LEVELS: AuthorizationLevel[] = [
   { level: 'L0', behavior: 'Read-only probes (matrix, topology, cluster, logs)' },
-  { level: 'L1', behavior: 'Safe actuation via platform-api (rollout restart, scale, sync — north star P1)' },
-  { level: 'L2', behavior: 'Owner-confirmed changes (node join, stack install, Argo rollback — north star P2+)' },
+  { level: 'L1', behavior: 'Safe actuation via platform-api (rollout restart, scale, sync — audited)' },
+  { level: 'L2', behavior: 'Owner-confirmed changes (node join, stack install, Argo rollback)' },
   { level: 'forbidden', behavior: 'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass' },
-]
-
-export type ApiEndpointRow = {
-  method: string
-  path: string
-  description: string
-}
-
-export const PLATFORM_API_ENDPOINTS: ApiEndpointRow[] = [
-  { method: 'GET', path: '/health', description: 'Platform API health' },
-  { method: 'GET', path: '/api/v1/context', description: 'Ops spine (milestones, decisions, focus)' },
-  { method: 'GET', path: '/api/v1/matrix', description: 'Connectivity matrix' },
-  { method: 'GET', path: '/api/v1/topology', description: 'Network topology + live status' },
-  { method: 'GET', path: '/api/v1/cluster', description: 'K3s cluster summary' },
-  { method: 'GET', path: '/api/v1/cluster/nodes', description: 'Node list' },
-  { method: 'GET', path: '/api/v1/cluster/namespaces', description: 'Namespaces (?watch=bifrost)' },
-  { method: 'GET', path: '/api/v1/cluster/workloads?ns=', description: 'Pods in namespace' },
-  { method: 'GET', path: '/api/v1/cluster/metrics', description: 'Cluster CPU/Mem, top pods' },
-  { method: 'GET', path: '/api/v1/cluster/observability', description: 'Layer B probe status' },
-  { method: 'GET', path: '/api/v1/gitops/apps', description: 'Argo CD health and Application sync status (P3 L0)' },
-  { method: 'POST', path: '/api/v1/gitops/apps/{name}/sync', description: 'Trigger Argo CD Application sync (operator)' },
-  { method: 'GET', path: '/api/v1/stack/addons', description: 'CI/CD stack add-on probe — Gitea, Tekton, Registry (P2 L0)' },
-  { method: 'GET', path: '/api/v1/delivery/pipelines', description: 'Tekton Pipeline list (P3 L0)' },
-  { method: 'GET', path: '/api/v1/delivery/pipelines/{name}/runs', description: 'PipelineRun history for a pipeline' },
-  { method: 'POST', path: '/api/v1/delivery/pipelines/{name}/runs', description: 'Start Tekton PipelineRun (operator)' },
-  { method: 'GET', path: '/api/v1/delivery/runs/{id}/logs', description: 'PipelineRun pod log tail' },
-  { method: 'POST', path: '/api/v1/cluster/sync-kubeconfig', description: 'Run fetch-kubeconfig.sh' },
-]
-
-export type ConfigFileRow = {
-  file: string
-  role: string
-}
-
-export const CONFIG_FILES: ConfigFileRow[] = [
-  { file: 'config/environments.yaml', role: 'Dev/prod probe targets' },
-  { file: 'config/ops-context.yaml', role: 'Spine — milestones, decisions, focus' },
-  { file: 'config/topology.yaml', role: 'Hardware graph' },
-  { file: 'config/clusters.yaml', role: 'K3s cluster registry + Bifrost namespaces' },
 ]
 
 export type SuccessCriterion = {
@@ -193,11 +201,16 @@ export type SuccessCriterion = {
   criterion: string
 }
 
+/** North Star completion conditions (Constitution) — not current implementation progress. */
 export const SUCCESS_CRITERIA: SuccessCriterion[] = [
   { area: 'Cluster', criterion: 'Node join/drain, namespace, workload restart/scale/logs — UI/API only' },
   { area: 'Delivery', criterion: 'Tekton run, Argo sync/rollback — UI/API only' },
   { area: 'Promote', criterion: 'release_gate trigger and results — UI/API only' },
-  { area: 'Runtime', criterion: 'Runtime Map / Control Room live strip / FocusStrip — clickable to executable actions, not read-only' },
+  {
+    area: 'Runtime',
+    criterion:
+      'Runtime Map, Control Room, and Operate views form a closed Observe→Act loop with deep-links; live readiness is Projection (matrix/gate)',
+  },
   { area: 'Spine', criterion: 'GET /api/v1/context + Program page always shows north star' },
   { area: 'MCP', criterion: 'MCP Tools and UI — same permissions, same audit (AI Agent self-interaction loop)' },
 ]
@@ -257,24 +270,24 @@ export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
   },
 ]
 
-export type AiPlatformPhase = { id: string; timeBox: string; deliverables: string; businessUnlock: string }
+export type AiPlatformPhase = { id: string; sequence: string; deliverables: string; businessUnlock: string }
 
 export const AI_PLATFORM_PHASES: AiPlatformPhase[] = [
   {
     id: 'A — Gates',
-    timeBox: 'now ~3mo',
+    sequence: 'First',
     deliverables: 'release_gate.sh, Mac Mini CI, MkDocs+Goal, 2C-B Prod',
     businessUnlock: 'Page refactoring continues; trade review AI offline trial (4090 Ollama)',
   },
   {
     id: 'B — GitOps',
-    timeBox: '3~9mo',
+    sequence: 'Second',
     deliverables: 'K3s + Gitea + Tekton + ArgoCD + k8s/base/',
     businessUnlock: 'Frontend Staging on K8s; review index CronJob',
   },
   {
     id: 'C — Closed loop',
-    timeBox: '9~18mo',
+    sequence: 'Third',
     deliverables: 'Prometheus/Loki/Grafana + bifrost-ops-mcp + AlertManager',
     businessUnlock: 'Ops Copilot production-ready; trade review RAG via Open-WebUI',
   },
@@ -301,8 +314,9 @@ export const AI_PLATFORM_BOUNDARIES: AiBoundary[] = [
   { rule: 'Phase 1 constraint', detail: 'While frontend points at Legacy API, platform must not mix "API migration" and "release" into one change (single-variable principle)' },
 ]
 
+/** Actuation phase definitions (Constitution) — which phase means what; live progress is Projection. */
 export const ACTUATION_PHASES: ActuationPhaseRow[] = [
-  { phase: 'P0 (current)', deliverables: 'Cluster L0 probes, Delivery dual track display', eliminates: 'Observation only' },
+  { phase: 'P0', deliverables: 'Cluster L0 probes, Delivery dual track display', eliminates: 'Observation only' },
   { phase: 'P1', deliverables: 'Auth + audit + workload L1 + logs', eliminates: 'Daily kubectl' },
   { phase: 'P2', deliverables: 'Node lifecycle job + Cluster UI wizard', eliminates: 'install-server.sh, join, drain' },
   { phase: 'P3', deliverables: 'GitOps + CI execution (Argo/Tekton API)', eliminates: 'Argo UI, tkn CLI' },
@@ -310,11 +324,23 @@ export const ACTUATION_PHASES: ActuationPhaseRow[] = [
   { phase: 'P5', deliverables: 'MCP actuation Tools', eliminates: 'Agent direct shell' },
 ]
 
-/** Build LLM-optimized text for the Blueprint page. */
-export function buildBlueprintLlmPack(spine?: OpsContextResponse): string {
+export type BlueprintLlmPackOptions = {
+  spine?: OpsContextResponse
+  projectionPack?: string
+}
+
+/** Constitution-only LLM pack section. */
+export function buildBlueprintConstitutionPack(): string {
   const lines: string[] = [
-    '# Bifrost Ops — Blueprint (Architecture & North Star)',
-    `# Source: ${BLUEPRINT_SOURCE} v${BLUEPRINT_VERSION}`,
+    '## Constitution (slow-changing principles)',
+    '',
+    '### Governance layers',
+    ...GOVERNANCE_LAYERS.map(
+      l => `- **${l.layer}** (${l.changeRate}): ${l.content} — authority: ${l.authority}`,
+    ),
+    '',
+    '### Boundary rules',
+    ...BOUNDARY_RULES.map(r => `- ${r.question} → **${r.answerLayer}**`),
     '',
     '## North Star',
     `Strategy: ${NORTH_STAR_STRATEGY} (decision ${NORTH_STAR_DECISION})`,
@@ -335,16 +361,10 @@ export function buildBlueprintLlmPack(spine?: OpsContextResponse): string {
     '## Authorization levels',
     ...BLUEPRINT_AUTHORIZATION_LEVELS.map(a => `- **${a.level}**: ${a.behavior}`),
     '',
-    '## Platform API endpoints',
-    ...PLATFORM_API_ENDPOINTS.map(e => `- ${e.method} ${e.path} — ${e.description}`),
-    '',
-    '## Configuration files',
-    ...CONFIG_FILES.map(c => `- **${c.file}** — ${c.role}`),
-    '',
-    '## Success criteria (north star completion)',
+    '## Success criteria (Constitution — North Star completion)',
     ...SUCCESS_CRITERIA.map(s => `- [${s.area}] ${s.criterion}`),
     '',
-    '## Actuation phases (P0–P5)',
+    '## Actuation phases (Constitution definitions P0–P5)',
     ...ACTUATION_PHASES.map(p => `- **${p.phase}**: ${p.deliverables} → eliminates: ${p.eliminates}`),
     '',
     '## AI Native Ops Platform — Mission',
@@ -358,8 +378,10 @@ export function buildBlueprintLlmPack(spine?: OpsContextResponse): string {
       ...c.examples.map(e => `- ${e}`),
     ]),
     '',
-    '## AI Platform phases',
-    ...AI_PLATFORM_PHASES.map(p => `- **${p.id}** (${p.timeBox}): ${p.deliverables} → unlocks: ${p.businessUnlock}`),
+    '## AI Platform phases (sequence — no calendar time boxes)',
+    ...AI_PLATFORM_PHASES.map(
+      p => `- **${p.id}** (${p.sequence}): ${p.deliverables} → unlocks: ${p.businessUnlock}`,
+    ),
     '',
     '## AI Platform success criteria',
     ...AI_PLATFORM_SUCCESS.map(s => `- [${s.area}] ${s.criterion}`),
@@ -367,14 +389,36 @@ export function buildBlueprintLlmPack(spine?: OpsContextResponse): string {
     '## AI Platform boundaries',
     ...AI_PLATFORM_BOUNDARIES.map(b => `- **${b.rule}**: ${b.detail}`),
   ]
+  return lines.join('\n')
+}
+
+/** Build LLM-optimized text for the Blueprint page (Constitution + Spine + Projection). */
+export function buildBlueprintLlmPack(options?: OpsContextResponse | BlueprintLlmPackOptions): string {
+  const opts: BlueprintLlmPackOptions =
+    options != null && 'deployment' in options
+      ? { spine: options }
+      : (options ?? {})
+  const { spine, projectionPack } = opts
+
+  const lines: string[] = [
+    '# Bifrost Ops — Blueprint (Architecture & North Star)',
+    `# Source: ${BLUEPRINT_SOURCE} v${BLUEPRINT_VERSION}`,
+    '',
+    buildBlueprintConstitutionPack(),
+  ]
+
+  if (projectionPack != null && projectionPack.trim() !== '') {
+    lines.push('', projectionPack)
+  }
 
   if (spine != null) {
     lines.push(
       '',
-      '## Live spine snapshot',
+      '## Spine (live sign-off state)',
       `- phase: ${spine.deployment.phase}`,
       `- active_track: ${spine.deployment.active_track}`,
       `- focus: ${spine.focus.headline}`,
+      '- Note: milestone SIGNED = Owner historical sign-off; live gate readiness from Projection (matrix/promote).',
     )
   }
 

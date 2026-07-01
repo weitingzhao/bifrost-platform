@@ -1,11 +1,22 @@
-import { useCallback, useState } from 'react'
-import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, DenseTag } from '@bifrost/ui'
+import { useCallback, useMemo, useState } from 'react'
+import {
+  Button,
+  DenseDataTable,
+  DenseTableHeader,
+  DenseTableBody,
+  DenseTableHeadRow,
+  DenseTableRow,
+  DenseTableHead,
+  DenseTableCell,
+  DenseTag,
+} from '@bifrost/ui'
+import { useQuery } from '@tanstack/react-query'
 import type { OpsContextResponse } from '@/api/types'
-import { fetchContext } from '@/api/platform'
+import { fetchContext, fetchMcpTools } from '@/api/platform'
 import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { BlueprintPhase1SignoffPanel } from '@/components/architecture/BlueprintPhase1SignoffPanel'
 import {
-  ACTUATION_PHASES,
   AI_MERGE_RATIONALE,
   AI_PLATFORM_BOUNDARIES,
   AI_PLATFORM_CAPABILITIES,
@@ -15,31 +26,69 @@ import {
   BLUEPRINT_AUTHORIZATION_LEVELS,
   BLUEPRINT_SOURCE,
   BLUEPRINT_VERSION,
-  CONFIG_FILES,
+  BOUNDARY_RULES,
   CONSOLE_VIEWS,
   AGENT_LAYERING,
   DESIGN_PRINCIPLES,
+  GOVERNANCE_LAYER_CONSTITUTION,
+  GOVERNANCE_LAYER_PROJECTION,
+  GOVERNANCE_LAYERS,
   NORTH_STAR_DECISION,
   NORTH_STAR_STATEMENT,
   NORTH_STAR_STRATEGY,
   OWNER_EXCEPTIONS,
-  PLATFORM_API_ENDPOINTS,
   STRATEGY_C_LAYERS,
   SUCCESS_CRITERIA,
   buildBlueprintLlmPack,
 } from '@/lib/architecture/blueprintCatalog'
+import {
+  PROJECTION_AUTHORITY,
+  actuationPhaseProgress,
+  buildBlueprintProjectionPack,
+  constitutionActuationWithProgress,
+} from '@/lib/architecture/blueprintProjection'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
+function LayerBanner({ layer }: { layer: typeof GOVERNANCE_LAYER_CONSTITUTION | typeof GOVERNANCE_LAYER_PROJECTION }) {
+  const meta = GOVERNANCE_LAYERS.find(l => l.layer === layer)
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--secondary)]/50 px-3 py-2">
+      <DenseTag variant={layer === GOVERNANCE_LAYER_CONSTITUTION ? 'category' : 'neutral'}>{layer}</DenseTag>
+      {meta != null && (
+        <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          {meta.changeRate} · {meta.authority}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
+  const toolsQuery = useQuery({ queryKey: ['mcp', 'tools'], queryFn: fetchMcpTools })
+
+  const actuationRows = useMemo(
+    () => constitutionActuationWithProgress(toolsQuery.data?.tools),
+    [toolsQuery.data?.tools],
+  )
+
+  const phaseProgress = useMemo(
+    () => (toolsQuery.data != null ? actuationPhaseProgress(toolsQuery.data.tools) : []),
+    [toolsQuery.data],
+  )
 
   const handleCopyForLlm = useCallback(async () => {
     let spine = context
     if (spine == null) {
-      try { spine = await fetchContext() } catch { /* static only */ }
+      try {
+        spine = await fetchContext()
+      } catch {
+        /* static only */
+      }
     }
-    const text = buildBlueprintLlmPack(spine)
+    const projectionPack = buildBlueprintProjectionPack(toolsQuery.data)
+    const text = buildBlueprintLlmPack({ spine, projectionPack })
     try {
       await navigator.clipboard.writeText(text)
       setCopyState('copied')
@@ -48,7 +97,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
       setCopyState('error')
       window.setTimeout(() => setCopyState('idle'), 3000)
     }
-  }, [context])
+  }, [context, toolsQuery.data])
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -56,10 +105,9 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         title="Overview"
         description={
           <>
-            HOW we build it — architectural principles, control-plane layers, authorization model, and design rules toward the Vision.
-            Source:{' '}
-            <code className="font-mono-tabular text-[var(--primary)]">{BLUEPRINT_SOURCE}</code>
-            {' '}(v{BLUEPRINT_VERSION}).
+            HOW we build it — Constitution (principles) vs Projection (live capability). Source:{' '}
+            <code className="font-mono-tabular text-[var(--primary)]">{BLUEPRINT_SOURCE}</code> (v
+            {BLUEPRINT_VERSION}).
           </>
         }
         actions={
@@ -70,7 +118,44 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         overflow="visible"
       />
 
-      {/* 1 — North Star */}
+      <BlueprintPhase1SignoffPanel />
+
+      {/* Governance boundary */}
+      <CatalogSection title="Governance boundary">
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Layer</DenseTableHead>
+              <DenseTableHead>Change rate</DenseTableHead>
+              <DenseTableHead>Authority</DenseTableHead>
+              <DenseTableHead>Content</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {GOVERNANCE_LAYERS.map(l => (
+              <DenseTableRow key={l.layer}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{l.layer}</DenseTableCell>
+                <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  {l.changeRate}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{l.authority}</DenseTableCell>
+                <DenseTableCell>{l.content}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+        <ul className="m-0 list-disc px-6 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          {BOUNDARY_RULES.map(r => (
+            <li key={r.question}>
+              {r.question} → <DenseTag variant="category">{r.answerLayer}</DenseTag>
+            </li>
+          ))}
+        </ul>
+      </CatalogSection>
+
+      <LayerBanner layer={GOVERNANCE_LAYER_CONSTITUTION} />
+
+      {/* North Star */}
       <CatalogSection title="North Star">
         <div className="px-3 py-3 text-[var(--text-dense)] flex flex-col gap-3">
           <div className="flex items-center gap-2 flex-wrap">
@@ -81,7 +166,6 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </div>
       </CatalogSection>
 
-      {/* 2 — Owner exceptions */}
       <CatalogSection title="Owner exceptions">
         <DenseDataTable>
           <DenseTableHeader>
@@ -101,7 +185,6 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </DenseDataTable>
       </CatalogSection>
 
-      {/* 3 — Strategy C layers */}
       <CatalogSection title="Strategy C — control-plane layers">
         <DenseDataTable>
           <DenseTableHeader>
@@ -121,19 +204,19 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </DenseDataTable>
       </CatalogSection>
 
-      {/* 4 — Design principles */}
       <CatalogSection title="Design principles">
         <ul className="m-0 pl-4 py-2 flex flex-col gap-2 text-[var(--text-dense)]">
           {DESIGN_PRINCIPLES.map(p => (
             <li key={p.id}>
-              <strong>{p.id}. {p.title}</strong>
+              <strong>
+                {p.id}. {p.title}
+              </strong>
               <span className="text-[var(--muted-foreground)]"> — {p.description}</span>
             </li>
           ))}
         </ul>
       </CatalogSection>
 
-      {/* 4b — Agent layering */}
       <CatalogSection title="Agent layering (monorepo-first)">
         <div className="flex flex-col gap-3 py-2">
           {AGENT_LAYERING.map(l => (
@@ -141,9 +224,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
               <div className="flex items-center gap-2">
                 <strong className="text-[var(--text-dense-label)]">{l.layer}</strong>
               </div>
-              <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                {l.substrate}
-              </p>
+              <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{l.substrate}</p>
               <p className="m-0 mt-0.5 text-[var(--text-dense-meta)]">{l.lifecycle}</p>
               {l.extractionTriggers != null && l.extractionTriggers.length > 0 && (
                 <div className="mt-1.5">
@@ -163,8 +244,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {/* 5 — Console views */}
-        <CatalogSection title="Console views">
+        <CatalogSection title="Console views (role summary)">
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
@@ -177,7 +257,9 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
               {CONSOLE_VIEWS.map(v => (
                 <DenseTableRow key={v.view}>
                   <DenseTableCell className="font-medium whitespace-nowrap">{v.view}</DenseTableCell>
-                  <DenseTableCell><DenseTag variant="category">{v.plane}</DenseTag></DenseTableCell>
+                  <DenseTableCell>
+                    <DenseTag variant="category">{v.plane}</DenseTag>
+                  </DenseTableCell>
                   <DenseTableCell className="text-[var(--muted-foreground)]">{v.purpose}</DenseTableCell>
                 </DenseTableRow>
               ))}
@@ -185,7 +267,6 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
           </DenseDataTable>
         </CatalogSection>
 
-        {/* 6 — Authorization levels */}
         <CatalogSection title="Authorization levels">
           <DenseDataTable>
             <DenseTableHeader>
@@ -208,50 +289,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </CatalogSection>
       </div>
 
-      {/* 7 — Platform API endpoints */}
-      <CatalogSection title="Platform API endpoints">
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Method</DenseTableHead>
-              <DenseTableHead>Path</DenseTableHead>
-              <DenseTableHead>Description</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {PLATFORM_API_ENDPOINTS.map(e => (
-              <DenseTableRow key={`${e.method}-${e.path}`}>
-                <DenseTableCell><DenseTag variant="category" className="font-mono-tabular">{e.method}</DenseTag></DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{e.path}</DenseTableCell>
-                <DenseTableCell className="text-[var(--muted-foreground)]">{e.description}</DenseTableCell>
-              </DenseTableRow>
-            ))}
-          </DenseTableBody>
-        </DenseDataTable>
-      </CatalogSection>
-
-      {/* 8 — Configuration files */}
-      <CatalogSection title="Configuration files">
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>File</DenseTableHead>
-              <DenseTableHead>Role</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {CONFIG_FILES.map(c => (
-              <DenseTableRow key={c.file}>
-                <DenseTableCell className="font-mono-tabular">{c.file}</DenseTableCell>
-                <DenseTableCell className="text-[var(--muted-foreground)]">{c.role}</DenseTableCell>
-              </DenseTableRow>
-            ))}
-          </DenseTableBody>
-        </DenseDataTable>
-      </CatalogSection>
-
-      {/* 9 — Success criteria */}
-      <CatalogSection title="Success criteria (north star completion)">
+      <CatalogSection title="Success criteria (Constitution — North Star completion)">
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
@@ -270,29 +308,35 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </DenseDataTable>
       </CatalogSection>
 
-      {/* 10 — Actuation phases */}
-      <CatalogSection title="Actuation phases (P0–P5)">
+      <CatalogSection title="Actuation phases (Constitution definitions P0–P5)">
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
               <DenseTableHead>Phase</DenseTableHead>
               <DenseTableHead>Deliverables</DenseTableHead>
               <DenseTableHead>Eliminates</DenseTableHead>
+              <DenseTableHead>MCP progress</DenseTableHead>
             </DenseTableHeadRow>
           </DenseTableHeader>
           <DenseTableBody>
-            {ACTUATION_PHASES.map(p => (
+            {actuationRows.map(p => (
               <DenseTableRow key={p.phase}>
                 <DenseTableCell className="font-medium whitespace-nowrap">{p.phase}</DenseTableCell>
                 <DenseTableCell>{p.deliverables}</DenseTableCell>
                 <DenseTableCell className="text-[var(--muted-foreground)]">{p.eliminates}</DenseTableCell>
+                <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  {p.progress ?? '—'}
+                </DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>
         </DenseDataTable>
+        <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Phase labels define intent (Constitution). Implemented/total counts come from MCP tool phase field
+          (Projection).
+        </p>
       </CatalogSection>
 
-      {/* 11 — AI Native Ops Platform */}
       <CatalogSection title="AI Native Ops Platform — Mission">
         <div className="flex flex-col gap-2 px-3 py-3 text-[var(--text-dense)]">
           <p className="m-0 leading-relaxed">{AI_PLATFORM_MISSION}</p>
@@ -300,7 +344,6 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </div>
       </CatalogSection>
 
-      {/* 12 — AI Capabilities */}
       <CatalogSection title="AI Platform capabilities">
         {AI_PLATFORM_CAPABILITIES.map(cap => (
           <div key={cap.name} className="border-b border-[var(--border)] last:border-b-0">
@@ -318,13 +361,12 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {/* 13 — AI Platform phases */}
-        <CatalogSection title="AI Platform phases">
+        <CatalogSection title="AI Platform phases (sequence)">
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
                 <DenseTableHead>Phase</DenseTableHead>
-                <DenseTableHead>Time</DenseTableHead>
+                <DenseTableHead>Sequence</DenseTableHead>
                 <DenseTableHead>Deliverables</DenseTableHead>
                 <DenseTableHead>Business unlock</DenseTableHead>
               </DenseTableHeadRow>
@@ -333,7 +375,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
               {AI_PLATFORM_PHASES.map(p => (
                 <DenseTableRow key={p.id}>
                   <DenseTableCell className="font-medium whitespace-nowrap">{p.id}</DenseTableCell>
-                  <DenseTableCell className="text-[var(--text-dense-meta)]">{p.timeBox}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--text-dense-meta)]">{p.sequence}</DenseTableCell>
                   <DenseTableCell>{p.deliverables}</DenseTableCell>
                   <DenseTableCell className="text-[var(--muted-foreground)]">{p.businessUnlock}</DenseTableCell>
                 </DenseTableRow>
@@ -342,7 +384,6 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
           </DenseDataTable>
         </CatalogSection>
 
-        {/* 14 — AI Boundaries */}
         <CatalogSection title="AI Platform boundaries">
           <DenseDataTable>
             <DenseTableHeader>
@@ -363,7 +404,6 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         </CatalogSection>
       </div>
 
-      {/* 15 — AI Platform success criteria */}
       <CatalogSection title="AI Platform success criteria">
         <DenseDataTable>
           <DenseTableHeader>
@@ -382,6 +422,79 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
           </DenseTableBody>
         </DenseDataTable>
       </CatalogSection>
+
+      <LayerBanner layer={GOVERNANCE_LAYER_PROJECTION} />
+
+      <CatalogSection title="Projection — API & actuation authority">
+        <div className="flex flex-col gap-3 px-3 py-3 text-[var(--text-dense)]">
+          <p className="m-0 text-[var(--muted-foreground)]">
+            Live API inventory is not duplicated in Constitution. Authoritative sources:
+          </p>
+          <ul className="m-0 list-disc pl-4 text-[var(--text-dense-meta)]">
+            <li>
+              <code className="font-mono-tabular">{PROJECTION_AUTHORITY.apiCatalog}</code>
+            </li>
+            <li>
+              Source: <code className="font-mono-tabular">{PROJECTION_AUTHORITY.apiSource}</code>
+            </li>
+            <li>{PROJECTION_AUTHORITY.configNote}</li>
+          </ul>
+          {toolsQuery.isLoading && (
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">Loading MCP tools…</p>
+          )}
+          {toolsQuery.isError && (
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--warning)]">
+              MCP tools unavailable — start platform-api to load live projection.
+            </p>
+          )}
+          {toolsQuery.data != null && (
+            <p className="m-0">
+              <DenseTag variant="success">
+                {toolsQuery.data.implemented_count}/{toolsQuery.data.tools.length} tools implemented
+              </DenseTag>
+              <span className="ml-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                See Architecture → MCP Contract for full catalog and Cursor setup.
+              </span>
+            </p>
+          )}
+        </div>
+      </CatalogSection>
+
+      {phaseProgress.length > 0 && (
+        <CatalogSection title="Projection — actuation progress (from MCP)">
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Phase label</DenseTableHead>
+                <DenseTableHead>Implemented</DenseTableHead>
+                <DenseTableHead>Total</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {phaseProgress.map(p => (
+                <DenseTableRow key={p.phase}>
+                  <DenseTableCell className="font-medium">{p.phase}</DenseTableCell>
+                  <DenseTableCell>{p.implemented}</DenseTableCell>
+                  <DenseTableCell>{p.total}</DenseTableCell>
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        </CatalogSection>
+      )}
+
+      {context != null && (
+        <CatalogSection title="Spine snapshot (live)">
+          <div className="px-3 py-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)] flex flex-col gap-1">
+            <p className="m-0">phase: {context.deployment.phase}</p>
+            <p className="m-0">active_track: {context.deployment.active_track}</p>
+            <p className="m-0">focus: {context.focus.headline}</p>
+            <p className="m-0 mt-2 text-[var(--text-dense-caption)]">
+              Milestone SIGNED = historical Owner sign-off; live gate readiness from Projection (matrix / Promote).
+            </p>
+          </div>
+        </CatalogSection>
+      )}
     </div>
   )
 }

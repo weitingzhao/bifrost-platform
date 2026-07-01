@@ -1,13 +1,14 @@
+import { useMemo } from 'react'
 import { DenseTag, StatusLamp } from '@bifrost/ui'
-import type { StgSmokeResponse } from '@/api/types'
+import type { OpsContextResponse, StgSmokeResponse } from '@/api/types'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
+import { evaluateStgDeliverStatus } from '@/lib/control-room/matrixSummary'
 import {
+  buildStgReleasePhases,
   DELIVERY_PIPELINE_CATALOG,
   DELIVERY_RUNBOOK_COMMANDS,
-  STG_RELEASE_PHASES,
   type DeliveryPhaseStatus,
 } from '@/lib/architecture/deliveryMainlineCatalog'
-import { evaluateStgDeliverStatus } from '@/lib/control-room/matrixSummary'
 
 function phaseLamp(status: DeliveryPhaseStatus): 'ok' | 'fail' | 'degraded' | 'unknown' {
   switch (status) {
@@ -22,34 +23,69 @@ function phaseLamp(status: DeliveryPhaseStatus): 'ok' | 'fail' | 'degraded' | 'u
   }
 }
 
+function phaseStatusTagVariant(status: DeliveryPhaseStatus): 'success' | 'warning' | 'danger' | 'neutral' {
+  switch (status) {
+    case 'done':
+      return 'success'
+    case 'active':
+      return 'warning'
+    case 'blocked':
+      return 'danger'
+    default:
+      return 'neutral'
+  }
+}
+
 interface DeliveryReleaseWorkflowPanelProps {
+  context: OpsContextResponse
   stgSmoke?: StgSmokeResponse
   lastDeliverSucceeded?: boolean
+  onOpenMilestones?: () => void
 }
 
 export function DeliveryReleaseWorkflowPanel({
+  context,
   stgSmoke,
   lastDeliverSucceeded = false,
+  onOpenMilestones,
 }: DeliveryReleaseWorkflowPanelProps) {
-  const stgStatus = evaluateStgDeliverStatus(stgSmoke, lastDeliverSucceeded)
+  const phases = useMemo(() => buildStgReleasePhases(context), [context])
+  const stgSmokeStatus = evaluateStgDeliverStatus(stgSmoke, lastDeliverSucceeded)
+
+  const stgTrackDone = phases.filter(p => p.id !== 'prod-cutover').every(p => p.status === 'done')
+  const prodPhase = phases.find(p => p.id === 'prod-cutover')
 
   return (
     <OpsSection
       title="STG release workflow"
-      description="Prepare → Deliver → Verify → STG gate. Prod cutover is a separate track (Deploy Mainline / D1)."
+      description="Prepare → Deliver → Verify → STG gate. Prod cutover is a separate track (Deploy Mainline / D1). Phase status from spine (Projection)."
       bodyPadding="default"
       overflow="visible"
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1.5 text-[var(--text-dense-meta)]">
-          <StatusLamp value={stgStatus.ready ? 'ok' : stgStatus.smokeFails ? 'fail' : 'degraded'} kind="reach" />
+          <StatusLamp value={stgTrackDone ? 'ok' : 'degraded'} kind="reach" />
           <span className="font-medium text-[var(--text-dense-label)]">
-            {stgStatus.ready ? 'STG deliver track ready' : 'STG deliver track in progress'}
+            {stgTrackDone ? 'STG deliver track complete (spine)' : 'STG deliver track in progress (spine)'}
           </span>
         </span>
-        {!stgStatus.ready && stgStatus.reasons.length > 0 && (
-          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {stgStatus.reasons.join(' · ')}
+        {prodPhase != null && (
+          <DenseTag variant={phaseStatusTagVariant(prodPhase.status)}>
+            Prod cutover · {prodPhase.status}
+          </DenseTag>
+        )}
+        {onOpenMilestones != null && (
+          <button
+            type="button"
+            className="text-[var(--text-dense-caption)] text-[var(--primary)] underline-offset-2 hover:underline"
+            onClick={onOpenMilestones}
+          >
+            Open Milestones
+          </button>
+        )}
+        {!stgSmokeStatus.ready && stgSmokeStatus.reasons.length > 0 && (
+          <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            Live smoke: {stgSmokeStatus.reasons.join(' · ')}
           </span>
         )}
       </div>
@@ -71,9 +107,9 @@ export function DeliveryReleaseWorkflowPanel({
         ))}
       </ul>
 
-      <OpsSubsectionTitle>Phases</OpsSubsectionTitle>
+      <OpsSubsectionTitle>Phases (Projection ← spine)</OpsSubsectionTitle>
       <ol className="m-0 list-none space-y-3 p-0">
-        {STG_RELEASE_PHASES.map(phase => (
+        {phases.map(phase => (
           <li
             key={phase.id}
             className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2"
@@ -84,6 +120,12 @@ export function DeliveryReleaseWorkflowPanel({
                 {phase.seq}. {phase.title}
               </span>
               <DenseTag variant="category">{phase.owner}</DenseTag>
+              <DenseTag variant={phaseStatusTagVariant(phase.status)}>{phase.status}</DenseTag>
+              {phase.spineMilestoneId != null && phase.spineStatus != null && (
+                <DenseTag variant="neutral" className="font-mono-tabular text-[10px]">
+                  {phase.spineMilestoneId} · {phase.spineStatus}
+                </DenseTag>
+              )}
             </div>
             <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               {phase.summary}

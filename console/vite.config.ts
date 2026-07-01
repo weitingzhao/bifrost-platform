@@ -19,6 +19,8 @@ export default defineConfig({
     ],
   },
   server: {
+    // Bind IPv4 explicitly — default [::1] breaks http://127.0.0.1:5180 in browsers.
+    host: '127.0.0.1',
     port: 5180,
     strictPort: true,
     fs: {

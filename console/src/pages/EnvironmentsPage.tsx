@@ -219,12 +219,12 @@ export function EnvironmentsPage({
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <CatalogSection title="Platform phases (Goal)">
+        <CatalogSection title="Platform phases (sequence)">
           <ul className="m-0 pl-4 flex flex-col gap-2 text-[var(--text-dense)]">
             {PLATFORM_PHASES.map(p => (
               <li key={p.id}>
                 <strong>Phase {p.id}</strong> — {p.label}{' '}
-                <span className="text-[var(--muted-foreground)]">({p.timeframe})</span>
+                <span className="text-[var(--muted-foreground)]">({p.sequence})</span>
                 <br />
                 <span className="text-[var(--muted-foreground)] text-[var(--text-dense-meta)]">
                   {p.deliverables}

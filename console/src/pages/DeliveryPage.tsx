@@ -4,6 +4,7 @@ import { DeliveryOperateView } from '@/components/delivery/DeliveryOperateView'
 import { DeliveryObserveView } from '@/components/delivery/DeliveryObserveView'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { DeliveryReleaseWorkflowPanel } from '@/components/delivery/DeliveryReleaseWorkflowPanel'
+import { GovernancePhase2SignoffPanel } from '@/components/architecture/GovernancePhase2SignoffPanel'
 import { DeliveryViewShell } from '@/components/delivery/DeliveryViewShell'
 import { ProdDeliverPanel } from '@/components/delivery/ProdDeliverPanel'
 import { StackInstallWizardPanel } from '@/components/delivery/StackInstallWizardPanel'
@@ -165,10 +166,13 @@ export function DeliveryPage({
 
         {pageTab === 'blueprint' && (
           <>
+            <GovernancePhase2SignoffPanel />
             <DeliveryReleaseWorkflowPanel
-            stgSmoke={stgSmoke}
-            lastDeliverSucceeded={lastDeliverSucceeded}
-          />
+              context={context}
+              stgSmoke={stgSmoke}
+              lastDeliverSucceeded={lastDeliverSucceeded}
+              onOpenMilestones={onOpenMilestones}
+            />
           <ProdDeliverPanel
             context={context}
             onOpenDeployMainline={onOpenDeployMainline}
