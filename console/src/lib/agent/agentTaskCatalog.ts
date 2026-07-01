@@ -200,6 +200,18 @@ export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
     description:
       'Fresh matrix reprobe + verify_payload; post_fix_verification.passed must be true before declaring remediation success.',
   },
+  {
+    id: 'hermes-first-task',
+    scope: 'hermes-first-task',
+    label: 'Hermes · First task',
+    domain: 'Platform',
+    action: 'Brief',
+    tier: 'manual',
+    entryPoint: 'Control Room · Copy first-task prompt · Nous Hermes dashboard',
+    trigger: 'Owner onboarding — first L0 read-only Mission health pass via Hermes + platform MCP',
+    description:
+      'Call get_hermes_readiness, then run hermes-mission-health-l0 prompt (verify_mission_snapshot + matrix). No actuation.',
+  },
 ]
 
 /** scope (and legacy aliases) → display label. Built once from the catalog. */

@@ -58,6 +58,8 @@ func Catalog() []ToolView {
 		tool("list_briefing_session_results", "Recent Agent Desk session close records", "read", "GET", "/api/v1/briefing/session-results", "viewer", "Agent", true),
 		tool("close_briefing_session", "Record Agent Desk session close to audit (operator)", "routine", "POST", "/api/v1/briefing/session-results", "operator", "Agent", true),
 		tool("get_agent_bridge", "Agent host + MCP bridge status (runner, Hermes slot, platform MCP)", "read", "GET", "/api/v1/agent/bridge", "viewer", "Agent", true),
+		tool("get_hermes_readiness", "Hermes gateway + LLM key + platform MCP readiness for first L0 task", "read", "GET", "/api/v1/agent/hermes/readiness", "viewer", "Agent", true),
+		tool("get_hermes_first_task", "Canonical Hermes First Task prompt (L0 read-only Mission health pass)", "read", "GET", "/api/v1/agent/hermes/first-task", "viewer", "Agent", true),
 		tool("get_agent_nightly_report", "Nightly drift scan report from agent host", "read", "GET", "/api/v1/agent/nightly-report", "viewer", "Agent", true),
 		tool("get_remediation_health", "Remediation runner health on agent host", "read", "GET", "/api/v1/remediation/health", "viewer", "Agent", true),
 		tool("list_remediation_jobs", "Recent agent remediation tasks", "read", "GET", "/api/v1/remediation/", "operator", "Agent", true),

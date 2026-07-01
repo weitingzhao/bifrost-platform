@@ -5,7 +5,7 @@
  * Single source of truth — do not duplicate elsewhere.
  */
 
-export const AGENT_PROTOCOL_VERSION = '2026-06-26'
+export const AGENT_PROTOCOL_VERSION = '2026-07-02'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 export type AgentModeRow = {
@@ -157,6 +157,54 @@ export const MISSION_POST_FIX_LOOP: MissionPostFixStep[] = [
     tool: 'finish_job (runner auto-runs step 2)',
     required: true,
     detail: 'If post_fix_verification.passed is false, continue diagnosis — do not declare success.',
+  },
+]
+
+/** Mission Signal Phase 4 — Hermes First Task (L0 read-only onboarding). */
+export type HermesFirstTaskStep = {
+  step: string
+  tool: string
+  required: boolean
+  detail: string
+}
+
+export const HERMES_FIRST_TASK_MCP = {
+  readiness: 'get_hermes_readiness — GET /api/v1/agent/hermes/readiness',
+  firstTask: 'get_hermes_first_task — GET /api/v1/agent/hermes/first-task',
+  bridge: 'get_agent_bridge',
+  verifySnapshot: 'verify_mission_snapshot',
+} as const
+
+export const HERMES_FIRST_TASK_STEPS: HermesFirstTaskStep[] = [
+  {
+    step: '0. Readiness gate',
+    tool: 'get_hermes_readiness',
+    required: true,
+    detail: 'Confirm ready=true (Hermes gateway, LLM key, platform MCP agent tools). If blockers present, fix config before running task.',
+  },
+  {
+    step: '1. Bridge check',
+    tool: 'get_agent_bridge',
+    required: true,
+    detail: 'Confirm Nous Hermes + platform MCP stdio bridge on agent host.',
+  },
+  {
+    step: '2. Mission snapshot',
+    tool: 'verify_mission_snapshot',
+    required: true,
+    detail: 'Fresh reprobe + post_fix_verification; cite passed/false in report.',
+  },
+  {
+    step: '3. Matrix context',
+    tool: 'get_connectivity_matrix',
+    required: true,
+    detail: 'List failing trade/datastore targets; classify PROBE_DRIFT vs DATA_LAYER via verify_payload guidance.',
+  },
+  {
+    step: '4. Report only',
+    tool: 'L0 — no actuation',
+    required: true,
+    detail: 'Structured English summary for Owner. Do not call rollout_restart, deploy, or L1+ tools on first task.',
   },
 ]
 
@@ -345,6 +393,11 @@ export function buildAgentProtocolLlmPack(): string {
     `- MCP: \`${MISSION_DIAGNOSTIC_MCP.verifyMissionSnapshot}\` — required before closing remediation`,
     ...MISSION_POST_FIX_LOOP.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
     '- Runner emits event kind=post_fix_verification on job complete; Control Room banner shows reprobe result.',
+    '',
+    '## Hermes First Task (L0 — Mission Signal Phase 4)',
+    `- Readiness: \`${HERMES_FIRST_TASK_MCP.readiness}\``,
+    `- Prompt: \`${HERMES_FIRST_TASK_MCP.firstTask}\` — task id hermes-mission-health-l0`,
+    ...HERMES_FIRST_TASK_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
     '',
     '## Example opening prompts',
     ...OPENING_PROMPTS.map(p => `- [${p.mode}] "${p.example}"`),

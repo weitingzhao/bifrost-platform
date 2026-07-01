@@ -1595,6 +1595,45 @@ export interface VerifyMissionSnapshotResponse {
   post_fix_verification: PostFixVerificationView
 }
 
+export interface HermesLlmKeyStatus {
+  configured: boolean
+  source: string
+  provider_hint?: string
+  note?: string
+}
+
+export interface HermesFirstTaskDefinition {
+  id: string
+  title: string
+  autonomy: string
+  prompt: string
+  required_mcp_tools: string[]
+  success_criteria: string[]
+}
+
+export interface HermesNousProbe {
+  url?: string
+  status: string
+  version?: string
+  gateway_running: boolean
+  gateway_state?: string
+  mcp_tool_count: number
+  llm_key_configured: boolean
+  dashboard_url?: string
+  error?: string
+}
+
+export interface HermesReadinessResponse {
+  generated_at: string
+  ready: boolean
+  blockers: string[]
+  llm_key: HermesLlmKeyStatus
+  nous_hermes: HermesNousProbe
+  platform_mcp_tools: number
+  platform_mcp_agent_tools: number
+  first_task: HermesFirstTaskDefinition
+}
+
 // Retrospective Agent — cross-job pattern analysis
 
 export type RetrospectiveSeverity = 'critical' | 'high' | 'medium' | 'low'

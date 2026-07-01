@@ -498,6 +498,23 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
         return textResult(jsonText(data))
       },
     },
+    get_hermes_readiness: {
+      description:
+        'Hermes gateway + LLM key + platform MCP readiness for first L0 Hermes task (Mission Signal Phase 4).',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/agent/hermes/readiness')
+        return textResult(jsonText(data))
+      },
+    },
+    get_hermes_first_task: {
+      description: 'Canonical Hermes First Task prompt (L0 read-only Mission health pass).',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/agent/hermes/first-task')
+        return textResult(jsonText(data))
+      },
+    },
 
     sync_cluster_kubeconfig: {
       description:

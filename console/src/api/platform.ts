@@ -76,6 +76,7 @@ import type {
   RetrospectiveReport,
   VerifyPayloadResponse,
   VerifyMissionSnapshotResponse,
+  HermesReadinessResponse,
   SessionSnapshotLatestResponse,
   SessionSnapshotSaveResponse,
   BriefingSessionPackResponse,
@@ -148,6 +149,12 @@ export async function fetchVerifyMissionSnapshot(): Promise<VerifyMissionSnapsho
   const r = await fetch('/api/v1/mission/verify-snapshot')
   if (!r.ok) throw new Error(`verify-snapshot: HTTP ${r.status}`)
   return r.json() as Promise<VerifyMissionSnapshotResponse>
+}
+
+export async function fetchHermesReadiness(): Promise<HermesReadinessResponse> {
+  const r = await fetch('/api/v1/agent/hermes/readiness')
+  if (!r.ok) throw new Error(`hermes-readiness: HTTP ${r.status}`)
+  return r.json() as Promise<HermesReadinessResponse>
 }
 
 export async function fetchPlatformHealth(): Promise<boolean> {
