@@ -263,29 +263,9 @@ func (s *Service) lastDeliverSuccess(ctx context.Context, pipelineName string) *
 	return nil
 }
 
-// ProdRedisInCluster reports redis deployment readiness in bifrost-prod (K3s in-cluster; no host NodePort).
+// ProdRedisInCluster reports redis-live-prod readiness in data NS (no host NodePort).
 func (s *Service) ProdRedisInCluster(ctx context.Context) (probe.Reachability, string) {
-	clientset, _, err := s.cluster.KubernetesClient()
-	if err != nil {
-		return probe.ReachFail, "cluster client: " + err.Error()
-	}
-	ns := "bifrost-prod"
-	dep, depErr := clientset.AppsV1().Deployments(ns).Get(ctx, "redis", metav1.GetOptions{})
-	if depErr != nil {
-		return probe.ReachFail, fmt.Sprintf("deployment/redis in %s: %v", ns, depErr)
-	}
-	ready := int32(0)
-	if dep.Status.ReadyReplicas > 0 {
-		ready = dep.Status.ReadyReplicas
-	}
-	desired := dep.Status.Replicas
-	if desired == 0 {
-		desired = *dep.Spec.Replicas
-	}
-	if ready > 0 && ready >= desired {
-		return probe.ReachOK, fmt.Sprintf("bifrost-prod/redis %d/%d ready (in-cluster)", ready, desired)
-	}
-	return probe.ReachDegraded, fmt.Sprintf("bifrost-prod/redis %d/%d ready", ready, desired)
+	return s.deploymentReadyInNS(ctx, "data", "redis-live-prod")
 }
 
 // DevRedisInCluster reports redis deployment readiness in bifrost-dev.
