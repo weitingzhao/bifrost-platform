@@ -271,6 +271,7 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 	matrix := s.prober.ProbeEnvironment(ctx, *env)
 	failIDs := []string{}
 	redisInCluster := false
+	postgresInCluster := false
 	for _, t := range matrix.Targets {
 		if t.Category == "trade_write" {
 			continue
@@ -284,6 +285,15 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 				continue
 			}
 		}
+		if t.ID == "postgres" {
+			if reach, detail := s.delivery.ProdPostgresInCluster(ctx); reach == probe.ReachOK {
+				postgresInCluster = true
+				continue
+			} else if reach == probe.ReachDegraded {
+				failIDs = append(failIDs, t.ID+" (in-cluster: "+detail+")")
+				continue
+			}
+		}
 		if t.Reachability == probe.ReachFail {
 			failIDs = append(failIDs, t.ID)
 		}
@@ -291,6 +301,9 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 	check := GateCheck{
 		ID: "prod-matrix", Label: "Prod matrix (all trade probes)", Required: true,
 		Detail: fmt.Sprintf("%d target(s) probed via %s", len(matrix.Targets), env.NginxBase),
+	}
+	if postgresInCluster {
+		check.Detail += "; postgres via in-cluster CNPG bifrost-postgres-rw"
 	}
 	if redisInCluster {
 		check.Detail += "; redis via in-cluster data/redis-live-prod"

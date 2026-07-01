@@ -100,5 +100,209 @@
     ],
     "triggered_by": "admin",
     "summary": "prod release gate fail (13 checks)"
+  },
+  {
+    "tier": "prod",
+    "at": "2026-07-01T02:30:47.339233Z",
+    "result": "fail",
+    "revision": "main",
+    "log_path": "bifrost-trade-infra/scripts/release_gate.log",
+    "checks": [
+      {
+        "id": "cutover-milestone",
+        "label": "2c-b-prod-cutover milestone",
+        "required": true,
+        "reachability": "ok",
+        "detail": "No cutover blocker"
+      },
+      {
+        "id": "prod-matrix",
+        "label": "Prod matrix (all trade probes)",
+        "required": true,
+        "reachability": "fail",
+        "detail": "failing: postgres"
+      },
+      {
+        "id": "deliver-prod-pipeline",
+        "label": "bifrost-deliver-prod pipeline",
+        "required": true,
+        "reachability": "ok",
+        "detail": "bifrost-deliver-prod-sgtfr (True)"
+      },
+      {
+        "id": "stg-frontend",
+        "label": "stg-frontend",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-monitor",
+        "label": "stg-api-monitor",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-massive",
+        "label": "stg-api-massive",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-docs",
+        "label": "stg-api-docs",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-ops",
+        "label": "stg-api-ops",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-trading",
+        "label": "stg-api-trading",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-strategy",
+        "label": "stg-api-strategy",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-portfolio",
+        "label": "stg-api-portfolio",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-market",
+        "label": "stg-api-market",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-research",
+        "label": "stg-api-research",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      }
+    ],
+    "triggered_by": "admin",
+    "summary": "prod release gate fail (13 checks)"
+  },
+  {
+    "tier": "prod",
+    "at": "2026-07-01T02:35:30.710589Z",
+    "result": "pass",
+    "revision": "main",
+    "log_path": "bifrost-trade-infra/scripts/release_gate.log",
+    "checks": [
+      {
+        "id": "cutover-milestone",
+        "label": "2c-b-prod-cutover milestone",
+        "required": true,
+        "reachability": "ok",
+        "detail": "No cutover blocker"
+      },
+      {
+        "id": "prod-matrix",
+        "label": "Prod matrix (all trade probes)",
+        "required": true,
+        "reachability": "ok",
+        "detail": "no failing prod targets"
+      },
+      {
+        "id": "deliver-prod-pipeline",
+        "label": "bifrost-deliver-prod pipeline",
+        "required": true,
+        "reachability": "ok",
+        "detail": "bifrost-deliver-prod-sgtfr (True)"
+      },
+      {
+        "id": "stg-frontend",
+        "label": "stg-frontend",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-monitor",
+        "label": "stg-api-monitor",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-massive",
+        "label": "stg-api-massive",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-docs",
+        "label": "stg-api-docs",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-ops",
+        "label": "stg-api-ops",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-trading",
+        "label": "stg-api-trading",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-strategy",
+        "label": "stg-api-strategy",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-portfolio",
+        "label": "stg-api-portfolio",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-market",
+        "label": "stg-api-market",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      },
+      {
+        "id": "stg-api-research",
+        "label": "stg-api-research",
+        "required": false,
+        "reachability": "ok",
+        "detail": "HTTP 200"
+      }
+    ],
+    "triggered_by": "admin",
+    "summary": "prod release gate pass (13 checks)"
   }
 ]
