@@ -1,4 +1,6 @@
-import { DenseTag, StatusLamp } from '@bifrost/ui'
+import { useState } from 'react'
+import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
+import { Copy, X } from 'lucide-react'
 import type {
   MatrixResponse,
   OpsContextResponse,
@@ -12,6 +14,10 @@ import {
   evaluatePromoteStatus,
   evaluateStgReleaseStatus,
 } from '@/lib/control-room/matrixSummary'
+import {
+  clearPromotePreflightPack,
+  readPromotePreflightPack,
+} from '@/lib/control-room/promoteCutover'
 
 const FLYWHEEL_A_CHECKS = [
   'npm run lint',
@@ -61,6 +67,9 @@ export function PromotePage({
   onOpenDelivery,
   onOpenDeployMainline,
 }: PromotePageProps) {
+  const [preflightPack, setPreflightPack] = useState<string | null>(() => readPromotePreflightPack())
+  const [preflightCopied, setPreflightCopied] = useState(false)
+
   if (isLoading || !context) {
     return <p className="text-[var(--muted-foreground)]">Loading promotion context…</p>
   }
@@ -70,8 +79,47 @@ export function PromotePage({
   const stgRelease = evaluateStgReleaseStatus(stgSmoke, lastDeliverSucceeded, stgGate, tierB)
   const staging = context.environments_extended.staging
 
+  async function handleCopyPreflight() {
+    if (preflightPack == null) return
+    await navigator.clipboard.writeText(preflightPack)
+    setPreflightCopied(true)
+    window.setTimeout(() => setPreflightCopied(false), 2000)
+  }
+
+  function dismissPreflightBanner() {
+    clearPromotePreflightPack()
+    setPreflightPack(null)
+  }
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
+      {preflightPack != null && (
+        <section
+          className="page-section panel-elevated flex flex-col gap-2 px-4 py-3"
+          aria-label="Control Room preflight pack"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <DenseTag variant="category">Control Room preflight</DenseTag>
+            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Stashed from Go to Promote (preflight) — Tier A/B checklist + promote status.
+            </span>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="xs" onClick={() => void handleCopyPreflight()}>
+                <Copy size={12} />
+                {preflightCopied ? 'Copied' : 'Copy preflight'}
+              </Button>
+              <Button variant="ghost" size="xs" onClick={dismissPreflightBanner} aria-label="Dismiss preflight banner">
+                <X size={14} />
+                Dismiss
+              </Button>
+            </div>
+          </div>
+          <pre className="promote-preflight-banner__pack m-0 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-[var(--border)] bg-[var(--background)] p-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            {preflightPack}
+          </pre>
+        </section>
+      )}
+
       <OpsSection
         title="Release tracks"
         description="STG release (deliver + gate + Tier B) is independent of Prod cutover (D1-blocked)."

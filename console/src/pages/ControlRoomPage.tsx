@@ -9,7 +9,9 @@ import { ControlRoomPhase2SignoffPanel } from '@/components/control-room/Control
 import { CommandIntentStrip } from '@/components/control-room/CommandIntentStrip'
 import { ControlRoomPhase3SignoffPanel } from '@/components/control-room/ControlRoomPhase3SignoffPanel'
 import { ControlRoomPhase4SignoffPanel } from '@/components/control-room/ControlRoomPhase4SignoffPanel'
+import { ControlRoomPhase5SignoffPanel } from '@/components/control-room/ControlRoomPhase5SignoffPanel'
 import { MissionTimelinePanel } from '@/components/control-room/MissionTimelinePanel'
+import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
 import { MissionControlHeader } from '@/components/control-room/MissionControlHeader'
 import { MissionVerifyBanner } from '@/components/control-room/MissionVerifyBanner'
 import { ProgramContextSection } from '@/components/control-room/ProgramContextSection'
@@ -30,9 +32,13 @@ import { computeAllTracks } from '@/lib/briefing/workTracks'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
+import {
+  buildPromoteCutoverModel,
+  stashPromotePreflightPack,
+} from '@/lib/control-room/promoteCutover'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { startRemediation } from '@/api/platform'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 interface ControlRoomPageProps {
   context: OpsContextResponse | undefined
@@ -45,6 +51,9 @@ interface ControlRoomPageProps {
   clusterLoading?: boolean
   stgSmoke?: import('@/api/types').StgSmokeResponse
   stgSmokeLoading?: boolean
+  stgGate?: import('@/api/types').ReleaseGateResponse
+  lastDeliverSucceeded?: boolean
+  tierB?: import('@/api/types').TierBStatusResponse
   onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenProgram: () => void
   onOpenDelivery: () => void
@@ -54,6 +63,7 @@ interface ControlRoomPageProps {
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenPlatformRelease?: () => void
   onOpenPromote?: () => void
+  onOpenDeployMainline?: () => void
 }
 
 export function ControlRoomPage({
@@ -63,6 +73,10 @@ export function ControlRoomPage({
   matrixLoading,
   matrixError,
   clusterSummary,
+  stgSmoke,
+  stgGate,
+  lastDeliverSucceeded = false,
+  tierB,
   onOpenRuntimeMap,
   onOpenProgram,
   onOpenDelivery,
@@ -72,6 +86,7 @@ export function ControlRoomPage({
   onOpenAgentDesk,
   onOpenPlatformRelease,
   onOpenPromote,
+  onOpenDeployMainline,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
   const { snapshot, matrices: liveMatrices, dataUpdatedAt, isLoading: missionLoading } = useMissionSnapshot()
@@ -111,6 +126,20 @@ export function ControlRoomPage({
   }
 
   const matrixList = liveMatrices.length > 0 ? liveMatrices : matrices
+
+  const handleOpenPromotePreflight = useCallback(() => {
+    if (context != null) {
+      const pack = buildPromoteCutoverModel({
+        context,
+        matrices: matrixList,
+        stgSmoke,
+        lastDeliverSucceeded,
+        tierB,
+      }).preflightPack
+      stashPromotePreflightPack(pack)
+    }
+    onOpenPromote?.()
+  }, [context, matrixList, stgSmoke, lastDeliverSucceeded, tierB, onOpenPromote])
 
   if (contextLoading || matrixLoading || missionLoading) {
     return <p className="text-[var(--muted-foreground)]">Loading mission control…</p>
@@ -153,6 +182,7 @@ export function ControlRoomPage({
           onOpenProgram={onOpenProgram}
           onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
           onOpenAgentDesk={openAgentDeskPrefill}
+          onOpenPromote={handleOpenPromotePreflight}
         />
 
         <ReleaseAgentCallout
@@ -186,7 +216,7 @@ export function ControlRoomPage({
           onOpenAgentDesk={openAgentDeskPrefill}
           onOpenBriefing={onOpenBriefing}
           onOpenDelivery={onOpenDelivery}
-          onOpenPromote={onOpenPromote}
+          onOpenPromote={handleOpenPromotePreflight}
         />
 
         <MissionTimelinePanel
@@ -194,6 +224,19 @@ export function ControlRoomPage({
           probeObservedAt={dataUpdatedAt}
           onOpenAudit={onOpenAudit}
           onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId)}
+        />
+
+        <PromoteCutoverStrip
+          context={context}
+          matrices={matrixList}
+          stgSmoke={stgSmoke}
+          stgGate={stgGate}
+          lastDeliverSucceeded={lastDeliverSucceeded}
+          tierB={tierB}
+          onOpenPromote={handleOpenPromotePreflight}
+          onOpenDelivery={onOpenDelivery}
+          onOpenDeployMainline={onOpenDeployMainline}
+          onOpenProgram={onOpenProgram}
         />
       </section>
 
@@ -261,6 +304,7 @@ export function ControlRoomPage({
         </div>
       </ProgramContextSection>
 
+      <ControlRoomPhase5SignoffPanel />
       <ControlRoomPhase4SignoffPanel />
       <ControlRoomPhase3SignoffPanel />
       <ControlRoomPhase2SignoffPanel />

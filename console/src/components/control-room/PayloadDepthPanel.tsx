@@ -25,6 +25,7 @@ interface PayloadDepthPanelProps {
   onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenDelivery?: () => void
   onOpenProgram?: () => void
+  onOpenPromote?: () => void
 }
 
 function ReadinessStatus({ cell }: { cell: { signal: Signal; detail: string; policyBlocked: boolean } }) {
@@ -57,6 +58,7 @@ export function PayloadDepthPanel({
   onOpenRuntimeMap,
   onOpenDelivery,
   onOpenProgram,
+  onOpenPromote,
 }: PayloadDepthPanelProps) {
   const rows = buildPayloadReadinessRows(matrices)
   const divergences = countEnvDivergences(rows)
@@ -148,6 +150,11 @@ export function PayloadDepthPanel({
             )}
           </div>
           <div className="payload-coupling-hint__actions">
+            {onOpenPromote != null && (
+              <Button variant="default" size="xs" onClick={onOpenPromote}>
+                Promote
+              </Button>
+            )}
             {onOpenDelivery != null && (
               <Button variant="outline" size="xs" onClick={onOpenDelivery}>
                 Delivery
