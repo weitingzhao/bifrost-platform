@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { fetchClusterObservability, fetchRemediationJobs, fetchSessionSnapshotLatest } from '@/api/platform'
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, SegmentControl } from '@bifrost/ui'
-import { Sparkles } from 'lucide-react'
 import { StatusLamp } from '@/components/StatusLamp'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
 import { NightlyBriefingPanel } from '@/components/briefing/NightlyBriefingPanel'
@@ -11,6 +10,10 @@ import { TrackCardsSection } from '@/components/briefing/TrackCardsSection'
 import { BuildPhaseGatePanel } from '@/components/briefing/BuildPhaseGatePanel'
 import { BriefingPhase1SignoffPanel } from '@/components/briefing/BriefingPhase1SignoffPanel'
 import { BriefingPhase2SignoffPanel } from '@/components/briefing/BriefingPhase2SignoffPanel'
+import { BriefingPhase3SignoffPanel } from '@/components/briefing/BriefingPhase3SignoffPanel'
+import { BriefingPhase4SignoffPanel } from '@/components/briefing/BriefingPhase4SignoffPanel'
+import { BriefingRoadmapStatusStrip } from '@/components/briefing/BriefingRoadmapStatusStrip'
+import { BriefingSessionResultsPanel } from '@/components/briefing/BriefingSessionResultsPanel'
 import { BriefingFoldableSection } from '@/components/briefing/BriefingFoldableSection'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
@@ -26,6 +29,17 @@ import {
 } from '@/lib/briefing/agentDialogueLanguage'
 import { computeSessionDelta, isEmptyDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
 import { loadSnapshot, saveSnapshot, type SessionSnapshot } from '@/lib/briefing/sessionSnapshot'
+import {
+  agentDeskPrefillDisabledReason,
+  BRIEFING_AGENT_DESK_DELIVERY_HINT,
+  BRIEFING_IDE_DELIVERY_HINT,
+  isAgentDeskSuitedIntent,
+} from '@/lib/briefing/briefingDeliveryChannels'
+import { saveBriefingActiveSession } from '@/lib/briefing/briefingActiveSession'
+import {
+  buildBriefingAutomationHandoff,
+  formatAutomationHandoffJson,
+} from '@/lib/briefing/briefingAutomationHandoff'
 import { CONSOLE_UI_PROGRESS, type UiItemStatus } from '@/lib/briefing/uiProgressSnapshot'
 import { TrackLaneSection } from '@/components/briefing/TrackLaneSection'
 import { BriefingSyncLoopPanel } from '@/components/briefing/BriefingSyncLoopPanel'
@@ -102,6 +116,7 @@ export function BriefingPage({
   const [showSessionPack, setShowSessionPack] = useState(false)
   const [showAlignmentPack, setShowAlignmentPack] = useState(false)
   const [sessionCopied, setSessionCopied] = useState(false)
+  const [automationCopied, setAutomationCopied] = useState(false)
   const [alignmentCopied, setAlignmentCopied] = useState(false)
   const [agentDialogueLanguage, setAgentDialogueLanguage] = useState<AgentDialogueLanguage>(
     DEFAULT_AGENT_DIALOGUE_LANGUAGE,
@@ -110,6 +125,7 @@ export function BriefingPage({
   const { canOperate } = usePlatformAuth()
   const [localSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
+  const sessionPackAnchorRef = useRef<HTMLDivElement>(null)
 
   const serverSnapshotQuery = useQuery({
     queryKey: ['session-snapshot', 'latest'],
@@ -291,7 +307,27 @@ export function BriefingPage({
 
   function handleSendToAgentDesk() {
     void handleSaveSnapshot()
+    saveBriefingActiveSession({
+      track: selectedTrack,
+      lane: selectedLane,
+      intent,
+      packSize,
+      startedAt: new Date().toISOString(),
+    })
     onOpenAgentDesk?.({ prefill: sessionPack })
+  }
+
+  async function handleCopyAutomationHandoff() {
+    const handoff = buildBriefingAutomationHandoff({
+      pack: sessionPack,
+      track: selectedTrack,
+      lane: selectedLane,
+      intent,
+      packSize,
+    })
+    await copyText(formatAutomationHandoffJson(handoff))
+    setAutomationCopied(true)
+    window.setTimeout(() => setAutomationCopied(false), 2000)
   }
 
   async function handleCopyAlignment() {
@@ -302,9 +338,20 @@ export function BriefingPage({
 
   const uiProgressDone = CONSOLE_UI_PROGRESS.filter(r => r.status === 'done').length
   const packHasWarnings = packFindings.some(f => f.severity === 'warning')
+  const agentDeskSuited = isAgentDeskSuitedIntent(intent)
+  const agentDeskDisabledReason = agentDeskPrefillDisabledReason(intent)
+
+  function handleGenerateSessionPack() {
+    setShowSessionPack(true)
+    window.requestAnimationFrame(() => {
+      sessionPackAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
+      <BriefingRoadmapStatusStrip />
+
       <TrackCardsSection
         tracks={trackSummaries}
         selectedTrack={selectedTrack}
@@ -337,14 +384,18 @@ export function BriefingPage({
 
       <section className="page-section panel-elevated px-4 py-3">
         <p className="briefing-section-kicker m-0">2 · Session briefing</p>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
+        <div className="mt-1 flex min-w-0 flex-col gap-3">
+          <div className="min-w-0">
             <h2 className="m-0 text-sm font-semibold">Generate briefing for your work</h2>
             <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Paste into a <strong>new</strong> Cursor chat before starting the task you selected
-              above. Content includes live status, UI progress, spine + matrix, intent-specific
-              read-first / opening prompt, and a required first-reply protocol (confirm understanding
-              + task list for you to pick).
+              <strong>Primary:</strong> copy the pack into a <strong>new Cursor IDE</strong> chat
+              (multi-repo workspace, rules, MCP). The pack includes live status, UI progress, spine
+              + matrix, read-first lists, and a first-reply protocol — confirm understanding, task
+              list, Source Audit — before you pick what to implement.
+            </p>
+            <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              <strong>Optional:</strong> prefill Agent Desk only for short Ops-runner tasks (cluster
+              debug, drift-style prompts). It does not replace IDE for feature or frontend work.
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="text-dense-meta text-muted-foreground">
@@ -420,12 +471,13 @@ export function BriefingPage({
               variant="pack"
             />
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               size="sm"
               disabled={!dataReady || packBlocked}
-              onClick={() => setShowSessionPack(true)}
+              onClick={handleGenerateSessionPack}
               title={
                 packBlocked
                   ? 'Resolve pack reconcile blockers before generating'
@@ -435,42 +487,101 @@ export function BriefingPage({
               {packBlocked
                 ? 'Pack blocked (reconcile)'
                 : dataReady
-                  ? 'Generate session briefing'
+                  ? showSessionPack
+                    ? 'Regenerate session briefing'
+                    : 'Generate session briefing'
                   : 'Loading spine & matrix…'}
             </Button>
             {showSessionPack && (
-              <>
-                <Button variant="outline" size="sm" onClick={() => void handleCopySession()}>
-                  {sessionCopied ? 'Copied!' : 'Copy session pack'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!canOperate || onOpenAgentDesk == null}
-                  title={!canOperate ? 'Operator token required' : undefined}
-                  onClick={handleSendToAgentDesk}
-                >
-                  <Sparkles className="size-3.5 shrink-0" aria-hidden />
-                  Send to Agent Desk
-                </Button>
-              </>
+              <span className="text-[var(--text-dense-caption)] text-[var(--success)]">
+                Pack ready — copy below or scroll to preview
+              </span>
             )}
           </div>
         </div>
+
+        {showSessionPack && (
+          <div
+            ref={sessionPackAnchorRef}
+            className="mt-3 flex w-full min-w-0 scroll-mt-4 flex-col gap-3 border-t border-[var(--border)] pt-3"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
+              <div className="min-w-0 flex-1">
+                <p className="briefing-section-kicker m-0">Cursor IDE · recommended</p>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  <Button type="button" size="sm" onClick={() => void handleCopySession()}>
+                    {sessionCopied ? 'Copied!' : 'Copy session pack'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleCopyAutomationHandoff()}
+                  >
+                    {automationCopied ? 'Copied!' : 'Copy automation handoff'}
+                  </Button>
+                </div>
+                <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                  {BRIEFING_IDE_DELIVERY_HINT}
+                </p>
+              </div>
+              <div className="min-w-0 flex-1 sm:max-w-md">
+                <p className="briefing-section-kicker m-0">Agent Desk · optional</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={
+                      !canOperate || onOpenAgentDesk == null || agentDeskDisabledReason != null
+                    }
+                    title={
+                      !canOperate
+                        ? 'Operator token required'
+                        : agentDeskDisabledReason ?? undefined
+                    }
+                    onClick={handleSendToAgentDesk}
+                  >
+                    Prefill Agent Desk
+                  </Button>
+                  {agentDeskSuited && (
+                    <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                      Ops runner
+                    </span>
+                  )}
+                </div>
+                <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                  {agentDeskDisabledReason ?? BRIEFING_AGENT_DESK_DELIVERY_HINT}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showSessionPack && (
           <LlmPackPreview
             charCount={sessionPack.length}
             metaLabel={`track: ${selectedTrack} · lane: ${selectedLane} · intent: ${intent} · pack: ${packSize} · lang: ${agentDialogueLanguage}`}
             pack={sessionPack}
-            footer="The Agent must first reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) a Source Audit table (provenance per fact + contradiction report) — wait for your selection before implementing."
+            footer="Paste into Cursor IDE for the full first-reply protocol. The Agent must reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) a Source Audit table — wait for your selection before implementing."
           />
         )}
       </section>
 
       <BriefingPhase1SignoffPanel />
       <BriefingPhase2SignoffPanel />
+      <BriefingPhase3SignoffPanel />
+
+      <BriefingFoldableSection
+        kicker="Closure"
+        title="Session results"
+        description="Closed Ops-runner briefing sessions (S9 write-back). IDE work stays in Cursor — no auto-close required."
+        defaultExpanded={false}
+      >
+        <BriefingSessionResultsPanel />
+      </BriefingFoldableSection>
+
+      <BriefingPhase4SignoffPanel />
 
       <section className="page-section panel-elevated px-4 py-3">
         <h2 className="m-0 text-sm font-semibold">Live snapshot</h2>
@@ -601,7 +712,7 @@ export function BriefingPage({
 
       <BriefingFoldableSection
         title="Console UI progress"
-        description={`${uiProgressDone}/${CONSOLE_UI_PROGRESS.length} done — manual snapshot until Phase 3 auto-generation.`}
+        description={`${uiProgressDone}/${CONSOLE_UI_PROGRESS.length} done — derived from Console nav registry + overrides.`}
         defaultExpanded={false}
         className="page-section panel-elevated overflow-hidden px-0 py-3"
       >

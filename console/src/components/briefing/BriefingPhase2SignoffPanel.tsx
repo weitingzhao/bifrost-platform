@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Button, ConfirmDialog, DenseTag, StatusLamp } from '@bifrost/ui'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { notifyBriefingSignoffChanged } from '@/lib/briefing/briefingSignoffEvents'
 import {
   allPhase2ItemsVerified,
   BRIEFING_PHASE2_DELIVERY_ITEMS,
@@ -26,6 +27,7 @@ export function BriefingPhase2SignoffPanel() {
   const persist = useCallback((next: BriefingPhase2SignoffState) => {
     setState(next)
     savePhase2SignoffState(next)
+    notifyBriefingSignoffChanged()
   }, [])
 
   function toggleVerified(itemId: string) {

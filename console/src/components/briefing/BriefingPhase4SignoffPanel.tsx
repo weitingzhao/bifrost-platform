@@ -2,31 +2,34 @@ import { useCallback, useState } from 'react'
 import { Button, ConfirmDialog, DenseTag, StatusLamp } from '@bifrost/ui'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { notifyBriefingSignoffChanged } from '@/lib/briefing/briefingSignoffEvents'
+import { notifyBriefingSignoffChanged, useBriefingSignoffRevision } from '@/lib/briefing/briefingSignoffEvents'
 import {
-  allPhase1ItemsVerified,
-  BRIEFING_PHASE1_DELIVERY_ITEMS,
-  BRIEFING_PHASE1_VERSION,
-  loadPhase1SignoffState,
-  phase1VerificationCount,
-  savePhase1SignoffState,
-  type BriefingPhase1SignoffState,
-} from '@/lib/briefing/briefingPhase1Delivery'
+  allPhase4ItemsVerified,
+  BRIEFING_PHASE4_DELIVERY_ITEMS,
+  BRIEFING_PHASE4_VERSION,
+  loadPhase4SignoffState,
+  phase4VerificationCount,
+  priorPhasesSignedOff,
+  savePhase4SignoffState,
+  type BriefingPhase4SignoffState,
+} from '@/lib/briefing/briefingPhase4Delivery'
 
-export function BriefingPhase1SignoffPanel() {
+export function BriefingPhase4SignoffPanel() {
   const { canAdmin, caps } = usePlatformAuth()
-  const [state, setState] = useState<BriefingPhase1SignoffState>(() => loadPhase1SignoffState())
+  const [state, setState] = useState<BriefingPhase4SignoffState>(() => loadPhase4SignoffState())
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [signConfirmOpen, setSignConfirmOpen] = useState(false)
   const [panelExpanded, setPanelExpanded] = useState(() => state.signedOffAt == null)
 
-  const counts = phase1VerificationCount(state)
-  const allVerified = allPhase1ItemsVerified(state)
+  const counts = phase4VerificationCount(state)
+  const allVerified = allPhase4ItemsVerified(state)
   const signed = state.signedOffAt != null
+  useBriefingSignoffRevision()
+  const priorPhases = priorPhasesSignedOff()
 
-  const persist = useCallback((next: BriefingPhase1SignoffState) => {
+  const persist = useCallback((next: BriefingPhase4SignoffState) => {
     setState(next)
-    savePhase1SignoffState(next)
+    savePhase4SignoffState(next)
     notifyBriefingSignoffChanged()
   }, [])
 
@@ -51,7 +54,7 @@ export function BriefingPhase1SignoffPanel() {
       ...state,
       signedOffAt: new Date().toISOString(),
       signedOffBy: caps?.principal ?? caps?.role ?? 'owner',
-      note: 'Phase 1 daily-use delivery — Owner UI sign-off',
+      note: 'Agent Briefing roadmap program complete — Phases 1–4 Owner UI sign-off',
     })
     setSignConfirmOpen(false)
     setPanelExpanded(false)
@@ -59,23 +62,18 @@ export function BriefingPhase1SignoffPanel() {
 
   function handleResetSignoff() {
     persist({
-      ...defaultResetState(),
-      items: state.items,
-    })
-  }
-
-  function defaultResetState(): BriefingPhase1SignoffState {
-    return {
-      version: BRIEFING_PHASE1_VERSION,
+      version: BRIEFING_PHASE4_VERSION,
       items: state.items,
       signedOffAt: null,
       signedOffBy: null,
       note: null,
-    }
+    })
   }
 
+  const canSignProgram = allVerified && priorPhases.ok && !signed
+
   return (
-    <section className="page-section panel-elevated px-4 py-3">
+    <section className="page-section panel-elevated px-4 py-3 ring-1 ring-[var(--success)]/20">
       <button
         type="button"
         className="flex w-full items-center gap-2 text-left"
@@ -86,13 +84,14 @@ export function BriefingPhase1SignoffPanel() {
         ) : (
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
         )}
-        <p className="briefing-section-kicker m-0">Phase 1 · Delivery sign-off</p>
+        <p className="briefing-section-kicker m-0">Phase 4 · Program complete</p>
         <DenseTag variant={signed ? 'success' : allVerified ? 'warning' : 'neutral'}>
-          {signed ? 'SIGNED' : `${counts.verified}/${counts.total} verified`}
+          {signed ? 'ROADMAP SIGNED' : `${counts.verified}/${counts.total} verified`}
         </DenseTag>
         {signed && state.signedOffBy != null && (
           <span className="ml-auto text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {state.signedOffBy} · {state.signedOffAt != null ? new Date(state.signedOffAt).toLocaleString() : ''}
+            {state.signedOffBy} ·{' '}
+            {state.signedOffAt != null ? new Date(state.signedOffAt).toLocaleString() : ''}
           </span>
         )}
       </button>
@@ -100,12 +99,18 @@ export function BriefingPhase1SignoffPanel() {
       {panelExpanded && (
         <div className="mt-3 flex flex-col gap-3">
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Verify each Phase 1 capability below, then sign off when ready. This records Owner acceptance
-            in local storage (v{BRIEFING_PHASE1_VERSION}) — spine/API sign-off is Phase 2+.
+            Final acceptance for the Agent Briefing roadmap (Phases 1–3 capabilities + polish).
+            Verify R1–R4, then sign to record program closure (v{BRIEFING_PHASE4_VERSION}).
           </p>
 
+          {!priorPhases.ok && !signed && (
+            <p className="m-0 rounded border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Sign off Phase 4 requires prior phases signed: {priorPhases.missing.join(', ')}.
+            </p>
+          )}
+
           <div className="flex flex-col gap-2">
-            {BRIEFING_PHASE1_DELIVERY_ITEMS.map(item => {
+            {BRIEFING_PHASE4_DELIVERY_ITEMS.map(item => {
               const verification = state.items[item.id]
               const isOpen = expandedId === item.id
               const itemVerified = verification?.verified === true
@@ -166,10 +171,10 @@ export function BriefingPhase1SignoffPanel() {
               <Button
                 type="button"
                 size="sm"
-                disabled={!allVerified || signed}
+                disabled={!canSignProgram}
                 onClick={() => setSignConfirmOpen(true)}
               >
-                {signed ? 'Phase 1 signed off' : 'Sign off Phase 1 delivery'}
+                {signed ? 'Program signed off' : 'Sign off Agent Briefing program'}
               </Button>
               {signed && (
                 <Button type="button" size="sm" variant="outline" onClick={handleResetSignoff}>
@@ -181,12 +186,17 @@ export function BriefingPhase1SignoffPanel() {
                   Mark all {counts.total} items verified to enable sign-off.
                 </span>
               )}
+              {allVerified && !priorPhases.ok && !signed && (
+                <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  Complete Phase 1–3 sign-off above first.
+                </span>
+              )}
             </div>
           )}
 
           {!canAdmin && (
             <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Admin token required to record Phase 1 sign-off.
+              Admin token required to record program sign-off.
             </p>
           )}
         </div>
@@ -194,9 +204,9 @@ export function BriefingPhase1SignoffPanel() {
 
       <ConfirmDialog
         open={signConfirmOpen}
-        title="Sign off Phase 1 delivery"
-        message="Confirm that S1 (done collapse), S3 (URL state), S4 (compact pack), and S5 (intent override) are verified and acceptable for daily use. This records Owner acceptance locally."
-        confirmLabel="Confirm sign-off"
+        title="Sign off Agent Briefing program"
+        message="Confirm Phases 1–3 delivery and Phase 4 polish (R1–R4). This records final Owner acceptance of the Briefing roadmap in local storage."
+        confirmLabel="Confirm program sign-off"
         onConfirm={handleSignOff}
         onCancel={() => setSignConfirmOpen(false)}
       />

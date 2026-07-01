@@ -500,7 +500,7 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES.briefing}
-              description="Pick track/lane, override work intent, send pack to Agent Desk — selections persist in URL. Verify Phase 1 & 2 delivery below before sign-off."
+              description="Pick track/lane, copy pack into Cursor IDE (primary). Verify Phases 1–4 below — Phase 4 closes the roadmap program."
             />
             <BriefingPage
               context={contextQuery.data}

@@ -11,10 +11,15 @@ import {
   startRemediation,
 } from '@/api/platform'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { CloseBriefingSessionDialog } from '@/components/briefing/CloseBriefingSessionDialog'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { AgentTaskCatalogPanel } from '@/components/agent/AgentTaskCatalogPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import {
+  attachJobToBriefingSession,
+  loadBriefingActiveSession,
+} from '@/lib/briefing/briefingActiveSession'
 import {
   formatRemediationJobWhen,
   groupRemediationJobsByScope,
@@ -125,6 +130,9 @@ export function AgentDeskPage({
   const [panelOpen, setPanelOpen] = useState(false)
   const [userPrompts, setUserPrompts] = useState<Record<string, string>>({})
   const [stopConfirm, setStopConfirm] = useState<{ jobId: string; label: string } | null>(null)
+  const [closeSessionJob, setCloseSessionJob] = useState<RemediationJob | null>(null)
+  const [trackedJob, setTrackedJob] = useState<RemediationJob | null>(null)
+  const briefingActiveSession = loadBriefingActiveSession()
 
   useEffect(() => {
     if (initialJobId == null) return
@@ -132,6 +140,10 @@ export function AgentDeskPage({
     setPanelOpen(true)
     onInitialJobConsumed?.()
   }, [initialJobId, onInitialJobConsumed])
+
+  useEffect(() => {
+    if (initialJob != null) setTrackedJob(initialJob)
+  }, [initialJob])
 
   useEffect(() => {
     if (prefillPrompt == null || prefillPrompt === '') return
@@ -174,9 +186,11 @@ export function AgentDeskPage({
     onSuccess: (job, { prompt }) => {
       setUserPrompts(prev => ({ ...prev, [job.id]: prompt }))
       setInitialJob(job)
+      setTrackedJob(job)
       setJobId(job.id)
       setPanelOpen(true)
       setComposerText('')
+      attachJobToBriefingSession(job.id)
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
     },
   })
@@ -499,14 +513,33 @@ export function AgentDeskPage({
         stopping={cancelMutation.isPending}
         onStop={id => cancelMutation.mutate(id)}
         onClose={() => setPanelOpen(false)}
+        onCloseSession={
+          briefingActiveSession != null
+            ? () => {
+                const job = trackedJob ?? initialJob
+                if (job != null) setCloseSessionJob(job)
+              }
+            : undefined
+        }
         onDismiss={() => {
           void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
         }}
         onComplete={job => {
           setInitialJob(job)
+          setTrackedJob(job)
           void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
           void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
         }}
+      />
+
+      <CloseBriefingSessionDialog
+        job={closeSessionJob}
+        open={closeSessionJob != null}
+        onDone={() => {
+          setCloseSessionJob(null)
+          setPanelOpen(false)
+        }}
+        onCancel={() => setCloseSessionJob(null)}
       />
 
       <ConfirmDialog

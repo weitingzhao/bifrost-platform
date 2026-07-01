@@ -16,7 +16,7 @@ export const BRIEFING_PHASE3_DELIVERY_ITEMS: BriefingPhase3DeliveryItem[] = [
     summary:
       'Agent Desk records session outcome to audit (briefing.session.close) when Owner closes a terminal job.',
     verifySteps: [
-      'Send a session pack from Briefing → complete or fail a short Agent Desk task.',
+      'Use Prefill Agent Desk with an Ops-suited intent (debug/cluster) and run a short task.',
       'Click “Close session” on the remediation panel — confirm outcome + summary.',
       'Audit page shows briefing.session.close; GET /briefing/session-results lists the record.',
     ],
@@ -49,9 +49,9 @@ export const BRIEFING_PHASE3_DELIVERY_ITEMS: BriefingPhase3DeliveryItem[] = [
     summary:
       'Copy automation JSON from Briefing — prefill payload for Cursor Automation / zero-click workflow.',
     verifySteps: [
-      'Generate session pack → click “Copy automation handoff”.',
+      'Generate session pack → under “Cursor IDE · recommended”, click “Copy automation handoff”.',
       'JSON includes version briefing-automation-v1, meta track/lane/intent, and cursor_automation.prefill.',
-      'Paste prefill into a new Cursor chat — Agent receives full pack without manual copy from preview.',
+      'Paste prefill into a new Cursor IDE chat — primary path alongside Copy session pack.',
     ],
   },
 ]
