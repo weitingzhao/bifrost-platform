@@ -293,7 +293,7 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 		Detail: fmt.Sprintf("%d target(s) probed via %s", len(matrix.Targets), env.NginxBase),
 	}
 	if redisInCluster {
-		check.Detail += "; redis via in-cluster bifrost-prod"
+		check.Detail += "; redis via in-cluster data/redis-live-prod"
 	}
 	if len(failIDs) > 0 {
 		check.Reachability = probe.ReachFail
