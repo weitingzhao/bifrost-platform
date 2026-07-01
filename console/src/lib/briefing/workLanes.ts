@@ -263,6 +263,12 @@ const OPERATE_LANES: WorkLane[] = [
 
 const ALL_LANES: WorkLane[] = [...BUILD_LANES, ...MIGRATE_LANES, ...AUTOMATE_LANES, ...INFRA_LANES, ...OPERATE_LANES]
 
+const LANE_ID_SET = new Set<LaneId>(ALL_LANES.map(l => l.id))
+
+export function isLaneId(id: string): id is LaneId {
+  return LANE_ID_SET.has(id as LaneId)
+}
+
 const BUILD_TASK_LANE: Record<string, BuildLaneId> = {
   'p1-auth-audit': 'console-api',
   'p1-workload-actuation': 'cluster-infra',

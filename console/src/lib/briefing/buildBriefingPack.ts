@@ -30,6 +30,8 @@ import {
   buildReconcileBriefingOptions,
   reconcileBriefing,
 } from '@/lib/briefing/reconcileBriefing'
+import type { BriefingPackSize } from '@/lib/briefing/briefingUrlState'
+import { splitQueueByCompletion } from '@/lib/briefing/queueDisplay'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
   intent: WorkIntent
@@ -39,6 +41,7 @@ export interface BriefingInputs extends BriefingSnapshotInput {
   selectedLane?: LaneId
   laneQueue?: QueueItem[]
   agentDialogueLanguage?: AgentDialogueLanguage
+  packSize?: BriefingPackSize
 }
 
 function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string {
@@ -193,6 +196,39 @@ function formatFirstResponseProtocol(
     '4. **Wait for selection** — ' + waitStep,
     '',
     'Only after Owner confirmation and task selection should you read the read-first list and begin work.',
+  ].join('\n')
+}
+
+function formatCompactFirstResponseProtocol(
+  language: AgentDialogueLanguage,
+  track: TrackId,
+  lane: LaneId,
+  intent: WorkIntent,
+): string {
+  const lang = agentDialogueLanguageById(language)
+  const laneMeta = laneById(lane)
+  const intentMeta = workIntentById(intent)
+
+  const confirmStep =
+    language === 'zh'
+      ? '用**中文**简述你对本 briefing 的理解（track/lane/intent、blocker、范围），请 Owner 确认后再动手。'
+      : 'Summarize your understanding (track/lane/intent, blockers, scope) in **English** and ask Owner to confirm before implementing.'
+
+  const taskListStep =
+    language === 'zh'
+      ? '提出 **3–5 条**编号任务清单，标出 *(recommended)* 默认项，等 Owner 选择。'
+      : 'Propose a **numbered list** of 3–5 tasks, mark *(recommended)*, and wait for Owner selection.'
+
+  return [
+    '## Required first response (compact pack)',
+    '',
+    `Dialogue language: **${lang.agentLabel}** · ${track} / ${laneMeta.label} / ${intentMeta.label}`,
+    '',
+    '1. **Confirm understanding** — ' + confirmStep,
+    '2. **Propose task list** — ' + taskListStep,
+    '3. **Wait** — no implementation until Owner confirms.',
+    '',
+    '_Compact pack: skip full Source Audit unless Owner requests it or you detect contradictions._',
   ].join('\n')
 }
 
@@ -451,6 +487,7 @@ function formatLaneQueueSection(laneId: LaneId, queue: QueueItem[]): string {
 /** Full briefing for a new Cursor Agent session — paste as first message or context block. */
 export function buildBriefingPack(input: BriefingInputs): string {
   const now = new Date().toISOString()
+  const packSize: BriefingPackSize = input.packSize ?? 'compact'
   const opt = workIntentById(input.intent)
   const language = input.agentDialogueLanguage ?? DEFAULT_AGENT_DIALOGUE_LANGUAGE
   const langMeta = agentDialogueLanguageById(language)
@@ -459,18 +496,29 @@ export function buildBriefingPack(input: BriefingInputs): string {
   const lane = input.selectedLane ?? 'console-api'
   const laneMeta = laneById(lane)
 
+  const queueForPack =
+    packSize === 'compact' && input.laneQueue != null
+      ? splitQueueByCompletion(input.laneQueue).active
+      : input.laneQueue
+
   const deltaSection = input.sessionDelta != null ? formatDeltaForPack(input.sessionDelta) : null
-  const trackSection = input.trackSummaries != null && input.trackSummaries.length > 0
-    ? formatTrackSection(input.trackSummaries, track)
-    : null
-  const queueSection = input.laneQueue != null
-    ? formatLaneQueueSection(lane, input.laneQueue)
+  const trackSection =
+    packSize === 'full' && input.trackSummaries != null && input.trackSummaries.length > 0
+      ? formatTrackSection(input.trackSummaries, track)
+      : null
+  const queueSection = queueForPack != null
+    ? formatLaneQueueSection(lane, queueForPack)
     : null
 
   const dialogueRule =
     language === 'zh'
       ? 'Reply in **Chinese** for dialogue with the Owner.'
       : 'Reply in **English** for dialogue with the Owner.'
+
+  const firstResponseProtocol =
+    packSize === 'compact'
+      ? formatCompactFirstResponseProtocol(language, track, lane, input.intent)
+      : formatFirstResponseProtocol(language, track, lane, input.intent)
 
   // Reconcile gate (D-B): blocker findings hard-block the pack; warnings stamp a banner.
   const migrateTrack = input.trackSummaries?.find(t => t.id === 'migrate')
@@ -496,9 +544,10 @@ export function buildBriefingPack(input: BriefingInputs): string {
   }
   const staleBanner = findings.length > 0 ? formatReconcileFindings(findings) : null
 
-  return [
+  const sections: string[] = [
     '# Bifrost Ops Platform — Agent Session Briefing',
     `Generated: ${now}`,
+    `Pack size: **${packSize}**`,
     ...(staleBanner != null ? ['', staleBanner, ''] : []),
     `Work track: ${track} · Lane: ${laneMeta.label} (${lane}) · Intent: ${opt.label} (${input.intent})`,
     `Agent layer: ${opt.agentLayer} Agent · Mode: ${opt.agentMode}`,
@@ -506,19 +555,36 @@ export function buildBriefingPack(input: BriefingInputs): string {
     '',
     formatAgentDialogueSection(language),
     '',
-    formatFirstResponseProtocol(language, track, lane, input.intent),
+    firstResponseProtocol,
     '',
-    ...(trackSection != null ? [trackSection, ''] : []),
-    ...(queueSection != null ? [queueSection, ''] : []),
-    intentTaskSection(input.intent, input.context),
-    '',
-    ...(deltaSection != null ? [deltaSection, ''] : []),
-    formatBriefingLiveStatus(input),
-    '',
-    formatUiProgressSection(),
-    '',
-    formatVisionBriefingSection(input.context),
-    '',
+  ]
+
+  if (trackSection != null) {
+    sections.push(trackSection, '')
+  }
+
+  if (queueSection != null) {
+    sections.push(queueSection, '')
+  }
+
+  sections.push(intentTaskSection(input.intent, input.context), '')
+
+  if (deltaSection != null) {
+    sections.push(deltaSection, '')
+  }
+
+  sections.push(formatBriefingLiveStatus(input), '')
+
+  if (packSize === 'full') {
+    sections.push(
+      formatUiProgressSection(),
+      '',
+      formatVisionBriefingSection(input.context),
+      '',
+    )
+  }
+
+  sections.push(
     '## Authoritative context (spine + matrix)',
     intentCorePack(input.intent, input.context, input.matrices, lane),
     '',
@@ -527,17 +593,26 @@ export function buildBriefingPack(input: BriefingInputs): string {
     '',
     '## Session discipline',
     `- ${dialogueRule} English for UI strings and code identifiers.`,
-    '- First reply: confirm briefing understanding + propose task list + Source Audit (provenance table + contradiction report) — wait for Owner selection before implementing.',
+    packSize === 'compact'
+      ? '- Compact pack: confirm understanding + task list; implement after Owner selects.'
+      : '- First reply: confirm briefing understanding + propose task list + Source Audit (provenance table + contradiction report) — wait for Owner selection before implementing.',
     '- One repo / one variable per task unless Owner expands scope.',
     '- bifrost-trader-engine/ is read-only reference — never edit.',
     '- Phase 1 trade stack: New Frontend + Legacy API only — do not migrate bifrost-trade-api yet.',
-    '',
-    '## Related Console views',
-    '- Observe → Diagnosis: Control Room → Runtime Map (business topology + matrix, L0)',
-    '- Observe → Scheduling: Placement (K8s node-pool / policy gap, L0)',
-    '- Operate → Cluster ops: Cluster (L0 read + L1 actuation)',
-    '- Observe → Session & audit: Agent Briefing · Audit (actuation history)',
-    '- Architecture → Vision / Blueprint / Data Layer / MCP Contract — governance catalogs',
-    '- Architecture Copy All for LLM — full static catalog appendix if needed',
-  ].join('\n')
+  )
+
+  if (packSize === 'full') {
+    sections.push(
+      '',
+      '## Related Console views',
+      '- Observe → Diagnosis: Control Room → Runtime Map (business topology + matrix, L0)',
+      '- Observe → Scheduling: Placement (K8s node-pool / policy gap, L0)',
+      '- Operate → Cluster ops: Cluster (L0 read + L1 actuation)',
+      '- Observe → Session & audit: Agent Briefing · Audit (actuation history)',
+      '- Architecture → Vision / Blueprint / Data Layer / MCP Contract — governance catalogs',
+      '- Architecture Copy All for LLM — full static catalog appendix if needed',
+    )
+  }
+
+  return sections.join('\n')
 }

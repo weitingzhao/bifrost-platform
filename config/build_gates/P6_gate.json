@@ -1,5 +1,5 @@
 {
-  "at": "2026-06-25T08:26:05.455412Z",
+  "at": "2026-07-01T04:35:47.825031Z",
   "phase": "P6",
   "result": "incomplete",
   "checks": [
@@ -41,23 +41,30 @@
     {
       "id": "p6-self-health",
       "label": "Platform self-health probe (L1 control plane liveness in Console)",
-      "status": "in_progress",
+      "status": "pass",
       "required": true,
-      "detail": "work in progress"
+      "detail": "completed per spine"
     },
     {
       "id": "p6-gate-spine-closure",
       "label": "Release gate → spine promotion.last_gate closure",
-      "status": "pending",
+      "status": "pass",
       "required": true,
-      "detail": "not yet started"
+      "detail": "completed per spine"
+    },
+    {
+      "id": "p6-platform-e2e-cicd",
+      "label": "Platform Release page end-to-end CI/CD (deliver + gate + health + history)",
+      "status": "pass",
+      "required": true,
+      "detail": "completed per spine"
     },
     {
       "id": "p6-escape-hatch",
       "label": "L0 escape hatch runbook + Console recovery visibility",
-      "status": "pending",
+      "status": "in_progress",
       "required": true,
-      "detail": "not yet started"
+      "detail": "work in progress"
     }
   ],
   "triggered_by": "admin"

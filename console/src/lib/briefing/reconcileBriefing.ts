@@ -349,7 +349,38 @@ export function reconcileBriefing(
     reconcileMigrateStreamQueue(dataStream, dataWaves, options.laneQueue, findings)
   }
 
-  return findings
+  return applyLaneScopeToFindings(findings, options?.selectedLane)
+}
+
+/** S8: downgrade migrate-stream blockers when they are not relevant to the selected lane. */
+function applyLaneScopeToFindings(
+  findings: ReconcileFinding[],
+  selectedLane?: LaneId,
+): ReconcileFinding[] {
+  if (selectedLane == null) return findings
+
+  const laneStreamId = MIGRATE_LANE_STREAM_IDS[selectedLane]
+
+  return findings.map(f => {
+    if (f.severity !== 'blocker') return f
+
+    const streamId = migrateStreamIdFromMessage(f.message)
+    if (streamId == null) return f
+
+    if (laneStreamId == null || streamId !== laneStreamId) {
+      return { ...f, severity: 'warning' }
+    }
+    return f
+  })
+}
+
+function migrateStreamIdFromMessage(message: string): string | null {
+  for (const streamId of Object.values(MIGRATE_LANE_STREAM_IDS)) {
+    if (streamId != null && message.includes(streamId)) {
+      return streamId
+    }
+  }
+  return null
 }
 
 export function hasBlockingFindings(findings: ReconcileFinding[]): boolean {

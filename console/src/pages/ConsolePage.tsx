@@ -35,6 +35,8 @@ import { AgentSystemPage } from '@/pages/AgentSystemPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { BlueprintPage } from '@/pages/BlueprintPage'
 import { BriefingPage } from '@/pages/BriefingPage'
+import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
+import { writeBriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { ClusterPage } from '@/pages/ClusterPage'
 import { DeliveryPage } from '@/pages/DeliveryPage'
 import { DeployMainlinePage } from '@/pages/DeployMainlinePage'
@@ -335,7 +337,16 @@ export function ConsolePage() {
   const openCluster = () => setViewTab('cluster')
   const openPlacement = () => setViewTab('placement')
   const openAudit = () => setViewTab('audit')
-  const openBriefing = () => setViewTab('briefing')
+  const openBriefing = useCallback((opts?: BriefingUrlState) => {
+    if (opts != null) {
+      if (opts.track != null && opts.lane == null) {
+        writeBriefingUrlState({ track: opts.track, lane: undefined, intent: undefined })
+      } else {
+        writeBriefingUrlState(opts)
+      }
+    }
+    setViewTab('briefing')
+  }, [])
   const openOperatorPlane = () => setViewTab('operator-plane')
   const openAgentDesk = useCallback((jobIdOrOpts?: string | { prefill: string }) => {
     if (typeof jobIdOrOpts === 'string') {
@@ -489,7 +500,7 @@ export function ConsolePage() {
           <>
             <PageHeader
               title={VIEW_TITLES.briefing}
-              description="Pick work intent, review UI progress, generate a full context pack for a new Cursor Agent session."
+              description="Pick track/lane, override work intent, send pack to Agent Desk — selections persist in URL. Verify Phase 1 & 2 delivery below before sign-off."
             />
             <BriefingPage
               context={contextQuery.data}

@@ -198,6 +198,49 @@ server.tool(
     ),
 )
 
+server.tool(
+  'get_session_briefing',
+  'Session briefing pack for Agent self-service (compact default). Params mirror Briefing URL state.',
+  {
+    track: z.string().optional(),
+    lane: z.string().optional(),
+    intent: z.string().optional(),
+    pack: z.enum(['compact', 'full']).optional(),
+  },
+  async ({ track, lane, intent, pack }) => {
+    const params = new URLSearchParams()
+    if (track != null && track !== '') params.set('track', track)
+    if (lane != null && lane !== '') params.set('lane', lane)
+    if (intent != null && intent !== '') params.set('intent', intent)
+    if (pack != null) params.set('pack', pack)
+    const qs = params.toString()
+    return jsonResult(await platformGet(`/api/v1/briefing/session-pack${qs !== '' ? `?${qs}` : ''}`))
+  },
+)
+
+server.tool(
+  'list_briefing_session_results',
+  'Recent Agent Desk session close records',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/briefing/session-results')),
+)
+
+server.tool(
+  'close_briefing_session',
+  'Record Agent Desk session close to audit (operator)',
+  {
+    job_id: z.string().optional(),
+    outcome: z.enum(['done', 'failed', 'cancelled']),
+    summary: z.string(),
+    track: z.string().optional(),
+    lane: z.string().optional(),
+    intent: z.string().optional(),
+    spine_note: z.string().optional(),
+    request_spine_update: z.boolean().optional(),
+  },
+  async body => jsonResult(await platformPost('/api/v1/briefing/session-results', body)),
+)
+
 server.tool('get_agent_bridge', 'Agent host + MCP bridge status', {}, async () =>
   jsonResult(await platformGet('/api/v1/agent/bridge')),
 )

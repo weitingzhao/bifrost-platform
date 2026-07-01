@@ -21,6 +21,8 @@ interface RemediationPanelProps {
   onDismiss?: () => void
   onComplete?: (job: RemediationJob) => void
   onOpenServerConsole?: () => void
+  /** Desk variant: record briefing session close (S9) instead of dismiss-only. */
+  onCloseSession?: () => void
   stopping?: boolean
 }
 

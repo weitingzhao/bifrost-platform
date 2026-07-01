@@ -24,6 +24,7 @@ import {
   type QueueItemStatus,
   type WorkLane,
 } from '@/lib/briefing/workLanes'
+import { splitQueueByCompletion } from '@/lib/briefing/queueDisplay'
 import type { TrackId } from '@/lib/briefing/workTracks'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 
@@ -363,6 +364,50 @@ function QueueItemRow({
   )
 }
 
+function CompletedQueueGroup({
+  items,
+  canAdmin,
+  reconcileFindings,
+}: {
+  items: QueueItem[]
+  canAdmin: boolean
+  reconcileFindings: ReturnType<typeof reconcileBriefing>
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (items.length === 0) return null
+
+  return (
+    <li className="border-b border-[var(--border)] last:border-b-0">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 bg-[var(--background)] px-3 py-2 text-left hover:bg-[var(--secondary)]/40"
+        onClick={() => setExpanded(v => !v)}
+      >
+        <StatusLamp value="ok" kind="reach" />
+        <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
+          {items.length} completed
+        </span>
+        <span className="ml-auto text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+          {expanded ? '▾' : '▸'}
+        </span>
+      </button>
+      {expanded && (
+        <ul className="m-0 flex list-none flex-col border-t border-[var(--border)] p-0 opacity-80">
+          {items.map(item => (
+            <QueueItemRow
+              key={item.id}
+              item={item}
+              canAdmin={canAdmin}
+              reconcileFindings={reconcileFindings}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}
+
 function TaskQueuePanel({
   items,
   lane,
@@ -398,6 +443,7 @@ function TaskQueuePanel({
     [context, laneReconcileOptions],
   )
   const streamId = MIGRATE_LANE_STREAM_IDS[lane.id]
+  const { active, completed } = splitQueueByCompletion(items)
 
   if (items.length === 0) {
     return (
@@ -417,7 +463,8 @@ function TaskQueuePanel({
           </h3>
         </div>
         <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {items.length} item{items.length > 1 ? 's' : ''}
+          {active.length} active
+          {completed.length > 0 ? ` · ${completed.length} completed` : ''}
         </span>
       </header>
       {isWaveLane && (
@@ -426,7 +473,7 @@ function TaskQueuePanel({
         </div>
       )}
       <ul className="m-0 flex list-none flex-col p-0">
-        {items.map(item => (
+        {active.map(item => (
           <QueueItemRow
             key={item.id}
             item={item}
@@ -434,6 +481,11 @@ function TaskQueuePanel({
             reconcileFindings={laneFindings}
           />
         ))}
+        <CompletedQueueGroup
+          items={completed}
+          canAdmin={canAdmin}
+          reconcileFindings={laneFindings}
+        />
       </ul>
       {isWaveLane && streamId != null && (
         <div className="border-t border-[var(--border)] px-3 py-2">

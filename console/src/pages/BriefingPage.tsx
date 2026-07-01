@@ -1,22 +1,31 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
-import { fetchClusterObservability, fetchRemediationJobs } from '@/api/platform'
+import { fetchClusterObservability, fetchRemediationJobs, fetchSessionSnapshotLatest } from '@/api/platform'
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, SegmentControl } from '@bifrost/ui'
+import { Sparkles } from 'lucide-react'
 import { StatusLamp } from '@/components/StatusLamp'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
 import { NightlyBriefingPanel } from '@/components/briefing/NightlyBriefingPanel'
 import { TrackCardsSection } from '@/components/briefing/TrackCardsSection'
 import { BuildPhaseGatePanel } from '@/components/briefing/BuildPhaseGatePanel'
+import { BriefingPhase1SignoffPanel } from '@/components/briefing/BriefingPhase1SignoffPanel'
+import { BriefingPhase2SignoffPanel } from '@/components/briefing/BriefingPhase2SignoffPanel'
+import { BriefingFoldableSection } from '@/components/briefing/BriefingFoldableSection'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
+import {
+  parseBriefingUrlState,
+  writeBriefingUrlState,
+  type BriefingPackSize,
+} from '@/lib/briefing/briefingUrlState'
 import {
   AGENT_DIALOGUE_LANGUAGE_OPTIONS,
   DEFAULT_AGENT_DIALOGUE_LANGUAGE,
   type AgentDialogueLanguage,
 } from '@/lib/briefing/agentDialogueLanguage'
-import { computeSessionDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
-import { loadSnapshot, saveSnapshot } from '@/lib/briefing/sessionSnapshot'
+import { computeSessionDelta, isEmptyDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
+import { loadSnapshot, saveSnapshot, type SessionSnapshot } from '@/lib/briefing/sessionSnapshot'
 import { CONSOLE_UI_PROGRESS, type UiItemStatus } from '@/lib/briefing/uiProgressSnapshot'
 import { TrackLaneSection } from '@/components/briefing/TrackLaneSection'
 import { BriefingSyncLoopPanel } from '@/components/briefing/BriefingSyncLoopPanel'
@@ -29,6 +38,7 @@ import {
   reconcileBriefing,
 } from '@/lib/briefing/reconcileBriefing'
 import type { WorkIntent } from '@/lib/briefing/workIntents'
+import { WORK_INTENT_OPTIONS } from '@/lib/briefing/workIntents'
 import {
   buildQueueForLane,
   defaultLaneForTrack,
@@ -39,6 +49,7 @@ import { computeAllTracks, type TrackId } from '@/lib/briefing/workTracks'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
 import { CATALOG_VERSION } from '@/lib/environments-catalog'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 interface BriefingPageProps {
   context: OpsContextResponse | undefined
@@ -77,10 +88,16 @@ export function BriefingPage({
   onOpenAgentDesk,
   onOpenAudit,
 }: BriefingPageProps) {
-  const [selectedTrack, setSelectedTrack] = useState<TrackId>('build')
-  const [selectedLane, setSelectedLane] = useState<LaneId>(() =>
-    defaultLaneForTrack('build'),
+  const initialUrl = useMemo(() => parseBriefingUrlState(), [])
+  const [selectedTrack, setSelectedTrack] = useState<TrackId>(initialUrl.track ?? 'build')
+  const [selectedLane, setSelectedLane] = useState<LaneId>(() => {
+    if (initialUrl.lane != null) return initialUrl.lane
+    return defaultLaneForTrack(initialUrl.track ?? 'build')
+  })
+  const [intentOverride, setIntentOverride] = useState<WorkIntent | null>(
+    initialUrl.intent ?? null,
   )
+  const [packSize, setPackSize] = useState<BriefingPackSize>(initialUrl.pack ?? 'compact')
   const [initialLaneSynced, setInitialLaneSynced] = useState(false)
   const [showSessionPack, setShowSessionPack] = useState(false)
   const [showAlignmentPack, setShowAlignmentPack] = useState(false)
@@ -90,8 +107,23 @@ export function BriefingPage({
     DEFAULT_AGENT_DIALOGUE_LANGUAGE,
   )
 
-  const [previousSnapshot] = useState(() => loadSnapshot())
+  const { canOperate } = usePlatformAuth()
+  const [localSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
+
+  const serverSnapshotQuery = useQuery({
+    queryKey: ['session-snapshot', 'latest'],
+    queryFn: async () => {
+      const res = await fetchSessionSnapshotLatest()
+      return (res.snapshot ?? null) as SessionSnapshot | null
+    },
+    staleTime: 60_000,
+  })
+
+  const previousSnapshot = useMemo((): SessionSnapshot | null => {
+    if (serverSnapshotQuery.data != null) return serverSnapshotQuery.data
+    return localSnapshot
+  }, [serverSnapshotQuery.data, localSnapshot])
 
   const remediationJobsQuery = useQuery({
     queryKey: ['remediation', 'jobs'],
@@ -111,18 +143,34 @@ export function BriefingPage({
 
   useEffect(() => {
     if (!dataReady || initialLaneSynced) return
-    setSelectedLane(defaultLaneForTrack(selectedTrack, context, matrices, clusterSummary))
+    if (initialUrl.lane == null) {
+      setSelectedLane(defaultLaneForTrack(selectedTrack, context, matrices, clusterSummary))
+    }
     setInitialLaneSynced(true)
   }, [
     dataReady,
     initialLaneSynced,
+    initialUrl.lane,
     selectedTrack,
     context,
     matrices,
     clusterSummary,
   ])
 
-  const intent: WorkIntent = laneById(selectedLane).workIntent
+  const laneDefaultIntent = laneById(selectedLane).workIntent
+  const intent: WorkIntent = intentOverride ?? laneDefaultIntent
+
+  useEffect(() => {
+    writeBriefingUrlState({
+      track: selectedTrack,
+      lane: selectedLane,
+      intent:
+        intentOverride != null && intentOverride !== laneDefaultIntent
+          ? intentOverride
+          : undefined,
+      pack: packSize === 'compact' ? undefined : packSize,
+    })
+  }, [selectedTrack, selectedLane, intentOverride, laneDefaultIntent, packSize])
 
   const laneQueue = useMemo(
     () => buildQueueForLane(selectedLane, context, matrices, clusterSummary),
@@ -173,12 +221,13 @@ export function BriefingPage({
     setSessionDelta(delta)
   }, [dataReady, previousSnapshot, context, matrices, clusterSummary, platformHealthy, auditRecords, remediationJobs])
 
-  function handleSaveSnapshot() {
-    saveSnapshot(
+  async function handleSaveSnapshot() {
+    await saveSnapshot(
       { context, matrices, clusterSummary, platformHealthy },
       auditRecords,
       remediationJobs,
     )
+    void serverSnapshotQuery.refetch()
   }
 
   const observabilityQuery = useQuery({
@@ -202,6 +251,7 @@ export function BriefingPage({
     () =>
       buildBriefingPack({
         intent,
+        packSize,
         sessionDelta,
         trackSummaries,
         selectedTrack,
@@ -212,6 +262,7 @@ export function BriefingPage({
       }),
     [
       intent,
+      packSize,
       sessionDelta,
       trackSummaries,
       selectedTrack,
@@ -233,9 +284,14 @@ export function BriefingPage({
 
   async function handleCopySession() {
     await copyText(sessionPack)
-    handleSaveSnapshot()
+    await handleSaveSnapshot()
     setSessionCopied(true)
     window.setTimeout(() => setSessionCopied(false), 2000)
+  }
+
+  function handleSendToAgentDesk() {
+    void handleSaveSnapshot()
+    onOpenAgentDesk?.({ prefill: sessionPack })
   }
 
   async function handleCopyAlignment() {
@@ -244,26 +300,18 @@ export function BriefingPage({
     window.setTimeout(() => setAlignmentCopied(false), 2000)
   }
 
+  const uiProgressDone = CONSOLE_UI_PROGRESS.filter(r => r.status === 'done').length
+  const packHasWarnings = packFindings.some(f => f.severity === 'warning')
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <BriefingSyncLoopPanel
-        context={context}
-        reconcileFindings={packFindings}
-        onOpenAgentDesk={onOpenAgentDesk}
-      />
-      <NightlyBriefingPanel onOpenAgentDesk={onOpenAgentDesk} />
-      <SessionDeltaPanel
-        delta={sessionDelta}
-        hasBaseline={previousSnapshot != null}
-        onOpenAgentDesk={onOpenAgentDesk}
-      />
-
       <TrackCardsSection
         tracks={trackSummaries}
         selectedTrack={selectedTrack}
         onSelectTrack={(id) => {
           setSelectedTrack(id)
           setSelectedLane(defaultLaneForTrack(id, context, matrices, clusterSummary))
+          setIntentOverride(null)
           setShowSessionPack(false)
         }}
       />
@@ -275,6 +323,7 @@ export function BriefingPage({
         selectedLane={selectedLane}
         onSelectLane={(id) => {
           setSelectedLane(id)
+          setIntentOverride(null)
           setShowSessionPack(false)
         }}
         context={context}
@@ -311,6 +360,42 @@ export function BriefingPage({
                   value: opt.id,
                   label: opt.label,
                 }))}
+                size="sm"
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-dense-meta text-muted-foreground">Work intent</span>
+              <SegmentControl
+                value={intent}
+                onChange={(v) => {
+                  const next = v as WorkIntent
+                  setIntentOverride(next === laneDefaultIntent ? null : next)
+                  setShowSessionPack(false)
+                }}
+                options={WORK_INTENT_OPTIONS.map(opt => ({
+                  value: opt.id,
+                  label: opt.shortLabel,
+                }))}
+                size="sm"
+              />
+              {intentOverride != null && intentOverride !== laneDefaultIntent && (
+                <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                  Override (lane default: {laneDefaultIntent})
+                </span>
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-dense-meta text-muted-foreground">Pack size</span>
+              <SegmentControl
+                value={packSize}
+                onChange={(v) => {
+                  setPackSize(v as BriefingPackSize)
+                  setShowSessionPack(false)
+                }}
+                options={[
+                  { value: 'compact', label: 'Compact' },
+                  { value: 'full', label: 'Full' },
+                ]}
                 size="sm"
               />
             </div>
@@ -354,9 +439,22 @@ export function BriefingPage({
                   : 'Loading spine & matrix…'}
             </Button>
             {showSessionPack && (
-              <Button variant="outline" size="sm" onClick={() => void handleCopySession()}>
-                {sessionCopied ? 'Copied!' : 'Copy session pack'}
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={() => void handleCopySession()}>
+                  {sessionCopied ? 'Copied!' : 'Copy session pack'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!canOperate || onOpenAgentDesk == null}
+                  title={!canOperate ? 'Operator token required' : undefined}
+                  onClick={handleSendToAgentDesk}
+                >
+                  <Sparkles className="size-3.5 shrink-0" aria-hidden />
+                  Send to Agent Desk
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -364,12 +462,15 @@ export function BriefingPage({
         {showSessionPack && (
           <LlmPackPreview
             charCount={sessionPack.length}
-            metaLabel={`track: ${selectedTrack} · lane: ${selectedLane} · lang: ${agentDialogueLanguage}`}
+            metaLabel={`track: ${selectedTrack} · lane: ${selectedLane} · intent: ${intent} · pack: ${packSize} · lang: ${agentDialogueLanguage}`}
             pack={sessionPack}
             footer="The Agent must first reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) a Source Audit table (provenance per fact + contradiction report) — wait for your selection before implementing."
           />
         )}
       </section>
+
+      <BriefingPhase1SignoffPanel />
+      <BriefingPhase2SignoffPanel />
 
       <section className="page-section panel-elevated px-4 py-3">
         <h2 className="m-0 text-sm font-semibold">Live snapshot</h2>
@@ -455,41 +556,83 @@ export function BriefingPage({
         </div>
       </section>
 
-      <section className="page-section panel-elevated overflow-hidden">
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-          <h2 className="m-0 text-sm font-semibold">Console UI progress</h2>
-          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {CONSOLE_UI_PROGRESS.filter(r => r.status === 'done').length} done ·{' '}
-            {CONSOLE_UI_PROGRESS.filter(r => r.status === 'partial').length} partial ·{' '}
-            {CONSOLE_UI_PROGRESS.filter(r => r.status === 'planned').length} planned
-          </span>
-        </header>
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Area</DenseTableHead>
-              <DenseTableHead>Feature</DenseTableHead>
-              <DenseTableHead>Status</DenseTableHead>
-              <DenseTableHead>Notes</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {CONSOLE_UI_PROGRESS.map(row => (
-              <DenseTableRow key={`${row.area}-${row.item}`}>
-                <DenseTableCell className="font-mono-tabular">{row.area}</DenseTableCell>
-                <DenseTableCell>{row.item}</DenseTableCell>
-                <DenseTableCell>
-                  <StatusLamp value={statusLamp(row.status)} kind="reach" />{' '}
-                  <span className="font-mono-tabular">{row.status}</span>
-                </DenseTableCell>
-                <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                  {row.notes}
-                </DenseTableCell>
-              </DenseTableRow>
-            ))}
-          </DenseTableBody>
-        </DenseDataTable>
-      </section>
+      <BriefingFoldableSection
+        kicker="Automation"
+        title="Briefing sync loop"
+        description="Detect → propose → approve → fix. Nightly drift pipeline status."
+        defaultExpanded={false}
+        badge={packBlocked ? 'BLOCKED' : packHasWarnings ? 'WARN' : 'CLEAR'}
+        badgeVariant={packBlocked ? 'warning' : packHasWarnings ? 'info' : 'success'}
+      >
+        <BriefingSyncLoopPanel
+          context={context}
+          reconcileFindings={packFindings}
+          onOpenAgentDesk={onOpenAgentDesk}
+        />
+      </BriefingFoldableSection>
+
+      <BriefingFoldableSection
+        kicker="Automation"
+        title="Nightly agent report & drift proposals"
+        description="Layer 1–4 scan from agent host. Owner approval required for fixes."
+        defaultExpanded={false}
+      >
+        <NightlyBriefingPanel onOpenAgentDesk={onOpenAgentDesk} />
+      </BriefingFoldableSection>
+
+      <BriefingFoldableSection
+        kicker="Automation"
+        title="Since your last session"
+        description={
+          previousSnapshot != null
+            ? `Baseline: ${new Date(previousSnapshot.savedAt).toLocaleString()}${serverSnapshotQuery.data != null ? ' (server)' : ' (local)'}`
+            : 'First session — snapshot saved on briefing copy.'
+        }
+        defaultExpanded={false}
+        badge={sessionDelta != null && !isEmptyDelta(sessionDelta) ? 'CHANGES' : undefined}
+        badgeVariant="info"
+      >
+        <SessionDeltaPanel
+          delta={sessionDelta}
+          hasBaseline={previousSnapshot != null}
+          onOpenAgentDesk={onOpenAgentDesk}
+        />
+      </BriefingFoldableSection>
+
+      <BriefingFoldableSection
+        title="Console UI progress"
+        description={`${uiProgressDone}/${CONSOLE_UI_PROGRESS.length} done — manual snapshot until Phase 3 auto-generation.`}
+        defaultExpanded={false}
+        className="page-section panel-elevated overflow-hidden px-0 py-3"
+      >
+        <div className="px-3">
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Area</DenseTableHead>
+                <DenseTableHead>Feature</DenseTableHead>
+                <DenseTableHead>Status</DenseTableHead>
+                <DenseTableHead>Notes</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {CONSOLE_UI_PROGRESS.map(row => (
+                <DenseTableRow key={`${row.area}-${row.item}`}>
+                  <DenseTableCell className="font-mono-tabular">{row.area}</DenseTableCell>
+                  <DenseTableCell>{row.item}</DenseTableCell>
+                  <DenseTableCell>
+                    <StatusLamp value={statusLamp(row.status)} kind="reach" />{' '}
+                    <span className="font-mono-tabular">{row.status}</span>
+                  </DenseTableCell>
+                  <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                    {row.notes}
+                  </DenseTableCell>
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        </div>
+      </BriefingFoldableSection>
 
       <section className="briefing-maintain-panel page-section px-4 py-3">
         <p className="briefing-section-kicker m-0">Meta · Platform maintenance</p>
