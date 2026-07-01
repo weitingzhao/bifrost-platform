@@ -2,12 +2,14 @@ import type {
   AgentBridgeResponse,
   ClusterSummary,
   MatrixResponse,
+  Reachability,
   RemediationHealthResponse,
   SelfHealthResponse,
   StgSmokeResponse,
   SupplyChainResponse,
-  Reachability,
+  VerifyPayloadResponse,
 } from '@/api/types'
+import { formatVerifyPayloadGuidance } from '@/lib/control-room/payloadVerification'
 
 export type Signal = Reachability
 
@@ -203,12 +205,16 @@ export interface MissionSnapshot {
  * Generate a structured diagnostic prompt from the current mission snapshot.
  * Returns null when the mission is NOMINAL (nothing to fix).
  */
-export function buildDiagnosticPrompt(snap: MissionSnapshot): string | null {
+export function buildDiagnosticPrompt(
+  snap: MissionSnapshot,
+  verify?: VerifyPayloadResponse,
+): string | null {
   if (snap.missionOverall === 'ok') return null
 
   const lines: string[] = []
   const mission = missionStatus(snap.missionOverall)
   lines.push(`Mission status: ${mission}.`)
+  lines.push('', 'Run verify_payload (MCP) or GET /api/v1/mission/verify-payload before fixing datastore targets.')
 
   const rocketIssues: string[] = []
   const modules: Array<{ name: string; state: ModuleState }> = [
@@ -234,6 +240,7 @@ export function buildDiagnosticPrompt(snap: MissionSnapshot): string | null {
   }
 
   lines.push('', 'Diagnose root causes for the issues above and propose remediation steps. For read-only checks, proceed automatically. For destructive actions, request operator approval first.')
+  lines.push(...formatVerifyPayloadGuidance(verify))
   return lines.join('\n')
 }
 

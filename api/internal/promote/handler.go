@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
@@ -14,8 +15,8 @@ type Handler struct {
 	audit *actuation.AuditLog
 }
 
-func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
-	svc := NewService(cfg)
+func NewHandler(cfg *config.Config, audit *actuation.AuditLog, cluster *cluster.Handler) *Handler {
+	svc := NewService(cfg, cluster)
 	return &Handler{svc: svc, store: svc.store, audit: audit}
 }
 

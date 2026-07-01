@@ -74,6 +74,7 @@ import type {
   HermesActuationLevel,
   RunnerSmokeResponse,
   RetrospectiveReport,
+  VerifyPayloadResponse,
   SessionSnapshotLatestResponse,
   SessionSnapshotSaveResponse,
   BriefingSessionPackResponse,
@@ -134,6 +135,12 @@ export async function fetchMatrix(env?: string): Promise<MatrixResponse | AllMat
   const r = await fetch(url)
   if (!r.ok) throw new Error(`matrix: HTTP ${r.status}`)
   return r.json() as Promise<MatrixResponse | AllMatricesResponse>
+}
+
+export async function fetchVerifyPayload(): Promise<VerifyPayloadResponse> {
+  const r = await fetch('/api/v1/mission/verify-payload')
+  if (!r.ok) throw new Error(`verify-payload: HTTP ${r.status}`)
+  return r.json() as Promise<VerifyPayloadResponse>
 }
 
 export async function fetchPlatformHealth(): Promise<boolean> {

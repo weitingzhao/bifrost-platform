@@ -2,7 +2,7 @@
  * Control Room Phase 3 — mission-scoped command intents for the Commander diagnosis zone.
  */
 
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { MatrixResponse, OpsContextResponse, VerifyPayloadResponse } from '@/api/types'
 import {
   buildSessionPack,
   packForMode,
@@ -41,13 +41,17 @@ function payloadVerifyPrefill(
   snapshot: MissionSnapshot,
   matrices: MatrixResponse[],
   context?: OpsContextResponse,
+  verify?: VerifyPayloadResponse,
 ): string {
-  const base = buildControlRoomDispatchPack({ snapshot, matrices, context })
+  const base = buildControlRoomDispatchPack({ snapshot, matrices, context, verify })
   if (base != null) return base
   return [
     '# Control Room — payload verification',
     '',
     `Payload status: ${snapshot.payloadOverall}.`,
+    '',
+    'First call MCP verify_payload or GET /api/v1/mission/verify-payload.',
+    'Classify: NOMINAL | PROBE_DRIFT | DATA_LAYER | HTTP_FAIL before any datastore fix.',
     '',
     'Read-only verification: list failing matrix targets for dev and prod, hypothesize root cause (network, K3s, datastore), propose probes only — no writes without approval.',
   ].join('\n')
@@ -71,8 +75,9 @@ export function buildCommandIntentStripModel(input: {
   snapshot: MissionSnapshot
   matrices: MatrixResponse[]
   context?: OpsContextResponse
+  verify?: VerifyPayloadResponse
 }): CommandIntentStripModel {
-  const { snapshot, matrices, context } = input
+  const { snapshot, matrices, context, verify } = input
   const suggestedMode = suggestAgentMode(context)
   const primaryChips: CommandIntentChip[] = []
 
@@ -84,7 +89,7 @@ export function buildCommandIntentStripModel(input: {
       emphasis: 'primary',
       action: {
         type: 'agent_prefill',
-        prefill: payloadVerifyPrefill(snapshot, matrices, context),
+        prefill: payloadVerifyPrefill(snapshot, matrices, context, verify),
       },
     })
   }

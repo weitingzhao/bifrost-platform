@@ -30,6 +30,13 @@ server.tool('get_connectivity_matrix', 'Environment connectivity matrix', {}, as
   jsonResult(await platformGet('/api/v1/matrix')),
 )
 
+server.tool(
+  'verify_payload',
+  'Matrix vs cluster datastore classification (NOMINAL/PROBE_DRIFT/DATA_LAYER/HTTP_FAIL per env)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/mission/verify-payload')),
+)
+
 server.tool('list_environments', 'Registered environments', {}, async () =>
   jsonResult(await platformGet('/api/v1/environments')),
 )

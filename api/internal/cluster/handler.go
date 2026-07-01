@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
 type Handler struct {
@@ -53,6 +54,11 @@ func (h *Handler) HandlePostgresStatus(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) HandleRedisStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.RedisStatus(r.Context()))
+}
+
+// DatastoreSnapshot exposes per-env PG/Redis reachability for matrix probes (Mac-hosted platform-api).
+func (h *Handler) DatastoreSnapshot(ctx context.Context) probe.DatastoreSnapshot {
+	return h.svc.DatastoreSnapshot(ctx)
 }
 
 func (h *Handler) HandleGovernance(w http.ResponseWriter, r *http.Request) {

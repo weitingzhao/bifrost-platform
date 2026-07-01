@@ -83,6 +83,53 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   { action: 'Editing bifrost-trader-engine/ (read-only reference)', scope: 'All modes' },
 ]
 
+/** Mission Signal Phase 2 — classify before remediating datastore / matrix failures. */
+export type MissionDiagnosticPlaybook = {
+  classification: 'NOMINAL' | 'PROBE_DRIFT' | 'DATA_LAYER' | 'HTTP_FAIL'
+  trigger: string
+  agentAction: string
+  autonomy: 'L0' | 'L1' | 'L2'
+  mustNot: string
+}
+
+export const MISSION_DIAGNOSTIC_PLAYBOOKS: MissionDiagnosticPlaybook[] = [
+  {
+    classification: 'NOMINAL',
+    trigger: 'verify_payload: matrix and cluster agree for PG/Redis',
+    agentAction: 'Skip datastore remediation; investigate other subsystems if Mission still degraded',
+    autonomy: 'L0',
+    mustNot: 'Restart CNPG/Redis or open platform defect PR without evidence',
+  },
+  {
+    classification: 'PROBE_DRIFT',
+    trigger: 'Matrix fail on postgres/redis but cluster/postgres + cluster/redis report ok (e.g. *.svc.cluster.local from Mac)',
+    agentAction: 'Document probe defect; propose platform-api/environments.yaml fix; re-run verify_payload',
+    autonomy: 'L2',
+    mustNot: 'Treat as payload outage — do NOT restart PG/Redis pods or fail over CNPG',
+  },
+  {
+    classification: 'DATA_LAYER',
+    trigger: 'verify_payload: matrix and cluster both fail or cluster reports CNPG/Redis unhealthy',
+    agentAction: 'Diagnose CNPG/Redis in data NS; L1 confirm before rollout restart or failover',
+    autonomy: 'L1',
+    mustNot: 'Prod cutover or spine writes without Owner approval',
+  },
+  {
+    classification: 'HTTP_FAIL',
+    trigger: 'Trade API or nginx-spa matrix targets fail; datastore classification NOMINAL',
+    agentAction: 'Check bifrost-{env} deployments, ingress, and API pods — not datastore',
+    autonomy: 'L1',
+    mustNot: 'Conflate with PG/Redis probe drift',
+  },
+]
+
+export const MISSION_DIAGNOSTIC_MCP = {
+  verifyPayload: 'verify_payload — GET /api/v1/mission/verify-payload',
+  matrix: 'get_connectivity_matrix',
+  clusterPostgres: 'get_cluster_postgres (Console cluster API)',
+  clusterRedis: 'get_cluster_redis (Console cluster API)',
+} as const
+
 export type OpeningPrompt = {
   mode: string
   example: string
@@ -256,6 +303,13 @@ export function buildAgentProtocolLlmPack(): string {
     '',
     '## Forbidden actions (all modes)',
     ...FORBIDDEN_ACTIONS.map(f => `- ${f.action} [${f.scope}]`),
+    '',
+    '## Mission diagnostic playbooks (verify_payload)',
+    `- MCP: \`${MISSION_DIAGNOSTIC_MCP.verifyPayload}\``,
+    ...MISSION_DIAGNOSTIC_PLAYBOOKS.map(
+      p =>
+        `- **${p.classification}** [${p.autonomy}]: ${p.trigger} → ${p.agentAction} | Must-not: ${p.mustNot}`,
+    ),
     '',
     '## Example opening prompts',
     ...OPENING_PROMPTS.map(p => `- [${p.mode}] "${p.example}"`),

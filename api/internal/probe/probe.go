@@ -61,6 +61,10 @@ func NewProber() *Prober {
 }
 
 func (p *Prober) ProbeEnvironment(ctx context.Context, env config.Environment) MatrixResponse {
+	return p.ProbeEnvironmentWithDatastore(ctx, env, nil)
+}
+
+func (p *Prober) ProbeEnvironmentWithDatastore(ctx context.Context, env config.Environment, ds *DatastoreSnapshot) MatrixResponse {
 	base := strings.TrimRight(env.NginxBase, "/")
 	targets := make([]Target, 0, len(tradeAPIEndpoints)+4+len(policyBlockedTargets))
 
@@ -69,10 +73,8 @@ func (p *Prober) ProbeEnvironment(ctx context.Context, env config.Environment) M
 		targets = append(targets, p.probeHTTP(ctx, ep.ID, ep.Category, url, "", env))
 	}
 
-	targets = append(targets, p.probeTCP(ctx, "postgres", "datastore",
-		fmt.Sprintf("%s:%d", env.Postgres.Host, env.Postgres.Port)))
-	targets = append(targets, p.probeTCP(ctx, "redis", "datastore",
-		fmt.Sprintf("%s:%d", env.Redis.Host, env.Redis.Port)))
+	targets = append(targets, p.probePostgres(ctx, env.ID, postgresCfgAddr(env), ds))
+	targets = append(targets, p.probeRedis(ctx, env.ID, redisCfgAddr(env), ds))
 
 	capURL := base + "/api/ops/ops/auth/capabilities"
 	token := env.OpsToken()
