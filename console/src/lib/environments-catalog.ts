@@ -56,7 +56,7 @@ export type HardwareRow = {
 export type PlatformPhase = {
   id: string
   label: string
-  timeframe: string
+  sequence: string
   deliverables: string
 }
 
@@ -102,7 +102,7 @@ export const SCOPE_ROWS: ScopeRow[] = [
     component: 'Bifrost Ops Platform (control plane)',
     technology: 'Go API :8780 · React Ops Console :5180 · Dense UI tokens',
     notes:
-      'Phase 0 L0 read-only: Control Room live strip, connectivity matrix, topology, Program spine, Ops auth probe. No daemon_control or ib:operator:cmd. Future: agent/, mcp/.',
+      'Control plane — Go API :8780, React Ops Console :5180, MCP tools. Probes matrix/topology/spine; no daemon_control or ib:operator:cmd.',
   },
   {
     tag: 'TRADE-FE',
@@ -333,20 +333,20 @@ export const HARDWARE_ROWS: HardwareRow[] = [
 export const PLATFORM_PHASES: PlatformPhase[] = [
   {
     id: 'A',
-    label: 'Gate (now ~3mo)',
-    timeframe: 'Compose prod + Mac CI',
+    label: 'Gate',
+    sequence: 'First',
     deliverables: '2C-B Docker Prod · release_gate.sh · Mac Mini #2 CI · MkDocs Goal',
   },
   {
     id: 'B',
-    label: 'GitOps (3–9mo)',
-    timeframe: 'K3s + CNPG',
+    label: 'GitOps',
+    sequence: 'Second',
     deliverables: 'Gitea · Tekton · ArgoCD · k8s/base/ · FE staging on K3s',
   },
   {
     id: 'C',
-    label: 'Closed loop (9–18mo)',
-    timeframe: 'Observe + AI ops',
+    label: 'Closed loop',
+    sequence: 'Third',
     deliverables: 'Prometheus/Loki/Grafana · bifrost-ops-mcp · AlertManager · research RAG',
   },
 ]
@@ -485,7 +485,7 @@ export function buildStaticCatalogContext(): string {
     ...HARDWARE_ROWS.map(h => `- **${h.id}** ${h.host}: compose=[${h.roleCompose}] k3s=[${h.roleK3s}]`),
     '',
     '## Platform roadmap phases',
-    ...PLATFORM_PHASES.map(p => `- **Phase ${p.id}** ${p.label} (${p.timeframe}): ${p.deliverables}`),
+    ...PLATFORM_PHASES.map(p => `- **Phase ${p.id}** ${p.label} (${p.sequence}): ${p.deliverables}`),
     '',
     '## Authorization (platform)',
     ...AUTHORIZATION_LEVELS.map(a => `- **${a.level}**: ${a.behavior}`),

@@ -337,7 +337,7 @@ def main() -> int:
         print(f"Starting console on http://127.0.0.1:{console_port}")
         children.append(
             subprocess.Popen(
-                ["npm", "run", "dev", "--", "--port", str(console_port), "--strictPort"],
+                ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", str(console_port), "--strictPort"],
                 cwd=_CONSOLE_DIR,
                 env=env,
             )

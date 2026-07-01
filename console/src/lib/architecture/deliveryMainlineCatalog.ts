@@ -1,31 +1,41 @@
 /**
  * STG delivery release workflow — authoritative for Ops Console → Operate → Delivery.
+ * Phase status is Projection (spine) — use resolveStgReleasePhases(context).
  * Infra detail: bifrost-trade-infra/docs/DELIVER_STG.md
  */
 
-export const DELIVERY_MAINLINE_VERSION = '2026-06-18'
+import type { OpsContextResponse } from '@/api/types'
+import { resolveStgReleasePhases } from './spineProjection'
+
+export const DELIVERY_MAINLINE_VERSION = '2026-07-01'
 export const DELIVERY_MAINLINE_SOURCE = 'console/src/lib/architecture/deliveryMainlineCatalog.ts'
 
 export type DeliveryPhaseStatus = 'done' | 'active' | 'blocked' | 'planned'
 
-export type DeliveryReleasePhase = {
+/** Constitution — structure only; no live status. */
+export type DeliveryReleasePhaseDefinition = {
   id: string
   seq: number
   title: string
   owner: string
-  status: DeliveryPhaseStatus
   summary: string
   actions: string[]
 }
 
+/** Projection — resolved from spine at render time. */
+export type DeliveryReleasePhase = DeliveryReleasePhaseDefinition & {
+  status: DeliveryPhaseStatus
+  spineMilestoneId?: string
+  spineStatus?: string
+}
+
 /** End-to-end STG release (post Local Prod Final). Prod cutover is a separate track (Deploy Mainline D1). */
-export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
+export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
   {
     id: 'push-upstream',
     seq: 1,
     title: 'Push to GitHub',
     owner: 'Developer',
-    status: 'done',
     summary: 'Commit bifrost-trade-{api,socket,worker,frontend,core} + bifrost-trade-infra. Gitea mirrors pull from GitHub.',
     actions: [
       'Console: Operate → Delivery → Sync mirrors',
@@ -39,7 +49,6 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 2,
     title: 'STG config & overlay',
     owner: 'Ops',
-    status: 'done',
     summary: 'IB client_id 210段、Massive delayed WS、Secrets — ConfigMap bifrost-config + bifrost-stg-secrets.',
     actions: [
       'make sync-stg-config (from .env)',
@@ -52,7 +61,6 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 3,
     title: 'bifrost-deliver-stg',
     owner: 'Tekton / Console Delivery',
-    status: 'done',
     summary:
       'Pipeline: prepare (mirror-sync + Dockerfile CMs) → Kaniko (9 API + FE + worker/socket) → rollout → verify-stg → Argo sync.',
     actions: [
@@ -68,8 +76,7 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 4,
     title: 'STG acceptance',
     owner: 'Ops / Agent',
-    status: 'done',
-    summary: 'Automated HTTP verify runs inside pipeline; Tier B (IB/Massive/Celery) signed off 2026-06-18.',
+    summary: 'Automated HTTP verify runs inside pipeline; Tier B (IB/Massive/Celery) Owner sign-off on Promote.',
     actions: [
       'Pipeline task verify-stg (gateway + 9 APIs)',
       'Operate → Delivery → Verify STG (or Observe tab → Stg smoke)',
@@ -82,8 +89,7 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 5,
     title: 'STG release gate',
     owner: 'Promote (stg tier)',
-    status: 'done',
-    summary: 'STG deliver + smoke + STG release gate pass + Tier B sign-off — staging track SIGNED 2026-06-18.',
+    summary: 'STG deliver + smoke + STG release gate pass + Tier B sign-off — staging track complete.',
     actions: [
       'Promote → Run STG release gate (tier=stg)',
       'Promote → Tier B sign-off after IB/Massive manual checks',
@@ -95,8 +101,7 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     seq: 6,
     title: 'Prod cutover',
     owner: 'Deploy Mainline / D1',
-    status: 'active',
-    summary: 'Prod overlay + bifrost-deliver-prod + prod matrix. Milestone 2c-b-prod-cutover IN_PROGRESS (D1 SIGNED).',
+    summary: 'Prod overlay + bifrost-deliver-prod + prod matrix — spine milestone 2c-b-prod-cutover.',
     actions: [
       'Ops Console → Operate → Deploy Mainline (seq 5 prod overlay)',
       'Implement pipeline-deliver-prod + k8s/overlays/prod',
@@ -104,6 +109,10 @@ export const STG_RELEASE_PHASES: DeliveryReleasePhase[] = [
     ],
   },
 ]
+
+export function buildStgReleasePhases(context?: OpsContextResponse): DeliveryReleasePhase[] {
+  return resolveStgReleasePhases(STG_RELEASE_PHASE_DEFINITIONS, context)
+}
 
 export const DELIVERY_PIPELINE_CATALOG = [
   {
@@ -176,14 +185,16 @@ export const DELIVERY_RUNBOOK_COMMANDS = {
   gateway: 'http://trade-stg.bifrost.lan/',
 } as const
 
-export function buildDeliveryMainlineLlmPack(): string {
+export function buildDeliveryMainlineLlmPack(context?: OpsContextResponse): string {
+  const phases = buildStgReleasePhases(context)
   const lines = [
     `# Delivery mainline (${DELIVERY_MAINLINE_VERSION})`,
     `Source: ${DELIVERY_MAINLINE_SOURCE}`,
     '',
-    '## STG release phases',
-    ...STG_RELEASE_PHASES.map(
-      p => `${p.seq}. ${p.title} [${p.status}] — ${p.summary}\n   Actions: ${p.actions.join('; ')}`,
+    '## STG release phases (Projection — status from spine)',
+    ...phases.map(
+      p =>
+        `${p.seq}. ${p.title} [${p.status}]${p.spineMilestoneId != null ? ` spine:${p.spineMilestoneId}=${p.spineStatus ?? '?'}` : ''} — ${p.summary}\n   Actions: ${p.actions.join('; ')}`,
     ),
     '',
     '## Pipelines',
