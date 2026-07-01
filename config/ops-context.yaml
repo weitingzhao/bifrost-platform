@@ -228,8 +228,8 @@ coupling_surfaces:
     - ib_client_id
 promotion:
     last_gate:
-        at: "2026-07-01T02:35:30Z"
-        result: pass
+        at: "2026-07-01T02:53:28Z"
+        result: fail
         log_path: bifrost-trade-infra/scripts/release_gate.log
 environments_extended:
     staging:

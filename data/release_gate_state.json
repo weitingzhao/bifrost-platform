@@ -1,7 +1,7 @@
 {
   "tier": "prod",
-  "at": "2026-07-01T02:35:30.710589Z",
-  "result": "pass",
+  "at": "2026-07-01T02:53:28.32648Z",
+  "result": "fail",
   "revision": "main",
   "log_path": "bifrost-trade-infra/scripts/release_gate.log",
   "checks": [
@@ -16,8 +16,8 @@
       "id": "prod-matrix",
       "label": "Prod matrix (all trade probes)",
       "required": true,
-      "reachability": "ok",
-      "detail": "no failing prod targets"
+      "reachability": "fail",
+      "detail": "failing: postgres"
     },
     {
       "id": "deliver-prod-pipeline",
@@ -98,5 +98,5 @@
     }
   ],
   "triggered_by": "admin",
-  "summary": "prod release gate pass (13 checks)"
+  "summary": "prod release gate fail (13 checks)"
 }
