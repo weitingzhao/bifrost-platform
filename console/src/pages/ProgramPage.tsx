@@ -3,6 +3,7 @@ import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, Den
 import type { OpsContextResponse } from '@/api/types'
 import { milestoneStatusVariant } from '@/components/FocusStrip'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
+import { formatSpineStatusLabel, SPINE_STATUS_SEMANTICS_NOTE } from '@/lib/architecture/spineSemantics'
 
 interface ProgramPageProps {
   context: OpsContextResponse | undefined
@@ -81,12 +82,16 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
       )}
 
       <ProgramSection title="Milestones">
+        <p className="m-0 border-b border-[var(--border)] px-4 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Spine (historical sign-off). {SPINE_STATUS_SEMANTICS_NOTE} Live gate verdicts: Operate → Promote
+          (Projection).
+        </p>
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
               <DenseTableHead>ID</DenseTableHead>
               <DenseTableHead>Label</DenseTableHead>
-              <DenseTableHead>Status</DenseTableHead>
+              <DenseTableHead>Spine status</DenseTableHead>
               <DenseTableHead>Blocker</DenseTableHead>
               <DenseTableHead>Signed</DenseTableHead>
             </DenseTableHeadRow>
@@ -97,7 +102,9 @@ export function ProgramPage({ context, isLoading, error, onOpenBlueprint }: Prog
                 <DenseTableCell className="font-mono-tabular">{m.id}</DenseTableCell>
                 <DenseTableCell>{m.label ?? '—'}</DenseTableCell>
                 <DenseTableCell>
-                  <DenseTag variant={milestoneStatusVariant(m.status)}>{m.status}</DenseTag>
+                  <DenseTag variant={milestoneStatusVariant(m.status)}>
+                    {formatSpineStatusLabel(m.status)}
+                  </DenseTag>
                 </DenseTableCell>
                 <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
                   {m.blocker ?? '—'}

@@ -6,6 +6,10 @@
  */
 
 import type { OpsContextResponse } from '@/api/types'
+import {
+  SPINE_MILESTONE_STATUS_DEFINITIONS,
+  SPINE_STATUS_SEMANTICS_NOTE,
+} from '@/lib/architecture/spineSemantics'
 
 export const BLUEPRINT_VERSION = '2026-07-01'
 export const BLUEPRINT_SOURCE = 'console/src/lib/architecture/blueprintCatalog.ts'
@@ -392,7 +396,28 @@ export function buildBlueprintConstitutionPack(): string {
   return lines.join('\n')
 }
 
-/** Build LLM-optimized text for the Blueprint page (Constitution + Spine + Projection). */
+/** Spine-only LLM pack section (live sign-off state + status definitions). */
+export function buildBlueprintSpinePack(spine: OpsContextResponse): string {
+  const lines: string[] = [
+    '## Spine (live sign-off state — medium-changing)',
+    '',
+    SPINE_STATUS_SEMANTICS_NOTE,
+    '',
+    '### Milestone status definitions',
+    ...SPINE_MILESTONE_STATUS_DEFINITIONS.map(
+      row => `- **${row.status}**: ${row.meaning}`,
+    ),
+    '',
+    '### Live snapshot (GET /api/v1/context)',
+    `- phase: ${spine.deployment.phase}`,
+    `- active_track: ${spine.deployment.active_track}`,
+    `- focus: ${spine.focus.headline}`,
+    '- Note: milestone SIGNED = Owner historical sign-off; live gate readiness from Projection (matrix/promote).',
+  ]
+  return lines.join('\n')
+}
+
+/** Build LLM-optimized text for the Blueprint page (Constitution → Spine → Projection). */
 export function buildBlueprintLlmPack(options?: OpsContextResponse | BlueprintLlmPackOptions): string {
   const opts: BlueprintLlmPackOptions =
     options != null && 'deployment' in options
@@ -407,19 +432,12 @@ export function buildBlueprintLlmPack(options?: OpsContextResponse | BlueprintLl
     buildBlueprintConstitutionPack(),
   ]
 
-  if (projectionPack != null && projectionPack.trim() !== '') {
-    lines.push('', projectionPack)
+  if (spine != null) {
+    lines.push('', buildBlueprintSpinePack(spine))
   }
 
-  if (spine != null) {
-    lines.push(
-      '',
-      '## Spine (live sign-off state)',
-      `- phase: ${spine.deployment.phase}`,
-      `- active_track: ${spine.deployment.active_track}`,
-      `- focus: ${spine.focus.headline}`,
-      '- Note: milestone SIGNED = Owner historical sign-off; live gate readiness from Projection (matrix/promote).',
-    )
+  if (projectionPack != null && projectionPack.trim() !== '') {
+    lines.push('', projectionPack)
   }
 
   return lines.join('\n')

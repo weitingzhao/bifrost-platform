@@ -9,6 +9,7 @@ import type {
   TierBStatusResponse,
 } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { MilestoneSpineDualTags } from '@/components/architecture/MilestoneSpineDualTags'
 import { ReleaseGateCompareSection } from '@/components/promote/ReleaseGateCompareSection'
 import {
   evaluatePromoteStatus,
@@ -18,6 +19,7 @@ import {
   clearPromotePreflightPack,
   readPromotePreflightPack,
 } from '@/lib/control-room/promoteCutover'
+import { shouldShowMilestoneDualLabels } from '@/lib/architecture/spineSemantics'
 
 const FLYWHEEL_A_CHECKS = [
   'npm run lint',
@@ -78,6 +80,8 @@ export function PromotePage({
   const promote = evaluatePromoteStatus(context, matrices)
   const stgRelease = evaluateStgReleaseStatus(stgSmoke, lastDeliverSucceeded, stgGate, tierB)
   const staging = context.environments_extended.staging
+  const showCutoverDualLabels =
+    cutover != null && shouldShowMilestoneDualLabels(cutover.status, promote.ready)
 
   async function handleCopyPreflight() {
     if (preflightPack == null) return
@@ -145,6 +149,24 @@ export function PromotePage({
           />
         </div>
       </OpsSection>
+
+      {showCutoverDualLabels && cutover != null && (
+        <section
+          className="page-section panel-elevated flex flex-col gap-2 px-4 py-3"
+          aria-label="Prod cutover spine semantics"
+        >
+          <p className="m-0 text-[var(--text-dense-label)] font-medium">Prod cutover — Spine vs Projection</p>
+          <MilestoneSpineDualTags
+            milestoneId={cutover.id}
+            milestoneStatus={cutover.status}
+            gateReady={promote.ready}
+          />
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Milestone {cutover.status} records historical Owner approval (Spine). Prod cutover gate remains
+            pending until matrix + release gate pass (Projection).
+          </p>
+        </section>
+      )}
 
       {!promote.ready && (
         <section className="page-section panel-elevated px-4 py-3 lamp-warn">

@@ -706,7 +706,7 @@ export function ConsolePage() {
               title={VIEW_TITLES['deploy-mainline']}
               description="Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain and sign-off gates."
             />
-            <DeployMainlinePage />
+            <DeployMainlinePage context={contextQuery.data} />
           </>
         )}
 

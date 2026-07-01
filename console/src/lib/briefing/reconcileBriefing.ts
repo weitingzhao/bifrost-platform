@@ -10,6 +10,7 @@
 
 import type { OpsContextResponse } from '@/api/types'
 import { CATALOG_VERSION } from '@/lib/environments-catalog'
+import { reconcileCatalogSpineParity } from '@/lib/architecture/catalogSpineParity'
 import {
   DATA_LAYER_MIGRATE_STREAM_ID,
   DATA_LAYER_MIGRATION_PHASES,
@@ -348,6 +349,8 @@ export function reconcileBriefing(
   ) {
     reconcileMigrateStreamQueue(dataStream, dataWaves, options.laneQueue, findings)
   }
+
+  findings.push(...reconcileCatalogSpineParity(ctx))
 
   return applyLaneScopeToFindings(findings, options?.selectedLane)
 }

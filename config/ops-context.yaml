@@ -1,6 +1,14 @@
 # Bifrost Ops Platform — context spine (authoritative for milestones & decisions).
 # Console Program/Control Room and Copy-for-LLM merge this file via GET /api/v1/context.
 # Detail: Ops Console → Program → Deploy Mainline (deployMainlineCatalog.ts) L3
+#
+# Milestone status semantics (Spine layer — historical Owner sign-off):
+#   SIGNED      — Owner historically approved this milestone's scope
+#   CLOSED      — Fully completed and archived (no further action)
+#   IN_PROGRESS — Active work ongoing
+#   NOT_STARTED — Planned, no work started
+#   BLOCKED_ON  — Blocked by named dependency
+# SIGNED ≠ "currently ready" — live gate readiness from Projection (matrix / Promote evaluation).
 
 meta:
     version: "2026-06-25-cicd-bootstrap"

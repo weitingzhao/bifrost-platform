@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Button, DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag, type DenseTagVariant } from '@bifrost/ui'
+import type { OpsContextResponse } from '@/api/types'
 import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
@@ -13,35 +14,39 @@ import {
   L2_SESSIONS,
   L3_DECISIONS,
   L4_SIGNOFF,
-  MAINLINE_PHASES,
   MIGRATION_SEQUENCE,
   NEXT_K3S_STEPS,
   PHASE_L_CONTEXT,
   POST_SIGNOFF_UNLOCK,
   buildDeployMainlineLlmPack,
+  resolveMainlinePhases,
 } from '@/lib/architecture/deployMainlineCatalog'
+import { formatSpineStatusLabel } from '@/lib/architecture/spineSemantics'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
-function statusVariant(status: string): DenseTagVariant {
-  if (status.includes('CLOSED')) return 'success'
-  if (status.includes('In progress') || status.includes('progress')) return 'neutral'
+function statusVariant(statusLabel: string, spineStatus?: string): DenseTagVariant {
+  if (spineStatus === 'SIGNED' || spineStatus === 'CLOSED') return 'success'
+  if (spineStatus === 'IN_PROGRESS' || spineStatus === 'BLOCKED_ON') return 'warning'
+  if (statusLabel.includes('CLOSED')) return 'success'
+  if (statusLabel.toLowerCase().includes('progress')) return 'neutral'
   return 'category'
 }
 
-export function DeployMainlinePage() {
+export function DeployMainlinePage({ context }: { context?: OpsContextResponse }) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
+  const phases = useMemo(() => resolveMainlinePhases(context), [context])
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(buildDeployMainlineLlmPack())
+      await navigator.clipboard.writeText(buildDeployMainlineLlmPack(context))
       setCopyState('copied')
       window.setTimeout(() => setCopyState('idle'), 2000)
     } catch {
       setCopyState('error')
       window.setTimeout(() => setCopyState('idle'), 3000)
     }
-  }, [])
+  }, [context])
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -52,7 +57,7 @@ export function DeployMainlinePage() {
             Deployment decision chain: Local Prod Final → K3s → Compose → Legacy retirement.
             Source:{' '}
             <code className="font-mono-tabular text-[var(--primary)]">{DEPLOY_MAINLINE_SOURCE}</code>
-            {' '}(v{DEPLOY_MAINLINE_VERSION}).
+            {' '}(v{DEPLOY_MAINLINE_VERSION}). Seq 4/5/7 status from spine (Projection).
           </>
         }
         headerExtra={<p className="m-0 mt-2 text-[var(--text-dense-meta)]">{DEPLOY_MAINLINE_STATUS}</p>}
@@ -64,7 +69,11 @@ export function DeployMainlinePage() {
         overflow="visible"
       />
 
-      <CatalogSection title="Mainline phases">
+      <CatalogSection title="Mainline phases (Projection ← spine)">
+        <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Constitution catalog holds phase structure only. Rows 4, 5, 7 bind to spine milestones — status
+          labels update from GET /api/v1/context.
+        </p>
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
@@ -75,12 +84,23 @@ export function DeployMainlinePage() {
             </DenseTableHeadRow>
           </DenseTableHeader>
           <DenseTableBody>
-            {MAINLINE_PHASES.map(p => (
+            {phases.map(p => (
               <DenseTableRow key={p.seq}>
                 <DenseTableCell className="font-mono-tabular">{p.seq}</DenseTableCell>
                 <DenseTableCell className="font-medium">{p.phase}</DenseTableCell>
-                <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{p.authority}</DenseTableCell>
-                <DenseTableCell><DenseTag variant={statusVariant(p.status)}>{p.status}</DenseTag></DenseTableCell>
+                <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  {p.authority}
+                </DenseTableCell>
+                <DenseTableCell>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <DenseTag variant={statusVariant(p.statusLabel, p.spineStatus)}>{p.statusLabel}</DenseTag>
+                    {p.spineMilestoneId != null && p.spineStatus != null && (
+                      <DenseTag variant="neutral" className="font-mono-tabular text-[var(--text-dense-caption)]">
+                        {p.spineMilestoneId} · {formatSpineStatusLabel(p.spineStatus)}
+                      </DenseTag>
+                    )}
+                  </div>
+                </DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>
@@ -125,39 +145,39 @@ export function DeployMainlinePage() {
               <DenseTableHead>Session</DenseTableHead>
               <DenseTableHead>Item</DenseTableHead>
               <DenseTableHead>Route</DenseTableHead>
+              <DenseTableHead>Pass</DenseTableHead>
               <DenseTableHead>Owner date</DenseTableHead>
               <DenseTableHead>Remarks</DenseTableHead>
             </DenseTableHeadRow>
           </DenseTableHeader>
           <DenseTableBody>
-            {L2_SESSIONS.map((s, i) => (
-              <DenseTableRow key={`${s.session}-${s.item}-${i}`}>
+            {L2_SESSIONS.map(s => (
+              <DenseTableRow key={`${s.session}-${s.item}`}>
                 <DenseTableCell className="font-mono-tabular">{s.session}</DenseTableCell>
-                <DenseTableCell className="font-medium">{s.item}</DenseTableCell>
+                <DenseTableCell>{s.item}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{s.route}</DenseTableCell>
-                <DenseTableCell className="text-[var(--text-dense-meta)]">{s.ownerDate}</DenseTableCell>
-                <DenseTableCell className="text-[var(--muted-foreground)]">{s.remarks || '—'}</DenseTableCell>
+                <DenseTableCell><DenseTag variant="success">{s.pass ? 'Pass' : '—'}</DenseTag></DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{s.ownerDate}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{s.remarks}</DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>
         </DenseDataTable>
-        <div className="px-3 py-2">
-          <p className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Known non-blockers (inherited from 2C-A)</p>
-          <ul className="m-0 list-disc px-4 py-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {L2_KNOWN_NON_BLOCKERS.map(n => (
-              <li key={n}>{n}</li>
-            ))}
-          </ul>
-        </div>
+        <ul className="m-0 list-disc px-6 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          {L2_KNOWN_NON_BLOCKERS.map(n => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
       </CatalogSection>
 
-      <CatalogSection title="L3 — Owner decisions (2026-06-04)">
+      <CatalogSection title="L3 — Owner decisions">
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
               <DenseTableHead>ID</DenseTableHead>
-              <DenseTableHead>Draft proposal</DenseTableHead>
+              <DenseTableHead>Draft</DenseTableHead>
               <DenseTableHead>Owner decision</DenseTableHead>
+              <DenseTableHead>Date</DenseTableHead>
             </DenseTableHeadRow>
           </DenseTableHeader>
           <DenseTableBody>
@@ -166,6 +186,7 @@ export function DeployMainlinePage() {
                 <DenseTableCell className="font-mono-tabular font-medium">{d.id}</DenseTableCell>
                 <DenseTableCell className="text-[var(--muted-foreground)]">{d.draft}</DenseTableCell>
                 <DenseTableCell>{d.ownerDecision}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{d.ownerDate}</DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>
@@ -185,53 +206,42 @@ export function DeployMainlinePage() {
           <DenseTableBody>
             {L4_SIGNOFF.map(s => (
               <DenseTableRow key={s.item}>
-                <DenseTableCell className="font-medium">{s.item}</DenseTableCell>
+                <DenseTableCell>{s.item}</DenseTableCell>
                 <DenseTableCell><DenseTag variant="success">{s.pass ? 'Pass' : '—'}</DenseTag></DenseTableCell>
                 <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">{s.ownerDate}</DenseTableCell>
-                <DenseTableCell className="text-[var(--muted-foreground)]">{s.signee}</DenseTableCell>
+                <DenseTableCell>{s.signee}</DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>
         </DenseDataTable>
-        <p className="m-0 px-3 py-2 text-[var(--text-dense)] text-[var(--muted-foreground)]">
-          <strong>Post-signoff unlock:</strong> {POST_SIGNOFF_UNLOCK}
+        <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Post-signoff: {POST_SIGNOFF_UNLOCK}
         </p>
       </CatalogSection>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <CatalogSection title="Next: K3s Phase 1 (current priority)">
-          <DenseDataTable>
-            <DenseTableHeader>
-              <DenseTableHeadRow>
-                <DenseTableHead>Target</DenseTableHead>
-                <DenseTableHead>Detail</DenseTableHead>
-              </DenseTableHeadRow>
-            </DenseTableHeader>
-            <DenseTableBody>
-              {NEXT_K3S_STEPS.map(s => (
-                <DenseTableRow key={s.label}>
-                  <DenseTableCell className="font-medium whitespace-nowrap">{s.label}</DenseTableCell>
-                  <DenseTableCell className="text-[var(--muted-foreground)]">{s.detail}</DenseTableCell>
-                </DenseTableRow>
-              ))}
-            </DenseTableBody>
-          </DenseDataTable>
-        </CatalogSection>
+      <CatalogSection title="Next: K3s Phase 1">
+        <ul className="m-0 list-disc px-6 py-2 text-[var(--text-dense)]">
+          {NEXT_K3S_STEPS.map(s => (
+            <li key={s.label}>
+              <strong>{s.label}</strong> — {s.detail}
+            </li>
+          ))}
+        </ul>
+      </CatalogSection>
 
-        <CatalogSection title="2C-B Compose (stability reference)">
-          <pre className="llm-content-pre m-0 px-3 py-2 text-[var(--text-dense-meta)] font-mono-tabular text-xs">
-            {COMPOSE_REFERENCE_COMMANDS.join('\n')}
-          </pre>
-          <div className="px-3 py-2">
-            <p className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Migration sequence</p>
-            <ul className="m-0 list-disc px-4 py-1 text-[var(--text-dense)]">
-              {MIGRATION_SEQUENCE.map(m => (
-                <li key={m}>{m}</li>
-              ))}
-            </ul>
-          </div>
-        </CatalogSection>
-      </div>
+      <CatalogSection title="Compose reference commands">
+        <pre className="m-0 overflow-x-auto px-3 py-2 font-mono-tabular text-[var(--text-dense-meta)]">
+          {COMPOSE_REFERENCE_COMMANDS.join('\n')}
+        </pre>
+      </CatalogSection>
+
+      <CatalogSection title="Migration sequence">
+        <ul className="m-0 list-disc px-6 py-2 text-[var(--text-dense)]">
+          {MIGRATION_SEQUENCE.map(m => (
+            <li key={m}>{m}</li>
+          ))}
+        </ul>
+      </CatalogSection>
 
       <CatalogSection title="Change log">
         <DenseDataTable>
@@ -243,9 +253,9 @@ export function DeployMainlinePage() {
           </DenseTableHeader>
           <DenseTableBody>
             {CHANGE_LOG.map(e => (
-              <DenseTableRow key={e.date}>
+              <DenseTableRow key={e.date + e.content.slice(0, 24)}>
                 <DenseTableCell className="font-mono-tabular whitespace-nowrap">{e.date}</DenseTableCell>
-                <DenseTableCell className="text-[var(--muted-foreground)]">{e.content}</DenseTableCell>
+                <DenseTableCell>{e.content}</DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>

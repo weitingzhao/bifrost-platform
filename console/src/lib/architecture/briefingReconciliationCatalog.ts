@@ -12,7 +12,7 @@
 
 import type { OpsContextResponse } from '@/api/types'
 
-export const BRIEFING_RECONCILIATION_VERSION = '2026-06-30'
+export const BRIEFING_RECONCILIATION_VERSION = '2026-07-01'
 export const BRIEFING_RECONCILIATION_SOURCE =
   'console/src/lib/architecture/briefingReconciliationCatalog.ts'
 
@@ -159,6 +159,8 @@ export type ReconcileFindingKind =
   | 'headline_stale'
   | 'queue_appendix_diverge'
   | 'catalog_version'
+  | 'catalog_spine_parity'
+  | 'catalog_milestone_refs'
   | 'stream_next_task'
 
 export type ReconcileGateRule = {
@@ -198,6 +200,22 @@ export const RECONCILE_GATE_RULES: ReconcileGateRule[] = [
     condition: 'meta.catalog_version ≠ environments-catalog CATALOG_VERSION',
     severity: 'warning',
     emit: 'BRIEFING_STALE — catalog_version drift (CI: check_spine_catalog.sh)',
+  },
+  {
+    id: 'gate-catalog-spine-parity',
+    kind: 'catalog_spine_parity',
+    condition:
+      'Spine-bound catalog rows (deployMainline seq 4/5/7) embed progress prose — Constitution requires spineMilestoneId + Projection only',
+    severity: 'warning',
+    emit: 'CATALOG_DRIFT — catalog embeds live progress on spine-bound row (use Projection)',
+  },
+  {
+    id: 'gate-catalog-milestone-refs',
+    kind: 'catalog_milestone_refs',
+    condition:
+      'Architecture catalog milestone id (Delivery / Vision / Deploy Mainline) missing from spine milestones',
+    severity: 'warning',
+    emit: 'CATALOG_DRIFT — unknown milestone ref in catalog',
   },
   {
     id: 'gate-migrate-next-vs-lane',
@@ -293,10 +311,10 @@ export const DRIFT_LAYER_MAP: DriftLayerMapRow[] = [
   {
     layer: 'L3 Semantic',
     scanner: 'agent/drift/scan_layer3.py',
-    scope: 'catalog_version, vision spine ids, trade-k8s reconcile gates',
-    coversBriefingReconcile: 'Full SYNC parity — nightly scan = Console SYNC banner',
+    scope: 'catalog_version, vision spine ids, trade-k8s reconcile gates, deployMainline ↔ spine parity',
+    coversBriefingReconcile: 'Full SYNC parity — nightly scan = Console SYNC banner + CATALOG_DRIFT',
     targetExtension:
-      'Covered: spineIndex contiguity, queue/appendix projection parity, queue-vs-done, headline-vs-next, migrate-next-vs-lane',
+      'Covered: spineIndex contiguity, queue/appendix projection parity, queue-vs-done, headline-vs-next, migrate-next-vs-lane, catalog-spine-parity',
   },
   {
     layer: 'L4 Remediation',
@@ -353,6 +371,8 @@ export type AntiPatternRow = {
   pattern: string
   why: string
   fix: string
+  status?: 'resolved'
+  resolvedIn?: string
 }
 
 export const ANTI_PATTERNS: AntiPatternRow[] = [
@@ -375,6 +395,13 @@ export const ANTI_PATTERNS: AntiPatternRow[] = [
     pattern: 'Silent contradictory pack',
     why: 'Agent trusts briefing; wrong task scope',
     fix: 'RECONCILE_GATE_RULES → BRIEFING_STALE banner + Source Audit protocol',
+  },
+  {
+    pattern: 'deployMainlineCatalog hardcoded IN_PROGRESS vs spine SIGNED',
+    why: 'Catalog showed active cutover while spine recorded historical sign-off',
+    fix: 'Governance P6: MAINLINE_PHASE_DEFINITIONS use spineMilestoneId; resolveMainlinePhases(context) for live status',
+    status: 'resolved',
+    resolvedIn: 'Governance Phase 6',
   },
 ]
 
