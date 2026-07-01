@@ -1,11 +1,12 @@
 import { Button, StatusLamp } from '@bifrost/ui'
 import { BriefingIconBadge, TRACK_ICONS } from '@/lib/briefing/briefingIcons'
+import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import type { TrackSummary, TrackId } from '@/lib/briefing/workTracks'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 interface WorkTracksStripProps {
   tracks: TrackSummary[]
-  onOpenBriefing: () => void
+  onOpenBriefing: (opts?: BriefingUrlState) => void
 }
 
 function trackReach(t: TrackSummary): 'ok' | 'degraded' | 'fail' | 'unknown' {
@@ -20,11 +21,21 @@ function trackReach(t: TrackSummary): 'ok' | 'degraded' | 'fail' | 'unknown' {
   return 'unknown'
 }
 
-function TrackMiniCard({ track }: { track: TrackSummary }) {
+function TrackMiniCard({
+  track,
+  onOpenBriefing,
+}: {
+  track: TrackSummary
+  onOpenBriefing: (opts?: BriefingUrlState) => void
+}) {
   const reach = trackReach(track)
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+    <button
+      type="button"
+      className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-left transition-colors hover:bg-[var(--secondary)]/40"
+      onClick={() => onOpenBriefing({ track: track.id })}
+    >
       <div className="flex items-center gap-2">
         <BriefingIconBadge icon={TRACK_ICONS[track.id as TrackId]} size="sm" />
         <StatusLamp value={reach} kind="reach" />
@@ -53,7 +64,7 @@ function TrackMiniCard({ track }: { track: TrackSummary }) {
           {track.issues.length > 1 ? ` (+${track.issues.length - 1})` : ''}
         </p>
       )}
-    </div>
+    </button>
   )
 }
 
@@ -63,7 +74,7 @@ export function WorkTracksStrip({ tracks, onOpenBriefing }: WorkTracksStripProps
       title="Work tracks"
       description="Build / migrate / operate progress from spine — open Agent Briefing to pick a lane and generate a session pack."
       actions={
-        <Button variant="ghost" size="xs" onClick={onOpenBriefing}>
+        <Button variant="ghost" size="xs" onClick={() => onOpenBriefing()}>
           Open Agent Briefing
         </Button>
       }
@@ -72,7 +83,7 @@ export function WorkTracksStrip({ tracks, onOpenBriefing }: WorkTracksStripProps
     >
       <div className="grid gap-2 sm:grid-cols-3">
         {tracks.map(t => (
-          <TrackMiniCard key={t.id} track={t} />
+          <TrackMiniCard key={t.id} track={t} onOpenBriefing={onOpenBriefing} />
         ))}
       </div>
     </OpsSection>

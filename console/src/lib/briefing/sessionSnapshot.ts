@@ -1,4 +1,5 @@
 import type { AuditRecord, Reachability, RemediationJob } from '@/api/types'
+import { saveSessionSnapshot } from '@/api/platform'
 import type { BriefingSnapshotInput } from '@/lib/briefing/briefingSnapshot'
 
 const STORAGE_KEY = 'bifrost_session_snapshot'
@@ -23,11 +24,11 @@ export interface SessionSnapshot {
   agentJobCount: number
 }
 
-export function saveSnapshot(
+function buildSnapshotObject(
   input: BriefingSnapshotInput,
   auditRecords: AuditRecord[],
-  remediationJobs: RemediationJob[] = [],
-): void {
+  remediationJobs: RemediationJob[],
+): SessionSnapshot {
   const milestoneStatuses: Record<string, string> = {}
   if (input.context != null) {
     for (const m of input.context.milestones) {
@@ -44,7 +45,7 @@ export function saveSnapshot(
     matrixFingerprints[m.environment] = envFp
   }
 
-  const snapshot: SessionSnapshot = {
+  return {
     savedAt: new Date().toISOString(),
     contextMetaVersion: input.context?.meta.version ?? '',
     focusHeadline: input.context?.focus.headline ?? '',
@@ -61,18 +62,35 @@ export function saveSnapshot(
     trackProgress: buildTrackProgress(input),
     lastAgentJobAt:
       remediationJobs.length > 0
-        ? remediationJobs.reduce((latest, j) =>
-            j.created_at > latest ? j.created_at : latest,
-          remediationJobs[0].created_at)
+        ? remediationJobs.reduce(
+            (latest, j) => (j.created_at > latest ? j.created_at : latest),
+            remediationJobs[0].created_at,
+          )
         : null,
     agentJobCount: remediationJobs.length,
   }
+}
+
+export async function saveSnapshot(
+  input: BriefingSnapshotInput,
+  auditRecords: AuditRecord[],
+  remediationJobs: RemediationJob[] = [],
+): Promise<SessionSnapshot> {
+  const snapshot = buildSnapshotObject(input, auditRecords, remediationJobs)
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
   } catch {
     // storage full or unavailable
   }
+
+  try {
+    await saveSessionSnapshot(snapshot)
+  } catch {
+    // platform-api unavailable — local baseline still works
+  }
+
+  return snapshot
 }
 
 export function loadSnapshot(): SessionSnapshot | null {

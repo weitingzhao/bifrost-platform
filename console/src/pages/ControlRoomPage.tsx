@@ -12,6 +12,7 @@ import { PipelineFlow } from '@/components/control-room/PipelineFlow'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { computeAllTracks } from '@/lib/briefing/workTracks'
+import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 import { useMemo, useState } from 'react'
 
@@ -31,7 +32,7 @@ interface ControlRoomPageProps {
   onOpenDelivery: () => void
   onOpenCluster: () => void
   onOpenAudit: () => void
-  onOpenBriefing: () => void
+  onOpenBriefing: (opts?: BriefingUrlState) => void
   onOpenAgentDesk?: (opts?: { prefill: string }) => void
   onOpenPlatformRelease?: () => void
 }

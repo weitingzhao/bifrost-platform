@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/briefing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
@@ -29,6 +30,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/retrospective"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
+	"github.com/weitingzhao/bifrost-platform/api/internal/sessionsnapshot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
@@ -58,6 +60,8 @@ type Server struct {
 	hermesgateway  *hermesgateway.Handler
 	retrospective  *retrospective.Handler
 	selfhealth     *selfhealth.Handler
+	sessionsnapshot *sessionsnapshot.Handler
+	briefing        *briefing.Handler
 	auth           *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -74,16 +78,18 @@ func New(cfg *config.Config) *Server {
 	remediationH := remediation.NewHandler(audit)
 	retroAnalyzer := retrospective.NewAnalyzer(remediationH.Store())
 	clusterH := cluster.NewHandler(cfg, audit)
+	promoteH := promote.NewHandler(cfg, audit)
+	prober := probe.NewProber()
 	return &Server{
 		cfg:     cfg,
-		prober:  probe.NewProber(),
+		prober:  prober,
 		console: console.NewHandlerWithCluster(cfg, clusterH),
 		cluster: clusterH,
 		gitops:  gitopsH,
 		mcp:     mcp.NewHandler(),
 		stack:   stack.NewHandler(cfg, audit),
 		delivery: delivery.NewHandler(cfg, audit),
-		promote:  promote.NewHandler(cfg, audit),
+		promote:  promoteH,
 		vision:    vision.NewHandler(cfg, audit),
 		buildgate: buildgate.NewHandler(cfg, audit),
 		migratewave: migratewave.NewHandler(cfg, audit),
@@ -97,6 +103,8 @@ func New(cfg *config.Config) *Server {
 		hermesgateway:  hermesgateway.NewHandler(),
 		retrospective:  retrospective.NewHandler(retroAnalyzer),
 		selfhealth:     selfhealth.NewHandler(cfg, gitopsH.Service()),
+		sessionsnapshot: sessionsnapshot.NewHandler(),
+		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store()),
 		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -127,6 +135,9 @@ func (s *Server) Router() http.Handler {
 		r.Get("/context", s.handleContext)
 		r.Get("/auth/capabilities", s.auth.Capabilities)
 		r.Get("/audit", s.audit.HandleList)
+		r.Get("/session-snapshots/latest", s.sessionsnapshot.HandleLatest)
+		r.Get("/briefing/session-pack", s.briefing.HandleSessionPack)
+		r.Get("/briefing/session-results", s.briefing.HandleListSessionResults)
 		r.Get("/jobs", s.jobs.HandleList)
 		r.Get("/mcp/tools", s.mcp.HandleTools)
 		r.Get("/mcp/status", s.mcp.HandleStatus)
@@ -145,6 +156,8 @@ func (s *Server) Router() http.Handler {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/agent/nightly-run", s.agentreport.HandleTriggerNightly)
 			r.Post("/agent/deploy", s.agentdeploy.HandleStart)
+			r.Post("/session-snapshots", s.sessionsnapshot.HandleSave)
+			r.Post("/briefing/session-results", s.briefing.HandleCloseSession)
 			r.Put("/agent/skills/{id}/actuation-level", s.hermesgateway.HandleSkillActuationLevel)
 		})
 		r.Route("/agent/drift-proposals", func(r chi.Router) {

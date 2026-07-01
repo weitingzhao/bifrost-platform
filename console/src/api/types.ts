@@ -1643,3 +1643,60 @@ export interface SelfHealthResponse {
   probes: SelfHealthProbe[]
   overall: SelfHealthProbeStatus
 }
+
+export interface SessionSnapshotLatestResponse {
+  snapshot: Record<string, unknown> | null
+  saved_at?: string
+  saved_by?: string
+}
+
+export interface SessionSnapshotSaveResponse {
+  ok: boolean
+  saved_at: string
+  saved_by: string
+}
+
+export interface BriefingSessionPackResponse {
+  pack: string
+  pack_size: string
+  track?: string
+  lane?: string
+  intent?: string
+  char_count: number
+  generated_at: string
+  has_baseline: boolean
+  baseline_at?: string
+}
+
+export interface BriefingSessionResult {
+  id: string
+  closed_at: string
+  closed_by: string
+  job_id?: string
+  outcome: string
+  summary: string
+  track?: string
+  lane?: string
+  intent?: string
+  spine_note?: string
+}
+
+export interface BriefingSessionResultsResponse {
+  results: BriefingSessionResult[]
+}
+
+export interface CloseBriefingSessionRequest {
+  job_id?: string
+  outcome: 'done' | 'failed' | 'cancelled'
+  summary: string
+  track?: string
+  lane?: string
+  intent?: string
+  spine_note?: string
+  request_spine_update?: boolean
+}
+
+export interface CloseBriefingSessionResponse {
+  ok: boolean
+  result: BriefingSessionResult
+}
