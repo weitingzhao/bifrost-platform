@@ -41,6 +41,7 @@ interface MissionControlHeaderProps {
   onOpenProgram?: () => void
   onOpenPlatformRelease: () => void
   onOpenAgentDesk: (opts?: { prefill: string }) => void
+  onOpenPromote?: () => void
 }
 
 function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: number } {
@@ -232,6 +233,7 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
             onOpenRuntimeMap={props.onOpenRuntimeMap}
             onOpenDelivery={props.onOpenDelivery}
             onOpenProgram={props.onOpenProgram}
+            onOpenPromote={props.onOpenPromote}
           />
         </div>
       </OpsSection>

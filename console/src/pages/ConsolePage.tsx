@@ -532,6 +532,9 @@ export function ConsolePage() {
                 clusterLoading={clusterQuery.isLoading}
                 stgSmoke={stgSmokeQuery.data}
                 stgSmokeLoading={stgSmokeQuery.isLoading}
+                stgGate={releaseGateStgQuery.data}
+                lastDeliverSucceeded={lastDeliverSucceeded}
+                tierB={tierBQuery.data}
                 onOpenRuntimeMap={openRuntimeMap}
                 onOpenProgram={openProgram}
                 onOpenDelivery={openDelivery}
@@ -541,6 +544,7 @@ export function ConsolePage() {
                 onOpenAgentDesk={(opts) => openAgentDesk(opts)}
                 onOpenPlatformRelease={() => setViewTab('platform-release')}
                 onOpenPromote={openPromote}
+                onOpenDeployMainline={openDeployMainline}
               />
             </Suspense>
           </>
