@@ -1548,7 +1548,7 @@ export interface EnvPayloadVerification {
   classification: PayloadClassification
   postgres: DatastoreComponentVerification
   redis: DatastoreComponentVerification
-  http_failures: string[]
+  http_failures: string[] | null
   detail: string
 }
 
@@ -1564,6 +1564,35 @@ export interface VerifyPayloadResponse {
   generated_at: string
   environments: EnvPayloadVerification[]
   summary: VerifyPayloadSummary
+}
+
+export type MissionMatrixSignal = 'ok' | 'degraded' | 'fail' | 'unknown'
+
+export interface TradeEnvSnapshotView {
+  environment: string
+  label: string
+  signal: MissionMatrixSignal
+  reachable: number
+  total: number
+  detail: string
+}
+
+export interface PostFixVerificationView {
+  passed: boolean
+  mission_matrix_nominal: boolean
+  datastore_verification_nominal: boolean
+  probe_drift_remaining: boolean
+  detail: string
+  agent_guidance: string
+}
+
+export interface VerifyMissionSnapshotResponse {
+  generated_at: string
+  trade_dev: TradeEnvSnapshotView
+  trade_prod: TradeEnvSnapshotView
+  payload_overall: MissionMatrixSignal
+  payload_verification: VerifyPayloadResponse
+  post_fix_verification: PostFixVerificationView
 }
 
 // Retrospective Agent — cross-job pattern analysis

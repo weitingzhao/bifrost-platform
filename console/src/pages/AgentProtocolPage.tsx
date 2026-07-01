@@ -14,6 +14,7 @@ import {
   FORBIDDEN_ACTIONS,
   MISSION_DIAGNOSTIC_MCP,
   MISSION_DIAGNOSTIC_PLAYBOOKS,
+  MISSION_POST_FIX_LOOP,
   MODE_SELECTION_HINTS,
   OPENING_PROMPTS,
   buildAgentProtocolLlmPack,
@@ -259,6 +260,34 @@ export function AgentProtocolPage() {
                 <DenseTableCell className="text-[var(--muted-foreground)]">{p.trigger}</DenseTableCell>
                 <DenseTableCell>{p.agentAction}</DenseTableCell>
                 <DenseTableCell className="text-[color:var(--destructive)]">{p.mustNot}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      {/* 4c — Mission post-fix validation loop */}
+      <CatalogSection title="Mission post-fix validation loop (Autonomous Loop)">
+        <p className="m-0 mb-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          MCP: <code className="font-mono-tabular">{MISSION_DIAGNOSTIC_MCP.verifyMissionSnapshot}</code> — call before
+          closing any remediation job. Runner auto-runs on job complete; Control Room banner shows reprobe result.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Step</DenseTableHead>
+              <DenseTableHead>Tool</DenseTableHead>
+              <DenseTableHead>Required</DenseTableHead>
+              <DenseTableHead>Detail</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {MISSION_POST_FIX_LOOP.map(s => (
+              <DenseTableRow key={s.step}>
+                <DenseTableCell className="font-medium whitespace-nowrap">{s.step}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{s.tool}</DenseTableCell>
+                <DenseTableCell>{s.required ? 'Yes' : 'No'}</DenseTableCell>
+                <DenseTableCell>{s.detail}</DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>

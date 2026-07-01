@@ -125,10 +125,40 @@ export const MISSION_DIAGNOSTIC_PLAYBOOKS: MissionDiagnosticPlaybook[] = [
 
 export const MISSION_DIAGNOSTIC_MCP = {
   verifyPayload: 'verify_payload — GET /api/v1/mission/verify-payload',
+  verifyMissionSnapshot: 'verify_mission_snapshot — GET /api/v1/mission/verify-snapshot',
   matrix: 'get_connectivity_matrix',
   clusterPostgres: 'get_cluster_postgres (Console cluster API)',
   clusterRedis: 'get_cluster_redis (Console cluster API)',
 } as const
+
+/** Mission Signal Phase 3 — autonomous fix validation loop. */
+export type MissionPostFixStep = {
+  step: string
+  tool: string
+  required: boolean
+  detail: string
+}
+
+export const MISSION_POST_FIX_LOOP: MissionPostFixStep[] = [
+  {
+    step: '1. Remediate',
+    tool: 'platform-api / kubectl tools',
+    required: true,
+    detail: 'Apply fix per diagnostic playbook (L0–L2). Do not skip verify_payload classification.',
+  },
+  {
+    step: '2. Re-probe',
+    tool: 'verify_mission_snapshot',
+    required: true,
+    detail: 'Fresh matrix + verify_payload; read post_fix_verification.passed before closing job.',
+  },
+  {
+    step: '3. Close or iterate',
+    tool: 'finish_job (runner auto-runs step 2)',
+    required: true,
+    detail: 'If post_fix_verification.passed is false, continue diagnosis — do not declare success.',
+  },
+]
 
 export type OpeningPrompt = {
   mode: string
@@ -310,6 +340,11 @@ export function buildAgentProtocolLlmPack(): string {
       p =>
         `- **${p.classification}** [${p.autonomy}]: ${p.trigger} → ${p.agentAction} | Must-not: ${p.mustNot}`,
     ),
+    '',
+    '## Mission post-fix validation loop (Autonomous Loop)',
+    `- MCP: \`${MISSION_DIAGNOSTIC_MCP.verifyMissionSnapshot}\` — required before closing remediation`,
+    ...MISSION_POST_FIX_LOOP.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
+    '- Runner emits event kind=post_fix_verification on job complete; Control Room banner shows reprobe result.',
     '',
     '## Example opening prompts',
     ...OPENING_PROMPTS.map(p => `- [${p.mode}] "${p.example}"`),

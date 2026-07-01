@@ -480,6 +480,24 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
         return textResult(jsonText(data))
       },
     },
+    verify_payload: {
+      description:
+        'Matrix vs cluster datastore classification (NOMINAL/PROBE_DRIFT/DATA_LAYER/HTTP_FAIL). Call before remediating PG/Redis.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/mission/verify-payload')
+        return textResult(jsonText(data))
+      },
+    },
+    verify_mission_snapshot: {
+      description:
+        'Fresh matrix reprobe + verify_payload + post_fix_verification verdict. REQUIRED before declaring remediation complete.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/mission/verify-snapshot')
+        return textResult(jsonText(data))
+      },
+    },
 
     sync_cluster_kubeconfig: {
       description:
