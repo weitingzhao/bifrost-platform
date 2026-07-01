@@ -3,6 +3,7 @@ import { AuditPageLink } from '@/components/AuditPageLink'
 import { ActiveAgentJobsStrip } from '@/components/control-room/ActiveAgentJobsStrip'
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
 import { BayDetailDrawer } from '@/components/control-room/BayDetailDrawer'
+import { ControlRoomProgramStatusStrip } from '@/components/control-room/ControlRoomProgramStatusStrip'
 import { ControlRoomPhase0SignoffPanel } from '@/components/control-room/ControlRoomPhase0SignoffPanel'
 import { ControlRoomPhase1SignoffPanel } from '@/components/control-room/ControlRoomPhase1SignoffPanel'
 import { ControlRoomPhase2SignoffPanel } from '@/components/control-room/ControlRoomPhase2SignoffPanel'
@@ -318,6 +319,8 @@ export function ControlRoomPage({
       <MissionSignalPhase3SignoffPanel />
       <MissionSignalPhase2SignoffPanel />
       <MissionSignalPhase1SignoffPanel matrices={matrices} />
+
+      <ControlRoomProgramStatusStrip />
 
       <ControlRoomPhase5SignoffPanel />
       <ControlRoomPhase4SignoffPanel />

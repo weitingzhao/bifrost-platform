@@ -1,5 +1,7 @@
 /** Control Room Phase 4 delivery checklist — Mission timeline (accountability & memory). */
 
+import { notifyControlRoomSignoffChanged } from './controlRoomSignoffEvents'
+
 export const CONTROL_ROOM_PHASE4_VERSION = '2026-07-01'
 
 export interface ControlRoomPhase4DeliveryItem {
@@ -113,6 +115,7 @@ export function loadPhase4SignoffState(): ControlRoomPhase4SignoffState {
 export function savePhase4SignoffState(state: ControlRoomPhase4SignoffState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    notifyControlRoomSignoffChanged()
   } catch {
     // storage unavailable
   }

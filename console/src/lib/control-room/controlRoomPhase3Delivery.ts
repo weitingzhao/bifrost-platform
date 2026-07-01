@@ -1,5 +1,7 @@
 /** Control Room Phase 3 delivery checklist — Command intent (mission-scoped commander actions). */
 
+import { notifyControlRoomSignoffChanged } from './controlRoomSignoffEvents'
+
 export const CONTROL_ROOM_PHASE3_VERSION = '2026-07-01'
 
 export interface ControlRoomPhase3DeliveryItem {
@@ -114,6 +116,7 @@ export function loadPhase3SignoffState(): ControlRoomPhase3SignoffState {
 export function savePhase3SignoffState(state: ControlRoomPhase3SignoffState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    notifyControlRoomSignoffChanged()
   } catch {
     // storage unavailable
   }

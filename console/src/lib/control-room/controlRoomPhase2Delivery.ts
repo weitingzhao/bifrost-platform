@@ -1,5 +1,7 @@
 /** Control Room Phase 2 delivery checklist — Payload depth (Trade readiness + coupling). */
 
+import { notifyControlRoomSignoffChanged } from './controlRoomSignoffEvents'
+
 export const CONTROL_ROOM_PHASE2_VERSION = '2026-07-01'
 
 export interface ControlRoomPhase2DeliveryItem {
@@ -113,6 +115,7 @@ export function loadPhase2SignoffState(): ControlRoomPhase2SignoffState {
 export function savePhase2SignoffState(state: ControlRoomPhase2SignoffState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    notifyControlRoomSignoffChanged()
   } catch {
     // storage unavailable
   }
