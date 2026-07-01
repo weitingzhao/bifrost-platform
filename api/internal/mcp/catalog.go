@@ -26,6 +26,7 @@ func Catalog() []ToolView {
 		tool("platform_mcp_capabilities", "List MCP tools with permission levels", "read", "GET", "/api/v1/mcp/tools", "viewer", "P5", true),
 		tool("get_connectivity_matrix", "Environment connectivity matrix probes", "read", "GET", "/api/v1/matrix", "viewer", "P0", true),
 		tool("verify_payload", "Matrix vs cluster datastore classification (NOMINAL/PROBE_DRIFT/DATA_LAYER/HTTP_FAIL)", "read", "GET", "/api/v1/mission/verify-payload", "viewer", "Agent", true),
+		tool("verify_mission_snapshot", "Fresh matrix reprobe + verify_payload + post_fix_verification verdict (call before closing remediation)", "read", "GET", "/api/v1/mission/verify-snapshot", "viewer", "Agent", true),
 		tool("list_environments", "Registered environments", "read", "GET", "/api/v1/environments", "viewer", "P0", true),
 		tool("get_ops_context", "Spine context (milestones, tracks, blockers)", "read", "GET", "/api/v1/context", "viewer", "P0", true),
 		tool("get_auth_capabilities", "Bearer token role and capabilities", "read", "GET", "/api/v1/auth/capabilities", "viewer", "P1", true),

@@ -37,6 +37,13 @@ server.tool(
   async () => jsonResult(await platformGet('/api/v1/mission/verify-payload')),
 )
 
+server.tool(
+  'verify_mission_snapshot',
+  'Fresh matrix reprobe + verify_payload + post_fix_verification (required before closing remediation jobs)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/mission/verify-snapshot')),
+)
+
 server.tool('list_environments', 'Registered environments', {}, async () =>
   jsonResult(await platformGet('/api/v1/environments')),
 )

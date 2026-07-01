@@ -29,8 +29,9 @@ export function formatVerifyPayloadGuidance(verify: VerifyPayloadResponse | unde
   ]
 
   for (const env of verify.environments) {
+    const httpFailures = env.http_failures ?? []
     lines.push(
-      `- **${env.environment}** (${env.classification}): PG ${env.postgres.classification} · Redis ${env.redis.classification}${env.http_failures.length > 0 ? ` · HTTP fail: ${env.http_failures.join(', ')}` : ''}`,
+      `- **${env.environment}** (${env.classification}): PG ${env.postgres.classification} · Redis ${env.redis.classification}${httpFailures.length > 0 ? ` · HTTP fail: ${httpFailures.join(', ')}` : ''}`,
     )
     if (env.classification === 'PROBE_DRIFT') {
       lines.push(`  - ${env.detail} — do not treat as payload outage`)

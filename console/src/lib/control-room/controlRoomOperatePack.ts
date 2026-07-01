@@ -2,7 +2,7 @@
  * Control Room Operate Loop — dispatch packs for Agent Desk / remediation runner.
  */
 
-import type { MatrixResponse, OpsContextResponse, VerifyPayloadResponse } from '@/api/types'
+import type { MatrixResponse, OpsContextResponse, VerifyMissionSnapshotResponse, VerifyPayloadResponse } from '@/api/types'
 import { buildOpsPack } from '@/lib/control-room/agentContextPacks'
 import {
   buildDiagnosticPrompt,
@@ -93,9 +93,11 @@ export function buildControlRoomDispatchPack(input: {
 export function buildMissionVerifyMessage(
   snapshot: MissionSnapshot,
   jobStatus: 'done' | 'failed',
+  verifySnapshot?: VerifyMissionSnapshotResponse,
 ): { nominal: boolean; headline: string; detail: string } {
   const mission = missionStatus(snapshot.missionOverall)
-  const nominal = snapshot.missionOverall === 'ok'
+  const postFix = verifySnapshot?.post_fix_verification
+  const payloadClass = verifySnapshot?.payload_verification.summary.overall
 
   if (jobStatus === 'failed') {
     return {
@@ -105,7 +107,26 @@ export function buildMissionVerifyMessage(
     }
   }
 
-  if (nominal) {
+  const cockpitNominal = snapshot.missionOverall === 'ok'
+  const postFixPassed = postFix?.passed === true
+
+  if (cockpitNominal && postFixPassed) {
+    return {
+      nominal: true,
+      headline: 'Verified NOMINAL',
+      detail: `Post-fix reprobe passed — cockpit ${mission}, verify_payload ${payloadClass ?? 'NOMINAL'}.`,
+    }
+  }
+
+  if (postFix != null && !postFixPassed) {
+    return {
+      nominal: false,
+      headline: 'Agent done — post-fix NOT passed',
+      detail: postFix.detail,
+    }
+  }
+
+  if (cockpitNominal) {
     return {
       nominal: true,
       headline: 'Verified NOMINAL',
@@ -116,6 +137,8 @@ export function buildMissionVerifyMessage(
   return {
     nominal: false,
     headline: `Agent done — Mission ${mission}`,
-    detail: 'Agent finished but probes still report issues. Review remaining failures or dispatch again.',
+    detail:
+      postFix?.agent_guidance ??
+      'Agent finished but probes still report issues. Review remaining failures or dispatch again.',
   }
 }

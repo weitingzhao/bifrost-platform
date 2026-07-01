@@ -132,6 +132,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/mission/verify-payload", s.handleVerifyPayload)
+		r.Get("/mission/verify-snapshot", s.handleVerifyMissionSnapshot)
 		r.Get("/self-health", s.selfhealth.HandleSelfHealth)
 		r.Get("/topology", s.handleTopology)
 		r.Get("/context", s.handleContext)
@@ -345,17 +346,26 @@ func (s *Server) datastoreSnapshot(ctx context.Context) *probe.DatastoreSnapshot
 
 func (s *Server) handleVerifyPayload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	matrices, dsSnap := s.probeMissionMatrices(ctx)
+	writeJSON(w, http.StatusOK, probe.VerifyPayload(s.cfg.Environments, matrices, dsSnap))
+}
+
+func (s *Server) handleVerifyMissionSnapshot(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	matrices, dsSnap := s.probeMissionMatrices(ctx)
+	writeJSON(w, http.StatusOK, probe.VerifyMissionSnapshot(s.cfg.Environments, matrices, dsSnap))
+}
+
+func (s *Server) probeMissionMatrices(ctx context.Context) ([]probe.MatrixResponse, probe.DatastoreSnapshot) {
 	dsSnap := probe.DatastoreSnapshot{}
 	if snap := s.datastoreSnapshot(ctx); snap != nil {
 		dsSnap = *snap
 	}
-
 	matrices := make([]probe.MatrixResponse, 0, len(s.cfg.Environments))
 	for _, env := range s.cfg.Environments {
 		matrices = append(matrices, s.prober.ProbeEnvironmentWithDatastore(ctx, env, &dsSnap))
 	}
-
-	writeJSON(w, http.StatusOK, probe.VerifyPayload(s.cfg.Environments, matrices, dsSnap))
+	return matrices, dsSnap
 }
 
 func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {

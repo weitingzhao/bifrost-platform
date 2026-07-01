@@ -2,6 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Agent, CursorAgentError } from '@cursor/sdk'
 import { appendEvent, finishJob, jobAbortSignal, makeEvent, setPhase } from './jobs.js'
+import { formatPostFixSummary, runPostFixVerification } from './postFixVerification.js'
 import { buildRemediationPrompt } from './prompt.js'
 import { buildCustomTools } from './tools.js'
 import type { StartRunRequest } from './types.js'
@@ -117,7 +118,9 @@ export async function runRemediationJob(jobId: string, req: StartRunRequest): Pr
       finishJob(jobId, 'failed', 'Agent run failed.', result.result ?? 'run error')
       return
     }
-    finishJob(jobId, 'done', result.result?.trim() || 'Remediation completed.')
+    const postFix = await runPostFixVerification(jobId)
+    const agentSummary = result.result?.trim() || 'Remediation completed.'
+    finishJob(jobId, 'done', formatPostFixSummary(postFix, agentSummary))
   } catch (err) {
     if (jobAbortSignal(jobId)?.aborted) return
     const message = err instanceof CursorAgentError ? err.message : err instanceof Error ? err.message : String(err)

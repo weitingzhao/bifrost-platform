@@ -10,6 +10,7 @@ import { CommandIntentStrip } from '@/components/control-room/CommandIntentStrip
 import { ControlRoomPhase3SignoffPanel } from '@/components/control-room/ControlRoomPhase3SignoffPanel'
 import { ControlRoomPhase4SignoffPanel } from '@/components/control-room/ControlRoomPhase4SignoffPanel'
 import { ControlRoomPhase5SignoffPanel } from '@/components/control-room/ControlRoomPhase5SignoffPanel'
+import { MissionSignalPhase3SignoffPanel } from '@/components/control-room/MissionSignalPhase3SignoffPanel'
 import { MissionSignalPhase2SignoffPanel } from '@/components/control-room/MissionSignalPhase2SignoffPanel'
 import { MissionSignalPhase1SignoffPanel } from '@/components/control-room/MissionSignalPhase1SignoffPanel'
 import { MissionTimelinePanel } from '@/components/control-room/MissionTimelinePanel'
@@ -168,7 +169,7 @@ export function ControlRoomPage({
 
         {pendingVerify && banner == null && (
           <p className="control-room-verify-pending m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Agent run finished — refreshing mission probes…
+            Agent run finished — refreshing mission probes and verify_mission_snapshot…
           </p>
         )}
 
@@ -306,6 +307,7 @@ export function ControlRoomPage({
         </div>
       </ProgramContextSection>
 
+      <MissionSignalPhase3SignoffPanel />
       <MissionSignalPhase2SignoffPanel />
       <MissionSignalPhase1SignoffPanel matrices={matrices} />
 

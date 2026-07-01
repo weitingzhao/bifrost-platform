@@ -240,6 +240,7 @@ export function buildDiagnosticPrompt(
   }
 
   lines.push('', 'Diagnose root causes for the issues above and propose remediation steps. For read-only checks, proceed automatically. For destructive actions, request operator approval first.')
+  lines.push('', 'Before closing the job, call verify_mission_snapshot (MCP) and confirm post_fix_verification.passed is true.')
   lines.push(...formatVerifyPayloadGuidance(verify))
   return lines.join('\n')
 }

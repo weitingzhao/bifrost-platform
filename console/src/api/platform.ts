@@ -75,6 +75,7 @@ import type {
   RunnerSmokeResponse,
   RetrospectiveReport,
   VerifyPayloadResponse,
+  VerifyMissionSnapshotResponse,
   SessionSnapshotLatestResponse,
   SessionSnapshotSaveResponse,
   BriefingSessionPackResponse,
@@ -141,6 +142,12 @@ export async function fetchVerifyPayload(): Promise<VerifyPayloadResponse> {
   const r = await fetch('/api/v1/mission/verify-payload')
   if (!r.ok) throw new Error(`verify-payload: HTTP ${r.status}`)
   return r.json() as Promise<VerifyPayloadResponse>
+}
+
+export async function fetchVerifyMissionSnapshot(): Promise<VerifyMissionSnapshotResponse> {
+  const r = await fetch('/api/v1/mission/verify-snapshot')
+  if (!r.ok) throw new Error(`verify-snapshot: HTTP ${r.status}`)
+  return r.json() as Promise<VerifyMissionSnapshotResponse>
 }
 
 export async function fetchPlatformHealth(): Promise<boolean> {

@@ -188,6 +188,18 @@ export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
     aliases: ['Nightly scheduled health verification'],
     description: 'Confirm cluster healthy when checker reports zero issues; no destructive actions.',
   },
+  {
+    id: 'post-fix-verification',
+    scope: 'post-fix-verification',
+    label: 'Health · Post-fix',
+    domain: 'Health',
+    action: 'Check',
+    tier: 'manual',
+    entryPoint: 'Remediation runner · verifying phase (automatic after every job)',
+    trigger: 'Agent job completes — runner calls verify_mission_snapshot',
+    description:
+      'Fresh matrix reprobe + verify_payload; post_fix_verification.passed must be true before declaring remediation success.',
+  },
 ]
 
 /** scope (and legacy aliases) → display label. Built once from the catalog. */
