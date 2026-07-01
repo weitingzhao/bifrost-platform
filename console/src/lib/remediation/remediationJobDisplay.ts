@@ -41,6 +41,31 @@ export function isRemediationStreamOrphanError(error: string | null | undefined)
   return lower.includes('not found') || lower.includes('not running')
 }
 
+/** All jobs still in progress (runner active or waiting on operator), newest first. */
+export function findActiveRemediationJobs(jobs: RemediationJob[]): RemediationJob[] {
+  return jobs
+    .filter(j => j.status === 'running' || j.phase === 'awaiting_approval')
+    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
+}
+
+/** Recently finished jobs for Control Room “Recent” strip (default 24h). */
+export function findRecentCompletedRemediationJobs(
+  jobs: RemediationJob[],
+  withinMs = 86_400_000,
+  limit = 3,
+): RemediationJob[] {
+  const cutoff = Date.now() - withinMs
+  return jobs
+    .filter(
+      j =>
+        (j.status === 'done' || j.status === 'failed') &&
+        Number.isFinite(Date.parse(j.updated_at)) &&
+        Date.parse(j.updated_at) >= cutoff,
+    )
+    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
+    .slice(0, limit)
+}
+
 /** Latest remediation job that is still in progress (runner active or waiting on operator). */
 export function findActiveRemediationJob(jobs: RemediationJob[]): RemediationJob | null {
   const running = jobs.filter(j => j.status === 'running')
