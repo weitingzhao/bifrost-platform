@@ -263,6 +263,22 @@ func (s *Service) lastDeliverSuccess(ctx context.Context, pipelineName string) *
 	return nil
 }
 
+// ProdPostgresInCluster reports CNPG bifrost-postgres readiness via kube API (not LAN TCP).
+func (s *Service) ProdPostgresInCluster(ctx context.Context) (probe.Reachability, string) {
+	if s.cluster == nil {
+		return probe.ReachFail, "cluster service unavailable"
+	}
+	status := s.cluster.PostgresStatus(ctx)
+	switch status.Reachability {
+	case probe.ReachOK:
+		return probe.ReachOK, fmt.Sprintf("CNPG %s ready (%s)", status.RwService, status.Summary)
+	case probe.ReachDegraded:
+		return probe.ReachDegraded, status.Summary
+	default:
+		return probe.ReachFail, status.Summary
+	}
+}
+
 // ProdRedisInCluster reports redis-live-prod readiness in data NS (no host NodePort).
 func (s *Service) ProdRedisInCluster(ctx context.Context) (probe.Reachability, string) {
 	return s.deploymentReadyInNS(ctx, "data", "redis-live-prod")
