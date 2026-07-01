@@ -12,13 +12,14 @@ export interface BriefingPhase2DeliveryItem {
 export const BRIEFING_PHASE2_DELIVERY_ITEMS: BriefingPhase2DeliveryItem[] = [
   {
     id: 'S2',
-    title: 'Send session pack to Agent Desk',
+    title: 'Prefill Agent Desk (optional)',
     summary:
-      'One-click prefill of the generated session briefing into Agent Desk — same ergonomics as drift fix.',
+      'Secondary path: prefill Agent Desk composer for Ops-runner tasks — not equivalent to Copy session pack in Cursor IDE.',
     verifySteps: [
-      'Generate a session briefing pack (compact or full).',
-      'Click “Send to Agent Desk” — Agent Desk opens with the full pack in the composer.',
-      'Confirm you can Send without manual copy-paste.',
+      'Generate a session briefing with an Ops-suited intent (debug, cluster, ops).',
+      'Expand delivery actions — “Copy session pack” is primary; “Prefill Agent Desk” is optional ghost button.',
+      'For feature/frontend intent, Prefill Agent Desk is disabled with an IDE-first tooltip.',
+      'When enabled, Agent Desk opens with the pack in composer — you still review before Send.',
     ],
   },
   {

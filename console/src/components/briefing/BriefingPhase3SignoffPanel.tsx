@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Button, ConfirmDialog, DenseTag, StatusLamp } from '@bifrost/ui'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { notifyBriefingSignoffChanged } from '@/lib/briefing/briefingSignoffEvents'
 import {
   allPhase3ItemsVerified,
   BRIEFING_PHASE3_DELIVERY_ITEMS,
@@ -26,6 +27,7 @@ export function BriefingPhase3SignoffPanel() {
   const persist = useCallback((next: BriefingPhase3SignoffState) => {
     setState(next)
     savePhase3SignoffState(next)
+    notifyBriefingSignoffChanged()
   }, [])
 
   function toggleVerified(itemId: string) {
@@ -77,7 +79,7 @@ export function BriefingPhase3SignoffPanel() {
         ) : (
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
         )}
-        <p className="briefing-section-kicker m-0">Phase 2 · Delivery sign-off</p>
+        <p className="briefing-section-kicker m-0">Phase 3 · Delivery sign-off</p>
         <DenseTag variant={signed ? 'success' : allVerified ? 'warning' : 'neutral'}>
           {signed ? 'SIGNED' : `${counts.verified}/${counts.total} verified`}
         </DenseTag>
@@ -92,8 +94,8 @@ export function BriefingPhase3SignoffPanel() {
       {panelExpanded && (
         <div className="mt-3 flex flex-col gap-3">
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Verify S2 (Agent Desk send), S6 (server snapshot), S7 (collapsed automation), and S8
-            (lane-scoped reconcile). Sign-off records Owner acceptance in local storage (v
+            Verify S9 (session close), S10 (MCP briefing), S11 (nav UI progress), and A1
+            (automation handoff). Sign-off records Owner acceptance in local storage (v
             {BRIEFING_PHASE3_VERSION}).
           </p>
 
@@ -162,7 +164,7 @@ export function BriefingPhase3SignoffPanel() {
                 disabled={!allVerified || signed}
                 onClick={() => setSignConfirmOpen(true)}
               >
-                {signed ? 'Phase 2 signed off' : 'Sign off Phase 2 delivery'}
+                {signed ? 'Phase 3 signed off' : 'Sign off Phase 3 delivery'}
               </Button>
               {signed && (
                 <Button type="button" size="sm" variant="outline" onClick={handleResetSignoff}>
@@ -179,7 +181,7 @@ export function BriefingPhase3SignoffPanel() {
 
           {!canAdmin && (
             <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Admin token required to record Phase 2 sign-off.
+              Admin token required to record Phase 3 sign-off.
             </p>
           )}
         </div>
@@ -187,7 +189,7 @@ export function BriefingPhase3SignoffPanel() {
 
       <ConfirmDialog
         open={signConfirmOpen}
-        title="Sign off Phase 2 delivery"
+        title="Sign off Phase 3 delivery"
         message="Confirm that S9 (session close), S10 (MCP briefing), S11 (nav UI progress), and A1 (automation handoff) are verified and acceptable. This records Owner acceptance locally."
         confirmLabel="Confirm sign-off"
         onConfirm={handleSignOff}
