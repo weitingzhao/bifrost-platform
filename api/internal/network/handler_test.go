@@ -43,7 +43,7 @@ func mockUnifiServer(t *testing.T) (*httptest.Server, string) {
 
 func TestHandleStatus(t *testing.T) {
 	srv, host := mockUnifiServer(t)
-	h := network.NewHandler(network.WithDial(func(ctx context.Context) (*unifi.Client, error) {
+	h := network.NewHandler(nil, network.WithDial(func(ctx context.Context) (*unifi.Client, error) {
 		c := unifi.New(unifi.Config{Host: host, User: "agent", Pass: "secret", Site: "default"})
 		c.SetHTTPClient(srv.Client())
 		if err := c.Login(ctx); err != nil {
@@ -70,7 +70,7 @@ func TestHandleStatus(t *testing.T) {
 
 func TestHandleAuditDriftOnPartialMock(t *testing.T) {
 	srv, host := mockUnifiServer(t)
-	h := network.NewHandler(network.WithDial(func(ctx context.Context) (*unifi.Client, error) {
+	h := network.NewHandler(nil, network.WithDial(func(ctx context.Context) (*unifi.Client, error) {
 		c := unifi.New(unifi.Config{Host: host, User: "agent", Pass: "secret", Site: "default"})
 		c.SetHTTPClient(srv.Client())
 		if err := c.Login(ctx); err != nil {
@@ -95,5 +95,35 @@ func TestHandleAuditDriftOnPartialMock(t *testing.T) {
 	}
 	if payload["classification"] != "POLICY_DRIFT" {
 		t.Fatalf("expected drift on partial mock: %v", payload["classification"])
+	}
+}
+
+func TestHandleFirewallApply(t *testing.T) {
+	h := network.NewHandler(nil, network.WithApplyFirewall(func(ctx context.Context, includeDefaultDeny bool) (map[string]any, error) {
+		return map[string]any{
+			"executor":             "mock",
+			"include_default_deny": includeDefaultDeny,
+			"stdout":               "Done.",
+		}, nil
+	}))
+
+	body := strings.NewReader(`{"include_default_deny":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/network/firewall/apply", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.HandleFirewallApply(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["action"] != "network.firewall.apply" {
+		t.Fatalf("action: %v", payload["action"])
+	}
+	if payload["autonomy"] != "L1" {
+		t.Fatalf("autonomy: %v", payload["autonomy"])
 	}
 }

@@ -38,13 +38,18 @@ type networkRef struct {
 }
 
 type Service struct {
-	dial func(ctx context.Context) (*unifi.Client, error)
+	dial          func(ctx context.Context) (*unifi.Client, error)
+	applyFirewall func(ctx context.Context, includeDefaultDeny bool) (map[string]any, error)
 }
 
 type ServiceOption func(*Service)
 
 func WithDial(fn func(ctx context.Context) (*unifi.Client, error)) ServiceOption {
 	return func(s *Service) { s.dial = fn }
+}
+
+func WithApplyFirewall(fn func(ctx context.Context, includeDefaultDeny bool) (map[string]any, error)) ServiceOption {
+	return func(s *Service) { s.applyFirewall = fn }
 }
 
 func NewService(opts ...ServiceOption) *Service {

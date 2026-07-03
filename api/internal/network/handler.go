@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
 type Handler struct {
-	svc *Service
+	svc   *Service
+	audit *actuation.AuditLog
 }
 
-func NewHandler(opts ...ServiceOption) *Handler {
-	return &Handler{svc: NewService(opts...)}
+func NewHandler(audit *actuation.AuditLog, opts ...ServiceOption) *Handler {
+	return &Handler{svc: NewService(opts...), audit: audit}
 }
 
 func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
@@ -37,6 +40,50 @@ func (h *Handler) HandleClients(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) HandleAudit(w http.ResponseWriter, r *http.Request) {
 	h.writeService(w, r, h.svc.Audit)
+}
+
+func (h *Handler) HandleFirewallApply(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IncludeDefaultDeny bool `json:"include_default_deny"`
+	}
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+	}
+
+	target := "/api/v1/network/firewall/apply"
+	action := "network.firewall.apply"
+
+	result, err := h.svc.ApplyFirewall(r.Context(), req.IncludeDefaultDeny)
+	auditStatus := "ok"
+	detail := "firewall apply completed"
+	if err != nil {
+		auditStatus = "failed"
+		detail = err.Error()
+	}
+	if h.audit != nil {
+		h.audit.Record(r, action, target, auditStatus, detail)
+	}
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	payload := map[string]any{
+		"action":               action,
+		"target":               target,
+		"autonomy":             "L1",
+		"include_default_deny": req.IncludeDefaultDeny,
+		"result":               result,
+		"message":              detail,
+	}
+	if postAudit, auditErr := h.svc.Audit(r.Context()); auditErr == nil {
+		payload["post_apply_audit"] = postAudit
+	}
+
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (h *Handler) writeService(w http.ResponseWriter, r *http.Request, fn func(context.Context) (map[string]any, error)) {

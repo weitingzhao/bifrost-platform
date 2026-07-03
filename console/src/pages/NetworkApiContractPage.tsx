@@ -14,6 +14,8 @@ import {
 import { CatalogSection } from '@/components/CatalogSection'
 import { UnifiMcpServerPhase1SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase1SignoffPanel'
 import { UnifiMcpServerPhase2SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase2SignoffPanel'
+import { UnifiMcpServerPhase3SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase3SignoffPanel'
+import { UnifiMcpServerPhase4SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase4SignoffPanel'
 import { UnifiMcpServerProgramStatusStrip } from '@/components/architecture/UnifiMcpServerProgramStatusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
@@ -68,6 +70,10 @@ export function NetworkApiContractPage() {
 
       <UnifiMcpServerPhase2SignoffPanel />
 
+      <UnifiMcpServerPhase3SignoffPanel />
+
+      <UnifiMcpServerPhase4SignoffPanel />
+
       <OpsSection title="Contract metadata" bodyPadding="compact">
         <div className="flex flex-wrap items-center gap-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           <span>
@@ -76,7 +82,7 @@ export function NetworkApiContractPage() {
           <span>
             Source: <code className="text-xs">{NETWORK_API_CONTRACT_SOURCE}</code>
           </span>
-          <DenseTag variant="warning">{NETWORK_API_CONTRACT_STATUS}</DenseTag>
+          <DenseTag variant="success">{NETWORK_API_CONTRACT_STATUS}</DenseTag>
           <Button variant="ghost" size="xs" onClick={() => void handleCopy()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Failed' : 'Copy for LLM'}
           </Button>
@@ -191,7 +197,7 @@ export function NetworkApiContractPage() {
         </DenseDataTable>
       </CatalogSection>
 
-      <CatalogSection title="MCP read tools (unifi-mcp-server stream ②)">
+      <CatalogSection title="MCP tools (unifi-mcp-server stream ② + ④)">
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
@@ -208,7 +214,9 @@ export function NetworkApiContractPage() {
                 <DenseTableCell className="font-mono text-xs">{t.route}</DenseTableCell>
                 <DenseTableCell>{t.level}</DenseTableCell>
                 <DenseTableCell>
-                  <DenseTag variant="warning">planned</DenseTag>
+                  <DenseTag variant={implVariant(t.implemented)}>
+                    {t.implemented ? 'implemented' : 'planned'}
+                  </DenseTag>
                 </DenseTableCell>
               </DenseTableRow>
             ))}

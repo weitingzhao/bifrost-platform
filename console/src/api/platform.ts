@@ -87,6 +87,8 @@ import type {
   BriefingSessionResultsResponse,
   CloseBriefingSessionRequest,
   CloseBriefingSessionResponse,
+  NetworkAuditResponse,
+  NetworkStatusResponse,
 } from './types'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 import type { SessionSnapshot } from '@/lib/briefing/sessionSnapshot'
@@ -153,6 +155,31 @@ export async function fetchVerifyMissionSnapshot(): Promise<VerifyMissionSnapsho
   const r = await fetch('/api/v1/mission/verify-snapshot')
   if (!r.ok) throw new Error(`verify-snapshot: HTTP ${r.status}`)
   return r.json() as Promise<VerifyMissionSnapshotResponse>
+}
+
+export async function fetchNetworkStatus(): Promise<NetworkStatusResponse> {
+  const r = await fetch('/api/v1/network/status')
+  const body = (await r.json()) as NetworkStatusResponse
+  if (!r.ok) {
+    return {
+      ...body,
+      reachable: false,
+      error: body.error ?? `HTTP ${r.status}`,
+    }
+  }
+  return body
+}
+
+export async function fetchNetworkAudit(): Promise<NetworkAuditResponse> {
+  const r = await fetch('/api/v1/network/audit')
+  const body = (await r.json()) as NetworkAuditResponse
+  if (!r.ok) {
+    return {
+      ...body,
+      error: body.error ?? `HTTP ${r.status}`,
+    }
+  }
+  return body
 }
 
 export async function fetchHermesReadiness(): Promise<HermesReadinessResponse> {

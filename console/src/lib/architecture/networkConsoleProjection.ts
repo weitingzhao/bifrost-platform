@@ -1,7 +1,7 @@
 /**
  * Network Health — Control Room projection helpers.
  * Merges spine (GET /api/v1/context) with networkUpgradeCatalog.ts fallback.
- * Live UniFi probe remains Phase 7 (/api/v1/network/*).
+ * Live UniFi probe: GET /api/v1/network/status + audit (UMS3).
  */
 
 import type { OpsContextResponse } from '@/api/types'
@@ -51,7 +51,7 @@ export const NETWORK_HEALTH_PROJECTION = {
   catalogVersion: NET_UPGRADE_VERSION,
   status: NET_UPGRADE_STATUS,
   firewall: FIREWALL_APPLIED,
-  futureProbe:
-    'GET /api/v1/network/* — see Architecture → Network API (networkApiContractCatalog.ts; planned, no Go handlers)',
+  liveProbeNote:
+    'Live probe polls platform-api every 30s — requires UNIFI_HOST/USER/PASS on platform-api host. L1 apply via POST /api/v1/network/firewall/apply (operator) or MCP apply_network_firewall.',
   agentPlaybooks: 'Agent Protocol → Network diagnostic playbooks (POLICY_NOMINAL / POLICY_DRIFT / SESSION_PATH / POSTURE_FORBIDDEN)',
 } as const

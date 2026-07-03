@@ -12,6 +12,7 @@ import {
 } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import {
   NETWORK_HEALTH_PROJECTION,
   resolveNetworkStreamProjections,
@@ -31,6 +32,15 @@ function streamReach(done: number, total: number): 'ok' | 'degraded' | 'unknown'
   return 'unknown'
 }
 
+function liveProbeTagVariant(
+  reach: ReturnType<typeof useNetworkLiveProbe>['probeReach'],
+): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (reach === 'ok') return 'success'
+  if (reach === 'degraded') return 'warning'
+  if (reach === 'fail') return 'danger'
+  return 'neutral'
+}
+
 export function NetworkHealthPanel({
   context,
   onOpenNetworkUpgrade,
@@ -40,11 +50,12 @@ export function NetworkHealthPanel({
   const streams = resolveNetworkStreamProjections(context)
   const spineLoaded = context?.tracks?.infra != null
   const { firewall } = NETWORK_HEALTH_PROJECTION
+  const liveProbe = useNetworkLiveProbe()
 
   return (
     <OpsSection
       title="Network Health — ground floor (LAN / UniFi)"
-      description="Catalog + spine projection — firewall applied via Session v2 (D9). Live zone-matrix probe via platform-api planned (North Star /api/v1/network/*)."
+      description="Catalog + spine projection plus live UniFi probe via GET /api/v1/network/status + audit (Session v2 per D9)."
       actions={
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" size="xs" onClick={onOpenNetworkUpgrade}>
@@ -67,6 +78,39 @@ export function NetworkHealthPanel({
           Catalog <strong>{NETWORK_HEALTH_PROJECTION.catalogVersion}</strong>
         </span>
         <span>· Projection {spineLoaded ? 'spine + catalog' : 'catalog fallback'}</span>
+        <DenseTag variant={liveProbeTagVariant(liveProbe.probeReach)}>
+          Live probe {liveProbe.isLoading ? '…' : liveProbe.probeReach.toUpperCase()}
+        </DenseTag>
+      </div>
+
+      <div className="mb-4 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusLamp value={liveProbe.probeReach} kind="reach" />
+          <p className="m-0 text-[var(--text-dense-label)] font-medium">Live UniFi probe</p>
+          <DenseTag variant="info">L0</DenseTag>
+          <code className="text-[var(--text-dense-caption)] font-mono">GET /api/v1/network/status</code>
+          <code className="text-[var(--text-dense-caption)] font-mono">GET /api/v1/network/audit</code>
+        </div>
+        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          {liveProbe.isLoading ? 'Probing UCG via platform-api…' : liveProbe.summary}
+        </p>
+        {liveProbe.audit?.classification === 'POLICY_DRIFT' && (
+          <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--warning)]">
+            Drift: {liveProbe.audit.zone_binding_gaps?.length ?? 0} zone gap(s) ·{' '}
+            {liveProbe.audit.missing_policies?.length ?? 0} missing policy(ies) — Agent{' '}
+            <button type="button" className="focus-strip-link" onClick={onOpenAgentProtocol}>
+              POLICY_DRIFT remediation
+            </button>
+          </p>
+        )}
+        {liveProbe.status?.hint != null && liveProbe.status.reachable !== true && (
+          <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            {liveProbe.status.hint}
+          </p>
+        )}
+        <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+          {NETWORK_HEALTH_PROJECTION.liveProbeNote}
+        </p>
       </div>
 
       <DenseDataTable>
@@ -111,9 +155,6 @@ export function NetworkHealthPanel({
           <button type="button" className="focus-strip-link" onClick={onOpenAgentProtocol}>
             POLICY_NOMINAL / POLICY_DRIFT
           </button>
-        </p>
-        <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          {NETWORK_HEALTH_PROJECTION.futureProbe}
         </p>
       </div>
     </OpsSection>

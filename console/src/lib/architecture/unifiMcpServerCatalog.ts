@@ -39,7 +39,7 @@ export const UNIFI_MCP_SERVER_STREAM_PHASES: UnifiMcpStreamPhase[] = [
     title: 'Ops Console Network Health live probe',
     summary: 'Control Room panel reads live UniFi status via platform-api (not catalog-only projection).',
     deliverable: 'NetworkHealthPanel liveProbe + GET /api/v1/network/status',
-    status: 'pending',
+    status: 'done',
   },
   {
     id: 'UMS4',
@@ -47,13 +47,13 @@ export const UNIFI_MCP_SERVER_STREAM_PHASES: UnifiMcpStreamPhase[] = [
     title: 'MCP Server write tools',
     summary: 'L1/L2 actuation — firewall apply, zone restructure — audit trail via platform-api POST.',
     deliverable: 'MCP write tools + POST /api/v1/network/firewall/apply',
-    status: 'pending',
+    status: 'done',
   },
 ]
 
 export const UNIFI_MCP_SERVER_IMPLEMENTATION_PROGRESS = {
   streamId: 'unifi-mcp-server',
-  done: 2,
+  done: 4,
   total: 4,
   label: 'UniFi MCP Server — AI network management',
 } as const
