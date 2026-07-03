@@ -5,7 +5,7 @@
  * Single source of truth — do not duplicate elsewhere.
  */
 
-export const AGENT_PROTOCOL_VERSION = '2026-07-02'
+export const AGENT_PROTOCOL_VERSION = '2026-07-03'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 export type AgentModeRow = {
@@ -28,8 +28,9 @@ export const AGENT_MODES: AgentModeRow[] = [
     mode: 'Ops',
     flywheel: 'B — Runtime',
     defaultUI: 'Bifrost Ops Console :5180 → Control Room',
-    agentMay: 'Read spine, matrix, topology; infra YAML; K3s planning',
-    agentMustNot: 'Change trade page UI, expand FE scope',
+    agentMay:
+      'Read spine, matrix, topology; infra YAML; K3s planning; network L0 zone-matrix + firewall audit (scripts/unifi_firewall_setup.py); L1 idempotent firewall apply per D9 Session v2',
+    agentMustNot: 'Change trade page UI, expand FE scope; toggle Default Security Posture or disable IDS/IPS',
   },
   {
     mode: 'Promote',
@@ -81,6 +82,19 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   { action: 'daemon_control write via platform AI', scope: 'All modes' },
   { action: 'ib:operator:cmd RPC', scope: 'All modes' },
   { action: 'Editing bifrost-trader-engine/ (read-only reference)', scope: 'All modes' },
+  {
+    action: 'Default Security Posture toggle (Allow All ↔ Block All) or disable IDS/IPS on UCG',
+    scope: 'All modes',
+  },
+  { action: 'Bulk delete all Bifrost firewall zones / policies', scope: 'All modes' },
+  {
+    action: 'Manual UniFi UI firewall / zone / SSID changes (use platform-api + scripts executors)',
+    scope: 'All modes',
+  },
+  {
+    action: 'UniFi Integration API Key write path on UCG 10.4.57 (site UUID blocked — use Session v2 per spine D9)',
+    scope: 'Ops mode',
+  },
 ]
 
 /** Mission Signal Phase 2 — classify before remediating datastore / matrix failures. */
@@ -129,6 +143,57 @@ export const MISSION_DIAGNOSTIC_MCP = {
   matrix: 'get_connectivity_matrix',
   clusterPostgres: 'get_cluster_postgres (Console cluster API)',
   clusterRedis: 'get_cluster_redis (Console cluster API)',
+} as const
+
+/** Network governance Phase 4 — classify before firewall/zone actuation (parallel to verify_payload). */
+export type NetworkDiagnosticPlaybook = {
+  classification: 'POLICY_NOMINAL' | 'POLICY_DRIFT' | 'SESSION_PATH' | 'POSTURE_FORBIDDEN'
+  trigger: string
+  agentAction: string
+  autonomy: 'L0' | 'L1' | 'L2'
+  mustNot: string
+}
+
+export const NETWORK_DIAGNOSTIC_PLAYBOOKS: NetworkDiagnosticPlaybook[] = [
+  {
+    classification: 'POLICY_NOMINAL',
+    trigger: 'unifi_firewall_setup.py audit — all Bifrost zones + policies match networkUpgradeCatalog.ts FIREWALL_RULES',
+    agentAction:
+      'Document clean zone-matrix; if connectivity issue persists, classify as matrix/K8s/TWS — not firewall drift',
+    autonomy: 'L0',
+    mustNot: 'Run apply or change zones when audit reports no drift',
+  },
+  {
+    classification: 'POLICY_DRIFT',
+    trigger: 'Audit reports missing Bifrost policies or zone-matrix mismatch vs FIREWALL_RULES',
+    agentAction:
+      'Ops mode L1: run unifi_firewall_setup.py apply (idempotent Session v2 path per spine D9); re-audit before closing',
+    autonomy: 'L1',
+    mustNot: 'Use Integration API Key write on UCG 10.4.57; do not bulk-delete zones',
+  },
+  {
+    classification: 'SESSION_PATH',
+    trigger: 'Integration /sites missing site UUID or firewall write fails via Integration Key',
+    agentAction:
+      'Confirm spine decision D9; actuation via bifrost-agent Session v2 + CSRF only; document unlock condition (firmware/API fix)',
+    autonomy: 'L0',
+    mustNot: 'Retry Integration Key writes or store Super Admin credentials in git',
+  },
+  {
+    classification: 'POSTURE_FORBIDDEN',
+    trigger: 'Remediation requires Default Security Posture toggle, IDS/IPS off, or manual UniFi UI zone/SSID edit',
+    agentAction: 'Stop — escalate to Owner; cite Blueprint forbidden + AI Platform Network Security Posture boundary',
+    autonomy: 'L2',
+    mustNot: 'Proceed with posture change or UniFi UI edits even with Owner chat approval without explicit L2 sign-off in Console',
+  },
+]
+
+export const NETWORK_DIAGNOSTIC_MCP = {
+  auditScript: 'scripts/unifi_firewall_setup.py audit',
+  applyScript: 'scripts/unifi_firewall_setup.py apply (L1 — Owner confirm if prod-adjacent)',
+  firewallCatalog: 'console/src/lib/architecture/networkUpgradeCatalog.ts — FIREWALL_RULES',
+  spineDecision: 'GET /api/v1/context — decisions D9, coupling unifi_session_v2',
+  futureApi: 'GET /api/v1/network/* (Projection — planned; Constitution North Star criterion)',
 } as const
 
 /** Mission Signal Phase 3 — autonomous fix validation loop. */
@@ -301,12 +366,17 @@ export type OpeningPrompt = {
 
 export const OPENING_PROMPTS: OpeningPrompt[] = [
   { mode: 'Product', example: 'Mode: Product. Task: migrate LivePage SSE hook only. No API or infra changes.' },
-  { mode: 'Ops', example: 'Mode: Ops. Task: verify prod matrix blockers; read spine D1. No frontend edits.' },
+  {
+    mode: 'Ops',
+    example:
+      'Mode: Ops. Task: audit Bifrost firewall vs FIREWALL_RULES; L1 apply only if drift. Spine D9 Session v2. No FE edits.',
+  },
   { mode: 'Promote', example: 'Mode: Promote. Task: assess if prod cutover is allowed; list blockers from spine + matrix.' },
 ]
 
 export const MODE_SELECTION_HINTS = [
   'focus.blocker or flywheel_primary === B → Ops',
+  'tracks.infra / network-upgrade-* stream / VLAN-firewall task → Ops (network playbooks + D9 Session v2)',
   'Promote bay or cutover milestone → Promote',
   'Otherwise → Product',
 ]
@@ -467,6 +537,16 @@ export function buildAgentProtocolLlmPack(): string {
     '',
     '## Forbidden actions (all modes)',
     ...FORBIDDEN_ACTIONS.map(f => `- ${f.action} [${f.scope}]`),
+    '',
+    '## Network diagnostic playbooks (firewall / zone — Network Governance Phase 4)',
+    `- Audit: \`${NETWORK_DIAGNOSTIC_MCP.auditScript}\``,
+    `- Catalog: \`${NETWORK_DIAGNOSTIC_MCP.firewallCatalog}\``,
+    `- Spine: \`${NETWORK_DIAGNOSTIC_MCP.spineDecision}\``,
+    `- Future probe: \`${NETWORK_DIAGNOSTIC_MCP.futureApi}\``,
+    ...NETWORK_DIAGNOSTIC_PLAYBOOKS.map(
+      p =>
+        `- **${p.classification}** [${p.autonomy}]: ${p.trigger} → ${p.agentAction} | Must-not: ${p.mustNot}`,
+    ),
     '',
     '## Mission diagnostic playbooks (verify_payload)',
     `- MCP: \`${MISSION_DIAGNOSTIC_MCP.verifyPayload}\``,

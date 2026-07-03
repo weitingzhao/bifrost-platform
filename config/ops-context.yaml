@@ -216,6 +216,12 @@ decisions:
       conclusion: "Owner dropped the ui-experience-alignment prerequisite for Phase 3: Legacy runtime is already stopped (.70/.73/.50 clean) so side-by-side comparison is no longer possible, and Phase 2B already signed off 9/9 domains as business-equivalent. Ongoing UI polish continues as ordinary Design System work, not a retirement blocker. bifrost-trader-engine is NAS-archived (read-only) and removed from the workspace. legacy-retirement milestone → SIGNED/closed."
       signed_at: "2026-06-29"
       authority: bifrost-trade-infra/docs/PHASE2C_PROD_DEFERRED.md
+    - id: D9
+      status: SIGNED
+      topic: Network actuation path — Session v2 API primary
+      conclusion: "Integration API Key on UCG Max 10.4.57 does not return site UUID in /sites response; firewall/zone write impossible via Integration path. Primary actuation path is bifrost-agent Session (Super Admin local account) via v2 API with CSRF token. Unlock condition: Ubiquiti fixes Integration /sites or UCG firmware upgrade."
+      signed_at: "2026-07-02"
+      authority: "scripts/unifi_firewall_setup.py + console/src/lib/architecture/blueprintCatalog.ts (Principle 8)"
 platform_phases:
     - id: A
       label: Gate
@@ -234,6 +240,7 @@ coupling_surfaces:
     - vite_api_env
     - ops_auth_capabilities
     - ib_client_id
+    - unifi_session_v2
 promotion:
     last_gate:
         at: "2026-07-01T02:54:49Z"
@@ -531,17 +538,17 @@ tracks:
             - id: network-upgrade-core
               label: "Network upgrade — server LAN (UCG Max + USW-Pro-Max-24)"
               total: 6
-              done: 1
+              done: 5
               status: in_progress
-              note: "① Hardware selection & purchase ✓ ② UCG Max initial setup (VLAN 10/20/50, IDS/IPS, Controller) ③ USW-Pro-Max-24 swap (cable migration, VLAN trunk, 2.5G uplinks) ④ K3s node connectivity validation (all nodes stable, kube-vip VIP) ⑤ UniFi API → MCP Server integration (read-only network diagnostics) ⑥ UniFi API write actuation (port restart, firewall rule, client isolation)"
+              note: "① Hardware selection & purchase ✓ ② UCG Max initial setup (VLAN 10/20/30/50, IDS/IPS, Controller) — VLAN 30 Family added 2026-07-02 ③ USW-Pro-Max-24 swap + wired VLAN 10 migration ✓ (all server ports incl. Mac .40) ④ K3s + TWS + kube-vip validation ✓ · ib.secondary aligned to .32 ⑤ UniFi API → MCP Server integration (read-only network diagnostics) — pending ⑥ Firewall ✓ — Session v2 applied (decision D9): 5 Bifrost Zones + 9 Policies via ZBF; scripts/unifi_firewall_setup.py audit/apply operational; Integration API Key blocked on UCG 10.4.57"
               prerequisites:
                 - "Hardware delivered (UCG Max + USW-Pro-Max-24)"
             - id: network-upgrade-wifi
               label: "Network upgrade — WiFi (U7 Pro + U6 Mesh, replace Eero)"
               total: 5
-              done: 0
-              status: not_started
-              note: "① AP hardware purchase ② WiFiman baseline benchmark ③ Per-floor AP rollout (MoCA backhaul, VLAN SSIDs) ④ B1/garage mesh AP deployment ⑤ Eero decommission + coverage verification"
+              done: 2
+              status: in_progress
+              note: "① AP hardware purchase ✓ (arriving ~2 days) ② WiFiman baseline — scripts/wifiman_baseline.sh ready (Owner: run 9-point survey on Eero before cutover) ③ Pre-AP tooling ✓ — unifi_wlan_precreate.py (apply after first AP adopt; ApGroupMissing until then) · unifi_moca_vlan_test.sh (evening window) ④ Per-floor AP rollout (MoCA trunk P13-15) ⑤ Eero decommission + coverage verification"
               prerequisites:
                 - "network-upgrade-core stream ③ switch swap complete"
             - id: unifi-mcp-server

@@ -42,7 +42,17 @@ VLANS = [
         "dhcpd_enabled": True,
         "dhcpd_start": "192.168.20.6",
         "dhcpd_stop": "192.168.20.254",
-        "note": "SSID Bifrost (later)",
+        "note": "SSID Bifrost (Admin)",
+    },
+    {
+        "name": "Family",
+        "vlan": 30,
+        "ip_subnet": "192.168.30.1/24",
+        "domain_name": "bifrost.lan",
+        "dhcpd_enabled": True,
+        "dhcpd_start": "192.168.30.6",
+        "dhcpd_stop": "192.168.30.254",
+        "note": "SSID Family — parents/kids, no Server access",
     },
     {
         "name": "Home",

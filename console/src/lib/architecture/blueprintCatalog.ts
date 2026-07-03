@@ -11,7 +11,7 @@ import {
   SPINE_STATUS_SEMANTICS_NOTE,
 } from '@/lib/architecture/spineSemantics'
 
-export const BLUEPRINT_VERSION = '2026-07-01'
+export const BLUEPRINT_VERSION = '2026-07-03'
 export const BLUEPRINT_SOURCE = 'console/src/lib/architecture/blueprintCatalog.ts'
 
 /** Slow-changing principles — North Star, design rules, forbidden actions. */
@@ -33,7 +33,7 @@ export const GOVERNANCE_LAYERS: GovernanceLayerRow[] = [
     layer: GOVERNANCE_LAYER_CONSTITUTION,
     changeRate: 'Slow (months / Owner principle changes)',
     authority: 'Blueprint + Agent Protocol catalogs',
-    content: 'North Star, Strategy C, design principles, L0/L1/L2/forbidden, AI boundaries',
+    content: 'North Star, Strategy C, design principles, L0/L1/L2/forbidden (incl. network), AI boundaries',
   },
   {
     layer: GOVERNANCE_LAYER_SPINE,
@@ -85,6 +85,10 @@ export const OWNER_EXCEPTIONS: OwnerException[] = [
     allowed: 'Edit ops-context.yaml / Goal (Owner strategic changes)',
     forbidden: 'Bypass platform-api to invoke Trade write paths',
   },
+  {
+    allowed: 'Physical hardware swap (UCG / Switch / AP — requires physical access)',
+    forbidden: 'Manual UniFi UI firewall / zone / SSID changes (use platform-api + scripts)',
+  },
 ]
 
 export type StrategyCLayer = {
@@ -103,7 +107,8 @@ export const STRATEGY_C_LAYERS: StrategyCLayer[] = [
   },
   {
     layer: 'Mature components',
-    responsibility: 'Argo CD, Tekton, Headlamp/Rancher — wrapped via API or deep-linked, not replacing control plane',
+    responsibility:
+      'Argo CD, Tekton, Headlamp/Rancher, UniFi Controller — wrapped via API (Session v2 / future Integration), not replacing control plane',
   },
   {
     layer: 'Infra scripts',
@@ -129,6 +134,12 @@ export const DESIGN_PRINCIPLES: DesignPrinciple[] = [
   { id: 5, title: 'Forbidden unchanged', description: 'daemon_control write, ib:operator:cmd, R-DV3 auto-order bypass — never exposed to platform AI.' },
   { id: 6, title: 'Out-of-band recovery never shares fate', description: 'The Agent that recovers the platform/cluster (L-1 Operator Plane) runs OUTSIDE K8s on dual Mac Minis with a mutual watchdog; it must never be scheduled into the cluster it recovers. The engineer stands on the ground, not inside the rocket.' },
   { id: 7, title: 'Earned autonomy over granted trust', description: 'Agent Skills start at L1 (confirm); consecutive successes earn L0 (auto); failure spikes trigger demotion back to L1. Owner governs via policy, not per-action approval — Flight Director model.' },
+  {
+    id: 8,
+    title: 'Network is the ground floor',
+    description:
+      'Network infrastructure (UCG / Switch / AP) is the physical substrate all layers depend on; probe and actuation must work independently of K8s (platform-api Session-connects UCG directly, bypassing cluster).',
+  },
 ]
 
 export type AgentLayeringRecord = {
@@ -175,6 +186,17 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Trust & Autonomy', plane: 'Agent', purpose: 'Earned autonomy KPIs and trust matrix' },
   { view: 'Operator Plane (L-1)', plane: 'Agent', purpose: 'Out-of-band runner infrastructure (fate-isolated)' },
   { view: 'Control Room', plane: 'Observe', purpose: 'Mission diagnosis — KPIs, matrix, flywheels, commander cockpit' },
+  {
+    view: 'Network Health (Control Room)',
+    plane: 'Observe',
+    purpose: 'Ground-floor LAN — spine + catalog projection, ZBF status, firewall audit path (embedded in Control Room)',
+  },
+  { view: 'Network Upgrade', plane: 'Architecture', purpose: 'Home LAN plan — VLAN design, FIREWALL_APPLIED, deployment progress, research' },
+  {
+    view: 'Network API',
+    plane: 'Architecture',
+    purpose: 'platform-api /api/v1/network/* contract — L0/L1/L2 routes, executors, forbidden actions (planned; no Go handlers)',
+  },
   { view: 'Delivery', plane: 'Operate', purpose: 'CI/CD pipelines and release coupling' },
   { view: 'Runtime Map', plane: 'Observe', purpose: 'Topology-first runtime diagnosis' },
   { view: 'Placement', plane: 'Observe', purpose: 'Workload placement policy and violations' },
@@ -194,10 +216,26 @@ export type AuthorizationLevel = {
 }
 
 export const BLUEPRINT_AUTHORIZATION_LEVELS: AuthorizationLevel[] = [
-  { level: 'L0', behavior: 'Read-only probes (matrix, topology, cluster, logs)' },
-  { level: 'L1', behavior: 'Safe actuation via platform-api (rollout restart, scale, sync — audited)' },
-  { level: 'L2', behavior: 'Owner-confirmed changes (node join, stack install, Argo rollback)' },
-  { level: 'forbidden', behavior: 'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass' },
+  {
+    level: 'L0',
+    behavior:
+      'Read-only probes (matrix, topology, cluster, logs) + network zone-matrix audit, AP status, VLAN binding check',
+  },
+  {
+    level: 'L1',
+    behavior:
+      'Safe actuation via platform-api (rollout restart, scale, sync — audited) + firewall policy apply (idempotent Bifrost rules), AP restart',
+  },
+  {
+    level: 'L2',
+    behavior:
+      'Owner-confirmed changes (node join, stack install, Argo rollback) + zone restructure, SSID CRUD, port profile change, Default Security Posture toggle',
+  },
+  {
+    level: 'forbidden',
+    behavior:
+      'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass · bulk delete all Bifrost firewall zones · disable IDS/IPS',
+  },
 ]
 
 export type SuccessCriterion = {
@@ -217,6 +255,11 @@ export const SUCCESS_CRITERIA: SuccessCriterion[] = [
   },
   { area: 'Spine', criterion: 'GET /api/v1/context + Program page always shows north star' },
   { area: 'MCP', criterion: 'MCP Tools and UI — same permissions, same audit (AI Agent self-interaction loop)' },
+  {
+    area: 'Network',
+    criterion:
+      'Zone-policy audit clean, AP coverage baseline met, Default VLAN device count → 0 — all verifiable via /api/v1/network/*',
+  },
 ]
 
 export type ActuationPhaseRow = {
@@ -250,6 +293,7 @@ export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
       'Service inventory from K8s API / Compose labels → unified list',
       'Health & dependencies from Monitor + Ops + Socket health Redis',
       'Config & versions from Git tag, image digest, ArgoCD sync status',
+      'Network topology from UniFi API — UCG / Switch / AP inventory, zone-matrix, client count per VLAN',
     ],
   },
   {
@@ -260,6 +304,7 @@ export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
       'Release via ArgoCD GitOps; release_gate.sh aggregates prod-health',
       'Config drift detection via ArgoCD diff + periodic make prod-health',
       'Agent Briefing reconcile gate — briefingReconciliationCatalog.ts (queue ≟ spine ≟ appendix)',
+      'Firewall policy drift — audit Bifrost zones/policies against networkUpgradeCatalog.ts FIREWALL_RULES',
     ],
   },
   {
@@ -269,6 +314,8 @@ export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
       'L0 read-only: diagnose, root cause summary, Runbook link',
       'L1 safe retry: retry-failed, restart Celery worker instance via Ops API',
       'L2 controlled change: ArgoCD rollback, scaling — requires Owner confirmation',
+      'L1 network: re-sync missing Bifrost firewall policies via unifi_firewall_setup.py apply (idempotent)',
+      'L2 network: zone restructure or SSID CRUD — requires Owner confirmation',
       'Forbidden: LLM direct to trade — daemon_control write, ib:operator:cmd, R-DV3 violation',
     ],
   },
@@ -307,6 +354,11 @@ export const AI_PLATFORM_SUCCESS: AiSuccessCriterion[] = [
   { area: 'Isolation', criterion: 'Trade review AI and ops Agent cannot trigger daemon_control or IB Operator RPC' },
   { area: 'Page refactoring', criterion: 'Each migrated page reaches Staging after CI gate; Owner sign-off chain complete' },
   { area: 'Trade review AI', criterion: 'At least one daily review report (positions + trades + PnL) generated locally; data source read-only and auditable' },
+  {
+    area: 'Network',
+    criterion:
+      'One platform-api call returns zone-matrix + firewall policy list + AP health; firewall drift auto-detected',
+  },
 ]
 
 export type AiBoundary = { rule: string; detail: string }
@@ -316,16 +368,37 @@ export const AI_PLATFORM_BOUNDARIES: AiBoundary[] = [
   { rule: 'Trade write path', detail: 'Only daemon → ib:operator:cmd; AI read-only or via verified Ops API' },
   { rule: 'TWS', detail: 'Win11 dedicated machine, never scheduled into K3s' },
   { rule: 'Phase 1 constraint', detail: 'While frontend points at Legacy API, platform must not mix "API migration" and "release" into one change (single-variable principle)' },
+  {
+    rule: 'Network Security Posture',
+    detail:
+      'Agent must not toggle Default Security Posture (Allow All ↔ Block All) or disable IDS/IPS; physical UCG access is Owner-only',
+  },
 ]
 
 /** Actuation phase definitions (Constitution) — which phase means what; live progress is Projection. */
 export const ACTUATION_PHASES: ActuationPhaseRow[] = [
-  { phase: 'P0', deliverables: 'Cluster L0 probes, Delivery dual track display', eliminates: 'Observation only' },
-  { phase: 'P1', deliverables: 'Auth + audit + workload L1 + logs', eliminates: 'Daily kubectl' },
-  { phase: 'P2', deliverables: 'Node lifecycle job + Cluster UI wizard', eliminates: 'install-server.sh, join, drain' },
+  {
+    phase: 'P0',
+    deliverables: 'Cluster L0 probes, Delivery dual track display + UCG reachability probe + zone-matrix read',
+    eliminates: 'Observation only',
+  },
+  {
+    phase: 'P1',
+    deliverables: 'Auth + audit + workload L1 + logs + firewall audit automation + AP status probe',
+    eliminates: 'Daily kubectl',
+  },
+  {
+    phase: 'P2',
+    deliverables: 'Node lifecycle job + Cluster UI wizard + AP lifecycle (adopt / restart / firmware)',
+    eliminates: 'install-server.sh, join, drain',
+  },
   { phase: 'P3', deliverables: 'GitOps + CI execution (Argo/Tekton API)', eliminates: 'Argo UI, tkn CLI' },
   { phase: 'P4', deliverables: 'Platform stack install wizard', eliminates: 'Manual Helm install' },
-  { phase: 'P5', deliverables: 'MCP actuation Tools', eliminates: 'Agent direct shell' },
+  {
+    phase: 'P5',
+    deliverables: 'MCP actuation Tools + UniFi MCP tools (network-read / network-write)',
+    eliminates: 'Agent direct shell',
+  },
 ]
 
 export type BlueprintLlmPackOptions = {

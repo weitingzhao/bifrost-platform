@@ -17,6 +17,7 @@ import { buildDualFlywheelVisionLlmPack } from './dualFlywheelVisionCatalog'
 import { buildK3sArchitectureLlmPack } from './k3sArchitectureCatalog'
 import { buildDeployMainlineLlmPack } from './deployMainlineCatalog'
 import { buildK3sBootstrapLlmPack } from './k3sBootstrapCatalog'
+import { buildNetworkApiContractLlmPack } from './networkApiContractCatalog'
 import { buildRoadmapLlmPack } from './roadmapCatalog'
 import { buildTradeK8sNativeLlmPack } from './tradeK8sNativeCatalog'
 import { buildStandardsLlmPack } from './standardsCatalog'
@@ -37,6 +38,7 @@ export function buildFullArchitectureLlmPack(spine?: OpsContextResponse): string
     buildTradeK8sNativeLlmPack(),
     buildCicdBootstrapLlmPack(),
     buildDeployMainlineLlmPack(),
+    buildNetworkApiContractLlmPack(),
     buildStandardsLlmPack(),
     buildAgentProtocolLlmPack(),
     buildBriefingReconciliationLlmPack(spine),

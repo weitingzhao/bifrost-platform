@@ -18,6 +18,8 @@ import {
   AP_PLACEMENTS,
   CURRENT_PROBLEMS,
   CURRENT_TOPOLOGY_ASCII,
+  DEPLOYMENT_PROGRESS,
+  FIREWALL_APPLIED,
   FIREWALL_RULES,
   HARDWARE_BOM,
   BOM_TOTAL,
@@ -56,6 +58,12 @@ function bomStatusVariant(status: string): DenseTagVariant {
   return 'neutral'
 }
 
+function deploymentStatusVariant(status: string): DenseTagVariant {
+  if (status.includes('PARTIAL DEPLOY')) return 'info'
+  if (status.includes('RESEARCH') || status.includes('ORDERED')) return 'warning'
+  return 'success'
+}
+
 export function NetworkUpgradePage() {
   const [copyState, setCopyState] = useState<CopyState>('idle')
 
@@ -78,12 +86,71 @@ export function NetworkUpgradePage() {
         <div className="flex flex-wrap items-center gap-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           <span>Version: <strong>{NET_UPGRADE_VERSION}</strong></span>
           <span>Source: <code className="text-xs">{NET_UPGRADE_SOURCE}</code></span>
-          <DenseTag variant="warning">{NET_UPGRADE_STATUS}</DenseTag>
+          <DenseTag variant={deploymentStatusVariant(NET_UPGRADE_STATUS)}>{NET_UPGRADE_STATUS}</DenseTag>
           <Button variant="ghost" size="xs" onClick={() => void handleCopy()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Failed' : 'Copy for LLM'}
           </Button>
         </div>
       </OpsSection>
+
+      {/* Deployment progress */}
+      <CatalogSection title="Deployment progress (live — spine streams)">
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Stream</DenseTableHead>
+              <DenseTableHead className="text-right">Progress</DenseTableHead>
+              <DenseTableHead>Label</DenseTableHead>
+              <DenseTableHead>Note</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {DEPLOYMENT_PROGRESS.map(d => (
+              <DenseTableRow key={d.stream}>
+                <DenseTableCell className="font-mono text-xs">{d.stream}</DenseTableCell>
+                <DenseTableCell className="text-right font-mono tabular-nums">
+                  {d.done}/{d.total}
+                </DenseTableCell>
+                <DenseTableCell className="font-medium">{d.label}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{d.note}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      {/* Firewall applied */}
+      <CatalogSection title="Firewall applied (ZBF — Session v2 · spine D9)">
+        <div className="mb-3 flex flex-wrap gap-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          <span>
+            Applied <strong>{FIREWALL_APPLIED.appliedAt}</strong>
+          </span>
+          <span>
+            · {FIREWALL_APPLIED.zoneCount} zones · {FIREWALL_APPLIED.policyCount} policies
+          </span>
+          <span>· Audit: <code className="font-mono text-xs">{FIREWALL_APPLIED.auditScript}</code></span>
+        </div>
+        <p className="m-0 mb-3 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          {FIREWALL_APPLIED.actuationPath}. Drift target: <code className="font-mono text-xs">FIREWALL_RULES</code> in
+          this catalog — Agent Protocol POLICY_NOMINAL / POLICY_DRIFT.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Applied policy</DenseTableHead>
+              <DenseTableHead>FIREWALL_RULES mapping</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {FIREWALL_APPLIED.policies.map(p => (
+              <DenseTableRow key={p.name}>
+                <DenseTableCell className="font-mono text-xs">{p.name}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{p.catalogRule}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
 
       {/* Current topology */}
       <CatalogSection title="Current topology">

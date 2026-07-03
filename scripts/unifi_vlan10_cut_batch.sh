@@ -13,16 +13,72 @@ SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-
 
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
-# name|old_ip|new_ip|port|iface|os
+# name|old_ip|new_ip|port|os  (Linux: iface auto-detected on SSH)
 NODES=(
-  "ubt-k3s-04|192.168.1.213|192.168.10.75|2|eno1|linux"
-  "ubt-k3s-05|192.168.1.93|192.168.10.77|3|eno1|linux"
-  "ubt-k3s-06|192.168.1.158|192.168.10.79|4|enp2s0|linux"
-  "ubt-k3s-02|192.168.1.230|192.168.10.70|23|enp4s0|linux"
-  "ops-mac-agent-02|192.168.1.102|192.168.10.50|5|Ethernet|macos"
-  "ops-mac-agent-01|192.168.1.144|192.168.10.52|6|Ethernet|macos"
-  "UGREEN-NAS|192.168.1.190|192.168.10.20|21|eth0|nas"
+  "ubt-k3s-04|192.168.1.213|192.168.10.75|2|linux"
+  "ubt-k3s-05|192.168.1.93|192.168.10.77|3|linux"
+  "ubt-k3s-06|192.168.1.158|192.168.10.79|4|linux"
+  "ubt-k3s-02|192.168.1.230|192.168.10.70|23|linux"
+  "ops-mac-agent-02|192.168.1.102|192.168.10.50|5|macos|Ethernet"
+  "ops-mac-agent-01|192.168.1.144|192.168.10.52|6|macos|Ethernet"
+  "UGREEN-NAS|192.168.1.190|192.168.10.20|21|nas|"
 )
+
+detect_linux_iface() {
+  local host="$1"
+  ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "bash -s" <<'EOF'
+set -euo pipefail
+IF=$(ip -o route show default 2>/dev/null | awk '{print $3}' | head -1 || true)
+if [[ -z "${IF}" ]]; then
+  IF=$(ip -o link show up | awk -F': ' '{print $2}' | grep -E '^(en|eth)' | grep -v '@' | head -1)
+fi
+[[ -n "${IF}" ]] || { echo "no wired iface" >&2; exit 1; }
+echo "${IF}"
+EOF
+}
+
+linux_static() {
+  local host="$1" ip="$2"
+  local iface sudocmd
+  if ! iface=$(detect_linux_iface "$host"); then
+    log "SKIP $host — cannot detect wired interface"
+    return 1
+  fi
+  log "Detected $host iface=$iface"
+  if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'sudo -n true' 2>/dev/null; then
+    sudocmd="sudo -n"
+  elif [[ -n "$SUDO_PASS" ]]; then
+    sudocmd="echo '$SUDO_PASS' | sudo -S"
+  else
+    log "SKIP $host — no NOPASSWD and BIFROST_SUDO_PASS unset"
+    return 1
+  fi
+  ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "bash -s" <<EOF
+set -euo pipefail
+IF=${iface}
+IP=${ip}
+${sudocmd} bash -c '
+cat > /etc/netplan/01-bifrost-vlan10.yaml <<YAML
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    '"\${IF}"':
+      dhcp4: false
+      dhcp6: false
+      addresses: ['"\${IP}"'/24]
+      routes:
+        - to: default
+          via: 192.168.10.1
+      nameservers:
+        addresses: [192.168.10.1, 1.1.1.1]
+YAML
+chmod 600 /etc/netplan/01-bifrost-vlan10.yaml
+rm -f /etc/netplan/01-*-dhcp.yaml /etc/netplan/99-bifrost-vlan10.yaml
+netplan generate && netplan apply
+'
+EOF
+}
 
 apply_port_vlan10() {
   local port="$1"
@@ -66,44 +122,6 @@ print(f"OK port P{port:02d} -> VLAN 10")
 PY
 }
 
-linux_static() {
-  local host="$1" ip="$2" iface="$3"
-  local sudocmd
-  if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'sudo -n true' 2>/dev/null; then
-    sudocmd="sudo -n"
-  elif [[ -n "$SUDO_PASS" ]]; then
-    sudocmd="echo '$SUDO_PASS' | sudo -S"
-  else
-    log "SKIP $host — no NOPASSWD and BIFROST_SUDO_PASS unset"
-    return 1
-  fi
-  ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "bash -s" <<EOF
-set -euo pipefail
-IF=${iface}
-IP=${ip}
-${sudocmd} bash -c '
-cat > /etc/netplan/01-bifrost-vlan10.yaml <<YAML
-network:
-  version: 2
-  renderer: networkd
-  ethernets:
-    '"\${IF}"':
-      dhcp4: false
-      dhcp6: false
-      addresses: ['"\${IP}"'/24]
-      routes:
-        - to: default
-          via: 192.168.10.1
-      nameservers:
-        addresses: [192.168.10.1, 1.1.1.1]
-YAML
-chmod 600 /etc/netplan/01-bifrost-vlan10.yaml
-rm -f /etc/netplan/01-eno1-dhcp.yaml /etc/netplan/99-bifrost-vlan10.yaml
-netplan generate && netplan apply
-'
-EOF
-}
-
 macos_static() {
   local host="$1" ip="$2" svc="${3:-Ethernet}"
   if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'sudo -n true' 2>/dev/null; then
@@ -128,7 +146,8 @@ wait_ping() {
 }
 
 cut_node() {
-  local name="$1" old_ip="$2" new_ip="$3" port="$4" iface="$5" os="$6"
+  local name="$1" old_ip="$2" new_ip="$3" port="$4" os="$5"
+  local iface="${6:-Ethernet}"
   log "=== $name $old_ip -> $new_ip (P$(printf '%02d' "$port")) ==="
   if wait_ping "$new_ip" 2; then
     log "Already on $new_ip — skip"
@@ -139,7 +158,7 @@ cut_node() {
     return 1
   fi
   case "$os" in
-    linux) linux_static "$old_ip" "$new_ip" "$iface" || return 1 ;;
+    linux) linux_static "$old_ip" "$new_ip" || return 1 ;;
     macos) macos_static "$old_ip" "$new_ip" "$iface" || return 1 ;;
     nas)
       log "NAS: set $new_ip in UGOS or provide SSH + BIFROST_SUDO_PASS"
@@ -161,11 +180,11 @@ main() {
   local only="${1:-}"
   local ok=0 fail=0
   for entry in "${NODES[@]}"; do
-    IFS='|' read -r name old new port iface os <<<"$entry"
+    IFS='|' read -r name old new port os iface <<<"$entry"
     if [[ -n "$only" && "$name" != "$only" ]]; then
       continue
     fi
-    if cut_node "$name" "$old" "$new" "$port" "$iface" "$os"; then
+    if cut_node "$name" "$old" "$new" "$port" "$os" "${iface:-Ethernet}"; then
       ok=$((ok + 1))
     else
       fail=$((fail + 1))
