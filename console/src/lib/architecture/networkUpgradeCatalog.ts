@@ -1,16 +1,78 @@
 /**
- * Home network upgrade plan — research & planning reference.
+ * Home network upgrade plan — research & deployment reference.
  *
  * Authoritative source for Ops Console → Architecture → Network Upgrade.
  * Created 2026-06-26 from Agent/Owner discussion on kube-vip, cross-subnet
  * access, VLAN-capable WiFi, and full UniFi migration.
  *
- * Status: RESEARCH — awaiting hardware purchase decision.
+ * Status: PARTIAL DEPLOY — core hardware live; firewall applied; WiFi AP rollout pending.
+ * Spine alignment: config/ops-context.yaml → network-upgrade-core 5/6 · decision D9.
  */
 
-export const NET_UPGRADE_VERSION = '2026-06-26-v1'
+export const NET_UPGRADE_VERSION = '2026-07-03-v2'
 export const NET_UPGRADE_SOURCE = 'console/src/lib/architecture/networkUpgradeCatalog.ts'
-export const NET_UPGRADE_STATUS = 'ORDERED — router + switch ordered (2026-06-27); AP deferred; awaiting delivery'
+export const NET_UPGRADE_STATUS =
+  'PARTIAL DEPLOY — UCG Max + USW-Pro-Max-24 live (VLAN 10/20/30/50); ZBF firewall applied via Session v2 (D9); AP rollout + Eero cutover pending'
+
+/** Live deployment progress — mirrors spine streams network-upgrade-core / network-upgrade-wifi. */
+export type DeploymentProgressRow = {
+  stream: string
+  done: number
+  total: number
+  label: string
+  note: string
+}
+
+export const DEPLOYMENT_PROGRESS: DeploymentProgressRow[] = [
+  {
+    stream: 'network-upgrade-core',
+    done: 5,
+    total: 6,
+    label: 'Core backbone (UCG · switch · VLAN · firewall · K3s validation)',
+    note: '⑥ Firewall ✓ Session v2 — 5 Bifrost zones + 9 ZBF policies; ⑤ UniFi MCP read integration pending',
+  },
+  {
+    stream: 'network-upgrade-wifi',
+    done: 2,
+    total: 5,
+    label: 'WiFi cutover (AP purchase · WiFiman · pre-AP tooling · rollout · Eero decommission)',
+    note: '① AP hardware purchase ✓ · ② WiFiman baseline — scripts/wifiman_baseline.sh ready (Owner: run 9-point survey) · ③ Pre-AP tooling ✓ — unifi_wlan_precreate.py + unifi_moca_vlan_test.sh pending evening window · ④⑤ rollout + Eero decommission pending',
+  },
+]
+
+/** Authoritative record of applied ZBF — audit via scripts/unifi_firewall_setup.py (Agent Protocol POLICY_* playbooks). */
+export const FIREWALL_APPLIED = {
+  appliedAt: '2026-07-02',
+  actuationPath: 'UniFi Session v2 + CSRF (spine decision D9 — Integration API Key write blocked on UCG 10.4.57)',
+  auditScript: 'scripts/unifi_firewall_setup.py audit',
+  applyScript: 'scripts/unifi_firewall_setup.py apply',
+  zoneCount: 5,
+  policyCount: 9,
+  zones: [
+    { name: 'Bifrost Server', vlanBinding: 'VLAN 10 (Server)' },
+    { name: 'Bifrost Work', vlanBinding: 'VLAN 20 (Admin / Bifrost SSID)' },
+    { name: 'Bifrost Family', vlanBinding: 'VLAN 30 (Family SSID)' },
+    { name: 'Bifrost IoT', vlanBinding: 'VLAN 50 (Home SSID)' },
+    { name: 'Bifrost Default', vlanBinding: 'Default / Eero transition' },
+  ],
+  policies: [
+    { name: 'Bifrost | REJECT Family → Server', catalogRule: 'VLAN 30 → VLAN 10 deny' },
+    { name: 'Bifrost | REJECT IoT → Server', catalogRule: 'VLAN 50 → VLAN 10 deny' },
+    { name: 'Bifrost | REJECT IoT → Family', catalogRule: 'VLAN 50 → VLAN 30 deny' },
+    { name: 'Bifrost | REJECT Family → IoT', catalogRule: 'VLAN 30 → VLAN 50 deny' },
+    { name: 'Bifrost | ALLOW Work → Server', catalogRule: 'VLAN 20 → VLAN 10 allow (kube-vip)' },
+    { name: 'Bifrost | ALLOW Family → NAS Plex/SMB', catalogRule: 'VLAN 30 → NAS Plex/SMB allow' },
+    { name: 'Bifrost | ALLOW IoT → NAS Plex', catalogRule: 'VLAN 50 → NAS Plex allow' },
+    { name: 'Bifrost | ALLOW Server → IoT', catalogRule: 'VLAN 10 → VLAN 50 allow (automation hub)' },
+    {
+      name: 'Bifrost | REJECT Default → Server (transition)',
+      catalogRule: 'Default zone → Server deny until Eero decommission',
+    },
+  ],
+  catalogAuthority: 'FIREWALL_RULES in this file — drift detection target for Agent Protocol POLICY_DRIFT',
+  spineDecision: 'D9',
+  integrationKeyBlocked: true,
+} as const
 
 /* ─── Current topology ─── */
 
@@ -86,16 +148,23 @@ export const TARGET_VLANS: VlanRow[] = [
   {
     vlan: 20,
     subnet: '192.168.20.x',
-    purpose: 'Trusted work devices',
+    purpose: 'Admin work devices (K3s / Ops access)',
     ssid: 'Bifrost',
-    devices: 'Laptops, phones, iPads needing K3s access',
+    devices: 'Owner laptops, phones, iPads needing Server access',
+  },
+  {
+    vlan: 30,
+    subnet: '192.168.30.x',
+    purpose: 'Family personal devices',
+    ssid: 'Family',
+    devices: 'Parents, kids laptops/phones/tablets, PS5, streaming — no Server access',
   },
   {
     vlan: 50,
     subnet: '192.168.50.x',
-    purpose: 'Home / IoT',
+    purpose: 'Home IoT',
     ssid: 'Home',
-    devices: 'Ring, Echo, smart switches, PS5, home theater, robot vacuums',
+    devices: 'Ring, Echo, smart switches, robot vacuums, sensors',
   },
 ]
 
@@ -107,12 +176,17 @@ export type FirewallRuleRow = {
 }
 
 export const FIREWALL_RULES: FirewallRuleRow[] = [
-  { from: 'VLAN 20 (Work)', to: 'VLAN 10 (Server)', action: 'allow', note: 'Laptops/phones → K3s + kube-vip VIP' },
+  { from: 'VLAN 20 (Admin)', to: 'VLAN 10 (Server)', action: 'allow', note: 'Owner devices → K3s + kube-vip VIP' },
+  { from: 'VLAN 30 (Family)', to: 'VLAN 10 (Server)', action: 'deny', note: 'Family devices cannot reach servers' },
   { from: 'VLAN 50 (IoT)', to: 'VLAN 10 (Server)', action: 'deny', note: 'IoT cannot reach servers' },
-  { from: 'VLAN 50 (IoT)', to: 'VLAN 20 (Work)', action: 'deny', note: 'IoT cannot reach work devices' },
-  { from: 'VLAN 20 (Work)', to: 'Internet', action: 'allow', note: '' },
+  { from: 'VLAN 50 (IoT)', to: 'VLAN 30 (Family)', action: 'deny', note: 'IoT cannot reach family devices' },
+  { from: 'VLAN 30 (Family)', to: 'VLAN 50 (IoT)', action: 'deny', note: 'Family cannot lateral-scan IoT' },
+  { from: 'VLAN 20 (Admin)', to: 'Internet', action: 'allow', note: '' },
+  { from: 'VLAN 30 (Family)', to: 'Internet', action: 'allow', note: '' },
   { from: 'VLAN 50 (IoT)', to: 'Internet', action: 'allow', note: 'Ring cloud, Echo, OTA updates' },
-  { from: 'VLAN 50 (IoT)', to: 'NAS Plex/SMB ports', action: 'allow', note: 'Home theater streaming from NAS' },
+  { from: 'VLAN 30 (Family)', to: 'NAS Plex/SMB ports', action: 'allow', note: 'Media streaming from NAS (.20)' },
+  { from: 'VLAN 50 (IoT)', to: 'NAS Plex ports', action: 'allow', note: 'Home theater streaming from NAS' },
+  { from: 'VLAN 10 (Server)', to: 'VLAN 50 (IoT)', action: 'allow', note: 'Home Assistant / automation hub control' },
 ]
 
 /* ─── Target topology ─── */
@@ -145,9 +219,9 @@ export type BomRow = {
 }
 
 export const HARDWARE_BOM: BomRow[] = [
-  { category: 'Router/Gateway', model: 'UCG Max (no storage)', qty: 1, unitPrice: 199, purpose: '2.5G WAN + 4×2.5G LAN, 2.3Gbps IDS/IPS, full UniFi suite (Protect-ready), REST API', status: 'ordered' },
-  { category: 'Switch', model: 'USW-Pro-Max-24 (no PoE)', qty: 1, unitPrice: 449, purpose: '8×2.5G + 16×1G + 2×10G SFP+, Layer 3, Etherlighting, replaces SG116E', status: 'ordered' },
-  { category: 'AP (main floors)', model: 'U7 Pro', qty: 3, unitPrice: 189, purpose: 'WiFi 7 tri-band, wall-mount, MoCA wired backhaul (1F/2F/3F)', status: 'to-buy' },
+  { category: 'Router/Gateway', model: 'UCG Max (no storage)', qty: 1, unitPrice: 199, purpose: '2.5G WAN + 4×2.5G LAN, 2.3Gbps IDS/IPS, full UniFi suite (Protect-ready), REST API', status: 'owned' },
+  { category: 'Switch', model: 'USW-Pro-Max-24 (no PoE)', qty: 1, unitPrice: 449, purpose: '8×2.5G + 16×1G + 2×10G SFP+, Layer 3, Etherlighting, replaces SG116E', status: 'owned' },
+  { category: 'AP (main floors)', model: 'U7 Pro', qty: 3, unitPrice: 189, purpose: 'WiFi 7 tri-band, wall-mount, MoCA wired backhaul (1F/2F/3F)', status: 'ordered' },
   { category: 'AP (basement+garage)', model: 'U6 Mesh', qty: 2, unitPrice: 159, purpose: 'WiFi 6, desktop/wall, wireless mesh backhaul (B1 + garage)', status: 'to-buy' },
   { category: 'Sell', model: 'Eero 6 Pro (3-pack)', qty: 1, unitPrice: -100, purpose: 'Recoup cost — no VLAN support, incompatible with UniFi mesh', status: 'sell' },
 ]
@@ -207,10 +281,25 @@ export type ResearchItemRow = {
 
 export const RESEARCH_ITEMS: ResearchItemRow[] = [
   {
+    id: 'firewall-applied',
+    question: 'Are Bifrost ZBF zones and policies applied and auditable against FIREWALL_RULES?',
+    status: 'answered',
+    answer:
+      'Yes — 2026-07-02 Session v2 apply on UCG Max: 5 Bifrost zones + 9 ZBF policies (see FIREWALL_APPLIED). Drift check: scripts/unifi_firewall_setup.py audit. Spine D9; Agent Protocol POLICY_NOMINAL / POLICY_DRIFT playbooks.',
+  },
+  {
+    id: 'session-v2-actuation',
+    question: 'Primary UniFi write path when Integration API Key lacks site UUID on UCG 10.4.57?',
+    status: 'answered',
+    answer:
+      'bifrost-agent Super Admin local account via UniFi v2 API + CSRF (spine decision D9). Integration Key blocked for firewall/zone write; read-only audit when /sites returns site id. Authority: scripts/unifi_firewall_setup.py + agentProtocolCatalog.ts SESSION_PATH playbook.',
+  },
+  {
     id: 'moca-vlan',
     question: 'Do existing MoCA adapters pass VLAN-tagged frames (802.1Q)?',
-    status: 'open',
-    answer: 'MoCA 2.5 generally passes tags; need to verify with actual test after switch upgrade',
+    status: 'blocked',
+    answer:
+      'MoCA 2.5 generally passes tags; physical verification pending via scripts/unifi_moca_vlan_test.sh (evening window, pre-AP rollout). Blocked until Owner runs test.',
   },
   {
     id: 'wifi7-clients',
@@ -359,6 +448,17 @@ export function buildNetworkUpgradeLlmPack(): string {
     '# Home Network Upgrade Plan',
     `Version: ${NET_UPGRADE_VERSION}`,
     `Status: ${NET_UPGRADE_STATUS}`,
+    '',
+    '## Deployment progress (spine streams)',
+    ...DEPLOYMENT_PROGRESS.map(
+      d => `- **${d.stream}** ${d.done}/${d.total}: ${d.label} — ${d.note}`,
+    ),
+    '',
+    '## Firewall applied (ZBF — Session v2)',
+    `- Applied: ${FIREWALL_APPLIED.appliedAt} · ${FIREWALL_APPLIED.zoneCount} zones · ${FIREWALL_APPLIED.policyCount} policies`,
+    `- Actuation: ${FIREWALL_APPLIED.actuationPath}`,
+    `- Audit: \`${FIREWALL_APPLIED.auditScript}\` · Catalog drift target: FIREWALL_RULES`,
+    `- Policies: ${FIREWALL_APPLIED.policies.map(p => p.name).join('; ')}`,
     '',
     '## Current topology',
     '```',

@@ -19,6 +19,7 @@ import { MissionSignalPhase3SignoffPanel } from '@/components/control-room/Missi
 import { MissionSignalPhase2SignoffPanel } from '@/components/control-room/MissionSignalPhase2SignoffPanel'
 import { MissionSignalPhase1SignoffPanel } from '@/components/control-room/MissionSignalPhase1SignoffPanel'
 import { MissionTimelinePanel } from '@/components/control-room/MissionTimelinePanel'
+import { NetworkHealthPanel } from '@/components/control-room/NetworkHealthPanel'
 import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
 import { MissionControlHeader } from '@/components/control-room/MissionControlHeader'
 import { MissionVerifyBanner } from '@/components/control-room/MissionVerifyBanner'
@@ -72,6 +73,9 @@ interface ControlRoomPageProps {
   onOpenPlatformRelease?: () => void
   onOpenPromote?: () => void
   onOpenDeployMainline?: () => void
+  onOpenNetworkUpgrade?: () => void
+  onOpenNetworkApi?: () => void
+  onOpenAgentProtocol?: () => void
 }
 
 export function ControlRoomPage({
@@ -95,6 +99,9 @@ export function ControlRoomPage({
   onOpenPlatformRelease,
   onOpenPromote,
   onOpenDeployMainline,
+  onOpenNetworkUpgrade,
+  onOpenNetworkApi,
+  onOpenAgentProtocol,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
   const { snapshot, matrices: liveMatrices, dataUpdatedAt, isLoading: missionLoading } = useMissionSnapshot()
@@ -246,6 +253,15 @@ export function ControlRoomPage({
           onOpenDeployMainline={onOpenDeployMainline}
           onOpenProgram={onOpenProgram}
         />
+
+        {onOpenNetworkUpgrade != null && onOpenNetworkApi != null && onOpenAgentProtocol != null && (
+          <NetworkHealthPanel
+            context={context}
+            onOpenNetworkUpgrade={onOpenNetworkUpgrade}
+            onOpenNetworkApi={onOpenNetworkApi}
+            onOpenAgentProtocol={onOpenAgentProtocol}
+          />
+        )}
       </section>
 
       <ProgramContextSection>

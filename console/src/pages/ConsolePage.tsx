@@ -56,6 +56,7 @@ import { DataLayerPage } from '@/pages/DataLayerPage'
 import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
 import { McpContractPage } from '@/pages/McpContractPage'
 import { NetworkUpgradePage } from '@/pages/NetworkUpgradePage'
+import { NetworkApiContractPage } from '@/pages/NetworkApiContractPage'
 import { AiComputeStrategyPage } from '@/pages/AiComputeStrategyPage'
 import { OperatorPlanePage } from '@/pages/OperatorPlanePage'
 import { AutonomousSkillsPage } from '@/pages/AutonomousSkillsPage'
@@ -100,6 +101,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'mcp-contract': 'MCP Contract',
   'design-system': 'Design System',
   'network-upgrade': 'Network Upgrade',
+  'network-api': 'Network API',
   'ai-compute': 'AI Compute Strategy',
   console: 'Server console',
   defects: 'Defects',
@@ -371,6 +373,7 @@ export function ConsolePage() {
     viewTab === 'cicd-bootstrap' ||
     viewTab === 'data-layer' ||
     viewTab === 'network-upgrade' ||
+    viewTab === 'network-api' ||
     viewTab === 'ai-compute'
   const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-system' || viewTab === 'agent-protocol' || viewTab === 'briefing-reconciliation' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
@@ -546,6 +549,9 @@ export function ConsolePage() {
                 onOpenPlatformRelease={() => setViewTab('platform-release')}
                 onOpenPromote={openPromote}
                 onOpenDeployMainline={openDeployMainline}
+                onOpenNetworkUpgrade={() => setViewTab('network-upgrade')}
+                onOpenNetworkApi={() => setViewTab('network-api')}
+                onOpenAgentProtocol={() => setViewTab('agent-protocol')}
               />
             </Suspense>
           </>
@@ -737,6 +743,8 @@ export function ConsolePage() {
                   : viewTab === 'cicd-bootstrap' ? 'L0/L1/L2 self-hosting bootstrap model — CI/CD rules, recovery paths, and P6 gap tracking.'
                   : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
                   : viewTab === 'network-upgrade' ? 'Home network backbone upgrade — VLAN redesign, UniFi migration plan, hardware BOM, and research checklist.'
+                  : viewTab === 'network-api'
+                    ? 'platform-api /api/v1/network/* contract — L0/L1/L2 routes, Session v2 executors, forbidden actions (planning only).'
                   : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-system'
@@ -783,6 +791,8 @@ export function ConsolePage() {
         {viewTab === 'data-layer' && <DataLayerPage />}
 
         {viewTab === 'network-upgrade' && <NetworkUpgradePage />}
+
+        {viewTab === 'network-api' && <NetworkApiContractPage />}
 
         {viewTab === 'ai-compute' && <AiComputeStrategyPage />}
 

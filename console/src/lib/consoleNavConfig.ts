@@ -172,6 +172,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
           { id: 'cicd-bootstrap', label: 'CI/CD Bootstrap', icon: GitBranch },
           { id: 'data-layer', label: 'Data Layer', icon: Database },
           { id: 'network-upgrade', label: 'Network Upgrade', icon: Wifi },
+          { id: 'network-api', label: 'Network API', icon: Network },
         ],
       },
       {
@@ -226,6 +227,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'cicd-bootstrap': 'Architecture',
   'data-layer': 'Architecture',
   'network-upgrade': 'Architecture',
+  'network-api': 'Architecture',
   'ai-compute': 'Architecture',
   'platform-standards': 'Architecture',
   'design-system': 'Architecture',
