@@ -17,6 +17,17 @@ export async function platformGet(path: string): Promise<unknown> {
   return text === '' ? {} : (JSON.parse(text) as unknown)
 }
 
+export async function platformPost(path: string, body: unknown): Promise<unknown> {
+  const r = await fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  })
+  const text = await r.text()
+  if (!r.ok) throw new Error(`POST ${path}: HTTP ${r.status} ${text}`)
+  return text === '' ? {} : (JSON.parse(text) as unknown)
+}
+
 export function jsonResult(data: unknown) {
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],

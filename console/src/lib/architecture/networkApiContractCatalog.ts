@@ -9,13 +9,13 @@
 export const NETWORK_API_CONTRACT_VERSION = '2026-07-03'
 export const NETWORK_API_CONTRACT_SOURCE = 'console/src/lib/architecture/networkApiContractCatalog.ts'
 export const NETWORK_API_CONTRACT_STATUS =
-  'L0 ROUTES LIVE — GET /api/v1/network/* + mcp/unifi read tools (UMS2); L1/L2 POST pending UMS4'
+  'L0 LIVE + L1 APPLY — GET /api/v1/network/* + POST firewall/apply + MCP write (unifi-mcp-server 4/4)'
 
 export const NETWORK_API_MCP_SERVER = {
   path: 'mcp/unifi/src/index.ts',
   version: '2026-07-03',
   status: 'implemented',
-  note: '7 read tools proxy platform-api GET /api/v1/network/*',
+  note: '7 read + 1 write tool proxy platform-api /api/v1/network/*',
 } as const
 
 export const NETWORK_API_CLIENT_LIBRARY = {
@@ -105,7 +105,7 @@ export const NETWORK_API_ROUTES: NetworkApiRouteDef[] = [
     purpose: 'L1 idempotent re-sync missing Bifrost ZBF policies (Agent Protocol POLICY_DRIFT remediation)',
     authLevel: 'operator',
     autonomy: 'L1',
-    implemented: false,
+    implemented: true,
     executor: 'scripts/unifi_firewall_setup.py apply — Session v2 per decision D9',
     mcpTool: 'apply_network_firewall',
   },
@@ -141,9 +141,9 @@ export const NETWORK_API_EXECUTOR_MODEL = {
   sessionPath: 'bifrost-agent Super Admin local account — UniFi v2 API + CSRF (spine decision D9)',
   catalogAuthority: 'networkUpgradeCatalog.ts — FIREWALL_APPLIED + FIREWALL_RULES',
   auditTrail: 'POST actuation → GET /api/v1/audit (same pattern as cluster/gitops L1)',
-  spineStream: 'unifi-mcp-server — ① client ② L0 routes + MCP read done; ③ live probe pending',
+  spineStream: 'unifi-mcp-server — ①–④ complete (client, L0+MCP read, live probe, MCP write L1 apply)',
   clientLibrary: 'api/internal/network/unifi — ConfigFromEnv, Login, LegacyGet, V2Get, ListDevices/Clients/Zones/Policies',
-  mcpServer: 'mcp/unifi — get_network_* + audit_network_firewall → GET /api/v1/network/*',
+  mcpServer: 'mcp/unifi — get_network_* + audit_network_firewall + apply_network_firewall → platform-api',
 } as const
 
 export type NetworkApiMcpToolDef = {

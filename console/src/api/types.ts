@@ -1853,3 +1853,33 @@ export interface CloseBriefingSessionResponse {
   ok: boolean
   result: BriefingSessionResult
 }
+
+export type NetworkPolicyClassification = 'POLICY_NOMINAL' | 'POLICY_DRIFT'
+
+export interface NetworkStatusResponse {
+  host?: string
+  site?: string
+  reachable?: boolean
+  controller_version?: string
+  auth?: string
+  session_user?: string
+  integration_key_usable?: boolean
+  session_path?: string
+  error?: string
+  hint?: string
+  autonomy?: string
+}
+
+export interface NetworkAuditResponse {
+  classification?: NetworkPolicyClassification
+  auth_mode?: string
+  controller_version?: string
+  integration_key_usable?: boolean
+  zone_binding_gaps?: string[]
+  missing_policies?: string[]
+  bifrost_policy_count?: number
+  expected_policy_count?: number
+  error?: string
+  hint?: string
+  autonomy?: string
+}

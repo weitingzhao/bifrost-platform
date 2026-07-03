@@ -114,7 +114,7 @@ func New(cfg *config.Config) *Server {
 		selfhealth:     selfhealth.NewHandler(cfg, gitopsH.Service()),
 		sessionsnapshot: sessionsnapshot.NewHandler(),
 		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store(), clusterH),
-		network:         network.NewHandler(),
+		network:         network.NewHandler(audit),
 		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -241,6 +241,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
 			r.Post("/ops-agent/alertmanager", s.opsagent.HandleAlertmanager)
+			r.Post("/network/firewall/apply", s.network.HandleFirewallApply)
 			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
 		})
 		r.Group(func(r chi.Router) {

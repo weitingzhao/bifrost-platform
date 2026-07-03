@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * Bifrost UniFi MCP server (UMS2).
- * Read-only tools proxy platform-api GET /api/v1/network/* (L0).
+ * Bifrost UniFi MCP server (UMS2 + UMS4).
+ * Read tools proxy GET /api/v1/network/* (L0); write tools proxy POST (L1).
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { jsonResult, platformGet } from './platformClient.js'
+import { z } from 'zod'
+import { jsonResult, platformGet, platformPost } from './platformClient.js'
 
 const SERVER_NAME = 'mcp-server-unifi'
 const SERVER_VERSION = '0.1.0'
@@ -62,6 +63,18 @@ server.tool(
   'Client count per VLAN / SSID summary (L0)',
   {},
   async () => jsonResult(await platformGet('/api/v1/network/clients')),
+)
+
+server.tool(
+  'apply_network_firewall',
+  'L1 idempotent re-sync missing Bifrost ZBF policies — operator token required',
+  { include_default_deny: z.boolean().optional() },
+  async ({ include_default_deny }) =>
+    jsonResult(
+      await platformPost('/api/v1/network/firewall/apply', {
+        include_default_deny: include_default_deny ?? false,
+      }),
+    ),
 )
 
 async function main() {

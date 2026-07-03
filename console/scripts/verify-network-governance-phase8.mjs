@@ -42,7 +42,7 @@ const mcpTools = [...nac.matchAll(/mcpTool: '[^']+'/g)]
 check('MCP tool mappings in contract catalog', mcpTools.length >= 5, `${mcpTools.length} tools`)
 
 const proj = read('src/lib/architecture/networkConsoleProjection.ts')
-check('Network Health futureProbe references contract catalog', proj.includes('networkApiContractCatalog.ts'))
+check('Network Health live probe wired', proj.includes('liveProbeNote') && proj.includes('/api/v1/network/status'))
 
 const ng5 = read('src/lib/architecture/networkGovernancePhase5Delivery.ts')
 check('NG5 wifi progress text fixed (no 3/5)', !ng5.includes('network-upgrade-wifi 3/5'))
