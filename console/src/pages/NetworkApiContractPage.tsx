@@ -12,6 +12,9 @@ import {
   type DenseTagVariant,
 } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
+import { UnifiMcpServerPhase1SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase1SignoffPanel'
+import { UnifiMcpServerPhase2SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase2SignoffPanel'
+import { UnifiMcpServerProgramStatusStrip } from '@/components/architecture/UnifiMcpServerProgramStatusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   NETWORK_API_CONTRACT_SOURCE,
@@ -23,6 +26,13 @@ import {
   NETWORK_API_ROUTES,
   buildNetworkApiContractLlmPack,
 } from '@/lib/architecture/networkApiContractCatalog'
+import {
+  UNIFI_MCP_SERVER_CATALOG_VERSION,
+  UNIFI_MCP_SERVER_IMPLEMENTATION_PROGRESS,
+  UNIFI_MCP_SERVER_SOURCE,
+  UNIFI_MCP_SERVER_STREAM_PHASES,
+  buildUnifiMcpServerLlmPack,
+} from '@/lib/architecture/unifiMcpServerCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
@@ -52,6 +62,12 @@ export function NetworkApiContractPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <UnifiMcpServerProgramStatusStrip />
+
+      <UnifiMcpServerPhase1SignoffPanel />
+
+      <UnifiMcpServerPhase2SignoffPanel />
+
       <OpsSection title="Contract metadata" bodyPadding="compact">
         <div className="flex flex-wrap items-center gap-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           <span>
@@ -83,6 +99,12 @@ export function NetworkApiContractPage() {
           </li>
           <li>
             <strong>Spine:</strong> {NETWORK_API_EXECUTOR_MODEL.spineStream}
+          </li>
+          <li>
+            <strong>Client library:</strong> {NETWORK_API_EXECUTOR_MODEL.clientLibrary}
+          </li>
+          <li>
+            <strong>MCP server:</strong> {NETWORK_API_EXECUTOR_MODEL.mcpServer}
           </li>
         </ul>
       </CatalogSection>
@@ -122,7 +144,54 @@ export function NetworkApiContractPage() {
         </DenseDataTable>
       </CatalogSection>
 
-      <CatalogSection title="Future MCP tools (unifi-mcp-server stream ⑤)">
+      <CatalogSection title="UniFi MCP Server — implementation stream">
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          <span>
+            Progress:{' '}
+            <strong>
+              {UNIFI_MCP_SERVER_IMPLEMENTATION_PROGRESS.done}/
+              {UNIFI_MCP_SERVER_IMPLEMENTATION_PROGRESS.total}
+            </strong>
+          </span>
+          <span>
+            Client: <code className="text-xs">{UNIFI_MCP_SERVER_SOURCE}</code>
+          </span>
+          <span>Catalog v{UNIFI_MCP_SERVER_CATALOG_VERSION}</span>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => void navigator.clipboard.writeText(buildUnifiMcpServerLlmPack())}
+          >
+            Copy stream pack
+          </Button>
+        </div>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Step</DenseTableHead>
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Title</DenseTableHead>
+              <DenseTableHead>Status</DenseTableHead>
+              <DenseTableHead>Deliverable</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {UNIFI_MCP_SERVER_STREAM_PHASES.map(p => (
+              <DenseTableRow key={p.id}>
+                <DenseTableCell>{p.spineStep}</DenseTableCell>
+                <DenseTableCell className="font-mono text-xs">{p.id}</DenseTableCell>
+                <DenseTableCell>{p.title}</DenseTableCell>
+                <DenseTableCell>
+                  <DenseTag variant={p.status === 'done' ? 'success' : 'warning'}>{p.status}</DenseTag>
+                </DenseTableCell>
+                <DenseTableCell className="text-xs text-[var(--muted-foreground)]">{p.deliverable}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection title="MCP read tools (unifi-mcp-server stream ②)">
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
