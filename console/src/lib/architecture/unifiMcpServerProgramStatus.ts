@@ -1,4 +1,5 @@
 import { isUnifiMcpServerPhase1SignedOff } from './unifiMcpServerPhase1Delivery'
+import { isUnifiMcpServerPhase2SignedOff } from './unifiMcpServerPhase2Delivery'
 
 export type UnifiMcpServerPhaseId = 'UMS1' | 'UMS2' | 'UMS3' | 'UMS4'
 
@@ -17,7 +18,7 @@ export const UNIFI_MCP_SERVER_PROGRAM_PHASES: UnifiMcpServerPhaseMeta[] = [
 
 const SIGNED_OFF: Record<UnifiMcpServerPhaseId, () => boolean> = {
   UMS1: isUnifiMcpServerPhase1SignedOff,
-  UMS2: () => false,
+  UMS2: isUnifiMcpServerPhase2SignedOff,
   UMS3: () => false,
   UMS4: () => false,
 }

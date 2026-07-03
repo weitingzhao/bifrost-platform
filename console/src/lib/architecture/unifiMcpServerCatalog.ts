@@ -31,7 +31,7 @@ export const UNIFI_MCP_SERVER_STREAM_PHASES: UnifiMcpStreamPhase[] = [
     title: 'MCP Server read tools',
     summary: 'unifi-mcp-server stdio tools wrap GET /api/v1/network/* (decoupling from platform-api).',
     deliverable: 'mcp/unifi/ + platform-api network handler L0 routes',
-    status: 'pending',
+    status: 'done',
   },
   {
     id: 'UMS3',
@@ -53,7 +53,7 @@ export const UNIFI_MCP_SERVER_STREAM_PHASES: UnifiMcpStreamPhase[] = [
 
 export const UNIFI_MCP_SERVER_IMPLEMENTATION_PROGRESS = {
   streamId: 'unifi-mcp-server',
-  done: 1,
+  done: 2,
   total: 4,
   label: 'UniFi MCP Server — AI network management',
 } as const

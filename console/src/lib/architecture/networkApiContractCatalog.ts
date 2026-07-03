@@ -9,7 +9,21 @@
 export const NETWORK_API_CONTRACT_VERSION = '2026-07-03'
 export const NETWORK_API_CONTRACT_SOURCE = 'console/src/lib/architecture/networkApiContractCatalog.ts'
 export const NETWORK_API_CONTRACT_STATUS =
-  'PLANNED — contract catalog only; routes not registered in platform-api until unifi-mcp-server stream ⑤'
+  'L0 ROUTES LIVE — GET /api/v1/network/* + mcp/unifi read tools (UMS2); L1/L2 POST pending UMS4'
+
+export const NETWORK_API_MCP_SERVER = {
+  path: 'mcp/unifi/src/index.ts',
+  version: '2026-07-03',
+  status: 'implemented',
+  note: '7 read tools proxy platform-api GET /api/v1/network/*',
+} as const
+
+export const NETWORK_API_CLIENT_LIBRARY = {
+  path: 'api/internal/network/unifi',
+  version: '2026-07-03',
+  status: 'implemented',
+  note: 'Session v2 Login + legacy/v2 read methods; unit tests via httptest',
+} as const
 
 export type NetworkApiRouteDef = {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -30,8 +44,8 @@ export const NETWORK_API_ROUTES: NetworkApiRouteDef[] = [
     purpose: 'UCG reachability, controller version, IDS/IPS posture read-only (no toggle)',
     authLevel: 'viewer',
     autonomy: 'L0',
-    implemented: false,
-    executor: 'UniFi Session v2 probe (future platform-api client)',
+    implemented: true,
+    executor: 'api/internal/network/unifi Client + network.Handler',
     mcpTool: 'get_network_status',
   },
   {
@@ -40,7 +54,7 @@ export const NETWORK_API_ROUTES: NetworkApiRouteDef[] = [
     purpose: 'Bifrost zone inventory + VLAN binding vs networkUpgradeCatalog.ts FIREWALL_APPLIED',
     authLevel: 'viewer',
     autonomy: 'L0',
-    implemented: false,
+    implemented: true,
     executor: 'UniFi v2 zones API',
     mcpTool: 'get_network_zones',
   },
@@ -50,7 +64,7 @@ export const NETWORK_API_ROUTES: NetworkApiRouteDef[] = [
     purpose: 'ZBF policy list mapped to FIREWALL_RULES catalog rows',
     authLevel: 'viewer',
     autonomy: 'L0',
-    implemented: false,
+    implemented: true,
     executor: 'UniFi v2 firewall-policies API',
     mcpTool: 'get_network_policies',
   },
@@ -61,7 +75,7 @@ export const NETWORK_API_ROUTES: NetworkApiRouteDef[] = [
       'Firewall drift classification — POLICY_NOMINAL | POLICY_DRIFT | SESSION_PATH (parallel to verify_payload)',
     authLevel: 'viewer',
     autonomy: 'L0',
-    implemented: false,
+    implemented: true,
     executor: 'scripts/unifi_firewall_setup.py audit (wrapped)',
     mcpTool: 'audit_network_firewall',
   },
@@ -71,7 +85,7 @@ export const NETWORK_API_ROUTES: NetworkApiRouteDef[] = [
     purpose: 'UCG / switch / AP inventory, port stats summary',
     authLevel: 'viewer',
     autonomy: 'L0',
-    implemented: false,
+    implemented: true,
     executor: 'UniFi stat/device API',
     mcpTool: 'get_network_devices',
   },
@@ -81,7 +95,7 @@ export const NETWORK_API_ROUTES: NetworkApiRouteDef[] = [
     purpose: 'Client count per VLAN / SSID — Default VLAN empty check (Constitution success criteria)',
     authLevel: 'viewer',
     autonomy: 'L0',
-    implemented: false,
+    implemented: true,
     executor: 'UniFi stat/sta API',
     mcpTool: 'get_network_clients',
   },
@@ -127,7 +141,9 @@ export const NETWORK_API_EXECUTOR_MODEL = {
   sessionPath: 'bifrost-agent Super Admin local account — UniFi v2 API + CSRF (spine decision D9)',
   catalogAuthority: 'networkUpgradeCatalog.ts — FIREWALL_APPLIED + FIREWALL_RULES',
   auditTrail: 'POST actuation → GET /api/v1/audit (same pattern as cluster/gitops L1)',
-  spineStream: 'unifi-mcp-server — MCP read tools wrap GET /api/v1/network/* (stream ⑤ pending)',
+  spineStream: 'unifi-mcp-server — ① client ② L0 routes + MCP read done; ③ live probe pending',
+  clientLibrary: 'api/internal/network/unifi — ConfigFromEnv, Login, LegacyGet, V2Get, ListDevices/Clients/Zones/Policies',
+  mcpServer: 'mcp/unifi — get_network_* + audit_network_firewall → GET /api/v1/network/*',
 } as const
 
 export type NetworkApiMcpToolDef = {
@@ -143,7 +159,7 @@ export const NETWORK_API_MCP_TOOLS: NetworkApiMcpToolDef[] = NETWORK_API_ROUTES.
     tool: r.mcpTool!,
     route: r.route,
     level: r.autonomy === 'L0' ? 'read' : r.autonomy === 'L1' ? 'routine' : 'confirm',
-    implemented: false,
+    implemented: r.implemented,
   }),
 )
 

@@ -27,6 +27,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
+	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
@@ -67,6 +68,7 @@ type Server struct {
 	selfhealth     *selfhealth.Handler
 	sessionsnapshot *sessionsnapshot.Handler
 	briefing        *briefing.Handler
+	network         *network.Handler
 	auth           *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -112,6 +114,7 @@ func New(cfg *config.Config) *Server {
 		selfhealth:     selfhealth.NewHandler(cfg, gitopsH.Service()),
 		sessionsnapshot: sessionsnapshot.NewHandler(),
 		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store(), clusterH),
+		network:         network.NewHandler(),
 		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -150,6 +153,12 @@ func (s *Server) Router() http.Handler {
 		r.Get("/jobs", s.jobs.HandleList)
 		r.Get("/mcp/tools", s.mcp.HandleTools)
 		r.Get("/mcp/status", s.mcp.HandleStatus)
+		r.Get("/network/status", s.network.HandleStatus)
+		r.Get("/network/zones", s.network.HandleZones)
+		r.Get("/network/policies", s.network.HandlePolicies)
+		r.Get("/network/audit", s.network.HandleAudit)
+		r.Get("/network/devices", s.network.HandleDevices)
+		r.Get("/network/clients", s.network.HandleClients)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
 		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)

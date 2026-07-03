@@ -1,0 +1,24 @@
+const base = process.env.PLATFORM_API_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:8780'
+
+function authHeaders(): HeadersInit {
+  const token =
+    process.env.PLATFORM_OPERATOR_TOKEN?.trim() ||
+    process.env.PLATFORM_ADMIN_TOKEN?.trim() ||
+    ''
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (token !== '') headers.Authorization = `Bearer ${token}`
+  return headers
+}
+
+export async function platformGet(path: string): Promise<unknown> {
+  const r = await fetch(`${base}${path}`, { headers: authHeaders() })
+  const text = await r.text()
+  if (!r.ok) throw new Error(`GET ${path}: HTTP ${r.status} ${text}`)
+  return text === '' ? {} : (JSON.parse(text) as unknown)
+}
+
+export function jsonResult(data: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+  }
+}

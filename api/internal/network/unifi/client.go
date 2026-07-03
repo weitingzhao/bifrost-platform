@@ -38,6 +38,16 @@ func New(cfg Config) *Client {
 	}
 }
 
+// Config returns the client configuration (read-only).
+func (c *Client) Config() Config {
+	return c.cfg
+}
+
+// SetHTTPClient overrides the HTTP client (tests only).
+func (c *Client) SetHTTPClient(httpClient *http.Client) {
+	c.http = httpClient
+}
+
 // Login authenticates via POST /api/auth/login and stores session cookie + CSRF token.
 func (c *Client) Login(ctx context.Context) error {
 	_, err := c.do(ctx, http.MethodPost, "/api/auth/login", map[string]string{
