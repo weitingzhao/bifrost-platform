@@ -234,7 +234,7 @@ export const BLUEPRINT_AUTHORIZATION_LEVELS: AuthorizationLevel[] = [
   {
     level: 'forbidden',
     behavior:
-      'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass · bulk delete all Bifrost firewall zones · disable IDS/IPS',
+      'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass · live trading enablement (D10 BLOCKED) · bulk delete all Bifrost firewall zones · disable IDS/IPS',
   },
 ]
 

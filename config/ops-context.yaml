@@ -222,6 +222,12 @@ decisions:
       conclusion: "Integration API Key on UCG Max 10.4.57 does not return site UUID in /sites response; firewall/zone write impossible via Integration path. Primary actuation path is bifrost-agent Session (Super Admin local account) via v2 API with CSRF token. Unlock condition: Ubiquiti fixes Integration /sites or UCG firmware upgrade."
       signed_at: "2026-07-02"
       authority: "scripts/unifi_firewall_setup.py + console/src/lib/architecture/blueprintCatalog.ts (Principle 8)"
+    - id: D10
+      status: BLOCKED
+      topic: Trade execution — intentional freeze until Owner unlock
+      conclusion: "Post TIBM-PC rollout may deploy observe + data-path surfaces only (W1–W3). Live order placement, daemon auto-trade scale-up, and S08 execution wiring remain BLOCKED. Rocket (Ops Platform) and satellite (Trade) must stabilize; research/analysis precede trading. Owner unlock requires explicit written command to Agent AND D10 status → UNLOCKED in spine. Authority: tradeIbClientMigrationRolloutCatalog.ts · agentProtocolCatalog.ts · trade-execution-freeze.mdc."
+      signed_at: "2026-07-04"
+      authority: "console/src/lib/architecture/tradeIbClientMigrationRolloutCatalog.ts"
 platform_phases:
     - id: A
       label: Gate
@@ -346,6 +352,17 @@ tracks:
                 - "compose-to-k3s stream closed"
                 - "data-layer-k3s PG+Redis in data NS (step ⑦ in progress)"
                 - "R-DV3 prod auto-trade cutover deferred (Owner)"
+            - id: trade-ib-client-migration-rollout
+              label: "TIBM rollout — observe + data path (no live trading)"
+              total: 3
+              done: 1
+              status: in_progress
+              next_task: "Owner sign-off W1 @ Architecture → Trade IB Migration → Rollout W1 panel"
+              note: "W0 ✓ · W1 STG observability rolled out (api-monitor/ops/frontend amd64) · verify-trade-ib-w1-stg OK · ACL trade-prod + bifrost:health fix · daemon replicas=0 (D10). Owner: #rollout-w1-signoff"
+              prerequisites:
+                - "IB Gateway Plugin program complete"
+                - "trade-ib-client-migration program COMPLETE (TIBM-PC signed)"
+                - "decision D10 BLOCKED acknowledged"
             - id: data-layer-k3s
               label: "K3s data layer (PG + Redis → data NS)"
               total: 7

@@ -18,6 +18,7 @@ import { TradeIbClientMigrationPhase2SignoffPanel } from '@/components/architect
 import { TradeIbClientMigrationPhase3SignoffPanel } from '@/components/architecture/TradeIbClientMigrationPhase3SignoffPanel'
 import { TradeIbClientMigrationPhase4SignoffPanel } from '@/components/architecture/TradeIbClientMigrationPhase4SignoffPanel'
 import { TradeIbClientMigrationProgramSignoffPanel } from '@/components/architecture/TradeIbClientMigrationProgramSignoffPanel'
+import { TradeIbClientMigrationRolloutW1SignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutW1SignoffPanel'
 import { TradeIbClientMigrationProgramStatusStrip } from '@/components/architecture/TradeIbClientMigrationProgramStatusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
@@ -30,6 +31,10 @@ import {
   surfaceStatusLabel,
   surfaceStatusVariant,
 } from '@/lib/architecture/tradeIbClientMigrationCatalog'
+import {
+  TIBM_ROLLOUT_ENV_ORDER,
+  TIBM_ROLLOUT_WAVES,
+} from '@/lib/architecture/tradeIbClientMigrationRolloutCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
@@ -105,6 +110,55 @@ export function TradeIbClientMigrationPage() {
       <TradeIbClientMigrationPhase4SignoffPanel />
 
       <TradeIbClientMigrationProgramSignoffPanel />
+
+      <section id="tibm-rollout">
+        <OpsSection title="Post-program rollout (D10 — no live trading)" bodyPadding="compact">
+        <p className="m-0 mb-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          TIBM-PC signed — deploy observe + data-path surfaces only. Live order execution is{' '}
+          <strong>intentionally BLOCKED</strong> (spine D10) until Owner explicit unlock. STG daemon
+          stays <code className="font-mono text-dense-caption">replicas: 0</code>; Prod remains
+          observe-safe.
+        </p>
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Wave</DenseTableHead>
+              <DenseTableHead>Title</DenseTableHead>
+              <DenseTableHead>Scope</DenseTableHead>
+              <DenseTableHead>Targets</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {TIBM_ROLLOUT_WAVES.map(w => (
+              <DenseTableRow key={w.id}>
+                <DenseTableCell>
+                  <span className="font-mono text-dense-label">{w.id}</span>
+                </DenseTableCell>
+                <DenseTableCell>{w.title}</DenseTableCell>
+                <DenseTableCell>
+                  <DenseTag
+                    variant={
+                      w.scope === 'blocked' ? 'danger' : w.scope === 'in_scope' ? 'success' : 'neutral'
+                    }
+                  >
+                    {w.scope.replace('_', ' ')}
+                  </DenseTag>
+                </DenseTableCell>
+                <DenseTableCell className="min-w-[14rem] text-[var(--muted-foreground)]">
+                  {w.targets.join(' · ')}
+                </DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+        <p className="m-0 mt-3 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+          Env order: {TIBM_ROLLOUT_ENV_ORDER.join(' → ')} · Gate each wave:{' '}
+          <code className="font-mono">make verify-trade-ib-migration-program</code>
+        </p>
+        </OpsSection>
+      </section>
+
+      <TradeIbClientMigrationRolloutW1SignoffPanel />
 
       <CatalogSection title="Design principles">
         <ul className="m-0 list-disc pl-5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
