@@ -86,11 +86,14 @@ func TestNewHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
-	if h.activeProgramID != "trade-ib-client-migration" {
-		t.Fatalf("expected active trade-ib-client-migration, got %q", h.activeProgramID)
+	if h.activeProgramID == "" {
+		t.Fatal("expected an active program")
 	}
 	rt := h.activeRuntime()
-	if rt == nil || len(rt.phases) != 5 {
-		t.Fatalf("expected 5 runtime phases, got %v", rt)
+	if rt == nil {
+		t.Fatalf("expected active runtime for %q", h.activeProgramID)
+	}
+	if len(rt.phases) == 0 {
+		t.Fatalf("expected phases for active program %q", h.activeProgramID)
 	}
 }

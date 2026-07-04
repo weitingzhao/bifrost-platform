@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node bridge.js"
+    "start": "node dist/bridge.js"
   },
   "dependencies": {
     "@cursor/sdk": "latest"
