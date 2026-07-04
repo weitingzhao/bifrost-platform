@@ -5,6 +5,8 @@
  * Authoritative: Architecture → Plugins → Trade IB Migration
  */
 
+import { buildTradeIbClientMigrationRolloutLlmPack } from './tradeIbClientMigrationRolloutCatalog'
+
 export const TRADE_IB_CLIENT_MIGRATION_VERSION = '2026-07-04'
 export const TRADE_IB_CLIENT_MIGRATION_STREAM_ID = 'trade-ib-client-migration'
 
@@ -257,6 +259,7 @@ export const TRADE_IB_MIGRATION_PRINCIPLES = [
   'No new direct ib_insync connections from Trade worker, api, or daemon containers.',
   'Health and UI must reflect Platform gateway aggregate — not retired socket StatefulSet names.',
   'R-DV3: Platform Agent must not auto-trigger trading write paths (order placement remains Trade daemon + operator approval).',
+  'Post TIBM-PC rollout: live trading execution BLOCKED (spine D10) until Owner explicit unlock — see tradeIbClientMigrationRolloutCatalog.ts.',
 ] as const
 
 export function surfaceStatusLabel(status: TradeIbSurfaceStatus): string {
@@ -318,6 +321,9 @@ export function buildTradeIbClientMigrationLlmPack(): string {
       r =>
         `- ${r.op}: legacy=${r.legacySocket} gateway=${r.platformGateway} callers=${r.tradeCallers} → ${r.targetPhase}`,
     ),
+    '',
+    '---',
+    buildTradeIbClientMigrationRolloutLlmPack(),
   ]
   return lines.join('\n')
 }

@@ -5,7 +5,7 @@
  * Single source of truth — do not duplicate elsewhere.
  */
 
-export const AGENT_PROTOCOL_VERSION = '2026-07-03'
+export const AGENT_PROTOCOL_VERSION = '2026-07-04'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 export type AgentModeRow = {
@@ -22,7 +22,7 @@ export const AGENT_MODES: AgentModeRow[] = [
     flywheel: 'A — Trade FE',
     defaultUI: 'bifrost-trade-frontend :5173',
     agentMay: 'Migrate pages, Dense UI, hooks, Legacy equivalence',
-    agentMustNot: 'Change compose, prod cutover, K3s, API contracts',
+    agentMustNot: 'Change compose, prod cutover, K3s, API contracts; enable live trading or scale daemon for auto-trade (D10 BLOCKED until Owner unlock)',
   },
   {
     mode: 'Ops',
@@ -30,14 +30,14 @@ export const AGENT_MODES: AgentModeRow[] = [
     defaultUI: 'Bifrost Ops Console :5180 → Control Room',
     agentMay:
       'Read spine, matrix, topology; infra YAML; K3s planning; network L0 zone-matrix + firewall audit (scripts/unifi_firewall_setup.py); L1 idempotent firewall apply per D9 Session v2',
-    agentMustNot: 'Change trade page UI, expand FE scope; toggle Default Security Posture or disable IDS/IPS',
+    agentMustNot: 'Change trade page UI, expand FE scope; toggle Default Security Posture or disable IDS/IPS; scale daemon for live trading or remove STG daemon-scale-zero (D10)',
   },
   {
     mode: 'Promote',
     flywheel: 'A + B coupling',
     defaultUI: 'Promote → Platform Release · Observe → Audit',
     agentMay: 'Query release-state, deploy via start_pipeline_run, run gates, verify smoke; follow next_action guidance',
-    agentMustNot: 'Skip blockers (D1, gate), deploy PROD with different revision than STG, bypass admin role for gates',
+    agentMustNot: 'Skip blockers (D1, gate), deploy PROD with different revision than STG, bypass admin role for gates; Promote rollout that enables live trading (D10 BLOCKED)',
   },
 ]
 
@@ -81,6 +81,11 @@ export type ForbiddenAction = {
 export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   { action: 'daemon_control write via platform AI', scope: 'All modes' },
   { action: 'ib:operator:cmd RPC', scope: 'All modes' },
+  {
+    action:
+      'Live trading enablement — scale daemon for auto-trade, remove STG daemon-scale-zero, enable live hedge/place_order, or Monitor /control/* that arms live trading (spine D10 BLOCKED until Owner explicit unlock)',
+    scope: 'All modes',
+  },
   { action: 'Editing bifrost-trader-engine/ (read-only reference)', scope: 'All modes' },
   {
     action: 'Default Security Posture toggle (Allow All ↔ Block All) or disable IDS/IPS on UCG',
