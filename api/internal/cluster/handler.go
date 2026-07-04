@@ -22,6 +22,10 @@ func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 	return &Handler{svc: NewService(entry), audit: audit}
 }
 
+func (h *Handler) Service() *Service {
+	return h.svc
+}
+
 func (h *Handler) HandleSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Summary(r.Context()))
 }

@@ -1883,3 +1883,67 @@ export interface NetworkAuditResponse {
   hint?: string
   autonomy?: string
 }
+
+export type IbGatewayReachability = 'ok' | 'degraded' | 'fail' | 'unknown'
+
+export interface IbGatewaySlotStatus {
+  slot: string
+  account_id: string
+  status: string
+  client_id?: number
+  connected: boolean
+  reachability: IbGatewayReachability
+  detail?: string
+}
+
+export interface IbGatewayDeploymentStatus {
+  namespace: string
+  name: string
+  ready: string
+  mode: string
+  reachability: IbGatewayReachability
+  detail?: string
+}
+
+export interface IbGatewayCutoverEnv {
+  namespace: string
+  legacy_ib_replicas: number
+  redis_ib_external_name_ok: boolean
+  reachability: IbGatewayReachability
+  detail?: string
+}
+
+export interface IbGatewayCutoverStatus {
+  legacy_socket_retired: boolean
+  reachability: IbGatewayReachability
+  environments: IbGatewayCutoverEnv[]
+}
+
+export interface IbGatewayStatusResponse {
+  reachable?: boolean
+  reachability?: IbGatewayReachability
+  summary?: string
+  mode?: string
+  deployment?: IbGatewayDeploymentStatus
+  redis_reachability?: IbGatewayReachability
+  slots?: IbGatewaySlotStatus[]
+  ingestor_health?: Record<string, string>
+  account_health?: Record<string, string>
+  operator_health?: Record<string, string>
+  sample_tick_nvda?: string
+  operator_consumer_group?: string
+  cutover?: IbGatewayCutoverStatus
+  autonomy?: string
+  error?: string
+  hint?: string
+  generated_at?: string
+}
+
+export interface IbGatewayControlResponse {
+  ok: boolean
+  action: string
+  target: string
+  autonomy: string
+  message: string
+  generated_at?: string
+}

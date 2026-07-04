@@ -89,6 +89,8 @@ import type {
   CloseBriefingSessionResponse,
   NetworkAuditResponse,
   NetworkStatusResponse,
+  IbGatewayControlResponse,
+  IbGatewayStatusResponse,
 } from './types'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 import type { SessionSnapshot } from '@/lib/briefing/sessionSnapshot'
@@ -180,6 +182,30 @@ export async function fetchNetworkAudit(): Promise<NetworkAuditResponse> {
     }
   }
   return body
+}
+
+export async function fetchIbGatewayStatus(): Promise<IbGatewayStatusResponse> {
+  const r = await fetch('/api/v1/plugins/ib-gateway/status')
+  const body = (await r.json()) as IbGatewayStatusResponse
+  if (!r.ok) {
+    return {
+      ...body,
+      reachable: false,
+      error: body.error ?? `HTTP ${r.status}`,
+    }
+  }
+  return body
+}
+
+export async function postIbGatewayControl(
+  action: 'reconnect' | 'maintenance' | 'mode',
+  body: { account_id?: string; enabled?: boolean; mode?: 'mock' | 'live' } = {},
+): Promise<IbGatewayControlResponse> {
+  const r = await authedFetch(`ib-gateway ${action}`, `/api/v1/plugins/ib-gateway/control/${action}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<IbGatewayControlResponse>
 }
 
 export async function fetchHermesReadiness(): Promise<HermesReadinessResponse> {

@@ -25,6 +25,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
+	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
@@ -69,6 +70,7 @@ type Server struct {
 	sessionsnapshot *sessionsnapshot.Handler
 	briefing        *briefing.Handler
 	network         *network.Handler
+	ibgateway       *ibgateway.Handler
 	auth           *actuation.AuthService
 	audit   *actuation.AuditLog
 	jobs    *actuation.JobStore
@@ -115,6 +117,7 @@ func New(cfg *config.Config) *Server {
 		sessionsnapshot: sessionsnapshot.NewHandler(),
 		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store(), clusterH),
 		network:         network.NewHandler(audit),
+		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
 		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
@@ -159,6 +162,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/network/audit", s.network.HandleAudit)
 		r.Get("/network/devices", s.network.HandleDevices)
 		r.Get("/network/clients", s.network.HandleClients)
+		r.Get("/plugins/ib-gateway/status", s.ibgateway.HandleStatus)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
 		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)
@@ -242,6 +246,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
 			r.Post("/ops-agent/alertmanager", s.opsagent.HandleAlertmanager)
 			r.Post("/network/firewall/apply", s.network.HandleFirewallApply)
+			r.Post("/plugins/ib-gateway/control/{action}", s.ibgateway.HandleControl)
 			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
 		})
 		r.Group(func(r chi.Router) {

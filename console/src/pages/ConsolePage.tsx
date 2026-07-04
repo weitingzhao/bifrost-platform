@@ -57,6 +57,7 @@ import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
 import { McpContractPage } from '@/pages/McpContractPage'
 import { NetworkUpgradePage } from '@/pages/NetworkUpgradePage'
 import { NetworkApiContractPage } from '@/pages/NetworkApiContractPage'
+import { IbGatewayPluginPage } from '@/pages/IbGatewayPluginPage'
 import { AiComputeStrategyPage } from '@/pages/AiComputeStrategyPage'
 import { OperatorPlanePage } from '@/pages/OperatorPlanePage'
 import { AutonomousSkillsPage } from '@/pages/AutonomousSkillsPage'
@@ -102,6 +103,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'design-system': 'Design System',
   'network-upgrade': 'Network Upgrade',
   'network-api': 'Network API',
+  'ib-gateway-plugin': 'IB Gateway',
   'ai-compute': 'AI Compute Strategy',
   console: 'Server console',
   defects: 'Defects',
@@ -374,6 +376,7 @@ export function ConsolePage() {
     viewTab === 'data-layer' ||
     viewTab === 'network-upgrade' ||
     viewTab === 'network-api' ||
+    viewTab === 'ib-gateway-plugin' ||
     viewTab === 'ai-compute'
   const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-system' || viewTab === 'agent-protocol' || viewTab === 'briefing-reconciliation' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
@@ -745,6 +748,8 @@ export function ConsolePage() {
                   : viewTab === 'network-upgrade' ? 'Home network backbone upgrade — VLAN redesign, UniFi migration plan, hardware BOM, and research checklist.'
                   : viewTab === 'network-api'
                     ? 'platform-api /api/v1/network/* contract — L0/L1/L2 routes, Session v2 executors, forbidden actions (planning only).'
+                  : viewTab === 'ib-gateway-plugin'
+                    ? 'Platform Plugin — shared TWS bus (redis-ib @ data NS); direct replacement of legacy trade-socket IB; per-phase Owner sign-off.'
                   : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-system'
@@ -793,6 +798,8 @@ export function ConsolePage() {
         {viewTab === 'network-upgrade' && <NetworkUpgradePage />}
 
         {viewTab === 'network-api' && <NetworkApiContractPage />}
+
+        {viewTab === 'ib-gateway-plugin' && <IbGatewayPluginPage />}
 
         {viewTab === 'ai-compute' && <AiComputeStrategyPage />}
 
