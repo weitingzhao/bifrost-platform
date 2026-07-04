@@ -19,6 +19,10 @@ import { TradeIbClientMigrationPhase3SignoffPanel } from '@/components/architect
 import { TradeIbClientMigrationPhase4SignoffPanel } from '@/components/architecture/TradeIbClientMigrationPhase4SignoffPanel'
 import { TradeIbClientMigrationProgramSignoffPanel } from '@/components/architecture/TradeIbClientMigrationProgramSignoffPanel'
 import { TradeIbClientMigrationRolloutW1SignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutW1SignoffPanel'
+import { TradeIbClientMigrationRolloutW2SignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutW2SignoffPanel'
+import { TradeIbClientMigrationRolloutW3SignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutW3SignoffPanel'
+import { TradeIbClientMigrationRolloutStgSignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutStgSignoffPanel'
+import { TradeIbClientMigrationRolloutDevComposeSignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutDevComposeSignoffPanel'
 import { TradeIbClientMigrationProgramStatusStrip } from '@/components/architecture/TradeIbClientMigrationProgramStatusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
@@ -159,6 +163,14 @@ export function TradeIbClientMigrationPage() {
       </section>
 
       <TradeIbClientMigrationRolloutW1SignoffPanel />
+
+      <TradeIbClientMigrationRolloutW2SignoffPanel />
+
+      <TradeIbClientMigrationRolloutW3SignoffPanel />
+
+      <TradeIbClientMigrationRolloutStgSignoffPanel />
+
+      <TradeIbClientMigrationRolloutDevComposeSignoffPanel />
 
       <CatalogSection title="Design principles">
         <ul className="m-0 list-disc pl-5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
