@@ -1,10 +1,22 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
-import type { RunnerSmokeResponse, RunnerStatus } from '@/api/types'
-import { fetchAgentBridge, fetchHermesGatewayHealth, fetchRunnerSmoke } from '@/api/platform'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { Button, DenseTag, PageHeader, StatusLamp } from '@bifrost/ui'
+import type { RemediationJob, RunnerSmokeResponse, RunnerStatus } from '@/api/types'
+import {
+  fetchAgentBridge,
+  fetchHermesGatewayHealth,
+  fetchRunnerSmoke,
+  startRemediation,
+} from '@/api/platform'
+import { AgentJobBanner } from '@/components/agent/AgentJobBanner'
 import { AgentMcpPanel } from '@/components/agent/AgentMcpPanel'
 import { AgentHostDeployPanel } from '@/components/agent/AgentHostDeployPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import {
+  buildOperatorPlaneFixPrompt,
+  OPERATOR_PLANE_FIX_SCOPE,
+} from '@/lib/agent/operatorPlaneFixPrompt'
 
 function runnerReach(status: string | undefined): 'ok' | 'degraded' | 'fail' | 'unknown' {
   if (status === 'ok') return 'ok'
@@ -69,10 +81,16 @@ function SmokeTestSection() {
 export function OperatorPlanePage({
   onOpenMcpContract,
   onOpenBriefing,
+  onOpenAgentDesk,
 }: {
   onOpenMcpContract?: () => void
   onOpenBriefing?: () => void
+  onOpenAgentDesk?: (jobIdOrOpts?: string | { prefill: string }) => void
 }) {
+  const qc = useQueryClient()
+  const { canOperate } = usePlatformAuth()
+  const [activeFixJobId, setActiveFixJobId] = useState<string | null>(null)
+
   const bridgeQuery = useQuery({
     queryKey: ['agent', 'bridge'],
     queryFn: fetchAgentBridge,
@@ -85,6 +103,24 @@ export function OperatorPlanePage({
     refetchInterval: 60_000,
   })
 
+  const fixMutation = useMutation({
+    mutationFn: async () => {
+      const bridge = bridgeQuery.data ?? (await fetchAgentBridge())
+      return startRemediation({
+        scope: OPERATOR_PLANE_FIX_SCOPE,
+        prompt: buildOperatorPlaneFixPrompt(bridge),
+      })
+    },
+    onSuccess: job => {
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      setActiveFixJobId(job.id)
+    },
+  })
+
+  function handleBannerComplete(_job: RemediationJob) {
+    void qc.invalidateQueries({ queryKey: ['agent', 'bridge'] })
+  }
+
   const bridge = bridgeQuery.data
   const hermes = hermesQuery.data
   const runners: RunnerStatus[] =
@@ -94,22 +130,49 @@ export function OperatorPlanePage({
         ? [bridge.remediation_runner]
         : []
 
+  const gitBridgeBad = bridge?.git_bridge?.status === 'unavailable'
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <OpsSection
+      <PageHeader
         title="Operator Plane (L-1)"
-        description={
-          <>
-            The out-of-band recovery layer — AI Remediation Runners that live{' '}
-            <strong>outside the K8s cluster</strong> on dual Mac Minis and repair the platform (rocket)
-            and Trade (payload) without sharing their fate. Fate isolation is mandatory (decision{' '}
-            <code className="font-mono-tabular text-[var(--primary)]">D7</code>; see Architecture → K3s
-            Bootstrap layer <code className="font-mono-tabular text-[var(--primary)]">L-1</code>).
-          </>
+        description="Out-of-band recovery layer — AI Remediation Runners outside K8s on dual Mac Minis (fate isolation D7 / L-1)."
+        actions={
+          <Button
+            variant="default"
+            size="sm"
+            disabled={!canOperate || fixMutation.isPending || activeFixJobId != null}
+            title={
+              !canOperate
+                ? 'Operator token required'
+                : activeFixJobId != null
+                  ? 'Agent task already running'
+                  : 'Start Operator · Remediate agent task with current bridge probe'
+            }
+            onClick={() => fixMutation.mutate()}
+          >
+            {fixMutation.isPending ? 'Starting…' : 'AI Fix'}
+          </Button>
         }
-        overflow="visible"
-      >
-        <div className="flex flex-wrap items-center gap-2 pt-2">
+      />
+
+      {fixMutation.isError && (
+        <p className="m-0 text-[var(--text-dense-meta)] text-destructive">
+          {(fixMutation.error as Error).message}
+        </p>
+      )}
+
+      {activeFixJobId != null && (
+        <AgentJobBanner
+          jobId={activeFixJobId}
+          onDismiss={() => setActiveFixJobId(null)}
+          onViewDetails={onOpenAgentDesk != null ? (id) => onOpenAgentDesk(id) : undefined}
+          onComplete={handleBannerComplete}
+        />
+      )}
+
+      <OpsSection title="Runner heartbeats" bodyPadding="compact" overflow="visible">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           {runners.length === 0 && (
             <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               {bridgeQuery.isLoading ? 'Loading runner heartbeats…' : 'No runner configured'}
@@ -133,16 +196,27 @@ export function OperatorPlanePage({
               )}
             </span>
           ))}
-          {/* Nous Research Hermes Agent heartbeat */}
           {bridge?.nous_hermes != null && (
             <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1">
               <StatusLamp
-                value={bridge.nous_hermes.status === 'ok' ? 'ok' : bridge.nous_hermes.status === 'unavailable' ? 'fail' : 'unknown'}
+                value={
+                  bridge.nous_hermes.status === 'ok'
+                    ? 'ok'
+                    : bridge.nous_hermes.status === 'unavailable'
+                      ? 'fail'
+                      : 'unknown'
+                }
                 kind="reach"
               />
               <span className="text-[var(--text-dense-meta)] font-medium">Hermes Agent</span>
               <DenseTag
-                variant={bridge.nous_hermes.status === 'ok' ? 'success' : bridge.nous_hermes.status === 'unavailable' ? 'danger' : 'neutral'}
+                variant={
+                  bridge.nous_hermes.status === 'ok'
+                    ? 'success'
+                    : bridge.nous_hermes.status === 'unavailable'
+                      ? 'danger'
+                      : 'neutral'
+                }
               >
                 {bridge.nous_hermes.status}
               </DenseTag>
@@ -166,7 +240,6 @@ export function OperatorPlanePage({
               )}
             </span>
           )}
-          {/* Legacy Hermes Gateway heartbeat */}
           <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 opacity-60">
             <StatusLamp
               value={hermes?.status === 'ok' ? 'ok' : hermes?.status === 'unavailable' ? 'fail' : 'unknown'}
@@ -174,11 +247,22 @@ export function OperatorPlanePage({
             />
             <span className="text-[var(--text-dense-meta)] font-medium">Scheduler (legacy)</span>
             <DenseTag
-              variant={hermes?.status === 'ok' ? 'success' : hermes?.status === 'unavailable' ? 'danger' : 'neutral'}
+              variant={
+                hermes?.status === 'ok'
+                  ? 'success'
+                  : hermes?.status === 'unavailable'
+                    ? 'danger'
+                    : 'neutral'
+              }
             >
               {hermes?.status ?? 'not_configured'}
             </DenseTag>
           </span>
+          {gitBridgeBad && (
+            <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              Git Bridge needs attention · use AI Fix to run Operator · Remediate
+            </span>
+          )}
         </div>
       </OpsSection>
 

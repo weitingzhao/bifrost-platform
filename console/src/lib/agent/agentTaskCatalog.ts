@@ -110,6 +110,18 @@ export const AGENT_TASK_RELATIONS: AgentTaskRelation[] = [
 
 export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
   {
+    id: 'operator-plane-remediate',
+    scope: 'operator-plane-remediate',
+    label: 'Operator · Remediate',
+    domain: 'Operator',
+    action: 'Remediate',
+    tier: 'manual',
+    entryPoint: 'Agent → Operator Plane (L-1) · AI Fix',
+    trigger: 'Operator clicks AI Fix when bridge/deploy probes fail',
+    description:
+      'Diagnose Git Bridge, agent deploy, and MCP bridge errors on L-1; guide operator through Mac Pro/Mini host fixes via manual steps.',
+  },
+  {
     id: 'ops',
     scope: 'agent-desk',
     label: 'Ops · Session',

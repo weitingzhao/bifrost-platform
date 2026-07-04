@@ -17,7 +17,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -86,6 +86,26 @@ function buildNightlyDriftAutofixPrompt(req: StartRunRequest): string {
     body !== '' ? body : '(missing proposal body)',
     '',
     'Complete the fix and report: branch, commits, PR steps.',
+  ]
+  return lines.join('\n')
+}
+
+function buildOperatorPlaneRemediatePrompt(req: StartRunRequest): string {
+  const body = req.prompt?.trim() ?? ''
+  const lines: string[] = [
+    'You are the Bifrost Operator Plane (L-1) remediation agent.',
+    'You run on the Mac Mini remediation runner. Git Bridge and platform-api live on the Mac Pro developer host.',
+    '',
+    '## Task',
+    body !== '' ? body : 'Diagnose and fix Operator Plane bridge/deploy errors.',
+    '',
+    '## Safety',
+    '- Do NOT schedule Git Bridge or remediation runner into K8s — L-1 fate isolation is mandatory.',
+    '- Use request_operator_manual_steps for Mac Pro host actions (launchd, .env edits, make start, git-bridge daemon).',
+    '- Use git_* tools only after Git Bridge is reachable from this runner.',
+    '- Do not run Platform Release unless operator explicitly asks.',
+    '',
+    'Begin with diagnosis, then manual steps for host fixes, then verify git_workspace_status and report.',
   ]
   return lines.join('\n')
 }
@@ -274,6 +294,9 @@ function buildReleaseFixPrompt(req: StartRunRequest): string {
 export function buildRemediationPrompt(req: StartRunRequest): string {
   if (req.scope === 'agent-desk') {
     return buildAgentDeskPrompt(req)
+  }
+  if (req.scope === 'operator-plane-remediate') {
+    return buildOperatorPlaneRemediatePrompt(req)
   }
   if (req.scope === 'release') {
     return buildReleasePrompt(req)

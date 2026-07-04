@@ -11,6 +11,8 @@ export type RemediationApprovalRespond = (
 interface RemediationApprovalBlockProps {
   event: RemediationEvent
   submitting?: boolean
+  /** Compact mode for inline banner — smaller fonts, xs buttons, collapsed context */
+  compact?: boolean
   onRespond: RemediationApprovalRespond
   onOpenServerConsole?: () => void
 }
@@ -61,10 +63,16 @@ const CONTEXT_LINE_THRESHOLD = 5
 const CONTEXT_CHAR_THRESHOLD = 320
 const CONTEXT_PREVIEW_LINES = 4
 
-function ApprovalContextMessage({ text }: { text: string }) {
+function ApprovalContextMessage({
+  text,
+  defaultExpanded = false,
+}: {
+  text: string
+  defaultExpanded?: boolean
+}) {
   const lines = text.split('\n')
   const isLong = lines.length > CONTEXT_LINE_THRESHOLD || text.length > CONTEXT_CHAR_THRESHOLD
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(defaultExpanded)
 
   if (!isLong) {
     return <p className="remediation-approval-message">{text}</p>
@@ -95,6 +103,7 @@ function ApprovalContextMessage({ text }: { text: string }) {
 export function RemediationApprovalBlock({
   event,
   submitting = false,
+  compact = false,
   onRespond,
   onOpenServerConsole,
 }: RemediationApprovalBlockProps) {
@@ -130,20 +139,23 @@ export function RemediationApprovalBlock({
     onRespond(optionId, finalNote, finalCommitMsg)
   }
 
+  const btnSize = compact ? 'xs' as const : 'sm' as const
+  const rootClass = [
+    'remediation-block remediation-block--approval',
+    kind === 'manual_steps' ? 'remediation-block--approval-manual' : '',
+    compact ? 'remediation-block--approval-compact' : '',
+  ].filter(Boolean).join(' ')
+
   return (
-    <div
-      className={`remediation-block remediation-block--approval${
-        kind === 'manual_steps' ? ' remediation-block--approval-manual' : ''
-      }`}
-    >
+    <div className={rootClass}>
       <div className="remediation-approval-context dense-scroll-y">
-        <p className="remediation-approval-context__kicker">Agent context</p>
-        <p className="remediation-approval-title">{title}</p>
-        <ApprovalContextMessage text={event.text} />
+        {!compact && <p className="remediation-approval-context__kicker">Agent context</p>}
+        <p className={compact ? 'remediation-approval-title remediation-approval-title--compact' : 'remediation-approval-title'}>{title}</p>
+        <ApprovalContextMessage text={event.text} defaultExpanded={kind === 'manual_steps' && !compact} />
 
         {checklist.length > 0 && (
           <div className="remediation-approval-checklist">
-            <p className="remediation-approval-checklist__title">Checklist</p>
+            {!compact && <p className="remediation-approval-checklist__title">Checklist</p>}
             <ul className="remediation-approval-checklist__list">
               {checklist.map((item, index) => (
                 <li key={index} className="remediation-approval-checklist__item">
@@ -180,13 +192,13 @@ export function RemediationApprovalBlock({
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button
                     variant="outline"
-                    size="sm"
+                    size={btnSize}
                     onClick={() => void navigator.clipboard.writeText(commands.join('\n'))}
                   >
                     Copy commands
                   </Button>
                   {onOpenServerConsole != null && (
-                    <Button variant="outline" size="sm" onClick={onOpenServerConsole}>
+                    <Button variant="outline" size={btnSize} onClick={onOpenServerConsole}>
                       Open Server Console
                     </Button>
                   )}
@@ -197,14 +209,14 @@ export function RemediationApprovalBlock({
         )}
 
         {onOpenServerConsole != null && commands.length === 0 && kind === 'manual_steps' && (
-          <Button variant="outline" size="sm" className="mb-2" onClick={onOpenServerConsole}>
+          <Button variant="outline" size={btnSize} className="mb-2" onClick={onOpenServerConsole}>
             Open Server Console
           </Button>
         )}
       </div>
 
       <div className="remediation-approval-actions">
-        <p className="remediation-approval-actions__kicker">Your response</p>
+        {!compact && <p className="remediation-approval-actions__kicker">Your response</p>}
 
         {proposedCommitMsg != null && (
           <div className="remediation-approval-commit-msg">
@@ -217,7 +229,7 @@ export function RemediationApprovalBlock({
             <textarea
               id={`approval-commit-msg-${event.id}`}
               className="remediation-approval-commit-msg__input"
-              rows={Math.min(Math.max(commitMsg.split('\n').length + 1, 3), 8)}
+              rows={compact ? 2 : Math.min(Math.max(commitMsg.split('\n').length + 1, 3), 8)}
               value={commitMsg}
               disabled={submitting}
               onChange={e => setCommitMsg(e.target.value)}
@@ -232,7 +244,7 @@ export function RemediationApprovalBlock({
           <textarea
             id={`approval-note-${event.id}`}
             className="remediation-approval-note__input"
-            rows={kind === 'manual_steps' ? 3 : 2}
+            rows={compact ? 1 : kind === 'manual_steps' ? 3 : 2}
             placeholder={noteHint}
             value={note}
             disabled={submitting}
@@ -245,13 +257,13 @@ export function RemediationApprovalBlock({
             <Button
               key={opt.id}
               variant={optionVariant(opt, kind)}
-              size="sm"
+              size={btnSize}
               disabled={submitting}
               className="remediation-approval-option"
               onClick={() => handleRespond(opt.id)}
             >
               <span className="remediation-approval-option__label">{opt.label}</span>
-              {opt.description != null && opt.description !== '' && (
+              {!compact && opt.description != null && opt.description !== '' && (
                 <span className="remediation-approval-option__desc">{opt.description}</span>
               )}
             </Button>
