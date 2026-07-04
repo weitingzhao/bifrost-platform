@@ -479,7 +479,7 @@ export function ConsolePage() {
                 jobId={ambientJob.id}
                 taskLabel={ambientJob.label}
                 onDismiss={() => setAmbientJob(null)}
-                onViewDetails={id => openAgentDesk(id)}
+                onOpenAgentDesk={id => openAgentDesk(id)}
                 onComplete={handleAmbientJobComplete}
               />
             </div>
