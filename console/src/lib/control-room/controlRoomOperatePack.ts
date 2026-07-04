@@ -12,7 +12,7 @@ import {
 
 /** Same prompt as Agent Desk → Platform release quick action. */
 export const PLATFORM_RELEASE_AGENT_PROMPT =
-  'Deploy latest changes to prod. Scan all repos for uncommitted changes, commit and push, then run the full STG → Prod pipeline.'
+  'Deploy latest changes to prod. Scan all repos; commit bifrost-platform AND bifrost-ui (merge ui to main first if on a feature branch), push both, verify Gitea main for both repos, then run STG → PROD pipeline. After PROD, smoke-check console CSS includes bifrost-ui theme tokens.'
 
 export type FailingMatrixTarget = {
   environment: string
