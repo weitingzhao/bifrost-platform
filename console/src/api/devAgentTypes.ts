@@ -1,3 +1,15 @@
+export interface DevAgentProgramInfo {
+  id: string
+  title: string
+  description: string
+  status: string
+}
+
+export interface DevAgentProgramSummary extends DevAgentProgramInfo {
+  phase_count: number
+  active: boolean
+}
+
 export interface DevAgentPhase {
   id: string
   title: string
@@ -18,7 +30,25 @@ export interface DevAgentJob {
 
 export interface DevAgentStatusResponse {
   project: string
+  program: DevAgentProgramInfo
   phases: DevAgentPhase[]
   active_job: DevAgentJob | null
   history: DevAgentJob[]
+}
+
+export interface DevAgentProgramsResponse {
+  programs: DevAgentProgramSummary[]
+}
+
+export interface DevAgentProgramDetailResponse {
+  program: DevAgentProgramInfo
+  phases: Array<{
+    id: string
+    title: string
+    status: string
+    verify_cmd?: string
+    acceptance?: string[]
+    depends_on?: string[]
+  }>
+  active: boolean
 }

@@ -1,0 +1,52 @@
+# Program Blueprint Template
+# Copy this file and rename to your-program-id.yaml to create a new program.
+# See _schema.yaml for field documentation.
+
+id: your-program-id
+title: "Your Program Title"
+description: "One-line description of what this program achieves."
+status: active
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/your-skill/SKILL.md
+model: composer-2.5
+
+phases:
+  - id: PHASE-0
+    title: "First phase title"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+      Follow {{skill_path}}.
+
+      Goal: <describe what this phase achieves>
+
+      Deliverables:
+      - <deliverable 1>
+      - <deliverable 2>
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "echo 'TODO: add verify command'"
+    acceptance:
+      - "Acceptance criterion 1"
+      - "Acceptance criterion 2"
+
+  - id: PHASE-1
+    title: "Second phase title"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}}.
+      Follow {{skill_path}}.
+      Verify: {{verify_cmd}}
+    verify_cmd: ""
+    acceptance:
+      - "Criterion"
+    depends_on:
+      - PHASE-0
+
+metadata:
+  created_at: "2026-07-04"
+  owner: "vision-mac-trader"
+  prerequisite_programs: []
+  tags:
+    - template

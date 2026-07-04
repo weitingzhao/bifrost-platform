@@ -1,0 +1,62 @@
+# Dev Agent Blueprint Schema
+# ============================================================
+# Each YAML file in this directory defines a "Program Blueprint" —
+# a declarative task plan that the Dev Agent can execute phase-by-phase
+# via Cursor SDK.
+#
+# The Go handler (api/internal/devagent) loads all *.yaml files in this
+# directory on startup (excluding _schema.yaml and files starting with _).
+#
+# Console UI renders the active program's Phase Board and allows
+# start / approve / reject / cancel per phase.
+# ============================================================
+
+# --- Top-level fields ---
+
+id: string              # Unique program identifier (kebab-case). Used as API path param.
+title: string           # Human-readable title shown in Console UI.
+description: string     # One-line summary of program goal.
+status: enum            # active | completed | archived
+                        #   active    — available for execution in Phase Board
+                        #   completed — all phases done + owner signed off
+                        #   archived  — hidden from UI unless explicitly shown
+
+# --- Execution context ---
+
+workspace: string       # Absolute path to workspace root (cwd for Cursor Agent).
+skill_path: string      # Relative path (from workspace) to .cursor/skills/SKILL.md.
+                        # Injected into prompt via {{skill_path}}.
+model: string           # Cursor SDK model identifier (e.g. "composer-2.5").
+                        # Optional — defaults to "composer-2.5" if omitted.
+
+# --- Phases (ordered list) ---
+
+phases:                 # Array of phase definitions. Executed in order.
+  - id: string          # Phase identifier (e.g. "TIBM0", "DAP-1"). Must be unique within program.
+    title: string       # Human-readable phase title.
+    status: enum        # Initial status: pending | done | skipped.
+                        # Runtime state may override this (persisted in state/ directory).
+    prompt_template: |  # Multi-line prompt sent to Cursor Agent.
+                        # Supports {{var}} placeholders:
+                        #   {{skill_path}}   — from program.skill_path
+                        #   {{workspace}}    — from program.workspace
+                        #   {{phase_id}}     — this phase's id
+                        #   {{phase_title}}  — this phase's title
+                        #   {{verify_cmd}}   — this phase's verify_cmd
+    verify_cmd: string  # Shell command to run after phase completion.
+                        # Exit 0 = pass. Non-zero = fail.
+                        # Optional — if omitted, phase relies on manual approval only.
+    acceptance:         # Array of strings — human-readable acceptance criteria.
+      - string          # Shown as checklist in Console sign-off panel.
+    depends_on:         # Array of phase IDs that must be "done" before this phase can start.
+      - string          # Optional — if omitted, only sequential order matters.
+
+# --- Metadata ---
+
+metadata:
+  created_at: string    # ISO date when blueprint was created.
+  owner: string         # GitHub username or identifier of program owner.
+  prerequisite_programs:  # Array of program IDs that must be "completed" before this program starts.
+    - string
+  tags:                 # Optional categorization tags.
+    - string

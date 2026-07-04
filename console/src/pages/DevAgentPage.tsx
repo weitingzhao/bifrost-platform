@@ -11,6 +11,8 @@ import {
   cancelDevAgent,
 } from '@/api/devAgent'
 import type { DevAgentJob, DevAgentPhase } from '@/api/devAgentTypes'
+import { DevAgentPlatformSignoffPanel } from '@/components/architecture/DevAgentPlatformSignoffPanel'
+import { DevAgentProgramRegistryPanel } from '@/components/devagent/DevAgentProgramRegistryPanel'
 
 function phaseVariant(status: DevAgentPhase['status']): DenseTagVariant {
   if (status === 'done') return 'success'
@@ -88,12 +90,46 @@ export function DevAgentPage() {
     return phases.find(p => p.status === 'pending')
   }, [phases])
 
+  if (statusQuery.isLoading) {
+    return (
+      <OpsSection title="Dev Agent — Phase Board" bodyPadding="compact">
+        <p className="m-0 text-dense-meta text-muted-foreground">Loading phase status…</p>
+      </OpsSection>
+    )
+  }
+
+  if (statusQuery.isError) {
+    const msg = statusQuery.error instanceof Error ? statusQuery.error.message : 'Unknown error'
+    return (
+      <OpsSection title="Dev Agent — Phase Board" bodyPadding="compact">
+        <p className="m-0 text-dense-body text-destructive">
+          Failed to load dev-agent status: {msg}
+        </p>
+        <p className="mt-2 m-0 text-dense-meta text-muted-foreground">
+          Ensure Ops API is running with the latest build (includes /api/v1/dev-agent/status).
+          Rebuild: <code className="font-mono">cd api && make build</code>, then restart platform.
+        </p>
+        <Button size="sm" className="mt-3" onClick={() => void statusQuery.refetch()}>
+          Retry
+        </Button>
+      </OpsSection>
+    )
+  }
+
+  const program = data?.program
+  const programLabel = program?.title ?? data?.project ?? 'Dev Agent'
+
   return (
     <div className="flex flex-col gap-4">
+      <DevAgentProgramRegistryPanel />
+
       {/* Phase Board */}
       <OpsSection
-        title="Dev Agent — Phase Board"
-        description="Cursor SDK Agent orchestration. Start a phase, observe execution, approve or request changes."
+        title={`Dev Agent — ${programLabel}`}
+        description={
+          program?.description ??
+          'Cursor SDK Agent orchestration. Start a phase, observe execution, approve or request changes.'
+        }
         actions={
           activeJob?.status === 'running' ? (
             <Button
@@ -118,18 +154,24 @@ export function DevAgentPage() {
         }
       >
         <div className="flex flex-wrap gap-2 px-3 py-2">
-          {phases.map(p => (
-            <div
-              key={p.id}
-              className="flex items-center gap-1.5 rounded border border-border/50 px-2 py-1"
-            >
-              <StatusLamp value={p.status === 'done' ? 'ok' : p.status === 'running' ? 'degraded' : p.status === 'failed' ? 'fail' : 'unknown'} kind="reach" />
-              <span className="font-mono text-dense-label">{p.id}</span>
-              <DenseTag variant={phaseVariant(p.status)} className="text-dense-micro">
-                {p.status}
-              </DenseTag>
-            </div>
-          ))}
+          {phases.length === 0 ? (
+            <p className="m-0 text-dense-meta text-muted-foreground">
+              No phases returned from API. Check dev-agent handler initialization.
+            </p>
+          ) : (
+            phases.map(p => (
+              <div
+                key={p.id}
+                className="flex items-center gap-1.5 rounded border border-border/50 px-2 py-1"
+              >
+                <StatusLamp value={p.status === 'done' ? 'ok' : p.status === 'running' ? 'degraded' : p.status === 'failed' ? 'fail' : 'unknown'} kind="reach" />
+                <span className="font-mono text-dense-label">{p.id}</span>
+                <DenseTag variant={phaseVariant(p.status)} className="text-dense-micro">
+                  {p.status}
+                </DenseTag>
+              </div>
+            ))
+          )}
         </div>
       </OpsSection>
 
@@ -227,6 +269,9 @@ export function DevAgentPage() {
           </div>
         </OpsSection>
       )}
+
+      {/* DAP Program Delivery */}
+      <DevAgentPlatformSignoffPanel />
     </div>
   )
 }
