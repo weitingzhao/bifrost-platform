@@ -4,7 +4,7 @@ import { Button, StatusLamp, cn } from '@bifrost/ui'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { RemediationJob } from '@/api/types'
 import { respondRemediationJob } from '@/api/platform'
-import { AgentPhaseIndicator, PHASE_STEPS } from '@/components/agent/AgentPhaseIndicator'
+import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { useRemediationStream } from '@/hooks/useRemediationStream'
 import {
@@ -33,12 +33,6 @@ function reachFromPhase(job: RemediationJob | null): 'ok' | 'degraded' | 'fail' 
   if (job.status === 'failed') return 'fail'
   if (job.status === 'cancelled') return 'degraded'
   return 'degraded'
-}
-
-function phaseShortLabel(job: RemediationJob | null): string | null {
-  if (job == null) return null
-  const step = PHASE_STEPS.find(s => s.key === job.phase)
-  return step?.label ?? job.phase ?? null
 }
 
 export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, onComplete }: AgentJobBannerProps) {
@@ -112,7 +106,6 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
       : 'running'
 
   const statusLabel = bannerStatusLabel(bannerVariant, job)
-  const phaseLabel = phaseShortLabel(job)
   const showInlineFeed = !isTerminal && liveFeed != null
   const showFeedPlaceholder = !isTerminal && liveFeed == null && connected
   const showStats = !isTerminal && (feedStats.toolCalls > 0 || feedStats.eventCount > 0)
@@ -125,9 +118,6 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
           <span className="agent-job-banner__task-label">{taskLabel}</span>
         )}
         <span className="agent-job-banner__label">{statusLabel}</span>
-        {phaseLabel != null && bannerVariant === 'running' && (
-          <span className="agent-job-banner__phase">{phaseLabel}</span>
-        )}
         {showInlineFeed && (
           <div className="agent-job-banner__feed" key={feedPulse}>
             <span className={cn('agent-job-banner__feed-kind', `agent-job-banner__feed-kind--${liveFeed.kind}`)}>
@@ -150,7 +140,7 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
             {feedStats.eventCount > feedStats.toolCalls && `${feedStats.eventCount} events`}
           </span>
         )}
-        <AgentPhaseIndicator currentPhase={job?.phase} failed={job?.status === 'failed'} compact />
+        <AgentPhaseIndicator currentPhase={job?.phase} failed={job?.status === 'failed'} compact interactive />
         {elapsed != null && !isTerminal && (
           <span className="agent-job-banner__elapsed">{elapsed}</span>
         )}
