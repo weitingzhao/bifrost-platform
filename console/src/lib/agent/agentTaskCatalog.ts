@@ -141,7 +141,7 @@ export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
     tier: 'manual',
     entryPoint: 'Agent Desk → Release scope · Platform release quick prompt',
     trigger: 'Operator starts a STG → PROD release of the Ops Platform',
-    description: 'Release the Ops Platform (bifrost-deliver-platform): commit & push via Git Bridge (incl. bifrost-platform-plugin when dirty), STG/PROD pipelines + gates; Phase G install-ib-gateway when plugin repo changed.',
+    description: 'Release the Ops Platform (bifrost-deliver-platform): commit & push via Git Bridge — **must include bifrost-ui on main** (Kaniko sibling COPY), STG/PROD pipelines + gates, Phase F console CSS smoke; Phase G install-ib-gateway when plugin repo changed.',
   },
   {
     id: 'release-fix',

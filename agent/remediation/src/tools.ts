@@ -762,7 +762,7 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
 
     git_workspace_status: {
       description:
-        'Scan all managed repos on the developer Mac for uncommitted changes. Returns per-repo branch, dirty flag, modified/untracked file lists, and ahead count. Use at the start of a release to decide what to commit.',
+        'Scan all managed repos on the developer Mac for uncommitted changes. Returns per-repo branch, on_deploy_branch, needs_main_for_deploy, head_sha, dirty flag, and ahead count. Block Platform release if bifrost-ui has needs_main_for_deploy (UI on feature branch — Tekton only clones main).',
       inputSchema: { type: 'object', properties: {} },
       async execute() {
         const data = await gitBridgeGet('/status')
@@ -931,7 +931,7 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
 
     get_delivery_revisions: {
       description:
-        'Fetch available git revisions (branches/tags) from Gitea mirror for given repos. Use to verify a pushed commit is visible before deploying.',
+        'Fetch available git revisions (branches/tags) from Gitea mirror for given repos. For Platform release always pass repos="bifrost-platform,bifrost-ui" — both are cloned at pipeline revision (default main) when building platform-console.',
       inputSchema: {
         type: 'object',
         properties: {

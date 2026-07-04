@@ -9,6 +9,11 @@ app.use(express.json())
 const PORT = parseInt(process.env.GIT_BRIDGE_PORT ?? '8785', 10)
 const WORKSPACE = process.env.GIT_WORKSPACE_ROOT ?? '/Users/vision-mac-trader/Desktop/stocks'
 
+const DEPLOY_BRANCH = 'main'
+
+/** Repos cloned by bifrost-deliver-platform* Tekton at param revision (default main). */
+const PLATFORM_PIPELINE_MIRROR_REPOS = ['bifrost-platform', 'bifrost-ui'] as const
+
 const MANAGED_REPOS = [
   'bifrost-platform',
   'bifrost-platform-plugin',
@@ -46,6 +51,9 @@ app.get('/status', (_req, res) => {
   const results: Array<{
     repo: string
     branch: string
+    on_deploy_branch: boolean
+    needs_main_for_deploy: boolean
+    head_sha: string
     dirty: boolean
     staged: string[]
     modified: string[]
@@ -83,10 +91,17 @@ app.get('/status', (_req, res) => {
         // no upstream tracking — treat as 0
       }
 
+      const dirty = lines.length > 0
+      const onDeployBranch = branch === DEPLOY_BRANCH
+      const headSha = git(dir, 'rev-parse --short HEAD')
+
       results.push({
         repo: name,
         branch,
-        dirty: lines.length > 0,
+        on_deploy_branch: onDeployBranch,
+        needs_main_for_deploy: !onDeployBranch && (dirty || ahead > 0),
+        head_sha: headSha,
+        dirty,
         staged,
         modified,
         untracked,
@@ -96,6 +111,9 @@ app.get('/status', (_req, res) => {
       results.push({
         repo: name,
         branch: '(error)',
+        on_deploy_branch: false,
+        needs_main_for_deploy: false,
+        head_sha: '',
         dirty: false,
         staged: [],
         modified: [],
@@ -107,8 +125,11 @@ app.get('/status', (_req, res) => {
 
   res.json({
     workspace: WORKSPACE,
+    deploy_branch: DEPLOY_BRANCH,
+    platform_pipeline_mirror_repos: [...PLATFORM_PIPELINE_MIRROR_REPOS],
     repos: results,
     dirty_repos: results.filter(r => r.dirty).map(r => r.repo),
+    needs_main_for_deploy: results.filter(r => r.needs_main_for_deploy).map(r => r.repo),
   })
 })
 
