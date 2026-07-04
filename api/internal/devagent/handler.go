@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -51,10 +52,26 @@ type Job struct {
 }
 
 type StatusResponse struct {
-	Project   string  `json:"project"`
-	Phases    []Phase `json:"phases"`
-	ActiveJob *Job    `json:"active_job"`
-	History   []Job   `json:"history"`
+	Project   string       `json:"project"`
+	Program   ProgramInfo  `json:"program"`
+	Phases    []Phase      `json:"phases"`
+	ActiveJob *Job         `json:"active_job"`
+	History   []Job        `json:"history"`
+}
+
+type ProgramDetailResponse struct {
+	Program ProgramInfo      `json:"program"`
+	Phases  []PhaseDetail    `json:"phases"`
+	Active  bool             `json:"active"`
+}
+
+type PhaseDetail struct {
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	Status     string   `json:"status"`
+	VerifyCmd  string   `json:"verify_cmd,omitempty"`
+	Acceptance []string `json:"acceptance,omitempty"`
+	DependsOn  []string `json:"depends_on,omitempty"`
 }
 
 type StartRequest struct {
@@ -65,37 +82,172 @@ type RejectRequest struct {
 	Feedback string `json:"feedback"`
 }
 
-type Handler struct {
-	mu        sync.Mutex
+type programRuntime struct {
+	blueprint *ProgramBlueprint
 	phases    []Phase
 	activeJob *Job
 	history   []Job
-	bridgeCmd string
 }
 
-func NewHandler() *Handler {
+type Handler struct {
+	mu              sync.Mutex
+	runtimes        map[string]*programRuntime
+	activeProgramID string
+	blueprintDir    string
+	bridgeCmd       string
+}
+
+func NewHandler(configDir string) (*Handler, error) {
+	programsDir := filepath.Join(configDir, "programs")
+	blueprints, err := LoadProgramBlueprints(programsDir)
+	if err != nil {
+		return nil, err
+	}
+
 	h := &Handler{
 		bridgeCmd: "node",
-		phases: []Phase{
-			{ID: "TIBM0", Title: "Inventory & sign-off", Status: PhaseDone},
-			{ID: "TIBM1", Title: "Gateway RPC parity", Status: PhaseDone},
-			{ID: "TIBM2", Title: "Trade read-path + health", Status: PhaseDone},
-			{ID: "TIBM3", Title: "Workers RPC-only", Status: PhaseDone},
-			{ID: "TIBM4", Title: "UI + legacy cleanup", Status: PhasePending},
-		},
+		runtimes:  make(map[string]*programRuntime, len(blueprints)),
 	}
-	return h
+
+	for _, bp := range blueprints {
+		h.runtimes[bp.ID] = &programRuntime{
+			blueprint: bp,
+			phases:    phasesFromBlueprint(bp),
+			history:   []Job{},
+		}
+	}
+
+	h.activeProgramID = pickDefaultActive(blueprints)
+	h.blueprintDir = programsDir
+	return h, nil
+}
+
+func pickDefaultActive(blueprints []*ProgramBlueprint) string {
+	for _, bp := range blueprints {
+		if bp.ID == "trade-ib-client-migration" {
+			return bp.ID
+		}
+	}
+	for _, bp := range blueprints {
+		if bp.Status == "active" {
+			return bp.ID
+		}
+	}
+	return blueprints[0].ID
+}
+
+func (h *Handler) activeRuntime() *programRuntime {
+	return h.runtimes[h.activeProgramID]
+}
+
+func (h *Handler) HandlePrograms(w http.ResponseWriter, _ *http.Request) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	list := make([]ProgramSummary, 0, len(h.runtimes))
+	for id, rt := range h.runtimes {
+		list = append(list, ProgramSummary{
+			ID:          id,
+			Title:       rt.blueprint.Title,
+			Description: rt.blueprint.Description,
+			Status:      rt.blueprint.Status,
+			PhaseCount:  len(rt.blueprint.Phases),
+			Active:      id == h.activeProgramID,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"programs": list})
+}
+
+func (h *Handler) HandleGetProgram(w http.ResponseWriter, r *http.Request) {
+	programID := chi.URLParam(r, "programId")
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	rt, ok := h.runtimes[programID]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, h.programDetailResponse(programID, rt))
+}
+
+func (h *Handler) HandleActivateProgram(w http.ResponseWriter, r *http.Request) {
+	programID := chi.URLParam(r, "programId")
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	rt, ok := h.runtimes[programID]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
+		return
+	}
+	if rt.activeJob != nil && rt.activeJob.Status == JobRunning {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot switch program while agent is running"})
+		return
+	}
+
+	h.activeProgramID = programID
+	writeJSON(w, http.StatusOK, h.programDetailResponse(programID, rt))
+}
+
+func (h *Handler) programDetailResponse(programID string, rt *programRuntime) ProgramDetailResponse {
+	phases := make([]PhaseDetail, len(rt.blueprint.Phases))
+	statusByID := make(map[string]PhaseStatus, len(rt.phases))
+	for _, p := range rt.phases {
+		statusByID[p.ID] = p.Status
+	}
+	for i, bp := range rt.blueprint.Phases {
+		st := string(parsePhaseStatus(bp.Status))
+		if runtimeSt, ok := statusByID[bp.ID]; ok {
+			st = string(runtimeSt)
+		}
+		phases[i] = PhaseDetail{
+			ID:         bp.ID,
+			Title:      bp.Title,
+			Status:     st,
+			VerifyCmd:  bp.VerifyCmd,
+			Acceptance: bp.Acceptance,
+			DependsOn:  bp.DependsOn,
+		}
+	}
+	return ProgramDetailResponse{
+		Program: ProgramInfo{
+			ID:          programID,
+			Title:       rt.blueprint.Title,
+			Description: rt.blueprint.Description,
+			Status:      rt.blueprint.Status,
+		},
+		Phases: phases,
+		Active: programID == h.activeProgramID,
+	}
 }
 
 func (h *Handler) HandleStatus(w http.ResponseWriter, _ *http.Request) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	rt := h.activeRuntime()
+	if rt == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "no active program"})
+		return
+	}
+
+	bp := rt.blueprint
 	resp := StatusResponse{
-		Project:   "trade-ib-client-migration",
-		Phases:    h.phases,
-		ActiveJob: h.activeJob,
-		History:   h.history,
+		Project: bp.ID,
+		Program: ProgramInfo{
+			ID:          bp.ID,
+			Title:       bp.Title,
+			Description: bp.Description,
+			Status:      bp.Status,
+		},
+		Phases:    rt.phases,
+		ActiveJob: rt.activeJob,
+		History:   rt.history,
+	}
+	if resp.History == nil {
+		resp.History = []Job{}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -108,16 +260,22 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.mu.Lock()
-	if h.activeJob != nil && h.activeJob.Status == JobRunning {
+	rt := h.activeRuntime()
+	if rt == nil {
+		h.mu.Unlock()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "no active program"})
+		return
+	}
+	if rt.activeJob != nil && rt.activeJob.Status == JobRunning {
 		h.mu.Unlock()
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "agent already running"})
 		return
 	}
 
 	var targetPhase *Phase
-	for i := range h.phases {
-		if h.phases[i].ID == req.PhaseID {
-			targetPhase = &h.phases[i]
+	for i := range rt.phases {
+		if rt.phases[i].ID == req.PhaseID {
+			targetPhase = &rt.phases[i]
 			break
 		}
 	}
@@ -135,10 +293,11 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	}
 	targetPhase.Status = PhaseRunning
 	targetPhase.StartedAt = time.Now().UTC().Format(time.RFC3339)
-	h.activeJob = job
+	rt.activeJob = job
+	programID := h.activeProgramID
 	h.mu.Unlock()
 
-	go h.runBridge(job)
+	go h.runBridge(programID, job)
 
 	writeJSON(w, http.StatusAccepted, job)
 }
@@ -148,25 +307,26 @@ func (h *Handler) HandleApprove(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.activeJob == nil || h.activeJob.ID != id {
+	rt := h.activeRuntime()
+	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != id {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
 		return
 	}
 
-	h.activeJob.Status = JobDone
-	h.activeJob.CompletedAt = time.Now().UTC().Format(time.RFC3339)
+	rt.activeJob.Status = JobDone
+	rt.activeJob.CompletedAt = time.Now().UTC().Format(time.RFC3339)
 
-	for i := range h.phases {
-		if h.phases[i].ID == h.activeJob.PhaseID {
-			h.phases[i].Status = PhaseDone
-			h.phases[i].CompletedAt = h.activeJob.CompletedAt
+	for i := range rt.phases {
+		if rt.phases[i].ID == rt.activeJob.PhaseID {
+			rt.phases[i].Status = PhaseDone
+			rt.phases[i].CompletedAt = rt.activeJob.CompletedAt
 			break
 		}
 	}
 
-	h.history = append([]Job{*h.activeJob}, h.history...)
-	archived := *h.activeJob
-	h.activeJob = nil
+	rt.history = append([]Job{*rt.activeJob}, rt.history...)
+	archived := *rt.activeJob
+	rt.activeJob = nil
 
 	writeJSON(w, http.StatusOK, archived)
 }
@@ -177,19 +337,22 @@ func (h *Handler) HandleReject(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if h.activeJob == nil || h.activeJob.ID != id {
+	rt := h.activeRuntime()
+	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != id {
+		h.mu.Unlock()
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
 		return
 	}
 
-	h.activeJob.Status = JobRunning
-	h.activeJob.Output += fmt.Sprintf("\n\n--- Owner feedback ---\n%s\n--- Resuming agent ---\n", req.Feedback)
+	rt.activeJob.Status = JobRunning
+	rt.activeJob.Output += fmt.Sprintf("\n\n--- Owner feedback ---\n%s\n--- Resuming agent ---\n", req.Feedback)
+	programID := h.activeProgramID
+	job := rt.activeJob
+	h.mu.Unlock()
 
-	go h.resumeBridge(h.activeJob, req.Feedback)
+	go h.resumeBridge(programID, job, req.Feedback)
 
-	writeJSON(w, http.StatusOK, h.activeJob)
+	writeJSON(w, http.StatusOK, job)
 }
 
 func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
@@ -197,39 +360,41 @@ func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.activeJob == nil || h.activeJob.ID != id {
+	rt := h.activeRuntime()
+	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != id {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
 		return
 	}
 
-	h.activeJob.Status = JobCancelled
-	h.activeJob.CompletedAt = time.Now().UTC().Format(time.RFC3339)
+	rt.activeJob.Status = JobCancelled
+	rt.activeJob.CompletedAt = time.Now().UTC().Format(time.RFC3339)
 
-	for i := range h.phases {
-		if h.phases[i].ID == h.activeJob.PhaseID {
-			h.phases[i].Status = PhasePending
+	for i := range rt.phases {
+		if rt.phases[i].ID == rt.activeJob.PhaseID {
+			rt.phases[i].Status = PhasePending
 			break
 		}
 	}
 
-	h.history = append([]Job{*h.activeJob}, h.history...)
-	archived := *h.activeJob
-	h.activeJob = nil
+	rt.history = append([]Job{*rt.activeJob}, rt.history...)
+	archived := *rt.activeJob
+	rt.activeJob = nil
 
 	writeJSON(w, http.StatusOK, archived)
 }
 
-func (h *Handler) runBridge(job *Job) {
+func (h *Handler) runBridge(programID string, job *Job) {
 	h.mu.Lock()
+	rt := h.runtimes[programID]
+	if rt == nil {
+		h.mu.Unlock()
+		return
+	}
+	bp := rt.blueprint
 	phaseID := job.PhaseID
 	h.mu.Unlock()
 
-	prompt := fmt.Sprintf(
-		"Execute IB Migration %s. Follow .cursor/skills/ib-migration/SKILL.md and "+
-			"update bifrost-trade-infra/docs/IB_MIGRATION_PROGRESS.md when complete. "+
-			"Output a structured Phase completion report at the end.",
-		phaseID,
-	)
+	prompt := promptForPhase(bp, phaseID)
 
 	out, err := exec.Command(
 		h.bridgeCmd,
@@ -241,20 +406,21 @@ func (h *Handler) runBridge(job *Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.activeJob == nil || h.activeJob.ID != job.ID {
+	rt = h.runtimes[programID]
+	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != job.ID {
 		return
 	}
 
 	if err != nil {
-		h.activeJob.Output += string(out) + "\n[Bridge error: " + err.Error() + "]"
-		h.activeJob.Status = JobAwaitingReview
+		rt.activeJob.Output += string(out) + "\n[Bridge error: " + err.Error() + "]"
+		rt.activeJob.Status = JobAwaitingReview
 	} else {
-		h.activeJob.Output = string(out)
-		h.activeJob.Status = JobAwaitingReview
+		rt.activeJob.Output = string(out)
+		rt.activeJob.Status = JobAwaitingReview
 	}
 }
 
-func (h *Handler) resumeBridge(job *Job, feedback string) {
+func (h *Handler) resumeBridge(programID string, job *Job, feedback string) {
 	prompt := fmt.Sprintf("Owner requested changes: %s\nPlease fix and re-verify.", feedback)
 
 	out, err := exec.Command(
@@ -267,16 +433,17 @@ func (h *Handler) resumeBridge(job *Job, feedback string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.activeJob == nil || h.activeJob.ID != job.ID {
+	rt := h.runtimes[programID]
+	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != job.ID {
 		return
 	}
 
 	if err != nil {
-		h.activeJob.Output += string(out) + "\n[Bridge error: " + err.Error() + "]"
+		rt.activeJob.Output += string(out) + "\n[Bridge error: " + err.Error() + "]"
 	} else {
-		h.activeJob.Output += string(out)
+		rt.activeJob.Output += string(out)
 	}
-	h.activeJob.Status = JobAwaitingReview
+	rt.activeJob.Status = JobAwaitingReview
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

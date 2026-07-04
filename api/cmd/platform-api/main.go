@@ -20,7 +20,10 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	srv := server.New(cfg)
+	srv, err := server.New(cfg)
+	if err != nil {
+		log.Fatalf("server: %v", err)
+	}
 	log.Printf("bifrost-platform-api listening on %s (config: %s)", cfg.Listen, cfg.ConfigPath)
 	if err := http.ListenAndServe(cfg.Listen, srv.Router()); err != nil {
 		log.Fatalf("server: %v", err)

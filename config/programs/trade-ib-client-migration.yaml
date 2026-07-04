@@ -1,0 +1,143 @@
+id: trade-ib-client-migration
+title: "Trade IB Client Migration"
+description: "Trade stack consumes Platform redis-ib bus only — zero direct TWS from any Trade pod."
+status: active
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/ib-migration/SKILL.md
+model: composer-2.5
+
+phases:
+  - id: TIBM0
+    title: "Inventory & sign-off"
+    status: done
+    prompt_template: |
+      Execute Trade IB Client Migration Phase 0 (Inventory & Prerequisites).
+      Follow {{skill_path}}.
+
+      Deliverables:
+      - Surface inventory (S01–S14) with current transport mode
+      - Prerequisite check: IBGP program status
+      - Phase 0 delivery panel in Console
+      - Update MIGRATION_TRACKING.md
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "echo 'TIBM0 manual sign-off only'"
+    acceptance:
+      - "Surface inventory S01–S14 cataloged in tradeIbClientMigrationCatalog.ts"
+      - "IBGP prerequisite acknowledged"
+      - "Phase 0 panel visible and signable in Console"
+
+  - id: TIBM1
+    title: "Gateway RPC parity"
+    status: done
+    prompt_template: |
+      Execute Trade IB Client Migration Phase 1 (Gateway RPC Parity).
+      Follow {{skill_path}}.
+
+      Goal: Platform IB Gateway implements all 9 operator RPC commands that Trade callers need.
+      Verify: {{verify_cmd}}
+
+      Deliverables:
+      - All 9 ALL_OPS implemented in plugin ib-gateway
+      - IbOperatorClient in bifrost-core compatible
+      - Verify script passes
+      - Phase 1 panel + sign-off in Console
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "make -C bifrost-platform-plugin verify-ib-gateway-rpc-parity"
+    acceptance:
+      - "9/9 RPC ops smoke test pass (verify-ib-gateway-rpc-parity)"
+      - "IbOperatorClient works against both legacy socket and Platform Gateway"
+      - "Phase 1 panel signed in Console"
+
+  - id: TIBM2
+    title: "Trade read-path + health"
+    status: done
+    prompt_template: |
+      Execute Trade IB Client Migration Phase 2 (Health & Read Path).
+      Follow {{skill_path}}.
+
+      Goal: Trade pods read market data + account state exclusively from redis-ib bus.
+      Platform Gateway health visible in Monitor API.
+      Verify: {{verify_cmd}}
+
+      Deliverables:
+      - platform_ib_gateway.py in bifrost-core (aggregate health)
+      - Monitor /status exposes socket.platform_ib_gateway
+      - ExternalName + overlay config for redis-ib
+      - Verify script passes
+      - Phase 2 panel + sign-off
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "make -C bifrost-platform-plugin verify-trade-ib-health"
+    acceptance:
+      - "redis-ib health hashes tagged plugin=ib-gateway"
+      - "Monitor /status includes platform_ib_gateway aggregate"
+      - "Canonical tick read path verified (S01)"
+      - "Phase 2 panel signed"
+
+  - id: TIBM3
+    title: "Workers RPC-only"
+    status: done
+    prompt_template: |
+      Execute Trade IB Client Migration Phase 3 (Celery Bars RPC-Only).
+      Follow {{skill_path}}.
+
+      Goal: Celery bars backfill uses Platform Gateway fetch_bars_range RPC.
+      No direct TWS socket from worker process. use_for_celery_bars defaults true.
+      Verify: {{verify_cmd}}
+
+      Deliverables:
+      - IbOperatorBarsAdapter in bifrost-core
+      - tasks.py uses RPC path by default
+      - use_for_celery_bars=true in core 0.2.10+
+      - Verify script passes
+      - Phase 3 panel + sign-off
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "make -C bifrost-platform-plugin verify-trade-celery-bars"
+    acceptance:
+      - "fetch_bars_range RPC OK via verify script"
+      - "Worker code has no MarketIbClient import (source)"
+      - "use_for_celery_bars defaults true in bifrost-core 0.2.10+"
+      - "Phase 3 panel signed"
+
+  - id: TIBM4
+    title: "UI + legacy cleanup"
+    status: pending
+    prompt_template: |
+      Execute Trade IB Client Migration Phase 4 (UI & Legacy Cleanup).
+      Follow {{skill_path}}.
+
+      Goal: Frontend and Ops API labels reflect Platform IB Gateway as transport source.
+      Legacy "IB Broker" / "Socket Ingest" references updated.
+      Verify: {{verify_cmd}}
+
+      Deliverables:
+      - platformIbGateway.ts utility in bifrost-trade-frontend
+      - socketIngestLamp + ibBrokerConnectionModel prefer platform_ib_gateway
+      - Ops market_ingest_config labels: "Platform IB Gateway · ..."
+      - platform_gateway_managed flag in market-ingest API
+      - Verify script passes
+      - Phase 4 panel + sign-off
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "make -C bifrost-platform-plugin verify-trade-ib-ui"
+    acceptance:
+      - "FE platformIbGateway.ts module present with tests"
+      - "Ops labels show 'Platform IB Gateway' (source grep)"
+      - "platform_gateway_managed in market-ingest response"
+      - "Phase 4 panel signed"
+    depends_on:
+      - TIBM3
+
+metadata:
+  created_at: "2026-07-04"
+  owner: "vision-mac-trader"
+  prerequisite_programs:
+    - ib-gateway-plugin
+  tags:
+    - migration
+    - ib
+    - trade-stack

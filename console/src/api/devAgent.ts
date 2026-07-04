@@ -1,24 +1,55 @@
-import type { DevAgentJob, DevAgentStatusResponse } from './devAgentTypes'
+import type {
+  DevAgentJob,
+  DevAgentProgramDetailResponse,
+  DevAgentProgramsResponse,
+  DevAgentStatusResponse,
+} from './devAgentTypes'
+import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
-const operatorToken = (): string =>
-  localStorage.getItem('bifrost_ops_token') ?? ''
+async function parseError(prefix: string, r: Response): Promise<Error> {
+  let detail = `HTTP ${r.status}`
+  try {
+    const body = (await r.json()) as { error?: string; message?: string; detail?: string }
+    detail = body.error ?? body.message ?? detail
+    if (body.detail != null && body.detail.trim() !== '' && body.detail !== detail) {
+      detail = `${detail} — ${body.detail.trim()}`
+    }
+  } catch {
+    // keep status detail
+  }
+  return new Error(`${prefix}: ${detail}`)
+}
 
 async function devAgentFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const token = operatorToken()
+  const token = getPlatformOperatorToken()
   const headers = new Headers(init.headers)
   headers.set('Content-Type', 'application/json')
-  if (token) headers.set('Authorization', `Bearer ${token}`)
+  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
   const r = await fetch(path, { ...init, headers })
-  if (!r.ok) {
-    const text = await r.text().catch(() => '')
-    throw new Error(`dev-agent: HTTP ${r.status} — ${text}`)
-  }
+  if (!r.ok) throw await parseError('dev-agent', r)
   return r
 }
 
 export async function fetchDevAgentStatus(): Promise<DevAgentStatusResponse> {
   const r = await devAgentFetch('/api/v1/dev-agent/status')
   return r.json() as Promise<DevAgentStatusResponse>
+}
+
+export async function fetchDevAgentPrograms(): Promise<DevAgentProgramsResponse> {
+  const r = await devAgentFetch('/api/v1/dev-agent/programs')
+  return r.json() as Promise<DevAgentProgramsResponse>
+}
+
+export async function fetchDevAgentProgram(programId: string): Promise<DevAgentProgramDetailResponse> {
+  const r = await devAgentFetch(`/api/v1/dev-agent/programs/${encodeURIComponent(programId)}`)
+  return r.json() as Promise<DevAgentProgramDetailResponse>
+}
+
+export async function activateDevAgentProgram(programId: string): Promise<DevAgentProgramDetailResponse> {
+  const r = await devAgentFetch(`/api/v1/dev-agent/programs/${encodeURIComponent(programId)}/activate`, {
+    method: 'POST',
+  })
+  return r.json() as Promise<DevAgentProgramDetailResponse>
 }
 
 export async function startDevAgentPhase(phaseId: string): Promise<DevAgentJob> {

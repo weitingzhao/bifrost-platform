@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -78,7 +79,7 @@ type Server struct {
 	jobs    *actuation.JobStore
 }
 
-func New(cfg *config.Config) *Server {
+func New(cfg *config.Config) (*Server, error) {
 	auth, err := actuation.LoadAuth(cfg.PlatformAuthPath)
 	if err != nil {
 		auth = &actuation.AuthService{}
@@ -91,6 +92,10 @@ func New(cfg *config.Config) *Server {
 	clusterH := cluster.NewHandler(cfg, audit)
 	promoteH := promote.NewHandler(cfg, audit, clusterH)
 	prober := probe.NewProber()
+	devagentH, err := devagent.NewHandler(cfg.ConfigDir())
+	if err != nil {
+		return nil, fmt.Errorf("devagent: %w", err)
+	}
 	return &Server{
 		cfg:     cfg,
 		prober:  prober,
@@ -105,7 +110,7 @@ func New(cfg *config.Config) *Server {
 		buildgate: buildgate.NewHandler(cfg, audit),
 		migratewave: migratewave.NewHandler(cfg, audit),
 		tradeagent: tradeagent.NewHandler(),
-		devagent:   devagent.NewHandler(),
+		devagent:   devagentH,
 		opsagent:    opsagent.NewHandler(audit),
 		remediation: remediationH,
 		agentreport: agentreport.NewHandler(),
@@ -124,7 +129,7 @@ func New(cfg *config.Config) *Server {
 		auth:        auth,
 		audit:   audit,
 		jobs:    jobs,
-	}
+	}, nil
 }
 
 func (s *Server) Router() http.Handler {
@@ -224,6 +229,9 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Route("/dev-agent", func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
+			r.Get("/programs", s.devagent.HandlePrograms)
+			r.Get("/programs/{programId}", s.devagent.HandleGetProgram)
+			r.Post("/programs/{programId}/activate", s.devagent.HandleActivateProgram)
 			r.Get("/status", s.devagent.HandleStatus)
 			r.Post("/start", s.devagent.HandleStart)
 			r.Post("/{id}/approve", s.devagent.HandleApprove)
