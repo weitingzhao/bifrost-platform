@@ -36,6 +36,7 @@ export type ConsoleViewTab =
   | 'flywheel-vision'
   | 'network-upgrade'
   | 'network-api'
+  | 'ib-gateway-plugin'
   | 'ai-compute'
   | 'console'
   | 'defects'

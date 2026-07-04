@@ -176,6 +176,12 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         ],
       },
       {
+        label: 'Plugins',
+        items: [
+          { id: 'ib-gateway-plugin', label: 'IB Gateway', icon: Plug },
+        ],
+      },
+      {
         label: 'AI',
         items: [
           { id: 'ai-compute', label: 'AI Compute Strategy', icon: Cpu },
@@ -228,6 +234,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'data-layer': 'Architecture',
   'network-upgrade': 'Architecture',
   'network-api': 'Architecture',
+  'ib-gateway-plugin': 'Architecture',
   'ai-compute': 'Architecture',
   'platform-standards': 'Architecture',
   'design-system': 'Architecture',
