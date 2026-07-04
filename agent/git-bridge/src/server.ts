@@ -11,6 +11,7 @@ const WORKSPACE = process.env.GIT_WORKSPACE_ROOT ?? '/Users/vision-mac-trader/De
 
 const MANAGED_REPOS = [
   'bifrost-platform',
+  'bifrost-platform-plugin',
   'bifrost-ui',
   'bifrost-trade-infra',
   'bifrost-trade-frontend',

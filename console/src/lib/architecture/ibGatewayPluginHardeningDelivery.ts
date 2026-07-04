@@ -50,8 +50,8 @@ export const IB_GATEWAY_PLUGIN_HARDENING_DELIVERY_ITEMS: IbGatewayPluginHardenin
     summary: 'Operator ping poll retry; verify-trade-cutover includes bifrost-stg ACL + tick read.',
     verifySteps: [
       'scripts/lib/redis_operator_ping.sh — 15s poll instead of fixed sleep.',
-      'verify-trade-cutover.sh step 4 includes bifrost-stg (trade-prod ACL).',
-      'verify-ib-gateway-live uses shared poll helper.',
+      'verify-trade-cutover.sh step 4 uses ib:ingester:tick:NVDA|STK|||.',
+      'verify-trade-quotes-e2e.sh — redis canonical key + Market API /quotes.',
     ],
   },
   {

@@ -66,7 +66,7 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	operatorRaw, _ := s.redisCLI("HGETALL", "bifrost:health:ws_ib_operator")
 	resp.OperatorHealth = parseRedisHash(operatorRaw)
 
-	tick, _ := s.redisCLI("GET", "ib:ingester:tick:NVDA")
+	tick, _ := s.redisCLI("GET", "ib:ingester:tick:NVDA|STK|||")
 	resp.SampleTick = tick
 	resp.Slots = s.readSlots()
 
