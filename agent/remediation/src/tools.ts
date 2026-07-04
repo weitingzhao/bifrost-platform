@@ -929,6 +929,19 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       },
     },
 
+    trigger_gitea_mirror_sync: {
+      description:
+        'Pull latest commits from GitHub into Gitea (Tekton task bifrost-gitea-mirror-sync). REQUIRED after git_push — Git Bridge pushes to GitHub; CI clones Gitea, which does not auto-update. Returns the TaskRun name; poll get_pipeline_runs or kubectl until succeeded before get_delivery_revisions.',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+      async execute() {
+        const data = await platformPost('/api/v1/delivery/supply-chain/mirror-sync')
+        return textResult(jsonText(data))
+      },
+    },
+
     get_delivery_revisions: {
       description:
         'Fetch available git revisions (branches/tags) from Gitea mirror for given repos. For Platform release always pass repos="bifrost-platform,bifrost-ui" — both are cloned at pipeline revision (default main) when building platform-console.',
