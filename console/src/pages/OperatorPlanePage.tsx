@@ -1,18 +1,19 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, PageHeader, StatusLamp } from '@bifrost/ui'
-import type { RemediationJob, RunnerSmokeResponse, RunnerStatus } from '@/api/types'
+import type { RunnerSmokeResponse, RunnerStatus } from '@/api/types'
 import {
   fetchAgentBridge,
   fetchHermesGatewayHealth,
   fetchRunnerSmoke,
-  startRemediation,
 } from '@/api/platform'
-import { AgentJobBanner } from '@/components/agent/AgentJobBanner'
 import { AgentMcpPanel } from '@/components/agent/AgentMcpPanel'
 import { AgentHostDeployPanel } from '@/components/agent/AgentHostDeployPanel'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   buildOperatorPlaneFixPrompt,
   OPERATOR_PLANE_FIX_SCOPE,
@@ -81,15 +82,13 @@ function SmokeTestSection() {
 export function OperatorPlanePage({
   onOpenMcpContract,
   onOpenBriefing,
-  onOpenAgentDesk,
+  ambientJobId,
+  onStartAgentJob,
 }: {
   onOpenMcpContract?: () => void
   onOpenBriefing?: () => void
-  onOpenAgentDesk?: (jobIdOrOpts?: string | { prefill: string }) => void
-}) {
-  const qc = useQueryClient()
+} & AmbientAgentShellProps) {
   const { canOperate } = usePlatformAuth()
-  const [activeFixJobId, setActiveFixJobId] = useState<string | null>(null)
 
   const bridgeQuery = useQuery({
     queryKey: ['agent', 'bridge'],
@@ -103,23 +102,17 @@ export function OperatorPlanePage({
     refetchInterval: 60_000,
   })
 
-  const fixMutation = useMutation({
-    mutationFn: async () => {
+  const aiFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: OPERATOR_PLANE_FIX_SCOPE,
+    label: scopeToLabel(OPERATOR_PLANE_FIX_SCOPE),
+    buildRequest: async () => {
       const bridge = bridgeQuery.data ?? (await fetchAgentBridge())
-      return startRemediation({
-        scope: OPERATOR_PLANE_FIX_SCOPE,
-        prompt: buildOperatorPlaneFixPrompt(bridge),
-      })
-    },
-    onSuccess: job => {
-      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-      setActiveFixJobId(job.id)
+      return { prompt: buildOperatorPlaneFixPrompt(bridge) }
     },
   })
-
-  function handleBannerComplete(_job: RemediationJob) {
-    void qc.invalidateQueries({ queryKey: ['agent', 'bridge'] })
-  }
 
   const bridge = bridgeQuery.data
   const hermes = hermesQuery.data
@@ -138,37 +131,18 @@ export function OperatorPlanePage({
         title="Operator Plane (L-1)"
         description="Out-of-band recovery layer — AI Remediation Runners outside K8s on dual Mac Minis (fate isolation D7 / L-1)."
         actions={
-          <Button
-            variant="default"
-            size="sm"
-            disabled={!canOperate || fixMutation.isPending || activeFixJobId != null}
-            title={
-              !canOperate
-                ? 'Operator token required'
-                : activeFixJobId != null
-                  ? 'Agent task already running'
-                  : 'Start Operator · Remediate agent task with current bridge probe'
-            }
-            onClick={() => fixMutation.mutate()}
-          >
-            {fixMutation.isPending ? 'Starting…' : 'AI Fix'}
-          </Button>
+          <AgentTriggerButton
+            label="AI Fix"
+            pending={aiFix.isPending}
+            disabled={aiFix.disabled}
+            title={aiFix.disabledReason ?? 'Start Operator · Remediate with current bridge probe'}
+            onClick={() => aiFix.trigger()}
+          />
         }
       />
 
-      {fixMutation.isError && (
-        <p className="m-0 text-[var(--text-dense-meta)] text-destructive">
-          {(fixMutation.error as Error).message}
-        </p>
-      )}
-
-      {activeFixJobId != null && (
-        <AgentJobBanner
-          jobId={activeFixJobId}
-          onDismiss={() => setActiveFixJobId(null)}
-          onViewDetails={onOpenAgentDesk != null ? (id) => onOpenAgentDesk(id) : undefined}
-          onComplete={handleBannerComplete}
-        />
+      {aiFix.error != null && (
+        <p className="m-0 text-[var(--text-dense-meta)] text-destructive">{aiFix.error.message}</p>
       )}
 
       <OpsSection title="Runner heartbeats" bodyPadding="compact" overflow="visible">

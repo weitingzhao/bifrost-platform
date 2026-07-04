@@ -14,6 +14,7 @@ interface CommandIntentStripProps {
   matrices: MatrixResponse[]
   context?: OpsContextResponse
   onOpenAgentDesk: (opts?: { prefill: string }) => void
+  onDispatchReleaseAgent?: () => void
   onOpenBriefing?: (opts?: BriefingUrlState) => void
   onOpenDelivery?: () => void
   onOpenPromote?: () => void
@@ -28,6 +29,7 @@ export function CommandIntentStrip({
   matrices,
   context,
   onOpenAgentDesk,
+  onDispatchReleaseAgent,
   onOpenBriefing,
   onOpenDelivery,
   onOpenPromote,
@@ -55,6 +57,9 @@ export function CommandIntentStrip({
     switch (action.type) {
       case 'agent_prefill':
         onOpenAgentDesk({ prefill: action.prefill })
+        break
+      case 'agent_dispatch_release':
+        onDispatchReleaseAgent?.()
         break
       case 'copy_text':
         void handleCopy(chip.id, action.text)

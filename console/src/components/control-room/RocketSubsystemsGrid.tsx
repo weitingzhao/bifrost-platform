@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Bot, Radar, Rocket, Server, type LucideIcon } from 'lucide-react'
-import { Button } from '@bifrost/ui'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import type { MissionSnapshot, ModuleState } from '@/lib/control-room/missionSignals'
 import { signalColor } from '@/lib/control-room/missionSignals'
 
@@ -101,19 +101,17 @@ export function RocketSubsystemsGrid({
       {ROCKET_MODULES.map(mod => {
         const footer =
           mod.key === 'release' && releaseDegraded && onDispatchReleaseAgent != null ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              className="mission-rocket-release-agent"
-              disabled={!canDispatchRelease || releaseDispatchPending}
-              onClick={e => {
-                e.stopPropagation()
-                onDispatchReleaseAgent()
-              }}
-            >
-              {releaseDispatchPending ? 'Starting…' : 'Platform release (Agent)'}
-            </Button>
+            <span className="inline-flex" onClick={e => e.stopPropagation()} role="presentation">
+              <AgentTriggerButton
+                label="AI Release"
+                size="xs"
+                pending={releaseDispatchPending}
+                disabled={!canDispatchRelease || releaseDispatchPending}
+                title="Run Platform · Release agent task"
+                onClick={() => onDispatchReleaseAgent()}
+                className="mission-rocket-release-agent"
+              />
+            </span>
           ) : undefined
 
         return (

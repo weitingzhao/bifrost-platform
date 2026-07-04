@@ -10,13 +10,14 @@ import {
   STARTER_PROMPTS,
   type AgentMode,
 } from '@/lib/control-room/agentContextPacks'
-import { buildControlRoomDispatchPack, PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
+import { buildControlRoomDispatchPack } from '@/lib/control-room/controlRoomOperatePack'
 import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
 import type { TrackId } from '@/lib/briefing/workTracks'
 
 export type CommandIntentAction =
   | { type: 'agent_prefill'; prefill: string }
+  | { type: 'agent_dispatch_release' }
   | { type: 'copy_text'; text: string }
   | { type: 'open_briefing'; track?: string }
   | { type: 'open_delivery' }
@@ -103,12 +104,10 @@ export function buildCommandIntentStripModel(input: {
     })
     primaryChips.push({
       id: 'release-agent',
-      label: 'Platform release (Agent)',
-      detail: 'Dispatch release-scoped Agent task',
-      action: {
-        type: 'agent_prefill',
-        prefill: PLATFORM_RELEASE_AGENT_PROMPT,
-      },
+      label: 'AI Release',
+      detail: 'Run Platform · Release agent task (ambient banner)',
+      emphasis: 'primary',
+      action: { type: 'agent_dispatch_release' },
     })
   }
 
