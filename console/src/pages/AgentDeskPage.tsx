@@ -73,7 +73,7 @@ const QUICK_PROMPTS: QuickPrompt[] = [
     id: 'release',
     label: 'Platform release',
     prompt:
-      'Deploy latest changes to prod. Scan all repos for uncommitted changes, commit and push, then run the full STG → Prod pipeline.',
+      'Deploy latest changes to prod. Scan all repos (incl. bifrost-platform-plugin) for uncommitted changes, commit and push, run STG → Prod platform pipeline, then Phase G install-ib-gateway if plugin changed.',
     scope: 'release',
   },
 ]
