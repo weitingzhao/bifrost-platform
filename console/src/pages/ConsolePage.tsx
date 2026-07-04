@@ -493,6 +493,7 @@ export function ConsolePage() {
           <OperatorPlanePage
             onOpenMcpContract={() => setViewTab('mcp-contract')}
             onOpenBriefing={openBriefing}
+            onOpenAgentDesk={openAgentDesk}
           />
         )}
 

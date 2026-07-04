@@ -1,11 +1,12 @@
 import { useMemo, useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, StatusLamp } from '@bifrost/ui'
-import type { RemediationEvent, RemediationJob, RemediationPhase } from '@/api/types'
+import type { RemediationEvent, RemediationJob } from '@/api/types'
 import { fetchRemediationJob, respondRemediationJob, cancelRemediationJob } from '@/api/platform'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { RemediationHistoryBar } from '@/components/cluster/RemediationHistoryBar'
 import { RemediationInitBrief } from '@/components/cluster/RemediationInitBrief'
+import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
 import { useRemediationStream } from '@/hooks/useRemediationStream'
 import { isRemediationStreamOrphanError } from '@/lib/remediation/remediationJobDisplay'
 
@@ -26,21 +27,28 @@ interface RemediationPanelProps {
   stopping?: boolean
 }
 
-const PHASE_STEPS: { key: RemediationPhase; label: string }[] = [
-  { key: 'starting', label: 'Start' },
-  { key: 'diagnosing', label: 'Diagnose' },
-  { key: 'awaiting_approval', label: 'Decide' },
-  { key: 'remediating', label: 'Remediate' },
-  { key: 'verifying', label: 'Verify' },
-  { key: 'done', label: 'Done' },
-]
+const DECISION_HEIGHT_STORAGE = 'bifrost.remediation.decisionZoneHeight'
+const DECISION_HEIGHT_DEFAULT = 480
+const DECISION_HEIGHT_MIN = 280
+const DECISION_HEIGHT_MAX_RATIO = 0.85
 
-function phaseIndex(phase: RemediationPhase | undefined): number {
-  if (phase == null) return -1
-  if (phase === 'failed' || phase === 'cancelled') return PHASE_STEPS.length
-  const idx = PHASE_STEPS.findIndex(s => s.key === phase)
-  return idx >= 0 ? idx : -1
+function readDecisionZoneHeight(): number {
+  if (typeof window === 'undefined') return DECISION_HEIGHT_DEFAULT
+  const raw = localStorage.getItem(DECISION_HEIGHT_STORAGE)
+  const parsed = raw != null ? Number(raw) : NaN
+  const max = Math.round(window.innerHeight * DECISION_HEIGHT_MAX_RATIO)
+  if (Number.isFinite(parsed) && parsed >= DECISION_HEIGHT_MIN) {
+    return Math.min(parsed, max)
+  }
+  return Math.min(Math.round(window.innerHeight * 0.55), 560)
 }
+
+function clampDecisionHeight(height: number): number {
+  if (typeof window === 'undefined') return height
+  const max = Math.round(window.innerHeight * DECISION_HEIGHT_MAX_RATIO)
+  return Math.min(Math.max(height, DECISION_HEIGHT_MIN), max)
+}
+
 
 function reachabilityFromJob(job: RemediationJob | null): 'ok' | 'degraded' | 'fail' | 'unknown' {
   if (job == null) return 'unknown'
@@ -317,27 +325,6 @@ function ErrorBlock({ event }: { event: RemediationEvent }) {
   )
 }
 
-function PhaseStepper({ currentPhase, failed }: { currentPhase: RemediationPhase | undefined; failed: boolean }) {
-  const current = phaseIndex(currentPhase)
-
-  return (
-    <nav className="remediation-stepper" aria-label="Remediation progress">
-      {PHASE_STEPS.map((step, i) => {
-        let state: 'done' | 'active' | 'pending' | 'failed' = 'pending'
-        if (failed && i === current) state = 'failed'
-        else if (i < current || currentPhase === 'done') state = 'done'
-        else if (i === current) state = 'active'
-        return (
-          <div key={step.key} className={`remediation-step remediation-step--${state}`}>
-            <div className="remediation-step-dot" />
-            <span className="remediation-step-label">{step.label}</span>
-            {i < PHASE_STEPS.length - 1 && <div className="remediation-step-line" />}
-          </div>
-        )
-      })}
-    </nav>
-  )
-}
 
 export function RemediationPanel({
   open,
@@ -359,12 +346,37 @@ export function RemediationPanel({
   const [dismissError, setDismissError] = useState<string | null>(null)
   const activityLogRef = useRef<HTMLDivElement>(null)
   const completedJobRef = useRef<string | null>(null)
+  const [decisionZoneHeight, setDecisionZoneHeight] = useState(readDecisionZoneHeight)
+  const decisionResizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
 
   useEffect(() => {
     if (jobId != null) setViewJobId(jobId)
     setStreamOrphan(false)
     setDismissError(null)
   }, [jobId])
+
+  useEffect(() => {
+    function onPointerMove(e: PointerEvent) {
+      const drag = decisionResizeRef.current
+      if (drag == null) return
+      const next = clampDecisionHeight(drag.startHeight + (e.clientY - drag.startY))
+      setDecisionZoneHeight(next)
+    }
+    function onPointerUp() {
+      if (decisionResizeRef.current == null) return
+      decisionResizeRef.current = null
+      setDecisionZoneHeight(h => {
+        localStorage.setItem(DECISION_HEIGHT_STORAGE, String(h))
+        return h
+      })
+    }
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+  }, [])
 
   const isLiveView = viewJobId != null && viewJobId === jobId
   const streamEnabled = open && isLiveView && jobId != null && !streamOrphan
@@ -631,7 +643,7 @@ export function RemediationPanel({
       ) : null}
 
       <div className="remediation-progress-bar">
-        <PhaseStepper currentPhase={job?.phase} failed={failed} />
+        <AgentPhaseIndicator currentPhase={job?.phase} failed={failed} />
       </div>
 
       <section
@@ -639,6 +651,11 @@ export function RemediationPanel({
           pendingApproval != null
             ? 'remediation-decision-zone remediation-decision-zone--active'
             : 'remediation-decision-zone remediation-decision-zone--idle'
+        }
+        style={
+          pendingApproval != null
+            ? { height: decisionZoneHeight, maxHeight: '85vh' }
+            : undefined
         }
         aria-label="Operator decision"
       >
@@ -668,6 +685,20 @@ export function RemediationPanel({
           </p>
         )}
       </section>
+
+      {pendingApproval != null ? (
+        <div
+          className="remediation-decision-resize-handle"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize decision panel"
+          title="Drag to resize Agent context area"
+          onPointerDown={e => {
+            decisionResizeRef.current = { startY: e.clientY, startHeight: decisionZoneHeight }
+            e.currentTarget.setPointerCapture(e.pointerId)
+          }}
+        />
+      ) : null}
 
       <div ref={activityLogRef} className="bay-detail-drawer-body remediation-activity-log dense-scroll-y">
         <div className="remediation-activity-log__head">

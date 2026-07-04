@@ -3692,8 +3692,41 @@ html {
 .remediation-decision-zone--active {
   display: flex;
   flex-direction: column;
-  max-height: min(46vh, 440px);
+  flex-shrink: 0;
+  min-height: 280px;
   overflow: hidden;
+}
+
+.remediation-decision-resize-handle {
+  flex-shrink: 0;
+  height: 0.5rem;
+  cursor: row-resize;
+  touch-action: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, #f59e0b 18%, var(--border)),
+    var(--border)
+  );
+  border-bottom: 1px solid var(--border);
+}
+
+.remediation-decision-resize-handle:hover,
+.remediation-decision-resize-handle:active {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, #f59e0b 35%, var(--border)),
+    color-mix(in srgb, var(--primary) 25%, var(--border))
+  );
+}
+
+.remediation-decision-resize-handle::after {
+  content: '';
+  display: block;
+  width: 2.5rem;
+  height: 0.2rem;
+  margin: 0.15rem auto 0;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
 }
 
 .remediation-decision-zone--active .remediation-block--approval {
@@ -3703,6 +3736,10 @@ html {
   min-height: 0;
   overflow: hidden;
   margin: 0;
+}
+
+.remediation-decision-zone--active .remediation-block--approval-manual {
+  display: grid;
 }
 
 .remediation-decision-zone--idle {
@@ -4047,10 +4084,9 @@ html {
 
 .remediation-approval-context {
   flex: 1 1 auto;
-  min-height: 0;
-  max-height: min(18vh, 168px);
+  min-height: 10rem;
   overflow-y: auto;
-  padding: 0.625rem 0.75rem;
+  padding: 0.75rem 0.875rem;
   border-bottom: 1px solid color-mix(in srgb, #f59e0b 22%, var(--border));
   background: color-mix(in srgb, var(--background) 55%, transparent);
 }
@@ -4107,13 +4143,40 @@ html {
 
 .remediation-approval-message {
   margin: 0;
-  font-size: var(--text-dense-meta);
-  line-height: 1.45;
+  font-size: var(--text-dense-body);
+  line-height: 1.5;
   white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.remediation-block--approval-manual {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+@media (min-width: 40rem) {
+  .remediation-block--approval-manual {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
 }
 
 .remediation-block--approval-manual .remediation-approval-context {
+  min-height: 12rem;
   border-bottom-color: color-mix(in srgb, #38bdf8 22%, var(--border));
+}
+
+@media (min-width: 40rem) {
+  .remediation-block--approval-manual .remediation-approval-context {
+    border-bottom: none;
+    border-right: 1px solid color-mix(in srgb, #38bdf8 22%, var(--border));
+  }
+
+  .remediation-block--approval-manual .remediation-approval-actions {
+    overflow-y: auto;
+    max-height: 100%;
+  }
 }
 
 .remediation-block--approval-manual .remediation-approval-actions {
@@ -5324,3 +5387,182 @@ button.infra-stack-chip:hover {
   margin-left: auto;
   flex-shrink: 0;
 }
+
+/* ===================================================================
+   Agent Job Banner — Ambient inline banner for in-page agent feedback
+   =================================================================== */
+
+.agent-job-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--card);
+  transition: opacity 0.3s, border-color 0.3s, background 0.3s;
+}
+
+.agent-job-banner--running {
+  border-left-color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 4%, var(--card));
+}
+
+.agent-job-banner--approval {
+  border-left-color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 8%, var(--card));
+  padding: 0.75rem 1rem;
+}
+
+.agent-job-banner--done {
+  border-left-color: #22c55e;
+  background: color-mix(in srgb, #22c55e 4%, var(--card));
+  animation: agent-banner-fade-out 5s ease-in forwards;
+}
+
+.agent-job-banner--failed {
+  border-left-color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 4%, var(--card));
+}
+
+@keyframes agent-banner-fade-out {
+  0%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.agent-job-banner__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.5rem;
+}
+
+.agent-job-banner__label {
+  font-size: var(--text-dense-label);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agent-job-banner__connecting {
+  font-size: var(--text-dense-caption);
+  color: var(--muted-foreground);
+  animation: remediation-pulse 1.5s ease-in-out infinite;
+}
+
+.agent-job-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.agent-job-banner__summary {
+  margin: 0;
+  font-size: var(--text-dense-meta);
+  line-height: 1.4;
+}
+
+.agent-job-banner__summary--done {
+  color: #22c55e;
+}
+
+.agent-job-banner__summary--failed {
+  color: var(--destructive);
+}
+
+.agent-job-banner__approval {
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+
+/* Compact phase indicator (horizontal dots without labels) */
+.agent-phase-indicator--compact {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.agent-phase-step {
+  display: flex;
+  align-items: center;
+}
+
+.agent-phase-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: all 0.25s;
+}
+
+.agent-phase-line {
+  width: 0.75rem;
+  height: 1.5px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.agent-phase-step--done .agent-phase-dot {
+  background: #22c55e;
+}
+
+.agent-phase-step--done .agent-phase-line {
+  background: #22c55e;
+}
+
+.agent-phase-step--active .agent-phase-dot {
+  background: #38bdf8;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #38bdf8 25%, transparent);
+  animation: remediation-pulse 1.5s ease-in-out infinite;
+}
+
+.agent-phase-step--active .agent-phase-line {
+  background: linear-gradient(to right, #38bdf8, var(--border));
+}
+
+.agent-phase-step--failed .agent-phase-dot {
+  background: var(--destructive);
+}
+
+/* Compact approval block adjustments */
+.remediation-block--approval-compact {
+  font-size: var(--text-dense-meta);
+  border-left: none;
+  background: transparent;
+}
+
+.remediation-block--approval-compact .remediation-approval-context {
+  min-height: unset;
+  max-height: 10rem;
+  padding: 0.25rem 0;
+}
+
+.remediation-block--approval-compact .remediation-approval-title {
+  font-size: var(--text-dense-label);
+  margin-bottom: 0.25rem;
+}
+
+.remediation-block--approval-compact .remediation-approval-title--compact {
+  font-size: var(--text-dense-label);
+}
+
+.remediation-block--approval-compact .remediation-approval-message {
+  font-size: var(--text-dense-meta);
+  line-height: 1.35;
+}
+
+.remediation-block--approval-compact .remediation-approval-actions {
+  padding: 0.25rem 0 0;
+}
+
+.remediation-block--approval-compact .remediation-approval-note__input {
+  font-size: var(--text-dense-meta);
+  padding: 0.25rem 0.5rem;
+}
+
+.remediation-block--approval-compact .remediation-approval-options {
+  gap: 0.25rem;
+}
+
