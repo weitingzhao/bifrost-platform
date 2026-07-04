@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -60,18 +61,28 @@ type StatusResponse struct {
 }
 
 type ProgramDetailResponse struct {
-	Program ProgramInfo      `json:"program"`
-	Phases  []PhaseDetail    `json:"phases"`
-	Active  bool             `json:"active"`
+	Program ProgramInfo   `json:"program"`
+	Phases  []PhaseDetail `json:"phases"`
+	Bridge  BridgeConfig  `json:"bridge"`
+	Active  bool          `json:"active"`
 }
 
 type PhaseDetail struct {
-	ID         string   `json:"id"`
-	Title      string   `json:"title"`
-	Status     string   `json:"status"`
-	VerifyCmd  string   `json:"verify_cmd,omitempty"`
-	Acceptance []string `json:"acceptance,omitempty"`
-	DependsOn  []string `json:"depends_on,omitempty"`
+	ID             string   `json:"id"`
+	Title          string   `json:"title"`
+	Status         string   `json:"status"`
+	VerifyCmd      string   `json:"verify_cmd,omitempty"`
+	Acceptance     []string `json:"acceptance,omitempty"`
+	DependsOn      []string `json:"depends_on,omitempty"`
+	RenderedPrompt string   `json:"rendered_prompt,omitempty"`
+	SkillInjected  bool     `json:"skill_injected,omitempty"`
+}
+
+type BridgeConfig struct {
+	Workspace   string `json:"workspace"`
+	Model       string `json:"model"`
+	SkillPath   string `json:"skill_path,omitempty"`
+	SkillLoaded bool   `json:"skill_loaded"`
 }
 
 type StartRequest struct {
@@ -94,7 +105,9 @@ type Handler struct {
 	runtimes        map[string]*programRuntime
 	activeProgramID string
 	blueprintDir    string
+	repoRoot        string
 	bridgeCmd       string
+	store           *FileStore
 }
 
 func NewHandler(configDir string) (*Handler, error) {
@@ -104,22 +117,64 @@ func NewHandler(configDir string) (*Handler, error) {
 		return nil, err
 	}
 
+	store := NewFileStore(configDir)
+	repoRoot := filepath.Dir(configDir)
 	h := &Handler{
 		bridgeCmd: "node",
+		repoRoot:  repoRoot,
 		runtimes:  make(map[string]*programRuntime, len(blueprints)),
+		store:     store,
 	}
 
 	for _, bp := range blueprints {
-		h.runtimes[bp.ID] = &programRuntime{
+		rt := &programRuntime{
 			blueprint: bp,
 			phases:    phasesFromBlueprint(bp),
 			history:   []Job{},
 		}
+		if saved, err := store.LoadProgram(bp.ID); err != nil {
+			return nil, err
+		} else if saved != nil {
+			rt.phases = mergePhasesFromState(bp, saved.Phases)
+			rt.activeJob = saved.ActiveJob
+			rt.history = saved.History
+			if rt.history == nil {
+				rt.history = []Job{}
+			}
+		}
+		h.runtimes[bp.ID] = rt
 	}
 
-	h.activeProgramID = pickDefaultActive(blueprints)
+	activeID, err := store.LoadActiveProgramID()
+	if err != nil {
+		return nil, err
+	}
+	if activeID != "" {
+		if _, ok := h.runtimes[activeID]; ok {
+			h.activeProgramID = activeID
+		}
+	}
+	if h.activeProgramID == "" {
+		h.activeProgramID = pickDefaultActive(blueprints)
+	}
+	if err := store.SaveActiveProgramID(h.activeProgramID); err != nil {
+		return nil, err
+	}
+
 	h.blueprintDir = programsDir
 	return h, nil
+}
+
+func (h *Handler) persistRuntimeLocked(programID string) error {
+	rt, ok := h.runtimes[programID]
+	if !ok {
+		return fmt.Errorf("program runtime not found: %s", programID)
+	}
+	return h.store.SaveProgram(programID, rt.phases, rt.activeJob, rt.history)
+}
+
+func (h *Handler) persistActiveLocked() error {
+	return h.store.SaveActiveProgramID(h.activeProgramID)
 }
 
 func pickDefaultActive(blueprints []*ProgramBlueprint) string {
@@ -146,16 +201,37 @@ func (h *Handler) HandlePrograms(w http.ResponseWriter, _ *http.Request) {
 
 	list := make([]ProgramSummary, 0, len(h.runtimes))
 	for id, rt := range h.runtimes {
+		phasesDone := 0
+		for _, p := range rt.phases {
+			if p.Status == PhaseDone {
+				phasesDone++
+			}
+		}
 		list = append(list, ProgramSummary{
-			ID:          id,
-			Title:       rt.blueprint.Title,
-			Description: rt.blueprint.Description,
-			Status:      rt.blueprint.Status,
-			PhaseCount:  len(rt.blueprint.Phases),
-			Active:      id == h.activeProgramID,
+			ID:            id,
+			Title:         rt.blueprint.Title,
+			Description:   rt.blueprint.Description,
+			Status:        rt.blueprint.Status,
+			PhaseCount:    len(rt.blueprint.Phases),
+			PhasesDone:    phasesDone,
+			AllPhasesDone: len(rt.phases) > 0 && phasesDone == len(rt.phases),
+			Active:        id == h.activeProgramID,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"programs": list})
+}
+
+func (h *Handler) HandlePersistence(w http.ResponseWriter, _ *http.Request) {
+	h.mu.Lock()
+	activeID := h.activeProgramID
+	h.mu.Unlock()
+
+	info, err := h.store.ListInfo(activeID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
 }
 
 func (h *Handler) HandleGetProgram(w http.ResponseWriter, r *http.Request) {
@@ -188,6 +264,10 @@ func (h *Handler) HandleActivateProgram(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.activeProgramID = programID
+	if err := h.persistActiveLocked(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusOK, h.programDetailResponse(programID, rt))
 }
 
@@ -203,12 +283,14 @@ func (h *Handler) programDetailResponse(programID string, rt *programRuntime) Pr
 			st = string(runtimeSt)
 		}
 		phases[i] = PhaseDetail{
-			ID:         bp.ID,
-			Title:      bp.Title,
-			Status:     st,
-			VerifyCmd:  bp.VerifyCmd,
-			Acceptance: bp.Acceptance,
-			DependsOn:  bp.DependsOn,
+			ID:             bp.ID,
+			Title:          bp.Title,
+			Status:         st,
+			VerifyCmd:      bp.VerifyCmd,
+			Acceptance:     bp.Acceptance,
+			DependsOn:      bp.DependsOn,
+			RenderedPrompt: promptForPhase(rt.blueprint, bp.ID),
+			SkillInjected:  skillFileLoaded(rt.blueprint.Workspace, rt.blueprint.SkillPath),
 		}
 	}
 	return ProgramDetailResponse{
@@ -219,6 +301,12 @@ func (h *Handler) programDetailResponse(programID string, rt *programRuntime) Pr
 			Status:      rt.blueprint.Status,
 		},
 		Phases: phases,
+		Bridge: BridgeConfig{
+			Workspace:   rt.blueprint.Workspace,
+			Model:       rt.blueprint.Model,
+			SkillPath:   rt.blueprint.SkillPath,
+			SkillLoaded: skillFileLoaded(rt.blueprint.Workspace, rt.blueprint.SkillPath),
+		},
 		Active: programID == h.activeProgramID,
 	}
 }
@@ -295,6 +383,11 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	targetPhase.StartedAt = time.Now().UTC().Format(time.RFC3339)
 	rt.activeJob = job
 	programID := h.activeProgramID
+	if err := h.persistRuntimeLocked(programID); err != nil {
+		h.mu.Unlock()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	h.mu.Unlock()
 
 	go h.runBridge(programID, job)
@@ -327,6 +420,10 @@ func (h *Handler) HandleApprove(w http.ResponseWriter, r *http.Request) {
 	rt.history = append([]Job{*rt.activeJob}, rt.history...)
 	archived := *rt.activeJob
 	rt.activeJob = nil
+	if err := h.persistRuntimeLocked(h.activeProgramID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 
 	writeJSON(w, http.StatusOK, archived)
 }
@@ -348,6 +445,11 @@ func (h *Handler) HandleReject(w http.ResponseWriter, r *http.Request) {
 	rt.activeJob.Output += fmt.Sprintf("\n\n--- Owner feedback ---\n%s\n--- Resuming agent ---\n", req.Feedback)
 	programID := h.activeProgramID
 	job := rt.activeJob
+	if err := h.persistRuntimeLocked(programID); err != nil {
+		h.mu.Unlock()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	h.mu.Unlock()
 
 	go h.resumeBridge(programID, job, req.Feedback)
@@ -379,8 +481,38 @@ func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
 	rt.history = append([]Job{*rt.activeJob}, rt.history...)
 	archived := *rt.activeJob
 	rt.activeJob = nil
+	if err := h.persistRuntimeLocked(h.activeProgramID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 
 	writeJSON(w, http.StatusOK, archived)
+}
+
+func (h *Handler) bridgeScriptPath() string {
+	return filepath.Join(h.repoRoot, "scripts", "dev-agent", "dist", "bridge.js")
+}
+
+func (h *Handler) bridgeArgs(bp *ProgramBlueprint, phaseID string, extra ...string) []string {
+	prompt := promptForPhase(bp, phaseID)
+	args := []string{
+		h.bridgeScriptPath(),
+		"--prompt", prompt,
+		"--phase", phaseID,
+		"--workspace", bp.Workspace,
+		"--model", bp.Model,
+	}
+	if strings.TrimSpace(bp.SkillPath) != "" {
+		args = append(args, "--skill-path", bp.SkillPath)
+	}
+	args = append(args, extra...)
+	return args
+}
+
+func (h *Handler) runBridgeCommand(args []string) ([]byte, error) {
+	cmd := exec.Command(h.bridgeCmd, args...)
+	cmd.Dir = h.repoRoot
+	return cmd.CombinedOutput()
 }
 
 func (h *Handler) runBridge(programID string, job *Job) {
@@ -394,14 +526,7 @@ func (h *Handler) runBridge(programID string, job *Job) {
 	phaseID := job.PhaseID
 	h.mu.Unlock()
 
-	prompt := promptForPhase(bp, phaseID)
-
-	out, err := exec.Command(
-		h.bridgeCmd,
-		"scripts/dev-agent/bridge.js",
-		"--prompt", prompt,
-		"--phase", phaseID,
-	).CombinedOutput()
+	out, err := h.runBridgeCommand(h.bridgeArgs(bp, phaseID))
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -418,22 +543,37 @@ func (h *Handler) runBridge(programID string, job *Job) {
 		rt.activeJob.Output = string(out)
 		rt.activeJob.Status = JobAwaitingReview
 	}
+	_ = h.persistRuntimeLocked(programID)
 }
 
 func (h *Handler) resumeBridge(programID string, job *Job, feedback string) {
-	prompt := fmt.Sprintf("Owner requested changes: %s\nPlease fix and re-verify.", feedback)
+	h.mu.Lock()
+	rt := h.runtimes[programID]
+	if rt == nil {
+		h.mu.Unlock()
+		return
+	}
+	bp := rt.blueprint
+	h.mu.Unlock()
 
-	out, err := exec.Command(
-		h.bridgeCmd,
-		"scripts/dev-agent/bridge.js",
+	prompt := fmt.Sprintf("Owner requested changes: %s\nPlease fix and re-verify.", feedback)
+	args := []string{
+		h.bridgeScriptPath(),
 		"--resume", job.CursorAgentID,
 		"--prompt", prompt,
-	).CombinedOutput()
+		"--workspace", bp.Workspace,
+		"--model", bp.Model,
+	}
+	if strings.TrimSpace(bp.SkillPath) != "" {
+		args = append(args, "--skill-path", bp.SkillPath)
+	}
+
+	out, err := h.runBridgeCommand(args)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	rt := h.runtimes[programID]
+	rt = h.runtimes[programID]
 	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != job.ID {
 		return
 	}
@@ -444,6 +584,7 @@ func (h *Handler) resumeBridge(programID string, job *Job, feedback string) {
 		rt.activeJob.Output += string(out)
 	}
 	rt.activeJob.Status = JobAwaitingReview
+	_ = h.persistRuntimeLocked(programID)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

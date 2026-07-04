@@ -7,6 +7,8 @@ export interface DevAgentProgramInfo {
 
 export interface DevAgentProgramSummary extends DevAgentProgramInfo {
   phase_count: number
+  phases_done: number
+  all_phases_done: boolean
   active: boolean
 }
 
@@ -49,6 +51,28 @@ export interface DevAgentProgramDetailResponse {
     verify_cmd?: string
     acceptance?: string[]
     depends_on?: string[]
+    rendered_prompt?: string
+    skill_injected?: boolean
   }>
+  bridge: {
+    workspace: string
+    model: string
+    skill_path?: string
+    skill_loaded: boolean
+  }
   active: boolean
+}
+
+export interface DevAgentPersistenceFile {
+  program_id: string
+  path: string
+  updated_at?: string
+  bytes: number
+}
+
+export interface DevAgentPersistenceResponse {
+  state_dir: string
+  active_program_id: string
+  active_program_path: string
+  files: DevAgentPersistenceFile[]
 }

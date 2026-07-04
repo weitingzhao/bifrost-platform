@@ -1,5 +1,6 @@
 import type {
   DevAgentJob,
+  DevAgentPersistenceResponse,
   DevAgentProgramDetailResponse,
   DevAgentProgramsResponse,
   DevAgentStatusResponse,
@@ -50,6 +51,11 @@ export async function activateDevAgentProgram(programId: string): Promise<DevAge
     method: 'POST',
   })
   return r.json() as Promise<DevAgentProgramDetailResponse>
+}
+
+export async function fetchDevAgentPersistence(): Promise<DevAgentPersistenceResponse> {
+  const r = await devAgentFetch('/api/v1/dev-agent/persistence')
+  return r.json() as Promise<DevAgentPersistenceResponse>
 }
 
 export async function startDevAgentPhase(phaseId: string): Promise<DevAgentJob> {

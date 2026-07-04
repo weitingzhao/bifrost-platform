@@ -232,6 +232,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/programs", s.devagent.HandlePrograms)
 			r.Get("/programs/{programId}", s.devagent.HandleGetProgram)
 			r.Post("/programs/{programId}/activate", s.devagent.HandleActivateProgram)
+			r.Get("/persistence", s.devagent.HandlePersistence)
 			r.Get("/status", s.devagent.HandleStatus)
 			r.Post("/start", s.devagent.HandleStart)
 			r.Post("/{id}/approve", s.devagent.HandleApprove)

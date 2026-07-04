@@ -1,0 +1,40 @@
+id: dap-smoke-test
+title: "DAP Smoke Test"
+description: "Minimal two-phase program for Dev Agent Platform UI smoke tests (program switch + done badge)."
+status: active
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/ib-migration/SKILL.md
+model: composer-2.5
+
+phases:
+  - id: SMOKE-0
+    title: "Selector renders"
+    status: done
+    prompt_template: |
+      Smoke test {{phase_id}} for {{id}}.
+      Follow {{skill_path}}.
+    verify_cmd: "echo smoke-0"
+    acceptance:
+      - "Program appears in Dev Agent selector"
+      - "Phase board lists SMOKE-0 and SMOKE-1"
+
+  - id: SMOKE-1
+    title: "Switch updates board"
+    status: done
+    prompt_template: |
+      Smoke test {{phase_id}}.
+    verify_cmd: "echo smoke-1"
+    acceptance:
+      - "Activating this program updates phase board"
+      - "Acceptance criteria expand on row click"
+    depends_on:
+      - SMOKE-0
+
+metadata:
+  created_at: "2026-07-04"
+  owner: "vision-mac-trader"
+  prerequisite_programs: []
+  tags:
+    - smoke
+    - dap

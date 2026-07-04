@@ -10,16 +10,11 @@ import {
   rejectDevAgentPhase,
   cancelDevAgent,
 } from '@/api/devAgent'
-import type { DevAgentJob, DevAgentPhase } from '@/api/devAgentTypes'
+import type { DevAgentJob } from '@/api/devAgentTypes'
 import { DevAgentPlatformSignoffPanel } from '@/components/architecture/DevAgentPlatformSignoffPanel'
-import { DevAgentProgramRegistryPanel } from '@/components/devagent/DevAgentProgramRegistryPanel'
-
-function phaseVariant(status: DevAgentPhase['status']): DenseTagVariant {
-  if (status === 'done') return 'success'
-  if (status === 'running') return 'warning'
-  if (status === 'failed') return 'danger'
-  return 'neutral'
-}
+import { DevAgentPersistencePanel } from '@/components/devagent/DevAgentPersistencePanel'
+import { DevAgentProgramSelector } from '@/components/devagent/DevAgentProgramSelector'
+import { DevAgentPhaseBoard } from '@/components/devagent/DevAgentPhaseBoard'
 
 function jobLampValue(status: DevAgentJob['status']): 'ok' | 'degraded' | 'fail' | 'unknown' {
   if (status === 'running' || status === 'awaiting_review') return 'degraded'
@@ -47,6 +42,8 @@ export function DevAgentPage() {
   })
 
   const data = statusQuery.data
+  const program = data?.program
+  const programId = program?.id ?? data?.project ?? ''
   const phases = data?.phases ?? []
   const activeJob = data?.active_job ?? null
   const output = activeJob?.output ?? ''
@@ -86,9 +83,9 @@ export function DevAgentPage() {
     } catch { /* ignore */ }
   }, [output])
 
-  const nextPhase = useMemo(() => {
-    return phases.find(p => p.status === 'pending')
-  }, [phases])
+  const nextPhase = useMemo(() => phases.find(p => p.status === 'pending'), [phases])
+
+  const programLabel = program?.title ?? data?.project ?? 'Dev Agent'
 
   if (statusQuery.isLoading) {
     return (
@@ -116,14 +113,10 @@ export function DevAgentPage() {
     )
   }
 
-  const program = data?.program
-  const programLabel = program?.title ?? data?.project ?? 'Dev Agent'
-
   return (
     <div className="flex flex-col gap-4">
-      <DevAgentProgramRegistryPanel />
+      <DevAgentPersistencePanel />
 
-      {/* Phase Board */}
       <OpsSection
         title={`Dev Agent — ${programLabel}`}
         description={
@@ -131,51 +124,34 @@ export function DevAgentPage() {
           'Cursor SDK Agent orchestration. Start a phase, observe execution, approve or request changes.'
         }
         actions={
-          activeJob?.status === 'running' ? (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => cancelMutation.mutate()}
-              disabled={cancelMutation.isPending}
-            >
-              <Square className="mr-1 h-3 w-3" />
-              Stop Agent
-            </Button>
-          ) : nextPhase ? (
-            <Button
-              size="sm"
-              onClick={() => startMutation.mutate(nextPhase.id)}
-              disabled={startMutation.isPending}
-            >
-              <Play className="mr-1 h-3 w-3" />
-              Start {nextPhase.id}
-            </Button>
-          ) : null
+          <div className="flex flex-wrap items-center gap-3">
+            <DevAgentProgramSelector activeProgramId={programId} />
+            {activeJob?.status === 'running' ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => cancelMutation.mutate()}
+                disabled={cancelMutation.isPending}
+              >
+                <Square className="mr-1 h-3 w-3" />
+                Stop Agent
+              </Button>
+            ) : nextPhase ? (
+              <Button
+                size="sm"
+                onClick={() => startMutation.mutate(nextPhase.id)}
+                disabled={startMutation.isPending}
+              >
+                <Play className="mr-1 h-3 w-3" />
+                Start {nextPhase.id}
+              </Button>
+            ) : null}
+          </div>
         }
       >
-        <div className="flex flex-wrap gap-2 px-3 py-2">
-          {phases.length === 0 ? (
-            <p className="m-0 text-dense-meta text-muted-foreground">
-              No phases returned from API. Check dev-agent handler initialization.
-            </p>
-          ) : (
-            phases.map(p => (
-              <div
-                key={p.id}
-                className="flex items-center gap-1.5 rounded border border-border/50 px-2 py-1"
-              >
-                <StatusLamp value={p.status === 'done' ? 'ok' : p.status === 'running' ? 'degraded' : p.status === 'failed' ? 'fail' : 'unknown'} kind="reach" />
-                <span className="font-mono text-dense-label">{p.id}</span>
-                <DenseTag variant={phaseVariant(p.status)} className="text-dense-micro">
-                  {p.status}
-                </DenseTag>
-              </div>
-            ))
-          )}
-        </div>
+        <DevAgentPhaseBoard programId={programId} phases={phases} />
       </OpsSection>
 
-      {/* Active Execution Panel */}
       {activeJob && (
         <OpsSection
           title={
@@ -186,15 +162,12 @@ export function DevAgentPage() {
           }
           leading={<StatusLamp value={jobLampValue(activeJob.status)} kind="reach" />}
           actions={
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={handleCopyOutput}>
-                <Copy className="mr-1 h-3 w-3" />
-                {copyState === 'copied' ? 'Copied' : 'Copy'}
-              </Button>
-            </div>
+            <Button size="sm" variant="ghost" onClick={handleCopyOutput}>
+              <Copy className="mr-1 h-3 w-3" />
+              {copyState === 'copied' ? 'Copied' : 'Copy'}
+            </Button>
           }
         >
-          {/* Streaming output */}
           <div
             ref={outputRef}
             className="mx-3 mb-3 max-h-[400px] overflow-y-auto rounded bg-background p-3 font-mono text-dense-meta leading-relaxed"
@@ -206,7 +179,6 @@ export function DevAgentPage() {
             )}
           </div>
 
-          {/* Decision buttons — show when agent reports completion */}
           {activeJob.status === 'awaiting_review' && (
             <div className="mx-3 mb-3 flex items-center gap-3 rounded border border-border/60 bg-secondary/50 p-3">
               <p className="m-0 flex-1 text-dense-body text-foreground">
@@ -247,7 +219,6 @@ export function DevAgentPage() {
         </OpsSection>
       )}
 
-      {/* History */}
       {data?.history && data.history.length > 0 && (
         <OpsSection title="Execution history">
           <div className="flex flex-col gap-1 px-3 py-2">
@@ -270,7 +241,6 @@ export function DevAgentPage() {
         </OpsSection>
       )}
 
-      {/* DAP Program Delivery */}
       <DevAgentPlatformSignoffPanel />
     </div>
   )

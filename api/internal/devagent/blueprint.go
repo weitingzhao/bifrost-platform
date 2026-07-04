@@ -33,12 +33,14 @@ type PhaseBlueprint struct {
 }
 
 type ProgramSummary struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-	PhaseCount  int    `json:"phase_count"`
-	Active      bool   `json:"active"`
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	Description   string `json:"description"`
+	Status        string `json:"status"`
+	PhaseCount    int    `json:"phase_count"`
+	PhasesDone    int    `json:"phases_done"`
+	AllPhasesDone bool   `json:"all_phases_done"`
+	Active        bool   `json:"active"`
 }
 
 type ProgramInfo struct {
@@ -123,6 +125,25 @@ func renderPrompt(tmpl string, vars map[string]string) string {
 		out = strings.ReplaceAll(out, "{{"+k+"}}", v)
 	}
 	return out
+}
+
+func resolveSkillPath(workspace, skillPath string) string {
+	if skillPath == "" {
+		return ""
+	}
+	if filepath.IsAbs(skillPath) {
+		return skillPath
+	}
+	return filepath.Join(workspace, skillPath)
+}
+
+func skillFileLoaded(workspace, skillPath string) bool {
+	if strings.TrimSpace(skillPath) == "" {
+		return false
+	}
+	path := resolveSkillPath(workspace, skillPath)
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func promptForPhase(bp *ProgramBlueprint, phaseID string) string {
