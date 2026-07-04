@@ -6,6 +6,7 @@ import {
   Bot,
   CalendarClock,
   ClipboardList,
+  Code2,
   Container,
   Cpu,
   Database,
@@ -67,6 +68,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         items: [
           { id: 'agent-desk', label: 'Agent Desk', icon: Bot },
           { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
+          { id: 'dev-agent', label: 'Dev Agent', icon: Code2 },
         ],
       },
       {
@@ -179,6 +181,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: 'Plugins',
         items: [
           { id: 'ib-gateway-plugin', label: 'IB Gateway', icon: Plug },
+          { id: 'trade-ib-client-migration', label: 'Trade IB Migration', icon: Workflow },
         ],
       },
       {
@@ -212,6 +215,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'briefing-reconciliation': 'Agent',
   'mcp-contract': 'Agent',
   'operator-plane': 'Agent',
+  'dev-agent': 'Agent',
   delivery: 'Operate',
   promote: 'Operate',
   'deploy-mainline': 'Operate',
@@ -235,6 +239,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'network-upgrade': 'Architecture',
   'network-api': 'Architecture',
   'ib-gateway-plugin': 'Architecture',
+  'trade-ib-client-migration': 'Architecture',
   'ai-compute': 'Architecture',
   'platform-standards': 'Architecture',
   'design-system': 'Architecture',

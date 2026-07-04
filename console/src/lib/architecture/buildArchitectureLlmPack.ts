@@ -19,6 +19,7 @@ import { buildDeployMainlineLlmPack } from './deployMainlineCatalog'
 import { buildK3sBootstrapLlmPack } from './k3sBootstrapCatalog'
 import { buildNetworkApiContractLlmPack } from './networkApiContractCatalog'
 import { buildIbGatewayPluginLlmPack } from './ibGatewayPluginCatalog'
+import { buildTradeIbClientMigrationLlmPack } from './tradeIbClientMigrationCatalog'
 import { buildRoadmapLlmPack } from './roadmapCatalog'
 import { buildTradeK8sNativeLlmPack } from './tradeK8sNativeCatalog'
 import { buildStandardsLlmPack } from './standardsCatalog'
@@ -41,6 +42,7 @@ export function buildFullArchitectureLlmPack(spine?: OpsContextResponse): string
     buildDeployMainlineLlmPack(),
     buildNetworkApiContractLlmPack(),
     buildIbGatewayPluginLlmPack(),
+    buildTradeIbClientMigrationLlmPack(),
     buildStandardsLlmPack(),
     buildAgentProtocolLlmPack(),
     buildBriefingReconciliationLlmPack(spine),

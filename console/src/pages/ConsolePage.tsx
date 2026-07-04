@@ -60,12 +60,14 @@ import { McpContractPage } from '@/pages/McpContractPage'
 import { NetworkUpgradePage } from '@/pages/NetworkUpgradePage'
 import { NetworkApiContractPage } from '@/pages/NetworkApiContractPage'
 import { IbGatewayPluginPage } from '@/pages/IbGatewayPluginPage'
+import { TradeIbClientMigrationPage } from '@/pages/TradeIbClientMigrationPage'
 import { AiComputeStrategyPage } from '@/pages/AiComputeStrategyPage'
 import { OperatorPlanePage } from '@/pages/OperatorPlanePage'
 import { AutonomousSkillsPage } from '@/pages/AutonomousSkillsPage'
 import { ExecutionLogPage } from '@/pages/ExecutionLogPage'
 import { AgentGovernancePage } from '@/pages/AgentGovernancePage'
 import { DefectsPage } from '@/pages/DefectsPage'
+import { DevAgentPage } from '@/pages/DevAgentPage'
 import { StandardsPage } from '@/pages/StandardsPage'
 
 const ControlRoomPage = lazy(() =>
@@ -106,7 +108,9 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'network-upgrade': 'Network Upgrade',
   'network-api': 'Network API',
   'ib-gateway-plugin': 'IB Gateway',
+  'trade-ib-client-migration': 'Trade IB Migration',
   'ai-compute': 'AI Compute Strategy',
+  'dev-agent': 'Dev Agent',
   console: 'Server console',
   defects: 'Defects',
 }
@@ -396,6 +400,7 @@ export function ConsolePage() {
     viewTab === 'network-upgrade' ||
     viewTab === 'network-api' ||
     viewTab === 'ib-gateway-plugin' ||
+    viewTab === 'trade-ib-client-migration' ||
     viewTab === 'ai-compute'
   const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-system' || viewTab === 'agent-protocol' || viewTab === 'briefing-reconciliation' || viewTab === 'mcp-contract' || viewTab === 'design-system'
   const isGovernanceTab = isArchTab || isStdTab
@@ -424,6 +429,7 @@ export function ConsolePage() {
     'execution-log',
     'agent-governance',
     'operator-plane',
+    'dev-agent',
     'control-room',
     'runtime-map',
     'cluster',
@@ -529,6 +535,8 @@ export function ConsolePage() {
         )}
 
         {viewTab === 'autonomous-skills' && <AutonomousSkillsPage />}
+
+        {viewTab === 'dev-agent' && <DevAgentPage />}
 
         {viewTab === 'execution-log' && <ExecutionLogPage />}
 
@@ -787,6 +795,8 @@ export function ConsolePage() {
                     ? 'platform-api /api/v1/network/* contract — L0/L1/L2 routes, Session v2 executors, forbidden actions (planning only).'
                   : viewTab === 'ib-gateway-plugin'
                     ? 'Platform Plugin — shared TWS bus (redis-ib @ data NS); direct replacement of legacy trade-socket IB; per-phase Owner sign-off.'
+                  : viewTab === 'trade-ib-client-migration'
+                    ? 'Trade stack IB refactor — surface inventory, Gateway RPC parity, health derivation, Celery workers, UI cleanup (redis-ib only).'
                   : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-system'
@@ -837,6 +847,8 @@ export function ConsolePage() {
         {viewTab === 'network-api' && <NetworkApiContractPage />}
 
         {viewTab === 'ib-gateway-plugin' && <IbGatewayPluginPage />}
+
+        {viewTab === 'trade-ib-client-migration' && <TradeIbClientMigrationPage />}
 
         {viewTab === 'ai-compute' && <AiComputeStrategyPage />}
 

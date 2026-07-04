@@ -37,7 +37,9 @@ export type ConsoleViewTab =
   | 'network-upgrade'
   | 'network-api'
   | 'ib-gateway-plugin'
+  | 'trade-ib-client-migration'
   | 'ai-compute'
+  | 'dev-agent'
   | 'console'
   | 'defects'
 

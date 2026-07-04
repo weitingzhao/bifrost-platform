@@ -21,6 +21,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"github.com/weitingzhao/bifrost-platform/api/internal/devagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
@@ -56,6 +57,7 @@ type Server struct {
 	buildgate *buildgate.Handler
 	migratewave *migratewave.Handler
 	tradeagent *tradeagent.Handler
+	devagent   *devagent.Handler
 	opsagent     *opsagent.Handler
 	remediation  *remediation.Handler
 	agentreport  *agentreport.Handler
@@ -103,6 +105,7 @@ func New(cfg *config.Config) *Server {
 		buildgate: buildgate.NewHandler(cfg, audit),
 		migratewave: migratewave.NewHandler(cfg, audit),
 		tradeagent: tradeagent.NewHandler(),
+		devagent:   devagent.NewHandler(),
 		opsagent:    opsagent.NewHandler(audit),
 		remediation: remediationH,
 		agentreport: agentreport.NewHandler(),
@@ -219,6 +222,14 @@ func (s *Server) Router() http.Handler {
 		r.Get("/vision/v5/gate", s.vision.HandleGetV5Gate)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
+		r.Route("/dev-agent", func(r chi.Router) {
+			r.Use(s.auth.Require(actuation.RoleOperator))
+			r.Get("/status", s.devagent.HandleStatus)
+			r.Post("/start", s.devagent.HandleStart)
+			r.Post("/{id}/approve", s.devagent.HandleApprove)
+			r.Post("/{id}/reject", s.devagent.HandleReject)
+			r.Post("/{id}/cancel", s.devagent.HandleCancel)
+		})
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
 		r.Get("/promote/release-state", s.promote.HandleGetReleaseState)
 		r.Get("/promote/gate-history", s.promote.HandleGetGateHistory)
