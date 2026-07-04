@@ -1,0 +1,17 @@
+{
+  "name": "bifrost-dev-agent-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "@cursor/sdk": "latest"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  }
+}
