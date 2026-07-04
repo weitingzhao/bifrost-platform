@@ -5389,8 +5389,24 @@ button.infra-stack-chip:hover {
 }
 
 /* ===================================================================
-   Agent Job Banner — Ambient inline banner for in-page agent feedback
+   Agent Job Banner — shell-level ambient agent feedback (ConsolePage chrome)
    =================================================================== */
+
+.console-shell-chrome__ambient-agent {
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  padding: 0.5rem 0.75rem;
+  max-height: min(60vh, 28rem);
+  overflow-y: auto;
+}
+
+.console-shell-chrome__ambient-agent .agent-job-banner {
+  margin: 0;
+  border-radius: 0;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+}
 
 .agent-job-banner {
   display: flex;
@@ -5564,5 +5580,43 @@ button.infra-stack-chip:hover {
 
 .remediation-block--approval-compact .remediation-approval-options {
   gap: 0.25rem;
+}
+
+/* Unified ambient Agent trigger button (AI Fix / AI Release / …) */
+.agent-trigger-btn {
+  gap: 0.375rem;
+  border: 1px solid color-mix(in srgb, #a855f7 35%, var(--primary));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, #a855f7 12%, var(--primary)) 0%,
+    color-mix(in srgb, var(--primary) 88%, transparent) 100%
+  );
+  box-shadow: 0 1px 2px color-mix(in srgb, #a855f7 15%, transparent);
+}
+
+.agent-trigger-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #a855f7 50%, var(--primary));
+  filter: brightness(1.05);
+}
+
+.agent-trigger-btn:disabled {
+  opacity: 0.55;
+}
+
+.agent-trigger-btn__icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+}
+
+.agent-job-banner__task-label {
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  color: color-mix(in srgb, #a855f7 70%, var(--foreground));
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.25rem;
+  border: 1px solid color-mix(in srgb, #a855f7 25%, var(--border));
+  background: color-mix(in srgb, #a855f7 6%, var(--card));
+  white-space: nowrap;
 }
 

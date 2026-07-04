@@ -1,7 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import type { MatrixResponse } from '@/api/types'
+import type { MatrixResponse, RemediationJob } from '@/api/types'
+import { AgentJobBanner } from '@/components/agent/AgentJobBanner'
+import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import {
   fetchAudit,
   fetchCluster,
@@ -152,6 +154,8 @@ export function ConsolePage() {
   const [viewTab, setViewTabState] = useState<ConsoleViewTab>(() => tabFromHash() ?? 'control-room')
   const [agentDeskJobId, setAgentDeskJobId] = useState<string | null>(null)
   const [agentDeskPrefill, setAgentDeskPrefill] = useState<string | null>(null)
+  /** Shell-level ambient agent job — survives tab switches. */
+  const [ambientJob, setAmbientJob] = useState<AmbientAgentJob | null>(null)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
   const qc = useQueryClient()
 
@@ -360,6 +364,21 @@ export function ConsolePage() {
     }
     setViewTab('agent-desk')
   }, [])
+
+  const startAmbientAgentJob = useCallback((job: AmbientAgentJob) => {
+    setAmbientJob(job)
+  }, [])
+
+  const handleAmbientJobComplete = useCallback(
+    (_job: RemediationJob) => {
+      void qc.invalidateQueries({ queryKey: ['agent', 'bridge'] })
+      void qc.invalidateQueries({ queryKey: ['promote', 'release-state'] })
+      void qc.invalidateQueries({ queryKey: ['delivery', 'runs'] })
+      void qc.invalidateQueries({ queryKey: ['promote', 'release-gate'] })
+      void qc.invalidateQueries({ queryKey: ['platform', 'self-health'] })
+    },
+    [qc],
+  )
   const openBlueprint = () => setViewTab('blueprint')
   const openStandards = () => setViewTab('platform-standards')
   const openEnvironments = () => setViewTab('environments')
@@ -437,7 +456,7 @@ export function ConsolePage() {
         onSelect={(id) => setViewTab(id as ConsoleViewTab)}
       />
       <SidebarInset>
-        <div className="sticky top-0 z-20 bg-card">
+        <div className="console-shell-chrome sticky top-0 z-20 bg-card">
           <ConsoleHeader
             title={VIEW_TITLES[viewTab]}
             plane={consoleNavPlane(viewTab)}
@@ -453,6 +472,17 @@ export function ConsolePage() {
                 onOpenAgentDeskWithPrefill={prefill => openAgentDesk({ prefill })}
               />
             </OpsContextBar>
+          )}
+          {ambientJob != null && (
+            <div className="console-shell-chrome__ambient-agent" role="region" aria-label="Active agent task">
+              <AgentJobBanner
+                jobId={ambientJob.id}
+                taskLabel={ambientJob.label}
+                onDismiss={() => setAmbientJob(null)}
+                onViewDetails={id => openAgentDesk(id)}
+                onComplete={handleAmbientJobComplete}
+              />
+            </div>
           )}
         </div>
       <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
@@ -493,7 +523,8 @@ export function ConsolePage() {
           <OperatorPlanePage
             onOpenMcpContract={() => setViewTab('mcp-contract')}
             onOpenBriefing={openBriefing}
-            onOpenAgentDesk={openAgentDesk}
+            ambientJobId={ambientJob?.id ?? null}
+            onStartAgentJob={startAmbientAgentJob}
           />
         )}
 
@@ -550,6 +581,8 @@ export function ConsolePage() {
                 onOpenAudit={openAudit}
                 onOpenBriefing={openBriefing}
                 onOpenAgentDesk={(opts) => openAgentDesk(opts)}
+                ambientJobId={ambientJob?.id ?? null}
+                onStartAgentJob={startAmbientAgentJob}
                 onOpenPlatformRelease={() => setViewTab('platform-release')}
                 onOpenPromote={openPromote}
                 onOpenDeployMainline={openDeployMainline}
@@ -727,7 +760,10 @@ export function ConsolePage() {
               title={VIEW_TITLES['platform-release']}
               description="End-to-end Platform CI/CD — follow the flow: Staging deploy → gate → Production deploy → gate."
             />
-            <PlatformReleasePage />
+            <PlatformReleasePage
+              ambientJobId={ambientJob?.id ?? null}
+              onStartAgentJob={startAmbientAgentJob}
+            />
           </>
         )}
 

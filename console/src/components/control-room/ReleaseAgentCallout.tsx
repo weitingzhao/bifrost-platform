@@ -1,5 +1,5 @@
 import { Rocket } from 'lucide-react'
-import { Button } from '@bifrost/ui'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import type { ModuleState } from '@/lib/control-room/missionSignals'
 import { signalColor } from '@/lib/control-room/missionSignals'
 
@@ -8,6 +8,7 @@ interface ReleaseAgentCalloutProps {
   onDispatch: () => void
   pending?: boolean
   canDispatch?: boolean
+  disabledReason?: string
 }
 
 /** Diagnosis-zone CTA when Rocket · Release is degraded. */
@@ -16,6 +17,7 @@ export function ReleaseAgentCallout({
   onDispatch,
   pending = false,
   canDispatch = false,
+  disabledReason,
 }: ReleaseAgentCalloutProps) {
   if (release.signal === 'ok') return null
 
@@ -26,15 +28,13 @@ export function ReleaseAgentCallout({
         <span className="control-room-release-callout__title">Release pipeline needs attention</span>
         <span className="control-room-release-callout__detail">{release.detail}</span>
       </div>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={!canDispatch || pending}
+      <AgentTriggerButton
+        label="AI Release"
+        pending={pending}
+        disabled={!canDispatch}
+        title={disabledReason ?? 'Run Platform · Release agent task'}
         onClick={onDispatch}
-      >
-        {pending ? 'Starting…' : 'Platform release (Agent)'}
-      </Button>
+      />
     </div>
   )
 }

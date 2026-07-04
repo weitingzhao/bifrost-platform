@@ -9,6 +9,8 @@ import { useRemediationStream } from '@/hooks/useRemediationStream'
 
 interface AgentJobBannerProps {
   jobId: string
+  /** Catalog label, e.g. "Platform · Release" */
+  taskLabel?: string
   onDismiss: () => void
   onViewDetails?: (jobId: string) => void
   onComplete?: (job: RemediationJob) => void
@@ -28,7 +30,7 @@ function phaseLabel(job: RemediationJob | null): string {
   return step?.label ?? job.phase ?? 'Running'
 }
 
-export function AgentJobBanner({ jobId, onDismiss, onViewDetails, onComplete }: AgentJobBannerProps) {
+export function AgentJobBanner({ jobId, taskLabel, onDismiss, onViewDetails, onComplete }: AgentJobBannerProps) {
   const qc = useQueryClient()
   const completedRef = useRef<string | null>(null)
   const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -84,6 +86,9 @@ export function AgentJobBanner({ jobId, onDismiss, onViewDetails, onComplete }: 
     <div className={`agent-job-banner agent-job-banner--${bannerVariant}`}>
       <div className="agent-job-banner__head">
         <StatusLamp value={reachFromPhase(job)} kind="reach" />
+        {taskLabel != null && taskLabel !== '' && (
+          <span className="agent-job-banner__task-label">{taskLabel}</span>
+        )}
         <span className="agent-job-banner__label">
           {bannerVariant === 'done'
             ? 'Agent completed'
@@ -103,9 +108,11 @@ export function AgentJobBanner({ jobId, onDismiss, onViewDetails, onComplete }: 
               View details
             </Button>
           )}
-          <Button variant="outline" size="xs" onClick={onDismiss}>
-            {isTerminal ? 'Dismiss' : 'Hide'}
-          </Button>
+          {isTerminal && (
+            <Button variant="outline" size="xs" onClick={onDismiss}>
+              Dismiss
+            </Button>
+          )}
         </div>
       </div>
 

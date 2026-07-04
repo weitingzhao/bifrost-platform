@@ -45,11 +45,13 @@ import {
   buildPromoteCutoverModel,
   stashPromotePreflightPack,
 } from '@/lib/control-room/promoteCutover'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { startRemediation } from '@/api/platform'
 import { useCallback, useMemo, useState } from 'react'
+import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
+import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
+import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 
-interface ControlRoomPageProps {
+type ControlRoomPageProps = {
   context: OpsContextResponse | undefined
   contextLoading: boolean
   matrices: MatrixResponse[]
@@ -76,7 +78,7 @@ interface ControlRoomPageProps {
   onOpenNetworkUpgrade?: () => void
   onOpenNetworkApi?: () => void
   onOpenAgentProtocol?: () => void
-}
+} & AmbientAgentShellProps
 
 export function ControlRoomPage({
   context,
@@ -102,12 +104,31 @@ export function ControlRoomPage({
   onOpenNetworkUpgrade,
   onOpenNetworkApi,
   onOpenAgentProtocol,
+  ambientJobId,
+  onStartAgentJob,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
   const { snapshot, matrices: liveMatrices, dataUpdatedAt, isLoading: missionLoading } = useMissionSnapshot()
   const { banner, dismissBanner, pendingVerify } = useMissionVerification()
   const { canOperate } = usePlatformAuth()
-  const qc = useQueryClient()
+
+  const aiRelease = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: PLATFORM_RELEASE_SCOPE,
+    label: scopeToLabel(PLATFORM_RELEASE_SCOPE),
+    buildRequest: () => {
+      const spineNote =
+        context?.focus?.headline != null ? `Spine focus: ${context.focus.headline}\n\n` : ''
+      return { prompt: `${spineNote}${PLATFORM_RELEASE_AGENT_PROMPT}` }
+    },
+  })
+
+  const dispatchReleaseAgent = () => {
+    if (!canOperate) return
+    aiRelease.trigger()
+  }
 
   const trackSummaries = useMemo(() => {
     const clusterFailingPods = clusterSummary?.failing_pods
@@ -115,29 +136,9 @@ export function ControlRoomPage({
     return computeAllTracks(context, matrices, clusterFailingPods, clusterReach)
   }, [context, matrices, clusterSummary])
 
-  const releaseDispatchMutation = useMutation({
-    mutationFn: async () => {
-      const spineNote =
-        context?.focus?.headline != null ? `Spine focus: ${context.focus.headline}\n\n` : ''
-      return startRemediation({
-        scope: 'release',
-        prompt: `${spineNote}${PLATFORM_RELEASE_AGENT_PROMPT}`,
-      })
-    },
-    onSuccess: job => {
-      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-      onOpenAgentDesk?.(job.id)
-    },
-  })
-
   const openAgentDeskPrefill = (opts?: { prefill: string }) => {
     if (opts?.prefill != null) onOpenAgentDesk?.({ prefill: opts.prefill })
     else onOpenAgentDesk?.()
-  }
-
-  const dispatchReleaseAgent = () => {
-    if (!canOperate) return
-    releaseDispatchMutation.mutate()
   }
 
   const matrixList = liveMatrices.length > 0 ? liveMatrices : matrices
@@ -203,19 +204,20 @@ export function ControlRoomPage({
         <ReleaseAgentCallout
           release={snapshot.release}
           onDispatch={dispatchReleaseAgent}
-          pending={releaseDispatchMutation.isPending}
-          canDispatch={canOperate}
+          pending={aiRelease.isPending}
+          canDispatch={!aiRelease.disabled}
+          disabledReason={aiRelease.disabledReason}
         />
 
         {!canOperate && snapshot.release.signal !== 'ok' && (
-          <OpsFeedback variant="warning" title="Authenticate as operator to dispatch Platform release (Agent)">
+          <OpsFeedback variant="warning" title="Authenticate as operator to run AI Release">
             Use the header auth control before starting release-scoped Agent tasks.
           </OpsFeedback>
         )}
 
-        {releaseDispatchMutation.isError && (
-          <OpsFeedback variant="error" title="Failed to start Platform release (Agent)">
-            {(releaseDispatchMutation.error as Error).message}
+        {aiRelease.error != null && (
+          <OpsFeedback variant="error" title="Failed to start AI Release">
+            {aiRelease.error.message}
           </OpsFeedback>
         )}
 
@@ -229,6 +231,7 @@ export function ControlRoomPage({
           matrices={matrixList}
           context={context}
           onOpenAgentDesk={openAgentDeskPrefill}
+          onDispatchReleaseAgent={dispatchReleaseAgent}
           onOpenBriefing={onOpenBriefing}
           onOpenDelivery={onOpenDelivery}
           onOpenPromote={handleOpenPromotePreflight}
@@ -279,8 +282,8 @@ export function ControlRoomPage({
               onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
               onOpenAgentDesk={() => onOpenAgentDesk?.()}
               onDispatchReleaseAgent={dispatchReleaseAgent}
-              releaseDispatchPending={releaseDispatchMutation.isPending}
-              canDispatchRelease={canOperate}
+              releaseDispatchPending={aiRelease.isPending}
+              canDispatchRelease={!aiRelease.disabled}
             />
           </OpsSection>
 

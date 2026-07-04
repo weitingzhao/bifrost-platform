@@ -43,6 +43,17 @@ import {
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { buildDeployDebugBundle } from '@/lib/delivery/buildDeployDebugBundle'
 import { buildGateDebugBundle } from '@/lib/promote/buildGateDebugBundle'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
+import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
+import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
+import {
+  buildPlatformReleasePrompt,
+  PLATFORM_RELEASE_SCOPE,
+} from '@/lib/agent/platformReleaseAgentPrompt'
+
+const AI_RELEASE_LABEL = 'AI Release'
+const AI_RELEASE_TASK_LABEL = scopeToLabel(PLATFORM_RELEASE_SCOPE)
 
 const PLATFORM_STG_TARGET = deliveryTargetById('platform-stg')
 const PLATFORM_PROD_TARGET = deliveryTargetById('platform-prod')
@@ -349,12 +360,20 @@ function ReleaseIdentityHeader({
   prodRun,
   stgGate,
   prodGate,
+  onAiRelease,
+  aiReleasePending = false,
+  aiReleaseDisabled = false,
+  aiReleaseDisabledReason,
 }: {
   steps: FlowStep[]
   stgRun: DeliveryPipelineRunView | undefined
   prodRun: DeliveryPipelineRunView | undefined
   stgGate: ReleaseGateResponse | undefined
   prodGate: ReleaseGateResponse | undefined
+  onAiRelease?: () => void
+  aiReleasePending?: boolean
+  aiReleaseDisabled?: boolean
+  aiReleaseDisabledReason?: string
 }) {
   const identity = deriveReleaseIdentity(stgRun, prodRun, stgGate, prodGate)
   const outcome = deriveReleaseOutcome(steps)
@@ -384,12 +403,23 @@ function ReleaseIdentityHeader({
             {outcome.label}
           </span>
         </div>
-        <span className={cn(
-          'text-dense-caption',
-          identity.mismatch ? 'font-medium text-warning' : 'text-muted-foreground/70',
-        )}>
-          {identity.mismatch ? `⚠ ${identity.hint}` : outcome.detail}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {onAiRelease != null && (
+            <AgentTriggerButton
+              label={AI_RELEASE_LABEL}
+              pending={aiReleasePending}
+              disabled={aiReleaseDisabled}
+              title={aiReleaseDisabledReason ?? `Run ${AI_RELEASE_TASK_LABEL} (commit → STG → PROD)`}
+              onClick={onAiRelease}
+            />
+          )}
+          <span className={cn(
+            'text-dense-caption',
+            identity.mismatch ? 'font-medium text-warning' : 'text-muted-foreground/70',
+          )}>
+            {identity.mismatch ? `⚠ ${identity.hint}` : outcome.detail}
+          </span>
+        </div>
       </div>
     </div>
   )
@@ -987,6 +1017,10 @@ interface StepCommandCenterProps {
   prodRun: DeliveryPipelineRunView | undefined
   stgGate: ReleaseGateResponse | undefined
   prodGate: ReleaseGateResponse | undefined
+  onAiRelease?: () => void
+  aiReleasePending?: boolean
+  aiReleaseDisabled?: boolean
+  aiReleaseDisabledReason?: string
 }
 
 function StepCommandCenter({
@@ -997,6 +1031,10 @@ function StepCommandCenter({
   prodRun,
   stgGate,
   prodGate,
+  onAiRelease,
+  aiReleasePending,
+  aiReleaseDisabled,
+  aiReleaseDisabledReason,
 }: StepCommandCenterProps) {
   const isStg = activeIndex < 2
   const accentClass = isStg ? 'release-cc__accent--stg' : 'release-cc__accent--prod'
@@ -1029,6 +1067,10 @@ function StepCommandCenter({
         prodRun={prodRun}
         stgGate={stgGate}
         prodGate={prodGate}
+        onAiRelease={onAiRelease}
+        aiReleasePending={aiReleasePending}
+        aiReleaseDisabled={aiReleaseDisabled}
+        aiReleaseDisabledReason={aiReleaseDisabledReason}
       />
 
       <FlowStepper steps={steps} activeIndex={activeIndex} onSelect={onSelect} />
@@ -1157,8 +1199,18 @@ function StepActionZone({ activeIndex, status }: { activeIndex: number; status: 
 const STG_PIPELINE = PLATFORM_STG_TARGET.pipeline
 const PROD_PIPELINE = PLATFORM_PROD_TARGET.pipeline
 
-export function PlatformReleasePage() {
+export function PlatformReleasePage({
+  ambientJobId,
+  onStartAgentJob,
+}: AmbientAgentShellProps = {}) {
+  const { canOperate } = usePlatformAuth()
   const [activeIndex, setActiveIndex] = useState(0)
+
+  const releaseStateQuery = useQuery({
+    queryKey: ['promote', 'release-state', 'platform'],
+    queryFn: () => fetchReleaseState('platform'),
+    refetchInterval: 30_000,
+  })
 
   const stgRuns = useQuery({
     queryKey: ['delivery', 'runs', STG_PIPELINE],
@@ -1192,6 +1244,34 @@ export function PlatformReleasePage() {
     { key: 'prod-deploy', label: 'Production Deploy', env: 'PROD', status: prodDeploy.status, statusLabel: prodDeploy.label },
     { key: 'prod-gate', label: 'Production Gate', env: 'PROD', status: prodGateStep.status, statusLabel: prodGateStep.label },
   ]
+
+  const releaseIdentity = deriveReleaseIdentity(
+    stgRuns.data?.runs?.[0],
+    prodRuns.data?.runs?.[0],
+    stgGate.data,
+    prodGate.data,
+  )
+  const releaseOutcome = deriveReleaseOutcome(steps)
+
+  const aiRelease = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: PLATFORM_RELEASE_SCOPE,
+    label: AI_RELEASE_TASK_LABEL,
+    buildRequest: () => ({
+      prompt: buildPlatformReleasePrompt({
+        releaseState: releaseStateQuery.data,
+        stgRun: stgRuns.data?.runs?.[0],
+        prodRun: prodRuns.data?.runs?.[0],
+        stgGate: stgGate.data,
+        prodGate: prodGate.data,
+        outcomeKind: releaseOutcome.kind,
+        outcomeDetail: releaseOutcome.detail,
+        activeRevision: releaseIdentity.revision,
+      }),
+    }),
+  })
 
   let stepDetail: ReactNode
   switch (activeIndex) {
@@ -1229,6 +1309,10 @@ export function PlatformReleasePage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
+      {aiRelease.error != null && (
+        <p className="m-0 text-dense-meta text-destructive">{aiRelease.error.message}</p>
+      )}
+
       {/* Compact context strip — health + access + release state */}
       <div className="flex flex-col gap-2 rounded-lg border border-border/50 bg-secondary/30 px-4 py-2.5">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
@@ -1246,6 +1330,10 @@ export function PlatformReleasePage() {
         prodRun={prodRuns.data?.runs?.[0]}
         stgGate={stgGate.data}
         prodGate={prodGate.data}
+        onAiRelease={() => aiRelease.trigger()}
+        aiReleasePending={aiRelease.isPending}
+        aiReleaseDisabled={aiRelease.disabled}
+        aiReleaseDisabledReason={aiRelease.disabledReason}
       />
       <div className="flex flex-col gap-4">{stepDetail}</div>
       <PlatformGateHistorySection />
