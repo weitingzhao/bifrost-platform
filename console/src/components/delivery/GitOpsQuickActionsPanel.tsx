@@ -77,7 +77,7 @@ export function GitOpsQuickActionsPanel({
     <OpsSection
       title="GitOps — post-deliver"
       leading={<DeliveryBrandIcon id="argocd" variant="scope" />}
-      description="Sync only when deliver changed GitOps manifests. Full probe and audit filters live on Observe."
+      description="Sync only when deliver changed GitOps manifests. Full probe and audit filters live on Mission Control."
       bodyPadding="default"
       overflow="visible"
     >
@@ -92,7 +92,7 @@ export function GitOpsQuickActionsPanel({
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">Loading GitOps…</p>
       ) : apps.length === 0 ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          No Argo CD applications — install Argo CD or check Observe.
+          No Argo CD applications — install Argo CD or check Mission Control.
         </p>
       ) : allSynced ? (
         <p className="m-0 flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)]">
@@ -100,7 +100,7 @@ export function GitOpsQuickActionsPanel({
           <span>All {apps.length} application(s) synced — no GitOps action needed.</span>
           {onOpenObserve != null && (
             <button type="button" className="focus-strip-link text-dense-meta" onClick={onOpenObserve}>
-              Open Observe
+              Open Mission Control
             </button>
           )}
         </p>
@@ -147,7 +147,7 @@ export function GitOpsQuickActionsPanel({
       {!allSynced && onOpenObserve != null && (
         <p className="m-0 mt-2 text-dense-meta text-muted-foreground">
           <button type="button" className="focus-strip-link" onClick={onOpenObserve}>
-            Observe tab
+            Mission Control
           </button>
           {' '}— full Application table, drawer guidance, and pipeline history.
         </p>

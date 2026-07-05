@@ -576,7 +576,7 @@ export function BriefingPage({
         <h2 className="m-0 text-sm font-semibold">Live snapshot</h2>
         <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           Embedded in both packs below when you generate. SYNC (pack reconcile) and HEALTH (operational
-          probes) are independent axes — see Doctrine → Briefing Reconciliation.
+          probes) are independent axes — see Governance → Briefing Reconciliation.
         </p>
         <BriefingHealthBanner
           matrices={matrices}

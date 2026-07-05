@@ -30,7 +30,7 @@ export const UNIFI_MCP_SERVER_PHASE3_DELIVERY_ITEMS: UnifiMcpServerPhase3Deliver
     summary:
       'useNetworkLiveProbe hook — TanStack Query polls status + audit every 30s; StatusLamp + POLICY_* classification.',
     verifySteps: [
-      'Observe → Control Room — Network Health panel shows “Live UniFi probe” block.',
+      'Mission Control → Control Room — Network Health panel shows “Live UniFi probe” block.',
       'With UNIFI_* configured: controller version + POLICY_NOMINAL or POLICY_DRIFT.',
       'Without credentials: unknown lamp + platform-api hint (not blank catalog-only).',
     ],
@@ -51,7 +51,7 @@ export const UNIFI_MCP_SERVER_PHASE3_DELIVERY_ITEMS: UnifiMcpServerPhase3Deliver
     title: 'Implementation catalog — stream 3/4',
     summary: 'unifiMcpServerCatalog.ts UMS3 marked done; progress 3/4.',
     verifySteps: [
-      'Architecture → Network API — UniFi MCP Server stream section shows 3/4 progress.',
+      'Governance → Standards — UniFi MCP Server stream section shows 3/4 progress.',
       'Phase ③ Live probe row status done; Phase ④ MCP write pending.',
       'Network API contract status still L0 live; POST routes planned until UMS4.',
     ],
@@ -62,7 +62,7 @@ export const UNIFI_MCP_SERVER_PHASE3_DELIVERY_ITEMS: UnifiMcpServerPhase3Deliver
     summary:
       'Network API page mounts UniFi MCP Server Phase 3 sign-off; requires Phase 2 signed off.',
     verifySteps: [
-      'Architecture → Network API — UniFi MCP Server Phase 3 · Live probe sign-off panel.',
+      'Governance → Standards — UniFi MCP Server Phase 3 · Live probe sign-off panel.',
       'Mark all UMS3 items verified → Sign off Phase 3 delivery (Admin token).',
       'MCP write tools + POST /api/v1/network/firewall/apply follow in Phase 4.',
     ],

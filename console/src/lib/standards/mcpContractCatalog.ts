@@ -1,7 +1,7 @@
 /**
  * MCP Contract catalog — standards for building and operating MCP servers.
  *
- * Authoritative source for Ops Console → Architecture → Standards → MCP Contract.
+ * Authoritative source for Ops Console → Governance → MCP Contract.
  * Defines the technical enforcement of Vision § Decoupling Principle:
  * what MCP servers must expose, how permissions work, and what is forbidden.
  */

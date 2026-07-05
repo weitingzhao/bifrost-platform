@@ -1,7 +1,7 @@
 /**
  * Vision V5 — Full convergence contract (Dev + Ops + Business merged).
  *
- * Authoritative for Ops Console → Architecture → Vision (V5 gate).
+ * Authoritative for Ops Console → Governance → Vision (V5 gate).
  */
 
 export const CONVERGENCE_LOOP_VERSION = '2026-06-19'

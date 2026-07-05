@@ -1,7 +1,7 @@
 /**
  * Blueprint catalog — North Star, system architecture, design principles.
  *
- * Authoritative source for Ops Console → Architecture → Blueprint.
+ * Authoritative source for Ops Console → Governance → Blueprint.
  * Single source of truth — do not duplicate elsewhere.
  */
 
@@ -176,31 +176,31 @@ export type ConsoleViewRow = {
 }
 
 export const CONSOLE_VIEWS: ConsoleViewRow[] = [
-  { view: 'Agent Desk', plane: 'Agent', purpose: 'Engineer workspace — Ops + Trade payload actor' },
-  { view: 'Agent Briefing', plane: 'Agent', purpose: 'New-session entry — work intent, progress, briefing pack' },
-  { view: 'Agent Protocol', plane: 'Agent', purpose: 'Agent doctrine — modes, architecture, forbidden actions' },
-  { view: 'Briefing Reconciliation', plane: 'Agent', purpose: 'Spine projection rules and drift reconciliation' },
-  { view: 'MCP Contract', plane: 'Agent', purpose: 'Agent tool contract — read / routine / confirm / forbidden' },
-  { view: 'Skills & Schedules', plane: 'Agent', purpose: 'Autonomous skill registry and triggers' },
-  { view: 'Execution Log', plane: 'Agent', purpose: 'Autonomous execution history' },
-  { view: 'Trust & Autonomy', plane: 'Agent', purpose: 'Earned autonomy KPIs and trust matrix' },
-  { view: 'Operator Plane (L-1)', plane: 'Agent', purpose: 'Out-of-band runner infrastructure (fate-isolated)' },
-  { view: 'Control Room', plane: 'Observe', purpose: 'Mission diagnosis — KPIs, matrix, flywheels, commander cockpit' },
+  { view: 'Agent Desk', plane: 'Engineer', purpose: 'Engineer workspace — Ops + Trade payload actor' },
+  { view: 'Agent Briefing', plane: 'Engineer', purpose: 'New-session entry — work intent, progress, briefing pack' },
+  { view: 'Agent Protocol', plane: 'Governance', purpose: 'Agent doctrine — modes, architecture, forbidden actions' },
+  { view: 'Briefing Reconciliation', plane: 'Governance', purpose: 'Spine projection rules and drift reconciliation' },
+  { view: 'MCP Contract', plane: 'Governance', purpose: 'Agent tool contract — read / routine / confirm / forbidden' },
+  { view: 'Skills & Schedules', plane: 'Engineer', purpose: 'Autonomous skill registry and triggers' },
+  { view: 'Execution Log', plane: 'Engineer', purpose: 'Autonomous execution history' },
+  { view: 'Trust & Autonomy', plane: 'Engineer', purpose: 'Earned autonomy KPIs and trust matrix' },
+  { view: 'Operator Plane (L-1)', plane: 'Engineer', purpose: 'Out-of-band runner infrastructure (fate-isolated)' },
+  { view: 'Control Room', plane: 'Mission Control', purpose: 'Mission diagnosis — KPIs, matrix, flywheels, commander cockpit' },
   {
     view: 'Network Health (Control Room)',
-    plane: 'Observe',
+    plane: 'Mission Control',
     purpose:
       'Ground-floor LAN — spine + catalog projection, ZBF status, live UniFi probe; catalogs: networkUpgradeCatalog.ts + networkApiContractCatalog.ts',
   },
-  { view: 'Delivery', plane: 'Operate', purpose: 'CI/CD pipelines and release coupling' },
-  { view: 'Runtime Map', plane: 'Observe', purpose: 'Topology-first runtime diagnosis' },
-  { view: 'Placement', plane: 'Observe', purpose: 'Workload placement policy and violations' },
-  { view: 'Cluster', plane: 'Operate', purpose: 'Cluster operations' },
-  { view: 'Audit', plane: 'Observe', purpose: 'Platform actuation audit history' },
-  { view: 'Promote', plane: 'Operate', purpose: 'Release readiness (flywheels A + B)' },
-  { view: 'Flywheel Vision', plane: 'Architecture', purpose: 'Three-layer Agent convergence vision' },
-  { view: 'Architecture catalogs', plane: 'Architecture', purpose: 'Governance catalogs and Copy Prompt' },
-  { view: 'Server Console', plane: 'Operate', purpose: 'Remote server console (Tools)' },
+  { view: 'Delivery', plane: 'Rocket', purpose: 'CI/CD pipelines and release coupling' },
+  { view: 'Runtime Map', plane: 'Mission Control', purpose: 'Topology-first runtime diagnosis' },
+  { view: 'Placement', plane: 'Rocket', purpose: 'Workload placement policy and violations' },
+  { view: 'Cluster', plane: 'Rocket', purpose: 'Cluster operations' },
+  { view: 'Audit', plane: 'Mission Control', purpose: 'Platform actuation audit history' },
+  { view: 'Promote', plane: 'Rocket', purpose: 'Release readiness (flywheels A + B)' },
+  { view: 'Flywheel Vision', plane: 'Governance', purpose: 'Three-layer Agent convergence vision' },
+  { view: 'Governance catalogs', plane: 'Governance', purpose: 'Governance catalogs and Copy Prompt' },
+  { view: 'Server Console', plane: 'Ground Systems', purpose: 'Remote server console (Tools)' },
 ]
 
 export type AuthorizationLevel = {
@@ -270,7 +270,7 @@ export const AI_PLATFORM_MISSION =
   'Bifrost Trade workloads (frontend, API, Worker, Socket) evolve safely, observably, and rollback-ready on this platform. ' +
   'Two downstream product lines share this unified foundation: (1) page continuous refactoring (Dense UI / frontend migration); ' +
   '(2) trade review AI (read-only analysis, isolated from trade execution path). ' +
-  'Ultimate convergence target: see Architecture → Flywheel Vision (dualFlywheelVisionCatalog.ts) — ' +
+  'Ultimate convergence target: see Governance → Vision (dualFlywheelVisionCatalog.ts) — ' +
   'three-layer Agent (Dev / Ops / Business) unifying code, operations, and trade intelligence in one Cursor window.'
 
 export const AI_MERGE_RATIONALE =

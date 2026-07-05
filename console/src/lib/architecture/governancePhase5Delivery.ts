@@ -16,7 +16,7 @@ export const GOVERNANCE_PHASE5_DELIVERY_ITEMS: GovernancePhase5DeliveryItem[] = 
     id: 'GP5-1',
     title: 'Three bordered governance zones on Blueprint',
     summary:
-      'Architecture → Blueprint renders Constitution, Spine, and Projection as distinct visual regions with zone headers (not inline LayerBanner only).',
+      'Governance → Blueprint renders Constitution, Spine, and Projection as distinct visual regions with zone headers (not inline LayerBanner only).',
     verifySteps: [
       'Scroll Blueprint — three bordered zones appear in order: Constitution → Spine → Projection.',
       'Each zone header shows layer tag, change rate, and authority source.',

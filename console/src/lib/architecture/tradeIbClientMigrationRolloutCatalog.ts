@@ -5,9 +5,9 @@
  * Prerequisite: TIBM0–4 + TIBM-PC signed; IBGP complete; spine decision D10 (trading frozen).
  *
  * Live state (not this catalog):
- * - Rollout sign-off: Operate → Delivery Board · trade-ib-migration
- * - Trade IB health: Operate → Cluster + Monitor matrix probes
- * - Migrate lane: Agent → Briefing · spine stream trade-ib-client-migration
+ * - Rollout sign-off: Subcontractors → Delivery Board · trade-ib-migration
+ * - Trade IB health: Rocket → Cluster + Monitor matrix probes
+ * - Migrate lane: Engineer → Briefing · spine stream trade-ib-client-migration
  *
  * Trading execution (daemon FSM, live orders, scale-up for auto-trade) is intentionally BLOCKED
  * until Owner issues an explicit unlock — see TRADE_EXECUTION_FREEZE.

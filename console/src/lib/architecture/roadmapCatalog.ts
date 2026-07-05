@@ -1,7 +1,7 @@
 /**
  * Platform Roadmap — Compose → K3s execution plan.
  *
- * Authoritative source for Ops Console → Architecture → Platform Roadmap.
+ * Authoritative source for Ops Console → Governance → Roadmap.
  * Migrated from bifrost-trade-infra/docs/PLATFORM_ROADMAP.md (2026-06-15).
  */
 
@@ -205,10 +205,10 @@ export const OWNER_CHECKLIST: string[] = [
 export type RelatedDocRow = { topic: string; authority: string }
 
 export const RELATED_DOCS: RelatedDocRow[] = [
-  { topic: 'AI-native ops north star', authority: 'Ops Console → Architecture → Blueprint § AI Native Platform (blueprintCatalog.ts)' },
+  { topic: 'AI-native ops north star', authority: 'Ops Console → Governance → Blueprint § AI Native Platform (blueprintCatalog.ts)' },
   { topic: 'K3s target topology', authority: 'k3sArchitectureCatalog.ts' },
   { topic: 'K3s bootstrap runbook', authority: 'k3sBootstrapCatalog.ts' },
-  { topic: 'Deploy mainline', authority: 'Ops Console → Operate → Deploy Mainline (deployMainlineCatalog.ts)' },
+  { topic: 'Deploy mainline', authority: 'Ops Console → Rocket → Trade Release (deployMainlineCatalog.ts)' },
   { topic: '2C-B runbook / sign-off', authority: 'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md' },
   { topic: 'Code migration progress', authority: 'bifrost-trade-infra/docs/MIGRATION_TRACKING.md' },
   { topic: 'Docker build / rebuild', authority: 'bifrost-trade-infra/docs/DOCKER_BUILD.md' },

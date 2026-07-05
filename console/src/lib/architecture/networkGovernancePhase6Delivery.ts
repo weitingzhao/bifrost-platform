@@ -16,9 +16,9 @@ export const NETWORK_GOVERNANCE_PHASE6_DELIVERY_ITEMS: NetworkGovernancePhase6De
     id: 'NG6-1',
     title: 'Control Room — Network Health panel (diagnosis zone)',
     summary:
-      'Observe → Control Room embeds Network Health — ground floor panel with PARTIAL DEPLOY status and network-upgrade-core / network-upgrade-wifi stream rows.',
+      'Mission Control → Control Room embeds Network Health — ground floor panel with PARTIAL DEPLOY status and network-upgrade-core / network-upgrade-wifi stream rows.',
     verifySteps: [
-      'Observe → Control Room — section “Network Health — ground floor (LAN / UniFi)” below Promote / cutover strip.',
+      'Mission Control → Control Room — section “Network Health — ground floor (LAN / UniFi)” below Promote / cutover strip.',
       'Stream table shows network-upgrade-core and network-upgrade-wifi with done/total progress.',
       'Catalog version 2026-07-03-v2 visible in panel header.',
     ],
@@ -62,7 +62,7 @@ export const NETWORK_GOVERNANCE_PHASE6_DELIVERY_ITEMS: NetworkGovernancePhase6De
     summary:
       'blueprintCatalog CONSOLE_VIEWS adds Network Health (Control Room) entry; Blueprint mounts Network Governance Phase 6 panel.',
     verifySteps: [
-      'Architecture → Blueprint → Console views — row “Network Health (Control Room)” [Observe].',
+      'Governance → Blueprint → Console views — row “Network Health (Control Room)” [Mission Control].',
       'Blueprint → Network Governance Phase 6 · Control Room views sign-off panel (NG6-1..NG6-5).',
       'Network Governance Phases 1–5 show SIGNED before signing Phase 6.',
     ],

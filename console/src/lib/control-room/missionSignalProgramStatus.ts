@@ -14,12 +14,12 @@ export type MissionSignalPhaseMeta = {
 }
 
 export const MISSION_SIGNAL_PROGRAM_PHASES: MissionSignalPhaseMeta[] = [
-  { id: 'P1', shortLabel: 'Signal Truth', signoffLocation: 'Control Room → Phase 1' },
-  { id: 'P2', shortLabel: 'Diagnostic Playbook', signoffLocation: 'Control Room → Phase 2' },
-  { id: 'P3', shortLabel: 'Autonomous Loop', signoffLocation: 'Control Room → Phase 3' },
-  { id: 'P4', shortLabel: 'Hermes First Task', signoffLocation: 'Control Room → Phase 4' },
-  { id: 'P5', shortLabel: 'Flight Director', signoffLocation: 'Control Room → Phase 5' },
-  { id: 'P6', shortLabel: 'Flight Director Ops', signoffLocation: 'Control Room → Phase 6' },
+  { id: 'P1', shortLabel: 'Signal Truth', signoffLocation: 'Mission Control → Control Room → Phase 1' },
+  { id: 'P2', shortLabel: 'Diagnostic Playbook', signoffLocation: 'Mission Control → Control Room → Phase 2' },
+  { id: 'P3', shortLabel: 'Autonomous Loop', signoffLocation: 'Mission Control → Control Room → Phase 3' },
+  { id: 'P4', shortLabel: 'Hermes First Task', signoffLocation: 'Mission Control → Control Room → Phase 4' },
+  { id: 'P5', shortLabel: 'Flight Director', signoffLocation: 'Mission Control → Control Room → Phase 5' },
+  { id: 'P6', shortLabel: 'Flight Director Ops', signoffLocation: 'Mission Control → Control Room → Phase 6' },
 ]
 
 const SIGNED_OFF: Record<MissionSignalPhaseId, () => boolean> = {

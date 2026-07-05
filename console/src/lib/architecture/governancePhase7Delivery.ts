@@ -22,7 +22,7 @@ export const GOVERNANCE_PHASE7_DELIVERY_ITEMS: GovernancePhase7DeliveryItem[] = 
     summary:
       'Blueprint shows P1–P6 sign-off progress strip — all six phases marked ✓ when Owner has signed each phase panel.',
     verifySteps: [
-      'Architecture → Blueprint — “Governance program” strip shows P1–P6 tags.',
+      'Governance → Blueprint — “Governance program” strip shows P1–P6 tags.',
       'Each tag shows ✓ when that phase is signed off in its home panel.',
       'When all six signed, strip reads “All phases signed — ready for Phase 7 program closure”.',
     ],
@@ -33,7 +33,7 @@ export const GOVERNANCE_PHASE7_DELIVERY_ITEMS: GovernancePhase7DeliveryItem[] = 
     summary:
       'Briefing Reconciliation gate-catalog-spine-parity documents Constitution check (no progress prose on spine-bound rows).',
     verifySteps: [
-      'Agent → Briefing Reconciliation → Reconcile gate table — gate-catalog-spine-parity condition mentions Constitution / spine-bound rows.',
+      'Governance → Briefing Reconciliation → Reconcile gate table — gate-catalog-spine-parity condition mentions Constitution / spine-bound rows.',
       'Catalog ↔ spine drift panel shows SYNCED (not legacy IN_PROGRESS vs SIGNED sample).',
     ],
   },
@@ -54,8 +54,8 @@ export const GOVERNANCE_PHASE7_DELIVERY_ITEMS: GovernancePhase7DeliveryItem[] = 
       'Owner can navigate to every phase sign-off panel: P1/P3/P5 Blueprint, P2 Delivery, P4/P6 Briefing Reconciliation.',
     verifySteps: [
       'Blueprint — Phase 1, 3, 5 panels visible (historical SIGNED ok).',
-      'Operate → Delivery — Phase 2 panel visible.',
-      'Agent → Briefing Reconciliation — Phase 4 and Phase 6 panels visible.',
+      'Rocket → Trade Release — Phase 2 panel visible.',
+      'Governance → Briefing Reconciliation — Phase 4 and Phase 6 panels visible.',
     ],
   },
   {

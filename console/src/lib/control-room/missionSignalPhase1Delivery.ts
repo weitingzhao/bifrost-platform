@@ -16,7 +16,7 @@ export const MISSION_SIGNAL_PHASE1_DELIVERY_ITEMS: MissionSignalPhase1DeliveryIt
     summary:
       'platform-api on Mac resolves PG/Redis via cluster/postgres + cluster/redis signals; matrix target detail shows cluster_api (not TCP dial failed on *.svc.cluster.local).',
     verifySteps: [
-      'Open Observe → Matrix — dev/stg/prod postgres and redis rows show reachability ok.',
+      'Open Mission Control → Runtime Map — dev/stg/prod postgres and redis rows show reachability ok.',
       'Target detail includes cluster_api (e.g. database bifrost_dev or live=ok queue=ok).',
       'No TCP dial failed: lookup *.svc.cluster.local on postgres/redis targets.',
     ],
@@ -47,7 +47,7 @@ export const MISSION_SIGNAL_PHASE1_DELIVERY_ITEMS: MissionSignalPhase1DeliveryIt
       'Promote / cutover strip and coupling gate no longer list postgres matrix fail when cluster datastore is healthy.',
     verifySteps: [
       'Control Room → Promote / cutover — primary blocker is not “Prod matrix has failing targets” for postgres alone.',
-      'Operate → Promote coupling gate matches Control Room when matrix datastore is ok.',
+      'Rocket → Trade Release coupling gate matches Control Room when matrix datastore is ok.',
     ],
   },
   {

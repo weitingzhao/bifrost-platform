@@ -1,16 +1,18 @@
 import type { ShellNavGroup } from '@bifrost/ui'
 import {
   Activity,
-  Boxes,
+  BookOpen,
   Bot,
+  Boxes,
+  Building2,
   CalendarClock,
   ClipboardList,
   Code2,
   Container,
   Cpu,
-  Eye,
   FileCode2,
   Gauge,
+  Handshake,
   History,
   LifeBuoy,
   Map,
@@ -19,6 +21,7 @@ import {
   Network,
   Orbit,
   Plug,
+  Rocket,
   Ruler,
   Scale,
   Server,
@@ -26,35 +29,87 @@ import {
   ShieldCheck,
   Terminal,
   Workflow,
-  Zap,
 } from 'lucide-react'
 
 /**
- * Ops Console sidebar — four top-level groups.
+ * Ops Console sidebar — seven system-domain groups (Apollo model).
  *
- * Three are LENSES on the managed system (rocket = Ops Platform, payload = Trade);
- * one is the ACTOR's own home (engineer = AI Agent). The lenses describe what the
- * Owner does to the system; the Agent plane is everything ABOUT the engineer itself.
+ * Instead of verb-based lenses (Observe / Operate / Architecture) the
+ * navigation is organised by **system domain** so each domain self-contains
+ * its observe, operate, and governance dimensions.
  *
- * | Group        | Axis    | Intent                                              |
- * |--------------|---------|-----------------------------------------------------|
- * | Agent        | actor   | The engineer's home — workspace, doctrine, L-1 plane|
- * | Operate      | lens    | L1/L2 actuation — release, cluster, tools           |
- * | Observe      | lens    | L0 probes — live status, audit                      |
- * | Architecture | lens    | PLAN static — rocket governance, K3s, standards     |
+ * | Group            | Domain                | Intent                                           |
+ * |------------------|-----------------------|--------------------------------------------------|
+ * | Mission Control  | Cross-domain ops hub  | Flight-director big board, topology, audit        |
+ * | Rocket           | Ops Platform itself   | K8s cluster, releases, scheduling                 |
+ * | Ground Systems   | Infrastructure        | Server console, network, compute                  |
+ * | Subcontractors   | External plugins      | Delivery Board, IB Gateway, future plugins        |
+ * | Engineer         | AI Agent              | Workspace, autonomous, trust, L-1 plane           |
+ * | Governance       | Cross-domain ref lib  | Strategic vision, standards, AI strategy           |
  *
- * Agent is fate-isolated from the system it services (bootstrap paradox, decision D7):
- *   Agent → Workspace: Agent Desk (dispatch) · Agent Briefing (session entry)
- *   Agent → Autonomous: Skills (Hermes scheduled) · Execution Log (history)
- *   Agent → Governance: Performance (KPIs) · Trust & Autonomy (per-Skill L0/L1/L2)
- *   Agent → Doctrine: Agent Protocol (modes) · Briefing Reconciliation (spine projection) · MCP Contract (tool contract)
- *   Agent → Operator Plane (L-1): runner + Hermes heartbeats, dual-Mini deploy, watchdog
+ * Engineer is fate-isolated from the system it services (bootstrap paradox, D7).
+ * Governance merges the former Architecture + Agent Doctrine pages into a
+ * unified reference library.
  */
 export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
   {
-    label: 'Agent',
-    icon: Bot,
+    label: 'Mission Control',
+    icon: Gauge,
     defaultOpen: true,
+    subGroups: [
+      {
+        label: '',
+        items: [
+          { id: 'control-room', label: 'Control Room', icon: Gauge },
+          { id: 'runtime-map', label: 'Runtime Map', icon: Map },
+          { id: 'defects', label: 'Defects', icon: Microscope },
+          { id: 'audit', label: 'Audit', icon: History },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Rocket',
+    icon: Rocket,
+    subGroups: [
+      {
+        label: '',
+        items: [
+          { id: 'cluster', label: 'Cluster', icon: Server },
+          { id: 'trade-release', label: 'Trade Release', icon: Workflow },
+          { id: 'platform-release', label: 'Platform Release', icon: Container },
+          { id: 'placement', label: 'Placement', icon: Network },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Ground Systems',
+    icon: Building2,
+    subGroups: [
+      {
+        label: '',
+        items: [
+          { id: 'console', label: 'Server Console', icon: Terminal },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Subcontractors',
+    icon: Handshake,
+    subGroups: [
+      {
+        label: '',
+        items: [
+          { id: 'delivery-board', label: 'Delivery Board', icon: ClipboardList },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Engineer',
+    icon: Bot,
     subGroups: [
       {
         label: 'Workspace',
@@ -72,18 +127,9 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         ],
       },
       {
-        label: 'Governance',
+        label: 'Trust',
         items: [
           { id: 'agent-governance', label: 'Trust & Autonomy', icon: ShieldCheck },
-        ],
-      },
-      {
-        label: 'Doctrine',
-        items: [
-          { id: 'agent-system', label: 'Agent System', icon: Boxes },
-          { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
-          { id: 'briefing-reconciliation', label: 'Briefing Reconciliation', icon: Scale },
-          { id: 'mcp-contract', label: 'MCP Contract', icon: Plug },
         ],
       },
       {
@@ -95,61 +141,11 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
     ],
   },
   {
-    label: 'Operate',
-    icon: Zap,
+    label: 'Governance',
+    icon: BookOpen,
     subGroups: [
       {
-        label: 'Delivery',
-        items: [
-          { id: 'delivery-board', label: 'Delivery Board', icon: ClipboardList },
-        ],
-      },
-      {
-        label: 'Release',
-        items: [
-          { id: 'trade-release', label: 'Trade Release', icon: Workflow },
-          { id: 'platform-release', label: 'Platform Release', icon: Container },
-        ],
-      },
-      {
-        label: 'Cluster ops',
-        items: [
-          { id: 'cluster', label: 'Cluster', icon: Server },
-          { id: 'console', label: 'Server Console', icon: Terminal },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'Observe',
-    icon: Eye,
-    subGroups: [
-      {
-        label: 'Diagnosis',
-        items: [
-          { id: 'control-room', label: 'Control Room', icon: Gauge },
-          { id: 'runtime-map', label: 'Runtime Map', icon: Map },
-          { id: 'defects', label: 'Defects', icon: Microscope },
-        ],
-      },
-      {
-        label: 'Scheduling',
-        items: [{ id: 'placement', label: 'Placement', icon: Network }],
-      },
-      {
-        label: 'Audit',
-        items: [
-          { id: 'audit', label: 'Audit', icon: History },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'Architecture',
-    icon: Boxes,
-    subGroups: [
-      {
-        label: 'Governance',
+        label: 'Strategic',
         items: [
           { id: 'flywheel-vision', label: 'Vision', icon: Orbit },
           { id: 'blueprint', label: 'Blueprint', icon: Boxes },
@@ -157,53 +153,63 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         ],
       },
       {
-        label: 'AI',
-        items: [
-          { id: 'ai-compute', label: 'AI Compute Strategy', icon: Cpu },
-        ],
-      },
-      {
         label: 'Standards',
         items: [
           { id: 'platform-standards', label: 'Platform', icon: Shield },
+          { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
+          { id: 'agent-system', label: 'Agent System', icon: Boxes },
+          { id: 'mcp-contract', label: 'MCP Contract', icon: Plug },
           { id: 'design-system', label: 'Design System', icon: Ruler },
+          { id: 'briefing-reconciliation', label: 'Briefing Reconciliation', icon: Scale },
+        ],
+      },
+      {
+        label: 'AI Strategy',
+        items: [
+          { id: 'ai-compute', label: 'AI Compute Strategy', icon: Cpu },
         ],
       },
     ],
   },
 ]
 
-export type ConsoleNavPlane = 'Agent' | 'Operate' | 'Observe' | 'Architecture'
+export type ConsoleNavPlane =
+  | 'Mission Control'
+  | 'Rocket'
+  | 'Ground Systems'
+  | 'Subcontractors'
+  | 'Engineer'
+  | 'Governance'
 
 /** Map view tab id → sidebar plane (for headers, briefing packs, catalog cross-refs). */
 export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
-  'agent-desk': 'Agent',
-  briefing: 'Agent',
-  'autonomous-skills': 'Agent',
-  'execution-log': 'Agent',
-  'agent-governance': 'Agent',
-  'agent-system': 'Agent',
-  'agent-protocol': 'Agent',
-  'briefing-reconciliation': 'Agent',
-  'mcp-contract': 'Agent',
-  'operator-plane': 'Agent',
-  'dev-agent': 'Agent',
-  'delivery-board': 'Operate',
-  'trade-release': 'Operate',
-  'platform-release': 'Operate',
-  cluster: 'Operate',
-  placement: 'Observe',
-  console: 'Operate',
-  'control-room': 'Observe',
-  'runtime-map': 'Observe',
-  audit: 'Observe',
-  defects: 'Observe',
-  blueprint: 'Architecture',
-  'flywheel-vision': 'Architecture',
-  roadmap: 'Architecture',
-  'ai-compute': 'Architecture',
-  'platform-standards': 'Architecture',
-  'design-system': 'Architecture',
+  'control-room': 'Mission Control',
+  'runtime-map': 'Mission Control',
+  defects: 'Mission Control',
+  audit: 'Mission Control',
+  cluster: 'Rocket',
+  'trade-release': 'Rocket',
+  'platform-release': 'Rocket',
+  placement: 'Rocket',
+  console: 'Ground Systems',
+  'delivery-board': 'Subcontractors',
+  'agent-desk': 'Engineer',
+  briefing: 'Engineer',
+  'dev-agent': 'Engineer',
+  'autonomous-skills': 'Engineer',
+  'execution-log': 'Engineer',
+  'agent-governance': 'Engineer',
+  'operator-plane': 'Engineer',
+  'flywheel-vision': 'Governance',
+  blueprint: 'Governance',
+  roadmap: 'Governance',
+  'platform-standards': 'Governance',
+  'agent-protocol': 'Governance',
+  'agent-system': 'Governance',
+  'mcp-contract': 'Governance',
+  'design-system': 'Governance',
+  'briefing-reconciliation': 'Governance',
+  'ai-compute': 'Governance',
 }
 
 export function consoleNavPlane(tabId: string): ConsoleNavPlane | undefined {

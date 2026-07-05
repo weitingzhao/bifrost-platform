@@ -197,7 +197,7 @@ export function GovernancePhase4SignoffPanel() {
       <ConfirmDialog
         open={signConfirmOpen}
         title="Sign off Governance Phase 4"
-        message="Confirm catalog-spine parity is detected as CATALOG_DRIFT warnings, milestone refs are validated, and nightly/CI scanners cover Architecture catalogs."
+        message="Confirm catalog-spine parity is detected as CATALOG_DRIFT warnings, milestone refs are validated, and nightly/CI scanners cover Governance catalogs."
         confirmLabel="Confirm sign-off"
         onConfirm={handleSignOff}
         onCancel={() => setSignConfirmOpen(false)}

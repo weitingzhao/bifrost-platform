@@ -93,7 +93,7 @@ export function NetworkGovernancePhase6SignoffPanel() {
       {panelExpanded && (
         <div className="mt-3 flex flex-col gap-3">
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Verify Network Health panel on Observe → Control Room (catalog + spine projection, not live UniFi API),
+            Verify Network Health panel on Mission Control → Control Room (catalog + spine projection, not live UniFi API),
             then sign off (v{NETWORK_GOVERNANCE_PHASE6_VERSION}).
           </p>
 

@@ -240,7 +240,7 @@ export function PipelineRunsPanel({
       description={
         allowActuation
           ? undefined
-          : 'Tekton run history and logs — start deliver on Operate, then inspect here.'
+          : 'Tekton run history and logs — start deliver on Rocket → Trade Release, then inspect here.'
       }
       actions={
         <SectionRefreshButton
@@ -395,7 +395,7 @@ export function PipelineRunsPanel({
                   <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
                     {allowActuation
                       ? 'No runs yet — click Run above (operator token required)'
-                      : 'No runs yet — run deliver on Operate, then refresh here'}
+                      : 'No runs yet — run deliver on Rocket → Trade Release, then refresh here'}
                   </DenseTableCell>
                 </DenseTableRow>
               ) : (

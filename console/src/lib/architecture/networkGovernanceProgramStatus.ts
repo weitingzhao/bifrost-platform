@@ -15,13 +15,13 @@ export type NetworkGovernancePhaseMeta = {
 }
 
 export const NETWORK_GOVERNANCE_PROGRAM_PHASES: NetworkGovernancePhaseMeta[] = [
-  { id: 'NG1', shortLabel: 'Constitution', signoffLocation: 'Architecture → Blueprint' },
-  { id: 'NG2', shortLabel: 'AI capabilities', signoffLocation: 'Architecture → Blueprint' },
-  { id: 'NG3', shortLabel: 'Spine', signoffLocation: 'Architecture → Blueprint' },
-  { id: 'NG4', shortLabel: 'Agent Protocol', signoffLocation: 'Architecture → Blueprint' },
-  { id: 'NG5', shortLabel: 'Network Upgrade', signoffLocation: 'Architecture → Blueprint' },
-  { id: 'NG6', shortLabel: 'Control Room', signoffLocation: 'Architecture → Blueprint' },
-  { id: 'NG7', shortLabel: 'Network API', signoffLocation: 'Architecture → Blueprint' },
+  { id: 'NG1', shortLabel: 'Constitution', signoffLocation: 'Governance → Blueprint' },
+  { id: 'NG2', shortLabel: 'AI capabilities', signoffLocation: 'Governance → Blueprint' },
+  { id: 'NG3', shortLabel: 'Spine', signoffLocation: 'Governance → Blueprint' },
+  { id: 'NG4', shortLabel: 'Agent Protocol', signoffLocation: 'Governance → Blueprint' },
+  { id: 'NG5', shortLabel: 'Network Upgrade', signoffLocation: 'Governance → Blueprint' },
+  { id: 'NG6', shortLabel: 'Control Room', signoffLocation: 'Governance → Blueprint' },
+  { id: 'NG7', shortLabel: 'Network API', signoffLocation: 'Governance → Blueprint' },
 ]
 
 const SIGNED_OFF: Record<NetworkGovernancePhaseId, () => boolean> = {

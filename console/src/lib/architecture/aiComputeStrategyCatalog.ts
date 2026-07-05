@@ -1,7 +1,7 @@
 /**
  * AI Compute Strategy — model sourcing, inference hardware, and tiered compute allocation.
  *
- * Authoritative source for Ops Console → Architecture → AI → AI Compute Strategy.
+ * Authoritative source for Ops Console → Governance → AI Strategy → AI Compute Strategy.
  * Created 2026-06-29 from an extended Agent/Owner discussion covering:
  *  - LLM token sourcing economics (Cursor vs Codex OAuth vs OpenAI API vs OpenRouter vs self-hosted)
  *  - local inference hardware (Mac Studio M4 Max/M3 Ultra vs AMD AI Max 395 vs NVIDIA DGX Spark vs RTX 4090)

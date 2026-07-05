@@ -1,7 +1,7 @@
 /**
  * Dual Flywheel Vision — Ultimate North Star for Bifrost Trade + Ops Platform.
  *
- * Authoritative source for Ops Console → Architecture → Dual Flywheel Vision.
+ * Authoritative source for Ops Console → Governance → Vision.
  * This catalog defines the convergence target: Trade (Flywheel A) and Ops Platform
  * (Flywheel B) merge into a unified AI-native development, operations, and business
  * intelligence experience powered by K3s, Cursor SDK, and MCP protocol.
@@ -121,7 +121,7 @@ export const AGENT_LAYERS: AgentLayerRow[] = [
   {
     layer: 2,
     name: 'Ops Agent',
-    scope: 'Observe → Diagnosis → Scheduling → Operate → Cluster ops → Audit',
+    scope: 'Mission Control → Rocket → Mission Control → Audit',
     examples: [
       'AlertManager webhook → read logs/metrics → root cause summary',
       'L1: rollout restart, scale, Celery purge (auto + audit)',

@@ -47,7 +47,7 @@ export const MISSION_SIGNAL_PHASE3_DELIVERY_ITEMS: MissionSignalPhase3DeliveryIt
     id: 'MSP3-4',
     title: 'Agent Protocol documents post-fix validation loop',
     summary:
-      'Architecture → Agent Protocol includes Mission post-fix validation loop (verify_mission_snapshot required before close).',
+      'Governance → Agent Protocol includes Mission post-fix validation loop (verify_mission_snapshot required before close).',
     verifySteps: [
       'Agent Protocol page — “Mission post-fix validation loop” section with 3 steps.',
       'Agent task catalog includes Health · Post-fix (post-fix-verification scope).',

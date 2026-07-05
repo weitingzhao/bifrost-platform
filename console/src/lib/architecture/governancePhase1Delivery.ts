@@ -18,7 +18,7 @@ export const GOVERNANCE_PHASE1_DELIVERY_ITEMS: GovernancePhase1DeliveryItem[] = 
     summary:
       'Blueprint page shows Governance layers (Constitution / Spine / Projection) and BOUNDARY_RULES; North Star through AI boundaries sit under Constitution.',
     verifySteps: [
-      'Open Architecture → Blueprint — “Governance boundary” section lists three layers and decision rules.',
+      'Open Governance → Blueprint — “Governance boundary” section lists three layers and decision rules.',
       'Constitution block tag appears above North Star; Projection block appears after Success criteria.',
       'Copy Prompt for LLM output has “## Constitution” and “## Projection” sections.',
     ],
@@ -42,7 +42,7 @@ export const GOVERNANCE_PHASE1_DELIVERY_ITEMS: GovernancePhase1DeliveryItem[] = 
     verifySteps: [
       'No “Platform API endpoints” static table on Blueprint page.',
       'Projection section shows authority pointers and live MCP tool count.',
-      'Architecture → MCP Contract still mirrors the same catalog.',
+      'Governance → MCP Contract still mirrors the same catalog.',
     ],
   },
   {

@@ -15,7 +15,7 @@ export function clusterProbeHeaderLines(
     'Mode: Ops',
     '',
     '## K3s cluster category snapshot',
-    'Source: Ops Console → Operate → Cluster → category Copy for LLM',
+    'Source: Ops Console → Rocket → Cluster → category Copy for LLM',
   ]
   if (clusterLabel != null && clusterLabel !== '') {
     lines.push(`Cluster: ${clusterLabel}${clusterId != null && clusterId !== '' ? ` (${clusterId})` : ''}`)

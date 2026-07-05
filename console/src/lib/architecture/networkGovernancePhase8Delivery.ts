@@ -22,7 +22,7 @@ export const NETWORK_GOVERNANCE_PHASE8_DELIVERY_ITEMS: NetworkGovernancePhase8De
     summary:
       'Blueprint shows NG1–NG7 sign-off progress strip — each phase tag shows ✓ when Owner has signed that phase panel.',
     verifySteps: [
-      'Architecture → Blueprint — “Network Governance program” strip shows NG1–NG7 tags.',
+      'Governance → Blueprint — “Network Governance program” strip shows NG1–NG7 tags.',
       'Each tag shows ✓ when that phase is signed off in its panel below.',
       'When all seven signed, strip reads “All phases signed — ready for Phase 8 program closure”.',
     ],
@@ -35,7 +35,7 @@ export const NETWORK_GOVERNANCE_PHASE8_DELIVERY_ITEMS: NetworkGovernancePhase8De
     verifySteps: [
       'Blueprint → Design principles — Principle 8 “Network is the ground floor”.',
       'Program / Briefing — D9 Session v2 and network-upgrade-core / network-upgrade-wifi streams visible.',
-      'Architecture → Network Upgrade, Network API; Control Room → Network Health panel loads catalog projection.',
+      'Governance → Standards; Control Room → Network Health panel loads catalog projection.',
     ],
   },
   {

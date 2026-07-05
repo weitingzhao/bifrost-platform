@@ -26,9 +26,9 @@ export const GOVERNANCE_PHASE6_DELIVERY_ITEMS: GovernancePhase6DeliveryItem[] = 
     id: 'GP6-2',
     title: 'Deploy Mainline page live Projection',
     summary:
-      'Operate → Deploy Mainline resolves status via resolveMainlinePhases(context) from GET /api/v1/context.',
+      'Rocket → Trade Release resolves status via resolveMainlinePhases(context) from GET /api/v1/context.',
     verifySteps: [
-      'Open Operate → Deploy Mainline — Mainline phases table shows “Projection ← spine” note.',
+      'Open Rocket → Trade Release — Mainline phases table shows “Projection ← spine” note.',
       'Seq 5 (2c-b-prod-cutover) status tag matches spine (e.g. SIGNED), not hardcoded IN_PROGRESS.',
       'Spine milestone id secondary tag appears on seq 4/5/7 rows when context loads.',
     ],
@@ -39,7 +39,7 @@ export const GOVERNANCE_PHASE6_DELIVERY_ITEMS: GovernancePhase6DeliveryItem[] = 
     summary:
       'gate-catalog-spine-parity checks Constitution (no progress prose on spine-bound rows) — live panel shows SYNCED.',
     verifySteps: [
-      'Open Agent → Briefing Reconciliation — Catalog ↔ spine drift panel shows SYNCED (green).',
+      'Open Governance → Briefing Reconciliation — Catalog ↔ spine drift panel shows SYNCED (green).',
       'No CATALOG_DRIFT finding for deployMainline seq 5 vs 2c-b-prod-cutover.',
     ],
   },

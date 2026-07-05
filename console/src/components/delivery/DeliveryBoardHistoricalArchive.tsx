@@ -32,7 +32,7 @@ export function DeliveryBoardHistoricalArchive() {
         <CatalogSection title="Historical mainline phases">
           <p className="m-0 px-3 py-2 text-dense-meta text-muted-foreground">
             Completed phases from the migration decision chain. Live spine state: Control Room /
-            Agent → Briefing Reconciliation.
+            Governance → Briefing Reconciliation.
           </p>
           <DenseDataTable>
             <DenseTableHeader>

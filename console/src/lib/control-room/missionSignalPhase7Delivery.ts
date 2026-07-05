@@ -33,7 +33,7 @@ export const MISSION_SIGNAL_PHASE7_DELIVERY_ITEMS: MissionSignalPhase7DeliveryIt
     summary:
       'Agent Protocol documents Phases 1–6 playbooks plus Phase 7 program closure — single doctrine reference for Agent modes.',
     verifySteps: [
-      'Agent → Agent Protocol — sections for Phases 1–6 (Signal Truth through Flight Director operations).',
+      'Governance → Agent Protocol — sections for Phases 1–6 (Signal Truth through Flight Director operations).',
       '“Mission Signal Program closure (Phase 7)” section lists maintenance-mode expectations.',
       'Copy pack / LLM appendix includes Mission Signal closure paragraph.',
     ],

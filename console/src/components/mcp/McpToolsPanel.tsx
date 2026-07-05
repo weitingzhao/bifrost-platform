@@ -60,7 +60,7 @@ const ACCEPTANCE_STEPS = [
   {
     phase: 'P1–P2',
     title: 'Control Room + Cluster wizard',
-    path: 'Observe → Control Room',
+    path: 'Mission Control → Control Room',
     checks: 'Work Tracks build lane shows Phase P5 · 10/10. Runtime → Cluster → wizard (Maintain / Compute off / Join).',
   },
   {
@@ -78,7 +78,7 @@ const ACCEPTANCE_STEPS = [
   {
     phase: 'P5',
     title: 'MCP catalog & Cursor setup',
-    path: 'Architecture → MCP Contract',
+    path: 'Governance → MCP Contract',
     checks: 'Tool catalog mirrors platform-api. Paste Cursor config into ~/.cursor/mcp.json — verify in Cursor Settings → Tools & MCP.',
   },
 ] as const

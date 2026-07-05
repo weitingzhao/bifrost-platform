@@ -1,7 +1,7 @@
 /**
  * Agent Protocol catalog — Agent Modes, context packs, forbidden actions.
  *
- * Authoritative source for Ops Console → Architecture → Agent Protocol.
+ * Authoritative source for Ops Console → Governance → Agent Protocol.
  * Single source of truth — do not duplicate elsewhere.
  */
 
@@ -35,7 +35,7 @@ export const AGENT_MODES: AgentModeRow[] = [
   {
     mode: 'Promote',
     flywheel: 'A + B coupling',
-    defaultUI: 'Promote → Platform Release · Observe → Audit',
+    defaultUI: 'Rocket → Platform Release · Mission Control → Audit',
     agentMay: 'Query release-state, deploy via start_pipeline_run, run gates, verify smoke; follow next_action guidance',
     agentMustNot: 'Skip blockers (D1, gate), deploy PROD with different revision than STG, bypass admin role for gates; Promote rollout that enables live trading (D10 BLOCKED)',
   },
@@ -351,7 +351,7 @@ export const MISSION_SIGNAL_CLOSURE_STEPS: FlightDirectorStep[] = [
     detail: 'P1–P6 tags show ✓ when Owner signed each phase panel; all six unlock Phase 7 closure.',
   },
   {
-    step: '2. Doctrine reference',
+    step: '2. Agent Protocol reference',
     tool: 'Agent Protocol',
     required: true,
     detail: 'Phases 1–6 playbooks + this closure section — single Mission Signal arc for Agent modes.',

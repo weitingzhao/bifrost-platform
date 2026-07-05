@@ -91,7 +91,7 @@ export function VisionV3GatePanel() {
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{gate.detail}</span>
         )}
         <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Audit trail: Observe → Audit
+          Audit trail: Mission Control → Audit
         </span>
       </div>
       {runError != null && <p className="m-0 mb-2 text-[var(--destructive)] text-[var(--text-dense-meta)]">{runError}</p>}

@@ -36,7 +36,7 @@ export const MISSION_SIGNAL_PHASE4_DELIVERY_ITEMS: MissionSignalPhase4DeliveryIt
     id: 'MSP4-3',
     title: 'Agent Protocol documents Hermes First Task playbook',
     summary:
-      'Architecture → Agent Protocol includes Hermes First Task section (readiness gate + L0 steps). Agent task catalog lists Hermes · First task.',
+      'Governance → Agent Protocol includes Hermes First Task section (readiness gate + L0 steps). Agent task catalog lists Hermes · First task.',
     verifySteps: [
       'Agent Protocol page — “Hermes First Task (L0)” section with readiness MCP + task steps.',
       'Agent task catalog includes Hermes · First task (hermes-first-task scope).',

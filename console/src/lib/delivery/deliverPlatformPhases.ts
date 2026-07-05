@@ -25,5 +25,5 @@ export const PLATFORM_GITOPS_PHASE1_ITEMS = [
   'Argo Application bifrost-platform-stg + bifrost-platform-prod',
   'Tekton pipeline bifrost-deliver-platform + bifrost-deliver-platform-prod',
   'make k3s-deliver-platform + sync-platform-k8s-config',
-  'Ops Console Platform Release page (Operate → Platform)',
+  'Ops Console Platform Release page (Rocket → Platform Release)',
 ] as const

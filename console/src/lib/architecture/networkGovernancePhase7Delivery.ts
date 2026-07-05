@@ -62,7 +62,7 @@ export const NETWORK_GOVERNANCE_PHASE7_DELIVERY_ITEMS: NetworkGovernancePhase7De
     summary:
       'Blueprint mounts Network Governance Phase 7 sign-off panel (NG7-1..NG7-5); Phases 1–6 show SIGNED before signing Phase 7.',
     verifySteps: [
-      'Architecture → Blueprint → Network Governance Phase 7 · Network API contract sign-off panel.',
+      'Governance → Blueprint → Network Governance Phase 7 · Network API contract sign-off panel.',
       'Mark all NG7 items verified → Sign off Network Phase 7 delivery (Admin token).',
       'Sign-off confirms contract planning only — live platform-api routes remain future work.',
     ],
