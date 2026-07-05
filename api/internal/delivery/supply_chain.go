@@ -50,6 +50,15 @@ var pipelineMirrorRepos = map[string][]string{
 		"bifrost-trade-infra",
 		"bifrost-ui",
 	},
+	"bifrost-deliver-prod": {
+		"bifrost-trade-core",
+		"bifrost-trade-worker",
+		"bifrost-trade-socket",
+		"bifrost-trade-api",
+		"bifrost-trade-frontend",
+		"bifrost-trade-infra",
+		"bifrost-ui",
+	},
 }
 
 // reposForPipeline returns the clone repos for a pipeline, falling back to all

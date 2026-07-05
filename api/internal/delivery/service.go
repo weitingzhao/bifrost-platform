@@ -251,7 +251,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 			"name": pipelineName,
 		},
 	}
-	if pipelineName == "bifrost-deliver-stg" || pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" {
+	if pipelineName == "bifrost-deliver-stg" || pipelineName == "bifrost-deliver-prod" || pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" {
 		spec["params"] = []map[string]any{
 			{"name": "revision", "value": rev},
 		}
@@ -263,6 +263,13 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 		spec["taskRunTemplate"] = amd64CITaskRunTemplate()
 	}
 	if pipelineName == "bifrost-deliver-stg" {
+		spec["taskRunSpecs"] = []map[string]any{
+			{"pipelineTaskName": "prepare", "serviceAccountName": "tekton-deliver"},
+			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
+			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
+		}
+	}
+	if pipelineName == "bifrost-deliver-prod" {
 		spec["taskRunSpecs"] = []map[string]any{
 			{"pipelineTaskName": "prepare", "serviceAccountName": "tekton-deliver"},
 			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
@@ -433,7 +440,7 @@ func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 		},
 	}
 	switch pipelineName {
-	case "bifrost-deliver-stg":
+	case "bifrost-deliver-stg", "bifrost-deliver-prod":
 		return []map[string]any{
 			map[string]any{
 				"name": "build-context",

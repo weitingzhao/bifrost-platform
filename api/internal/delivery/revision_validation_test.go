@@ -47,6 +47,10 @@ func TestReposForPipeline(t *testing.T) {
 	if len(trade) != 7 {
 		t.Fatalf("trade repos = %v, want 7", trade)
 	}
+	prod := reposForPipeline("bifrost-deliver-prod")
+	if len(prod) != 7 {
+		t.Fatalf("deliver-prod repos = %v, want 7", prod)
+	}
 	unknown := reposForPipeline("does-not-exist")
 	if len(unknown) != len(trackedGiteaRepos) {
 		t.Fatalf("unknown pipeline should fall back to all tracked repos")
