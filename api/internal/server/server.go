@@ -12,12 +12,12 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/briefing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
@@ -28,55 +28,59 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
-	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
+	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/retrospective"
+	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/sessionsnapshot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
+	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/vision"
 )
 
 type Server struct {
-	cfg     *config.Config
-	prober  *probe.Prober
-	console *console.Handler
-	cluster *cluster.Handler
-	gitops  *gitops.Handler
-	mcp     *mcp.Handler
-	stack   *stack.Handler
-	delivery *delivery.Handler
-	promote  *promote.Handler
-	vision    *vision.Handler
-	buildgate *buildgate.Handler
-	migratewave *migratewave.Handler
-	tradeagent *tradeagent.Handler
-	devagent   *devagent.Handler
-	opsagent     *opsagent.Handler
-	remediation  *remediation.Handler
-	agentreport  *agentreport.Handler
-	agentbridge  *agentbridge.Handler
+	cfg             *config.Config
+	prober          *probe.Prober
+	console         *console.Handler
+	cluster         *cluster.Handler
+	gitops          *gitops.Handler
+	mcp             *mcp.Handler
+	stack           *stack.Handler
+	delivery        *delivery.Handler
+	promote         *promote.Handler
+	vision          *vision.Handler
+	buildgate       *buildgate.Handler
+	migratewave     *migratewave.Handler
+	tradeagent      *tradeagent.Handler
+	devagent        *devagent.Handler
+	opsagent        *opsagent.Handler
+	remediation     *remediation.Handler
+	agentreport     *agentreport.Handler
+	agentbridge     *agentbridge.Handler
 	agentgovernance *agentgovernance.Handler
-	agentdeploy  *agentdeploy.Handler
-	driftproposal  *driftproposal.Handler
-	hermesgateway  *hermesgateway.Handler
+	agentdeploy     *agentdeploy.Handler
+	driftproposal   *driftproposal.Handler
+	hermesgateway   *hermesgateway.Handler
 	hermesreadiness *hermesreadiness.Handler
-	retrospective  *retrospective.Handler
-	selfhealth     *selfhealth.Handler
+	retrospective   *retrospective.Handler
+	satellite       *satellite.Handler
+	selfhealth      *selfhealth.Handler
 	sessionsnapshot *sessionsnapshot.Handler
 	briefing        *briefing.Handler
 	network         *network.Handler
 	ibgateway       *ibgateway.Handler
-	auth           *actuation.AuthService
-	audit   *actuation.AuditLog
-	jobs    *actuation.JobStore
+	telemetry       *telemetry.Handler
+	auth            *actuation.AuthService
+	audit           *actuation.AuditLog
+	jobs            *actuation.JobStore
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -97,38 +101,40 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("devagent: %w", err)
 	}
 	return &Server{
-		cfg:     cfg,
-		prober:  prober,
-		console: console.NewHandlerWithCluster(cfg, clusterH),
-		cluster: clusterH,
-		gitops:  gitopsH,
-		mcp:     mcp.NewHandler(),
-		stack:   stack.NewHandler(cfg, audit),
-		delivery: delivery.NewHandler(cfg, audit),
-		promote:  promoteH,
-		vision:    vision.NewHandler(cfg, audit),
-		buildgate: buildgate.NewHandler(cfg, audit),
-		migratewave: migratewave.NewHandler(cfg, audit),
-		tradeagent: tradeagent.NewHandler(),
-		devagent:   devagentH,
-		opsagent:    opsagent.NewHandler(audit),
-		remediation: remediationH,
-		agentreport: agentreport.NewHandler(),
-		agentbridge: agentbridge.NewHandler(),
+		cfg:             cfg,
+		prober:          prober,
+		console:         console.NewHandlerWithCluster(cfg, clusterH),
+		cluster:         clusterH,
+		gitops:          gitopsH,
+		mcp:             mcp.NewHandler(),
+		stack:           stack.NewHandler(cfg, audit),
+		delivery:        delivery.NewHandler(cfg, audit),
+		promote:         promoteH,
+		vision:          vision.NewHandler(cfg, audit),
+		buildgate:       buildgate.NewHandler(cfg, audit),
+		migratewave:     migratewave.NewHandler(cfg, audit),
+		tradeagent:      tradeagent.NewHandler(),
+		devagent:        devagentH,
+		opsagent:        opsagent.NewHandler(audit),
+		remediation:     remediationH,
+		agentreport:     agentreport.NewHandler(),
+		agentbridge:     agentbridge.NewHandler(),
 		agentgovernance: agentgovernance.NewHandler(remediationH.Store()),
-		agentdeploy: agentdeploy.NewHandler(audit),
-		driftproposal:  driftproposal.NewHandler(audit),
-		hermesgateway:  hermesgateway.NewHandler(),
+		agentdeploy:     agentdeploy.NewHandler(audit),
+		driftproposal:   driftproposal.NewHandler(audit),
+		hermesgateway:   hermesgateway.NewHandler(),
 		hermesreadiness: hermesreadiness.NewHandler(),
-		retrospective:  retrospective.NewHandler(retroAnalyzer),
-		selfhealth:     selfhealth.NewHandler(cfg, gitopsH.Service()),
+		retrospective:   retrospective.NewHandler(retroAnalyzer),
+		satellite:       satellite.NewHandler(cfg),
+		selfhealth:      selfhealth.NewHandler(cfg, gitopsH.Service()),
 		sessionsnapshot: sessionsnapshot.NewHandler(),
 		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store(), clusterH),
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
-		auth:        auth,
-		audit:   audit,
-		jobs:    jobs,
+		telemetry:       telemetry.NewHandler(cfg),
+		auth:            auth,
+		audit:           audit,
+		jobs:            jobs,
 	}, nil
 }
 
@@ -151,6 +157,9 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
+		r.Get("/satellite/bus-deep", s.satellite.HandleBusDeep)
+		r.Get("/telemetry/overview", s.telemetry.HandleOverview)
+		r.Get("/telemetry/query", s.telemetry.HandleQuery)
 		r.Get("/mission/verify-payload", s.handleVerifyPayload)
 		r.Get("/mission/verify-snapshot", s.handleVerifyMissionSnapshot)
 		r.Get("/self-health", s.selfhealth.HandleSelfHealth)
@@ -326,6 +335,7 @@ func (s *Server) Router() http.Handler {
 				r.Use(s.auth.Require(actuation.RoleAdmin))
 				r.Post("/kubeconfig-secret/ensure", s.cluster.HandleEnsureKubeconfigSecret)
 				r.Post("/addons/metrics-server/ensure", s.cluster.HandleEnsureMetricsServer)
+				r.Post("/addons/kube-prometheus-stack/ensure", s.cluster.HandleEnsureKubePrometheusStack)
 				r.Post("/nodes/join", s.cluster.HandleJoinNode)
 				r.Post("/nodes/{name}/drain", s.cluster.HandleDrainNode)
 				r.Post("/nodes/{name}/poweroff", s.cluster.HandlePowerOffNode)

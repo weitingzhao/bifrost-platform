@@ -38,9 +38,15 @@ clusters:
         script: join-gpu-server.sh
         expected_node: gpu-server
     monitoring_namespace: monitoring
+    # Optional deep links for Rocket -> Observability (browser must reach these URLs).
+    # Leave empty until NodePort/ingress is confirmed post-install, or override via:
+    #   PLATFORM_GRAFANA_URL / PLATFORM_PROMETHEUS_URL
+    # In-cluster defaults after ensure (platform-api inside cluster only):
+    #   grafana: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local
+    #   prometheus: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
     observability_urls:
       grafana: ""
-      prometheus: ""
+      prometheus: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
       docs_infra: ""
     gitops:
       argocd_namespace: cicd

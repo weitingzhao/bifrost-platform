@@ -156,19 +156,21 @@ type ObservabilityComponentView struct {
 	Status       string             `json:"status"`
 	Reachability probe.Reachability `json:"reachability"`
 	Detail       string             `json:"detail"`
+	Phase        string             `json:"phase,omitempty"` // required | planned
 }
 
 type ObservabilityResponse struct {
-	ClusterID     string                       `json:"cluster_id"`
-	Namespace     string                       `json:"namespace"`
-	LayerBStatus  string                       `json:"layer_b_status"`
-	Reachability  probe.Reachability           `json:"reachability"`
-	Detail        string                       `json:"detail"`
-	Components    []ObservabilityComponentView `json:"components"`
-	GrafanaURL    string                       `json:"grafana_url,omitempty"`
-	PrometheusURL string                       `json:"prometheus_url,omitempty"`
-	DocsURL       string                       `json:"docs_url,omitempty"`
-	GeneratedAt   time.Time                    `json:"generated_at"`
+	ClusterID            string                       `json:"cluster_id"`
+	Namespace            string                       `json:"namespace"`
+	LayerBStatus         string                       `json:"layer_b_status"`
+	LayerBInstallEnabled bool                         `json:"layer_b_install_enabled"`
+	Reachability         probe.Reachability           `json:"reachability"`
+	Detail               string                       `json:"detail"`
+	Components           []ObservabilityComponentView `json:"components"`
+	GrafanaURL           string                       `json:"grafana_url,omitempty"`
+	PrometheusURL        string                       `json:"prometheus_url,omitempty"`
+	DocsURL              string                       `json:"docs_url,omitempty"`
+	GeneratedAt          time.Time                    `json:"generated_at"`
 }
 
 type FailingPodView struct {

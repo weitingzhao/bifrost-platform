@@ -1,11 +1,13 @@
 import type {
   ActuationResponse,
   AllMatricesResponse,
+  AllSatelliteBusDeepResponse,
   AuditResponse,
   AuthCapabilities,
   ClusterEventsResponse,
   ClusterMetricsResponse,
   ClusterObservabilityResponse,
+  TelemetryOverviewResponse,
   GitOpsAppsResponse,
   StackAddonsResponse,
   McpToolsResponse,
@@ -41,6 +43,7 @@ import type {
   TierBStatusResponse,
   EnvironmentSummary,
   MatrixResponse,
+  SatelliteBusDeepResponse,
   OpsContextResponse,
   PodLogsResponse,
   RolloutRestartRequest,
@@ -88,7 +91,11 @@ import type {
   CloseBriefingSessionRequest,
   CloseBriefingSessionResponse,
   NetworkAuditResponse,
+  NetworkClientsResponse,
+  NetworkDevicesResponse,
+  NetworkPoliciesResponse,
   NetworkStatusResponse,
+  NetworkZonesResponse,
   IbGatewayControlResponse,
   IbGatewayStatusResponse,
 } from './types'
@@ -184,6 +191,34 @@ export async function fetchNetworkAudit(): Promise<NetworkAuditResponse> {
   return body
 }
 
+async function fetchNetworkJson<T>(path: string): Promise<T> {
+  const r = await fetch(path)
+  const body = (await r.json()) as T
+  if (!r.ok) {
+    return {
+      ...(body as object),
+      error: (body as { error?: string }).error ?? `HTTP ${r.status}`,
+    } as T
+  }
+  return body
+}
+
+export async function fetchNetworkDevices(): Promise<NetworkDevicesResponse> {
+  return fetchNetworkJson('/api/v1/network/devices')
+}
+
+export async function fetchNetworkClients(): Promise<NetworkClientsResponse> {
+  return fetchNetworkJson('/api/v1/network/clients')
+}
+
+export async function fetchNetworkZones(): Promise<NetworkZonesResponse> {
+  return fetchNetworkJson('/api/v1/network/zones')
+}
+
+export async function fetchNetworkPolicies(): Promise<NetworkPoliciesResponse> {
+  return fetchNetworkJson('/api/v1/network/policies')
+}
+
 export async function fetchIbGatewayStatus(): Promise<IbGatewayStatusResponse> {
   const r = await fetch('/api/v1/plugins/ib-gateway/status')
   const body = (await r.json()) as IbGatewayStatusResponse
@@ -227,6 +262,21 @@ export function isAllMatrices(
   data: MatrixResponse | AllMatricesResponse
 ): data is AllMatricesResponse {
   return 'matrices' in data
+}
+
+export function isAllSatelliteBusDeep(
+  data: SatelliteBusDeepResponse | AllSatelliteBusDeepResponse
+): data is AllSatelliteBusDeepResponse {
+  return 'buses' in data
+}
+
+export async function fetchSatelliteBusDeep(
+  env?: string,
+): Promise<SatelliteBusDeepResponse | AllSatelliteBusDeepResponse> {
+  const url = env ? `/api/v1/satellite/bus-deep?env=${encodeURIComponent(env)}` : '/api/v1/satellite/bus-deep'
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`satellite bus deep: HTTP ${r.status}`)
+  return r.json() as Promise<SatelliteBusDeepResponse | AllSatelliteBusDeepResponse>
 }
 
 export async function fetchTopology(env: string): Promise<TopologyResponse> {
@@ -361,6 +411,16 @@ export async function fetchClusterObservability(): Promise<ClusterObservabilityR
   const r = await fetch('/api/v1/cluster/observability')
   if (!r.ok) throw new Error(`cluster observability: HTTP ${r.status}`)
   return r.json() as Promise<ClusterObservabilityResponse>
+}
+
+export async function fetchTelemetryOverview(ns?: string): Promise<TelemetryOverviewResponse> {
+  const query = ns != null && ns !== '' ? `?ns=${encodeURIComponent(ns)}` : ''
+  const r = await fetch(`/api/v1/telemetry/overview${query}`)
+  if (!r.ok) {
+    const detail = await r.text()
+    throw new Error(`telemetry overview: HTTP ${r.status}${detail !== '' ? ` — ${detail}` : ''}`)
+  }
+  return r.json() as Promise<TelemetryOverviewResponse>
 }
 
 export async function fetchGitOpsApps(): Promise<GitOpsAppsResponse> {
@@ -769,6 +829,17 @@ export async function ensureMetricsServer(): Promise<ActuationResponse> {
   const r = await authedFetch('ensure metrics-server', '/api/v1/cluster/addons/metrics-server/ensure', {
     method: 'POST',
   })
+  return r.json() as Promise<ActuationResponse>
+}
+
+export async function ensureKubePrometheusStack(): Promise<ActuationResponse> {
+  const r = await authedFetch(
+    'ensure kube-prometheus-stack',
+    '/api/v1/cluster/addons/kube-prometheus-stack/ensure',
+    {
+      method: 'POST',
+    },
+  )
   return r.json() as Promise<ActuationResponse>
 }
 

@@ -124,6 +124,12 @@ func (h *Handler) HandleEnsureMetricsServer(w http.ResponseWriter, r *http.Reque
 	writeActuationResponse(w, resp, err)
 }
 
+func (h *Handler) HandleEnsureKubePrometheusStack(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.svc.EnsureKubePrometheusStack()
+	h.recordAudit(r, resp.Action, resp.Target, auditStatus(err), resp.Message)
+	writeActuationResponse(w, resp, err)
+}
+
 func (h *Handler) HandleEnsureBifrost(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.EnsureBifrostNamespaces(r.Context())
 	h.recordAudit(r, resp.Action, resp.Target, auditStatus(err), resp.Message)

@@ -16,6 +16,7 @@ export type ConsoleViewTab =
   | 'audit'
   | 'runtime-map'
   | 'cluster'
+  | 'observability'
   | 'placement'
   | 'trade-release'
   | 'platform-release'
@@ -30,6 +31,12 @@ export type ConsoleViewTab =
   | 'ai-compute'
   | 'dev-agent'
   | 'console'
+  | 'network'
+  | 'compute'
+  | 'satellite-bus'
+  | 'satellite-telemetry'
+  | 'satellite-api'
+  | 'plugin-gallery'
   | 'defects'
 
 export function ConsoleSidebar({
