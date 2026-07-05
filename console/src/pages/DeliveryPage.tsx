@@ -3,6 +3,8 @@ import type { ClusterSummary, DeliveryPipelinesResponse, GitOpsAppsResponse, Mat
 import { DeliveryOperateView } from '@/components/delivery/DeliveryOperateView'
 import { DeliveryObserveView } from '@/components/delivery/DeliveryObserveView'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
+import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
+import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import { DeliveryReleaseWorkflowPanel } from '@/components/delivery/DeliveryReleaseWorkflowPanel'
 import { GovernancePhase2SignoffPanel } from '@/components/architecture/GovernancePhase2SignoffPanel'
 import { DeliveryViewShell } from '@/components/delivery/DeliveryViewShell'
@@ -178,6 +180,7 @@ export function DeliveryPage({
             onOpenDeployMainline={onOpenDeployMainline}
             onOpenPromote={onOpenPromote}
           />
+          <PlatformDeliverActuatePanel target={deliveryTargetById('trade-prod')} />
           <OpsSection title="Strategy (K3S §5)" bodyPadding="default" overflow="visible">
             <ul className="m-0 list-disc px-5 text-[var(--text-dense)]">
               {DELIVERY_STRATEGY_BULLETS.map(b => (

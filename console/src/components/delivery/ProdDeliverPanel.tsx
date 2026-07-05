@@ -36,8 +36,9 @@ export function ProdDeliverPanel({
     >
       <ul className="m-0 list-disc px-5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
         <li>
-          Pipeline <code className="font-mono-tabular">bifrost-deliver-prod</code> — trigger via
-          Operate → Pipelines tab (select pipeline → Run)
+          Pipeline <code className="font-mono-tabular">bifrost-deliver-prod</code> — trigger on{' '}
+          <strong>Operate → Delivery → Blueprint</strong> tab → <strong>Trade PROD</strong> actuation panel
+          (operator token), or Observe → History to watch runs
         </li>
         <li>
           <strong>STG preflight gate</strong> — automatically verifies STG health before any prod build;

@@ -8,7 +8,7 @@ import {
 } from '@/lib/delivery/deliverPlatformPhases'
 import { EXPECTED_DOCKERFILE_CONFIGMAPS } from '@/lib/delivery/deliverStgPhases'
 
-export type DeliveryTargetId = 'trade-stg' | 'platform-stg' | 'platform-prod'
+export type DeliveryTargetId = 'trade-stg' | 'trade-prod' | 'platform-stg' | 'platform-prod'
 
 export type DeliveryTargetConfig = {
   id: DeliveryTargetId
@@ -42,6 +42,26 @@ export const DELIVERY_TARGETS: DeliveryTargetConfig[] = [
     successLink: { href: 'http://trade-stg.bifrost.lan/', label: 'Open Trade STG gateway' },
     actuateDescription:
       'Gitea mirror → Kaniko (9 APIs + frontend + worker/socket) → rollout bifrost-stg → verify → Argo sync.',
+  },
+  {
+    id: 'trade-prod',
+    label: 'Bifrost Trade PROD',
+    shortLabel: 'Trade PROD',
+    pipeline: 'bifrost-deliver-prod',
+    namespace: 'bifrost-prod',
+    dockerfileConfigMaps: EXPECTED_DOCKERFILE_CONFIGMAPS,
+    mirrorRepos: [
+      'bifrost-trade-core',
+      'bifrost-trade-worker',
+      'bifrost-trade-socket',
+      'bifrost-trade-api',
+      'bifrost-trade-frontend',
+      'bifrost-trade-infra',
+      'bifrost-ui',
+    ],
+    successLink: { href: 'http://trade.bifrost.lan/', label: 'Open Trade PROD gateway' },
+    actuateDescription:
+      'STG preflight gate → Kaniko (:prod) → rollout bifrost-prod → verify-prod → Argo sync bifrost-prod.',
   },
   {
     id: 'platform-stg',

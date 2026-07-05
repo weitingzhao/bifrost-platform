@@ -27,6 +27,14 @@ import type { DeliveryTargetConfig } from '@/lib/delivery/deliveryTargets'
 const SMOKE_URLS: Record<string, { console: string; apiHealth: string }> = {
   'platform-stg': PLATFORM_STG_URLS,
   'platform-prod': PLATFORM_PROD_URLS,
+  'trade-stg': {
+    console: 'http://trade-stg.bifrost.lan/',
+    apiHealth: 'http://trade-stg.bifrost.lan/api/monitor/status',
+  },
+  'trade-prod': {
+    console: 'http://trade.bifrost.lan/',
+    apiHealth: 'http://trade.bifrost.lan/api/monitor/status',
+  },
 }
 
 interface PlatformDeliverActuatePanelProps {
@@ -78,7 +86,7 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
   const mirrorsOk = target.mirrorRepos.every(repo => supplyChain?.tracked_repos?.includes(repo))
 
   const smokeUrls = SMOKE_URLS[target.id] ?? PLATFORM_STG_URLS
-  const isProd = target.id === 'platform-prod'
+  const isProd = target.id === 'platform-prod' || target.id === 'trade-prod'
 
   return (
     <OpsSection
