@@ -47,6 +47,7 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
   const qc = useQueryClient()
   const [revision, setRevision] = useState('main')
   const [actionError, setActionError] = useState<string | null>(null)
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null)
 
   const supplyQuery = useQuery({
     queryKey: ['delivery', 'supply-chain'],
@@ -63,11 +64,20 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
 
   const deliverMutation = useMutation({
     mutationFn: (rev: string) => startPipelineRun(target.pipeline, rev),
-    onMutate: () => setActionError(null),
+    onMutate: () => {
+      setActionError(null)
+      setActionSuccess(null)
+    },
     onSuccess: data => {
-      if (data.run?.name) {
-        qc.setQueryData(deliveryFocusRunQueryKey(target.pipeline), data.run.name)
-        void qc.invalidateQueries({ queryKey: ['delivery', 'steps', data.run.name] })
+      const runName = data.run?.name
+      setActionSuccess(
+        runName
+          ? `PipelineRun ${runName} started — open Delivery → History to watch progress.`
+          : 'Pipeline run started — open Delivery → History to watch progress.',
+      )
+      if (runName) {
+        qc.setQueryData(deliveryFocusRunQueryKey(target.pipeline), runName)
+        void qc.invalidateQueries({ queryKey: ['delivery', 'steps', runName] })
       }
       void qc.invalidateQueries({ queryKey: ['delivery', 'runs', target.pipeline] })
       void qc.invalidateQueries({ queryKey: ['delivery', 'supply-chain'] })
@@ -188,6 +198,7 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
         )}
 
         {!hideActions && actionError && <p className="text-dense-meta text-destructive m-0">{actionError}</p>}
+        {!hideActions && actionSuccess && <p className="text-dense-meta text-success m-0">{actionSuccess}</p>}
       </div>
     </OpsSection>
   )
