@@ -1,7 +1,7 @@
 /**
  * Briefing Reconciliation catalog — Agent session context single-source discipline.
  *
- * Authoritative source for Ops Console → Agent → Doctrine → Briefing Reconciliation.
+ * Authoritative source for Ops Console → Governance → Briefing Reconciliation.
  * Governs how Agent Briefing packs are projected from spine + catalogs + live probes,
  * and how drift is detected before agents act on stale context.
  *

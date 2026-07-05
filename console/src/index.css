@@ -3029,7 +3029,7 @@ html {
   50% { opacity: 0.5; }
 }
 
-/* Agent System map (Architecture → Agent System) */
+/* Agent System map (Governance → Agent System) */
 .agent-system-kpis {
   display: flex;
   flex-wrap: wrap;

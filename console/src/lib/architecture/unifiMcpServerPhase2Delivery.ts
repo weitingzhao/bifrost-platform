@@ -63,7 +63,7 @@ export const UNIFI_MCP_SERVER_PHASE2_DELIVERY_ITEMS: UnifiMcpServerPhase2Deliver
     summary:
       'Network API page mounts UniFi MCP Server Phase 2 sign-off; requires Phase 1 signed off.',
     verifySteps: [
-      'Architecture → Network API — UniFi MCP Server Phase 2 · L0 routes + MCP read sign-off panel.',
+      'Governance → Standards — UniFi MCP Server Phase 2 · L0 routes + MCP read sign-off panel.',
       'Mark all UMS2 items verified → Sign off Phase 2 delivery (Admin token).',
       'Control Room live probe still catalog-only until UMS3.',
     ],

@@ -41,8 +41,8 @@ const TRADE_STG_ASK_CONTEXT: PipelineRunAskContext = {
     'gitops-sync (optional)',
   ],
   clusterSignals: [
-    'verify: Operate → Cluster → bifrost-stg workloads (failing pods)',
-    'scheduling: Observe → Scheduling → Placement (amd64_ci pool, policy violations)',
+    'verify: Rocket → Cluster → bifrost-stg workloads (failing pods)',
+    'scheduling: Rocket → Placement (amd64_ci pool, policy violations)',
     'gateway: http://trade-stg.bifrost.lan/ (Traefik Host ingress)',
   ],
   acceptanceHint: 'How to confirm S12/S14 acceptance after the fix.',
@@ -72,7 +72,7 @@ export function platformDeliverAskContext(target: {
           'rollout bifrost-platform-stg → Argo sync',
         ],
     clusterSignals: [
-      `workloads: Operate → Cluster → ${target.namespace} pods (ImagePullBackOff = image not built yet)`,
+      `workloads: Rocket → Cluster → ${target.namespace} pods (ImagePullBackOff = image not built yet)`,
       'pipeline workspace: the pipeline declares workspace "build-context"; InvalidWorkspaceBindings means the PipelineRun was started without a matching workspace binding (volumeClaimTemplate / PVC / emptyDir)',
       'registry: registry.cicd.svc.cluster.local:5000 (images pushed by Kaniko)',
       'ServiceAccount: tekton-deliver in cicd namespace (RBAC for cross-namespace rollout)',
@@ -151,7 +151,7 @@ export function rolloutLogTailHint(
     return {
       tone: 'warning',
       message:
-        'Run failed while rollout was waiting for replicas. Check pod events: Operate → Cluster → target namespace (ImagePullBackOff, CrashLoop, probe failures).',
+        'Run failed while rollout was waiting for replicas. Check pod events: Rocket → Cluster → target namespace (ImagePullBackOff, CrashLoop, probe failures).',
     }
   }
   return null

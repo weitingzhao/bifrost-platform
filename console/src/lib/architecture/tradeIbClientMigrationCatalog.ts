@@ -5,9 +5,9 @@
  * All phases complete — no Architecture UI page; governance lives in this catalog + Delivery Board.
  *
  * Live state (not this catalog):
- * - Trade IB health aggregate: Operate → Cluster + Monitor matrix probes
- * - Phase / rollout sign-off: Operate → Delivery Board · trade-ib-migration
- * - Migrate lane: Agent → Briefing · spine stream trade-ib-client-migration
+ * - Trade IB health aggregate: Rocket → Cluster + Monitor matrix probes
+ * - Phase / rollout sign-off: Subcontractors → Delivery Board · trade-ib-migration
+ * - Migrate lane: Engineer → Briefing · spine stream trade-ib-client-migration
  */
 
 import {
@@ -272,10 +272,10 @@ export const TRADE_IB_MIGRATION_PRINCIPLES = [
 ] as const
 
 export const TRADE_IB_MIGRATION_RELATED_AUTHORITIES = [
-  'Trade IB health aggregate: Operate → Cluster + Monitor matrix probes',
-  'Program / rollout sign-off: Operate → Delivery Board · trade-ib-migration',
-  'Migrate lane + spine stream: Agent → Briefing · trade-ib-client-migration',
-  'Platform TWS bus prerequisite: ibGatewayPluginCatalog.ts · Operate → Cluster (ib-gateway)',
+  'Trade IB health aggregate: Rocket → Cluster + Monitor matrix probes',
+  'Program / rollout sign-off: Subcontractors → Delivery Board · trade-ib-migration',
+  'Migrate lane + spine stream: Engineer → Briefing · trade-ib-client-migration',
+  'Platform TWS bus prerequisite: ibGatewayPluginCatalog.ts · Rocket → Cluster (ib-gateway)',
   'Trading execution freeze: spine decision D10 · tradeIbClientMigrationRolloutCatalog.ts TRADE_EXECUTION_FREEZE',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
@@ -350,7 +350,7 @@ export function buildTradeIbClientMigrationLlmPack(): string {
     '# Trade IB Client Migration',
     `Version: ${TRADE_IB_CLIENT_MIGRATION_VERSION}`,
     `Stream: ${TRADE_IB_CLIENT_MIGRATION_STREAM_ID}`,
-    'Live health + rollout state: Operate → Cluster / Delivery Board — not this catalog.',
+    'Live health + rollout state: Rocket → Cluster / Subcontractors → Delivery Board — not this catalog.',
     '',
     '## Prerequisite',
     'IB Gateway Plugin (IBGP0–4) — Platform TWS bus @ data/redis-ib.',

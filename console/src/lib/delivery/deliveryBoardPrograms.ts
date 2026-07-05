@@ -116,7 +116,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'mission-signal',
       label: 'Mission Signal',
       description: 'Flight Director signal truth → autonomous loop → program closure.',
-      formerLocation: 'Observe → Control Room',
+      formerLocation: 'Mission Control → Control Room',
       ...(() => {
         const { signed, total } = missionSignalSignedCount()
         return { signed, phaseCount: total }
@@ -126,7 +126,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'control-room-ui',
       label: 'Control Room UI',
       description: 'Console commander layout, payload depth, promote cutover panels.',
-      formerLocation: 'Observe → Control Room',
+      formerLocation: 'Mission Control → Control Room',
       ...(() => {
         const { signed, total } = controlRoomProgramSignedCount()
         return { signed, phaseCount: total }
@@ -136,7 +136,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'governance',
       label: 'Governance',
       description: 'Constitution, projection, spine semantics, blueprint zones.',
-      formerLocation: 'Architecture → Blueprint · Agent → Briefing Reconciliation',
+      formerLocation: 'Governance → Blueprint · Governance → Briefing Reconciliation',
       ...(() => {
         const { signed, total } = governanceSignedCount()
         return { signed, phaseCount: total }
@@ -146,7 +146,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'network-governance',
       label: 'Network Governance',
       description: 'Network constitution, Agent Protocol, Network API program.',
-      formerLocation: 'Architecture → Blueprint',
+      formerLocation: 'Governance → Blueprint',
       ...(() => {
         const { signed, total } = networkGovernanceSignedCount()
         return { signed, phaseCount: total }
@@ -156,7 +156,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'trade-ib-migration',
       label: 'Trade IB Migration',
       description: 'Gateway RPC cutover and rollout waves (W1–W3, STG, prod).',
-      formerLocation: 'Operate → Cluster (live) / catalog-only (governance) · Agent → Briefing / Delivery Board',
+      formerLocation: 'Rocket → Cluster (live) / catalog-only (governance) · Engineer → Briefing / Subcontractors → Delivery Board',
       ...(() => {
         const { signed, total } = tradeIbMigrationSignedCount()
         return { signed, phaseCount: total }
@@ -166,7 +166,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'ib-gateway-plugin',
       label: 'IB Gateway Plugin',
       description: 'redis-ib plugin phases, program closure, hardening.',
-      formerLocation: 'Operate → Cluster (live) / catalog-only (governance) · Agent → Briefing / Delivery Board',
+      formerLocation: 'Rocket → Cluster (live) / catalog-only (governance) · Engineer → Briefing / Subcontractors → Delivery Board',
       ...(() => {
         const { signed, total } = ibGatewayPluginSignedCount()
         return { signed, phaseCount: total }
@@ -176,7 +176,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'unifi-mcp',
       label: 'UniFi MCP Server',
       description: 'REST client, MCP read/write, live probe phases.',
-      formerLocation: 'Architecture → Network API',
+      formerLocation: 'Governance → Standards',
       ...(() => {
         const { signed, total } = unifiMcpServerProgramSignedCount()
         return { signed, phaseCount: total }
@@ -186,7 +186,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'briefing',
       label: 'Agent Briefing',
       description: 'Briefing workspace phased delivery (P1–P4).',
-      formerLocation: 'Agent → Briefing',
+      formerLocation: 'Engineer → Briefing',
       ...(() => {
         const { signed, total } = briefingSignedCount()
         return { signed, phaseCount: total }
@@ -196,7 +196,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'dev-agent',
       label: 'Dev Agent Platform',
       description: 'Declarative program blueprint and multi-program API.',
-      formerLocation: 'Agent → Dev Agent',
+      formerLocation: 'Engineer → Dev Agent',
       phaseCount: 1,
       signed: isDapProgramSignedOff() ? 1 : 0,
     },
@@ -204,7 +204,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'vision',
       label: 'Dual Flywheel Vision',
       description: 'Vision gates V1–V5 (API-backed sign-off).',
-      formerLocation: 'Architecture → Vision',
+      formerLocation: 'Governance → Vision',
       phaseCount: 6,
       signed: 0,
     },

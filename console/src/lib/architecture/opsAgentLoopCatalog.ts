@@ -1,7 +1,7 @@
 /**
  * Vision V3 — Ops Agent L1/L2 closed-loop contract.
  *
- * Authoritative for Ops Console → Architecture → Vision (V3 gate)
+ * Authoritative for Ops Console → Governance → Vision (V3 gate)
  * and Agent Briefing Ops-layer runtime discipline.
  */
 
@@ -60,7 +60,7 @@ export const OPS_AGENT_LOOP_STEPS: OpsAgentLoopStep[] = [
     phase: 'Report',
     actor: 'Ops Agent',
     action: 'Summarize alert, actions taken, matrix/cluster state to Owner',
-    verify: 'Audit log + Observe → Audit page',
+    verify: 'Audit log + Mission Control → Audit page',
     level: 'L0',
   },
   {

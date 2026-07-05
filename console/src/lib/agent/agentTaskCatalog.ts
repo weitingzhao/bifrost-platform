@@ -116,7 +116,7 @@ export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
     domain: 'Operator',
     action: 'Remediate',
     tier: 'manual',
-    entryPoint: 'Agent → Operator Plane (L-1) · AI Fix',
+    entryPoint: 'Engineer → Operator Plane (L-1) · AI Fix',
     trigger: 'Operator clicks AI Fix when bridge/deploy probes fail',
     description:
       'Diagnose Git Bridge, agent deploy, and MCP bridge errors on L-1; guide operator through Mac Pro/Mini host fixes via manual steps.',
@@ -162,7 +162,7 @@ export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
     domain: 'Cluster',
     action: 'Remediate',
     tier: 'manual',
-    entryPoint: 'Operate → Cluster → Auto-remediate',
+    entryPoint: 'Rocket → Cluster → Auto-remediate',
     trigger: 'Operator clicks Auto-remediate with open cluster issues',
     description: 'Diagnose reported pod/node issues and apply safe remediation (restart, delete debug pods, etc.).',
   },

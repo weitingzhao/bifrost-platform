@@ -18,7 +18,7 @@ export const MISSION_SIGNAL_PHASE6_DELIVERY_ITEMS: MissionSignalPhase6DeliveryIt
     summary:
       'Agent Briefing shows 24h Flight Director digest from get_flight_director_snapshot — replaces manual Audit scanning for autonomous job outcomes.',
     verifySteps: [
-      'Agent → Agent Briefing — “Flight Director · 24h digest” panel loads without HTTP error.',
+      'Engineer → Agent Briefing — “Flight Director · 24h digest” panel loads without HTTP error.',
       'Digest shows completed / failed / escalations / promotion-pending counts matching snapshot API.',
       'Panel links to Trust & Autonomy for drill-down.',
     ],

@@ -86,7 +86,7 @@ export function StgTierBChecklistPanel({
       description={
         allowSignOff
           ? 'Beyond Tier A HTTP smoke: review probes below, then admin sign-off records Owner acceptance.'
-          : 'Beyond Tier A HTTP smoke: daemon, ops, socket probes + manual IB/Massive verification (read-only). Sign-off on Operate.'
+          : 'Beyond Tier A HTTP smoke: daemon, ops, socket probes + manual IB/Massive verification (read-only). Sign-off on Rocket.'
       }
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -208,7 +208,7 @@ export function StgTierBChecklistPanel({
             data != null &&
             !data.signed_off && (
               <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Sign-off pending — switch to Operate after probes look good (admin token required).
+                Sign-off pending — switch to Rocket → Trade Release after probes look good (admin token required).
               </p>
             )
           )}

@@ -5,8 +5,8 @@
  * Aligned with Vision § Redis Ideal Topology.
  *
  * Live state (not this catalog):
- * - PG/Redis/MinIO readiness: Operate → Cluster (Postgres / Redis / Issues panels)
- * - Migrate progress: Agent → Briefing · lane data-layer-k3s + spine projection
+ * - PG/Redis/MinIO readiness: Rocket → Cluster (Postgres / Redis / Issues panels)
+ * - Migrate progress: Engineer → Briefing · lane data-layer-k3s + spine projection
  */
 
 import type { OpsContextResponse } from '@/api/types'
@@ -313,8 +313,8 @@ export function formatDataLayerBriefingAppendix(ctx?: OpsContextResponse): strin
 // ---------------------------------------------------------------------------
 
 export const DATA_LAYER_RELATED_AUTHORITIES = [
-  'Live PG/Redis/MinIO readiness: Operate → Cluster (Postgres / Redis / Issues panels)',
-  'Migrate lane + spine-projected queue: Agent → Briefing · lane data-layer-k3s',
+  'Live PG/Redis/MinIO readiness: Rocket → Cluster (Postgres / Redis / Issues panels)',
+  'Migrate lane + spine-projected queue: Engineer → Briefing · lane data-layer-k3s',
   'Target topology complement: k3sArchitectureCatalog.ts',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
@@ -344,7 +344,7 @@ export function buildDataLayerLlmPack(): string {
   const lines: string[] = [
     '# Bifrost Ops — Data Layer Architecture',
     `# Source: ${DATA_LAYER_SOURCE} v${DATA_LAYER_VERSION}`,
-    'Live cluster + migrate progress: Operate → Cluster / Agent → Briefing (data-layer-k3s) — not this catalog.',
+    'Live cluster + migrate progress: Rocket → Cluster / Engineer → Briefing (data-layer-k3s) — not this catalog.',
     '',
     '## Redis instances (per environment)',
     ...REDIS_INSTANCES.map(r =>

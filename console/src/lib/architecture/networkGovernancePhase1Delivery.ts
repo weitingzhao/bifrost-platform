@@ -18,7 +18,7 @@ export const NETWORK_GOVERNANCE_PHASE1_DELIVERY_ITEMS: NetworkGovernancePhase1De
     summary:
       'Blueprint Constitution adds Principle 8: network infrastructure is fate-isolated substrate; UCG probe/actuation works independently of K8s.',
     verifySteps: [
-      'Architecture → Blueprint → Design principles — row 8 title is “Network is the ground floor”.',
+      'Governance → Blueprint → Design principles — row 8 title is “Network is the ground floor”.',
       'Description mentions UCG / Switch / AP and Session-connect bypassing cluster.',
       'Copy Prompt for LLM includes “8. **Network is the ground floor**”.',
     ],

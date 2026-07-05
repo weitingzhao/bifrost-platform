@@ -82,7 +82,7 @@ export function AgentTaskCatalogPanel({ onOpenDoctrine, onOpenAgentSystem }: Age
                 Agent System
               </button>
             ) : (
-              'Agent → Doctrine → Agent System'
+              'Governance → Agent System'
             )}
             .
           </p>

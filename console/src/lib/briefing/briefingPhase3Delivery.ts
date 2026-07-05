@@ -27,7 +27,7 @@ export const BRIEFING_PHASE3_DELIVERY_ITEMS: BriefingPhase3DeliveryItem[] = [
     summary:
       'MCP tool + GET /api/v1/briefing/session-pack return compact briefing for Agent self-service.',
     verifySteps: [
-      'Architecture → MCP Contract — get_session_briefing shows Implemented.',
+      'Governance → MCP Contract — get_session_briefing shows Implemented.',
       'curl GET /api/v1/briefing/session-pack?track=build&lane=console-api&pack=compact returns pack JSON.',
       'MCP server tool get_session_briefing returns same pack (with operator/viewer token).',
     ],

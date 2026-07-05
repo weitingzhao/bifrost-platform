@@ -267,7 +267,7 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
           {terminal && isPipelineRunSucceeded(focusRun) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Deliver succeeded — verify smoke on Observe.
+                Deliver succeeded — verify smoke on Mission Control.
               </span>
               <Button variant="outline" size="sm" asChild>
                 <a href={target.successLink.href} target="_blank" rel="noreferrer">

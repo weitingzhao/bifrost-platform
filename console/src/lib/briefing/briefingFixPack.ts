@@ -168,7 +168,7 @@ export function buildSyncLoopFixPack(input: {
     '- READ-ONLY (never edit): `bifrost-trader-engine/`',
     '',
     `## Detected (${summary})`,
-    issueLines.length > 0 ? issueLines.join('\n') : '- (See pipeline step details in Ops Console → Agent Briefing)',
+    issueLines.length > 0 ? issueLines.join('\n') : '- (See pipeline step details in Ops Console → Engineer → Agent Briefing)',
     '',
     '## Layer findings (from nightly report)',
     excerpts,
@@ -184,7 +184,7 @@ export function buildSyncLoopFixPack(input: {
     '## Verify before done',
     '- `cd bifrost-platform && python3 agent/drift/scan_layer1.py && python3 agent/drift/scan_layer3.py` → each reports `Findings: 0`',
     '- `cd bifrost-platform/console && npm run build` passes',
-    '- Re-open Ops Console → Agent Briefing → Briefing sync loop shows RUNTIME SYNC OK and no FAIL steps',
+    '- Re-open Ops Console → Engineer → Agent Briefing → Briefing sync loop shows RUNTIME SYNC OK and no FAIL steps',
   ].join('\n')
 
   // ---- direction 3: doctrine / learning note ----

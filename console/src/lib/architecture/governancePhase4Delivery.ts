@@ -36,9 +36,9 @@ export const GOVERNANCE_PHASE4_DELIVERY_ITEMS: GovernancePhase4DeliveryItem[] = 
     id: 'GP4-3',
     title: 'Briefing Reconciliation UI CATALOG_DRIFT panel',
     summary:
-      'Agent → Briefing Reconciliation shows live catalog-spine drift findings with CATALOG_DRIFT tag.',
+      'Governance → Briefing Reconciliation shows live catalog-spine drift findings with CATALOG_DRIFT tag.',
     verifySteps: [
-      'Open Agent → Briefing Reconciliation — Catalog ↔ spine drift section at top.',
+      'Open Governance → Briefing Reconciliation — Catalog ↔ spine drift section at top.',
       'When drift exists: CATALOG_DRIFT tag + finding list; when clean: “No catalog-spine drift”.',
     ],
   },

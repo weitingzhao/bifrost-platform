@@ -101,7 +101,7 @@ export function GovernancePhase2SignoffPanel() {
           )}
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Verify spine-driven Delivery phases, purified environments-catalog, and Projection labels on
-            Operate → Delivery → Blueprint (v{GOVERNANCE_PHASE2_VERSION}).
+            Subcontractors → Delivery Board → Blueprint (v{GOVERNANCE_PHASE2_VERSION}).
           </p>
 
           <ul className="m-0 flex list-none flex-col gap-2 p-0">

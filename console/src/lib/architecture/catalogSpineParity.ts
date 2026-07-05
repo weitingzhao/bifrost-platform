@@ -1,5 +1,5 @@
 /**
- * Catalog ↔ spine parity — detect hardcoded progress in Architecture catalogs
+ * Catalog ↔ spine parity — detect hardcoded progress in Governance catalogs
  * that diverges from live spine (GET /api/v1/context).
  *
  * Governance Phase 4 / briefingReconciliationCatalog gate-catalog-spine-parity.

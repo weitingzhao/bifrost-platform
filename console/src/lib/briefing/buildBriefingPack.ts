@@ -61,35 +61,35 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
 
   const readFirst: Record<WorkIntent, string[]> = {
     ops: [
-      'Ops Console → Architecture → Vision (dualFlywheelVisionCatalog.ts)',
-      'Ops Console → Architecture → Blueprint (blueprintCatalog.ts)',
-      'Ops Console → Architecture → Standards + MCP Contract',
+      'Ops Console → Governance → Vision (dualFlywheelVisionCatalog.ts)',
+      'Ops Console → Governance → Blueprint (blueprintCatalog.ts)',
+      'Ops Console → Governance → Standards + MCP Contract',
       'GET /api/v1/context',
       'bifrost-trade-infra/docs/MIGRATION_TRACKING.md (trade stack only)',
     ],
     feature: [
-      'Ops Console → Architecture → Blueprint + Standards + MCP Contract',
+      'Ops Console → Governance → Blueprint + Standards + MCP Contract',
       'api/internal/server/server.go — registered /api/v1/* routes',
       'config/ops-context.yaml — milestone ops-ui-actuation',
     ],
     debug: [
-      'Ops Console → Runtime Map (failing matrix targets)',
-      'Ops Console → Cluster (kubeconfig, failing pods)',
-      'Ops Console → Architecture → Standards — probe contract',
+      'Ops Console → Mission Control → Runtime Map (failing matrix targets)',
+      'Ops Console → Rocket → Cluster (kubeconfig, failing pods)',
+      'Ops Console → Governance → Standards — probe contract',
       'context.probe_hints in GET /api/v1/context',
     ],
     release: [
-      'Ops Console → Architecture → Blueprint — North Star',
-      'Ops Console → Operate → Deploy Mainline (deployMainlineCatalog.ts)',
+      'Ops Console → Governance → Blueprint — North Star',
+      'Ops Console → Rocket → Trade Release (deployMainlineCatalog.ts)',
       'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md',
       'decision D1 in ops-context spine',
     ],
     cluster: [
       'dataLayerCatalog.ts (catalog-only; live: Cluster + Briefing data-layer-k3s)',
-      'Ops Console → Architecture → tradeK8sNativeCatalog.ts — IB Edge + K8s-native waves W0–W11',
+      'Ops Console → Governance → tradeK8sNativeCatalog.ts — IB Edge + K8s-native waves W0–W11',
       'config/ops-context.yaml — tracks.migrate.streams trade-k8s-native + data-layer-k3s',
       'bifrost-trade-infra/k8s/ (base + overlays/dev|stg|prod)',
-      'Ops Console → Architecture → Standards — cluster actuation + observability layers',
+      'Ops Console → Governance → Standards — cluster actuation + observability layers',
       'api/internal/cluster — implementation',
       'bifrost-platform/config/clusters.yaml',
     ],
@@ -100,17 +100,17 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
       'Never edit bifrost-trader-engine/ (read-only reference)',
     ],
     business: [
-      'Ops Console → Architecture → Vision § Agent Layers (Business Agent)',
-      'Ops Console → Architecture → Standards → MCP Contract (permission model + deny-list)',
+      'Ops Console → Governance → Vision § Agent Layers (Business Agent)',
+      'Ops Console → Governance → MCP Contract (permission model + deny-list)',
       'bifrost-trade-api/CLAUDE.md — 9 API domains (read endpoints)',
       'bifrost-trade-frontend — existing pages for context on data presentation',
     ],
     automate: [
       'config/ops-context.yaml — tracks.automate (streams + milestone autonomous-agent-v1)',
-      'Ops Console → Operate → Delivery (deliveryMainlineCatalog.ts) — existing CI/CD pipeline reference',
+      'Ops Console → Rocket → Trade Release (deliveryMainlineCatalog.ts) — existing CI/CD pipeline reference',
       'config/clusters.yaml — gitops + stack addons (Gitea, Tekton, Argo CD)',
       'k8s/cicd/ in bifrost-trade-infra — Tekton pipelines, Gitea mirror-sync, Argo Applications',
-      'Ops Console → Architecture → Agent Protocol (agentProtocolCatalog.ts)',
+      'Ops Console → Governance → Agent Protocol (agentProtocolCatalog.ts)',
       'Hermes Agent docs: hermes-agent.nousresearch.com/docs (Gateway, cron, skills, MCP Server)',
       'Staleguard / ctxharness — deterministic drift detection CLI tools',
       'console/src/lib/briefing/uiProgressSnapshot.ts — static catalog example for drift targets',
@@ -300,7 +300,7 @@ function suggestedOpening(
         : `Mode: Ops. Work intent: operations. Read spine + prod/dev matrix. Summarize platform governance state and recommend the next ops-ui-actuation milestone step. No trade-frontend edits.`
       break
     case 'feature':
-      base = `Mode: Ops. Work intent: feature extension. Scope to bifrost-platform unless Owner named trade repos. Check milestone ops-ui-actuation and Architecture → Standards (actuation phases). Propose minimal API+Console diff for one capability.`
+      base = `Mode: Ops. Work intent: feature extension. Scope to bifrost-platform unless Owner named trade repos. Check milestone ops-ui-actuation and Governance → Standards (actuation phases). Propose minimal API+Console diff for one capability.`
       break
     case 'debug':
       base = fails.length > 0
@@ -364,7 +364,7 @@ function intentCorePack(
       'Layer: Business Agent (read-only advisory)',
       'Access: Trade API read endpoints only (portfolio, market, research, strategy, trading)',
       'Forbidden: order placement, config writes, daemon control, IB operator commands',
-      'Reference: Ops Console → Architecture → Standards → MCP Contract (deny-list)',
+      'Reference: Ops Console → Governance → MCP Contract (deny-list)',
     ].join('\n')
   }
 
@@ -437,7 +437,7 @@ function intentCorePack(
       'Layer A: metrics-server + GET /cluster/metrics (CPU/mem, top pods).',
       'Layer B: GET /cluster/observability — Prometheus/Grafana/Loki/Alertmanager in monitoring NS.',
       'P1 actuation: ensure namespaces, rollout restart, scale, delete pod (operator token).',
-      'Reference: Ops Console → Architecture → Standards (cluster actuation + observability layers).',
+      'Reference: Ops Console → Governance → Standards (cluster actuation + observability layers).',
     ]
     if (shouldIncludeDataLayerAppendix(intent, lane)) {
       sections.push('', formatDataLayerBriefingAppendix(ctx))
@@ -551,7 +551,7 @@ export function buildBriefingPack(input: BriefingInputs): string {
       formatReconcileFindings(findings),
       '',
       'Pack generation halted. Resolve the blockers above (spine ↔ catalog) and regenerate.',
-      'Doctrine: Ops Console → Agent → Doctrine → Briefing Reconciliation.',
+      'Doctrine: Ops Console → Governance → Briefing Reconciliation.',
     ].join('\n')
   }
   const staleBanner = findings.length > 0 ? formatReconcileFindings(findings) : null
@@ -617,12 +617,12 @@ export function buildBriefingPack(input: BriefingInputs): string {
     sections.push(
       '',
       '## Related Console views',
-      '- Observe → Diagnosis: Control Room → Runtime Map (business topology + matrix, L0)',
-      '- Observe → Scheduling: Placement (K8s node-pool / policy gap, L0)',
-      '- Operate → Cluster ops: Cluster (L0 read + L1 actuation)',
-      '- Observe → Session & audit: Agent Briefing · Audit (actuation history)',
+      '- Mission Control: Control Room → Runtime Map (business topology + matrix, L0)',
+      '- Rocket: Placement (K8s node-pool / policy gap, L0)',
+      '- Rocket: Cluster (L0 read + L1 actuation)',
+      '- Mission Control: Audit · Engineer → Agent Briefing (actuation history)',
       '- Governance catalogs: Vision, Blueprint, dataLayerCatalog.ts, cicdBootstrapCatalog.ts, MCP Contract',
-      '- Architecture Copy All for LLM — full static catalog appendix if needed',
+      '- Governance Copy All for LLM — full static catalog appendix if needed',
     )
   }
 

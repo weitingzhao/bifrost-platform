@@ -63,7 +63,7 @@ export const UNIFI_MCP_SERVER_PHASE4_DELIVERY_ITEMS: UnifiMcpServerPhase4Deliver
     summary:
       'Network API page mounts UniFi MCP Server Phase 4 sign-off; requires Phase 3 signed off. Completes unifi-mcp-server spine ①–④.',
     verifySteps: [
-      'Architecture → Network API — UniFi MCP Server Phase 4 · MCP write sign-off panel.',
+      'Governance → Standards — UniFi MCP Server Phase 4 · MCP write sign-off panel.',
       'Mark all UMS4 items verified → Sign off Phase 4 delivery (Admin token).',
       'zones/restructure + wlan POST routes remain planned (out of UMS4 scope).',
     ],

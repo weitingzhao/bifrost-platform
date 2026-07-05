@@ -507,7 +507,7 @@ export function buildStaticCatalogContext(): string {
     '- Probe, do not duplicate trade health endpoints',
     '- Never expose forbidden write paths to platform MCP/AI',
     '- Frontend Phase 1: do not migrate API until FE business-equivalent to Legacy',
-    '- Agent modes: Ops Console → Architecture → Agent Protocol',
+    '- Agent modes: Ops Console → Governance → Agent Protocol',
   ]
   return lines.join('\n')
 }

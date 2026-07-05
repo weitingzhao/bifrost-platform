@@ -1,7 +1,7 @@
 /**
  * Vision V1–V5 ↔ spine milestone map — single source for Briefing, Control Room, and S3 gate.
  *
- * Authoritative for Ops Console → Architecture → Vision (Briefing alignment section)
+ * Authoritative for Ops Console → Governance → Vision (Briefing alignment section)
  * and Agent Briefing vision milestone appendix.
  */
 

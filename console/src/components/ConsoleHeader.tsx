@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Button, SidebarTrigger, SHELL_TOP_BAR_HEIGHT_CLASS, StatusLamp, cn } from '@bifrost/ui'
+import type { ConsoleNavPlane } from '@/lib/consoleNavConfig'
 
 export function ConsoleHeader({
   title,
@@ -9,8 +10,8 @@ export function ConsoleHeader({
   children,
 }: {
   title?: string
-  /** Sidebar plane — Agent / Operate / Observe / Architecture */
-  plane?: 'Agent' | 'Operate' | 'Observe' | 'Architecture'
+  /** Sidebar plane — system domain label shown in header chrome. */
+  plane?: ConsoleNavPlane
   healthy: boolean | undefined
   onRefresh: () => void
   /** Right-side slot — e.g. compact PlatformAuthBar */

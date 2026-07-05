@@ -36,9 +36,9 @@ export const MISSION_SIGNAL_PHASE2_DELIVERY_ITEMS: MissionSignalPhase2DeliveryIt
     id: 'MSP2-3',
     title: 'Agent Protocol documents PROBE_DRIFT and DATA_LAYER playbooks',
     summary:
-      'Architecture → Agent Protocol includes mission diagnostic playbooks with autonomy levels (L0 diagnose, L1 data layer fix, L2 probe drift).',
+      'Governance → Agent Protocol includes mission diagnostic playbooks with autonomy levels (L0 diagnose, L1 data layer fix, L2 probe drift).',
     verifySteps: [
-      'Open Architecture → Agent Protocol — “Mission diagnostic playbooks” section visible.',
+      'Open Governance → Agent Protocol — “Mission diagnostic playbooks” section visible.',
       'PROBE_DRIFT: do not restart PG/Redis; escalate platform probe fix.',
       'DATA_LAYER: L1 confirm before CNPG/Redis remediation.',
     ],

@@ -26,9 +26,9 @@ export const GOVERNANCE_PHASE3_DELIVERY_ITEMS: GovernancePhase3DeliveryItem[] = 
     id: 'GP3-2',
     title: 'Program Milestones historical labels',
     summary:
-      'Architecture → Milestones table shows SIGNED (historically) / CLOSED (archived) — not raw gate verdict.',
+      'Governance → Blueprint → Milestones table shows SIGNED (historically) / CLOSED (archived) — not raw gate verdict.',
     verifySteps: [
-      'Architecture → Milestones — Status column uses historical qualifiers for SIGNED/CLOSED.',
+      'Governance → Blueprint → Milestones — Status column uses historical qualifiers for SIGNED/CLOSED.',
       'Section footnote explains live gate readiness lives on Promote (Projection).',
     ],
   },
@@ -36,7 +36,7 @@ export const GOVERNANCE_PHASE3_DELIVERY_ITEMS: GovernancePhase3DeliveryItem[] = 
     id: 'GP3-3',
     title: 'Promote dual labels when SIGNED but gate pending',
     summary:
-      'Operate → Promote shows spine + gate chips for 2c-b-prod-cutover when historically SIGNED but promote not ready.',
+      'Rocket → Trade Release shows spine + gate chips for 2c-b-prod-cutover when historically SIGNED but promote not ready.',
     verifySteps: [
       'Promote page — Prod cutover spine semantics panel visible when cutover is SIGNED.',
       'Dual chips: SIGNED (historically) + gate: pending (current prod matrix / gate state).',
@@ -59,7 +59,7 @@ export const GOVERNANCE_PHASE3_DELIVERY_ITEMS: GovernancePhase3DeliveryItem[] = 
     summary:
       'Copy Prompt for LLM Spine section includes SIGNED ≠ live gate readiness disclaimer.',
     verifySteps: [
-      'Architecture → Blueprint → Copy Prompt for LLM — Spine section contains semantics note.',
+      'Governance → Blueprint → Copy Prompt for LLM — Spine section contains semantics note.',
       'Blueprint Spine snapshot section repeats the same disclaimer when context is loaded.',
     ],
   },

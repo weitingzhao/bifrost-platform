@@ -14,12 +14,12 @@ export type ControlRoomPhaseMeta = {
 }
 
 export const CONTROL_ROOM_PROGRAM_PHASES: ControlRoomPhaseMeta[] = [
-  { id: 'P0', shortLabel: 'Structure', signoffLocation: 'Control Room → Phase 0' },
-  { id: 'P1', shortLabel: 'Operate Loop', signoffLocation: 'Control Room → Phase 1' },
-  { id: 'P2', shortLabel: 'Payload depth', signoffLocation: 'Control Room → Phase 2' },
-  { id: 'P3', shortLabel: 'Command intent', signoffLocation: 'Control Room → Phase 3' },
-  { id: 'P4', shortLabel: 'Mission timeline', signoffLocation: 'Control Room → Phase 4' },
-  { id: 'P5', shortLabel: 'Promote / cutover', signoffLocation: 'Control Room → Phase 5' },
+  { id: 'P0', shortLabel: 'Structure', signoffLocation: 'Mission Control → Control Room → Phase 0' },
+  { id: 'P1', shortLabel: 'Operate Loop', signoffLocation: 'Mission Control → Control Room → Phase 1' },
+  { id: 'P2', shortLabel: 'Payload depth', signoffLocation: 'Mission Control → Control Room → Phase 2' },
+  { id: 'P3', shortLabel: 'Command intent', signoffLocation: 'Mission Control → Control Room → Phase 3' },
+  { id: 'P4', shortLabel: 'Mission timeline', signoffLocation: 'Mission Control → Control Room → Phase 4' },
+  { id: 'P5', shortLabel: 'Promote / cutover', signoffLocation: 'Mission Control → Control Room → Phase 5' },
 ]
 
 const SIGNED_OFF: Record<ControlRoomPhaseId, () => boolean> = {

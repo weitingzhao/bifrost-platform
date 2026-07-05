@@ -1,7 +1,7 @@
 /**
  * K3s Bootstrap catalog — first-node deployment runbook.
  *
- * Static bootstrap runbook for LLM packs. Live cluster: Operate → Cluster.
+ * Static bootstrap runbook for LLM packs. Live cluster: Rocket → Cluster.
  * L-1 out-of-band: Operator Plane + Flywheel Vision. Source: bifrost-trade-infra scripts/k3s/.
  * Migrated from bifrost-trade-infra/docs/K3S_BOOTSTRAP.md (2026-06-15).
  */
@@ -54,7 +54,7 @@ export const SLICE1_CHECKLIST: ChecklistItem[] = [
   { id: 4, check: 'L0 API', command: 'curl -s http://127.0.0.1:8780/api/v1/cluster | jq .reachability → ok' },
   { id: 5, check: 'Layer A read path', command: 'curl .../cluster/metrics | jq .metrics_server_available' },
   { id: 6, check: 'Layer B probe', command: 'curl .../cluster/observability | jq .layer_b_status → not_installed (expected)' },
-  { id: 7, check: 'Console', command: 'Operate → Cluster ops → Cluster: 1/1 Ready; Layer B shows Planned' },
+  { id: 7, check: 'Console', command: 'Rocket → Cluster: 1/1 Ready; Layer B shows Planned' },
 ]
 
 export const VERIFY_COMMANDS = [
@@ -73,7 +73,7 @@ export const CONSOLE_CLUSTER_COMMANDS = [
   'cd bifrost-trade-infra && make k3s-fetch-kubeconfig',
   'export PLATFORM_KUBECONFIG=$HOME/.kube/bifrost-k3s.yaml',
   'cd ../bifrost-platform && make start',
-  '# Console → Operate → Cluster ops → Cluster',
+  '# Console → Rocket → Cluster',
 ]
 
 export const CONSOLE_VERIFY_API = [
@@ -211,7 +211,7 @@ export const SPINE_REFERENCE =
   'config/ops-context.yaml · k3s-phase1 → CLOSED · k3s-mac-agents (P5b) → CLOSED 2026-06-15 · active_track: ops_ui_actuation'
 
 export const BOOTSTRAP_RELATED_AUTHORITIES = [
-  'Live cluster: Operate → Cluster (nodes, join wizard, metrics, observability)',
+  'Live cluster: Rocket → Cluster (nodes, join wizard, metrics, observability)',
   'Target topology: k3sArchitectureCatalog.ts',
   'Execution timeline: roadmapCatalog.ts (Platform Roadmap UI)',
   'L-1 operator plane: Operator Plane UI + cicdBootstrapCatalog.ts (L-1)',
@@ -248,7 +248,7 @@ export function buildK3sBootstrapLlmPack(): string {
   const lines: string[] = [
     '# Bifrost Ops — K3s Bootstrap (First Node Deployment — runbook)',
     `# Source: ${K3S_BOOTSTRAP_SOURCE} v${K3S_BOOTSTRAP_VERSION}`,
-    'Live cluster state: Operate → Cluster — not this catalog.',
+    'Live cluster state: Rocket → Cluster — not this catalog.',
     '',
     `## First Server: ${FIRST_SERVER.hostname} · ${FIRST_SERVER.ip} (${FIRST_SERVER.catalogSlot})`,
     FIRST_SERVER.note,
@@ -272,7 +272,7 @@ export function buildK3sBootstrapLlmPack(): string {
     ...MACBOOK_KUBECTL,
     '```',
     '',
-    '## Platform-api cluster probes (runbook — live UI: Operate → Cluster)',
+    '## Platform-api cluster probes (runbook — live UI: Rocket → Cluster)',
     '```bash',
     ...CONSOLE_CLUSTER_COMMANDS,
     '```',

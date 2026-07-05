@@ -18,7 +18,7 @@ export const NETWORK_GOVERNANCE_PHASE3_DELIVERY_ITEMS: NetworkGovernancePhase3De
     summary:
       'ops-context.yaml records D9: Integration API Key blocked on UCG 10.4.57; bifrost-agent Session v2 + CSRF is primary firewall/zone write path.',
     verifySteps: [
-      'Architecture → Milestones (Program) → Owner decisions — card D9 with topic “Network actuation path — Session v2 API primary”.',
+      'Governance → Blueprint → Owner decisions — card D9 with topic “Network actuation path — Session v2 API primary”.',
       'Status SIGNED, signed_at 2026-07-02; conclusion mentions site UUID missing and Session v2 primary.',
       'Authority references scripts/unifi_firewall_setup.py and Blueprint Principle 8.',
     ],
@@ -40,7 +40,7 @@ export const NETWORK_GOVERNANCE_PHASE3_DELIVERY_ITEMS: NetworkGovernancePhase3De
     summary:
       'Spine coupling_surfaces lists unifi_session_v2 alongside ib_client_id — documents Session auth path for UCG actuation.',
     verifySteps: [
-      'Architecture → Milestones (Program) → Coupling surfaces — list includes unifi_session_v2.',
+      'Governance → Blueprint → Coupling surfaces — list includes unifi_session_v2.',
       'GET /api/v1/context returns coupling_surfaces containing unifi_session_v2.',
     ],
   },

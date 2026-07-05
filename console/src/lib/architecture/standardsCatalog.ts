@@ -1,7 +1,7 @@
 /**
  * Standards catalog — Trade Contract + Cluster Actuation.
  *
- * Authoritative source for Ops Console → Architecture → Standards.
+ * Authoritative source for Ops Console → Governance → Standards.
  * Single source of truth — do not duplicate elsewhere.
  */
 

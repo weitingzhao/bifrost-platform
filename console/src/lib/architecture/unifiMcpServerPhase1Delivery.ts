@@ -51,7 +51,7 @@ export const UNIFI_MCP_SERVER_PHASE1_DELIVERY_ITEMS: UnifiMcpServerPhase1Deliver
     summary:
       'unifiMcpServerCatalog.ts documents 4 stream phases; UMS1 marked done; progress 1/4.',
     verifySteps: [
-      'Architecture → Network API — “UniFi MCP Server stream” section shows 1/4 progress.',
+      'Governance → Standards — “UniFi MCP Server stream” section shows 1/4 progress.',
       'Phase ① REST client row status done; phases ②–④ pending.',
       'Copy for LLM includes client path api/internal/network/unifi.',
     ],
@@ -62,7 +62,7 @@ export const UNIFI_MCP_SERVER_PHASE1_DELIVERY_ITEMS: UnifiMcpServerPhase1Deliver
     summary:
       'Network API page mounts UniFi MCP Server Phase 1 sign-off; requires Network Governance program complete (NG8).',
     verifySteps: [
-      'Architecture → Network API — UniFi MCP Server Phase 1 · REST client sign-off panel.',
+      'Governance → Standards — UniFi MCP Server Phase 1 · REST client sign-off panel.',
       'Mark all UMS1 items verified → Sign off Phase 1 delivery (Admin token).',
       'Sign-off does not register /api/v1/network/* routes yet — Phase 2 adds handlers + MCP read.',
     ],

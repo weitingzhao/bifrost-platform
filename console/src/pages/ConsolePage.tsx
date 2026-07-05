@@ -341,13 +341,7 @@ export function ConsolePage() {
   const openStandards = () => setViewTab('platform-standards')
 
   const [govCopyState, setGovCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
-  const isArchTab =
-    viewTab === 'blueprint' ||
-    viewTab === 'flywheel-vision' ||
-    viewTab === 'roadmap' ||
-    viewTab === 'ai-compute'
-  const isStdTab = viewTab === 'platform-standards' || viewTab === 'agent-system' || viewTab === 'agent-protocol' || viewTab === 'briefing-reconciliation' || viewTab === 'mcp-contract' || viewTab === 'design-system'
-  const isGovernanceTab = isArchTab || isStdTab
+  const isGovernanceTab = consoleNavPlane(viewTab) === 'Governance'
   const handleCopyAllGovernance = async () => {
     let spine = contextQuery.data
     if (spine == null) {

@@ -40,7 +40,7 @@ export function buildClusterLlmContext(input: ClusterLlmContextInput): string {
     'Mode: Ops',
     '',
     '## K3s cluster snapshot',
-    'Source: Ops Console → Operate → Cluster (platform-api GET /api/v1/cluster/*)',
+    'Source: Ops Console → Rocket → Cluster (platform-api GET /api/v1/cluster/*)',
   ]
 
   if (summary?.generated_at != null && summary.generated_at !== '') {
@@ -284,7 +284,7 @@ export function buildClusterLlmContext(input: ClusterLlmContextInput): string {
       '- Mode Ops: cluster/infrastructure work only — do not edit bifrost-trade-frontend pages unless cross-linked.',
       '- Prefer Ops Console actuation (platform-api) over ad-hoc kubectl for mutations.',
       '- bifrost-trader-engine/ is read-only reference — never edit.',
-      '- For placement/CI scheduling details also see Architecture → Placement (Copy LLM pack).',
+      '- For placement/CI scheduling details also see Rocket → Placement (Copy LLM pack).',
       '- For hardware/env topology also see environments-catalog.ts (Copy All for LLM on Architecture tabs) or Runtime Map (live).',
       '',
       'When diagnosing issues:',

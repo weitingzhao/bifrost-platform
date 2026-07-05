@@ -18,7 +18,7 @@ export const NETWORK_GOVERNANCE_PHASE4_DELIVERY_ITEMS: NetworkGovernancePhase4De
     summary:
       'FORBIDDEN_ACTIONS adds Default Security Posture / IDS/IPS, bulk zone delete, manual UniFi UI, and Integration Key write on UCG 10.4.57.',
     verifySteps: [
-      'Architecture → Agent Protocol → Forbidden actions — rows for Default Security Posture, bulk delete zones, manual UniFi UI.',
+      'Governance → Agent Protocol → Forbidden actions — rows for Default Security Posture, bulk delete zones, manual UniFi UI.',
       'Integration API Key write row scoped to Ops mode with D9 / site UUID reference.',
       'Copy Prompt for LLM — Forbidden actions section includes network rows.',
     ],

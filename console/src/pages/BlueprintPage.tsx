@@ -493,7 +493,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
                 {toolsQuery.data.implemented_count}/{toolsQuery.data.tools.length} tools implemented
               </DenseTag>
               <span className="ml-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                See Architecture → MCP Contract for full catalog and Cursor setup.
+                See Governance → MCP Contract for full catalog and Cursor setup.
               </span>
             </p>
           )}
