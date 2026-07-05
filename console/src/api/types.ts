@@ -28,6 +28,107 @@ export interface AllMatricesResponse {
   matrices: MatrixResponse[]
 }
 
+export interface SatelliteBusSocketComponent {
+  reachability: Reachability
+  lamp?: string
+  self_check?: string
+  detail: string
+  raw?: Record<string, unknown>
+}
+
+export interface SatelliteBusMonitorHealth {
+  self_check?: string
+  block_reasons?: string[]
+  status_lamp?: string
+  reachability: Reachability
+}
+
+export interface SatelliteBusMonitorDaemon {
+  self_check?: string
+  lamp?: string
+  block_reasons?: string[]
+  trading?: Record<string, unknown>
+  heartbeat?: Record<string, unknown>
+  auto_status?: Record<string, unknown>
+  reachability: Reachability
+}
+
+export interface SatelliteBusMonitorSocket {
+  massive: SatelliteBusSocketComponent
+  ib_ingestor: SatelliteBusSocketComponent
+  ib_account_agent: SatelliteBusSocketComponent
+  ib_operator: SatelliteBusSocketComponent
+  platform_ib_gateway: SatelliteBusSocketComponent
+}
+
+export interface SatelliteBusMonitorCelery {
+  broker_connected: boolean
+  workers: string[]
+  worker_ib_connected: boolean
+  worker_ib_client_id?: unknown
+  worker_last_updated_ts?: unknown
+  reachability: Reachability
+}
+
+export interface SatelliteBusMonitorAccountSync {
+  daemon_alive: boolean
+  stream_lag?: unknown
+  heartbeat?: Record<string, unknown>
+  reachability: Reachability
+}
+
+export interface SatelliteBusMonitorDeep {
+  reachability: Reachability
+  detail: string
+  health: SatelliteBusMonitorHealth
+  daemon: SatelliteBusMonitorDaemon
+  socket: SatelliteBusMonitorSocket
+  celery: SatelliteBusMonitorCelery
+  account_sync: SatelliteBusMonitorAccountSync
+}
+
+export interface SatelliteBusOpsDeep {
+  status?: string
+  service?: string
+  executor_mode?: string
+  k8s_reachable?: boolean
+  reachability: Reachability
+  detail: string
+  raw?: Record<string, unknown>
+}
+
+export interface SatelliteBusIngestService {
+  id: string
+  process_active?: string
+  runtime_kind?: string
+  redis_control_env?: string
+  runtime_externally_managed?: boolean
+  platform_gateway_managed?: boolean
+  reachability: Reachability
+  detail: string
+}
+
+export interface SatelliteBusIngestDeep {
+  services: SatelliteBusIngestService[]
+  reachability: Reachability
+  detail: string
+}
+
+export interface SatelliteBusDeepResponse {
+  environment: string
+  label: string
+  generated_at: string
+  reachability: Reachability
+  detail: string
+  monitor: SatelliteBusMonitorDeep
+  ops: SatelliteBusOpsDeep
+  ingest: SatelliteBusIngestDeep
+}
+
+export interface AllSatelliteBusDeepResponse {
+  buses: SatelliteBusDeepResponse[]
+}
+
 export interface TopologyMatrixService {
   id: string
   reachability: Reachability
@@ -659,18 +760,45 @@ export interface ObservabilityComponent {
   status: string
   reachability: Reachability
   detail: string
+  /** required = counts toward Layer B ready; planned = Phase 5+ */
+  phase?: 'required' | 'planned'
 }
 
 export interface ClusterObservabilityResponse {
   cluster_id: string
   namespace: string
   layer_b_status: LayerBStatus
+  layer_b_install_enabled: boolean
   reachability: Reachability
   detail: string
   components: ObservabilityComponent[]
   grafana_url?: string
   prometheus_url?: string
   docs_url?: string
+  generated_at: string
+}
+
+export interface TelemetrySamplePoint {
+  labels: Record<string, string>
+  value: number
+  timestamp?: number
+}
+
+export interface TelemetryMetricResult {
+  id: string
+  title: string
+  unit?: string
+  status: 'ok' | 'empty' | 'error'
+  detail?: string
+  points: TelemetrySamplePoint[]
+}
+
+export interface TelemetryOverviewResponse {
+  namespace: string
+  prometheus_url?: string
+  layer_b_status?: LayerBStatus
+  reachability?: Reachability
+  metrics: TelemetryMetricResult[]
   generated_at: string
 }
 
@@ -1882,6 +2010,56 @@ export interface NetworkAuditResponse {
   error?: string
   hint?: string
   autonomy?: string
+}
+
+export interface NetworkDeviceView {
+  name?: string
+  model?: string
+  type?: string
+  ip?: string
+  mac?: string
+  state?: number
+  adopted?: boolean
+  version?: string
+}
+
+export interface NetworkDevicesResponse {
+  count?: number
+  devices?: NetworkDeviceView[]
+  error?: string
+  hint?: string
+}
+
+export interface NetworkClientView {
+  hostname?: string
+  name?: string
+  ip?: string
+  mac?: string
+  network?: string
+  is_wired?: boolean
+  last_seen?: number
+}
+
+export interface NetworkClientsResponse {
+  count?: number
+  clients?: NetworkClientView[]
+  error?: string
+  hint?: string
+}
+
+export interface NetworkZonesResponse {
+  zones?: Record<string, unknown>[]
+  count?: number
+  error?: string
+  hint?: string
+}
+
+export interface NetworkPoliciesResponse {
+  policies?: Record<string, unknown>[]
+  bifrost_count?: number
+  bifrost_policies?: Record<string, unknown>[]
+  error?: string
+  hint?: string
 }
 
 export type IbGatewayReachability = 'ok' | 'degraded' | 'fail' | 'unknown'

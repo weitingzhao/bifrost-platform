@@ -15,6 +15,7 @@ import {
   Handshake,
   History,
   LifeBuoy,
+  LineChart,
   Map,
   MapPinned,
   Microscope,
@@ -23,6 +24,7 @@ import {
   Plug,
   Rocket,
   Ruler,
+  Satellite,
   Scale,
   Server,
   Shield,
@@ -43,7 +45,8 @@ import {
  * | Mission Control  | Cross-domain ops hub  | Flight-director big board, topology, audit        |
  * | Rocket           | Ops Platform itself   | K8s cluster, releases, scheduling                 |
  * | Ground Systems   | Infrastructure        | Server console, network, compute                  |
- * | Subcontractors   | External plugins      | Delivery Board, IB Gateway, future plugins        |
+ * | Satellite        | Trade stack payload   | Bus status, API health (L0 probes)                |
+ * | Subcontractors   | External plugins      | Delivery Board, Plugin Gallery, future plugins    |
  * | Engineer         | AI Agent              | Workspace, autonomous, trust, L-1 plane           |
  * | Governance       | Cross-domain ref lib  | Strategic vision, standards, AI strategy           |
  *
@@ -76,6 +79,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'cluster', label: 'Cluster', icon: Server },
+          { id: 'observability', label: 'Observability', icon: Activity },
           { id: 'trade-release', label: 'Trade Release', icon: Workflow },
           { id: 'platform-release', label: 'Platform Release', icon: Container },
           { id: 'placement', label: 'Placement', icon: Network },
@@ -91,6 +95,22 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'console', label: 'Server Console', icon: Terminal },
+          { id: 'network', label: 'Network', icon: Network },
+          { id: 'compute', label: 'Compute', icon: Cpu },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Satellite',
+    icon: Satellite,
+    subGroups: [
+      {
+        label: '',
+        items: [
+          { id: 'satellite-bus', label: 'Bus Status', icon: Activity },
+          { id: 'satellite-telemetry', label: 'Telemetry', icon: LineChart },
+          { id: 'satellite-api', label: 'API Health', icon: Gauge },
         ],
       },
     ],
@@ -103,6 +123,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'delivery-board', label: 'Delivery Board', icon: ClipboardList },
+          { id: 'plugin-gallery', label: 'Plugin Gallery', icon: Plug },
         ],
       },
     ],
@@ -177,6 +198,7 @@ export type ConsoleNavPlane =
   | 'Mission Control'
   | 'Rocket'
   | 'Ground Systems'
+  | 'Satellite'
   | 'Subcontractors'
   | 'Engineer'
   | 'Governance'
@@ -188,11 +210,18 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   defects: 'Mission Control',
   audit: 'Mission Control',
   cluster: 'Rocket',
+  observability: 'Rocket',
   'trade-release': 'Rocket',
   'platform-release': 'Rocket',
   placement: 'Rocket',
   console: 'Ground Systems',
+  network: 'Ground Systems',
+  compute: 'Ground Systems',
+  'satellite-bus': 'Satellite',
+  'satellite-telemetry': 'Satellite',
+  'satellite-api': 'Satellite',
   'delivery-board': 'Subcontractors',
+  'plugin-gallery': 'Subcontractors',
   'agent-desk': 'Engineer',
   briefing: 'Engineer',
   'dev-agent': 'Engineer',

@@ -38,7 +38,7 @@ export const MCP_SERVER_REGISTRY: McpServerDef[] = [
   { name: 'mcp-server-postgres', layer: 'platform', namespace: 'local (stdio bridge)', provides: 'PostgreSQL reachability via matrix probes (read L0)', status: 'available' },
   { name: 'mcp-server-argocd', layer: 'platform', namespace: 'cicd', provides: 'App sync status, sync trigger, rollback', status: 'planned' },
   { name: 'mcp-server-tekton', layer: 'platform', namespace: 'cicd', provides: 'Pipeline list, run trigger, run logs', status: 'planned' },
-  { name: 'mcp-server-prometheus', layer: 'platform', namespace: 'monitoring', provides: 'PromQL query, alert list, target status', status: 'planned' },
+  { name: 'mcp-server-prometheus', layer: 'platform', namespace: 'monitoring', provides: 'PromQL query, alert list, target status (proxy via GET /telemetry/*)', status: 'planned' },
   { name: 'mcp-trade-api', layer: 'business', namespace: 'local (stdio)', provides: 'Trade domain APIs — 9 domains read-only via gateway (Vision V4)', status: 'available' },
 ]
 

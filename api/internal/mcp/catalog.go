@@ -51,6 +51,7 @@ func Catalog() []ToolView {
 		tool("poweroff_compute_node", "Drain + power off compute node", "confirm", "POST", "/api/v1/cluster/nodes/{name}/poweroff", "admin", "P1", true),
 		tool("ensure_kubeconfig_secret", "Sync kubeconfig and ensure platform-kubeconfig Secret in STG/PROD namespaces", "confirm", "POST", "/api/v1/cluster/kubeconfig-secret/ensure", "admin", "P6", true),
 		tool("ensure_metrics_server", "Install metrics-server add-on", "confirm", "POST", "/api/v1/cluster/addons/metrics-server/ensure", "admin", "P1", true),
+		tool("ensure_kube_prometheus_stack", "Install kube-prometheus-stack add-on", "confirm", "POST", "/api/v1/cluster/addons/kube-prometheus-stack/ensure", "admin", "P3", true),
 		tool("gitops_rollback_app", "Rollback Argo CD app to previous revision", "confirm", "POST", "/api/v1/gitops/apps/{name}/rollback", "admin", "P3", true),
 		tool("stack_install_addon", "Install CI/CD stack add-on", "confirm", "POST", "/api/v1/stack/addons/{name}/install", "admin", "P4", true),
 		tool("stack_upgrade_addon", "Upgrade/reinstall stack add-on", "confirm", "POST", "/api/v1/stack/addons/{name}/upgrade", "admin", "P4", true),

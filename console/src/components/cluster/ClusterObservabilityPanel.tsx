@@ -10,6 +10,10 @@ interface ClusterObservabilityPanelProps {
   isLoading: boolean
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
+  onOpenObservability?: () => void
+  onInstallLayerB?: () => void
+  installLayerBPending?: boolean
+  installLayerBDisabled?: boolean
 }
 
 function layerBHeadline(status: LayerBStatus | undefined): string {
@@ -40,6 +44,10 @@ export function ClusterObservabilityPanel({
   isLoading,
   onOpenStandards,
   onOpenRuntimeMap,
+  onOpenObservability,
+  onInstallLayerB,
+  installLayerBPending = false,
+  installLayerBDisabled = false,
 }: ClusterObservabilityPanelProps) {
   const qc = useQueryClient()
   const observabilityFetching = useIsFetching({ queryKey: ['cluster', 'observability'] }) > 0
@@ -57,7 +65,7 @@ export function ClusterObservabilityPanel({
       {data?.layer_b_status === 'not_installed' && (
         <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           Layer A above uses metrics-server only. Layer B adds historical metrics, disk I/O, logs,
-          and alerts.
+          and alerts. Install from Rocket → Observability.
         </p>
       )}
       {data?.layer_b_status === 'partial' && data.detail !== '' && (
@@ -74,6 +82,21 @@ export function ClusterObservabilityPanel({
         {onOpenRuntimeMap != null && (
           <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenRuntimeMap}>
             Open Runtime Map
+          </Button>
+        )}
+        {onOpenObservability != null && (
+          <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenObservability}>
+            Open Observability
+          </Button>
+        )}
+        {onInstallLayerB != null && data?.layer_b_status !== 'ready' && (
+          <Button
+            type="button"
+            size="sm"
+            disabled={installLayerBDisabled || installLayerBPending}
+            onClick={onInstallLayerB}
+          >
+            {installLayerBPending ? 'Installing…' : 'Install Layer B'}
           </Button>
         )}
         {docsUrl != null && docsUrl !== '' && (
@@ -148,7 +171,9 @@ export function ClusterObservabilityPanel({
                 <DenseTableCell className="font-mono-tabular">{component.ready}</DenseTableCell>
                 <DenseTableCell>
                   <StatusLamp value={component.reachability} kind="reach" />{' '}
-                  <span className="font-mono-tabular">{component.status}</span>
+                  <span className="font-mono-tabular">
+                    {component.status === 'planned' ? 'Planned (Phase 5)' : component.status}
+                  </span>
                 </DenseTableCell>
                 <DenseTableCell>
                   {component.id === 'grafana' &&

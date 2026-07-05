@@ -37,7 +37,14 @@ import { BriefingPage } from '@/pages/BriefingPage'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { writeBriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { ClusterPage } from '@/pages/ClusterPage'
+import { ObservabilityPage } from '@/pages/ObservabilityPage'
+import { ComputePage } from '@/pages/ComputePage'
 import { DeliveryBoardPage } from '@/pages/DeliveryBoardPage'
+import { NetworkPage } from '@/pages/NetworkPage'
+import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
+import { SatelliteApiHealthPage } from '@/pages/SatelliteApiHealthPage'
+import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
+import { SatelliteTelemetryPage } from '@/pages/SatelliteTelemetryPage'
 import { PlacementPage } from '@/pages/PlacementPage'
 import { PlatformReleasePage } from '@/pages/PlatformReleasePage'
 import { TradeReleasePage } from '@/pages/TradeReleasePage'
@@ -72,6 +79,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   audit: 'Audit',
   'runtime-map': 'Runtime Map',
   cluster: 'Cluster',
+  observability: 'Observability',
   placement: 'Placement',
   'trade-release': 'Trade Release',
   'delivery-board': 'Delivery Board',
@@ -87,6 +95,12 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'ai-compute': 'AI Compute Strategy',
   'dev-agent': 'Dev Agent',
   console: 'Server console',
+  network: 'Network',
+  compute: 'Compute',
+  'satellite-bus': 'Bus Status',
+  'satellite-telemetry': 'Telemetry',
+  'satellite-api': 'API Health',
+  'plugin-gallery': 'Plugin Gallery',
   defects: 'Defects',
 }
 
@@ -99,6 +113,12 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'audit',
   'briefing',
   'console',
+  'network',
+  'compute',
+  'satellite-bus',
+  'satellite-telemetry',
+  'satellite-api',
+  'plugin-gallery',
   'control-room',
   'delivery-board',
   'trade-release',
@@ -106,6 +126,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'cluster',
   'placement',
   'runtime-map',
+  'observability',
 ]
 
 const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
@@ -121,10 +142,11 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   'k3s-bootstrap': 'control-room',
   'cicd-bootstrap': 'control-room',
   'data-layer': 'control-room',
-  'network-upgrade': 'control-room',
-  'network-api': 'control-room',
+  'network-upgrade': 'network',
+  'network-api': 'network',
   'ib-gateway-plugin': 'control-room',
   'trade-ib-client-migration': 'control-room',
+  'cluster-observability': 'observability',
 }
 
 function isConsoleViewTab(value: string): value is ConsoleViewTab {
@@ -192,7 +214,10 @@ export function ConsolePage() {
     enabled:
       viewTab === 'briefing' ||
       viewTab === 'control-room' ||
-      viewTab === 'trade-release',
+      viewTab === 'trade-release' ||
+      viewTab === 'satellite-bus' ||
+      viewTab === 'satellite-telemetry' ||
+      viewTab === 'satellite-api',
   })
 
   const clusterQuery = useQuery({
@@ -202,9 +227,11 @@ export function ConsolePage() {
     enabled:
       viewTab === 'briefing' ||
       viewTab === 'cluster' ||
+      viewTab === 'compute' ||
       viewTab === 'placement' ||
       viewTab === 'control-room' ||
-      viewTab === 'runtime-map',
+      viewTab === 'runtime-map' ||
+      viewTab === 'satellite-bus',
   })
 
   const stgSmokeQuery = useQuery({
@@ -302,6 +329,11 @@ export function ConsolePage() {
     setViewTab('runtime-map')
   }, [envFilter])
   const openCluster = () => setViewTab('cluster')
+  const openObservability = () => setViewTab('observability')
+  const openNetwork = () => setViewTab('network')
+  const openSatelliteApi = () => setViewTab('satellite-api')
+  const openSatelliteTelemetry = () => setViewTab('satellite-telemetry')
+  const openPluginGallery = () => setViewTab('plugin-gallery')
   const openPlacement = () => setViewTab('placement')
   const openAudit = () => setViewTab('audit')
   const openBriefing = useCallback((opts?: BriefingUrlState) => {
@@ -371,6 +403,7 @@ export function ConsolePage() {
     'control-room',
     'runtime-map',
     'cluster',
+    'observability',
     'trade-release',
     'blueprint',
     'platform-standards',
@@ -379,6 +412,12 @@ export function ConsolePage() {
     'mcp-contract',
     'design-system',
     'console',
+    'network',
+    'compute',
+    'satellite-bus',
+    'satellite-telemetry',
+    'satellite-api',
+    'plugin-gallery',
     'platform-release',
     'defects',
   ].includes(viewTab)
@@ -526,6 +565,7 @@ export function ConsolePage() {
                 onOpenPlatformRelease={() => setViewTab('platform-release')}
                 onOpenPromote={openPromote}
                 onOpenAgentProtocol={() => setViewTab('agent-protocol')}
+                onOpenNetwork={openNetwork}
               />
             </Suspense>
           </>
@@ -577,11 +617,20 @@ export function ConsolePage() {
             <ClusterPage
               onOpenStandards={openStandards}
               onOpenRuntimeMap={() => openRuntimeMap()}
+              onOpenObservability={openObservability}
               onOpenAudit={openAudit}
               onOpenServerConsole={() => setViewTab('console')}
               onOpenAgentDesk={openAgentDesk}
             />
           </>
+        )}
+
+        {viewTab === 'observability' && (
+          <ObservabilityPage
+            onOpenCluster={openCluster}
+            onOpenStandards={openStandards}
+            onOpenRuntimeMap={() => openRuntimeMap()}
+          />
         )}
 
         {viewTab === 'placement' && (
@@ -632,6 +681,34 @@ export function ConsolePage() {
         )}
 
         {viewTab === 'console' && <ServerConsolePage />}
+
+        {viewTab === 'network' && (
+          <NetworkPage
+            context={contextQuery.data}
+            onOpenAgentProtocol={() => setViewTab('agent-protocol')}
+          />
+        )}
+
+        {viewTab === 'compute' && (
+          <ComputePage onOpenCluster={openCluster} onOpenAudit={openAudit} />
+        )}
+
+        {viewTab === 'satellite-bus' && (
+          <SatelliteBusPage
+            onOpenObservability={openObservability}
+            onOpenTelemetry={openSatelliteTelemetry}
+            onOpenPluginGallery={openPluginGallery}
+            onOpenApiHealth={openSatelliteApi}
+          />
+        )}
+
+        {viewTab === 'satellite-api' && <SatelliteApiHealthPage />}
+
+        {viewTab === 'satellite-telemetry' && (
+          <SatelliteTelemetryPage onOpenObservability={openObservability} />
+        )}
+
+        {viewTab === 'plugin-gallery' && <PluginGalleryPage />}
 
         {isGovernanceTab && (
           <div className="flex items-center justify-between gap-3">
