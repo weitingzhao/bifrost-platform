@@ -7,13 +7,7 @@ import { StatusLamp } from '@/components/StatusLamp'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
 import { NightlyBriefingPanel } from '@/components/briefing/NightlyBriefingPanel'
 import { TrackCardsSection } from '@/components/briefing/TrackCardsSection'
-import { BuildPhaseGatePanel } from '@/components/briefing/BuildPhaseGatePanel'
-import { BriefingPhase1SignoffPanel } from '@/components/briefing/BriefingPhase1SignoffPanel'
-import { BriefingPhase2SignoffPanel } from '@/components/briefing/BriefingPhase2SignoffPanel'
-import { BriefingPhase3SignoffPanel } from '@/components/briefing/BriefingPhase3SignoffPanel'
-import { BriefingPhase4SignoffPanel } from '@/components/briefing/BriefingPhase4SignoffPanel'
 import { FlightDirectorBriefingPanel } from '@/components/briefing/FlightDirectorBriefingPanel'
-import { BriefingRoadmapStatusStrip } from '@/components/briefing/BriefingRoadmapStatusStrip'
 import { BriefingSessionResultsPanel } from '@/components/briefing/BriefingSessionResultsPanel'
 import { BriefingFoldableSection } from '@/components/briefing/BriefingFoldableSection'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
@@ -353,8 +347,6 @@ export function BriefingPage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <BriefingRoadmapStatusStrip />
-
       <FlightDirectorBriefingPanel onOpenTrustAutonomy={onOpenTrustAutonomy} />
 
       <TrackCardsSection
@@ -367,8 +359,6 @@ export function BriefingPage({
           setShowSessionPack(false)
         }}
       />
-
-      {selectedTrack === 'build' && <BuildPhaseGatePanel />}
 
       <TrackLaneSection
         track={selectedTrack}
@@ -573,10 +563,6 @@ export function BriefingPage({
         )}
       </section>
 
-      <BriefingPhase1SignoffPanel />
-      <BriefingPhase2SignoffPanel />
-      <BriefingPhase3SignoffPanel />
-
       <BriefingFoldableSection
         kicker="Closure"
         title="Session results"
@@ -585,8 +571,6 @@ export function BriefingPage({
       >
         <BriefingSessionResultsPanel />
       </BriefingFoldableSection>
-
-      <BriefingPhase4SignoffPanel />
 
       <section className="page-section panel-elevated px-4 py-3">
         <h2 className="m-0 text-sm font-semibold">Live snapshot</h2>

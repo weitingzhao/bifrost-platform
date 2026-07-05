@@ -3,21 +3,7 @@ import { AuditPageLink } from '@/components/AuditPageLink'
 import { ActiveAgentJobsStrip } from '@/components/control-room/ActiveAgentJobsStrip'
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
 import { BayDetailDrawer } from '@/components/control-room/BayDetailDrawer'
-import { ControlRoomProgramStatusStrip } from '@/components/control-room/ControlRoomProgramStatusStrip'
-import { ControlRoomPhase0SignoffPanel } from '@/components/control-room/ControlRoomPhase0SignoffPanel'
-import { ControlRoomPhase1SignoffPanel } from '@/components/control-room/ControlRoomPhase1SignoffPanel'
-import { ControlRoomPhase2SignoffPanel } from '@/components/control-room/ControlRoomPhase2SignoffPanel'
 import { CommandIntentStrip } from '@/components/control-room/CommandIntentStrip'
-import { ControlRoomPhase3SignoffPanel } from '@/components/control-room/ControlRoomPhase3SignoffPanel'
-import { ControlRoomPhase4SignoffPanel } from '@/components/control-room/ControlRoomPhase4SignoffPanel'
-import { ControlRoomPhase5SignoffPanel } from '@/components/control-room/ControlRoomPhase5SignoffPanel'
-import { MissionSignalPhase7SignoffPanel } from '@/components/control-room/MissionSignalPhase7SignoffPanel'
-import { MissionSignalPhase6SignoffPanel } from '@/components/control-room/MissionSignalPhase6SignoffPanel'
-import { MissionSignalPhase5SignoffPanel } from '@/components/control-room/MissionSignalPhase5SignoffPanel'
-import { MissionSignalPhase4SignoffPanel } from '@/components/control-room/MissionSignalPhase4SignoffPanel'
-import { MissionSignalPhase3SignoffPanel } from '@/components/control-room/MissionSignalPhase3SignoffPanel'
-import { MissionSignalPhase2SignoffPanel } from '@/components/control-room/MissionSignalPhase2SignoffPanel'
-import { MissionSignalPhase1SignoffPanel } from '@/components/control-room/MissionSignalPhase1SignoffPanel'
 import { MissionTimelinePanel } from '@/components/control-room/MissionTimelinePanel'
 import { NetworkHealthPanel } from '@/components/control-room/NetworkHealthPanel'
 import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
@@ -330,23 +316,6 @@ export function ControlRoomPage({
           />
         </div>
       </ProgramContextSection>
-
-      <MissionSignalPhase7SignoffPanel />
-      <MissionSignalPhase6SignoffPanel />
-      <MissionSignalPhase5SignoffPanel />
-      <MissionSignalPhase4SignoffPanel />
-      <MissionSignalPhase3SignoffPanel />
-      <MissionSignalPhase2SignoffPanel />
-      <MissionSignalPhase1SignoffPanel matrices={matrices} />
-
-      <ControlRoomProgramStatusStrip />
-
-      <ControlRoomPhase5SignoffPanel />
-      <ControlRoomPhase4SignoffPanel />
-      <ControlRoomPhase3SignoffPanel />
-      <ControlRoomPhase2SignoffPanel />
-      <ControlRoomPhase1SignoffPanel />
-      <ControlRoomPhase0SignoffPanel />
 
       <BayDetailDrawer
         selection={selection}

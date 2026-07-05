@@ -204,7 +204,7 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Audit', plane: 'Observe', purpose: 'Platform actuation audit history' },
   { view: 'Milestones', plane: 'Architecture', purpose: 'Spine milestones, decisions, focus' },
   { view: 'Promote', plane: 'Operate', purpose: 'Release readiness (flywheels A + B)' },
-  { view: 'Deploy Mainline', plane: 'Operate', purpose: 'Deployment decision chain' },
+  { view: 'Deploy Mainline', plane: 'Architecture', purpose: 'Migration decision chain — spine-bound milestones' },
   { view: 'Flywheel Vision', plane: 'Architecture', purpose: 'Three-layer Agent convergence vision' },
   { view: 'Architecture catalogs', plane: 'Architecture', purpose: 'Governance catalogs and Copy Prompt' },
   { view: 'Server Console', plane: 'Operate', purpose: 'Remote server console (Tools)' },

@@ -1,4 +1,6 @@
 /** Kaniko Dockerfile ConfigMaps required before deliver-stg build. */
+export const DELIVER_STG_PIPELINE = 'bifrost-deliver-stg'
+
 export const EXPECTED_DOCKERFILE_CONFIGMAPS = [
   { name: 'bifrost-api-stg-dockerfile', short: 'api' },
   { name: 'bifrost-frontend-stg-dockerfile', short: 'frontend' },

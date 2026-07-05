@@ -14,14 +14,6 @@ import {
 import { CatalogSection } from '@/components/CatalogSection'
 import { IbGatewayCutoverStatusPanel } from '@/components/architecture/IbGatewayCutoverStatusPanel'
 import { IbGatewayLiveStatusPanel } from '@/components/architecture/IbGatewayLiveStatusPanel'
-import { IbGatewayPluginPhase0SignoffPanel } from '@/components/architecture/IbGatewayPluginPhase0SignoffPanel'
-import { IbGatewayPluginPhase1SignoffPanel } from '@/components/architecture/IbGatewayPluginPhase1SignoffPanel'
-import { IbGatewayPluginPhase2SignoffPanel } from '@/components/architecture/IbGatewayPluginPhase2SignoffPanel'
-import { IbGatewayPluginPhase3SignoffPanel } from '@/components/architecture/IbGatewayPluginPhase3SignoffPanel'
-import { IbGatewayPluginPhase4SignoffPanel } from '@/components/architecture/IbGatewayPluginPhase4SignoffPanel'
-import { IbGatewayPluginProgramSignoffPanel } from '@/components/architecture/IbGatewayPluginProgramSignoffPanel'
-import { IbGatewayPluginHardeningSignoffPanel } from '@/components/architecture/IbGatewayPluginHardeningSignoffPanel'
-import { IbGatewayPluginProgramStatusStrip } from '@/components/architecture/IbGatewayPluginProgramStatusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   IB_GATEWAY_DESIGN_PRINCIPLES,
@@ -56,25 +48,9 @@ export function IbGatewayPluginPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <IbGatewayPluginProgramStatusStrip />
-
       <IbGatewayLiveStatusPanel />
 
       <IbGatewayCutoverStatusPanel />
-
-      <IbGatewayPluginPhase0SignoffPanel />
-
-      <IbGatewayPluginPhase1SignoffPanel />
-
-      <IbGatewayPluginPhase2SignoffPanel />
-
-      <IbGatewayPluginPhase3SignoffPanel />
-
-      <IbGatewayPluginPhase4SignoffPanel />
-
-      <IbGatewayPluginProgramSignoffPanel />
-
-      <IbGatewayPluginHardeningSignoffPanel />
 
       <OpsSection title="Plugin metadata" bodyPadding="compact">
         <div className="flex flex-wrap items-center gap-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

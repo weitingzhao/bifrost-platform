@@ -1,10 +1,11 @@
 /**
  * Deploy Mainline catalog — deployment decision chain & sign-off gates.
  *
- * Authoritative source for Ops Console → Operate → Deploy Mainline.
+ * Authoritative source for Ops Console → Architecture → Deploy Mainline.
  * Migrated from bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md (2026-06-15).
  *
- * Spine-bound rows (seq 4/5/7): structure only — live status from Projection (resolveMainlinePhases).
+ * Spine-bound rows (seq 4/5/7): live status from Projection (resolveMainlinePhases).
+ * Historical rows (seq 0-3, 6): archived on Delivery Board.
  */
 
 import type { OpsContextResponse } from '@/api/types'
@@ -38,7 +39,8 @@ export type MainlinePhase = MainlinePhaseDefinition & {
   spineStatus?: string
 }
 
-export const MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] = [
+/** Full list — used by LLM pack (needs full context) and Delivery Board historical archive. */
+export const ALL_MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] = [
   { seq: 0, phase: 'Phase 2B + 2C-A Session 0–9', authority: 'PHASE2C_SIGNOFF_MASTER.md', historicalNote: 'CLOSED (2026-06-08)' },
   { seq: 1, phase: 'Local Prod Final', authority: 'This page', historicalNote: 'CLOSED (2026-06-04 Owner L4)' },
   {
@@ -79,13 +81,38 @@ export const MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] = [
   },
 ]
 
+/** Spine-bound live phases only (seq 4/5/7) — shown on Deploy Mainline page. */
+export const MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] =
+  ALL_MAINLINE_PHASE_DEFINITIONS.filter(d => d.spineMilestoneId != null)
+
+/** Historical CLOSED phases (seq 0-3, 6) — shown on Delivery Board archive. */
+export const MAINLINE_HISTORICAL_PHASES: MainlinePhaseDefinition[] =
+  ALL_MAINLINE_PHASE_DEFINITIONS.filter(d => d.spineMilestoneId == null)
+
 /** @deprecated Use resolveMainlinePhases(context) — static export kept for LLM pack fallback only. */
 export const MAINLINE_PHASES: Array<MainlinePhaseDefinition & { status: string }> =
-  MAINLINE_PHASE_DEFINITIONS.map(def => ({
+  ALL_MAINLINE_PHASE_DEFINITIONS.map(def => ({
     ...def,
     status: def.historicalNote ?? (def.spineMilestoneId != null ? 'Projection (spine)' : '—'),
   }))
 
+/** Resolve all phases (historical + live) with spine projection. Used by LLM pack. */
+export function resolveAllMainlinePhases(context?: OpsContextResponse): MainlinePhase[] {
+  return ALL_MAINLINE_PHASE_DEFINITIONS.map(def => {
+    if (def.spineMilestoneId != null) {
+      const spine = findSpineMilestone(context, def.spineMilestoneId)
+      const spineStatus = spine?.status
+      const statusLabel =
+        spineStatus != null && spineStatus !== ''
+          ? formatSpineStatusLabel(spineStatus)
+          : '— (spine unavailable)'
+      return { ...def, statusLabel, spineStatus }
+    }
+    return { ...def, statusLabel: def.historicalNote ?? '—' }
+  })
+}
+
+/** Resolve live spine-bound phases only (seq 4/5/7). Used by Deploy Mainline page. */
 export function resolveMainlinePhases(context?: OpsContextResponse): MainlinePhase[] {
   return MAINLINE_PHASE_DEFINITIONS.map(def => {
     if (def.spineMilestoneId != null) {
@@ -248,7 +275,7 @@ export const CHANGE_LOG: ChangeLogEntry[] = [
 ]
 
 export function buildDeployMainlineLlmPack(context?: OpsContextResponse): string {
-  const phases = resolveMainlinePhases(context)
+  const phases = resolveAllMainlinePhases(context)
   const lines: string[] = [
     '# Bifrost Ops — Deploy Mainline (Decision Chain & Sign-off Gates)',
     `# Source: ${DEPLOY_MAINLINE_SOURCE} v${DEPLOY_MAINLINE_VERSION}`,

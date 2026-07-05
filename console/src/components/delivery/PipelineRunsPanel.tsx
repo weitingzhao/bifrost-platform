@@ -37,7 +37,7 @@ import {
   type PipelineRunSortKey,
 } from '@/lib/delivery/pipelineRunAskPack'
 
-import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliveryPageTabs'
+import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 
 export type PipelineRunsPanelLayout = 'observe' | 'operate'
 

@@ -11,7 +11,6 @@ import {
   cancelDevAgent,
 } from '@/api/devAgent'
 import type { DevAgentJob } from '@/api/devAgentTypes'
-import { DevAgentPlatformSignoffPanel } from '@/components/architecture/DevAgentPlatformSignoffPanel'
 import { DevAgentPersistencePanel } from '@/components/devagent/DevAgentPersistencePanel'
 import { DevAgentProgramSelector } from '@/components/devagent/DevAgentProgramSelector'
 import { DevAgentPhaseBoard } from '@/components/devagent/DevAgentPhaseBoard'
@@ -240,8 +239,6 @@ export function DevAgentPage() {
           </div>
         </OpsSection>
       )}
-
-      <DevAgentPlatformSignoffPanel />
     </div>
   )
 }
