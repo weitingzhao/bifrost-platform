@@ -43,17 +43,9 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
     status: 'partial',
     notes: 'dataLayerCatalog + k8s/data CNPG manifests',
   },
-  'k3s-architecture': {
-    status: 'partial',
-    notes: 'tradeK8sNativeCatalog — W0–W2 signed; W3+ in progress',
-  },
   'flywheel-vision': {
     status: 'partial',
     notes: 'V1–V5 gate panels; Dual Flywheel vision SIGNED at V5',
-  },
-  environments: {
-    status: 'done',
-    notes: 'Static flows/scope/hardware + Copy for LLM',
   },
   console: {
     status: 'done',

@@ -2,7 +2,7 @@
  * Data Layer catalog — Redis & PostgreSQL architecture principles for K3s.
  *
  * Authoritative source for Ops Console → Architecture → K3s → Data Layer.
- * Complements K3s Architecture (topology/CI/CD) with stateful-service design.
+ * Complements k3sArchitectureCatalog.ts (topology/CI/CD) with stateful-service design.
  * Aligned with Vision § Redis Ideal Topology.
  */
 
@@ -88,7 +88,7 @@ export const REDIS_DEPLOY_PRINCIPLES: RedisDeployPrinciple[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// PostgreSQL architecture (extracted & extended from K3s Architecture)
+// PostgreSQL architecture (extracted & extended from k3sArchitectureCatalog.ts)
 // ---------------------------------------------------------------------------
 
 export type PgPrinciple = {

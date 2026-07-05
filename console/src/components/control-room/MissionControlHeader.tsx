@@ -40,7 +40,6 @@ interface MissionControlHeaderProps {
   onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenCluster: () => void
   onOpenDelivery: () => void
-  onOpenProgram?: () => void
   onOpenPlatformRelease: () => void
   onOpenAgentDesk: (opts?: { prefill: string }) => void
   onOpenPromote?: () => void
@@ -241,7 +240,6 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
             context={context}
             onOpenRuntimeMap={props.onOpenRuntimeMap}
             onOpenDelivery={props.onOpenDelivery}
-            onOpenProgram={props.onOpenProgram}
             onOpenPromote={props.onOpenPromote}
           />
         </div>

@@ -7,14 +7,12 @@ import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
 interface CouplingGatePanelProps {
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
-  onOpenProgram: () => void
   onOpenDelivery?: () => void
 }
 
 export function CouplingGatePanel({
   context,
   matrices,
-  onOpenProgram,
   onOpenDelivery,
 }: CouplingGatePanelProps) {
   if (!context) {
@@ -50,9 +48,9 @@ export function CouplingGatePanel({
         </ul>
       )}
       {context.focus.blocker != null && context.focus.blocker !== '' && (
-        <Button variant="ghost" size="sm" className="mt-2 text-[var(--text-dense)]" onClick={onOpenProgram}>
-          Open blocker: {context.focus.blocker}
-        </Button>
+        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Blocker: {context.focus.blocker}
+        </p>
       )}
       {onOpenDelivery != null && (
         <Button variant="ghost" size="sm" className="mt-2 text-[var(--text-dense)]" onClick={onOpenDelivery}>

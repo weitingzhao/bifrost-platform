@@ -31,8 +31,8 @@ export function DeliveryBoardHistoricalArchive() {
       <div className="flex flex-col gap-4 border-t border-border/50 px-1 pb-4 pt-2">
         <CatalogSection title="Historical mainline phases">
           <p className="m-0 px-3 py-2 text-dense-meta text-muted-foreground">
-            Completed phases from the migration decision chain. Live spine-bound phases (4/5/7)
-            are shown on Architecture → Deploy Mainline.
+            Completed phases from the migration decision chain. Live spine state: Control Room /
+            Agent → Briefing Reconciliation.
           </p>
           <DenseDataTable>
             <DenseTableHeader>

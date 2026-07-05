@@ -37,17 +37,13 @@ import { BriefingPage } from '@/pages/BriefingPage'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { writeBriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { ClusterPage } from '@/pages/ClusterPage'
-import { DeployMainlinePage } from '@/pages/DeployMainlinePage'
 import { DeliveryBoardPage } from '@/pages/DeliveryBoardPage'
-import { EnvironmentsPage } from '@/pages/EnvironmentsPage'
 import { PlacementPage } from '@/pages/PlacementPage'
 import { PlatformReleasePage } from '@/pages/PlatformReleasePage'
-import { ProgramPage } from '@/pages/ProgramPage'
 import { TradeReleasePage } from '@/pages/TradeReleasePage'
 import { RuntimeMapPage } from '@/pages/RuntimeMapPage'
 import { ServerConsolePage } from '@/pages/ServerConsolePage'
 import { DesignSystemPage } from '@/pages/DesignSystemPage'
-import { K3sArchitecturePage } from '@/pages/K3sArchitecturePage'
 import { K3sBootstrapPage } from '@/pages/K3sBootstrapPage'
 import { CicdBootstrapPage } from '@/pages/CicdBootstrapPage'
 import { RoadmapPage } from '@/pages/RoadmapPage'
@@ -86,16 +82,12 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   placement: 'Placement',
   'trade-release': 'Trade Release',
   'delivery-board': 'Delivery Board',
-  program: 'Milestones',
   blueprint: 'Blueprint',
   'flywheel-vision': 'Vision',
-  environments: 'Environments',
   roadmap: 'Roadmap',
-  'k3s-architecture': 'K3s Architecture',
   'k3s-bootstrap': 'K3s Bootstrap',
   'cicd-bootstrap': 'CI/CD Bootstrap',
   'data-layer': 'Data Layer',
-  'deploy-mainline': 'Deploy Mainline',
   'platform-release': 'Platform Release',
   'platform-standards': 'Platform',
   'agent-protocol': 'Agent Protocol',
@@ -128,7 +120,6 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'cluster',
   'placement',
   'runtime-map',
-  'program',
 ]
 
 const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
@@ -137,6 +128,10 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   pulse: 'control-room',
   delivery: 'trade-release',
   promote: 'trade-release',
+  program: 'control-room',
+  'deploy-mainline': 'control-room',
+  environments: 'control-room',
+  'k3s-architecture': 'control-room',
 }
 
 function isConsoleViewTab(value: string): value is ConsoleViewTab {
@@ -299,11 +294,9 @@ export function ConsolePage() {
     void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
   }
 
-  const openProgram = () => setViewTab('program')
   const openTradeRelease = () => setViewTab('trade-release')
   const openDelivery = openTradeRelease
   const openPromote = openTradeRelease
-  const openDeployMainline = () => setViewTab('deploy-mainline')
   const clearRuntimeMapFocus = useCallback(() => setRuntimeMapFocus(null), [])
 
   const openRuntimeMap: OpenRuntimeMapFn = useCallback((options) => {
@@ -352,18 +345,13 @@ export function ConsolePage() {
     },
     [qc],
   )
-  const openBlueprint = () => setViewTab('blueprint')
   const openStandards = () => setViewTab('platform-standards')
-  const openEnvironments = () => setViewTab('environments')
 
   const [govCopyState, setGovCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const isArchTab =
     viewTab === 'blueprint' ||
     viewTab === 'flywheel-vision' ||
-    viewTab === 'environments' ||
     viewTab === 'roadmap' ||
-    viewTab === 'deploy-mainline' ||
-    viewTab === 'k3s-architecture' ||
     viewTab === 'k3s-bootstrap' ||
     viewTab === 'cicd-bootstrap' ||
     viewTab === 'data-layer' ||
@@ -404,9 +392,7 @@ export function ConsolePage() {
     'runtime-map',
     'cluster',
     'trade-release',
-    'program',
     'blueprint',
-    'environments',
     'platform-standards',
     'agent-protocol',
     'briefing-reconciliation',
@@ -551,7 +537,6 @@ export function ConsolePage() {
                 lastDeliverSucceeded={lastDeliverSucceeded}
                 tierB={tierBQuery.data}
                 onOpenRuntimeMap={openRuntimeMap}
-                onOpenProgram={openProgram}
                 onOpenDelivery={openDelivery}
                 onOpenCluster={openCluster}
                 onOpenAudit={openAudit}
@@ -561,7 +546,6 @@ export function ConsolePage() {
                 onStartAgentJob={startAmbientAgentJob}
                 onOpenPlatformRelease={() => setViewTab('platform-release')}
                 onOpenPromote={openPromote}
-                onOpenDeployMainline={openDeployMainline}
                 onOpenNetworkUpgrade={() => setViewTab('network-upgrade')}
                 onOpenNetworkApi={() => setViewTab('network-api')}
                 onOpenAgentProtocol={() => setViewTab('agent-protocol')}
@@ -615,7 +599,7 @@ export function ConsolePage() {
             />
             <ClusterPage
               onOpenStandards={openStandards}
-              onOpenEnvironments={openEnvironments}
+              onOpenRuntimeMap={() => openRuntimeMap()}
               onOpenAudit={openAudit}
               onOpenServerConsole={() => setViewTab('console')}
               onOpenAgentDesk={openAgentDesk}
@@ -652,21 +636,7 @@ export function ConsolePage() {
             <TradeReleasePage
               context={contextQuery.data}
               isLoading={contextQuery.isLoading}
-            />
-          </>
-        )}
-
-        {viewTab === 'program' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES.program}
-              description="NOW — Live progress: active milestones, owner decisions, and deployment status from ops-context spine."
-            />
-            <ProgramPage
-              context={contextQuery.data}
-              isLoading={contextQuery.isLoading}
-              error={contextQuery.error as Error | null}
-              onOpenBlueprint={openBlueprint}
+              onOpenPlacement={openPlacement}
             />
           </>
         )}
@@ -694,8 +664,6 @@ export function ConsolePage() {
                 viewTab === 'flywheel-vision' ? 'WHERE — Ultimate destination: Trade + Ops converge into unified AI-native experience via three-layer Agents.'
                   : viewTab === 'blueprint' ? 'HOW — Architectural principles, control-plane strategy, authorization model, and design rules toward the Vision.'
                   : viewTab === 'roadmap' ? 'WHEN — Phased execution plan: hardware roles, K3s stages, GitOps migration, AI ops timeline.'
-                  : viewTab === 'environments' ? 'WHAT — Concrete probe targets, IPs, ports, and connectivity for each environment.'
-                  : viewTab === 'k3s-architecture' ? 'Target K3s topology, CNPG, GitOps, AI-native ops, and living checkpoints.'
                   : viewTab === 'k3s-bootstrap' ? 'First-node deployment runbook, verification checklist, node join steps, and sign-off.'
                   : viewTab === 'cicd-bootstrap' ? 'L0/L1/L2 self-hosting bootstrap model — CI/CD rules, recovery paths, and P6 gap tracking.'
                   : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
@@ -706,7 +674,6 @@ export function ConsolePage() {
                     ? 'Platform Plugin — shared TWS bus (redis-ib @ data NS); direct replacement of legacy trade-socket IB; per-phase Owner sign-off.'
                   : viewTab === 'trade-ib-client-migration'
                     ? 'Trade stack IB refactor — surface inventory, Gateway RPC parity, health derivation, Celery workers, UI cleanup (redis-ib only).'
-                  : viewTab === 'deploy-mainline' ? 'Migration decision chain — spine-bound milestones (STG deliver, Prod cutover, Legacy retirement).'
                   : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-system'
@@ -734,19 +701,7 @@ export function ConsolePage() {
 
         {viewTab === 'flywheel-vision' && <DualFlywheelVisionPage />}
 
-        {viewTab === 'environments' && (
-          <EnvironmentsPage
-            context={contextQuery.data}
-            onOpenRuntimeMap={openRuntimeMap}
-            onOpenDelivery={openDelivery}
-          />
-        )}
-
         {viewTab === 'roadmap' && <RoadmapPage />}
-
-        {viewTab === 'deploy-mainline' && <DeployMainlinePage context={contextQuery.data} />}
-
-        {viewTab === 'k3s-architecture' && <K3sArchitecturePage onOpenPlacement={openPlacement} />}
 
         {viewTab === 'k3s-bootstrap' && <K3sBootstrapPage />}
 

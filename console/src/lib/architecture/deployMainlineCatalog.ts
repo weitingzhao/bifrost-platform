@@ -1,11 +1,8 @@
 /**
- * Deploy Mainline catalog — deployment decision chain & sign-off gates.
+ * Deploy mainline catalog — migration decision chain data (archive + LLM pack).
  *
- * Authoritative source for Ops Console → Architecture → Deploy Mainline.
- * Migrated from bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md (2026-06-15).
- *
- * Spine-bound rows (seq 4/5/7): live status from Projection (resolveMainlinePhases).
- * Historical rows (seq 0-3, 6): archived on Delivery Board.
+ * Source: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md (2026-06-15).
+ * UI: historical phases on Delivery Board; live spine: Control Room / Briefing Reconciliation.
  */
 
 import type { OpsContextResponse } from '@/api/types'
@@ -52,7 +49,7 @@ export const ALL_MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] = [
   {
     seq: 3,
     phase: 'K3s Phase 1 trial',
-    authority: 'Ops Console → Architecture → K3s Architecture §10',
+    authority: 'k3sArchitectureCatalog.ts STATUS_CHECKPOINTS',
     historicalNote: 'Bootstrap CLOSED 2026-06-14; cluster build ongoing',
   },
   {
@@ -81,7 +78,7 @@ export const ALL_MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] = [
   },
 ]
 
-/** Spine-bound live phases only (seq 4/5/7) — shown on Deploy Mainline page. */
+/** Spine-bound live phases (seq 4/5/7). */
 export const MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] =
   ALL_MAINLINE_PHASE_DEFINITIONS.filter(d => d.spineMilestoneId != null)
 
@@ -112,7 +109,7 @@ export function resolveAllMainlinePhases(context?: OpsContextResponse): Mainline
   })
 }
 
-/** Resolve live spine-bound phases only (seq 4/5/7). Used by Deploy Mainline page. */
+/** Resolve live spine-bound phases (seq 4/5/7). Used by LLM pack and catalog parity. */
 export function resolveMainlinePhases(context?: OpsContextResponse): MainlinePhase[] {
   return MAINLINE_PHASE_DEFINITIONS.map(def => {
     if (def.spineMilestoneId != null) {
@@ -236,7 +233,7 @@ export const L4_SIGNOFF: L4Signoff[] = [
 ]
 
 export const POST_SIGNOFF_UNLOCK =
-  'K3s Phase 1 (Ops Console → Architecture → K3s Architecture §10); 2C-B production runbook retained as Compose reference; prod cutover pending D1 migration decision.'
+  'K3s Phase 1 (k3sArchitectureCatalog.ts STATUS_CHECKPOINTS); 2C-B production runbook retained as Compose reference; prod cutover pending D1 migration decision.'
 
 export type NextPhaseItem = { label: string; detail: string }
 

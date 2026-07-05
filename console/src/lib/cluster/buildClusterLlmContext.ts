@@ -285,7 +285,7 @@ export function buildClusterLlmContext(input: ClusterLlmContextInput): string {
       '- Prefer Ops Console actuation (platform-api) over ad-hoc kubectl for mutations.',
       '- bifrost-trader-engine/ is read-only reference — never edit.',
       '- For placement/CI scheduling details also see Architecture → Placement (Copy LLM pack).',
-      '- For hardware/env topology also see Architecture → Environments (Copy for LLM).',
+      '- For hardware/env topology also see environments-catalog.ts (Copy All for LLM on Architecture tabs) or Runtime Map (live).',
       '',
       'When diagnosing issues:',
       '1. Start from failing pods and placement violations above.',
