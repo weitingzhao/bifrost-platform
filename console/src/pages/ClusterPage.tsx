@@ -64,7 +64,6 @@ import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
 import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabilityPanel'
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
-import { ClusterPlatformPluginsSection } from '@/components/cluster/ClusterPlatformPluginsSection'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
@@ -97,12 +96,14 @@ interface ScaleState {
 export function ClusterPage({
   onOpenStandards,
   onOpenRuntimeMap,
+  onOpenObservability,
   onOpenAudit,
   onOpenServerConsole,
   onOpenAgentDesk,
 }: {
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
+  onOpenObservability?: () => void
   onOpenAudit?: () => void
   onOpenServerConsole?: () => void
   onOpenAgentDesk?: (jobId: string) => void
@@ -981,8 +982,6 @@ cd ../bifrost-platform && make start`}
         isLoading={summaryQuery.isLoading || metricsQuery.isLoading}
       />
 
-      <ClusterPlatformPluginsSection />
-
       <section
         className="cluster-global-top-pods page-section"
         aria-label="Cluster-wide pod resource usage"
@@ -1151,6 +1150,7 @@ cd ../bifrost-platform && make start`}
             isLoading={observabilityQuery.isLoading}
             onOpenStandards={onOpenStandards}
             onOpenRuntimeMap={onOpenRuntimeMap}
+            onOpenObservability={onOpenObservability}
           />
         }
       />
