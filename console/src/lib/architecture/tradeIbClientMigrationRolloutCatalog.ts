@@ -1,8 +1,13 @@
 /**
- * Trade IB Client Migration — post-program rollout (observe + data path only).
+ * Trade IB Client Migration — post-program rollout (catalog-only).
  *
- * Authority: Ops Console → Architecture → Plugins → Trade IB Migration (Rollout section).
+ * All rollout waves complete — no Architecture UI page.
  * Prerequisite: TIBM0–4 + TIBM-PC signed; IBGP complete; spine decision D10 (trading frozen).
+ *
+ * Live state (not this catalog):
+ * - Rollout sign-off: Operate → Delivery Board · trade-ib-migration
+ * - Trade IB health: Operate → Cluster + Monitor matrix probes
+ * - Migrate lane: Agent → Briefing · spine stream trade-ib-client-migration
  *
  * Trading execution (daemon FSM, live orders, scale-up for auto-trade) is intentionally BLOCKED
  * until Owner issues an explicit unlock — see TRADE_EXECUTION_FREEZE.

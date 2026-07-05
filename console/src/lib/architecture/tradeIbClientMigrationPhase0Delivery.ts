@@ -20,7 +20,7 @@ export const TRADE_IB_CLIENT_MIGRATION_PHASE0_DELIVERY_ITEMS: TradeIbClientMigra
       summary:
         'All Trade IB touchpoints catalogued: quotes, account, RPC, Celery bars, daemon health, ops, FE — with repo paths and bus status.',
       verifySteps: [
-        'Architecture → Plugins → Trade IB Migration — Surface inventory shows 14 rows (S01–S14).',
+        'tradeIbClientMigrationCatalog.ts — Surface inventory shows 14 rows (S01–S14).',
         'Each row has status tag: on_bus / partial / direct_tws / stale_ref / retired.',
         'Owner confirms no missing production IB path (daemon, api, worker, fe).',
       ],
@@ -74,7 +74,7 @@ export const TRADE_IB_CLIENT_MIGRATION_PHASE0_DELIVERY_ITEMS: TradeIbClientMigra
       title: 'IB Gateway Plugin prerequisite',
       summary: 'Migration assumes IBGP program complete — redis-ib live, Trade ExternalName, legacy socket retired.',
       verifySteps: [
-        'IB Gateway page — program strip shows IBGP0–4 signed (or Owner acknowledges live gateway).',
+        'Delivery Board → IB Gateway Plugin — program strip shows IBGP0–4 signed (or Owner acknowledges live gateway).',
         'make verify-ib-gateway-program passes on cluster (optional live check).',
         'If IBGP incomplete, block TIBM1+ until Platform bus stable.',
       ],

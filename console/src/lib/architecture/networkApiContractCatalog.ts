@@ -1,10 +1,11 @@
 /**
- * Network API contract — platform-api /api/v1/network/* (Projection planning).
+ * Network API contract — platform-api /api/v1/network/* (catalog-only).
  *
- * Authoritative source for Ops Console → Architecture → Network API.
- * Phase 7 delivers contract + Console UI only — no Go handlers in this phase.
- * Actuation executors: scripts/unifi_firewall_setup.py (Session v2 per spine D9).
+ * Live routes and UniFi probe: Observe → Control Room → Network Health;
+ * actuation audit via GET /api/v1/audit. Executor scripts per spine D9.
  */
+
+import { buildUnifiMcpServerLlmPack } from './unifiMcpServerCatalog'
 
 export const NETWORK_API_CONTRACT_VERSION = '2026-07-03'
 export const NETWORK_API_CONTRACT_SOURCE = 'console/src/lib/architecture/networkApiContractCatalog.ts'
@@ -163,11 +164,43 @@ export const NETWORK_API_MCP_TOOLS: NetworkApiMcpToolDef[] = NETWORK_API_ROUTES.
   }),
 )
 
+export const NETWORK_API_RELATED_AUTHORITIES = [
+  'Live UniFi probe + infra streams: Observe → Control Room → Network Health',
+  'Actuation audit: GET /api/v1/audit (same pattern as cluster L1)',
+  'Agent playbooks: Agent Protocol → POLICY_NOMINAL / POLICY_DRIFT / SESSION_PATH',
+  'UniFi MCP stream: unifiMcpServerCatalog.ts · spine unifi-mcp-server',
+  'Firewall catalog authority: networkUpgradeCatalog.ts — FIREWALL_APPLIED + FIREWALL_RULES',
+]
+
+/** Archived implementation status and MCP stream progress — live routes via platform-api + Control Room. */
+export function buildNetworkApiHistoricalAppendix(): string {
+  const lines: string[] = [
+    '## Historical progress (archived — do not treat as live)',
+    '',
+    `Contract status snapshot: ${NETWORK_API_CONTRACT_STATUS}`,
+    '',
+    '### Routes (implementation snapshot)',
+    ...NETWORK_API_ROUTES.map(
+      r =>
+        `- **${r.method} ${r.route}** [${r.autonomy}/${r.authLevel}] implemented=${r.implemented} — ${r.purpose}`,
+    ),
+    '',
+    '### MCP tools (implementation snapshot)',
+    ...NETWORK_API_MCP_TOOLS.map(
+      t => `- ${t.tool} → ${t.route} (${t.level}) implemented=${t.implemented}`,
+    ),
+    '',
+    buildUnifiMcpServerLlmPack(),
+  ]
+  return lines.join('\n')
+}
+
 export function buildNetworkApiContractLlmPack(): string {
   const lines: string[] = [
     '# Bifrost Ops — Network API Contract (platform-api /api/v1/network/*)',
     `Version: ${NETWORK_API_CONTRACT_VERSION}`,
-    `Status: ${NETWORK_API_CONTRACT_STATUS}`,
+    `Source: ${NETWORK_API_CONTRACT_SOURCE}`,
+    'Live probe + route health: Control Room Network Health + platform-api — not this catalog.',
     '',
     '## Executor model',
     `- Primary: ${NETWORK_API_EXECUTOR_MODEL.primary}`,
@@ -175,18 +208,22 @@ export function buildNetworkApiContractLlmPack(): string {
     `- Catalog: ${NETWORK_API_EXECUTOR_MODEL.catalogAuthority}`,
     `- Audit: ${NETWORK_API_EXECUTOR_MODEL.auditTrail}`,
     `- MCP: ${NETWORK_API_EXECUTOR_MODEL.spineStream}`,
+    `- Client library: ${NETWORK_API_EXECUTOR_MODEL.clientLibrary}`,
+    `- MCP server: ${NETWORK_API_EXECUTOR_MODEL.mcpServer}`,
     '',
-    '## Planned routes',
+    '## Routes (contract)',
     ...NETWORK_API_ROUTES.map(
       r =>
-        `- **${r.method} ${r.route}** [${r.autonomy}/${r.authLevel}] implemented=${r.implemented} — ${r.purpose}`,
+        `- **${r.method} ${r.route}** [${r.autonomy}/${r.authLevel}] — ${r.purpose} · executor: ${r.executor}`,
     ),
     '',
     '## Forbidden (never exposed)',
     ...NETWORK_API_FORBIDDEN.map(f => `- ${f}`),
     '',
-    '## Future MCP tools',
-    ...NETWORK_API_MCP_TOOLS.map(t => `- ${t.tool} → ${t.route} (${t.level})`),
+    '## Related authorities',
+    ...NETWORK_API_RELATED_AUTHORITIES.map(a => `- ${a}`),
+    '',
+    buildNetworkApiHistoricalAppendix(),
   ]
   return lines.join('\n')
 }

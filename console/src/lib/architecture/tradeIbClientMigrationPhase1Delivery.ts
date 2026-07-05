@@ -56,7 +56,7 @@ export const TRADE_IB_CLIENT_MIGRATION_PHASE1_DELIVERY_ITEMS: TradeIbClientMigra
     {
       id: 'TIBM1-5',
       title: 'Catalog RPC matrix updated',
-      summary: 'Architecture → Trade IB Migration — Platform Gateway column all yes for 9 ops.',
+      summary: 'tradeIbClientMigrationCatalog.ts RPC matrix — Platform Gateway column all yes for 9 ops.',
       verifySteps: [
         'TRADE_IB_RPC_OP_MATRIX platformGateway=yes for every row.',
         'S04 Operator RPC surface status → on_bus (client + gateway parity).',

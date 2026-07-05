@@ -1,11 +1,20 @@
 /**
- * Trade IB Client Migration — refactor Trade stack to consume Platform TWS bus (redis-ib).
+ * Trade IB Client Migration — refactor Trade stack to consume Platform TWS bus (catalog-only).
  *
  * Prerequisite: IB Gateway Plugin program (IBGP0–4) — Platform owns TWS; Trade becomes bus-only.
- * Authoritative: Architecture → Plugins → Trade IB Migration
+ * All phases complete — no Architecture UI page; governance lives in this catalog + Delivery Board.
+ *
+ * Live state (not this catalog):
+ * - Trade IB health aggregate: Operate → Cluster + Monitor matrix probes
+ * - Phase / rollout sign-off: Operate → Delivery Board · trade-ib-migration
+ * - Migrate lane: Agent → Briefing · spine stream trade-ib-client-migration
  */
 
-import { buildTradeIbClientMigrationRolloutLlmPack } from './tradeIbClientMigrationRolloutCatalog'
+import {
+  TIBM_ROLLOUT_ENV_STEPS,
+  TIBM_ROLLOUT_WAVES,
+  TRADE_EXECUTION_FREEZE,
+} from './tradeIbClientMigrationRolloutCatalog'
 
 export const TRADE_IB_CLIENT_MIGRATION_VERSION = '2026-07-04'
 export const TRADE_IB_CLIENT_MIGRATION_STREAM_ID = 'trade-ib-client-migration'
@@ -262,6 +271,15 @@ export const TRADE_IB_MIGRATION_PRINCIPLES = [
   'Post TIBM-PC rollout: live trading execution BLOCKED (spine D10) until Owner explicit unlock — see tradeIbClientMigrationRolloutCatalog.ts.',
 ] as const
 
+export const TRADE_IB_MIGRATION_RELATED_AUTHORITIES = [
+  'Trade IB health aggregate: Operate → Cluster + Monitor matrix probes',
+  'Program / rollout sign-off: Operate → Delivery Board · trade-ib-migration',
+  'Migrate lane + spine stream: Agent → Briefing · trade-ib-client-migration',
+  'Platform TWS bus prerequisite: ibGatewayPluginCatalog.ts · Operate → Cluster (ib-gateway)',
+  'Trading execution freeze: spine decision D10 · tradeIbClientMigrationRolloutCatalog.ts TRADE_EXECUTION_FREEZE',
+  'Spine: config/ops-context.yaml · GET /api/v1/context',
+]
+
 export function surfaceStatusLabel(status: TradeIbSurfaceStatus): string {
   switch (status) {
     case 'on_bus':
@@ -293,37 +311,74 @@ export function surfaceStatusVariant(
   }
 }
 
+/** Archived phase statuses, surface tags, rollout wave snapshots — live sign-off on Delivery Board. */
+export function buildTradeIbClientMigrationHistoricalAppendix(): string {
+  const lines: string[] = [
+    '## Historical progress (archived — do not treat as live)',
+    '',
+    `Spine stream: \`${TRADE_IB_CLIENT_MIGRATION_STREAM_ID}\` · all TIBM0–4 phases complete.`,
+    '',
+    '### Migration phases (status snapshot)',
+    ...TRADE_IB_MIGRATION_PHASES.map(
+      p => `- **${p.id}** [${p.status}] ${p.title} — ${p.deliverable}`,
+    ),
+    '',
+    '### Surface inventory (status snapshot)',
+    ...TRADE_IB_SURFACES.map(
+      s =>
+        `- ${s.id} [${s.status}] ${s.domain}/${s.component} (${s.repo}) → ${s.mode}; target ${s.targetPhase}`,
+    ),
+    '',
+    '### Rollout waves (scope snapshot)',
+    ...TIBM_ROLLOUT_WAVES.map(
+      w =>
+        `- **${w.id}** ${w.title} [${w.scope}] — ${w.notes} · Targets: ${w.targets.join('; ')}`,
+    ),
+    '',
+    '### Rollout environment order (snapshot)',
+    ...TIBM_ROLLOUT_ENV_STEPS.map(s => `- **${s.env}**: ${s.action} · Gate: ${s.gate}`),
+    '',
+    '### Trading execution freeze (D10 snapshot)',
+    `Status: ${TRADE_EXECUTION_FREEZE.status} · spine ${TRADE_EXECUTION_FREEZE.spineDecision}`,
+    TRADE_EXECUTION_FREEZE.rationale,
+  ]
+  return lines.join('\n')
+}
+
 export function buildTradeIbClientMigrationLlmPack(): string {
   const lines: string[] = [
     '# Trade IB Client Migration',
     `Version: ${TRADE_IB_CLIENT_MIGRATION_VERSION}`,
     `Stream: ${TRADE_IB_CLIENT_MIGRATION_STREAM_ID}`,
+    'Live health + rollout state: Operate → Cluster / Delivery Board — not this catalog.',
     '',
     '## Prerequisite',
     'IB Gateway Plugin (IBGP0–4) — Platform TWS bus @ data/redis-ib.',
     '',
-    '## Phases',
-    ...TRADE_IB_MIGRATION_PHASES.map(
-      p => `- **${p.id}** (${p.status}): ${p.title} — ${p.summary}`,
-    ),
-    '',
     '## Principles',
     ...TRADE_IB_MIGRATION_PRINCIPLES.map(p => `- ${p}`),
     '',
-    '## Surface inventory',
+    '## Surface inventory (architecture reference)',
     ...TRADE_IB_SURFACES.map(
       s =>
-        `- ${s.id} [${s.status}] ${s.domain}/${s.component} (${s.repo}) → ${s.mode}; target ${s.targetPhase}. ${s.notes}`,
+        `- ${s.id} ${s.domain}/${s.component} (${s.repo} @ ${s.path}) → ${s.mode}; target ${s.targetPhase}. ${s.notes}`,
     ),
     '',
-    '## Operator RPC parity',
+    '## Operator RPC parity matrix',
     ...TRADE_IB_RPC_OP_MATRIX.map(
       r =>
         `- ${r.op}: legacy=${r.legacySocket} gateway=${r.platformGateway} callers=${r.tradeCallers} → ${r.targetPhase}`,
     ),
     '',
-    '---',
-    buildTradeIbClientMigrationRolloutLlmPack(),
+    '## Migration phases (definitions)',
+    ...TRADE_IB_MIGRATION_PHASES.map(
+      p => `- **${p.id}** ${p.title} — ${p.summary} · Deliverable: ${p.deliverable}`,
+    ),
+    '',
+    '## Related authorities',
+    ...TRADE_IB_MIGRATION_RELATED_AUTHORITIES.map(a => `- ${a}`),
+    '',
+    buildTradeIbClientMigrationHistoricalAppendix(),
   ]
   return lines.join('\n')
 }

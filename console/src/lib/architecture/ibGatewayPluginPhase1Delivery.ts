@@ -72,7 +72,7 @@ export const IB_GATEWAY_PLUGIN_PHASE1_DELIVERY_ITEMS: IbGatewayPluginPhase1Deliv
     id: 'IBGP1-6',
     title: 'Console Phase 1 sign-off panel',
     summary:
-      'Architecture → Plugins → IB Gateway — Phase 1 checklist + sign-off after cluster verify.',
+      'Delivery Board → IB Gateway Plugin — Phase 1 checklist + sign-off after cluster verify.',
     verifySteps: [
       'Phase 0 signed off; Phase 1 panel visible below Phase 0.',
       'Mark all IBGP1 items verified → Sign off Phase 1 delivery (Admin token).',

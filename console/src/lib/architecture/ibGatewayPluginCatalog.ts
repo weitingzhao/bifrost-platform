@@ -1,7 +1,12 @@
 /**
- * IB Gateway Plugin — architecture catalog (Platform Plugin, not core Ops).
+ * IB Gateway Plugin — architecture & redis-ib contract (catalog-only).
  *
- * Authoritative source for Ops Console → Architecture → Plugins → IB Gateway.
+ * Created 2026-07-04 for bifrost-platform-plugin (Platform TWS bus).
+ *
+ * Live state (not this catalog):
+ * - IB Gateway health + mode: Operate → Cluster (platform-api /api/v1/plugins/ib-gateway/*)
+ * - Phase / program sign-off: Operate → Delivery Board · ib-gateway-plugin
+ * - Migrate lane: Agent → Briefing · spine stream ib-gateway-plugin
  */
 
 export const IB_GATEWAY_PLUGIN_SOURCE = 'bifrost-platform-plugin'
@@ -97,12 +102,37 @@ export const IB_GATEWAY_PLUGIN_PROGRESS = {
   label: 'IB Gateway Plugin — Platform TWS bus',
 } as const
 
+export const IB_GATEWAY_RELATED_AUTHORITIES = [
+  'Live IB Gateway health + mode: Operate → Cluster (platform-api /api/v1/plugins/ib-gateway/*)',
+  'Program / phase sign-off: Operate → Delivery Board · ib-gateway-plugin',
+  'Migrate lane + spine stream: Agent → Briefing · ib-gateway-plugin',
+  'Plugin implementation: bifrost-platform-plugin · k8s/data/redis-ib + k8s/data/ib-gateway',
+  'Spine: config/ops-context.yaml · GET /api/v1/context',
+]
+
+/** Archived phase statuses and spine progress snapshot — live sign-off on Delivery Board. */
+export function buildIbGatewayHistoricalAppendix(): string {
+  const lines: string[] = [
+    '## Historical progress (archived — do not treat as live)',
+    '',
+    `Progress snapshot: ${IB_GATEWAY_PLUGIN_PROGRESS.done}/${IB_GATEWAY_PLUGIN_PROGRESS.total} — ${IB_GATEWAY_PLUGIN_PROGRESS.label}`,
+    `Spine stream: \`${IB_GATEWAY_PLUGIN_PROGRESS.streamId}\``,
+    '',
+    '### Phases (status snapshot)',
+    ...IB_GATEWAY_PLUGIN_PHASES.map(
+      p => `- ${p.spineStep} **${p.id}** [${p.status}] ${p.title} — ${p.deliverable}`,
+    ),
+  ]
+  return lines.join('\n')
+}
+
 export function buildIbGatewayPluginLlmPack(): string {
   const lines = [
     '# IB Gateway Plugin — implementation program',
     `Version: ${IB_GATEWAY_PLUGIN_CATALOG_VERSION}`,
     `Repo: ${IB_GATEWAY_PLUGIN_SOURCE}`,
-    `Progress: ${IB_GATEWAY_PLUGIN_PROGRESS.done}/${IB_GATEWAY_PLUGIN_PROGRESS.total}`,
+    'Live health + mode: Operate → Cluster — not this catalog.',
+    'Sign-off state: Delivery Board · ib-gateway-plugin — not this catalog.',
     '',
     '## Design principles',
     ...IB_GATEWAY_DESIGN_PRINCIPLES.map(p => `- ${p}`),
@@ -114,10 +144,15 @@ export function buildIbGatewayPluginLlmPack(): string {
     '- Keys:',
     ...REDIS_IB_CONTRACT.keyNamespaces.map(k => `  - ${k}`),
     '',
-    '## Phases',
+    '## Phases (definitions)',
+    ...IB_GATEWAY_PLUGIN_PHASES.map(
+      p => `- ${p.spineStep} ${p.id} ${p.title} — ${p.summary} · Deliverable: ${p.deliverable}`,
+    ),
+    '',
+    '## Related authorities',
+    ...IB_GATEWAY_RELATED_AUTHORITIES.map(a => `- ${a}`),
+    '',
+    buildIbGatewayHistoricalAppendix(),
   ]
-  for (const p of IB_GATEWAY_PLUGIN_PHASES) {
-    lines.push(`- ${p.spineStep} ${p.id} ${p.title} [${p.status}] — ${p.deliverable}`)
-  }
   return lines.join('\n')
 }

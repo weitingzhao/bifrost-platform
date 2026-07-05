@@ -25,7 +25,6 @@ import {
   Shield,
   ShieldCheck,
   Terminal,
-  Wifi,
   Workflow,
   Zap,
 } from 'lucide-react'
@@ -158,20 +157,6 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         ],
       },
       {
-        label: 'K3s',
-        items: [
-          { id: 'network-upgrade', label: 'Network Upgrade', icon: Wifi },
-          { id: 'network-api', label: 'Network API', icon: Network },
-        ],
-      },
-      {
-        label: 'Plugins',
-        items: [
-          { id: 'ib-gateway-plugin', label: 'IB Gateway', icon: Plug },
-          { id: 'trade-ib-client-migration', label: 'Trade IB Migration', icon: Workflow },
-        ],
-      },
-      {
         label: 'AI',
         items: [
           { id: 'ai-compute', label: 'AI Compute Strategy', icon: Cpu },
@@ -216,10 +201,6 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   blueprint: 'Architecture',
   'flywheel-vision': 'Architecture',
   roadmap: 'Architecture',
-  'network-upgrade': 'Architecture',
-  'network-api': 'Architecture',
-  'ib-gateway-plugin': 'Architecture',
-  'trade-ib-client-migration': 'Architecture',
   'ai-compute': 'Architecture',
   'platform-standards': 'Architecture',
   'design-system': 'Architecture',

@@ -58,7 +58,7 @@ export const IB_GATEWAY_PLUGIN_PHASE4_DELIVERY_ITEMS: IbGatewayPluginPhase4Deliv
     title: 'Console mode switch UI',
     summary: 'IbGatewayLiveStatusPanel — Switch to live / Revert to mock with ConfirmDialog.',
     verifySteps: [
-      'Architecture → IB Gateway — mode DenseTag shows MOCK or LIVE.',
+      'Operate → Cluster — mode DenseTag shows MOCK or LIVE.',
       'Operator token enables mode switch buttons next to Reconnect.',
       'After switch, live probe refreshes within ~30s.',
     ],

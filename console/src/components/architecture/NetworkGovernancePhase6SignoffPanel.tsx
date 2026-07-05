@@ -185,7 +185,7 @@ export function NetworkGovernancePhase6SignoffPanel() {
       <ConfirmDialog
         open={signConfirmOpen}
         title="Sign off Network Governance Phase 6"
-        message="Confirm Control Room Network Health panel: spine + catalog projection, firewall block, and navigation to Network Upgrade / Agent Protocol."
+        message="Confirm Control Room Network Health panel: spine + catalog projection, firewall block, and Agent Protocol navigation."
         confirmLabel="Confirm sign-off"
         onConfirm={handleSignOff}
         onCancel={() => setSignConfirmOpen(false)}

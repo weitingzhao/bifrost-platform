@@ -93,8 +93,8 @@ export function NetworkGovernancePhase5SignoffPanel() {
       {panelExpanded && (
         <div className="mt-3 flex flex-col gap-3">
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Verify networkUpgradeCatalog.ts reflects live deployment (FIREWALL_APPLIED, deployment progress, research
-            items) on Architecture → Network Upgrade, then sign off (v{NETWORK_GOVERNANCE_PHASE5_VERSION}).
+            Verify networkUpgradeCatalog.ts (Governance Copy All) and Control Room Network Health panel,
+            then sign off (v{NETWORK_GOVERNANCE_PHASE5_VERSION}).
           </p>
 
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
