@@ -23,6 +23,7 @@ import { TradeIbClientMigrationRolloutW2SignoffPanel } from '@/components/archit
 import { TradeIbClientMigrationRolloutW3SignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutW3SignoffPanel'
 import { TradeIbClientMigrationRolloutStgSignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutStgSignoffPanel'
 import { TradeIbClientMigrationRolloutDevComposeSignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutDevComposeSignoffPanel'
+import { TradeIbClientMigrationRolloutProdSignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutProdSignoffPanel'
 import { TradeIbClientMigrationProgramStatusStrip } from '@/components/architecture/TradeIbClientMigrationProgramStatusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
@@ -171,6 +172,8 @@ export function TradeIbClientMigrationPage() {
       <TradeIbClientMigrationRolloutStgSignoffPanel />
 
       <TradeIbClientMigrationRolloutDevComposeSignoffPanel />
+
+      <TradeIbClientMigrationRolloutProdSignoffPanel />
 
       <CatalogSection title="Design principles">
         <ul className="m-0 list-disc pl-5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
