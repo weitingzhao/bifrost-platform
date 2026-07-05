@@ -44,10 +44,7 @@ import { TradeReleasePage } from '@/pages/TradeReleasePage'
 import { RuntimeMapPage } from '@/pages/RuntimeMapPage'
 import { ServerConsolePage } from '@/pages/ServerConsolePage'
 import { DesignSystemPage } from '@/pages/DesignSystemPage'
-import { K3sBootstrapPage } from '@/pages/K3sBootstrapPage'
-import { CicdBootstrapPage } from '@/pages/CicdBootstrapPage'
 import { RoadmapPage } from '@/pages/RoadmapPage'
-import { DataLayerPage } from '@/pages/DataLayerPage'
 import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
 import { McpContractPage } from '@/pages/McpContractPage'
 import { NetworkUpgradePage } from '@/pages/NetworkUpgradePage'
@@ -85,9 +82,6 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   blueprint: 'Blueprint',
   'flywheel-vision': 'Vision',
   roadmap: 'Roadmap',
-  'k3s-bootstrap': 'K3s Bootstrap',
-  'cicd-bootstrap': 'CI/CD Bootstrap',
-  'data-layer': 'Data Layer',
   'platform-release': 'Platform Release',
   'platform-standards': 'Platform',
   'agent-protocol': 'Agent Protocol',
@@ -132,6 +126,9 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   'deploy-mainline': 'control-room',
   environments: 'control-room',
   'k3s-architecture': 'control-room',
+  'k3s-bootstrap': 'control-room',
+  'cicd-bootstrap': 'control-room',
+  'data-layer': 'control-room',
 }
 
 function isConsoleViewTab(value: string): value is ConsoleViewTab {
@@ -352,9 +349,6 @@ export function ConsolePage() {
     viewTab === 'blueprint' ||
     viewTab === 'flywheel-vision' ||
     viewTab === 'roadmap' ||
-    viewTab === 'k3s-bootstrap' ||
-    viewTab === 'cicd-bootstrap' ||
-    viewTab === 'data-layer' ||
     viewTab === 'network-upgrade' ||
     viewTab === 'network-api' ||
     viewTab === 'ib-gateway-plugin' ||
@@ -397,7 +391,6 @@ export function ConsolePage() {
     'agent-protocol',
     'briefing-reconciliation',
     'mcp-contract',
-    'data-layer',
     'design-system',
     'console',
     'platform-release',
@@ -664,9 +657,6 @@ export function ConsolePage() {
                 viewTab === 'flywheel-vision' ? 'WHERE — Ultimate destination: Trade + Ops converge into unified AI-native experience via three-layer Agents.'
                   : viewTab === 'blueprint' ? 'HOW — Architectural principles, control-plane strategy, authorization model, and design rules toward the Vision.'
                   : viewTab === 'roadmap' ? 'WHEN — Phased execution plan: hardware roles, K3s stages, GitOps migration, AI ops timeline.'
-                  : viewTab === 'k3s-bootstrap' ? 'First-node deployment runbook, verification checklist, node join steps, and sign-off.'
-                  : viewTab === 'cicd-bootstrap' ? 'L0/L1/L2 self-hosting bootstrap model — CI/CD rules, recovery paths, and P6 gap tracking.'
-                  : viewTab === 'data-layer' ? 'Redis, PostgreSQL, MinIO — stateful service architecture, HA topology, and data responsibility split.'
                   : viewTab === 'network-upgrade' ? 'Home network backbone upgrade — VLAN redesign, UniFi migration plan, hardware BOM, and research checklist.'
                   : viewTab === 'network-api'
                     ? 'platform-api /api/v1/network/* contract — L0/L1/L2 routes, Session v2 executors, forbidden actions (planning only).'
@@ -702,12 +692,6 @@ export function ConsolePage() {
         {viewTab === 'flywheel-vision' && <DualFlywheelVisionPage />}
 
         {viewTab === 'roadmap' && <RoadmapPage />}
-
-        {viewTab === 'k3s-bootstrap' && <K3sBootstrapPage />}
-
-        {viewTab === 'cicd-bootstrap' && <CicdBootstrapPage />}
-
-        {viewTab === 'data-layer' && <DataLayerPage />}
 
         {viewTab === 'network-upgrade' && <NetworkUpgradePage />}
 

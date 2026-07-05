@@ -1,13 +1,17 @@
 /**
- * CI/CD Bootstrap Model — L0 / L1 / L2 layered self-hosting architecture.
+ * CI/CD Bootstrap Model — L-1 / L0 / L1 / L2 layered self-hosting architecture (catalog-only).
  *
- * Authoritative source for Ops Console → Architecture → K3s → CI/CD Bootstrap.
- * Defines the bootstrap paradox resolution: the Ops Platform (control plane)
- * runs on the same K3s cluster it governs — layers separate concerns so a
- * failure at one level never orphans the ability to recover.
+ * Governance LLM authority for bootstrap paradox resolution: the Ops Platform runs on
+ * the K3s cluster it governs — layers separate concerns so failure at one level never
+ * orphans recovery.
  *
- * Aligned with: blueprintCatalog.ts (D6, north star), deliveryMainlineCatalog.ts
- * (STG/prod release phases), workloadPlacementCatalog.ts (CI node placement).
+ * Live state (not this catalog):
+ * - L1 self-health + platform deliver: Operate → Platform Release
+ * - L2 trade deliver + gates: Operate → Trade Release
+ * - L-1 operator plane: Operate → Operator Plane
+ *
+ * Aligned with: blueprintCatalog.ts (D6, north star), deliveryMainlineCatalog.ts,
+ * workloadPlacementCatalog.ts (CI node placement).
  */
 
 export const CICD_BOOTSTRAP_VERSION = '2026-06-27.1'
@@ -335,7 +339,7 @@ export const CICD_GAPS: CicdGap[] = [
   {
     id: 'self-health',
     layer: 'L1',
-    gap: 'Implemented — /api/v1/self-health probes platform-api + console + Argo sync (STG + PROD); SelfHealthPanel on CI/CD Bootstrap page',
+    gap: 'Implemented — /api/v1/self-health probes platform-api + console + Argo sync (STG + PROD); SelfHealthPanel on Platform Release page',
     target: 'Console self-health panel: API liveness, Console reachability, Argo sync status',
     spineTask: 'p6-self-health',
   },
@@ -362,14 +366,47 @@ export const CICD_GAPS: CicdGap[] = [
   },
 ]
 
+export const CICD_RELATED_AUTHORITIES = [
+  'Live L1 self-health + platform deliver: Operate → Platform Release',
+  'Live L2 trade deliver + release gates: Operate → Trade Release',
+  'L-1 out-of-band operator plane: Operate → Operator Plane',
+  'Spine: config/ops-context.yaml · GET /api/v1/context',
+]
+
 // ---------------------------------------------------------------------------
 // LLM pack
 // ---------------------------------------------------------------------------
 
+/** Archived bootstrap progress, component deployment status, and P6 gap snapshot — not live ops state. */
+export function buildCicdBootstrapHistoricalAppendix(): string {
+  const lines: string[] = [
+    '## Historical progress (archived — do not treat as live)',
+    '',
+    '### Bootstrap sequence (cold start)',
+    ...BOOTSTRAP_SEQUENCE.map(
+      s =>
+        `${s.seq}. [${s.layer}] ${s.action} — status=${s.status}${s.prerequisite ? ` (after: ${s.prerequisite})` : ''} · verify: ${s.verify}`,
+    ),
+    '',
+    '### Component deployment status (catalog snapshot)',
+    ...BOOTSTRAP_LAYERS.map(l => [
+      `#### ${l.id}`,
+      ...l.components.map(c => `- ${c.name}: **${c.status}**`),
+      '',
+    ]).flat(),
+    '### Current gaps (P6 tasks — delivery snapshot)',
+    ...CICD_GAPS.map(
+      g => `- [${g.layer}] **${g.id}** (${g.spineTask}): ${g.gap} → ${g.target}`,
+    ),
+  ]
+  return lines.join('\n')
+}
+
 export function buildCicdBootstrapLlmPack(): string {
   const lines: string[] = [
-    '# Bifrost Ops — CI/CD Bootstrap Model (L0 / L1 / L2)',
+    '# Bifrost Ops — CI/CD Bootstrap Model (L-1 / L0 / L1 / L2)',
     `# Source: ${CICD_BOOTSTRAP_SOURCE} v${CICD_BOOTSTRAP_VERSION}`,
+    'Live L1/L2 state: Operate → Platform Release / Trade Release — not this catalog.',
     '',
     '## Core principle',
     '',
@@ -388,15 +425,9 @@ export function buildCicdBootstrapLlmPack(): string {
       `- Ownership: ${l.ownership}`,
       `- CI/CD rule: ${l.cicdRule}`,
       `- Recovery: ${l.recoveryPath}`,
-      `- Components: ${l.components.map(c => `${c.name} [${c.status}]`).join('; ')}`,
+      `- Components: ${l.components.map(c => c.name).join('; ')}`,
       '',
     ]).flat(),
-    '## Bootstrap sequence (cold start)',
-    '',
-    ...BOOTSTRAP_SEQUENCE.map(
-      s => `${s.seq}. [${s.layer}] ${s.action}${s.prerequisite ? ` (after: ${s.prerequisite})` : ''} — verify: ${s.verify}`,
-    ),
-    '',
     '## CI/CD rules per layer',
     '',
     ...(['L-1', 'L0', 'L1', 'L2'] as BootstrapLayerId[]).map(layer => {
@@ -413,11 +444,10 @@ export function buildCicdBootstrapLlmPack(): string {
       c => `- **${c.dimension}**: Platform=[${c.platform}] | Trade=[${c.trade}] — ${c.reason}`,
     ),
     '',
-    '## Current gaps (P6 tasks)',
+    '## Related authorities',
+    ...CICD_RELATED_AUTHORITIES.map(a => `- ${a}`),
     '',
-    ...CICD_GAPS.map(
-      g => `- [${g.layer}] **${g.id}** (${g.spineTask}): ${g.gap} → ${g.target}`,
-    ),
+    buildCicdBootstrapHistoricalAppendix(),
   ]
   return lines.join('\n')
 }

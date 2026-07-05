@@ -72,7 +72,7 @@ export const HARDWARE_MAPPING: RoadmapHardwareRow[] = [
 export const HARDWARE_NOTES = [
   'K3s doc lists three Mini PCs; current reality is two Linux Minis live + mini-pc-c as second batch (K3s §9 stage 4).',
   'TWS runs on Win11 (not Mac Mini) — socket connects via IB_HOST on LAN; same principle as ARCHITECTURE §2.',
-  'The two Mac Minis (.50 primary / .52 standby) double as the L-1 Out-of-Band Operator Plane: AI Remediation Runners + launchd mutual watchdog, living OUTSIDE K8s so they can recover the cluster. Fate-isolated by design — see Architecture → K3s Bootstrap (L-1) and Flywheel Vision.',
+  'The two Mac Minis (.50 primary / .52 standby) double as the L-1 Out-of-Band Operator Plane: AI Remediation Runners + launchd mutual watchdog, living OUTSIDE K8s so they can recover the cluster. Fate-isolated by design — see k3sBootstrapCatalog.ts · cicdBootstrapCatalog.ts (L-1) and Flywheel Vision.',
 ]
 
 export type MilestoneBaselineRow = {
@@ -207,7 +207,7 @@ export type RelatedDocRow = { topic: string; authority: string }
 export const RELATED_DOCS: RelatedDocRow[] = [
   { topic: 'AI-native ops north star', authority: 'Ops Console → Architecture → Blueprint § AI Native Platform (blueprintCatalog.ts)' },
   { topic: 'K3s target topology', authority: 'k3sArchitectureCatalog.ts' },
-  { topic: 'K3s bootstrap runbook', authority: 'Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts)' },
+  { topic: 'K3s bootstrap runbook', authority: 'k3sBootstrapCatalog.ts' },
   { topic: 'Deploy mainline', authority: 'Ops Console → Operate → Deploy Mainline (deployMainlineCatalog.ts)' },
   { topic: '2C-B runbook / sign-off', authority: 'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md' },
   { topic: 'Code migration progress', authority: 'bifrost-trade-infra/docs/MIGRATION_TRACKING.md' },

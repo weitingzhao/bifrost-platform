@@ -24,7 +24,7 @@ export const VISION_STATEMENT =
   'Mental model: Ops Platform is the rocket, Trade is the payload satellite, and the AI Agent is the ' +
   'engineer crew standing on the ground — it builds, launches, monitors and repairs both, yet stands ' +
   'OUTSIDE the rocket so it never falls with it. This out-of-band stance is the human-replacement for the ' +
-  'bootstrap escape hatch (see Architecture → K3s Bootstrap, layer L-1).'
+  'bootstrap escape hatch (see k3sBootstrapCatalog.ts · cicdBootstrapCatalog.ts L-1).'
 
 export const FLYWHEEL_CONVERGENCE =
   'Trade (Flywheel A) and Ops Platform (Flywheel B) accelerate each other: every Trade feature shipped ' +

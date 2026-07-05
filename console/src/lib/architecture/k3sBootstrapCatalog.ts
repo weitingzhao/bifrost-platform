@@ -1,7 +1,8 @@
 /**
  * K3s Bootstrap catalog — first-node deployment runbook.
  *
- * Authoritative source for Ops Console → Architecture → K3s Bootstrap.
+ * Static bootstrap runbook for LLM packs. Live cluster: Operate → Cluster.
+ * L-1 out-of-band: Operator Plane + Flywheel Vision. Source: bifrost-trade-infra scripts/k3s/.
  * Migrated from bifrost-trade-infra/docs/K3S_BOOTSTRAP.md (2026-06-15).
  */
 
@@ -209,11 +210,45 @@ export const P5B_SIGNOFF: SignoffItem[] = [
 export const SPINE_REFERENCE =
   'config/ops-context.yaml · k3s-phase1 → CLOSED · k3s-mac-agents (P5b) → CLOSED 2026-06-15 · active_track: ops_ui_actuation'
 
+export const BOOTSTRAP_RELATED_AUTHORITIES = [
+  'Live cluster: Operate → Cluster (nodes, join wizard, metrics, observability)',
+  'Target topology: k3sArchitectureCatalog.ts',
+  'Execution timeline: roadmapCatalog.ts (Platform Roadmap UI)',
+  'L-1 operator plane: Operator Plane UI + cicdBootstrapCatalog.ts (L-1)',
+  'Spine: config/ops-context.yaml · GET /api/v1/context',
+]
+
+/** Archived checklist, sign-off, and progress — not live cluster state. */
+export function buildK3sBootstrapHistoricalAppendix(): string {
+  const lines: string[] = [
+    '## Historical progress (archived — do not treat as live)',
+    `Snapshot status (catalog): ${K3S_BOOTSTRAP_STATUS}`,
+    '',
+    '### Slice 1 verification checklist',
+    ...SLICE1_CHECKLIST.map(c => `${c.id}. ${c.check} — ${c.command}`),
+    '',
+    '### k3s-phase1 sign-off (Owner confirmed 2026-06-14)',
+    ...PHASE1_SIGNOFF.map(s => `- ${s.check}: **${s.status}**`),
+    '',
+    '### P5b Mac agents sign-off (Owner confirmed 2026-06-15)',
+    ...P5B_SIGNOFF.map(s => `- ${s.check}: **${s.status}**`),
+    '',
+    '### Next stages (not in bootstrap)',
+    ...NEXT_STAGES.map(s => `- ${s}`),
+    '',
+    '### Compose relation',
+    ...COMPOSE_RELATION.map(r => `- ${r}`),
+    '',
+    `Spine: ${SPINE_REFERENCE}`,
+  ]
+  return lines.join('\n')
+}
+
 export function buildK3sBootstrapLlmPack(): string {
   const lines: string[] = [
-    '# Bifrost Ops — K3s Bootstrap (First Node Deployment)',
+    '# Bifrost Ops — K3s Bootstrap (First Node Deployment — runbook)',
     `# Source: ${K3S_BOOTSTRAP_SOURCE} v${K3S_BOOTSTRAP_VERSION}`,
-    `Status: ${K3S_BOOTSTRAP_STATUS}`,
+    'Live cluster state: Operate → Cluster — not this catalog.',
     '',
     `## First Server: ${FIRST_SERVER.hostname} · ${FIRST_SERVER.ip} (${FIRST_SERVER.catalogSlot})`,
     FIRST_SERVER.note,
@@ -224,11 +259,33 @@ export function buildK3sBootstrapLlmPack(): string {
     '## Install methods',
     ...INSTALL_METHODS.map(m => `### ${m.label}\n\`\`\`bash\n${m.commands}\n\`\`\``),
     '',
-    '## Slice 1 verification checklist',
-    ...SLICE1_CHECKLIST.map(c => `${c.id}. ${c.check} — ${c.command}`),
-    '',
     '## Install contents',
     ...INSTALL_CONTENTS.map(c => `- **${c.item}**: ${c.detail}`),
+    '',
+    '## Verify (SSH)',
+    '```bash',
+    ...VERIFY_COMMANDS,
+    '```',
+    '',
+    '## MacBook kubectl',
+    '```bash',
+    ...MACBOOK_KUBECTL,
+    '```',
+    '',
+    '## Platform-api cluster probes (runbook — live UI: Operate → Cluster)',
+    '```bash',
+    ...CONSOLE_CLUSTER_COMMANDS,
+    '```',
+    '',
+    '### Verify API',
+    '```bash',
+    ...CONSOLE_VERIFY_API,
+    '```',
+    '',
+    '### Ensure Bifrost namespaces',
+    '```bash',
+    ENSURE_NAMESPACES_CMD,
+    '```',
     '',
     '## Layer A — metrics-server',
     ...LAYER_A_METHODS.map(m => `- **${m.label}**: ${m.detail}`),
@@ -236,24 +293,15 @@ export function buildK3sBootstrapLlmPack(): string {
     '## Node join (Phase 1 expansion)',
     ...NODE_JOIN_STEPS.map(s => `### ${s.title}\n${s.description}\n\`\`\`bash\n${s.command}\n\`\`\``),
     '',
-    '## Next stages (not in bootstrap)',
-    ...NEXT_STAGES,
-    '',
-    '## Compose relation',
-    ...COMPOSE_RELATION.map(r => `- ${r}`),
-    '',
-    '## k3s-phase1 sign-off (Owner confirmed 2026-06-14)',
-    ...PHASE1_SIGNOFF.map(s => `- ${s.check}: **${s.status}**`),
-    '',
-    '## P5b Mac agents sign-off (Owner confirmed 2026-06-15)',
-    ...P5B_SIGNOFF.map(s => `- ${s.check}: **${s.status}**`),
-    '',
     '## Mac agent nodes (UTM)',
     ...MAC_AGENT_NODES.map(
       n => `- **${n.hostname}** · ${n.ip} · host ${n.hostMac} · K3s node \`${n.k3sNodeName}\``,
     ),
     '',
-    `Spine: ${SPINE_REFERENCE}`,
+    '## Related authorities',
+    ...BOOTSTRAP_RELATED_AUTHORITIES.map(a => `- ${a}`),
+    '',
+    buildK3sBootstrapHistoricalAppendix(),
   ]
   return lines.join('\n')
 }

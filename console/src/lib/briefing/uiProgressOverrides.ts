@@ -39,10 +39,6 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
     status: 'done',
     notes: 'Flywheel checklist + POST /promote/release-gate',
   },
-  'data-layer': {
-    status: 'partial',
-    notes: 'dataLayerCatalog + k8s/data CNPG manifests',
-  },
   'flywheel-vision': {
     status: 'partial',
     notes: 'V1–V5 gate panels; Dual Flywheel vision SIGNED at V5',
