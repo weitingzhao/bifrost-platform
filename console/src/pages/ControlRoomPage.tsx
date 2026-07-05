@@ -60,6 +60,7 @@ type ControlRoomPageProps = {
   onOpenPlatformRelease?: () => void
   onOpenPromote?: () => void
   onOpenAgentProtocol?: () => void
+  onOpenNetwork?: () => void
 } & AmbientAgentShellProps
 
 export function ControlRoomPage({
@@ -82,6 +83,7 @@ export function ControlRoomPage({
   onOpenPlatformRelease,
   onOpenPromote,
   onOpenAgentProtocol,
+  onOpenNetwork,
   ambientJobId,
   onStartAgentJob,
 }: ControlRoomPageProps) {
@@ -236,6 +238,7 @@ export function ControlRoomPage({
           <NetworkHealthPanel
             context={context}
             onOpenAgentProtocol={onOpenAgentProtocol}
+            onOpenNetwork={onOpenNetwork}
           />
         )}
       </section>
