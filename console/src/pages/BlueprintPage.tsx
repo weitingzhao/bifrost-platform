@@ -425,13 +425,9 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
 
       <CatalogSection title="Spine milestone semantics">
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {SPINE_STATUS_SEMANTICS_NOTE} Authoritative definitions also in{' '}
-          <code className="font-mono-tabular">config/ops-context.yaml</code> file header. Full milestone
-          list: Architecture →{' '}
-          <a href="#program" className="text-[var(--primary)] underline-offset-2 hover:underline">
-            Milestones
-          </a>
-          .
+          {SPINE_STATUS_SEMANTICS_NOTE} Authoritative definitions in{' '}
+          <code className="font-mono-tabular">config/ops-context.yaml</code> file header and milestone
+          records.
         </p>
         <DenseDataTable>
           <DenseTableHeader>

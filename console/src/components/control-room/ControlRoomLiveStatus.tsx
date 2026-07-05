@@ -30,7 +30,6 @@ interface ControlRoomLiveStatusProps {
   stgSmoke?: StgSmokeResponse
   stgSmokeLoading?: boolean
   onOpenRuntimeMap: OpenRuntimeMapFn
-  onOpenProgram: () => void
   onOpenCluster?: () => void
   onOpenDelivery?: () => void
 }
@@ -57,7 +56,6 @@ export function ControlRoomLiveStatus({
   stgSmoke,
   stgSmokeLoading,
   onOpenRuntimeMap,
-  onOpenProgram,
   onOpenCluster,
   onOpenDelivery,
 }: ControlRoomLiveStatusProps) {
@@ -126,10 +124,7 @@ export function ControlRoomLiveStatus({
 
       {context != null && context.focus.blocker != null && context.focus.blocker !== '' && (
         <section className="page-section panel-elevated px-4 py-3 lamp-warn">
-          <strong>Focus blocker:</strong> {context.focus.headline} —{' '}
-          <button type="button" className="focus-strip-link" onClick={onOpenProgram}>
-            {context.focus.blocker}
-          </button>
+          <strong>Focus blocker:</strong> {context.focus.headline} — {context.focus.blocker}
         </section>
       )}
 

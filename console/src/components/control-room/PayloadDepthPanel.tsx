@@ -24,7 +24,6 @@ interface PayloadDepthPanelProps {
   context?: OpsContextResponse
   onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenDelivery?: () => void
-  onOpenProgram?: () => void
   onOpenPromote?: () => void
 }
 
@@ -57,7 +56,6 @@ export function PayloadDepthPanel({
   context,
   onOpenRuntimeMap,
   onOpenDelivery,
-  onOpenProgram,
   onOpenPromote,
 }: PayloadDepthPanelProps) {
   const rows = buildPayloadReadinessRows(matrices)
@@ -158,11 +156,6 @@ export function PayloadDepthPanel({
             {onOpenDelivery != null && (
               <Button variant="outline" size="xs" onClick={onOpenDelivery}>
                 Delivery
-              </Button>
-            )}
-            {onOpenProgram != null && coupling.promote.blockedByDecision && (
-              <Button variant="ghost" size="xs" onClick={onOpenProgram}>
-                Program
               </Button>
             )}
           </div>

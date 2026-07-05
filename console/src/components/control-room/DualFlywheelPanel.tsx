@@ -48,7 +48,6 @@ interface DualFlywheelPanelProps {
   matrices: MatrixResponse[]
   selection: ControlRoomSelection
   onSelectBay: (bayId: string) => void
-  onOpenProgram: () => void
   onOpenDelivery?: () => void
 }
 
@@ -57,7 +56,6 @@ export function DualFlywheelPanel({
   matrices,
   selection,
   onSelectBay,
-  onOpenProgram,
   onOpenDelivery,
 }: DualFlywheelPanelProps) {
   const flywheelA = baysForFlywheel('A')
@@ -92,7 +90,6 @@ export function DualFlywheelPanel({
           <CouplingGatePanel
             context={context}
             matrices={matrices}
-            onOpenProgram={onOpenProgram}
             onOpenDelivery={onOpenDelivery}
           />
         </div>

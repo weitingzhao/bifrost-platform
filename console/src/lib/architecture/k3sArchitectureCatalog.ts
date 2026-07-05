@@ -1,7 +1,8 @@
 /**
  * K3s platform target architecture.
  *
- * Authoritative source for Ops Console → Architecture → K3s Architecture.
+ * Static catalog for LLM packs and Placement registry (NAMESPACE_ALLOCATION).
+ * Live cluster state: Observe → Cluster / Placement / Runtime Map.
  * Migrated from bifrost-trade-infra/docs/K3S_PLATFORM_ARCHITECTURE.md (2026-06-15).
  */
 
@@ -324,17 +325,38 @@ export const STATUS_CHECKPOINTS: StatusCheckpointRow[] = [
 ]
 
 export const RELATED_AUTHORITIES = [
-  'Execution order + hardware map: Ops Console → Architecture → Platform Roadmap (roadmapCatalog.ts)',
-  'Bootstrap runbook: Ops Console → Architecture → K3s Bootstrap (k3sBootstrapCatalog.ts)',
-  'North star: Ops Console → Architecture → Blueprint § AI Native Platform (blueprintCatalog.ts)',
+  'Execution order + hardware map: roadmapCatalog.ts (Platform Roadmap UI)',
+  'Bootstrap runbook: k3sBootstrapCatalog.ts (K3s Bootstrap UI)',
+  'North star: blueprintCatalog.ts · Blueprint § AI Native Platform',
+  'Live cluster: Observe → Cluster · Placement · Runtime Map',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
 
+/** Archived progress tables — not live; do not treat as current cluster state. */
+export function buildK3sArchitectureHistoricalAppendix(): string {
+  const lines: string[] = [
+    '## Historical progress (archived — do not treat as live)',
+    `Snapshot status (catalog): ${K3S_ARCH_STATUS}`,
+    '',
+    '### Implementation phases',
+    ...IMPLEMENTATION_PHASES.flatMap(p => [
+      `#### ${p.title}`,
+      ...p.items.map(i => `- ${i}`),
+    ]),
+    '',
+    '### Status checkpoints',
+    ...STATUS_CHECKPOINTS.map(
+      r => `- **${r.target}**: planned=${r.planned}; actual=${r.actual}; ${r.notes}`,
+    ),
+  ]
+  return lines.join('\n')
+}
+
 export function buildK3sArchitectureLlmPack(): string {
   const lines: string[] = [
-    '# Bifrost Ops — K3s Platform Architecture',
+    '# Bifrost Ops — K3s Platform Architecture (target design)',
     `# Source: ${K3S_ARCH_SOURCE} v${K3S_ARCH_VERSION}`,
-    `Status: ${K3S_ARCH_STATUS}`,
+    'Live state: Observe → Cluster / Placement / Runtime Map — not this catalog.',
     '',
     '## Background',
     `Compose problem: ${BACKGROUND_COMPOSE}`,
@@ -373,19 +395,10 @@ export function buildK3sArchitectureLlmPack(): string {
     '## Compose → K8s mapping',
     ...COMPOSE_TO_K8S.map(r => `- ${r.compose} → ${r.k8s}`),
     '',
-    '## Implementation phases',
-    ...IMPLEMENTATION_PHASES.flatMap(p => [
-      `### ${p.title}`,
-      ...p.items.map(i => `- ${i}`),
-    ]),
-    '',
-    '## Status checkpoints (update after each architecture change)',
-    ...STATUS_CHECKPOINTS.map(
-      r => `- **${r.target}**: planned=${r.planned}; actual=${r.actual}; ${r.notes}`,
-    ),
-    '',
     '## Related authorities',
     ...RELATED_AUTHORITIES.map(a => `- ${a}`),
+    '',
+    buildK3sArchitectureHistoricalAppendix(),
   ]
   return lines.join('\n')
 }

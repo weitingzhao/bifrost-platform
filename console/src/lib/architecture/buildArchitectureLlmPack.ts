@@ -1,5 +1,5 @@
 /**
- * Unified governance LLM pack — merges Architecture (Blueprint, Environments)
+ * Unified governance LLM pack — merges Architecture (Blueprint, environments-catalog)
  * and Standards (Platform, Agent Protocol, Design System) sub-packs into a
  * single copyable text.
  */

@@ -100,7 +100,7 @@ export function GovernancePhase2SignoffPanel() {
             </p>
           )}
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Verify spine-driven Delivery phases, purified Environments catalog, and Projection labels on
+            Verify spine-driven Delivery phases, purified environments-catalog, and Projection labels on
             Operate → Delivery → Blueprint (v{GOVERNANCE_PHASE2_VERSION}).
           </p>
 
@@ -197,7 +197,7 @@ export function GovernancePhase2SignoffPanel() {
       <ConfirmDialog
         open={signConfirmOpen}
         title="Sign off Governance Phase 2"
-        message="Confirm Delivery phases derive status from spine, Environments catalog is purified, and Projection labels are visible on Delivery Blueprint."
+        message="Confirm Delivery phases derive status from spine, environments-catalog is purified, and Projection labels are visible on Delivery Blueprint."
         confirmLabel="Confirm sign-off"
         onConfirm={handleSignOff}
         onCancel={() => setSignConfirmOpen(false)}

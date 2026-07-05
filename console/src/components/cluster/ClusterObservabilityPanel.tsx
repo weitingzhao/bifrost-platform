@@ -9,7 +9,7 @@ interface ClusterObservabilityPanelProps {
   data: ClusterObservabilityResponse | undefined
   isLoading: boolean
   onOpenStandards?: () => void
-  onOpenEnvironments?: () => void
+  onOpenRuntimeMap?: () => void
 }
 
 function layerBHeadline(status: LayerBStatus | undefined): string {
@@ -39,7 +39,7 @@ export function ClusterObservabilityPanel({
   data,
   isLoading,
   onOpenStandards,
-  onOpenEnvironments,
+  onOpenRuntimeMap,
 }: ClusterObservabilityPanelProps) {
   const qc = useQueryClient()
   const observabilityFetching = useIsFetching({ queryKey: ['cluster', 'observability'] }) > 0
@@ -71,9 +71,9 @@ export function ClusterObservabilityPanel({
             Open Standards
           </Button>
         )}
-        {onOpenEnvironments != null && (
-          <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenEnvironments}>
-            Open Environments
+        {onOpenRuntimeMap != null && (
+          <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenRuntimeMap}>
+            Open Runtime Map
           </Button>
         )}
         {docsUrl != null && docsUrl !== '' && (

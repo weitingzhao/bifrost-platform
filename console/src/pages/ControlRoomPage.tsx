@@ -52,7 +52,6 @@ type ControlRoomPageProps = {
   lastDeliverSucceeded?: boolean
   tierB?: import('@/api/types').TierBStatusResponse
   onOpenRuntimeMap: OpenRuntimeMapFn
-  onOpenProgram: () => void
   onOpenDelivery: () => void
   onOpenCluster: () => void
   onOpenAudit: () => void
@@ -60,7 +59,6 @@ type ControlRoomPageProps = {
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenPlatformRelease?: () => void
   onOpenPromote?: () => void
-  onOpenDeployMainline?: () => void
   onOpenNetworkUpgrade?: () => void
   onOpenNetworkApi?: () => void
   onOpenAgentProtocol?: () => void
@@ -78,7 +76,6 @@ export function ControlRoomPage({
   lastDeliverSucceeded = false,
   tierB,
   onOpenRuntimeMap,
-  onOpenProgram,
   onOpenDelivery,
   onOpenCluster,
   onOpenAudit,
@@ -86,7 +83,6 @@ export function ControlRoomPage({
   onOpenAgentDesk,
   onOpenPlatformRelease,
   onOpenPromote,
-  onOpenDeployMainline,
   onOpenNetworkUpgrade,
   onOpenNetworkApi,
   onOpenAgentProtocol,
@@ -181,7 +177,6 @@ export function ControlRoomPage({
           onOpenRuntimeMap={onOpenRuntimeMap}
           onOpenCluster={onOpenCluster}
           onOpenDelivery={onOpenDelivery}
-          onOpenProgram={onOpenProgram}
           onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
           onOpenAgentDesk={openAgentDeskPrefill}
           onOpenPromote={handleOpenPromotePreflight}
@@ -239,8 +234,6 @@ export function ControlRoomPage({
           tierB={tierB}
           onOpenPromote={handleOpenPromotePreflight}
           onOpenDelivery={onOpenDelivery}
-          onOpenDeployMainline={onOpenDeployMainline}
-          onOpenProgram={onOpenProgram}
         />
 
         {onOpenNetworkUpgrade != null && onOpenNetworkApi != null && onOpenAgentProtocol != null && (
@@ -296,7 +289,6 @@ export function ControlRoomPage({
             matrices={matrices}
             selection={selection}
             onSelectBay={id => setSelection({ kind: 'bay', id })}
-            onOpenProgram={onOpenProgram}
             onOpenDelivery={onOpenDelivery}
           />
 
@@ -323,7 +315,6 @@ export function ControlRoomPage({
         matrices={matrices}
         onClose={() => setSelection(null)}
         onOpenRuntimeMap={onOpenRuntimeMap}
-        onOpenProgram={onOpenProgram}
       />
     </div>
   )

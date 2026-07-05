@@ -38,7 +38,7 @@ export const GOVERNANCE_PHASE2_DELIVERY_ITEMS: GovernancePhase2DeliveryItem[] = 
     title: 'Environments PLATFORM scope notes purified',
     summary: 'SCOPE PLATFORM row describes role only — no Phase 0 / L0 read-only implementation stage text.',
     verifySteps: [
-      'Architecture → Environments → Scope table — PLATFORM notes mention control plane role only.',
+      'environments-catalog.ts Scope table — PLATFORM notes mention control plane role only.',
       'No “Phase 0 L0 read-only” or “Future: agent/, mcp/” in PLATFORM notes.',
     ],
   },
@@ -48,7 +48,7 @@ export const GOVERNANCE_PHASE2_DELIVERY_ITEMS: GovernancePhase2DeliveryItem[] = 
     summary:
       'PLATFORM_PHASES table uses Sequence (First / Second / Third) — no calendar time boxes like “now ~3mo”.',
     verifySteps: [
-      'Environments page Platform phases section column is Sequence.',
+      'environments-catalog.ts PLATFORM_PHASES — Sequence column is First / Second / Third.',
       'Rows show First / Second / Third without month ranges.',
     ],
   },

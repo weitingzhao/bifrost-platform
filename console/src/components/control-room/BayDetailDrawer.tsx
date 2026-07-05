@@ -14,7 +14,6 @@ interface BayDetailDrawerProps {
   matrices: MatrixResponse[]
   onClose: () => void
   onOpenRuntimeMap: OpenRuntimeMapFn
-  onOpenProgram: () => void
 }
 
 export function BayDetailDrawer({
@@ -23,7 +22,6 @@ export function BayDetailDrawer({
   matrices,
   onClose,
   onOpenRuntimeMap,
-  onOpenProgram,
 }: BayDetailDrawerProps) {
   if (selection == null) return null
 
@@ -139,9 +137,6 @@ export function BayDetailDrawer({
       <footer className="bay-detail-drawer-footer">
         <Button variant="ghost" size="sm" onClick={() => onOpenRuntimeMap()}>
           Open Runtime Map
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onOpenProgram}>
-          Open Program
         </Button>
         {(bay?.id === 'bay_trade_reactor' || selection.id === 'bay_trade_reactor') && (
           <Button asChild size="sm">

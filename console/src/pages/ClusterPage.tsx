@@ -95,13 +95,13 @@ interface ScaleState {
 
 export function ClusterPage({
   onOpenStandards,
-  onOpenEnvironments,
+  onOpenRuntimeMap,
   onOpenAudit,
   onOpenServerConsole,
   onOpenAgentDesk,
 }: {
   onOpenStandards?: () => void
-  onOpenEnvironments?: () => void
+  onOpenRuntimeMap?: () => void
   onOpenAudit?: () => void
   onOpenServerConsole?: () => void
   onOpenAgentDesk?: (jobId: string) => void
@@ -1147,7 +1147,7 @@ cd ../bifrost-platform && make start`}
             data={observabilityQuery.data}
             isLoading={observabilityQuery.isLoading}
             onOpenStandards={onOpenStandards}
-            onOpenEnvironments={onOpenEnvironments}
+            onOpenRuntimeMap={onOpenRuntimeMap}
           />
         }
       />

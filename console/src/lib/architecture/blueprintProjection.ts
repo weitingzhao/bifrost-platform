@@ -11,7 +11,7 @@ export const PROJECTION_AUTHORITY = {
   apiCatalog: 'GET /api/v1/mcp/tools',
   apiSource: 'api/internal/mcp/catalog.go',
   configNote:
-    'config/*.yaml mounted to platform-api — probe targets (environments), Spine (ops-context), topology, clusters. See Architecture → Environments.',
+    'config/*.yaml mounted to platform-api — probe targets (environments), Spine (ops-context), topology, clusters. Probe targets in environments-catalog.ts / config/environments.yaml.',
 } as const
 
 export type ActuationPhaseProgress = {

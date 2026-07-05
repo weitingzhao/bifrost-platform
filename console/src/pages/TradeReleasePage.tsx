@@ -93,9 +93,10 @@ function SupplyChainSummaryLine() {
 interface TradeReleasePageProps {
   context: OpsContextResponse | undefined
   isLoading?: boolean
+  onOpenPlacement?: () => void
 }
 
-export function TradeReleasePage({ context, isLoading = false }: TradeReleasePageProps) {
+export function TradeReleasePage({ context, isLoading = false, onOpenPlacement }: TradeReleasePageProps) {
   const [activeIndex, setActiveIndex] = useState(0)
 
   const stgRuns = useQuery({
@@ -199,6 +200,7 @@ export function TradeReleasePage({ context, isLoading = false }: TradeReleasePag
               pipelinesLoading={pipelines.isLoading}
               errorMessage={pipelines.error instanceof Error ? pipelines.error.message : null}
               layout="observe"
+              onOpenPlacement={onOpenPlacement}
             />
           </div>
         )

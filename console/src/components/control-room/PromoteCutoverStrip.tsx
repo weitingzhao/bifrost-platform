@@ -19,8 +19,6 @@ interface PromoteCutoverStripProps {
   tierB?: TierBStatusResponse
   onOpenPromote?: () => void
   onOpenDelivery?: () => void
-  onOpenDeployMainline?: () => void
-  onOpenProgram?: () => void
 }
 
 function TrackChip({
@@ -55,8 +53,6 @@ export function PromoteCutoverStrip({
   tierB,
   onOpenPromote,
   onOpenDelivery,
-  onOpenDeployMainline,
-  onOpenProgram,
 }: PromoteCutoverStripProps) {
   const [copied, setCopied] = useState(false)
 
@@ -141,14 +137,7 @@ export function PromoteCutoverStrip({
           <p className="promote-cutover-strip__blocker m-0">
             Milestone{' '}
             <code className="font-mono text-[var(--text-dense-caption)]">2c-b-prod-cutover</code>{' '}
-            blocked on{' '}
-            {onOpenDeployMainline != null ? (
-              <button type="button" className="focus-strip-link" onClick={onOpenDeployMainline}>
-                {model.spine.milestoneBlocker}
-              </button>
-            ) : (
-              model.spine.milestoneBlocker
-            )}
+            blocked on {model.spine.milestoneBlocker}
           </p>
         )}
         <p
@@ -202,11 +191,6 @@ export function PromoteCutoverStrip({
         {onOpenDelivery != null && (
           <Button variant="ghost" size="sm" onClick={onOpenDelivery}>
             Delivery
-          </Button>
-        )}
-        {onOpenProgram != null && model.promote.blockedByDecision && (
-          <Button variant="ghost" size="sm" onClick={onOpenProgram}>
-            Program
           </Button>
         )}
       </div>

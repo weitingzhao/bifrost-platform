@@ -1,10 +1,10 @@
 /**
  * Bifrost Ops — environments & architecture catalog.
  *
- * Static catalog for Environments UI and "Copy for LLM" context.
+ * Static catalog for LLM packs and Runtime Map registry (probe targets, scope, hardware).
  * Milestones and decisions: authoritative via config/ops-context.yaml + GET /api/v1/context.
  *
- * Authoritative architecture UI: Ops Console → Architecture (Blueprint, Standards, Agent Protocol, Environments).
+ * Live environment status: Control Room + Runtime Map. Governance UI: Blueprint, Standards, Agent Protocol.
  */
 
 import type { DenseTagVariant } from '@bifrost/ui'
@@ -493,7 +493,7 @@ export function buildStaticCatalogContext(): string {
     '## Key repos',
     '- bifrost-platform — Bifrost Ops control plane (this console)',
     '- bifrost-trade-infra — compose, nginx, Goal, migration sign-off docs',
-    '- Architecture → Platform Roadmap · K3s Architecture (roadmapCatalog.ts · k3sArchitectureCatalog.ts)',
+    '- Platform Roadmap (roadmapCatalog.ts) · k3sArchitectureCatalog.ts (target topology)',
     '- bifrost-trade-{api,worker,socket,frontend,core} — data plane',
     '- bifrost-trader-engine — READ-ONLY reference (do not edit)',
     '',
@@ -501,7 +501,7 @@ export function buildStaticCatalogContext(): string {
     '- Blueprint — North Star, system architecture, design principles',
     '- Standards — Trade probe contract, cluster actuation phases',
     '- Agent Protocol — Product / Ops / Promote modes',
-    '- Environments — hardware, flows, platform phases (this catalog)',
+    '- environments-catalog.ts — probe targets, scope, hardware (static WHAT)',
     '',
     '## Agent discipline',
     '- Probe, do not duplicate trade health endpoints',
