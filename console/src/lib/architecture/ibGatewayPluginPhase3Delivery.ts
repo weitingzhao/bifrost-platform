@@ -64,7 +64,7 @@ export const IB_GATEWAY_PLUGIN_PHASE3_DELIVERY_ITEMS: IbGatewayPluginPhase3Deliv
       'GET /plugins/ib-gateway/status includes cutover.environments — legacy replicas + ExternalName per NS.',
     verifySteps: [
       'status.cutover.legacy_socket_retired === true when all Trade NS at replicas=0.',
-      'IbGatewayCutoverStatusPanel on Rocket → Cluster — per-env table.',
+      'IbGatewayCutoverStatusPanel on Subcontractors → Plugin Gallery — per-env table.',
       'Live summary reflects cutover reachability.',
     ],
   },

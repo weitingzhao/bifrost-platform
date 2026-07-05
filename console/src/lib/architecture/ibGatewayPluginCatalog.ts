@@ -4,7 +4,7 @@
  * Created 2026-07-04 for bifrost-platform-plugin (Platform TWS bus).
  *
  * Live state (not this catalog):
- * - IB Gateway health + mode: Rocket → Cluster (platform-api /api/v1/plugins/ib-gateway/*)
+ * - IB Gateway health + mode: Subcontractors → Plugin Gallery (platform-api /api/v1/plugins/ib-gateway/*)
  * - Phase / program sign-off: Subcontractors → Delivery Board · ib-gateway-plugin
  * - Migrate lane: Engineer → Briefing · spine stream ib-gateway-plugin
  */
@@ -103,7 +103,7 @@ export const IB_GATEWAY_PLUGIN_PROGRESS = {
 } as const
 
 export const IB_GATEWAY_RELATED_AUTHORITIES = [
-  'Live IB Gateway health + mode: Rocket → Cluster (platform-api /api/v1/plugins/ib-gateway/*)',
+  'Live IB Gateway health + mode: Subcontractors → Plugin Gallery (platform-api /api/v1/plugins/ib-gateway/*)',
   'Program / phase sign-off: Subcontractors → Delivery Board · ib-gateway-plugin',
   'Migrate lane + spine stream: Engineer → Briefing · ib-gateway-plugin',
   'Plugin implementation: bifrost-platform-plugin · k8s/data/redis-ib + k8s/data/ib-gateway',
@@ -131,7 +131,7 @@ export function buildIbGatewayPluginLlmPack(): string {
     '# IB Gateway Plugin — implementation program',
     `Version: ${IB_GATEWAY_PLUGIN_CATALOG_VERSION}`,
     `Repo: ${IB_GATEWAY_PLUGIN_SOURCE}`,
-    'Live health + mode: Rocket → Cluster — not this catalog.',
+    'Live health + mode: Subcontractors → Plugin Gallery — not this catalog.',
     'Sign-off state: Delivery Board · ib-gateway-plugin — not this catalog.',
     '',
     '## Design principles',

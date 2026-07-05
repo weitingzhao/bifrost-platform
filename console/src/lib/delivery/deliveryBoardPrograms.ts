@@ -156,7 +156,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'trade-ib-migration',
       label: 'Trade IB Migration',
       description: 'Gateway RPC cutover and rollout waves (W1–W3, STG, prod).',
-      formerLocation: 'Rocket → Cluster (live) / catalog-only (governance) · Engineer → Briefing / Subcontractors → Delivery Board',
+      formerLocation: 'Subcontractors → Plugin Gallery (live) / catalog-only (governance) · Engineer → Briefing / Subcontractors → Delivery Board',
       ...(() => {
         const { signed, total } = tradeIbMigrationSignedCount()
         return { signed, phaseCount: total }
@@ -166,7 +166,7 @@ export function buildDeliveryBoardProgramOverview(): DeliveryBoardProgramOvervie
       id: 'ib-gateway-plugin',
       label: 'IB Gateway Plugin',
       description: 'redis-ib plugin phases, program closure, hardening.',
-      formerLocation: 'Rocket → Cluster (live) / catalog-only (governance) · Engineer → Briefing / Subcontractors → Delivery Board',
+      formerLocation: 'Subcontractors → Plugin Gallery (live) / catalog-only (governance) · Engineer → Briefing / Subcontractors → Delivery Board',
       ...(() => {
         const { signed, total } = ibGatewayPluginSignedCount()
         return { signed, phaseCount: total }

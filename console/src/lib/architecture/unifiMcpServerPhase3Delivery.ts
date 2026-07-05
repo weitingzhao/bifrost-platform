@@ -30,7 +30,7 @@ export const UNIFI_MCP_SERVER_PHASE3_DELIVERY_ITEMS: UnifiMcpServerPhase3Deliver
     summary:
       'useNetworkLiveProbe hook — TanStack Query polls status + audit every 30s; StatusLamp + POLICY_* classification.',
     verifySteps: [
-      'Mission Control → Control Room — Network Health panel shows “Live UniFi probe” block.',
+      'Mission Control → Control Room — Network Health summary; Ground Systems → Network — full devices/clients tables.',
       'With UNIFI_* configured: controller version + POLICY_NOMINAL or POLICY_DRIFT.',
       'Without credentials: unknown lamp + platform-api hint (not blank catalog-only).',
     ],

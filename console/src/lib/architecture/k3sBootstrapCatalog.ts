@@ -175,7 +175,7 @@ export const NODE_JOIN_STEPS: NodeJoinStep[] = [
 export const NEXT_STAGES = [
   '1. `cicd` namespace: Gitea · Registry · Tekton · ArgoCD',
   '2. `data`: CloudNativePG (coexist with bare .80 PG, pending D2)',
-  '3. `monitoring` namespace: kube-prometheus-stack (Layer B — via Platform P4, not ad-hoc shell)',
+  '3. `monitoring` namespace: kube-prometheus-stack (Layer B — POST /cluster/addons/kube-prometheus-stack/ensure, not ad-hoc shell)',
   '4. gpu-server compute: make gpu-install-compute-stack (Ollama + MinIO scale-to-zero)',
   '5. gpu-server power: make gpu-install-power-manager on bootstrap (WOL + idle poweroff)',
 ]
