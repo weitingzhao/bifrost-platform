@@ -35,7 +35,7 @@ export const NETWORK_GOVERNANCE_PHASE8_DELIVERY_ITEMS: NetworkGovernancePhase8De
     verifySteps: [
       'Blueprint → Design principles — Principle 8 “Network is the ground floor”.',
       'Program / Briefing — D9 Session v2 and network-upgrade-core / network-upgrade-wifi streams visible.',
-      'Governance → Standards; Control Room → Network Health panel loads catalog projection.',
+      'Governance → Standards; Ground Systems → Network panel loads catalog projection.',
     ],
   },
   {

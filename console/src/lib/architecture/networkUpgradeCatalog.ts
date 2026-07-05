@@ -5,7 +5,7 @@
  * access, VLAN-capable WiFi, and full UniFi migration.
  *
  * Live state (not this catalog):
- * - LAN health + spine infra streams: Mission Control → Control Room → Network Health
+ * - LAN health + spine infra streams: Ground Systems → Network (summary also on Mission Control → Control Room)
  * - Infra lane: Engineer → Briefing · network-upgrade-core / network-upgrade-wifi
  * - API actuation: platform-api /api/v1/network/* · networkApiContractCatalog.ts
  */
@@ -445,7 +445,7 @@ export const AI_SCENARIOS: AiScenarioRow[] = [
 /* ─── LLM pack builder ─── */
 
 export const NETWORK_UPGRADE_RELATED_AUTHORITIES = [
-  'Live LAN health + spine infra streams: Mission Control → Control Room → Network Health',
+  'Live LAN health + spine infra streams: Ground Systems → Network (Mission Control → Control Room summary)',
   'Infra migrate lane: Engineer → Briefing · network-upgrade-core / network-upgrade-wifi',
   'Network API actuation: GET/POST /api/v1/network/* · networkApiContractCatalog.ts',
   'Spine: config/ops-context.yaml · decision D9 (Session v2)',

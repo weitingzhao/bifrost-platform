@@ -275,7 +275,7 @@ export const TRADE_IB_MIGRATION_RELATED_AUTHORITIES = [
   'Trade IB health aggregate: Rocket → Cluster + Monitor matrix probes',
   'Program / rollout sign-off: Subcontractors → Delivery Board · trade-ib-migration',
   'Migrate lane + spine stream: Engineer → Briefing · trade-ib-client-migration',
-  'Platform TWS bus prerequisite: ibGatewayPluginCatalog.ts · Rocket → Cluster (ib-gateway)',
+  'Platform TWS bus prerequisite: ibGatewayPluginCatalog.ts · Subcontractors → Plugin Gallery (ib-gateway)',
   'Trading execution freeze: spine decision D10 · tradeIbClientMigrationRolloutCatalog.ts TRADE_EXECUTION_FREEZE',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
@@ -350,7 +350,7 @@ export function buildTradeIbClientMigrationLlmPack(): string {
     '# Trade IB Client Migration',
     `Version: ${TRADE_IB_CLIENT_MIGRATION_VERSION}`,
     `Stream: ${TRADE_IB_CLIENT_MIGRATION_STREAM_ID}`,
-    'Live health + rollout state: Rocket → Cluster / Subcontractors → Delivery Board — not this catalog.',
+    'Live health + rollout state: Subcontractors → Plugin Gallery / Subcontractors → Delivery Board — not this catalog.',
     '',
     '## Prerequisite',
     'IB Gateway Plugin (IBGP0–4) — Platform TWS bus @ data/redis-ib.',

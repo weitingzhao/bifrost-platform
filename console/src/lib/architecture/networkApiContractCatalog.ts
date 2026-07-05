@@ -1,7 +1,7 @@
 /**
  * Network API contract — platform-api /api/v1/network/* (catalog-only).
  *
- * Live routes and UniFi probe: Mission Control → Control Room → Network Health;
+ * Live routes and UniFi probe: Ground Systems → Network;
  * actuation audit via GET /api/v1/audit. Executor scripts per spine D9.
  */
 
@@ -165,7 +165,7 @@ export const NETWORK_API_MCP_TOOLS: NetworkApiMcpToolDef[] = NETWORK_API_ROUTES.
 )
 
 export const NETWORK_API_RELATED_AUTHORITIES = [
-  'Live UniFi probe + infra streams: Mission Control → Control Room → Network Health',
+  'Live UniFi probe + infra streams: Ground Systems → Network (Mission Control → Control Room summary)',
   'Actuation audit: GET /api/v1/audit (same pattern as cluster L1)',
   'Agent playbooks: Agent Protocol → POLICY_NOMINAL / POLICY_DRIFT / SESSION_PATH',
   'UniFi MCP stream: unifiMcpServerCatalog.ts · spine unifi-mcp-server',

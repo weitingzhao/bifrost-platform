@@ -16,9 +16,9 @@ export const NETWORK_GOVERNANCE_PHASE6_DELIVERY_ITEMS: NetworkGovernancePhase6De
     id: 'NG6-1',
     title: 'Control Room — Network Health panel (diagnosis zone)',
     summary:
-      'Mission Control → Control Room embeds Network Health — ground floor panel with PARTIAL DEPLOY status and network-upgrade-core / network-upgrade-wifi stream rows.',
+      'Ground Systems → Network — full UniFi panel; Mission Control → Control Room embeds Network Health summary.',
     verifySteps: [
-      'Mission Control → Control Room — section “Network Health — ground floor (LAN / UniFi)” below Promote / cutover strip.',
+      'Ground Systems → Network — section “Network Health — ground floor (LAN / UniFi)”. Mission Control → Control Room retains summary + cross-link.',
       'Stream table shows network-upgrade-core and network-upgrade-wifi with done/total progress.',
       'Catalog version 2026-07-03-v2 visible in panel header.',
     ],
