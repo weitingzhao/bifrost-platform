@@ -16,27 +16,27 @@ export const TRADE_IB_CLIENT_MIGRATION_PROGRAM_PHASES: TradeIbClientMigrationPro
   {
     id: 'TIBM0',
     shortLabel: 'Inventory',
-    signoffLocation: 'Architecture → Plugins → Trade IB Migration',
+    signoffLocation: 'Delivery Board · Agent → Briefing',
   },
   {
     id: 'TIBM1',
     shortLabel: 'Gateway RPC',
-    signoffLocation: 'Architecture → Plugins → Trade IB Migration',
+    signoffLocation: 'Delivery Board · Agent → Briefing',
   },
   {
     id: 'TIBM2',
     shortLabel: 'Health / read',
-    signoffLocation: 'Architecture → Plugins → Trade IB Migration',
+    signoffLocation: 'Delivery Board · Agent → Briefing',
   },
   {
     id: 'TIBM3',
     shortLabel: 'Workers',
-    signoffLocation: 'Architecture → Plugins → Trade IB Migration',
+    signoffLocation: 'Delivery Board · Agent → Briefing',
   },
   {
     id: 'TIBM4',
     shortLabel: 'UI cleanup',
-    signoffLocation: 'Architecture → Plugins → Trade IB Migration',
+    signoffLocation: 'Delivery Board · Agent → Briefing',
   },
 ]
 

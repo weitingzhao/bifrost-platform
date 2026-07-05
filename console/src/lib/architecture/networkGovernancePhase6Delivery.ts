@@ -47,11 +47,13 @@ export const NETWORK_GOVERNANCE_PHASE6_DELIVERY_ITEMS: NetworkGovernancePhase6De
   },
   {
     id: 'NG6-4',
-    title: 'Navigation — Network Upgrade catalog',
-    summary: 'Network Upgrade button opens Architecture → Network Upgrade (FIREWALL_APPLIED + deployment sections).',
+    title: 'Control Room — self-contained network OS view',
+    summary:
+      'Network Health panel shows spine streams, live UniFi probe, and ZBF summary without Architecture page navigation.',
     verifySteps: [
-      'Click “Network Upgrade” in panel actions — navigates to Network Upgrade tab.',
-      'Network Upgrade page shows Deployment progress and Firewall applied sections from Phase 5.',
+      'Control Room Network Health — stream table + live probe + ZBF block (no Architecture deep links).',
+      'Agent Protocol button still navigates for POLICY_DRIFT remediation.',
+      'Catalog authority via Governance Copy All → networkUpgradeCatalog.ts historical appendix.',
     ],
   },
   {

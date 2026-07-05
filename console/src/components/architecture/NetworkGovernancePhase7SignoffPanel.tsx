@@ -93,7 +93,7 @@ export function NetworkGovernancePhase7SignoffPanel() {
       {panelExpanded && (
         <div className="mt-3 flex flex-col gap-3">
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Verify Network API contract catalog and Architecture page (planning only — no live platform-api handlers),
+            Verify networkApiContractCatalog.ts and Control Room live UniFi probe (GET /api/v1/network/*),
             then sign off (v{NETWORK_GOVERNANCE_PHASE7_VERSION}). Phase 8 program closure follows when NG1–NG7 are
             signed; live probe implementation follows unifi-mcp-server stream.
           </p>
@@ -186,7 +186,7 @@ export function NetworkGovernancePhase7SignoffPanel() {
       <ConfirmDialog
         open={signConfirmOpen}
         title="Sign off Network Governance Phase 7"
-        message="Confirm Network API contract catalog and Architecture page. This sign-off covers planning only — platform-api /api/v1/network/* handlers and live UniFi probes are future implementation."
+        message="Confirm Network API contract catalog and Control Room live probe. platform-api /api/v1/network/* handlers and MCP tools are documented in networkApiContractCatalog.ts historical appendix."
         confirmLabel="Confirm sign-off"
         onConfirm={handleSignOff}
         onCancel={() => setSignConfirmOpen(false)}

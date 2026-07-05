@@ -59,8 +59,6 @@ type ControlRoomPageProps = {
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenPlatformRelease?: () => void
   onOpenPromote?: () => void
-  onOpenNetworkUpgrade?: () => void
-  onOpenNetworkApi?: () => void
   onOpenAgentProtocol?: () => void
 } & AmbientAgentShellProps
 
@@ -83,8 +81,6 @@ export function ControlRoomPage({
   onOpenAgentDesk,
   onOpenPlatformRelease,
   onOpenPromote,
-  onOpenNetworkUpgrade,
-  onOpenNetworkApi,
   onOpenAgentProtocol,
   ambientJobId,
   onStartAgentJob,
@@ -236,11 +232,9 @@ export function ControlRoomPage({
           onOpenDelivery={onOpenDelivery}
         />
 
-        {onOpenNetworkUpgrade != null && onOpenNetworkApi != null && onOpenAgentProtocol != null && (
+        {onOpenAgentProtocol != null && (
           <NetworkHealthPanel
             context={context}
-            onOpenNetworkUpgrade={onOpenNetworkUpgrade}
-            onOpenNetworkApi={onOpenNetworkApi}
             onOpenAgentProtocol={onOpenAgentProtocol}
           />
         )}

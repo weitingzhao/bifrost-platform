@@ -189,13 +189,8 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   {
     view: 'Network Health (Control Room)',
     plane: 'Observe',
-    purpose: 'Ground-floor LAN — spine + catalog projection, ZBF status, firewall audit path (embedded in Control Room)',
-  },
-  { view: 'Network Upgrade', plane: 'Architecture', purpose: 'Home LAN plan — VLAN design, FIREWALL_APPLIED, deployment progress, research' },
-  {
-    view: 'Network API',
-    plane: 'Architecture',
-    purpose: 'platform-api /api/v1/network/* contract — L0/L1/L2 routes, executors, forbidden actions (planned; no Go handlers)',
+    purpose:
+      'Ground-floor LAN — spine + catalog projection, ZBF status, live UniFi probe; catalogs: networkUpgradeCatalog.ts + networkApiContractCatalog.ts',
   },
   { view: 'Delivery', plane: 'Operate', purpose: 'CI/CD pipelines and release coupling' },
   { view: 'Runtime Map', plane: 'Observe', purpose: 'Topology-first runtime diagnosis' },

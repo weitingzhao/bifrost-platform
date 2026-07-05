@@ -32,7 +32,7 @@ for (let i = 1; i <= 7; i++) {
 
 const cat = read('src/lib/architecture/blueprintCatalog.ts')
 check('Constitution Principle 8 — Network is the ground floor', cat.includes('Network is the ground floor'))
-check('CONSOLE_VIEWS includes Network API', /view: 'Network API'/.test(cat))
+check('CONSOLE_VIEWS includes Network Health catalog refs', cat.includes('networkUpgradeCatalog.ts') && cat.includes('networkApiContractCatalog.ts'))
 
 const nac = read('src/lib/architecture/networkApiContractCatalog.ts')
 const routes = [...nac.matchAll(/\/api\/v1\/network[^\s'"]+/g)]

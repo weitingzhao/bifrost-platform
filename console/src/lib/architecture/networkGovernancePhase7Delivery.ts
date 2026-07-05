@@ -18,20 +18,20 @@ export const NETWORK_GOVERNANCE_PHASE7_DELIVERY_ITEMS: NetworkGovernancePhase7De
     summary:
       'networkApiContractCatalog.ts documents planned GET/POST /api/v1/network/* routes, L0/L1/L2 autonomy, auth levels, executors, and forbidden actions — all status planned (no Go handlers).',
     verifySteps: [
-      'Architecture → Network API — metadata shows version 2026-07-03 and PLANNED status tag.',
-      'Planned routes table lists status, zones, policies, audit, devices, clients, firewall/apply, zones/restructure, wlan.',
+      'networkApiContractCatalog.ts — NETWORK_API_CONTRACT_VERSION 2026-07-03 and route definitions.',
+      'Governance Copy All — network API section with historical implementation snapshot.',
       'Forbidden section lists Default Security Posture toggle, bulk delete, Integration Key write, manual UI.',
     ],
   },
   {
     id: 'NG7-2',
-    title: 'Architecture page — Network API',
+    title: 'Live platform-api routes + Control Room probe',
     summary:
-      'NetworkApiContractPage renders executor model, route table, future MCP tools, and Copy for LLM pack.',
+      'GET /api/v1/network/* handlers live; Control Room Network Health polls status + audit (UMS3).',
     verifySteps: [
-      'Sidebar K3s → Network API navigates to #network-api.',
-      'Page header describes platform-api contract planning (Projection layer).',
-      'Copy for LLM produces pack with routes, forbidden list, and MCP tool mapping.',
+      'Control Room Network Health — live probe shows GET /api/v1/network/status reachability.',
+      'networkApiContractCatalog.ts routes list L0 GET + L1 POST firewall/apply as implemented in historical appendix.',
+      'buildNetworkApiContractLlmPack available via Governance Copy All for LLM.',
     ],
   },
   {
@@ -40,9 +40,9 @@ export const NETWORK_GOVERNANCE_PHASE7_DELIVERY_ITEMS: NetworkGovernancePhase7De
     summary:
       'Network Health panel links to Network API contract; blueprintCatalog CONSOLE_VIEWS adds Network API row.',
     verifySteps: [
-      'Control Room → Network Health — “Network API contract” button opens Network API tab.',
-      'futureProbe references networkApiContractCatalog.ts (not generic planned text only).',
-      'Blueprint → Console views — row “Network API” [Architecture].',
+      'Control Room Network Health — live probe + ZBF block (no Architecture navigation buttons).',
+      'networkConsoleProjection liveProbeNote references networkApiContractCatalog.ts.',
+      'Blueprint CONSOLE_VIEWS — Network Health row cites networkUpgradeCatalog + networkApiContractCatalog.',
     ],
   },
   {
@@ -51,9 +51,9 @@ export const NETWORK_GOVERNANCE_PHASE7_DELIVERY_ITEMS: NetworkGovernancePhase7De
     summary:
       'Future MCP read/routine/confirm tools map 1:1 to platform-api routes — decoupling per Constitution.',
     verifySteps: [
-      'Network API page → Future MCP tools table lists get_network_status, audit_network_firewall, apply_network_firewall, etc.',
-      'Each tool row shows corresponding /api/v1/network/* route and planned status.',
-      'Executor model notes spine stream unifi-mcp-server wraps GET routes when implemented.',
+      'networkApiContractCatalog.ts NETWORK_API_MCP_TOOLS — get_network_status, audit_network_firewall, apply_network_firewall, etc.',
+      'unifiMcpServerCatalog.ts stream phases UMS1–UMS4 in network API historical appendix.',
+      'Executor model notes spine stream unifi-mcp-server wraps platform-api routes.',
     ],
   },
   {

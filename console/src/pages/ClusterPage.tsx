@@ -64,6 +64,7 @@ import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
 import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabilityPanel'
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
+import { ClusterPlatformPluginsSection } from '@/components/cluster/ClusterPlatformPluginsSection'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
@@ -979,6 +980,8 @@ cd ../bifrost-platform && make start`}
         metrics={metricsQuery.data}
         isLoading={summaryQuery.isLoading || metricsQuery.isLoading}
       />
+
+      <ClusterPlatformPluginsSection />
 
       <section
         className="cluster-global-top-pods page-section"

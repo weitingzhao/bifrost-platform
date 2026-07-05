@@ -49,7 +49,7 @@ export const IB_GATEWAY_PLUGIN_PHASE2_DELIVERY_ITEMS: IbGatewayPluginPhase2Deliv
     summary: 'TanStack Query polls status every 30s — maps reachability to StatusLamp.',
     verifySteps: [
       'console/src/hooks/useIbGatewayLiveProbe.ts — probeReach ok/degraded/fail/unknown.',
-      'Hook used by IbGatewayLiveStatusPanel on IB Gateway Plugin page.',
+      'Hook used by IbGatewayLiveStatusPanel on Operate → Cluster.',
     ],
   },
   {
@@ -57,7 +57,7 @@ export const IB_GATEWAY_PLUGIN_PHASE2_DELIVERY_ITEMS: IbGatewayPluginPhase2Deliv
     title: 'Console live status + control panel',
     summary: 'IbGatewayLiveStatusPanel — StatusLamp, slot table, reconnect + maintenance actions.',
     verifySteps: [
-      'Architecture → IB Gateway — live status section above Phase sign-off panels.',
+      'Operate → Cluster — IB Gateway live status section (platform-api probe).',
       'Operator token enables Reconnect + per-slot maintenance Enter/Clear.',
       'Summary shows mock/live mode and deployment ready fraction.',
     ],

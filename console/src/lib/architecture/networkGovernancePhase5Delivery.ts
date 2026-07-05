@@ -18,9 +18,9 @@ export const NETWORK_GOVERNANCE_PHASE5_DELIVERY_ITEMS: NetworkGovernancePhase5De
     summary:
       'networkUpgradeCatalog.ts advances to 2026-07-03-v2; NET_UPGRADE_STATUS reflects UCG + switch live, firewall applied, AP rollout pending (not RESEARCH/ORDERED).',
     verifySteps: [
-      'Architecture → Network Upgrade → Catalog metadata — Version 2026-07-03-v2.',
-      'Status tag shows PARTIAL DEPLOY with VLAN 10/20/30/50 and Session v2 firewall note.',
-      'Copy for LLM — header Status matches UI (not 2026-06-26-v1 / ORDERED).',
+      'networkUpgradeCatalog.ts — NET_UPGRADE_VERSION 2026-07-03-v2 and NET_UPGRADE_STATUS partial deploy note.',
+      'Governance Copy All for LLM — historical appendix includes deployment snapshot.',
+      'Control Room Network Health — status tag matches NET_UPGRADE_STATUS theme.',
     ],
   },
   {
@@ -29,8 +29,8 @@ export const NETWORK_GOVERNANCE_PHASE5_DELIVERY_ITEMS: NetworkGovernancePhase5De
     summary:
       'FIREWALL_APPLIED documents 5 Bifrost zones + 9 policies, Session v2 path (D9), audit script, and mapping to FIREWALL_RULES.',
     verifySteps: [
-      'Network Upgrade → Firewall applied (ZBF — Session v2) section — 9 policy rows with catalogRule mapping.',
-      'Section mentions scripts/unifi_firewall_setup.py audit and spine D9.',
+      'networkUpgradeCatalog.ts FIREWALL_APPLIED — 9 policy rows with catalogRule mapping.',
+      'Control Room Network Health — ZBF block cites audit script and spine D9.',
       'FIREWALL_APPLIED.policyCount === 9 and zoneCount === 5 in catalog source.',
     ],
   },
@@ -40,7 +40,7 @@ export const NETWORK_GOVERNANCE_PHASE5_DELIVERY_ITEMS: NetworkGovernancePhase5De
     summary:
       'Research table adds firewall-applied and session-v2-actuation (answered); moca-vlan blocked pending physical test script.',
     verifySteps: [
-      'Network Upgrade → Research items — row firewall-applied status answered with FIREWALL_APPLIED reference.',
+      'networkUpgradeCatalog.ts RESEARCH_ITEMS — firewall-applied answered with FIREWALL_APPLIED reference.',
       'Row session-v2-actuation answered with D9 + unifi_firewall_setup.py authority.',
       'moca-vlan status blocked (not open) with unifi_moca_vlan_test.sh note.',
     ],
@@ -51,9 +51,9 @@ export const NETWORK_GOVERNANCE_PHASE5_DELIVERY_ITEMS: NetworkGovernancePhase5De
     summary:
       'DEPLOYMENT_PROGRESS mirrors spine network-upgrade-core 5/6 and network-upgrade-wifi 2/5; UCG + switch BOM status owned.',
     verifySteps: [
-      'Network Upgrade → Deployment progress — network-upgrade-core 5/6 with firewall ✓ note.',
-      'network-upgrade-wifi 2/5 with ① AP purchase + ③ pre-AP tooling done; ② WiFiman survey pending.',
-      'Hardware BOM — UCG Max and USW-Pro-Max-24 status owned (not ordered).',
+      'Control Room Network Health — network-upgrade-core 5/6 with firewall note (spine or catalog).',
+      'network-upgrade-wifi 2/5 with AP purchase + pre-AP tooling done; WiFiman survey pending.',
+      'networkUpgradeCatalog.ts HARDWARE_BOM — UCG Max and USW-Pro-Max-24 status owned.',
     ],
   },
   {

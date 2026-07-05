@@ -68,9 +68,9 @@ export const IB_GATEWAY_PLUGIN_PHASE0_DELIVERY_ITEMS: IbGatewayPluginPhase0Deliv
     id: 'IBGP0-6',
     title: 'Console Plugin page + Phase 0 sign-off',
     summary:
-      'Architecture → Plugins → IB Gateway — program strip, catalog tables, Phase 0 sign-off panel.',
+      'Delivery Board · ib-gateway-plugin — program strip, catalog tables, Phase 0 sign-off panel.',
     verifySteps: [
-      'Navigate Architecture → Plugins → IB Gateway.',
+      'Navigate Operate → Delivery Board → IB Gateway Plugin.',
       'Mark all IBGP0 items verified → Sign off Phase 0 delivery (Admin token).',
       'Signed state persists in localStorage; program strip shows IBGP0 ✓.',
     ],

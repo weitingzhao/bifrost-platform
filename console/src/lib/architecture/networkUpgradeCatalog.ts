@@ -1,12 +1,13 @@
 /**
- * Home network upgrade plan — research & deployment reference.
+ * Home network upgrade plan — research & deployment reference (catalog-only).
  *
- * Authoritative source for Ops Console → Architecture → Network Upgrade.
  * Created 2026-06-26 from Agent/Owner discussion on kube-vip, cross-subnet
  * access, VLAN-capable WiFi, and full UniFi migration.
  *
- * Status: PARTIAL DEPLOY — core hardware live; firewall applied; WiFi AP rollout pending.
- * Spine alignment: config/ops-context.yaml → network-upgrade-core 5/6 · decision D9.
+ * Live state (not this catalog):
+ * - LAN health + spine infra streams: Observe → Control Room → Network Health
+ * - Infra lane: Agent → Briefing · network-upgrade-core / network-upgrade-wifi
+ * - API actuation: platform-api /api/v1/network/* · networkApiContractCatalog.ts
  */
 
 export const NET_UPGRADE_VERSION = '2026-07-03-v2'
@@ -443,22 +444,50 @@ export const AI_SCENARIOS: AiScenarioRow[] = [
 
 /* ─── LLM pack builder ─── */
 
-export function buildNetworkUpgradeLlmPack(): string {
+export const NETWORK_UPGRADE_RELATED_AUTHORITIES = [
+  'Live LAN health + spine infra streams: Observe → Control Room → Network Health',
+  'Infra migrate lane: Agent → Briefing · network-upgrade-core / network-upgrade-wifi',
+  'Network API actuation: GET/POST /api/v1/network/* · networkApiContractCatalog.ts',
+  'Spine: config/ops-context.yaml · decision D9 (Session v2)',
+]
+
+/** Archived deployment progress, applied firewall snapshot, BOM/research status — not live ops state. */
+export function buildNetworkUpgradeHistoricalAppendix(): string {
   const lines: string[] = [
-    '# Home Network Upgrade Plan',
-    `Version: ${NET_UPGRADE_VERSION}`,
-    `Status: ${NET_UPGRADE_STATUS}`,
+    '## Historical progress (archived — do not treat as live)',
     '',
-    '## Deployment progress (spine streams)',
+    `Status snapshot: ${NET_UPGRADE_STATUS}`,
+    '',
+    '### Deployment progress (catalog snapshot — live: Control Room + spine)',
     ...DEPLOYMENT_PROGRESS.map(
       d => `- **${d.stream}** ${d.done}/${d.total}: ${d.label} — ${d.note}`,
     ),
     '',
-    '## Firewall applied (ZBF — Session v2)',
+    '### Firewall applied (ZBF — Session v2 snapshot)',
     `- Applied: ${FIREWALL_APPLIED.appliedAt} · ${FIREWALL_APPLIED.zoneCount} zones · ${FIREWALL_APPLIED.policyCount} policies`,
     `- Actuation: ${FIREWALL_APPLIED.actuationPath}`,
-    `- Audit: \`${FIREWALL_APPLIED.auditScript}\` · Catalog drift target: FIREWALL_RULES`,
+    `- Audit: \`${FIREWALL_APPLIED.auditScript}\``,
     `- Policies: ${FIREWALL_APPLIED.policies.map(p => p.name).join('; ')}`,
+    '',
+    '### Hardware BOM (with status)',
+    ...HARDWARE_BOM.map(
+      b => `- ${b.model} ×${b.qty} @ $${b.unitPrice} [${b.status}] — ${b.purpose}`,
+    ),
+    '',
+    '### Research items',
+    ...RESEARCH_ITEMS.map(
+      r => `- [${r.id}] (${r.status}) ${r.question}${r.answer ? ` — ${r.answer}` : ''}`,
+    ),
+  ]
+  return lines.join('\n')
+}
+
+export function buildNetworkUpgradeLlmPack(): string {
+  const lines: string[] = [
+    '# Home Network Upgrade Plan',
+    `Version: ${NET_UPGRADE_VERSION}`,
+    `Source: ${NET_UPGRADE_SOURCE}`,
+    'Live progress: Control Room Network Health + spine — not this catalog.',
     '',
     '## Current topology',
     '```',
@@ -471,17 +500,31 @@ export function buildNetworkUpgradeLlmPack(): string {
     '## Target VLAN design',
     ...TARGET_VLANS.map(v => `- VLAN ${v.vlan} (${v.subnet}): ${v.purpose}${v.ssid ? ` — SSID "${v.ssid}"` : ' — wired only'}`),
     '',
+    '## Firewall rules (design target)',
+    ...FIREWALL_RULES.map(r => `- ${r.from} → ${r.to}: **${r.action}**${r.note ? ` — ${r.note}` : ''}`),
+    '',
     '## Target topology',
     '```',
     TARGET_TOPOLOGY_ASCII,
     '```',
     '',
-    '## Hardware BOM',
-    `Total: $${BOM_TOTAL}`,
-    ...HARDWARE_BOM.map(b => `- ${b.model} ×${b.qty} @ $${b.unitPrice} — ${b.purpose}`),
+    '## Migration steps',
+    `Total downtime target: ${MIGRATION_TOTAL_DOWNTIME}`,
+    ...MIGRATION_STEPS.map(s => `${s.step}. ${s.action} (downtime ${s.downtime}) — ${s.detail}`),
     '',
-    '## Open research items',
-    ...RESEARCH_ITEMS.filter(r => r.status === 'open').map(r => `- [${r.id}] ${r.question}`),
+    '## AP placements',
+    ...AP_PLACEMENTS.map(a => `- ${a.location}: ${a.model} · ${a.backhaul} · ${a.mount}`),
+    '',
+    '## Post-upgrade effects',
+    ...POST_UPGRADE_EFFECTS.map(e => `- **${e.scenario}**: before=${e.before} · after=${e.after}`),
+    '',
+    '## AI smart home scenarios',
+    ...AI_SCENARIOS.map(s => `- [${s.phase}] ${s.category}: ${s.scenario} — ${s.trigger} → ${s.action}`),
+    '',
+    '## Related authorities',
+    ...NETWORK_UPGRADE_RELATED_AUTHORITIES.map(a => `- ${a}`),
+    '',
+    buildNetworkUpgradeHistoricalAppendix(),
   ]
   return lines.join('\n')
 }
