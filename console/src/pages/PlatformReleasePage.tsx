@@ -8,6 +8,7 @@ import { GateActionBar } from '@/components/delivery/GateActionBar'
 import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
 import { ReleaseEnvAccessBar } from '@/components/delivery/ReleaseEnvAccessBar'
 import { ReleaseHealthStrip } from '@/components/delivery/ReleaseHealthStrip'
+import { SelfHealthPanel } from '@/components/architecture/SelfHealthPanel'
 import {
   ReleaseStepCommandCenter,
   runStepStatus,
@@ -175,6 +176,8 @@ export function PlatformReleasePage({
         </div>
         <ReleaseStateBanner tier="platform" />
       </div>
+
+      <SelfHealthPanel />
 
       <ReleaseStepCommandCenter
         steps={steps}

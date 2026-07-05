@@ -85,7 +85,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
       'decision D1 in ops-context spine',
     ],
     cluster: [
-      'Ops Console → Architecture → K3s → Data Layer (dataLayerCatalog.ts)',
+      'dataLayerCatalog.ts (catalog-only; live: Cluster + Briefing data-layer-k3s)',
       'Ops Console → Architecture → tradeK8sNativeCatalog.ts — IB Edge + K8s-native waves W0–W11',
       'config/ops-context.yaml — tracks.migrate.streams trade-k8s-native + data-layer-k3s',
       'bifrost-trade-infra/k8s/ (base + overlays/dev|stg|prod)',
@@ -621,7 +621,7 @@ export function buildBriefingPack(input: BriefingInputs): string {
       '- Observe → Scheduling: Placement (K8s node-pool / policy gap, L0)',
       '- Operate → Cluster ops: Cluster (L0 read + L1 actuation)',
       '- Observe → Session & audit: Agent Briefing · Audit (actuation history)',
-      '- Architecture → Vision / Blueprint / Data Layer / MCP Contract — governance catalogs',
+      '- Governance catalogs: Vision, Blueprint, dataLayerCatalog.ts, cicdBootstrapCatalog.ts, MCP Contract',
       '- Architecture Copy All for LLM — full static catalog appendix if needed',
     )
   }

@@ -326,7 +326,7 @@ export const STATUS_CHECKPOINTS: StatusCheckpointRow[] = [
 
 export const RELATED_AUTHORITIES = [
   'Execution order + hardware map: roadmapCatalog.ts (Platform Roadmap UI)',
-  'Bootstrap runbook: k3sBootstrapCatalog.ts (K3s Bootstrap UI)',
+  'Bootstrap runbook: k3sBootstrapCatalog.ts',
   'North star: blueprintCatalog.ts · Blueprint § AI Native Platform',
   'Live cluster: Observe → Cluster · Placement · Runtime Map',
   'Spine: config/ops-context.yaml · GET /api/v1/context',

@@ -116,7 +116,7 @@ export const STRATEGY_C_LAYERS: StrategyCLayer[] = [
   },
   {
     layer: 'Out-of-band Operator Plane (L-1)',
-    responsibility: 'AI Agent runners (dual Mac Mini, outside K8s) + mutual watchdog — automate the Owner out-of-band action: recover the platform/cluster when the single pane itself is down. Fate-isolated; see K3s Bootstrap L-1.',
+    responsibility: 'AI Agent runners (dual Mac Mini, outside K8s) + mutual watchdog — automate the Owner out-of-band action: recover the platform/cluster when the single pane itself is down. Fate-isolated; see cicdBootstrapCatalog.ts L-1 / Operator Plane.',
   },
 ]
 
