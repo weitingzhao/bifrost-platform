@@ -1,12 +1,6 @@
 import { useCallback, useState } from 'react'
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, DenseTag } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
-import { VisionV1GatePanel } from '@/components/architecture/VisionV1GatePanel'
-import { VisionS3GatePanel } from '@/components/architecture/VisionS3GatePanel'
-import { VisionV2GatePanel } from '@/components/architecture/VisionV2GatePanel'
-import { VisionV3GatePanel } from '@/components/architecture/VisionV3GatePanel'
-import { VisionV4GatePanel } from '@/components/architecture/VisionV4GatePanel'
-import { VisionV5GatePanel } from '@/components/architecture/VisionV5GatePanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   AGENT_LAYERS,
@@ -295,14 +289,6 @@ export function DualFlywheelVisionPage() {
           </DenseTableBody>
         </DenseDataTable>
       </CatalogSection>
-
-      {/* 8 — Acceptance gates */}
-      <VisionV1GatePanel />
-      <VisionS3GatePanel />
-      <VisionV2GatePanel />
-      <VisionV3GatePanel />
-      <VisionV4GatePanel />
-      <VisionV5GatePanel />
 
       <CatalogSection title={`Dev Agent loop (${DEV_AGENT_LOOP_SOURCE})`}>
         <DenseDataTable>

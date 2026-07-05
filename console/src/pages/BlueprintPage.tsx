@@ -15,22 +15,8 @@ import type { OpsContextResponse } from '@/api/types'
 import { fetchContext, fetchMcpTools } from '@/api/platform'
 import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { BlueprintPhase1SignoffPanel } from '@/components/architecture/BlueprintPhase1SignoffPanel'
-import { NetworkGovernancePhase1SignoffPanel } from '@/components/architecture/NetworkGovernancePhase1SignoffPanel'
-import { NetworkGovernancePhase2SignoffPanel } from '@/components/architecture/NetworkGovernancePhase2SignoffPanel'
-import { NetworkGovernancePhase3SignoffPanel } from '@/components/architecture/NetworkGovernancePhase3SignoffPanel'
-import { NetworkGovernancePhase4SignoffPanel } from '@/components/architecture/NetworkGovernancePhase4SignoffPanel'
-import { NetworkGovernancePhase5SignoffPanel } from '@/components/architecture/NetworkGovernancePhase5SignoffPanel'
-import { NetworkGovernancePhase6SignoffPanel } from '@/components/architecture/NetworkGovernancePhase6SignoffPanel'
-import { NetworkGovernancePhase7SignoffPanel } from '@/components/architecture/NetworkGovernancePhase7SignoffPanel'
-import { NetworkGovernancePhase8SignoffPanel } from '@/components/architecture/NetworkGovernancePhase8SignoffPanel'
-import { NetworkGovernanceProgramStatusStrip } from '@/components/architecture/NetworkGovernanceProgramStatusStrip'
 import { BlueprintGovernanceZone } from '@/components/architecture/BlueprintGovernanceZone'
 import { BlueprintZoneNav } from '@/components/architecture/BlueprintZoneNav'
-import { GovernancePhase3SignoffPanel } from '@/components/architecture/GovernancePhase3SignoffPanel'
-import { GovernancePhase5SignoffPanel } from '@/components/architecture/GovernancePhase5SignoffPanel'
-import { GovernancePhase7SignoffPanel } from '@/components/architecture/GovernancePhase7SignoffPanel'
-import { GovernanceProgramStatusStrip } from '@/components/architecture/GovernanceProgramStatusStrip'
 import {
   AI_MERGE_RATIONALE,
   AI_PLATFORM_BOUNDARIES,
@@ -127,34 +113,6 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
         }
         overflow="visible"
       />
-
-      <GovernanceProgramStatusStrip />
-
-      <NetworkGovernanceProgramStatusStrip />
-
-      <BlueprintPhase1SignoffPanel />
-
-      <GovernancePhase3SignoffPanel />
-
-      <GovernancePhase5SignoffPanel />
-
-      <GovernancePhase7SignoffPanel />
-
-      <NetworkGovernancePhase1SignoffPanel />
-
-      <NetworkGovernancePhase2SignoffPanel />
-
-      <NetworkGovernancePhase3SignoffPanel />
-
-      <NetworkGovernancePhase4SignoffPanel />
-
-      <NetworkGovernancePhase5SignoffPanel />
-
-      <NetworkGovernancePhase6SignoffPanel />
-
-      <NetworkGovernancePhase7SignoffPanel />
-
-      <NetworkGovernancePhase8SignoffPanel />
 
       {/* Governance boundary */}
       <CatalogSection title="Governance boundary">

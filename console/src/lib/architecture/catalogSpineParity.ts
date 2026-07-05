@@ -8,7 +8,7 @@
 import type { OpsContextResponse } from '@/api/types'
 import {
   LEGACY_RETIREMENT_MILESTONE_ID,
-  MAINLINE_PHASE_DEFINITIONS,
+  ALL_MAINLINE_PHASE_DEFINITIONS,
 } from '@/lib/architecture/deployMainlineCatalog'
 import {
   PROD_CUTOVER_MILESTONE_ID,
@@ -50,7 +50,7 @@ const LEGACY_PROGRESS_PATTERN =
 export function checkDeployMainlineCatalogConstitution(): CatalogSpineParityFinding[] {
   const findings: CatalogSpineParityFinding[] = []
   for (const binding of DEPLOY_MAINLINE_MILESTONE_BINDINGS) {
-    const def = MAINLINE_PHASE_DEFINITIONS.find(p => p.seq === binding.seq)
+    const def = ALL_MAINLINE_PHASE_DEFINITIONS.find(p => p.seq === binding.seq)
     if (def == null) continue
     if (def.spineMilestoneId !== binding.milestoneId) {
       findings.push({

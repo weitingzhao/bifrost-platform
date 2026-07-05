@@ -9,9 +9,6 @@ import {
   fetchCluster,
   fetchContext,
   fetchEnvironments,
-  fetchGitOpsApps,
-  fetchStackAddons,
-  fetchDeliveryPipelines,
   fetchMatrix,
   fetchPlatformHealth,
   fetchStgSmoke,
@@ -40,13 +37,13 @@ import { BriefingPage } from '@/pages/BriefingPage'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { writeBriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { ClusterPage } from '@/pages/ClusterPage'
-import { DeliveryPage } from '@/pages/DeliveryPage'
 import { DeployMainlinePage } from '@/pages/DeployMainlinePage'
+import { DeliveryBoardPage } from '@/pages/DeliveryBoardPage'
 import { EnvironmentsPage } from '@/pages/EnvironmentsPage'
 import { PlacementPage } from '@/pages/PlacementPage'
 import { PlatformReleasePage } from '@/pages/PlatformReleasePage'
 import { ProgramPage } from '@/pages/ProgramPage'
-import { PromotePage } from '@/pages/PromotePage'
+import { TradeReleasePage } from '@/pages/TradeReleasePage'
 import { RuntimeMapPage } from '@/pages/RuntimeMapPage'
 import { ServerConsolePage } from '@/pages/ServerConsolePage'
 import { DesignSystemPage } from '@/pages/DesignSystemPage'
@@ -87,9 +84,9 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'runtime-map': 'Runtime Map',
   cluster: 'Cluster',
   placement: 'Placement',
-  delivery: 'Delivery',
+  'trade-release': 'Trade Release',
+  'delivery-board': 'Delivery Board',
   program: 'Milestones',
-  promote: 'Promote',
   blueprint: 'Blueprint',
   'flywheel-vision': 'Vision',
   environments: 'Environments',
@@ -125,20 +122,21 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'briefing',
   'console',
   'control-room',
-  'promote',
-  'delivery',
+  'delivery-board',
+  'trade-release',
   'platform-release',
   'cluster',
   'placement',
   'runtime-map',
   'program',
-  'deploy-mainline',
 ]
 
 const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   topology: 'runtime-map',
   matrix: 'runtime-map',
   pulse: 'control-room',
+  delivery: 'trade-release',
+  promote: 'trade-release',
 }
 
 function isConsoleViewTab(value: string): value is ConsoleViewTab {
@@ -206,8 +204,7 @@ export function ConsolePage() {
     enabled:
       viewTab === 'briefing' ||
       viewTab === 'control-room' ||
-      viewTab === 'promote' ||
-      viewTab === 'delivery',
+      viewTab === 'trade-release',
   })
 
   const clusterQuery = useQuery({
@@ -219,64 +216,35 @@ export function ConsolePage() {
       viewTab === 'cluster' ||
       viewTab === 'placement' ||
       viewTab === 'control-room' ||
-      viewTab === 'runtime-map' ||
-      viewTab === 'delivery',
-  })
-
-  const gitopsQuery = useQuery({
-    queryKey: ['gitops', 'apps'],
-    queryFn: fetchGitOpsApps,
-    refetchInterval: 30_000,
-    enabled: viewTab === 'delivery',
-  })
-
-  const stackQuery = useQuery({
-    queryKey: ['stack', 'addons'],
-    queryFn: fetchStackAddons,
-    refetchInterval: 30_000,
-    enabled: viewTab === 'delivery',
-  })
-
-  const pipelinesQuery = useQuery({
-    queryKey: ['delivery', 'pipelines'],
-    queryFn: fetchDeliveryPipelines,
-    refetchInterval: 30_000,
-    enabled: viewTab === 'delivery' || viewTab === 'placement',
+      viewTab === 'runtime-map',
   })
 
   const stgSmokeQuery = useQuery({
     queryKey: ['delivery', 'stg-smoke'],
     queryFn: fetchStgSmoke,
     refetchInterval: 30_000,
-    enabled: viewTab === 'delivery' || viewTab === 'control-room',
+    enabled: viewTab === 'trade-release' || viewTab === 'control-room',
   })
 
   const releaseGateStgQuery = useQuery({
     queryKey: ['promote', 'release-gate', 'stg'],
     queryFn: () => fetchReleaseGate('stg'),
     refetchInterval: 30_000,
-    enabled: viewTab === 'promote' || viewTab === 'delivery',
-  })
-
-  const releaseGateProdQuery = useQuery({
-    queryKey: ['promote', 'release-gate', 'prod'],
-    queryFn: () => fetchReleaseGate('prod'),
-    refetchInterval: 30_000,
-    enabled: viewTab === 'promote',
+    enabled: viewTab === 'control-room',
   })
 
   const supplyChainQuery = useQuery({
     queryKey: ['delivery', 'supply-chain'],
     queryFn: fetchSupplyChain,
     refetchInterval: 30_000,
-    enabled: viewTab === 'delivery' || viewTab === 'promote',
+    enabled: viewTab === 'control-room',
   })
 
   const tierBQuery = useQuery({
     queryKey: ['promote', 'tier-b'],
     queryFn: fetchTierBStatus,
     refetchInterval: 30_000,
-    enabled: viewTab === 'delivery' || viewTab === 'promote',
+    enabled: viewTab === 'control-room',
   })
 
   const lastDeliverSucceeded = useMemo(() => {
@@ -332,8 +300,9 @@ export function ConsolePage() {
   }
 
   const openProgram = () => setViewTab('program')
-  const openDelivery = () => setViewTab('delivery')
-  const openPromote = () => setViewTab('promote')
+  const openTradeRelease = () => setViewTab('trade-release')
+  const openDelivery = openTradeRelease
+  const openPromote = openTradeRelease
   const openDeployMainline = () => setViewTab('deploy-mainline')
   const clearRuntimeMapFocus = useCallback(() => setRuntimeMapFocus(null), [])
 
@@ -393,6 +362,7 @@ export function ConsolePage() {
     viewTab === 'flywheel-vision' ||
     viewTab === 'environments' ||
     viewTab === 'roadmap' ||
+    viewTab === 'deploy-mainline' ||
     viewTab === 'k3s-architecture' ||
     viewTab === 'k3s-bootstrap' ||
     viewTab === 'cicd-bootstrap' ||
@@ -433,10 +403,8 @@ export function ConsolePage() {
     'control-room',
     'runtime-map',
     'cluster',
-    'delivery',
+    'trade-release',
     'program',
-    'promote',
-    'deploy-mainline',
     'blueprint',
     'environments',
     'platform-standards',
@@ -665,44 +633,25 @@ export function ConsolePage() {
           </>
         )}
 
-        {viewTab === 'delivery' && (
+        {viewTab === 'delivery-board' && (
           <>
             <PageHeader
-              title={VIEW_TITLES.delivery}
-              description="STG CI/CD — Operate (deliver), Observe (health & history), Blueprint (workflow & gates)."
+              title={VIEW_TITLES['delivery-board']}
+              description="Console delivery programs — phased sign-off checklists consolidated from functional pages."
             />
-            <DeliveryPage
+            <DeliveryBoardPage />
+          </>
+        )}
+
+        {viewTab === 'trade-release' && (
+          <>
+            <PageHeader
+              title={VIEW_TITLES['trade-release']}
+              description="End-to-end Trade CI/CD — STG deploy → gate → PROD deploy → gate."
+            />
+            <TradeReleasePage
               context={contextQuery.data}
-              matrices={pulseMatrices}
-              clusterSummary={clusterQuery.data}
-              gitops={gitopsQuery.data}
-              gitopsLoading={gitopsQuery.isLoading}
-              gitopsError={gitopsQuery.error instanceof Error ? gitopsQuery.error.message : null}
-              stack={stackQuery.data}
-              stackLoading={stackQuery.isLoading}
-              stackError={stackQuery.error instanceof Error ? stackQuery.error.message : null}
-              pipelines={pipelinesQuery.data}
-              pipelinesLoading={pipelinesQuery.isLoading}
-              pipelinesError={
-                pipelinesQuery.error instanceof Error ? pipelinesQuery.error.message : null
-              }
-              stgSmoke={stgSmokeQuery.data}
-              stgSmokeLoading={stgSmokeQuery.isLoading}
-              stgSmokeFetching={stgSmokeQuery.isFetching}
-              stgSmokeError={
-                stgSmokeQuery.error instanceof Error ? stgSmokeQuery.error.message : null
-              }
-              lastDeliverSucceeded={lastDeliverSucceeded}
-              stgGate={releaseGateStgQuery.data}
-              tierB={tierBQuery.data}
-              tierBLoading={tierBQuery.isLoading}
-              onRefreshStgSmoke={() => void stgSmokeQuery.refetch()}
-              isLoading={contextQuery.isLoading || matrixForPulse.isLoading}
-              onOpenMilestones={openProgram}
-              onOpenPromote={openPromote}
-              onOpenAudit={openAudit}
-              onOpenPlacement={openPlacement}
-              onOpenDeployMainline={openDeployMainline}
+              isLoading={contextQuery.isLoading}
             />
           </>
         )}
@@ -719,46 +668,6 @@ export function ConsolePage() {
               error={contextQuery.error as Error | null}
               onOpenBlueprint={openBlueprint}
             />
-          </>
-        )}
-
-        {viewTab === 'promote' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES.promote}
-              description="STG release gate + Tier B vs Prod cutover gate — flywheel A/B checklists."
-            />
-            <PromotePage
-              context={contextQuery.data}
-              matrices={pulseMatrices}
-              stgGate={releaseGateStgQuery.data}
-              stgGateLoading={releaseGateStgQuery.isLoading}
-              stgGateError={
-                releaseGateStgQuery.error instanceof Error ? releaseGateStgQuery.error.message : null
-              }
-              prodGate={releaseGateProdQuery.data}
-              prodGateLoading={releaseGateProdQuery.isLoading}
-              prodGateError={
-                releaseGateProdQuery.error instanceof Error ? releaseGateProdQuery.error.message : null
-              }
-              stgSmoke={stgSmokeQuery.data}
-              lastDeliverSucceeded={lastDeliverSucceeded}
-              tierB={tierBQuery.data}
-              isLoading={contextQuery.isLoading || matrixForPulse.isLoading}
-              onOpenProgram={openProgram}
-              onOpenDelivery={openDelivery}
-              onOpenDeployMainline={openDeployMainline}
-            />
-          </>
-        )}
-
-        {viewTab === 'deploy-mainline' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES['deploy-mainline']}
-              description="Local Prod Final → K3s → Compose → Legacy retirement — deployment decision chain and sign-off gates."
-            />
-            <DeployMainlinePage context={contextQuery.data} />
           </>
         )}
 
@@ -797,6 +706,7 @@ export function ConsolePage() {
                     ? 'Platform Plugin — shared TWS bus (redis-ib @ data NS); direct replacement of legacy trade-socket IB; per-phase Owner sign-off.'
                   : viewTab === 'trade-ib-client-migration'
                     ? 'Trade stack IB refactor — surface inventory, Gateway RPC parity, health derivation, Celery workers, UI cleanup (redis-ib only).'
+                  : viewTab === 'deploy-mainline' ? 'Migration decision chain — spine-bound milestones (STG deliver, Prod cutover, Legacy retirement).'
                   : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
                   : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
                   : viewTab === 'agent-system'
@@ -833,6 +743,8 @@ export function ConsolePage() {
         )}
 
         {viewTab === 'roadmap' && <RoadmapPage />}
+
+        {viewTab === 'deploy-mainline' && <DeployMainlinePage context={contextQuery.data} />}
 
         {viewTab === 'k3s-architecture' && <K3sArchitecturePage onOpenPlacement={openPlacement} />}
 

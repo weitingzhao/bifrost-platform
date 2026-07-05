@@ -1,4 +1,4 @@
-import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliveryPageTabs'
+import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import {
   DELIVER_PLATFORM_PIPELINE,
   DELIVER_PLATFORM_PROD_PIPELINE,

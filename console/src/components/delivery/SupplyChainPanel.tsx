@@ -25,7 +25,7 @@ import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
-import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliveryPageTabs'
+import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import { formatPipelineRunStatus, isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 
 function runStatusVariant(status: string): 'success' | 'warning' | 'danger' | 'neutral' {

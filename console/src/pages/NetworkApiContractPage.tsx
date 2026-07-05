@@ -12,11 +12,6 @@ import {
   type DenseTagVariant,
 } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
-import { UnifiMcpServerPhase1SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase1SignoffPanel'
-import { UnifiMcpServerPhase2SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase2SignoffPanel'
-import { UnifiMcpServerPhase3SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase3SignoffPanel'
-import { UnifiMcpServerPhase4SignoffPanel } from '@/components/architecture/UnifiMcpServerPhase4SignoffPanel'
-import { UnifiMcpServerProgramStatusStrip } from '@/components/architecture/UnifiMcpServerProgramStatusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   NETWORK_API_CONTRACT_SOURCE,
@@ -64,16 +59,6 @@ export function NetworkApiContractPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <UnifiMcpServerProgramStatusStrip />
-
-      <UnifiMcpServerPhase1SignoffPanel />
-
-      <UnifiMcpServerPhase2SignoffPanel />
-
-      <UnifiMcpServerPhase3SignoffPanel />
-
-      <UnifiMcpServerPhase4SignoffPanel />
-
       <OpsSection title="Contract metadata" bodyPadding="compact">
         <div className="flex flex-wrap items-center gap-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           <span>

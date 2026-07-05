@@ -12,19 +12,6 @@ import {
   type DenseTagVariant,
 } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
-import { TradeIbClientMigrationPhase0SignoffPanel } from '@/components/architecture/TradeIbClientMigrationPhase0SignoffPanel'
-import { TradeIbClientMigrationPhase1SignoffPanel } from '@/components/architecture/TradeIbClientMigrationPhase1SignoffPanel'
-import { TradeIbClientMigrationPhase2SignoffPanel } from '@/components/architecture/TradeIbClientMigrationPhase2SignoffPanel'
-import { TradeIbClientMigrationPhase3SignoffPanel } from '@/components/architecture/TradeIbClientMigrationPhase3SignoffPanel'
-import { TradeIbClientMigrationPhase4SignoffPanel } from '@/components/architecture/TradeIbClientMigrationPhase4SignoffPanel'
-import { TradeIbClientMigrationProgramSignoffPanel } from '@/components/architecture/TradeIbClientMigrationProgramSignoffPanel'
-import { TradeIbClientMigrationRolloutW1SignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutW1SignoffPanel'
-import { TradeIbClientMigrationRolloutW2SignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutW2SignoffPanel'
-import { TradeIbClientMigrationRolloutW3SignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutW3SignoffPanel'
-import { TradeIbClientMigrationRolloutStgSignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutStgSignoffPanel'
-import { TradeIbClientMigrationRolloutDevComposeSignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutDevComposeSignoffPanel'
-import { TradeIbClientMigrationRolloutProdSignoffPanel } from '@/components/architecture/TradeIbClientMigrationRolloutProdSignoffPanel'
-import { TradeIbClientMigrationProgramStatusStrip } from '@/components/architecture/TradeIbClientMigrationProgramStatusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   TRADE_IB_CLIENT_MIGRATION_VERSION,
@@ -71,8 +58,6 @@ export function TradeIbClientMigrationPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <TradeIbClientMigrationProgramStatusStrip />
-
       <OpsSection title="Program overview" bodyPadding="compact">
         <p className="m-0 mb-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           Refactor Trade stack IB usage to consume Platform TWS bus (redis-ib) only — no direct
@@ -103,18 +88,6 @@ export function TradeIbClientMigrationPage() {
           </DenseTableBody>
         </DenseDataTable>
       </OpsSection>
-
-      <TradeIbClientMigrationPhase0SignoffPanel />
-
-      <TradeIbClientMigrationPhase1SignoffPanel />
-
-      <TradeIbClientMigrationPhase2SignoffPanel />
-
-      <TradeIbClientMigrationPhase3SignoffPanel />
-
-      <TradeIbClientMigrationPhase4SignoffPanel />
-
-      <TradeIbClientMigrationProgramSignoffPanel />
 
       <section id="tibm-rollout">
         <OpsSection title="Post-program rollout (D10 — no live trading)" bodyPadding="compact">
@@ -162,18 +135,6 @@ export function TradeIbClientMigrationPage() {
         </p>
         </OpsSection>
       </section>
-
-      <TradeIbClientMigrationRolloutW1SignoffPanel />
-
-      <TradeIbClientMigrationRolloutW2SignoffPanel />
-
-      <TradeIbClientMigrationRolloutW3SignoffPanel />
-
-      <TradeIbClientMigrationRolloutStgSignoffPanel />
-
-      <TradeIbClientMigrationRolloutDevComposeSignoffPanel />
-
-      <TradeIbClientMigrationRolloutProdSignoffPanel />
 
       <CatalogSection title="Design principles">
         <ul className="m-0 list-disc pl-5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

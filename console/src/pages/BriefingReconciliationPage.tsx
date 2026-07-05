@@ -14,8 +14,6 @@ import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { BriefingSyncLoopPanel } from '@/components/briefing/BriefingSyncLoopPanel'
 import { CatalogSpineDriftPanel } from '@/components/architecture/CatalogSpineDriftPanel'
-import { GovernancePhase4SignoffPanel } from '@/components/architecture/GovernancePhase4SignoffPanel'
-import { GovernancePhase6SignoffPanel } from '@/components/architecture/GovernancePhase6SignoffPanel'
 import type { OpsContextResponse } from '@/api/types'
 import {
   ANTI_PATTERNS,
@@ -80,10 +78,6 @@ export function BriefingReconciliationPage({ context }: { context?: OpsContextRe
         }
         overflow="visible"
       />
-
-      <GovernancePhase4SignoffPanel />
-
-      <GovernancePhase6SignoffPanel />
 
       <CatalogSpineDriftPanel findings={reconcileFindings} />
 
