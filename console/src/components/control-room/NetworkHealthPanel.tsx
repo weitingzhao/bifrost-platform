@@ -21,6 +21,7 @@ import {
 interface NetworkHealthPanelProps {
   context: OpsContextResponse | undefined
   onOpenAgentProtocol: () => void
+  onOpenNetwork?: () => void
 }
 
 function streamReach(done: number, total: number): 'ok' | 'degraded' | 'unknown' {
@@ -42,6 +43,7 @@ function liveProbeTagVariant(
 export function NetworkHealthPanel({
   context,
   onOpenAgentProtocol,
+  onOpenNetwork,
 }: NetworkHealthPanelProps) {
   const streams = resolveNetworkStreamProjections(context)
   const spineLoaded = context?.tracks?.infra != null
@@ -53,9 +55,16 @@ export function NetworkHealthPanel({
       title="Network Health — ground floor (LAN / UniFi)"
       description="Catalog + spine projection plus live UniFi probe via GET /api/v1/network/status + audit (Session v2 per D9)."
       actions={
-        <Button variant="ghost" size="xs" onClick={onOpenAgentProtocol}>
-          Agent Protocol
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {onOpenNetwork != null && (
+            <Button variant="ghost" size="xs" onClick={onOpenNetwork}>
+              Ground Systems → Network
+            </Button>
+          )}
+          <Button variant="ghost" size="xs" onClick={onOpenAgentProtocol}>
+            Agent Protocol
+          </Button>
+        </div>
       }
       bodyPadding="default"
       overflow="visible"
