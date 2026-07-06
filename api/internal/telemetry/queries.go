@@ -32,7 +32,8 @@ func PresetQueries() []QuerySpec {
 			Title: "API 5xx error rate",
 			Unit:  "ratio",
 			Build: func(ns string) string {
-				return `sum(rate(http_requests_total{namespace="` + ns + `",status="5xx"}[5m])) by (service) / sum(rate(http_requests_total{namespace="` + ns + `"}[5m])) by (service)`
+				// Zero-fill when no 5xx so empty scrape still returns 0 ratio per service.
+				return `(sum(rate(http_requests_total{namespace="` + ns + `",status="5xx"}[5m])) by (service) or (sum(rate(http_requests_total{namespace="` + ns + `"}[5m])) by (service) * 0)) / sum(rate(http_requests_total{namespace="` + ns + `"}[5m])) by (service)`
 			},
 		},
 		{
@@ -56,7 +57,7 @@ func PresetQueries() []QuerySpec {
 			Title: "PostgreSQL connections",
 			Unit:  "connections",
 			Build: func(_ string) string {
-				return `cnpg_collector_pg_stat_activity_count{namespace="data"}`
+				return `sum(cnpg_backends_total{namespace="data"}) by (pod)`
 			},
 		},
 		{
@@ -64,7 +65,7 @@ func PresetQueries() []QuerySpec {
 			Title: "PostgreSQL replication lag",
 			Unit:  "s",
 			Build: func(_ string) string {
-				return `cnpg_collector_pg_replication_lag{namespace="data"}`
+				return `cnpg_pg_stat_replication_replay_lag_seconds{namespace="data"}`
 			},
 		},
 	}
