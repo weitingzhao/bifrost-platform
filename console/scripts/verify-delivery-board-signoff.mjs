@@ -30,6 +30,25 @@ check('Agent Protocol — Delivery Board mission-signal closure', agentCat.inclu
 
 const tibmYaml = readRepo('config/programs/trade-ib-client-migration.yaml')
 check('TIBM YAML — no legacy panel acceptance', !tibmYaml.includes('panel signed in Console'))
+check('TIBM YAML — api sign-off mechanism', tibmYaml.includes('sign_off_mechanism: api'))
+
+const programsDir = path.join(repoRoot, 'config/programs')
+const yamlFiles = fs.readdirSync(programsDir).filter(f => f.endsWith('.yaml') && f !== '_schema.yaml')
+const legacyMech = yamlFiles.filter(f => {
+  const body = fs.readFileSync(path.join(programsDir, f), 'utf8')
+  return /sign_off_mechanism:\s*(vision_gate|dev_agent)/.test(body)
+})
+check(
+  'Program YAML — no vision_gate/dev_agent mechanisms',
+  legacyMech.length === 0,
+  legacyMech.join(', ') || undefined,
+)
+
+const detailView = read('src/components/delivery/ProgramDetailView.tsx')
+check('ProgramDetailView — no vision_gate branch', !detailView.includes("'vision_gate'"))
+
+const programsDelivery = readRepo('api/internal/devagent/programs_delivery.go')
+check('programs_delivery — no vision_gate reads', !programsDelivery.includes('vision_gate'))
 
 const programsApi = read('src/api/programs.ts')
 check('signoffProgramPhase accepts signed_off_at', programsApi.includes('signed_off_at'))

@@ -13,7 +13,7 @@ import (
 type DeliveryConfig struct {
 	BoardVisible     bool   `yaml:"board_visible" json:"board_visible"`
 	FormerLocation   string `yaml:"former_location" json:"former_location,omitempty"`
-	SignOffMechanism string `yaml:"sign_off_mechanism" json:"sign_off_mechanism,omitempty"` // api | vision_gate | dev_agent
+	SignOffMechanism string `yaml:"sign_off_mechanism" json:"sign_off_mechanism,omitempty"` // api only (D12)
 }
 
 type PhaseSignOffConfig struct {

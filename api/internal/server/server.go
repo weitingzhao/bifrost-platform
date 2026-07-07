@@ -100,6 +100,8 @@ func New(cfg *config.Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("devagent: %w", err)
 	}
+	visionH := vision.NewHandler(cfg, audit)
+	visionH.BindPrograms(devagentH)
 	return &Server{
 		cfg:             cfg,
 		prober:          prober,
@@ -110,7 +112,7 @@ func New(cfg *config.Config) (*Server, error) {
 		stack:           stack.NewHandler(cfg, audit),
 		delivery:        delivery.NewHandler(cfg, audit),
 		promote:         promoteH,
-		vision:          vision.NewHandler(cfg, audit),
+		vision:          visionH,
 		buildgate:       buildgate.NewHandler(cfg, audit),
 		migratewave:     migratewave.NewHandler(cfg, audit),
 		tradeagent:      tradeagent.NewHandler(),

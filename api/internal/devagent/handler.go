@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
 type PhaseStatus string
@@ -164,6 +166,10 @@ func NewHandler(configDir string) (*Handler, error) {
 		h.activeProgramID = pickDefaultActive(blueprints)
 	}
 	if err := store.SaveActiveProgramID(h.activeProgramID); err != nil {
+		return nil, err
+	}
+
+	if err := h.syncVisionSignoffsFromGateFiles(); err != nil {
 		return nil, err
 	}
 
@@ -378,10 +384,10 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleApprove(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	rt := h.activeRuntime()
 	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != id {
+		h.mu.Unlock()
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
 		return
 	}
@@ -389,19 +395,29 @@ func (h *Handler) HandleApprove(w http.ResponseWriter, r *http.Request) {
 	rt.activeJob.Status = JobDone
 	rt.activeJob.CompletedAt = time.Now().UTC().Format(time.RFC3339)
 
-	for i := range rt.phases {
-		if rt.phases[i].ID == rt.activeJob.PhaseID {
-			rt.phases[i].Status = PhaseDone
-			rt.phases[i].CompletedAt = rt.activeJob.CompletedAt
-			break
-		}
-	}
-
 	rt.history = append([]Job{*rt.activeJob}, rt.history...)
 	archived := *rt.activeJob
+	phaseID := archived.PhaseID
+	programID := h.activeProgramID
 	rt.activeJob = nil
-	if err := h.persistRuntimeLocked(h.activeProgramID); err != nil {
+	if err := h.persistRuntimeLocked(programID); err != nil {
+		h.mu.Unlock()
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	h.mu.Unlock()
+
+	by := actuation.PrincipalFromContext(r.Context()).Name
+	if by == "" {
+		by = "owner"
+	}
+	notes := "Dev Agent phase verified"
+	if err := h.RecordPhaseSignoff(programID, phaseID, by, archived.CompletedAt, notes); err != nil {
+		if strings.Contains(err.Error(), "already signed off") {
+			writeJSON(w, http.StatusOK, archived)
+			return
+		}
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
 

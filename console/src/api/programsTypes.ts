@@ -1,7 +1,7 @@
 export interface ProgramDeliveryConfig {
   board_visible: boolean
   former_location?: string
-  sign_off_mechanism?: 'api' | 'vision_gate' | 'dev_agent'
+  sign_off_mechanism?: 'api'
 }
 
 export interface ProgramSummary {

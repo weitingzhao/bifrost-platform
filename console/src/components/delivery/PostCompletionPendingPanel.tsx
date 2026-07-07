@@ -51,7 +51,7 @@ export function PostCompletionPendingPanel({ programId }: { programId?: string }
     <div className="flex flex-col gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2">
       <p className="text-dense-label font-medium m-0">Post-completion — pending Owner review</p>
       <p className="text-dense-meta text-muted-foreground m-0">
-        Approve items before they enter the Operate queue.
+        Marks items approved; Operate queue handoff ships in Wave 3b.
       </p>
       <ul className="m-0 flex flex-col gap-2 p-0 list-none">
         {items.map(item => (
@@ -67,7 +67,7 @@ export function PostCompletionPendingPanel({ programId }: { programId?: string }
             </div>
             {canAdmin && (
               <Button type="button" size="sm" variant="outline" onClick={() => setApproveId(item.id)}>
-                Approve for Operate queue
+                Approve
               </Button>
             )}
           </li>
@@ -76,8 +76,8 @@ export function PostCompletionPendingPanel({ programId }: { programId?: string }
 
       <ConfirmDialog
         open={approveId != null}
-        title="Approve operate queue item"
-        message="This injects the item into the Operate queue after approval."
+        title="Approve post-completion item"
+        message="Marks the item approved. Operate queue injection ships in Wave 3b."
         confirmLabel="Approve"
         confirming={approveMutation.isPending}
         onConfirm={() => {

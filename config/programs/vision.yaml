@@ -5,7 +5,7 @@ status: active
 delivery:
   board_visible: true
   former_location: Governance → Vision
-  sign_off_mechanism: vision_gate
+  sign_off_mechanism: api
 phases:
   - id: V5
     title: "V5"
