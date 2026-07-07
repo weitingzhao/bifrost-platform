@@ -5,7 +5,7 @@
  *
  * Live state (not this catalog):
  * - IB Gateway health + mode: Subcontractors → Plugin Gallery (platform-api /api/v1/plugins/ib-gateway/*)
- * - Phase / program sign-off: Subcontractors → Delivery Board · ib-gateway-plugin
+ * - Phase / program sign-off: Mission Control → Delivery Board · ib-gateway-plugin
  * - Migrate lane: Engineer → Briefing · spine stream ib-gateway-plugin
  */
 
@@ -104,7 +104,7 @@ export const IB_GATEWAY_PLUGIN_PROGRESS = {
 
 export const IB_GATEWAY_RELATED_AUTHORITIES = [
   'Live IB Gateway health + mode: Subcontractors → Plugin Gallery (platform-api /api/v1/plugins/ib-gateway/*)',
-  'Program / phase sign-off: Subcontractors → Delivery Board · ib-gateway-plugin',
+  'Program / phase sign-off: Mission Control → Delivery Board · ib-gateway-plugin',
   'Migrate lane + spine stream: Engineer → Briefing · ib-gateway-plugin',
   'Plugin implementation: bifrost-platform-plugin · k8s/data/redis-ib + k8s/data/ib-gateway',
   'Spine: config/ops-context.yaml · GET /api/v1/context',

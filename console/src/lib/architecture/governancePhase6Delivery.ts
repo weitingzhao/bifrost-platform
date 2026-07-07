@@ -26,9 +26,9 @@ export const GOVERNANCE_PHASE6_DELIVERY_ITEMS: GovernancePhase6DeliveryItem[] = 
     id: 'GP6-2',
     title: 'Deploy Mainline page live Projection',
     summary:
-      'Rocket → Trade Release resolves status via resolveMainlinePhases(context) from GET /api/v1/context.',
+      'Satellite → Trade Deploy resolves status via resolveMainlinePhases(context) from GET /api/v1/context.',
     verifySteps: [
-      'Open Rocket → Trade Release — Mainline phases table shows “Projection ← spine” note.',
+      'Open Satellite → Trade Deploy — Mainline phases table shows “Projection ← spine” note.',
       'Seq 5 (2c-b-prod-cutover) status tag matches spine (e.g. SIGNED), not hardcoded IN_PROGRESS.',
       'Spine milestone id secondary tag appears on seq 4/5/7 rows when context loads.',
     ],

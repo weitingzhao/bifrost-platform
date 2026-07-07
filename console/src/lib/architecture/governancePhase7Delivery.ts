@@ -54,7 +54,7 @@ export const GOVERNANCE_PHASE7_DELIVERY_ITEMS: GovernancePhase7DeliveryItem[] = 
       'Owner can navigate to every phase sign-off panel: P1/P3/P5 Blueprint, P2 Delivery, P4/P6 Briefing Reconciliation.',
     verifySteps: [
       'Blueprint — Phase 1, 3, 5 panels visible (historical SIGNED ok).',
-      'Rocket → Trade Release — Phase 2 panel visible.',
+      'Satellite → Trade Deploy — Phase 2 panel visible.',
       'Governance → Briefing Reconciliation — Phase 4 and Phase 6 panels visible.',
     ],
   },

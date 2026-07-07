@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -73,6 +74,65 @@ func (s *Service) Query(ctx context.Context, queryID, namespace string) (QueryRe
 		QueryID:   spec.ID,
 		Metric:    metric,
 	}, nil
+}
+
+func (s *Service) PromQL(ctx context.Context, promQL string) (PromQLResponse, error) {
+	q := strings.TrimSpace(promQL)
+	if q == "" {
+		return PromQLResponse{}, ErrMissingPromQL
+	}
+	promURL := s.prometheusURL()
+	if promURL == "" {
+		return PromQLResponse{}, ErrPrometheusNotConfigured
+	}
+	client := NewClient(promURL)
+	points, err := client.QueryInstant(ctx, q)
+	if err != nil {
+		return PromQLResponse{}, err
+	}
+	resultType := "vector"
+	if len(points) == 0 {
+		resultType = "vector"
+	}
+	return PromQLResponse{
+		PrometheusURL: promURL,
+		Query:         q,
+		ResultType:    resultType,
+		Points:        points,
+		GeneratedAt:   time.Now().UTC(),
+	}, nil
+}
+
+func (s *Service) Alerts(ctx context.Context) (AlertsResponse, error) {
+	promURL := s.prometheusURL()
+	if promURL == "" {
+		return AlertsResponse{}, ErrPrometheusNotConfigured
+	}
+	client := NewClient(promURL)
+	alerts, err := client.QueryAlerts(ctx)
+	if err != nil {
+		return AlertsResponse{}, err
+	}
+	return AlertsResponse{
+		PrometheusURL: promURL,
+		Alerts:        alerts,
+		GeneratedAt:   time.Now().UTC(),
+	}, nil
+}
+
+func (s *Service) Targets(ctx context.Context, state string) (TargetsResponse, error) {
+	promURL := s.prometheusURL()
+	if promURL == "" {
+		return TargetsResponse{}, ErrPrometheusNotConfigured
+	}
+	client := NewClient(promURL)
+	resp, err := client.QueryTargets(ctx, strings.TrimSpace(state))
+	if err != nil {
+		return TargetsResponse{}, err
+	}
+	resp.PrometheusURL = promURL
+	resp.GeneratedAt = time.Now().UTC()
+	return resp, nil
 }
 
 func (s *Service) runQuery(ctx context.Context, client *Client, spec QuerySpec, ns string) MetricResult {

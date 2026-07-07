@@ -30,6 +30,12 @@ func (a *Analyzer) Analyze() AnalysisReport {
 
 	if len(jobs) == 0 {
 		report.HealthScore = 100
+		report.Patterns = []PatternCluster{}
+		report.RootCauseDist = []RootCauseDistribution{}
+		report.ScopeStats = []ScopeStats{}
+		report.ToolUsage = []ToolUsage{}
+		report.Namespaces = []NamespaceActivity{}
+		report.Insights = []string{}
 		return report
 	}
 
@@ -199,6 +205,9 @@ func computeNamespaceActivity(jobs []remediation.Job) []NamespaceActivity {
 		if len(na.TopActions) > 5 {
 			na.TopActions = na.TopActions[:5]
 		}
+		if na.TopActions == nil {
+			na.TopActions = []ActionTaken{}
+		}
 		out = append(out, na)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ToolCalls > out[j].ToolCalls })
@@ -304,6 +313,9 @@ func clusterPatterns(jobs []remediation.Job) []PatternCluster {
 		})
 		if len(pc.TopActions) > 5 {
 			pc.TopActions = pc.TopActions[:5]
+		}
+		if pc.TopActions == nil {
+			pc.TopActions = []ActionTaken{}
 		}
 
 		// success rate

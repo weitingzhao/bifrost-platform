@@ -14,6 +14,8 @@ Usage:
   python3 scripts/unifi_firewall_setup.py audit
   python3 scripts/unifi_firewall_setup.py apply
   python3 scripts/unifi_firewall_setup.py apply --include-default-deny
+  python3 scripts/unifi_firewall_setup.py remove
+  python3 scripts/unifi_firewall_setup.py open-server
   python3 scripts/unifi_firewall_setup.py cleanup-probes
 """
 from __future__ import annotations
@@ -118,6 +120,38 @@ DEFAULT_DENY_POLICY = {
     "note": "Hide Server from Eero/Default until decommission",
 }
 
+# Temporary cross-zone allow while AP/Eero cutover is pending (overrides ZBF Block All Traffic matrix).
+TEMP_OPEN_SERVER_SPECS: list[dict[str, Any]] = [
+    {
+        "name": "Bifrost | TEMP ALLOW Default → Server",
+        "action": "ALLOW",
+        "src": "Default",
+        "dst": "Server",
+        "note": "Eero WiFi + Default LAN → TWS/K3s until UniFi AP rollout",
+    },
+    {
+        "name": "Bifrost | TEMP ALLOW Work → Server",
+        "action": "ALLOW",
+        "src": "Work",
+        "dst": "Server",
+        "note": "Admin SSID → Server",
+    },
+    {
+        "name": "Bifrost | TEMP ALLOW Family → Server",
+        "action": "ALLOW",
+        "src": "Family",
+        "dst": "Server",
+        "note": "Family SSID → Server (temporary)",
+    },
+    {
+        "name": "Bifrost | TEMP ALLOW IoT → Server",
+        "action": "ALLOW",
+        "src": "Home",
+        "dst": "Server",
+        "note": "Home/IoT SSID → Server (temporary)",
+    },
+]
+
 PROBE_NAMES = {
     "Bifrost | TEST Allow Work → Server",
     "Bifrost | PROBE reject",
@@ -202,6 +236,16 @@ class UniFiSession:
 
     def v2_delete(self, path: str) -> None:
         self.v2_write("DELETE", path, None)
+
+    def v2_delete_optional(self, path: str) -> bool:
+        """Delete v2 resource; return False if already gone (404)."""
+        try:
+            self.v2_write("DELETE", path, None)
+            return True
+        except RuntimeError as e:
+            if "HTTP 404" in str(e) or "NotFound" in str(e):
+                return False
+            raise
 
 
 @dataclass
@@ -445,6 +489,63 @@ def cleanup_probes(api: UniFiSession) -> None:
         print(f"Removed {deleted} probe policy(ies).")
 
 
+def remove_bifrost_policies(api: UniFiSession) -> None:
+    """Delete all Bifrost ZBF policies — restores cross-VLAN routing until re-apply."""
+    deleted_total = 0
+    for _ in range(20):
+        policies = list_v2_policies(api)
+        bifrost = [p for p in policies if str(p.get("name", "")).startswith("Bifrost |")]
+        if not bifrost:
+            break
+        if deleted_total == 0:
+            print(f"Removing {len(bifrost)} Bifrost firewall policy(ies)…")
+        for p in sorted(bifrost, key=lambda x: x.get("name", "")):
+            name = p.get("name", "")
+            pid = p.get("_id")
+            if not pid:
+                continue
+            if api.v2_delete_optional(f"/firewall-policies/{pid}"):
+                print(f"  - deleted {name}")
+                deleted_total += 1
+            else:
+                print(f"  = skip (gone) {name}")
+    if deleted_total == 0:
+        print("No Bifrost firewall policies found (already open).")
+        return
+    print(f"\nRemoved {deleted_total} policy(ies). Cross-VLAN traffic is no longer blocked by Bifrost ZBF.")
+    print("Re-enable later: python3 scripts/unifi_firewall_setup.py apply --include-default-deny")
+
+
+def open_server_access(api: UniFiSession) -> None:
+    """Add TEMP ALLOW policies so all VLAN zones can reach Server (overrides ZBF matrix blocks)."""
+    networks = load_networks(api)
+    zones = list_v2_zones(api)
+    zone_ids: dict[str, str] = {}
+    for zone_name, net_name in ZONE_SPECS:
+        net = networks.get(net_name)
+        if not net:
+            raise SystemExit(f"Missing network: {net_name}")
+        z = find_zone_for_spec(zones, zone_name)
+        if not z:
+            zone_ids[zone_name] = ensure_v2_zone(api, zones, zone_name, net)
+            zones = list_v2_zones(api)
+        else:
+            zone_ids[zone_name] = z["_id"]
+
+    existing = {p.get("name") for p in list_v2_policies(api)}
+    print("Adding temporary Server access policies (override ZBF Block All Traffic matrix)…")
+    for spec in TEMP_OPEN_SERVER_SPECS:
+        if spec["name"] in existing:
+            print(f"  = skip (exists) {spec['name']}")
+            continue
+        body = build_v2_policy(spec, zone_ids)
+        created = api.v2_post("/firewall-policies", body)
+        pid = created.get("_id") if isinstance(created, dict) else "?"
+        print(f"  + {spec['name']} id={pid}")
+    print("\nDone. Test: ping 192.168.10.30 from WiFi/Default LAN.")
+    print("Re-lock later: remove TEMP policies + run apply --include-default-deny")
+
+
 def main() -> None:
     cmd = sys.argv[1] if len(sys.argv) > 1 else "audit"
     include_default = "--include-default-deny" in sys.argv
@@ -456,8 +557,14 @@ def main() -> None:
         apply(api, include_default_deny=include_default)
     elif cmd == "cleanup-probes":
         cleanup_probes(api)
+    elif cmd == "remove":
+        remove_bifrost_policies(api)
+    elif cmd == "open-server":
+        open_server_access(api)
     else:
-        raise SystemExit(f"Unknown command: {cmd}  (audit | apply | cleanup-probes)")
+        raise SystemExit(
+            f"Unknown command: {cmd}  (audit | apply | remove | open-server | cleanup-probes)"
+        )
 
 
 if __name__ == "__main__":

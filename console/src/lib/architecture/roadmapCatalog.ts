@@ -176,7 +176,7 @@ export const PHASE_C_OPS_PLATFORM: PhaseCCapabilityRow[] = [
   { capability: 'Self-discovery', implementation: 'K8s/Compose inventory + health + Git/image versions → MCP & docs' },
   { capability: 'Self-maintenance', implementation: 'Tekton build/test; ArgoCD GitOps; release_gate; Mac Mini CI sentinel' },
   { capability: 'Self-healing', implementation: 'Ops API L0–L2; bifrost-ops-mcp; Ollama @ gpu-server; no LLM direct orders' },
-  { capability: 'Observability', implementation: 'kube-prometheus-stack + Loki @ monitoring (after mini-pc-c)' },
+  { capability: 'Observability', implementation: 'kube-prometheus-stack + Loki + Alertmanager webhook @ monitoring (STG verified)' },
   { capability: 'Inference shell', implementation: 'Open-WebUI / Cursor MCP reads Grafana, Loki, K8s events' },
 ]
 
@@ -208,7 +208,7 @@ export const RELATED_DOCS: RelatedDocRow[] = [
   { topic: 'AI-native ops north star', authority: 'Ops Console → Governance → Blueprint § AI Native Platform (blueprintCatalog.ts)' },
   { topic: 'K3s target topology', authority: 'k3sArchitectureCatalog.ts' },
   { topic: 'K3s bootstrap runbook', authority: 'k3sBootstrapCatalog.ts' },
-  { topic: 'Deploy mainline', authority: 'Ops Console → Rocket → Trade Release (deployMainlineCatalog.ts)' },
+  { topic: 'Deploy mainline', authority: 'Ops Console → Satellite → Trade Deploy (deployMainlineCatalog.ts)' },
   { topic: '2C-B runbook / sign-off', authority: 'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md' },
   { topic: 'Code migration progress', authority: 'bifrost-trade-infra/docs/MIGRATION_TRACKING.md' },
   { topic: 'Docker build / rebuild', authority: 'bifrost-trade-infra/docs/DOCKER_BUILD.md' },

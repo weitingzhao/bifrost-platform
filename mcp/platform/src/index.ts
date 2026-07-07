@@ -7,12 +7,17 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { jsonResult, platformDelete, platformGet, platformPost } from './platformClient.js'
+import { registerPrometheusBridge } from './prometheusBridge.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
+const bridgeFocus = process.env.MCP_BRIDGE_FOCUS?.trim().toLowerCase() ?? ''
 
 const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
 
+if (bridgeFocus === 'prometheus') {
+  registerPrometheusBridge(server)
+} else {
 server.tool('platform_mcp_health', 'MCP server health + version', {}, async () =>
   jsonResult({
     ok: true,
@@ -385,6 +390,8 @@ server.tool(
     )
   },
 )
+
+} // end platform tools (non-prometheus focus)
 
 async function main() {
   const transport = new StdioServerTransport()

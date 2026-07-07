@@ -289,20 +289,20 @@ export const STATUS_CHECKPOINTS: StatusCheckpointRow[] = [
   {
     target: 'Prometheus + Grafana',
     planned: 'monitoring namespace',
-    actual: '—',
-    notes: 'Not started (Layer B Planned)',
+    actual: 'monitoring namespace (kube-prometheus-stack @ STG)',
+    notes: 'Layer B ready — Grafana NodePort 30883 · Trade dashboard ConfigMap',
   },
   {
     target: 'Loki',
     planned: 'monitoring namespace',
-    actual: '—',
-    notes: 'Not started',
+    actual: 'monitoring namespace (SingleBinary + Promtail)',
+    notes: 'Phase 5 observability — STG verified via verify-phase5-observability.sh',
   },
   {
     target: 'AIOps webhook',
-    planned: 'ai namespace',
-    actual: '—',
-    notes: 'Not started',
+    planned: 'Alertmanager → platform-api /ops-agent/alertmanager',
+    actual: 'bifrost-ops-agent receiver @ STG',
+    notes: 'Phase 5 alerting — NetworkPolicy alertmanager-webhook-egress',
   },
   {
     target: 'External sentinel watchdog',

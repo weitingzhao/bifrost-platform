@@ -16,27 +16,27 @@ export const TRADE_IB_CLIENT_MIGRATION_PROGRAM_PHASES: TradeIbClientMigrationPro
   {
     id: 'TIBM0',
     shortLabel: 'Inventory',
-    signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing',
+    signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing',
   },
   {
     id: 'TIBM1',
     shortLabel: 'Gateway RPC',
-    signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing',
+    signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing',
   },
   {
     id: 'TIBM2',
     shortLabel: 'Health / read',
-    signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing',
+    signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing',
   },
   {
     id: 'TIBM3',
     shortLabel: 'Workers',
-    signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing',
+    signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing',
   },
   {
     id: 'TIBM4',
     shortLabel: 'UI cleanup',
-    signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing',
+    signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing',
   },
 ]
 

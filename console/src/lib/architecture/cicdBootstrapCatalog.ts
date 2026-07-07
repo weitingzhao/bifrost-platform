@@ -7,7 +7,7 @@
  *
  * Live state (not this catalog):
  * - L1 self-health + platform deliver: Rocket → Platform Release
- * - L2 trade deliver + gates: Rocket → Trade Release
+ * - L2 trade deliver + gates: Satellite → Trade Deploy
  * - L-1 operator plane: Engineer → Operator Plane
  *
  * Aligned with: blueprintCatalog.ts (D6, north star), deliveryMainlineCatalog.ts,
@@ -368,7 +368,7 @@ export const CICD_GAPS: CicdGap[] = [
 
 export const CICD_RELATED_AUTHORITIES = [
   'Live L1 self-health + platform deliver: Rocket → Platform Release',
-  'Live L2 trade deliver + release gates: Rocket → Trade Release',
+  'Live L2 trade deliver + release gates: Satellite → Trade Deploy',
   'L-1 out-of-band operator plane: Engineer → Operator Plane',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
@@ -406,7 +406,7 @@ export function buildCicdBootstrapLlmPack(): string {
   const lines: string[] = [
     '# Bifrost Ops — CI/CD Bootstrap Model (L-1 / L0 / L1 / L2)',
     `# Source: ${CICD_BOOTSTRAP_SOURCE} v${CICD_BOOTSTRAP_VERSION}`,
-    'Live L1/L2 state: Rocket → Platform Release / Trade Release — not this catalog.',
+    'Live L1/L2 state: Rocket → Platform Release · Satellite → Trade Deploy — not this catalog.',
     '',
     '## Core principle',
     '',

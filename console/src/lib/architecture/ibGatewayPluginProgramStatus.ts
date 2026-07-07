@@ -13,11 +13,11 @@ export type IbGatewayPluginProgramPhaseMeta = {
 }
 
 export const IB_GATEWAY_PLUGIN_PROGRAM_PHASES: IbGatewayPluginProgramPhaseMeta[] = [
-  { id: 'IBGP0', shortLabel: 'redis-ib', signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing' },
-  { id: 'IBGP1', shortLabel: 'Gateway core', signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing' },
-  { id: 'IBGP2', shortLabel: 'Platform API', signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing' },
-  { id: 'IBGP3', shortLabel: 'Trade cutover', signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing' },
-  { id: 'IBGP4', shortLabel: 'Live TWS', signoffLocation: 'Subcontractors → Delivery Board · Engineer → Briefing' },
+  { id: 'IBGP0', shortLabel: 'redis-ib', signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing' },
+  { id: 'IBGP1', shortLabel: 'Gateway core', signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing' },
+  { id: 'IBGP2', shortLabel: 'Platform API', signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing' },
+  { id: 'IBGP3', shortLabel: 'Trade cutover', signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing' },
+  { id: 'IBGP4', shortLabel: 'Live TWS', signoffLocation: 'Mission Control → Delivery Board · Engineer → Briefing' },
 ]
 
 const SIGNED_OFF: Partial<Record<IbGatewayPluginProgramPhaseId, () => boolean>> = {

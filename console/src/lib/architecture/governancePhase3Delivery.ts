@@ -36,7 +36,7 @@ export const GOVERNANCE_PHASE3_DELIVERY_ITEMS: GovernancePhase3DeliveryItem[] = 
     id: 'GP3-3',
     title: 'Promote dual labels when SIGNED but gate pending',
     summary:
-      'Rocket → Trade Release shows spine + gate chips for 2c-b-prod-cutover when historically SIGNED but promote not ready.',
+      'Satellite → Trade Deploy shows spine + gate chips for 2c-b-prod-cutover when historically SIGNED but promote not ready.',
     verifySteps: [
       'Promote page — Prod cutover spine semantics panel visible when cutover is SIGNED.',
       'Dual chips: SIGNED (historically) + gate: pending (current prod matrix / gate state).',

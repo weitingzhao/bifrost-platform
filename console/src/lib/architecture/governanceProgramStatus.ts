@@ -15,7 +15,7 @@ export type GovernancePhaseMeta = {
 
 export const GOVERNANCE_PROGRAM_PHASES: GovernancePhaseMeta[] = [
   { id: 'P1', shortLabel: 'Constitution', signoffLocation: 'Governance → Blueprint' },
-  { id: 'P2', shortLabel: 'Projection', signoffLocation: 'Rocket → Trade Release' },
+  { id: 'P2', shortLabel: 'Projection', signoffLocation: 'Satellite → Trade Deploy' },
   { id: 'P3', shortLabel: 'Spine semantics', signoffLocation: 'Governance → Blueprint' },
   { id: 'P4', shortLabel: 'Reconciliation', signoffLocation: 'Governance → Briefing Reconciliation' },
   { id: 'P5', shortLabel: 'Blueprint zones', signoffLocation: 'Governance → Blueprint' },

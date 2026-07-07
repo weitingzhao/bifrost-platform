@@ -31,3 +31,42 @@ type QueryResponse struct {
 	QueryID   string       `json:"query_id"`
 	Metric    MetricResult `json:"metric"`
 }
+
+type PromQLResponse struct {
+	PrometheusURL string        `json:"prometheus_url,omitempty"`
+	Query         string        `json:"query"`
+	ResultType    string        `json:"result_type,omitempty"`
+	Points        []SamplePoint `json:"points"`
+	GeneratedAt   time.Time     `json:"generated_at"`
+}
+
+type AlertEntry struct {
+	Labels      map[string]string `json:"labels"`
+	Annotations map[string]string `json:"annotations"`
+	State       string            `json:"state"`
+	ActiveAt    string            `json:"active_at,omitempty"`
+	Value       string            `json:"value,omitempty"`
+}
+
+type AlertsResponse struct {
+	PrometheusURL string       `json:"prometheus_url,omitempty"`
+	Alerts        []AlertEntry `json:"alerts"`
+	GeneratedAt   time.Time    `json:"generated_at"`
+}
+
+type TargetEntry struct {
+	Labels           map[string]string `json:"labels"`
+	ScrapePool       string            `json:"scrape_pool,omitempty"`
+	ScrapeURL        string            `json:"scrape_url,omitempty"`
+	Health           string            `json:"health"`
+	LastError        string            `json:"last_error,omitempty"`
+	LastScrape       string            `json:"last_scrape,omitempty"`
+	LastScrapeDuration float64         `json:"last_scrape_duration,omitempty"`
+}
+
+type TargetsResponse struct {
+	PrometheusURL string        `json:"prometheus_url,omitempty"`
+	ActiveTargets []TargetEntry `json:"active_targets"`
+	DroppedTargets []TargetEntry `json:"dropped_targets,omitempty"`
+	GeneratedAt   time.Time     `json:"generated_at"`
+}
