@@ -7,7 +7,7 @@ interface SatelliteObservabilityStripProps {
   observability: ClusterObservabilityResponse | undefined
   metricsLoading: boolean
   observabilityLoading: boolean
-  onOpenObservability?: () => void
+  onOpenCluster?: () => void
   onOpenTelemetry?: () => void
 }
 
@@ -38,7 +38,7 @@ export function SatelliteObservabilityStrip({
   observability,
   metricsLoading,
   observabilityLoading,
-  onOpenObservability,
+  onOpenCluster,
   onOpenTelemetry,
 }: SatelliteObservabilityStripProps) {
   const layerA = metrics?.metrics_server_available === true
@@ -76,9 +76,9 @@ export function SatelliteObservabilityStrip({
             </a>
           )}
         </div>
-        {onOpenObservability != null && (
-          <button type="button" className="focus-strip-link text-[var(--text-dense-meta)]" onClick={onOpenObservability}>
-            Rocket → Observability
+        {onOpenCluster != null && (
+          <button type="button" className="focus-strip-link text-[var(--text-dense-meta)]" onClick={onOpenCluster}>
+            Rocket → Cluster
           </button>
         )}
         {onOpenTelemetry != null && (
@@ -89,7 +89,7 @@ export function SatelliteObservabilityStrip({
       </div>
       {layerB === 'not_installed' && !observabilityLoading && (
         <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Layer B adds historical metrics, disk I/O, logs, and alerts. Install via Rocket → Observability.
+          Layer B adds historical metrics, disk I/O, logs, and alerts. Install via Rocket → Cluster.
         </p>
       )}
     </OpsSection>

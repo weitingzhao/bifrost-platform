@@ -6,6 +6,7 @@ import {
   deletePod,
   drainNode,
   ensureBifrostNamespaces,
+  ensureKubePrometheusStack,
   ensureMetricsServer,
   fetchCluster,
   fetchClusterEvents,
@@ -96,14 +97,12 @@ interface ScaleState {
 export function ClusterPage({
   onOpenStandards,
   onOpenRuntimeMap,
-  onOpenObservability,
   onOpenAudit,
   onOpenServerConsole,
   onOpenAgentDesk,
 }: {
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
-  onOpenObservability?: () => void
   onOpenAudit?: () => void
   onOpenServerConsole?: () => void
   onOpenAgentDesk?: (jobId: string) => void
@@ -281,6 +280,19 @@ export function ClusterPage({
   const metricsServerMutation = useMutation({
     mutationFn: ensureMetricsServer,
     onSuccess: data => handleActuationSuccess(data.message),
+    onError: handleActuationError,
+  })
+
+  const layerBInstallMutation = useMutation({
+    mutationFn: ensureKubePrometheusStack,
+    onSuccess: data => {
+      if (!data.ok) {
+        handleActuationError(new Error(data.message || 'Layer B install failed'))
+        return
+      }
+      handleActuationSuccess(data.message)
+      void qc.invalidateQueries({ queryKey: ['cluster', 'observability'] })
+    },
     onError: handleActuationError,
   })
 
@@ -581,6 +593,27 @@ export function ClusterPage({
     })
   }
 
+  const layerBInstallEnabled = observabilityQuery.data?.layer_b_install_enabled === true
+  const layerBInstallBlockedReason = !canAdmin
+    ? 'Install Layer B requires an admin token.'
+    : !layerBInstallEnabled
+      ? 'Layer B install is disabled on platform-api. Set PLATFORM_OBSERVABILITY_INSTALL_ENABLED=1 and restart platform-api.'
+      : null
+
+  function handleInstallLayerB() {
+    if (layerBInstallBlockedReason != null) {
+      setActionError(layerBInstallBlockedReason)
+      return
+    }
+    requireConfirm({
+      title: 'Install Layer B observability',
+      message:
+        'This installs kube-prometheus-stack in the monitoring namespace via platform-api actuation (Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics).',
+      confirmLabel: 'Install Layer B',
+      action: () => layerBInstallMutation.mutate(),
+    })
+  }
+
   function handleEnsureNamespaces() {
     requireConfirm({
       title: 'Ensure Bifrost namespaces',
@@ -617,6 +650,7 @@ export function ClusterPage({
     return (
       ensureMutation.isPending ||
       metricsServerMutation.isPending ||
+      layerBInstallMutation.isPending ||
       restartMutation.isPending ||
       scaleMutation.isPending ||
       deletePodMutation.isPending ||
@@ -989,24 +1023,6 @@ cd ../bifrost-platform && make start`}
         <ClusterTopPodsTable metrics={metricsQuery.data} isLoading={metricsQuery.isLoading} />
       </section>
 
-      {clusterSummary != null && (
-        <ClusterIssuesPanel
-          summary={clusterSummary}
-          serviceReadiness={serviceReadinessQuery.data}
-          postgresStatus={postgresStatusQuery.data}
-          canOperate={canOperate}
-          remediatePending={remediationStartMutation.isPending}
-          activeRemediationJob={activeRemediationJob}
-          onOpenRemediationSession={handleOpenRemediationSession}
-          onAutoRemediate={handleAutoRemediate}
-          onSelectPodNamespace={ns => {
-            setNsFilter(nsFilterForNamespace(ns))
-            handleSelectNs(ns)
-            setCategory('workloads')
-          }}
-        />
-      )}
-
       <section className="page-section panel-elevated cluster-home-summaries px-3 py-2">
         <ClusterCategoryGrid
           summary={clusterSummary}
@@ -1150,10 +1166,30 @@ cd ../bifrost-platform && make start`}
             isLoading={observabilityQuery.isLoading}
             onOpenStandards={onOpenStandards}
             onOpenRuntimeMap={onOpenRuntimeMap}
-            onOpenObservability={onOpenObservability}
+            onInstallLayerB={handleInstallLayerB}
+            installLayerBPending={layerBInstallMutation.isPending}
+            installLayerBDisabled={layerBInstallBlockedReason != null}
           />
         }
       />
+
+      {clusterSummary != null && (
+        <ClusterIssuesPanel
+          summary={clusterSummary}
+          serviceReadiness={serviceReadinessQuery.data}
+          postgresStatus={postgresStatusQuery.data}
+          canOperate={canOperate}
+          remediatePending={remediationStartMutation.isPending}
+          activeRemediationJob={activeRemediationJob}
+          onOpenRemediationSession={handleOpenRemediationSession}
+          onAutoRemediate={handleAutoRemediate}
+          onSelectPodNamespace={ns => {
+            setNsFilter(nsFilterForNamespace(ns))
+            handleSelectNs(ns)
+            setCategory('workloads')
+          }}
+        />
+      )}
 
       <ClusterDrawer
         open={drawerOpen}

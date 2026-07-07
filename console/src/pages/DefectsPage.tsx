@@ -11,8 +11,9 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
-import { RefreshCw, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react'
+import { AlertCircle, RefreshCw, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
+import { Button } from '@bifrost/ui'
 import { fetchRetrospectiveReport } from '@/api/platform'
 import { OpsSection } from '@/components/layout/OpsSection'
 import type {
@@ -80,12 +81,13 @@ function TrendIcon({ trend }: { trend: string }) {
 }
 
 function StatsCards({ report }: { report: RetrospectiveReport }) {
+  const score = report.health_score ?? 0
   const lampValue =
-    report.health_score >= 90 ? 'ok' : report.health_score >= 70 ? 'degraded' : ('fail' as const)
+    score >= 90 ? 'ok' : score >= 70 ? 'degraded' : ('fail' as const)
   const scoreColor =
-    report.health_score >= 90
+    score >= 90
       ? 'text-emerald-400'
-      : report.health_score >= 70
+      : score >= 70
         ? 'text-yellow-400'
         : 'text-red-400'
 
@@ -96,7 +98,7 @@ function StatsCards({ report }: { report: RetrospectiveReport }) {
         <div>
           <p className="text-dense-meta text-muted-foreground">Health Score</p>
           <p className={`text-2xl font-bold tabular-nums ${scoreColor}`}>
-            {report.health_score.toFixed(0)}
+            {score.toFixed(0)}
           </p>
         </div>
       </div>
@@ -107,16 +109,16 @@ function StatsCards({ report }: { report: RetrospectiveReport }) {
       </div>
       <div className="panel-elevated rounded-md p-4">
         <p className="text-dense-meta text-muted-foreground">Patterns Detected</p>
-        <p className="text-2xl font-bold tabular-nums">{report.patterns.length}</p>
+        <p className="text-2xl font-bold tabular-nums">{report.patterns?.length ?? 0}</p>
         <p className="text-dense-caption text-muted-foreground mt-1">
-          {report.patterns.filter(p => p.trending === 'up').length} trending up
+          {(report.patterns ?? []).filter(p => p.trending === 'up').length} trending up
         </p>
       </div>
       <div className="panel-elevated rounded-md p-4">
         <p className="text-dense-meta text-muted-foreground">Namespaces</p>
-        <p className="text-2xl font-bold tabular-nums">{report.namespaces.length}</p>
+        <p className="text-2xl font-bold tabular-nums">{report.namespaces?.length ?? 0}</p>
         <p className="text-dense-caption text-muted-foreground mt-1">
-          {report.tool_usage.length} tools used
+          {report.tool_usage?.length ?? 0} tools used
         </p>
       </div>
     </div>
@@ -153,12 +155,12 @@ function RootCauseDistBar({ dist }: { dist: RetrospectiveRootCauseDistribution[]
   )
 }
 
-function InsightsPanel({ insights }: { insights: string[] }) {
-  if (insights.length === 0) return null
+function InsightsPanel({ insights }: { insights: string[] | undefined }) {
+  if ((insights?.length ?? 0) === 0) return null
   return (
     <OpsSection title="Insights">
       <ul className="space-y-1.5 px-3 py-2">
-        {insights.map((insight, i) => (
+        {(insights ?? []).map((insight, i) => (
           <li key={i} className="text-dense-body text-muted-foreground">
             {insight}
           </li>
@@ -233,14 +235,14 @@ function PatternsTable({ patterns }: { patterns: RetrospectivePatternCluster[] }
                     {p.occurrences}
                   </DenseTableCell>
                   <DenseTableCell className="text-right font-mono tabular-nums">
-                    {p.success_rate.toFixed(0)}%
+                    {(p.success_rate ?? 0).toFixed(0)}%
                   </DenseTableCell>
                   <DenseTableCell className="text-center">
                     <TrendIcon trend={p.trending} />
                   </DenseTableCell>
                   <DenseTableCell>
                     <div className="flex gap-1 flex-wrap">
-                      {p.top_actions.slice(0, 3).map(a => (
+                      {safeActions(p.top_actions).slice(0, 3).map(a => (
                         <span
                           key={a.tool}
                           className="text-dense-caption bg-secondary px-1.5 py-0.5 rounded"
@@ -312,7 +314,7 @@ function ScopeStatsTable({ stats }: { stats: RetrospectiveScopeStats[] }) {
                 {s.failed || '—'}
               </DenseTableCell>
               <DenseTableCell className="text-right font-mono tabular-nums">
-                {s.success_rate.toFixed(0)}%
+                {(s.success_rate ?? 0).toFixed(0)}%
               </DenseTableCell>
             </DenseTableRow>
           ))}
@@ -379,7 +381,7 @@ function NamespaceTable({ namespaces }: { namespaces: RetrospectiveNamespaceActi
               </DenseTableCell>
               <DenseTableCell>
                 <div className="flex gap-1 flex-wrap">
-                  {n.top_actions.slice(0, 3).map(a => (
+                  {safeActions(n.top_actions).slice(0, 3).map(a => (
                     <span
                       key={a.tool}
                       className="text-dense-caption bg-secondary px-1.5 py-0.5 rounded"
@@ -397,14 +399,22 @@ function NamespaceTable({ namespaces }: { namespaces: RetrospectiveNamespaceActi
   )
 }
 
+function isReportEmpty(report: RetrospectiveReport): boolean {
+  return report.total_jobs === 0 && (report.patterns?.length ?? 0) === 0
+}
+
+function safeActions(actions: RetrospectivePatternCluster['top_actions'] | undefined) {
+  return actions ?? []
+}
+
 export function DefectsPage() {
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['agent', 'retrospective', 'report'],
     queryFn: () => fetchRetrospectiveReport(),
     refetchInterval: 120_000,
   })
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <PageHeader
@@ -414,6 +424,53 @@ export function DefectsPage() {
         <OpsSection title="Analysis">
           <p className="p-8 text-center text-muted-foreground text-dense-body">
             Analyzing remediation job history…
+          </p>
+        </OpsSection>
+      </div>
+    )
+  }
+
+  if (error != null) {
+    const message = error instanceof Error ? error.message : 'Failed to load retrospective report'
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title="Defects"
+          description="Cross-job pattern analysis — identifying systemic platform issues from remediation history."
+        />
+        <OpsSection title="Analysis">
+          <div className="flex flex-col items-center gap-3 p-8 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive" />
+            <p className="text-dense-body text-destructive">{message}</p>
+            <Button variant="outline" size="sm" disabled={isFetching} onClick={() => void refetch()}>
+              <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+              Retry
+            </Button>
+          </div>
+        </OpsSection>
+      </div>
+    )
+  }
+
+  if (data == null || isReportEmpty(data)) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title="Defects"
+          description="Cross-job pattern analysis — identifying systemic platform issues from remediation history."
+          actions={
+            <button
+              onClick={() => void refetch()}
+              className="inline-flex items-center gap-1.5 text-dense-label text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+          }
+        />
+        <OpsSection title="Analysis">
+          <p className="p-8 text-center text-muted-foreground text-dense-body">
+            No remediation job history yet — patterns will appear after Agent runs complete.
           </p>
         </OpsSection>
       </div>
@@ -437,16 +494,16 @@ export function DefectsPage() {
       />
 
       <StatsCards report={data} />
-      <RootCauseDistBar dist={data.root_cause_distribution} />
+      <RootCauseDistBar dist={data.root_cause_distribution ?? []} />
       <InsightsPanel insights={data.insights} />
-      <PatternsTable patterns={data.patterns} />
+      <PatternsTable patterns={data.patterns ?? []} />
 
       <div className="grid grid-cols-2 gap-4">
-        <ScopeStatsTable stats={data.scope_stats} />
-        <ToolUsageTable tools={data.tool_usage} />
+        <ScopeStatsTable stats={data.scope_stats ?? []} />
+        <ToolUsageTable tools={data.tool_usage ?? []} />
       </div>
 
-      <NamespaceTable namespaces={data.namespaces} />
+      <NamespaceTable namespaces={data.namespaces ?? []} />
     </div>
   )
 }

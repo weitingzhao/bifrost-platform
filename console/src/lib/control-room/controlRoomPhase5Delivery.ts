@@ -19,7 +19,7 @@ export const CONTROL_ROOM_PHASE5_DELIVERY_ITEMS: ControlRoomPhase5DeliveryItem[]
       'Launch-window strip at the bottom of diagnosis shows STG release + Prod cutover tracks with the same lamps as Promote page.',
     verifySteps: [
       'Open Control Room — “Promote / cutover” section appears after Mission timeline.',
-      'Prod cutover row shows Promote blocked or Promote ready (narrative) matching Rocket → Trade Release.',
+      'Prod cutover row shows Promote blocked or Promote ready (narrative) matching Satellite → Trade Deploy.',
       'When stg smoke is loaded, STG release track appears beside Prod cutover.',
     ],
   },
@@ -135,8 +135,4 @@ export function phase5VerificationCount(state: ControlRoomPhase5SignoffState): {
     item => state.items[item.id]?.verified === true,
   ).length
   return { verified, total: CONTROL_ROOM_PHASE5_DELIVERY_ITEMS.length }
-}
-
-export function isControlRoomProgramComplete(): boolean {
-  return loadPhase5SignoffState().signedOffAt != null
 }

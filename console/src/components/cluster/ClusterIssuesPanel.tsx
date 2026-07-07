@@ -10,6 +10,8 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
+import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import type {
   ClusterPostgresStatusResponse,
   ClusterServiceReadinessResponse,
@@ -42,6 +44,25 @@ interface ClusterIssuesPanelProps {
 
 export { collectClusterIssues, type ClusterIssueRow } from '@/lib/cluster/collectClusterIssues'
 
+/** One-line summary for dense tables; full text stays in title/tooltip. */
+function compactIssueText(text: string, max = 96): string {
+  const t = text.trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, max - 1)}…`
+}
+
+function primaryPodReason(reason: string): string {
+  const t = reason.trim()
+  if (t === '') return '—'
+  const head = t.split(':')[0]?.trim() ?? t
+  const imageMatch = t.match(/image "([^"]+)"/)
+  if (imageMatch != null && head.length <= 48) {
+    return `${head} · ${imageMatch[1]}`
+  }
+  if (head.length < t.length && head.length <= 64) return head
+  return compactIssueText(t, 88)
+}
+
 export function ClusterIssuesPanel({
   summary,
   serviceReadiness,
@@ -61,6 +82,19 @@ export function ClusterIssuesPanel({
   const pods = summary.failing_pod_details ?? []
   const healthy = issues.length === 0
   const issueReach = clusterIssuesReachability(issues)
+  const [podsExpanded, setPodsExpanded] = useState(() => pods.length <= 2)
+  const podReasonSummary = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const pod of pods) {
+      const key = primaryPodReason(pod.reason)
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([reason, count]) => (count > 1 ? `${reason} (×${count})` : reason))
+      .join(' · ')
+  }, [pods])
   const sessionActive = activeRemediationJob?.status === 'running'
   const sessionReach = sessionActive ? remediationJobReachability(activeRemediationJob) : 'unknown'
   const sessionStatusLabel = sessionActive ? remediationJobStatusLabel(activeRemediationJob) : ''
@@ -186,7 +220,12 @@ export function ClusterIssuesPanel({
                     <DenseTag variant={issue.severity === 'fail' ? 'danger' : 'warning'}>{issue.category}</DenseTag>
                   </DenseTableCell>
                   <DenseTableCell className="font-medium">{issue.title}</DenseTableCell>
-                  <DenseTableCell className="text-[var(--muted-foreground)]">{issue.detail}</DenseTableCell>
+                  <DenseTableCell
+                    className="cluster-issues-cell-clip text-[var(--muted-foreground)]"
+                    title={issue.detail}
+                  >
+                    {compactIssueText(issue.detail)}
+                  </DenseTableCell>
                 </DenseTableRow>
               ))}
             </DenseTableBody>
@@ -194,14 +233,28 @@ export function ClusterIssuesPanel({
 
           {pods.length > 0 && (
             <>
-              <div className="border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-label)] font-medium">
-                Failing pods
-              </div>
+              <button
+                type="button"
+                className="cluster-issues-pods-toggle"
+                onClick={() => setPodsExpanded(open => !open)}
+                aria-expanded={podsExpanded}
+              >
+                {podsExpanded ? (
+                  <ChevronDown className="size-3.5 shrink-0" aria-hidden />
+                ) : (
+                  <ChevronRight className="size-3.5 shrink-0" aria-hidden />
+                )}
+                <span className="font-medium">Failing pods ({pods.length})</span>
+                {!podsExpanded && podReasonSummary !== '' && (
+                  <span className="cluster-issues-pods-toggle__summary">{podReasonSummary}</span>
+                )}
+              </button>
+              {podsExpanded && (
               <DenseDataTable>
                 <DenseTableHeader>
                   <DenseTableHeadRow>
                     <DenseTableHead className="w-[14%]">Namespace</DenseTableHead>
-                    <DenseTableHead className="w-[28%]">Pod</DenseTableHead>
+                    <DenseTableHead className="w-[26%]">Pod</DenseTableHead>
                     <DenseTableHead className="w-[8%]">Phase</DenseTableHead>
                     <DenseTableHead>Reason</DenseTableHead>
                     <DenseTableHead className="w-[12%]">Node</DenseTableHead>
@@ -224,17 +277,27 @@ export function ClusterIssuesPanel({
                           pod.namespace
                         )}
                       </DenseTableCell>
-                      <DenseTableCell className="font-mono-tabular">{pod.name}</DenseTableCell>
+                      <DenseTableCell className="cluster-issues-cell-clip font-mono-tabular" title={pod.name}>
+                        {pod.name}
+                      </DenseTableCell>
                       <DenseTableCell>
                         <DenseTag variant={pod.phase === 'Running' ? 'success' : 'danger'}>{pod.phase}</DenseTag>
                       </DenseTableCell>
-                      <DenseTableCell className="text-[var(--muted-foreground)]">{pod.reason}</DenseTableCell>
-                      <DenseTableCell className="font-mono-tabular">{pod.node ?? '—'}</DenseTableCell>
+                      <DenseTableCell
+                        className="cluster-issues-cell-clip text-[var(--muted-foreground)]"
+                        title={pod.reason}
+                      >
+                        {primaryPodReason(pod.reason)}
+                      </DenseTableCell>
+                      <DenseTableCell className="cluster-issues-cell-clip font-mono-tabular" title={pod.node ?? undefined}>
+                        {pod.node ?? '—'}
+                      </DenseTableCell>
                       <DenseTableCell className="font-mono-tabular">{pod.age ?? '—'}</DenseTableCell>
                     </DenseTableRow>
                   ))}
                 </DenseTableBody>
               </DenseDataTable>
+              )}
             </>
           )}
         </>

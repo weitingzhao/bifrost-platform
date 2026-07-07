@@ -95,22 +95,6 @@ export function buildCommandIntentStripModel(input: {
     })
   }
 
-  if (snapshot.release.signal !== 'ok') {
-    primaryChips.push({
-      id: 'release-review',
-      label: 'Review release',
-      detail: 'Open Delivery — STG deliver & gates',
-      action: { type: 'open_delivery' },
-    })
-    primaryChips.push({
-      id: 'release-agent',
-      label: 'AI Release',
-      detail: 'Run Platform · Release agent task (ambient banner)',
-      emphasis: 'primary',
-      action: { type: 'agent_dispatch_release' },
-    })
-  }
-
   if (context != null) {
     const promote = evaluatePromoteStatus(context, matrices)
     if (!promote.ready) {

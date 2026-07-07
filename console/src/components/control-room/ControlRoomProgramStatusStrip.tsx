@@ -4,7 +4,7 @@ import {
   controlRoomProgramSignedCount,
   isControlRoomPhaseSignedOff,
 } from '@/lib/control-room/controlRoomProgramStatus'
-import { isControlRoomProgramComplete } from '@/lib/control-room/controlRoomPhase5Delivery'
+import { isControlRoomProgramComplete } from '@/lib/control-room/controlRoomPhase6Delivery'
 import { isMissionSignalPhase7SignedOff } from '@/lib/control-room/missionSignalPhase7Delivery'
 import { useControlRoomSignoffRevision } from '@/lib/control-room/controlRoomSignoffEvents'
 

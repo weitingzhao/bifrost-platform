@@ -98,10 +98,15 @@ function buildApiPerformanceRows(metrics: TelemetryMetricResult[] | undefined) {
 }
 
 interface SatelliteTelemetryPageProps {
-  onOpenObservability?: () => void
+  onOpenCluster?: () => void
 }
 
-export function SatelliteTelemetryPage({ onOpenObservability }: SatelliteTelemetryPageProps) {
+function tradeDashboardUrl(grafanaUrl: string | undefined): string | null {
+  if (grafanaUrl == null || grafanaUrl.trim() === '') return null
+  return `${grafanaUrl.replace(/\/$/, '')}/d/bifrost-trade-overview/bifrost-trade-overview`
+}
+
+export function SatelliteTelemetryPage({ onOpenCluster }: SatelliteTelemetryPageProps) {
   const [tradeEnv, setTradeEnv] = useState<TradeEnv>('stg')
   const ns = TRADE_NS[tradeEnv]
 
@@ -131,6 +136,7 @@ export function SatelliteTelemetryPage({ onOpenObservability }: SatelliteTelemet
   }, [telemetryQuery.data?.metrics])
 
   const layerB = observabilityQuery.data?.layer_b_status
+  const tradeDashUrl = tradeDashboardUrl(observabilityQuery.data?.grafana_url)
   const promConfigured = telemetryQuery.error == null || telemetryQuery.isSuccess
   const telemetryUnavailable =
     telemetryQuery.error instanceof Error &&
@@ -196,9 +202,16 @@ export function SatelliteTelemetryPage({ onOpenObservability }: SatelliteTelemet
                   </a>
                 </Button>
               )}
-            {layerB !== 'ready' && onOpenObservability != null && (
-              <Button variant="outline" size="sm" onClick={onOpenObservability}>
-                Rocket → Observability
+            {tradeDashUrl != null && layerB === 'ready' && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={tradeDashUrl} target="_blank" rel="noreferrer">
+                  Open Trade Dashboard
+                </a>
+              </Button>
+            )}
+            {layerB !== 'ready' && onOpenCluster != null && (
+              <Button variant="outline" size="sm" onClick={onOpenCluster}>
+                Rocket → Cluster
               </Button>
             )}
           </div>

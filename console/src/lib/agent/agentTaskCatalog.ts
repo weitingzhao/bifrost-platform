@@ -156,6 +156,18 @@ export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
     description: 'Diagnose failure, patch code/manifest, commit & push so Release can retry the failed phase.',
   },
   {
+    id: 'trade-deploy',
+    scope: 'trade-deploy',
+    label: 'Trade · Deploy',
+    domain: 'Trade',
+    action: 'Release',
+    tier: 'manual',
+    entryPoint: 'Control Room → Launch Pad · Agent Deploy · Agent Desk trade-deploy scope',
+    trigger: 'Operator starts STG → PROD Trade stack deliver (bifrost-deliver-stg / bifrost-deliver-prod)',
+    description:
+      'Deliver Trade stack: mirror sync + Dockerfile CMs → Kaniko build → rollout bifrost-stg/prod → STG smoke + release gates. Does NOT enable live trading (D10).',
+  },
+  {
     id: 'cluster-auto',
     scope: 'cluster_issues_full_auto',
     label: 'Cluster · Remediate',

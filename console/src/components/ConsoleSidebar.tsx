@@ -16,7 +16,6 @@ export type ConsoleViewTab =
   | 'audit'
   | 'runtime-map'
   | 'cluster'
-  | 'observability'
   | 'placement'
   | 'trade-release'
   | 'platform-release'

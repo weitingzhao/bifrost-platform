@@ -27,10 +27,10 @@ export const CONTROL_ROOM_PHASE3_DELIVERY_ITEMS: ControlRoomPhase3DeliveryItem[]
     id: 'P3-2',
     title: 'Context-aware intent chips',
     summary:
-      'Primary chips adapt to mission: payload fail → Verify payload; release fail → Review release + Platform release; promote blocked → Assess promote.',
+      'Primary chips adapt to mission: payload fail → Verify payload; release fail → Agent Launch (Launch Pad); promote blocked → Assess promote.',
     verifySteps: [
       'With Payload CRITICAL, “Verify payload” chip is primary.',
-      'With Release failed, “Review release” and “Platform release (Agent)” chips appear.',
+      'With Release failed, “Agent Launch” intent chip appears (Launch Pad covers release review).',
       'With coupling blocked, “Assess promote” chip prefills Promote pack.',
     ],
   },
@@ -42,7 +42,7 @@ export const CONTROL_ROOM_PHASE3_DELIVERY_ITEMS: ControlRoomPhase3DeliveryItem[]
     verifySteps: [
       'Click “Agent session pack” — Agent Desk opens with session pack + starter prompt in composer.',
       'Click “Verify payload” (when degraded) — composer includes Control Room dispatch brief sections.',
-      'Click “Platform release (Agent)” when Release failed — release scope prompt prefilled.',
+      'Click “Agent Launch” when Release failed — release scope prompt prefilled via Launch Pad.',
     ],
   },
   {

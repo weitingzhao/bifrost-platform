@@ -47,7 +47,7 @@ export const MISSION_SIGNAL_PHASE1_DELIVERY_ITEMS: MissionSignalPhase1DeliveryIt
       'Promote / cutover strip and coupling gate no longer list postgres matrix fail when cluster datastore is healthy.',
     verifySteps: [
       'Control Room → Promote / cutover — primary blocker is not “Prod matrix has failing targets” for postgres alone.',
-      'Rocket → Trade Release coupling gate matches Control Room when matrix datastore is ok.',
+      'Satellite → Trade Deploy coupling gate matches Control Room when matrix datastore is ok.',
     ],
   },
   {

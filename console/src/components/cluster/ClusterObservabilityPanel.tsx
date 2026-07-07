@@ -10,7 +10,6 @@ interface ClusterObservabilityPanelProps {
   isLoading: boolean
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
-  onOpenObservability?: () => void
   onInstallLayerB?: () => void
   installLayerBPending?: boolean
   installLayerBDisabled?: boolean
@@ -39,12 +38,16 @@ function layerBLamp(status: LayerBStatus | undefined) {
   }
 }
 
+function tradeDashboardUrl(grafanaUrl: string | undefined): string | null {
+  if (grafanaUrl == null || grafanaUrl.trim() === '') return null
+  return `${grafanaUrl.replace(/\/$/, '')}/d/bifrost-trade-overview/bifrost-trade-overview`
+}
+
 export function ClusterObservabilityPanel({
   data,
   isLoading,
   onOpenStandards,
   onOpenRuntimeMap,
-  onOpenObservability,
   onInstallLayerB,
   installLayerBPending = false,
   installLayerBDisabled = false,
@@ -53,6 +56,7 @@ export function ClusterObservabilityPanel({
   const observabilityFetching = useIsFetching({ queryKey: ['cluster', 'observability'] }) > 0
   const components = data?.components ?? []
   const docsUrl = data?.docs_url?.trim()
+  const tradeDashUrl = tradeDashboardUrl(data?.grafana_url)
 
   const headerExtra = (
     <>
@@ -65,7 +69,7 @@ export function ClusterObservabilityPanel({
       {data?.layer_b_status === 'not_installed' && (
         <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           Layer A above uses metrics-server only. Layer B adds historical metrics, disk I/O, logs,
-          and alerts. Install from Rocket → Observability.
+          and alerts. Install Layer B below or from this Cluster page.
         </p>
       )}
       {data?.layer_b_status === 'partial' && data.detail !== '' && (
@@ -82,11 +86,6 @@ export function ClusterObservabilityPanel({
         {onOpenRuntimeMap != null && (
           <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenRuntimeMap}>
             Open Runtime Map
-          </Button>
-        )}
-        {onOpenObservability != null && (
-          <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenObservability}>
-            Open Observability
           </Button>
         )}
         {onInstallLayerB != null && data?.layer_b_status !== 'ready' && (
@@ -110,6 +109,13 @@ export function ClusterObservabilityPanel({
           <Button size="sm" asChild>
             <a href={data.grafana_url} target="_blank" rel="noreferrer">
               Open Grafana
+            </a>
+          </Button>
+        )}
+        {tradeDashUrl != null && data?.layer_b_status === 'ready' && (
+          <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" asChild>
+            <a href={tradeDashUrl} target="_blank" rel="noreferrer">
+              Open Trade Dashboard
             </a>
           </Button>
         )}
