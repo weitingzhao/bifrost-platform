@@ -31,6 +31,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
+	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
@@ -61,6 +62,7 @@ type Server struct {
 	migratewave     *migratewave.Handler
 	tradeagent      *tradeagent.Handler
 	devagent        *devagent.Handler
+	operatequeue    *operatequeue.Handler
 	opsagent        *opsagent.Handler
 	remediation     *remediation.Handler
 	agentreport     *agentreport.Handler
@@ -100,6 +102,8 @@ func New(cfg *config.Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("devagent: %w", err)
 	}
+	operatequeueH := operatequeue.NewHandler(cfg.ConfigDir(), audit)
+	devagentH.BindOperateQueue(operatequeueH)
 	visionH := vision.NewHandler(cfg, audit)
 	visionH.BindPrograms(devagentH)
 	return &Server{
@@ -117,6 +121,7 @@ func New(cfg *config.Config) (*Server, error) {
 		migratewave:     migratewave.NewHandler(cfg, audit),
 		tradeagent:      tradeagent.NewHandler(),
 		devagent:        devagentH,
+		operatequeue:    operatequeueH,
 		opsagent:        opsagent.NewHandler(audit),
 		remediation:     remediationH,
 		agentreport:     agentreport.NewHandler(),
@@ -241,6 +246,11 @@ func (s *Server) Router() http.Handler {
 		r.Get("/vision/v5/gate", s.vision.HandleGetV5Gate)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
+		r.Get("/operate/queue", s.operatequeue.HandleGetQueue)
+		r.Group(func(r chi.Router) {
+			r.Use(s.auth.Require(actuation.RoleAdmin))
+			r.Post("/operate/queue", s.operatequeue.HandleEnqueue)
+		})
 		r.Route("/programs", func(r chi.Router) {
 			r.Get("/", s.devagent.HandlePrograms)
 			r.Get("/post-completion/pending", s.devagent.HandleListPendingPostCompletion)

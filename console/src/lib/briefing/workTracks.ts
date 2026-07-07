@@ -9,6 +9,7 @@ import type {
   Reachability,
   TrackTask,
 } from '@/api/types'
+import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import { hasProdFailures, prodFailingTargetIds } from '@/lib/control-room/matrixSummary'
 
 export type TrackId = 'build' | 'migrate' | 'automate' | 'infra' | 'operate'
@@ -20,7 +21,7 @@ export interface TrackProgress {
 }
 
 export interface OperateIssue {
-  kind: 'matrix_fail' | 'cluster_failing' | 'promote_blocked' | 'gate_missing'
+  kind: 'matrix_fail' | 'cluster_failing' | 'promote_blocked' | 'gate_missing' | 'queue_item'
   label: string
 }
 
@@ -119,8 +120,16 @@ export function computeOperateSummary(
   matrices: MatrixResponse[],
   clusterFailingPods?: number,
   clusterReachability?: Reachability,
+  operateQueueOpen?: OperateQueueItem[],
 ): Omit<TrackSummary, 'id' | 'agentMode'> {
   const issues: OperateIssue[] = []
+
+  for (const item of operateQueueOpen ?? []) {
+    issues.push({
+      kind: 'queue_item',
+      label: `Queue: ${item.title} (${item.program_id})`,
+    })
+  }
 
   if (matrices.length > 0 && hasProdFailures(matrices)) {
     const fails = prodFailingTargetIds(matrices)
@@ -221,6 +230,7 @@ export function computeAllTracks(
   matrices: MatrixResponse[],
   clusterFailingPods?: number,
   clusterReachability?: Reachability,
+  operateQueueOpen?: OperateQueueItem[],
 ): TrackSummary[] {
   const tracks: OpsContextTracks | undefined = context?.tracks
 
@@ -251,7 +261,7 @@ export function computeAllTracks(
   const operate: TrackSummary = {
     id: 'operate',
     agentMode: 'Ops',
-    ...computeOperateSummary(context, matrices, clusterFailingPods, clusterReachability),
+    ...computeOperateSummary(context, matrices, clusterFailingPods, clusterReachability, operateQueueOpen),
   }
 
   return [build, migrate, automate, infra, operate]

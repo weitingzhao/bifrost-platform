@@ -27,6 +27,8 @@ import {
 import { splitQueueByCompletion } from '@/lib/briefing/queueDisplay'
 import type { TrackId } from '@/lib/briefing/workTracks'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { OperateQueueItem } from '@/api/operateQueueTypes'
+import { OperateQueueHandoffPanel } from '@/components/briefing/OperateQueueHandoffPanel'
 
 interface TrackLaneSectionProps {
   track: TrackId
@@ -39,6 +41,8 @@ interface TrackLaneSectionProps {
   auditRecords?: AuditRecord[]
   auditLoading?: boolean
   onOpenAudit?: () => void
+  operateQueueOpen?: OperateQueueItem[]
+  operateQueueLoading?: boolean
 }
 
 function queueItemReach(status: QueueItemStatus): 'ok' | 'degraded' | 'fail' | 'unknown' {
@@ -512,6 +516,8 @@ export function TrackLaneSection({
   auditRecords = [],
   auditLoading,
   onOpenAudit,
+  operateQueueOpen = [],
+  operateQueueLoading = false,
 }: TrackLaneSectionProps) {
   const lanes = lanesForTrack(track)
   const activeLane = laneById(selectedLane)
@@ -546,6 +552,12 @@ export function TrackLaneSection({
           )
         })}
       </div>
+
+      {track === 'operate' && (
+        <div className="mt-3">
+          <OperateQueueHandoffPanel items={operateQueueOpen} loading={operateQueueLoading} />
+        </div>
+      )}
 
       <TaskQueuePanel
         items={queue}

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
 )
 
 type PhaseStatus string
@@ -112,6 +113,11 @@ type Handler struct {
 	configDir       string
 	bridgeCmd       string
 	store           *FileStore
+	operateQueue    *operatequeue.Handler
+}
+
+func (h *Handler) BindOperateQueue(oq *operatequeue.Handler) {
+	h.operateQueue = oq
 }
 
 func NewHandler(configDir string) (*Handler, error) {

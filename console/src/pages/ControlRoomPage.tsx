@@ -13,6 +13,7 @@ import { ProgramContextSection } from '@/components/control-room/ProgramContextS
 import { LaunchPad } from '@/components/control-room/LaunchPad'
 import { SpokeSignalCards } from '@/components/control-room/SpokeSignalCards'
 import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystemsGrid'
+import { OperateQueueStrip } from '@/components/control-room/OperateQueueStrip'
 import { WorkTracksStrip } from '@/components/control-room/WorkTracksStrip'
 import {
   DualFlywheelPanel,
@@ -23,6 +24,7 @@ import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { useMissionVerification } from '@/hooks/useMissionVerification'
+import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { computeAllTracks } from '@/lib/briefing/workTracks'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
@@ -106,6 +108,7 @@ export function ControlRoomPage({
   const { snapshot, matrices: liveMatrices, dataUpdatedAt, isLoading: missionLoading } = useMissionSnapshot()
   const { banner, dismissBanner, pendingVerify } = useMissionVerification()
   const { canOperate } = usePlatformAuth()
+  const operateQueueQuery = useOperateQueue()
   const matrixList = liveMatrices.length > 0 ? liveMatrices : matrices
 
   const aiRelease = useAmbientAgentTask({
@@ -149,8 +152,14 @@ export function ControlRoomPage({
   const trackSummaries = useMemo(() => {
     const clusterFailingPods = clusterSummary?.failing_pods
     const clusterReach = clusterSummary?.reachability
-    return computeAllTracks(context, matrices, clusterFailingPods, clusterReach)
-  }, [context, matrices, clusterSummary])
+    return computeAllTracks(
+      context,
+      matrices,
+      clusterFailingPods,
+      clusterReach,
+      operateQueueQuery.data?.open,
+    )
+  }, [context, matrices, clusterSummary, operateQueueQuery.data?.open])
 
   const openAgentDeskPrefill = (opts?: { prefill: string }) => {
     if (opts?.prefill != null) onOpenAgentDesk?.({ prefill: opts.prefill })
@@ -278,6 +287,8 @@ export function ControlRoomPage({
           onOpenPromote={handleOpenPromotePreflight}
           onOpenDelivery={onOpenDelivery}
         />
+
+        <OperateQueueStrip />
 
         {onOpenAgentProtocol != null && (
           <NetworkHealthPanel

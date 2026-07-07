@@ -452,6 +452,13 @@ server.tool(
     ),
 )
 
+server.tool(
+  'get_operate_queue',
+  'Open operate queue items (Projection layer · D11)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/operate/queue')),
+)
+
 } // end platform tools (non-prometheus focus)
 
 async function main() {
