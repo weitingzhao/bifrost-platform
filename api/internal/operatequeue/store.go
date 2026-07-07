@@ -117,6 +117,40 @@ func (s *Store) FindByPendingID(pendingID string) (*Item, bool) {
 	return nil, false
 }
 
+func (s *Store) Close(id string) (Item, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rec, err := s.loadLocked()
+	if err != nil {
+		return Item{}, err
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Item{}, fmt.Errorf("id required")
+	}
+	for i := range rec.Items {
+		if rec.Items[i].ID != id {
+			continue
+		}
+		if rec.Items[i].Status == StatusClosed {
+			return rec.Items[i], nil
+		}
+		if rec.Items[i].Status != StatusOpen {
+			return Item{}, fmt.Errorf("item not open")
+		}
+		now := time.Now().UTC().Format(time.RFC3339)
+		rec.Items[i].Status = StatusClosed
+		rec.Items[i].UpdatedAt = now
+		rec.Items[i].ClosedAt = now
+		if err := s.saveLocked(rec); err != nil {
+			return Item{}, err
+		}
+		return rec.Items[i], nil
+	}
+	return Item{}, fmt.Errorf("item not found")
+}
+
 func (s *Store) Add(item Item) (Item, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

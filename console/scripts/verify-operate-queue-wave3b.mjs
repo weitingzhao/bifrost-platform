@@ -27,6 +27,11 @@ check('PostCompletion copy — injects queue', read('src/components/delivery/Pos
 check('workTracks queue_item kind', read('src/lib/briefing/workTracks.ts').includes('queue_item'))
 check('queue persisted under data/operate', readRepo('api/internal/operatequeue/store.go').includes('"operate"') && readRepo('api/internal/operatequeue/store.go').includes('"queue.json"'))
 check('no spine tracks.operate write in operatequeue', !readRepo('api/internal/operatequeue/store.go').includes('tracks.operate'))
+check('operate queue close route', readRepo('api/internal/server/server.go').includes('/operate/queue/{id}/close'))
+check('store Close method', readRepo('api/internal/operatequeue/store.go').includes('func (s *Store) Close'))
+check('MCP close_operate_queue_item', readRepo('api/internal/mcp/catalog.go').includes('close_operate_queue_item'))
+check('close API client', read('src/api/operateQueue.ts').includes('closeOperateQueueItem'))
+check('Control Room Resolve button', read('src/components/control-room/OperateQueueStrip.tsx').includes('Resolve'))
 
 const pass = checks.filter(c => c.ok).length
 const total = checks.length

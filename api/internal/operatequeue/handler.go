@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
@@ -53,6 +54,28 @@ func (h *Handler) HandleEnqueue(w http.ResponseWriter, r *http.Request) {
 	h.audit.Record(r, "operate.queue.enqueue", saved.ID, StatusOpen,
 		fmt.Sprintf("program=%s source=%s", saved.ProgramID, saved.Source))
 	writeJSON(w, http.StatusCreated, saved)
+}
+
+func (h *Handler) HandleClose(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	closed, err := h.store.Close(id)
+	if err != nil {
+		msg := err.Error()
+		switch msg {
+		case "item not found":
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": msg})
+		default:
+			writeJSON(w, http.StatusConflict, map[string]string{"error": msg})
+		}
+		return
+	}
+	h.audit.Record(r, "operate.queue.close", closed.ID, StatusClosed,
+		fmt.Sprintf("program=%s", closed.ProgramID))
+	writeJSON(w, http.StatusOK, closed)
 }
 
 func (h *Handler) InjectFromApproval(r *http.Request, params ApprovalInjectParams) (Item, error) {
