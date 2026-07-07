@@ -24,6 +24,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
+	"github.com/weitingzhao/bifrost-platform/api/internal/escapehatch"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
@@ -75,6 +76,7 @@ type Server struct {
 	retrospective   *retrospective.Handler
 	satellite       *satellite.Handler
 	selfhealth      *selfhealth.Handler
+	escapehatch     *escapehatch.Handler
 	sessionsnapshot *sessionsnapshot.Handler
 	briefing        *briefing.Handler
 	network         *network.Handler
@@ -134,6 +136,7 @@ func New(cfg *config.Config) (*Server, error) {
 		retrospective:   retrospective.NewHandler(retroAnalyzer),
 		satellite:       satellite.NewHandler(cfg),
 		selfhealth:      selfhealth.NewHandler(cfg, gitopsH.Service()),
+		escapehatch:     escapehatch.NewHandler(cfg, audit),
 		sessionsnapshot: sessionsnapshot.NewHandler(),
 		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store(), clusterH),
 		network:         network.NewHandler(audit),
@@ -173,6 +176,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/mission/verify-payload", s.handleVerifyPayload)
 		r.Get("/mission/verify-snapshot", s.handleVerifyMissionSnapshot)
 		r.Get("/self-health", s.selfhealth.HandleSelfHealth)
+		r.Get("/platform/escape-hatch", s.escapehatch.HandleGet)
 		r.Get("/topology", s.handleTopology)
 		r.Get("/context", s.handleContext)
 		r.Get("/auth/capabilities", s.auth.Capabilities)
@@ -315,6 +319,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/promote/tier-b/signoff", s.promote.HandleSignTierB)
 			r.Post("/build-phase/{phase}/gate", s.buildgate.HandleRunGate)
 			r.Post("/build-phase/{phase}/signoff", s.buildgate.HandleSignoff)
+			r.Post("/platform/escape-hatch/drill", s.escapehatch.HandleRecordDrill)
 			r.Post("/migrate-streams/{streamId}/waves/{waveId}/deliver", s.migratewave.HandleDeliver)
 			r.Post("/migrate-streams/{streamId}/waves/{waveId}/signoff", s.migratewave.HandleSignoff)
 			r.Post("/vision/v1/gate", s.vision.HandleRunV1Gate)

@@ -65,6 +65,8 @@ import type {
   RunBuildPhaseGateResponse,
   MigrateWaveActuationResponse,
   SelfHealthResponse,
+  EscapeHatchResponse,
+  EscapeHatchDrillResponse,
   RevisionsResponse,
   RefPreflightResponse,
   ReleaseStateResponse,
@@ -433,6 +435,23 @@ export async function fetchSelfHealth(): Promise<SelfHealthResponse> {
   const r = await fetch('/api/v1/self-health')
   if (!r.ok) throw new Error(`self-health: HTTP ${r.status}`)
   return r.json() as Promise<SelfHealthResponse>
+}
+
+export async function fetchEscapeHatch(): Promise<EscapeHatchResponse> {
+  const r = await fetch('/api/v1/platform/escape-hatch')
+  if (!r.ok) throw new Error(`escape-hatch: HTTP ${r.status}`)
+  return r.json() as Promise<EscapeHatchResponse>
+}
+
+export async function recordEscapeHatchDrill(body?: {
+  notes?: string
+  route_ids?: string[]
+}): Promise<EscapeHatchDrillResponse> {
+  const r = await authedFetch('escape hatch drill', '/api/v1/platform/escape-hatch/drill', {
+    method: 'POST',
+    body: JSON.stringify(body ?? {}),
+  })
+  return r.json() as Promise<EscapeHatchDrillResponse>
 }
 
 export async function fetchStackAddons(): Promise<StackAddonsResponse> {

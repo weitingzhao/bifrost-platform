@@ -1925,6 +1925,58 @@ export interface SelfHealthResponse {
   overall: SelfHealthProbeStatus
 }
 
+export type EscapeRouteStatus = 'ok' | 'degraded' | 'fail' | 'unknown' | 'documented'
+
+export interface EscapeRouteProbe {
+  id: string
+  label: string
+  url?: string
+  status: EscapeRouteStatus
+  detail: string
+  latency_ms?: number
+}
+
+export interface EscapeRouteView {
+  id: string
+  label: string
+  layer: string
+  summary: string
+  command?: string
+  status: EscapeRouteStatus
+  detail: string
+  probes?: EscapeRouteProbe[]
+  runbook_refs?: string[]
+}
+
+export interface EscapeHatchQuarterly {
+  interval_days: number
+  last_drill_at?: string
+  last_drill_by?: string
+  notes?: string
+  next_due_at?: string
+  overdue: boolean
+  days_since_last_drill?: number
+}
+
+export interface EscapeHatchResponse {
+  generated_at: string
+  runbook_version: string
+  overall: EscapeRouteStatus
+  routes: EscapeRouteView[]
+  quarterly: EscapeHatchQuarterly
+  agent_guidance?: string
+}
+
+export interface EscapeHatchDrillResponse {
+  ok: boolean
+  drill?: {
+    at: string
+    by: string
+    notes?: string
+    route_ids?: string[]
+  }
+}
+
 export interface SessionSnapshotLatestResponse {
   snapshot: Record<string, unknown> | null
   saved_at?: string

@@ -165,6 +165,8 @@ export function ProgramDetailView({ programId }: { programId: string }) {
   )
   const totalPhases = detail?.phases.length ?? 0
   const isVisionProgram = programId === 'vision'
+  const isMissionSignalProgram = programId === 'mission-signal'
+  const panelSignOffOnly = isVisionProgram || isMissionSignalProgram
 
   if (detailQuery.isLoading) {
     return <p className="text-dense-meta text-muted-foreground">Loading program…</p>
@@ -192,7 +194,9 @@ export function ProgramDetailView({ programId }: { programId: string }) {
         description={
           isVisionProgram
             ? 'Counts sync from unified programs API. Run and sign each gate in the Vision panels below.'
-            : 'Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands.'
+            : isMissionSignalProgram
+              ? 'Counts sync from unified programs API. Sign each phase in the Mission Signal panels below when live readiness passes.'
+              : 'Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands.'
         }
       >
         <DenseDataTable>
@@ -211,7 +215,7 @@ export function ProgramDetailView({ programId }: { programId: string }) {
                 key={phase.id}
                 phase={phase}
                 canAdmin={canAdmin}
-                allowSignOff={!isVisionProgram}
+                allowSignOff={!panelSignOffOnly}
                 onSignOff={setConfirmPhaseId}
               />
             ))}

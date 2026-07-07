@@ -1,27 +1,27 @@
 {
-  "at": "2026-06-19T20:46:03.280641Z",
-  "result": "pass",
+  "at": "2026-07-07T16:24:35.951822Z",
+  "result": "fail",
   "checks": [
     {
       "id": "dev-namespace",
       "label": "bifrost-dev workloads",
       "required": true,
       "reachability": "ok",
-      "detail": "19 deployment(s) ready in bifrost-dev"
+      "detail": "15 deployment(s) ready in bifrost-dev"
     },
     {
       "id": "dev-redis",
       "label": "In-cluster Redis (bifrost-dev)",
       "required": true,
-      "reachability": "ok",
-      "detail": "bifrost-dev/redis 1/1 ready (in-cluster)"
+      "reachability": "fail",
+      "detail": "deployment/redis in bifrost-dev: deployments.apps \"redis\" not found"
     },
     {
       "id": "dev-postgres",
       "label": "In-cluster PostgreSQL (bifrost-dev)",
       "required": true,
-      "reachability": "ok",
-      "detail": "bifrost-dev/postgres 1/1 ready (in-cluster)"
+      "reachability": "fail",
+      "detail": "deployment/postgres in bifrost-dev: deployments.apps \"postgres\" not found"
     },
     {
       "id": "dev-api-monitor",
@@ -90,8 +90,8 @@
       "id": "dev-matrix",
       "label": "Dev matrix (K3s gateway)",
       "required": true,
-      "reachability": "ok",
-      "detail": "no failing dev targets"
+      "reachability": "fail",
+      "detail": "failing: postgres, redis"
     },
     {
       "id": "frontend-env-k3s",
@@ -102,5 +102,5 @@
     }
   ],
   "triggered_by": "admin",
-  "summary": "Vision V1 gate pass (14 checks)"
+  "summary": "Vision V1 gate fail (14 checks)"
 }
