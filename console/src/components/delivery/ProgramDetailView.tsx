@@ -43,10 +43,12 @@ function phaseStatusLabel(phase: ProgramPhaseDetail): string {
 function PhaseDetailRow({
   phase,
   canAdmin,
+  allowSignOff,
   onSignOff,
 }: {
   phase: ProgramPhaseDetail
   canAdmin: boolean
+  allowSignOff: boolean
   onSignOff: (phaseId: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -85,7 +87,7 @@ function PhaseDetailRow({
           {phase.signed_off_at ?? '—'}
         </DenseTableCell>
         <DenseTableCell>
-          {!phase.signed_off && canAdmin && phase.sign_off?.required !== false && (
+          {!phase.signed_off && canAdmin && allowSignOff && phase.sign_off?.required !== false && (
             <Button type="button" size="sm" variant="outline" onClick={() => onSignOff(phase.id)}>
               Sign off
             </Button>
@@ -162,7 +164,7 @@ export function ProgramDetailView({ programId }: { programId: string }) {
     [detail?.phases],
   )
   const totalPhases = detail?.phases.length ?? 0
-  const mech = detail?.program.sign_off_mechanism ?? detail?.program.delivery?.sign_off_mechanism
+  const isVisionProgram = programId === 'vision'
 
   if (detailQuery.isLoading) {
     return <p className="text-dense-meta text-muted-foreground">Loading program…</p>
@@ -181,45 +183,41 @@ export function ProgramDetailView({ programId }: { programId: string }) {
             <DenseTag variant={signedCount === totalPhases && totalPhases > 0 ? 'success' : 'warning'}>
               {signedCount}/{totalPhases} signed
             </DenseTag>
-            {mech != null && mech !== '' && (
-              <DenseTag variant="neutral">{mech}</DenseTag>
-            )}
           </div>
         }
       />
 
-      {mech === 'vision_gate' ? (
-        <p className="text-dense-meta text-muted-foreground m-0">
-          Vision gates use dedicated run + sign-off panels below. Overview counts sync from gate API.
-        </p>
-      ) : (
-        <OpsSection
-          title="Phase sign-off"
-          description="Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands."
-        >
-          <DenseDataTable>
-            <DenseTableHeader>
-              <DenseTableHeadRow>
-                <DenseTableHead className="w-8" />
-                <DenseTableHead>Phase</DenseTableHead>
-                <DenseTableHead>Status</DenseTableHead>
-                <DenseTableHead>Signed at</DenseTableHead>
-                <DenseTableHead />
-              </DenseTableHeadRow>
-            </DenseTableHeader>
-            <DenseTableBody>
-              {detail.phases.map(phase => (
-                <PhaseDetailRow
-                  key={phase.id}
-                  phase={phase}
-                  canAdmin={canAdmin}
-                  onSignOff={setConfirmPhaseId}
-                />
-              ))}
-            </DenseTableBody>
-          </DenseDataTable>
-        </OpsSection>
-      )}
+      <OpsSection
+        title="Phase sign-off"
+        description={
+          isVisionProgram
+            ? 'Counts sync from unified programs API. Run and sign each gate in the Vision panels below.'
+            : 'Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands.'
+        }
+      >
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead className="w-8" />
+              <DenseTableHead>Phase</DenseTableHead>
+              <DenseTableHead>Status</DenseTableHead>
+              <DenseTableHead>Signed at</DenseTableHead>
+              <DenseTableHead />
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {detail.phases.map(phase => (
+              <PhaseDetailRow
+                key={phase.id}
+                phase={phase}
+                canAdmin={canAdmin}
+                allowSignOff={!isVisionProgram}
+                onSignOff={setConfirmPhaseId}
+              />
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </OpsSection>
 
       <OpsSection title="Agent sessions">
         <ProgramAgentSessionsPanel programId={programId} />

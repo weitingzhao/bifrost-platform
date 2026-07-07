@@ -5,7 +5,7 @@ status: active
 
 delivery:
   board_visible: false
-  sign_off_mechanism: dev_agent
+  sign_off_mechanism: api
 
 workspace: /Users/vision-mac-trader/Desktop/stocks
 skill_path: .cursor/skills/ib-migration/SKILL.md

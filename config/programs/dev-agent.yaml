@@ -5,7 +5,7 @@ status: active
 delivery:
   board_visible: true
   former_location: Engineer → Dev Agent
-  sign_off_mechanism: dev_agent
+  sign_off_mechanism: api
 workspace: /Users/vision-mac-trader/Desktop/stocks
 skill_path: .cursor/skills/batch-execution/SKILL.md
 model: composer-2.5

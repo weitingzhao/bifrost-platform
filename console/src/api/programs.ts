@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query'
 import type {
   LaunchProgramRequest,
   LaunchProgramResponse,
@@ -28,6 +29,11 @@ async function programsFetch(path: string, init: RequestInit = {}): Promise<Resp
 }
 
 export const PROGRAMS_BOARD_QUERY_KEY = ['programs', 'board'] as const
+
+export function invalidateProgramDeliveryQueries(qc: QueryClient, programId: string) {
+  void qc.invalidateQueries({ queryKey: PROGRAMS_BOARD_QUERY_KEY })
+  void qc.invalidateQueries({ queryKey: ['programs', programId] })
+}
 
 export async function fetchDeliveryBoardPrograms(): Promise<ProgramsListResponse> {
   const r = await fetch('/api/v1/programs?board=1')

@@ -228,6 +228,18 @@ decisions:
       conclusion: "Post TIBM-PC rollout may deploy observe + data-path surfaces only (W1–W3). Live order placement, daemon auto-trade scale-up, and S08 execution wiring remain BLOCKED. Rocket (Ops Platform) and satellite (Trade) must stabilize; research/analysis precede trading. Owner unlock requires explicit written command to Agent AND D10 status → UNLOCKED in spine. Authority: tradeIbClientMigrationRolloutCatalog.ts · agentProtocolCatalog.ts · trade-execution-freeze.mdc."
       signed_at: "2026-07-04"
       authority: "console/src/lib/architecture/tradeIbClientMigrationRolloutCatalog.ts"
+    - id: D11
+      status: SIGNED
+      topic: Operate Queue — post-completion handoff contract (Wave 3 P0)
+      conclusion: "Approved post-completion items inject into a dedicated Projection-layer Operate Queue API (GET/POST /api/v1/operate/queue), persisted under data/operate/queue.json — not spine tracks.operate. Flow: submit_post_completion → pending_review → Owner approve → queue item status open → Control Room + Briefing operate track consume read-only. Items carry program_id, optional operate lane (governance/troubleshoot/release/business-advisory), title, description. Spine tracks.operate remains strategic flywheel classification only."
+      signed_at: "2026-07-07"
+      authority: "console/src/lib/architecture/agentProtocolCatalog.ts · config/programs/_schema.yaml"
+    - id: D12
+      status: SIGNED
+      topic: Delivery Board sign-off — single write path api (Wave 3 P0)
+      conclusion: "All program phase sign-offs converge on POST /api/v1/programs/{id}/phases/{pid}/signoff → data/programs/{id}.json phase_sign_offs. Deprecate sign_off_mechanism enums dev_agent and vision_gate; schema default and only mechanism is api. Dev Agent Mark as Verified and Vision gate Owner sign-off become adapters that call the same programs signoff API. Vision gate run/check artifacts remain on /api/v1/vision/*/gate; Delivery Board reads unified programs state only."
+      signed_at: "2026-07-07"
+      authority: "console/src/lib/architecture/agentProtocolCatalog.ts · api/internal/devagent/programs_delivery.go"
 platform_phases:
     - id: A
       label: Gate

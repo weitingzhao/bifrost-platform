@@ -17,7 +17,7 @@ status: enum            # active | completed | archived
 delivery:
   board_visible: bool   # true → listed on Mission Control → Delivery Board
   former_location: string
-  sign_off_mechanism: enum   # api | vision_gate | dev_agent
+  sign_off_mechanism: enum   # api only (D12 — dev_agent/vision_gate removed Wave 3)
 
 # --- Execution context (optional for delivery-only programs) ---
 

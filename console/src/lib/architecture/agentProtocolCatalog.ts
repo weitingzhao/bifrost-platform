@@ -5,7 +5,7 @@
  * Single source of truth — do not duplicate elsewhere.
  */
 
-export const AGENT_PROTOCOL_VERSION = '2026-07-04'
+export const AGENT_PROTOCOL_VERSION = '2026-07-07'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 export type AgentModeRow = {
@@ -99,6 +99,41 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   {
     action: 'UniFi Integration API Key write path on UCG 10.4.57 (site UUID blocked — use Session v2 per spine D9)',
     scope: 'Ops mode',
+  },
+]
+
+/** Wave 3 P0 — Owner-locked before implementation (spine D11, D12). */
+export type Wave3P0Decision = {
+  id: 'D11' | 'D12'
+  topic: string
+  rule: string
+  wave3Deliverables: string[]
+}
+
+export const WAVE3_P0_DECISIONS: Wave3P0Decision[] = [
+  {
+    id: 'D11',
+    topic: 'Operate Queue API',
+    rule:
+      'Post-completion approve injects into GET/POST /api/v1/operate/queue (data/operate/queue.json). Not spine tracks.operate.',
+    wave3Deliverables: [
+      'Operate queue store + GET list + POST enqueue on approve',
+      'Control Room strip: open operate queue items',
+      'Briefing operate track reads queue API',
+      'MCP get_operate_queue (read)',
+    ],
+  },
+  {
+    id: 'D12',
+    topic: 'Sign-off single path api',
+    rule:
+      'Only POST /api/v1/programs/{id}/phases/{pid}/signoff writes phase_sign_offs. Remove dev_agent/vision_gate mechanisms.',
+    wave3Deliverables: [
+      'Dev Agent approve → programs signoff API',
+      'Vision gate Owner sign → programs signoff API (gate JSON = run artifact only)',
+      'YAML: all programs sign_off_mechanism: api',
+      'Remove vision_gate branch from programs_delivery.go reads; unify Delivery Board',
+    ],
   },
 ]
 
@@ -542,6 +577,12 @@ export function buildAgentProtocolLlmPack(): string {
     '',
     '## Forbidden actions (all modes)',
     ...FORBIDDEN_ACTIONS.map(f => `- ${f.action} [${f.scope}]`),
+    '',
+    '## Wave 3 P0 decisions (locked — spine D11/D12)',
+    ...WAVE3_P0_DECISIONS.flatMap(d => [
+      `- **${d.id}** ${d.topic}: ${d.rule}`,
+      ...d.wave3Deliverables.map(x => `  - ${x}`),
+    ]),
     '',
     '## Network diagnostic playbooks (firewall / zone — Network Governance Phase 4)',
     `- Audit: \`${NETWORK_DIAGNOSTIC_MCP.auditScript}\``,

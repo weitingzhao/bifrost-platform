@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -92,93 +91,23 @@ type SessionStopRequest struct {
 
 func (h *Handler) countSignedPhases(rt *programRuntime) int {
 	n := 0
-	mech := ""
-	if rt.blueprint.Delivery != nil {
-		mech = rt.blueprint.Delivery.SignOffMechanism
-	}
 	for _, bp := range rt.blueprint.Phases {
-		if h.isPhaseSigned(rt, bp.ID, mech) {
+		if h.phaseSignoffRecordLocked(rt, bp.ID) != nil {
 			n++
 		}
 	}
 	return n
 }
 
-func (h *Handler) isPhaseSigned(rt *programRuntime, phaseID, mechanism string) bool {
-	if mechanism == "vision_gate" {
-		at := h.visionGateSignedAt(phaseID)
-		return at != ""
-	}
-	if rt.state == nil {
-		return false
-	}
-	for _, s := range rt.state.PhaseSignOffs {
-		if s.PhaseID == phaseID && s.SignedOffAt != "" {
-			return true
-		}
-	}
-	return false
+func (h *Handler) isPhaseSigned(rt *programRuntime, phaseID string) bool {
+	return h.phaseSignoffRecordLocked(rt, phaseID) != nil
 }
 
-func (h *Handler) phaseSignoffRecord(rt *programRuntime, phaseID, mechanism string) *PhaseSignOffRecord {
-	if mechanism == "vision_gate" {
-		at := h.visionGateSignedAt(phaseID)
-		if at == "" {
-			return nil
-		}
-		return &PhaseSignOffRecord{PhaseID: phaseID, SignedOffAt: at}
-	}
-	if rt.state == nil {
-		return nil
-	}
-	for i := range rt.state.PhaseSignOffs {
-		if rt.state.PhaseSignOffs[i].PhaseID == phaseID {
-			return &rt.state.PhaseSignOffs[i]
-		}
-	}
-	return nil
-}
-
-type visionSignoffFile struct {
-	SignedAt string `json:"signed_at"`
-	SignedBy string `json:"signed_by"`
-}
-
-func (h *Handler) visionGateSignedAt(phaseID string) string {
-	fileByPhase := map[string]string{
-		"V1":  "vision_v1_gate.json",
-		"S3":  "vision_s3_gate.json",
-		"V2":  "vision_v2_gate.json",
-		"V3":  "vision_v3_gate.json",
-		"V4":  "vision_v4_gate.json",
-		"V5":  "vision_v5_gate.json",
-	}
-	fname, ok := fileByPhase[phaseID]
-	if !ok {
-		return ""
-	}
-	path := filepath.Join(h.configDir, fname)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	var wrapper struct {
-		Signoff *visionSignoffFile `json:"signoff"`
-	}
-	if err := json.Unmarshal(data, &wrapper); err != nil {
-		return ""
-	}
-	if wrapper.Signoff == nil {
-		return ""
-	}
-	return wrapper.Signoff.SignedAt
+func (h *Handler) phaseSignoffRecord(rt *programRuntime, phaseID string) *PhaseSignOffRecord {
+	return h.phaseSignoffRecordLocked(rt, phaseID)
 }
 
 func (h *Handler) programDetailBoardResponse(programID string, rt *programRuntime) ProgramDetailBoardResponse {
-	mech := ""
-	if rt.blueprint.Delivery != nil {
-		mech = rt.blueprint.Delivery.SignOffMechanism
-	}
 	phases := make([]PhaseDetailBoard, len(rt.blueprint.Phases))
 	statusByID := make(map[string]PhaseStatus, len(rt.phases))
 	for _, p := range rt.phases {
@@ -196,7 +125,7 @@ func (h *Handler) programDetailBoardResponse(programID string, rt *programRuntim
 		if runtimeSt, ok := statusByID[bp.ID]; ok {
 			st = string(runtimeSt)
 		}
-		rec := h.phaseSignoffRecord(rt, bp.ID, mech)
+		rec := h.phaseSignoffRecord(rt, bp.ID)
 		detail := PhaseDetailBoard{
 			ID:             bp.ID,
 			Title:          bp.Title,
@@ -270,58 +199,34 @@ func (h *Handler) HandlePhaseSignoff(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
 		return
 	}
-	mech := "api"
-	if rt.blueprint.Delivery != nil && rt.blueprint.Delivery.SignOffMechanism != "" {
-		mech = rt.blueprint.Delivery.SignOffMechanism
-	}
-	if mech == "vision_gate" {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "vision_gate sign-off uses vision API endpoints"})
-		return
-	}
 	if !phaseExists(rt.blueprint, phaseID) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "phase not found"})
+		return
+	}
+	if programID == "vision" {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "vision program phases sign off via vision gate API (run gate first)",
+		})
 		return
 	}
 	if rt.state == nil {
 		rt.state = &ProgramStateRecord{ProgramID: programID, History: []Job{}}
 	}
-	signedAt := strings.TrimSpace(req.SignedOffAt)
-	if signedAt != "" {
-		if _, err := time.Parse(time.RFC3339, signedAt); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "signed_off_at must be RFC3339"})
-			return
-		}
-	} else {
-		signedAt = time.Now().UTC().Format(time.RFC3339)
-	}
 	by := strings.TrimSpace(req.SignedOffBy)
 	if by == "" {
 		by = "owner"
 	}
-	updated := false
-	for i := range rt.state.PhaseSignOffs {
-		if rt.state.PhaseSignOffs[i].PhaseID == phaseID {
-			if rt.state.PhaseSignOffs[i].SignedOffAt != "" {
-				writeJSON(w, http.StatusConflict, map[string]string{"error": "phase already signed off"})
-				return
-			}
-			rt.state.PhaseSignOffs[i].SignedOffAt = signedAt
-			rt.state.PhaseSignOffs[i].SignedOffBy = by
-			rt.state.PhaseSignOffs[i].Notes = req.Notes
-			updated = true
-			break
+	if err := h.applyPhaseSignoffLocked(rt, phaseID, by, req.SignedOffAt, req.Notes); err != nil {
+		if strings.Contains(err.Error(), "already signed off") {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
 		}
-	}
-	if !updated {
-		rt.state.PhaseSignOffs = append(rt.state.PhaseSignOffs, PhaseSignOffRecord{
-			PhaseID: phaseID, SignedOffAt: signedAt, SignedOffBy: by, Notes: req.Notes,
-		})
-	}
-	for i := range rt.phases {
-		if rt.phases[i].ID == phaseID {
-			rt.phases[i].Status = PhaseDone
-			rt.phases[i].CompletedAt = signedAt
+		if strings.Contains(err.Error(), "RFC3339") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
 		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
 	if err := h.persistRuntimeLocked(programID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

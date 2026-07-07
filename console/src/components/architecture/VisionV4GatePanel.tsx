@@ -13,6 +13,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { fetchVisionV4Gate, runVisionV4Gate, signVisionV4 } from '@/api/platform'
+import { invalidateProgramDeliveryQueries } from '@/api/programs'
 import type { VisionV1GateResponse } from '@/api/types'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
@@ -47,6 +48,7 @@ export function VisionV4GatePanel() {
       void qc.invalidateQueries({ queryKey: ['vision', 'v4', 'gate'] })
       void qc.invalidateQueries({ queryKey: ['context'] })
       void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
+      invalidateProgramDeliveryQueries(qc, 'vision')
     },
     onError: (err: Error) => setSignError(err.message),
   })
