@@ -72,6 +72,49 @@ func TestStoreIdempotentPendingID(t *testing.T) {
 	}
 }
 
+func TestStoreClose(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+
+	store := NewStore(configDir)
+	item, err := store.Add(Item{
+		ID: "q-close", ProgramID: "p1", Title: "Resolve me", Status: StatusOpen,
+		CreatedAt: "2026-07-07T00:00:00Z", Source: SourceManual,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	closed, err := store.Close(item.ID)
+	if err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if closed.Status != StatusClosed || closed.ClosedAt == "" {
+		t.Fatalf("expected closed item, got %+v", closed)
+	}
+
+	list, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Open) != 0 {
+		t.Fatalf("expected 0 open, got %d", len(list.Open))
+	}
+	if len(list.RecentClosed) != 1 {
+		t.Fatalf("expected 1 recent_closed, got %d", len(list.RecentClosed))
+	}
+
+	again, err := store.Close(item.ID)
+	if err != nil {
+		t.Fatalf("idempotent close: %v", err)
+	}
+	if again.Status != StatusClosed {
+		t.Fatalf("idempotent close status = %q", again.Status)
+	}
+}
+
 func TestNewItemFromManualValidation(t *testing.T) {
 	if _, err := NewItemFromManual(EnqueueRequest{}); err == nil {
 		t.Fatal("expected validation error")

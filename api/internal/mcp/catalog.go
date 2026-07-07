@@ -79,6 +79,7 @@ func Catalog() []ToolView {
 		tool("submit_post_completion", "Submit program completion + pending_review operate items", "routine", "POST", "/api/v1/programs/{id}/complete", "operator", "Agent", true),
 		tool("approve_post_completion_item", "Owner approve pending_review operate queue item", "confirm", "POST", "/api/v1/programs/post-completion/{itemId}/approve", "admin", "Agent", true),
 		tool("get_operate_queue", "Open operate queue items from Projection layer (D11)", "read", "GET", "/api/v1/operate/queue", "viewer", "Agent", true),
+		tool("close_operate_queue_item", "Mark operate queue item resolved (operator)", "routine", "POST", "/api/v1/operate/queue/{id}/close", "operator", "Agent", true),
 	}
 }
 

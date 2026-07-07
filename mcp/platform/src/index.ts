@@ -459,6 +459,16 @@ server.tool(
   async () => jsonResult(await platformGet('/api/v1/operate/queue')),
 )
 
+server.tool(
+  'close_operate_queue_item',
+  'Mark operate queue item resolved (operator)',
+  { item_id: z.string() },
+  async ({ item_id }) =>
+    jsonResult(
+      await platformPost(`/api/v1/operate/queue/${encodeURIComponent(item_id)}/close`, {}),
+    ),
+)
+
 } // end platform tools (non-prometheus focus)
 
 async function main() {

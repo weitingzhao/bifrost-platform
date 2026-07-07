@@ -248,8 +248,9 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/operate/queue", s.operatequeue.HandleGetQueue)
 		r.Group(func(r chi.Router) {
-			r.Use(s.auth.Require(actuation.RoleAdmin))
+			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/operate/queue", s.operatequeue.HandleEnqueue)
+			r.Post("/operate/queue/{id}/close", s.operatequeue.HandleClose)
 		})
 		r.Route("/programs", func(r chi.Router) {
 			r.Get("/", s.devagent.HandlePrograms)
