@@ -5,7 +5,7 @@
  * Prerequisite: TIBM0–4 + TIBM-PC signed; IBGP complete; spine decision D10 (trading frozen).
  *
  * Live state (not this catalog):
- * - Rollout sign-off: Subcontractors → Delivery Board · trade-ib-migration
+ * - Rollout sign-off: Mission Control → Delivery Board · trade-ib-migration
  * - Trade IB health: Rocket → Cluster + Monitor matrix probes
  * - Migrate lane: Engineer → Briefing · spine stream trade-ib-client-migration
  *

@@ -55,13 +55,13 @@ export const ALL_MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] = [
   {
     seq: 4,
     phase: 'K3s STG v2 deliver (bifrost-deliver-stg)',
-    authority: 'Ops Console → Rocket → Trade Release (deliveryMainlineCatalog.ts)',
+    authority: 'Ops Console → Satellite → Trade Deploy (deliveryMainlineCatalog.ts)',
     spineMilestoneId: STG_DELIVER_MILESTONE_ID,
   },
   {
     seq: 5,
     phase: 'K3s Prod overlay + deliver-prod',
-    authority: 'Ops Console → Rocket → Trade Release · k8s/overlays/prod',
+    authority: 'Ops Console → Satellite → Trade Deploy · k8s/overlays/prod',
     spineMilestoneId: PROD_CUTOVER_MILESTONE_ID,
   },
   {

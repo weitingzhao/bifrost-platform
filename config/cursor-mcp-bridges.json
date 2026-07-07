@@ -38,6 +38,16 @@
         "PLATFORM_OPERATOR_TOKEN": "<viewer-or-operator-token>",
         "MCP_BRIDGE_FOCUS": "postgres"
       }
+    },
+    "bifrost-prometheus-bridge": {
+      "comment": "PromQL / alerts / targets via platform-api /telemetry/* (read-only L0)",
+      "command": "npx",
+      "args": ["tsx", "mcp/platform/src/index.ts"],
+      "env": {
+        "PLATFORM_API_URL": "http://127.0.0.1:8780",
+        "PLATFORM_OPERATOR_TOKEN": "<viewer-or-operator-token>",
+        "MCP_BRIDGE_FOCUS": "prometheus"
+      }
     }
   }
 }

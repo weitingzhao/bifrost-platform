@@ -70,7 +70,7 @@ export const IB_GATEWAY_PLUGIN_PHASE0_DELIVERY_ITEMS: IbGatewayPluginPhase0Deliv
     summary:
       'Delivery Board · ib-gateway-plugin — program strip, catalog tables, Phase 0 sign-off panel.',
     verifySteps: [
-      'Navigate Subcontractors → Delivery Board → IB Gateway Plugin.',
+      'Navigate Mission Control → Delivery Board → IB Gateway Plugin.',
       'Mark all IBGP0 items verified → Sign off Phase 0 delivery (Admin token).',
       'Signed state persists in localStorage; program strip shows IBGP0 ✓.',
     ],

@@ -45,7 +45,7 @@ clusters:
     #   grafana: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local
     #   prometheus: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
     observability_urls:
-      grafana: ""
+      grafana: "http://192.168.10.73:30883"
       prometheus: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
       docs_infra: ""
     gitops:

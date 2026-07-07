@@ -18,7 +18,7 @@ export const GOVERNANCE_PHASE2_DELIVERY_ITEMS: GovernancePhase2DeliveryItem[] = 
     summary:
       'STG release workflow prod-cutover phase status is derived from spine milestone 2c-b-prod-cutover — not hardcoded active.',
     verifySteps: [
-      'Rocket → Trade Release → Blueprint tab → STG release workflow phases.',
+      'Satellite → Trade Deploy → Blueprint tab → STG release workflow phases.',
       'Prod cutover row shows status done when spine milestone 2c-b-prod-cutover is SIGNED.',
       'Spine chip on row shows milestone id + live status (e.g. 2c-b-prod-cutover · SIGNED).',
     ],

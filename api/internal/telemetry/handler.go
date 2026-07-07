@@ -47,6 +47,35 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) HandlePromQL(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	resp, err := h.svc.PromQL(r.Context(), q)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleAlerts(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.svc.Alerts(r.Context())
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleTargets(w http.ResponseWriter, r *http.Request) {
+	state := r.URL.Query().Get("state")
+	resp, err := h.svc.Targets(r.Context(), state)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (h *Handler) writeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrPrometheusNotConfigured):
@@ -55,6 +84,10 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 			"hint":  "Set observability_urls.prometheus in clusters.yaml or PLATFORM_PROMETHEUS_URL",
 		})
 	case errors.Is(err, ErrUnknownQuery):
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+	case errors.Is(err, ErrMissingPromQL):
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": err.Error(),
 		})

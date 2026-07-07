@@ -80,6 +80,134 @@ func (c *Client) QueryInstant(ctx context.Context, promQL string) ([]SamplePoint
 	return vectorToPoints(parsed.Data.Result), nil
 }
 
+type promAlertsResponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		Alerts []struct {
+			Labels      map[string]string `json:"labels"`
+			Annotations map[string]string `json:"annotations"`
+			State       string            `json:"state"`
+			ActiveAt    string            `json:"activeAt"`
+			Value       string            `json:"value"`
+		} `json:"alerts"`
+	} `json:"data"`
+	Error     string `json:"error"`
+	ErrorType string `json:"errorType"`
+}
+
+type promTargetsResponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		ActiveTargets  []promTargetEntry `json:"activeTargets"`
+		DroppedTargets []promTargetEntry `json:"droppedTargets"`
+	} `json:"data"`
+	Error     string `json:"error"`
+	ErrorType string `json:"errorType"`
+}
+
+type promTargetEntry struct {
+	Labels             map[string]string `json:"labels"`
+	DiscoveredLabels   map[string]string `json:"discoveredLabels"`
+	ScrapePool         string            `json:"scrapePool"`
+	ScrapeURL          string            `json:"scrapeUrl"`
+	Health             string            `json:"health"`
+	LastError          string            `json:"lastError"`
+	LastScrape         string            `json:"lastScrape"`
+	LastScrapeDuration float64           `json:"lastScrapeDuration"`
+}
+
+func (c *Client) getJSON(ctx context.Context, path string, dest any) error {
+	if c.baseURL == "" {
+		return fmt.Errorf("prometheus url not configured")
+	}
+	endpoint := c.baseURL + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("prometheus HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+	}
+	if err := json.Unmarshal(body, dest); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) QueryAlerts(ctx context.Context) ([]AlertEntry, error) {
+	var parsed promAlertsResponse
+	if err := c.getJSON(ctx, "/api/v1/alerts", &parsed); err != nil {
+		return nil, err
+	}
+	if parsed.Status != "success" {
+		if parsed.Error != "" {
+			return nil, fmt.Errorf("%s: %s", parsed.ErrorType, parsed.Error)
+		}
+		return nil, fmt.Errorf("prometheus alerts query failed")
+	}
+	out := make([]AlertEntry, 0, len(parsed.Data.Alerts))
+	for _, a := range parsed.Data.Alerts {
+		out = append(out, AlertEntry{
+			Labels:      a.Labels,
+			Annotations: a.Annotations,
+			State:       a.State,
+			ActiveAt:    a.ActiveAt,
+			Value:       a.Value,
+		})
+	}
+	return out, nil
+}
+
+func (c *Client) QueryTargets(ctx context.Context, state string) (TargetsResponse, error) {
+	path := "/api/v1/targets"
+	if state != "" && state != "any" {
+		path += "?" + url.Values{"state": {state}}.Encode()
+	}
+	var parsed promTargetsResponse
+	if err := c.getJSON(ctx, path, &parsed); err != nil {
+		return TargetsResponse{}, err
+	}
+	if parsed.Status != "success" {
+		if parsed.Error != "" {
+			return TargetsResponse{}, fmt.Errorf("%s: %s", parsed.ErrorType, parsed.Error)
+		}
+		return TargetsResponse{}, fmt.Errorf("prometheus targets query failed")
+	}
+	return TargetsResponse{
+		ActiveTargets:  mapTargetEntries(parsed.Data.ActiveTargets),
+		DroppedTargets: mapTargetEntries(parsed.Data.DroppedTargets),
+	}, nil
+}
+
+func mapTargetEntries(in []promTargetEntry) []TargetEntry {
+	out := make([]TargetEntry, 0, len(in))
+	for _, t := range in {
+		labels := t.Labels
+		if len(labels) == 0 {
+			labels = t.DiscoveredLabels
+		}
+		out = append(out, TargetEntry{
+			Labels:             labels,
+			ScrapePool:         t.ScrapePool,
+			ScrapeURL:          t.ScrapeURL,
+			Health:             t.Health,
+			LastError:          t.LastError,
+			LastScrape:         t.LastScrape,
+			LastScrapeDuration: t.LastScrapeDuration,
+		})
+	}
+	return out
+}
+
 func vectorToPoints(entries []promVectorEntry) []SamplePoint {
 	out := make([]SamplePoint, 0, len(entries))
 	for _, entry := range entries {

@@ -172,9 +172,9 @@ export const OBSERVABILITY_LAYERS: LayerDescription[] = [
   },
   {
     layer: 'B — Probe',
-    scope: 'Prometheus, Grafana, Alertmanager presence (Loki Phase 5)',
+    scope: 'Prometheus, Grafana, Alertmanager, Loki presence',
     dataSource: 'monitoring namespace workloads (substring match)',
-    notes: 'Probe + ensure API (Phase 3B) · Rocket → Observability · Satellite → Bus Status summary',
+    notes: 'Probe + ensure API (Phase 3B) · Loki + Promtail @ monitoring · Rocket → Cluster · Satellite → Bus Status summary',
   },
   {
     layer: 'Console surfaces',
@@ -186,7 +186,7 @@ export const OBSERVABILITY_LAYERS: LayerDescription[] = [
     layer: 'C — Telemetry',
     scope: 'Trade API + datastore runtime metrics via PromQL',
     dataSource: 'GET /api/v1/telemetry/overview + /api/v1/telemetry/query',
-    notes: 'Satellite → Telemetry · proxy to in-cluster Prometheus · MCP mcp-server-prometheus planned',
+    notes: 'Satellite → Telemetry · proxy to in-cluster Prometheus · MCP mcp-server-prometheus available',
   },
 ]
 

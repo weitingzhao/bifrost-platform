@@ -80,7 +80,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     ],
     release: [
       'Ops Console → Governance → Blueprint — North Star',
-      'Ops Console → Rocket → Trade Release (deployMainlineCatalog.ts)',
+      'Ops Console → Satellite → Trade Deploy (deployMainlineCatalog.ts)',
       'bifrost-trade-infra/docs/PHASE2C_SIGNOFF_MASTER.md',
       'decision D1 in ops-context spine',
     ],
@@ -107,7 +107,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
     ],
     automate: [
       'config/ops-context.yaml — tracks.automate (streams + milestone autonomous-agent-v1)',
-      'Ops Console → Rocket → Trade Release (deliveryMainlineCatalog.ts) — existing CI/CD pipeline reference',
+      'Ops Console → Satellite → Trade Deploy (deliveryMainlineCatalog.ts) — existing CI/CD pipeline reference',
       'config/clusters.yaml — gitops + stack addons (Gitea, Tekton, Argo CD)',
       'k8s/cicd/ in bifrost-trade-infra — Tekton pipelines, Gitea mirror-sync, Argo Applications',
       'Ops Console → Governance → Agent Protocol (agentProtocolCatalog.ts)',

@@ -12,10 +12,10 @@ export type UnifiMcpServerPhaseMeta = {
 }
 
 export const UNIFI_MCP_SERVER_PROGRAM_PHASES: UnifiMcpServerPhaseMeta[] = [
-  { id: 'UMS1', shortLabel: 'REST client', signoffLocation: 'Subcontractors → Delivery Board · Network Governance · networkApiContractCatalog.ts' },
-  { id: 'UMS2', shortLabel: 'MCP read', signoffLocation: 'Subcontractors → Delivery Board · Network Governance · networkApiContractCatalog.ts' },
+  { id: 'UMS1', shortLabel: 'REST client', signoffLocation: 'Mission Control → Delivery Board · Network Governance · networkApiContractCatalog.ts' },
+  { id: 'UMS2', shortLabel: 'MCP read', signoffLocation: 'Mission Control → Delivery Board · Network Governance · networkApiContractCatalog.ts' },
   { id: 'UMS3', shortLabel: 'Live probe', signoffLocation: 'Ground Systems → Network · Mission Control → Control Room summary' },
-  { id: 'UMS4', shortLabel: 'MCP write', signoffLocation: 'Subcontractors → Delivery Board · Network Governance · networkApiContractCatalog.ts' },
+  { id: 'UMS4', shortLabel: 'MCP write', signoffLocation: 'Mission Control → Delivery Board · Network Governance · networkApiContractCatalog.ts' },
 ]
 
 const SIGNED_OFF: Record<UnifiMcpServerPhaseId, () => boolean> = {
