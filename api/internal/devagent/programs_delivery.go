@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
 )
 
 type ProgramDetailBoardResponse struct {
@@ -381,7 +383,7 @@ func (h *Handler) HandleApprovePostCompletionItem(w http.ResponseWriter, r *http
 	if by == "" {
 		by = "owner"
 	}
-	found := false
+	var approved *PostCompletionItem
 	for i := range pending {
 		if pending[i].ID == itemID {
 			if pending[i].Status != "pending_review" {
@@ -391,18 +393,61 @@ func (h *Handler) HandleApprovePostCompletionItem(w http.ResponseWriter, r *http
 			pending[i].Status = "approved"
 			pending[i].ApprovedAt = now
 			pending[i].ApprovedBy = by
-			found = true
+			item := pending[i]
+			approved = &item
 			if err := h.store.SavePendingPostCompletion(pending); err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 				return
 			}
-			writeJSON(w, http.StatusOK, pending[i])
-			return
+			break
 		}
 	}
-	if !found {
+	if approved == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "item not found"})
+		return
 	}
+
+	resp := map[string]any{
+		"id":           approved.ID,
+		"program_id":   approved.ProgramID,
+		"title":        approved.Title,
+		"description":  approved.Description,
+		"status":       approved.Status,
+		"created_at":   approved.CreatedAt,
+		"approved_at":  approved.ApprovedAt,
+		"approved_by":  approved.ApprovedBy,
+	}
+
+	if h.operateQueue != nil {
+		queueItem, err := h.operateQueue.InjectFromApproval(r, operatequeue.ApprovalInjectParams{
+			PendingID:   approved.ID,
+			ProgramID:   approved.ProgramID,
+			Title:       approved.Title,
+			Description: approved.Description,
+			Lane:        h.operateLaneForProgram(approved.ProgramID),
+			ApprovedBy:  by,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		resp["operate_queue_item"] = queueItem
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) operateLaneForProgram(programID string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	rt, ok := h.runtimes[programID]
+	if !ok || rt.blueprint == nil || rt.blueprint.Metadata == nil {
+		return ""
+	}
+	if lane, ok := rt.blueprint.Metadata["operate_lane"].(string); ok {
+		return strings.TrimSpace(lane)
+	}
+	return ""
 }
 
 func (h *Handler) HandleListPendingPostCompletion(w http.ResponseWriter, _ *http.Request) {

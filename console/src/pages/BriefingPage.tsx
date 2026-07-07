@@ -60,6 +60,7 @@ import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
 import { CATALOG_VERSION } from '@/lib/environments-catalog'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { useOperateQueue } from '@/hooks/useOperateQueue'
 
 interface BriefingPageProps {
   context: OpsContextResponse | undefined
@@ -123,6 +124,7 @@ export function BriefingPage({
   )
 
   const { canOperate } = usePlatformAuth()
+  const operateQueueQuery = useOperateQueue()
   const [localSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
   const sessionPackAnchorRef = useRef<HTMLDivElement>(null)
@@ -154,8 +156,14 @@ export function BriefingPage({
   const trackSummaries = useMemo(() => {
     const clusterFailingPods = clusterSummary?.failing_pods
     const clusterReach = clusterSummary?.reachability
-    return computeAllTracks(context, matrices, clusterFailingPods, clusterReach)
-  }, [context, matrices, clusterSummary])
+    return computeAllTracks(
+      context,
+      matrices,
+      clusterFailingPods,
+      clusterReach,
+      operateQueueQuery.data?.open,
+    )
+  }, [context, matrices, clusterSummary, operateQueueQuery.data?.open])
 
   useEffect(() => {
     if (!dataReady || initialLaneSynced) return
@@ -412,6 +420,8 @@ export function BriefingPage({
         auditRecords={auditRecords}
         auditLoading={auditLoading}
         onOpenAudit={onOpenAudit}
+        operateQueueOpen={operateQueueQuery.data?.open}
+        operateQueueLoading={operateQueueQuery.isLoading}
       />
 
       <section className="page-section panel-elevated px-4 py-3">
