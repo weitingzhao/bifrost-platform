@@ -293,10 +293,10 @@ func (h *Handler) HandleProgramComplete(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	rt, ok := h.runtimes[programID]
 	if !ok {
+		h.mu.Unlock()
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
 		return
 	}
