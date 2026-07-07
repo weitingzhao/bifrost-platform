@@ -19,7 +19,7 @@ export function agentDeskPrefillDisabledReason(intent: WorkIntent): string | und
 }
 
 export const BRIEFING_IDE_DELIVERY_HINT =
-  'Primary path: paste into a new Cursor IDE chat. Full workspace, rules, MCP, and the first-reply protocol (confirm → task list → Source Audit).'
+  'Primary: Launch IDE Agent (Cursor SDK via platform-api). Fallback: Copy session pack into a new Cursor chat. Full workspace, rules, MCP, and first-reply protocol.'
 
 export const BRIEFING_AGENT_DESK_DELIVERY_HINT =
   'Optional: prefill Agent Desk for the Mac Mini Ops runner (Cursor SDK). Suited to short cluster/debug/release tasks — not a substitute for IDE for multi-repo development.'

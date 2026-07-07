@@ -11,18 +11,13 @@ import {
 } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import { fetchMatrix, isAllMatrices } from '@/api/platform'
+import { fetchDeliveryBoardPrograms, PROGRAMS_BOARD_QUERY_KEY } from '@/api/programs'
+import { mapProgramSummaryToOverview } from '@/api/programsTypes'
 import { DeliveryBoardHistoricalArchive } from '@/components/delivery/DeliveryBoardHistoricalArchive'
 import { DeliveryBoardProgramPanels } from '@/components/delivery/DeliveryBoardProgramPanels'
+import { PostCompletionPendingPanel } from '@/components/delivery/PostCompletionPendingPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { useGovernanceSignoffRevision } from '@/lib/architecture/governanceSignoffEvents'
-import { useBriefingSignoffRevision } from '@/lib/briefing/briefingSignoffEvents'
-import { useControlRoomSignoffRevision } from '@/lib/control-room/controlRoomSignoffEvents'
-import { useMissionSignalSignoffRevision } from '@/lib/control-room/missionSignalSignoffEvents'
-import {
-  buildDeliveryBoardProgramOverview,
-  type DeliveryBoardProgramId,
-} from '@/lib/delivery/deliveryBoardPrograms'
+import type { DeliveryBoardProgramId } from '@/lib/delivery/deliveryBoardPrograms'
 
 function programStatusVariant(signed: number, complete: boolean): DenseTagVariant {
   if (complete) return 'success'
@@ -31,22 +26,18 @@ function programStatusVariant(signed: number, complete: boolean): DenseTagVarian
 }
 
 export function DeliveryBoardPage() {
-  const crRev = useControlRoomSignoffRevision()
-  const msRev = useMissionSignalSignoffRevision()
-  const govRev = useGovernanceSignoffRevision()
-  const briefingRev = useBriefingSignoffRevision()
-
   const [selectedProgramId, setSelectedProgramId] = useState<DeliveryBoardProgramId | null>(null)
 
-  const matrixQuery = useQuery({
-    queryKey: ['matrix', 'all'],
-    queryFn: () => fetchMatrix(),
-    enabled: selectedProgramId === 'mission-signal',
+  const programsQuery = useQuery({
+    queryKey: PROGRAMS_BOARD_QUERY_KEY,
+    queryFn: fetchDeliveryBoardPrograms,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   })
 
   const programs = useMemo(
-    () => buildDeliveryBoardProgramOverview(),
-    [crRev, msRev, govRev, briefingRev],
+    () => (programsQuery.data?.programs ?? []).map(mapProgramSummaryToOverview),
+    [programsQuery.data],
   )
 
   const selectedProgram = programs.find(p => p.id === selectedProgramId)
@@ -55,9 +46,18 @@ export function DeliveryBoardPage() {
     <div className="flex w-full min-w-0 flex-col gap-4">
       <OpsSection
         title="Program overview"
-        description="Console delivery programs — phased sign-off checklists moved out of functional pages. Select a program to expand its panels."
+        description="Delivery programs from platform-api GET /api/v1/programs?board=1 — sign-off persisted on server."
         overflow="visible"
       />
+
+      <PostCompletionPendingPanel />
+
+      {programsQuery.isLoading && (
+        <p className="text-dense-meta text-muted-foreground">Loading programs…</p>
+      )}
+      {programsQuery.isError && (
+        <p className="text-dense-meta text-destructive">Failed to load delivery programs from API.</p>
+      )}
 
       <DenseDataTable>
         <DenseTableHeader>
@@ -110,16 +110,7 @@ export function DeliveryBoardPage() {
           description={`${selectedProgram.signed}/${selectedProgram.phaseCount} phases signed · formerly ${selectedProgram.formerLocation}`}
           overflow="visible"
         >
-          <DeliveryBoardProgramPanels
-            programId={selectedProgramId}
-            matrices={
-              matrixQuery.data != null && isAllMatrices(matrixQuery.data)
-                ? matrixQuery.data.matrices
-                : matrixQuery.data != null && !isAllMatrices(matrixQuery.data)
-                  ? [matrixQuery.data]
-                  : []
-            }
-          />
+          <DeliveryBoardProgramPanels programId={selectedProgramId} />
         </OpsSection>
       )}
 

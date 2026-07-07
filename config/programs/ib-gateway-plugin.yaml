@@ -1,0 +1,48 @@
+id: ib-gateway-plugin
+title: IB Gateway Plugin
+description: redis-ib plugin phases, program closure, hardening.
+status: active
+delivery:
+  board_visible: true
+  former_location: Subcontractors → Plugin Gallery · Engineer → Briefing
+  sign_off_mechanism: api
+phases:
+  - id: IBGP0
+    title: "IBGP0"
+    status: pending
+    sign_off:
+      required: true
+  - id: IBGP1
+    title: "IBGP1"
+    status: pending
+    sign_off:
+      required: true
+  - id: IBGP2
+    title: "IBGP2"
+    status: pending
+    sign_off:
+      required: true
+  - id: IBGP3
+    title: "IBGP3"
+    status: pending
+    sign_off:
+      required: true
+  - id: IBGP4
+    title: "IBGP4"
+    status: pending
+    sign_off:
+      required: true
+  - id: PROGRAM
+    title: "PROGRAM"
+    status: pending
+    sign_off:
+      required: true
+  - id: HARDENING
+    title: "HARDENING"
+    status: pending
+    sign_off:
+      required: true
+metadata:
+  created_at: "2026-07-07"
+  owner: vision-mac-trader
+  tags: [delivery-board, plugin]

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { fetchClusterObservability, fetchRemediationJobs, fetchSessionSnapshotLatest } from '@/api/platform'
+import { launchProgramAgent } from '@/api/programs'
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, SegmentControl } from '@bifrost/ui'
 import { StatusLamp } from '@/components/StatusLamp'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
@@ -113,6 +114,8 @@ export function BriefingPage({
   const [showSessionPack, setShowSessionPack] = useState(false)
   const [showAlignmentPack, setShowAlignmentPack] = useState(false)
   const [sessionCopied, setSessionCopied] = useState(false)
+  const [launchingIde, setLaunchingIde] = useState(false)
+  const [launchStatus, setLaunchStatus] = useState<string | null>(null)
   const [automationCopied, setAutomationCopied] = useState(false)
   const [alignmentCopied, setAlignmentCopied] = useState(false)
   const [agentDialogueLanguage, setAgentDialogueLanguage] = useState<AgentDialogueLanguage>(
@@ -294,6 +297,40 @@ export function BriefingPage({
   const activeTrack = trackSummaries.find(t => t.id === selectedTrack) ?? trackSummaries[0]
   const activeLane = laneById(selectedLane)
   const clusterLine = summarizeCluster(clusterSummary)
+
+  async function handleLaunchIdeAgent() {
+    if (!canOperate) return
+    setLaunchingIde(true)
+    setLaunchStatus(null)
+    try {
+      await handleSaveSnapshot()
+      saveBriefingActiveSession({
+        track: selectedTrack,
+        lane: selectedLane,
+        intent,
+        packSize,
+        startedAt: new Date().toISOString(),
+      })
+      const resp = await launchProgramAgent({
+        session_pack: sessionPack,
+        track: selectedTrack,
+        lane: selectedLane,
+        intent,
+        program_id: 'briefing',
+      })
+      setLaunchStatus(
+        resp.agent_id
+          ? `Launched — agent ${resp.agent_id}`
+          : resp.status === 'launched'
+            ? 'Launch accepted'
+            : resp.message ?? resp.status,
+      )
+    } catch (err) {
+      setLaunchStatus(err instanceof Error ? err.message : 'Launch failed')
+    } finally {
+      setLaunchingIde(false)
+    }
+  }
 
   async function handleCopySession() {
     await copyText(sessionPack)
@@ -502,9 +539,18 @@ export function BriefingPage({
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
               <div className="min-w-0 flex-1">
-                <p className="briefing-section-kicker m-0">Cursor IDE · recommended</p>
+                <p className="briefing-section-kicker m-0">Cursor IDE · primary</p>
                 <div className="mt-1.5 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={() => void handleCopySession()}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!canOperate || launchingIde || packBlocked}
+                    onClick={() => void handleLaunchIdeAgent()}
+                    title={!canOperate ? 'Operator token required' : undefined}
+                  >
+                    {launchingIde ? 'Launching…' : 'Launch IDE Agent'}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void handleCopySession()}>
                     {sessionCopied ? 'Copied!' : 'Copy session pack'}
                   </Button>
                   <Button
@@ -519,6 +565,11 @@ export function BriefingPage({
                 <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
                   {BRIEFING_IDE_DELIVERY_HINT}
                 </p>
+                {launchStatus != null && (
+                  <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--foreground)]">
+                    {launchStatus}
+                  </p>
+                )}
               </div>
               <div className="min-w-0 flex-1 sm:max-w-md">
                 <p className="briefing-section-kicker m-0">Agent Desk · optional</p>

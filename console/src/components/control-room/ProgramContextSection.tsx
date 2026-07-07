@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@bifrost/ui'
-import { loadPhase0SignoffState } from '@/lib/control-room/controlRoomPhase0Delivery'
 
 const STORAGE_KEY = 'bifrost_control_room_program_context_open'
 
@@ -12,8 +11,7 @@ function loadDefaultOpen(): boolean {
   } catch {
     // ignore
   }
-  const signed = loadPhase0SignoffState().signedOffAt != null
-  return !signed
+  return true
 }
 
 interface ProgramContextSectionProps {

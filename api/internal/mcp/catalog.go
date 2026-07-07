@@ -74,6 +74,10 @@ func Catalog() []ToolView {
 		tool("get_delivery_revisions", "Available Gitea tags for deploy revision selection", "read", "GET", "/api/v1/delivery/revisions", "viewer", "P4", true),
 		tool("run_release_gate", "Run STG or Prod release gate", "confirm", "POST", "/api/v1/promote/release-gate", "admin", "P4", true),
 		tool("sign_tier_b", "Record Tier B Owner sign-off", "confirm", "POST", "/api/v1/promote/tier-b/signoff", "admin", "P4", false),
+		tool("get_program_context", "Program blueprint + phase sign-off state", "read", "GET", "/api/v1/programs/{id}", "viewer", "Agent", true),
+		tool("report_phase_progress", "Report agent phase progress to Delivery Board", "routine", "POST", "/api/v1/programs/{id}/phases/{pid}/progress", "operator", "Agent", true),
+		tool("submit_post_completion", "Submit program completion + pending_review operate items", "routine", "POST", "/api/v1/programs/{id}/complete", "operator", "Agent", true),
+		tool("approve_post_completion_item", "Owner approve pending_review operate queue item", "confirm", "POST", "/api/v1/programs/post-completion/{itemId}/approve", "admin", "Agent", true),
 	}
 }
 

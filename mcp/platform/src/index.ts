@@ -391,6 +391,67 @@ server.tool(
   },
 )
 
+server.tool(
+  'get_program_context',
+  'Program blueprint + phase sign-off state for Delivery Board program',
+  { program_id: z.string().describe('Program id e.g. trade-ib-migration') },
+  async ({ program_id }) =>
+    jsonResult(await platformGet(`/api/v1/programs/${encodeURIComponent(program_id)}`)),
+)
+
+server.tool(
+  'report_phase_progress',
+  'Report agent phase progress (operator)',
+  {
+    program_id: z.string(),
+    phase_id: z.string(),
+    status: z.string(),
+    summary: z.string().optional(),
+    verify_passed: z.boolean().optional(),
+  },
+  async ({ program_id, phase_id, status, summary, verify_passed }) =>
+    jsonResult(
+      await platformPost(
+        `/api/v1/programs/${encodeURIComponent(program_id)}/phases/${encodeURIComponent(phase_id)}/progress`,
+        { status, summary: summary ?? '', verify_passed: verify_passed ?? false },
+      ),
+    ),
+)
+
+server.tool(
+  'submit_post_completion',
+  'Submit program completion; operate items enter pending_review (operator)',
+  {
+    program_id: z.string(),
+    new_capabilities: z.array(z.string()).optional(),
+    new_risks: z.array(z.string()).optional(),
+    operate_queue_items: z
+      .array(z.object({ id: z.string().optional(), title: z.string(), description: z.string().optional() }))
+      .optional(),
+  },
+  async ({ program_id, new_capabilities, new_risks, operate_queue_items }) =>
+    jsonResult(
+      await platformPost(`/api/v1/programs/${encodeURIComponent(program_id)}/complete`, {
+        new_capabilities: new_capabilities ?? [],
+        new_risks: new_risks ?? [],
+        operate_queue_items: operate_queue_items ?? [],
+      }),
+    ),
+)
+
+server.tool(
+  'approve_post_completion_item',
+  'Owner approve pending_review operate queue item (admin)',
+  { item_id: z.string(), approved_by: z.string().optional() },
+  async ({ item_id, approved_by }) =>
+    jsonResult(
+      await platformPost(
+        `/api/v1/programs/post-completion/${encodeURIComponent(item_id)}/approve`,
+        { approved_by: approved_by ?? '' },
+      ),
+    ),
+)
+
 } // end platform tools (non-prometheus focus)
 
 async function main() {

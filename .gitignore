@@ -33,6 +33,7 @@ scripts/dev-agent/dist/
 
 # Dev Agent runtime state (phase status, jobs, history)
 data/dev-agent/
+data/programs/
 
 # OS / IDE
 .DS_Store
