@@ -41,8 +41,9 @@ type PhaseDetailBoard struct {
 }
 
 type PhaseSignoffRequest struct {
-	SignedOffBy string `json:"signed_off_by,omitempty"`
-	Notes       string `json:"notes,omitempty"`
+	SignedOffBy  string `json:"signed_off_by,omitempty"`
+	SignedOffAt  string `json:"signed_off_at,omitempty"`
+	Notes        string `json:"notes,omitempty"`
 }
 
 type PhaseProgressRequest struct {
@@ -284,7 +285,15 @@ func (h *Handler) HandlePhaseSignoff(w http.ResponseWriter, r *http.Request) {
 	if rt.state == nil {
 		rt.state = &ProgramStateRecord{ProgramID: programID, History: []Job{}}
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
+	signedAt := strings.TrimSpace(req.SignedOffAt)
+	if signedAt != "" {
+		if _, err := time.Parse(time.RFC3339, signedAt); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "signed_off_at must be RFC3339"})
+			return
+		}
+	} else {
+		signedAt = time.Now().UTC().Format(time.RFC3339)
+	}
 	by := strings.TrimSpace(req.SignedOffBy)
 	if by == "" {
 		by = "owner"
@@ -292,7 +301,11 @@ func (h *Handler) HandlePhaseSignoff(w http.ResponseWriter, r *http.Request) {
 	updated := false
 	for i := range rt.state.PhaseSignOffs {
 		if rt.state.PhaseSignOffs[i].PhaseID == phaseID {
-			rt.state.PhaseSignOffs[i].SignedOffAt = now
+			if rt.state.PhaseSignOffs[i].SignedOffAt != "" {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "phase already signed off"})
+				return
+			}
+			rt.state.PhaseSignOffs[i].SignedOffAt = signedAt
 			rt.state.PhaseSignOffs[i].SignedOffBy = by
 			rt.state.PhaseSignOffs[i].Notes = req.Notes
 			updated = true
@@ -301,13 +314,13 @@ func (h *Handler) HandlePhaseSignoff(w http.ResponseWriter, r *http.Request) {
 	}
 	if !updated {
 		rt.state.PhaseSignOffs = append(rt.state.PhaseSignOffs, PhaseSignOffRecord{
-			PhaseID: phaseID, SignedOffAt: now, SignedOffBy: by, Notes: req.Notes,
+			PhaseID: phaseID, SignedOffAt: signedAt, SignedOffBy: by, Notes: req.Notes,
 		})
 	}
 	for i := range rt.phases {
 		if rt.phases[i].ID == phaseID {
 			rt.phases[i].Status = PhaseDone
-			rt.phases[i].CompletedAt = now
+			rt.phases[i].CompletedAt = signedAt
 		}
 	}
 	if err := h.persistRuntimeLocked(programID); err != nil {

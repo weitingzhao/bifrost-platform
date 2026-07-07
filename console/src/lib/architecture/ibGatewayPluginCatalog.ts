@@ -31,7 +31,7 @@ export const IB_GATEWAY_PLUGIN_PHASES: IbGatewayPluginPhase[] = [
     title: 'Plugin skeleton + redis-ib',
     summary:
       'bifrost-platform-plugin repo, shared redis-ib @ data NS, ACL, NetworkPolicy, Trade ExternalName aliases.',
-    deliverable: 'k8s/redis-ib + k8s/external-names + Console sign-off panel',
+    deliverable: 'k8s/redis-ib + k8s/external-names + Delivery Board IBGP0 sign-off',
     status: 'done',
   },
   {
@@ -66,7 +66,7 @@ export const IB_GATEWAY_PLUGIN_PHASES: IbGatewayPluginPhase[] = [
     title: 'Live TWS cutover',
     summary:
       'Switch ib-gateway mock → live; real TWS @ Host (.30) + Secondary (.32); L1 mode control + live verification.',
-    deliverable: 'POST control/mode + verify-ib-gateway-live + Console Phase 4 sign-off',
+    deliverable: 'POST control/mode + verify-ib-gateway-live + Delivery Board IBGP4 sign-off',
     status: 'done',
   },
 ]

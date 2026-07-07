@@ -44,7 +44,7 @@ export async function fetchProgramDetail(programId: string): Promise<ProgramDeta
 export async function signoffProgramPhase(
   programId: string,
   phaseId: string,
-  body?: { signed_off_by?: string; notes?: string },
+  body?: { signed_off_by?: string; signed_off_at?: string; notes?: string },
 ): Promise<ProgramDetailResponse> {
   const r = await programsFetch(
     `/api/v1/programs/${encodeURIComponent(programId)}/phases/${encodeURIComponent(phaseId)}/signoff`,

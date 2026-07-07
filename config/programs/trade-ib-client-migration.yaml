@@ -30,7 +30,7 @@ phases:
     acceptance:
       - "Surface inventory S01–S14 cataloged in tradeIbClientMigrationCatalog.ts"
       - "IBGP prerequisite acknowledged"
-      - "Phase 0 panel visible and signable in Console"
+      - "Phase 0 visible and signable on Delivery Board · trade-ib-migration"
 
   - id: TIBM1
     title: "Gateway RPC parity"
@@ -46,14 +46,14 @@ phases:
       - All 9 ALL_OPS implemented in plugin ib-gateway
       - IbOperatorClient in bifrost-core compatible
       - Verify script passes
-      - Phase 1 panel + sign-off in Console
+      - Phase 1 Delivery Board sign-off · trade-ib-migration
 
       Output a structured Phase completion report at the end.
     verify_cmd: "make -C bifrost-platform-plugin verify-ib-gateway-rpc-parity"
     acceptance:
       - "9/9 RPC ops smoke test pass (verify-ib-gateway-rpc-parity)"
       - "IbOperatorClient works against both legacy socket and Platform Gateway"
-      - "Phase 1 panel signed in Console"
+      - "Phase 1 signed on Delivery Board · trade-ib-migration"
 
   - id: TIBM2
     title: "Trade read-path + health"
@@ -71,7 +71,7 @@ phases:
       - Monitor /status exposes socket.platform_ib_gateway
       - ExternalName + overlay config for redis-ib
       - Verify script passes
-      - Phase 2 panel + sign-off
+      - Phase 2 Delivery Board sign-off
 
       Output a structured Phase completion report at the end.
     verify_cmd: "make -C bifrost-platform-plugin verify-trade-ib-health"
@@ -79,7 +79,7 @@ phases:
       - "redis-ib health hashes tagged plugin=ib-gateway"
       - "Monitor /status includes platform_ib_gateway aggregate"
       - "Canonical tick read path verified (S01)"
-      - "Phase 2 panel signed"
+      - "Phase 2 signed on Delivery Board"
 
   - id: TIBM3
     title: "Workers RPC-only"
@@ -97,7 +97,7 @@ phases:
       - tasks.py uses RPC path by default
       - use_for_celery_bars=true in core 0.2.10+
       - Verify script passes
-      - Phase 3 panel + sign-off
+      - Phase 3 Delivery Board sign-off
 
       Output a structured Phase completion report at the end.
     verify_cmd: "make -C bifrost-platform-plugin verify-trade-celery-bars"
@@ -105,7 +105,7 @@ phases:
       - "fetch_bars_range RPC OK via verify script"
       - "Worker code has no MarketIbClient import (source)"
       - "use_for_celery_bars defaults true in bifrost-core 0.2.10+"
-      - "Phase 3 panel signed"
+      - "Phase 3 signed on Delivery Board"
 
   - id: TIBM4
     title: "UI + legacy cleanup"
@@ -124,7 +124,7 @@ phases:
       - Ops market_ingest_config labels: "Platform IB Gateway · ..."
       - platform_gateway_managed flag in market-ingest API
       - Verify script passes
-      - Phase 4 panel + sign-off
+      - Phase 4 Delivery Board sign-off
 
       Output a structured Phase completion report at the end.
     verify_cmd: "make -C bifrost-platform-plugin verify-trade-ib-ui"
@@ -132,7 +132,7 @@ phases:
       - "FE platformIbGateway.ts module present with tests"
       - "Ops labels show 'Platform IB Gateway' (source grep)"
       - "platform_gateway_managed in market-ingest response"
-      - "Phase 4 panel signed"
+      - "Phase 4 signed on Delivery Board"
     depends_on:
       - TIBM3
 

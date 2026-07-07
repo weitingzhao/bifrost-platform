@@ -14,6 +14,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   fetchProgramDetail,
   PROGRAMS_BOARD_QUERY_KEY,
@@ -172,31 +173,30 @@ export function ProgramDetailView({ programId }: { programId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="page-section panel-elevated px-4 py-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-            <span className="text-dense-label font-medium">{detail.program.title}</span>
-            <span className="text-dense-meta text-muted-foreground">{detail.program.description}</span>
+      <OpsSection
+        title={detail.program.title}
+        description={detail.program.description}
+        actions={
+          <div className="flex items-center gap-2">
+            <DenseTag variant={signedCount === totalPhases && totalPhases > 0 ? 'success' : 'warning'}>
+              {signedCount}/{totalPhases} signed
+            </DenseTag>
+            {mech != null && mech !== '' && (
+              <DenseTag variant="neutral">{mech}</DenseTag>
+            )}
           </div>
-          <DenseTag variant={signedCount === totalPhases && totalPhases > 0 ? 'success' : 'warning'}>
-            {signedCount}/{totalPhases} signed
-          </DenseTag>
-          {mech != null && mech !== '' && (
-            <DenseTag variant="neutral">{mech}</DenseTag>
-          )}
-        </div>
-      </section>
+        }
+      />
 
       {mech === 'vision_gate' ? (
         <p className="text-dense-meta text-muted-foreground m-0">
           Vision gates use dedicated run + sign-off panels below. Overview counts sync from gate API.
         </p>
       ) : (
-        <section className="page-section panel-elevated px-4 py-3">
-          <p className="text-dense-label font-medium m-0 mb-2">Phase sign-off</p>
-          <p className="text-dense-meta text-muted-foreground m-0 mb-3">
-            Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands.
-          </p>
+        <OpsSection
+          title="Phase sign-off"
+          description="Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands."
+        >
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
@@ -218,21 +218,19 @@ export function ProgramDetailView({ programId }: { programId: string }) {
               ))}
             </DenseTableBody>
           </DenseDataTable>
-        </section>
+        </OpsSection>
       )}
 
-      <section className="page-section panel-elevated px-4 py-3">
-        <p className="text-dense-label font-medium m-0 mb-2">Agent sessions</p>
+      <OpsSection title="Agent sessions">
         <ProgramAgentSessionsPanel programId={programId} />
-      </section>
+      </OpsSection>
 
       <PostCompletionPendingPanel programId={programId} />
 
       {detail.post_completion != null &&
         ((detail.post_completion.new_capabilities?.length ?? 0) > 0 ||
           (detail.post_completion.new_risks?.length ?? 0) > 0) && (
-          <section className="page-section panel-elevated px-4 py-3">
-            <p className="text-dense-label font-medium m-0 mb-2">Post-completion summary</p>
+          <OpsSection title="Post-completion summary" bodyPadding="compact">
             {(detail.post_completion.new_capabilities?.length ?? 0) > 0 && (
               <div className="mb-2">
                 <p className="text-dense-meta font-medium m-0 mb-1">New capabilities</p>
@@ -253,7 +251,7 @@ export function ProgramDetailView({ programId }: { programId: string }) {
                 </ul>
               </div>
             )}
-          </section>
+          </OpsSection>
         )}
 
       <ConfirmDialog

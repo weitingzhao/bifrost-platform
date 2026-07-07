@@ -1,11 +1,9 @@
 import { ProgramDetailView } from '@/components/delivery/ProgramDetailView'
 import { VisionProgramGatePanels } from '@/components/delivery/VisionProgramGatePanels'
-import type { DeliveryBoardProgramId } from '@/lib/delivery/deliveryBoardPrograms'
-
 export function DeliveryBoardProgramPanels({
   programId,
 }: {
-  programId: DeliveryBoardProgramId
+  programId: string
   signOffMechanism?: string
   matrices?: unknown[]
 }) {
