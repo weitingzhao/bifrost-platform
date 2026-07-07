@@ -10,7 +10,8 @@ import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStr
 import { MissionControlHeader } from '@/components/control-room/MissionControlHeader'
 import { MissionVerifyBanner } from '@/components/control-room/MissionVerifyBanner'
 import { ProgramContextSection } from '@/components/control-room/ProgramContextSection'
-import { ReleaseAgentCallout } from '@/components/control-room/ReleaseAgentCallout'
+import { LaunchPad } from '@/components/control-room/LaunchPad'
+import { SpokeSignalCards } from '@/components/control-room/SpokeSignalCards'
 import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystemsGrid'
 import { WorkTracksStrip } from '@/components/control-room/WorkTracksStrip'
 import {
@@ -35,6 +36,10 @@ import { useCallback, useMemo, useState } from 'react'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
+import {
+  buildTradeDeployPrompt,
+  TRADE_DEPLOY_SCOPE,
+} from '@/lib/agent/tradeDeployAgentPrompt'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 
 type ControlRoomPageProps = {
@@ -58,9 +63,14 @@ type ControlRoomPageProps = {
   onOpenBriefing: (opts?: BriefingUrlState) => void
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenPlatformRelease?: () => void
+  onOpenTradeDeploy?: () => void
   onOpenPromote?: () => void
   onOpenAgentProtocol?: () => void
   onOpenNetwork?: () => void
+  onOpenSatelliteBus?: () => void
+  onOpenCompute?: () => void
+  onOpenDefects?: () => void
+  onOpenAgentDeskTab?: () => void
 } & AmbientAgentShellProps
 
 export function ControlRoomPage({
@@ -81,9 +91,14 @@ export function ControlRoomPage({
   onOpenBriefing,
   onOpenAgentDesk,
   onOpenPlatformRelease,
+  onOpenTradeDeploy,
   onOpenPromote,
   onOpenAgentProtocol,
   onOpenNetwork,
+  onOpenSatelliteBus,
+  onOpenCompute,
+  onOpenDefects,
+  onOpenAgentDeskTab,
   ambientJobId,
   onStartAgentJob,
 }: ControlRoomPageProps) {
@@ -91,6 +106,7 @@ export function ControlRoomPage({
   const { snapshot, matrices: liveMatrices, dataUpdatedAt, isLoading: missionLoading } = useMissionSnapshot()
   const { banner, dismissBanner, pendingVerify } = useMissionVerification()
   const { canOperate } = usePlatformAuth()
+  const matrixList = liveMatrices.length > 0 ? liveMatrices : matrices
 
   const aiRelease = useAmbientAgentTask({
     canOperate,
@@ -105,9 +121,29 @@ export function ControlRoomPage({
     },
   })
 
+  const aiTradeDeploy = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: TRADE_DEPLOY_SCOPE,
+    label: scopeToLabel(TRADE_DEPLOY_SCOPE),
+    buildRequest: () => ({
+      prompt: buildTradeDeployPrompt({
+        matrices: matrixList,
+        stgSmoke,
+        tierB,
+      }),
+    }),
+  })
+
   const dispatchReleaseAgent = () => {
     if (!canOperate) return
     aiRelease.trigger()
+  }
+
+  const dispatchTradeDeployAgent = () => {
+    if (!canOperate) return
+    aiTradeDeploy.trigger()
   }
 
   const trackSummaries = useMemo(() => {
@@ -120,8 +156,6 @@ export function ControlRoomPage({
     if (opts?.prefill != null) onOpenAgentDesk?.({ prefill: opts.prefill })
     else onOpenAgentDesk?.()
   }
-
-  const matrixList = liveMatrices.length > 0 ? liveMatrices : matrices
 
   const handleOpenPromotePreflight = useCallback(() => {
     if (context != null) {
@@ -180,23 +214,34 @@ export function ControlRoomPage({
           onOpenPromote={handleOpenPromotePreflight}
         />
 
-        <ReleaseAgentCallout
-          release={snapshot.release}
-          onDispatch={dispatchReleaseAgent}
-          pending={aiRelease.isPending}
-          canDispatch={!aiRelease.disabled}
-          disabledReason={aiRelease.disabledReason}
+        <LaunchPad
+          onDispatchRelease={dispatchReleaseAgent}
+          onDispatchTradeDeploy={dispatchTradeDeployAgent}
+          releasePending={aiRelease.isPending}
+          tradeDeployPending={aiTradeDeploy.isPending}
+          canDispatchRelease={!aiRelease.disabled}
+          canDispatchTradeDeploy={!aiTradeDeploy.disabled}
+          releaseDisabledReason={aiRelease.disabledReason}
+          tradeDeployDisabledReason={aiTradeDeploy.disabledReason}
+          onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
+          onOpenTradeDeploy={onOpenTradeDeploy ?? onOpenDelivery}
         />
 
-        {!canOperate && snapshot.release.signal !== 'ok' && (
-          <OpsFeedback variant="warning" title="Authenticate as operator to run AI Release">
-            Use the header auth control before starting release-scoped Agent tasks.
+        {!canOperate && (snapshot.release.signal !== 'ok' || snapshot.payloadOverall !== 'ok') && (
+          <OpsFeedback variant="warning" title="Authenticate as operator to run Launch Pad agents">
+            Use the header auth control before starting release or trade-deploy Agent tasks.
           </OpsFeedback>
         )}
 
         {aiRelease.error != null && (
           <OpsFeedback variant="error" title="Failed to start AI Release">
             {aiRelease.error.message}
+          </OpsFeedback>
+        )}
+
+        {aiTradeDeploy.error != null && (
+          <OpsFeedback variant="error" title="Failed to start Trade Deploy agent">
+            {aiTradeDeploy.error.message}
           </OpsFeedback>
         )}
 
@@ -262,6 +307,27 @@ export function ControlRoomPage({
               canDispatchRelease={!aiRelease.disabled}
             />
           </OpsSection>
+
+          {onOpenSatelliteBus != null &&
+            onOpenNetwork != null &&
+            onOpenCompute != null &&
+            onOpenDefects != null &&
+            onOpenAgentDeskTab != null && (
+            <OpsSection
+              title="Spokes — Satellite · Ground Systems · Engineer"
+              description="Hub drill-down into payload bus, infrastructure, and Agent loop health."
+              bodyPadding="compact"
+              overflow="visible"
+            >
+              <SpokeSignalCards
+                onOpenSatelliteBus={onOpenSatelliteBus}
+                onOpenNetwork={onOpenNetwork}
+                onOpenCompute={onOpenCompute}
+                onOpenAgentDesk={onOpenAgentDeskTab}
+                onOpenDefects={onOpenDefects}
+              />
+            </OpsSection>
+          )}
 
           <WorkTracksStrip tracks={trackSummaries} onOpenBriefing={onOpenBriefing} />
 

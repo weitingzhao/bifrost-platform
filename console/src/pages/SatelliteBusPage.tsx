@@ -130,12 +130,12 @@ function PayloadReadinessTable({ rows }: { rows: PayloadReadinessRow[] }) {
 }
 
 export function SatelliteBusPage({
-  onOpenObservability,
+  onOpenCluster,
   onOpenTelemetry,
   onOpenPluginGallery,
   onOpenApiHealth,
 }: {
-  onOpenObservability?: () => void
+  onOpenCluster?: () => void
   onOpenTelemetry?: () => void
   onOpenPluginGallery?: () => void
   onOpenApiHealth?: () => void
@@ -497,7 +497,7 @@ export function SatelliteBusPage({
         observability={observabilityQuery.data}
         metricsLoading={metricsQuery.isLoading}
         observabilityLoading={observabilityQuery.isLoading}
-        onOpenObservability={onOpenObservability}
+        onOpenCluster={onOpenCluster}
         onOpenTelemetry={onOpenTelemetry}
       />
 

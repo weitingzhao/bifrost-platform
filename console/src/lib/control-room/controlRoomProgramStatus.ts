@@ -4,8 +4,9 @@ import { loadPhase2SignoffState } from './controlRoomPhase2Delivery'
 import { loadPhase3SignoffState } from './controlRoomPhase3Delivery'
 import { loadPhase4SignoffState } from './controlRoomPhase4Delivery'
 import { loadPhase5SignoffState } from './controlRoomPhase5Delivery'
+import { isControlRoomProgramComplete, loadPhase6SignoffState } from './controlRoomPhase6Delivery'
 
-export type ControlRoomPhaseId = 'P0' | 'P1' | 'P2' | 'P3' | 'P4' | 'P5'
+export type ControlRoomPhaseId = 'P0' | 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6'
 
 export type ControlRoomPhaseMeta = {
   id: ControlRoomPhaseId
@@ -20,6 +21,7 @@ export const CONTROL_ROOM_PROGRAM_PHASES: ControlRoomPhaseMeta[] = [
   { id: 'P3', shortLabel: 'Command intent', signoffLocation: 'Mission Control → Control Room → Phase 3' },
   { id: 'P4', shortLabel: 'Mission timeline', signoffLocation: 'Mission Control → Control Room → Phase 4' },
   { id: 'P5', shortLabel: 'Promote / cutover', signoffLocation: 'Mission Control → Control Room → Phase 5' },
+  { id: 'P6', shortLabel: 'Launch Pad', signoffLocation: 'Mission Control → Control Room → Phase 6' },
 ]
 
 const SIGNED_OFF: Record<ControlRoomPhaseId, () => boolean> = {
@@ -29,6 +31,7 @@ const SIGNED_OFF: Record<ControlRoomPhaseId, () => boolean> = {
   P3: () => loadPhase3SignoffState().signedOffAt != null,
   P4: () => loadPhase4SignoffState().signedOffAt != null,
   P5: () => loadPhase5SignoffState().signedOffAt != null,
+  P6: () => loadPhase6SignoffState().signedOffAt != null,
 }
 
 export function isControlRoomPhaseSignedOff(id: ControlRoomPhaseId): boolean {
@@ -40,4 +43,4 @@ export function controlRoomProgramSignedCount(): { signed: number; total: number
   return { signed, total: CONTROL_ROOM_PROGRAM_PHASES.length }
 }
 
-export { isControlRoomPhase0SignedOff }
+export { isControlRoomPhase0SignedOff, isControlRoomProgramComplete }

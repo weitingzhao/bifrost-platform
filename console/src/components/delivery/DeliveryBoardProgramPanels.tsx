@@ -59,6 +59,7 @@ import { ControlRoomPhase1SignoffPanel } from '@/components/control-room/Control
 import { ControlRoomPhase2SignoffPanel } from '@/components/control-room/ControlRoomPhase2SignoffPanel'
 import { ControlRoomPhase3SignoffPanel } from '@/components/control-room/ControlRoomPhase3SignoffPanel'
 import { ControlRoomPhase4SignoffPanel } from '@/components/control-room/ControlRoomPhase4SignoffPanel'
+import { ControlRoomPhase6SignoffPanel } from '@/components/control-room/ControlRoomPhase6SignoffPanel'
 import { ControlRoomPhase5SignoffPanel } from '@/components/control-room/ControlRoomPhase5SignoffPanel'
 import { ControlRoomProgramStatusStrip } from '@/components/control-room/ControlRoomProgramStatusStrip'
 import { MissionSignalPhase1SignoffPanel } from '@/components/control-room/MissionSignalPhase1SignoffPanel'
@@ -96,6 +97,7 @@ export function DeliveryBoardProgramPanels({
       return (
         <div className="flex flex-col gap-4">
           <ControlRoomProgramStatusStrip />
+          <ControlRoomPhase6SignoffPanel />
           <ControlRoomPhase5SignoffPanel />
           <ControlRoomPhase4SignoffPanel />
           <ControlRoomPhase3SignoffPanel />

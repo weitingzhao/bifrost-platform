@@ -245,6 +245,35 @@ export function ClusterCategoryGrid({
   return (
     <div className="cluster-category-grid">
       <section className="cluster-category-grid__section">
+        <p className="cluster-category-grid__kicker">Infrastructure</p>
+        <p className="cluster-category-grid__desc">Nodes, workloads, governance, observability.</p>
+        <div className="cluster-category-grid__cards cluster-category-grid__cards--infra">
+          {infraCards.map(card => (
+            <ClusterCategoryCard
+              key={card.category}
+              title={card.title}
+              reach={card.reach}
+              headline={card.headline}
+              detail={card.detail}
+              meta={card.meta}
+              icon={card.icon}
+              loading={card.loading}
+              selected={selectedCategory === card.category}
+              copyState={categoryCopyId === card.category ? categoryCopyState : 'idle'}
+              onSelect={() => onSelectCategory(card.category)}
+              onCopyForLlm={
+                onCopyCategory != null && !card.loading
+                  ? () => onCopyCategory(card.category, card.title)
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+      </section>
+
+      <div className="cluster-home-summaries__divider" aria-hidden="true" />
+
+      <section className="cluster-category-grid__section">
         <div className="cluster-category-grid__section-head">
           <p className="cluster-category-grid__kicker">Application stack</p>
           {!serviceReadinessLoading && domains.length > 0 && (
@@ -285,35 +314,6 @@ export function ClusterCategoryGrid({
               />
             ))
           )}
-        </div>
-      </section>
-
-      <div className="cluster-home-summaries__divider" aria-hidden="true" />
-
-      <section className="cluster-category-grid__section">
-        <p className="cluster-category-grid__kicker">Infrastructure</p>
-        <p className="cluster-category-grid__desc">Nodes, workloads, governance, observability.</p>
-        <div className="cluster-category-grid__cards cluster-category-grid__cards--infra">
-          {infraCards.map(card => (
-            <ClusterCategoryCard
-              key={card.category}
-              title={card.title}
-              reach={card.reach}
-              headline={card.headline}
-              detail={card.detail}
-              meta={card.meta}
-              icon={card.icon}
-              loading={card.loading}
-              selected={selectedCategory === card.category}
-              copyState={categoryCopyId === card.category ? categoryCopyState : 'idle'}
-              onSelect={() => onSelectCategory(card.category)}
-              onCopyForLlm={
-                onCopyCategory != null && !card.loading
-                  ? () => onCopyCategory(card.category, card.title)
-                  : undefined
-              }
-            />
-          ))}
         </div>
       </section>
     </div>

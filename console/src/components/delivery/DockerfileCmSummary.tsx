@@ -42,7 +42,7 @@ export function DockerfileCmSummary({ configmaps, loading = false }: DockerfileC
       </div>
       {!allOk && (
         <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          Run Refresh Dockerfile CMs before deliver-stg. Full table: Rocket → Trade Release.
+          Run Refresh Dockerfile CMs before deliver-stg. Full table: Satellite → Trade Deploy.
         </p>
       )}
     </div>
