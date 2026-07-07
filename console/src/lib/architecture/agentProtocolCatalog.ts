@@ -348,7 +348,7 @@ export const MISSION_SIGNAL_CLOSURE_STEPS: FlightDirectorStep[] = [
     step: '1. Program status',
     tool: 'Control Room → Mission Signal strip',
     required: true,
-    detail: 'P1–P6 tags show ✓ when Owner signed each phase panel; all six unlock Phase 7 closure.',
+    detail: 'P1–P6 show ✓ when Owner signed each phase on Delivery Board · mission-signal; all six unlock Phase 7 closure.',
   },
   {
     step: '2. Agent Protocol reference',
@@ -582,7 +582,7 @@ export function buildAgentProtocolLlmPack(): string {
     ...FLIGHT_DIRECTOR_OPS_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
     '',
     '## Mission Signal Program closure (Phase 7)',
-    '- Control Room status strip: P1 Signal Truth → P6 Flight Director Ops — all signed before program closure.',
+    '- Control Room status strip: P1 Signal Truth → P6 Flight Director Ops — all signed on Delivery Board · mission-signal before program closure.',
     ...MISSION_SIGNAL_CLOSURE_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
     '- After Owner sign-off: Mission Signal enters maintenance mode; new work is scoped patches, not program phases.',
     '',

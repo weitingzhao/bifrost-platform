@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, DenseTag, type DenseTagVariant, StatusLamp } from '@bifrost/ui'
+import { Button, ConfirmDialog, DenseTag, type DenseTagVariant, StatusLamp } from '@bifrost/ui'
 import { Play, Square, CheckCircle2, RotateCcw, Copy, Terminal } from 'lucide-react'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
@@ -33,6 +33,8 @@ export function DevAgentPage() {
   const qc = useQueryClient()
   const outputRef = useRef<HTMLDivElement>(null)
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+  const [rejectFeedback, setRejectFeedback] = useState('')
 
   const statusQuery = useQuery({
     queryKey: ['dev-agent', 'status'],
@@ -196,8 +198,8 @@ export function DevAgentPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  const feedback = window.prompt('What should the agent fix?')
-                  if (feedback) rejectMutation.mutate(feedback)
+                  setRejectFeedback('')
+                  setRejectDialogOpen(true)
                 }}
                 disabled={rejectMutation.isPending}
               >
@@ -239,6 +241,31 @@ export function DevAgentPage() {
           </div>
         </OpsSection>
       )}
+
+      <ConfirmDialog
+        open={rejectDialogOpen}
+        title="Request changes"
+        message="Describe what the agent should fix before the next execution."
+        confirmLabel="Send feedback"
+        confirming={rejectMutation.isPending}
+        bodyExtra={
+          <textarea
+            className="w-full rounded border border-input bg-background px-3 py-2 text-dense-body text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+            rows={4}
+            placeholder="What should the agent fix?"
+            value={rejectFeedback}
+            onChange={e => setRejectFeedback(e.target.value)}
+            autoFocus
+          />
+        }
+        onConfirm={() => {
+          if (rejectFeedback.trim()) {
+            rejectMutation.mutate(rejectFeedback.trim())
+            setRejectDialogOpen(false)
+          }
+        }}
+        onCancel={() => setRejectDialogOpen(false)}
+      />
     </div>
   )
 }

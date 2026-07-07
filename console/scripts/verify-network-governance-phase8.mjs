@@ -37,6 +37,9 @@ check('MCP tool mappings in contract catalog', mcpTools.length >= 5, `${mcpTools
 const proj = read('src/lib/architecture/networkConsoleProjection.ts')
 check('Network Health live probe wired', proj.includes('liveProbeNote') && proj.includes('/api/v1/network/status'))
 
+const agentCat = read('src/lib/architecture/agentProtocolCatalog.ts')
+check('Agent Protocol references Delivery Board not phase panels', !agentCat.includes('phase panel'))
+
 const pass = checks.filter(c => c.ok).length
 const total = checks.length
 console.log(`\nNetwork Governance Delivery Board verification: ${pass}/${total} PASS\n`)

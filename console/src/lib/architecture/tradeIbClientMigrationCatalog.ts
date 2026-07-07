@@ -55,7 +55,7 @@ export const TRADE_IB_MIGRATION_PHASES: {
     title: 'Inventory & sign-off',
     summary:
       'Catalog every Trade IB surface: redis-ib read, operator RPC, direct TWS, stale health/UI refs. Lock Phase 1–4 scope.',
-    deliverable: 'Console inventory tables + Phase 0 Owner sign-off',
+    deliverable: 'Console inventory tables + Delivery Board TIBM0 Owner sign-off',
     status: 'done',
   },
   {

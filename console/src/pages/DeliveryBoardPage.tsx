@@ -17,7 +17,6 @@ import { DeliveryBoardHistoricalArchive } from '@/components/delivery/DeliveryBo
 import { DeliveryBoardProgramPanels } from '@/components/delivery/DeliveryBoardProgramPanels'
 import { PostCompletionPendingPanel } from '@/components/delivery/PostCompletionPendingPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
-import type { DeliveryBoardProgramId } from '@/lib/delivery/deliveryBoardPrograms'
 
 function programStatusVariant(signed: number, complete: boolean): DenseTagVariant {
   if (complete) return 'success'
@@ -26,7 +25,7 @@ function programStatusVariant(signed: number, complete: boolean): DenseTagVarian
 }
 
 export function DeliveryBoardPage() {
-  const [selectedProgramId, setSelectedProgramId] = useState<DeliveryBoardProgramId | null>(null)
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null)
 
   const programsQuery = useQuery({
     queryKey: PROGRAMS_BOARD_QUERY_KEY,
