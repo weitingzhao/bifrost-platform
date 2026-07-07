@@ -15,7 +15,7 @@ export function DevAgentPersistencePanel() {
   return (
     <OpsSection
       title="State Persistence"
-      description="Phase status, active jobs, and history are stored as JSON under data/dev-agent/ and survive API restarts."
+      description="Phase status, active jobs, and history are stored as JSON under data/programs/ and survive API restarts."
       bodyPadding="compact"
     >
       {persistenceQuery.isLoading ? (

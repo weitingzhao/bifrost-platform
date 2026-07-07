@@ -1,0 +1,43 @@
+id: vision
+title: Dual Flywheel Vision
+description: Vision gates V1–V5 (API-backed sign-off).
+status: active
+delivery:
+  board_visible: true
+  former_location: Governance → Vision
+  sign_off_mechanism: vision_gate
+phases:
+  - id: V5
+    title: "V5"
+    status: pending
+    sign_off:
+      required: true
+  - id: V4
+    title: "V4"
+    status: pending
+    sign_off:
+      required: true
+  - id: V3
+    title: "V3"
+    status: pending
+    sign_off:
+      required: true
+  - id: V2
+    title: "V2"
+    status: pending
+    sign_off:
+      required: true
+  - id: S3
+    title: "S3"
+    status: pending
+    sign_off:
+      required: true
+  - id: V1
+    title: "V1"
+    status: pending
+    sign_off:
+      required: true
+metadata:
+  created_at: "2026-07-07"
+  owner: vision-mac-trader
+  tags: [delivery-board, vision]

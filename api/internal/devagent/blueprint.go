@@ -9,38 +9,77 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DeliveryConfig controls Delivery Board visibility and sign-off source.
+type DeliveryConfig struct {
+	BoardVisible     bool   `yaml:"board_visible" json:"board_visible"`
+	FormerLocation   string `yaml:"former_location" json:"former_location,omitempty"`
+	SignOffMechanism string `yaml:"sign_off_mechanism" json:"sign_off_mechanism,omitempty"` // api | vision_gate | dev_agent
+}
+
+type PhaseSignOffConfig struct {
+	Required  bool     `yaml:"required" json:"required"`
+	Checklist []string `yaml:"checklist" json:"checklist,omitempty"`
+}
+
+type AgentSessionConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
+}
+
+type OperateQueueItemBlueprint struct {
+	ID          string `yaml:"id" json:"id"`
+	Title       string `yaml:"title" json:"title"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+type PostCompletionBlueprint struct {
+	NewCapabilities   []string                    `yaml:"new_capabilities" json:"new_capabilities,omitempty"`
+	NewRisks          []string                    `yaml:"new_risks" json:"new_risks,omitempty"`
+	OperateQueueItems []OperateQueueItemBlueprint `yaml:"operate_queue_items" json:"operate_queue_items,omitempty"`
+}
+
 // ProgramBlueprint is the declarative program definition loaded from config/programs/*.yaml.
 type ProgramBlueprint struct {
-	ID          string                 `yaml:"id" json:"id"`
-	Title       string                 `yaml:"title" json:"title"`
-	Description string                 `yaml:"description" json:"description"`
-	Status      string                 `yaml:"status" json:"status"`
-	Workspace   string                 `yaml:"workspace" json:"workspace"`
-	SkillPath   string                 `yaml:"skill_path" json:"skill_path"`
-	Model       string                 `yaml:"model" json:"model"`
-	Phases      []PhaseBlueprint       `yaml:"phases" json:"phases"`
-	Metadata    map[string]interface{} `yaml:"metadata" json:"metadata,omitempty"`
+	ID             string                   `yaml:"id" json:"id"`
+	Title          string                   `yaml:"title" json:"title"`
+	Description    string                   `yaml:"description" json:"description"`
+	Status         string                   `yaml:"status" json:"status"`
+	Workspace      string                   `yaml:"workspace" json:"workspace"`
+	SkillPath      string                   `yaml:"skill_path" json:"skill_path"`
+	Model          string                   `yaml:"model" json:"model"`
+	Delivery       *DeliveryConfig          `yaml:"delivery" json:"delivery,omitempty"`
+	Phases         []PhaseBlueprint         `yaml:"phases" json:"phases"`
+	PostCompletion *PostCompletionBlueprint `yaml:"post_completion" json:"post_completion,omitempty"`
+	Metadata       map[string]interface{}   `yaml:"metadata" json:"metadata,omitempty"`
 }
 
 type PhaseBlueprint struct {
-	ID             string   `yaml:"id" json:"id"`
-	Title          string   `yaml:"title" json:"title"`
-	Status         string   `yaml:"status" json:"status"`
-	PromptTemplate string   `yaml:"prompt_template" json:"prompt_template,omitempty"`
-	VerifyCmd      string   `yaml:"verify_cmd" json:"verify_cmd,omitempty"`
-	Acceptance     []string `yaml:"acceptance" json:"acceptance,omitempty"`
-	DependsOn      []string `yaml:"depends_on" json:"depends_on,omitempty"`
+	ID             string              `yaml:"id" json:"id"`
+	Title          string              `yaml:"title" json:"title"`
+	Status         string              `yaml:"status" json:"status"`
+	PromptTemplate string              `yaml:"prompt_template" json:"prompt_template,omitempty"`
+	VerifyCmd      string              `yaml:"verify_cmd" json:"verify_cmd,omitempty"`
+	Acceptance     []string            `yaml:"acceptance" json:"acceptance,omitempty"`
+	DependsOn      []string            `yaml:"depends_on" json:"depends_on,omitempty"`
+	SignOff        *PhaseSignOffConfig `yaml:"sign_off" json:"sign_off,omitempty"`
+	AgentSession   *AgentSessionConfig `yaml:"agent_session" json:"agent_session,omitempty"`
 }
 
 type ProgramSummary struct {
-	ID            string `json:"id"`
-	Title         string `json:"title"`
-	Description   string `json:"description"`
-	Status        string `json:"status"`
-	PhaseCount    int    `json:"phase_count"`
-	PhasesDone    int    `json:"phases_done"`
-	AllPhasesDone bool   `json:"all_phases_done"`
-	Active        bool   `json:"active"`
+	ID               string          `json:"id"`
+	Title            string          `json:"title"`
+	Label            string          `json:"label,omitempty"`
+	Description      string          `json:"description"`
+	Status           string          `json:"status"`
+	PhaseCount       int             `json:"phase_count"`
+	PhasesDone       int             `json:"phases_done"`
+	PhasesSigned     int             `json:"phases_signed,omitempty"`
+	Signed           int             `json:"signed,omitempty"`
+	Complete         bool            `json:"complete,omitempty"`
+	AllPhasesDone    bool            `json:"all_phases_done"`
+	Active           bool            `json:"active"`
+	FormerLocation   string          `json:"former_location,omitempty"`
+	SignOffMechanism string          `json:"sign_off_mechanism,omitempty"`
+	Delivery         *DeliveryConfig `json:"delivery,omitempty"`
 }
 
 type ProgramInfo struct {

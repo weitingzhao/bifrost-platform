@@ -1,0 +1,48 @@
+id: control-room-ui
+title: Control Room UI
+description: Console commander layout, payload depth, promote cutover panels.
+status: active
+delivery:
+  board_visible: true
+  former_location: Mission Control → Control Room
+  sign_off_mechanism: api
+phases:
+  - id: P0
+    title: "P0"
+    status: pending
+    sign_off:
+      required: true
+  - id: P1
+    title: "P1"
+    status: pending
+    sign_off:
+      required: true
+  - id: P2
+    title: "P2"
+    status: pending
+    sign_off:
+      required: true
+  - id: P3
+    title: "P3"
+    status: pending
+    sign_off:
+      required: true
+  - id: P4
+    title: "P4"
+    status: pending
+    sign_off:
+      required: true
+  - id: P5
+    title: "P5"
+    status: pending
+    sign_off:
+      required: true
+  - id: P6
+    title: "P6"
+    status: pending
+    sign_off:
+      required: true
+metadata:
+  created_at: "2026-07-07"
+  owner: vision-mac-trader
+  tags: [delivery-board, control-room]

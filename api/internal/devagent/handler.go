@@ -98,6 +98,7 @@ type programRuntime struct {
 	phases    []Phase
 	activeJob *Job
 	history   []Job
+	state     *ProgramStateRecord
 }
 
 type Handler struct {
@@ -106,6 +107,7 @@ type Handler struct {
 	activeProgramID string
 	blueprintDir    string
 	repoRoot        string
+	configDir       string
 	bridgeCmd       string
 	store           *FileStore
 }
@@ -122,6 +124,7 @@ func NewHandler(configDir string) (*Handler, error) {
 	h := &Handler{
 		bridgeCmd: "node",
 		repoRoot:  repoRoot,
+		configDir: configDir,
 		runtimes:  make(map[string]*programRuntime, len(blueprints)),
 		store:     store,
 	}
@@ -138,9 +141,12 @@ func NewHandler(configDir string) (*Handler, error) {
 			rt.phases = mergePhasesFromState(bp, saved.Phases)
 			rt.activeJob = saved.ActiveJob
 			rt.history = saved.History
+			rt.state = saved
 			if rt.history == nil {
 				rt.history = []Job{}
 			}
+		} else {
+			rt.state = &ProgramStateRecord{ProgramID: bp.ID, History: []Job{}}
 		}
 		h.runtimes[bp.ID] = rt
 	}
@@ -170,7 +176,14 @@ func (h *Handler) persistRuntimeLocked(programID string) error {
 	if !ok {
 		return fmt.Errorf("program runtime not found: %s", programID)
 	}
-	return h.store.SaveProgram(programID, rt.phases, rt.activeJob, rt.history)
+	if rt.state == nil {
+		rt.state = &ProgramStateRecord{ProgramID: programID, History: []Job{}}
+	}
+	rt.state.ProgramID = programID
+	rt.state.Phases = rt.phases
+	rt.state.ActiveJob = rt.activeJob
+	rt.state.History = rt.history
+	return h.store.SaveProgramRecord(rt.state)
 }
 
 func (h *Handler) persistActiveLocked() error {
@@ -179,12 +192,12 @@ func (h *Handler) persistActiveLocked() error {
 
 func pickDefaultActive(blueprints []*ProgramBlueprint) string {
 	for _, bp := range blueprints {
-		if bp.ID == "trade-ib-client-migration" {
+		if bp.ID == "trade-ib-migration" || bp.ID == "trade-ib-client-migration" {
 			return bp.ID
 		}
 	}
 	for _, bp := range blueprints {
-		if bp.Status == "active" {
+		if bp.Status == "active" && bp.Workspace != "" {
 			return bp.ID
 		}
 	}
@@ -195,30 +208,51 @@ func (h *Handler) activeRuntime() *programRuntime {
 	return h.runtimes[h.activeProgramID]
 }
 
-func (h *Handler) HandlePrograms(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) HandlePrograms(w http.ResponseWriter, r *http.Request) {
+	boardOnly := r.URL.Query().Get("board") == "1" || r.URL.Query().Get("board") == "true"
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	list := make([]ProgramSummary, 0, len(h.runtimes))
 	for id, rt := range h.runtimes {
-		phasesDone := 0
-		for _, p := range rt.phases {
-			if p.Status == PhaseDone {
-				phasesDone++
-			}
+		if boardOnly && (rt.blueprint.Delivery == nil || !rt.blueprint.Delivery.BoardVisible) {
+			continue
 		}
-		list = append(list, ProgramSummary{
-			ID:            id,
-			Title:         rt.blueprint.Title,
-			Description:   rt.blueprint.Description,
-			Status:        rt.blueprint.Status,
-			PhaseCount:    len(rt.blueprint.Phases),
-			PhasesDone:    phasesDone,
-			AllPhasesDone: len(rt.phases) > 0 && phasesDone == len(rt.phases),
-			Active:        id == h.activeProgramID,
-		})
+		list = append(list, h.buildProgramSummary(id, rt))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"programs": list})
+}
+
+func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) ProgramSummary {
+	phasesDone := 0
+	for _, p := range rt.phases {
+		if p.Status == PhaseDone {
+			phasesDone++
+		}
+	}
+	signed := h.countSignedPhases(rt)
+	phaseCount := len(rt.blueprint.Phases)
+	complete := phaseCount > 0 && signed == phaseCount
+	summary := ProgramSummary{
+		ID:            programID,
+		Title:         rt.blueprint.Title,
+		Label:         rt.blueprint.Title,
+		Description:   rt.blueprint.Description,
+		Status:        rt.blueprint.Status,
+		PhaseCount:    phaseCount,
+		PhasesDone:    phasesDone,
+		PhasesSigned:  signed,
+		Signed:        signed,
+		Complete:      complete,
+		AllPhasesDone: phaseCount > 0 && phasesDone == phaseCount,
+		Active:        programID == h.activeProgramID,
+		Delivery:      rt.blueprint.Delivery,
+	}
+	if rt.blueprint.Delivery != nil {
+		summary.FormerLocation = rt.blueprint.Delivery.FormerLocation
+		summary.SignOffMechanism = rt.blueprint.Delivery.SignOffMechanism
+	}
+	return summary
 }
 
 func (h *Handler) HandlePersistence(w http.ResponseWriter, _ *http.Request) {
@@ -232,20 +266,6 @@ func (h *Handler) HandlePersistence(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
-}
-
-func (h *Handler) HandleGetProgram(w http.ResponseWriter, r *http.Request) {
-	programID := chi.URLParam(r, "programId")
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	rt, ok := h.runtimes[programID]
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, h.programDetailResponse(programID, rt))
 }
 
 func (h *Handler) HandleActivateProgram(w http.ResponseWriter, r *http.Request) {
@@ -268,47 +288,7 @@ func (h *Handler) HandleActivateProgram(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, h.programDetailResponse(programID, rt))
-}
-
-func (h *Handler) programDetailResponse(programID string, rt *programRuntime) ProgramDetailResponse {
-	phases := make([]PhaseDetail, len(rt.blueprint.Phases))
-	statusByID := make(map[string]PhaseStatus, len(rt.phases))
-	for _, p := range rt.phases {
-		statusByID[p.ID] = p.Status
-	}
-	for i, bp := range rt.blueprint.Phases {
-		st := string(parsePhaseStatus(bp.Status))
-		if runtimeSt, ok := statusByID[bp.ID]; ok {
-			st = string(runtimeSt)
-		}
-		phases[i] = PhaseDetail{
-			ID:             bp.ID,
-			Title:          bp.Title,
-			Status:         st,
-			VerifyCmd:      bp.VerifyCmd,
-			Acceptance:     bp.Acceptance,
-			DependsOn:      bp.DependsOn,
-			RenderedPrompt: promptForPhase(rt.blueprint, bp.ID),
-			SkillInjected:  skillFileLoaded(rt.blueprint.Workspace, rt.blueprint.SkillPath),
-		}
-	}
-	return ProgramDetailResponse{
-		Program: ProgramInfo{
-			ID:          programID,
-			Title:       rt.blueprint.Title,
-			Description: rt.blueprint.Description,
-			Status:      rt.blueprint.Status,
-		},
-		Phases: phases,
-		Bridge: BridgeConfig{
-			Workspace:   rt.blueprint.Workspace,
-			Model:       rt.blueprint.Model,
-			SkillPath:   rt.blueprint.SkillPath,
-			SkillLoaded: skillFileLoaded(rt.blueprint.Workspace, rt.blueprint.SkillPath),
-		},
-		Active: programID == h.activeProgramID,
-	}
+	writeJSON(w, http.StatusOK, h.programDetailBoardResponse(programID, rt))
 }
 
 func (h *Handler) HandleStatus(w http.ResponseWriter, _ *http.Request) {

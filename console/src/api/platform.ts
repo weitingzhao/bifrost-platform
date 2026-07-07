@@ -653,6 +653,20 @@ export async function signVisionV5(notes = ''): Promise<RunVisionV1GateResponse>
   return r.json() as Promise<RunVisionV1GateResponse>
 }
 
+/** All Vision gates for Delivery Board signed/total (V5 → V1 + S3). */
+export const VISION_PROGRAM_GATES_QUERY_KEY = ['vision', 'program', 'gates'] as const
+
+export async function fetchVisionProgramGates(): Promise<VisionV1GateResponse[]> {
+  return Promise.all([
+    fetchVisionV5Gate(),
+    fetchVisionV4Gate(),
+    fetchVisionV3Gate(),
+    fetchVisionV2Gate(),
+    fetchVisionS3Gate(),
+    fetchVisionV1Gate(),
+  ])
+}
+
 export async function fetchPipelineRuns(name: string): Promise<DeliveryPipelineRunsResponse> {
   const r = await fetch(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`)
   if (!r.ok) throw new Error(`pipeline runs: HTTP ${r.status}`)

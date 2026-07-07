@@ -12,13 +12,62 @@ import (
 
 const stateVersion = "2026-07-04"
 
+type PhaseSignOffRecord struct {
+	PhaseID     string `json:"phase_id"`
+	SignedOffAt string `json:"signed_off_at"`
+	SignedOffBy string `json:"signed_off_by,omitempty"`
+	Notes       string `json:"notes,omitempty"`
+}
+
+type PhaseProgressRecord struct {
+	PhaseID      string `json:"phase_id"`
+	Status       string `json:"status"`
+	Summary      string `json:"summary,omitempty"`
+	VerifyPassed bool   `json:"verify_passed"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+type AgentSessionRecord struct {
+	ID            string `json:"id"`
+	PhaseID       string `json:"phase_id,omitempty"`
+	ProgramID     string `json:"program_id,omitempty"`
+	StartedAt     string `json:"started_at"`
+	EndedAt       string `json:"ended_at,omitempty"`
+	CursorAgentID string `json:"cursor_agent_id,omitempty"`
+	Summary       string `json:"summary,omitempty"`
+	Track         string `json:"track,omitempty"`
+	Lane          string `json:"lane,omitempty"`
+	Intent        string `json:"intent,omitempty"`
+}
+
+type PostCompletionItem struct {
+	ID          string `json:"id"`
+	ProgramID   string `json:"program_id"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status"` // pending_review | approved | rejected
+	CreatedAt   string `json:"created_at"`
+	ApprovedAt  string `json:"approved_at,omitempty"`
+	ApprovedBy  string `json:"approved_by,omitempty"`
+}
+
 type ProgramStateRecord struct {
-	Version   string  `json:"version"`
-	ProgramID string  `json:"program_id"`
-	Phases    []Phase `json:"phases"`
-	ActiveJob *Job    `json:"active_job"`
-	History   []Job   `json:"history"`
-	UpdatedAt string  `json:"updated_at"`
+	Version            string                 `json:"version"`
+	ProgramID          string                 `json:"program_id"`
+	Phases             []Phase                `json:"phases"`
+	ActiveJob          *Job                   `json:"active_job"`
+	History            []Job                  `json:"history"`
+	PhaseSignOffs      []PhaseSignOffRecord   `json:"phase_sign_offs,omitempty"`
+	PhaseProgress      []PhaseProgressRecord  `json:"phase_progress,omitempty"`
+	AgentSessions      []AgentSessionRecord   `json:"agent_sessions,omitempty"`
+	PostCompletion     *PostCompletionState   `json:"post_completion,omitempty"`
+	UpdatedAt          string                 `json:"updated_at"`
+}
+
+type PostCompletionState struct {
+	SubmittedAt     string   `json:"submitted_at,omitempty"`
+	NewCapabilities []string `json:"new_capabilities,omitempty"`
+	NewRisks        []string `json:"new_risks,omitempty"`
 }
 
 type ActiveProgramRecord struct {
@@ -50,7 +99,13 @@ func NewFileStore(configDir string) *FileStore {
 	if dataDir == "" {
 		dataDir = filepath.Join(configDir, "..", "data")
 	}
-	dir := filepath.Join(dataDir, "dev-agent")
+	dir := filepath.Join(dataDir, "programs")
+	legacy := filepath.Join(dataDir, "dev-agent")
+	if entries, err := os.ReadDir(legacy); err == nil && len(entries) > 0 {
+		if _, err := os.ReadDir(dir); os.IsNotExist(err) {
+			_ = os.Rename(legacy, dir)
+		}
+	}
 	return &FileStore{dir: dir}
 }
 
@@ -128,34 +183,100 @@ func (s *FileStore) loadProgramLocked(programID string) (*ProgramStateRecord, er
 	return &rec, nil
 }
 
-func (s *FileStore) SaveProgram(programID string, phases []Phase, activeJob *Job, history []Job) error {
+func (s *FileStore) SaveProgramRecord(rec *ProgramStateRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.saveProgramRecordLocked(rec)
+}
 
+func (s *FileStore) saveProgramRecordLocked(rec *ProgramStateRecord) error {
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
-		return fmt.Errorf("mkdir dev-agent state: %w", err)
+		return fmt.Errorf("mkdir programs state: %w", err)
 	}
-	if history == nil {
-		history = []Job{}
+	if rec.History == nil {
+		rec.History = []Job{}
 	}
-	rec := ProgramStateRecord{
-		Version:   stateVersion,
-		ProgramID: programID,
-		Phases:    phases,
-		ActiveJob: activeJob,
-		History:   history,
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
-	}
+	rec.Version = stateVersion
+	rec.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	data, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return err
 	}
-	path := s.programPath(programID)
+	path := s.programPath(rec.ProgramID)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return fmt.Errorf("write program state: %w", err)
 	}
 	return os.Rename(tmp, path)
+}
+
+func (s *FileStore) SaveProgram(programID string, phases []Phase, activeJob *Job, history []Job) error {
+	rec, err := s.LoadProgram(programID)
+	if err != nil {
+		return err
+	}
+	if rec == nil {
+		rec = &ProgramStateRecord{ProgramID: programID}
+	}
+	rec.Phases = phases
+	rec.ActiveJob = activeJob
+	rec.History = history
+	return s.SaveProgramRecord(rec)
+}
+
+func (s *FileStore) LoadOrCreateProgram(programID string) (*ProgramStateRecord, error) {
+	rec, err := s.LoadProgram(programID)
+	if err != nil {
+		return nil, err
+	}
+	if rec == nil {
+		return &ProgramStateRecord{ProgramID: programID, History: []Job{}}, nil
+	}
+	return rec, nil
+}
+
+func (s *FileStore) PendingPostCompletionPath() string {
+	return filepath.Join(s.dir, "_post_completion_pending.json")
+}
+
+func (s *FileStore) LoadPendingPostCompletion() ([]PostCompletionItem, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := os.ReadFile(s.PendingPostCompletionPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []PostCompletionItem{}, nil
+		}
+		return nil, err
+	}
+	var items []PostCompletionItem
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return []PostCompletionItem{}, nil
+	}
+	return items, nil
+}
+
+func (s *FileStore) SavePendingPostCompletion(items []PostCompletionItem) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		return err
+	}
+	if items == nil {
+		items = []PostCompletionItem{}
+	}
+	data, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := s.PendingPostCompletionPath() + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.PendingPostCompletionPath())
 }
 
 func (s *FileStore) ListInfo(activeProgramID string) (*PersistenceInfo, error) {

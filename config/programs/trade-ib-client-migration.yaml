@@ -3,6 +3,10 @@ title: "Trade IB Client Migration"
 description: "Trade stack consumes Platform redis-ib bus only — zero direct TWS from any Trade pod."
 status: active
 
+delivery:
+  board_visible: false
+  sign_off_mechanism: dev_agent
+
 workspace: /Users/vision-mac-trader/Desktop/stocks
 skill_path: .cursor/skills/ib-migration/SKILL.md
 model: composer-2.5

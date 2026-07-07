@@ -102,7 +102,7 @@ export function DevAgentPage() {
           Failed to load dev-agent status: {msg}
         </p>
         <p className="mt-2 m-0 text-dense-meta text-muted-foreground">
-          Ensure Ops API is running with the latest build (includes /api/v1/dev-agent/status).
+          Ensure Ops API is running with the latest build (includes /api/v1/programs/active/status).
           Rebuild: <code className="font-mono">cd api && make build</code>, then restart platform.
         </p>
         <Button size="sm" className="mt-3" onClick={() => void statusQuery.refetch()}>
