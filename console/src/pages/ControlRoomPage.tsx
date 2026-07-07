@@ -14,6 +14,7 @@ import { LaunchPad } from '@/components/control-room/LaunchPad'
 import { SpokeSignalCards } from '@/components/control-room/SpokeSignalCards'
 import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystemsGrid'
 import { OperateQueueStrip } from '@/components/control-room/OperateQueueStrip'
+import { MissionSignalProgramStrip } from '@/components/control-room/MissionSignalProgramStrip'
 import { WorkTracksStrip } from '@/components/control-room/WorkTracksStrip'
 import {
   DualFlywheelPanel,
@@ -289,6 +290,8 @@ export function ControlRoomPage({
         />
 
         <OperateQueueStrip />
+
+        <MissionSignalProgramStrip onOpenDelivery={onOpenDelivery} />
 
         {onOpenAgentProtocol != null && (
           <NetworkHealthPanel

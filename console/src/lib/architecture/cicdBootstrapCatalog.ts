@@ -360,7 +360,7 @@ export const CICD_GAPS: CicdGap[] = [
   {
     id: 'escape-runbook',
     layer: 'L0',
-    gap: 'Escape hatch exists (make start, kubectl overlay) but not formalized or visible',
+    gap: 'Implemented — GET /api/v1/platform/escape-hatch probes local + NodePort routes; EscapeHatchPanel on Platform Release; quarterly drill via POST /platform/escape-hatch/drill',
     target: 'Documented runbook; Console shows escape route status; quarterly test schedule',
     spineTask: 'p6-escape-hatch',
   },

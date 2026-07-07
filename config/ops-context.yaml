@@ -330,7 +330,7 @@ tracks:
               status: done
             - id: p6-escape-hatch
               label: "L0 escape hatch runbook + Console recovery visibility"
-              status: next
+              status: done
     migrate:
         label: "Legacy retirement & deployment migration"
         streams:

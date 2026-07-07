@@ -9,6 +9,7 @@ import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliv
 import { ReleaseEnvAccessBar } from '@/components/delivery/ReleaseEnvAccessBar'
 import { ReleaseHealthStrip } from '@/components/delivery/ReleaseHealthStrip'
 import { SelfHealthPanel } from '@/components/architecture/SelfHealthPanel'
+import { EscapeHatchPanel } from '@/components/architecture/EscapeHatchPanel'
 import {
   ReleaseStepCommandCenter,
   runStepStatus,
@@ -178,6 +179,8 @@ export function PlatformReleasePage({
       </div>
 
       <SelfHealthPanel />
+
+      <EscapeHatchPanel />
 
       <ReleaseStepCommandCenter
         steps={steps}

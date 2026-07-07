@@ -8,41 +8,83 @@ delivery:
   sign_off_mechanism: api
 phases:
   - id: P1
-    title: "P1"
+    title: Signal Truth
     status: pending
+    depends_on: []
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/matrix >/dev/null && echo 'P1 matrix probes reachable'"
+    acceptance:
+      - Mission Control header shows Mission / Rocket / Payload status
+      - Rocket subsystems grid (infra, release, control, agent) reachable
+      - Trade dev + prod matrix targets probed
     sign_off:
       required: true
   - id: P2
-    title: "P2"
+    title: Diagnostic playbooks
     status: pending
+    depends_on: [P1]
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/mission/verify-payload | jq -e '.summary'"
+    acceptance:
+      - NOMINAL / PROBE_DRIFT / DATA_LAYER / HTTP_FAIL playbooks in Agent Protocol
+      - verify_payload returns per-env postgres/redis classification
+      - Command intent strip cites verify_payload before Diagnose & Fix
     sign_off:
       required: true
   - id: P3
-    title: "P3"
+    title: Post-fix validation
     status: pending
+    depends_on: [P2]
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/mission/verify-snapshot | jq -e '.post_fix_verification'"
+    acceptance:
+      - Mission verify banner after Agent job completion
+      - post_fix_verification.passed surfaced before job close
+      - MISSION_POST_FIX_LOOP documented in Agent Protocol
     sign_off:
       required: true
   - id: P4
-    title: "P4"
+    title: Hermes first task
     status: pending
+    depends_on: [P3]
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/agent/hermes/readiness | jq -e '.first_task'"
+    acceptance:
+      - Hermes readiness gate (ready=true, blockers empty)
+      - First task prompt references verify_mission_snapshot + matrix
+      - L0 report only — no actuation on first task
     sign_off:
       required: true
   - id: P5
-    title: "P5"
+    title: Flight Director governance
     status: pending
+    depends_on: [P4]
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/agent/governance/snapshot | jq -e '.trust_matrix'"
+    acceptance:
+      - Trust & Autonomy page shows per-skill L0/L1/L2
+      - Flight Director snapshot includes performance + capability map
+      - 24h briefing digest replaces manual Audit scanning
     sign_off:
       required: true
   - id: P6
-    title: "P6"
+    title: Flight Director ops
     status: pending
+    depends_on: [P5]
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/agent/governance/trust-matrix | jq -e '.entries'"
+    acceptance:
+      - Agent Briefing Flight Director 24h digest panel
+      - PUT trust-overrides/{skill_id} documented and reachable (admin)
+      - Trust matrix reflects owner_overrides after actuation
     sign_off:
       required: true
   - id: P7
-    title: "P7"
+    title: Program closure
     status: pending
+    depends_on: [P1, P2, P3, P4, P5, P6]
+    verify_cmd: "node console/scripts/verify-mission-signal-wave4b.mjs"
+    acceptance:
+      - All phases P1–P6 signed via programs API
+      - Mission Signal strip shows program complete
+      - New signal work scoped as patches, not new program phases
     sign_off:
       required: true
 metadata:
   created_at: "2026-07-07"
   owner: vision-mac-trader
-  tags: [delivery-board, control-room]
+  tags: [delivery-board, control-room, mission-signal]
