@@ -1,7 +1,43 @@
 /**
- * Task mode lens — per-mode accent tints for sidebar + header chrome.
- * Scoped via .task-mode-chrome-root[data-task-mode="…"] on Console shell.
+ * Task mode lens — per-mode accent tokens (shared by shell chrome + picker rows).
+ * Any element with data-task-mode="…" receives --task-mode-accent* variables.
  */
+
+[data-task-mode='system'] {
+  --task-mode-accent: var(--muted-foreground);
+  --task-mode-accent-subtle: color-mix(in oklab, var(--muted-foreground) 8%, transparent);
+  --task-mode-accent-border: var(--border);
+}
+
+[data-task-mode='daily-ops'] {
+  --task-mode-accent: oklch(0.72 0.12 210);
+  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.72 0.12 210) 14%, transparent);
+  --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.12 210) 40%, transparent);
+}
+
+[data-task-mode='rocket-launch'] {
+  --task-mode-accent: oklch(0.78 0.16 55);
+  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.78 0.16 55) 16%, transparent);
+  --task-mode-accent-border: color-mix(in oklab, oklch(0.78 0.16 55) 45%, transparent);
+}
+
+[data-task-mode='satellite-deploy'] {
+  --task-mode-accent: oklch(0.72 0.14 250);
+  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.72 0.14 250) 14%, transparent);
+  --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.14 250) 42%, transparent);
+}
+
+[data-task-mode='rocket-build'] {
+  --task-mode-accent: oklch(0.68 0.16 285);
+  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.68 0.16 285) 14%, transparent);
+  --task-mode-accent-border: color-mix(in oklab, oklch(0.68 0.16 285) 42%, transparent);
+}
+
+[data-task-mode='satellite-build'] {
+  --task-mode-accent: oklch(0.72 0.14 155);
+  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.72 0.14 155) 14%, transparent);
+  --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.14 155) 42%, transparent);
+}
 
 .task-mode-chrome-root {
   --task-mode-accent: var(--muted-foreground);
@@ -9,40 +45,23 @@
   --task-mode-accent-border: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
 }
 
-.task-mode-chrome-root[data-task-mode='system'] {
-  --task-mode-accent: var(--muted-foreground);
-  --task-mode-accent-subtle: color-mix(in oklab, var(--muted-foreground) 8%, transparent);
-  --task-mode-accent-border: var(--border);
+/* Picker — each row carries its own data-task-mode accent */
+.task-mode-picker-option .task-mode-picker-option__icon,
+.task-mode-picker-option .task-mode-picker-option__label {
+  color: var(--task-mode-accent);
 }
 
-.task-mode-chrome-root[data-task-mode='daily-ops'] {
-  --task-mode-accent: oklch(0.72 0.12 210);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.72 0.12 210) 14%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.12 210) 40%, transparent);
+.task-mode-picker-option:hover {
+  background: var(--task-mode-accent-subtle);
 }
 
-.task-mode-chrome-root[data-task-mode='rocket-launch'] {
-  --task-mode-accent: oklch(0.78 0.16 55);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.78 0.16 55) 16%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.78 0.16 55) 45%, transparent);
+.task-mode-picker-option[data-active='true'] {
+  background: var(--task-mode-accent-subtle);
+  box-shadow: inset 2px 0 0 var(--task-mode-accent);
 }
 
-.task-mode-chrome-root[data-task-mode='satellite-deploy'] {
-  --task-mode-accent: oklch(0.72 0.14 250);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.72 0.14 250) 14%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.14 250) 42%, transparent);
-}
-
-.task-mode-chrome-root[data-task-mode='rocket-build'] {
-  --task-mode-accent: oklch(0.68 0.16 285);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.68 0.16 285) 14%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.68 0.16 285) 42%, transparent);
-}
-
-.task-mode-chrome-root[data-task-mode='satellite-build'] {
-  --task-mode-accent: oklch(0.72 0.14 155);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.72 0.14 155) 14%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.14 155) 42%, transparent);
+.task-mode-picker-option[data-active='true'] .task-mode-picker-option__check {
+  color: var(--task-mode-accent);
 }
 
 /* Sidebar — left accent rail + subtle wash */

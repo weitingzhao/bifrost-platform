@@ -51,15 +51,19 @@ function ModeOption({
   return (
     <button
       type="button"
+      data-task-mode={mode.id}
+      data-active={active ? 'true' : undefined}
       className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors',
-        active ? 'bg-secondary' : 'hover:bg-secondary/60',
+        'task-mode-picker-option flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors',
+        !active && 'hover:bg-transparent',
       )}
       onClick={() => onPick(mode.id)}
     >
-      <Icon size={14} className="shrink-0" style={{ color: 'var(--task-mode-accent)' }} />
+      <Icon size={14} className="task-mode-picker-option__icon shrink-0" />
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className="truncate text-[var(--text-dense-label)] font-medium">{mode.label}</span>
+        <span className="task-mode-picker-option__label truncate text-[var(--text-dense-label)] font-medium">
+          {mode.label}
+        </span>
         {mode.loopArchetype !== 'system' && (
           <DenseTag variant={LOOP_VARIANT[mode.loopArchetype]} className="shrink-0 text-[9px]">
             {LOOP_LABEL[mode.loopArchetype]}
@@ -67,7 +71,7 @@ function ModeOption({
         )}
         <ModeDescriptionHelp description={mode.description} label={mode.label} />
       </span>
-      {active && <Check size={14} className="shrink-0 text-primary" />}
+      {active && <Check size={14} className="task-mode-picker-option__check shrink-0" />}
     </button>
   )
 }
