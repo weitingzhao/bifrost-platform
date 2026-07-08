@@ -18,7 +18,13 @@ import type {
 } from '@/api/types'
 import type { MatrixResponse, Reachability } from '@/api/types'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import { ReadinessFixBar } from '@/components/task-mode/ReadinessFixBar'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
+import {
+  primaryChipNavigation,
+  setSatelliteBusFocus,
+  type ReadinessChipContext,
+} from '@/lib/task-mode/readinessChipActions'
 import {
   infraSignal,
   missionStatus,
@@ -42,17 +48,32 @@ type ReadinessChipProps = {
   label: string
   signal: Signal
   detail: string
+  onDrillDown?: () => void
 }
 
-function ReadinessChip({ label, signal, detail }: ReadinessChipProps) {
-  return (
-    <div className="rounded border border-border/60 bg-card px-2 py-1.5">
+function ReadinessChip({ label, signal, detail, onDrillDown }: ReadinessChipProps) {
+  const actionable = signal !== 'ok' && onDrillDown != null
+  const inner = (
+    <>
       <div className="flex items-center gap-1.5">
         <StatusLamp value={signal} kind="reach" />
         <span className="text-[var(--text-dense-meta)] font-medium">{label}</span>
       </div>
       <p className="m-0 mt-0.5 truncate text-[var(--text-dense-caption)] text-muted-foreground">{detail}</p>
-    </div>
+    </>
+  )
+  if (!actionable) {
+    return <div className="rounded border border-border/60 bg-card px-2 py-1.5">{inner}</div>
+  }
+  return (
+    <button
+      type="button"
+      className="w-full rounded border border-border/60 bg-card px-2 py-1.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+      title={`Drill down: ${label}`}
+      onClick={onDrillDown}
+    >
+      {inner}
+    </button>
   )
 }
 
@@ -174,6 +195,13 @@ type EnvironmentReadinessPanelProps = {
   summaryColumn?: boolean
   linkLabel: string
   onLink: () => void
+  onNavigate: (tabId: string) => void
+  fixCtx?: ReadinessChipContext
+  canOperate?: boolean
+  onAgentFix?: () => void
+  agentFixPending?: boolean
+  agentFixDisabled?: boolean
+  agentFixTitle?: string
 }
 
 function EnvironmentReadinessPanel({
@@ -186,6 +214,13 @@ function EnvironmentReadinessPanel({
   summaryColumn = false,
   linkLabel,
   onLink,
+  onNavigate,
+  fixCtx,
+  canOperate = false,
+  onAgentFix,
+  agentFixPending,
+  agentFixDisabled,
+  agentFixTitle,
 }: EnvironmentReadinessPanelProps) {
   const tag = stripOverallTag(overall, isLoading)
   const color = missionStatusColor(missionStatus(overall))
@@ -214,10 +249,44 @@ function EnvironmentReadinessPanel({
           dense ? 'grid-cols-2' : 'sm:grid-cols-2',
         )}
       >
-        {chips.map(chip => (
-          <ReadinessChip key={chip.label} label={chip.label} signal={chip.signal} detail={chip.detail} />
-        ))}
+        {chips.map(chip => {
+          const nav =
+            fixCtx != null && chip.signal !== 'ok'
+              ? primaryChipNavigation(chip.label, fixCtx)
+              : null
+          return (
+            <ReadinessChip
+              key={chip.label}
+              label={chip.label}
+              signal={chip.signal}
+              detail={chip.detail}
+              onDrillDown={
+                nav != null
+                  ? () => {
+                      if (nav.tabId === 'satellite-bus') {
+                        setSatelliteBusFocus(nav.busFocus)
+                      }
+                      onNavigate(nav.tabId)
+                    }
+                  : undefined
+              }
+            />
+          )
+        })}
       </div>
+      {fixCtx != null && (
+        <ReadinessFixBar
+          chips={chips}
+          ctx={fixCtx}
+          canOperate={canOperate}
+          onNavigate={onNavigate}
+          onAgentFix={onAgentFix}
+          agentFixPending={agentFixPending}
+          agentFixDisabled={agentFixDisabled}
+          agentFixTitle={agentFixTitle}
+          dense={dense}
+        />
+      )}
       {!summaryColumn && (
         <button
           type="button"
@@ -702,6 +771,8 @@ function RocketReadinessStrip({
         chips={stgChips}
         linkLabel="Platform Release →"
         onLink={() => onNavigate('platform-release')}
+        onNavigate={onNavigate}
+        fixCtx={{ modeId: 'rocket-launch', env: 'platform-stg' }}
       />
       <EnvironmentReadinessPanel
         title={summaryColumn ? 'PROD readiness' : 'PROD environment readiness'}
@@ -718,6 +789,8 @@ function RocketReadinessStrip({
         ]}
         linkLabel="Platform Release →"
         onLink={() => onNavigate('platform-release')}
+        onNavigate={onNavigate}
+        fixCtx={{ modeId: 'rocket-launch', env: 'platform-prod' }}
       />
       {summaryColumn && (
         <button
@@ -737,11 +810,23 @@ function SatelliteReadinessStrip({
   summaryColumn = false,
   suppressProdBlockedBanner = false,
   onNavigate,
+  canOperate = false,
+  onAgentFixStg,
+  onAgentFixProd,
+  agentFixPending = false,
+  agentFixDisabled = false,
+  agentFixTitle,
 }: {
   compact?: boolean
   summaryColumn?: boolean
   suppressProdBlockedBanner?: boolean
   onNavigate: (tabId: string) => void
+  canOperate?: boolean
+  onAgentFixStg?: () => void
+  onAgentFixProd?: () => void
+  agentFixPending?: boolean
+  agentFixDisabled?: boolean
+  agentFixTitle?: string
 }) {
   const { snapshot, matrices, isLoading: missionLoading } = useMissionSnapshot()
   const { prodOverall, prodBlocked } = useSatelliteProdReadiness()
@@ -883,6 +968,13 @@ function SatelliteReadinessStrip({
         ]}
         linkLabel="Satellite Bus →"
         onLink={() => onNavigate('satellite-bus')}
+        onNavigate={onNavigate}
+        fixCtx={{ modeId: 'satellite-deploy', env: 'stg' }}
+        canOperate={canOperate}
+        onAgentFix={onAgentFixStg}
+        agentFixPending={agentFixPending}
+        agentFixDisabled={agentFixDisabled}
+        agentFixTitle={agentFixTitle}
       />
       <EnvironmentReadinessPanel
         title={summaryColumn ? 'PROD readiness' : 'PROD environment readiness'}
@@ -894,6 +986,13 @@ function SatelliteReadinessStrip({
         chips={prodChips}
         linkLabel="Trade Release →"
         onLink={() => onNavigate('trade-release')}
+        onNavigate={onNavigate}
+        fixCtx={{ modeId: 'satellite-deploy', env: 'prod' }}
+        canOperate={canOperate}
+        onAgentFix={onAgentFixProd}
+        agentFixPending={agentFixPending}
+        agentFixDisabled={agentFixDisabled}
+        agentFixTitle={agentFixTitle}
       />
       {summaryColumn && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5">
@@ -923,6 +1022,12 @@ export type TaskModeReadinessStripProps = {
   compact?: boolean
   summaryColumn?: boolean
   suppressProdBlockedBanner?: boolean
+  canOperate?: boolean
+  onAgentFixStg?: () => void
+  onAgentFixProd?: () => void
+  agentFixPending?: boolean
+  agentFixDisabled?: boolean
+  agentFixTitle?: string
 }
 
 /** Mode-scoped environment readiness — replaces generic mission signals in playbook ops modes. */
@@ -932,6 +1037,12 @@ export function TaskModeReadinessStrip({
   compact = false,
   summaryColumn = false,
   suppressProdBlockedBanner = false,
+  canOperate = false,
+  onAgentFixStg,
+  onAgentFixProd,
+  agentFixPending = false,
+  agentFixDisabled = false,
+  agentFixTitle,
 }: TaskModeReadinessStripProps) {
   if (modeId === 'rocket-launch') {
     return (
@@ -950,6 +1061,12 @@ export function TaskModeReadinessStrip({
         summaryColumn={summaryColumn}
         suppressProdBlockedBanner={suppressProdBlockedBanner}
         onNavigate={onNavigate}
+        canOperate={canOperate}
+        onAgentFixStg={onAgentFixStg}
+        onAgentFixProd={onAgentFixProd}
+        agentFixPending={agentFixPending}
+        agentFixDisabled={agentFixDisabled}
+        agentFixTitle={agentFixTitle}
       />
     )
   }
