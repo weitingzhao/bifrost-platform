@@ -10,6 +10,7 @@ import type {
   VerifyPayloadResponse,
 } from '@/api/types'
 import { formatVerifyPayloadGuidance } from '@/lib/control-room/payloadVerification'
+import { formatPipelineRunStatus, isPipelineRunFailed } from '@/lib/delivery/pipelineRunAskPack'
 
 export type Signal = Reachability
 
@@ -77,24 +78,63 @@ export function infraSignal(d?: ClusterSummary): ModuleState {
   }
 }
 
+function stgSmokeCounts(stg?: StgSmokeResponse): { ok: number; total: number; allOk: boolean } {
+  const total = stg?.targets.length ?? 0
+  const ok = stg?.targets.filter(t => t.reachability === 'ok').length ?? 0
+  return { ok, total, allOk: total > 0 && ok === total }
+}
+
+function smokeSignalFromCounts(smoke: { ok: number; total: number; allOk: boolean }): Signal {
+  if (smoke.total === 0) return 'unknown'
+  if (smoke.allOk) return 'ok'
+  if (smoke.ok === 0) return 'fail'
+  return 'degraded'
+}
+
 export function releaseSignal(supply?: SupplyChainResponse, stg?: StgSmokeResponse): ModuleState {
   if (!supply) return { signal: 'unknown', value: '…', detail: 'Release: probing' }
-  if (supply.reachability === 'fail') return { signal: 'fail', value: 'down', detail: 'Delivery pipeline unreachable' }
+  if (supply.reachability === 'fail') {
+    return { signal: 'fail', value: 'down', detail: 'Delivery pipeline unreachable' }
+  }
   const last = supply.last_deliver_run
-  const smokeTotal = stg?.targets.length ?? 0
-  const smokeOk = stg?.targets.filter(t => t.reachability === 'ok').length ?? 0
-  const smokeSignal: Signal =
-    stg == null ? 'unknown' : smokeTotal === 0 ? 'ok' : smokeOk === smokeTotal ? 'ok' : smokeOk === 0 ? 'fail' : 'degraded'
-  const smokeDetail = smokeTotal > 0 ? `, STG smoke ${smokeOk}/${smokeTotal}` : ''
-  if (!last)
-    return { signal: worst('ok', smokeSignal), value: 'idle', detail: `No recent deliver run${smokeDetail}` }
-  const st = last.status
-  const runSignal: Signal = st === 'Succeeded' ? 'ok' : st === 'Running' ? 'degraded' : 'fail'
-  const value = st === 'Succeeded' ? 'shipped' : st === 'Running' ? 'shipping' : 'failed'
+  const smoke = stgSmokeCounts(stg)
+  const smokeSignal = smokeSignalFromCounts(smoke)
+  const smokeDetail = smoke.total > 0 ? `STG smoke ${smoke.ok}/${smoke.total}` : ''
+  if (!last) {
+    return {
+      signal: worst('ok', smokeSignal),
+      value: 'idle',
+      detail: smokeDetail !== '' ? `No recent deliver run · ${smokeDetail}` : 'No recent deliver run',
+    }
+  }
+  const pipelineLabel = last.pipeline ?? 'bifrost-deliver-stg'
+  const statusLabel = formatPipelineRunStatus(last)
+  const running = statusLabel === 'Running' || (last.reason ?? '').toLowerCase() === 'running'
+  if (running) {
+    return {
+      signal: worst('degraded', smokeSignal),
+      value: 'shipping',
+      detail: `Deliver running: ${pipelineLabel} ${last.name}${smokeDetail !== '' ? ` · ${smokeDetail}` : ''}`,
+    }
+  }
+  if (isPipelineRunFailed(last)) {
+    if (smoke.allOk) {
+      return {
+        signal: 'degraded',
+        value: 'stale-fail',
+        detail: `Deliver-stg failed (${last.name}: ${statusLabel}) · ${smokeDetail} — runtime OK, rerun pipeline (not cluster/nodes)`,
+      }
+    }
+    return {
+      signal: worst('fail', smokeSignal),
+      value: 'failed',
+      detail: `Deliver-stg failed (${last.name}: ${statusLabel})${smokeDetail !== '' ? ` · ${smokeDetail}` : ''}`,
+    }
+  }
   return {
-    signal: worst(runSignal, smokeSignal),
-    value,
-    detail: `Last deliver: ${last.pipeline ?? 'pipeline'} ${st}${smokeDetail}`,
+    signal: worst('ok', smokeSignal),
+    value: 'shipped',
+    detail: `Last deliver: ${pipelineLabel} ${statusLabel}${smokeDetail !== '' ? ` · ${smokeDetail}` : ''}`,
   }
 }
 
@@ -201,6 +241,71 @@ export interface MissionSnapshot {
   missionOverall: Signal
 }
 
+export type MissionDegradationSegment = 'rocket' | 'payload'
+
+export type MissionDegradationItem = {
+  segment: MissionDegradationSegment
+  id: string
+  signal: Signal
+  detail: string
+}
+
+export function collectRocketDegradationItems(snap: MissionSnapshot): MissionDegradationItem[] {
+  const modules: Array<{ id: string; state: ModuleState }> = [
+    { id: 'Infra', state: snap.infra },
+    { id: 'Release', state: snap.release },
+    { id: 'Control', state: snap.control },
+    { id: 'Agent', state: snap.agent },
+  ]
+  return modules
+    .filter(m => m.state.signal !== 'ok')
+    .map(m => ({
+      segment: 'rocket' as const,
+      id: m.id,
+      signal: m.state.signal,
+      detail: m.state.detail,
+    }))
+}
+
+export function collectPayloadDegradationItems(snap: MissionSnapshot): MissionDegradationItem[] {
+  const out: MissionDegradationItem[] = []
+  if (snap.tradeDev.signal !== 'ok') {
+    out.push({
+      segment: 'payload',
+      id: 'Trade · dev',
+      signal: snap.tradeDev.signal,
+      detail: snap.tradeDev.detail,
+    })
+  }
+  if (snap.tradeProd.signal !== 'ok') {
+    out.push({
+      segment: 'payload',
+      id: 'Trade · prod',
+      signal: snap.tradeProd.signal,
+      detail: snap.tradeProd.detail,
+    })
+  }
+  return out
+}
+
+export function collectMissionDegradationItems(snap: MissionSnapshot): MissionDegradationItem[] {
+  return [...collectRocketDegradationItems(snap), ...collectPayloadDegradationItems(snap)]
+}
+
+export function missionDegradationSummary(
+  items: MissionDegradationItem[],
+  segment?: MissionDegradationSegment,
+): string {
+  const filtered = segment != null ? items.filter(i => i.segment === segment) : items
+  if (filtered.length === 0) return 'All probes nominal.'
+  const critical = filtered.filter(i => i.signal === 'fail').length
+  const caution = filtered.filter(i => i.signal === 'degraded').length
+  const parts: string[] = []
+  if (critical > 0) parts.push(`${critical} critical`)
+  if (caution > 0) parts.push(`${caution} caution`)
+  return `${filtered.length} issue${filtered.length === 1 ? '' : 's'} (${parts.join(', ')})`
+}
+
 /**
  * Generate a structured diagnostic prompt from the current mission snapshot.
  * Returns null when the mission is NOMINAL (nothing to fix).
@@ -217,6 +322,8 @@ export function buildDiagnosticPrompt(
   lines.push('', 'Run verify_payload (MCP) or GET /api/v1/mission/verify-payload before fixing datastore targets.')
 
   const rocketIssues: string[] = []
+  const releaseIssues: string[] = []
+  const infraIssues: string[] = []
   const modules: Array<{ name: string; state: ModuleState }> = [
     { name: 'Infra', state: snap.infra },
     { name: 'Release', state: snap.release },
@@ -224,10 +331,31 @@ export function buildDiagnosticPrompt(
     { name: 'Agent', state: snap.agent },
   ]
   for (const m of modules) {
-    if (m.state.signal !== 'ok') rocketIssues.push(`- ${m.name} (${m.state.signal}): ${m.state.detail}`)
+    if (m.state.signal === 'ok') continue
+    const line = `- ${m.name} (${m.state.signal}): ${m.state.detail}`
+    if (m.name === 'Release' || m.state.detail.toLowerCase().includes('deliver')) {
+      releaseIssues.push(line)
+    } else if (m.name === 'Infra' || m.state.detail.toLowerCase().includes('pod')) {
+      infraIssues.push(line)
+    } else {
+      rocketIssues.push(line)
+    }
+  }
+  if (releaseIssues.length > 0) {
+    lines.push('', 'Release / delivery pipeline (Tekton — not a K8s node problem):')
+    lines.push(...releaseIssues)
+    if (snap.release.value === 'stale-fail') {
+      lines.push(
+        '- Hint: STG smoke green + deliver-stg failed → use playbook deliver-stg-recover (fix PipelineRun / GitOps, then rerun).',
+      )
+    }
+  }
+  if (infraIssues.length > 0) {
+    lines.push('', 'Cluster / infra (K8s):')
+    lines.push(...infraIssues)
   }
   if (rocketIssues.length > 0) {
-    lines.push('', 'Rocket subsystem issues:')
+    lines.push('', 'Rocket subsystem (control plane):')
     lines.push(...rocketIssues)
   }
 

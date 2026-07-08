@@ -1,8 +1,4 @@
 import {
-  Satellite,
-  Wrench,
-} from 'lucide-react'
-import {
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -20,8 +16,6 @@ import {
   buildControlRoomDispatchPack,
 } from '@/lib/control-room/controlRoomOperatePack'
 import {
-  missionStatus,
-  missionStatusColor,
   signalColor,
   type MissionSnapshot,
   type Signal,
@@ -29,6 +23,7 @@ import {
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 import { PayloadDepthPanel } from '@/components/control-room/PayloadDepthPanel'
 import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystemsGrid'
+import { MissionBoard } from '@/components/control-room/MissionBoard'
 
 interface MissionControlHeaderProps {
   snapshot: MissionSnapshot
@@ -42,7 +37,11 @@ interface MissionControlHeaderProps {
   onOpenDelivery: () => void
   onOpenPlatformRelease: () => void
   onOpenAgentDesk: (opts?: { prefill: string }) => void
+  onOpenLaunchView: (mode: 'rocket-launch' | 'satellite-deploy') => void
   onOpenPromote?: () => void
+  onPlaybookFix?: (opts: { scope: string; prompt: string }) => void
+  playbookFixPending?: boolean
+  canOperate?: boolean
 }
 
 function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: number } {
@@ -55,13 +54,6 @@ function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: 
   return { ok, fail, total: matrix.targets.length }
 }
 
-function formatAge(epoch: number): string {
-  const ms = Date.now() - epoch
-  if (ms < 60_000) return 'just now'
-  const min = Math.floor(ms / 60_000)
-  if (min < 60) return `${min}m ago`
-  return `${Math.floor(min / 60)}h ago`
-}
 
 export function MissionControlHeader(props: MissionControlHeaderProps) {
   const {
@@ -71,10 +63,9 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
     dataUpdatedAt,
     showRocketSubsystems = true,
     onOpenAgentDesk,
+    onOpenRuntimeMap,
+    onOpenLaunchView,
   } = props
-  const mission = missionStatus(snapshot.missionOverall)
-  const rocketMission = missionStatus(snapshot.rocketOverall)
-  const payloadMission = missionStatus(snapshot.payloadOverall)
 
   const verifyQ = useQuery({
     queryKey: ['cockpit', 'verify-payload'],
@@ -91,54 +82,19 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
 
   return (
     <div className="mission-control flex w-full min-w-0 flex-col gap-4">
-      <section className="mission-board">
-        <div className="mission-board-status">
-          <span className="mission-board-label">Mission status</span>
-          <span className="mission-board-value" style={{ color: missionStatusColor(mission) }}>
-            {mission}
-          </span>
-        </div>
-        <div className="mission-board-divider" aria-hidden />
-        <div className="mission-board-segment">
-          <span className="mission-board-seg-label">Rocket</span>
-          <span className="mission-board-seg-val" style={{ color: missionStatusColor(rocketMission) }}>
-            {rocketMission}
-          </span>
-        </div>
-        <div className="mission-board-segment">
-          <Satellite size={16} style={{ color: missionStatusColor(payloadMission) }} />
-          <span className="mission-board-seg-label">Payload</span>
-          <span className="mission-board-seg-val" style={{ color: missionStatusColor(payloadMission) }}>
-            {payloadMission}
-          </span>
-        </div>
-        {diagnosticPrompt != null && (
-          <>
-            <div className="mission-board-divider" aria-hidden />
-            <button
-              type="button"
-              className="mission-board-fix"
-              onClick={() => onOpenAgentDesk({ prefill: diagnosticPrompt })}
-              title="Open Agent Desk with a pre-filled diagnostic prompt based on current failures"
-            >
-              <Wrench size={14} />
-              <span>Diagnose &amp; Fix</span>
-            </button>
-          </>
-        )}
-        {context?.focus.headline != null && context.focus.headline !== '' && (
-          <>
-            <div className="mission-board-divider" aria-hidden />
-            <div className="mission-board-focus">
-              <span className="mission-board-focus-label">Focus</span>
-              <span className="mission-board-focus-text">{context.focus.headline.split('—')[0]?.trim()}</span>
-            </div>
-          </>
-        )}
-        <div className="mission-board-ts">
-          {dataUpdatedAt > 0 ? formatAge(dataUpdatedAt) : 'probing…'}
-        </div>
-      </section>
+      <MissionBoard
+        snapshot={snapshot}
+        matrices={matrices}
+        context={context}
+        dataUpdatedAt={dataUpdatedAt}
+        diagnosticPrompt={diagnosticPrompt}
+        onOpenLaunchView={onOpenLaunchView}
+        onOpenAgentDesk={onOpenAgentDesk}
+        onOpenRuntimeMap={onOpenRuntimeMap}
+        onPlaybookFix={props.onPlaybookFix}
+        playbookFixPending={props.playbookFixPending}
+        canOperate={props.canOperate}
+      />
 
       {context?.focus.blocker != null && context.focus.blocker !== '' && (
         <section className="mission-blocker">

@@ -61,12 +61,15 @@ import { ClusterCategoryGrid } from '@/components/cluster/ClusterCategoryGrid'
 import { ClusterCategoryDetail } from '@/components/cluster/ClusterCategoryDetail'
 import { ClusterGovernancePanel } from '@/components/cluster/ClusterGovernancePanel'
 import { ClusterIssuesPanel, collectClusterIssues } from '@/components/cluster/ClusterIssuesPanel'
+import { ClusterFailureTriageStrip } from '@/components/cluster/ClusterFailureTriageStrip'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
 import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabilityPanel'
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
+import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
 import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
 import { buildClusterLlmContext } from '@/lib/cluster/buildClusterLlmContext'
@@ -100,12 +103,18 @@ export function ClusterPage({
   onOpenAudit,
   onOpenServerConsole,
   onOpenAgentDesk,
+  onOpenDefects,
+  ambientJobId: _ambientJobId,
+  onStartAgentJob,
 }: {
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
   onOpenAudit?: () => void
   onOpenServerConsole?: () => void
-  onOpenAgentDesk?: (jobId: string) => void
+  onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
+  onOpenDefects?: () => void
+  ambientJobId?: string | null
+  onStartAgentJob?: (job: AmbientAgentJob) => void
 }) {
   const qc = useQueryClient()
   const [nsFilter, setNsFilter] = useState<NsFilterType>('trade')
@@ -132,6 +141,15 @@ export function ClusterPage({
   const { category: selectedCategory, setCategory, toggleCategory } = useClusterCategory()
 
   const { canOperate, canAdmin, caps, capsLoading } = usePlatformAuth()
+
+  const playbookFixMutation = useMutation({
+    mutationFn: ({ scope, prompt }: { scope: string; prompt: string }) =>
+      startRemediation({ scope, prompt }),
+    onSuccess: (job, vars) => {
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      onStartAgentJob?.({ id: job.id, scope: vars.scope, label: scopeToLabel(vars.scope) })
+    },
+  })
 
   const summaryQuery = useQuery({
     queryKey: ['cluster', 'summary'],
@@ -1174,6 +1192,20 @@ cd ../bifrost-platform && make start`}
       />
 
       {clusterSummary != null && (
+        <>
+        <ClusterFailureTriageStrip
+          summary={clusterSummary}
+          serviceReadiness={serviceReadinessQuery.data}
+          postgresStatus={postgresStatusQuery.data}
+          onOpenAgentDesk={opts => onOpenAgentDesk?.(opts)}
+          onOpenDefects={onOpenDefects}
+          onPlaybookFix={({ scope, prompt }) => {
+            if (!canOperate) return
+            playbookFixMutation.mutate({ scope, prompt })
+          }}
+          playbookFixPending={playbookFixMutation.isPending}
+          canOperate={canOperate}
+        />
         <ClusterIssuesPanel
           summary={clusterSummary}
           serviceReadiness={serviceReadinessQuery.data}
@@ -1189,6 +1221,7 @@ cd ../bifrost-platform && make start`}
             setCategory('workloads')
           }}
         />
+        </>
       )}
 
       <ClusterDrawer

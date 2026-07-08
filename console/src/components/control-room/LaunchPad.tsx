@@ -125,6 +125,10 @@ export interface LaunchPadProps {
   tradeDeployDisabledReason?: string
   onOpenPlatformRelease: () => void
   onOpenTradeDeploy: () => void
+  /** Task CC summary column — full width, no max-w cap */
+  embedded?: boolean
+  /** Parent page already shows prod gate banner */
+  suppressProdBlockedFeedback?: boolean
 }
 
 export function LaunchPad({
@@ -139,6 +143,8 @@ export function LaunchPad({
   tradeDeployDisabledReason,
   onOpenPlatformRelease,
   onOpenTradeDeploy,
+  embedded = false,
+  suppressProdBlockedFeedback = false,
 }: LaunchPadProps) {
   const showRocket = variant === 'both' || variant === 'rocket-launch'
   const showSatellite = variant === 'both' || variant === 'satellite-deploy'
@@ -267,16 +273,22 @@ export function LaunchPad({
 
   return (
     <section
-      className={`launch-pad grid gap-3 ${showRocket && showSatellite ? 'sm:grid-cols-2' : 'max-w-xl'}`}
+      className={`launch-pad grid gap-3 ${
+        embedded
+          ? 'w-full'
+          : showRocket && showSatellite
+            ? 'sm:grid-cols-2'
+            : 'max-w-xl'
+      }`}
       aria-label="Launch pad"
     >
-      {showRocket && rocketAgentBlocked && (
+      {showRocket && rocketAgentBlocked && !suppressProdBlockedFeedback && (
         <OpsFeedback variant="warning" title="Prod readiness blocked" className="sm:col-span-2">
           Fix Platform Prod environment before release — resolve failing namespaces, self-health probes, or release
           gate checks first.
         </OpsFeedback>
       )}
-      {showSatellite && satelliteAgentBlocked && (
+      {showSatellite && satelliteAgentBlocked && !suppressProdBlockedFeedback && (
         <OpsFeedback variant="warning" title="Prod readiness blocked" className="sm:col-span-2">
           Fix Trade Prod environment before deploy — resolve failing pods, datastore, IB socket, or API reachability
           first.

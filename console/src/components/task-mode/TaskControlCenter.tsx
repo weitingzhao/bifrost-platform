@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, PageHeader } from '@bifrost/ui'
 import {
+  fetchCluster,
+  fetchClusterServiceReadiness,
   fetchPipelineRuns,
   fetchReleaseGate,
   fetchSupplyChain,
@@ -15,6 +17,7 @@ import {
 } from '@/components/task-mode/TaskModeReadinessStrip'
 import { DevTaskStrips } from '@/components/task-mode/DevTaskStrips'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { useDevProgramInstance } from '@/hooks/useDevProgramInstance'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
@@ -23,8 +26,14 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import {
+  buildPlatformProdFixPrompt,
+  buildTradeProdFixPrompt,
+  PROD_ENV_FIX_SCOPE,
+} from '@/lib/agent/prodEnvironmentFixPrompt'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import { missionStatus } from '@/lib/control-room/missionSignals'
+import { collectClusterIssues } from '@/lib/cluster/collectClusterIssues'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import {
   buildTradeDeployPrompt,
@@ -37,6 +46,11 @@ import {
   resolveAllTaskPhaseStatuses,
   type TaskPhaseStatusInput,
 } from '@/lib/task-mode/navLens'
+import {
+  buildDailyOpsMissionFixPrompt,
+  buildPhaseHints,
+  type TaskPhaseFixAction,
+} from '@/lib/task-mode/taskPhaseDiagnostics'
 import { pickDeployPipelineRun } from '@/components/delivery/ReleaseStepCommandCenter'
 import { useTaskMode } from '@/lib/task-mode/TaskModeContext'
 import type { TaskPhaseDef } from '@/lib/task-mode/types'
@@ -77,6 +91,26 @@ export function TaskControlCenter({
   const rocketProd = useRocketProdReadiness(mode.id === 'rocket-launch')
   const satelliteProd = useSatelliteProdReadiness(mode.id === 'satellite-deploy')
 
+  const clusterForFixQ = useQuery({
+    queryKey: ['task-cc', 'cluster-fix'],
+    queryFn: fetchCluster,
+    refetchInterval: 20_000,
+    enabled:
+      (mode.id === 'rocket-launch' && rocketProd.prodBlocked) ||
+      (mode.id === 'satellite-deploy' && satelliteProd.prodBlocked) ||
+      (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
+  })
+
+  const serviceReadinessForFixQ = useQuery({
+    queryKey: ['task-cc', 'service-readiness-fix'],
+    queryFn: fetchClusterServiceReadiness,
+    refetchInterval: 20_000,
+    enabled:
+      (mode.id === 'rocket-launch' && rocketProd.prodBlocked) ||
+      (mode.id === 'satellite-deploy' && satelliteProd.prodBlocked) ||
+      (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
+  })
+
   const devProgram = useDevProgramInstance(mode)
   const programQ = devProgram
 
@@ -106,6 +140,63 @@ export function TaskControlCenter({
         tierB,
       }),
     }),
+  })
+
+  const prodFixLabel = scopeToLabel(PROD_ENV_FIX_SCOPE)
+
+  const aiPlatformProdFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: PROD_ENV_FIX_SCOPE,
+    label: prodFixLabel,
+    buildRequest: async () => {
+      const cluster = clusterForFixQ.data ?? (await fetchCluster())
+      const serviceReadiness =
+        serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
+      const issues = collectClusterIssues({
+        summary: cluster,
+        serviceReadiness,
+      })
+      return {
+        prompt: buildPlatformProdFixPrompt({
+          prodOverall: rocketProd.prodOverall,
+          namespace: rocketProd.prodNamespace ?? 'bifrost-platform-prod',
+          signals: rocketProd.fixSignals ?? [],
+        }),
+        cluster_summary: cluster,
+        service_readiness: serviceReadiness,
+        issues,
+      }
+    },
+  })
+
+  const aiTradeProdFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: PROD_ENV_FIX_SCOPE,
+    label: prodFixLabel,
+    buildRequest: async () => {
+      const cluster = clusterForFixQ.data ?? (await fetchCluster())
+      const serviceReadiness =
+        serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
+      const issues = collectClusterIssues({
+        summary: cluster,
+        serviceReadiness,
+      })
+      return {
+        prompt: buildTradeProdFixPrompt({
+          prodOverall: satelliteProd.prodOverall,
+          stgNamespace: satelliteProd.stgNamespace ?? 'bifrost-stg',
+          prodNamespace: satelliteProd.prodNamespace ?? 'bifrost-prod',
+          signals: satelliteProd.fixSignals ?? [],
+        }),
+        cluster_summary: cluster,
+        service_readiness: serviceReadiness,
+        issues,
+      }
+    },
   })
 
   const dispatchReleaseAgent = () => {
@@ -213,12 +304,59 @@ export function TaskControlCenter({
     [mode.id, statusInput],
   )
 
+  const phaseHints = useMemo(
+    () => buildPhaseHints(mode.id, phases, statuses, statusInput),
+    [mode.id, phases, statuses, statusInput],
+  )
+
+  const aiDailyOpsFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: PROD_ENV_FIX_SCOPE,
+    label: prodFixLabel,
+    buildRequest: async () => {
+      const prompt = buildDailyOpsMissionFixPrompt(snapshot)
+      if (prompt == null) {
+        throw new Error('Mission is NOMINAL — nothing to fix')
+      }
+      const cluster = clusterForFixQ.data ?? (await fetchCluster())
+      const serviceReadiness =
+        serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
+      return {
+        prompt,
+        cluster_summary: cluster,
+        service_readiness: serviceReadiness,
+        issues: collectClusterIssues({ summary: cluster, serviceReadiness }),
+      }
+    },
+  })
+
   const doneCount = phases.filter((p: TaskPhaseDef) => statuses[p.id] === 'done').length
   const loopLabel =
     mode.loopArchetype === 'ops' ? 'Ops loop' : mode.loopArchetype === 'dev' ? 'Dev loop' : 'System'
 
   const handleOpenPhasePage = (phase: TaskPhaseDef) => {
     if (phase.navigateTab != null) onNavigate(phase.navigateTab)
+  }
+
+  const handlePhaseFixAction = (action: TaskPhaseFixAction, _phase: TaskPhaseDef) => {
+    if (action.kind === 'agent-fix') {
+      if (mode.id === 'daily-ops') {
+        aiDailyOpsFix.trigger()
+        return
+      }
+      if (mode.id === 'rocket-launch') {
+        aiPlatformProdFix.trigger()
+        return
+      }
+      if (mode.id === 'satellite-deploy') {
+        aiTradeProdFix.trigger()
+        return
+      }
+      return
+    }
+    if (action.tabId != null) onNavigate(action.tabId)
   }
 
   const showLaunchPad = mode.ops?.showLaunchPad === true
@@ -262,14 +400,83 @@ export function TaskControlCenter({
               {aiTradeDeploy.error.message}
             </OpsFeedback>
           )}
+          {aiPlatformProdFix.error != null && (
+            <OpsFeedback variant="error" title="Failed to start Agent Fix">
+              {aiPlatformProdFix.error.message}
+            </OpsFeedback>
+          )}
+          {aiTradeProdFix.error != null && (
+            <OpsFeedback variant="error" title="Failed to start Agent Fix">
+              {aiTradeProdFix.error.message}
+            </OpsFeedback>
+          )}
+          {aiDailyOpsFix.error != null && (
+            <OpsFeedback variant="error" title="Failed to start Agent Fix">
+              {aiDailyOpsFix.error.message}
+            </OpsFeedback>
+          )}
+          {mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok' && (
+            <OpsFeedback
+              variant="warning"
+              title={`Mission ${missionStatus(snapshot.missionOverall)} — fix signals before continuing`}
+              actions={
+                <AgentTriggerButton
+                  label="Agent Fix"
+                  size="xs"
+                  pending={aiDailyOpsFix.isPending}
+                  disabled={aiDailyOpsFix.disabled}
+                  title={
+                    aiDailyOpsFix.disabledReason ??
+                    'Diagnose failing rocket/payload signals and remediate via Cluster · Remediate'
+                  }
+                  onClick={() => aiDailyOpsFix.trigger()}
+                />
+              }
+            >
+              Phase 1 stays blocked until mission signals are NOMINAL. Select step 1 in Phase progress for
+              root-cause breakdown, or open Control Room for the full mission board.
+            </OpsFeedback>
+          )}
           {mode.id === 'rocket-launch' && rocketProd.prodBlocked && (
-            <OpsFeedback variant="warning" title="Fix Prod environment before release">
+            <OpsFeedback
+              variant="warning"
+              title="Fix Prod environment before release"
+              actions={
+                <AgentTriggerButton
+                  label="Agent Fix"
+                  size="xs"
+                  pending={aiPlatformProdFix.isPending}
+                  disabled={aiPlatformProdFix.disabled}
+                  title={
+                    aiPlatformProdFix.disabledReason ??
+                    'Start Cluster · Remediate focused on Platform Prod readiness'
+                  }
+                  onClick={() => aiPlatformProdFix.trigger()}
+                />
+              }
+            >
               Platform Prod readiness is {missionStatus(rocketProd.prodOverall)} — resolve Prod namespace,
               self-health, or release gate issues before launching release agents.
             </OpsFeedback>
           )}
           {mode.id === 'satellite-deploy' && satelliteProd.prodBlocked && (
-            <OpsFeedback variant="warning" title="Fix Prod environment before release">
+            <OpsFeedback
+              variant="warning"
+              title="Fix Prod environment before release"
+              actions={
+                <AgentTriggerButton
+                  label="Agent Fix"
+                  size="xs"
+                  pending={aiTradeProdFix.isPending}
+                  disabled={aiTradeProdFix.disabled}
+                  title={
+                    aiTradeProdFix.disabledReason ??
+                    'Start Cluster · Remediate focused on Trade Prod readiness'
+                  }
+                  onClick={() => aiTradeProdFix.trigger()}
+                />
+              }
+            >
               Trade Prod readiness is {missionStatus(satelliteProd.prodOverall)} — resolve Prod workloads,
               datastore, IB socket, or API reachability before deploying.
             </OpsFeedback>
@@ -312,7 +519,9 @@ export function TaskControlCenter({
           <TaskPhaseProgress
             phases={phases}
             statuses={statuses}
+            hints={phaseHints}
             onOpenFullPage={handleOpenPhasePage}
+            onFixAction={handlePhaseFixAction}
           />
         </div>
       )}

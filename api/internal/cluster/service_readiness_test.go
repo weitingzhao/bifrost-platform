@@ -110,6 +110,53 @@ func TestEvalApplicationsDomainAmd64OnlyNoArm64(t *testing.T) {
 	}
 }
 
+func TestAggregateServiceReadinessStandbyOnly(t *testing.T) {
+	domains := []ServiceDomainView{
+		{ID: "database", Status: "ready", Reachability: probe.ReachOK},
+		{ID: "workers", Status: "standby", Reachability: probe.ReachDegraded},
+		{ID: "warehouse", Status: "standby", Reachability: probe.ReachDegraded},
+	}
+	reach, detail := aggregateServiceReadiness(domains)
+	if reach != probe.ReachOK {
+		t.Fatalf("standby-only domains should not block aggregate readiness: %s %s", reach, detail)
+	}
+	if !strings.Contains(detail, "standby") {
+		t.Fatalf("detail should mention standby: %s", detail)
+	}
+}
+
+func TestEvalWorkersDomainDaemonStandby(t *testing.T) {
+	replicas := int32(0)
+	snap := readinessSnapshot{
+		pools: map[string]placement.PoolView{
+			"amd64_general": {ID: "amd64_general", NodesReady: 2, NodesTotal: 2, Status: placement.PoolStatusLive},
+		},
+		nodeCoverage: map[string]CapabilityCoverageView{
+			"nfs-client": {ID: "nfs-client", NodesReady: 2, NodesTotal: 2, Reachability: probe.ReachOK},
+		},
+		deployments: map[string]appsv1.Deployment{
+			"bifrost-stg/daemon": {
+				ObjectMeta: metav1.ObjectMeta{Name: "daemon", Namespace: "bifrost-stg"},
+				Status:     appsv1.DeploymentStatus{Replicas: 0, ReadyReplicas: 0},
+				Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+			},
+		},
+	}
+	d := evalWorkersDomain(snap)
+	if d.Status != "standby" {
+		t.Fatalf("expected standby when daemon scaled to zero, got %s (%s)", d.Status, d.Summary)
+	}
+}
+
+func TestDependencyIsStandby(t *testing.T) {
+	if !dependencyIsStandby(ServiceDependencyView{Reachability: probe.ReachDegraded, Detail: "scaled to zero (standby)"}) {
+		t.Fatal("expected standby")
+	}
+	if dependencyIsStandby(ServiceDependencyView{Reachability: probe.ReachDegraded, Detail: "not deployed in bifrost-stg"}) {
+		t.Fatal("not deployed should not be standby")
+	}
+}
+
 func TestServiceReadinessMissingKubeconfig(t *testing.T) {
 	t.Setenv("PLATFORM_KUBECONFIG", t.TempDir()+"/missing.yaml")
 	svc := NewService(nil)

@@ -304,7 +304,25 @@ func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
 			Reachability: probe.ReachDegraded, Detail: "not deployed",
 		})
 	}
-	return finalizeDomain("workers", "General workers", deps, "Daemon · Celery · data pipelines")
+	domain := finalizeDomain("workers", "General workers", deps, "Daemon · Celery · data pipelines")
+	if domain.Status == "partial" || domain.Status == "standby" {
+		onlyStandby := true
+		for _, d := range domain.Dependencies {
+			if d.Reachability == probe.ReachOK {
+				continue
+			}
+			if !dependencyIsStandby(d) {
+				onlyStandby = false
+				break
+			}
+		}
+		if onlyStandby {
+			domain.Status = "standby"
+			domain.Reachability = probe.ReachDegraded
+			domain.Summary = "Worker pool ready · trading daemon scaled to zero (observe mode / D10)"
+		}
+	}
+	return domain
 }
 
 func evalApplicationsDomain(snap readinessSnapshot) ServiceDomainView {
@@ -366,6 +384,14 @@ func finalizeDomain(id, label string, deps []ServiceDependencyView, purpose stri
 	}
 }
 
+func dependencyIsStandby(d ServiceDependencyView) bool {
+	if d.Reachability != probe.ReachDegraded {
+		return false
+	}
+	lower := strings.ToLower(d.Detail)
+	return strings.Contains(lower, "standby") || strings.Contains(lower, "scaled to zero")
+}
+
 func domainStatusFromDeps(deps []ServiceDependencyView) (status string, reach probe.Reachability, summary string) {
 	fail := 0
 	degraded := 0
@@ -378,7 +404,7 @@ func domainStatusFromDeps(deps []ServiceDependencyView) (status string, reach pr
 			gaps = append(gaps, d.Label)
 		case probe.ReachDegraded:
 			degraded++
-			if strings.Contains(strings.ToLower(d.Detail), "standby") || strings.Contains(strings.ToLower(d.Detail), "scaled to zero") {
+			if dependencyIsStandby(d) {
 				standby++
 			}
 		}
@@ -398,19 +424,29 @@ func domainStatusFromDeps(deps []ServiceDependencyView) (status string, reach pr
 func aggregateServiceReadiness(domains []ServiceDomainView) (probe.Reachability, string) {
 	fail := 0
 	degraded := 0
+	standby := 0
 	for _, d := range domains {
-		switch d.Reachability {
-		case probe.ReachFail:
+		switch d.Status {
+		case "standby":
+			standby++
+		case "unavailable":
 			fail++
-		case probe.ReachDegraded:
-			degraded++
+		default:
+			switch d.Reachability {
+			case probe.ReachFail:
+				fail++
+			case probe.ReachDegraded:
+				degraded++
+			}
 		}
 	}
 	switch {
 	case fail > 0:
 		return probe.ReachDegraded, fmt.Sprintf("%d domain(s) unavailable", fail)
 	case degraded > 0:
-		return probe.ReachDegraded, fmt.Sprintf("%d domain(s) partial or standby", degraded)
+		return probe.ReachDegraded, fmt.Sprintf("%d domain(s) partial", degraded)
+	case standby > 0:
+		return probe.ReachOK, fmt.Sprintf("%d domain(s) on standby (scaled to zero)", standby)
 	default:
 		return probe.ReachOK, "all service domains ready"
 	}

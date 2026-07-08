@@ -21,6 +21,17 @@ skills:
     timeout_ms: 300000
     tags: ["observability", "drift"]
 
+  - id: stale-pipeline-triage
+    label: "Stale Pipeline Triage"
+    description: "L0 read-only pre-drift check — classify deliver-stg pipeline fail vs STG smoke green (stale-fail track)"
+    trigger: cron
+    schedule: "55 5 * * 1-5"
+    actuation_level: L0
+    status: enabled
+    script: "../../scripts/agent/stale_pipeline_triage.sh"
+    timeout_ms: 120000
+    tags: ["delivery", "triage"]
+
   - id: morning-briefing
     label: "Morning Briefing"
     description: "Scheduled pre-market summary — spine progress, drift findings, Trade positions overview pushed to Console"

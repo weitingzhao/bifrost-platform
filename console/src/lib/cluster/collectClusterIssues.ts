@@ -76,6 +76,8 @@ function collectServiceDomainIssues(
 
   for (const domain of readiness.domains) {
     if (skipDomainIds.has(domain.id)) continue
+    if (domain.status === 'standby') continue
+
     const isHealthy = domain.reachability === 'ok' && domain.status === 'ready'
     if (isHealthy) continue
 

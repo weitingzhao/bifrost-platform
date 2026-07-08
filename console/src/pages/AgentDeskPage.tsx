@@ -41,7 +41,7 @@ interface AgentDeskPageProps {
   onOpenOperatorPlane?: () => void
 }
 
-type AgentScope = 'agent-desk' | 'release'
+type AgentScope = 'agent-desk' | 'release' | 'deliver-stg-recover'
 
 interface QuickPrompt {
   id: string
@@ -75,6 +75,13 @@ const QUICK_PROMPTS: QuickPrompt[] = [
     prompt:
       'Deploy latest changes to prod. Scan all repos (incl. bifrost-platform-plugin) for uncommitted changes, commit and push, run STG → Prod platform pipeline, then Phase G install-ib-gateway if plugin changed.',
     scope: 'release',
+  },
+  {
+    id: 'deliver-stg-recover',
+    label: 'Deliver STG Recover',
+    prompt:
+      'Last bifrost-deliver-stg PipelineRun failed. Use get_delivery_run_logs and get_stg_smoke first. If STG smoke is green, this is stale-fail — fix rollout/GitOps (not nodes), then start_pipeline_run bifrost-deliver-stg. D10: no live trading.',
+    scope: 'deliver-stg-recover',
   },
 ]
 
@@ -297,7 +304,7 @@ export function AgentDeskPage({
               <button
                 key={item.id}
                 type="button"
-                className={`agent-desk-quick-btn${item.scope === 'release' ? ' agent-desk-quick-btn--accent' : ''}`}
+                className={`agent-desk-quick-btn${item.scope === 'release' || item.scope === 'deliver-stg-recover' ? ' agent-desk-quick-btn--accent' : ''}`}
                 disabled={!canOperate || startMutation.isPending || runnerBlocked}
                 onClick={() => handleSend(item.prompt, item.scope)}
               >

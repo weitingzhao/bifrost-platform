@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { DenseTag, StatusLamp } from '@bifrost/ui'
+import { cn, DenseTag, StatusLamp } from '@bifrost/ui'
 import { AlertTriangle, Gauge, Rocket, Satellite, type LucideIcon } from 'lucide-react'
 import {
   fetchCluster,
@@ -28,6 +28,7 @@ import {
   type Signal,
 } from '@/lib/control-room/missionSignals'
 import type { TaskModeId } from '@/lib/task-mode/types'
+import type { ProdFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
 
 const REFETCH_MS = 20_000
 const STG_NS = 'bifrost-stg'
@@ -170,6 +171,7 @@ type EnvironmentReadinessPanelProps = {
   isLoading: boolean
   chips: EnvChip[]
   compact?: boolean
+  summaryColumn?: boolean
   linkLabel: string
   onLink: () => void
 }
@@ -181,32 +183,50 @@ function EnvironmentReadinessPanel({
   isLoading,
   chips,
   compact = false,
+  summaryColumn = false,
   linkLabel,
   onLink,
 }: EnvironmentReadinessPanelProps) {
   const tag = stripOverallTag(overall, isLoading)
   const color = missionStatusColor(missionStatus(overall))
+  const dense = compact || summaryColumn
 
   return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Icon size={16} style={{ color }} />
-        <span className="text-[var(--text-dense-label)] font-semibold">{title}</span>
+    <div
+      className={cn(
+        'rounded-lg border border-border bg-secondary',
+        dense ? 'px-2.5 py-2' : 'px-3 py-2.5',
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Icon size={dense ? 14 : 16} style={{ color }} />
+        <span className={cn('font-semibold', dense ? 'text-[var(--text-dense-meta)]' : 'text-[var(--text-dense-label)]')}>
+          {title}
+        </span>
         <StatusLamp value={overall} kind="reach" />
-        <DenseTag variant={tag.variant}>{tag.label}</DenseTag>
+        <DenseTag variant={tag.variant} className={dense ? 'text-[9px]' : undefined}>
+          {tag.label}
+        </DenseTag>
       </div>
-      <div className={`mt-2 grid gap-2 ${compact ? 'grid-cols-1' : 'sm:grid-cols-2'}`}>
+      <div
+        className={cn(
+          'mt-1.5 grid gap-1.5',
+          dense ? 'grid-cols-2' : 'sm:grid-cols-2',
+        )}
+      >
         {chips.map(chip => (
           <ReadinessChip key={chip.label} label={chip.label} signal={chip.signal} detail={chip.detail} />
         ))}
       </div>
-      <button
-        type="button"
-        className="mt-2 text-[var(--text-dense-meta)] text-primary hover:underline"
-        onClick={onLink}
-      >
-        {linkLabel}
-      </button>
+      {!summaryColumn && (
+        <button
+          type="button"
+          className="mt-2 text-[var(--text-dense-meta)] text-primary hover:underline"
+          onClick={onLink}
+        >
+          {linkLabel}
+        </button>
+      )}
     </div>
   )
 }
@@ -308,6 +328,16 @@ export function useSatelliteProdReadiness(enabled = true) {
     prodBlocked,
     isLoading,
     prodDisabledReason: prodBlocked ? 'Prod readiness blocked — fix environment first' : undefined,
+    fixSignals: [
+      { label: 'K8s · Trade PROD NS', signal: k8s.signal, detail: k8s.detail },
+      { label: 'PG / Redis', signal: datastore.signal, detail: datastore.detail },
+      { label: 'IB socket', signal: ib.signal, detail: ib.detail },
+      { label: 'Trade APIs', signal: tradeApis.signal, detail: tradeApis.detail },
+      { label: 'Trade prod matrix', signal: tradeSnapshot.signal, detail: tradeSnapshot.detail },
+      { label: 'PROD release gate', signal: gate.signal, detail: gate.detail },
+    ] as ProdFixSignal[],
+    prodNamespace: PROD_NS,
+    stgNamespace: STG_NS,
   }
 }
 
@@ -350,14 +380,233 @@ export function useRocketProdReadiness(enabled = true) {
     prodBlocked,
     isLoading,
     prodDisabledReason: prodBlocked ? 'Prod readiness blocked — fix environment first' : undefined,
+    fixSignals: [
+      { label: 'K8s · Platform PROD NS', signal: k8sProd.signal, detail: k8sProd.detail },
+      { label: 'Self-health PROD', signal: selfProd.signal, detail: selfProd.detail },
+      { label: 'PROD release gate', signal: gate.signal, detail: gate.detail },
+      { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
+    ] as ProdFixSignal[],
+    prodNamespace: PLATFORM_PROD,
   }
+}
+
+export type LaunchViewOverall = {
+  overall: Signal
+  stgOverall: Signal
+  prodOverall: Signal
+  isLoading: boolean
+  fixSignals: ProdFixSignal[]
+}
+
+/** Headline readiness for Rocket Launch view — worst(STG, PROD) panels in Task CC. */
+export function useRocketLaunchOverall(enabled = true): LaunchViewOverall {
+  const { snapshot, isLoading: missionLoading } = useMissionSnapshot()
+
+  const serviceQ = useQuery({
+    queryKey: ['task-cc', 'service-readiness'],
+    queryFn: fetchClusterServiceReadiness,
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const clusterQ = useQuery({
+    queryKey: ['task-cc', 'cluster'],
+    queryFn: fetchCluster,
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const selfQ = useQuery({
+    queryKey: ['cockpit', 'self-health'],
+    queryFn: fetchSelfHealth,
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const stgGateQ = useQuery({
+    queryKey: ['task-cc', 'platform-stg-gate'],
+    queryFn: () => fetchReleaseGate('platform-stg'),
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const prodGateQ = useQuery({
+    queryKey: ['task-cc', 'platform-prod-gate'],
+    queryFn: () => fetchReleaseGate('platform-prod'),
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const cicdDomain = serviceQ.data?.domains.find(d => d.id === 'cicd')
+  const cicdSignal = (cicdDomain?.reachability ?? 'unknown') as Signal
+  const cicdDetail = cicdDomain?.summary ?? serviceQ.data?.detail ?? 'Tekton · platform namespaces'
+
+  const cluster = clusterQ.data
+  const clusterInfra = useMemo(() => infraSignal(cluster), [cluster])
+  const k8sStgNs = useMemo(() => namespacePods(cluster, PLATFORM_STG), [cluster])
+  const k8sProd = useMemo(() => namespacePods(cluster, PLATFORM_PROD), [cluster])
+  const selfStg = useMemo(() => selfHealthEnvSignal(selfQ.data?.probes, 'stg'), [selfQ.data?.probes])
+  const selfProd = useMemo(() => selfHealthEnvSignal(selfQ.data?.probes, 'prod'), [selfQ.data?.probes])
+  const stgGate = useMemo(() => releaseGateSignal(stgGateQ.data), [stgGateQ.data])
+  const prodGate = useMemo(() => releaseGateSignal(prodGateQ.data), [prodGateQ.data])
+
+  const stgOverall = worst(
+    clusterInfra.signal,
+    k8sStgNs.signal,
+    cicdSignal,
+    selfStg.signal,
+    stgGate.signal,
+    snapshot.release.signal,
+  )
+  const prodOverall = worst(k8sProd.signal, selfProd.signal, prodGate.signal, snapshot.release.signal)
+  const overall = worst(stgOverall, prodOverall)
+
+  const isLoading =
+    missionLoading ||
+    serviceQ.isLoading ||
+    clusterQ.isLoading ||
+    selfQ.isLoading ||
+    stgGateQ.isLoading ||
+    prodGateQ.isLoading
+
+  const fixSignals: ProdFixSignal[] = [
+    { label: 'Cluster · infra', signal: clusterInfra.signal, detail: clusterInfra.detail },
+    { label: 'STG · K8s NS', signal: k8sStgNs.signal, detail: k8sStgNs.detail },
+    { label: 'STG · CI/CD', signal: cicdSignal, detail: cicdDetail },
+    { label: 'STG · Release gate', signal: stgGate.signal, detail: stgGate.detail },
+    { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
+    { label: 'STG · Self-health', signal: selfStg.signal, detail: selfStg.detail },
+    { label: 'PROD · Platform NS', signal: k8sProd.signal, detail: k8sProd.detail },
+    { label: 'PROD · Self-health', signal: selfProd.signal, detail: selfProd.detail },
+    { label: 'PROD · Release gate', signal: prodGate.signal, detail: prodGate.detail },
+  ]
+
+  return { overall, stgOverall, prodOverall, isLoading, fixSignals }
+}
+
+/** Headline readiness for Satellite Deploy view — worst(STG, PROD) panels in Task CC. */
+export function useSatelliteDeployOverall(enabled = true): LaunchViewOverall {
+  const { snapshot, matrices, isLoading: missionLoading } = useMissionSnapshot()
+
+  const stgBusQ = useQuery({
+    queryKey: ['task-cc', 'satellite-bus', 'stg'],
+    queryFn: () => fetchSatelliteBusDeep('stg'),
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const prodBusQ = useQuery({
+    queryKey: ['task-cc', 'satellite-bus', 'prod'],
+    queryFn: () => fetchSatelliteBusDeep('prod'),
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const prodGateQ = useQuery({
+    queryKey: ['task-cc', 'trade-prod-gate'],
+    queryFn: () => fetchReleaseGate('prod'),
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const clusterQ = useQuery({
+    queryKey: ['task-cc', 'cluster'],
+    queryFn: fetchCluster,
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const stgMatrix = useMemo(() => matrices.find(m => m.environment === 'stg'), [matrices])
+  const prodMatrix = useMemo(() => matrices.find(m => m.environment === 'prod'), [matrices])
+  const cluster = clusterQ.data
+  const clusterInfra = useMemo(() => infraSignal(cluster), [cluster])
+  const stgK8sNs = useMemo(() => namespacePods(cluster, STG_NS), [cluster])
+  const prodK8sNs = useMemo(() => namespacePods(cluster, PROD_NS), [cluster])
+
+  const stgDatastore = useMemo(
+    () => ({ signal: datastoreEnvSignal(matrices, 'stg'), detail: datastoreDetail(matrices, 'stg') }),
+    [matrices],
+  )
+
+  const prodDatastore = useMemo(
+    () => ({ signal: datastoreEnvSignal(matrices, 'prod'), detail: datastoreDetail(matrices, 'prod') }),
+    [matrices],
+  )
+
+  const busForEnv = (data: typeof stgBusQ.data, env: 'stg' | 'prod'): SatelliteBusDeepResponse | undefined => {
+    if (data == null) return undefined
+    if (isAllSatelliteBusDeep(data)) return data.buses.find(b => b.environment === env)
+    return data
+  }
+
+  const ibForBus = (busReach: SatelliteBusDeepResponse | undefined) => {
+    if (busReach == null) return { signal: 'unknown' as Signal, detail: 'probing' }
+    const socket = busReach.monitor.socket
+    return ibSocketSignal(busReach.ingest.reachability, [
+      socket.ib_ingestor,
+      socket.ib_account_agent,
+      socket.ib_operator,
+      socket.massive,
+    ])
+  }
+
+  const stgIb = useMemo(() => ibForBus(busForEnv(stgBusQ.data, 'stg')), [stgBusQ.data])
+  const prodIb = useMemo(() => ibForBus(busForEnv(prodBusQ.data, 'prod')), [prodBusQ.data])
+  const stgTradeApis = useMemo(() => tradeApiSummary(stgMatrix), [stgMatrix])
+  const prodTradeApis = useMemo(() => tradeApiSummary(prodMatrix), [prodMatrix])
+  const prodGate = useMemo(() => releaseGateSignal(prodGateQ.data), [prodGateQ.data])
+
+  const stgOverall = worst(
+    clusterInfra.signal,
+    stgK8sNs.signal,
+    stgDatastore.signal,
+    stgIb.signal,
+    stgTradeApis.signal,
+  )
+  const prodOverall = worst(
+    clusterInfra.signal,
+    prodK8sNs.signal,
+    prodDatastore.signal,
+    prodIb.signal,
+    prodTradeApis.signal,
+    snapshot.tradeProd.signal,
+    prodGate.signal,
+  )
+  const overall = worst(stgOverall, prodOverall)
+
+  const isLoading =
+    missionLoading ||
+    stgBusQ.isLoading ||
+    prodBusQ.isLoading ||
+    clusterQ.isLoading ||
+    prodGateQ.isLoading
+
+  const fixSignals: ProdFixSignal[] = [
+    { label: 'Cluster · infra', signal: clusterInfra.signal, detail: clusterInfra.detail },
+    { label: 'STG · K8s NS', signal: stgK8sNs.signal, detail: stgK8sNs.detail },
+    { label: 'STG · PG / Redis', signal: stgDatastore.signal, detail: stgDatastore.detail },
+    { label: 'STG · IB socket', signal: stgIb.signal, detail: stgIb.detail },
+    { label: 'STG · Trade APIs', signal: stgTradeApis.signal, detail: stgTradeApis.detail },
+    { label: 'PROD · K8s NS', signal: prodK8sNs.signal, detail: prodK8sNs.detail },
+    { label: 'PROD · PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
+    { label: 'PROD · IB socket', signal: prodIb.signal, detail: prodIb.detail },
+    { label: 'PROD · Trade APIs', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
+    { label: 'PROD · Trade matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
+    { label: 'PROD · Release gate', signal: prodGate.signal, detail: prodGate.detail },
+  ]
+
+  return { overall, stgOverall, prodOverall, isLoading, fixSignals }
 }
 
 function RocketReadinessStrip({
   compact = false,
+  summaryColumn = false,
+  suppressProdBlockedBanner = false,
   onNavigate,
 }: {
   compact?: boolean
+  summaryColumn?: boolean
+  suppressProdBlockedBanner?: boolean
   onNavigate: (tabId: string) => void
 }) {
   const { snapshot, isLoading: missionLoading } = useMissionSnapshot()
@@ -421,51 +670,77 @@ function RocketReadinessStrip({
     stgGateQ.isLoading
   const prodPanelLoading = prodLoading || clusterQ.isLoading || selfQ.isLoading || prodGateQ.isLoading
 
-  const showProdBanner = isProdReleaseBlocked(prodOverallLocal) || isProdReleaseBlocked(prodOverall)
+  const showProdBanner =
+    !suppressProdBlockedBanner &&
+    (isProdReleaseBlocked(prodOverallLocal) || isProdReleaseBlocked(prodOverall))
+
+  const stgChips: EnvChip[] = summaryColumn
+    ? [
+        { label: 'K8s · STG NS', signal: k8sStg.signal, detail: k8sStg.detail },
+        { label: 'CI/CD', signal: cicdSignal, detail: cicdDetail },
+        { label: 'Self-health STG', signal: selfStg.signal, detail: selfStg.detail },
+        { label: 'STG gate', signal: stgGate.signal, detail: stgGate.detail },
+      ]
+    : [
+        { label: 'K8s · Platform STG NS', signal: k8sStg.signal, detail: k8sStg.detail },
+        { label: 'CI/CD', signal: cicdSignal, detail: cicdDetail },
+        { label: 'Self-health STG', signal: selfStg.signal, detail: selfStg.detail },
+        { label: 'STG release gate', signal: stgGate.signal, detail: stgGate.detail },
+        { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
+      ]
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cn('flex flex-col', summaryColumn ? 'gap-1.5' : 'gap-2')}>
       {showProdBanner && <ProdBlockedBanner context="rocket" />}
       <EnvironmentReadinessPanel
-        title="Platform STG readiness"
+        title={summaryColumn ? 'STG readiness' : 'Platform STG readiness'}
         icon={Rocket}
         overall={stgOverall}
         isLoading={stgLoading}
         compact={compact}
-        chips={[
-          { label: 'K8s · Platform STG NS', signal: k8sStg.signal, detail: k8sStg.detail },
-          { label: 'CI/CD', signal: cicdSignal, detail: cicdDetail },
-          { label: 'Self-health STG', signal: selfStg.signal, detail: selfStg.detail },
-          { label: 'STG release gate', signal: stgGate.signal, detail: stgGate.detail },
-          { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
-        ]}
+        summaryColumn={summaryColumn}
+        chips={stgChips}
         linkLabel="Platform Release →"
         onLink={() => onNavigate('platform-release')}
       />
       <EnvironmentReadinessPanel
-        title="PROD environment readiness"
+        title={summaryColumn ? 'PROD readiness' : 'PROD environment readiness'}
         icon={Rocket}
         overall={prodOverallLocal}
         isLoading={prodPanelLoading}
         compact={compact}
+        summaryColumn={summaryColumn}
         chips={[
-          { label: 'K8s · Platform PROD NS', signal: k8sProd.signal, detail: k8sProd.detail },
+          { label: 'K8s · PROD NS', signal: k8sProd.signal, detail: k8sProd.detail },
           { label: 'Self-health PROD', signal: selfProd.signal, detail: selfProd.detail },
-          { label: 'PROD release gate', signal: prodGate.signal, detail: prodGate.detail },
+          { label: 'PROD gate', signal: prodGate.signal, detail: prodGate.detail },
           { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
         ]}
         linkLabel="Platform Release →"
         onLink={() => onNavigate('platform-release')}
       />
+      {summaryColumn && (
+        <button
+          type="button"
+          className="text-[var(--text-dense-caption)] text-primary hover:underline"
+          onClick={() => onNavigate('platform-release')}
+        >
+          Platform Release →
+        </button>
+      )}
     </div>
   )
 }
 
 function SatelliteReadinessStrip({
   compact = false,
+  summaryColumn = false,
+  suppressProdBlockedBanner = false,
   onNavigate,
 }: {
   compact?: boolean
+  summaryColumn?: boolean
+  suppressProdBlockedBanner?: boolean
   onNavigate: (tabId: string) => void
 }) {
   const { snapshot, matrices, isLoading: missionLoading } = useMissionSnapshot()
@@ -570,17 +845,36 @@ function SatelliteReadinessStrip({
   const prodLoading =
     missionLoading || prodBusQ.isLoading || clusterDetailQ.isLoading || prodGateQ.isLoading
 
-  const showProdBanner = prodBlocked || isProdReleaseBlocked(prodOverallLocal) || isProdReleaseBlocked(prodOverall)
+  const showProdBanner =
+    !suppressProdBlockedBanner &&
+    (prodBlocked || isProdReleaseBlocked(prodOverallLocal) || isProdReleaseBlocked(prodOverall))
+
+  const prodChips: EnvChip[] = summaryColumn
+    ? [
+        { label: 'K8s · PROD NS', signal: prodK8s.signal, detail: prodK8s.detail },
+        { label: 'PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
+        { label: 'IB socket', signal: prodIb.signal, detail: prodIb.detail },
+        { label: 'Trade APIs', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
+      ]
+    : [
+        { label: 'K8s · PROD NS', signal: prodK8s.signal, detail: prodK8s.detail },
+        { label: 'PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
+        { label: 'IB socket', signal: prodIb.signal, detail: prodIb.detail },
+        { label: 'Trade APIs', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
+        { label: 'Trade prod matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
+        { label: 'PROD release gate', signal: prodGate.signal, detail: prodGate.detail },
+      ]
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cn('flex flex-col', summaryColumn ? 'gap-1.5' : 'gap-2')}>
       {showProdBanner && <ProdBlockedBanner context="satellite" />}
       <EnvironmentReadinessPanel
-        title="STG environment readiness"
+        title={summaryColumn ? 'STG readiness' : 'STG environment readiness'}
         icon={Satellite}
         overall={stgOverall}
         isLoading={stgLoading}
         compact={compact}
+        summaryColumn={summaryColumn}
         chips={[
           { label: 'K8s · STG NS', signal: stgK8s.signal, detail: stgK8s.detail },
           { label: 'PG / Redis', signal: stgDatastore.signal, detail: stgDatastore.detail },
@@ -591,22 +885,34 @@ function SatelliteReadinessStrip({
         onLink={() => onNavigate('satellite-bus')}
       />
       <EnvironmentReadinessPanel
-        title="PROD environment readiness"
+        title={summaryColumn ? 'PROD readiness' : 'PROD environment readiness'}
         icon={Satellite}
         overall={prodOverallLocal}
         isLoading={prodLoading}
         compact={compact}
-        chips={[
-          { label: 'K8s · PROD NS', signal: prodK8s.signal, detail: prodK8s.detail },
-          { label: 'PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
-          { label: 'IB socket', signal: prodIb.signal, detail: prodIb.detail },
-          { label: 'Trade APIs', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
-          { label: 'Trade prod matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
-          { label: 'PROD release gate', signal: prodGate.signal, detail: prodGate.detail },
-        ]}
+        summaryColumn={summaryColumn}
+        chips={prodChips}
         linkLabel="Trade Release →"
         onLink={() => onNavigate('trade-release')}
       />
+      {summaryColumn && (
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+          <button
+            type="button"
+            className="text-[var(--text-dense-caption)] text-primary hover:underline"
+            onClick={() => onNavigate('satellite-bus')}
+          >
+            Satellite Bus →
+          </button>
+          <button
+            type="button"
+            className="text-[var(--text-dense-caption)] text-primary hover:underline"
+            onClick={() => onNavigate('trade-release')}
+          >
+            Trade Release →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -615,15 +921,37 @@ export type TaskModeReadinessStripProps = {
   modeId: TaskModeId
   onNavigate: (tabId: string) => void
   compact?: boolean
+  summaryColumn?: boolean
+  suppressProdBlockedBanner?: boolean
 }
 
 /** Mode-scoped environment readiness — replaces generic mission signals in playbook ops modes. */
-export function TaskModeReadinessStrip({ modeId, onNavigate, compact = false }: TaskModeReadinessStripProps) {
+export function TaskModeReadinessStrip({
+  modeId,
+  onNavigate,
+  compact = false,
+  summaryColumn = false,
+  suppressProdBlockedBanner = false,
+}: TaskModeReadinessStripProps) {
   if (modeId === 'rocket-launch') {
-    return <RocketReadinessStrip compact={compact} onNavigate={onNavigate} />
+    return (
+      <RocketReadinessStrip
+        compact={compact}
+        summaryColumn={summaryColumn}
+        suppressProdBlockedBanner={suppressProdBlockedBanner}
+        onNavigate={onNavigate}
+      />
+    )
   }
   if (modeId === 'satellite-deploy') {
-    return <SatelliteReadinessStrip compact={compact} onNavigate={onNavigate} />
+    return (
+      <SatelliteReadinessStrip
+        compact={compact}
+        summaryColumn={summaryColumn}
+        suppressProdBlockedBanner={suppressProdBlockedBanner}
+        onNavigate={onNavigate}
+      />
+    )
   }
   return null
 }

@@ -39,6 +39,9 @@ test-api:
 test-console:
 	cd console && npm run type-check
 
+cluster-triage:
+	cd console && npx --yes tsx scripts/cluster-failure-triage.ts
+
 check-spine:
 	bash scripts/ci/check_spine_catalog.sh
 

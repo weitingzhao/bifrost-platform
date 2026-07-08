@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@bifrost/ui'
 import {
   DenseDataTable,
@@ -10,11 +10,15 @@ import {
   DenseTableCell,
   DenseTag,
   StatusLamp,
+  Button,
 } from '@bifrost/ui'
-import { AlertCircle, RefreshCw, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react'
+import { AlertCircle, RefreshCw, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Wrench } from 'lucide-react'
 import { useState } from 'react'
-import { Button } from '@bifrost/ui'
-import { fetchRetrospectiveReport } from '@/api/platform'
+import { fetchRetrospectiveReport, startRemediation } from '@/api/platform'
+import { buildDefectPatternRemediatePrompt } from '@/lib/agent/defectPatternRemediatePrompt'
+import { DEFECT_PATTERN_REMEDIATE_SCOPE } from '@/lib/agent/agentScopes'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
+import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import { OpsSection } from '@/components/layout/OpsSection'
 import type {
   RetrospectiveReport,
@@ -170,7 +174,17 @@ function InsightsPanel({ insights }: { insights: string[] | undefined }) {
   )
 }
 
-function PatternsTable({ patterns }: { patterns: RetrospectivePatternCluster[] }) {
+function PatternsTable({
+  patterns,
+  onFixPattern,
+  fixPending,
+  canFix,
+}: {
+  patterns: RetrospectivePatternCluster[]
+  onFixPattern?: (pattern: RetrospectivePatternCluster) => void
+  fixPending?: boolean
+  canFix?: boolean
+}) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggle = (id: string) =>
     setExpanded(prev => {
@@ -203,6 +217,7 @@ function PatternsTable({ patterns }: { patterns: RetrospectivePatternCluster[] }
             <DenseTableHead className="w-[60px] text-right">Success</DenseTableHead>
             <DenseTableHead className="w-[40px] text-center">Trend</DenseTableHead>
             <DenseTableHead>Top Tools</DenseTableHead>
+            {onFixPattern != null && <DenseTableHead className="w-[72px]" />}
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
@@ -253,10 +268,28 @@ function PatternsTable({ patterns }: { patterns: RetrospectivePatternCluster[] }
                       ))}
                     </div>
                   </DenseTableCell>
+                  {onFixPattern != null && (
+                    <DenseTableCell>
+                      {p.occurrences >= 2 && canFix && (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          disabled={fixPending}
+                          onClick={e => {
+                            e.stopPropagation()
+                            onFixPattern(p)
+                          }}
+                        >
+                          <Wrench size={12} className="mr-1" aria-hidden />
+                          Fix
+                        </Button>
+                      )}
+                    </DenseTableCell>
+                  )}
                 </DenseTableRow>
                 {isOpen && p.signals && p.signals.length > 0 && (
                   <DenseTableRow key={`${p.id}-signals`}>
-                    <DenseTableCell colSpan={9} className="!py-2 bg-secondary/30">
+                    <DenseTableCell colSpan={onFixPattern != null ? 10 : 9} className="!py-2 bg-secondary/30">
                       <div className="pl-6 space-y-1">
                         <p className="text-dense-caption font-medium text-muted-foreground mb-1">
                           Classification signals ({p.signals.length})
@@ -399,6 +432,60 @@ function NamespaceTable({ namespaces }: { namespaces: RetrospectiveNamespaceActi
   )
 }
 
+function HighRecurrenceTriageStrip({
+  patterns,
+  onFixPattern,
+  fixPending,
+  canFix,
+}: {
+  patterns: RetrospectivePatternCluster[]
+  onFixPattern?: (pattern: RetrospectivePatternCluster) => void
+  fixPending?: boolean
+  canFix?: boolean
+}) {
+  const hot = [...patterns]
+    .filter(p => p.occurrences >= 2)
+    .sort((a, b) => b.occurrences - a.occurrences)
+    .slice(0, 5)
+  if (hot.length === 0) return null
+
+  function inferTrack(p: RetrospectivePatternCluster): string {
+    const label = p.label.toLowerCase()
+    if (label.includes('deliver') || label.includes('pipeline') || label.includes('tekton')) return 'playbook'
+    if (label.includes('crash') || label.includes('config') || label.includes('nginx')) return 'product'
+    if (label.includes('node') || label.includes('postgres') || label.includes('redis')) return 'infra'
+    return 'agent-adhoc'
+  }
+
+  return (
+    <OpsSection
+      title="High-recurrence patterns (cluster triage cross-ref)"
+      description="Patterns with 2+ agent jobs — see Cluster → Failure triage for live Top-N ranking and Fix actions."
+    >
+      <ul className="m-0 list-none space-y-1.5 px-3 py-2">
+        {hot.map(p => (
+          <li key={p.id} className="flex flex-wrap items-center gap-2 text-dense-body">
+            <DenseTag variant={p.severity === 'critical' ? 'danger' : 'warning'}>{inferTrack(p)}</DenseTag>
+            <span className="font-medium">{p.label}</span>
+            <span className="font-mono tabular-nums text-muted-foreground">{p.occurrences}×</span>
+            {p.trending === 'up' && <TrendIcon trend="up" />}
+            {onFixPattern != null && canFix && (
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={fixPending}
+                onClick={() => onFixPattern(p)}
+              >
+                Fix
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </OpsSection>
+  )
+}
+
 function isReportEmpty(report: RetrospectiveReport): boolean {
   return report.total_jobs === 0 && (report.patterns?.length ?? 0) === 0
 }
@@ -407,7 +494,37 @@ function safeActions(actions: RetrospectivePatternCluster['top_actions'] | undef
   return actions ?? []
 }
 
-export function DefectsPage() {
+export type DefectsPageProps = {
+  canOperate?: boolean
+  onStartAgentJob?: (job: AmbientAgentJob) => void
+}
+
+export function DefectsPage({
+  canOperate = false,
+  onStartAgentJob,
+}: DefectsPageProps = {}) {
+  const qc = useQueryClient()
+  const patternFixMutation = useMutation({
+    mutationFn: (pattern: RetrospectivePatternCluster) =>
+      startRemediation({
+        scope: DEFECT_PATTERN_REMEDIATE_SCOPE,
+        prompt: buildDefectPatternRemediatePrompt(pattern),
+      }),
+    onSuccess: (job) => {
+      void qc.invalidateQueries({ queryKey: ['agent', 'retrospective', 'report'] })
+      onStartAgentJob?.({
+        id: job.id,
+        scope: DEFECT_PATTERN_REMEDIATE_SCOPE,
+        label: scopeToLabel(DEFECT_PATTERN_REMEDIATE_SCOPE),
+      })
+    },
+  })
+
+  const handleFixPattern = (pattern: RetrospectivePatternCluster) => {
+    if (!canOperate) return
+    patternFixMutation.mutate(pattern)
+  }
+
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['agent', 'retrospective', 'report'],
     queryFn: () => fetchRetrospectiveReport(),
@@ -494,9 +611,20 @@ export function DefectsPage() {
       />
 
       <StatsCards report={data} />
+      <HighRecurrenceTriageStrip
+        patterns={data.patterns ?? []}
+        onFixPattern={handleFixPattern}
+        fixPending={patternFixMutation.isPending}
+        canFix={canOperate}
+      />
       <RootCauseDistBar dist={data.root_cause_distribution ?? []} />
       <InsightsPanel insights={data.insights} />
-      <PatternsTable patterns={data.patterns ?? []} />
+      <PatternsTable
+        patterns={data.patterns ?? []}
+        onFixPattern={handleFixPattern}
+        fixPending={patternFixMutation.isPending}
+        canFix={canOperate}
+      />
 
       <div className="grid grid-cols-2 gap-4">
         <ScopeStatsTable stats={data.scope_stats ?? []} />

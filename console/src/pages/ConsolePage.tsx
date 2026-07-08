@@ -3,6 +3,7 @@ import { Button, PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipPr
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import type { MatrixResponse, RemediationJob } from '@/api/types'
 import { AgentJobBanner } from '@/components/agent/AgentJobBanner'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import {
   fetchAudit,
@@ -169,13 +170,14 @@ function tabFromHash(): ConsoleViewTab | null {
 function ConsolePageInner() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('prod')
   const [viewTab, setViewTabState] = useState<ConsoleViewTab>(() => tabFromHash() ?? 'control-room')
-  const { modeId } = useTaskMode()
+  const { modeId, setModeId } = useTaskMode()
   const [agentDeskJobId, setAgentDeskJobId] = useState<string | null>(null)
   const [agentDeskPrefill, setAgentDeskPrefill] = useState<string | null>(null)
   /** Shell-level ambient agent job — survives tab switches. */
   const [ambientJob, setAmbientJob] = useState<AmbientAgentJob | null>(null)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
   const qc = useQueryClient()
+  const { canOperate } = usePlatformAuth()
 
   const envForRuntime = envFilter === 'all' ? 'prod' : envFilter
 
@@ -396,6 +398,14 @@ function ConsolePageInner() {
   const openCompute = () => setViewTab('compute')
   const openAgentDeskTab = () => setViewTab('agent-desk')
 
+  const openLaunchView = useCallback(
+    (taskMode: 'rocket-launch' | 'satellite-deploy') => {
+      setModeId(taskMode)
+      setViewTab('task-cc', { taskMode })
+    },
+    [setModeId, setViewTab],
+  )
+
   const handleTaskModeChange = useCallback(
     (landingTab: string, nextModeId: TaskModeId) => {
       if (isConsoleViewTab(landingTab)) {
@@ -470,7 +480,7 @@ function ConsolePageInner() {
         onSelect={(id) => setViewTab(id as ConsoleViewTab)}
         onModeChange={handleTaskModeChange}
       />
-      <SidebarInset>
+      <SidebarInset className="min-w-0 overflow-x-hidden">
         <div className="console-shell-chrome sticky top-0 z-20 bg-card">
           <ConsoleHeader
             title={VIEW_TITLES[viewTab]}
@@ -609,6 +619,7 @@ function ConsolePageInner() {
                 onOpenCompute={openCompute}
                 onOpenDefects={openDefects}
                 onOpenAgentDeskTab={openAgentDeskTab}
+                onOpenLaunchView={openLaunchView}
               />
             </Suspense>
           </>
@@ -641,7 +652,12 @@ function ConsolePageInner() {
           </>
         )}
 
-        {viewTab === 'defects' && <DefectsPage />}
+        {viewTab === 'defects' && (
+          <DefectsPage
+            canOperate={canOperate}
+            onStartAgentJob={startAmbientAgentJob}
+          />
+        )}
 
         {viewTab === 'runtime-map' && (
           <>
@@ -680,6 +696,9 @@ function ConsolePageInner() {
               onOpenAudit={openAudit}
               onOpenServerConsole={() => setViewTab('console')}
               onOpenAgentDesk={openAgentDesk}
+              onOpenDefects={() => setViewTab('defects')}
+              ambientJobId={ambientJob?.id ?? null}
+              onStartAgentJob={startAmbientAgentJob}
             />
           </>
         )}

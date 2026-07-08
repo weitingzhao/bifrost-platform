@@ -183,7 +183,75 @@ export const MISSION_DIAGNOSTIC_MCP = {
   matrix: 'get_connectivity_matrix',
   clusterPostgres: 'get_cluster_postgres (Console cluster API)',
   clusterRedis: 'get_cluster_redis (Console cluster API)',
+  deliveryRunLogs: 'get_delivery_run_logs — Tekton PipelineRun task logs',
+  startPipelineRun: 'start_pipeline_run — re-run bifrost-deliver-stg after fix',
+  stgSmoke: 'get_stg_smoke — STG runtime probes (stale-fail vs outage)',
+  gitopsApps: 'get_gitops_apps — Argo CD Application sync/health',
+  gitopsSync: 'gitops_sync_app — trigger Argo sync to HEAD',
 } as const
+
+/** Cluster / delivery remediation playbooks — L1 Ops scope (Mission Board + Cluster triage). */
+export type ClusterRemediationPlaybook = {
+  id: string
+  title: string
+  trigger: string
+  agentAction: string
+  autonomy: 'L0' | 'L1' | 'L2'
+  mustNot: string
+  mcpTools: string[]
+}
+
+export const CLUSTER_REMEDIATION_PLAYBOOKS: ClusterRemediationPlaybook[] = [
+  {
+    id: 'deliver-stg-recover',
+    title: 'Deliver STG pipeline recovery',
+    trigger:
+      'Last bifrost-deliver-stg PipelineRun failed (Mission Release fail/degraded) — especially when STG smoke is green (stale pipeline fail, not K8s nodes)',
+    agentAction:
+      'L1: get_delivery_run_logs → identify failing Tekton task/step (rollout first) → spawn_trade_release_fix if repo fix needed → start_pipeline_run bifrost-deliver-stg → get_stg_smoke + verify_mission_snapshot',
+    autonomy: 'L1',
+    mustNot: 'Do not cordon nodes; do not enable live trading (D10); do not bypass release gates',
+    mcpTools: ['get_delivery_run_logs', 'start_pipeline_run', 'get_stg_smoke', 'verify_mission_snapshot'],
+  },
+  {
+    id: 'gitops-config-repair',
+    title: 'GitOps / ConfigMap repair',
+    trigger: 'PipelineRun gitops-sync or rollout fails on missing ConfigMap/Secret; CreateContainerConfigError pods',
+    agentAction: 'Restore manifest in Gitea programs/ path; ArgoCD sync; re-run deliver-stg',
+    autonomy: 'L1',
+    mustNot: 'Patch prod secrets in-cluster without Owner review',
+    mcpTools: ['gitops_sync_app', 'get_delivery_run_logs', 'start_pipeline_run'],
+  },
+  {
+    id: 'elastic-node-recover',
+    title: 'Elastic node recover (WOL / k3s-agent)',
+    trigger: 'Elastic node degraded — host online but K3s agent down or node cordoned',
+    agentAction: 'POST /cluster/nodes/{name}/wake or restart k3s-agent; uncordon when Ready',
+    autonomy: 'L1',
+    mustNot: 'Replace hardware or drain core nodes without triage',
+    mcpTools: ['get_cluster_nodes', 'cordon_node', 'uncordon_node', 'drain_node'],
+  },
+  {
+    id: 'platform-self-health-recover',
+    title: 'Platform self-health recovery',
+    trigger: 'Control plane self-health probes failing (platform-api, console, nginx routes)',
+    agentAction:
+      'L1: verify_mission_snapshot → rollout_restart platform-api/console in bifrost-platform-prod → confirm NodePort reachability',
+    autonomy: 'L1',
+    mustNot: 'Do not patch prod secrets in-cluster without Owner review',
+    mcpTools: ['verify_mission_snapshot', 'rollout_restart_deployment', 'get_cluster_summary'],
+  },
+  {
+    id: 'registry-pull-recover',
+    title: 'Registry image pull recovery',
+    trigger: 'ImagePullBackOff / ErrImagePull from registry.cicd:30500 after deliver rollout',
+    agentAction:
+      'L1: describe failing pods → confirm Kaniko tag + registry reachability → fix image/build → rollout_restart',
+    autonomy: 'L1',
+    mustNot: 'Do not replace nodes for registry pull failures',
+    mcpTools: ['get_cluster_summary', 'rollout_restart_deployment'],
+  },
+]
 
 /** Network governance Phase 4 — classify before firewall/zone actuation (parallel to verify_payload). */
 export type NetworkDiagnosticPlaybook = {
@@ -507,6 +575,9 @@ export const DEV_AGENT_CLOSED_LOOP = {
     runGate: 'run_release_gate (tier?) — admin',
     smoke: 'get_stg_smoke',
     revisions: 'get_delivery_revisions (repos?)',
+    runLogs: 'get_delivery_run_logs (run_id)',
+    gitopsApps: 'get_gitops_apps',
+    gitopsSync: 'gitops_sync_app (name)',
   },
 } as const
 
@@ -599,6 +670,12 @@ export function buildAgentProtocolLlmPack(): string {
     ...MISSION_DIAGNOSTIC_PLAYBOOKS.map(
       p =>
         `- **${p.classification}** [${p.autonomy}]: ${p.trigger} → ${p.agentAction} | Must-not: ${p.mustNot}`,
+    ),
+    '',
+    '## Cluster remediation playbooks (delivery / infra L1)',
+    ...CLUSTER_REMEDIATION_PLAYBOOKS.map(
+      p =>
+        `- **${p.id}** — ${p.title} [${p.autonomy}]: ${p.trigger} → ${p.agentAction} | Must-not: ${p.mustNot} | MCP: ${p.mcpTools.join(', ')}`,
     ),
     '',
     '## Mission post-fix validation loop (Autonomous Loop)',

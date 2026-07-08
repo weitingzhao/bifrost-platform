@@ -17,6 +17,7 @@ import {
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
+import { DELIVER_PLATFORM_PIPELINE } from '@/lib/delivery/deliverPlatformPhases'
 import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import type { TaskModeDef } from '@/lib/task-mode/types'
@@ -72,6 +73,67 @@ function OperateQueueSummary({ onNavigate }: { onNavigate: (tab: string) => void
         onClick={() => onNavigate('control-room')}
       >
         Review in Control Room →
+      </button>
+    </div>
+  )
+}
+
+function PlatformStgReleaseStrip({ onNavigate }: { onNavigate: (tab: string) => void }) {
+  const platformRunsQ = useQuery({
+    queryKey: ['task-cc', 'platform-runs-summary'],
+    queryFn: () => fetchPipelineRuns(DELIVER_PLATFORM_PIPELINE),
+    refetchInterval: 20_000,
+  })
+  const platformStgGateQ = useQuery({
+    queryKey: ['task-cc', 'platform-stg-gate-summary'],
+    queryFn: () => fetchReleaseGate('platform-stg'),
+    refetchInterval: 20_000,
+  })
+  const supplyQ = useQuery({
+    queryKey: ['task-cc', 'supply-chain-summary'],
+    queryFn: fetchSupplyChain,
+    refetchInterval: 20_000,
+  })
+
+  const gate = gateStepStatus(platformStgGateQ.data)
+  const runs = platformRunsQ.data?.runs
+  const run = pickDeployPipelineRun(runs, {
+    gatePassed: platformStgGateQ.data?.result === 'pass',
+  })
+  const deploy = runStepStatus(run)
+  const retryFailed = deployRunRetryFailed(runs, run)
+  const cms = supplyQ.data?.dockerfile_configmaps ?? []
+  const cmsPresent = cms.filter(c => c.present).length
+
+  return (
+    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Rocket size={16} />
+        <span className="text-[var(--text-dense-label)] font-semibold">Platform STG mainline</span>
+        <DenseTag variant={cmsPresent === cms.length && cms.length > 0 ? 'success' : 'warning'}>
+          CMs {cmsPresent}/{cms.length}
+        </DenseTag>
+      </div>
+      <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-muted-foreground">
+        {run?.revision != null ? `Revision ${run.revision}` : 'bifrost-deliver-platform pipeline'}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <DenseTag variant={deploy.status === 'done' ? 'success' : deploy.status === 'error' ? 'warning' : 'warning'}>
+          Deploy · {deploy.label}
+        </DenseTag>
+        {retryFailed && (
+          <DenseTag variant="neutral" className="text-[9px]">
+            Latest retry failed
+          </DenseTag>
+        )}
+        <DenseTag variant={gate.status === 'done' ? 'success' : 'warning'}>Gate · {gate.label}</DenseTag>
+      </div>
+      <button
+        type="button"
+        className="mt-2 text-[var(--text-dense-meta)] text-primary hover:underline"
+        onClick={() => onNavigate('platform-release')}
+      >
+        Platform Release →
       </button>
     </div>
   )
@@ -210,10 +272,12 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
 
   if (mode.id === 'rocket-launch' && showLaunchPad) {
     return (
-      <div className="grid gap-3 xl:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-3">
         <OpsSection title="Rocket launch" bodyPadding="compact">
           <LaunchPad
             variant="rocket-launch"
+            embedded
+            suppressProdBlockedFeedback
             onDispatchRelease={onDispatchRelease!}
             onDispatchTradeDeploy={() => {}}
             releasePending={releasePending}
@@ -223,14 +287,18 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
             onOpenTradeDeploy={() => onNavigate('trade-release')}
           />
         </OpsSection>
-        {ops.signalSource === 'supply-chain' && (
-          <OpsSection title="Supply chain" bodyPadding="compact">
-            <SupplyChainStrip onNavigate={onNavigate} />
-          </OpsSection>
-        )}
+        <OpsSection title="Platform STG release" bodyPadding="compact">
+          <PlatformStgReleaseStrip onNavigate={onNavigate} />
+        </OpsSection>
         {ops.showMissionSignals && (
           <OpsSection title="Environment readiness" bodyPadding="compact">
-            <TaskModeReadinessStrip modeId="rocket-launch" onNavigate={onNavigate} compact />
+            <TaskModeReadinessStrip
+              modeId="rocket-launch"
+              onNavigate={onNavigate}
+              compact
+              summaryColumn
+              suppressProdBlockedBanner
+            />
           </OpsSection>
         )}
       </div>
@@ -239,10 +307,12 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
 
   if (mode.id === 'satellite-deploy' && showLaunchPad) {
     return (
-      <div className="grid gap-3 xl:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-3">
         <OpsSection title="Satellite deploy" bodyPadding="compact">
           <LaunchPad
             variant="satellite-deploy"
+            embedded
+            suppressProdBlockedFeedback
             onDispatchRelease={() => {}}
             onDispatchTradeDeploy={onDispatchTradeDeploy!}
             tradeDeployPending={tradeDeployPending}
@@ -257,7 +327,13 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
         </OpsSection>
         {ops.showMissionSignals && (
           <OpsSection title="Environment readiness" bodyPadding="compact">
-            <TaskModeReadinessStrip modeId="satellite-deploy" onNavigate={onNavigate} compact />
+            <TaskModeReadinessStrip
+              modeId="satellite-deploy"
+              onNavigate={onNavigate}
+              compact
+              summaryColumn
+              suppressProdBlockedBanner
+            />
           </OpsSection>
         )}
       </div>

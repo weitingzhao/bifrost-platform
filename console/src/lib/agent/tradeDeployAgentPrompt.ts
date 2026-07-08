@@ -109,6 +109,7 @@ export function buildTradeDeployPrompt(ctx: TradeDeployPromptContext): string {
     '7. Request operator approval before PROD deploy.',
     '8. Call start_pipeline_run with pipeline="bifrost-deliver-prod" and the **same revision** as STG.',
     '9. Poll prod run, then run_release_gate tier="prod".',
+    '10. On build/rollout/gitops failure needing repo fix: spawn_trade_release_fix(diagnosis) — one escalation per phase.',
     '',
     '## Reminders',
     '- Registry: 192.168.10.73:30500 — kubelet pulls via NodePort, not in-cluster DNS.',
