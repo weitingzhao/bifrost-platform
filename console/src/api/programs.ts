@@ -4,6 +4,7 @@ import type {
   LaunchProgramResponse,
   ProgramDetailResponse,
   ProgramsListResponse,
+  CreateProgramFromTemplateRequest,
 } from './programsTypes'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
@@ -65,6 +66,16 @@ export async function launchProgramAgent(body: LaunchProgramRequest): Promise<La
     body: JSON.stringify(body),
   })
   return r.json() as Promise<LaunchProgramResponse>
+}
+
+export async function createProgramFromTemplate(
+  body: CreateProgramFromTemplateRequest,
+): Promise<ProgramDetailResponse> {
+  const r = await programsFetch('/api/v1/programs/from-template', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<ProgramDetailResponse>
 }
 
 export async function approvePostCompletionItem(

@@ -205,6 +205,7 @@ export type ConsoleNavPlane =
 /** Map view tab id → sidebar plane (for headers, briefing packs, catalog cross-refs). */
 export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'control-room': 'Mission Control',
+  'task-cc': 'Mission Control',
   'runtime-map': 'Mission Control',
   defects: 'Mission Control',
   audit: 'Mission Control',

@@ -262,6 +262,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/{programId}", s.devagent.HandleGetProgram)
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleOperator))
+				r.Post("/from-template", s.devagent.HandleCreateFromTemplate)
 				r.Post("/launch", s.devagent.HandleLaunch)
 				r.Post("/session-stop", s.devagent.HandleSessionStop)
 				r.Post("/{programId}/activate", s.devagent.HandleActivateProgram)

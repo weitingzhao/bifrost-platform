@@ -61,6 +61,11 @@ import { AgentGovernancePage } from '@/pages/AgentGovernancePage'
 import { DefectsPage } from '@/pages/DefectsPage'
 import { DevAgentPage } from '@/pages/DevAgentPage'
 import { StandardsPage } from '@/pages/StandardsPage'
+import { TaskControlCenterPage } from '@/pages/TaskControlCenterPage'
+import { TaskModeActiveBanner } from '@/components/task-mode/TaskModeActiveBanner'
+import { TaskModeProvider, useTaskMode } from '@/lib/task-mode/TaskModeContext'
+import { formatConsoleHash } from '@/lib/task-mode/taskModeUrl'
+import type { TaskModeId } from '@/lib/task-mode/types'
 
 const ControlRoomPage = lazy(() =>
   import('@/pages/ControlRoomPage').then(m => ({ default: m.ControlRoomPage })),
@@ -75,6 +80,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'agent-system': 'Agent System',
   'operator-plane': 'Operator Plane',
   'control-room': 'Control Room',
+  'task-cc': 'Task Control Center',
   audit: 'Audit',
   'runtime-map': 'Runtime Map',
   cluster: 'Cluster',
@@ -118,6 +124,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'satellite-api',
   'plugin-gallery',
   'control-room',
+  'task-cc',
   'delivery-board',
   'trade-release',
   'platform-release',
@@ -152,15 +159,17 @@ function isConsoleViewTab(value: string): value is ConsoleViewTab {
 
 /** Resolve the active tab from the URL hash so refresh/deep-link stays put. */
 function tabFromHash(): ConsoleViewTab | null {
-  const hash = window.location.hash.replace(/^#/, '')
-  if (!hash) return null
-  if (isConsoleViewTab(hash)) return hash
-  return LEGACY_RUNTIME_HASHES[hash] ?? null
+  const raw = window.location.hash.replace(/^#/, '')
+  if (!raw) return null
+  const tabPart = raw.split('?')[0]
+  if (isConsoleViewTab(tabPart)) return tabPart
+  return LEGACY_RUNTIME_HASHES[tabPart] ?? null
 }
 
-export function ConsolePage() {
+function ConsolePageInner() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('prod')
   const [viewTab, setViewTabState] = useState<ConsoleViewTab>(() => tabFromHash() ?? 'control-room')
+  const { modeId } = useTaskMode()
   const [agentDeskJobId, setAgentDeskJobId] = useState<string | null>(null)
   const [agentDeskPrefill, setAgentDeskPrefill] = useState<string | null>(null)
   /** Shell-level ambient agent job — survives tab switches. */
@@ -170,13 +179,18 @@ export function ConsolePage() {
 
   const envForRuntime = envFilter === 'all' ? 'prod' : envFilter
 
-  const setViewTab = useCallback((tab: ConsoleViewTab) => {
-    setViewTabState(tab)
-    const nextHash = `#${tab}`
-    if (window.location.hash !== nextHash) {
-      window.history.replaceState(null, '', nextHash)
-    }
-  }, [])
+  const setViewTab = useCallback(
+    (tab: ConsoleViewTab, opts?: { taskMode?: TaskModeId }) => {
+      setViewTabState(tab)
+      const taskMode =
+        opts?.taskMode ?? (tab === 'task-cc' && modeId !== 'system' ? modeId : undefined)
+      const nextHash = formatConsoleHash(tab, taskMode)
+      if (window.location.hash !== nextHash) {
+        window.history.replaceState(null, '', nextHash)
+      }
+    },
+    [modeId],
+  )
 
   useEffect(() => {
     const onHashChange = () => {
@@ -186,6 +200,14 @@ export function ConsolePage() {
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+
+  useEffect(() => {
+    if (viewTab !== 'task-cc' || modeId === 'system') return
+    const expected = formatConsoleHash('task-cc', modeId)
+    if (window.location.hash !== expected) {
+      window.history.replaceState(null, '', expected)
+    }
+  }, [viewTab, modeId])
 
   const contextQuery = useQuery({
     queryKey: ['context'],
@@ -211,6 +233,7 @@ export function ConsolePage() {
     enabled:
       viewTab === 'briefing' ||
       viewTab === 'control-room' ||
+      viewTab === 'task-cc' ||
       viewTab === 'trade-release' ||
       viewTab === 'satellite-bus' ||
       viewTab === 'satellite-telemetry' ||
@@ -227,6 +250,7 @@ export function ConsolePage() {
       viewTab === 'compute' ||
       viewTab === 'placement' ||
       viewTab === 'control-room' ||
+      viewTab === 'task-cc' ||
       viewTab === 'runtime-map' ||
       viewTab === 'satellite-bus',
   })
@@ -235,28 +259,28 @@ export function ConsolePage() {
     queryKey: ['delivery', 'stg-smoke'],
     queryFn: fetchStgSmoke,
     refetchInterval: 30_000,
-    enabled: viewTab === 'trade-release' || viewTab === 'control-room',
+    enabled: viewTab === 'trade-release' || viewTab === 'control-room' || viewTab === 'task-cc',
   })
 
   const releaseGateStgQuery = useQuery({
     queryKey: ['promote', 'release-gate', 'stg'],
     queryFn: () => fetchReleaseGate('stg'),
     refetchInterval: 30_000,
-    enabled: viewTab === 'control-room',
+    enabled: viewTab === 'control-room' || viewTab === 'task-cc',
   })
 
   const supplyChainQuery = useQuery({
     queryKey: ['delivery', 'supply-chain'],
     queryFn: fetchSupplyChain,
     refetchInterval: 30_000,
-    enabled: viewTab === 'control-room',
+    enabled: viewTab === 'control-room' || viewTab === 'task-cc',
   })
 
   const tierBQuery = useQuery({
     queryKey: ['promote', 'tier-b'],
     queryFn: fetchTierBStatus,
     refetchInterval: 30_000,
-    enabled: viewTab === 'control-room',
+    enabled: viewTab === 'control-room' || viewTab === 'task-cc',
   })
 
   const lastDeliverSucceeded = useMemo(() => {
@@ -335,13 +359,13 @@ export function ConsolePage() {
   const openBriefing = useCallback((opts?: BriefingUrlState) => {
     if (opts != null) {
       if (opts.track != null && opts.lane == null) {
-        writeBriefingUrlState({ track: opts.track, lane: undefined, intent: undefined })
+        writeBriefingUrlState({ track: opts.track, lane: undefined, intent: undefined, taskModeContext: opts.taskModeContext })
       } else {
         writeBriefingUrlState(opts)
       }
     }
     setViewTab('briefing')
-  }, [])
+  }, [setViewTab])
   const openOperatorPlane = () => setViewTab('operator-plane')
   const openAgentDesk = useCallback((jobIdOrOpts?: string | { prefill: string }) => {
     if (typeof jobIdOrOpts === 'string') {
@@ -372,6 +396,17 @@ export function ConsolePage() {
   const openCompute = () => setViewTab('compute')
   const openAgentDeskTab = () => setViewTab('agent-desk')
 
+  const handleTaskModeChange = useCallback(
+    (landingTab: string, nextModeId: TaskModeId) => {
+      if (isConsoleViewTab(landingTab)) {
+        setViewTab(landingTab, {
+          taskMode: nextModeId !== 'system' ? nextModeId : undefined,
+        })
+      }
+    },
+    [setViewTab],
+  )
+
   const [govCopyState, setGovCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const isGovernanceTab = consoleNavPlane(viewTab) === 'Governance'
   const handleCopyAllGovernance = async () => {
@@ -401,6 +436,7 @@ export function ConsolePage() {
     'operator-plane',
     'dev-agent',
     'control-room',
+    'task-cc',
     'runtime-map',
     'cluster',
     'trade-release',
@@ -427,10 +463,12 @@ export function ConsolePage() {
 
   return (
     <TooltipProvider>
+    <div className="task-mode-chrome-root flex min-h-svh w-full" data-task-mode={modeId}>
     <SidebarProvider>
       <ConsoleSidebar
         activeTab={viewTab}
         onSelect={(id) => setViewTab(id as ConsoleViewTab)}
+        onModeChange={handleTaskModeChange}
       />
       <SidebarInset>
         <div className="console-shell-chrome sticky top-0 z-20 bg-card">
@@ -442,6 +480,7 @@ export function ConsolePage() {
           >
             <PlatformAuthBar compact hideRefresh />
           </ConsoleHeader>
+          <TaskModeActiveBanner onModeChange={handleTaskModeChange} />
           {OPS_CONTEXT_TABS.includes(viewTab) && (
             <OpsContextBar>
               <FocusStrip
@@ -573,6 +612,23 @@ export function ConsolePage() {
               />
             </Suspense>
           </>
+        )}
+
+        {viewTab === 'task-cc' && (
+          <TaskControlCenterPage
+            context={contextQuery.data}
+            matrices={pulseMatrices}
+            stgSmoke={stgSmokeQuery.data}
+            stgGate={releaseGateStgQuery.data}
+            lastDeliverSucceeded={lastDeliverSucceeded}
+            tierB={tierBQuery.data}
+            onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
+            onOpenBriefing={openBriefing}
+            onOpenPromote={openPromote}
+            onOpenDelivery={openDelivery}
+            ambientJobId={ambientJob?.id ?? null}
+            onStartAgentJob={startAmbientAgentJob}
+          />
         )}
 
         {viewTab === 'audit' && (
@@ -764,6 +820,15 @@ export function ConsolePage() {
       </PageShell>
       </SidebarInset>
     </SidebarProvider>
+    </div>
     </TooltipProvider>
+  )
+}
+
+export function ConsolePage() {
+  return (
+    <TaskModeProvider>
+      <ConsolePageInner />
+    </TaskModeProvider>
   )
 }

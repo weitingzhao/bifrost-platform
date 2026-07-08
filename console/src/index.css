@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "@fontsource-variable/geist";
 @import "@bifrost/ui/styles";
+@import "./styles/taskModeChrome.css";
 
 @source "../../../bifrost-ui/src/**/*.{ts,tsx}";
 @source "./**/*.{ts,tsx}";
