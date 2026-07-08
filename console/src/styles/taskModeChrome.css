@@ -39,7 +39,8 @@
   --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.14 155) 42%, transparent);
 }
 
-.task-mode-chrome-root {
+/* Fallback only when chrome root has no mode attribute */
+.task-mode-chrome-root:not([data-task-mode]) {
   --task-mode-accent: var(--muted-foreground);
   --task-mode-accent-subtle: color-mix(in oklab, var(--muted-foreground) 12%, transparent);
   --task-mode-accent-border: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
@@ -64,13 +65,14 @@
   color: var(--task-mode-accent);
 }
 
-/* Sidebar — left accent rail + subtle wash */
+/* Sidebar — left accent rail + mode-tinted wash (overrides bg-sidebar tint) */
 .task-mode-chrome-root[data-task-mode]:not([data-task-mode='system']) [data-sidebar='sidebar'] {
   border-left: 3px solid var(--task-mode-accent);
+  background-color: color-mix(in oklab, var(--task-mode-accent) 10%, var(--sidebar));
   background-image: linear-gradient(
     90deg,
     var(--task-mode-accent-subtle) 0%,
-    transparent min(220px, 45%)
+    transparent min(260px, 55%)
   );
 }
 
