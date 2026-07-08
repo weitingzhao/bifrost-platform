@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { ShellNavSidebar } from '@bifrost/ui'
 import { CONSOLE_NAV_GROUPS } from '@/lib/consoleNavConfig'
-import { TaskModeSwitcher } from '@/components/task-mode/TaskModeSwitcher'
+import { TaskModeIconRail } from '@/components/task-mode/TaskModeIconRail'
 import { buildTaskNavGroups } from '@/lib/task-mode/navLens'
 import type { TaskModeId } from '@/lib/task-mode/types'
 import { useTaskMode } from '@/lib/task-mode/TaskModeContext'
@@ -73,7 +73,7 @@ export function ConsoleSidebar({
           description: 'Business console · positions, daemon, market',
         }}
         storageKey="bifrost-ops"
-        headerActions={<TaskModeSwitcher variant="sidebar-icon" onModeChange={onModeChange} />}
+        navPrefix={collapsed => <TaskModeIconRail collapsed={collapsed} onModeChange={onModeChange} />}
         footer={
           isTaskLens ? (
             <p className="m-0 px-1 text-[var(--text-dense-caption)] text-muted-foreground">

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { DenseTag, StatusLamp } from '@bifrost/ui'
-import { Bot, Gauge, Rocket, Satellite } from 'lucide-react'
+import { DenseTag } from '@bifrost/ui'
+import { Bot, Rocket, Satellite } from 'lucide-react'
 import {
   fetchPipelineRuns,
   fetchReleaseGate,
@@ -8,12 +8,14 @@ import {
   fetchStgSmoke,
 } from '@/api/platform'
 import { LaunchPad } from '@/components/control-room/LaunchPad'
-import { gateStepStatus, runStepStatus } from '@/components/delivery/ReleaseStepCommandCenter'
+import { gateStepStatus, runStepStatus, pickDeployPipelineRun, deployRunRetryFailed } from '@/components/delivery/ReleaseStepCommandCenter'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
+import {
+  DailyOpsMissionStrip,
+  TaskModeReadinessStrip,
+} from '@/components/task-mode/TaskModeReadinessStrip'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
-import { missionStatus, missionStatusColor } from '@/lib/control-room/missionSignals'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
@@ -38,50 +40,8 @@ export type OpsTaskStripsProps = {
   canDispatchTradeDeploy?: boolean
   releaseDisabledReason?: string
   tradeDeployDisabledReason?: string
-}
-
-function MissionSignalStrip() {
-  const { snapshot, isLoading } = useMissionSnapshot()
-  const status = missionStatus(snapshot.missionOverall)
-  const color = missionStatusColor(status)
-
-  return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Gauge size={16} style={{ color }} />
-        <span className="text-[var(--text-dense-label)] font-semibold">Mission signals</span>
-        <StatusLamp value={snapshot.missionOverall} kind="reach" />
-        <DenseTag variant={status === 'NOMINAL' ? 'success' : status === 'CRITICAL' ? 'danger' : 'warning'}>
-          {isLoading ? 'Probing…' : status}
-        </DenseTag>
-      </div>
-      <div className="mt-2 grid gap-2 sm:grid-cols-3">
-        <SignalChip label="Rocket" signal={snapshot.rocketOverall} detail={snapshot.release.detail} />
-        <SignalChip label="Payload" signal={snapshot.payloadOverall} detail={snapshot.tradeProd.detail} />
-        <SignalChip label="Infra" signal={snapshot.infra.signal} detail={snapshot.infra.detail} />
-      </div>
-    </div>
-  )
-}
-
-function SignalChip({
-  label,
-  signal,
-  detail,
-}: {
-  label: string
-  signal: import('@/lib/control-room/missionSignals').Signal
-  detail: string
-}) {
-  return (
-    <div className="rounded border border-border/60 bg-card px-2 py-1.5">
-      <div className="flex items-center gap-1.5">
-        <StatusLamp value={signal} kind="reach" />
-        <span className="text-[var(--text-dense-meta)] font-medium">{label}</span>
-      </div>
-      <p className="m-0 mt-0.5 truncate text-[var(--text-dense-caption)] text-muted-foreground">{detail}</p>
-    </div>
-  )
+  /** When true, only render Promote / cutover (summary row rendered separately). */
+  promoteOnly?: boolean
 }
 
 function OperateQueueSummary({ onNavigate }: { onNavigate: (tab: string) => void }) {
@@ -176,9 +136,15 @@ function StgReleaseStrip({
     refetchInterval: 20_000,
   })
 
-  const run = tradeRunsQ.data?.runs?.[0]
-  const deploy = runStepStatus(run)
   const gate = gateStepStatus(tradeGateQ.data)
+  const smokeOk = smokeQ.data?.reachability === 'ok'
+  const runs = tradeRunsQ.data?.runs
+  const run = pickDeployPipelineRun(runs, {
+    gatePassed: tradeGateQ.data?.result === 'pass',
+    smokeOk,
+  })
+  const deploy = runStepStatus(run)
+  const retryFailed = deployRunRetryFailed(runs, run)
 
   return (
     <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
@@ -193,10 +159,17 @@ function StgReleaseStrip({
         {active != null ? `${active.title} · ${active.status}` : 'All phases complete or planned'}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
-        <DenseTag variant={deploy.status === 'done' ? 'success' : 'warning'}>Deploy · {deploy.label}</DenseTag>
+        <DenseTag variant={deploy.status === 'done' ? 'success' : deploy.status === 'error' ? 'warning' : 'warning'}>
+          Deploy · {deploy.label}
+        </DenseTag>
+        {retryFailed && (
+          <DenseTag variant="neutral" className="text-[9px]">
+            Latest retry failed
+          </DenseTag>
+        )}
         <DenseTag variant={gate.status === 'done' ? 'success' : 'warning'}>Gate · {gate.label}</DenseTag>
-        <DenseTag variant={smokeQ.data?.reachability === 'ok' ? 'success' : 'warning'}>
-          Smoke · {smokeQ.data?.reachability === 'ok' ? 'pass' : '…'}
+        <DenseTag variant={smokeOk ? 'success' : 'warning'}>
+          Smoke · {smokeOk ? 'pass' : smokeQ.isLoading ? '…' : 'fail'}
         </DenseTag>
       </div>
       <button
@@ -208,6 +181,105 @@ function StgReleaseStrip({
       </button>
     </div>
   )
+}
+
+type SummaryRowProps = Omit<OpsTaskStripsProps, 'promoteOnly'>
+
+/** Three-column summary — launch + playbook context + live signals, above phase stepper. */
+export function OpsTaskSummaryRow(props: SummaryRowProps) {
+  const {
+    mode,
+    context,
+    onNavigate,
+    onDispatchRelease,
+    onDispatchTradeDeploy,
+    releasePending,
+    tradeDeployPending,
+    canDispatchRelease,
+    canDispatchTradeDeploy,
+    releaseDisabledReason,
+    tradeDeployDisabledReason,
+  } = props
+  const ops = mode.ops
+  if (ops == null) return null
+
+  const showLaunchPad =
+    ops.showLaunchPad &&
+    ((mode.id === 'rocket-launch' && onDispatchRelease != null) ||
+      (mode.id === 'satellite-deploy' && onDispatchTradeDeploy != null))
+
+  if (mode.id === 'rocket-launch' && showLaunchPad) {
+    return (
+      <div className="grid gap-3 xl:grid-cols-3">
+        <OpsSection title="Rocket launch" bodyPadding="compact">
+          <LaunchPad
+            variant="rocket-launch"
+            onDispatchRelease={onDispatchRelease!}
+            onDispatchTradeDeploy={() => {}}
+            releasePending={releasePending}
+            canDispatchRelease={canDispatchRelease}
+            releaseDisabledReason={releaseDisabledReason}
+            onOpenPlatformRelease={() => onNavigate('platform-release')}
+            onOpenTradeDeploy={() => onNavigate('trade-release')}
+          />
+        </OpsSection>
+        {ops.signalSource === 'supply-chain' && (
+          <OpsSection title="Supply chain" bodyPadding="compact">
+            <SupplyChainStrip onNavigate={onNavigate} />
+          </OpsSection>
+        )}
+        {ops.showMissionSignals && (
+          <OpsSection title="Environment readiness" bodyPadding="compact">
+            <TaskModeReadinessStrip modeId="rocket-launch" onNavigate={onNavigate} compact />
+          </OpsSection>
+        )}
+      </div>
+    )
+  }
+
+  if (mode.id === 'satellite-deploy' && showLaunchPad) {
+    return (
+      <div className="grid gap-3 xl:grid-cols-3">
+        <OpsSection title="Satellite deploy" bodyPadding="compact">
+          <LaunchPad
+            variant="satellite-deploy"
+            onDispatchRelease={() => {}}
+            onDispatchTradeDeploy={onDispatchTradeDeploy!}
+            tradeDeployPending={tradeDeployPending}
+            canDispatchTradeDeploy={canDispatchTradeDeploy}
+            tradeDeployDisabledReason={tradeDeployDisabledReason}
+            onOpenPlatformRelease={() => onNavigate('platform-release')}
+            onOpenTradeDeploy={() => onNavigate('trade-release')}
+          />
+        </OpsSection>
+        <OpsSection title="STG release" bodyPadding="compact">
+          <StgReleaseStrip context={context} onNavigate={onNavigate} />
+        </OpsSection>
+        {ops.showMissionSignals && (
+          <OpsSection title="Environment readiness" bodyPadding="compact">
+            <TaskModeReadinessStrip modeId="satellite-deploy" onNavigate={onNavigate} compact />
+          </OpsSection>
+        )}
+      </div>
+    )
+  }
+
+  if (mode.id === 'daily-ops') {
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        <OpsSection title="Operate summary" bodyPadding="compact">
+          <OperateQueueSummary onNavigate={onNavigate} />
+        </OpsSection>
+        {ops.showMissionSignals && (
+          <OpsSection title="Live signals" bodyPadding="compact">
+            <DailyOpsMissionStrip compact />
+          </OpsSection>
+        )}
+      </div>
+    )
+  }
+
+  return null
 }
 
 export function OpsTaskStrips({
@@ -229,67 +301,115 @@ export function OpsTaskStrips({
   canDispatchTradeDeploy,
   releaseDisabledReason,
   tradeDeployDisabledReason,
+  promoteOnly = false,
 }: OpsTaskStripsProps) {
   const ops = mode.ops
   if (ops == null) return null
 
+  const promoteSection =
+    mode.id === 'rocket-launch' || mode.id === 'satellite-deploy' || mode.id === 'daily-ops' ? (
+      <OpsSection title="Promote / cutover">
+        <PromoteCutoverStrip
+          context={context}
+          matrices={matrices}
+          stgSmoke={stgSmoke}
+          stgGate={stgGate}
+          lastDeliverSucceeded={lastDeliverSucceeded}
+          tierB={tierB}
+          onOpenPromote={onOpenPromote}
+          onOpenDelivery={onOpenDelivery}
+        />
+      </OpsSection>
+    ) : null
+
+  if (promoteOnly) {
+    return promoteSection != null ? <div className="flex flex-col gap-3">{promoteSection}</div> : null
+  }
+
+  const isPlaybookLaunch = mode.id === 'rocket-launch' || mode.id === 'satellite-deploy'
+
+  const launchPadSection =
+    ops.showLaunchPad &&
+    ((mode.id === 'rocket-launch' && onDispatchRelease != null) ||
+      (mode.id === 'satellite-deploy' && onDispatchTradeDeploy != null)) ? (
+      <OpsSection title={mode.id === 'rocket-launch' ? 'Rocket launch' : 'Satellite deploy'}>
+        <LaunchPad
+          variant={mode.id === 'rocket-launch' ? 'rocket-launch' : 'satellite-deploy'}
+          onDispatchRelease={onDispatchRelease ?? (() => {})}
+          onDispatchTradeDeploy={onDispatchTradeDeploy ?? (() => {})}
+          releasePending={releasePending}
+          tradeDeployPending={tradeDeployPending}
+          canDispatchRelease={canDispatchRelease}
+          canDispatchTradeDeploy={canDispatchTradeDeploy}
+          releaseDisabledReason={releaseDisabledReason}
+          tradeDeployDisabledReason={tradeDeployDisabledReason}
+          onOpenPlatformRelease={() => onNavigate('platform-release')}
+          onOpenTradeDeploy={() => onNavigate('trade-release')}
+        />
+      </OpsSection>
+    ) : null
+
+  const supplyChainSection =
+    mode.id === 'rocket-launch' && ops.signalSource === 'supply-chain' ? (
+      <OpsSection title="Supply chain">
+        <SupplyChainStrip onNavigate={onNavigate} />
+      </OpsSection>
+    ) : null
+
+  const stgReleaseSection =
+    mode.id === 'satellite-deploy' ? (
+      <OpsSection title="STG release">
+        <StgReleaseStrip context={context} onNavigate={onNavigate} />
+      </OpsSection>
+    ) : null
+
+  const readinessSection =
+    mode.id === 'rocket-launch' && ops.showMissionSignals ? (
+      <OpsSection title="Environment readiness">
+        <TaskModeReadinessStrip modeId="rocket-launch" onNavigate={onNavigate} />
+      </OpsSection>
+    ) : mode.id === 'satellite-deploy' && ops.showMissionSignals ? (
+      <OpsSection title="Environment readiness">
+        <TaskModeReadinessStrip modeId="satellite-deploy" onNavigate={onNavigate} />
+      </OpsSection>
+    ) : mode.id === 'daily-ops' && ops.showMissionSignals ? (
+      <OpsSection title="Live signals">
+        <DailyOpsMissionStrip />
+      </OpsSection>
+    ) : null
+
+  const operateSummarySection =
+    mode.id === 'daily-ops' ? (
+      <OpsSection title="Operate summary">
+        <OperateQueueSummary onNavigate={onNavigate} />
+      </OpsSection>
+    ) : null
+
+  if (isPlaybookLaunch) {
+    return (
+      <div className="flex flex-col gap-3">
+        {launchPadSection}
+        {mode.id === 'rocket-launch' ? supplyChainSection : stgReleaseSection}
+        {readinessSection}
+        {promoteSection}
+      </div>
+    )
+  }
+
+  if (mode.id === 'daily-ops') {
+    return (
+      <div className="flex flex-col gap-3">
+        {operateSummarySection}
+        {readinessSection}
+        {promoteSection}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      {(mode.id === 'rocket-launch' || mode.id === 'satellite-deploy' || mode.id === 'daily-ops') && (
-        <OpsSection title="Promote / cutover">
-          <PromoteCutoverStrip
-            context={context}
-            matrices={matrices}
-            stgSmoke={stgSmoke}
-            stgGate={stgGate}
-            lastDeliverSucceeded={lastDeliverSucceeded}
-            tierB={tierB}
-            onOpenPromote={onOpenPromote}
-            onOpenDelivery={onOpenDelivery}
-          />
-        </OpsSection>
-      )}
-
-      {ops.showMissionSignals && (
-        <OpsSection title="Live signals">
-          <MissionSignalStrip />
-        </OpsSection>
-      )}
-
-      {mode.id === 'daily-ops' && (
-        <OpsSection title="Operate summary">
-          <OperateQueueSummary onNavigate={onNavigate} />
-        </OpsSection>
-      )}
-
-      {mode.id === 'rocket-launch' && ops.signalSource === 'supply-chain' && (
-        <OpsSection title="Supply chain">
-          <SupplyChainStrip onNavigate={onNavigate} />
-        </OpsSection>
-      )}
-
-      {mode.id === 'satellite-deploy' && (
-        <OpsSection title="STG release">
-          <StgReleaseStrip context={context} onNavigate={onNavigate} />
-        </OpsSection>
-      )}
-
-      {ops.showLaunchPad && onDispatchRelease != null && onDispatchTradeDeploy != null && (
-        <OpsSection title="Launch pad">
-          <LaunchPad
-            onDispatchRelease={onDispatchRelease}
-            onDispatchTradeDeploy={onDispatchTradeDeploy}
-            releasePending={releasePending}
-            tradeDeployPending={tradeDeployPending}
-            canDispatchRelease={canDispatchRelease}
-            canDispatchTradeDeploy={canDispatchTradeDeploy}
-            releaseDisabledReason={releaseDisabledReason}
-            tradeDeployDisabledReason={tradeDeployDisabledReason}
-            onOpenPlatformRelease={() => onNavigate('platform-release')}
-            onOpenTradeDeploy={() => onNavigate('trade-release')}
-          />
-        </OpsSection>
-      )}
+      {promoteSection}
+      {readinessSection}
     </div>
   )
 }

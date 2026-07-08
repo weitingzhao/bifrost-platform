@@ -1,6 +1,6 @@
 {
   "tier": "platform-prod",
-  "at": "2026-07-01T16:31:17.601658Z",
+  "at": "2026-07-08T02:57:34.595212Z",
   "result": "pass",
   "revision": "main",
   "log_path": "bifrost-trade-infra/scripts/release_gate.log",
@@ -10,7 +10,7 @@
       "label": "Last bifrost-deliver-platform-prod success",
       "required": true,
       "reachability": "ok",
-      "detail": "bifrost-deliver-platform-prod-1782923108 (True)"
+      "detail": "bifrost-deliver-platform-prod-1783479211 (True)"
     },
     {
       "id": "platform-prod-console",

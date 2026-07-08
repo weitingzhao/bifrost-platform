@@ -8,7 +8,11 @@ import {
   fetchStgSmoke,
 } from '@/api/platform'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
-import { OpsTaskStrips } from '@/components/task-mode/OpsTaskStrips'
+import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
+import {
+  useRocketProdReadiness,
+  useSatelliteProdReadiness,
+} from '@/components/task-mode/TaskModeReadinessStrip'
 import { DevTaskStrips } from '@/components/task-mode/DevTaskStrips'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
@@ -20,6 +24,7 @@ import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
+import { missionStatus } from '@/lib/control-room/missionSignals'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import {
   buildTradeDeployPrompt,
@@ -32,6 +37,7 @@ import {
   resolveAllTaskPhaseStatuses,
   type TaskPhaseStatusInput,
 } from '@/lib/task-mode/navLens'
+import { pickDeployPipelineRun } from '@/components/delivery/ReleaseStepCommandCenter'
 import { useTaskMode } from '@/lib/task-mode/TaskModeContext'
 import type { TaskPhaseDef } from '@/lib/task-mode/types'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
@@ -67,6 +73,9 @@ export function TaskControlCenter({
   const { canOperate } = usePlatformAuth()
   const { snapshot } = useMissionSnapshot()
   const queueQ = useOperateQueue()
+
+  const rocketProd = useRocketProdReadiness(mode.id === 'rocket-launch')
+  const satelliteProd = useSatelliteProdReadiness(mode.id === 'satellite-deploy')
 
   const devProgram = useDevProgramInstance(mode)
   const programQ = devProgram
@@ -159,8 +168,17 @@ export function TaskControlCenter({
   })
 
   const statusInput = useMemo((): TaskPhaseStatusInput => {
-    const platformRun = platformRunsQ.data?.runs?.[0]
-    const tradeRun = tradeRunsQ.data?.runs?.[0]
+    const platformRuns = platformRunsQ.data?.runs
+    const tradeRuns = tradeRunsQ.data?.runs
+    const tradeGateData = tradeGateQ.data
+    const tradeSmokeOk = smokeQ.data?.reachability === 'ok'
+    const platformRun = pickDeployPipelineRun(platformRuns, {
+      gatePassed: platformStgGateQ.data?.result === 'pass',
+    })
+    const tradeRun = pickDeployPipelineRun(tradeRuns, {
+      gatePassed: tradeGateData?.result === 'pass',
+      smokeOk: tradeSmokeOk,
+    })
     return {
       context,
       snapshot,
@@ -172,8 +190,8 @@ export function TaskControlCenter({
       platformStgGate: platformStgGateQ.data,
       platformProdGate: platformProdGateQ.data,
       tradeStgRun: tradeRun,
-      tradeStgGate: tradeGateQ.data,
-      tradeStgSmokeOk: smokeQ.data?.reachability === 'ok',
+      tradeStgGate: tradeGateData,
+      tradeStgSmokeOk: tradeSmokeOk,
     }
   }, [
     context,
@@ -199,12 +217,21 @@ export function TaskControlCenter({
   const loopLabel =
     mode.loopArchetype === 'ops' ? 'Ops loop' : mode.loopArchetype === 'dev' ? 'Dev loop' : 'System'
 
-  const handleNavigatePhase = (phase: TaskPhaseDef) => {
+  const handleOpenPhasePage = (phase: TaskPhaseDef) => {
     if (phase.navigateTab != null) onNavigate(phase.navigateTab)
   }
 
   const showLaunchPad = mode.ops?.showLaunchPad === true
   const resolvedProgramId = devProgram.programId ?? mode.dev?.programId
+
+  const releaseDispatchAllowed = showLaunchPad && !aiRelease.disabled && !rocketProd.prodBlocked
+  const tradeDeployDispatchAllowed = showLaunchPad && !aiTradeDeploy.disabled && !satelliteProd.prodBlocked
+  const releaseDisabledReason = rocketProd.prodBlocked
+    ? rocketProd.prodDisabledReason
+    : aiRelease.disabledReason
+  const tradeDeployDisabledReason = satelliteProd.prodBlocked
+    ? satelliteProd.prodDisabledReason
+    : aiTradeDeploy.disabledReason
 
   return (
     <div className="flex flex-col gap-4">
@@ -217,22 +244,6 @@ export function TaskControlCenter({
           )
         }
       />
-
-      {phases.length > 0 && (
-        <div className="rounded-lg border border-border bg-card px-3 py-2">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="text-[var(--text-dense-label)] font-semibold">Phase progress</span>
-            <DenseTag variant="neutral">
-              {doneCount}/{phases.length} complete
-            </DenseTag>
-          </div>
-          <TaskPhaseProgress
-            phases={phases}
-            statuses={statuses}
-            onNavigatePhase={handleNavigatePhase}
-          />
-        </div>
-      )}
 
       {mode.loopArchetype === 'ops' && showLaunchPad && (
         <>
@@ -251,7 +262,59 @@ export function TaskControlCenter({
               {aiTradeDeploy.error.message}
             </OpsFeedback>
           )}
+          {mode.id === 'rocket-launch' && rocketProd.prodBlocked && (
+            <OpsFeedback variant="warning" title="Fix Prod environment before release">
+              Platform Prod readiness is {missionStatus(rocketProd.prodOverall)} — resolve Prod namespace,
+              self-health, or release gate issues before launching release agents.
+            </OpsFeedback>
+          )}
+          {mode.id === 'satellite-deploy' && satelliteProd.prodBlocked && (
+            <OpsFeedback variant="warning" title="Fix Prod environment before release">
+              Trade Prod readiness is {missionStatus(satelliteProd.prodOverall)} — resolve Prod workloads,
+              datastore, IB socket, or API reachability before deploying.
+            </OpsFeedback>
+          )}
         </>
+      )}
+
+      {mode.loopArchetype === 'ops' &&
+        (mode.id === 'rocket-launch' || mode.id === 'satellite-deploy' || mode.id === 'daily-ops') && (
+          <OpsTaskSummaryRow
+            mode={mode}
+            context={context}
+            matrices={matrices}
+            stgSmoke={stgSmoke}
+            stgGate={stgGate}
+            lastDeliverSucceeded={lastDeliverSucceeded}
+            tierB={tierB}
+            onNavigate={onNavigate}
+            onOpenPromote={onOpenPromote}
+            onOpenDelivery={onOpenDelivery}
+            onDispatchRelease={showLaunchPad ? dispatchReleaseAgent : undefined}
+            onDispatchTradeDeploy={showLaunchPad ? dispatchTradeDeployAgent : undefined}
+            releasePending={aiRelease.isPending}
+            tradeDeployPending={aiTradeDeploy.isPending}
+            canDispatchRelease={releaseDispatchAllowed}
+            canDispatchTradeDeploy={tradeDeployDispatchAllowed}
+            releaseDisabledReason={releaseDisabledReason}
+            tradeDeployDisabledReason={tradeDeployDisabledReason}
+          />
+        )}
+
+      {phases.length > 0 && (
+        <div className="rounded-lg border border-border bg-card px-3 py-1.5">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
+            <DenseTag variant="neutral" className="text-[9px]">
+              {doneCount}/{phases.length} complete
+            </DenseTag>
+          </div>
+          <TaskPhaseProgress
+            phases={phases}
+            statuses={statuses}
+            onOpenFullPage={handleOpenPhasePage}
+          />
+        </div>
       )}
 
       {mode.loopArchetype === 'ops' && (
@@ -270,10 +333,13 @@ export function TaskControlCenter({
           onDispatchTradeDeploy={showLaunchPad ? dispatchTradeDeployAgent : undefined}
           releasePending={aiRelease.isPending}
           tradeDeployPending={aiTradeDeploy.isPending}
-          canDispatchRelease={showLaunchPad && !aiRelease.disabled}
-          canDispatchTradeDeploy={showLaunchPad && !aiTradeDeploy.disabled}
-          releaseDisabledReason={aiRelease.disabledReason}
-          tradeDeployDisabledReason={aiTradeDeploy.disabledReason}
+          canDispatchRelease={releaseDispatchAllowed}
+          canDispatchTradeDeploy={tradeDeployDispatchAllowed}
+          releaseDisabledReason={releaseDisabledReason}
+          tradeDeployDisabledReason={tradeDeployDisabledReason}
+          promoteOnly={
+            mode.id === 'rocket-launch' || mode.id === 'satellite-deploy' || mode.id === 'daily-ops'
+          }
         />
       )}
 
