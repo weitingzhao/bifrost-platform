@@ -222,12 +222,16 @@ func (h *Handler) activeRuntime() *programRuntime {
 
 func (h *Handler) HandlePrograms(w http.ResponseWriter, r *http.Request) {
 	boardOnly := r.URL.Query().Get("board") == "1" || r.URL.Query().Get("board") == "true"
+	templateFilter := strings.TrimSpace(r.URL.Query().Get("template_id"))
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	list := make([]ProgramSummary, 0, len(h.runtimes))
 	for id, rt := range h.runtimes {
 		if boardOnly && (rt.blueprint.Delivery == nil || !rt.blueprint.Delivery.BoardVisible) {
+			continue
+		}
+		if templateFilter != "" && templateIDFromRuntime(rt) != templateFilter {
 			continue
 		}
 		list = append(list, h.buildProgramSummary(id, rt))

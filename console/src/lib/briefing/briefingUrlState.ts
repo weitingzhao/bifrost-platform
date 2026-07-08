@@ -1,11 +1,13 @@
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 import { isLaneId, type LaneId } from '@/lib/briefing/workLanes'
 import type { TrackId } from '@/lib/briefing/workTracks'
+import type { TaskModeBriefingContext } from '@/lib/task-mode/TaskModeContext'
 
 export const BRIEFING_TRACK_PARAM = 'track'
 export const BRIEFING_LANE_PARAM = 'lane'
 export const BRIEFING_INTENT_PARAM = 'intent'
 export const BRIEFING_PACK_PARAM = 'pack'
+export const BRIEFING_TASK_MODE_CTX_STORAGE_KEY = 'bifrost-briefing-task-mode-context'
 
 export type BriefingPackSize = 'compact' | 'full'
 
@@ -14,6 +16,7 @@ export interface BriefingUrlState {
   lane?: LaneId
   intent?: WorkIntent
   pack?: BriefingPackSize
+  taskModeContext?: TaskModeBriefingContext
 }
 
 const TRACK_IDS = new Set<TrackId>(['build', 'migrate', 'automate', 'infra', 'operate'])
@@ -56,6 +59,16 @@ export function parseBriefingUrlState(url: URL = new URL(window.location.href)):
   return state
 }
 
+export function readBriefingTaskModeContext(): TaskModeBriefingContext | undefined {
+  try {
+    const raw = sessionStorage.getItem(BRIEFING_TASK_MODE_CTX_STORAGE_KEY)
+    if (raw == null || raw === '') return undefined
+    return JSON.parse(raw) as TaskModeBriefingContext
+  } catch {
+    return undefined
+  }
+}
+
 /** Merge briefing query params into the current URL (preserves hash tab). */
 export function writeBriefingUrlState(
   partial: BriefingUrlState,
@@ -73,6 +86,17 @@ export function writeBriefingUrlState(
   if ('lane' in partial) setOrDelete(BRIEFING_LANE_PARAM, partial.lane)
   if ('intent' in partial) setOrDelete(BRIEFING_INTENT_PARAM, partial.intent)
   if ('pack' in partial) setOrDelete(BRIEFING_PACK_PARAM, partial.pack)
+
+  if ('taskModeContext' in partial) {
+    if (partial.taskModeContext == null) {
+      sessionStorage.removeItem(BRIEFING_TASK_MODE_CTX_STORAGE_KEY)
+    } else {
+      sessionStorage.setItem(
+        BRIEFING_TASK_MODE_CTX_STORAGE_KEY,
+        JSON.stringify(partial.taskModeContext),
+      )
+    }
+  }
 
   window.history.replaceState(null, '', url)
 }

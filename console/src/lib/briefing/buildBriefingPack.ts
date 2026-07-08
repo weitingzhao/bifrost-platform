@@ -31,6 +31,7 @@ import {
   reconcileBriefing,
 } from '@/lib/briefing/reconcileBriefing'
 import type { BriefingPackSize } from '@/lib/briefing/briefingUrlState'
+import type { TaskModeBriefingContext } from '@/lib/task-mode/TaskModeContext'
 import { splitQueueByCompletion } from '@/lib/briefing/queueDisplay'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
@@ -42,6 +43,21 @@ export interface BriefingInputs extends BriefingSnapshotInput {
   laneQueue?: QueueItem[]
   agentDialogueLanguage?: AgentDialogueLanguage
   packSize?: BriefingPackSize
+  taskModeContext?: TaskModeBriefingContext
+}
+
+function formatTaskModeContextSection(ctx: TaskModeBriefingContext): string {
+  const lines = [
+    '## Task mode context',
+    '',
+    `Task mode: **${ctx.modeLabel}** (\`${ctx.modeId}\`)`,
+    `Loop: **${ctx.loopArchetype}**`,
+  ]
+  if (ctx.programId != null) {
+    lines.push(`Linked program: \`${ctx.programId}\` (Delivery Board sign-off)`)
+  }
+  lines.push('', 'Follow the active task mode phase playbook in Task Control Center before expanding scope.')
+  return lines.join('\n')
 }
 
 function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string {
@@ -570,6 +586,10 @@ export function buildBriefingPack(input: BriefingInputs): string {
     firstResponseProtocol,
     '',
   ]
+
+  if (input.taskModeContext != null) {
+    sections.push(formatTaskModeContextSection(input.taskModeContext), '')
+  }
 
   if (trackSection != null) {
     sections.push(trackSection, '')

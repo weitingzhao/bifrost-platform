@@ -186,6 +186,7 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Trust & Autonomy', plane: 'Engineer', purpose: 'Earned autonomy KPIs and trust matrix' },
   { view: 'Operator Plane (L-1)', plane: 'Engineer', purpose: 'Out-of-band runner infrastructure (fate-isolated)' },
   { view: 'Control Room', plane: 'Mission Control', purpose: 'Mission diagnosis — KPIs, matrix, flywheels, commander cockpit' },
+  { view: 'Task Control Center', plane: 'Mission Control', purpose: 'Task mode phased playbook — ops/dev loop lens with nav filter' },
   {
     view: 'Network Health (Control Room)',
     plane: 'Mission Control',
@@ -202,6 +203,18 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Governance catalogs', plane: 'Governance', purpose: 'Governance catalogs and Copy Prompt' },
   { view: 'Server Console', plane: 'Ground Systems', purpose: 'Remote server console (Tools)' },
 ]
+
+/** Task mode lenses — focused Console navigation for ops vs dev loops (Constitution). */
+export const TASK_MODE_BLUEPRINT = {
+  version: '2026-07-07',
+  source: 'console/src/lib/task-mode/taskModeCatalog.ts',
+  statement:
+    'Task modes filter sidebar navigation and land on Task Control Center for phased playbooks. ' +
+    'Ops loops (daily-ops, rocket-launch, satellite-deploy) use signals + LaunchPad — no Briefing/DevAgent. ' +
+    'Dev loops (rocket-build, satellite-build) chain Briefing → Dev Agent → Delivery Board.',
+  modes: ['system', 'daily-ops', 'rocket-launch', 'satellite-deploy', 'rocket-build', 'satellite-build'] as const,
+  escapeHatch: 'Sidebar footer — Switch to System view restores full CONSOLE_NAV_GROUPS.',
+}
 
 export type AuthorizationLevel = {
   level: string

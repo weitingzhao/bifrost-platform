@@ -15,6 +15,7 @@ import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmen
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
 import {
   parseBriefingUrlState,
+  readBriefingTaskModeContext,
   writeBriefingUrlState,
   type BriefingPackSize,
 } from '@/lib/briefing/briefingUrlState'
@@ -282,6 +283,7 @@ export function BriefingPage({
         selectedLane,
         laneQueue,
         agentDialogueLanguage,
+        taskModeContext: readBriefingTaskModeContext(),
         ...snapshotInput,
       }),
     [

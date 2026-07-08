@@ -107,6 +107,12 @@ export interface LaunchProgramResponse {
   message?: string
 }
 
+export interface CreateProgramFromTemplateRequest {
+  template_id: string
+  instance_label?: string
+  notes?: string
+}
+
 export type DeliveryBoardProgramOverview = {
   id: string
   label: string

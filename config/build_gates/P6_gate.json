@@ -1,7 +1,7 @@
 {
-  "at": "2026-07-01T04:35:47.825031Z",
+  "at": "2026-07-07T20:56:25.276118Z",
   "phase": "P6",
-  "result": "incomplete",
+  "result": "pass",
   "checks": [
     {
       "id": "p6-bootstrap-model",
@@ -62,9 +62,9 @@
     {
       "id": "p6-escape-hatch",
       "label": "L0 escape hatch runbook + Console recovery visibility",
-      "status": "in_progress",
+      "status": "pass",
       "required": true,
-      "detail": "work in progress"
+      "detail": "completed per spine"
     }
   ],
   "triggered_by": "admin"
