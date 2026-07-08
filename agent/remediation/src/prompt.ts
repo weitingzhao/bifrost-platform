@@ -1,4 +1,14 @@
 import type { StartRunRequest } from './types.js'
+import {
+  buildDefectPatternRemediateRunnerPrompt,
+  buildDeliverStgRecoverRunnerPrompt,
+  buildGitopsConfigRepairRunnerPrompt,
+  buildPlatformSelfHealthRecoverRunnerPrompt,
+  buildRegistryPullRecoverRunnerPrompt,
+  buildStalePipelineTriageRunnerPrompt,
+  buildTradeDeployRunnerPrompt,
+  buildTradeReleaseFixRunnerPrompt,
+} from './scopedPrompts.js'
 
 function issueRowBrief(issue: unknown): string {
   if (typeof issue !== 'object' || issue == null) return `- ${String(issue)}`
@@ -17,7 +27,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -341,6 +351,30 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
   if (req.scope === 'nightly-drift-autofix') {
     return buildNightlyDriftAutofixPrompt(req)
+  }
+  if (req.scope === 'deliver-stg-recover') {
+    return buildDeliverStgRecoverRunnerPrompt(req)
+  }
+  if (req.scope === 'trade-release-fix') {
+    return buildTradeReleaseFixRunnerPrompt(req)
+  }
+  if (req.scope === 'trade-deploy') {
+    return buildTradeDeployRunnerPrompt(req)
+  }
+  if (req.scope === 'gitops-config-repair') {
+    return buildGitopsConfigRepairRunnerPrompt(req)
+  }
+  if (req.scope === 'defect-pattern-remediate') {
+    return buildDefectPatternRemediateRunnerPrompt(req)
+  }
+  if (req.scope === 'stale-pipeline-triage') {
+    return buildStalePipelineTriageRunnerPrompt(req)
+  }
+  if (req.scope === 'platform-self-health-recover') {
+    return buildPlatformSelfHealthRecoverRunnerPrompt(req)
+  }
+  if (req.scope === 'registry-pull-recover') {
+    return buildRegistryPullRecoverRunnerPrompt(req)
   }
 
   const issueList = Array.isArray(req.issues) ? req.issues : []

@@ -36,9 +36,14 @@ import {
   stashPromotePreflightPack,
 } from '@/lib/control-room/promoteCutover'
 import { useCallback, useMemo, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
+import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
+import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
+import { fetchSupplyChain } from '@/api/platform'
+import { startRemediation } from '@/api/platform'
 import {
   buildTradeDeployPrompt,
   TRADE_DEPLOY_SCOPE,
@@ -74,6 +79,7 @@ type ControlRoomPageProps = {
   onOpenCompute?: () => void
   onOpenDefects?: () => void
   onOpenAgentDeskTab?: () => void
+  onOpenLaunchView?: (mode: 'rocket-launch' | 'satellite-deploy') => void
 } & AmbientAgentShellProps
 
 export function ControlRoomPage({
@@ -102,6 +108,7 @@ export function ControlRoomPage({
   onOpenCompute,
   onOpenDefects,
   onOpenAgentDeskTab,
+  onOpenLaunchView,
   ambientJobId,
   onStartAgentJob,
 }: ControlRoomPageProps) {
@@ -149,6 +156,32 @@ export function ControlRoomPage({
     if (!canOperate) return
     aiTradeDeploy.trigger()
   }
+
+  const qc = useQueryClient()
+  const playbookFixMutation = useMutation({
+    mutationFn: ({ scope, prompt }: { scope: string; prompt: string }) =>
+      startRemediation({ scope, prompt }),
+    onSuccess: (job, vars) => {
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      onStartAgentJob?.({ id: job.id, scope: vars.scope, label: scopeToLabel(vars.scope) })
+    },
+  })
+
+  const handlePlaybookFix = useCallback(
+    async ({ scope, prompt }: { scope: string; prompt: string }) => {
+      if (!canOperate) return
+      if (scope === DELIVER_STG_RECOVER_SCOPE) {
+        const supply = await fetchSupplyChain()
+        playbookFixMutation.mutate({
+          scope,
+          prompt: buildDeliverStgRecoverPrompt({ supply, stgSmoke }),
+        })
+        return
+      }
+      playbookFixMutation.mutate({ scope, prompt })
+    },
+    [canOperate, playbookFixMutation, stgSmoke],
+  )
 
   const trackSummaries = useMemo(() => {
     const clusterFailingPods = clusterSummary?.failing_pods
@@ -221,7 +254,11 @@ export function ControlRoomPage({
           onOpenDelivery={onOpenDelivery}
           onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
           onOpenAgentDesk={openAgentDeskPrefill}
+          onOpenLaunchView={mode => onOpenLaunchView?.(mode)}
           onOpenPromote={handleOpenPromotePreflight}
+          onPlaybookFix={handlePlaybookFix}
+          playbookFixPending={playbookFixMutation.isPending}
+          canOperate={canOperate}
         />
 
         <LaunchPad

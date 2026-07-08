@@ -692,6 +692,106 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       },
     },
 
+    // ── Trade Release-Fix escalation (trade-deploy / deliver-stg-recover → trade-release-fix) ──
+
+    spawn_trade_release_fix: {
+      description:
+        'Escalate a Trade deliver failure to Trade Release-Fix Agent. Starts scope "trade-release-fix" to patch bifrost-trade-infra / trade-* repos. ' +
+        'Use when rollout/build/gitops failure requires GitOps manifest or code fix. Returns spawned job ID.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          diagnosis: {
+            type: 'string',
+            description: 'Detailed diagnosis: failing Tekton task, error logs, repos/files to fix.',
+          },
+        },
+        required: ['diagnosis'],
+      },
+      async execute(args) {
+        const diagnosis = String(args.diagnosis ?? '')
+        if (diagnosis.trim() === '') {
+          return textResult('diagnosis must be a non-empty string', true)
+        }
+        setPhase(jobId, 'awaiting_approval')
+        appendEvent(jobId, makeEvent('status', 'Escalating to Trade Release-Fix Agent…', {
+          phase: 'awaiting_approval',
+          escalation: 'trade-release-fix',
+        }))
+        const runnerBase =
+          process.env.REMEDIATION_RUNNER_URL?.replace(/\/$/, '') ??
+          `http://127.0.0.1:${process.env.REMEDIATION_RUNNER_PORT ?? '8781'}`
+        try {
+          const resp = await fetch(`${runnerBase}/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              scope: 'trade-release-fix',
+              actor: 'trade-deliver-agent',
+              prompt: diagnosis,
+            }),
+          })
+          if (!resp.ok) {
+            const errText = await resp.text()
+            setPhase(jobId, 'remediating')
+            return textResult(`Failed to spawn trade-release-fix: HTTP ${resp.status} ${errText}`, true)
+          }
+          const job = (await resp.json()) as { id: string; status: string }
+          appendEvent(jobId, makeEvent('status', `Trade Release-Fix spawned: ${job.id}`, {
+            trade_release_fix_job_id: job.id,
+          }))
+          setPhase(jobId, 'remediating')
+          return textResult(jsonText({ spawned: true, trade_release_fix_job_id: job.id, status: job.status }))
+        } catch (err) {
+          setPhase(jobId, 'remediating')
+          return textResult(`Failed to spawn trade-release-fix: ${err instanceof Error ? err.message : String(err)}`, true)
+        }
+      },
+    },
+
+    poll_trade_release_fix: {
+      description:
+        'Poll a Trade Release-Fix job. Loop every 15–30s after spawn_trade_release_fix until done or failed.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          job_id: { type: 'string', description: 'Job ID from spawn_trade_release_fix' },
+        },
+        required: ['job_id'],
+      },
+      async execute(args) {
+        const fixJobId = String(args.job_id ?? '')
+        if (fixJobId.trim() === '') return textResult('job_id is required', true)
+        const runnerBase =
+          process.env.REMEDIATION_RUNNER_URL?.replace(/\/$/, '') ??
+          `http://127.0.0.1:${process.env.REMEDIATION_RUNNER_PORT ?? '8781'}`
+        try {
+          const resp = await fetch(`${runnerBase}/run/${encodeURIComponent(fixJobId)}`)
+          if (!resp.ok) {
+            return textResult(`Failed to poll trade-release-fix: HTTP ${resp.status} ${await resp.text()}`, true)
+          }
+          const job = (await resp.json()) as {
+            id: string
+            status: string
+            phase: string
+            summary?: string
+            error?: string
+          }
+          return textResult(jsonText({
+            job_id: job.id,
+            status: job.status,
+            phase: job.phase,
+            summary: job.summary ?? null,
+            error: job.error ?? null,
+            completed: job.status !== 'running',
+            fix_succeeded: job.status === 'done',
+          }))
+        } catch (err) {
+          return textResult(`Failed to poll trade-release-fix: ${err instanceof Error ? err.message : String(err)}`, true)
+        }
+      },
+    },
+
     // ── Mutual watchdog tools (dual Mac Mini self-healing) ──
 
     peer_agent_health: {
@@ -832,6 +932,65 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       async execute(args) {
         const repos = Array.isArray(args.repos) ? args.repos.map(String) : undefined
         const data = await gitBridgePost('/push', { repos })
+        return textResult(jsonText(data))
+      },
+    },
+
+    // ── Delivery / GitOps read tools (deliver-stg-recover, gitops-config-repair) ──
+
+    get_delivery_run_logs: {
+      description:
+        'Tail logs for a Tekton PipelineRun (build + step pods). Prefer this over get_pipeline_runs when diagnosing which task/step failed.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          run_id: {
+            type: 'string',
+            description: 'PipelineRun name, e.g. bifrost-deliver-stg-1783409435',
+          },
+        },
+        required: ['run_id'],
+      },
+      async execute(args) {
+        const runId = String(args.run_id ?? '')
+        const data = await platformGet(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/logs`)
+        return textResult(jsonText(data))
+      },
+    },
+
+    get_stg_smoke: {
+      description: 'STG runtime smoke probes (Trade + Platform targets). Green smoke + failed pipeline = stale pipeline fail, not node outage.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/delivery/stg/smoke')
+        return textResult(jsonText(data))
+      },
+    },
+
+    get_gitops_apps: {
+      description: 'List Argo CD applications with sync/health status. Use for ComparisonError or Unknown sync_status.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/gitops/apps')
+        return textResult(jsonText(data))
+      },
+    },
+
+    gitops_sync_app: {
+      description: 'Trigger Argo CD sync to HEAD for a named Application (operator role).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Argo Application name, e.g. bifrost-stg or bifrost-platform-prod',
+          },
+        },
+        required: ['name'],
+      },
+      async execute(args) {
+        const name = String(args.name ?? '')
+        const data = await platformPost(`/api/v1/gitops/apps/${encodeURIComponent(name)}/sync`, {})
         return textResult(jsonText(data))
       },
     },

@@ -599,8 +599,23 @@ func classifyRootCauseMultiSignal(ca *clusterAccum) (RootCause, float64, []Class
 	if strings.Contains(scopeLower, "drift") {
 		emit(RootCauseConfigDrift, 3.0, "scope_drift", "scope explicitly mentions drift")
 	}
-	if strings.Contains(scopeLower, "release") {
-		emit(RootCausePlatformDefect, 1.5, "scope_release", "release scope — failures indicate platform/CI issues")
+	if strings.Contains(scopeLower, "release") || scopeLower == "deliver-stg-recover" || scopeLower == "trade-deploy" || scopeLower == "trade-release-fix" {
+		emit(RootCausePlatformDefect, 1.5, "scope_release", "release/delivery scope — failures indicate platform/CI issues")
+	}
+	if scopeLower == "gitops-config-repair" {
+		emit(RootCausePlatformDefect, 2.0, "scope_gitops_repair", "GitOps manifest repair")
+	}
+	if scopeLower == "defect-pattern-remediate" {
+		emit(RootCausePlatformDefect, 1.0, "scope_defect_pattern", "routed Defects pattern remediation")
+	}
+	if scopeLower == "stale-pipeline-triage" {
+		emit(RootCauseTransient, 0.5, "scope_stale_triage", "L0 stale pipeline classification — read-only")
+	}
+	if scopeLower == "platform-self-health-recover" {
+		emit(RootCausePlatformDefect, 2.0, "scope_platform_self_health", "platform control plane self-health recovery")
+	}
+	if scopeLower == "registry-pull-recover" {
+		emit(RootCausePlatformDefect, 2.5, "scope_registry_pull", "registry image pull recovery after deliver rollout")
 	}
 	if scopeLower == "agent-desk" {
 		emit(RootCauseTransient, 0.5, "scope_agent_desk", "ad-hoc dispatch — often one-off investigations")

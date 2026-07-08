@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, cn, DenseTag } from '@bifrost/ui'
 import { Check, ChevronRight } from 'lucide-react'
 import type { TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
+import type { TaskPhaseFixAction, TaskPhaseHint } from '@/lib/task-mode/taskPhaseDiagnostics'
 
 const STATUS_VARIANT: Record<
   TaskPhaseStatus,
@@ -56,14 +57,19 @@ function defaultSelectedIndex(
 export type TaskPhaseProgressProps = {
   phases: TaskPhaseDef[]
   statuses: Record<string, TaskPhaseStatus>
+  /** Per-step operator hints (block reason, root causes, fix actions). */
+  hints?: Record<string, TaskPhaseHint>
   /** Secondary — open full Console tab for deep work on this phase. */
   onOpenFullPage?: (phase: TaskPhaseDef) => void
+  onFixAction?: (action: TaskPhaseFixAction, phase: TaskPhaseDef) => void
 }
 
 export function TaskPhaseProgress({
   phases,
   statuses,
+  hints,
   onOpenFullPage,
+  onFixAction,
 }: TaskPhaseProgressProps) {
   const phaseKey = useMemo(() => phases.map(p => p.id).join(','), [phases])
   const statusKey = useMemo(
@@ -83,6 +89,7 @@ export function TaskPhaseProgress({
 
   const selectedPhase = phases[selectedIndex] ?? phases[0]
   const selectedStatus = statuses[selectedPhase.id] ?? 'unknown'
+  const selectedHint = hints?.[selectedPhase.id]
 
   const dependsOnLabels =
     selectedPhase.dependsOn?.map(
@@ -159,6 +166,51 @@ export function TaskPhaseProgress({
         <p className="m-0 mt-1.5 text-[var(--text-dense-meta)] text-muted-foreground">
           {selectedPhase.summary}
         </p>
+        {selectedHint != null && (
+          <div
+            className={cn(
+              'mt-2 rounded-md border px-2.5 py-2',
+              selectedStatus === 'blocked'
+                ? 'border-destructive/35 bg-destructive/5'
+                : 'border-[color-mix(in_srgb,var(--color-lamp-yellow)_35%,var(--border))] bg-[color-mix(in_srgb,var(--color-lamp-yellow)_6%,transparent)]',
+            )}
+          >
+            <p
+              className={cn(
+                'm-0 text-[var(--text-dense-meta)] font-medium',
+                selectedStatus === 'blocked'
+                  ? 'text-destructive'
+                  : 'text-[var(--color-lamp-yellow)]',
+              )}
+            >
+              {selectedHint.reason}
+            </p>
+            {selectedHint.rootCauses.length > 0 && (
+              <ul className="m-0 mt-1.5 list-none space-y-0.5 p-0">
+                {selectedHint.rootCauses.slice(0, 5).map(line => (
+                  <li key={line} className="text-[var(--text-dense-caption)] text-muted-foreground">
+                    · {line}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {selectedHint.fixActions.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {selectedHint.fixActions.map(action => (
+                  <Button
+                    key={action.label}
+                    variant={action.kind === 'agent-fix' ? 'default' : 'outline'}
+                    size="xs"
+                    className="h-7 text-[var(--text-dense-caption)]"
+                    onClick={() => onFixAction?.(action, selectedPhase)}
+                  >
+                    {action.label}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {dependsOnLabels.length > 0 && (
           <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-muted-foreground">
             Depends on: {dependsOnLabels.join(' → ')}

@@ -41,7 +41,6 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
   const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [nowMs, setNowMs] = useState(() => Date.now())
-  const [feedPulse, setFeedPulse] = useState(0)
 
   const { job, events, connected, error } = useRemediationStream(jobId)
 
@@ -76,10 +75,6 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
     const id = window.setInterval(() => setNowMs(Date.now()), 1000)
     return () => window.clearInterval(id)
   }, [isTerminal])
-
-  useEffect(() => {
-    setFeedPulse(k => k + 1)
-  }, [liveFeed?.text, liveFeed?.kind])
 
   useEffect(() => {
     if (job == null || !isTerminal || completedRef.current === job.id) return
@@ -119,7 +114,7 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
         )}
         <span className="agent-job-banner__label">{statusLabel}</span>
         {showInlineFeed && (
-          <div className="agent-job-banner__feed" key={feedPulse}>
+          <div className="agent-job-banner__feed">
             <span className={cn('agent-job-banner__feed-kind', `agent-job-banner__feed-kind--${liveFeed.kind}`)}>
               {feedKindLabel(liveFeed.kind)}
             </span>
@@ -140,7 +135,7 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
             {feedStats.eventCount > feedStats.toolCalls && `${feedStats.eventCount} events`}
           </span>
         )}
-        <AgentPhaseIndicator currentPhase={job?.phase} failed={job?.status === 'failed'} compact interactive />
+        <AgentPhaseIndicator currentPhase={job?.phase} failed={job?.status === 'failed'} compact />
         {elapsed != null && !isTerminal && (
           <span className="agent-job-banner__elapsed">{elapsed}</span>
         )}

@@ -29,6 +29,46 @@ func TaskCatalog() []TaskDef {
 			MissionSignals: []string{"release-gate"},
 		},
 		{
+			ID: "trade-deploy", Scope: "trade-deploy", Label: "Trade · Deploy", Tier: "manual", DefaultLevel: "L1",
+			McpTools: []string{"start_pipeline_run", "get_pipeline_runs", "get_delivery_run_logs", "get_stg_smoke"},
+			MissionSignals: []string{"release-gate", "stg-smoke"},
+		},
+		{
+			ID: "deliver-stg-recover", Scope: "deliver-stg-recover", Label: "Trade · Deliver STG Recover", Tier: "manual", DefaultLevel: "L1",
+			McpTools: []string{"get_delivery_run_logs", "get_stg_smoke", "start_pipeline_run", "gitops_sync_app", "get_gitops_apps"},
+			MissionSignals: []string{"release-gate", "stg-smoke"},
+		},
+		{
+			ID: "trade-release-fix", Scope: "trade-release-fix", Label: "Trade · Release Fix", Tier: "escalation", DefaultLevel: "L2",
+			McpTools: []string{"get_delivery_run_logs", "git_commit", "git_push"},
+			MissionSignals: []string{"release-gate"},
+		},
+		{
+			ID: "gitops-config-repair", Scope: "gitops-config-repair", Label: "Platform · GitOps Repair", Tier: "manual", DefaultLevel: "L1",
+			McpTools: []string{"get_gitops_apps", "gitops_sync_app", "start_pipeline_run"},
+			MissionSignals: []string{"release-gate"},
+		},
+		{
+			ID: "defect-pattern-remediate", Scope: "defect-pattern-remediate", Label: "Health · Pattern Fix", Tier: "manual", DefaultLevel: "L1",
+			McpTools: []string{"verify_mission_snapshot"},
+			MissionSignals: []string{"verify-snapshot"},
+		},
+		{
+			ID: "stale-pipeline-triage", Scope: "stale-pipeline-triage", Label: "Health · Stale Pipeline Check", Tier: "automated", DefaultLevel: "L0",
+			McpTools: []string{"get_pipeline_runs", "get_stg_smoke"},
+			MissionSignals: []string{"stg-smoke", "release-gate"},
+		},
+		{
+			ID: "platform-self-health-recover", Scope: "platform-self-health-recover", Label: "Platform · Self-health Recover", Tier: "manual", DefaultLevel: "L1",
+			McpTools: []string{"verify_mission_snapshot", "rollout_restart_deployment"},
+			MissionSignals: []string{"self-health"},
+		},
+		{
+			ID: "registry-pull-recover", Scope: "registry-pull-recover", Label: "Infra · Registry Pull Recover", Tier: "manual", DefaultLevel: "L1",
+			McpTools: []string{"rollout_restart_deployment", "get_cluster_summary"},
+			MissionSignals: []string{"cluster"},
+		},
+		{
 			ID: "cluster-auto", Scope: "cluster_issues_full_auto", Label: "Cluster · Remediate", Tier: "manual", DefaultLevel: "L1",
 			McpTools: []string{"rollout_restart_deployment", "delete_pod", "get_cluster_summary"},
 			MissionSignals: []string{"matrix", "cluster"},
