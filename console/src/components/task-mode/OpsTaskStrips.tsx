@@ -43,6 +43,12 @@ export type OpsTaskStripsProps = {
   tradeDeployDisabledReason?: string
   /** When true, only render Promote / cutover (summary row rendered separately). */
   promoteOnly?: boolean
+  readinessCanOperate?: boolean
+  onAgentFixStg?: () => void
+  onAgentFixProd?: () => void
+  agentFixPending?: boolean
+  agentFixDisabled?: boolean
+  agentFixTitle?: string
 }
 
 function OperateQueueSummary({ onNavigate }: { onNavigate: (tab: string) => void }) {
@@ -261,6 +267,12 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     canDispatchTradeDeploy,
     releaseDisabledReason,
     tradeDeployDisabledReason,
+    readinessCanOperate,
+    onAgentFixStg,
+    onAgentFixProd,
+    agentFixPending,
+    agentFixDisabled,
+    agentFixTitle,
   } = props
   const ops = mode.ops
   if (ops == null) return null
@@ -333,6 +345,12 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
               compact
               summaryColumn
               suppressProdBlockedBanner
+              canOperate={readinessCanOperate}
+              onAgentFixStg={onAgentFixStg}
+              onAgentFixProd={onAgentFixProd}
+              agentFixPending={agentFixPending}
+              agentFixDisabled={agentFixDisabled}
+              agentFixTitle={agentFixTitle}
             />
           </OpsSection>
         )}

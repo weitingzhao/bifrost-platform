@@ -13,6 +13,7 @@ import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
 import {
   useRocketProdReadiness,
+  useSatelliteDeployOverall,
   useSatelliteProdReadiness,
 } from '@/components/task-mode/TaskModeReadinessStrip'
 import { DevTaskStrips } from '@/components/task-mode/DevTaskStrips'
@@ -31,6 +32,7 @@ import {
   buildTradeProdFixPrompt,
   PROD_ENV_FIX_SCOPE,
 } from '@/lib/agent/prodEnvironmentFixPrompt'
+import { buildTradeEnvReadinessFixPrompt } from '@/lib/agent/tradeEnvReadinessFixPrompt'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import { collectClusterIssues } from '@/lib/cluster/collectClusterIssues'
@@ -90,14 +92,24 @@ export function TaskControlCenter({
 
   const rocketProd = useRocketProdReadiness(mode.id === 'rocket-launch')
   const satelliteProd = useSatelliteProdReadiness(mode.id === 'satellite-deploy')
+  const satelliteDeploy = useSatelliteDeployOverall(mode.id === 'satellite-deploy')
+
+  const stgReadinessSignals = useMemo(
+    () => satelliteDeploy.fixSignals.filter(s => s.label.startsWith('STG')),
+    [satelliteDeploy.fixSignals],
+  )
+  const prodReadinessSignals = useMemo(
+    () => satelliteDeploy.fixSignals.filter(s => s.label.startsWith('PROD')),
+    [satelliteDeploy.fixSignals],
+  )
 
   const clusterForFixQ = useQuery({
     queryKey: ['task-cc', 'cluster-fix'],
     queryFn: fetchCluster,
     refetchInterval: 20_000,
     enabled:
+      mode.id === 'satellite-deploy' ||
       (mode.id === 'rocket-launch' && rocketProd.prodBlocked) ||
-      (mode.id === 'satellite-deploy' && satelliteProd.prodBlocked) ||
       (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
   })
 
@@ -106,8 +118,8 @@ export function TaskControlCenter({
     queryFn: fetchClusterServiceReadiness,
     refetchInterval: 20_000,
     enabled:
+      mode.id === 'satellite-deploy' ||
       (mode.id === 'rocket-launch' && rocketProd.prodBlocked) ||
-      (mode.id === 'satellite-deploy' && satelliteProd.prodBlocked) ||
       (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
   })
 
@@ -191,6 +203,62 @@ export function TaskControlCenter({
           stgNamespace: satelliteProd.stgNamespace ?? 'bifrost-stg',
           prodNamespace: satelliteProd.prodNamespace ?? 'bifrost-prod',
           signals: satelliteProd.fixSignals ?? [],
+        }),
+        cluster_summary: cluster,
+        service_readiness: serviceReadiness,
+        issues,
+      }
+    },
+  })
+
+  const aiTradeStgEnvFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: PROD_ENV_FIX_SCOPE,
+    label: prodFixLabel,
+    buildRequest: async () => {
+      const cluster = clusterForFixQ.data ?? (await fetchCluster())
+      const serviceReadiness =
+        serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
+      const issues = collectClusterIssues({
+        summary: cluster,
+        serviceReadiness,
+      })
+      return {
+        prompt: buildTradeEnvReadinessFixPrompt({
+          env: 'stg',
+          overall: satelliteDeploy.stgOverall,
+          namespace: 'bifrost-stg',
+          signals: stgReadinessSignals,
+        }),
+        cluster_summary: cluster,
+        service_readiness: serviceReadiness,
+        issues,
+      }
+    },
+  })
+
+  const aiTradeProdEnvFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: PROD_ENV_FIX_SCOPE,
+    label: prodFixLabel,
+    buildRequest: async () => {
+      const cluster = clusterForFixQ.data ?? (await fetchCluster())
+      const serviceReadiness =
+        serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
+      const issues = collectClusterIssues({
+        summary: cluster,
+        serviceReadiness,
+      })
+      return {
+        prompt: buildTradeEnvReadinessFixPrompt({
+          env: 'prod',
+          overall: satelliteDeploy.prodOverall,
+          namespace: 'bifrost-prod',
+          signals: prodReadinessSignals,
         }),
         cluster_summary: cluster,
         service_readiness: serviceReadiness,
@@ -505,6 +573,12 @@ export function TaskControlCenter({
             canDispatchTradeDeploy={tradeDeployDispatchAllowed}
             releaseDisabledReason={releaseDisabledReason}
             tradeDeployDisabledReason={tradeDeployDisabledReason}
+            readinessCanOperate={canOperate}
+            onAgentFixStg={() => aiTradeStgEnvFix.trigger()}
+            onAgentFixProd={() => aiTradeProdEnvFix.trigger()}
+            agentFixPending={aiTradeStgEnvFix.isPending || aiTradeProdEnvFix.isPending}
+            agentFixDisabled={!canOperate}
+            agentFixTitle="Diagnose STG/PROD readiness via Cluster · Remediate (IB socket triage included)"
           />
         )}
 

@@ -46,12 +46,12 @@ export function SatelliteObservabilityStrip({
 
   return (
     <OpsSection
-      title="Observability backbone"
-      description="Layer A (metrics-server) and Layer B (kube-prometheus-stack) support satellite telemetry from the rocket."
-      bodyPadding="default"
+      title="Observability"
+      bodyPadding="compact"
       overflow="visible"
+      className="shadow-none"
     >
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="flex items-center gap-2">
           <StatusLamp value={layerA ? 'ok' : metricsLoading ? 'unknown' : 'fail'} kind="reach" />
           <span className="text-[var(--text-dense-label)] font-medium">Layer A</span>
@@ -88,8 +88,8 @@ export function SatelliteObservabilityStrip({
         )}
       </div>
       {layerB === 'not_installed' && !observabilityLoading && (
-        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Layer B adds historical metrics, disk I/O, logs, and alerts. Install via Rocket → Cluster.
+        <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+          Install Layer B via Rocket → Cluster for historical metrics and alerts.
         </p>
       )}
     </OpsSection>
