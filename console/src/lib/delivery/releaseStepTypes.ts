@@ -35,6 +35,44 @@ export function runStepStatus(run: DeliveryPipelineRunView | undefined): { statu
   return { status: 'pending', label: 'Pending' }
 }
 
+export type DeployRunPickHints = {
+  /** STG/PROD release gate passed — STG is accepted for this revision. */
+  gatePassed?: boolean
+  /** Automated smoke / verify-stg reachability OK. */
+  smokeOk?: boolean
+}
+
+/**
+ * Pick the PipelineRun that best represents deploy status for summary badges.
+ * API returns runs newest-first; a failed retry after a successful deliver should not
+ * override Gate + smoke acceptance signals.
+ */
+export function pickDeployPipelineRun(
+  runs: DeliveryPipelineRunView[] | undefined,
+  hints?: DeployRunPickHints,
+): DeliveryPipelineRunView | undefined {
+  if (runs == null || runs.length === 0) return undefined
+  const latest = runs[0]
+  if (isPipelineRunSucceeded(latest) || isPipelineRunRunning(latest)) return latest
+
+  const accepted = hints?.gatePassed === true || hints?.smokeOk === true
+  if (accepted) {
+    const lastSuccess = runs.find(r => isPipelineRunSucceeded(r))
+    if (lastSuccess != null) return lastSuccess
+  }
+  return latest
+}
+
+/** True when newest run failed but an older succeeded run is shown (retry after acceptance). */
+export function deployRunRetryFailed(
+  runs: DeliveryPipelineRunView[] | undefined,
+  displayRun: DeliveryPipelineRunView | undefined,
+): boolean {
+  if (runs == null || runs.length === 0 || displayRun == null) return false
+  const latest = runs[0]
+  return latest !== displayRun && isPipelineRunFailed(latest)
+}
+
 export function gateStepStatus(gate: ReleaseGateResponse | undefined): { status: StepStatus; label: string } {
   const result = gate?.result ?? ''
   if (result === 'pass') return { status: 'done', label: 'Passed' }

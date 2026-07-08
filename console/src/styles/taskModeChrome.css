@@ -68,11 +68,12 @@
 /* Sidebar — left accent rail + mode-tinted wash (overrides bg-sidebar tint) */
 .task-mode-chrome-root[data-task-mode]:not([data-task-mode='system']) [data-sidebar='sidebar'] {
   border-left: 3px solid var(--task-mode-accent);
-  background-color: color-mix(in oklab, var(--task-mode-accent) 10%, var(--sidebar));
+  /* Muted wash — keeps mode identity without pulling focus from nav content */
+  background-color: color-mix(in oklab, var(--task-mode-accent) 4%, var(--sidebar));
   background-image: linear-gradient(
     90deg,
-    var(--task-mode-accent-subtle) 0%,
-    transparent min(260px, 55%)
+    color-mix(in oklab, var(--task-mode-accent) 6%, transparent) 0%,
+    transparent min(200px, 42%)
   );
 }
 
@@ -112,4 +113,26 @@
 
 .task-mode-sidebar-icon-trigger:hover {
   background: color-mix(in oklab, var(--task-mode-accent) 22%, transparent);
+}
+
+/* Sidebar icon rail — one-click view switch (no popover) */
+.task-mode-icon-rail__btn {
+  color: var(--task-mode-accent);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.task-mode-icon-rail__btn:hover {
+  background: var(--task-mode-accent-subtle);
+  border-color: var(--task-mode-accent-border);
+}
+
+.task-mode-icon-rail__btn[data-active='true'] {
+  background: var(--task-mode-accent-subtle);
+  border-color: var(--task-mode-accent-border);
+  box-shadow: inset 0 -2px 0 0 var(--task-mode-accent);
+}
+
+.task-mode-icon-rail__icon {
+  color: var(--task-mode-accent);
 }

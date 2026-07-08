@@ -21,7 +21,7 @@ import {
 } from '@/lib/delivery/releaseStepTypes'
 
 export type { FlowStep, StepStatus } from '@/lib/delivery/releaseStepTypes'
-export { runStepStatus, gateStepStatus, deriveReleaseOutcome } from '@/lib/delivery/releaseStepTypes'
+export { runStepStatus, gateStepStatus, deriveReleaseOutcome, pickDeployPipelineRun, deployRunRetryFailed } from '@/lib/delivery/releaseStepTypes'
 
 const RELEASE_OUTCOME_BADGE: Record<string, string> = {
   released: 'border-success/40 bg-success/10 text-success',

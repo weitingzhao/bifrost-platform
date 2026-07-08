@@ -14,7 +14,12 @@ import {
 } from '@/api/platform'
 import type { MatrixResponse } from '@/api/types'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
-import { gateStepStatus, runStepStatus } from '@/components/delivery/ReleaseStepCommandCenter'
+import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import { gateStepStatus, runStepStatus, pickDeployPipelineRun } from '@/components/delivery/ReleaseStepCommandCenter'
+import {
+  useRocketProdReadiness,
+  useSatelliteProdReadiness,
+} from '@/components/task-mode/TaskModeReadinessStrip'
 import {
   DELIVER_PLATFORM_PIPELINE,
 } from '@/lib/delivery/deliverPlatformPhases'
@@ -23,6 +28,9 @@ import { signalColor, type Signal } from '@/lib/control-room/missionSignals'
 import { StatusLamp } from '@/components/StatusLamp'
 
 const REFETCH_MS = 20_000
+
+/** Task CC shows one playbook card; Control Room shows both. */
+export type LaunchPadVariant = 'both' | 'rocket-launch' | 'satellite-deploy'
 
 function tradeEnvSignal(matrix: MatrixResponse | undefined): Signal {
   if (matrix == null) return 'unknown'
@@ -105,6 +113,8 @@ function LaunchPadCard({
 }
 
 export interface LaunchPadProps {
+  /** Default `both` — Control Room. Task CC passes the active playbook id. */
+  variant?: LaunchPadVariant
   onDispatchRelease: () => void
   onDispatchTradeDeploy: () => void
   releasePending?: boolean
@@ -118,6 +128,7 @@ export interface LaunchPadProps {
 }
 
 export function LaunchPad({
+  variant = 'both',
   onDispatchRelease,
   onDispatchTradeDeploy,
   releasePending = false,
@@ -129,51 +140,66 @@ export function LaunchPad({
   onOpenPlatformRelease,
   onOpenTradeDeploy,
 }: LaunchPadProps) {
+  const showRocket = variant === 'both' || variant === 'rocket-launch'
+  const showSatellite = variant === 'both' || variant === 'satellite-deploy'
+
+  const rocketProd = useRocketProdReadiness(showRocket)
+  const satelliteProd = useSatelliteProdReadiness(showSatellite)
+
   const releaseStateQ = useQuery({
     queryKey: ['launch-pad', 'release-state', 'platform'],
     queryFn: () => fetchReleaseState('platform'),
     refetchInterval: REFETCH_MS,
+    enabled: showRocket,
   })
   const platformStgRunsQ = useQuery({
     queryKey: ['launch-pad', 'runs', DELIVER_PLATFORM_PIPELINE],
     queryFn: () => fetchPipelineRuns(DELIVER_PLATFORM_PIPELINE),
     refetchInterval: REFETCH_MS,
+    enabled: showRocket,
   })
   const platformStgGateQ = useQuery({
     queryKey: ['launch-pad', 'gate', 'platform-stg'],
     queryFn: () => fetchReleaseGate('platform-stg'),
     refetchInterval: REFETCH_MS,
+    enabled: showRocket,
   })
 
   const tradeStgRunsQ = useQuery({
     queryKey: ['launch-pad', 'runs', DELIVER_STG_PIPELINE],
     queryFn: () => fetchPipelineRuns(DELIVER_STG_PIPELINE),
     refetchInterval: REFETCH_MS,
+    enabled: showSatellite,
   })
   const tradeStgGateQ = useQuery({
     queryKey: ['launch-pad', 'gate', 'stg'],
     queryFn: () => fetchReleaseGate('stg'),
     refetchInterval: REFETCH_MS,
+    enabled: showSatellite,
   })
   const stgSmokeQ = useQuery({
     queryKey: ['launch-pad', 'stg-smoke'],
     queryFn: fetchStgSmoke,
     refetchInterval: REFETCH_MS,
+    enabled: showSatellite,
   })
   const tierBQ = useQuery({
     queryKey: ['launch-pad', 'tier-b'],
     queryFn: fetchTierBStatus,
     refetchInterval: REFETCH_MS,
+    enabled: showSatellite,
   })
   const supplyQ = useQuery({
     queryKey: ['launch-pad', 'supply-chain'],
     queryFn: fetchSupplyChain,
     refetchInterval: REFETCH_MS,
+    enabled: showSatellite,
   })
   const matrixQ = useQuery({
     queryKey: ['launch-pad', 'matrix'],
     queryFn: () => fetchMatrix(),
     refetchInterval: REFETCH_MS,
+    enabled: showSatellite,
   })
 
   const matrices = matrixQ.data != null && isAllMatrices(matrixQ.data) ? matrixQ.data.matrices : []
@@ -181,7 +207,9 @@ export function LaunchPad({
   const stgMatrix = matrices.find(m => m.environment === 'stg')
   const prodMatrix = matrices.find(m => m.environment === 'prod')
 
-  const platformRun = platformStgRunsQ.data?.runs?.[0]
+  const platformRun = pickDeployPipelineRun(platformStgRunsQ.data?.runs, {
+    gatePassed: platformStgGateQ.data?.result === 'pass',
+  })
   const platformDeploy = runStepStatus(platformRun)
   const platformGate = gateStepStatus(platformStgGateQ.data)
   const releaseSignal: Signal =
@@ -200,10 +228,13 @@ export function LaunchPad({
     nextAction?.description ??
     (platformRun?.revision != null ? `Revision ${platformRun.revision}` : 'Platform STG → PROD release')
 
-  const tradeRun = tradeStgRunsQ.data?.runs?.[0]
+  const smokeOk = stgSmokeQ.data?.reachability === 'ok'
+  const tradeRun = pickDeployPipelineRun(tradeStgRunsQ.data?.runs, {
+    gatePassed: tradeStgGateQ.data?.result === 'pass',
+    smokeOk,
+  })
   const tradeDeploy = runStepStatus(tradeRun)
   const tradeGate = gateStepStatus(tradeStgGateQ.data)
-  const smokeOk = stgSmokeQ.data?.reachability === 'ok'
   const smokeSignal: Signal = stgSmokeQ.isLoading ? 'unknown' : smokeOk ? 'ok' : 'fail'
   const tradeSignals: Signal[] = [
     tradeEnvSignal(devMatrix),
@@ -223,8 +254,35 @@ export function LaunchPad({
   const cmsTotal = supplyQ.data?.dockerfile_configmaps?.length ?? 0
   const tierBSigned = tierBQ.data?.signed_off === true
 
+  const rocketAgentBlocked = rocketProd.prodBlocked
+  const satelliteAgentBlocked = satelliteProd.prodBlocked
+  const rocketCanLaunch = canDispatchRelease && !rocketAgentBlocked
+  const satelliteCanLaunch = canDispatchTradeDeploy && !satelliteAgentBlocked
+  const rocketDisabledReason = rocketAgentBlocked
+    ? rocketProd.prodDisabledReason
+    : releaseDisabledReason
+  const satelliteDisabledReason = satelliteAgentBlocked
+    ? satelliteProd.prodDisabledReason
+    : tradeDeployDisabledReason
+
   return (
-    <section className="launch-pad grid gap-3 sm:grid-cols-2" aria-label="Launch pad">
+    <section
+      className={`launch-pad grid gap-3 ${showRocket && showSatellite ? 'sm:grid-cols-2' : 'max-w-xl'}`}
+      aria-label="Launch pad"
+    >
+      {showRocket && rocketAgentBlocked && (
+        <OpsFeedback variant="warning" title="Prod readiness blocked" className="sm:col-span-2">
+          Fix Platform Prod environment before release — resolve failing namespaces, self-health probes, or release
+          gate checks first.
+        </OpsFeedback>
+      )}
+      {showSatellite && satelliteAgentBlocked && (
+        <OpsFeedback variant="warning" title="Prod readiness blocked" className="sm:col-span-2">
+          Fix Trade Prod environment before deploy — resolve failing pods, datastore, IB socket, or API reachability
+          first.
+        </OpsFeedback>
+      )}
+      {showRocket && (
       <LaunchPadCard
         icon={Rocket}
         title="Rocket Launch"
@@ -244,11 +302,13 @@ export function LaunchPad({
         agentLabel="Agent Launch"
         onAgentLaunch={onDispatchRelease}
         agentPending={releasePending}
-        canAgentLaunch={canDispatchRelease}
-        agentDisabledReason={releaseDisabledReason}
+        canAgentLaunch={rocketCanLaunch}
+        agentDisabledReason={rocketDisabledReason}
         onOpenDetail={onOpenPlatformRelease}
       />
+      )}
 
+      {showSatellite && (
       <LaunchPadCard
         icon={Satellite}
         title="Satellite Deploy"
@@ -268,10 +328,11 @@ export function LaunchPad({
         agentLabel="Agent Deploy"
         onAgentLaunch={onDispatchTradeDeploy}
         agentPending={tradeDeployPending}
-        canAgentLaunch={canDispatchTradeDeploy}
-        agentDisabledReason={tradeDeployDisabledReason}
+        canAgentLaunch={satelliteCanLaunch}
+        agentDisabledReason={satelliteDisabledReason}
         onOpenDetail={onOpenTradeDeploy}
       />
+      )}
     </section>
   )
 }
