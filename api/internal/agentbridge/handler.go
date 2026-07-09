@@ -27,14 +27,15 @@ func NewHandler() *Handler {
 }
 
 type BridgeResponse struct {
-	GeneratedAt       time.Time         `json:"generated_at"`
-	RemediationRunner RunnerStatus      `json:"remediation_runner"`
-	Runners           []RunnerStatus    `json:"runners"`
-	GitBridge         GitBridgeStatus   `json:"git_bridge"`
-	HermesMcp         OptionalEndpoint  `json:"hermes_mcp"`
-	NousHermes        NousHermesStatus  `json:"nous_hermes"`
-	PlatformMcp       PlatformMcpStatus `json:"platform_mcp"`
-	NightlyReport     NightlyHint       `json:"nightly_report"`
+	GeneratedAt            time.Time                 `json:"generated_at"`
+	RemediationRunner      RunnerStatus              `json:"remediation_runner"`
+	Runners                []RunnerStatus            `json:"runners"`
+	GitBridge              GitBridgeStatus           `json:"git_bridge"`
+	SatelliteProbeBridge   SatelliteProbeBridgeStatus `json:"satellite_probe_bridge"`
+	HermesMcp              OptionalEndpoint          `json:"hermes_mcp"`
+	NousHermes             NousHermesStatus          `json:"nous_hermes"`
+	PlatformMcp            PlatformMcpStatus         `json:"platform_mcp"`
+	NightlyReport          NightlyHint               `json:"nightly_report"`
 }
 
 type NousHermesStatus struct {
@@ -58,6 +59,13 @@ type GitBridgeStatus struct {
 	RepoCount  int    `json:"repo_count,omitempty"`
 	DirtyRepos int    `json:"dirty_repos,omitempty"`
 	Error      string `json:"error,omitempty"`
+}
+
+type SatelliteProbeBridgeStatus struct {
+	URL             string `json:"url,omitempty"`
+	Status          string `json:"status"` // not_configured | ok | unavailable
+	TradeNginxBase  string `json:"trade_nginx_base,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 type RunnerStatus struct {
@@ -144,6 +152,7 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 	hermes := probeHermesMcp(ctx, h.httpClient)
 	nousHermes := probeNousHermes(ctx, h.httpClient)
 	gitBridge := probeGitBridge(ctx, h.httpClient)
+	satelliteProbeBridge := probeSatelliteProbeBridge(ctx, h.httpClient)
 
 	tools := mcp.Catalog()
 	agentTools := 0
@@ -165,7 +174,8 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 		GeneratedAt:       now,
 		RemediationRunner: runner,
 		Runners:           runners,
-		GitBridge:         gitBridge,
+		GitBridge:            gitBridge,
+		SatelliteProbeBridge: satelliteProbeBridge,
 		HermesMcp:         hermes,
 		NousHermes:        nousHermes,
 		PlatformMcp: PlatformMcpStatus{
@@ -239,6 +249,38 @@ func probeGitBridge(ctx context.Context, client *http.Client) GitBridgeStatus {
 		Workspace:  body.Workspace,
 		RepoCount:  len(body.Repos),
 		DirtyRepos: len(body.DirtyRepos),
+	}
+}
+
+func probeSatelliteProbeBridge(ctx context.Context, client *http.Client) SatelliteProbeBridgeStatus {
+	url := strings.TrimRight(strings.TrimSpace(os.Getenv("SATELLITE_PROBE_BRIDGE_URL")), "/")
+	if url == "" {
+		return SatelliteProbeBridgeStatus{
+			Status: "not_configured",
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/health", nil)
+	if err != nil {
+		return SatelliteProbeBridgeStatus{URL: url, Status: "unavailable", Error: err.Error()}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return SatelliteProbeBridgeStatus{URL: url, Status: "unavailable", Error: err.Error()}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return SatelliteProbeBridgeStatus{URL: url, Status: "unavailable", Error: "HTTP " + resp.Status}
+	}
+	var body struct {
+		TradeNginxBase string `json:"trade_nginx_base"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return SatelliteProbeBridgeStatus{URL: url, Status: "ok"}
+	}
+	return SatelliteProbeBridgeStatus{
+		URL:            url,
+		Status:         "ok",
+		TradeNginxBase: body.TradeNginxBase,
 	}
 }
 

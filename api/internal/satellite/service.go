@@ -63,15 +63,9 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 				Reachability: probe.ReachUnknown,
 			},
 			Socket: MonitorSocketDeep{
-				Massive: SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
-				IBIngestor: SocketComponentDeep{
-					Reachability: probe.ReachUnknown,
-					Detail:       "not reported",
-				},
-				IBAccountAgent: SocketComponentDeep{
-					Reachability: probe.ReachUnknown,
-					Detail:       "not reported",
-				},
+				Massive:           SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
+				IBIngestor:        SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
+				IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 				IBOperator:        SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 				PlatformIBGateway: SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 			},
@@ -95,6 +89,12 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 		Reachability: probe.ReachUnknown,
 	}
 
+	if env.EffectiveProbeMode() == "bridge" {
+		bridgeResp := s.busDeepFromBridge(ctx, env)
+		bridgeResp.GeneratedAt = now
+		return bridgeResp
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(3)
 	go func() {
@@ -112,62 +112,207 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 	wg.Wait()
 
 	resp.Reachability = aggregateReach(resp.Monitor.Reachability, resp.Ops.Reachability, resp.Ingest.Reachability)
+
+	// Pull fallback only when this env explicitly sets trade_bridge_url (avoid global bridge URL on K3s envs).
+	if resp.Reachability == probe.ReachFail && strings.TrimSpace(env.TradeBridgeURL) != "" {
+		bridgeResp := s.busDeepFromBridge(ctx, env)
+		bridgeResp.GeneratedAt = now
+		bridgeResp.Detail = "Pull probe failed; served from satellite-probe-bridge fallback"
+		return bridgeResp
+	}
+
 	return resp
 }
 
-func (s *Service) fetchMonitorDeep(ctx context.Context, env config.Environment, url string) MonitorDeep {
-	var raw struct {
-		Health struct {
-			SelfCheck    string   `json:"self_check"`
-			BlockReasons []string `json:"block_reasons"`
-			StatusLamp   string   `json:"status_lamp"`
-		} `json:"health"`
-		Daemon struct {
-			SelfCheck    string         `json:"self_check"`
-			Lamp         string         `json:"lamp"`
-			BlockReasons []string       `json:"block_reasons"`
-			Trading      map[string]any `json:"trading"`
-			Heartbeat    map[string]any `json:"heartbeat"`
-		} `json:"daemon"`
-		Socket map[string]any `json:"socket"`
-		Celery struct {
-			BrokerConnected   bool     `json:"broker_connected"`
-			Workers           []string `json:"workers"`
-			WorkerIBConnected bool     `json:"worker_ib_connected"`
-			WorkerIBClientID  any      `json:"worker_ib_client_id"`
-			WorkerLastUpdated any      `json:"worker_last_updated_ts"`
-		} `json:"celery"`
-		AccountSyncDaemon *struct {
-			Heartbeat map[string]any `json:"heartbeat"`
-		} `json:"account_sync_daemon"`
-	}
-	if err := s.fetchJSON(ctx, env, url, &raw); err != nil {
-		return MonitorDeep{
+type bridgeProbePayload struct {
+	OK         bool            `json:"ok"`
+	StatusCode int             `json:"status_code,omitempty"`
+	Body       json.RawMessage `json:"body,omitempty"`
+	Error      string          `json:"error,omitempty"`
+}
+
+type bridgeBusSnapshot struct {
+	Source         string             `json:"source"`
+	TradeNginxBase string             `json:"trade_nginx_base"`
+	GeneratedAt    string             `json:"generated_at"`
+	Monitor        bridgeProbePayload `json:"monitor"`
+	MarketIngest   bridgeProbePayload `json:"market_ingest"`
+}
+
+func (s *Service) busDeepFromBridge(ctx context.Context, env config.Environment) BusDeepResponse {
+	bridgeURL := env.EffectiveTradeBridgeURL()
+	resp := BusDeepResponse{
+		Environment: env.ID,
+		Label:       env.Label,
+		Detail:      "Deep bus semantics via satellite-probe-bridge",
+		Monitor: MonitorDeep{
 			Reachability: probe.ReachFail,
-			Detail:       err.Error(),
-			Health: MonitorHealthDeep{
-				Reachability: probe.ReachFail,
-			},
-			Daemon: MonitorDaemonDeep{
-				Reachability: probe.ReachFail,
-			},
+			Detail:       "bridge monitor payload unavailable",
+			Health:       MonitorHealthDeep{Reachability: probe.ReachFail},
+			Daemon:       MonitorDaemonDeep{Reachability: probe.ReachFail},
 			Socket: MonitorSocketDeep{
-				Massive:           SocketComponentDeep{Reachability: probe.ReachFail, Detail: err.Error()},
-				IBIngestor:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: err.Error()},
-				IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachFail, Detail: err.Error()},
-				IBOperator:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: err.Error()},
-				PlatformIBGateway: SocketComponentDeep{Reachability: probe.ReachFail, Detail: err.Error()},
+				Massive:           SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
+				IBIngestor:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
+				IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
+				IBOperator:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
+				PlatformIBGateway: SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
 			},
 			Celery: MonitorCeleryDeep{
 				Workers:      []string{},
 				Reachability: probe.ReachFail,
 			},
-			AccountSync: MonitorAccountSyncDeep{
-				Reachability: probe.ReachFail,
-			},
+			AccountSync: MonitorAccountSyncDeep{Reachability: probe.ReachFail},
+		},
+		Ops: OpsDeep{
+			Reachability: probe.ReachUnknown,
+			Detail:       "ops not probed via bridge",
+		},
+		Ingest: IngestDeep{
+			Reachability: probe.ReachFail,
+			Detail:       "bridge ingest payload unavailable",
+			Services:     []IngestServiceDeep{},
+		},
+		Reachability: probe.ReachFail,
+	}
+
+	if bridgeURL == "" {
+		resp.Detail = "satellite-probe-bridge not configured (set trade_bridge_url or SATELLITE_PROBE_BRIDGE_URL)"
+		resp.Monitor.Detail = resp.Detail
+		resp.Ingest.Detail = resp.Detail
+		return resp
+	}
+
+	var snap bridgeBusSnapshot
+	if err := s.fetchJSONPlain(ctx, bridgeURL+"/bus-snapshot", &snap); err != nil {
+		msg := "satellite-probe-bridge unreachable: " + err.Error()
+		resp.Detail = msg
+		resp.Monitor.Detail = msg
+		resp.Ingest.Detail = msg
+		return resp
+	}
+
+	if snap.Monitor.OK && len(snap.Monitor.Body) > 0 {
+		resp.Monitor = s.parseMonitorDeepJSON(snap.Monitor.Body)
+	} else if snap.Monitor.Error != "" {
+		resp.Monitor = monitorDeepFromBridgeError(snap.Monitor.Error)
+	}
+
+	if snap.MarketIngest.OK && len(snap.MarketIngest.Body) > 0 {
+		resp.Ingest = s.parseIngestDeepJSON(snap.MarketIngest.Body)
+	} else if snap.MarketIngest.Error != "" {
+		resp.Ingest = IngestDeep{
+			Reachability: probe.ReachFail,
+			Detail:       snap.MarketIngest.Error,
+			Services:     []IngestServiceDeep{},
 		}
 	}
 
+	if snap.TradeNginxBase != "" {
+		resp.Detail = fmt.Sprintf("Bridge probe of %s (%s)", snap.TradeNginxBase, snap.Source)
+	}
+
+	resp.Reachability = aggregateReach(resp.Monitor.Reachability, resp.Ingest.Reachability)
+	return resp
+}
+
+func monitorDeepFromBridgeError(msg string) MonitorDeep {
+	return MonitorDeep{
+		Reachability: probe.ReachFail,
+		Detail:       msg,
+		Health:       MonitorHealthDeep{Reachability: probe.ReachFail},
+		Daemon:       MonitorDaemonDeep{Reachability: probe.ReachFail},
+		Socket: MonitorSocketDeep{
+			Massive:           SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
+			IBIngestor:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
+			IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
+			IBOperator:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
+			PlatformIBGateway: SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
+		},
+		Celery: MonitorCeleryDeep{
+			Workers:      []string{},
+			Reachability: probe.ReachFail,
+		},
+		AccountSync: MonitorAccountSyncDeep{Reachability: probe.ReachFail},
+	}
+}
+
+func (s *Service) parseMonitorDeepJSON(body []byte) MonitorDeep {
+	var raw monitorStatusRaw
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return monitorDeepFromBridgeError("invalid monitor JSON: " + err.Error())
+	}
+	return buildMonitorDeepFromRaw(raw)
+}
+
+func (s *Service) parseIngestDeepJSON(body []byte) IngestDeep {
+	var raw struct {
+		OK       bool             `json:"ok"`
+		Services []map[string]any `json:"services"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return IngestDeep{
+			Reachability: probe.ReachFail,
+			Detail:       "invalid ingest JSON: " + err.Error(),
+			Services:     []IngestServiceDeep{},
+		}
+	}
+	return buildIngestDeepFromRaw(raw.Services)
+}
+
+func (s *Service) fetchJSONPlain(ctx context.Context, url string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxJSONBodyBytes))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		trimmed := strings.TrimSpace(string(body))
+		if len(trimmed) > 256 {
+			trimmed = trimmed[:256]
+		}
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, trimmed)
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	return nil
+}
+
+type monitorStatusRaw struct {
+	Health struct {
+		SelfCheck    string   `json:"self_check"`
+		BlockReasons []string `json:"block_reasons"`
+		StatusLamp   string   `json:"status_lamp"`
+	} `json:"health"`
+	Daemon struct {
+		SelfCheck    string         `json:"self_check"`
+		Lamp         string         `json:"lamp"`
+		BlockReasons []string       `json:"block_reasons"`
+		Trading      map[string]any `json:"trading"`
+		Heartbeat    map[string]any `json:"heartbeat"`
+	} `json:"daemon"`
+	Socket map[string]any `json:"socket"`
+	Celery struct {
+		BrokerConnected   bool     `json:"broker_connected"`
+		Workers           []string `json:"workers"`
+		WorkerIBConnected bool     `json:"worker_ib_connected"`
+		WorkerIBClientID  any      `json:"worker_ib_client_id"`
+		WorkerLastUpdated any      `json:"worker_last_updated_ts"`
+	} `json:"celery"`
+	AccountSyncDaemon *struct {
+		Heartbeat map[string]any `json:"heartbeat"`
+	} `json:"account_sync_daemon"`
+}
+
+func buildMonitorDeepFromRaw(raw monitorStatusRaw) MonitorDeep {
 	healthReach := aggregateReach(reachFromLamp(raw.Health.StatusLamp), reachFromSelfCheck(raw.Health.SelfCheck))
 	daemonReach := aggregateReach(
 		reachFromLamp(raw.Daemon.Lamp),
@@ -249,6 +394,64 @@ func (s *Service) fetchMonitorDeep(ctx context.Context, env config.Environment, 
 	}
 }
 
+func (s *Service) fetchMonitorDeep(ctx context.Context, env config.Environment, url string) MonitorDeep {
+	var raw monitorStatusRaw
+	if err := s.fetchJSON(ctx, env, url, &raw); err != nil {
+		return monitorDeepFromBridgeError(err.Error())
+	}
+	return buildMonitorDeepFromRaw(raw)
+}
+
+func buildIngestDeepFromRaw(services []map[string]any) IngestDeep {
+	out := make([]IngestServiceDeep, 0, len(services))
+	reaches := make([]probe.Reachability, 0, len(services))
+	for _, item := range services {
+		id, _ := item["id"].(string)
+		active, _ := item["process_active"].(string)
+		runtimeStatus, _ := item["runtime_status"].(string)
+		displayActive, _ := item["display_active"].(string)
+		runtimeKind, _ := item["runtime_kind"].(string)
+		redisControlEnv, _ := item["redis_control_env"].(string)
+		runtimeExternallyManaged, _ := item["runtime_externally_managed"].(bool)
+		platformGatewayManaged, _ := item["platform_gateway_managed"].(bool)
+		reach := reachFromRuntimeStatus(runtimeStatus)
+		if reach == probe.ReachUnknown {
+			reach = reachFromProcessActive(active)
+			if runtimeExternallyManaged && reach == probe.ReachFail {
+				reach = probe.ReachDegraded
+			}
+			if platformGatewayManaged && reach == probe.ReachFail {
+				reach = probe.ReachDegraded
+			}
+		}
+		detail := strings.TrimSpace(displayActive)
+		if detail == "" {
+			detail = strings.TrimSpace(active)
+		}
+		if detail == "" {
+			detail = "process_active unknown"
+		}
+		out = append(out, IngestServiceDeep{
+			ID:                       id,
+			ProcessActive:            active,
+			RuntimeStatus:            runtimeStatus,
+			DisplayActive:            displayActive,
+			RuntimeKind:              runtimeKind,
+			RedisControlEnv:          redisControlEnv,
+			RuntimeExternallyManaged: runtimeExternallyManaged,
+			PlatformGatewayManaged:   platformGatewayManaged,
+			Reachability:             reach,
+			Detail:                   detail,
+		})
+		reaches = append(reaches, reach)
+	}
+	return IngestDeep{
+		Services:     out,
+		Reachability: aggregateReach(reaches...),
+		Detail:       "Parsed market ingest services payload",
+	}
+}
+
 func (s *Service) fetchOpsDeep(ctx context.Context, env config.Environment, url string) OpsDeep {
 	raw := map[string]any{}
 	if err := s.fetchJSON(ctx, env, url, &raw); err != nil {
@@ -294,54 +497,7 @@ func (s *Service) fetchIngestDeep(ctx context.Context, env config.Environment, u
 			Services:     []IngestServiceDeep{},
 		}
 	}
-
-	out := make([]IngestServiceDeep, 0, len(raw.Services))
-	reaches := make([]probe.Reachability, 0, len(raw.Services))
-	for _, item := range raw.Services {
-		id, _ := item["id"].(string)
-		active, _ := item["process_active"].(string)
-		runtimeStatus, _ := item["runtime_status"].(string)
-		displayActive, _ := item["display_active"].(string)
-		runtimeKind, _ := item["runtime_kind"].(string)
-		redisControlEnv, _ := item["redis_control_env"].(string)
-		runtimeExternallyManaged, _ := item["runtime_externally_managed"].(bool)
-		platformGatewayManaged, _ := item["platform_gateway_managed"].(bool)
-		reach := reachFromRuntimeStatus(runtimeStatus)
-		if reach == probe.ReachUnknown {
-			reach = reachFromProcessActive(active)
-			if runtimeExternallyManaged && reach == probe.ReachFail {
-				reach = probe.ReachDegraded
-			}
-			if platformGatewayManaged && reach == probe.ReachFail {
-				reach = probe.ReachDegraded
-			}
-		}
-		detail := strings.TrimSpace(displayActive)
-		if detail == "" {
-			detail = strings.TrimSpace(active)
-		}
-		if detail == "" {
-			detail = "process_active unknown"
-		}
-		out = append(out, IngestServiceDeep{
-			ID:                       id,
-			ProcessActive:            active,
-			RuntimeStatus:            runtimeStatus,
-			DisplayActive:            displayActive,
-			RuntimeKind:              runtimeKind,
-			RedisControlEnv:          redisControlEnv,
-			RuntimeExternallyManaged: runtimeExternallyManaged,
-			PlatformGatewayManaged:   platformGatewayManaged,
-			Reachability:             reach,
-			Detail:                   detail,
-		})
-		reaches = append(reaches, reach)
-	}
-	return IngestDeep{
-		Services:     out,
-		Reachability: aggregateReach(reaches...),
-		Detail:       "Parsed market ingest services payload",
-	}
+	return buildIngestDeepFromRaw(raw.Services)
 }
 
 func (s *Service) fetchJSON(ctx context.Context, env config.Environment, url string, out any) error {

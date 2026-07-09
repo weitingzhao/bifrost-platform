@@ -161,6 +161,60 @@ func TestBusDeepAllHealthy(t *testing.T) {
 	}
 }
 
+func TestBusDeepBridgeMode(t *testing.T) {
+	monitorBody := `{
+		"health": {"self_check":"ok","block_reasons":[],"status_lamp":"green"},
+		"daemon": {"self_check":"ok","lamp":"green","block_reasons":[],"trading":{},"heartbeat":{"daemon_alive":true}},
+		"socket": {
+			"massive":{"lamp":"green","self_check":"ok"},
+			"ib_ingestor":{"lamp":"green","self_check":"ok"},
+			"ib_account_agent":{"lamp":"green","self_check":"ok"},
+			"ib_operator":{"lamp":"green","self_check":"ok"},
+			"platform_ib_gateway":{"lamp":"green","self_check":"ok"}
+		},
+		"celery":{"broker_connected":true,"workers":["w1"],"worker_ib_connected":false},
+		"account_sync_daemon":{"heartbeat":{"daemon_alive":true,"stream_lag":0}}
+	}`
+	ingestBody := `{"ok":true,"services":[{"id":"massive_ws","process_active":"active"}]}`
+
+	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bus-snapshot" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{
+			"source":"local-compose",
+			"trade_nginx_base":"http://127.0.0.1:80",
+			"monitor":{"ok":true,"body":` + monitorBody + `},
+			"market_ingest":{"ok":true,"body":` + ingestBody + `}
+		}`))
+	}))
+	defer bridge.Close()
+
+	cfg := &config.Config{
+		Environments: []config.Environment{{
+			ID:             "dev-local",
+			Label:          "Local",
+			ProbeMode:      "bridge",
+			TradeBridgeURL: bridge.URL,
+		}},
+	}
+	svc := NewService(cfg)
+	resp, err := svc.BusDeep(context.Background(), "dev-local")
+	if err != nil {
+		t.Fatalf("BusDeep error: %v", err)
+	}
+	if resp.Reachability != probe.ReachOK {
+		t.Fatalf("expected bridge overall ok, got %s", resp.Reachability)
+	}
+	if resp.Monitor.Reachability != probe.ReachOK {
+		t.Fatalf("expected monitor ok via bridge, got %s", resp.Monitor.Reachability)
+	}
+	if len(resp.Ingest.Services) != 1 {
+		t.Fatalf("expected 1 ingest service, got %d", len(resp.Ingest.Services))
+	}
+}
+
 func TestSocketComponentDeepPlatformGatewayConnected(t *testing.T) {
 	raw := map[string]any{
 		"connected":     true,

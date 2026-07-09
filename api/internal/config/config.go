@@ -17,14 +17,16 @@ type HostPort struct {
 }
 
 type Environment struct {
-	ID            string   `yaml:"id" json:"id"`
-	Label         string   `yaml:"label" json:"label"`
-	NginxBase     string   `yaml:"nginx_base" json:"nginx_base"`
-	IngressHost   string   `yaml:"ingress_host" json:"ingress_host,omitempty"`
-	IngressNodeIP string   `yaml:"ingress_node_ip" json:"ingress_node_ip,omitempty"`
-	Postgres      HostPort `yaml:"postgres" json:"postgres"`
-	Redis         HostPort `yaml:"redis" json:"redis"`
-	OpsTokenEnv   string   `yaml:"ops_token_env" json:"ops_token_env,omitempty"`
+	ID             string   `yaml:"id" json:"id"`
+	Label          string   `yaml:"label" json:"label"`
+	NginxBase      string   `yaml:"nginx_base" json:"nginx_base"`
+	IngressHost    string   `yaml:"ingress_host" json:"ingress_host,omitempty"`
+	IngressNodeIP  string   `yaml:"ingress_node_ip" json:"ingress_node_ip,omitempty"`
+	ProbeMode      string   `yaml:"probe_mode" json:"probe_mode,omitempty"`             // pull (default) | bridge
+	TradeBridgeURL string   `yaml:"trade_bridge_url" json:"trade_bridge_url,omitempty"` // override; falls back to SATELLITE_PROBE_BRIDGE_URL
+	Postgres       HostPort `yaml:"postgres" json:"postgres"`
+	Redis          HostPort `yaml:"redis" json:"redis"`
+	OpsTokenEnv    string   `yaml:"ops_token_env" json:"ops_token_env,omitempty"`
 }
 
 type File struct {
@@ -147,6 +149,30 @@ func (e *Environment) OpsToken() string {
 		return ""
 	}
 	return os.Getenv(e.OpsTokenEnv)
+}
+
+// EffectiveProbeMode returns pull unless probe_mode is explicitly bridge.
+func (e *Environment) EffectiveProbeMode() string {
+	if e == nil {
+		return "pull"
+	}
+	switch strings.ToLower(strings.TrimSpace(e.ProbeMode)) {
+	case "bridge":
+		return "bridge"
+	default:
+		return "pull"
+	}
+}
+
+// EffectiveTradeBridgeURL resolves per-env override then SATELLITE_PROBE_BRIDGE_URL.
+func (e *Environment) EffectiveTradeBridgeURL() string {
+	if e == nil {
+		return strings.TrimRight(strings.TrimSpace(os.Getenv("SATELLITE_PROBE_BRIDGE_URL")), "/")
+	}
+	if u := strings.TrimRight(strings.TrimSpace(e.TradeBridgeURL), "/"); u != "" {
+		return u
+	}
+	return strings.TrimRight(strings.TrimSpace(os.Getenv("SATELLITE_PROBE_BRIDGE_URL")), "/")
 }
 
 // NeedsTraefikHostHeader is false for IP NodePort gateways (:30880/:30882) and bare-IP :80 routes.

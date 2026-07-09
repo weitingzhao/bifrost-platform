@@ -4,6 +4,7 @@
 environments:
   - id: dev
     label: Development
+    probe_mode: pull
     nginx_base: http://192.168.10.73:30882
     ingress_host: trade-dev.bifrost.lan
     ingress_node_ip: 192.168.10.73
@@ -17,8 +18,22 @@ environments:
       port: 30379
     ops_token_env: BIFROST_DEV_OPS_TOKEN
 
+  - id: dev-local
+    label: Local Compose
+    probe_mode: bridge
+    # trade_bridge_url optional — defaults to SATELLITE_PROBE_BRIDGE_URL on platform-api host
+    trade_bridge_url: http://127.0.0.1:8786
+    nginx_base: http://127.0.0.1:80
+    postgres:
+      host: 127.0.0.1
+      port: 5432
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
   - id: stg
     label: Staging
+    probe_mode: pull
     nginx_base: http://192.168.10.73:30880
     ingress_host: trade-stg.bifrost.lan
     ingress_node_ip: 192.168.10.73
@@ -32,6 +47,7 @@ environments:
 
   - id: prod
     label: Production
+    probe_mode: pull
     # W2 Traefik Ingress — Host trade.bifrost.lan @ K3s prod node :80
     nginx_base: http://192.168.10.70
     ingress_host: trade.bifrost.lan

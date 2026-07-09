@@ -1,5 +1,6 @@
 import type { Reachability, SatelliteBusIngestService, SatelliteBusSocketComponent } from '@/api/types'
 import type { Signal } from '@/lib/control-room/missionSignals'
+import { worst } from '@/lib/control-room/missionSignals'
 
 export type SocketHealthLayer = 'rocket' | 'trade'
 
@@ -16,6 +17,16 @@ export type SocketHealthRow = {
 }
 
 type TradeEnv = 'dev' | 'stg' | 'prod'
+
+export type TradeEnvId = TradeEnv
+
+export const SOCKET_TRADE_ENVS: TradeEnv[] = ['dev', 'stg', 'prod']
+
+export const SOCKET_TRADE_NS: Record<TradeEnv, string> = {
+  dev: 'bifrost-dev',
+  stg: 'bifrost-stg',
+  prod: 'bifrost-prod',
+}
 
 function rawBool(raw: Record<string, unknown> | undefined, key: string): boolean | undefined {
   const v = raw?.[key]
@@ -207,7 +218,7 @@ export function buildSocketHealthRows(
       required: 'policy-off',
       reach: 'ok',
       reachLabel: 'policy-off',
-      detail: 'Daemon scaled to 0 by env policy (D10 / STG)',
+      detail: `Daemon scaled to 0 by env policy (${env.toUpperCase()})`,
     })
   }
 
@@ -235,6 +246,182 @@ export function summarizeSocketHealth(
   return {
     signal,
     headline: parts.length > 0 ? parts.join(' · ') : 'No socket rows',
+    attention,
+  }
+}
+
+export type SocketHealthEnvCell = {
+  reach: Reachability
+  reachLabel: string
+  required: SocketRequiredState
+  detail: string
+}
+
+export type SocketHealthMatrixRow = {
+  id: string
+  label: string
+  dev: SocketHealthEnvCell
+  stg: SocketHealthEnvCell
+  prod: SocketHealthEnvCell
+  envDiverges: boolean
+}
+
+type BusSocketSlice = {
+  socket?: Parameters<typeof buildSocketHealthRows>[0]
+  ingest?: SatelliteBusIngestService[]
+  /** When bus-deep probe failed or returned partial data */
+  probeDetail?: string
+}
+
+function reachRank(reach: Reachability): number {
+  switch (reach) {
+    case 'ok':
+      return 4
+    case 'degraded':
+      return 3
+    case 'fail':
+      return 2
+    default:
+      return 1
+  }
+}
+
+function applyProbeDetail(cell: SocketHealthEnvCell, probeDetail?: string): SocketHealthEnvCell {
+  if (cell.reach !== 'unknown' && cell.detail !== 'Not probed' && cell.detail !== '—') {
+    return cell
+  }
+  if (probeDetail == null || probeDetail.trim() === '') {
+    return cell
+  }
+  return {
+    ...cell,
+    reach: cell.reach === 'unknown' ? 'fail' : cell.reach,
+    reachLabel: cell.reach === 'unknown' ? 'fail' : cell.reachLabel,
+    detail: probeDetail,
+  }
+}
+
+function rowToCell(row: SocketHealthRow): SocketHealthEnvCell {
+  return {
+    reach: row.reach,
+    reachLabel: row.reachLabel,
+    required: row.required,
+    detail: row.detail,
+  }
+}
+
+function emptyCell(): SocketHealthEnvCell {
+  return { reach: 'unknown', reachLabel: 'unknown', required: 'optional', detail: 'Not probed' }
+}
+
+const TRADE_CONSUMER_DEFS: { id: string; label: string; includeDaemon?: boolean }[] = [
+  { id: 'ib_ingestor', label: 'IB Ingestor' },
+  { id: 'ib_account_agent', label: 'IB Account Agent' },
+  { id: 'ib_operator', label: 'IB Operator' },
+  { id: 'massive', label: 'Massive WS' },
+  { id: 'trading_engine', label: 'Trading daemon', includeDaemon: true },
+]
+
+/** Rocket bus is cluster-shared; pick best reach across envs (not first env). */
+export function resolveSharedRocketRow(
+  buses: Partial<Record<TradeEnv, BusSocketSlice>>,
+): SocketHealthRow {
+  let best: SocketHealthRow | null = null
+  let bestRank = 0
+
+  for (const env of SOCKET_TRADE_ENVS) {
+    const gateway = buses[env]?.socket?.platform_ib_gateway
+    if (gateway == null) continue
+    const row = classifyPlatformIbGateway(gateway)
+    const rank = reachRank(row.reach)
+    if (rank > bestRank) {
+      bestRank = rank
+      best = row
+    }
+  }
+
+  return best ?? classifyPlatformIbGateway(undefined)
+}
+
+export function buildSocketHealthMatrix(
+  buses: Partial<Record<TradeEnv, BusSocketSlice>>,
+): { rocket: SocketHealthRow; tradeRows: SocketHealthMatrixRow[] } {
+  const rocket = resolveSharedRocketRow(buses)
+
+  const tradeRows: SocketHealthMatrixRow[] = TRADE_CONSUMER_DEFS.map(def => {
+    const cells: Record<TradeEnv, SocketHealthEnvCell> = {
+      dev: emptyCell(),
+      stg: emptyCell(),
+      prod: emptyCell(),
+    }
+
+    for (const env of SOCKET_TRADE_ENVS) {
+      const slice = buses[env]
+      if (slice == null) continue
+      const built = buildSocketHealthRows(slice.socket, env, slice.ingest)
+      const match = built.trade.find(r => r.id === def.id)
+      if (match != null) {
+        cells[env] = applyProbeDetail(rowToCell(match), slice.probeDetail)
+      } else if (slice.probeDetail != null) {
+        cells[env] = applyProbeDetail(emptyCell(), slice.probeDetail)
+      }
+    }
+
+    const labels = SOCKET_TRADE_ENVS.map(e => cells[e].reachLabel)
+    const envDiverges = new Set(labels).size > 1
+
+    return {
+      id: def.id,
+      label: def.label,
+      dev: cells.dev,
+      stg: cells.stg,
+      prod: cells.prod,
+      envDiverges,
+    }
+  }).filter(row => {
+    const anyPresent = SOCKET_TRADE_ENVS.some(
+      e => row[e].required !== 'optional' || row[e].reach !== 'unknown',
+    )
+    return anyPresent
+  })
+
+  return { rocket, tradeRows }
+}
+
+export function summarizeSocketHealthAllEnvs(
+  matrix: { rocket: SocketHealthRow; tradeRows: SocketHealthMatrixRow[] },
+): { signal: Signal; headline: string; attention: number } {
+  const envParts: string[] = []
+  let attention = 0
+  const envSignals: Signal[] = []
+
+  for (const env of SOCKET_TRADE_ENVS) {
+    const rows: SocketHealthRow[] = [
+      matrix.rocket,
+      ...matrix.tradeRows.map(r => ({
+        id: r.id,
+        label: r.label,
+        layer: 'trade' as const,
+        required: r[env].required,
+        reach: r[env].reach,
+        reachLabel: r[env].reachLabel,
+        detail: r[env].detail,
+      })),
+    ]
+    const summary = summarizeSocketHealth(rows)
+    envSignals.push(summary.signal)
+    const short = env.toUpperCase()
+    if (summary.attention > 0) {
+      attention += summary.attention
+      envParts.push(`${short} ${summary.headline}`)
+    } else {
+      envParts.push(`${short} ok`)
+    }
+  }
+
+  return {
+    signal: worst(...envSignals),
+    headline: envParts.join(' · '),
     attention,
   }
 }
