@@ -769,6 +769,8 @@ function ConsolePageInner() {
             onOpenTelemetry={openSatelliteTelemetry}
             onOpenPluginGallery={openPluginGallery}
             onOpenApiHealth={openSatelliteApi}
+            ambientJobId={ambientJob?.id ?? null}
+            onStartAgentJob={startAmbientAgentJob}
           />
         )}
 

@@ -27,7 +27,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -375,6 +375,9 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
   if (req.scope === 'registry-pull-recover') {
     return buildRegistryPullRecoverRunnerPrompt(req)
+  }
+  if (req.scope === 'satellite-bus-ingest-triage') {
+    return buildAgentDeskPrompt(req)
   }
 
   const issueList = Array.isArray(req.issues) ? req.issues : []

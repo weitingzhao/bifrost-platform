@@ -96,6 +96,8 @@ type IngestDeep struct {
 type IngestServiceDeep struct {
 	ID                       string             `json:"id"`
 	ProcessActive            string             `json:"process_active,omitempty"`
+	RuntimeStatus            string             `json:"runtime_status,omitempty"`
+	DisplayActive            string             `json:"display_active,omitempty"`
 	RuntimeKind              string             `json:"runtime_kind,omitempty"`
 	RedisControlEnv          string             `json:"redis_control_env,omitempty"`
 	RuntimeExternallyManaged bool               `json:"runtime_externally_managed,omitempty"`

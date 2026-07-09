@@ -119,6 +119,12 @@ export const AGENT_TASK_RELATIONS: AgentTaskRelation[] = [
     label: 'Classified as stale pipeline fail',
   },
   {
+    fromId: 'trade-deploy',
+    toId: 'satellite-bus-ingest-triage',
+    kind: 'on-failure',
+    label: 'Bus Status ingest rows look inactive but STG topology is policy-off/managed',
+  },
+  {
     fromId: 'drift-brief',
     toId: 'drift-autofix',
     kind: 'approval',
@@ -133,6 +139,18 @@ export const AGENT_TASK_RELATIONS: AgentTaskRelation[] = [
 ]
 
 export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
+  {
+    id: 'satellite-bus-ingest-triage',
+    scope: 'satellite-bus-ingest-triage',
+    label: 'Satellite · Bus Ingest Triage',
+    domain: 'Trade',
+    action: 'Remediate',
+    tier: 'manual',
+    entryPoint: 'Task CC (Satellite Deploy) · Agent Triage · or Satellite → Bus Status',
+    trigger: 'Operator investigates misleading ingest inactive rows from Task CC or Bus Status',
+    description:
+      'Cross-check bus-deep ingest vs monitor.socket vs ib-gateway plugin; classify policy-off/managed-ok/false-alarm; safe L1 restart only (no daemon scale, D10).',
+  },
   {
     id: 'operator-plane-remediate',
     scope: 'operator-plane-remediate',
