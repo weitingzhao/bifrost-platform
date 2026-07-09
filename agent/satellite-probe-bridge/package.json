@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Read-only HTTP bridge — probes local Trade compose nginx for platform-api satellite bus-deep",
+  "description": "Read-only HTTP bridge — probes K3s dev trade ingress from Mac for platform-api satellite bus-deep",
   "scripts": {
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts",

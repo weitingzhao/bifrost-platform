@@ -312,6 +312,37 @@ type monitorStatusRaw struct {
 	} `json:"account_sync_daemon"`
 }
 
+func monitorDetailFromRaw(raw monitorStatusRaw, reach probe.Reachability) string {
+	if reach == probe.ReachOK {
+		return "Parsed monitor schema v9 subset"
+	}
+	parts := []string{}
+	if lamp := strings.TrimSpace(raw.Health.StatusLamp); lamp != "" {
+		parts = append(parts, "health lamp="+lamp)
+	}
+	if len(raw.Health.BlockReasons) > 0 {
+		parts = append(parts, "blocked: "+strings.Join(raw.Health.BlockReasons, ", "))
+	}
+	if raw.Daemon.Heartbeat != nil {
+		if alive, ok := raw.Daemon.Heartbeat["daemon_alive"].(bool); ok && !alive {
+			parts = append(parts, "daemon_alive=false")
+		}
+	}
+	nullSockets := []string{}
+	for _, key := range []string{"ib_ingestor", "ib_account_agent", "ib_operator", "massive", "platform_ib_gateway"} {
+		if raw.Socket[key] == nil {
+			nullSockets = append(nullSockets, key)
+		}
+	}
+	if len(nullSockets) > 0 {
+		parts = append(parts, "socket null: "+strings.Join(nullSockets, ", "))
+	}
+	if len(parts) == 0 {
+		return "monitor unhealthy"
+	}
+	return strings.Join(parts, " · ")
+}
+
 func buildMonitorDeepFromRaw(raw monitorStatusRaw) MonitorDeep {
 	healthReach := aggregateReach(reachFromLamp(raw.Health.StatusLamp), reachFromSelfCheck(raw.Health.SelfCheck))
 	daemonReach := aggregateReach(
@@ -363,9 +394,10 @@ func buildMonitorDeepFromRaw(raw monitorStatusRaw) MonitorDeep {
 		socket.PlatformIBGateway.Reachability,
 	)
 
+	reach := aggregateReach(healthReach, daemonReach, socketReach, celeryReach, accountSync.Reachability)
 	return MonitorDeep{
-		Reachability: aggregateReach(healthReach, daemonReach, socketReach, celeryReach, accountSync.Reachability),
-		Detail:       "Parsed monitor schema v9 subset",
+		Reachability: reach,
+		Detail:       monitorDetailFromRaw(raw, reach),
 		Health: MonitorHealthDeep{
 			SelfCheck:    raw.Health.SelfCheck,
 			BlockReasons: raw.Health.BlockReasons,
