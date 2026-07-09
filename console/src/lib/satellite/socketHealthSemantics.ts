@@ -1,4 +1,10 @@
-import type { Reachability, SatelliteBusIngestService, SatelliteBusSocketComponent } from '@/api/types'
+import type {
+  Reachability,
+  SatelliteBusDeepResponse,
+  SatelliteBusIngestService,
+  SatelliteBusMonitorDaemon,
+  SatelliteBusSocketComponent,
+} from '@/api/types'
 import type { Signal } from '@/lib/control-room/missionSignals'
 import { worst } from '@/lib/control-room/missionSignals'
 
@@ -20,13 +26,31 @@ type TradeEnv = 'dev' | 'stg' | 'prod'
 
 export type TradeEnvId = TradeEnv
 
+/** Matrix columns: K3s dev (cluster pull) + Mac thin-client (satellite-probe-bridge). */
+export type BusEnvId = TradeEnv | 'dev-local'
+
 export const SOCKET_TRADE_ENVS: TradeEnv[] = ['dev', 'stg', 'prod']
+
+export const SOCKET_MATRIX_ENVS: BusEnvId[] = ['dev', 'stg', 'prod', 'dev-local']
+
+export const SOCKET_MATRIX_LABELS: Record<BusEnvId, string> = {
+  dev: 'K3s Dev',
+  stg: 'Stg',
+  prod: 'Prod',
+  'dev-local': 'Mac',
+}
 
 export const SOCKET_TRADE_NS: Record<TradeEnv, string> = {
   dev: 'bifrost-dev',
   stg: 'bifrost-stg',
   prod: 'bifrost-prod',
 }
+
+const GENERIC_PROBE_DETAILS = new Set([
+  'Parsed monitor schema v9 subset',
+  'Deep bus semantics from trade monitor/ops APIs',
+  'Deep bus semantics via satellite-probe-bridge',
+])
 
 function rawBool(raw: Record<string, unknown> | undefined, key: string): boolean | undefined {
   const v = raw?.[key]
@@ -37,6 +61,27 @@ function rawBool(raw: Record<string, unknown> | undefined, key: string): boolean
 function rawStr(raw: Record<string, unknown> | undefined, key: string): string {
   const v = raw?.[key]
   return typeof v === 'string' ? v.trim() : ''
+}
+
+function policyEnv(env: BusEnvId): TradeEnv {
+  return env === 'dev-local' ? 'dev' : env
+}
+
+export function formatBusProbeDetail(bus: SatelliteBusDeepResponse): string | undefined {
+  const reasons = bus.monitor?.health?.block_reasons ?? []
+  if (reasons.length > 0) {
+    const lamp = bus.monitor?.health?.status_lamp ?? '?'
+    return `health lamp=${lamp}: ${reasons.join(', ')}`
+  }
+  for (const candidate of [bus.detail, bus.monitor?.detail, bus.ingest?.detail]) {
+    if (candidate == null || candidate.trim() === '') continue
+    if (GENERIC_PROBE_DETAILS.has(candidate.trim())) continue
+    return candidate.trim()
+  }
+  if (bus.reachability === 'fail' || bus.reachability === 'unknown') {
+    return `bus-deep ${bus.reachability}`
+  }
+  return undefined
 }
 
 function ingestById(
@@ -63,6 +108,118 @@ function tradingDaemonPolicyOff(ingest?: SatelliteBusIngestService): boolean {
   const runtime = (ingest?.runtime_status ?? '').toLowerCase()
   const display = (ingest?.display_active ?? '').toLowerCase()
   return runtime === 'policy-off' || display.includes('daemon scale')
+}
+
+/** Trading daemon row — uses monitor.daemon + ops ingest, not system-wide health rollup. */
+export function classifyTradingDaemon(
+  env: TradeEnv,
+  ingest?: SatelliteBusIngestService,
+  daemon?: SatelliteBusMonitorDaemon,
+): SocketHealthRow | null {
+  if (tradingDaemonPolicyOff(ingest)) {
+    return {
+      id: 'trading_engine',
+      label: 'Trading daemon',
+      layer: 'trade',
+      required: 'policy-off',
+      reach: 'ok',
+      reachLabel: 'policy-off',
+      detail: `Daemon scaled to 0 by env policy (${env.toUpperCase()})`,
+    }
+  }
+
+  if (ingest == null && daemon == null) return null
+
+  const heartbeat = daemon?.heartbeat ?? {}
+  const daemonAlive = heartbeat.daemon_alive === true
+  const trading = daemon?.trading as { trading_suspended?: boolean } | undefined
+  const tradingSuspended = trading?.trading_suspended === true
+  const blockReasons = daemon?.block_reasons ?? []
+  const selfCheck = (daemon?.self_check ?? '').toLowerCase()
+  const ingestRuntime = (ingest?.runtime_status ?? '').toLowerCase()
+  const ingestDisplay = ingest?.display_active ?? ''
+  const ingestInactive =
+    (ingest?.process_active ?? '').toLowerCase() === 'inactive' ||
+    ingestRuntime === 'inactive' ||
+    ingestDisplay.toLowerCase().includes('inactive')
+
+  if (ingestInactive && !daemonAlive) {
+    return {
+      id: 'trading_engine',
+      label: 'Trading daemon',
+      layer: 'trade',
+      required: 'required',
+      reach: 'ok',
+      reachLabel: 'stopped',
+      detail: ingestDisplay || 'Daemon stopped by operator (not a fault)',
+    }
+  }
+
+  if (!daemonAlive) {
+    const reason = blockReasons[0] ?? 'daemon_not_running'
+    return {
+      id: 'trading_engine',
+      label: 'Trading daemon',
+      layer: 'trade',
+      required: 'required',
+      reach: 'fail',
+      reachLabel: 'fail',
+      detail: reason === 'heartbeat_stale' ? 'Heartbeat stale — daemon process down or not writing' : reason,
+    }
+  }
+
+  if (tradingSuspended) {
+    return {
+      id: 'trading_engine',
+      label: 'Trading daemon',
+      layer: 'trade',
+      required: 'required',
+      reach: 'degraded',
+      reachLabel: 'suspended',
+      detail: 'Trading suspended (operator pause — expected, not a socket fault)',
+    }
+  }
+
+  const daemonReach = daemon?.reachability ?? ingest?.reachability ?? 'unknown'
+  if (selfCheck === 'degraded' || daemonReach === 'degraded') {
+    const detail =
+      blockReasons.length > 0
+        ? blockReasons.join(', ')
+        : ingestDisplay || 'Daemon running with degraded checks (e.g. IB not connected in observe/mock)'
+    return {
+      id: 'trading_engine',
+      label: 'Trading daemon',
+      layer: 'trade',
+      required: 'required',
+      reach: 'degraded',
+      reachLabel: 'degraded',
+      detail,
+    }
+  }
+
+  if (daemonAlive && (selfCheck === 'ok' || daemonReach === 'ok' || ingestRuntime === 'active')) {
+    const auto = daemon?.auto_status as { daemon_state?: string; trading_state?: string } | undefined
+    const state = auto?.daemon_state ?? auto?.trading_state
+    return {
+      id: 'trading_engine',
+      label: 'Trading daemon',
+      layer: 'trade',
+      required: 'required',
+      reach: 'ok',
+      reachLabel: 'ok',
+      detail: state != null ? `Running · ${state}` : ingestDisplay || 'Running',
+    }
+  }
+
+  return {
+    id: 'trading_engine',
+    label: 'Trading daemon',
+    layer: 'trade',
+    required: 'required',
+    reach: daemonReach,
+    reachLabel: String(daemonReach),
+    detail: ingest?.detail ?? (ingestDisplay || '—'),
+  }
 }
 
 /** Classify platform IB gateway aggregate (Rocket socket bus). */
@@ -192,6 +349,7 @@ export function buildSocketHealthRows(
   } | undefined,
   env: TradeEnv,
   ingestServices?: SatelliteBusIngestService[],
+  daemon?: SatelliteBusMonitorDaemon,
 ): { rocket: SocketHealthRow[]; trade: SocketHealthRow[] } {
   const ingest = (sid: string) => ingestById(ingestServices, sid)
 
@@ -210,16 +368,9 @@ export function buildSocketHealthRows(
     classifyTradeSocketConsumer('massive', 'Massive WS', socket?.massive, env, ingest('massive_ws')),
   ]
 
-  if (tradingDaemonPolicyOff(ingest('trading_engine'))) {
-    trade.push({
-      id: 'trading_engine',
-      label: 'Trading daemon',
-      layer: 'trade',
-      required: 'policy-off',
-      reach: 'ok',
-      reachLabel: 'policy-off',
-      detail: `Daemon scaled to 0 by env policy (${env.toUpperCase()})`,
-    })
+  const daemonRow = classifyTradingDaemon(env, ingest('trading_engine'), daemon)
+  if (daemonRow != null) {
+    trade.push(daemonRow)
   }
 
   return { rocket, trade }
@@ -263,14 +414,20 @@ export type SocketHealthMatrixRow = {
   dev: SocketHealthEnvCell
   stg: SocketHealthEnvCell
   prod: SocketHealthEnvCell
+  local: SocketHealthEnvCell
   envDiverges: boolean
 }
 
 type BusSocketSlice = {
   socket?: Parameters<typeof buildSocketHealthRows>[0]
   ingest?: SatelliteBusIngestService[]
-  /** When bus-deep probe failed or returned partial data */
+  daemon?: SatelliteBusMonitorDaemon
   probeDetail?: string
+}
+
+function matrixCellKey(env: BusEnvId): keyof Pick<SocketHealthMatrixRow, 'dev' | 'stg' | 'prod' | 'local'> {
+  if (env === 'dev-local') return 'local'
+  return env
 }
 
 function reachRank(reach: Reachability): number {
@@ -324,12 +481,13 @@ const TRADE_CONSUMER_DEFS: { id: string; label: string; includeDaemon?: boolean 
 
 /** Rocket bus is cluster-shared; pick best reach across envs (not first env). */
 export function resolveSharedRocketRow(
-  buses: Partial<Record<TradeEnv, BusSocketSlice>>,
+  buses: Partial<Record<BusEnvId, BusSocketSlice>>,
 ): SocketHealthRow {
   let best: SocketHealthRow | null = null
   let bestRank = 0
 
-  for (const env of SOCKET_TRADE_ENVS) {
+  for (const env of SOCKET_MATRIX_ENVS) {
+    if (env === 'dev-local') continue
     const gateway = buses[env]?.socket?.platform_ib_gateway
     if (gateway == null) continue
     const row = classifyPlatformIbGateway(gateway)
@@ -344,30 +502,32 @@ export function resolveSharedRocketRow(
 }
 
 export function buildSocketHealthMatrix(
-  buses: Partial<Record<TradeEnv, BusSocketSlice>>,
+  buses: Partial<Record<BusEnvId, BusSocketSlice>>,
 ): { rocket: SocketHealthRow; tradeRows: SocketHealthMatrixRow[] } {
   const rocket = resolveSharedRocketRow(buses)
 
   const tradeRows: SocketHealthMatrixRow[] = TRADE_CONSUMER_DEFS.map(def => {
-    const cells: Record<TradeEnv, SocketHealthEnvCell> = {
+    const cells: Record<'dev' | 'stg' | 'prod' | 'local', SocketHealthEnvCell> = {
       dev: emptyCell(),
       stg: emptyCell(),
       prod: emptyCell(),
+      local: emptyCell(),
     }
 
-    for (const env of SOCKET_TRADE_ENVS) {
+    for (const env of SOCKET_MATRIX_ENVS) {
       const slice = buses[env]
       if (slice == null) continue
-      const built = buildSocketHealthRows(slice.socket, env, slice.ingest)
+      const built = buildSocketHealthRows(slice.socket, policyEnv(env), slice.ingest, slice.daemon)
       const match = built.trade.find(r => r.id === def.id)
+      const key = matrixCellKey(env)
       if (match != null) {
-        cells[env] = applyProbeDetail(rowToCell(match), slice.probeDetail)
-      } else if (slice.probeDetail != null) {
-        cells[env] = applyProbeDetail(emptyCell(), slice.probeDetail)
+        cells[key] = rowToCell(match)
+      } else if (def.id !== 'trading_engine' && slice.probeDetail != null) {
+        cells[key] = applyProbeDetail(emptyCell(), slice.probeDetail)
       }
     }
 
-    const labels = SOCKET_TRADE_ENVS.map(e => cells[e].reachLabel)
+    const labels = SOCKET_MATRIX_ENVS.map(e => cells[matrixCellKey(e)].reachLabel)
     const envDiverges = new Set(labels).size > 1
 
     return {
@@ -376,11 +536,12 @@ export function buildSocketHealthMatrix(
       dev: cells.dev,
       stg: cells.stg,
       prod: cells.prod,
+      local: cells.local,
       envDiverges,
     }
   }).filter(row => {
-    const anyPresent = SOCKET_TRADE_ENVS.some(
-      e => row[e].required !== 'optional' || row[e].reach !== 'unknown',
+    const anyPresent = SOCKET_MATRIX_ENVS.some(
+      e => row[matrixCellKey(e)].required !== 'optional' || row[matrixCellKey(e)].reach !== 'unknown',
     )
     return anyPresent
   })
@@ -395,22 +556,22 @@ export function summarizeSocketHealthAllEnvs(
   let attention = 0
   const envSignals: Signal[] = []
 
-  for (const env of SOCKET_TRADE_ENVS) {
+  for (const env of SOCKET_MATRIX_ENVS) {
     const rows: SocketHealthRow[] = [
       matrix.rocket,
       ...matrix.tradeRows.map(r => ({
         id: r.id,
         label: r.label,
         layer: 'trade' as const,
-        required: r[env].required,
-        reach: r[env].reach,
-        reachLabel: r[env].reachLabel,
-        detail: r[env].detail,
+        required: r[matrixCellKey(env)].required,
+        reach: r[matrixCellKey(env)].reach,
+        reachLabel: r[matrixCellKey(env)].reachLabel,
+        detail: r[matrixCellKey(env)].detail,
       })),
     ]
     const summary = summarizeSocketHealth(rows)
     envSignals.push(summary.signal)
-    const short = env.toUpperCase()
+    const short = SOCKET_MATRIX_LABELS[env]
     if (summary.attention > 0) {
       attention += summary.attention
       envParts.push(`${short} ${summary.headline}`)

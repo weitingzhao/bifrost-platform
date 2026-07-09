@@ -19,17 +19,17 @@ environments:
     ops_token_env: BIFROST_DEV_OPS_TOKEN
 
   - id: dev-local
-    label: Local Compose
+    label: Mac (thin client)
     probe_mode: bridge
-    # trade_bridge_url optional — defaults to SATELLITE_PROBE_BRIDGE_URL on platform-api host
+    # satellite-probe-bridge on developer Mac probes K3s dev ingress (Vision V1).
     trade_bridge_url: http://127.0.0.1:8786
-    nginx_base: http://127.0.0.1:80
+    nginx_base: http://192.168.10.73:30882
     postgres:
-      host: 127.0.0.1
-      port: 5432
+      host: 192.168.10.73
+      port: 30432
     redis:
-      host: 127.0.0.1
-      port: 6379
+      host: 192.168.10.73
+      port: 30379
 
   - id: stg
     label: Staging

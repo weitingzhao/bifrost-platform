@@ -46,8 +46,11 @@ import {
 } from '@/lib/control-room/payloadReadiness'
 import {
   buildSocketHealthMatrix,
+  formatBusProbeDetail,
+  SOCKET_MATRIX_LABELS,
   SOCKET_TRADE_NS,
   summarizeSocketHealthAllEnvs,
+  type BusEnvId,
   type SocketHealthEnvCell,
   type SocketHealthMatrixRow,
   type SocketHealthRow,
@@ -260,9 +263,16 @@ function SocketHealthMatrixTable({
       <DenseTableHeader>
         <DenseTableHeadRow>
           <DenseTableHead>Service</DenseTableHead>
-          <DenseTableHead className={selectedEnv === 'dev' ? 'bg-[var(--accent)]/30' : undefined}>Dev</DenseTableHead>
-          <DenseTableHead className={selectedEnv === 'stg' ? 'bg-[var(--accent)]/30' : undefined}>Stg</DenseTableHead>
-          <DenseTableHead className={selectedEnv === 'prod' ? 'bg-[var(--accent)]/30' : undefined}>Prod</DenseTableHead>
+          <DenseTableHead className={selectedEnv === 'dev' ? 'bg-[var(--accent)]/30' : undefined}>
+            {SOCKET_MATRIX_LABELS.dev}
+          </DenseTableHead>
+          <DenseTableHead className={selectedEnv === 'stg' ? 'bg-[var(--accent)]/30' : undefined}>
+            {SOCKET_MATRIX_LABELS.stg}
+          </DenseTableHead>
+          <DenseTableHead className={selectedEnv === 'prod' ? 'bg-[var(--accent)]/30' : undefined}>
+            {SOCKET_MATRIX_LABELS.prod}
+          </DenseTableHead>
+          <DenseTableHead>Local</DenseTableHead>
         </DenseTableHeadRow>
       </DenseTableHeader>
       <DenseTableBody>
@@ -284,6 +294,9 @@ function SocketHealthMatrixTable({
             </DenseTableCell>
             <DenseTableCell>
               <SocketHealthEnvCellView cell={row.prod} selected={selectedEnv === 'prod'} />
+            </DenseTableCell>
+            <DenseTableCell>
+              <SocketHealthEnvCellView cell={row.local} />
             </DenseTableCell>
           </DenseTableRow>
         ))}
@@ -517,16 +530,17 @@ export function SatelliteBusPage({
     refetchInterval: 30_000,
   })
 
-  const busesByEnv = useMemo((): Partial<Record<TradeEnvId, SatelliteBusDeepResponse>> => {
+  const busesByEnv = useMemo((): Partial<Record<BusEnvId, SatelliteBusDeepResponse>> => {
     const data = busDeepAllQuery.data
     if (data == null) return {}
     if (isAllSatelliteBusDeep(data)) {
-      return Object.fromEntries(data.buses.map(b => [b.environment as TradeEnvId, b])) as Partial<
-        Record<TradeEnvId, SatelliteBusDeepResponse>
-      >
+      return Object.fromEntries(
+        data.buses.map(b => [b.environment as BusEnvId, b]),
+      ) as Partial<Record<BusEnvId, SatelliteBusDeepResponse>>
     }
-    if (data.environment === 'dev' || data.environment === 'stg' || data.environment === 'prod') {
-      return { [data.environment]: data }
+    const env = data.environment as BusEnvId
+    if (env === 'dev' || env === 'stg' || env === 'prod' || env === 'dev-local') {
+      return { [env]: data }
     }
     return {}
   }, [busDeepAllQuery.data])
@@ -612,21 +626,19 @@ export function SatelliteBusPage({
   }, [serviceReadinessQuery.data?.domains])
 
   const socketHealthMatrix = useMemo(() => {
-    const probeDetailFor = (env: TradeEnvId): string | undefined => {
+    const probeDetailFor = (env: BusEnvId): string | undefined => {
       const bus = busesByEnv[env]
       if (bus == null) return undefined
-      if (bus.reachability === 'fail' || bus.reachability === 'unknown') {
-        return bus.monitor?.detail || bus.detail
-      }
-      return undefined
+      return formatBusProbeDetail(bus)
     }
     const slices = Object.fromEntries(
-      (['dev', 'stg', 'prod'] as const).map(env => [
+      (['dev', 'stg', 'prod', 'dev-local'] as const).map(env => [
         env,
         busesByEnv[env] != null
           ? {
               socket: busesByEnv[env]?.monitor.socket,
               ingest: busesByEnv[env]?.ingest.services,
+              daemon: busesByEnv[env]?.monitor.daemon,
               probeDetail: probeDetailFor(env),
             }
           : undefined,
@@ -895,16 +907,18 @@ export function SatelliteBusPage({
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground">
-                    Trade · consumers by env ({SOCKET_TRADE_NS.dev} / {SOCKET_TRADE_NS.stg} / {SOCKET_TRADE_NS.prod})
+                    Trade · consumers ({SOCKET_TRADE_NS.dev} / {SOCKET_TRADE_NS.stg} / {SOCKET_TRADE_NS.prod} / Mac
+                    bridge)
                   </span>
                   <SocketHealthMatrixTable rows={socketHealthMatrix.tradeRows} selectedEnv={tradeEnv} />
                 </div>
                 <p className="text-[var(--text-dense-caption)] text-muted-foreground m-0">
-                  Trade NS selector highlights the active column. K3s envs (dev/stg/prod) use pull probe;
-                  local Mac <code className="text-[var(--text-dense-meta)]">make dev</code> is available via{' '}
-                  <code className="text-[var(--text-dense-meta)]">dev-local</code> + satellite-probe-bridge (
-                  <code className="text-[var(--text-dense-meta)]">GET /api/v1/satellite/bus-deep?env=dev-local</code>
-                  ).
+                  <strong className="font-medium text-foreground/80">K3s Dev</strong> = cluster bifrost-dev @ :30882
+                  (authoritative stack health).{' '}
+                  <strong className="font-medium text-foreground/80">Mac</strong> = satellite-probe-bridge on this
+                  workstation probing the same K3s dev ingress (Vision V1 thin-client reachability). Fix{' '}
+                  <strong className="font-medium text-foreground/80">K3s Dev</strong> first; Mac stays red until the
+                  cluster stack is healthy or reachable.
                 </p>
               </div>
             </OpsSection>

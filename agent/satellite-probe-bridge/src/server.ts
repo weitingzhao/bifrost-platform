@@ -3,7 +3,10 @@ import express from 'express'
 const app = express()
 
 const PORT = parseInt(process.env.SATELLITE_PROBE_BRIDGE_PORT ?? '8786', 10)
-const TRADE_NGINX_BASE = (process.env.TRADE_NGINX_BASE ?? 'http://127.0.0.1:80').replace(/\/$/, '')
+// Vision V1 thin client: Mac bridge probes K3s bifrost-dev ingress (not local compose).
+const TRADE_NGINX_BASE = (
+  process.env.TRADE_NGINX_BASE ?? process.env.TRADE_DEV_BASE ?? 'http://192.168.10.73:30882'
+).replace(/\/$/, '')
 const PROBE_TIMEOUT_MS = parseInt(process.env.SATELLITE_PROBE_TIMEOUT_MS ?? '8000', 10)
 
 type ProbeResult = {
@@ -55,7 +58,7 @@ app.get('/health', (_req, res) => {
 
 /**
  * Read-only bus snapshot for platform-api satellite bus-deep bridge mode.
- * Probes local compose nginx — monitor status + market ingest services.
+ * Probes K3s dev trade ingress from the developer Mac (thin-client reachability).
  */
 app.get('/bus-snapshot', async (_req, res) => {
   const generatedAt = new Date().toISOString()
@@ -65,7 +68,7 @@ app.get('/bus-snapshot', async (_req, res) => {
   ])
 
   res.json({
-    source: 'local-compose',
+    source: 'mac-thin-client',
     trade_nginx_base: TRADE_NGINX_BASE,
     generated_at: generatedAt,
     monitor,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start satellite-probe-bridge (read-only local compose probe).
+# Start satellite-probe-bridge (Mac thin-client probe of K3s dev trade ingress).
 # Usage:
 #   ./start.sh          # foreground (Ctrl+C to stop)
 #   ./start.sh daemon   # background daemon via double-fork
