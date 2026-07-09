@@ -45,10 +45,14 @@ import {
   type PayloadReadinessRow,
 } from '@/lib/control-room/payloadReadiness'
 import {
-  buildSocketHealthRows,
-  summarizeSocketHealth,
+  buildSocketHealthMatrix,
+  SOCKET_TRADE_NS,
+  summarizeSocketHealthAllEnvs,
+  type SocketHealthEnvCell,
+  type SocketHealthMatrixRow,
   type SocketHealthRow,
   type SocketRequiredState,
+  type TradeEnvId,
 } from '@/lib/satellite/socketHealthSemantics'
 import { consumeSatelliteBusFocus } from '@/lib/task-mode/readinessChipActions'
 import { worst, type Signal } from '@/lib/control-room/missionSignals'
@@ -206,48 +210,113 @@ function RequiredTag({ state }: { state: SocketRequiredState }) {
   return <DenseTag variant="success">required</DenseTag>
 }
 
-function SocketHealthTable({ rows, layerLabel }: { rows: SocketHealthRow[]; layerLabel: string }) {
+function SocketHealthEnvCellView({
+  cell,
+  selected,
+}: {
+  cell: SocketHealthEnvCell
+  selected?: boolean
+}) {
+  const lampReach = cell.required === 'policy-off' ? 'ok' : cell.reach
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground">{layerLabel}</span>
-      <DenseDataTable>
-        <DenseTableHeader>
-          <DenseTableHeadRow>
-            <DenseTableHead>Service</DenseTableHead>
-            <DenseTableHead>Required</DenseTableHead>
-            <DenseTableHead>Reach</DenseTableHead>
-            <DenseTableHead>Detail</DenseTableHead>
-          </DenseTableHeadRow>
-        </DenseTableHeader>
-        <DenseTableBody>
-          {rows.map(row => (
-            <DenseTableRow key={row.id}>
-              <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">{row.label}</DenseTableCell>
-              <DenseTableCell>
-                <RequiredTag state={row.required} />
-              </DenseTableCell>
-              <DenseTableCell>
-                <StatusLamp
-                  value={row.required === 'policy-off' ? 'ok' : row.reach}
-                  kind="reach"
-                />{' '}
-                <span
-                  className={cn(
-                    'text-[var(--text-dense-caption)]',
-                    row.required === 'policy-off' ? 'text-muted-foreground' : '',
-                  )}
-                >
-                  {row.reachLabel}
-                </span>
-              </DenseTableCell>
-              <DenseTableCell className="max-w-[14rem] text-[var(--text-dense-caption)] text-muted-foreground">
-                {row.detail}
-              </DenseTableCell>
-            </DenseTableRow>
-          ))}
-        </DenseTableBody>
-      </DenseDataTable>
+    <div
+      className={cn(
+        'flex flex-col gap-0.5',
+        selected && 'rounded-sm bg-[var(--accent)]/40 px-1 -mx-1',
+      )}
+    >
+      <span className="flex items-center gap-1">
+        <StatusLamp value={lampReach} kind="reach" />
+        <span
+          className={cn(
+            'text-[var(--text-dense-caption)]',
+            cell.required === 'policy-off' ? 'text-muted-foreground' : '',
+          )}
+        >
+          {cell.reachLabel}
+        </span>
+        {cell.required === 'policy-off' && (
+          <DenseTag variant="neutral" className="text-[9px]">
+            policy-off
+          </DenseTag>
+        )}
+      </span>
+      <span className="text-[var(--text-dense-caption)] text-muted-foreground line-clamp-2" title={cell.detail}>
+        {cell.detail}
+      </span>
     </div>
+  )
+}
+
+function SocketHealthMatrixTable({
+  rows,
+  selectedEnv,
+}: {
+  rows: SocketHealthMatrixRow[]
+  selectedEnv: TradeEnvId
+}) {
+  return (
+    <DenseDataTable>
+      <DenseTableHeader>
+        <DenseTableHeadRow>
+          <DenseTableHead>Service</DenseTableHead>
+          <DenseTableHead className={selectedEnv === 'dev' ? 'bg-[var(--accent)]/30' : undefined}>Dev</DenseTableHead>
+          <DenseTableHead className={selectedEnv === 'stg' ? 'bg-[var(--accent)]/30' : undefined}>Stg</DenseTableHead>
+          <DenseTableHead className={selectedEnv === 'prod' ? 'bg-[var(--accent)]/30' : undefined}>Prod</DenseTableHead>
+        </DenseTableHeadRow>
+      </DenseTableHeader>
+      <DenseTableBody>
+        {rows.map(row => (
+          <DenseTableRow key={row.id}>
+            <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">
+              {row.label}
+              {row.envDiverges && (
+                <DenseTag variant="warning" className="ml-1.5 text-[9px]">
+                  Diverged
+                </DenseTag>
+              )}
+            </DenseTableCell>
+            <DenseTableCell>
+              <SocketHealthEnvCellView cell={row.dev} selected={selectedEnv === 'dev'} />
+            </DenseTableCell>
+            <DenseTableCell>
+              <SocketHealthEnvCellView cell={row.stg} selected={selectedEnv === 'stg'} />
+            </DenseTableCell>
+            <DenseTableCell>
+              <SocketHealthEnvCellView cell={row.prod} selected={selectedEnv === 'prod'} />
+            </DenseTableCell>
+          </DenseTableRow>
+        ))}
+      </DenseTableBody>
+    </DenseDataTable>
+  )
+}
+
+function RocketSocketBusRow({ row }: { row: SocketHealthRow }) {
+  return (
+    <DenseDataTable>
+      <DenseTableHeader>
+        <DenseTableHeadRow>
+          <DenseTableHead>Service</DenseTableHead>
+          <DenseTableHead>Required</DenseTableHead>
+          <DenseTableHead>Reach</DenseTableHead>
+          <DenseTableHead>Detail</DenseTableHead>
+        </DenseTableHeadRow>
+      </DenseTableHeader>
+      <DenseTableBody>
+        <DenseTableRow>
+          <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">{row.label}</DenseTableCell>
+          <DenseTableCell>
+            <RequiredTag state={row.required} />
+          </DenseTableCell>
+          <DenseTableCell>
+            <StatusLamp value={row.reach} kind="reach" />{' '}
+            <span className="text-[var(--text-dense-caption)]">{row.reachLabel}</span>
+          </DenseTableCell>
+          <DenseTableCell className="text-[var(--text-dense-caption)] text-muted-foreground">{row.detail}</DenseTableCell>
+        </DenseTableRow>
+      </DenseTableBody>
+    </DenseDataTable>
   )
 }
 
@@ -442,18 +511,27 @@ export function SatelliteBusPage({
   const envMatrix = matrices.find(m => m.environment === tradeEnv)
   const tradeApi = tradeApiTargets(envMatrix)
 
-  const busDeepQuery = useQuery({
-    queryKey: ['satellite', 'bus-deep', tradeEnv],
-    queryFn: () => fetchSatelliteBusDeep(tradeEnv),
+  const busDeepAllQuery = useQuery({
+    queryKey: ['satellite', 'bus-deep', 'all'],
+    queryFn: () => fetchSatelliteBusDeep(),
     refetchInterval: 30_000,
   })
 
-  const busDeep = useMemo((): SatelliteBusDeepResponse | undefined => {
-    const data = busDeepQuery.data
-    if (data == null) return undefined
-    if (isAllSatelliteBusDeep(data)) return data.buses.find(b => b.environment === tradeEnv)
-    return data
-  }, [busDeepQuery.data, tradeEnv])
+  const busesByEnv = useMemo((): Partial<Record<TradeEnvId, SatelliteBusDeepResponse>> => {
+    const data = busDeepAllQuery.data
+    if (data == null) return {}
+    if (isAllSatelliteBusDeep(data)) {
+      return Object.fromEntries(data.buses.map(b => [b.environment as TradeEnvId, b])) as Partial<
+        Record<TradeEnvId, SatelliteBusDeepResponse>
+      >
+    }
+    if (data.environment === 'dev' || data.environment === 'stg' || data.environment === 'prod') {
+      return { [data.environment]: data }
+    }
+    return {}
+  }, [busDeepAllQuery.data])
+
+  const busDeep = busesByEnv[tradeEnv]
 
   const busSignal = useMemo((): Signal => {
     const workloadSignals = (workloadsQuery.data?.workloads ?? []).map(w => w.reachability as Signal)
@@ -533,14 +611,33 @@ export function SatelliteBusPage({
     return { signal, headline }
   }, [serviceReadinessQuery.data?.domains])
 
-  const socketHealth = useMemo(
-    () => buildSocketHealthRows(busDeep?.monitor.socket, tradeEnv, busDeep?.ingest.services),
-    [busDeep?.ingest.services, busDeep?.monitor.socket, tradeEnv],
-  )
+  const socketHealthMatrix = useMemo(() => {
+    const probeDetailFor = (env: TradeEnvId): string | undefined => {
+      const bus = busesByEnv[env]
+      if (bus == null) return undefined
+      if (bus.reachability === 'fail' || bus.reachability === 'unknown') {
+        return bus.monitor?.detail || bus.detail
+      }
+      return undefined
+    }
+    const slices = Object.fromEntries(
+      (['dev', 'stg', 'prod'] as const).map(env => [
+        env,
+        busesByEnv[env] != null
+          ? {
+              socket: busesByEnv[env]?.monitor.socket,
+              ingest: busesByEnv[env]?.ingest.services,
+              probeDetail: probeDetailFor(env),
+            }
+          : undefined,
+      ]),
+    )
+    return buildSocketHealthMatrix(slices)
+  }, [busesByEnv])
 
   const socketSummary = useMemo(
-    () => summarizeSocketHealth([...socketHealth.rocket, ...socketHealth.trade]),
-    [socketHealth],
+    () => summarizeSocketHealthAllEnvs(socketHealthMatrix),
+    [socketHealthMatrix],
   )
 
   const socketHeadline = socketSummary.headline
@@ -570,7 +667,7 @@ export function SatelliteBusPage({
   )
 
   const daemonRows = useMemo((): MonitorKvRow[] => {
-    if (busDeepQuery.isLoading) return []
+    if (busDeepAllQuery.isLoading) return []
     const daemon = busDeep?.monitor.daemon
     return [
       {
@@ -600,7 +697,7 @@ export function SatelliteBusPage({
       { label: 'ib_connected', value: renderText(daemon?.heartbeat?.ib_connected) },
       { label: 'seconds_until_retry', value: renderText(daemon?.heartbeat?.seconds_until_retry) },
     ]
-  }, [busDeep?.monitor.daemon, busDeepQuery.isLoading])
+  }, [busDeep?.monitor.daemon, busDeepAllQuery.isLoading])
 
   const celeryRows = useMemo((): MonitorKvRow[] => {
     const celery = busDeep?.monitor.celery
@@ -776,9 +873,9 @@ export function SatelliteBusPage({
         sectionRef={monitorSectionRef}
         highlight={highlightSection === 'monitor' || highlightSection === 'socket'}
       >
-        <div className="grid gap-1.5 lg:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
           <OpsSection title="Daemon FSM" bodyPadding="none" overflow="hidden" className="shadow-none">
-            <MonitorKvTable rows={daemonRows} loading={busDeepQuery.isLoading} />
+            <MonitorKvTable rows={daemonRows} loading={busDeepAllQuery.isLoading} />
           </OpsSection>
 
           <div ref={socketSectionRef}>
@@ -787,14 +884,28 @@ export function SatelliteBusPage({
               bodyPadding="compact"
               overflow="hidden"
               className="shadow-none"
-              description="Rocket platform bus vs Trade env consumers · policy-off ≠ degraded"
+              description="Rocket bus is cluster-shared (all envs) · Trade columns = per-namespace consumers · policy-off ≠ degraded"
             >
               <div className="flex flex-col gap-2">
-                <SocketHealthTable rows={socketHealth.rocket} layerLabel="Rocket · Platform socket bus (data/ib-gateway)" />
-                <SocketHealthTable
-                  rows={socketHealth.trade}
-                  layerLabel={`Trade · ${tradeEnv.toUpperCase()} consumers (${ns})`}
-                />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground">
+                    Rocket · Platform socket bus (data/ib-gateway @ redis-ib) — shared by Dev, Stg, Prod
+                  </span>
+                  <RocketSocketBusRow row={socketHealthMatrix.rocket} />
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground">
+                    Trade · consumers by env ({SOCKET_TRADE_NS.dev} / {SOCKET_TRADE_NS.stg} / {SOCKET_TRADE_NS.prod})
+                  </span>
+                  <SocketHealthMatrixTable rows={socketHealthMatrix.tradeRows} selectedEnv={tradeEnv} />
+                </div>
+                <p className="text-[var(--text-dense-caption)] text-muted-foreground m-0">
+                  Trade NS selector highlights the active column. K3s envs (dev/stg/prod) use pull probe;
+                  local Mac <code className="text-[var(--text-dense-meta)]">make dev</code> is available via{' '}
+                  <code className="text-[var(--text-dense-meta)]">dev-local</code> + satellite-probe-bridge (
+                  <code className="text-[var(--text-dense-meta)]">GET /api/v1/satellite/bus-deep?env=dev-local</code>
+                  ).
+                </p>
               </div>
             </OpsSection>
           </div>
@@ -802,13 +913,13 @@ export function SatelliteBusPage({
 
         <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
           <OpsSection title="Celery" bodyPadding="none" overflow="hidden" className="shadow-none">
-            <MonitorKvTable rows={celeryRows} loading={busDeepQuery.isLoading} />
+            <MonitorKvTable rows={celeryRows} loading={busDeepAllQuery.isLoading} />
           </OpsSection>
           <OpsSection title="Account sync" bodyPadding="none" overflow="hidden" className="shadow-none">
-            <MonitorKvTable rows={accountSyncRows} loading={busDeepQuery.isLoading} />
+            <MonitorKvTable rows={accountSyncRows} loading={busDeepAllQuery.isLoading} />
           </OpsSection>
           <OpsSection title="Ops executor" bodyPadding="none" overflow="hidden" className="shadow-none">
-            <MonitorKvTable rows={opsRows} loading={busDeepQuery.isLoading} />
+            <MonitorKvTable rows={opsRows} loading={busDeepAllQuery.isLoading} />
           </OpsSection>
         </div>
 
@@ -839,7 +950,7 @@ export function SatelliteBusPage({
                 {(busDeep?.ingest.services ?? []).length === 0 ? (
                   <DenseTableRow>
                     <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
-                      {busDeepQuery.isLoading ? 'Loading…' : '—'}
+                      {busDeepAllQuery.isLoading ? 'Loading…' : '—'}
                     </DenseTableCell>
                   </DenseTableRow>
                 ) : (

@@ -1469,6 +1469,12 @@ export interface AgentBridgeResponse {
     dirty_repos?: number
     error?: string
   }
+  satellite_probe_bridge: {
+    url?: string
+    status: string
+    trade_nginx_base?: string
+    error?: string
+  }
   hermes_mcp: {
     url?: string
     status: string

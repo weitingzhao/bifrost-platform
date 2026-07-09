@@ -186,6 +186,9 @@ export function AgentMcpPanel({
               ? ` · ${bridge.git_bridge.dirty_repos} dirty`
               : ''}
           </DenseTag>
+          <DenseTag variant={bridgeStatusVariant(bridge.satellite_probe_bridge?.status ?? 'not_configured')}>
+            Probe Bridge {bridge.satellite_probe_bridge?.status ?? 'not_configured'}
+          </DenseTag>
           <DenseTag variant={bridgeStatusVariant(bridge.hermes_mcp.status)}>
             Hermes MCP {bridge.hermes_mcp.status}
           </DenseTag>
