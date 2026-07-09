@@ -44,10 +44,11 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"ok": true,
 				"services": [
-					{"id":"massive_ws","process_active":"active","runtime_kind":"kubernetes"},
-					{"id":"ib_ingestor","process_active":"inactive","runtime_kind":"kubernetes","platform_gateway_managed":true},
-					{"id":"ib_account_agent","process_active":"inactive","runtime_kind":"kubernetes","platform_gateway_managed":true},
-					{"id":"ib_operator","process_active":"inactive","runtime_kind":"kubernetes","platform_gateway_managed":true}
+					{"id":"massive_ws","process_active":"inactive","runtime_status":"policy-off","display_active":"ws-disabled (REST-only)","runtime_kind":"kubernetes"},
+					{"id":"ib_ingestor","process_active":"inactive","runtime_status":"active","display_active":"managed@platform-ib-gateway","runtime_kind":"kubernetes","platform_gateway_managed":true},
+					{"id":"ib_account_agent","process_active":"inactive","runtime_status":"active","display_active":"managed@platform-ib-gateway","runtime_kind":"kubernetes","platform_gateway_managed":true},
+					{"id":"ib_operator","process_active":"inactive","runtime_status":"active","display_active":"managed@platform-ib-gateway","runtime_kind":"kubernetes","platform_gateway_managed":true},
+					{"id":"trading_engine","process_active":"inactive","runtime_status":"policy-off","display_active":"policy-off (daemon scale 0)","runtime_kind":"kubernetes"}
 				]
 			}`))
 		default:
@@ -84,8 +85,11 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 	if resp.Ops.K8sReachable == nil || *resp.Ops.K8sReachable {
 		t.Fatalf("expected k8s_reachable=false, got %+v", resp.Ops.K8sReachable)
 	}
-	if resp.Ingest.Reachability != probe.ReachDegraded {
-		t.Fatalf("expected ingest degraded with platform gateway managed rows, got %s", resp.Ingest.Reachability)
+	if resp.Ingest.Reachability != probe.ReachOK {
+		t.Fatalf("expected ingest ok with semantic runtime_status rows, got %s", resp.Ingest.Reachability)
+	}
+	if resp.Ingest.Services[1].DisplayActive != "managed@platform-ib-gateway" {
+		t.Fatalf("expected display_active passthrough, got %q", resp.Ingest.Services[1].DisplayActive)
 	}
 	if resp.Reachability != probe.ReachDegraded {
 		t.Fatalf("expected overall degraded, got %s", resp.Reachability)

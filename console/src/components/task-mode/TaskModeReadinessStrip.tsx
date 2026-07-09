@@ -18,6 +18,7 @@ import type {
 } from '@/api/types'
 import type { MatrixResponse, Reachability } from '@/api/types'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { ReadinessFixBar } from '@/components/task-mode/ReadinessFixBar'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import {
@@ -816,6 +817,10 @@ function SatelliteReadinessStrip({
   agentFixPending = false,
   agentFixDisabled = false,
   agentFixTitle,
+  onAgentTriage,
+  agentTriagePending = false,
+  agentTriageDisabled = false,
+  agentTriageTitle,
 }: {
   compact?: boolean
   summaryColumn?: boolean
@@ -827,6 +832,10 @@ function SatelliteReadinessStrip({
   agentFixPending?: boolean
   agentFixDisabled?: boolean
   agentFixTitle?: string
+  onAgentTriage?: () => void
+  agentTriagePending?: boolean
+  agentTriageDisabled?: boolean
+  agentTriageTitle?: string
 }) {
   const { snapshot, matrices, isLoading: missionLoading } = useMissionSnapshot()
   const { prodOverall, prodBlocked } = useSatelliteProdReadiness()
@@ -995,7 +1004,7 @@ function SatelliteReadinessStrip({
         agentFixTitle={agentFixTitle}
       />
       {summaryColumn && (
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <button
             type="button"
             className="text-[var(--text-dense-caption)] text-primary hover:underline"
@@ -1010,6 +1019,19 @@ function SatelliteReadinessStrip({
           >
             Trade Release →
           </button>
+          {onAgentTriage != null && (
+            <AgentTriggerButton
+              label="Agent Triage"
+              size="xs"
+              pending={agentTriagePending}
+              disabled={agentTriageDisabled}
+              title={
+                agentTriageTitle ??
+                'Cross-check ingest display vs monitor.socket vs ib-gateway (D10 safe)'
+              }
+              onClick={onAgentTriage}
+            />
+          )}
         </div>
       )}
     </div>
@@ -1028,6 +1050,10 @@ export type TaskModeReadinessStripProps = {
   agentFixPending?: boolean
   agentFixDisabled?: boolean
   agentFixTitle?: string
+  onAgentTriage?: () => void
+  agentTriagePending?: boolean
+  agentTriageDisabled?: boolean
+  agentTriageTitle?: string
 }
 
 /** Mode-scoped environment readiness — replaces generic mission signals in playbook ops modes. */
@@ -1043,6 +1069,10 @@ export function TaskModeReadinessStrip({
   agentFixPending = false,
   agentFixDisabled = false,
   agentFixTitle,
+  onAgentTriage,
+  agentTriagePending = false,
+  agentTriageDisabled = false,
+  agentTriageTitle,
 }: TaskModeReadinessStripProps) {
   if (modeId === 'rocket-launch') {
     return (
@@ -1067,6 +1097,10 @@ export function TaskModeReadinessStrip({
         agentFixPending={agentFixPending}
         agentFixDisabled={agentFixDisabled}
         agentFixTitle={agentFixTitle}
+        onAgentTriage={onAgentTriage}
+        agentTriagePending={agentTriagePending}
+        agentTriageDisabled={agentTriageDisabled}
+        agentTriageTitle={agentTriageTitle}
       />
     )
   }

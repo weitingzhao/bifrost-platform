@@ -100,6 +100,8 @@ export interface SatelliteBusOpsDeep {
 export interface SatelliteBusIngestService {
   id: string
   process_active?: string
+  runtime_status?: string
+  display_active?: string
   runtime_kind?: string
   redis_control_env?: string
   runtime_externally_managed?: boolean

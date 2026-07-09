@@ -11,7 +11,7 @@ export type ReadinessChipAction = {
   label: string
   tabId?: string
   /** Satellite Bus section scroll target */
-  busFocus?: 'socket' | 'ingest' | 'daemon'
+  busFocus?: 'socket' | 'ingest' | 'monitor' | 'trade-apis' | 'workers' | 'cluster'
   actuation?: ReadinessActuation
   requiresOperate?: boolean
 }
@@ -147,6 +147,8 @@ export function setSatelliteBusFocus(focus: ReadinessChipAction['busFocus'] | un
 export function consumeSatelliteBusFocus(): ReadinessChipAction['busFocus'] | null {
   const raw = sessionStorage.getItem(SATELLITE_BUS_FOCUS_KEY)
   sessionStorage.removeItem(SATELLITE_BUS_FOCUS_KEY)
-  if (raw === 'socket' || raw === 'ingest' || raw === 'daemon') return raw
+  if (raw === 'socket' || raw === 'ingest' || raw === 'monitor' || raw === 'trade-apis' || raw === 'workers' || raw === 'cluster') {
+    return raw
+  }
   return null
 }

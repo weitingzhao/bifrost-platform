@@ -6,8 +6,10 @@ import {
   fetchClusterServiceReadiness,
   fetchPipelineRuns,
   fetchReleaseGate,
+  fetchSatelliteBusDeep,
   fetchSupplyChain,
   fetchStgSmoke,
+  isAllSatelliteBusDeep,
 } from '@/api/platform'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
@@ -32,6 +34,11 @@ import {
   buildTradeProdFixPrompt,
   PROD_ENV_FIX_SCOPE,
 } from '@/lib/agent/prodEnvironmentFixPrompt'
+import {
+  buildSatelliteBusIngestTriagePrompt,
+  SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
+  summarizeIngestServices,
+} from '@/lib/agent/satelliteBusIngestTriagePrompt'
 import { buildTradeEnvReadinessFixPrompt } from '@/lib/agent/tradeEnvReadinessFixPrompt'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import { missionStatus } from '@/lib/control-room/missionSignals'
@@ -267,6 +274,53 @@ export function TaskControlCenter({
     },
   })
 
+  const stgBusForTriageQ = useQuery({
+    queryKey: ['task-cc', 'satellite-bus-triage', 'stg'],
+    queryFn: () => fetchSatelliteBusDeep('stg'),
+    refetchInterval: 20_000,
+    enabled: mode.id === 'satellite-deploy',
+  })
+
+  const aiBusIngestTriage = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
+    label: scopeToLabel(SATELLITE_BUS_INGEST_TRIAGE_SCOPE),
+    buildRequest: async () => {
+      const data = stgBusForTriageQ.data ?? (await fetchSatelliteBusDeep('stg'))
+      const bus =
+        data != null && isAllSatelliteBusDeep(data)
+          ? data.buses.find(b => b.environment === 'stg')
+          : data
+      const ingestHeadline = summarizeIngestServices(bus?.ingest.services ?? []).headline
+      const socket = bus?.monitor.socket
+      const socketRows = socket
+        ? [
+            socket.massive,
+            socket.ib_ingestor,
+            socket.ib_account_agent,
+            socket.ib_operator,
+            socket.platform_ib_gateway,
+          ]
+        : []
+      const socketOk = socketRows.filter(r => r?.reachability === 'ok').length
+      const socketHeadline =
+        socket == null
+          ? 'Monitor socket block unavailable'
+          : `${socketOk}/${socketRows.length} socket components ok`
+      return {
+        prompt: buildSatelliteBusIngestTriagePrompt({
+          env: 'stg',
+          namespace: 'bifrost-stg',
+          ingestHeadline,
+          socketHeadline,
+          busReachability: bus?.reachability,
+        }),
+      }
+    },
+  })
+
   const dispatchReleaseAgent = () => {
     if (!canOperate || aiRelease.disabled) return
     aiRelease.trigger()
@@ -483,6 +537,11 @@ export function TaskControlCenter({
               {aiDailyOpsFix.error.message}
             </OpsFeedback>
           )}
+          {aiBusIngestTriage.error != null && (
+            <OpsFeedback variant="error" title="Failed to start Bus Ingest Triage">
+              {aiBusIngestTriage.error.message}
+            </OpsFeedback>
+          )}
           {mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok' && (
             <OpsFeedback
               variant="warning"
@@ -579,6 +638,13 @@ export function TaskControlCenter({
             agentFixPending={aiTradeStgEnvFix.isPending || aiTradeProdEnvFix.isPending}
             agentFixDisabled={!canOperate}
             agentFixTitle="Diagnose STG/PROD readiness via Cluster · Remediate (IB socket triage included)"
+            onAgentTriage={() => aiBusIngestTriage.trigger()}
+            agentTriagePending={aiBusIngestTriage.isPending}
+            agentTriageDisabled={aiBusIngestTriage.disabled}
+            agentTriageTitle={
+              aiBusIngestTriage.disabledReason ??
+              'Cross-check ingest display vs monitor.socket vs ib-gateway (D10 safe)'
+            }
           />
         )}
 

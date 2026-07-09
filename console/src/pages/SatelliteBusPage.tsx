@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref, RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DenseDataTable,
   DenseTableBody,
@@ -12,6 +12,7 @@ import {
   DenseTag,
   PageHeader,
   SegmentControl,
+  cn,
 } from '@bifrost/ui'
 import {
   fetchSatelliteBusDeep,
@@ -24,10 +25,22 @@ import {
   isAllSatelliteBusDeep,
 } from '@/api/platform'
 import type { MatrixResponse, Reachability, SatelliteBusDeepResponse } from '@/api/types'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { SatelliteObservabilityStrip } from '@/components/satellite/SatelliteObservabilityStrip'
 import { StatusLamp } from '@/components/StatusLamp'
+import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
+import {
+  buildSatelliteBusIngestTriagePrompt,
+  ingestActiveLabel,
+  ingestDisplayTagVariant,
+  SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
+  summarizeIngestServices,
+} from '@/lib/agent/satelliteBusIngestTriagePrompt'
 import {
   buildPayloadReadinessRows,
   type PayloadReadinessRow,
@@ -102,14 +115,24 @@ function renderText(value: unknown): string {
 function BusPageGroup({
   title,
   description,
+  sectionRef,
+  highlight,
   children,
 }: {
   title: string
   description?: string
+  sectionRef?: Ref<HTMLDivElement>
+  highlight?: boolean
   children: ReactNode
 }) {
   return (
-    <section className="satellite-bus-group flex flex-col gap-1.5">
+    <div
+      ref={sectionRef}
+      className={cn(
+        'satellite-bus-group flex flex-col gap-1.5 scroll-mt-2 rounded-sm transition-shadow',
+        highlight && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
+      )}
+    >
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <OpsSubsectionTitle className="m-0">{title}</OpsSubsectionTitle>
         {description != null && description !== '' && (
@@ -117,8 +140,45 @@ function BusPageGroup({
         )}
       </div>
       {children}
-    </section>
+    </div>
   )
+}
+
+function BusSummaryCard({
+  label,
+  signal,
+  headline,
+  onClick,
+}: {
+  label: string
+  signal: Signal
+  headline: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-w-[9rem] flex-1 flex-col gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+    >
+      <span className="flex items-center gap-1.5 text-[var(--text-dense-caption)] font-medium text-muted-foreground">
+        <StatusLamp value={signal} kind="reach" />
+        {label}
+      </span>
+      <span className="text-[var(--text-dense-meta)] leading-snug">{headline}</span>
+    </button>
+  )
+}
+
+function scrollToBusSection(
+  ref: RefObject<HTMLDivElement | null>,
+  setHighlight: (key: string | null) => void,
+  key: string,
+) {
+  if (ref.current == null) return
+  setHighlight(key)
+  ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  window.setTimeout(() => setHighlight(null), 1800)
 }
 
 type MonitorKvRow = { label: string; value: ReactNode }
@@ -189,31 +249,49 @@ export function SatelliteBusPage({
   onOpenTelemetry,
   onOpenPluginGallery,
   onOpenApiHealth,
+  ambientJobId,
+  onStartAgentJob,
 }: {
   onOpenCluster?: () => void
   onOpenTelemetry?: () => void
   onOpenPluginGallery?: () => void
   onOpenApiHealth?: () => void
-}) {
+} & AmbientAgentShellProps) {
+  const { canOperate } = usePlatformAuth()
   const [tradeEnv, setTradeEnv] = useState<TradeEnv>('stg')
+  const [highlightSection, setHighlightSection] = useState<string | null>(null)
   const ns = TRADE_NS[tradeEnv]
+  const monitorSectionRef = useRef<HTMLDivElement | null>(null)
   const socketSectionRef = useRef<HTMLDivElement | null>(null)
   const ingestSectionRef = useRef<HTMLDivElement | null>(null)
+  const tradeApisSectionRef = useRef<HTMLDivElement | null>(null)
+  const workersSectionRef = useRef<HTMLDivElement | null>(null)
+  const clusterSectionRef = useRef<HTMLDivElement | null>(null)
+
+  const focusRefs = useMemo(
+    () =>
+      ({
+        monitor: monitorSectionRef,
+        socket: socketSectionRef,
+        ingest: ingestSectionRef,
+        'trade-apis': tradeApisSectionRef,
+        workers: workersSectionRef,
+        cluster: clusterSectionRef,
+      }) as const,
+    [],
+  )
 
   useEffect(() => {
     const focus = consumeSatelliteBusFocus()
     if (focus == null) return
-    const target =
-      focus === 'socket'
-        ? socketSectionRef.current
-        : focus === 'ingest'
-          ? ingestSectionRef.current
-          : null
+    const target = focusRefs[focus]?.current
     if (target == null) return
     requestAnimationFrame(() => {
+      setHighlightSection(focus)
       target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      window.setTimeout(() => setHighlightSection(null), 1800)
     })
-  }, [])
+  }, [focusRefs])
 
   const matrixQuery = useQuery({
     queryKey: ['matrix', 'all'],
@@ -298,6 +376,93 @@ export function SatelliteBusPage({
       }
     })
   }, [ns, workloadsQuery.data?.workloads])
+
+  const ingestSummary = useMemo(
+    () => summarizeIngestServices(busDeep?.ingest.services ?? []),
+    [busDeep?.ingest.services],
+  )
+
+  const tradeApiSignal = useMemo((): Signal => {
+    if (tradeApi.total === 0) return 'unknown'
+    if (tradeApi.ok === tradeApi.total) return 'ok'
+    if (tradeApi.ok > 0) return 'degraded'
+    return 'fail'
+  }, [tradeApi.ok, tradeApi.total])
+
+  const workersSummary = useMemo(() => {
+    const rows = criticalProcesses
+    const ok = rows.filter(r => r.reachability === 'ok').length
+    const fail = rows.filter(r => r.reachability === 'fail').length
+    const degraded = rows.filter(r => r.reachability === 'degraded').length
+    let signal: Signal = 'ok'
+    if (fail > 0) signal = 'fail'
+    else if (degraded > 0) signal = 'degraded'
+    else if (rows.length === 0) signal = 'unknown'
+    const headline =
+      rows.length === 0
+        ? 'No workloads'
+        : fail + degraded > 0
+          ? `${ok}/${rows.length} ready · ${fail + degraded} attention`
+          : `${ok}/${rows.length} critical ready`
+    return { signal, headline, ok, total: rows.length }
+  }, [criticalProcesses])
+
+  const clusterDomainSummary = useMemo(() => {
+    const domains = (serviceReadinessQuery.data?.domains ?? []).filter(d =>
+      SATELLITE_DOMAIN_IDS.includes(d.id as (typeof SATELLITE_DOMAIN_IDS)[number]),
+    )
+    const ok = domains.filter(d => d.reachability === 'ok').length
+    const fail = domains.filter(d => d.reachability === 'fail').length
+    const degraded = domains.filter(d => d.reachability === 'degraded').length
+    let signal: Signal = 'ok'
+    if (fail > 0) signal = 'fail'
+    else if (degraded > 0) signal = 'degraded'
+    else if (domains.length === 0) signal = 'unknown'
+    const headline =
+      domains.length === 0
+        ? 'Domains loading'
+        : `${ok}/${domains.length} domains ok` +
+          (fail + degraded > 0 ? ` · ${fail + degraded} degraded` : '')
+    return { signal, headline }
+  }, [serviceReadinessQuery.data?.domains])
+
+  const socketHeadline = useMemo(() => {
+    const socket = busDeep?.monitor.socket
+    if (socket == null) return 'Monitor socket block unavailable'
+    const rows = [
+      socket.massive,
+      socket.ib_ingestor,
+      socket.ib_account_agent,
+      socket.ib_operator,
+      socket.platform_ib_gateway,
+    ]
+    const ok = rows.filter(r => r?.reachability === 'ok').length
+    return `${ok}/${rows.length} socket components ok`
+  }, [busDeep?.monitor.socket])
+
+  const aiIngestTriage = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
+    label: scopeToLabel(SATELLITE_BUS_INGEST_TRIAGE_SCOPE),
+    buildRequest: () => ({
+      prompt: buildSatelliteBusIngestTriagePrompt({
+        env: tradeEnv,
+        namespace: ns,
+        ingestHeadline: ingestSummary.headline,
+        socketHeadline,
+        busReachability: busDeep?.reachability,
+      }),
+    }),
+  })
+
+  const scrollTo = useCallback(
+    (key: keyof typeof focusRefs) => {
+      scrollToBusSection(focusRefs[key], setHighlightSection, key)
+    },
+    [focusRefs],
+  )
 
   const daemonRows = useMemo((): MonitorKvRow[] => {
     if (busDeepQuery.isLoading) return []
@@ -422,6 +587,17 @@ export function SatelliteBusPage({
           </DenseTag>
           <DenseTag variant="neutral">Probe {probeTime}</DenseTag>
           <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-0.5">
+            <AgentTriggerButton
+              label="Agent Triage"
+              size="xs"
+              pending={aiIngestTriage.isPending}
+              disabled={aiIngestTriage.disabled}
+              title={
+                aiIngestTriage.disabledReason ??
+                'Cross-check ingest display vs monitor.socket vs ib-gateway (D10 safe)'
+              }
+              onClick={() => aiIngestTriage.trigger()}
+            />
             {onOpenApiHealth != null && (
               <button type="button" className="focus-strip-link text-[var(--text-dense-caption)]" onClick={onOpenApiHealth}>
                 API Health
@@ -436,7 +612,41 @@ export function SatelliteBusPage({
         </div>
       </section>
 
-      <BusPageGroup title="Monitor probe" description="Daemon, socket, ingest from monitor /status + ops APIs">
+      <BusPageGroup title="Summary" description="Macro signals — click a row to jump to detail below">
+        <div className="flex flex-wrap gap-2">
+          <BusSummaryCard
+            label="Trade APIs"
+            signal={tradeApiSignal}
+            headline={`${tradeApi.ok}/${tradeApi.total} reachable`}
+            onClick={() => scrollTo('trade-apis')}
+          />
+          <BusSummaryCard
+            label="Market ingest"
+            signal={ingestSummary.signal}
+            headline={ingestSummary.headline}
+            onClick={() => scrollTo('ingest')}
+          />
+          <BusSummaryCard
+            label="Workers"
+            signal={workersSummary.signal}
+            headline={workersSummary.headline}
+            onClick={() => scrollTo('workers')}
+          />
+          <BusSummaryCard
+            label="Cluster domains"
+            signal={clusterDomainSummary.signal}
+            headline={clusterDomainSummary.headline}
+            onClick={() => scrollTo('cluster')}
+          />
+        </div>
+      </BusPageGroup>
+
+      <BusPageGroup
+        title="Monitor probe"
+        description="Daemon, socket, ingest from monitor /status + ops APIs"
+        sectionRef={monitorSectionRef}
+        highlight={highlightSection === 'monitor' || highlightSection === 'socket'}
+      >
         <div className="grid gap-1.5 lg:grid-cols-2">
           <OpsSection title="Daemon FSM" bodyPadding="none" overflow="hidden" className="shadow-none">
             <MonitorKvTable rows={daemonRows} loading={busDeepQuery.isLoading} />
@@ -477,7 +687,13 @@ export function SatelliteBusPage({
           </div>
         </div>
 
-        <div ref={ingestSectionRef} className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
+        <div
+          ref={ingestSectionRef}
+          className={cn(
+            'grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4 scroll-mt-2 rounded-sm transition-shadow',
+            highlightSection === 'ingest' && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
+          )}
+        >
           <OpsSection title="Celery" bodyPadding="none" overflow="hidden" className="shadow-none">
             <MonitorKvTable rows={celeryRows} loading={busDeepQuery.isLoading} />
           </OpsSection>
@@ -508,9 +724,21 @@ export function SatelliteBusPage({
                     <DenseTableRow key={svc.id}>
                       <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">{svc.id}</DenseTableCell>
                       <DenseTableCell>
-                        <StatusLamp value={svc.reachability} kind="reach" />
+                        <StatusLamp value={svc.reachability} kind="reach" />{' '}
+                        <span className="text-[var(--text-dense-caption)] text-muted-foreground">{renderText(svc.reachability)}</span>
                       </DenseTableCell>
-                      <DenseTableCell className="text-[var(--text-dense-caption)]">{renderText(svc.process_active)}</DenseTableCell>
+                      <DenseTableCell>
+                        <DenseTag variant={ingestDisplayTagVariant(svc.runtime_status)} className="mr-1">
+                          {ingestActiveLabel(svc)}
+                        </DenseTag>
+                        {svc.process_active != null &&
+                          svc.display_active != null &&
+                          svc.process_active !== svc.display_active && (
+                            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+                              systemd:{svc.process_active}
+                            </span>
+                          )}
+                      </DenseTableCell>
                     </DenseTableRow>
                   ))
                 )}
@@ -520,7 +748,12 @@ export function SatelliteBusPage({
         </div>
       </BusPageGroup>
 
-      <BusPageGroup title={`Namespace · ${ns}`} description="Critical workloads in selected trade namespace">
+      <BusPageGroup
+        title={`Namespace · ${ns}`}
+        description="Critical workloads in selected trade namespace"
+        sectionRef={workersSectionRef}
+        highlight={highlightSection === 'workers'}
+      >
         <OpsSection
           title="Critical processes"
           bodyPadding="none"
@@ -561,7 +794,23 @@ export function SatelliteBusPage({
         </OpsSection>
       </BusPageGroup>
 
-      <BusPageGroup title="Cluster readiness" description="Service domains · matrix L0 · observability">
+      <BusPageGroup
+        title="Cluster readiness"
+        description="Service domains · matrix L0 · observability"
+        sectionRef={clusterSectionRef}
+        highlight={highlightSection === 'cluster' || highlightSection === 'trade-apis'}
+      >
+        <div
+          ref={tradeApisSectionRef}
+          className={cn(
+            'scroll-mt-2 rounded-sm transition-shadow',
+            highlightSection === 'trade-apis' && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
+          )}
+        >
+          <OpsSection title="Payload readiness (matrix L0)" bodyPadding="none" overflow="hidden" className="shadow-none mb-1.5">
+            <PayloadReadinessTable rows={payloadRows} />
+          </OpsSection>
+        </div>
         <div className="grid gap-1.5 lg:grid-cols-2">
           <OpsSection title="Service domains" bodyPadding="none" overflow="hidden" className="shadow-none">
             {SATELLITE_DOMAIN_IDS.map(domainId => (
@@ -575,18 +824,17 @@ export function SatelliteBusPage({
               </div>
             ))}
           </OpsSection>
-          <OpsSection title="Payload readiness (matrix L0)" bodyPadding="none" overflow="hidden" className="shadow-none">
-            <PayloadReadinessTable rows={payloadRows} />
+          <OpsSection title="Observability" bodyPadding="none" overflow="hidden" className="shadow-none">
+            <SatelliteObservabilityStrip
+              metrics={metricsQuery.data}
+              observability={observabilityQuery.data}
+              metricsLoading={metricsQuery.isLoading}
+              observabilityLoading={observabilityQuery.isLoading}
+              onOpenCluster={onOpenCluster}
+              onOpenTelemetry={onOpenTelemetry}
+            />
           </OpsSection>
         </div>
-        <SatelliteObservabilityStrip
-          metrics={metricsQuery.data}
-          observability={observabilityQuery.data}
-          metricsLoading={metricsQuery.isLoading}
-          observabilityLoading={observabilityQuery.isLoading}
-          onOpenCluster={onOpenCluster}
-          onOpenTelemetry={onOpenTelemetry}
-        />
       </BusPageGroup>
     </div>
   )

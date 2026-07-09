@@ -49,6 +49,10 @@ export type OpsTaskStripsProps = {
   agentFixPending?: boolean
   agentFixDisabled?: boolean
   agentFixTitle?: string
+  onAgentTriage?: () => void
+  agentTriagePending?: boolean
+  agentTriageDisabled?: boolean
+  agentTriageTitle?: string
 }
 
 function OperateQueueSummary({ onNavigate }: { onNavigate: (tab: string) => void }) {
@@ -273,6 +277,10 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     agentFixPending,
     agentFixDisabled,
     agentFixTitle,
+    onAgentTriage,
+    agentTriagePending,
+    agentTriageDisabled,
+    agentTriageTitle,
   } = props
   const ops = mode.ops
   if (ops == null) return null
@@ -351,6 +359,10 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
               agentFixPending={agentFixPending}
               agentFixDisabled={agentFixDisabled}
               agentFixTitle={agentFixTitle}
+              onAgentTriage={onAgentTriage}
+              agentTriagePending={agentTriagePending}
+              agentTriageDisabled={agentTriageDisabled}
+              agentTriageTitle={agentTriageTitle}
             />
           </OpsSection>
         )}
