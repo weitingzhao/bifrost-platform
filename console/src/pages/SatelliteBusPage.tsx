@@ -36,8 +36,7 @@ import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   buildSatelliteBusIngestTriagePrompt,
-  ingestActiveLabel,
-  ingestDisplayTagVariant,
+  ingestRuntimeView,
   SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
   summarizeIngestServices,
 } from '@/lib/agent/satelliteBusIngestTriagePrompt'
@@ -45,6 +44,12 @@ import {
   buildPayloadReadinessRows,
   type PayloadReadinessRow,
 } from '@/lib/control-room/payloadReadiness'
+import {
+  buildSocketHealthRows,
+  summarizeSocketHealth,
+  type SocketHealthRow,
+  type SocketRequiredState,
+} from '@/lib/satellite/socketHealthSemantics'
 import { consumeSatelliteBusFocus } from '@/lib/task-mode/readinessChipActions'
 import { worst, type Signal } from '@/lib/control-room/missionSignals'
 
@@ -129,7 +134,7 @@ function BusPageGroup({
     <div
       ref={sectionRef}
       className={cn(
-        'satellite-bus-group flex flex-col gap-1.5 scroll-mt-2 rounded-sm transition-shadow',
+        'satellite-bus-group flex flex-col gap-1.5 rounded-sm transition-shadow',
         highlight && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
       )}
     >
@@ -148,36 +153,124 @@ function BusSummaryCard({
   label,
   signal,
   headline,
+  selected,
   onClick,
 }: {
   label: string
   signal: Signal
   headline: string
+  selected?: boolean
   onClick: () => void
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex min-w-[9rem] flex-1 flex-col gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+      aria-pressed={selected === true}
+      className={cn(
+        'flex min-w-[8.5rem] flex-1 flex-col gap-0.5 rounded-md border px-2 py-1.5 text-left transition-colors',
+        selected
+          ? 'border-[var(--ring)] bg-[var(--accent)]'
+          : 'border-[var(--border)] bg-[var(--secondary)] hover:bg-[var(--accent)]',
+      )}
     >
       <span className="flex items-center gap-1.5 text-[var(--text-dense-caption)] font-medium text-muted-foreground">
         <StatusLamp value={signal} kind="reach" />
         {label}
       </span>
-      <span className="text-[var(--text-dense-meta)] leading-snug">{headline}</span>
+      <span className="text-[var(--text-dense-caption)] leading-snug text-foreground/90">{headline}</span>
     </button>
   )
 }
 
+function runtimeToneClass(tone: 'ok' | 'warn' | 'fail' | 'muted'): string {
+  switch (tone) {
+    case 'ok':
+      return 'text-success'
+    case 'warn':
+      return 'text-warning'
+    case 'fail':
+      return 'text-danger'
+    default:
+      return 'text-muted-foreground'
+  }
+}
+
+function RequiredTag({ state }: { state: SocketRequiredState }) {
+  if (state === 'policy-off') {
+    return <DenseTag variant="neutral">policy-off</DenseTag>
+  }
+  if (state === 'optional') {
+    return <DenseTag variant="neutral">optional</DenseTag>
+  }
+  return <DenseTag variant="success">required</DenseTag>
+}
+
+function SocketHealthTable({ rows, layerLabel }: { rows: SocketHealthRow[]; layerLabel: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground">{layerLabel}</span>
+      <DenseDataTable>
+        <DenseTableHeader>
+          <DenseTableHeadRow>
+            <DenseTableHead>Service</DenseTableHead>
+            <DenseTableHead>Required</DenseTableHead>
+            <DenseTableHead>Reach</DenseTableHead>
+            <DenseTableHead>Detail</DenseTableHead>
+          </DenseTableHeadRow>
+        </DenseTableHeader>
+        <DenseTableBody>
+          {rows.map(row => (
+            <DenseTableRow key={row.id}>
+              <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">{row.label}</DenseTableCell>
+              <DenseTableCell>
+                <RequiredTag state={row.required} />
+              </DenseTableCell>
+              <DenseTableCell>
+                <StatusLamp
+                  value={row.required === 'policy-off' ? 'ok' : row.reach}
+                  kind="reach"
+                />{' '}
+                <span
+                  className={cn(
+                    'text-[var(--text-dense-caption)]',
+                    row.required === 'policy-off' ? 'text-muted-foreground' : '',
+                  )}
+                >
+                  {row.reachLabel}
+                </span>
+              </DenseTableCell>
+              <DenseTableCell className="max-w-[14rem] text-[var(--text-dense-caption)] text-muted-foreground">
+                {row.detail}
+              </DenseTableCell>
+            </DenseTableRow>
+          ))}
+        </DenseTableBody>
+      </DenseDataTable>
+    </div>
+  )
+}
+
+function updateSatelliteBusPageHeight(root: HTMLDivElement | null) {
+  if (root == null) return
+  const top = root.getBoundingClientRect().top
+  root.style.height = `calc(100dvh - ${Math.ceil(top)}px)`
+}
+
 function scrollToBusSection(
   ref: RefObject<HTMLDivElement | null>,
+  scrollContainerRef: RefObject<HTMLDivElement | null>,
   setHighlight: (key: string | null) => void,
   key: string,
 ) {
-  if (ref.current == null) return
+  const container = scrollContainerRef.current
+  const el = ref.current
+  if (container == null || el == null) return
   setHighlight(key)
-  ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const containerTop = container.getBoundingClientRect().top
+  const elTop = el.getBoundingClientRect().top
+  const nextTop = container.scrollTop + (elTop - containerTop) - 8
+  container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' })
   window.setTimeout(() => setHighlight(null), 1800)
 }
 
@@ -261,12 +354,29 @@ export function SatelliteBusPage({
   const [tradeEnv, setTradeEnv] = useState<TradeEnv>('stg')
   const [highlightSection, setHighlightSection] = useState<string | null>(null)
   const ns = TRADE_NS[tradeEnv]
+  const pageRootRef = useRef<HTMLDivElement | null>(null)
+  const detailScrollRef = useRef<HTMLDivElement | null>(null)
   const monitorSectionRef = useRef<HTMLDivElement | null>(null)
   const socketSectionRef = useRef<HTMLDivElement | null>(null)
   const ingestSectionRef = useRef<HTMLDivElement | null>(null)
   const tradeApisSectionRef = useRef<HTMLDivElement | null>(null)
   const workersSectionRef = useRef<HTMLDivElement | null>(null)
   const clusterSectionRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const root = pageRootRef.current
+    const update = () => updateSatelliteBusPageHeight(root)
+    update()
+    window.addEventListener('resize', update)
+    const ro = new ResizeObserver(update)
+    if (root?.parentElement != null) ro.observe(root.parentElement)
+    const chrome = document.querySelector('.console-shell-chrome')
+    if (chrome instanceof HTMLElement) ro.observe(chrome)
+    return () => {
+      window.removeEventListener('resize', update)
+      ro.disconnect()
+    }
+  }, [])
 
   const focusRefs = useMemo(
     () =>
@@ -284,12 +394,9 @@ export function SatelliteBusPage({
   useEffect(() => {
     const focus = consumeSatelliteBusFocus()
     if (focus == null) return
-    const target = focusRefs[focus]?.current
-    if (target == null) return
+    if (focusRefs[focus]?.current == null) return
     requestAnimationFrame(() => {
-      setHighlightSection(focus)
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      window.setTimeout(() => setHighlightSection(null), 1800)
+      scrollToBusSection(focusRefs[focus], detailScrollRef, setHighlightSection, focus)
     })
   }, [focusRefs])
 
@@ -426,19 +533,17 @@ export function SatelliteBusPage({
     return { signal, headline }
   }, [serviceReadinessQuery.data?.domains])
 
-  const socketHeadline = useMemo(() => {
-    const socket = busDeep?.monitor.socket
-    if (socket == null) return 'Monitor socket block unavailable'
-    const rows = [
-      socket.massive,
-      socket.ib_ingestor,
-      socket.ib_account_agent,
-      socket.ib_operator,
-      socket.platform_ib_gateway,
-    ]
-    const ok = rows.filter(r => r?.reachability === 'ok').length
-    return `${ok}/${rows.length} socket components ok`
-  }, [busDeep?.monitor.socket])
+  const socketHealth = useMemo(
+    () => buildSocketHealthRows(busDeep?.monitor.socket, tradeEnv, busDeep?.ingest.services),
+    [busDeep?.ingest.services, busDeep?.monitor.socket, tradeEnv],
+  )
+
+  const socketSummary = useMemo(
+    () => summarizeSocketHealth([...socketHealth.rocket, ...socketHealth.trade]),
+    [socketHealth],
+  )
+
+  const socketHeadline = socketSummary.headline
 
   const aiIngestTriage = useAmbientAgentTask({
     canOperate,
@@ -459,7 +564,7 @@ export function SatelliteBusPage({
 
   const scrollTo = useCallback(
     (key: keyof typeof focusRefs) => {
-      scrollToBusSection(focusRefs[key], setHighlightSection, key)
+      scrollToBusSection(focusRefs[key], detailScrollRef, setHighlightSection, key)
     },
     [focusRefs],
   )
@@ -558,7 +663,11 @@ export function SatelliteBusPage({
         : '—'
 
   return (
-    <div className="satellite-bus-page flex w-full min-w-0 flex-col gap-2">
+    <div
+      ref={pageRootRef}
+      className="satellite-bus-page flex w-full min-w-0 flex-col overflow-hidden"
+    >
+      <div className="flex shrink-0 flex-col gap-2">
       <PageHeader
         title="Bus Status"
         titleSize="default"
@@ -612,35 +721,55 @@ export function SatelliteBusPage({
         </div>
       </section>
 
-      <BusPageGroup title="Summary" description="Macro signals — click a row to jump to detail below">
-        <div className="flex flex-wrap gap-2">
+      <section className="page-section panel-elevated px-2.5 py-1.5">
+        <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <OpsSubsectionTitle className="m-0">Summary</OpsSubsectionTitle>
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+            Macro signals — click to jump · dock stays fixed
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <BusSummaryCard
+            label="Socket health"
+            signal={socketSummary.signal}
+            headline={socketHeadline}
+            selected={highlightSection === 'socket'}
+            onClick={() => scrollTo('socket')}
+          />
           <BusSummaryCard
             label="Trade APIs"
             signal={tradeApiSignal}
             headline={`${tradeApi.ok}/${tradeApi.total} reachable`}
+            selected={highlightSection === 'trade-apis'}
             onClick={() => scrollTo('trade-apis')}
           />
           <BusSummaryCard
             label="Market ingest"
             signal={ingestSummary.signal}
             headline={ingestSummary.headline}
+            selected={highlightSection === 'ingest'}
             onClick={() => scrollTo('ingest')}
           />
           <BusSummaryCard
             label="Workers"
             signal={workersSummary.signal}
             headline={workersSummary.headline}
+            selected={highlightSection === 'workers'}
             onClick={() => scrollTo('workers')}
           />
           <BusSummaryCard
             label="Cluster domains"
             signal={clusterDomainSummary.signal}
             headline={clusterDomainSummary.headline}
+            selected={highlightSection === 'cluster'}
             onClick={() => scrollTo('cluster')}
           />
         </div>
-      </BusPageGroup>
+      </section>
+      </div>
 
+      <div ref={detailScrollRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div className="flex flex-col gap-2 pb-2">
       <BusPageGroup
         title="Monitor probe"
         description="Daemon, socket, ingest from monitor /status + ops APIs"
@@ -653,47 +782,25 @@ export function SatelliteBusPage({
           </OpsSection>
 
           <div ref={socketSectionRef}>
-            <OpsSection title="Socket health" bodyPadding="none" overflow="hidden" className="shadow-none">
-              <DenseDataTable>
-                <DenseTableHeader>
-                  <DenseTableHeadRow>
-                    <DenseTableHead>Socket</DenseTableHead>
-                    <DenseTableHead>Reach</DenseTableHead>
-                    <DenseTableHead>Detail</DenseTableHead>
-                  </DenseTableHeadRow>
-                </DenseTableHeader>
-                <DenseTableBody>
-                  {([
-                    ['massive', busDeep?.monitor.socket.massive],
-                    ['ib_ingestor', busDeep?.monitor.socket.ib_ingestor],
-                    ['ib_account_agent', busDeep?.monitor.socket.ib_account_agent],
-                    ['ib_operator', busDeep?.monitor.socket.ib_operator],
-                    ['platform_ib_gateway', busDeep?.monitor.socket.platform_ib_gateway],
-                  ] as const).map(([name, row]) => (
-                    <DenseTableRow key={name}>
-                      <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">{name}</DenseTableCell>
-                      <DenseTableCell>
-                        <StatusLamp value={row?.reachability ?? 'unknown'} kind="reach" />{' '}
-                        <span className="text-[var(--text-dense-caption)]">{renderText(row?.reachability)}</span>
-                      </DenseTableCell>
-                      <DenseTableCell className="max-w-[12rem] truncate text-[var(--text-dense-caption)] text-muted-foreground">
-                        {renderText(row?.detail)}
-                      </DenseTableCell>
-                    </DenseTableRow>
-                  ))}
-                </DenseTableBody>
-              </DenseDataTable>
+            <OpsSection
+              title="Socket health"
+              bodyPadding="compact"
+              overflow="hidden"
+              className="shadow-none"
+              description="Rocket platform bus vs Trade env consumers · policy-off ≠ degraded"
+            >
+              <div className="flex flex-col gap-2">
+                <SocketHealthTable rows={socketHealth.rocket} layerLabel="Rocket · Platform socket bus (data/ib-gateway)" />
+                <SocketHealthTable
+                  rows={socketHealth.trade}
+                  layerLabel={`Trade · ${tradeEnv.toUpperCase()} consumers (${ns})`}
+                />
+              </div>
             </OpsSection>
           </div>
         </div>
 
-        <div
-          ref={ingestSectionRef}
-          className={cn(
-            'grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4 scroll-mt-2 rounded-sm transition-shadow',
-            highlightSection === 'ingest' && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
-          )}
-        >
+        <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
           <OpsSection title="Celery" bodyPadding="none" overflow="hidden" className="shadow-none">
             <MonitorKvTable rows={celeryRows} loading={busDeepQuery.isLoading} />
           </OpsSection>
@@ -703,44 +810,73 @@ export function SatelliteBusPage({
           <OpsSection title="Ops executor" bodyPadding="none" overflow="hidden" className="shadow-none">
             <MonitorKvTable rows={opsRows} loading={busDeepQuery.isLoading} />
           </OpsSection>
-          <OpsSection title="Market ingest" bodyPadding="none" overflow="hidden" className="shadow-none sm:col-span-2 xl:col-span-1">
+        </div>
+
+        <div
+          ref={ingestSectionRef}
+          className={cn(
+            'rounded-sm transition-shadow',
+            highlightSection === 'ingest' && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
+          )}
+        >
+          <OpsSection
+            title="Market ingest"
+            bodyPadding="none"
+            overflow="hidden"
+            className="shadow-none"
+            description="Runtime semantics · source of truth (not local systemd)"
+          >
             <DenseDataTable>
               <DenseTableHeader>
                 <DenseTableHeadRow>
-                  <DenseTableHead>Service</DenseTableHead>
-                  <DenseTableHead>Reach</DenseTableHead>
-                  <DenseTableHead>Active</DenseTableHead>
+                  <DenseTableHead className="w-[28%]">Service</DenseTableHead>
+                  <DenseTableHead className="w-[18%]">Reach</DenseTableHead>
+                  <DenseTableHead className="w-[22%]">Runtime</DenseTableHead>
+                  <DenseTableHead>Source</DenseTableHead>
                 </DenseTableHeadRow>
               </DenseTableHeader>
               <DenseTableBody>
                 {(busDeep?.ingest.services ?? []).length === 0 ? (
                   <DenseTableRow>
-                    <DenseTableCell colSpan={3} className="text-[var(--muted-foreground)]">
+                    <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
                       {busDeepQuery.isLoading ? 'Loading…' : '—'}
                     </DenseTableCell>
                   </DenseTableRow>
                 ) : (
-                  busDeep?.ingest.services.map(svc => (
-                    <DenseTableRow key={svc.id}>
-                      <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">{svc.id}</DenseTableCell>
-                      <DenseTableCell>
-                        <StatusLamp value={svc.reachability} kind="reach" />{' '}
-                        <span className="text-[var(--text-dense-caption)] text-muted-foreground">{renderText(svc.reachability)}</span>
-                      </DenseTableCell>
-                      <DenseTableCell>
-                        <DenseTag variant={ingestDisplayTagVariant(svc.runtime_status)} className="mr-1">
-                          {ingestActiveLabel(svc)}
-                        </DenseTag>
-                        {svc.process_active != null &&
-                          svc.display_active != null &&
-                          svc.process_active !== svc.display_active && (
-                            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-                              systemd:{svc.process_active}
+                  busDeep?.ingest.services.map(svc => {
+                    const view = ingestRuntimeView(svc)
+                    return (
+                      <DenseTableRow key={svc.id}>
+                        <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)] font-medium">
+                          {svc.id}
+                        </DenseTableCell>
+                        <DenseTableCell>
+                          <StatusLamp value={svc.reachability} kind="reach" />{' '}
+                          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+                            {renderText(svc.reachability)}
+                          </span>
+                        </DenseTableCell>
+                        <DenseTableCell>
+                          <span
+                            className={cn(
+                              'font-mono-tabular text-[var(--text-dense-meta)]',
+                              runtimeToneClass(view.tone),
+                            )}
+                          >
+                            {view.runtime}
+                          </span>
+                          {view.note != null && (
+                            <span className="ml-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
+                              {view.note}
                             </span>
                           )}
-                      </DenseTableCell>
-                    </DenseTableRow>
-                  ))
+                        </DenseTableCell>
+                        <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)] text-muted-foreground">
+                          {view.source}
+                        </DenseTableCell>
+                      </DenseTableRow>
+                    )
+                  })
                 )}
               </DenseTableBody>
             </DenseDataTable>
@@ -803,7 +939,7 @@ export function SatelliteBusPage({
         <div
           ref={tradeApisSectionRef}
           className={cn(
-            'scroll-mt-2 rounded-sm transition-shadow',
+            'rounded-sm transition-shadow',
             highlightSection === 'trade-apis' && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
           )}
         >
@@ -836,6 +972,8 @@ export function SatelliteBusPage({
           </OpsSection>
         </div>
       </BusPageGroup>
+      </div>
+      </div>
     </div>
   )
 }

@@ -380,6 +380,43 @@ func socketComponentDeep(v any) SocketComponentDeep {
 			Detail:       "not reported",
 		}
 	}
+
+	if wsMode, _ := m["ws_mode"].(string); strings.EqualFold(strings.TrimSpace(wsMode), "rest_only") {
+		return SocketComponentDeep{
+			Reachability: probe.ReachOK,
+			Detail:       "policy-off · REST-only (ws not required)",
+			Raw:          m,
+		}
+	}
+
+	transport, _ := m["transport"].(string)
+	healthSource, _ := m["health_source"].(string)
+	isPlatformGateway := strings.EqualFold(strings.TrimSpace(transport), "platform_gateway") ||
+		strings.EqualFold(strings.TrimSpace(healthSource), "platform_ib_gateway")
+
+	if isPlatformGateway {
+		connected, _ := m["connected"].(bool)
+		serviceAlive, _ := m["service_alive"].(bool)
+		if connected || serviceAlive {
+			lamp, _ := m["lamp"].(string)
+			reach := probe.ReachOK
+			if reachFromLamp(lamp) == probe.ReachDegraded {
+				reach = probe.ReachDegraded
+			}
+			return SocketComponentDeep{
+				Reachability: reach,
+				Lamp:         lamp,
+				Detail:       socketComponentDetail(m, reach),
+				Raw:          m,
+			}
+		}
+	}
+
+	if components, ok := m["components"].(map[string]any); ok && len(components) > 0 {
+		lamp, _ := m["lamp"].(string)
+		return socketPlatformGatewayAggregateDeep(m, lamp, components)
+	}
+
 	lamp, _ := m["lamp"].(string)
 	selfCheck, _ := m["self_check"].(string)
 	reaches := []probe.Reachability{
@@ -399,6 +436,54 @@ func socketComponentDeep(v any) SocketComponentDeep {
 		Lamp:         lamp,
 		SelfCheck:    selfCheck,
 		Detail:       socketComponentDetail(m, reach),
+		Raw:          m,
+	}
+}
+
+func socketPlatformGatewayAggregateDeep(m map[string]any, lamp string, components map[string]any) SocketComponentDeep {
+	liveCount, total := 0, 0
+	for _, block := range components {
+		bm := mapFromAny(block)
+		if bm == nil {
+			continue
+		}
+		total++
+		if c, hasConnected := bm["connected"].(bool); hasConnected && c {
+			liveCount++
+			continue
+		}
+		if a, hasAlive := bm["service_alive"].(bool); hasAlive && a {
+			liveCount++
+		}
+	}
+
+	var reach probe.Reachability
+	detail := socketComponentDetail(m, reach)
+	if title, _ := m["title"].(string); strings.TrimSpace(title) != "" {
+		detail = strings.TrimSpace(title)
+	}
+	switch {
+	case total > 0 && liveCount == total:
+		reach = probe.ReachOK
+		if detail == "" || detail == string(reach) {
+			detail = "Platform IB Gateway healthy @ redis-ib"
+		}
+	case liveCount > 0:
+		reach = probe.ReachDegraded
+		if detail == "" || detail == string(reach) {
+			detail = fmt.Sprintf("%d/%d components live · check TWS slots", liveCount, total)
+		}
+	default:
+		reach = probe.ReachFail
+		if detail == "" || detail == string(reach) {
+			detail = "Platform IB Gateway unreachable @ redis-ib"
+		}
+	}
+
+	return SocketComponentDeep{
+		Reachability: reach,
+		Lamp:         lamp,
+		Detail:       detail,
 		Raw:          m,
 	}
 }
