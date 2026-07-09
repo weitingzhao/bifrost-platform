@@ -10,6 +10,60 @@ export function ingestActiveLabel(svc: SatelliteBusIngestService): string {
   return svc.process_active ?? 'unknown'
 }
 
+/** Compact engineer-facing runtime / source for Bus Status Market ingest table. */
+export type IngestRuntimeView = {
+  runtime: string
+  source: string
+  note?: string
+  tone: 'ok' | 'warn' | 'fail' | 'muted'
+}
+
+export function ingestRuntimeView(svc: SatelliteBusIngestService): IngestRuntimeView {
+  const status = (svc.runtime_status ?? '').toLowerCase()
+  const display = (svc.display_active ?? svc.process_active ?? '').toLowerCase()
+
+  let source = '—'
+  if (
+    svc.platform_gateway_managed ||
+    display.includes('platform-ib-gateway') ||
+    display.includes('ib-gateway')
+  ) {
+    source = 'ib-gateway'
+  } else if (svc.runtime_externally_managed || display.includes('managed@k8s')) {
+    source = 'k8s'
+  } else if (svc.runtime_kind === 'kubernetes') {
+    source = 'k8s'
+  } else if (svc.runtime_kind === 'subprocess' || svc.runtime_kind === 'systemd') {
+    source = 'local'
+  } else if (svc.runtime_kind != null && svc.runtime_kind.trim() !== '') {
+    source = svc.runtime_kind
+  }
+
+  if (status === 'policy-off') {
+    let note: string | undefined
+    if (display.includes('ws-disabled') || display.includes('rest-only')) note = 'REST-only'
+    else if (display.includes('daemon scale')) note = 'daemon×0'
+    return { runtime: 'policy-off', source, note, tone: 'muted' }
+  }
+  if (status === 'active') {
+    return { runtime: 'active', source, tone: 'ok' }
+  }
+  if (status === 'degraded') {
+    const note = display.includes('offline') ? 'offline' : undefined
+    return { runtime: 'degraded', source, note, tone: 'warn' }
+  }
+  if (status === 'inactive') {
+    const note = display.includes('offline') ? 'offline' : undefined
+    return { runtime: 'inactive', source, note, tone: 'fail' }
+  }
+
+  // Fallback when API has not yet deployed runtime_status.
+  if (svc.reachability === 'ok') return { runtime: 'active', source, tone: 'ok' }
+  if (svc.reachability === 'degraded') return { runtime: 'degraded', source, tone: 'warn' }
+  if (svc.reachability === 'fail') return { runtime: 'inactive', source, tone: 'fail' }
+  return { runtime: svc.process_active ?? 'unknown', source, tone: 'muted' }
+}
+
 export function ingestDisplayTagVariant(
   runtimeStatus: string | undefined,
 ): 'success' | 'warning' | 'neutral' | 'danger' {
@@ -60,7 +114,16 @@ export function summarizeIngestServices(services: SatelliteBusIngestService[]): 
       degraded += 1
       continue
     }
-    if (status === 'inactive' || svc.reachability === 'fail') {
+    if (status === 'inactive') {
+      // Platform-gateway consumer marked offline in ops API while monitor may still show connected.
+      if (svc.platform_gateway_managed && svc.reachability !== 'fail') {
+        degraded += 1
+        continue
+      }
+      inactive += 1
+      continue
+    }
+    if (svc.reachability === 'fail') {
       inactive += 1
       continue
     }

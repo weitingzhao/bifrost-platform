@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -88,6 +89,12 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 	if resp.Ingest.Reachability != probe.ReachOK {
 		t.Fatalf("expected ingest ok with semantic runtime_status rows, got %s", resp.Ingest.Reachability)
 	}
+	if resp.Monitor.Socket.Massive.Reachability != probe.ReachOK {
+		t.Fatalf("expected massive policy-off ok, got %s", resp.Monitor.Socket.Massive.Reachability)
+	}
+	if resp.Monitor.Socket.IBIngestor.Reachability != probe.ReachDegraded {
+		t.Fatalf("expected ib_ingestor degraded from lamp, got %s", resp.Monitor.Socket.IBIngestor.Reachability)
+	}
 	if resp.Ingest.Services[1].DisplayActive != "managed@platform-ib-gateway" {
 		t.Fatalf("expected display_active passthrough, got %q", resp.Ingest.Services[1].DisplayActive)
 	}
@@ -151,5 +158,34 @@ func TestBusDeepAllHealthy(t *testing.T) {
 	}
 	if resp.Ingest.Reachability != probe.ReachOK {
 		t.Fatalf("expected ingest ok, got %s", resp.Ingest.Reachability)
+	}
+}
+
+func TestSocketComponentDeepPlatformGatewayConnected(t *testing.T) {
+	raw := map[string]any{
+		"connected":     true,
+		"transport":     "platform_gateway",
+		"health_source": "platform_ib_gateway",
+		"status":        "connected",
+	}
+	got := socketComponentDeep(raw)
+	if got.Reachability != probe.ReachOK {
+		t.Fatalf("expected ok when platform_gateway connected, got %s", got.Reachability)
+	}
+}
+
+func TestSocketComponentDeepMassiveRestOnly(t *testing.T) {
+	raw := map[string]any{
+		"ws_mode":       "rest_only",
+		"ws_connected":  false,
+		"configured":    false,
+		"reachability":  "unknown",
+	}
+	got := socketComponentDeep(raw)
+	if got.Reachability != probe.ReachOK {
+		t.Fatalf("expected policy-off ok for rest_only, got %s", got.Reachability)
+	}
+	if !strings.Contains(got.Detail, "policy-off") {
+		t.Fatalf("expected policy-off detail, got %q", got.Detail)
 	}
 }
