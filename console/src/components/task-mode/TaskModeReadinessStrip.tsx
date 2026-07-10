@@ -50,9 +50,10 @@ type ReadinessChipProps = {
   signal: Signal
   detail: string
   onDrillDown?: () => void
+  title?: string
 }
 
-function ReadinessChip({ label, signal, detail, onDrillDown }: ReadinessChipProps) {
+function ReadinessChip({ label, signal, detail, onDrillDown, title }: ReadinessChipProps) {
   const actionable = signal !== 'ok' && onDrillDown != null
   const inner = (
     <>
@@ -64,13 +65,17 @@ function ReadinessChip({ label, signal, detail, onDrillDown }: ReadinessChipProp
     </>
   )
   if (!actionable) {
-    return <div className="rounded border border-border/60 bg-card px-2 py-1.5">{inner}</div>
+    return (
+      <div className="rounded border border-border/60 bg-card px-2 py-1.5" title={title}>
+        {inner}
+      </div>
+    )
   }
   return (
     <button
       type="button"
       className="w-full rounded border border-border/60 bg-card px-2 py-1.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
-      title={`Drill down: ${label}`}
+      title={title ?? `Drill down: ${label}`}
       onClick={onDrillDown}
     >
       {inner}
@@ -399,12 +404,12 @@ export function useSatelliteProdReadiness(enabled = true) {
     isLoading,
     prodDisabledReason: prodBlocked ? 'Prod readiness blocked — fix environment first' : undefined,
     fixSignals: [
-      { label: 'K8s · Trade PROD NS', signal: k8s.signal, detail: k8s.detail },
-      { label: 'PG / Redis', signal: datastore.signal, detail: datastore.detail },
-      { label: 'IB socket', signal: ib.signal, detail: ib.detail },
-      { label: 'Trade APIs', signal: tradeApis.signal, detail: tradeApis.detail },
-      { label: 'Trade prod matrix', signal: tradeSnapshot.signal, detail: tradeSnapshot.detail },
-      { label: 'PROD release gate', signal: gate.signal, detail: gate.detail },
+      { label: 'Trade · K8s PROD', signal: k8s.signal, detail: k8s.detail },
+      { label: 'Ground · PG / Redis', signal: datastore.signal, detail: datastore.detail },
+      { label: 'Rocket · IB socket', signal: ib.signal, detail: ib.detail },
+      { label: 'Trade · APIs PROD', signal: tradeApis.signal, detail: tradeApis.detail },
+      { label: 'Trade · PROD matrix', signal: tradeSnapshot.signal, detail: tradeSnapshot.detail },
+      { label: 'Trade · PROD gate', signal: gate.signal, detail: gate.detail },
     ] as ProdFixSignal[],
     prodNamespace: PROD_NS,
     stgNamespace: STG_NS,
@@ -652,17 +657,17 @@ export function useSatelliteDeployOverall(enabled = true): LaunchViewOverall {
     prodGateQ.isLoading
 
   const fixSignals: ProdFixSignal[] = [
-    { label: 'Cluster · infra', signal: clusterInfra.signal, detail: clusterInfra.detail },
-    { label: 'STG · K8s NS', signal: stgK8sNs.signal, detail: stgK8sNs.detail },
-    { label: 'STG · PG / Redis', signal: stgDatastore.signal, detail: stgDatastore.detail },
-    { label: 'STG · IB socket', signal: stgIb.signal, detail: stgIb.detail },
-    { label: 'STG · Trade APIs', signal: stgTradeApis.signal, detail: stgTradeApis.detail },
-    { label: 'PROD · K8s NS', signal: prodK8sNs.signal, detail: prodK8sNs.detail },
-    { label: 'PROD · PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
-    { label: 'PROD · IB socket', signal: prodIb.signal, detail: prodIb.detail },
-    { label: 'PROD · Trade APIs', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
-    { label: 'PROD · Trade matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
-    { label: 'PROD · Release gate', signal: prodGate.signal, detail: prodGate.detail },
+    { label: 'Ground · Cluster infra', signal: clusterInfra.signal, detail: clusterInfra.detail },
+    { label: 'Trade · K8s STG', signal: stgK8sNs.signal, detail: stgK8sNs.detail },
+    { label: 'Ground · PG / Redis STG', signal: stgDatastore.signal, detail: stgDatastore.detail },
+    { label: 'Rocket · IB socket STG', signal: stgIb.signal, detail: stgIb.detail },
+    { label: 'Trade · APIs STG', signal: stgTradeApis.signal, detail: stgTradeApis.detail },
+    { label: 'Trade · K8s PROD', signal: prodK8sNs.signal, detail: prodK8sNs.detail },
+    { label: 'Ground · PG / Redis PROD', signal: prodDatastore.signal, detail: prodDatastore.detail },
+    { label: 'Rocket · IB socket PROD', signal: prodIb.signal, detail: prodIb.detail },
+    { label: 'Trade · APIs PROD', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
+    { label: 'Trade · PROD matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
+    { label: 'Trade · PROD gate', signal: prodGate.signal, detail: prodGate.detail },
   ]
 
   return { overall, stgOverall, prodOverall, isLoading, fixSignals }
@@ -746,13 +751,13 @@ function RocketReadinessStrip({
 
   const stgChips: EnvChip[] = summaryColumn
     ? [
-        { label: 'K8s · STG NS', signal: k8sStg.signal, detail: k8sStg.detail },
+        { label: 'Rocket · K8s STG', signal: k8sStg.signal, detail: k8sStg.detail },
         { label: 'CI/CD', signal: cicdSignal, detail: cicdDetail },
         { label: 'Self-health STG', signal: selfStg.signal, detail: selfStg.detail },
         { label: 'STG gate', signal: stgGate.signal, detail: stgGate.detail },
       ]
     : [
-        { label: 'K8s · Platform STG NS', signal: k8sStg.signal, detail: k8sStg.detail },
+        { label: 'Rocket · K8s STG', signal: k8sStg.signal, detail: k8sStg.detail },
         { label: 'CI/CD', signal: cicdSignal, detail: cicdDetail },
         { label: 'Self-health STG', signal: selfStg.signal, detail: selfStg.detail },
         { label: 'STG release gate', signal: stgGate.signal, detail: stgGate.detail },
@@ -783,7 +788,7 @@ function RocketReadinessStrip({
         compact={compact}
         summaryColumn={summaryColumn}
         chips={[
-          { label: 'K8s · PROD NS', signal: k8sProd.signal, detail: k8sProd.detail },
+          { label: 'Rocket · K8s PROD', signal: k8sProd.signal, detail: k8sProd.detail },
           { label: 'Self-health PROD', signal: selfProd.signal, detail: selfProd.detail },
           { label: 'PROD gate', signal: prodGate.signal, detail: prodGate.detail },
           { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
@@ -945,18 +950,18 @@ function SatelliteReadinessStrip({
 
   const prodChips: EnvChip[] = summaryColumn
     ? [
-        { label: 'K8s · PROD NS', signal: prodK8s.signal, detail: prodK8s.detail },
-        { label: 'PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
-        { label: 'IB socket', signal: prodIb.signal, detail: prodIb.detail },
-        { label: 'Trade APIs', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
+        { label: 'Trade · K8s PROD', signal: prodK8s.signal, detail: prodK8s.detail },
+        { label: 'Ground · PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
+        { label: 'Rocket · IB socket', signal: prodIb.signal, detail: prodIb.detail },
+        { label: 'Trade · APIs PROD', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
       ]
     : [
-        { label: 'K8s · PROD NS', signal: prodK8s.signal, detail: prodK8s.detail },
-        { label: 'PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
-        { label: 'IB socket', signal: prodIb.signal, detail: prodIb.detail },
-        { label: 'Trade APIs', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
-        { label: 'Trade prod matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
-        { label: 'PROD release gate', signal: prodGate.signal, detail: prodGate.detail },
+        { label: 'Trade · K8s PROD', signal: prodK8s.signal, detail: prodK8s.detail },
+        { label: 'Ground · PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
+        { label: 'Rocket · IB socket', signal: prodIb.signal, detail: prodIb.detail },
+        { label: 'Trade · APIs PROD', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
+        { label: 'Trade · PROD matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
+        { label: 'Trade · PROD gate', signal: prodGate.signal, detail: prodGate.detail },
       ]
 
   return (
@@ -970,10 +975,10 @@ function SatelliteReadinessStrip({
         compact={compact}
         summaryColumn={summaryColumn}
         chips={[
-          { label: 'K8s · STG NS', signal: stgK8s.signal, detail: stgK8s.detail },
-          { label: 'PG / Redis', signal: stgDatastore.signal, detail: stgDatastore.detail },
-          { label: 'IB socket', signal: stgIb.signal, detail: stgIb.detail },
-          { label: 'Trade APIs', signal: stgTradeApis.signal, detail: stgTradeApis.detail },
+          { label: 'Trade · K8s STG', signal: stgK8s.signal, detail: stgK8s.detail },
+          { label: 'Ground · PG / Redis', signal: stgDatastore.signal, detail: stgDatastore.detail },
+          { label: 'Rocket · IB socket', signal: stgIb.signal, detail: stgIb.detail },
+          { label: 'Trade · APIs STG', signal: stgTradeApis.signal, detail: stgTradeApis.detail },
         ]}
         linkLabel="Satellite Bus →"
         onLink={() => onNavigate('satellite-bus')}
@@ -1124,9 +1129,24 @@ export function DailyOpsMissionStrip({ compact = false }: { compact?: boolean })
         </DenseTag>
       </div>
       <div className={`mt-2 grid gap-2 ${compact ? 'grid-cols-1' : 'sm:grid-cols-3'}`}>
-        <ReadinessChip label="Rocket" signal={snapshot.rocketOverall} detail={snapshot.release.detail} />
-        <ReadinessChip label="Payload" signal={snapshot.payloadOverall} detail={snapshot.tradeProd.detail} />
-        <ReadinessChip label="Infra" signal={snapshot.infra.signal} detail={snapshot.infra.detail} />
+        <ReadinessChip
+          label="Rocket"
+          signal={snapshot.rocketOverall}
+          detail={snapshot.release.detail}
+          title="Rocket scope — Platform release, IB Gateway, supply chain"
+        />
+        <ReadinessChip
+          label="Payload"
+          signal={snapshot.payloadOverall}
+          detail={snapshot.tradeProd.detail}
+          title="Trade scope — per-env APIs, sockets, prod matrix"
+        />
+        <ReadinessChip
+          label="Infra"
+          signal={snapshot.infra.signal}
+          detail={snapshot.infra.detail}
+          title="Ground scope — cluster domains, PG/Redis, observability"
+        />
       </div>
     </div>
   )

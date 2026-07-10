@@ -21,6 +21,7 @@ interface ClusterServiceReadinessPanelProps {
   compact?: boolean
   /** When set, show only this domain and auto-expand dependencies. */
   domainFilter?: string
+  variant?: 'elevated' | 'flat'
 }
 
 function statusVariant(status: ServiceDomainStatus | string): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -75,6 +76,7 @@ export function ClusterServiceReadinessPanel({
   isLoading,
   compact = false,
   domainFilter,
+  variant = 'elevated',
 }: ClusterServiceReadinessPanelProps) {
   const qc = useQueryClient()
   const fetching = useIsFetching({ queryKey: ['cluster', 'service-readiness'] }) > 0
@@ -97,6 +99,7 @@ export function ClusterServiceReadinessPanel({
 
   return (
     <OpsSection
+      variant={variant}
       title={filteredDomain != null ? filteredDomain.label : 'Service readiness'}
       description={
         isFiltered

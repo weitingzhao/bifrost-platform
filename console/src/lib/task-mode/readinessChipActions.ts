@@ -11,7 +11,7 @@ export type ReadinessChipAction = {
   label: string
   tabId?: string
   /** Satellite Bus section scroll target */
-  busFocus?: 'socket' | 'ingest' | 'monitor' | 'trade-apis' | 'workers' | 'cluster'
+  busFocus?: 'rocket' | 'socket' | 'ingest' | 'monitor' | 'trade-apis' | 'workers' | 'cluster'
   actuation?: ReadinessActuation
   requiresOperate?: boolean
 }
@@ -26,17 +26,31 @@ const TRADE_NS: Record<'stg' | 'prod', string> = {
   prod: 'bifrost-prod',
 }
 
+function chipLabelNorm(chipLabel: string): string {
+  return chipLabel.toLowerCase()
+}
+
+function chipMatchesTradeApis(label: string): boolean {
+  return label.includes('trade apis') || (label.includes('trade') && label.includes('apis'))
+}
+
 /** Primary drill-down when operator clicks a failing readiness chip. */
 export function primaryChipNavigation(
   chipLabel: string,
   ctx: ReadinessChipContext,
 ): { tabId: string; busFocus?: ReadinessChipAction['busFocus'] } | null {
-  const label = chipLabel.toLowerCase()
+  const label = chipLabelNorm(chipLabel)
   if (label.includes('ib socket')) {
-    return { tabId: 'satellite-bus', busFocus: 'socket' }
+    return { tabId: 'satellite-bus', busFocus: 'rocket' }
   }
-  if (label.includes('pg / redis') || label.includes('trade apis')) {
-    return { tabId: 'satellite-bus' }
+  if (label.includes('pg / redis')) {
+    return { tabId: 'satellite-bus', busFocus: 'cluster' }
+  }
+  if (chipMatchesTradeApis(label)) {
+    return { tabId: 'satellite-bus', busFocus: 'trade-apis' }
+  }
+  if (label.includes('trade prod matrix') || label.includes('prod matrix')) {
+    return { tabId: 'satellite-bus', busFocus: 'socket' }
   }
   if (label.includes('k8s')) {
     return { tabId: 'cluster' }
@@ -58,7 +72,7 @@ export function readinessChipFixActions(
 ): ReadinessChipAction[] {
   if (signal === 'ok') return []
 
-  const label = chipLabel.toLowerCase()
+  const label = chipLabelNorm(chipLabel)
   const actions: ReadinessChipAction[] = []
   const tradeEnv = ctx.env === 'prod' ? 'prod' : ctx.env === 'stg' ? 'stg' : null
   const tradeNs = tradeEnv != null ? TRADE_NS[tradeEnv] : null
@@ -72,7 +86,8 @@ export function readinessChipFixActions(
   }
 
   if (label.includes('ib socket') && tradeNs != null) {
-    pushNavigate('satellite-bus', 'Socket health', 'socket')
+    pushNavigate('satellite-bus', 'Rocket IB bus', 'rocket')
+    pushNavigate('satellite-bus', 'Socket matrix', 'socket')
     pushNavigate('plugin-gallery', 'IB Gateway plugin')
     actions.push({
       kind: 'actuate',
@@ -90,14 +105,19 @@ export function readinessChipFixActions(
   }
 
   if (label.includes('pg / redis')) {
-    pushNavigate('satellite-bus', 'Bus + matrix')
+    pushNavigate('satellite-bus', 'Ground cluster', 'cluster')
     pushNavigate('cluster', 'Datastore domains')
     return actions
   }
 
-  if (label.includes('trade apis')) {
-    pushNavigate('satellite-bus', 'API reachability')
+  if (chipMatchesTradeApis(label)) {
+    pushNavigate('satellite-bus', 'API reachability', 'trade-apis')
     pushNavigate('api-health', 'API health')
+    return actions
+  }
+
+  if (label.includes('trade prod matrix') || label.includes('prod matrix')) {
+    pushNavigate('satellite-bus', 'Socket matrix', 'socket')
     return actions
   }
 
@@ -147,7 +167,7 @@ export function setSatelliteBusFocus(focus: ReadinessChipAction['busFocus'] | un
 export function consumeSatelliteBusFocus(): ReadinessChipAction['busFocus'] | null {
   const raw = sessionStorage.getItem(SATELLITE_BUS_FOCUS_KEY)
   sessionStorage.removeItem(SATELLITE_BUS_FOCUS_KEY)
-  if (raw === 'socket' || raw === 'ingest' || raw === 'monitor' || raw === 'trade-apis' || raw === 'workers' || raw === 'cluster') {
+  if (raw === 'rocket' || raw === 'socket' || raw === 'ingest' || raw === 'monitor' || raw === 'trade-apis' || raw === 'workers' || raw === 'cluster') {
     return raw
   }
   return null

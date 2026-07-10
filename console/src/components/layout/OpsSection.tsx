@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@bifrost/ui'
 
 export type OpsSectionBodyPadding = 'none' | 'compact' | 'default'
+export type OpsSectionVariant = 'elevated' | 'flat'
 
 export interface OpsSectionProps {
   /** Uppercase section label — same style as CI/CD dual track */
@@ -18,6 +19,8 @@ export interface OpsSectionProps {
   bodyClassName?: string
   overflow?: 'hidden' | 'visible' | 'clip-x'
   bodyPadding?: OpsSectionBodyPadding
+  /** elevated = panel card; flat = borderless inner block (e.g. inside BusPageGroup) */
+  variant?: OpsSectionVariant
 }
 
 const bodyPaddingClass: Record<OpsSectionBodyPadding, string> = {
@@ -46,6 +49,7 @@ export function OpsSection({
   bodyClassName,
   overflow = 'visible',
   bodyPadding = 'none',
+  variant = 'elevated',
 }: OpsSectionProps) {
   const hasBody = children != null
   const showHeader = title != null || description != null || actions != null || leading != null
@@ -53,7 +57,9 @@ export function OpsSection({
   return (
     <section
       className={cn(
-        'page-section panel-elevated ops-section',
+        'page-section ops-section',
+        variant === 'elevated' && 'panel-elevated',
+        variant === 'flat' && 'ops-section--flat',
         overflow === 'hidden' && 'overflow-hidden',
         overflow === 'visible' && 'overflow-visible',
         overflow === 'clip-x' && 'ops-section--clip-x',
