@@ -64,7 +64,8 @@ export const PROMOTE_TIER_B_CHECKS = [
 ] as const
 
 function prodLampFromPromote(promote: PromoteStatus): Signal {
-  if (promote.ready) return 'ok'
+  // Narrative-only — never paint success green that competes with live readiness.
+  if (promote.ready) return 'unknown'
   if (promote.blockedByDecision || promote.prodFails) return 'fail'
   return 'degraded'
 }
@@ -77,7 +78,7 @@ function stgLampFromRelease(stg: StgReleaseStatus): Signal {
 
 /** Same verdict strings as PromotePage TrackSummary + banner. */
 export function promoteProdHeadline(promote: PromoteStatus): string {
-  return promote.ready ? 'Promote ready (narrative)' : 'Promote blocked'
+  return promote.ready ? 'Spine promote: ready (narrative)' : 'Spine promote: blocked'
 }
 
 export function promoteProdDetail(promote: PromoteStatus): string {

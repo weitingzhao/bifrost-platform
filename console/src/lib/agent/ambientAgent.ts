@@ -8,6 +8,8 @@ export type AmbientAgentJob = {
 
 export type AmbientAgentShellProps = {
   ambientJobId?: string | null
+  /** Scope of the ambient job (e.g. trade-deploy) — used to open Launch Live View. */
+  ambientJobScope?: string | null
   onStartAgentJob?: (job: AmbientAgentJob) => void
 }
 

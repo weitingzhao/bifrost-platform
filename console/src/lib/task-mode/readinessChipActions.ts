@@ -12,6 +12,8 @@ export type ReadinessChipAction = {
   tabId?: string
   /** Satellite Bus section scroll target */
   busFocus?: 'rocket' | 'socket' | 'ingest' | 'monitor' | 'trade-apis' | 'workers' | 'cluster'
+  /** Prefill Satellite API Health env when navigating there */
+  apiEnv?: 'dev' | 'stg' | 'prod'
   actuation?: ReadinessActuation
   requiresOperate?: boolean
 }
@@ -34,23 +36,41 @@ function chipMatchesTradeApis(label: string): boolean {
   return label.includes('trade apis') || (label.includes('trade') && label.includes('apis'))
 }
 
-/** Primary drill-down when operator clicks a failing readiness chip. */
+export type ChipNavigation = {
+  tabId: string
+  busFocus?: ReadinessChipAction['busFocus']
+  /** Prefill Satellite API Health env segment when tabId is satellite-api. */
+  apiEnv?: 'dev' | 'stg' | 'prod'
+}
+
+function tradeApiEnv(ctx: ReadinessChipContext): ChipNavigation['apiEnv'] {
+  if (ctx.env === 'prod' || ctx.env === 'platform-prod') return 'prod'
+  if (ctx.env === 'stg' || ctx.env === 'platform-stg') return 'stg'
+  return 'prod'
+}
+
+/** Primary drill-down when operator clicks a readiness chip (ok or not). */
 export function primaryChipNavigation(
   chipLabel: string,
   ctx: ReadinessChipContext,
-): { tabId: string; busFocus?: ReadinessChipAction['busFocus'] } | null {
+): ChipNavigation | null {
   const label = chipLabelNorm(chipLabel)
-  if (label.includes('ib socket')) {
+  if (label.includes('ib socket') || label.includes('rocket · ib') || label.includes('shared rocket')) {
     return { tabId: 'satellite-bus', busFocus: 'rocket' }
   }
   if (label.includes('pg / redis')) {
     return { tabId: 'satellite-bus', busFocus: 'cluster' }
   }
   if (chipMatchesTradeApis(label)) {
-    return { tabId: 'satellite-bus', busFocus: 'trade-apis' }
+    return { tabId: 'satellite-api', apiEnv: tradeApiEnv(ctx) }
   }
-  if (label.includes('trade prod matrix') || label.includes('prod matrix')) {
-    return { tabId: 'satellite-bus', busFocus: 'socket' }
+  // Full Trade connectivity matrix (mission tradeProd) — land on API Health for that env.
+  if (
+    label.includes('prod matrix') ||
+    label.includes('stg matrix') ||
+    (label.includes('matrix') && (label.includes('trade') || label.includes('prod') || label.includes('stg')))
+  ) {
+    return { tabId: 'satellite-api', apiEnv: tradeApiEnv(ctx) }
   }
   if (label.includes('k8s')) {
     return { tabId: 'cluster' }
@@ -81,11 +101,15 @@ export function readinessChipFixActions(
     tabId: string,
     actionLabel: string,
     busFocus?: ReadinessChipAction['busFocus'],
+    apiEnv?: ReadinessChipAction['apiEnv'],
   ) => {
-    actions.push({ kind: 'navigate', label: actionLabel, tabId, busFocus })
+    actions.push({ kind: 'navigate', label: actionLabel, tabId, busFocus, apiEnv })
   }
 
-  if (label.includes('ib socket') && tradeNs != null) {
+  if (
+    (label.includes('ib socket') || label.includes('rocket · ib') || label.includes('shared rocket')) &&
+    tradeNs != null
+  ) {
     pushNavigate('satellite-bus', 'Rocket IB bus', 'rocket')
     pushNavigate('satellite-bus', 'Socket matrix', 'socket')
     pushNavigate('plugin-gallery', 'IB Gateway plugin')
@@ -111,13 +135,18 @@ export function readinessChipFixActions(
   }
 
   if (chipMatchesTradeApis(label)) {
+    pushNavigate('satellite-api', 'API health', undefined, tradeApiEnv(ctx))
     pushNavigate('satellite-bus', 'API reachability', 'trade-apis')
-    pushNavigate('api-health', 'API health')
     return actions
   }
 
-  if (label.includes('trade prod matrix') || label.includes('prod matrix')) {
-    pushNavigate('satellite-bus', 'Socket matrix', 'socket')
+  if (
+    label.includes('prod matrix') ||
+    label.includes('stg matrix') ||
+    (label.includes('matrix') && (label.includes('trade') || label.includes('prod') || label.includes('stg')))
+  ) {
+    pushNavigate('satellite-api', 'API Health matrix', undefined, tradeApiEnv(ctx))
+    pushNavigate('control-room', 'Control Room')
     return actions
   }
 
@@ -149,12 +178,13 @@ export function readinessChipFixActions(
 
   const primary = primaryChipNavigation(chipLabel, ctx)
   if (primary != null) {
-    pushNavigate(primary.tabId, 'Open details', primary.busFocus)
+    pushNavigate(primary.tabId, 'Open details', primary.busFocus, primary.apiEnv)
   }
   return actions
 }
 
 export const SATELLITE_BUS_FOCUS_KEY = 'bifrost.satelliteBus.focus'
+export const SATELLITE_API_ENV_KEY = 'bifrost.satelliteApi.env'
 
 export function setSatelliteBusFocus(focus: ReadinessChipAction['busFocus'] | undefined): void {
   if (focus == null) {
@@ -170,5 +200,20 @@ export function consumeSatelliteBusFocus(): ReadinessChipAction['busFocus'] | nu
   if (raw === 'rocket' || raw === 'socket' || raw === 'ingest' || raw === 'monitor' || raw === 'trade-apis' || raw === 'workers' || raw === 'cluster') {
     return raw
   }
+  return null
+}
+
+export function setSatelliteApiEnv(env: ReadinessChipAction['apiEnv'] | undefined): void {
+  if (env == null) {
+    sessionStorage.removeItem(SATELLITE_API_ENV_KEY)
+    return
+  }
+  sessionStorage.setItem(SATELLITE_API_ENV_KEY, env)
+}
+
+export function consumeSatelliteApiEnv(): ReadinessChipAction['apiEnv'] | null {
+  const raw = sessionStorage.getItem(SATELLITE_API_ENV_KEY)
+  sessionStorage.removeItem(SATELLITE_API_ENV_KEY)
+  if (raw === 'dev' || raw === 'stg' || raw === 'prod') return raw
   return null
 }

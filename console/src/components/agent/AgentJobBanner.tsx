@@ -109,6 +109,7 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
     <div className={cn('agent-job-banner', `agent-job-banner--${bannerVariant}`, expanded && 'agent-job-banner--expanded')}>
       <div className="agent-job-banner__head">
         <StatusLamp value={reachFromPhase(job)} kind="reach" />
+        <span className="agent-job-banner__chrome-kicker">Agent task</span>
         {taskLabel != null && taskLabel !== '' && (
           <span className="agent-job-banner__task-label">{taskLabel}</span>
         )}
@@ -143,6 +144,11 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
           <span className="agent-job-banner__connecting">connecting…</span>
         )}
         <div className="agent-job-banner__actions">
+          {!isTerminal && onOpenAgentDesk != null && (
+            <Button variant="default" size="xs" onClick={() => onOpenAgentDesk(jobId)}>
+              View agent →
+            </Button>
+          )}
           {!isTerminal && (
             <Button
               variant="outline"

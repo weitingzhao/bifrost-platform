@@ -21,6 +21,8 @@ export interface OpsSectionProps {
   bodyPadding?: OpsSectionBodyPadding
   /** elevated = panel card; flat = borderless inner block (e.g. inside BusPageGroup) */
   variant?: OpsSectionVariant
+  /** DOM id for scroll targets (e.g. Launch gate → Recent launches). */
+  id?: string
 }
 
 const bodyPaddingClass: Record<OpsSectionBodyPadding, string> = {
@@ -50,12 +52,14 @@ export function OpsSection({
   overflow = 'visible',
   bodyPadding = 'none',
   variant = 'elevated',
+  id,
 }: OpsSectionProps) {
   const hasBody = children != null
   const showHeader = title != null || description != null || actions != null || leading != null
 
   return (
     <section
+      id={id}
       className={cn(
         'page-section ops-section',
         variant === 'elevated' && 'panel-elevated',

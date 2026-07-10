@@ -37,7 +37,7 @@ function TrackChip({
       <div className="promote-cutover-strip__track-head">
         <StatusLamp value={lamp} kind="reach" />
         <span className="promote-cutover-strip__track-label">{label}</span>
-        <DenseTag variant={ready ? 'success' : 'warning'}>{ready ? 'ready' : 'pending'}</DenseTag>
+        <DenseTag variant={ready ? 'neutral' : 'warning'}>{ready ? 'narrative' : 'pending'}</DenseTag>
       </div>
       <p className="promote-cutover-strip__track-detail">{detail}</p>
     </div>

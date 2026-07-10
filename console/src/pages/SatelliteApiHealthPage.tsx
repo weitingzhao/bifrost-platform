@@ -20,6 +20,8 @@ import {
 import { fetchMatrix, isAllMatrices } from '@/api/platform'
 import type { MatrixResponse, Target } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { consumeSatelliteApiEnv } from '@/lib/task-mode/readinessChipActions'
+import { summarizeTradeReadiness } from '@/lib/control-room/matrixSummary'
 
 const ENV_OPTIONS = [
   { value: 'dev', label: 'Dev' },
@@ -67,7 +69,8 @@ function sortTargets(targets: Target[]): Target[] {
 }
 
 export function SatelliteApiHealthPage() {
-  const [env, setEnv] = useState<MatrixEnv>('prod')
+  const focusedEnv = consumeSatelliteApiEnv()
+  const [env, setEnv] = useState<MatrixEnv>(focusedEnv ?? 'prod')
   const [selected, setSelected] = useState<Target | null>(null)
 
   const matrixQuery = useQuery({
@@ -86,7 +89,9 @@ export function SatelliteApiHealthPage() {
   const matrix = matrices.find(m => m.environment === env)
   const targets = sortTargets(matrix?.targets ?? [])
   const apiTargets = targets.filter(t => t.category === 'trade_api')
-  const okCount = targets.filter(t => t.reachability === 'ok').length
+  const readiness = summarizeTradeReadiness(targets)
+  const excludedCount = targets.length - readiness.total
+  const readinessOk = readiness.ok === readiness.total && readiness.total > 0
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -99,9 +104,16 @@ export function SatelliteApiHealthPage() {
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Environment:</span>
           <SegmentControl value={env} options={[...ENV_OPTIONS]} onChange={v => setEnv(v as MatrixEnv)} />
-          <DenseTag variant={okCount === targets.length && targets.length > 0 ? 'success' : 'warning'}>
-            {matrixQuery.isLoading ? '…' : `${okCount}/${targets.length} OK`}
+          <DenseTag variant={readinessOk ? 'success' : 'warning'}>
+            {matrixQuery.isLoading
+              ? '…'
+              : `${readiness.ok}/${readiness.total} readiness OK`}
           </DenseTag>
+          {excludedCount > 0 && (
+            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+              {excludedCount} policy / skipped (not scored)
+            </span>
+          )}
           {matrix?.generated_at != null && (
             <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               Probed {new Date(matrix.generated_at).toLocaleString()}

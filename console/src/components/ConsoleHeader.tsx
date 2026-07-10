@@ -1,12 +1,19 @@
 import type { ReactNode } from 'react'
 import { Button, SidebarTrigger, SHELL_TOP_BAR_HEIGHT_CLASS, StatusLamp, cn } from '@bifrost/ui'
+import { Bot } from 'lucide-react'
 import type { ConsoleNavPlane } from '@/lib/consoleNavConfig'
+
+export type ConsoleHeaderAmbientAgent = {
+  label: string
+  onOpen: () => void
+}
 
 export function ConsoleHeader({
   title,
   plane,
   healthy,
   onRefresh,
+  ambientAgent,
   children,
 }: {
   title?: string
@@ -14,6 +21,8 @@ export function ConsoleHeader({
   plane?: ConsoleNavPlane
   healthy: boolean | undefined
   onRefresh: () => void
+  /** Global entry when an ambient Agent Task is running. */
+  ambientAgent?: ConsoleHeaderAmbientAgent | null
   /** Right-side slot — e.g. compact PlatformAuthBar */
   children?: ReactNode
 }) {
@@ -40,6 +49,22 @@ export function ConsoleHeader({
       )}
 
       <div className="flex-1" />
+
+      {ambientAgent != null && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 shrink-0 gap-1.5 border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_45%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_10%,var(--card))] px-2 text-[var(--text-dense-caption)]"
+          onClick={ambientAgent.onOpen}
+          title="Open Agent Desk for the running ambient task"
+        >
+          <StatusLamp value="degraded" kind="reach" />
+          <Bot size={12} aria-hidden />
+          <span className="hidden max-w-[9rem] truncate sm:inline">{ambientAgent.label}</span>
+          <span className="font-medium text-foreground">View agent →</span>
+        </Button>
+      )}
 
       {children != null ? <div className="shrink-0">{children}</div> : null}
 

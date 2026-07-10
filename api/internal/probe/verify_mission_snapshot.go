@@ -48,9 +48,26 @@ type VerifyMissionSnapshotResponse struct {
 	PostFixVerification PostFixVerification    `json:"post_fix_verification"`
 }
 
+func countsTowardTradeReadiness(t Target) bool {
+	if t.Category == "trade_write" {
+		return false
+	}
+	if t.Auth == AuthBlocked {
+		return false
+	}
+	// Optional ops auth probe when token is not configured — informational only.
+	if t.ID == "ops-capabilities" && t.Auth == AuthSkipped {
+		return false
+	}
+	return true
+}
+
 func tradeEnvSnapshot(env config.Environment, matrix MatrixResponse) TradeEnvSnapshot {
 	targets := make([]Target, 0, len(matrix.Targets))
 	for _, t := range matrix.Targets {
+		if !countsTowardTradeReadiness(t) {
+			continue
+		}
 		if strings.HasPrefix(t.Category, "trade") || t.Category == "datastore" {
 			targets = append(targets, t)
 		}

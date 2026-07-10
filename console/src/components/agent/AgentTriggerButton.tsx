@@ -6,6 +6,9 @@ export interface AgentTriggerButtonProps {
   label: string
   pending?: boolean
   pendingLabel?: string
+  /** Ambient job already running — keep affordance visible (not a dead disabled control). */
+  active?: boolean
+  activeLabel?: string
   disabled?: boolean
   /** Shown as native title tooltip when disabled or on hover */
   title?: string
@@ -22,26 +25,31 @@ export function AgentTriggerButton({
   label,
   pending = false,
   pendingLabel = 'Starting…',
+  active = false,
+  activeLabel = 'Running…',
   disabled = false,
   title,
   onClick,
   size = 'sm',
   className,
 }: AgentTriggerButtonProps) {
+  const busy = pending || active
+  /** Disabled must not look like a ready green CTA (Launch No-Go mental model). */
+  const variant = disabled && !busy ? 'outline' : active && !pending ? 'outline' : 'default'
   return (
     <Button
       type="button"
-      variant="default"
+      variant={variant}
       size={size}
       disabled={disabled || pending}
       title={title}
       onClick={onClick}
       className={cn('agent-trigger-btn', className)}
     >
-      {pending ? (
+      {busy ? (
         <>
           <Loader2 className="agent-trigger-btn__icon animate-spin" aria-hidden />
-          {pendingLabel}
+          {pending ? pendingLabel : activeLabel}
         </>
       ) : (
         <>
