@@ -110,11 +110,43 @@ function tradingDaemonPolicyOff(ingest?: SatelliteBusIngestService): boolean {
   return runtime === 'policy-off' || display.includes('daemon scale')
 }
 
-/** Trading daemon row — uses monitor.daemon + ops ingest, not system-wide health rollup. */
+/** Platform IB Gateway supplies quotes/account; daemon ``ib_connected`` is the execution-arm rollup (stricter). */
+function platformIbDataPathOk(
+  socket?: {
+    ib_ingestor?: SatelliteBusSocketComponent
+    ib_account_agent?: SatelliteBusSocketComponent
+    platform_ib_gateway?: SatelliteBusSocketComponent
+  },
+): boolean {
+  if (socket == null) return false
+  const consumerUp = (c?: SatelliteBusSocketComponent): boolean => {
+    if (c == null) return false
+    const raw = c.raw
+    if (rawBool(raw, 'connected') === true || rawBool(raw, 'service_alive') === true) return true
+    return c.reachability === 'ok'
+  }
+  if (consumerUp(socket.ib_ingestor) && consumerUp(socket.ib_account_agent)) return true
+  const pg = socket.platform_ib_gateway?.raw
+  if (pg == null) return false
+  const mode = rawStr(pg, 'mode')
+  if (mode === 'mock') return true
+  return rawBool(pg, 'connected') === true || rawStr(pg, 'lamp') === 'green' || rawStr(pg, 'lamp') === 'yellow'
+}
+
+function isIbExecutionArmGapOnly(blockReasons: string[]): boolean {
+  return blockReasons.length === 1 && blockReasons[0] === 'ib_not_connected'
+}
+
+/** Trading daemon row — uses monitor.daemon + ops ingest + socket bus, not system-wide health rollup. */
 export function classifyTradingDaemon(
   env: TradeEnv,
   ingest?: SatelliteBusIngestService,
   daemon?: SatelliteBusMonitorDaemon,
+  socket?: {
+    ib_ingestor?: SatelliteBusSocketComponent
+    ib_account_agent?: SatelliteBusSocketComponent
+    platform_ib_gateway?: SatelliteBusSocketComponent
+  },
 ): SocketHealthRow | null {
   if (tradingDaemonPolicyOff(ingest)) {
     return {
@@ -174,13 +206,45 @@ export function classifyTradingDaemon(
       label: 'Trading daemon',
       layer: 'trade',
       required: 'required',
-      reach: 'degraded',
-      reachLabel: 'suspended',
-      detail: 'Trading suspended (operator pause — expected, not a socket fault)',
+      reach: 'ok',
+      reachLabel: 'paused',
+      detail: 'Trading suspended by operator (intentional pause — not a fault)',
+    }
+  }
+
+  if (
+    daemonAlive &&
+    isIbExecutionArmGapOnly(blockReasons) &&
+    platformIbDataPathOk(socket)
+  ) {
+    const mode = rawStr(socket?.platform_ib_gateway?.raw, 'mode')
+    const modeHint = mode === 'mock' ? 'dev mock' : mode === 'live' ? 'live gateway' : 'platform gateway'
+    return {
+      id: 'trading_engine',
+      label: 'Trading daemon',
+      layer: 'trade',
+      required: 'required',
+      reach: 'ok',
+      reachLabel: 'observe',
+      detail: `Running · observe (${modeHint} feeds data; execution arm not required in ${env.toUpperCase()})`,
     }
   }
 
   const daemonReach = daemon?.reachability ?? ingest?.reachability ?? 'unknown'
+  const faultReasons = blockReasons.filter(r => r !== 'ib_not_connected')
+  if (faultReasons.length > 0 || (selfCheck === 'blocked')) {
+    const detail = faultReasons.length > 0 ? faultReasons.join(', ') : blockReasons.join(', ')
+    return {
+      id: 'trading_engine',
+      label: 'Trading daemon',
+      layer: 'trade',
+      required: 'required',
+      reach: daemonReach === 'fail' ? 'fail' : 'degraded',
+      reachLabel: daemonReach === 'fail' ? 'fail' : 'degraded',
+      detail,
+    }
+  }
+
   if (selfCheck === 'degraded' || daemonReach === 'degraded') {
     const detail =
       blockReasons.length > 0
@@ -368,7 +432,7 @@ export function buildSocketHealthRows(
     classifyTradeSocketConsumer('massive', 'Massive WS', socket?.massive, env, ingest('massive_ws')),
   ]
 
-  const daemonRow = classifyTradingDaemon(env, ingest('trading_engine'), daemon)
+  const daemonRow = classifyTradingDaemon(env, ingest('trading_engine'), daemon, socket)
   if (daemonRow != null) {
     trade.push(daemonRow)
   }

@@ -9,6 +9,7 @@ interface SatelliteObservabilityStripProps {
   observabilityLoading: boolean
   onOpenCluster?: () => void
   onOpenTelemetry?: () => void
+  variant?: 'elevated' | 'flat'
 }
 
 function layerBLabel(status: ClusterObservabilityResponse['layer_b_status'] | undefined): string {
@@ -40,16 +41,17 @@ export function SatelliteObservabilityStrip({
   observabilityLoading,
   onOpenCluster,
   onOpenTelemetry,
+  variant = 'elevated',
 }: SatelliteObservabilityStripProps) {
   const layerA = metrics?.metrics_server_available === true
   const layerB = observability?.layer_b_status
 
   return (
     <OpsSection
+      variant={variant}
       title="Observability"
       bodyPadding="compact"
       overflow="visible"
-      className="shadow-none"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="flex items-center gap-2">

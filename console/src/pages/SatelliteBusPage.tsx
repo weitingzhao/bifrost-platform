@@ -24,7 +24,7 @@ import {
   isAllMatrices,
   isAllSatelliteBusDeep,
 } from '@/api/platform'
-import type { MatrixResponse, Reachability, SatelliteBusDeepResponse } from '@/api/types'
+import type { MatrixResponse, Reachability, SatelliteBusDeepResponse, Target } from '@/api/types'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
@@ -36,7 +36,6 @@ import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   buildSatelliteBusIngestTriagePrompt,
-  ingestRuntimeView,
   SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
   summarizeIngestServices,
 } from '@/lib/agent/satelliteBusIngestTriagePrompt'
@@ -46,9 +45,9 @@ import {
 } from '@/lib/control-room/payloadReadiness'
 import {
   buildSocketHealthMatrix,
+  classifyTradingDaemon,
   formatBusProbeDetail,
   SOCKET_MATRIX_LABELS,
-  SOCKET_TRADE_NS,
   summarizeSocketHealthAllEnvs,
   type BusEnvId,
   type SocketHealthEnvCell,
@@ -57,6 +56,12 @@ import {
   type SocketRequiredState,
   type TradeEnvId,
 } from '@/lib/satellite/socketHealthSemantics'
+import {
+  busScopeGroupClass,
+  tradeSingleEnvProbeSource,
+  tradeSingleEnvScope,
+  type BusStatusScope,
+} from '@/lib/satellite/busStatusScope'
 import { consumeSatelliteBusFocus } from '@/lib/task-mode/readinessChipActions'
 import { worst, type Signal } from '@/lib/control-room/missionSignals'
 
@@ -88,15 +93,73 @@ const CRITICAL_PROCESS_PATTERNS = [
 
 function tradeApiTargets(matrix: MatrixResponse | undefined): { ok: number; total: number } {
   if (matrix == null) return { ok: 0, total: 0 }
-  const tradeTargets = matrix.targets.filter(
+  const tradeTargets = filterTradeApiTargets(matrix)
+  const ok = tradeTargets.filter(t => t.reachability === 'ok').length
+  return { ok, total: tradeTargets.length }
+}
+
+function filterTradeApiTargets(matrix: MatrixResponse): Target[] {
+  return matrix.targets.filter(
     t =>
       t.category === 'trade_api' ||
       t.category === 'trade_frontend' ||
       t.id === 'nginx-spa' ||
       t.id.startsWith('api-'),
   )
-  const ok = tradeTargets.filter(t => t.reachability === 'ok').length
-  return { ok, total: tradeTargets.length }
+}
+
+function TradeApiReachTable({
+  targets,
+  loading,
+}: {
+  targets: Target[]
+  loading: boolean
+}) {
+  return (
+    <DenseDataTable>
+      <DenseTableHeader>
+        <DenseTableHeadRow>
+          <DenseTableHead>Target</DenseTableHead>
+          <DenseTableHead>Category</DenseTableHead>
+          <DenseTableHead>Reach</DenseTableHead>
+          <DenseTableHead>Detail</DenseTableHead>
+        </DenseTableHeadRow>
+      </DenseTableHeader>
+      <DenseTableBody>
+        {loading ? (
+          <DenseTableRow>
+            <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
+              Loading…
+            </DenseTableCell>
+          </DenseTableRow>
+        ) : targets.length === 0 ? (
+          <DenseTableRow>
+            <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
+              —
+            </DenseTableCell>
+          </DenseTableRow>
+        ) : (
+          targets.map(t => (
+            <DenseTableRow key={t.id}>
+              <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)] font-medium">
+                {t.id}
+              </DenseTableCell>
+              <DenseTableCell className="text-[var(--text-dense-caption)] text-muted-foreground">
+                {t.category}
+              </DenseTableCell>
+              <DenseTableCell>
+                <StatusLamp value={t.reachability} kind="reach" />{' '}
+                <span className="text-[var(--text-dense-caption)]">{t.reachability}</span>
+              </DenseTableCell>
+              <DenseTableCell className="text-[var(--text-dense-caption)] text-muted-foreground">
+                {t.detail ?? '—'}
+              </DenseTableCell>
+            </DenseTableRow>
+          ))
+        )}
+      </DenseTableBody>
+    </DenseDataTable>
+  )
 }
 
 function signalFromReach(r: Reachability | undefined): Signal {
@@ -124,15 +187,72 @@ function renderText(value: unknown): string {
   return String(value)
 }
 
+function BusScopeBadge({ scope }: { scope: BusStatusScope }) {
+  const label =
+    scope === 'rocket'
+      ? 'Rocket'
+      : scope === 'trade-multi-env'
+        ? 'Trade · all envs'
+        : scope === 'trade-single-env'
+          ? 'Trade · selected NS'
+          : 'Ground'
+  const variant: 'info' | 'category' | 'neutral' | 'warning' =
+    scope === 'rocket'
+      ? 'info'
+      : scope === 'trade-multi-env'
+        ? 'warning'
+        : scope === 'trade-single-env'
+          ? 'category'
+          : 'neutral'
+  return (
+    <DenseTag variant={variant} className="shrink-0 text-[10px] uppercase tracking-wide">
+      {label}
+    </DenseTag>
+  )
+}
+
+function BusEnvScopePill({ scope, env }: { scope: BusStatusScope; env: TradeEnv }) {
+  if (scope === 'rocket') {
+    return (
+      <DenseTag variant="info" className="text-[10px] uppercase tracking-wide">
+        SHARED
+      </DenseTag>
+    )
+  }
+  if (scope === 'trade-multi-env') {
+    return (
+      <DenseTag variant="warning" className="text-[10px] uppercase tracking-wide">
+        ALL ENVS
+      </DenseTag>
+    )
+  }
+  if (scope === 'ground') {
+    return (
+      <DenseTag variant="neutral" className="text-[10px] uppercase tracking-wide">
+        PLATFORM
+      </DenseTag>
+    )
+  }
+  return (
+    <DenseTag variant="success" className="text-[10px] uppercase tracking-wide">
+      {env.toUpperCase()}
+    </DenseTag>
+  )
+}
+
 function BusPageGroup({
   title,
   description,
+  scope,
+  tradeEnv,
   sectionRef,
   highlight,
   children,
 }: {
   title: string
   description?: string
+  scope: BusStatusScope
+  tradeEnv?: TradeEnv
   sectionRef?: Ref<HTMLDivElement>
   highlight?: boolean
   children: ReactNode
@@ -140,18 +260,62 @@ function BusPageGroup({
   return (
     <div
       ref={sectionRef}
+      data-scope={scope}
       className={cn(
-        'satellite-bus-group flex flex-col gap-1.5 rounded-sm transition-shadow',
+        'satellite-bus-group panel-elevated flex flex-col overflow-hidden rounded-md transition-shadow',
+        busScopeGroupClass(scope),
         highlight && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
       )}
     >
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <OpsSubsectionTitle className="m-0">{title}</OpsSubsectionTitle>
-        {description != null && description !== '' && (
-          <span className="text-[var(--text-dense-caption)] text-muted-foreground">{description}</span>
-        )}
-      </div>
-      {children}
+      <header className="satellite-bus-group-header">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+          <BusScopeBadge scope={scope} />
+          <h3 className="satellite-bus-group-title">{title}</h3>
+          {description != null && description !== '' && (
+            <span className="text-[var(--text-dense-caption)] text-muted-foreground">{description}</span>
+          )}
+        </div>
+        <BusEnvScopePill scope={scope} env={tradeEnv ?? 'stg'} />
+      </header>
+      <div className="satellite-bus-group-body flex flex-col">{children}</div>
+    </div>
+  )
+}
+
+function DaemonBusStatusStrip({
+  row,
+  loading,
+}: {
+  row: SocketHealthRow | null
+  loading: boolean
+}) {
+  if (loading) {
+    return (
+      <p className="m-0 px-3 py-2 text-[var(--text-dense-caption)] text-muted-foreground border-b border-[var(--border)]">
+        Loading bus interpretation…
+      </p>
+    )
+  }
+  if (row == null) {
+    return (
+      <p className="m-0 px-3 py-2 text-[var(--text-dense-caption)] text-muted-foreground border-b border-[var(--border)]">
+        No daemon probe for this environment.
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-3 py-2">
+      <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground shrink-0">Bus status</span>
+      <StatusLamp value={row.reach} kind="reach" />
+      <DenseTag
+        variant={
+          row.reach === 'ok' ? 'success' : row.reach === 'fail' ? 'danger' : row.reach === 'degraded' ? 'warning' : 'neutral'
+        }
+        className="text-[9px]"
+      >
+        {row.reachLabel}
+      </DenseTag>
+      <span className="text-[var(--text-dense-meta)] text-muted-foreground">{row.detail}</span>
     </div>
   )
 }
@@ -160,12 +324,14 @@ function BusSummaryCard({
   label,
   signal,
   headline,
+  scope,
   selected,
   onClick,
 }: {
   label: string
   signal: Signal
   headline: string
+  scope: BusStatusScope
   selected?: boolean
   onClick: () => void
 }) {
@@ -175,10 +341,11 @@ function BusSummaryCard({
       onClick={onClick}
       aria-pressed={selected === true}
       className={cn(
-        'flex min-w-[8.5rem] flex-1 flex-col gap-0.5 rounded-md border px-2 py-1.5 text-left transition-colors',
+        'satellite-bus-summary-card flex min-w-[8.5rem] flex-1 flex-col gap-0.5 rounded-md border border-[var(--border)] px-2 py-1.5 text-left transition-colors',
+        `satellite-bus-summary-card--${scope}`,
         selected
           ? 'border-[var(--ring)] bg-[var(--accent)]'
-          : 'border-[var(--border)] bg-[var(--secondary)] hover:bg-[var(--accent)]',
+          : 'bg-[var(--secondary)] hover:bg-[var(--accent)]',
       )}
     >
       <span className="flex items-center gap-1.5 text-[var(--text-dense-caption)] font-medium text-muted-foreground">
@@ -188,19 +355,6 @@ function BusSummaryCard({
       <span className="text-[var(--text-dense-caption)] leading-snug text-foreground/90">{headline}</span>
     </button>
   )
-}
-
-function runtimeToneClass(tone: 'ok' | 'warn' | 'fail' | 'muted'): string {
-  switch (tone) {
-    case 'ok':
-      return 'text-success'
-    case 'warn':
-      return 'text-warning'
-    case 'fail':
-      return 'text-danger'
-    default:
-      return 'text-muted-foreground'
-  }
 }
 
 function RequiredTag({ state }: { state: SocketRequiredState }) {
@@ -439,8 +593,8 @@ export function SatelliteBusPage({
   const pageRootRef = useRef<HTMLDivElement | null>(null)
   const detailScrollRef = useRef<HTMLDivElement | null>(null)
   const monitorSectionRef = useRef<HTMLDivElement | null>(null)
+  const rocketSectionRef = useRef<HTMLDivElement | null>(null)
   const socketSectionRef = useRef<HTMLDivElement | null>(null)
-  const ingestSectionRef = useRef<HTMLDivElement | null>(null)
   const tradeApisSectionRef = useRef<HTMLDivElement | null>(null)
   const workersSectionRef = useRef<HTMLDivElement | null>(null)
   const clusterSectionRef = useRef<HTMLDivElement | null>(null)
@@ -464,8 +618,10 @@ export function SatelliteBusPage({
     () =>
       ({
         monitor: monitorSectionRef,
+        rocket: rocketSectionRef,
         socket: socketSectionRef,
-        ingest: ingestSectionRef,
+        // Legacy chip focus — Market ingest table removed; Socket matrix is authoritative.
+        ingest: socketSectionRef,
         'trade-apis': tradeApisSectionRef,
         workers: workersSectionRef,
         cluster: clusterSectionRef,
@@ -654,6 +810,37 @@ export function SatelliteBusPage({
 
   const socketHeadline = socketSummary.headline
 
+  const daemonBusRow = useMemo((): SocketHealthRow | null => {
+    const bus = busesByEnv[tradeEnv]
+    if (bus == null) return null
+    const ingest = bus.ingest.services.find(s => s.id === 'trading_engine')
+    return classifyTradingDaemon(tradeEnv, ingest, bus.monitor.daemon, bus.monitor.socket)
+  }, [busesByEnv, tradeEnv])
+
+  const daemonSummary = useMemo((): { signal: Signal; headline: string } => {
+    if (busDeepAllQuery.isLoading) return { signal: 'unknown', headline: 'Loading…' }
+    if (daemonBusRow == null) return { signal: 'unknown', headline: 'No probe' }
+    return {
+      signal: daemonBusRow.reach as Signal,
+      headline: `${daemonBusRow.reachLabel} — ${daemonBusRow.detail}`,
+    }
+  }, [busDeepAllQuery.isLoading, daemonBusRow])
+
+  const tradeApiTargetRows = useMemo(
+    () => (envMatrix != null ? filterTradeApiTargets(envMatrix) : []),
+    [envMatrix],
+  )
+
+  const rocketSummary = useMemo((): { signal: Signal; headline: string } => {
+    const row = socketHealthMatrix.rocket
+    return {
+      signal: row.reach as Signal,
+      headline: `${row.reachLabel} — ${row.detail}`,
+    }
+  }, [socketHealthMatrix.rocket])
+
+  const singleEnvScope = tradeSingleEnvScope(tradeEnv)
+
   const aiIngestTriage = useAmbientAgentTask({
     canOperate,
     ambientJobId,
@@ -780,7 +967,7 @@ export function SatelliteBusPage({
       <PageHeader
         title="Bus Status"
         titleSize="default"
-        description="Monitor + ops deep probe · namespace workloads · matrix L0."
+        description="Rocket (Platform) vs Trade satellite vs Ground cluster — scoped sections below."
       />
 
       <section className="page-section panel-elevated px-2.5 py-1.5">
@@ -804,6 +991,9 @@ export function SatelliteBusPage({
             Bus {busSignal.toUpperCase()}
           </DenseTag>
           <DenseTag variant="neutral">Probe {probeTime}</DenseTag>
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+            Drives <strong className="font-medium text-foreground/80">Trade · selected NS</strong> sections only
+          </span>
           <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-0.5">
             <AgentTriggerButton
               label="Agent Triage"
@@ -812,7 +1002,7 @@ export function SatelliteBusPage({
               disabled={aiIngestTriage.disabled}
               title={
                 aiIngestTriage.disabledReason ??
-                'Cross-check ingest display vs monitor.socket vs ib-gateway (D10 safe)'
+                'Cross-check Socket matrix vs monitor.socket vs ib-gateway (D10 safe)'
               }
               onClick={() => aiIngestTriage.trigger()}
             />
@@ -834,40 +1024,53 @@ export function SatelliteBusPage({
         <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <OpsSubsectionTitle className="m-0">Summary</OpsSubsectionTitle>
           <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-            Macro signals — click to jump · dock stays fixed
+            Color bar = scope · click to jump
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <BusSummaryCard
-            label="Socket health"
+            label="Rocket · IB Gateway"
+            scope="rocket"
+            signal={rocketSummary.signal}
+            headline={rocketSummary.headline}
+            selected={highlightSection === 'rocket'}
+            onClick={() => scrollTo('rocket')}
+          />
+          <BusSummaryCard
+            label="Socket · all envs"
+            scope="trade-multi-env"
             signal={socketSummary.signal}
             headline={socketHeadline}
             selected={highlightSection === 'socket'}
             onClick={() => scrollTo('socket')}
           />
           <BusSummaryCard
-            label="Trade APIs"
+            label={`Daemon · ${tradeEnv.toUpperCase()}`}
+            scope="trade-single-env"
+            signal={daemonSummary.signal}
+            headline={daemonSummary.headline}
+            selected={highlightSection === 'monitor'}
+            onClick={() => scrollTo('monitor')}
+          />
+          <BusSummaryCard
+            label={`APIs · ${tradeEnv.toUpperCase()}`}
+            scope="trade-single-env"
             signal={tradeApiSignal}
             headline={`${tradeApi.ok}/${tradeApi.total} reachable`}
             selected={highlightSection === 'trade-apis'}
             onClick={() => scrollTo('trade-apis')}
           />
           <BusSummaryCard
-            label="Market ingest"
-            signal={ingestSummary.signal}
-            headline={ingestSummary.headline}
-            selected={highlightSection === 'ingest'}
-            onClick={() => scrollTo('ingest')}
-          />
-          <BusSummaryCard
-            label="Workers"
+            label={`Workers · ${tradeEnv.toUpperCase()}`}
+            scope="trade-single-env"
             signal={workersSummary.signal}
             headline={workersSummary.headline}
             selected={highlightSection === 'workers'}
             onClick={() => scrollTo('workers')}
           />
           <BusSummaryCard
-            label="Cluster domains"
+            label="Ground · cluster"
+            scope="ground"
             signal={clusterDomainSummary.signal}
             headline={clusterDomainSummary.headline}
             selected={highlightSection === 'cluster'}
@@ -879,148 +1082,130 @@ export function SatelliteBusPage({
 
       <div ref={detailScrollRef} className="min-h-0 flex-1 overflow-y-auto">
       <div className="flex flex-col gap-2 pb-2">
+      <details className="page-section panel-elevated px-2.5 py-1 text-[var(--text-dense-caption)] text-muted-foreground">
+        <summary className="cursor-pointer font-medium text-foreground/80">Scope guide</summary>
+        <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
+          <li>
+            <BusScopeBadge scope="rocket" /> Platform IB Gateway — shared across Dev / Stg / Prod (not Trade NS)
+          </li>
+          <li>
+            <BusScopeBadge scope="trade-multi-env" /> Socket matrix — all env columns + Mac bridge
+          </li>
+          <li>
+            <BusScopeBadge scope="trade-single-env" /> Follows Trade NS selector — monitor, ingest, APIs, workloads
+          </li>
+          <li>
+            <BusScopeBadge scope="ground" /> Cluster matrix L0, service domains, observability
+          </li>
+        </ul>
+      </details>
+
       <BusPageGroup
-        title="Monitor probe"
-        description="Daemon, socket, ingest from monitor /status + ops APIs"
-        sectionRef={monitorSectionRef}
-        highlight={highlightSection === 'monitor' || highlightSection === 'socket'}
+        title="Platform IB socket bus"
+        scope="rocket"
+        description="data/ib-gateway @ redis-ib"
+        sectionRef={rocketSectionRef}
+        highlight={highlightSection === 'rocket'}
       >
-        <div className="flex flex-col gap-1.5">
-          <OpsSection title="Daemon FSM" bodyPadding="none" overflow="hidden" className="shadow-none">
-            <MonitorKvTable rows={daemonRows} loading={busDeepAllQuery.isLoading} />
-          </OpsSection>
+        <OpsSection
+          variant="flat"
+          title="Rocket · Platform IB Gateway"
+          bodyPadding="compact"
+          overflow="hidden"
+          description="Authoritative quote/account/operator path for all trade namespaces"
+        >
+          <RocketSocketBusRow row={socketHealthMatrix.rocket} />
+        </OpsSection>
+      </BusPageGroup>
 
-          <div ref={socketSectionRef}>
-            <OpsSection
-              title="Socket health"
-              bodyPadding="compact"
-              overflow="hidden"
-              className="shadow-none"
-              description="Rocket bus is cluster-shared (all envs) · Trade columns = per-namespace consumers · policy-off ≠ degraded"
-            >
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground">
-                    Rocket · Platform socket bus (data/ib-gateway @ redis-ib) — shared by Dev, Stg, Prod
-                  </span>
-                  <RocketSocketBusRow row={socketHealthMatrix.rocket} />
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground">
-                    Trade · consumers ({SOCKET_TRADE_NS.dev} / {SOCKET_TRADE_NS.stg} / {SOCKET_TRADE_NS.prod} / Mac
-                    bridge)
-                  </span>
-                  <SocketHealthMatrixTable rows={socketHealthMatrix.tradeRows} selectedEnv={tradeEnv} />
-                </div>
-                <p className="text-[var(--text-dense-caption)] text-muted-foreground m-0">
-                  <strong className="font-medium text-foreground/80">K3s Dev</strong> = cluster bifrost-dev @ :30882
-                  (authoritative stack health).{' '}
-                  <strong className="font-medium text-foreground/80">Mac</strong> = satellite-probe-bridge on this
-                  workstation probing the same K3s dev ingress (Vision V1 thin-client reachability). Fix{' '}
-                  <strong className="font-medium text-foreground/80">K3s Dev</strong> first; Mac stays red until the
-                  cluster stack is healthy or reachable.
-                </p>
-              </div>
-            </OpsSection>
+      <BusPageGroup
+        title="Socket consumers"
+        scope="trade-multi-env"
+        description="Per-namespace consumers vs Platform gateway — authoritative bus health (replaces legacy Market ingest table)"
+        sectionRef={socketSectionRef}
+        highlight={highlightSection === 'socket' || highlightSection === 'ingest'}
+      >
+        <OpsSection
+          variant="flat"
+          title="Trade · socket matrix"
+          bodyPadding="compact"
+          overflow="hidden"
+          description={`Highlight column = ${tradeEnv.toUpperCase()} (Trade NS) · monitor.socket + bus semantics`}
+        >
+          <div className="flex flex-col gap-2">
+            <SocketHealthMatrixTable rows={socketHealthMatrix.tradeRows} selectedEnv={tradeEnv} />
+            <p className="text-[var(--text-dense-caption)] text-muted-foreground m-0">
+              Trading daemon row uses bus semantics (observe / paused / policy-off). K3s Dev = bifrost-dev @
+              :30882. Mac = satellite-probe-bridge on this workstation.
+            </p>
           </div>
-        </div>
+        </OpsSection>
+      </BusPageGroup>
 
-        <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
-          <OpsSection title="Celery" bodyPadding="none" overflow="hidden" className="shadow-none">
+      <BusPageGroup
+        title={`Monitor · ${singleEnvScope}`}
+        scope="trade-single-env"
+        tradeEnv={tradeEnv}
+        description={tradeSingleEnvProbeSource(tradeEnv)}
+        sectionRef={monitorSectionRef}
+        highlight={
+          highlightSection === 'monitor' ||
+          highlightSection === 'trade-apis'
+        }
+      >
+        <OpsSection
+          variant="flat"
+          title="GsTrading trading daemon"
+          description="Bus interpretation + raw monitor FSM"
+          bodyPadding="none"
+          overflow="hidden"
+        >
+          <DaemonBusStatusStrip row={daemonBusRow} loading={busDeepAllQuery.isLoading} />
+          <div className="border-t border-[var(--border)] px-3 py-1.5">
+            <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground">
+              Raw monitor FSM
+            </span>
+            <span className="ml-2 text-[var(--text-dense-caption)] text-muted-foreground">
+              Strict trading-arm semantics — may differ from Bus status when observe / pause is healthy
+            </span>
+          </div>
+          <MonitorKvTable rows={daemonRows} loading={busDeepAllQuery.isLoading} />
+        </OpsSection>
+
+        <div className="grid divide-x divide-[var(--border)] border-t border-[var(--border)] sm:grid-cols-2 xl:grid-cols-3">
+          <OpsSection variant="flat" title="Celery" bodyPadding="none" overflow="hidden">
             <MonitorKvTable rows={celeryRows} loading={busDeepAllQuery.isLoading} />
           </OpsSection>
-          <OpsSection title="Account sync" bodyPadding="none" overflow="hidden" className="shadow-none">
+          <OpsSection variant="flat" title="Account sync" bodyPadding="none" overflow="hidden">
             <MonitorKvTable rows={accountSyncRows} loading={busDeepAllQuery.isLoading} />
           </OpsSection>
-          <OpsSection title="Ops executor" bodyPadding="none" overflow="hidden" className="shadow-none">
+          <OpsSection variant="flat" title="Ops executor" bodyPadding="none" overflow="hidden">
             <MonitorKvTable rows={opsRows} loading={busDeepAllQuery.isLoading} />
           </OpsSection>
         </div>
 
-        <div
-          ref={ingestSectionRef}
-          className={cn(
-            'rounded-sm transition-shadow',
-            highlightSection === 'ingest' && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
-          )}
-        >
+        <div ref={tradeApisSectionRef}>
           <OpsSection
-            title="Market ingest"
+            variant="flat"
+            title="Trade API reachability"
             bodyPadding="none"
             overflow="hidden"
-            className="shadow-none"
-            description="Runtime semantics · source of truth (not local systemd)"
+            description={`Matrix L0 HTTP probes for ${tradeEnv.toUpperCase()} · full detail on API Health`}
           >
-            <DenseDataTable>
-              <DenseTableHeader>
-                <DenseTableHeadRow>
-                  <DenseTableHead className="w-[28%]">Service</DenseTableHead>
-                  <DenseTableHead className="w-[18%]">Reach</DenseTableHead>
-                  <DenseTableHead className="w-[22%]">Runtime</DenseTableHead>
-                  <DenseTableHead>Source</DenseTableHead>
-                </DenseTableHeadRow>
-              </DenseTableHeader>
-              <DenseTableBody>
-                {(busDeep?.ingest.services ?? []).length === 0 ? (
-                  <DenseTableRow>
-                    <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
-                      {busDeepAllQuery.isLoading ? 'Loading…' : '—'}
-                    </DenseTableCell>
-                  </DenseTableRow>
-                ) : (
-                  busDeep?.ingest.services.map(svc => {
-                    const view = ingestRuntimeView(svc)
-                    return (
-                      <DenseTableRow key={svc.id}>
-                        <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)] font-medium">
-                          {svc.id}
-                        </DenseTableCell>
-                        <DenseTableCell>
-                          <StatusLamp value={svc.reachability} kind="reach" />{' '}
-                          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-                            {renderText(svc.reachability)}
-                          </span>
-                        </DenseTableCell>
-                        <DenseTableCell>
-                          <span
-                            className={cn(
-                              'font-mono-tabular text-[var(--text-dense-meta)]',
-                              runtimeToneClass(view.tone),
-                            )}
-                          >
-                            {view.runtime}
-                          </span>
-                          {view.note != null && (
-                            <span className="ml-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
-                              {view.note}
-                            </span>
-                          )}
-                        </DenseTableCell>
-                        <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)] text-muted-foreground">
-                          {view.source}
-                        </DenseTableCell>
-                      </DenseTableRow>
-                    )
-                  })
-                )}
-              </DenseTableBody>
-            </DenseDataTable>
+            <TradeApiReachTable targets={tradeApiTargetRows} loading={matrixQuery.isLoading} />
           </OpsSection>
         </div>
       </BusPageGroup>
 
       <BusPageGroup
         title={`Namespace · ${ns}`}
-        description="Critical workloads in selected trade namespace"
+        scope="trade-single-env"
+        tradeEnv={tradeEnv}
+        description={`K8s workloads in ${singleEnvScope}`}
         sectionRef={workersSectionRef}
         highlight={highlightSection === 'workers'}
       >
-        <OpsSection
-          title="Critical processes"
-          bodyPadding="none"
-          overflow="hidden"
-          className="shadow-none"
-        >
+        <OpsSection variant="flat" title="Critical processes" bodyPadding="none" overflow="hidden">
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
@@ -1057,44 +1242,36 @@ export function SatelliteBusPage({
 
       <BusPageGroup
         title="Cluster readiness"
-        description="Service domains · matrix L0 · observability"
+        scope="ground"
+        description="Matrix L0 · service domains · observability"
         sectionRef={clusterSectionRef}
-        highlight={highlightSection === 'cluster' || highlightSection === 'trade-apis'}
+        highlight={highlightSection === 'cluster'}
       >
-        <div
-          ref={tradeApisSectionRef}
-          className={cn(
-            'rounded-sm transition-shadow',
-            highlightSection === 'trade-apis' && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
-          )}
-        >
-          <OpsSection title="Payload readiness (matrix L0)" bodyPadding="none" overflow="hidden" className="shadow-none mb-1.5">
-            <PayloadReadinessTable rows={payloadRows} />
-          </OpsSection>
-        </div>
-        <div className="grid gap-1.5 lg:grid-cols-2">
-          <OpsSection title="Service domains" bodyPadding="none" overflow="hidden" className="shadow-none">
+        <OpsSection variant="flat" title="Payload readiness (matrix L0)" bodyPadding="none" overflow="hidden">
+          <PayloadReadinessTable rows={payloadRows} />
+        </OpsSection>
+        <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-[var(--border)]">
+          <OpsSection variant="flat" title="Service domains" bodyPadding="none" overflow="hidden">
             {SATELLITE_DOMAIN_IDS.map(domainId => (
-              <div key={domainId} className="border-t border-[var(--border)] first:border-t-0">
-                <ClusterServiceReadinessPanel
-                  data={serviceReadinessQuery.data}
-                  isLoading={serviceReadinessQuery.isLoading}
-                  compact
-                  domainFilter={domainId}
-                />
-              </div>
+              <ClusterServiceReadinessPanel
+                key={domainId}
+                data={serviceReadinessQuery.data}
+                isLoading={serviceReadinessQuery.isLoading}
+                compact
+                variant="flat"
+                domainFilter={domainId}
+              />
             ))}
           </OpsSection>
-          <OpsSection title="Observability" bodyPadding="none" overflow="hidden" className="shadow-none">
-            <SatelliteObservabilityStrip
-              metrics={metricsQuery.data}
-              observability={observabilityQuery.data}
-              metricsLoading={metricsQuery.isLoading}
-              observabilityLoading={observabilityQuery.isLoading}
-              onOpenCluster={onOpenCluster}
-              onOpenTelemetry={onOpenTelemetry}
-            />
-          </OpsSection>
+          <SatelliteObservabilityStrip
+            variant="flat"
+            metrics={metricsQuery.data}
+            observability={observabilityQuery.data}
+            metricsLoading={metricsQuery.isLoading}
+            observabilityLoading={observabilityQuery.isLoading}
+            onOpenCluster={onOpenCluster}
+            onOpenTelemetry={onOpenTelemetry}
+          />
         </div>
       </BusPageGroup>
       </div>

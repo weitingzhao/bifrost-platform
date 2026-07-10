@@ -1152,21 +1152,109 @@ html {
   box-shadow: none;
 }
 
+/* Bus Status — scope accent tokens */
+:root {
+  --scope-rocket: #60a5fa;
+  --scope-trade: var(--primary);
+  --scope-ground: var(--muted-foreground);
+  --scope-multi-env: var(--color-env-stg);
+}
+
 /* Satellite Bus Status — grouped compact layout */
 .satellite-bus-page .ops-section.panel-elevated {
   box-shadow: none;
 }
 
+.satellite-bus-page .ops-section--flat {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.satellite-bus-page .ops-section--flat + .ops-section--flat,
+.satellite-bus-page .satellite-bus-group-body > * + * {
+  border-top: 1px solid var(--border);
+}
+
 .satellite-bus-page .ops-section-header {
-  padding: 0.375rem 0.5rem 0.25rem;
+  padding: 0.375rem 0.75rem 0.25rem;
+}
+
+.satellite-bus-page .ops-section--flat .ops-section-header {
+  padding: 0.375rem 0.75rem 0.25rem;
 }
 
 .satellite-bus-page .ops-section-title {
   font-size: var(--text-dense-meta);
 }
 
+.satellite-bus-page .ops-section-body .dense-scroll-x {
+  border: none;
+  border-radius: 0;
+}
+
+.satellite-bus-group {
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+
+.satellite-bus-group--rocket {
+  border-left-color: var(--scope-rocket);
+}
+
+.satellite-bus-group--trade-multi-env {
+  border-left-color: var(--scope-multi-env);
+}
+
+.satellite-bus-group--trade-single-env {
+  border-left-color: var(--scope-trade);
+}
+
+.satellite-bus-group--ground {
+  border-left-color: var(--scope-ground);
+}
+
+.satellite-bus-group-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.375rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.satellite-bus-group-title {
+  margin: 0;
+  font-size: var(--text-dense-label);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--foreground);
+}
+
 .satellite-bus-group + .satellite-bus-group {
-  margin-top: 0.125rem;
+  margin-top: 0.5rem;
+}
+
+.satellite-bus-summary-card {
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+
+.satellite-bus-summary-card--rocket {
+  border-left-color: var(--scope-rocket);
+}
+
+.satellite-bus-summary-card--trade-multi-env {
+  border-left-color: var(--scope-multi-env);
+}
+
+.satellite-bus-summary-card--trade-single-env {
+  border-left-color: var(--scope-trade);
+}
+
+.satellite-bus-summary-card--ground {
+  border-left-color: var(--scope-ground);
 }
 
 .cluster-kpi-strip .cluster-kpi-gauge {
