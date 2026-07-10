@@ -18,6 +18,7 @@ import {
   type FlowStep,
 } from '@/components/delivery/ReleaseStepCommandCenter'
 import { ReleaseStateBanner } from '@/components/delivery/ReleaseStateBanner'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   PlatformGateHistorySection,
   PlatformStageGatePanel,
@@ -142,9 +143,14 @@ export function PlatformReleasePage({
       break
     case 1:
       stepDetail = (
-        <div className="page-section panel-elevated px-3 py-3">
+        <OpsSection
+          title="STG release gate"
+          description="Platform staging gate checks and blockers."
+          bodyPadding="compact"
+          overflow="hidden"
+        >
           <PlatformStageGatePanel tier="platform-stg" label="STG" hideActions />
-        </div>
+        </OpsSection>
       )
       break
     case 2:
@@ -157,9 +163,14 @@ export function PlatformReleasePage({
       break
     default:
       stepDetail = (
-        <div className="page-section panel-elevated px-3 py-3">
+        <OpsSection
+          title="PROD release gate"
+          description="Platform production gate checks and blockers."
+          bodyPadding="compact"
+          overflow="hidden"
+        >
           <PlatformStageGatePanel tier="platform-prod" label="PROD" hideActions />
-        </div>
+        </OpsSection>
       )
       break
   }
@@ -198,8 +209,17 @@ export function PlatformReleasePage({
         aiReleaseDisabledReason={aiRelease.disabledReason}
         aiReleaseLabel={AI_RELEASE_LABEL}
       />
-      <div className="flex flex-col gap-4">{stepDetail}</div>
-      <PlatformGateHistorySection />
+
+      <div className="flex flex-col gap-3">{stepDetail}</div>
+
+      <details open className="group rounded-lg border border-border/50 bg-card">
+        <summary className="cursor-pointer list-none px-4 py-3 text-dense-label font-medium text-foreground hover:bg-secondary/30">
+          Audit · gate run history
+        </summary>
+        <div className="border-t border-border/50">
+          <PlatformGateHistorySection />
+        </div>
+      </details>
     </div>
   )
 }

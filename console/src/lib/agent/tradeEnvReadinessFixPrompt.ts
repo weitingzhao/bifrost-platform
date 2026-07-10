@@ -52,7 +52,7 @@ export function buildTradeEnvReadinessFixPrompt(input: {
       input.env +
       '/config, sync-redis-ib-secrets, Argo sync or rollout restart monitor.',
     '5. Re-probe bus-deep until IB socket chip shows ≥3/5 ok (ingestor, account, operator on platform_gateway).',
-    '6. For ingest-only false inactive (systemctl on api-ops pod): use scope **satellite-bus-ingest-triage** from Task CC (Satellite Deploy) → Agent Triage or Bus Status → Agent Triage.',
+    '6. For Socket/Rocket disagreement (gateway vs trade consumers): use scope **satellite-bus-ingest-triage** from Task CC (Satellite Deploy) → Agent Triage or Bus Status → Agent Triage.',
     '',
     failing.length > 0
       ? `Priority targets (${failing.length} non-ok): ${failing.map(f => f.label).join(', ')}.`

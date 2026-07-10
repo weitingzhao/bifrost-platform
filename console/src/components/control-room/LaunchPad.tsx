@@ -20,6 +20,7 @@ import {
   useRocketProdReadiness,
   useSatelliteProdReadiness,
 } from '@/components/task-mode/TaskModeReadinessStrip'
+import { countsTowardTradeReadiness } from '@/lib/control-room/matrixSummary'
 import {
   DELIVER_PLATFORM_PIPELINE,
 } from '@/lib/delivery/deliverPlatformPhases'
@@ -29,13 +30,14 @@ import { StatusLamp } from '@/components/StatusLamp'
 
 const REFETCH_MS = 20_000
 
-/** Task CC shows one playbook card; Control Room shows both. */
+/** Control Room shows both; OpsTaskStrips playbook path may pass one variant. */
 export type LaunchPadVariant = 'both' | 'rocket-launch' | 'satellite-deploy'
 
 function tradeEnvSignal(matrix: MatrixResponse | undefined): Signal {
   if (matrix == null) return 'unknown'
-  const fails = matrix.targets.filter(t => t.reachability === 'fail').length
-  const degraded = matrix.targets.filter(t => t.reachability === 'degraded').length
+  const scored = matrix.targets.filter(countsTowardTradeReadiness)
+  const fails = scored.filter(t => t.reachability === 'fail').length
+  const degraded = scored.filter(t => t.reachability === 'degraded').length
   if (fails > 0) return 'fail'
   if (degraded > 0) return 'degraded'
   return 'ok'
@@ -113,7 +115,7 @@ function LaunchPadCard({
 }
 
 export interface LaunchPadProps {
-  /** Default `both` — Control Room. Task CC passes the active playbook id. */
+  /** Default `both` — Control Room. Task CC playbook strips may pass one side. */
   variant?: LaunchPadVariant
   onDispatchRelease: () => void
   onDispatchTradeDeploy: () => void
@@ -125,7 +127,7 @@ export interface LaunchPadProps {
   tradeDeployDisabledReason?: string
   onOpenPlatformRelease: () => void
   onOpenTradeDeploy: () => void
-  /** Task CC summary column — full width, no max-w cap */
+  /** Full width, no max-w cap */
   embedded?: boolean
   /** Parent page already shows prod gate banner */
   suppressProdBlockedFeedback?: boolean
@@ -229,7 +231,9 @@ export function LaunchPad({
 
   const nextAction = releaseStateQ.data?.next_action
   const rocketSummary =
-    nextAction?.label != null ? nextAction.label : `${platformDeploy.label} · ${platformGate.label}`
+    nextAction?.label != null
+      ? `Last deliver · ${nextAction.label}`
+      : `Last deliver · ${platformDeploy.label} · ${platformGate.label}`
   const rocketDetail =
     nextAction?.description ??
     (platformRun?.revision != null ? `Revision ${platformRun.revision}` : 'Platform STG → PROD release')
@@ -271,6 +275,11 @@ export function LaunchPad({
     ? satelliteProd.prodDisabledReason
     : tradeDeployDisabledReason
 
+  const satelliteSummary = `Last deliver · ${tradeDeploy.label} · Smoke ${
+    smokeOk ? 'pass' : stgSmokeQ.isLoading ? '…' : 'fail'
+  }`
+  const satelliteDetail = `${tradeGate.label} · Supply chain ${cmsPresent}/${cmsTotal} CMs`
+
   return (
     <section
       className={`launch-pad grid gap-3 ${
@@ -295,55 +304,55 @@ export function LaunchPad({
         </OpsFeedback>
       )}
       {showRocket && (
-      <LaunchPadCard
-        icon={Rocket}
-        title="Rocket Launch"
-        signal={releaseSignal}
-        summary={rocketSummary}
-        detail={rocketDetail}
-        tags={
-          <>
-            <DenseTag variant={platformGate.status === 'done' ? 'success' : 'warning'}>
-              Gate · {platformGate.label}
-            </DenseTag>
-            <DenseTag variant={platformDeploy.status === 'done' ? 'success' : 'neutral'}>
-              Deploy · {platformDeploy.label}
-            </DenseTag>
-          </>
-        }
-        agentLabel="Agent Launch"
-        onAgentLaunch={onDispatchRelease}
-        agentPending={releasePending}
-        canAgentLaunch={rocketCanLaunch}
-        agentDisabledReason={rocketDisabledReason}
-        onOpenDetail={onOpenPlatformRelease}
-      />
+        <LaunchPadCard
+          icon={Rocket}
+          title="Rocket Launch"
+          signal={releaseSignal}
+          summary={rocketSummary}
+          detail={rocketDetail}
+          tags={
+            <>
+              <DenseTag variant={platformGate.status === 'done' ? 'success' : 'warning'}>
+                Gate · {platformGate.label}
+              </DenseTag>
+              <DenseTag variant={platformDeploy.status === 'done' ? 'success' : 'neutral'}>
+                Deploy · {platformDeploy.label}
+              </DenseTag>
+            </>
+          }
+          agentLabel="Agent Launch"
+          onAgentLaunch={onDispatchRelease}
+          agentPending={releasePending}
+          canAgentLaunch={rocketCanLaunch}
+          agentDisabledReason={rocketDisabledReason}
+          onOpenDetail={onOpenPlatformRelease}
+        />
       )}
 
       {showSatellite && (
-      <LaunchPadCard
-        icon={Satellite}
-        title="Satellite Deploy"
-        signal={tradeSignal}
-        summary={`${tradeDeploy.label} · Smoke ${smokeOk ? 'pass' : stgSmokeQ.isLoading ? '…' : 'fail'}`}
-        detail={`${tradeGate.label} · Supply chain ${cmsPresent}/${cmsTotal} CMs`}
-        tags={
-          <>
-            <EnvDot label="Dev" signal={tradeEnvSignal(devMatrix)} />
-            <EnvDot label="Stg" signal={tradeEnvSignal(stgMatrix)} />
-            <EnvDot label="Prod" signal={tradeEnvSignal(prodMatrix)} />
-            <DenseTag variant={tierBSigned ? 'success' : 'warning'}>
-              Tier B · {tierBSigned ? 'signed' : 'pending'}
-            </DenseTag>
-          </>
-        }
-        agentLabel="Agent Deploy"
-        onAgentLaunch={onDispatchTradeDeploy}
-        agentPending={tradeDeployPending}
-        canAgentLaunch={satelliteCanLaunch}
-        agentDisabledReason={satelliteDisabledReason}
-        onOpenDetail={onOpenTradeDeploy}
-      />
+        <LaunchPadCard
+          icon={Satellite}
+          title="Satellite Deploy"
+          signal={tradeSignal}
+          summary={satelliteSummary}
+          detail={satelliteDetail}
+          tags={
+            <>
+              <EnvDot label="Dev" signal={tradeEnvSignal(devMatrix)} />
+              <EnvDot label="Stg" signal={tradeEnvSignal(stgMatrix)} />
+              <EnvDot label="Prod" signal={tradeEnvSignal(prodMatrix)} />
+              <DenseTag variant={tierBSigned ? 'success' : 'warning'}>
+                Tier B · {tierBSigned ? 'signed' : 'pending'}
+              </DenseTag>
+            </>
+          }
+          agentLabel="Agent Deploy"
+          onAgentLaunch={onDispatchTradeDeploy}
+          agentPending={tradeDeployPending}
+          canAgentLaunch={satelliteCanLaunch}
+          agentDisabledReason={satelliteDisabledReason}
+          onOpenDetail={onOpenTradeDeploy}
+        />
       )}
     </section>
   )

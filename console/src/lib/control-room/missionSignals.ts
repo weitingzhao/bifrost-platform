@@ -10,6 +10,7 @@ import type {
   VerifyPayloadResponse,
 } from '@/api/types'
 import { formatVerifyPayloadGuidance } from '@/lib/control-room/payloadVerification'
+import { tradeReadinessTargets } from '@/lib/control-room/matrixSummary'
 import { formatPipelineRunStatus, isPipelineRunFailed } from '@/lib/delivery/pipelineRunAskPack'
 
 export type Signal = Reachability
@@ -219,9 +220,11 @@ export function agentSignal(runner?: RemediationHealthResponse, bridge?: AgentBr
 
 export function tradeEnvSignal(m: MatrixResponse | undefined): ModuleState {
   if (!m) return { signal: 'unknown', value: '…', detail: 'probing' }
-  const targets = m.targets.filter(t => t.category.startsWith('trade') || t.category === 'datastore')
+  // Exclude policy-blocked write stubs and optional skipped ops-capabilities — they must not
+  // degrade Satellite launch Go/No-Go when real HTTP/datastore probes are healthy.
+  const targets = tradeReadinessTargets(m.targets)
   const total = targets.length
-  if (total === 0) return { signal: 'unknown', value: 'n/a', detail: 'no targets' }
+  if (total === 0) return { signal: 'unknown', value: 'n/a', detail: 'no scored targets' }
   const up = targets.filter(t => t.reachability === 'ok').length
   const anyFail = targets.some(t => t.reachability === 'fail')
   const anyDeg = targets.some(t => t.reachability === 'degraded')

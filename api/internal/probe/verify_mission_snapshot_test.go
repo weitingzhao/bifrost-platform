@@ -61,3 +61,37 @@ func TestVerifyMissionSnapshot_ProbeDriftBlocksPostFix(t *testing.T) {
 		t.Fatal("expected probe_drift_remaining")
 	}
 }
+
+func TestTradeEnvSnapshot_IgnoresPolicyBlockedAndSkippedAuth(t *testing.T) {
+	env := config.Environment{ID: "prod", Label: "Production"}
+	matrix := MatrixResponse{
+		Environment: "prod",
+		Label:       "Production",
+		Targets: []Target{
+			{ID: "api-monitor", Category: "trade_api", Reachability: ReachOK, Auth: AuthSkipped},
+			{ID: "postgres", Category: "datastore", Reachability: ReachOK, Auth: AuthSkipped},
+			{ID: "redis", Category: "datastore", Reachability: ReachOK, Auth: AuthSkipped},
+			{
+				ID: "ops-capabilities", Category: "trade_auth",
+				Reachability: ReachUnknown, Auth: AuthSkipped,
+				Detail: "No ops token configured",
+			},
+			{
+				ID: "ib-operator-rpc", Category: "trade_write",
+				Reachability: ReachUnknown, Auth: AuthBlocked,
+			},
+			{
+				ID: "daemon-control-write", Category: "trade_write",
+				Reachability: ReachUnknown, Auth: AuthBlocked,
+			},
+		},
+	}
+
+	snap := tradeEnvSnapshot(env, matrix)
+	if snap.Signal != MissionOK {
+		t.Fatalf("expected ok, got %s (%s)", snap.Signal, snap.Detail)
+	}
+	if snap.Total != 3 || snap.Reachable != 3 {
+		t.Fatalf("expected 3/3 scored targets, got %d/%d", snap.Reachable, snap.Total)
+	}
+}

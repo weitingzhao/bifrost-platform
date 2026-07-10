@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, PageHeader } from '@bifrost/ui'
 import {
@@ -56,6 +56,11 @@ import {
   type TaskPhaseStatusInput,
 } from '@/lib/task-mode/navLens'
 import {
+  buildLaunchCheckpoints,
+  hasDeliverInFlight,
+  resolveLaunchVerdict,
+} from '@/lib/task-mode/satelliteLaunchVerdict'
+import {
   buildDailyOpsMissionFixPrompt,
   buildPhaseHints,
   type TaskPhaseFixAction,
@@ -76,6 +81,7 @@ export type TaskControlCenterProps = AmbientAgentShellProps & {
   onOpenBriefing?: (opts?: BriefingUrlState) => void
   onOpenPromote?: () => void
   onOpenDelivery?: () => void
+  onOpenAgentDesk?: (jobId?: string) => void
 }
 
 export function TaskControlCenter({
@@ -89,7 +95,9 @@ export function TaskControlCenter({
   onOpenBriefing,
   onOpenPromote,
   onOpenDelivery,
+  onOpenAgentDesk,
   ambientJobId,
+  ambientJobScope,
   onStartAgentJob,
 }: TaskControlCenterProps) {
   const { mode } = useTaskMode()
@@ -102,11 +110,17 @@ export function TaskControlCenter({
   const satelliteDeploy = useSatelliteDeployOverall(mode.id === 'satellite-deploy')
 
   const stgReadinessSignals = useMemo(
-    () => satelliteDeploy.fixSignals.filter(s => s.label.startsWith('STG')),
+    () =>
+      satelliteDeploy.fixSignals.filter(
+        s => s.label.includes('STG') && !s.label.includes('Rocket'),
+      ),
     [satelliteDeploy.fixSignals],
   )
   const prodReadinessSignals = useMemo(
-    () => satelliteDeploy.fixSignals.filter(s => s.label.startsWith('PROD')),
+    () =>
+      satelliteDeploy.fixSignals.filter(
+        s => s.label.includes('PROD') && !s.label.includes('Rocket'),
+      ),
     [satelliteDeploy.fixSignals],
   )
 
@@ -209,7 +223,12 @@ export function TaskControlCenter({
           prodOverall: satelliteProd.prodOverall,
           stgNamespace: satelliteProd.stgNamespace ?? 'bifrost-stg',
           prodNamespace: satelliteProd.prodNamespace ?? 'bifrost-prod',
-          signals: satelliteProd.fixSignals ?? [],
+          signals: [
+            ...(satelliteProd.rocketBlocked && satelliteProd.rocketFixSignal != null
+              ? [satelliteProd.rocketFixSignal]
+              : []),
+            ...(satelliteProd.fixSignals ?? []),
+          ],
         }),
         cluster_summary: cluster,
         service_readiness: serviceReadiness,
@@ -322,12 +341,12 @@ export function TaskControlCenter({
   })
 
   const dispatchReleaseAgent = () => {
-    if (!canOperate || aiRelease.disabled) return
+    if (!canOperate || aiRelease.disabled || rocketVerdict.kind !== 'GO') return
     aiRelease.trigger()
   }
 
   const dispatchTradeDeployAgent = () => {
-    if (!canOperate || aiTradeDeploy.disabled) return
+    if (!canOperate || aiTradeDeploy.disabled || satelliteVerdict.kind !== 'GO') return
     aiTradeDeploy.trigger()
   }
 
@@ -341,7 +360,12 @@ export function TaskControlCenter({
   const platformRunsQ = useQuery({
     queryKey: ['task-cc', 'platform-runs'],
     queryFn: () => fetchPipelineRuns(DELIVER_PLATFORM_PIPELINE),
-    refetchInterval: 20_000,
+    refetchInterval: query => {
+      const runs = query.state.data?.runs
+      if (hasDeliverInFlight(runs)) return 5_000
+      if (ambientJobId != null && ambientJobScope === PLATFORM_RELEASE_SCOPE) return 5_000
+      return 20_000
+    },
     enabled: mode.id === 'rocket-launch' || mode.id === 'rocket-build',
   })
 
@@ -362,7 +386,12 @@ export function TaskControlCenter({
   const tradeRunsQ = useQuery({
     queryKey: ['task-cc', 'trade-runs-detail'],
     queryFn: () => fetchPipelineRuns(DELIVER_STG_PIPELINE),
-    refetchInterval: 20_000,
+    refetchInterval: query => {
+      const runs = query.state.data?.runs
+      if (hasDeliverInFlight(runs)) return 5_000
+      if (ambientJobId != null && ambientJobScope === TRADE_DEPLOY_SCOPE) return 5_000
+      return 20_000
+    },
     enabled: mode.id === 'satellite-deploy' || mode.id === 'satellite-build',
   })
 
@@ -484,20 +513,96 @@ export function TaskControlCenter({
   const showLaunchPad = mode.ops?.showLaunchPad === true
   const resolvedProgramId = devProgram.programId ?? mode.dev?.programId
 
-  const releaseDispatchAllowed = showLaunchPad && !aiRelease.disabled && !rocketProd.prodBlocked
-  const tradeDeployDispatchAllowed = showLaunchPad && !aiTradeDeploy.disabled && !satelliteProd.prodBlocked
-  const releaseDisabledReason = rocketProd.prodBlocked
-    ? rocketProd.prodDisabledReason
-    : aiRelease.disabledReason
-  const tradeDeployDisabledReason = satelliteProd.prodBlocked
-    ? satelliteProd.prodDisabledReason
-    : aiTradeDeploy.disabledReason
+  const satelliteVerdictInput = useMemo(
+    () => ({
+      mode: 'satellite' as const,
+      canOperate,
+      prodBlocked: satelliteProd.prodBlocked,
+      blockKind: satelliteProd.blockKind ?? undefined,
+      rocketDetail: satelliteProd.rocketDetail,
+      rocketLabel: missionStatus(satelliteProd.rocketSignal),
+      rocketSignal: satelliteProd.rocketSignal,
+      tradeProdLabel: missionStatus(satelliteProd.tradeProdOverall),
+      tradeProdSignal: satelliteProd.tradeProdOverall,
+      deliverInFlight: hasDeliverInFlight(tradeRunsQ.data?.runs),
+      agentInFlight: ambientJobId != null && ambientJobScope === TRADE_DEPLOY_SCOPE,
+    }),
+    [
+      canOperate,
+      satelliteProd.prodBlocked,
+      satelliteProd.blockKind,
+      satelliteProd.rocketDetail,
+      satelliteProd.rocketSignal,
+      satelliteProd.tradeProdOverall,
+      tradeRunsQ.data?.runs,
+      ambientJobId,
+      ambientJobScope,
+    ],
+  )
+
+  const satelliteVerdict = useMemo(
+    () => resolveLaunchVerdict(satelliteVerdictInput),
+    [satelliteVerdictInput],
+  )
+  const satelliteCheckpoints = useMemo(
+    () => buildLaunchCheckpoints(satelliteVerdictInput),
+    [satelliteVerdictInput],
+  )
+
+  const rocketVerdictInput = useMemo(
+    () => ({
+      mode: 'rocket' as const,
+      canOperate,
+      prodBlocked: rocketProd.prodBlocked,
+      tradeProdLabel: missionStatus(rocketProd.prodOverall),
+      tradeProdSignal: rocketProd.prodOverall,
+      deliverInFlight: hasDeliverInFlight(platformRunsQ.data?.runs),
+      agentInFlight: ambientJobId != null && ambientJobScope === PLATFORM_RELEASE_SCOPE,
+    }),
+    [
+      canOperate,
+      rocketProd.prodBlocked,
+      rocketProd.prodOverall,
+      platformRunsQ.data?.runs,
+      ambientJobId,
+      ambientJobScope,
+    ],
+  )
+
+  const rocketVerdict = useMemo(() => resolveLaunchVerdict(rocketVerdictInput), [rocketVerdictInput])
+  const rocketCheckpoints = useMemo(
+    () => buildLaunchCheckpoints(rocketVerdictInput),
+    [rocketVerdictInput],
+  )
+
+  const releaseDispatchAllowed =
+    showLaunchPad && !aiRelease.disabled && rocketVerdict.kind === 'GO'
+  const tradeDeployDispatchAllowed =
+    showLaunchPad && !aiTradeDeploy.disabled && satelliteVerdict.kind === 'GO'
+  const releaseDisabledReason =
+    rocketVerdict.kind !== 'GO'
+      ? rocketVerdict.disabledReason
+      : aiRelease.disabledReason
+  const tradeDeployDisabledReason =
+    satelliteVerdict.kind !== 'GO'
+      ? satelliteVerdict.disabledReason
+      : aiTradeDeploy.disabledReason
+
+  const phaseDefaultOpen = useMemo(() => {
+    if (phases.length === 0) return false
+    return !phases.every((p: TaskPhaseDef) => statuses[p.id] === 'done')
+  }, [phases, statuses])
+
+  const [phaseOpen, setPhaseOpen] = useState(phaseDefaultOpen)
+  useEffect(() => {
+    setPhaseOpen(phaseDefaultOpen)
+  }, [phaseDefaultOpen, mode.id])
 
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Task Control Center"
-        description={`${mode.label} · ${loopLabel} — phased playbook with live status projection.`}
+        description={`${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`}
         actions={
           mode.loopArchetype === 'system' ? undefined : (
             <DenseTag variant={mode.loopArchetype === 'dev' ? 'info' : 'warning'}>{loopLabel}</DenseTag>
@@ -507,7 +612,7 @@ export function TaskControlCenter({
 
       {mode.loopArchetype === 'ops' && showLaunchPad && (
         <>
-          {!canOperate && (
+          {mode.id !== 'satellite-deploy' && mode.id !== 'rocket-launch' && !canOperate && (
             <OpsFeedback variant="warning" title="Authenticate as operator to run Launch Pad agents">
               Use the header auth control before starting release or trade-deploy Agent tasks.
             </OpsFeedback>
@@ -564,50 +669,6 @@ export function TaskControlCenter({
               root-cause breakdown, or open Control Room for the full mission board.
             </OpsFeedback>
           )}
-          {mode.id === 'rocket-launch' && rocketProd.prodBlocked && (
-            <OpsFeedback
-              variant="warning"
-              title="Fix Prod environment before release"
-              actions={
-                <AgentTriggerButton
-                  label="Agent Fix"
-                  size="xs"
-                  pending={aiPlatformProdFix.isPending}
-                  disabled={aiPlatformProdFix.disabled}
-                  title={
-                    aiPlatformProdFix.disabledReason ??
-                    'Start Cluster · Remediate focused on Platform Prod readiness'
-                  }
-                  onClick={() => aiPlatformProdFix.trigger()}
-                />
-              }
-            >
-              Platform Prod readiness is {missionStatus(rocketProd.prodOverall)} — resolve Prod namespace,
-              self-health, or release gate issues before launching release agents.
-            </OpsFeedback>
-          )}
-          {mode.id === 'satellite-deploy' && satelliteProd.prodBlocked && (
-            <OpsFeedback
-              variant="warning"
-              title="Fix Prod environment before release"
-              actions={
-                <AgentTriggerButton
-                  label="Agent Fix"
-                  size="xs"
-                  pending={aiTradeProdFix.isPending}
-                  disabled={aiTradeProdFix.disabled}
-                  title={
-                    aiTradeProdFix.disabledReason ??
-                    'Start Cluster · Remediate focused on Trade Prod readiness'
-                  }
-                  onClick={() => aiTradeProdFix.trigger()}
-                />
-              }
-            >
-              Trade Prod readiness is {missionStatus(satelliteProd.prodOverall)} — resolve Prod workloads,
-              datastore, IB socket, or API reachability before deploying.
-            </OpsFeedback>
-          )}
         </>
       )}
 
@@ -637,25 +698,123 @@ export function TaskControlCenter({
             onAgentFixProd={() => aiTradeProdEnvFix.trigger()}
             agentFixPending={aiTradeStgEnvFix.isPending || aiTradeProdEnvFix.isPending}
             agentFixDisabled={!canOperate}
-            agentFixTitle="Diagnose STG/PROD readiness via Cluster · Remediate (IB socket triage included)"
+            agentFixTitle="Diagnose STG/PROD trade readiness via Cluster · Remediate"
             onAgentTriage={() => aiBusIngestTriage.trigger()}
             agentTriagePending={aiBusIngestTriage.isPending}
             agentTriageDisabled={aiBusIngestTriage.disabled}
             agentTriageTitle={
               aiBusIngestTriage.disabledReason ??
-              'Cross-check ingest display vs monitor.socket vs ib-gateway (D10 safe)'
+              'Cross-check Socket matrix vs Rocket IB gateway (D10 safe)'
             }
+            recentRuns={
+              mode.id === 'satellite-deploy'
+                ? tradeRunsQ.data?.runs
+                : mode.id === 'rocket-launch'
+                  ? platformRunsQ.data?.runs
+                  : undefined
+            }
+            recentRunsLoading={
+              mode.id === 'satellite-deploy'
+                ? tradeRunsQ.isLoading
+                : mode.id === 'rocket-launch'
+                  ? platformRunsQ.isLoading
+                  : false
+            }
+            launchVerdict={
+              mode.id === 'satellite-deploy'
+                ? satelliteVerdict
+                : mode.id === 'rocket-launch'
+                  ? rocketVerdict
+                  : undefined
+            }
+            launchCheckpoints={
+              mode.id === 'satellite-deploy'
+                ? satelliteCheckpoints
+                : mode.id === 'rocket-launch'
+                  ? rocketCheckpoints
+                  : undefined
+            }
+            onLaunchAgentFix={
+              mode.id === 'satellite-deploy'
+                ? () => aiTradeProdFix.trigger()
+                : mode.id === 'rocket-launch'
+                  ? () => aiPlatformProdFix.trigger()
+                  : undefined
+            }
+            launchAgentFixPending={
+              mode.id === 'satellite-deploy'
+                ? aiTradeProdFix.isPending
+                : mode.id === 'rocket-launch'
+                  ? aiPlatformProdFix.isPending
+                  : false
+            }
+            launchAgentFixActive={
+              mode.id === 'satellite-deploy'
+                ? aiTradeProdFix.isActive
+                : mode.id === 'rocket-launch'
+                  ? aiPlatformProdFix.isActive
+                  : false
+            }
+            launchAgentFixDisabled={
+              mode.id === 'satellite-deploy'
+                ? aiTradeProdFix.disabled
+                : mode.id === 'rocket-launch'
+                  ? aiPlatformProdFix.disabled
+                  : true
+            }
+            launchAgentFixTitle={
+              mode.id === 'satellite-deploy'
+                ? (aiTradeProdFix.disabledReason ??
+                  (satelliteProd.blockKind === 'rocket'
+                    ? 'Start Cluster · Remediate focused on Rocket IB bus'
+                    : 'Start Cluster · Remediate focused on Trade Prod readiness'))
+                : mode.id === 'rocket-launch'
+                  ? (aiPlatformProdFix.disabledReason ??
+                    'Start Cluster · Remediate focused on Platform Prod readiness')
+                  : undefined
+            }
+            onOpenAgentDesk={() => onOpenAgentDesk?.(ambientJobId ?? undefined)}
+            ambientJobId={ambientJobId}
+            ambientJobScope={ambientJobScope}
+            pipelineRunsNamespace={
+              mode.id === 'satellite-deploy'
+                ? tradeRunsQ.data?.namespace
+                : mode.id === 'rocket-launch'
+                  ? platformRunsQ.data?.namespace
+                  : undefined
+            }
+            platformStgGate={platformStgGateQ.data}
+            platformProdGate={platformProdGateQ.data}
+            supplyCmsPresent={
+              supplyQ.data?.dockerfile_configmaps?.filter(c => c.present).length
+            }
+            supplyCmsTotal={supplyQ.data?.dockerfile_configmaps?.length}
           />
         )}
 
       {phases.length > 0 && (
-        <div className="rounded-lg border border-border bg-card px-3 py-1.5">
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
-            <DenseTag variant="neutral" className="text-[9px]">
-              {doneCount}/{phases.length} complete
-            </DenseTag>
-          </div>
+        <details
+          className="rounded-lg border border-border bg-card px-3 py-1.5"
+          open={phaseOpen}
+          onToggle={e => setPhaseOpen((e.currentTarget as HTMLDetailsElement).open)}
+        >
+          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
+              <DenseTag variant="neutral" className="text-[9px]">
+                Playbook
+              </DenseTag>
+              <DenseTag variant="neutral" className="text-[9px]">
+                {doneCount}/{phases.length} complete
+              </DenseTag>
+              <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+                {phaseOpen ? 'Open — not live Go/No-Go' : 'Collapsed — not live Go/No-Go'}
+              </span>
+            </div>
+          </summary>
+          <p className="m-0 mb-1.5 mt-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
+            Historical phase checklist — not live environment health
+          </p>
           <TaskPhaseProgress
             phases={phases}
             statuses={statuses}
@@ -663,7 +822,17 @@ export function TaskControlCenter({
             onOpenFullPage={handleOpenPhasePage}
             onFixAction={handlePhaseFixAction}
           />
-        </div>
+          {mode.id === 'satellite-deploy' && satelliteProd.prodBlocked && (
+            <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
+              Live readiness blocked — playbook Done does not clear release
+            </p>
+          )}
+          {mode.id === 'rocket-launch' && rocketProd.prodBlocked && (
+            <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
+              Live readiness blocked — playbook Done does not clear release
+            </p>
+          )}
+        </details>
       )}
 
       {mode.loopArchetype === 'ops' && (

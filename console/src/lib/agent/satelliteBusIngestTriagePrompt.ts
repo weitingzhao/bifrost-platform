@@ -160,27 +160,25 @@ export function buildSatelliteBusIngestTriagePrompt(input: {
   busReachability: Reachability | undefined
 }): string {
   return [
-    `Triage Satellite Bus market ingest display vs actual runtime for **${input.env.toUpperCase()}** (${input.namespace}).`,
+    `Triage Satellite Bus Socket matrix vs Rocket IB gateway for **${input.env.toUpperCase()}** (${input.namespace}).`,
     '',
     '## Reported summary',
     `- Bus reachability: ${input.busReachability ?? 'unknown'}`,
-    `- Market ingest: ${input.ingestHeadline}`,
     `- Monitor socket: ${input.socketHeadline}`,
+    `- Legacy ingest rollup (secondary): ${input.ingestHeadline}`,
     '',
     '## Agent workflow',
     '1. verify_mission_snapshot + GET /api/v1/satellite/bus-deep?env=' + input.env + ' (platform MCP).',
-    '2. Cross-check ingest.services display_active/runtime_status vs monitor.socket.* vs GET plugins/ib-gateway/status.',
+    '2. Treat **monitor.socket** as authoritative — cross-check ib_ingestor / ib_account_agent / ib_operator / platform_ib_gateway vs GET plugins/ib-gateway/status.',
     '3. kubectl -n data get deploy ib-gateway; kubectl -n ' +
       input.namespace +
-      ' get deploy massive-ws daemon — confirm replicas/intent.',
-    '4. Classify each ingest row: **policy-off** (daemon scale 0, ws-disabled REST-only) | **managed-ok** (platform-ib-gateway / k8s heartbeat) | **real-degraded** | **false-alarm** (systemctl inactive on api-ops pod).',
-    '5. Safe L1 actuation (operator token): rollout_restart deployment/ib-gateway -n data; rollout_restart deployment/massive-ws -n ' +
-      input.namespace +
-      ' when ws should be live.',
+      ' get deploy massive-ws — confirm replicas/intent.',
+    '4. Classify Rocket gateway: **ok** | **partial/observe** | **fail**; classify trade socket consumers separately (do not double-count shared Rocket into STG+PROD).',
+    '5. Safe L1 actuation (operator token): rollout_restart deployment/ib-gateway -n data; Gateway reconnect via plugin when TWS slots need refresh.',
     '6. **D10 BLOCKED** — do NOT scale daemon, enable live trading, or remove daemon-scale-zero / observe-safe guards.',
     '',
     '## Close criteria',
-    '- Ingest rows show semantic labels (managed@platform-ib-gateway, policy-off, ws-disabled) not bare inactive for expected STG topology.',
+    '- Bus Status Socket matrix and Task CC Shared Rocket agree on gateway health.',
     '- monitor.socket.platform_ib_gateway reachability is not fail when plugin healthy.',
     '- Document any config gap (missing redis_ib block) before closing.',
   ].join('\n')

@@ -24,7 +24,8 @@ export function CouplingGatePanel({
   }
 
   const promote = evaluatePromoteStatus(context, matrices)
-  const lamp = promote.ready ? 'ok' : promote.blockedByDecision || promote.prodFails ? 'fail' : 'degraded'
+  // Narrative spine status — muted lamp so live CRITICAL readiness stays the visual authority.
+  const lamp = promote.ready ? 'unknown' : promote.blockedByDecision || promote.prodFails ? 'fail' : 'degraded'
 
   return (
     <OpsSection
@@ -34,8 +35,8 @@ export function CouplingGatePanel({
       overflow="visible"
       className="coupling-gate-panel"
     >
-      <p className="m-0 text-[var(--text-dense)] font-medium">
-        {promote.ready ? 'Promote ready (narrative)' : 'Promote blocked'}
+      <p className="m-0 text-[var(--text-dense)] font-medium text-muted-foreground">
+        {promote.ready ? 'Spine promote: ready (narrative)' : 'Spine promote: blocked'}
       </p>
       <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
         Flywheel primary: {flywheelLabel(context.focus.flywheel_primary)}

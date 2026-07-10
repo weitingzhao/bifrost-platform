@@ -13,6 +13,7 @@ import type { ClusterSummary, MatrixResponse, OpsContextResponse, StgSmokeRespon
 import { OpsSection } from '@/components/layout/OpsSection'
 import { flywheelLabel } from '@/components/FocusStrip'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
+import { countsTowardTradeReadiness } from '@/lib/control-room/matrixSummary'
 import {
   firstFailingTargetId,
   type OpenRuntimeMapFn,
@@ -37,11 +38,14 @@ interface ControlRoomLiveStatusProps {
 function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: number } {
   let ok = 0
   let fail = 0
+  let total = 0
   for (const t of matrix.targets) {
+    if (!countsTowardTradeReadiness(t)) continue
+    total += 1
     if (t.reachability === 'ok' || t.reachability === 'degraded') ok += 1
     else if (t.reachability === 'fail') fail += 1
   }
-  return { ok, fail, total: matrix.targets.length }
+  return { ok, fail, total }
 }
 
 export function ControlRoomLiveStatus({

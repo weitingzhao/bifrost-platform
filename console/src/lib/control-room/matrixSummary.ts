@@ -39,6 +39,47 @@ export function summarizeMatrix(m: MatrixResponse): MatrixSummary {
   return { ok, fail, degraded, unknown, total: m.targets.length, worstReach }
 }
 
+/**
+ * Whether a matrix target should affect Trade / Satellite launch readiness.
+ *
+ * Excludes by design:
+ * - `trade_write` / auth=blocked — Platform L0 must not probe write paths (R-DV3)
+ * - `ops-capabilities` with auth=skipped — optional token not configured (not a failure)
+ */
+export function countsTowardTradeReadiness(t: Target): boolean {
+  if (t.category === 'trade_write') return false
+  if (t.auth === 'blocked') return false
+  if (t.id === 'ops-capabilities' && t.auth === 'skipped') return false
+  return true
+}
+
+/** Trade + datastore targets that participate in payload / launch Go-No-Go scoring. */
+export function tradeReadinessTargets(targets: Target[]): Target[] {
+  return targets.filter(
+    t =>
+      countsTowardTradeReadiness(t) &&
+      (t.category.startsWith('trade') || t.category === 'datastore'),
+  )
+}
+
+/** Summarize only readiness-scored targets (for API Health badge / launch lamps). */
+export function summarizeTradeReadiness(targets: Target[]): MatrixSummary {
+  const scored = targets.filter(countsTowardTradeReadiness)
+  let ok = 0
+  let fail = 0
+  let degraded = 0
+  let unknown = 0
+  for (const t of scored) {
+    if (t.reachability === 'ok') ok += 1
+    else if (t.reachability === 'fail') fail += 1
+    else if (t.reachability === 'degraded') degraded += 1
+    else unknown += 1
+  }
+  const worstReach: BayLamp =
+    fail > 0 ? 'fail' : degraded > 0 ? 'degraded' : unknown > 0 ? 'unknown' : ok > 0 ? 'ok' : 'unknown'
+  return { ok, fail, degraded, unknown, total: scored.length, worstReach }
+}
+
 export function getProdMatrix(matrices: MatrixResponse[]): MatrixResponse | undefined {
   return matrices.find(m => m.environment === 'prod')
 }

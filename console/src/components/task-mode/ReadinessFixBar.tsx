@@ -8,6 +8,7 @@ import type { ProdFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
 import type { Signal } from '@/lib/control-room/missionSignals'
 import {
   readinessChipFixActions,
+  setSatelliteApiEnv,
   setSatelliteBusFocus,
   type ReadinessChipAction,
   type ReadinessChipContext,
@@ -70,6 +71,9 @@ export function ReadinessFixBar({
       if (action.tabId == null) return
       if (action.tabId === 'satellite-bus') {
         setSatelliteBusFocus(action.busFocus)
+      }
+      if (action.tabId === 'satellite-api') {
+        setSatelliteApiEnv(action.apiEnv)
       }
       onNavigate(action.tabId)
     },

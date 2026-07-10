@@ -487,6 +487,14 @@ function ConsolePageInner() {
             plane={consoleNavPlane(viewTab)}
             healthy={healthQuery.data}
             onRefresh={refreshAll}
+            ambientAgent={
+              ambientJob != null
+                ? {
+                    label: ambientJob.label,
+                    onOpen: () => openAgentDesk(ambientJob.id),
+                  }
+                : null
+            }
           >
             <PlatformAuthBar compact hideRefresh />
           </ConsoleHeader>
@@ -638,7 +646,9 @@ function ConsolePageInner() {
             onOpenPromote={openPromote}
             onOpenDelivery={openDelivery}
             ambientJobId={ambientJob?.id ?? null}
+            ambientJobScope={ambientJob?.scope ?? null}
             onStartAgentJob={startAmbientAgentJob}
+            onOpenAgentDesk={id => openAgentDesk(id)}
           />
         )}
 

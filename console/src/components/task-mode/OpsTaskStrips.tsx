@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import { Bot, Rocket, Satellite } from 'lucide-react'
 import {
@@ -14,13 +15,24 @@ import {
   DailyOpsMissionStrip,
   TaskModeReadinessStrip,
 } from '@/components/task-mode/TaskModeReadinessStrip'
+import { LaunchGateBar } from '@/components/task-mode/LaunchGateBar'
+import { LaunchLiveView } from '@/components/task-mode/LaunchLiveView'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import { DELIVER_PLATFORM_PIPELINE } from '@/lib/delivery/deliverPlatformPhases'
+import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
+import { TRADE_DEPLOY_SCOPE } from '@/lib/agent/tradeDeployAgentPrompt'
+import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import { PipelineRunHistoryStrip } from '@/components/task-mode/PipelineRunHistoryStrip'
+import { setSatelliteBusFocus } from '@/lib/task-mode/readinessChipActions'
+import type { DeliveryPipelineRunView, MatrixResponse, OpsContextResponse } from '@/api/types'
 import type { TaskModeDef } from '@/lib/task-mode/types'
+import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
+import { readinessAnchorDomId } from '@/lib/task-mode/satelliteLaunchVerdict'
 
 export type OpsTaskStripsProps = {
   mode: TaskModeDef
@@ -53,6 +65,29 @@ export type OpsTaskStripsProps = {
   agentTriagePending?: boolean
   agentTriageDisabled?: boolean
   agentTriageTitle?: string
+  /** Recent PipelineRuns for the side history column. */
+  recentRuns?: import('@/api/types').DeliveryPipelineRunView[]
+  recentRunsLoading?: boolean
+  /** Live Go/No-Go for LaunchGateBar (Task CC). */
+  launchVerdict?: LaunchVerdict
+  launchCheckpoints?: LaunchCheckpoint[]
+  /** Launch-bar Agent Fix (prod remediation) — distinct from readiness strip Fix. */
+  onLaunchAgentFix?: () => void
+  launchAgentFixPending?: boolean
+  launchAgentFixActive?: boolean
+  launchAgentFixDisabled?: boolean
+  launchAgentFixTitle?: string
+  onOpenAgentDesk?: () => void
+  /** Ambient agent job — opens Launch Live View for trade-deploy / release scope. */
+  ambientJobId?: string | null
+  ambientJobScope?: string | null
+  /** Namespace for the mode's deliver pipeline runs (trade STG or platform). */
+  pipelineRunsNamespace?: string
+  /** Rocket Launch Live View post-deploy chips. */
+  platformStgGate?: import('@/api/types').ReleaseGateResponse
+  platformProdGate?: import('@/api/types').ReleaseGateResponse
+  supplyCmsPresent?: number
+  supplyCmsTotal?: number
 }
 
 function OperateQueueSummary({ onNavigate }: { onNavigate: (tab: string) => void }) {
@@ -88,7 +123,13 @@ function OperateQueueSummary({ onNavigate }: { onNavigate: (tab: string) => void
   )
 }
 
-function PlatformStgReleaseStrip({ onNavigate }: { onNavigate: (tab: string) => void }) {
+function PlatformStgReleaseStrip({
+  onNavigate,
+  compact = false,
+}: {
+  onNavigate: (tab: string) => void
+  compact?: boolean
+}) {
   const platformRunsQ = useQuery({
     queryKey: ['task-cc', 'platform-runs-summary'],
     queryFn: () => fetchPipelineRuns(DELIVER_PLATFORM_PIPELINE),
@@ -115,11 +156,40 @@ function PlatformStgReleaseStrip({ onNavigate }: { onNavigate: (tab: string) => 
   const cms = supplyQ.data?.dockerfile_configmaps ?? []
   const cmsPresent = cms.filter(c => c.present).length
 
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
+        <span className="text-[var(--text-dense-micro)] font-medium uppercase tracking-wide text-muted-foreground">
+          Last STG deliver
+        </span>
+        <div className="flex flex-wrap gap-1">
+          <DenseTag variant="neutral" className="text-[8px]">
+            {deploy.label}
+          </DenseTag>
+          <DenseTag variant="neutral" className="text-[8px]">
+            Gate {gate.label}
+          </DenseTag>
+          <DenseTag variant="neutral" className="text-[8px]">
+            CM {cmsPresent}/{cms.length}
+          </DenseTag>
+          {retryFailed && (
+            <DenseTag variant="neutral" className="text-[8px]">
+              retry fail
+            </DenseTag>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <Rocket size={16} />
         <span className="text-[var(--text-dense-label)] font-semibold">Platform STG mainline</span>
+        <DenseTag variant="neutral" className="text-[9px]">
+          Last run
+        </DenseTag>
         <DenseTag variant={cmsPresent === cms.length && cms.length > 0 ? 'success' : 'warning'}>
           CMs {cmsPresent}/{cms.length}
         </DenseTag>
@@ -184,9 +254,11 @@ function SupplyChainStrip({ onNavigate }: { onNavigate: (tab: string) => void })
 function StgReleaseStrip({
   context,
   onNavigate,
+  compact = false,
 }: {
   context?: OpsContextResponse
   onNavigate: (tab: string) => void
+  compact?: boolean
 }) {
   const phases = buildStgReleasePhases(context)
   const active = phases.find(p => p.status === 'active') ?? phases.find(p => p.status === 'blocked')
@@ -218,16 +290,48 @@ function StgReleaseStrip({
   const deploy = runStepStatus(run)
   const retryFailed = deployRunRetryFailed(runs, run)
 
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
+        <span className="text-[var(--text-dense-micro)] font-medium uppercase tracking-wide text-muted-foreground">
+          Last STG deliver
+        </span>
+        <div className="flex flex-wrap gap-1">
+          <DenseTag variant="neutral" className="text-[8px]">
+            {deploy.label}
+          </DenseTag>
+          <DenseTag variant="neutral" className="text-[8px]">
+            Gate {gate.label}
+          </DenseTag>
+          <DenseTag variant="neutral" className="text-[8px]">
+            Smoke {smokeOk ? 'ok' : smokeQ.isLoading ? '…' : 'fail'}
+          </DenseTag>
+          {retryFailed && (
+            <DenseTag variant="neutral" className="text-[8px]">
+              retry fail
+            </DenseTag>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <Satellite size={16} />
-        <span className="text-[var(--text-dense-label)] font-semibold">STG release mainline</span>
+        <span className="text-[var(--text-dense-label)] font-semibold">Trade STG deliver</span>
+        <DenseTag variant="neutral" className="text-[9px]">
+          Last run
+        </DenseTag>
         <DenseTag variant="neutral">
           {done}/{phases.length} phases
         </DenseTag>
       </div>
-      <p className="m-0 mt-1 text-[var(--text-dense-meta)]">
+      <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-muted-foreground">
+        bifrost-deliver-stg · smoke + gate (pre-prod checkpoint)
+      </p>
+      <p className="m-0 mt-0.5 text-[var(--text-dense-meta)]">
         {active != null ? `${active.title} · ${active.status}` : 'All phases complete or planned'}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -257,7 +361,7 @@ function StgReleaseStrip({
 
 type SummaryRowProps = Omit<OpsTaskStripsProps, 'promoteOnly'>
 
-/** Three-column summary — launch + playbook context + live signals, above phase stepper. */
+/** Row1 full-width LaunchGateBar · Row2 Environment 2/3 + Recent 1/3. */
 export function OpsTaskSummaryRow(props: SummaryRowProps) {
   const {
     mode,
@@ -281,7 +385,45 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     agentTriagePending,
     agentTriageDisabled,
     agentTriageTitle,
+    recentRuns,
+    recentRunsLoading,
+    launchVerdict,
+    launchCheckpoints,
+    onLaunchAgentFix,
+    launchAgentFixPending,
+    launchAgentFixActive,
+    launchAgentFixDisabled,
+    launchAgentFixTitle,
+    onOpenAgentDesk,
+    ambientJobId,
+    ambientJobScope,
+    pipelineRunsNamespace,
+    stgSmoke,
+    stgGate,
+    tierB,
+    platformStgGate,
+    platformProdGate,
+    supplyCmsPresent,
+    supplyCmsTotal,
   } = props
+
+  const [liveViewDismissed, setLiveViewDismissed] = useState(false)
+  useEffect(() => {
+    setLiveViewDismissed(false)
+  }, [ambientJobId])
+
+  const qc = useQueryClient()
+
+  const openTradeRun = (run: DeliveryPipelineRunView) => {
+    qc.setQueryData(deliveryFocusRunQueryKey(DELIVER_STG_PIPELINE), run.name)
+    onNavigate('trade-release')
+  }
+
+  const openPlatformRun = (run: DeliveryPipelineRunView) => {
+    qc.setQueryData(deliveryFocusRunQueryKey(DELIVER_PLATFORM_PIPELINE), run.name)
+    onNavigate('platform-release')
+  }
+
   const ops = mode.ops
   if (ops == null) return null
 
@@ -290,82 +432,240 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     ((mode.id === 'rocket-launch' && onDispatchRelease != null) ||
       (mode.id === 'satellite-deploy' && onDispatchTradeDeploy != null))
 
-  if (mode.id === 'rocket-launch' && showLaunchPad) {
+  const showSatelliteLiveView =
+    mode.id === 'satellite-deploy' &&
+    showLaunchPad &&
+    launchVerdict?.kind === 'IN_FLIGHT' &&
+    ambientJobId != null &&
+    ambientJobId !== '' &&
+    ambientJobScope === TRADE_DEPLOY_SCOPE &&
+    !liveViewDismissed
+
+  const showRocketLiveView =
+    mode.id === 'rocket-launch' &&
+    showLaunchPad &&
+    launchVerdict?.kind === 'IN_FLIGHT' &&
+    ambientJobId != null &&
+    ambientJobId !== '' &&
+    ambientJobScope === PLATFORM_RELEASE_SCOPE &&
+    !liveViewDismissed
+
+  if (showSatelliteLiveView && ambientJobId != null) {
     return (
-      <div className="grid gap-3 lg:grid-cols-3">
-        <OpsSection title="Rocket launch" bodyPadding="compact">
-          <LaunchPad
-            variant="rocket-launch"
-            embedded
-            suppressProdBlockedFeedback
-            onDispatchRelease={onDispatchRelease!}
-            onDispatchTradeDeploy={() => {}}
-            releasePending={releasePending}
-            canDispatchRelease={canDispatchRelease}
-            releaseDisabledReason={releaseDisabledReason}
-            onOpenPlatformRelease={() => onNavigate('platform-release')}
-            onOpenTradeDeploy={() => onNavigate('trade-release')}
-          />
-        </OpsSection>
-        <OpsSection title="Platform STG release" bodyPadding="compact">
-          <PlatformStgReleaseStrip onNavigate={onNavigate} />
-        </OpsSection>
-        {ops.showMissionSignals && (
-          <OpsSection title="Environment readiness" bodyPadding="compact">
-            <TaskModeReadinessStrip
-              modeId="rocket-launch"
-              onNavigate={onNavigate}
+      <LaunchLiveView
+        variant="satellite"
+        jobId={ambientJobId}
+        taskLabel={scopeToLabel(TRADE_DEPLOY_SCOPE)}
+        pipelineRuns={recentRuns}
+        pipelineNamespace={pipelineRunsNamespace}
+        stgSmoke={stgSmoke}
+        stgGate={stgGate}
+        tierB={tierB}
+        onOpenDetail={() => onNavigate('trade-release')}
+        detailLabel="Trade Release →"
+        onOpenAgentDesk={
+          onOpenAgentDesk != null ? () => onOpenAgentDesk() : undefined
+        }
+        onBackToGate={() => setLiveViewDismissed(true)}
+      />
+    )
+  }
+
+  if (showRocketLiveView && ambientJobId != null) {
+    return (
+      <LaunchLiveView
+        variant="rocket"
+        jobId={ambientJobId}
+        taskLabel={scopeToLabel(PLATFORM_RELEASE_SCOPE)}
+        pipelineRuns={recentRuns}
+        pipelineNamespace={pipelineRunsNamespace}
+        platformStgGate={platformStgGate}
+        platformProdGate={platformProdGate}
+        supplyCmsPresent={supplyCmsPresent}
+        supplyCmsTotal={supplyCmsTotal}
+        onOpenDetail={() => onNavigate('platform-release')}
+        detailLabel="Platform Release →"
+        onOpenAgentDesk={
+          onOpenAgentDesk != null ? () => onOpenAgentDesk() : undefined
+        }
+        onBackToGate={() => setLiveViewDismissed(true)}
+      />
+    )
+  }
+
+  if (mode.id === 'rocket-launch' && showLaunchPad && launchVerdict != null) {
+    return (
+      <div className="flex flex-col gap-2">
+        <LaunchGateBar
+          verdict={launchVerdict}
+          checkpoints={launchCheckpoints ?? []}
+          onAgentFix={onLaunchAgentFix}
+          agentFixPending={launchAgentFixPending}
+          agentFixActive={launchAgentFixActive}
+          agentFixDisabled={launchAgentFixDisabled}
+          agentFixTitle={launchAgentFixTitle}
+          onOpenAgentDesk={onOpenAgentDesk}
+          onLaunch={onDispatchRelease}
+          launchLabel="Agent Launch"
+          blockedLabel="Launch blocked"
+          launchPending={releasePending}
+          launchDisabled={!canDispatchRelease}
+          launchDisabledReason={releaseDisabledReason}
+          onOpenDetail={() => onNavigate('platform-release')}
+          detailLabel="Detail →"
+          onOpenActiveRun={() => onNavigate('platform-release')}
+          openActiveRunLabel="Platform Release →"
+        />
+        <div className="grid items-stretch gap-2 lg:grid-cols-3">
+          {ops.showMissionSignals && (
+            <OpsSection
+              title="Environment readiness"
+              bodyPadding="compact"
+              className="flex h-full min-h-0 flex-col lg:col-span-2"
+              bodyClassName="flex min-h-0 flex-1 flex-col gap-1.5"
+              actions={
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <button
+                    type="button"
+                    className="text-[var(--text-dense-caption)] text-primary hover:underline"
+                    onClick={() => onNavigate('platform-release')}
+                  >
+                    Platform Release →
+                  </button>
+                </div>
+              }
+            >
+              <TaskModeReadinessStrip
+                modeId="rocket-launch"
+                onNavigate={onNavigate}
+                compact
+                summaryColumn
+                suppressProdBlockedBanner
+              />
+              <PlatformStgReleaseStrip onNavigate={onNavigate} compact />
+            </OpsSection>
+          )}
+          <OpsSection
+            id={readinessAnchorDomId('pipeline')}
+            title="Recent launches"
+            bodyPadding="compact"
+            className="flex h-full min-h-0 flex-col scroll-mt-2 transition-shadow lg:col-span-1"
+            bodyClassName="flex min-h-0 flex-1 flex-col"
+          >
+            <PipelineRunHistoryStrip
+              runs={recentRuns}
+              isLoading={recentRunsLoading}
               compact
-              summaryColumn
-              suppressProdBlockedBanner
+              embedded
+              linkLabel="Platform Release →"
+              onOpenFullHistory={() => onNavigate('platform-release')}
+              onOpenRun={openPlatformRun}
             />
           </OpsSection>
-        )}
+        </div>
       </div>
     )
   }
 
-  if (mode.id === 'satellite-deploy' && showLaunchPad) {
+  if (mode.id === 'satellite-deploy' && showLaunchPad && launchVerdict != null) {
     return (
-      <div className="grid gap-3 lg:grid-cols-3">
-        <OpsSection title="Satellite deploy" bodyPadding="compact">
-          <LaunchPad
-            variant="satellite-deploy"
-            embedded
-            suppressProdBlockedFeedback
-            onDispatchRelease={() => {}}
-            onDispatchTradeDeploy={onDispatchTradeDeploy!}
-            tradeDeployPending={tradeDeployPending}
-            canDispatchTradeDeploy={canDispatchTradeDeploy}
-            tradeDeployDisabledReason={tradeDeployDisabledReason}
-            onOpenPlatformRelease={() => onNavigate('platform-release')}
-            onOpenTradeDeploy={() => onNavigate('trade-release')}
-          />
-        </OpsSection>
-        <OpsSection title="STG release" bodyPadding="compact">
-          <StgReleaseStrip context={context} onNavigate={onNavigate} />
-        </OpsSection>
-        {ops.showMissionSignals && (
-          <OpsSection title="Environment readiness" bodyPadding="compact">
-            <TaskModeReadinessStrip
-              modeId="satellite-deploy"
-              onNavigate={onNavigate}
+      <div className="flex flex-col gap-2">
+        <LaunchGateBar
+          verdict={launchVerdict}
+          checkpoints={launchCheckpoints ?? []}
+          onAgentFix={onLaunchAgentFix}
+          agentFixPending={launchAgentFixPending}
+          agentFixActive={launchAgentFixActive}
+          agentFixDisabled={launchAgentFixDisabled}
+          agentFixTitle={launchAgentFixTitle}
+          onOpenAgentDesk={onOpenAgentDesk}
+          onLaunch={onDispatchTradeDeploy}
+          launchLabel="Agent Deploy"
+          blockedLabel="Deploy blocked"
+          launchPending={tradeDeployPending}
+          launchDisabled={!canDispatchTradeDeploy}
+          launchDisabledReason={tradeDeployDisabledReason}
+          onOpenDetail={() => onNavigate('trade-release')}
+          detailLabel="Detail →"
+          onOpenActiveRun={() => onNavigate('trade-release')}
+          openActiveRunLabel="Trade Deploy →"
+        />
+        <div className="grid items-stretch gap-2 lg:grid-cols-3">
+          {ops.showMissionSignals && (
+            <OpsSection
+              title="Environment readiness"
+              bodyPadding="compact"
+              className="flex h-full min-h-0 flex-col lg:col-span-2"
+              bodyClassName="flex min-h-0 flex-1 flex-col gap-1.5"
+              actions={
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <button
+                    type="button"
+                    className="text-[var(--text-dense-caption)] text-primary hover:underline"
+                    onClick={() => {
+                      setSatelliteBusFocus('rocket')
+                      onNavigate('satellite-bus')
+                    }}
+                  >
+                    Satellite Bus →
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[var(--text-dense-caption)] text-primary hover:underline"
+                    onClick={() => onNavigate('trade-release')}
+                  >
+                    Trade Release →
+                  </button>
+                  {onAgentTriage != null && (
+                    <AgentTriggerButton
+                      label="Agent Triage"
+                      size="xs"
+                      pending={agentTriagePending}
+                      disabled={agentTriageDisabled}
+                      title={
+                        agentTriageTitle ??
+                        'Cross-check Socket matrix vs Rocket IB gateway (D10 safe)'
+                      }
+                      onClick={onAgentTriage}
+                    />
+                  )}
+                </div>
+              }
+            >
+              <TaskModeReadinessStrip
+                modeId="satellite-deploy"
+                onNavigate={onNavigate}
+                compact
+                summaryColumn
+                suppressProdBlockedBanner
+                canOperate={readinessCanOperate}
+                onAgentFixStg={onAgentFixStg}
+                onAgentFixProd={onAgentFixProd}
+                agentFixPending={agentFixPending}
+                agentFixDisabled={agentFixDisabled}
+                agentFixTitle={agentFixTitle}
+              />
+              <StgReleaseStrip context={context} onNavigate={onNavigate} compact />
+            </OpsSection>
+          )}
+          <OpsSection
+            id={readinessAnchorDomId('pipeline')}
+            title="Recent launches"
+            bodyPadding="compact"
+            className="flex h-full min-h-0 flex-col scroll-mt-2 transition-shadow lg:col-span-1"
+            bodyClassName="flex min-h-0 flex-1 flex-col"
+          >
+            <PipelineRunHistoryStrip
+              runs={recentRuns}
+              isLoading={recentRunsLoading}
               compact
-              summaryColumn
-              suppressProdBlockedBanner
-              canOperate={readinessCanOperate}
-              onAgentFixStg={onAgentFixStg}
-              onAgentFixProd={onAgentFixProd}
-              agentFixPending={agentFixPending}
-              agentFixDisabled={agentFixDisabled}
-              agentFixTitle={agentFixTitle}
-              onAgentTriage={onAgentTriage}
-              agentTriagePending={agentTriagePending}
-              agentTriageDisabled={agentTriageDisabled}
-              agentTriageTitle={agentTriageTitle}
+              embedded
+              linkLabel="Trade Deploy →"
+              onOpenFullHistory={() => onNavigate('trade-release')}
+              onOpenRun={openTradeRun}
             />
           </OpsSection>
-        )}
+        </div>
       </div>
     )
   }
@@ -464,7 +764,7 @@ export function OpsTaskStrips({
 
   const stgReleaseSection =
     mode.id === 'satellite-deploy' ? (
-      <OpsSection title="STG release">
+      <OpsSection title="Trade STG deliver">
         <StgReleaseStrip context={context} onNavigate={onNavigate} />
       </OpsSection>
     ) : null

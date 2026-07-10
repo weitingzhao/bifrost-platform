@@ -20,6 +20,7 @@ import {
   type MissionSnapshot,
   type Signal,
 } from '@/lib/control-room/missionSignals'
+import { countsTowardTradeReadiness } from '@/lib/control-room/matrixSummary'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 import { PayloadDepthPanel } from '@/components/control-room/PayloadDepthPanel'
 import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystemsGrid'
@@ -47,11 +48,14 @@ interface MissionControlHeaderProps {
 function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: number } {
   let ok = 0
   let fail = 0
+  let total = 0
   for (const t of matrix.targets) {
+    if (!countsTowardTradeReadiness(t)) continue
+    total += 1
     if (t.reachability === 'ok' || t.reachability === 'degraded') ok += 1
     else if (t.reachability === 'fail') fail += 1
   }
-  return { ok, fail, total: matrix.targets.length }
+  return { ok, fail, total }
 }
 
 

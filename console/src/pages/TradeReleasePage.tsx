@@ -162,64 +162,63 @@ export function TradeReleasePage({ context, isLoading = false, onOpenPlacement }
     && lastProdRun != null
     && (isPipelineRunRunning(lastProdRun) || isPipelineRunFailed(lastProdRun))
 
-  const renderStepDetail = (index: number): ReactNode => {
-    switch (index) {
-      case 0:
-        return (
-          <div className="mt-3 flex flex-col gap-3 border-t border-border/40 pt-3">
-            <SupplyChainPanel layout="operate" />
-            {showStgActiveRun && <DeliveryActiveRunPanel target={TRADE_STG_TARGET} />}
-          </div>
-        )
-      case 1:
-        return (
-          <div className="mt-3 flex flex-col gap-3 border-t border-border/40 pt-3">
-            <StgSmokePanel
-              data={stgSmoke.data}
-              isLoading={stgSmoke.isLoading}
-              isFetching={stgSmoke.isFetching}
-              errorMessage={stgSmoke.error instanceof Error ? stgSmoke.error.message : null}
-              onRefresh={() => void stgSmoke.refetch()}
-              title="STG HTTP smoke"
-              description="Post-deliver acceptance via trade-stg gateway."
-            />
-            <StgTierBChecklistPanel
-              tierB={tierB.data}
-              tierBLoading={tierB.isLoading}
-              layout="observe"
-            />
-          </div>
-        )
-      case 2:
-        return (
-          <div className="mt-3 flex flex-col gap-3 border-t border-border/40 pt-3">
-            <PlatformDeliverActuatePanel target={TRADE_PROD_TARGET} hideActions />
-            {showProdActiveRun && <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} />}
-            <PipelineRunsPanel
-              pipelines={pipelines.data}
-              pipelinesLoading={pipelines.isLoading}
-              errorMessage={pipelines.error instanceof Error ? pipelines.error.message : null}
-              layout="observe"
-              onOpenPlacement={onOpenPlacement}
-            />
-          </div>
-        )
-      case 3:
-        return (
-          <div className="mt-3 border-t border-border/40 pt-3">
-            <ReleaseGateCompareSection
-              stgGate={stgGate.data}
-              stgGateLoading={stgGate.isLoading}
-              stgGateError={stgGate.error instanceof Error ? stgGate.error.message : null}
-              prodGate={prodGate.data}
-              prodGateLoading={prodGate.isLoading}
-              prodGateError={prodGate.error instanceof Error ? prodGate.error.message : null}
-            />
-          </div>
-        )
-      default:
-        return null
-    }
+  let stepDetail: ReactNode
+  switch (activeIndex) {
+    case 0:
+      stepDetail = (
+        <>
+          <SupplyChainPanel layout="operate" />
+          {showStgActiveRun && <DeliveryActiveRunPanel target={TRADE_STG_TARGET} />}
+        </>
+      )
+      break
+    case 1:
+      stepDetail = (
+        <>
+          <StgSmokePanel
+            data={stgSmoke.data}
+            isLoading={stgSmoke.isLoading}
+            isFetching={stgSmoke.isFetching}
+            errorMessage={stgSmoke.error instanceof Error ? stgSmoke.error.message : null}
+            onRefresh={() => void stgSmoke.refetch()}
+            title="STG HTTP smoke"
+            description="Post-deliver acceptance via trade-stg gateway."
+          />
+          <StgTierBChecklistPanel
+            tierB={tierB.data}
+            tierBLoading={tierB.isLoading}
+            layout="observe"
+          />
+        </>
+      )
+      break
+    case 2:
+      stepDetail = (
+        <>
+          <PlatformDeliverActuatePanel target={TRADE_PROD_TARGET} hideActions />
+          {showProdActiveRun && <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} />}
+          <PipelineRunsPanel
+            pipelines={pipelines.data}
+            pipelinesLoading={pipelines.isLoading}
+            errorMessage={pipelines.error instanceof Error ? pipelines.error.message : null}
+            layout="observe"
+            onOpenPlacement={onOpenPlacement}
+          />
+        </>
+      )
+      break
+    default:
+      stepDetail = (
+        <ReleaseGateCompareSection
+          stgGate={stgGate.data}
+          stgGateLoading={stgGate.isLoading}
+          stgGateError={stgGate.error instanceof Error ? stgGate.error.message : null}
+          prodGate={prodGate.data}
+          prodGateLoading={prodGate.isLoading}
+          prodGateError={prodGate.error instanceof Error ? prodGate.error.message : null}
+        />
+      )
+      break
   }
 
   return (
@@ -240,8 +239,9 @@ export function TradeReleasePage({ context, isLoading = false, onOpenPlacement }
         stgGate={stgGate.data}
         prodGate={prodGate.data}
         renderStepActions={renderTradeStepActions}
-        renderStepDetail={renderStepDetail}
       />
+
+      <div className="flex flex-col gap-3">{stepDetail}</div>
 
       <details className="group rounded-lg border border-border/50 bg-card">
         <summary className="cursor-pointer list-none px-4 py-3 text-dense-label font-medium text-foreground hover:bg-secondary/30">
