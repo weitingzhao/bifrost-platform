@@ -9,22 +9,25 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
 const defaultTimeout = 45 * time.Second
 
 // Client is the shared UniFi REST client for platform-api (Session v2 + legacy v1 reads).
+// Cookie/CSRF are reused across requests; Login is only called when needed (or after 401).
 type Client struct {
-	cfg        Config
-	http       *http.Client
-	baseURL    string
-	cookie     string
-	csrf       string
-	loggedIn   bool
+	cfg      Config
+	http     *http.Client
+	baseURL  string
+	mu       sync.Mutex
+	cookie   string
+	csrf     string
+	loggedIn bool
 }
 
-// New builds a client. Call Login before LegacyGet/V2Get/V2Write.
+// New builds a client. Call Login (or EnsureLogin) before LegacyGet/V2Get/V2Write.
 func New(cfg Config) *Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // UCG uses self-signed cert
@@ -48,6 +51,33 @@ func (c *Client) SetHTTPClient(httpClient *http.Client) {
 	c.http = httpClient
 }
 
+// LoggedIn reports whether a session cookie is present.
+func (c *Client) LoggedIn() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.loggedIn && c.cookie != ""
+}
+
+// InvalidateSession clears the cached cookie so the next EnsureLogin re-authenticates.
+func (c *Client) InvalidateSession() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cookie = ""
+	c.csrf = ""
+	c.loggedIn = false
+}
+
+// EnsureLogin logs in only when no session is cached.
+func (c *Client) EnsureLogin(ctx context.Context) error {
+	c.mu.Lock()
+	ok := c.loggedIn && c.cookie != ""
+	c.mu.Unlock()
+	if ok {
+		return nil
+	}
+	return c.Login(ctx)
+}
+
 // Login authenticates via POST /api/auth/login and stores session cookie + CSRF token.
 func (c *Client) Login(ctx context.Context) error {
 	_, err := c.do(ctx, http.MethodPost, "/api/auth/login", map[string]string{
@@ -57,7 +87,9 @@ func (c *Client) Login(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("unifi login: %w", err)
 	}
+	c.mu.Lock()
 	c.loggedIn = true
+	c.mu.Unlock()
 	return nil
 }
 
@@ -66,7 +98,7 @@ func (c *Client) LegacyGet(ctx context.Context, path string) (json.RawMessage, e
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	return c.do(ctx, http.MethodGet, fmt.Sprintf("/proxy/network/api/s/%s%s", c.cfg.Site, path), nil, requestOpts{})
+	return c.doAuthed(ctx, http.MethodGet, fmt.Sprintf("/proxy/network/api/s/%s%s", c.cfg.Site, path), nil)
 }
 
 // V2Get calls GET /proxy/network/v2/api/site/{site}{path}.
@@ -74,7 +106,7 @@ func (c *Client) V2Get(ctx context.Context, path string) (json.RawMessage, error
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	return c.do(ctx, http.MethodGet, fmt.Sprintf("/proxy/network/v2/api/site/%s%s", c.cfg.Site, path), nil, requestOpts{})
+	return c.doAuthed(ctx, http.MethodGet, fmt.Sprintf("/proxy/network/v2/api/site/%s%s", c.cfg.Site, path), nil)
 }
 
 // V2Post calls POST on the v2 site API.
@@ -82,7 +114,7 @@ func (c *Client) V2Post(ctx context.Context, path string, body any) (json.RawMes
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	return c.do(ctx, http.MethodPost, fmt.Sprintf("/proxy/network/v2/api/site/%s%s", c.cfg.Site, path), body, requestOpts{})
+	return c.doAuthed(ctx, http.MethodPost, fmt.Sprintf("/proxy/network/v2/api/site/%s%s", c.cfg.Site, path), body)
 }
 
 // V2Delete calls DELETE on the v2 site API.
@@ -90,7 +122,7 @@ func (c *Client) V2Delete(ctx context.Context, path string) error {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	_, err := c.do(ctx, http.MethodDelete, fmt.Sprintf("/proxy/network/v2/api/site/%s%s", c.cfg.Site, path), nil, requestOpts{})
+	_, err := c.doAuthed(ctx, http.MethodDelete, fmt.Sprintf("/proxy/network/v2/api/site/%s%s", c.cfg.Site, path), nil)
 	return err
 }
 
@@ -157,6 +189,33 @@ type requestOpts struct {
 	integration bool
 }
 
+// doAuthed ensures a session, then retries once after 401 with a fresh login.
+func (c *Client) doAuthed(ctx context.Context, method, path string, body any) (json.RawMessage, error) {
+	if err := c.EnsureLogin(ctx); err != nil {
+		return nil, err
+	}
+	raw, err := c.do(ctx, method, path, body, requestOpts{})
+	if err == nil {
+		return raw, nil
+	}
+	if !isUnauthorized(err) {
+		return nil, err
+	}
+	c.InvalidateSession()
+	if err := c.Login(ctx); err != nil {
+		return nil, err
+	}
+	return c.do(ctx, method, path, body, requestOpts{})
+}
+
+func isUnauthorized(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "HTTP 401") || strings.Contains(msg, "HTTP 403")
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body any, opts requestOpts) (json.RawMessage, error) {
 	var reader io.Reader
 	if body != nil {
@@ -175,11 +234,14 @@ func (c *Client) do(ctx context.Context, method, path string, body any, opts req
 	if opts.integration {
 		req.Header.Set("X-API-KEY", c.cfg.APIKey)
 	} else {
-		if c.cookie != "" {
-			req.Header.Set("Cookie", c.cookie)
+		c.mu.Lock()
+		cookie, csrf := c.cookie, c.csrf
+		c.mu.Unlock()
+		if cookie != "" {
+			req.Header.Set("Cookie", cookie)
 		}
-		if c.csrf != "" {
-			req.Header.Set("X-CSRF-Token", c.csrf)
+		if csrf != "" {
+			req.Header.Set("X-CSRF-Token", csrf)
 		}
 	}
 
@@ -189,6 +251,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, opts req
 	}
 	defer resp.Body.Close()
 
+	c.mu.Lock()
 	if opts.login {
 		if sc := resp.Header.Get("Set-Cookie"); sc != "" {
 			c.cookie = strings.Split(sc, ";")[0]
@@ -202,6 +265,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, opts req
 	if updated := resp.Header.Get("x-updated-csrf-token"); updated != "" {
 		c.csrf = updated
 	}
+	c.mu.Unlock()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {

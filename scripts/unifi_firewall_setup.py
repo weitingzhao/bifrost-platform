@@ -35,7 +35,8 @@ USER = os.environ.get("UNIFI_USER", "")
 PASS = os.environ.get("UNIFI_PASS", "")
 API_KEY = os.environ.get("UNIFI_API_KEY", "")
 SITE = "default"
-NAS_IP = "192.168.10.20"
+# Canonical UGREEN-NAS fixed IP on Server VLAN (UniFi reservation on MAC …:4e:25).
+NAS_IP = os.environ.get("NAS_IP", "192.168.10.20")
 PLEX_PORTS = "32400"
 SMB_PORTS = "445,139"
 WRITE_DELAY_S = 0.35
@@ -51,20 +52,53 @@ ZONE_SPECS = [
     ("Bifrost Default", "Default"),
 ]
 
+# Create order matters on UniFi ZBF: lower index = higher priority.
+# Specific ALLOW (e.g. Family→NAS) MUST be created before zone REJECT (Family→Server).
 POLICY_SPECS: list[dict[str, Any]] = [
+    {
+        "name": "Bifrost | ALLOW Work → Server",
+        "action": "ALLOW",
+        "src": "Work",
+        "dst": "Server",
+        "note": "Admin → K3s + kube-vip + NAS",
+    },
+    {
+        "name": "Bifrost | ALLOW Family → NAS",
+        "action": "ALLOW",
+        "src": "Family",
+        "dst_ip": NAS_IP,
+        # Full NAS access (SMB/Plex/web UI/etc.) — not Server-wide.
+        "dst_ports": "*",
+        "note": "Family SSID → UGREEN-NAS only (must outrank REJECT Family→Server)",
+    },
+    {
+        "name": "Bifrost | ALLOW IoT → NAS Plex",
+        "action": "ALLOW",
+        "src": "Home",
+        "dst_ip": NAS_IP,
+        "dst_ports": PLEX_PORTS,
+        "note": "Home theater streaming from NAS (must outrank REJECT IoT→Server)",
+    },
+    {
+        "name": "Bifrost | ALLOW Server → IoT",
+        "action": "ALLOW",
+        "src": "Server",
+        "dst": "Home",
+        "note": "Home Assistant / automation hub control",
+    },
     {
         "name": "Bifrost | REJECT Family → Server",
         "action": "REJECT",
         "src": "Family",
         "dst": "Server",
-        "note": "Family devices cannot reach servers",
+        "note": "Family devices cannot reach servers (except NAS allow above)",
     },
     {
         "name": "Bifrost | REJECT IoT → Server",
         "action": "REJECT",
         "src": "Home",
         "dst": "Server",
-        "note": "IoT cannot reach servers",
+        "note": "IoT cannot reach servers (except Plex allow above)",
     },
     {
         "name": "Bifrost | REJECT IoT → Family",
@@ -79,36 +113,6 @@ POLICY_SPECS: list[dict[str, Any]] = [
         "src": "Family",
         "dst": "Home",
         "note": "Family cannot lateral-scan IoT",
-    },
-    {
-        "name": "Bifrost | ALLOW Work → Server",
-        "action": "ALLOW",
-        "src": "Work",
-        "dst": "Server",
-        "note": "Admin → K3s + kube-vip",
-    },
-    {
-        "name": "Bifrost | ALLOW Family → NAS Plex/SMB",
-        "action": "ALLOW",
-        "src": "Family",
-        "dst_ip": NAS_IP,
-        "dst_ports": f"{PLEX_PORTS},{SMB_PORTS}",
-        "note": "Media streaming from NAS",
-    },
-    {
-        "name": "Bifrost | ALLOW IoT → NAS Plex",
-        "action": "ALLOW",
-        "src": "Home",
-        "dst_ip": NAS_IP,
-        "dst_ports": PLEX_PORTS,
-        "note": "Home theater streaming from NAS",
-    },
-    {
-        "name": "Bifrost | ALLOW Server → IoT",
-        "action": "ALLOW",
-        "src": "Server",
-        "dst": "Home",
-        "note": "Home Assistant / automation hub control",
     },
 ]
 
@@ -148,7 +152,7 @@ TEMP_OPEN_SERVER_SPECS: list[dict[str, Any]] = [
         "action": "ALLOW",
         "src": "Home",
         "dst": "Server",
-        "note": "Home/IoT SSID → Server (temporary)",
+        "note": "vision/IoT SSID → Server (temporary)",
     },
 ]
 
@@ -355,23 +359,26 @@ def build_v2_policy(spec: dict, zone_ids: dict[str, str]) -> dict[str, Any]:
         destination: dict[str, Any] = endpoint_any(dst_zone)
     else:
         dst_zone = zone_ids["Bifrost Server"]
+        ports = spec.get("dst_ports", "")
+        any_ports = ports in ("", "*", "any", None)
         destination = {
             "zone_id": dst_zone,
             "matching_target": "IP",
             "matching_target_type": "SPECIFIC",
             "ips": [spec["dst_ip"]],
-            "port_matching_type": "SPECIFIC",
-            "port": spec.get("dst_ports", ""),
+            "port_matching_type": "ANY" if any_ports else "SPECIFIC",
             "match_opposite_ports": False,
             "match_opposite_ips": False,
         }
+        if not any_ports:
+            destination["port"] = ports
 
     return {
         "name": spec["name"],
         "enabled": True,
         "action": action,
         "ip_version": "IPV4",
-        "protocol": "tcp" if "dst_ip" in spec else "all",
+        "protocol": "all",
         "source": endpoint_any(src_zone),
         "destination": destination,
         "schedule": {"mode": "ALWAYS"},

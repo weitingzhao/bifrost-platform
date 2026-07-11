@@ -10,10 +10,10 @@
  * - API actuation: platform-api /api/v1/network/* · networkApiContractCatalog.ts
  */
 
-export const NET_UPGRADE_VERSION = '2026-07-03-v2'
+export const NET_UPGRADE_VERSION = '2026-07-10-ssid-vision'
 export const NET_UPGRADE_SOURCE = 'console/src/lib/architecture/networkUpgradeCatalog.ts'
 export const NET_UPGRADE_STATUS =
-  'PARTIAL DEPLOY — UCG Max + USW-Pro-Max-24 live (VLAN 10/20/30/50); ZBF firewall applied via Session v2 (D9); AP rollout + Eero cutover pending'
+  'WIFI CLOSED — 4× U7-Pro-Wall + Bifrost/Family/vision; permanent ZBF; Eero decommissioned; Ring Alarm Pro Bridge on VLAN 50. Core ⑤ firewall ✓ · ⑥ UniFi MCP pending.'
 
 /** Live deployment progress — mirrors spine streams network-upgrade-core / network-upgrade-wifi. */
 export type DeploymentProgressRow = {
@@ -30,30 +30,31 @@ export const DEPLOYMENT_PROGRESS: DeploymentProgressRow[] = [
     done: 5,
     total: 6,
     label: 'Core backbone (UCG · switch · VLAN · firewall · K3s validation)',
-    note: '⑥ Firewall ✓ Session v2 — 5 Bifrost zones + 9 ZBF policies; ⑤ UniFi MCP read integration pending',
+    note: '⑤ Firewall permanent ZBF ✓ (2026-07-11 Family→NAS priority fix); ⑥ UniFi MCP read integration pending',
   },
   {
     stream: 'network-upgrade-wifi',
-    done: 2,
+    done: 5,
     total: 5,
-    label: 'WiFi cutover (AP purchase · WiFiman · pre-AP tooling · rollout · Eero decommission)',
-    note: '① AP hardware purchase ✓ · ② WiFiman baseline — scripts/wifiman_baseline.sh ready (Owner: run 9-point survey) · ③ Pre-AP tooling ✓ — unifi_wlan_precreate.py + unifi_moca_vlan_test.sh pending evening window · ④⑤ rollout + Eero decommission pending',
+    label: 'WiFi cutover (AP purchase · SSIDs · rollout · Eero decommission)',
+    note: 'CLOSED 2026-07-11 — 4× U7-Pro-Wall + Bifrost/Family/vision; Eero off; Ring Alarm Pro Bridge on VLAN 50',
   },
 ]
 
 /** Authoritative record of applied ZBF — audit via scripts/unifi_firewall_setup.py (Agent Protocol POLICY_* playbooks). */
 export const FIREWALL_APPLIED = {
-  appliedAt: '2026-07-02',
+  appliedAt: '2026-07-11',
   actuationPath: 'UniFi Session v2 + CSRF (spine decision D9 — Integration API Key write blocked on UCG 10.4.57)',
   auditScript: 'scripts/unifi_firewall_setup.py audit',
-  applyScript: 'scripts/unifi_firewall_setup.py apply',
+  applyScript: 'scripts/unifi_firewall_setup.py apply --include-default-deny',
   zoneCount: 5,
   policyCount: 9,
+  nasIp: '192.168.10.20',
   zones: [
     { name: 'Bifrost Server', vlanBinding: 'VLAN 10 (Server)' },
     { name: 'Bifrost Work', vlanBinding: 'VLAN 20 (Admin / Bifrost SSID)' },
     { name: 'Bifrost Family', vlanBinding: 'VLAN 30 (Family SSID)' },
-    { name: 'Bifrost IoT', vlanBinding: 'VLAN 50 (Home SSID)' },
+    { name: 'Bifrost IoT', vlanBinding: 'VLAN 50 (vision SSID)' },
     { name: 'Bifrost Default', vlanBinding: 'Default / Eero transition' },
   ],
   policies: [
@@ -61,9 +62,9 @@ export const FIREWALL_APPLIED = {
     { name: 'Bifrost | REJECT IoT → Server', catalogRule: 'VLAN 50 → VLAN 10 deny' },
     { name: 'Bifrost | REJECT IoT → Family', catalogRule: 'VLAN 50 → VLAN 30 deny' },
     { name: 'Bifrost | REJECT Family → IoT', catalogRule: 'VLAN 30 → VLAN 50 deny' },
-    { name: 'Bifrost | ALLOW Work → Server', catalogRule: 'VLAN 20 → VLAN 10 allow (kube-vip)' },
-    { name: 'Bifrost | ALLOW Family → NAS Plex/SMB', catalogRule: 'VLAN 30 → NAS Plex/SMB allow' },
-    { name: 'Bifrost | ALLOW IoT → NAS Plex', catalogRule: 'VLAN 50 → NAS Plex allow' },
+    { name: 'Bifrost | ALLOW Work → Server', catalogRule: 'VLAN 20 → VLAN 10 allow (kube-vip + NAS)' },
+    { name: 'Bifrost | ALLOW Family → NAS', catalogRule: 'VLAN 30 → UGREEN-NAS 192.168.10.20 allow (all)' },
+    { name: 'Bifrost | ALLOW IoT → NAS Plex', catalogRule: 'VLAN 50 → NAS Plex :32400 allow' },
     { name: 'Bifrost | ALLOW Server → IoT', catalogRule: 'VLAN 10 → VLAN 50 allow (automation hub)' },
     {
       name: 'Bifrost | REJECT Default → Server (transition)',
@@ -164,8 +165,8 @@ export const TARGET_VLANS: VlanRow[] = [
     vlan: 50,
     subnet: '192.168.50.x',
     purpose: 'Home IoT',
-    ssid: 'Home',
-    devices: 'Ring, Echo, smart switches, robot vacuums, sensors',
+    ssid: 'vision',
+    devices: 'Ring, Echo, smart switches, robot vacuums, sensors — same SSID+pass as Eero',
   },
 ]
 
@@ -199,9 +200,9 @@ UCG Max (192.168.10.1) ── 4×2.5G LAN, 2.3Gbps IDS/IPS, UniFi Controller, RE
   │ 2.5G trunk
 USW-Pro-Max-24 (8×2.5G + 16×1G + 2×10G SFP+, L3) ── replaces SG116E
   ├── [VLAN 10] K3s nodes (.70/.73/.75/.77) + NAS + GPU + Work Mac
-  ├── [trunk → MoCA] → coax → MoCA → U7 Pro (3F) ─WiFi→ "Bifrost"(V20) + "Home"(V50)
-  ├── [trunk → MoCA] → coax → MoCA → U7 Pro (2F) ─WiFi→ "Bifrost"(V20) + "Home"(V50)
-  ├── [trunk → MoCA] → coax → MoCA → U7 Pro (1F) ─WiFi→ "Bifrost"(V20) + "Home"(V50)
+  ├── [trunk → MoCA] → coax → MoCA → U7 Pro (3F) ─WiFi→ "Bifrost"(V20) + "vision"(V50)
+  ├── [trunk → MoCA] → coax → MoCA → U7 Pro (2F) ─WiFi→ "Bifrost"(V20) + "vision"(V50)
+  ├── [trunk → MoCA] → coax → MoCA → U7 Pro (1F) ─WiFi→ "Bifrost"(V20) + "vision"(V50)
   └── spare ports for expansion (12+)
 
   U6 Mesh (B1/basement) ── wireless mesh backhaul to 1F U7 Pro
@@ -312,7 +313,7 @@ export const RESEARCH_ITEMS: ResearchItemRow[] = [
     id: 'ring-alarm-pro',
     question: 'Ring Alarm Pro built-in Eero WiFi — how to disable without losing alarm?',
     status: 'answered',
-    answer: 'Connect via Ethernet to USW-24 VLAN 50 port. In Eero App: rename SSID to _DO_NOT_USE_ + strong password, or enable Bridge Mode. Z-Wave hub (sensors) and cellular backup work independently of WiFi. Ring cameras reconnect to UniFi "Home" SSID.',
+    answer: 'Connect via Ethernet to USW-24 VLAN 50 port. In Eero App: rename SSID to _DO_NOT_USE_ + strong password, or enable Bridge Mode. Z-Wave hub (sensors) and cellular backup work independently of WiFi. Ring cameras reconnect to UniFi "vision" SSID (same name+pass as Eero).',
   },
   {
     id: 'eero-resale',
@@ -348,7 +349,7 @@ export const RESEARCH_ITEMS: ResearchItemRow[] = [
     id: 'echo-eero-compat',
     question: 'Will Amazon Echo lose functionality without Eero?',
     status: 'answered',
-    answer: 'No. Echo core features (voice, smart home control, music, routines, multi-room audio) use standard WiFi — zero dependency on Eero. Only lost: "Alexa, how is my network?" Eero Skill. Echo connects to "Home" SSID and works identically.',
+    answer: 'No. Echo core features (voice, smart home control, music, routines, multi-room audio) use standard WiFi — zero dependency on Eero. Only lost: "Alexa, how is my network?" Eero Skill. Echo reconnects to UniFi "vision" SSID (same name+pass) and works identically.',
   },
   {
     id: 'wifi-coverage-plan',
@@ -360,7 +361,8 @@ export const RESEARCH_ITEMS: ResearchItemRow[] = [
     id: 'ssid-seamless',
     question: 'Can family devices reconnect without manual reconfiguration?',
     status: 'answered',
-    answer: 'Yes. Set new UniFi SSIDs to same name + password as current Eero network. All devices auto-reconnect. No action needed from family members.',
+    answer:
+      'Yes. IoT SSID on UniFi is "vision" (exact Eero spelling, case-sensitive) + same WPA password → hundreds of IoT devices auto-reconnect. Bifrost (VLAN 20) and Family (VLAN 30) are new SSIDs — phones/laptops join manually. Network object name stays "Home" (VLAN 50) for ZBF zone binding.',
   },
   {
     id: 'moca-endpoints',
@@ -394,7 +396,7 @@ export const POST_UPGRADE_EFFECTS: EffectRow[] = [
   {
     scenario: 'IoT isolation',
     before: '⚠️ All devices share .50 — Ring/Echo can see laptops',
-    after: '✅ IoT on "Home" (VLAN 50), work on "Bifrost" (VLAN 20), firewall blocks cross-VLAN',
+    after: '✅ IoT on "vision" (VLAN 50), work on "Bifrost" (VLAN 20), firewall blocks cross-VLAN',
   },
   {
     scenario: 'kube-vip VIP',

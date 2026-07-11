@@ -65,16 +65,9 @@
   color: var(--task-mode-accent);
 }
 
-/* Sidebar — left accent rail + mode-tinted wash (overrides bg-sidebar tint) */
+/* Sidebar — left accent rail only (no mode wash / gradient — keeps nav readable) */
 .task-mode-chrome-root[data-task-mode]:not([data-task-mode='system']) [data-sidebar='sidebar'] {
   border-left: 3px solid var(--task-mode-accent);
-  /* Muted wash — keeps mode identity without pulling focus from nav content */
-  background-color: color-mix(in oklab, var(--task-mode-accent) 4%, var(--sidebar));
-  background-image: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--task-mode-accent) 6%, transparent) 0%,
-    transparent min(200px, 42%)
-  );
 }
 
 .task-mode-chrome-root[data-task-mode='system'] [data-sidebar='sidebar'] {
