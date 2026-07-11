@@ -62,7 +62,7 @@ VLANS = [
         "dhcpd_enabled": True,
         "dhcpd_start": "192.168.50.6",
         "dhcpd_stop": "192.168.50.254",
-        "note": "SSID Home / IoT (later)",
+        "note": "SSID vision / IoT (same name as Eero for seamless cutover)",
     },
 ]
 

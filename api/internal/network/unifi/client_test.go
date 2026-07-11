@@ -3,6 +3,7 @@ package unifi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,9 +12,11 @@ import (
 
 func TestLoginAndLegacyGet(t *testing.T) {
 	t.Parallel()
+	loginCount := 0
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/auth/login":
+			loginCount++
 			w.Header().Set("Set-Cookie", "TOKEN=abc123; Path=/")
 			w.Header().Set("X-Csrf-Token", "csrf-login")
 			w.WriteHeader(http.StatusOK)
@@ -41,6 +44,13 @@ func TestLoginAndLegacyGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("devices: %v", err)
 	}
+	// Second call must reuse cookie — no extra login.
+	if _, err := c.ListDevices(context.Background()); err != nil {
+		t.Fatalf("devices 2: %v", err)
+	}
+	if loginCount != 1 {
+		t.Fatalf("expected 1 login, got %d", loginCount)
+	}
 	var payload struct {
 		Data []struct {
 			Name string `json:"name"`
@@ -51,6 +61,79 @@ func TestLoginAndLegacyGet(t *testing.T) {
 	}
 	if len(payload.Data) != 1 || payload.Data[0].Name != "ucg" {
 		t.Fatalf("unexpected payload: %s", raw)
+	}
+}
+
+func TestEnsureLoginSkipsWhenCached(t *testing.T) {
+	t.Parallel()
+	loginCount := 0
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/auth/login" {
+			loginCount++
+			w.Header().Set("Set-Cookie", "TOKEN=cached; Path=/")
+			w.Header().Set("X-Csrf-Token", "csrf")
+			_, _ = w.Write([]byte(`{}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	host := strings.TrimPrefix(srv.URL, "https://")
+	c := New(Config{Host: host, User: "u", Pass: "p", Site: "default"})
+	c.http = srv.Client()
+	ctx := context.Background()
+	if err := c.EnsureLogin(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.EnsureLogin(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if loginCount != 1 {
+		t.Fatalf("expected 1 login for two EnsureLogin calls, got %d", loginCount)
+	}
+}
+
+func TestReauthOn401(t *testing.T) {
+	t.Parallel()
+	loginCount := 0
+	deviceHits := 0
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/auth/login":
+			loginCount++
+			token := fmt.Sprintf("TOKEN=t%d", loginCount)
+			w.Header().Set("Set-Cookie", token+"; Path=/")
+			w.Header().Set("X-Csrf-Token", "csrf")
+			_, _ = w.Write([]byte(`{}`))
+		case "/proxy/network/api/s/default/stat/device":
+			deviceHits++
+			if deviceHits == 1 {
+				http.Error(w, "expired", http.StatusUnauthorized)
+				return
+			}
+			if r.Header.Get("Cookie") != "TOKEN=t2" {
+				http.Error(w, "bad cookie", http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write([]byte(`{"data":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	host := strings.TrimPrefix(srv.URL, "https://")
+	c := New(Config{Host: host, User: "u", Pass: "p", Site: "default"})
+	c.http = srv.Client()
+	if err := c.Login(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.ListDevices(context.Background()); err != nil {
+		t.Fatalf("reauth devices: %v", err)
+	}
+	if loginCount != 2 {
+		t.Fatalf("expected login+reauth (2), got %d", loginCount)
 	}
 }
 

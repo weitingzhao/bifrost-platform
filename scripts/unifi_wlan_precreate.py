@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 """Pre-create Bifrost WiFi SSIDs on UniFi (disabled until AP adoption).
 
 Requires: UNIFI_HOST, UNIFI_USER, UNIFI_PASS
-Optional: BIFROST_WIFI_PASS — WPA2 passphrase (must match Eero before cutover)
+Optional: BIFROST_WIFI_PASS — WPA2 passphrase (or set password in UniFi Portal after create)
 
 Usage:
   python3 scripts/unifi_wlan_precreate.py audit
@@ -15,12 +14,13 @@ import json
 import os
 import ssl
 import sys
+import urllib.error
 import urllib.request
 
 HOST = os.environ.get("UNIFI_HOST", "192.168.1.1")
 USER = os.environ.get("UNIFI_USER", "")
 PASS = os.environ.get("UNIFI_PASS", "")
-WIFI_PASS = os.environ.get("BIFROST_WIFI_PASS", "CHANGE-ME-before-AP-rollout")
+WIFI_PASS = os.environ.get("BIFROST_WIFI_PASS", "CHANGE-ME-set-in-unifi-portal")
 SITE = "default"
 CTX = ssl.create_default_context()
 CTX.check_hostname = False
@@ -29,7 +29,8 @@ CTX.verify_mode = ssl.CERT_NONE
 SSID_SPECS = [
     ("Bifrost", 20, "Admin — K3s/Ops access"),
     ("Family", 30, "Family devices — no Server"),
-    ("Home", 50, "IoT — Ring/Echo/sensors"),
+    # Exact Eero SSID spelling (case-sensitive) so IoT auto-reconnects on cutover.
+    ("vision", 50, "IoT — Ring/Echo/sensors (same name+pass as Eero)"),
 ]
 
 
@@ -48,31 +49,38 @@ class UniFi:
             h["X-CSRF-Token"] = self.csrf
         return h
 
-    def call(self, method: str, path: str, body: dict | None = None) -> dict:
+    def call(self, method: str, path: str, body: dict | None = None) -> dict | list:
         url = f"https://{HOST}{path}"
         data = None if body is None else json.dumps(body).encode()
         req = urllib.request.Request(url, data=data, headers=self._headers(), method=method)
-        with urllib.request.urlopen(req, context=CTX, timeout=45) as resp:
-            raw = resp.read().decode()
-            if method == "POST" and path.endswith("/login"):
-                self.cookie = resp.headers.get("Set-Cookie", "").split(";")[0]
-                self.csrf = resp.headers.get("X-Csrf-Token") or resp.headers.get("x-csrf-token")
-            updated = resp.headers.get("x-updated-csrf-token")
-            if updated:
-                self.csrf = updated
-            return json.loads(raw) if raw else {}
+        try:
+            with urllib.request.urlopen(req, context=CTX, timeout=45) as resp:
+                raw = resp.read().decode()
+                if method == "POST" and path.endswith("/login"):
+                    self.cookie = resp.headers.get("Set-Cookie", "").split(";")[0]
+                    self.csrf = resp.headers.get("X-Csrf-Token") or resp.headers.get("x-csrf-token")
+                updated = resp.headers.get("x-updated-csrf-token")
+                if updated:
+                    self.csrf = updated
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode()[:900]
+            raise SystemExit(f"HTTP {e.code} {method} {path}: {detail}") from e
 
     def login(self) -> None:
         self.call("POST", "/api/auth/login", {"username": USER, "password": PASS})
 
     def get(self, path: str) -> dict:
-        return self.call("GET", f"/proxy/network/api/s/{SITE}{path}")
+        return self.call("GET", f"/proxy/network/api/s/{SITE}{path}")  # type: ignore[return-value]
+
+    def v2_get(self, path: str) -> list | dict:
+        return self.call("GET", f"/proxy/network/v2/api/site/{SITE}{path}")
 
     def post(self, path: str, body: dict) -> dict:
-        return self.call("POST", f"/proxy/network/api/s/{SITE}{path}", body)
+        return self.call("POST", f"/proxy/network/api/s/{SITE}{path}", body)  # type: ignore[return-value]
 
     def put(self, path: str, body: dict) -> dict:
-        return self.call("PUT", f"/proxy/network/api/s/{SITE}{path}", body)
+        return self.call("PUT", f"/proxy/network/api/s/{SITE}{path}", body)  # type: ignore[return-value]
 
 
 def vlan_network_ids(api: UniFi) -> dict[int, str]:
@@ -86,7 +94,27 @@ def vlan_network_ids(api: UniFi) -> dict[int, str]:
     return out
 
 
-def wlan_payload(name: str, net_id: str, usergroup_id: str, wlangroup_id: str, enabled: bool) -> dict:
+def default_ap_group_id(api: UniFi) -> str:
+    """UCG Network 10.x exposes AP groups on v2; required for wlanconf create."""
+    groups = api.v2_get("/apgroups")
+    if not isinstance(groups, list):
+        raise SystemExit(f"Unexpected apgroups payload: {groups}")
+    for g in groups:
+        if g.get("attr_hidden_id") == "default" or g.get("name") == "All APs":
+            return g["_id"]
+    if groups:
+        return groups[0]["_id"]
+    raise SystemExit("No AP groups found — adopt at least one AP first")
+
+
+def wlan_payload(
+    name: str,
+    net_id: str,
+    usergroup_id: str,
+    wlangroup_id: str,
+    ap_group_id: str,
+    enabled: bool,
+) -> dict:
     return {
         "name": name,
         "enabled": enabled,
@@ -98,6 +126,7 @@ def wlan_payload(name: str, net_id: str, usergroup_id: str, wlangroup_id: str, e
         "networkconf_id": net_id,
         "usergroup_id": usergroup_id,
         "wlangroup_id": wlangroup_id,
+        "ap_group_ids": [ap_group_id],
         "wlan_band": "both",
         "mac_filter_enabled": False,
         "is_guest": False,
@@ -130,11 +159,17 @@ def apply(api: UniFi, enable: bool) -> None:
     wlangroup_id = next(
         g["_id"] for g in api.get("/rest/wlangroup")["data"] if g.get("name") == "Default"
     )
+    ap_group_id = default_ap_group_id(api)
     existing = {w.get("name"): w for w in api.get("/rest/wlanconf").get("data", [])}
     for name, vid, note in SSID_SPECS:
-        body = wlan_payload(name, nets[vid], usergroup_id, wlangroup_id, enabled=enable)
+        body = wlan_payload(
+            name, nets[vid], usergroup_id, wlangroup_id, ap_group_id, enabled=enable
+        )
         if name in existing:
             wid = existing[name]["_id"]
+            # Do not overwrite Portal-set password unless BIFROST_WIFI_PASS is explicitly set.
+            if "BIFROST_WIFI_PASS" not in os.environ:
+                body.pop("x_passphrase", None)
             resp = api.put(f"/rest/wlanconf/{wid}", body)
             action = "UPDATE"
         else:
@@ -145,7 +180,11 @@ def apply(api: UniFi, enable: bool) -> None:
         state = "enabled" if enable else "disabled"
         print(f"OK  {action} {name} → VLAN {vid} ({state}) — {note}")
     if not enable:
-        print("\nSSIDs are disabled — safe alongside Eero. Set BIFROST_WIFI_PASS to Eero password before --enable.")
+        print(
+            "\nSSIDs are disabled — safe alongside Eero.\n"
+            "Next: UniFi Portal → Settings → WiFi → set password on each SSID "
+            "(vision = current Eero password), then enable when ready."
+        )
 
 
 def main() -> None:

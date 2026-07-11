@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/network/unifi"
 )
@@ -40,6 +41,11 @@ type networkRef struct {
 type Service struct {
 	dial          func(ctx context.Context) (*unifi.Client, error)
 	applyFirewall func(ctx context.Context, includeDefaultDeny bool) (map[string]any, error)
+
+	// Cached UniFi session — reuse cookie across /api/v1/network/* calls to avoid
+	// UniFi OS login rate limits (AUTHENTICATION_FAILED_LIMIT_REACHED / HTTP 429).
+	sessionMu sync.Mutex
+	client    *unifi.Client
 }
 
 type ServiceOption func(*Service)
@@ -66,14 +72,26 @@ func defaultDial(ctx context.Context) (*unifi.Client, error) {
 		return nil, err
 	}
 	client := unifi.New(cfg)
-	if err := client.Login(ctx); err != nil {
+	if err := client.EnsureLogin(ctx); err != nil {
 		return nil, fmt.Errorf("unifi login: %w", err)
 	}
 	return client, nil
 }
 
+// session returns a process-cached UniFi client. Login happens once (or after
+// InvalidateSession / 401 retry inside the client), not on every API request.
 func (s *Service) session(ctx context.Context) (*unifi.Client, error) {
-	return s.dial(ctx)
+	s.sessionMu.Lock()
+	defer s.sessionMu.Unlock()
+	if s.client != nil && s.client.LoggedIn() {
+		return s.client, nil
+	}
+	client, err := s.dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.client = client
+	return client, nil
 }
 
 func parseJSONArray(raw json.RawMessage) ([]map[string]any, error) {

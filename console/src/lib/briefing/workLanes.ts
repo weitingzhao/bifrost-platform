@@ -207,7 +207,7 @@ const INFRA_LANES: WorkLane[] = [
     track: 'infra',
     label: 'WiFi upgrade (U7 Pro + U6 Mesh)',
     shortLabel: 'WiFi',
-    description: 'Replace Eero with UniFi APs: per-floor rollout, MoCA backhaul, VLAN SSIDs (Bifrost/Home), coverage benchmark.',
+    description: 'Replace Eero with UniFi APs: per-floor rollout, MoCA backhaul, VLAN SSIDs (Bifrost/Family/vision), coverage benchmark.',
     agentMode: 'Ops',
     workIntent: 'ops',
   },
