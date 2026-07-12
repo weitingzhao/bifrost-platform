@@ -1,10 +1,10 @@
 /**
  * Trade environment gateway entrypoints (Dev / STG / Prod) — single source of truth.
  *
- * Preferred path (UniFi DNS → VIP → Traefik Host):
- *   - DEV  → http://dev.trader.bifrost.lan/
- *   - STG  → http://stg.trader.bifrost.lan/
- *   - PROD → http://trader.bifrost.lan/
+ * Preferred path (UniFi DNS → VIP → Traefik Host HTTPS):
+ *   - DEV  → https://dev.trader.bifrost.lan/
+ *   - STG  → https://stg.trader.bifrost.lan/
+ *   - PROD → https://trader.bifrost.lan/
  *
  * IP escape (NodePort / node :80) still listed when VIP is unset; with VIP set,
  * IP gateways resolve through TRADE_INGRESS_VIP.
@@ -59,7 +59,7 @@ export const TRADE_ENV_ACCESS: readonly TradeEnvAccess[] = TRADE_ENV_DEFS.map(de
 
 /** Hostname URLs on Traefik :80 (after UniFi DNS or /etc/hosts). */
 export const TRADE_HOSTNAME_GATEWAYS = TRADE_ENV_DEFS.filter(d => d.ingressHost).map(
-  d => `http://${d.ingressHost}/`,
+  d => `https://${d.ingressHost}/`,
 )
 
 export const TRADE_INGRESS_USES_VIP = TRADE_INGRESS_VIP !== null

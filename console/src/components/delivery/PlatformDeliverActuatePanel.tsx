@@ -28,12 +28,12 @@ const SMOKE_URLS: Record<string, { console: string; apiHealth: string }> = {
   'platform-stg': PLATFORM_STG_URLS,
   'platform-prod': PLATFORM_PROD_URLS,
   'trade-stg': {
-    console: 'http://stg.trader.bifrost.lan/',
-    apiHealth: 'http://stg.trader.bifrost.lan/api/monitor/status',
+    console: 'https://stg.trader.bifrost.lan/',
+    apiHealth: 'https://stg.trader.bifrost.lan/api/monitor/status',
   },
   'trade-prod': {
-    console: 'http://trader.bifrost.lan/',
-    apiHealth: 'http://trader.bifrost.lan/api/monitor/status',
+    console: 'https://trader.bifrost.lan/',
+    apiHealth: 'https://trader.bifrost.lan/api/monitor/status',
   },
 }
 

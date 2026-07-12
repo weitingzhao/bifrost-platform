@@ -37,6 +37,9 @@ API_KEY = os.environ.get("UNIFI_API_KEY", "")
 SITE = "default"
 # Canonical UGREEN-NAS fixed IP on Server VLAN (UniFi reservation on MAC …:4e:25).
 NAS_IP = os.environ.get("NAS_IP", "192.168.10.20")
+# kube-vip Traefik entry (Satellite/Rocket Hostnames on :80).
+TRADE_VIP = os.environ.get("TRADE_VIP", "192.168.10.100")
+TRADE_VIP_PORTS = "80,443"
 PLEX_PORTS = "32400"
 SMB_PORTS = "445,139"
 WRITE_DELAY_S = 0.35
@@ -70,6 +73,14 @@ POLICY_SPECS: list[dict[str, Any]] = [
         # Full NAS access (SMB/Plex/web UI/etc.) — not Server-wide.
         "dst_ports": "*",
         "note": "Family SSID → UGREEN-NAS only (must outrank REJECT Family→Server)",
+    },
+    {
+        "name": "Bifrost | ALLOW Family → Trade VIP",
+        "action": "ALLOW",
+        "src": "Family",
+        "dst_ip": TRADE_VIP,
+        "dst_ports": TRADE_VIP_PORTS,
+        "note": "Family SSID → kube-vip Traefik (*.trader|ops.bifrost.lan :80/:443); must outrank REJECT Family→Server",
     },
     {
         "name": "Bifrost | ALLOW IoT → NAS Plex",

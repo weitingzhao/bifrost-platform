@@ -76,14 +76,14 @@ clusters:
       gateway_host: stg.trader.bifrost.lan
       api_monitor_url: http://192.168.10.100/api/monitor/status
       frontend_url: http://192.168.10.100/
-      platform_console_url: http://stg.ops.bifrost.lan/
+      platform_console_url: https://stg.ops.bifrost.lan/
       platform_api_health_url: http://192.168.10.73:30878/health
     prod_smoke:
       gateway_url: http://192.168.10.100/
       gateway_host: trader.bifrost.lan
       api_monitor_url: http://192.168.10.100/api/monitor/status
       frontend_url: http://192.168.10.100/
-      platform_console_url: http://ops.bifrost.lan/
+      platform_console_url: https://ops.bifrost.lan/
     dev_smoke:
       gateway_url: http://192.168.10.100/
       gateway_host: dev.trader.bifrost.lan
