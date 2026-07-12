@@ -43,7 +43,7 @@ export const TRADE_STG_ASK_CONTEXT: PipelineRunAskContext = {
   clusterSignals: [
     'verify: Rocket → Cluster → bifrost-stg workloads (failing pods)',
     'scheduling: Rocket → Placement (amd64_ci pool, policy violations)',
-    'gateway: http://trade-stg.bifrost.lan/ (Traefik Host ingress)',
+    'gateway: http://stg.trader.bifrost.lan/ (Traefik Host ingress)',
   ],
   acceptanceHint: 'How to confirm S12/S14 acceptance after the fix.',
 }

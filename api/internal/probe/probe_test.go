@@ -48,13 +48,13 @@ func TestProbeHTTP_IngressHost(t *testing.T) {
 	defer srv.Close()
 
 	p := NewProber()
-	env := config.Environment{IngressHost: "trade.bifrost.lan"}
+	env := config.Environment{IngressHost: "trader.bifrost.lan", NginxBase: "http://192.168.10.100"}
 	target := p.probeHTTP(context.Background(), "test", "trade_api", srv.URL, "", env)
 	if target.Reachability != ReachOK {
 		t.Fatalf("reachability: %s", target.Reachability)
 	}
-	if gotHost != "trade.bifrost.lan" {
-		t.Fatalf("Host header: got %q want trade.bifrost.lan", gotHost)
+	if gotHost != "trader.bifrost.lan" {
+		t.Fatalf("Host header: got %q want trader.bifrost.lan", gotHost)
 	}
 }
 

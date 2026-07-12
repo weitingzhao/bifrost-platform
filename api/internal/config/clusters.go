@@ -319,7 +319,7 @@ func (e *ClusterEntry) ResolvedProdGatewayURL() string {
 	if e != nil && strings.TrimSpace(e.ProdSmoke.GatewayURL) != "" {
 		return strings.TrimSpace(e.ProdSmoke.GatewayURL)
 	}
-	return "http://192.168.10.70"
+	return "http://192.168.10.100"
 }
 
 func (e *ClusterEntry) ResolvedProdFrontendURL() string {
@@ -370,7 +370,7 @@ func (e *ClusterEntry) ResolvedDevGatewayHost() string {
 	if e != nil && strings.TrimSpace(e.DevSmoke.GatewayHost) != "" {
 		return strings.TrimSpace(e.DevSmoke.GatewayHost)
 	}
-	return "trade-dev.bifrost.lan"
+	return "dev.trader.bifrost.lan"
 }
 
 func (e *ClusterEntry) ApplyDevGatewayHost(req *http.Request) {

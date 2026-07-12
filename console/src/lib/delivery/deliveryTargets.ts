@@ -39,7 +39,7 @@ export const DELIVERY_TARGETS: DeliveryTargetConfig[] = [
       'bifrost-trade-infra',
       'bifrost-ui',
     ],
-    successLink: { href: 'http://trade-stg.bifrost.lan/', label: 'Open Trade STG gateway' },
+    successLink: { href: 'http://stg.trader.bifrost.lan/', label: 'Open Trade STG gateway' },
     actuateDescription:
       'Gitea mirror → Kaniko (9 APIs + frontend + worker/socket) → rollout bifrost-stg → verify → Argo sync.',
   },
@@ -59,7 +59,7 @@ export const DELIVERY_TARGETS: DeliveryTargetConfig[] = [
       'bifrost-trade-infra',
       'bifrost-ui',
     ],
-    successLink: { href: 'http://trade.bifrost.lan/', label: 'Open Trade PROD gateway' },
+    successLink: { href: 'http://trader.bifrost.lan/', label: 'Open Trade PROD gateway' },
     actuateDescription:
       'STG preflight gate → Kaniko (:prod) → rollout bifrost-prod → verify-prod → Argo sync bifrost-prod.',
   },

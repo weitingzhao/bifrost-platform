@@ -694,7 +694,7 @@ func (s *Service) probeProdHTTP(ctx context.Context, id, url string) StgSmokeTar
 	return StgSmokeTargetView{ID: id, URL: url, Reachability: reach, Detail: detail}
 }
 
-// ProdSmoke HTTP probes for bifrost-prod via Traefik @ :80 (Host trade.bifrost.lan).
+// ProdSmoke HTTP probes for bifrost-prod via Traefik @ VIP :80 (Host trader.bifrost.lan).
 func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 	now := time.Now().UTC()
 	out := StgSmokeResponse{
@@ -766,7 +766,7 @@ func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 	return out
 }
 
-// DevSmoke HTTP probes for bifrost-dev via Traefik @ :80 (Host trade-dev.bifrost.lan).
+// DevSmoke HTTP probes for bifrost-dev via Traefik @ VIP :80 (Host dev.trader.bifrost.lan).
 func (s *Service) DevSmoke(ctx context.Context) StgSmokeResponse {
 	now := time.Now().UTC()
 	out := StgSmokeResponse{
