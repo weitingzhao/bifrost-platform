@@ -9,12 +9,12 @@ export const DELIVER_PLATFORM_PIPELINE = 'bifrost-deliver-platform'
 export const DELIVER_PLATFORM_PROD_PIPELINE = 'bifrost-deliver-platform-prod'
 
 export const PLATFORM_STG_URLS = {
-  console: 'http://stg.ops.bifrost.lan/',
+  console: 'https://stg.ops.bifrost.lan/',
   apiHealth: 'http://192.168.10.73:30878/health',
 } as const
 
 export const PLATFORM_PROD_URLS = {
-  console: 'http://ops.bifrost.lan/',
+  console: 'https://ops.bifrost.lan/',
   apiHealth: 'http://192.168.10.73:30876/health',
 } as const
 

@@ -442,7 +442,7 @@ func (s *Service) platformStgConsoleURL() string {
 	if e != nil && e.StgSmoke.PlatformConsoleURL != "" {
 		return e.StgSmoke.PlatformConsoleURL
 	}
-	return "http://stg.ops.bifrost.lan/"
+	return "https://stg.ops.bifrost.lan/"
 }
 
 func (s *Service) platformStgAPIURL() string {
@@ -458,7 +458,7 @@ func (s *Service) platformProdConsoleURL() string {
 	if e != nil && e.ProdSmoke.PlatformConsoleURL != "" {
 		return e.ProdSmoke.PlatformConsoleURL
 	}
-	return "http://ops.bifrost.lan/"
+	return "https://ops.bifrost.lan/"
 }
 
 func (s *Service) platformProdAPIURL() string {

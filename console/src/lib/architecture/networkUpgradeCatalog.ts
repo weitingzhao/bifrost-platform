@@ -17,11 +17,11 @@ export const NET_UPGRADE_STATUS =
 
 /** Owner UniFi local DNS — all A records → kube-vip 192.168.10.100 (Phase 1). */
 export const VIP_DNS_RECORDS: { fqdn: string; role: string }[] = [
-  { fqdn: 'trader.bifrost.lan', role: 'Satellite PROD' },
-  { fqdn: 'stg.trader.bifrost.lan', role: 'Satellite STG' },
-  { fqdn: 'dev.trader.bifrost.lan', role: 'Satellite DEV' },
-  { fqdn: 'ops.bifrost.lan', role: 'Rocket PROD' },
-  { fqdn: 'stg.ops.bifrost.lan', role: 'Rocket STG' },
+  { fqdn: 'trader.bifrost.lan', role: 'Satellite PROD (https)' },
+  { fqdn: 'stg.trader.bifrost.lan', role: 'Satellite STG (https)' },
+  { fqdn: 'dev.trader.bifrost.lan', role: 'Satellite DEV (https)' },
+  { fqdn: 'ops.bifrost.lan', role: 'Rocket PROD (https)' },
+  { fqdn: 'stg.ops.bifrost.lan', role: 'Rocket STG (https)' },
   { fqdn: 'trade.bifrost.lan', role: 'Legacy DNS alias only — Ingress no longer matches (expect 404)' },
   { fqdn: 'trade-stg.bifrost.lan', role: 'Legacy DNS alias only — Ingress no longer matches' },
   { fqdn: 'trade-dev.bifrost.lan', role: 'Legacy DNS alias only — Ingress no longer matches' },
@@ -29,11 +29,12 @@ export const VIP_DNS_RECORDS: { fqdn: string; role: string }[] = [
 
 /** Escape hatch when hostname DNS/VIP path is unavailable. */
 export const VIP_ESCAPE_HATCH = [
-  'Satellite STG: http://192.168.10.73:30880/',
-  'Satellite DEV: http://192.168.10.73:30882/',
-  'Satellite PROD: http://192.168.10.70/ (Host 192.168.10.70)',
+  'Satellite STG: http://192.168.10.73:30880/ (HTTP NodePort)',
+  'Satellite DEV: http://192.168.10.73:30882/ (HTTP NodePort)',
+  'Satellite PROD: https://192.168.10.70/ or https://192.168.10.100/ (TLS; install bifrost-lan-rootCA.pem)',
   'Rocket STG: http://192.168.10.73:30879/',
   'Rocket PROD: http://192.168.10.73:30877/',
+  'CA: bifrost-trade-infra/k8s/system/tls/bifrost-lan-rootCA.pem',
 ] as const
 /** Live deployment progress — mirrors spine streams network-upgrade-core / network-upgrade-wifi. */
 export type DeploymentProgressRow = {
@@ -84,6 +85,7 @@ export const FIREWALL_APPLIED = {
     { name: 'Bifrost | REJECT Family → IoT', catalogRule: 'VLAN 30 → VLAN 50 deny' },
     { name: 'Bifrost | ALLOW Work → Server', catalogRule: 'VLAN 20 → VLAN 10 allow (kube-vip + NAS)' },
     { name: 'Bifrost | ALLOW Family → NAS', catalogRule: 'VLAN 30 → UGREEN-NAS 192.168.10.20 allow (all)' },
+    { name: 'Bifrost | ALLOW Family → Trade VIP', catalogRule: 'VLAN 30 → kube-vip 192.168.10.100 :80/:443 (trader/ops Hostnames)' },
     { name: 'Bifrost | ALLOW IoT → NAS Plex', catalogRule: 'VLAN 50 → NAS Plex :32400 allow' },
     { name: 'Bifrost | ALLOW Server → IoT', catalogRule: 'VLAN 10 → VLAN 50 allow (automation hub)' },
     {
@@ -411,7 +413,7 @@ export const POST_UPGRADE_EFFECTS: EffectRow[] = [
   {
     scenario: 'Phone/iPad → Ops Console',
     before: '❌ Same as laptop — blocked by cross-subnet',
-    after: '✅ Connect "Bifrost" WiFi → http://ops.bifrost.lan/ (VIP 192.168.10.100:80 Host) · escape :30877',
+    after: '✅ Connect "Bifrost" WiFi → https://ops.bifrost.lan/ · Family WiFi allowed VIP :80/:443',
   },
   {
     scenario: 'IoT isolation',
