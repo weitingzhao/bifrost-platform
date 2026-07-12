@@ -15,6 +15,7 @@ import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
 import {
   useRocketProdReadiness,
+  usePromoteVerifyReadiness,
   useSatelliteDeployOverall,
   useSatelliteProdReadiness,
 } from '@/components/task-mode/TaskModeReadinessStrip'
@@ -105,9 +106,11 @@ export function TaskControlCenter({
   const { snapshot } = useMissionSnapshot()
   const queueQ = useOperateQueue()
 
-  const rocketProd = useRocketProdReadiness(mode.id === 'rocket-launch')
-  const satelliteProd = useSatelliteProdReadiness(mode.id === 'satellite-deploy')
-  const satelliteDeploy = useSatelliteDeployOverall(mode.id === 'satellite-deploy')
+  const isMissionLaunch = mode.id === 'mission-launch'
+  const rocketProd = useRocketProdReadiness(isMissionLaunch)
+  const satelliteProd = useSatelliteProdReadiness(isMissionLaunch)
+  const promoteVerify = usePromoteVerifyReadiness(isMissionLaunch)
+  const satelliteDeploy = useSatelliteDeployOverall(isMissionLaunch)
 
   const stgReadinessSignals = useMemo(
     () =>
@@ -129,8 +132,7 @@ export function TaskControlCenter({
     queryFn: fetchCluster,
     refetchInterval: 20_000,
     enabled:
-      mode.id === 'satellite-deploy' ||
-      (mode.id === 'rocket-launch' && rocketProd.prodBlocked) ||
+      isMissionLaunch ||
       (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
   })
 
@@ -139,8 +141,7 @@ export function TaskControlCenter({
     queryFn: fetchClusterServiceReadiness,
     refetchInterval: 20_000,
     enabled:
-      mode.id === 'satellite-deploy' ||
-      (mode.id === 'rocket-launch' && rocketProd.prodBlocked) ||
+      isMissionLaunch ||
       (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
   })
 
@@ -297,7 +298,7 @@ export function TaskControlCenter({
     queryKey: ['task-cc', 'satellite-bus-triage', 'stg'],
     queryFn: () => fetchSatelliteBusDeep('stg'),
     refetchInterval: 20_000,
-    enabled: mode.id === 'satellite-deploy',
+    enabled: isMissionLaunch,
   })
 
   const aiBusIngestTriage = useAmbientAgentTask({
@@ -354,7 +355,7 @@ export function TaskControlCenter({
     queryKey: ['task-cc', 'supply'],
     queryFn: fetchSupplyChain,
     refetchInterval: 20_000,
-    enabled: mode.id === 'rocket-launch',
+    enabled: isMissionLaunch,
   })
 
   const platformRunsQ = useQuery({
@@ -366,21 +367,21 @@ export function TaskControlCenter({
       if (ambientJobId != null && ambientJobScope === PLATFORM_RELEASE_SCOPE) return 5_000
       return 20_000
     },
-    enabled: mode.id === 'rocket-launch' || mode.id === 'rocket-build',
+    enabled: isMissionLaunch || mode.id === 'rocket-build' || mode.id === 'engineer-build',
   })
 
   const platformStgGateQ = useQuery({
     queryKey: ['task-cc', 'platform-stg-gate'],
     queryFn: () => fetchReleaseGate('platform-stg'),
     refetchInterval: 20_000,
-    enabled: mode.id === 'rocket-launch' || mode.id === 'rocket-build',
+    enabled: isMissionLaunch || mode.id === 'rocket-build' || mode.id === 'engineer-build',
   })
 
   const platformProdGateQ = useQuery({
     queryKey: ['task-cc', 'platform-prod-gate'],
     queryFn: () => fetchReleaseGate('platform-prod'),
     refetchInterval: 20_000,
-    enabled: mode.id === 'rocket-launch',
+    enabled: isMissionLaunch,
   })
 
   const tradeRunsQ = useQuery({
@@ -392,21 +393,21 @@ export function TaskControlCenter({
       if (ambientJobId != null && ambientJobScope === TRADE_DEPLOY_SCOPE) return 5_000
       return 20_000
     },
-    enabled: mode.id === 'satellite-deploy' || mode.id === 'satellite-build',
+    enabled: isMissionLaunch || mode.id === 'satellite-build' || mode.id === 'plugin-build',
   })
 
   const tradeGateQ = useQuery({
     queryKey: ['task-cc', 'trade-gate-detail'],
     queryFn: () => fetchReleaseGate('stg'),
     refetchInterval: 20_000,
-    enabled: mode.id === 'satellite-deploy' || mode.id === 'satellite-build',
+    enabled: isMissionLaunch || mode.id === 'satellite-build' || mode.id === 'plugin-build',
   })
 
   const smokeQ = useQuery({
     queryKey: ['task-cc', 'smoke-detail'],
     queryFn: fetchStgSmoke,
     refetchInterval: 20_000,
-    enabled: mode.id === 'satellite-deploy' || mode.id === 'satellite-build',
+    enabled: isMissionLaunch || mode.id === 'satellite-build' || mode.id === 'plugin-build',
   })
 
   const statusInput = useMemo((): TaskPhaseStatusInput => {
@@ -497,11 +498,11 @@ export function TaskControlCenter({
         aiDailyOpsFix.trigger()
         return
       }
-      if (mode.id === 'rocket-launch') {
-        aiPlatformProdFix.trigger()
-        return
-      }
-      if (mode.id === 'satellite-deploy') {
+      if (isMissionLaunch) {
+        if (rocketProd.prodBlocked) {
+          aiPlatformProdFix.trigger()
+          return
+        }
         aiTradeProdFix.trigger()
         return
       }
@@ -524,6 +525,8 @@ export function TaskControlCenter({
       rocketSignal: satelliteProd.rocketSignal,
       tradeProdLabel: missionStatus(satelliteProd.tradeProdOverall),
       tradeProdSignal: satelliteProd.tradeProdOverall,
+      promoteSignal: promoteVerify.promoteSignal,
+      promoteDetail: promoteVerify.promoteDetail,
       deliverInFlight: hasDeliverInFlight(tradeRunsQ.data?.runs),
       agentInFlight: ambientJobId != null && ambientJobScope === TRADE_DEPLOY_SCOPE,
     }),
@@ -534,6 +537,8 @@ export function TaskControlCenter({
       satelliteProd.rocketDetail,
       satelliteProd.rocketSignal,
       satelliteProd.tradeProdOverall,
+      promoteVerify.promoteSignal,
+      promoteVerify.promoteDetail,
       tradeRunsQ.data?.runs,
       ambientJobId,
       ambientJobScope,
@@ -556,6 +561,8 @@ export function TaskControlCenter({
       prodBlocked: rocketProd.prodBlocked,
       tradeProdLabel: missionStatus(rocketProd.prodOverall),
       tradeProdSignal: rocketProd.prodOverall,
+      promoteSignal: promoteVerify.promoteSignal,
+      promoteDetail: promoteVerify.promoteDetail,
       deliverInFlight: hasDeliverInFlight(platformRunsQ.data?.runs),
       agentInFlight: ambientJobId != null && ambientJobScope === PLATFORM_RELEASE_SCOPE,
     }),
@@ -563,6 +570,8 @@ export function TaskControlCenter({
       canOperate,
       rocketProd.prodBlocked,
       rocketProd.prodOverall,
+      promoteVerify.promoteSignal,
+      promoteVerify.promoteDetail,
       platformRunsQ.data?.runs,
       ambientJobId,
       ambientJobScope,
@@ -612,7 +621,7 @@ export function TaskControlCenter({
 
       {mode.loopArchetype === 'ops' && showLaunchPad && (
         <>
-          {mode.id !== 'satellite-deploy' && mode.id !== 'rocket-launch' && !canOperate && (
+          {isMissionLaunch && !canOperate && (
             <OpsFeedback variant="warning" title="Authenticate as operator to run Launch Pad agents">
               Use the header auth control before starting release or trade-deploy Agent tasks.
             </OpsFeedback>
@@ -623,7 +632,7 @@ export function TaskControlCenter({
             </OpsFeedback>
           )}
           {aiTradeDeploy.error != null && (
-            <OpsFeedback variant="error" title="Failed to start Trade Deploy agent">
+            <OpsFeedback variant="error" title="Failed to start Deploy Satellite agent">
               {aiTradeDeploy.error.message}
             </OpsFeedback>
           )}
@@ -673,7 +682,7 @@ export function TaskControlCenter({
       )}
 
       {mode.loopArchetype === 'ops' &&
-        (mode.id === 'rocket-launch' || mode.id === 'satellite-deploy' || mode.id === 'daily-ops') && (
+        (isMissionLaunch || mode.id === 'daily-ops') && (
           <OpsTaskSummaryRow
             mode={mode}
             context={context}
@@ -706,83 +715,41 @@ export function TaskControlCenter({
               aiBusIngestTriage.disabledReason ??
               'Cross-check Socket matrix vs Rocket IB gateway (D10 safe)'
             }
-            recentRuns={
-              mode.id === 'satellite-deploy'
-                ? tradeRunsQ.data?.runs
-                : mode.id === 'rocket-launch'
-                  ? platformRunsQ.data?.runs
-                  : undefined
-            }
-            recentRunsLoading={
-              mode.id === 'satellite-deploy'
-                ? tradeRunsQ.isLoading
-                : mode.id === 'rocket-launch'
-                  ? platformRunsQ.isLoading
-                  : false
-            }
-            launchVerdict={
-              mode.id === 'satellite-deploy'
-                ? satelliteVerdict
-                : mode.id === 'rocket-launch'
-                  ? rocketVerdict
-                  : undefined
-            }
-            launchCheckpoints={
-              mode.id === 'satellite-deploy'
-                ? satelliteCheckpoints
-                : mode.id === 'rocket-launch'
-                  ? rocketCheckpoints
-                  : undefined
-            }
-            onLaunchAgentFix={
-              mode.id === 'satellite-deploy'
-                ? () => aiTradeProdFix.trigger()
-                : mode.id === 'rocket-launch'
-                  ? () => aiPlatformProdFix.trigger()
-                  : undefined
-            }
-            launchAgentFixPending={
-              mode.id === 'satellite-deploy'
-                ? aiTradeProdFix.isPending
-                : mode.id === 'rocket-launch'
-                  ? aiPlatformProdFix.isPending
-                  : false
-            }
-            launchAgentFixActive={
-              mode.id === 'satellite-deploy'
-                ? aiTradeProdFix.isActive
-                : mode.id === 'rocket-launch'
-                  ? aiPlatformProdFix.isActive
-                  : false
-            }
-            launchAgentFixDisabled={
-              mode.id === 'satellite-deploy'
-                ? aiTradeProdFix.disabled
-                : mode.id === 'rocket-launch'
-                  ? aiPlatformProdFix.disabled
-                  : true
-            }
+            recentRuns={isMissionLaunch ? platformRunsQ.data?.runs : undefined}
+            recentRunsLoading={isMissionLaunch ? platformRunsQ.isLoading : false}
+            tradeRecentRuns={isMissionLaunch ? tradeRunsQ.data?.runs : undefined}
+            tradeRecentRunsLoading={isMissionLaunch ? tradeRunsQ.isLoading : false}
+            tradePipelineRunsNamespace={isMissionLaunch ? tradeRunsQ.data?.namespace : undefined}
+            launchVerdict={isMissionLaunch ? rocketVerdict : undefined}
+            launchCheckpoints={isMissionLaunch ? rocketCheckpoints : undefined}
+            satelliteLaunchVerdict={isMissionLaunch ? satelliteVerdict : undefined}
+            satelliteLaunchCheckpoints={isMissionLaunch ? satelliteCheckpoints : undefined}
+            onLaunchAgentFix={isMissionLaunch ? () => aiPlatformProdFix.trigger() : undefined}
+            onSatelliteLaunchAgentFix={isMissionLaunch ? () => aiTradeProdFix.trigger() : undefined}
+            launchAgentFixPending={isMissionLaunch ? aiPlatformProdFix.isPending : false}
+            launchAgentFixActive={isMissionLaunch ? aiPlatformProdFix.isActive : false}
+            launchAgentFixDisabled={isMissionLaunch ? aiPlatformProdFix.disabled : true}
             launchAgentFixTitle={
-              mode.id === 'satellite-deploy'
+              isMissionLaunch
+                ? (aiPlatformProdFix.disabledReason ??
+                  'Start Cluster · Remediate focused on Platform Prod readiness')
+                : undefined
+            }
+            satelliteLaunchAgentFixPending={isMissionLaunch ? aiTradeProdFix.isPending : false}
+            satelliteLaunchAgentFixActive={isMissionLaunch ? aiTradeProdFix.isActive : false}
+            satelliteLaunchAgentFixDisabled={isMissionLaunch ? aiTradeProdFix.disabled : true}
+            satelliteLaunchAgentFixTitle={
+              isMissionLaunch
                 ? (aiTradeProdFix.disabledReason ??
                   (satelliteProd.blockKind === 'rocket'
                     ? 'Start Cluster · Remediate focused on Rocket IB bus'
                     : 'Start Cluster · Remediate focused on Trade Prod readiness'))
-                : mode.id === 'rocket-launch'
-                  ? (aiPlatformProdFix.disabledReason ??
-                    'Start Cluster · Remediate focused on Platform Prod readiness')
-                  : undefined
+                : undefined
             }
             onOpenAgentDesk={() => onOpenAgentDesk?.(ambientJobId ?? undefined)}
             ambientJobId={ambientJobId}
             ambientJobScope={ambientJobScope}
-            pipelineRunsNamespace={
-              mode.id === 'satellite-deploy'
-                ? tradeRunsQ.data?.namespace
-                : mode.id === 'rocket-launch'
-                  ? platformRunsQ.data?.namespace
-                  : undefined
-            }
+            pipelineRunsNamespace={isMissionLaunch ? platformRunsQ.data?.namespace : undefined}
             platformStgGate={platformStgGateQ.data}
             platformProdGate={platformProdGateQ.data}
             supplyCmsPresent={
@@ -822,12 +789,7 @@ export function TaskControlCenter({
             onOpenFullPage={handleOpenPhasePage}
             onFixAction={handlePhaseFixAction}
           />
-          {mode.id === 'satellite-deploy' && satelliteProd.prodBlocked && (
-            <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
-              Live readiness blocked — playbook Done does not clear release
-            </p>
-          )}
-          {mode.id === 'rocket-launch' && rocketProd.prodBlocked && (
+          {isMissionLaunch && (satelliteProd.prodBlocked || rocketProd.prodBlocked) && (
             <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
               Live readiness blocked — playbook Done does not clear release
             </p>
@@ -835,7 +797,7 @@ export function TaskControlCenter({
         </details>
       )}
 
-      {mode.loopArchetype === 'ops' && (
+      {mode.loopArchetype === 'ops' && !isMissionLaunch && (
         <OpsTaskStrips
           mode={mode}
           context={context}
@@ -855,9 +817,7 @@ export function TaskControlCenter({
           canDispatchTradeDeploy={tradeDeployDispatchAllowed}
           releaseDisabledReason={releaseDisabledReason}
           tradeDeployDisabledReason={tradeDeployDisabledReason}
-          promoteOnly={
-            mode.id === 'rocket-launch' || mode.id === 'satellite-deploy' || mode.id === 'daily-ops'
-          }
+          promoteOnly={mode.id === 'daily-ops'}
         />
       )}
 

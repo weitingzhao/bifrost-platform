@@ -30,7 +30,7 @@ export function buildPlatformProdFixPrompt(input: {
     '2. For pod crashes: inspect logs/events, apply safe Cluster · Remediate actions (restart deployment, delete stuck pods) via platform-api actuation.',
     '3. For self-health PROD probes failing: verify platform-api/console NodePorts and HA replicas in bifrost-platform-prod.',
     '4. For PROD release gate failing: inspect gate history; fix underlying probe failures before re-running gate — do NOT bypass gates.',
-    '5. For supply chain / Dockerfile CM issues: sync mirrors and refresh Kaniko ConfigMaps (Platform Release page).',
+    '5. For supply chain / Dockerfile CM issues: sync mirrors and refresh Kaniko ConfigMaps (Launch Rocket page).',
     '',
     failing.length > 0
       ? `Priority targets (${failing.length} non-ok): ${failing.map(f => f.label).join(', ')}.`

@@ -86,12 +86,12 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'runtime-map': 'Runtime Map',
   cluster: 'Cluster',
   placement: 'Placement',
-  'trade-release': 'Trade Deploy',
+  'trade-release': 'Deploy Satellite',
   'delivery-board': 'Delivery Board',
   blueprint: 'Blueprint',
   'flywheel-vision': 'Vision',
   roadmap: 'Roadmap',
-  'platform-release': 'Platform Release',
+  'platform-release': 'Launch Rocket',
   'platform-standards': 'Platform',
   'agent-protocol': 'Agent Protocol',
   'briefing-reconciliation': 'Briefing Reconciliation',
@@ -399,7 +399,7 @@ function ConsolePageInner() {
   const openAgentDeskTab = () => setViewTab('agent-desk')
 
   const openLaunchView = useCallback(
-    (taskMode: 'rocket-launch' | 'satellite-deploy') => {
+    (taskMode: 'mission-launch') => {
       setModeId(taskMode)
       setViewTab('task-cc', { taskMode })
     },
@@ -737,7 +737,7 @@ function ConsolePageInner() {
           <>
             <PageHeader
               title={VIEW_TITLES['trade-release']}
-              description="End-to-end Trade CI/CD — STG deploy → gate → PROD deploy → gate."
+              description="End-to-end satellite CI/CD — STG deploy → gate → PROD deploy → gate."
             />
             <TradeReleasePage
               context={contextQuery.data}
@@ -751,7 +751,7 @@ function ConsolePageInner() {
           <>
             <PageHeader
               title={VIEW_TITLES['platform-release']}
-              description="End-to-end Platform CI/CD — follow the flow: Staging deploy → gate → Production deploy → gate."
+              description="End-to-end rocket CI/CD — Staging deploy → gate → Production deploy → gate."
             />
             <PlatformReleasePage
               ambientJobId={ambientJob?.id ?? null}

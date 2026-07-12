@@ -77,7 +77,7 @@ function dailyOpsFixActions(phaseId: string, rootCauses: string[]): TaskPhaseFix
     actions.push({ label: 'Satellite Bus', tabId: 'satellite-bus', kind: 'navigate' })
   }
   if (rootCauses.some(c => c.toLowerCase().includes('release'))) {
-    actions.push({ label: 'Platform Release', tabId: 'platform-release', kind: 'navigate' })
+    actions.push({ label: 'Launch Rocket', tabId: 'platform-release', kind: 'navigate' })
   }
   return actions
 }

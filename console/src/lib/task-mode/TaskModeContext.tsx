@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import {
-  isTaskModeId,
+  resolveTaskModeId,
   TASK_MODE_STORAGE_KEY,
   taskModeById,
 } from './taskModeCatalog'
@@ -20,7 +20,10 @@ function readStoredMode(): TaskModeId {
     if (urlMode != null) return urlMode
 
     const stored = localStorage.getItem(TASK_MODE_STORAGE_KEY)
-    if (stored != null && isTaskModeId(stored)) return stored
+    if (stored != null) {
+      const resolved = resolveTaskModeId(stored)
+      if (resolved != null) return resolved
+    }
   } catch {
     // ignore
   }

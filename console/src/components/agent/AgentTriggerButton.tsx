@@ -19,7 +19,7 @@ export interface AgentTriggerButtonProps {
 
 /**
  * Unified Ops Console control for starting an ambient Agent task.
- * Same visual language on Operator Plane, Platform Release, Control Room, etc.
+ * Same visual language on Operator Plane, Launch Rocket, Control Room, etc.
  */
 export function AgentTriggerButton({
   label,

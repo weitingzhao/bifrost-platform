@@ -34,6 +34,24 @@ var programTemplates = map[string]ProgramTemplate{
 		Description:     "Dev loop instance for trade stack migration/build work.",
 		BaseBlueprintID: "trade-ib-client-migration",
 	},
+	"engineer-build": {
+		ID:              "engineer-build",
+		Title:           "Engineer Build",
+		Description:     "Dev loop instance for agent infra / Dev Agent platform work.",
+		BaseBlueprintID: "dev-agent",
+	},
+	"ground-build": {
+		ID:              "ground-build",
+		Title:           "Ground Build",
+		Description:     "Dev loop instance for ground systems / network governance work.",
+		BaseBlueprintID: "network-governance",
+	},
+	"plugin-build": {
+		ID:              "plugin-build",
+		Title:           "Plugin Build",
+		Description:     "Dev loop instance for platform plugin work (e.g. IB Gateway).",
+		BaseBlueprintID: "ib-gateway-plugin",
+	},
 }
 
 func GetProgramTemplate(templateID string) (ProgramTemplate, bool) {

@@ -35,7 +35,7 @@ export const AGENT_MODES: AgentModeRow[] = [
   {
     mode: 'Promote',
     flywheel: 'A + B coupling',
-    defaultUI: 'Rocket → Platform Release · Mission Control → Audit',
+    defaultUI: 'Rocket → Launch Rocket · Mission Control → Audit',
     agentMay: 'Query release-state, deploy via start_pipeline_run, run gates, verify smoke; follow next_action guidance',
     agentMustNot: 'Skip blockers (D1, gate), deploy PROD with different revision than STG, bypass admin role for gates; Promote rollout that enables live trading (D10 BLOCKED)',
   },

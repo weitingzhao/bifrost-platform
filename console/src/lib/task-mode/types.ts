@@ -6,10 +6,12 @@ import type { WorkIntent } from '@/lib/briefing/workIntents'
 export type TaskModeId =
   | 'system'
   | 'daily-ops'
-  | 'rocket-launch'
-  | 'satellite-deploy'
+  | 'mission-launch'
   | 'rocket-build'
   | 'satellite-build'
+  | 'engineer-build'
+  | 'ground-build'
+  | 'plugin-build'
 
 export type LoopArchetype = 'system' | 'ops' | 'dev'
 
@@ -44,7 +46,7 @@ export type NavLensConfig = {
 export type OpsLoopConfig = {
   kind: 'ops'
   /** Primary live signal source for phase status projection. */
-  signalSource: 'mission-snapshot' | 'supply-chain' | 'stg-release' | 'operate-queue'
+  signalSource: 'mission-snapshot' | 'supply-chain' | 'stg-release' | 'operate-queue' | 'mission-launch'
   showLaunchPad?: boolean
   showMissionSignals?: boolean
 }

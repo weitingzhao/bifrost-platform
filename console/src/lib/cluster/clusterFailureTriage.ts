@@ -159,7 +159,7 @@ function classifyClusterIssue(issue: ClusterIssueRow): Pick<FailureTriageRow, 't
         return {
           track: 'playbook',
           trackReason: 'CI/CD domain unhealthy — Tekton/Argo/registry',
-          suggestedAction: 'Platform Release → STG deliver; fix PipelineRun; verify Gitea sync',
+          suggestedAction: 'Launch Rocket → STG deliver; fix PipelineRun; verify Gitea sync',
           playbookId: 'cicd-domain-recover',
         }
       }
@@ -197,7 +197,7 @@ function classifyMissionItem(
     return {
       track: 'playbook',
       trackReason: 'Delivery pipeline failure — not a node problem',
-      suggestedAction: 'Rocket Launch → Platform Release; re-run deliver-stg after fixing PipelineRun cause',
+      suggestedAction: 'Rocket Launch → Launch Rocket; re-run deliver-stg after fixing PipelineRun cause',
       playbookId: 'deliver-stg-recover',
     }
   }
@@ -213,7 +213,7 @@ function classifyMissionItem(
     return {
       track: 'playbook',
       trackReason: 'Platform control plane probe failure',
-      suggestedAction: 'Platform Release self-health; verify console/API/Argo routes',
+      suggestedAction: 'Launch Rocket self-health; verify console/API/Argo routes',
       playbookId: 'platform-self-health-recover',
     }
   }

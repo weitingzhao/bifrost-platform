@@ -33,7 +33,7 @@ export function buildGateDebugBundle(input: GateDebugBundleInput): string {
     '',
     `Generated: ${new Date().toISOString()}`,
     'Mode: Ops',
-    'Source: Ops Console → Rocket → Platform Release',
+    'Source: Ops Console → Rocket → Launch Rocket',
     `Tier: ${tier} · Pipeline: ${pipeline} · Namespace: ${namespace}`,
   ]
 

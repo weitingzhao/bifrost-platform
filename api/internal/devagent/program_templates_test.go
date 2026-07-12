@@ -136,6 +136,24 @@ func TestGetProgramTemplate(t *testing.T) {
 	if tmpl.BaseBlueprintID != "trade-ib-client-migration" {
 		t.Fatalf("base = %q", tmpl.BaseBlueprintID)
 	}
+
+	cases := []struct {
+		id   string
+		base string
+	}{
+		{"engineer-build", "dev-agent"},
+		{"ground-build", "network-governance"},
+		{"plugin-build", "ib-gateway-plugin"},
+	}
+	for _, tc := range cases {
+		got, ok := GetProgramTemplate(tc.id)
+		if !ok {
+			t.Fatalf("expected %s template", tc.id)
+		}
+		if got.BaseBlueprintID != tc.base {
+			t.Fatalf("%s base = %q want %q", tc.id, got.BaseBlueprintID, tc.base)
+		}
+	}
 }
 
 func TestSlugInstanceLabel(t *testing.T) {

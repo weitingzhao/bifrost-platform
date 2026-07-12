@@ -28,6 +28,9 @@ export type ResolveLaunchVerdictInput = {
   tradeProdSignal?: Signal
   /** Raw Signal for the rocket readiness dimension. */
   rocketSignal?: Signal
+  /** Promote / cutover verify — gates prod-path launch when not ready. */
+  promoteSignal?: Signal
+  promoteDetail?: string
   deliverInFlight: boolean
   /**
    * Ambient deploy agent already started (scope trade-deploy / release) but Tekton
@@ -42,6 +45,7 @@ export type LaunchCheckpointId =
   | 'rocket'
   | 'trade-prod'
   | 'platform-prod'
+  | 'promote'
   | 'pipeline'
   /** @deprecated collapsed readiness — prefer rocket / trade-prod */
   | 'readiness'
@@ -82,13 +86,14 @@ export function readinessAnchorDomId(anchor: LaunchReadinessAnchor): string {
 
 /**
  * Critical launch checkpoints — lamps map 1:1 onto Environment Readiness / Recent panels.
- * Satellite: Auth · Rocket IB bus · Trade Prod · Pipeline idle
- * Rocket: Auth · Platform Prod · Pipeline idle
+ * Satellite: Auth · Rocket IB bus · Trade Prod · Promote / cutover · Pipeline idle
+ * Rocket: Auth · Platform Prod · Promote / cutover · Pipeline idle
  * Any `ok: false` ⇒ No-Go (same inputs as resolveLaunchVerdict).
  */
 export function buildLaunchCheckpoints(input: ResolveLaunchVerdictInput): LaunchCheckpoint[] {
   const authOk = input.canOperate
   const pipelineOk = !input.deliverInFlight
+  const promoteBlocked = signalBlocksLaunch(input.promoteSignal)
 
   if (input.mode === 'satellite') {
     const rocketBlocked = signalBlocksLaunch(input.rocketSignal)
@@ -109,6 +114,14 @@ export function buildLaunchCheckpoints(input: ResolveLaunchVerdictInput): Launch
         ok: !tradeBlocked,
         signal: input.tradeProdSignal ?? 'ok',
         detail: tradeBlocked ? input.tradeProdLabel : undefined,
+        readinessAnchor: 'trade-prod',
+      },
+      {
+        id: 'promote',
+        label: 'Promote / cutover',
+        ok: !promoteBlocked,
+        signal: input.promoteSignal ?? 'ok',
+        detail: promoteBlocked ? input.promoteDetail : undefined,
         readinessAnchor: 'trade-prod',
       },
       {
@@ -134,6 +147,14 @@ export function buildLaunchCheckpoints(input: ResolveLaunchVerdictInput): Launch
       readinessAnchor: 'platform-prod',
     },
     {
+      id: 'promote',
+      label: 'Promote / cutover',
+      ok: !promoteBlocked,
+      signal: input.promoteSignal ?? 'ok',
+      detail: promoteBlocked ? input.promoteDetail : undefined,
+      readinessAnchor: 'platform-prod',
+    },
+    {
       id: 'pipeline',
       label: 'Pipeline idle',
       ok: pipelineOk,
@@ -154,6 +175,19 @@ export function resolveLaunchVerdict(input: ResolveLaunchVerdictInput): LaunchVe
       detail: 'Use the header auth control as operator before starting Launch Pad agents.',
       disabledReason: 'Authenticate as operator to run Launch Pad agents',
       blockKind: 'auth',
+    }
+  }
+
+  if (signalBlocksLaunch(input.promoteSignal)) {
+    return {
+      kind: 'NO_GO',
+      title: 'Complete Promote / cutover verify before launch',
+      detail:
+        input.promoteDetail != null && input.promoteDetail !== ''
+          ? input.promoteDetail
+          : 'Spine promote / prod cutover verify is not clear — resolve blockers before Agent Launch.',
+      disabledReason: 'Promote / cutover verify blocked',
+      blockKind: 'prod',
     }
   }
 
@@ -211,11 +245,11 @@ export function resolveLaunchVerdict(input: ResolveLaunchVerdictInput): LaunchVe
       title: 'Launch in progress',
       detail: agentOnly
         ? input.mode === 'satellite'
-          ? 'Trade Deploy agent is running — waiting for the bifrost-deliver-stg PipelineRun to appear.'
-          : 'Platform Release agent is running — waiting for the bifrost-deliver-platform PipelineRun to appear.'
+          ? 'Deploy Satellite agent is running — waiting for the bifrost-deliver-stg PipelineRun to appear.'
+          : 'Launch Rocket agent is running — waiting for the bifrost-deliver-platform PipelineRun to appear.'
         : input.mode === 'satellite'
-          ? 'A bifrost-deliver-stg PipelineRun is still running — wait for it to finish or open Trade Deploy for logs.'
-          : 'A bifrost-deliver-platform PipelineRun is still running — wait for it to finish or open Platform Release for logs.',
+          ? 'A bifrost-deliver-stg PipelineRun is still running — wait for it to finish or open Deploy Satellite for logs.'
+          : 'A bifrost-deliver-platform PipelineRun is still running — wait for it to finish or open Launch Rocket for logs.',
       disabledReason: 'Launch already in progress',
     }
   }

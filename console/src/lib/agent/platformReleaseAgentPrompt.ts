@@ -41,8 +41,8 @@ export function buildPlatformReleasePrompt(ctx: PlatformReleasePromptContext): s
   return [
     PLATFORM_RELEASE_AGENT_PROMPT,
     '',
-    '## Operator context (Platform Release page at task start)',
-    'The operator clicked **AI Release** on the Platform Release page. Use the snapshot below plus live MCP tools.',
+    '## Operator context (Launch Rocket page at task start)',
+    'The operator clicked **AI Release** on the Launch Rocket page. Use the snapshot below plus live MCP tools.',
     '',
     '```json',
     JSON.stringify(snapshot, null, 2),

@@ -3,8 +3,14 @@ import type { TaskModeDef, TaskModeId } from './types'
 export const TASK_MODE_STORAGE_KEY = 'bifrost-ops-task-mode'
 export const TASK_MODE_QUERY_PARAM = 'taskMode'
 
-export const TASK_MODE_CATALOG_VERSION = '2026-07-07'
+export const TASK_MODE_CATALOG_VERSION = '2026-07-11'
 export const TASK_MODE_CATALOG_SOURCE = 'console/src/lib/task-mode/taskModeCatalog.ts'
+
+/** Legacy mode ids remapped after 2026-07-11 restructure. */
+const LEGACY_TASK_MODE_ALIASES: Record<string, TaskModeId> = {
+  'rocket-launch': 'mission-launch',
+  'satellite-deploy': 'mission-launch',
+}
 
 const DAILY_OPS_PHASES: TaskModeDef['phases'] = [
   {
@@ -44,96 +50,67 @@ const DAILY_OPS_PHASES: TaskModeDef['phases'] = [
   },
 ]
 
-const ROCKET_LAUNCH_PHASES: TaskModeDef['phases'] = [
+const MISSION_LAUNCH_PHASES: TaskModeDef['phases'] = [
   {
     id: 'supply-chain',
     seq: 1,
-    title: 'Supply chain ready',
-    summary: 'Gitea mirrors synced and platform Dockerfile ConfigMaps refreshed.',
+    title: 'Supply chain · all domains',
+    summary: 'Gitea mirrors + Dockerfile CMs ready for platform and trade deliver pipelines.',
     navigateTab: 'platform-release',
-    actions: [{ label: 'Platform Release', tabId: 'platform-release' }],
+    actions: [
+      { label: 'Launch Rocket', tabId: 'platform-release' },
+      { label: 'Deploy Satellite', tabId: 'trade-release' },
+    ],
   },
   {
-    id: 'deliver-platform-stg',
+    id: 'deploy-stg',
     seq: 2,
-    title: 'Deliver platform STG',
-    summary: 'Run bifrost-deliver-platform — Kaniko build + STG rollout.',
+    title: 'Deploy STG',
+    summary: 'Run platform + trade STG deliver pipelines (both must succeed).',
     dependsOn: ['supply-chain'],
-    navigateTab: 'platform-release',
-  },
-  {
-    id: 'platform-stg-gate',
-    seq: 3,
-    title: 'Platform STG gate',
-    summary: 'STG release gate pass + self-health probe green.',
-    dependsOn: ['deliver-platform-stg'],
-    navigateTab: 'platform-release',
-  },
-  {
-    id: 'deliver-platform-prod',
-    seq: 4,
-    title: 'Deliver platform PROD',
-    summary: 'Run bifrost-deliver-platform-prod with same revision as STG.',
-    dependsOn: ['platform-stg-gate'],
-    navigateTab: 'platform-release',
-  },
-  {
-    id: 'platform-prod-gate',
-    seq: 5,
-    title: 'Platform PROD gate',
-    summary: 'PROD release gate + platform matrix nominal.',
-    dependsOn: ['deliver-platform-prod'],
-    navigateTab: 'platform-release',
-  },
-]
-
-const SATELLITE_DEPLOY_PHASES: TaskModeDef['phases'] = [
-  {
-    id: 'push-upstream',
-    seq: 1,
-    title: 'Push to GitHub',
-    summary: 'Commit trade repos + infra; sync Gitea mirrors and Dockerfile CMs.',
-    navigateTab: 'trade-release',
-  },
-  {
-    id: 'config-overlay',
-    seq: 2,
-    title: 'STG config & overlay',
-    summary: 'Apply STG overlay, secrets, and IB client_id segment.',
-    dependsOn: ['push-upstream'],
-    navigateTab: 'trade-release',
-  },
-  {
-    id: 'deliver-stg',
-    seq: 3,
-    title: 'bifrost-deliver-stg',
-    summary: 'Tekton pipeline: prepare → build → rollout → verify-stg.',
-    dependsOn: ['config-overlay'],
-    navigateTab: 'trade-release',
-  },
-  {
-    id: 'verify-stg',
-    seq: 4,
-    title: 'STG acceptance',
-    summary: 'Automated verify-stg + manual Tier B sign-off when needed.',
-    dependsOn: ['deliver-stg'],
-    navigateTab: 'trade-release',
+    navigateTab: 'control-room',
+    actions: [
+      { label: 'Launch Rocket', tabId: 'platform-release' },
+      { label: 'Deploy Satellite', tabId: 'trade-release' },
+      { label: 'Control Room', tabId: 'control-room' },
+    ],
   },
   {
     id: 'stg-gate',
-    seq: 5,
-    title: 'STG release gate',
-    summary: 'Promote STG gate pass — staging track complete.',
-    dependsOn: ['verify-stg'],
-    navigateTab: 'trade-release',
+    seq: 3,
+    title: 'STG gate · unified',
+    summary: 'Platform STG gate + trade STG gate both pass.',
+    dependsOn: ['deploy-stg'],
+    navigateTab: 'platform-release',
+    actions: [
+      { label: 'Launch Rocket', tabId: 'platform-release' },
+      { label: 'Deploy Satellite', tabId: 'trade-release' },
+    ],
   },
   {
-    id: 'prod-cutover',
-    seq: 6,
-    title: 'Prod cutover',
-    summary: 'Prod overlay + deliver-prod + prod matrix — Deploy Mainline D1.',
+    id: 'deploy-prod',
+    seq: 4,
+    title: 'Deploy PROD',
+    summary: 'Promote platform + trade to PROD after unified STG gate.',
     dependsOn: ['stg-gate'],
-    navigateTab: 'trade-release',
+    navigateTab: 'platform-release',
+    actions: [
+      { label: 'Launch Rocket', tabId: 'platform-release' },
+      { label: 'Deploy Satellite', tabId: 'trade-release' },
+    ],
+  },
+  {
+    id: 'prod-gate',
+    seq: 5,
+    title: 'PROD gate + mission verify',
+    summary: 'PROD gates pass and mission snapshot nominal.',
+    dependsOn: ['deploy-prod'],
+    navigateTab: 'control-room',
+    actions: [
+      { label: 'Control Room', tabId: 'control-room' },
+      { label: 'Launch Rocket', tabId: 'platform-release' },
+      { label: 'Deploy Satellite', tabId: 'trade-release' },
+    ],
   },
 ]
 
@@ -209,7 +186,7 @@ const SATELLITE_BUILD_PHASES: TaskModeDef['phases'] = [
   {
     id: 'deliver-stg',
     seq: 4,
-    title: 'Trade deliver STG',
+    title: 'Satellite deliver STG',
     summary: 'Push → bifrost-deliver-stg → STG smoke (9 API domains).',
     dependsOn: ['pre-push'],
     navigateTab: 'trade-release',
@@ -221,6 +198,154 @@ const SATELLITE_BUILD_PHASES: TaskModeDef['phases'] = [
     summary: 'Owner sign-off on linked program phases.',
     dependsOn: ['deliver-stg'],
     navigateTab: 'delivery-board',
+  },
+]
+
+const ENGINEER_BUILD_PHASES: TaskModeDef['phases'] = [
+  {
+    id: 'briefing',
+    seq: 1,
+    title: 'Agent Briefing',
+    summary: 'Copy scoped pack — automate track, agent-infra lane.',
+    navigateTab: 'briefing',
+    actions: [{ label: 'Open Briefing', tabId: 'briefing' }],
+  },
+  {
+    id: 'implement',
+    seq: 2,
+    title: 'Implement in Cursor',
+    summary: 'Execute agent-infra / Dev Agent platform work; follow program skill.',
+    dependsOn: ['briefing'],
+    navigateTab: 'dev-agent',
+    actions: [{ label: 'Dev Agent', tabId: 'dev-agent' }],
+  },
+  {
+    id: 'pre-push',
+    seq: 3,
+    title: 'Pre-push verify',
+    summary: 'Lint + build before git push.',
+    dependsOn: ['implement'],
+    navigateTab: 'dev-agent',
+  },
+  {
+    id: 'deliver-stg',
+    seq: 4,
+    title: 'Deliver / board',
+    summary: 'Platform deliver STG when applicable, or advance Delivery Board phases.',
+    dependsOn: ['pre-push'],
+    navigateTab: 'platform-release',
+    actions: [
+      { label: 'Launch Rocket', tabId: 'platform-release' },
+      { label: 'Delivery Board', tabId: 'delivery-board' },
+    ],
+  },
+  {
+    id: 'sign-off',
+    seq: 5,
+    title: 'Delivery Board sign-off',
+    summary: 'Owner sign-off on linked program phases.',
+    dependsOn: ['deliver-stg'],
+    navigateTab: 'delivery-board',
+    actions: [{ label: 'Delivery Board', tabId: 'delivery-board' }],
+  },
+]
+
+const GROUND_BUILD_PHASES: TaskModeDef['phases'] = [
+  {
+    id: 'briefing',
+    seq: 1,
+    title: 'Agent Briefing',
+    summary: 'Copy scoped pack — infra track, network-server lane, ops intent.',
+    navigateTab: 'briefing',
+    actions: [{ label: 'Open Briefing', tabId: 'briefing' }],
+  },
+  {
+    id: 'implement',
+    seq: 2,
+    title: 'Implement in Cursor',
+    summary: 'Execute ground / network governance work; follow program skill.',
+    dependsOn: ['briefing'],
+    navigateTab: 'dev-agent',
+    actions: [{ label: 'Dev Agent', tabId: 'dev-agent' }],
+  },
+  {
+    id: 'pre-push',
+    seq: 3,
+    title: 'Pre-push verify',
+    summary: 'Lint + verify before git push.',
+    dependsOn: ['implement'],
+    navigateTab: 'dev-agent',
+  },
+  {
+    id: 'deliver-stg',
+    seq: 4,
+    title: 'Delivery Board advance',
+    summary: 'Ground infra often lands via spine / Delivery Board (no Tekton pipeline).',
+    dependsOn: ['pre-push'],
+    navigateTab: 'delivery-board',
+    actions: [
+      { label: 'Delivery Board', tabId: 'delivery-board' },
+      { label: 'Network', tabId: 'network' },
+    ],
+  },
+  {
+    id: 'sign-off',
+    seq: 5,
+    title: 'Delivery Board sign-off',
+    summary: 'Owner sign-off on linked program phases.',
+    dependsOn: ['deliver-stg'],
+    navigateTab: 'delivery-board',
+    actions: [{ label: 'Delivery Board', tabId: 'delivery-board' }],
+  },
+]
+
+const PLUGIN_BUILD_PHASES: TaskModeDef['phases'] = [
+  {
+    id: 'briefing',
+    seq: 1,
+    title: 'Agent Briefing',
+    summary: 'Copy scoped pack — automate track, agent-services lane, feature intent.',
+    navigateTab: 'briefing',
+    actions: [{ label: 'Open Briefing', tabId: 'briefing' }],
+  },
+  {
+    id: 'implement',
+    seq: 2,
+    title: 'Implement in Cursor',
+    summary: 'Execute plugin work (e.g. IB Gateway); follow program skill.',
+    dependsOn: ['briefing'],
+    navigateTab: 'dev-agent',
+    actions: [{ label: 'Dev Agent', tabId: 'dev-agent' }],
+  },
+  {
+    id: 'pre-push',
+    seq: 3,
+    title: 'Pre-push verify',
+    summary: 'Lint + test before git push.',
+    dependsOn: ['implement'],
+    navigateTab: 'dev-agent',
+  },
+  {
+    id: 'deliver-stg',
+    seq: 4,
+    title: 'Satellite / board deliver',
+    summary: 'Satellite deliver STG when plugin ships with the payload stack, or Delivery Board.',
+    dependsOn: ['pre-push'],
+    navigateTab: 'trade-release',
+    actions: [
+      { label: 'Deploy Satellite', tabId: 'trade-release' },
+      { label: 'Delivery Board', tabId: 'delivery-board' },
+      { label: 'Plugin Gallery', tabId: 'plugin-gallery' },
+    ],
+  },
+  {
+    id: 'sign-off',
+    seq: 5,
+    title: 'Delivery Board sign-off',
+    summary: 'Owner sign-off on linked program phases.',
+    dependsOn: ['deliver-stg'],
+    navigateTab: 'delivery-board',
+    actions: [{ label: 'Delivery Board', tabId: 'delivery-board' }],
   },
 ]
 
@@ -263,54 +388,31 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
     },
   },
   {
-    id: 'rocket-launch',
-    label: 'Rocket Launch',
-    description: 'Ops loop — platform CI/CD STG → gate → PROD.',
+    id: 'mission-launch',
+    label: 'Mission Launch',
+    description: 'Ops loop — unified platform + trade STG → gate → PROD mission.',
     loopArchetype: 'ops',
     landingTab: 'task-cc',
-    phases: ROCKET_LAUNCH_PHASES,
+    phases: MISSION_LAUNCH_PHASES,
     navLens: {
       showTaskControlCenter: true,
       includeTabs: [
         'task-cc',
         'control-room',
         'platform-release',
+        'trade-release',
         'cluster',
         'placement',
-        'audit',
-        'runtime-map',
-      ],
-    },
-    ops: {
-      kind: 'ops',
-      signalSource: 'supply-chain',
-      showLaunchPad: true,
-      showMissionSignals: true,
-    },
-  },
-  {
-    id: 'satellite-deploy',
-    label: 'Satellite Deploy',
-    description: 'Ops loop — trade stack STG release mainline.',
-    loopArchetype: 'ops',
-    landingTab: 'task-cc',
-    phases: SATELLITE_DEPLOY_PHASES,
-    navLens: {
-      showTaskControlCenter: true,
-      includeTabs: [
-        'task-cc',
-        'control-room',
-        'trade-release',
         'satellite-bus',
         'satellite-telemetry',
         'satellite-api',
-        'placement',
+        'runtime-map',
         'audit',
       ],
     },
     ops: {
       kind: 'ops',
-      signalSource: 'stg-release',
+      signalSource: 'mission-launch',
       showLaunchPad: true,
       showMissionSignals: true,
     },
@@ -375,6 +477,98 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
       briefingIntent: 'feature',
     },
   },
+  {
+    id: 'engineer-build',
+    label: 'Engineer Build',
+    description: 'Dev loop — agent infra / Dev Agent platform with Briefing → Dev Agent → Delivery Board.',
+    loopArchetype: 'dev',
+    landingTab: 'task-cc',
+    phases: ENGINEER_BUILD_PHASES,
+    navLens: {
+      showTaskControlCenter: true,
+      includeTabs: [
+        'task-cc',
+        'briefing',
+        'dev-agent',
+        'delivery-board',
+        'agent-desk',
+        'autonomous-skills',
+        'execution-log',
+        'agent-governance',
+        'blueprint',
+        'control-room',
+      ],
+    },
+    dev: {
+      kind: 'dev',
+      programId: 'dev-agent',
+      templateId: 'engineer-build',
+      briefingTrack: 'automate',
+      briefingLane: 'agent-infra',
+      briefingIntent: 'automate',
+    },
+  },
+  {
+    id: 'ground-build',
+    label: 'Ground Build',
+    description: 'Dev loop — ground systems / network governance with Briefing → Dev Agent → Delivery Board.',
+    loopArchetype: 'dev',
+    landingTab: 'task-cc',
+    phases: GROUND_BUILD_PHASES,
+    navLens: {
+      showTaskControlCenter: true,
+      includeTabs: [
+        'task-cc',
+        'briefing',
+        'dev-agent',
+        'delivery-board',
+        'console',
+        'network',
+        'compute',
+        'cluster',
+        'blueprint',
+        'control-room',
+      ],
+    },
+    dev: {
+      kind: 'dev',
+      programId: 'network-governance',
+      templateId: 'ground-build',
+      briefingTrack: 'infra',
+      briefingLane: 'network-server',
+      briefingIntent: 'ops',
+    },
+  },
+  {
+    id: 'plugin-build',
+    label: 'Plugin Build',
+    description: 'Dev loop — platform plugins (IB Gateway) with Briefing → Dev Agent → Delivery Board.',
+    loopArchetype: 'dev',
+    landingTab: 'task-cc',
+    phases: PLUGIN_BUILD_PHASES,
+    navLens: {
+      showTaskControlCenter: true,
+      includeTabs: [
+        'task-cc',
+        'briefing',
+        'dev-agent',
+        'delivery-board',
+        'plugin-gallery',
+        'satellite-bus',
+        'trade-release',
+        'blueprint',
+        'control-room',
+      ],
+    },
+    dev: {
+      kind: 'dev',
+      programId: 'ib-gateway-plugin',
+      templateId: 'plugin-build',
+      briefingTrack: 'automate',
+      briefingLane: 'agent-services',
+      briefingIntent: 'feature',
+    },
+  },
 ]
 
 export function taskModeById(id: TaskModeId): TaskModeDef {
@@ -385,6 +579,13 @@ export function taskModeById(id: TaskModeId): TaskModeDef {
 
 export function isTaskModeId(value: string): value is TaskModeId {
   return TASK_MODE_DEFINITIONS.some(m => m.id === value)
+}
+
+/** Resolve catalog id including legacy aliases (rocket-launch / satellite-deploy → mission-launch). */
+export function resolveTaskModeId(value: string): TaskModeId | null {
+  if (isTaskModeId(value)) return value
+  const aliased = LEGACY_TASK_MODE_ALIASES[value]
+  return aliased ?? null
 }
 
 export function taskModesForSwitcher(): TaskModeDef[] {

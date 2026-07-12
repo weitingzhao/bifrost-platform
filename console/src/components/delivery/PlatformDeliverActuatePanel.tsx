@@ -72,8 +72,8 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
       const runName = data.run?.name
       setActionSuccess(
         runName
-          ? `PipelineRun ${runName} started — open Satellite → Trade Deploy → History to watch progress.`
-          : 'Pipeline run started — open Satellite → Trade Deploy → History to watch progress.',
+          ? `PipelineRun ${runName} started — open Satellite → Deploy Satellite → History to watch progress.`
+          : 'Pipeline run started — open Satellite → Deploy Satellite → History to watch progress.',
       )
       if (runName) {
         qc.setQueryData(deliveryFocusRunQueryKey(target.pipeline), runName)
@@ -183,7 +183,7 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
               </Button>
               {!cmAllOk && (
                 <span className="text-dense-meta text-muted-foreground">
-                  Satellite → Trade Deploy → Refresh Dockerfile CMs (includes platform CMs).
+                  Satellite → Deploy Satellite → Refresh Dockerfile CMs (includes platform CMs).
                 </span>
               )}
             </div>

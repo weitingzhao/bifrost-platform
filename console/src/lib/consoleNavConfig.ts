@@ -43,9 +43,9 @@ import {
  * | Group            | Domain                | Intent                                           |
  * |------------------|-----------------------|--------------------------------------------------|
  * | Mission Control  | Cross-domain ops hub  | Control Room, topology, defects, audit, delivery   |
- * | Rocket           | Ops Platform itself   | K8s cluster, platform release, placement          |
+ * | Rocket           | Ops Platform itself   | K8s cluster, Launch Rocket, placement             |
  * | Ground Systems   | Infrastructure        | Server console, network, compute                  |
- * | Satellite        | Trade stack payload   | Bus, telemetry, API health, trade deploy          |
+ * | Satellite        | Payload satellite(s)  | Bus, telemetry, API health, Deploy Satellite      |
  * | Subcontractors   | External plugins      | Plugin Gallery, future plugins                    |
  * | Engineer         | AI Agent              | Workspace, autonomous, trust, L-1 plane           |
  * | Governance       | Cross-domain ref lib  | Strategic vision, standards, AI strategy           |
@@ -82,7 +82,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
           { id: 'satellite-bus', label: 'Bus Status', icon: Activity },
           { id: 'satellite-telemetry', label: 'Telemetry', icon: LineChart },
           { id: 'satellite-api', label: 'API Health', icon: Gauge },
-          { id: 'trade-release', label: 'Trade Deploy', icon: Workflow },
+          { id: 'trade-release', label: 'Deploy Satellite', icon: Workflow },
         ],
       },
     ],
@@ -95,7 +95,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'cluster', label: 'Cluster', icon: Server },
-          { id: 'platform-release', label: 'Platform Release', icon: Container },
+          { id: 'platform-release', label: 'Launch Rocket', icon: Container },
           { id: 'placement', label: 'Placement', icon: Network },
         ],
       },

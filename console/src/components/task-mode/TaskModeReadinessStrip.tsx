@@ -5,9 +5,13 @@ import { AlertTriangle, ChevronRight, Gauge, Rocket, Satellite, type LucideIcon 
 import {
   fetchCluster,
   fetchClusterServiceReadiness,
+  fetchContext,
   fetchReleaseGate,
   fetchSatelliteBusDeep,
   fetchSelfHealth,
+  fetchStgSmoke,
+  fetchSupplyChain,
+  fetchTierBStatus,
   isAllSatelliteBusDeep,
 } from '@/api/platform'
 import type {
@@ -39,6 +43,16 @@ import {
 import { classifyPlatformIbGateway } from '@/lib/satellite/socketHealthSemantics'
 import type { TaskModeId } from '@/lib/task-mode/types'
 import type { ProdFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
+import {
+  evaluatePromoteStatus,
+  evaluateStgReleaseStatus,
+} from '@/lib/control-room/matrixSummary'
+import {
+  promoteProdDetail,
+  promoteVerifySignal,
+  stgReleaseVerifySignal,
+} from '@/lib/control-room/promoteCutover'
+import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 
 const REFETCH_MS = 20_000
 const STG_NS = 'bifrost-stg'
@@ -283,7 +297,8 @@ function EnvironmentReadinessPanel({
       <div
         className={cn(
           'mt-1.5 grid gap-1.5',
-          dense ? 'grid-cols-2' : 'sm:grid-cols-2',
+          // Mission Launch summary: one chip per row (STG/Prod already side-by-side).
+          summaryColumn ? 'grid-cols-1' : dense ? 'grid-cols-2' : 'sm:grid-cols-2',
         )}
       >
         {chips.map(chip => {
@@ -353,6 +368,92 @@ function ProdBlockedBanner({ context }: { context: 'satellite' | 'rocket' }) {
 }
 
 export type SatelliteBlockKind = 'rocket' | 'prod' | 'both' | null
+
+/** Promote / cutover + STG release verify — shared Mission Launch readiness GO/NO-GO. */
+export function usePromoteVerifyReadiness(enabled = true) {
+  const { matrices } = useMissionSnapshot()
+
+  const contextQ = useQuery({
+    queryKey: ['context'],
+    queryFn: fetchContext,
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const stgSmokeQ = useQuery({
+    queryKey: ['cockpit', 'stg-smoke'],
+    queryFn: fetchStgSmoke,
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const stgGateQ = useQuery({
+    queryKey: ['promote', 'release-gate', 'stg'],
+    queryFn: () => fetchReleaseGate('stg'),
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const tierBQ = useQuery({
+    queryKey: ['promote', 'tier-b'],
+    queryFn: fetchTierBStatus,
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const supplyQ = useQuery({
+    queryKey: ['cockpit', 'supply-chain'],
+    queryFn: fetchSupplyChain,
+    refetchInterval: REFETCH_MS,
+    enabled,
+  })
+
+  const lastDeliverSucceeded =
+    supplyQ.data?.last_deliver_success != null &&
+    isPipelineRunSucceeded(supplyQ.data.last_deliver_success)
+
+  const promote = useMemo(() => {
+    if (contextQ.data == null) return null
+    return evaluatePromoteStatus(contextQ.data, matrices)
+  }, [contextQ.data, matrices])
+
+  const stgRelease = useMemo(() => {
+    return evaluateStgReleaseStatus(
+      stgSmokeQ.data,
+      lastDeliverSucceeded,
+      stgGateQ.data,
+      tierBQ.data,
+    )
+  }, [stgSmokeQ.data, lastDeliverSucceeded, stgGateQ.data, tierBQ.data])
+
+  const promoteSignal: Signal = promote != null ? promoteVerifySignal(promote) : 'unknown'
+  const promoteDetail =
+    promote != null
+      ? promote.ready
+        ? 'Spine promote · prod cutover verify clear'
+        : promoteProdDetail(promote)
+      : 'Loading promote verify…'
+
+  const stgReleaseSignal: Signal = stgReleaseVerifySignal(stgRelease)
+  const stgReleaseDetail = stgRelease.releaseReady
+    ? 'Deliver + smoke + STG gate + Tier B complete'
+    : stgRelease.releaseReasons[0] ?? 'STG release verify incomplete'
+
+  return {
+    promoteSignal,
+    promoteDetail,
+    promoteReady: promote?.ready === true,
+    stgReleaseSignal,
+    stgReleaseDetail,
+    stgReleaseReady: stgRelease.releaseReady,
+    isLoading:
+      contextQ.isLoading ||
+      stgSmokeQ.isLoading ||
+      stgGateQ.isLoading ||
+      tierBQ.isLoading ||
+      supplyQ.isLoading,
+  }
+}
 
 export function useSatelliteProdReadiness(enabled = true) {
   const { snapshot, matrices, isLoading: missionLoading } = useMissionSnapshot()
@@ -734,7 +835,7 @@ export function useSatelliteDeployOverall(enabled = true): LaunchViewOverall {
   }
 }
 
-function RocketReadinessStrip({
+export function RocketReadinessStrip({
   compact = false,
   summaryColumn = false,
   suppressProdBlockedBanner = false,
@@ -794,9 +895,16 @@ function RocketReadinessStrip({
   const selfProd = useMemo(() => selfHealthEnvSignal(selfQ.data?.probes, 'prod'), [selfQ.data?.probes])
   const stgGate = useMemo(() => releaseGateSignal(stgGateQ.data), [stgGateQ.data])
   const prodGate = useMemo(() => releaseGateSignal(prodGateQ.data), [prodGateQ.data])
+  const promoteVerify = usePromoteVerifyReadiness()
 
   const stgOverall = worst(k8sStg.signal, cicdSignal, selfStg.signal, stgGate.signal, snapshot.release.signal)
-  const prodOverallLocal = worst(k8sProd.signal, selfProd.signal, prodGate.signal, snapshot.release.signal)
+  const prodOverallLocal = worst(
+    k8sProd.signal,
+    selfProd.signal,
+    prodGate.signal,
+    snapshot.release.signal,
+    promoteVerify.promoteSignal,
+  )
 
   const stgLoading =
     missionLoading ||
@@ -804,7 +912,12 @@ function RocketReadinessStrip({
     clusterQ.isLoading ||
     selfQ.isLoading ||
     stgGateQ.isLoading
-  const prodPanelLoading = prodLoading || clusterQ.isLoading || selfQ.isLoading || prodGateQ.isLoading
+  const prodPanelLoading =
+    prodLoading ||
+    clusterQ.isLoading ||
+    selfQ.isLoading ||
+    prodGateQ.isLoading ||
+    promoteVerify.isLoading
 
   const showProdBanner =
     !suppressProdBlockedBanner &&
@@ -825,47 +938,61 @@ function RocketReadinessStrip({
         { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
       ]
 
+  const prodChips: EnvChip[] = [
+    { label: 'Rocket · K8s PROD', signal: k8sProd.signal, detail: k8sProd.detail },
+    { label: 'Self-health PROD', signal: selfProd.signal, detail: selfProd.detail },
+    { label: 'PROD gate', signal: prodGate.signal, detail: prodGate.detail },
+    { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
+    {
+      label: 'Promote / cutover',
+      signal: promoteVerify.promoteSignal,
+      detail: promoteVerify.promoteDetail,
+    },
+  ]
+
   return (
-    <div className={cn('flex flex-col', summaryColumn ? 'gap-1.5' : 'gap-2')}>
+    <div className={cn('flex min-h-0 flex-col', summaryColumn ? 'h-full gap-1.5' : 'gap-2')}>
       {showProdBanner && <ProdBlockedBanner context="rocket" />}
-      <EnvironmentReadinessPanel
-        title={summaryColumn ? 'STG readiness' : 'Platform STG readiness'}
-        icon={Rocket}
-        overall={stgOverall}
-        isLoading={stgLoading}
-        compact={compact}
-        summaryColumn={summaryColumn}
-        readinessAnchor="stg"
-        chips={stgChips}
-        linkLabel="Platform Release →"
-        onLink={() => onNavigate('platform-release')}
-        onNavigate={onNavigate}
-        fixCtx={{ modeId: 'rocket-launch', env: 'platform-stg' }}
-      />
-      <EnvironmentReadinessPanel
-        title={summaryColumn ? 'Platform Prod' : 'PROD environment readiness'}
-        icon={Rocket}
-        overall={prodOverallLocal}
-        isLoading={prodPanelLoading}
-        compact={compact}
-        summaryColumn={summaryColumn}
-        readinessAnchor="platform-prod"
-        chips={[
-          { label: 'Rocket · K8s PROD', signal: k8sProd.signal, detail: k8sProd.detail },
-          { label: 'Self-health PROD', signal: selfProd.signal, detail: selfProd.detail },
-          { label: 'PROD gate', signal: prodGate.signal, detail: prodGate.detail },
-          { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
-        ]}
-        linkLabel="Platform Release →"
-        onLink={() => onNavigate('platform-release')}
-        onNavigate={onNavigate}
-        fixCtx={{ modeId: 'rocket-launch', env: 'platform-prod' }}
-      />
+      <div
+        className={cn(
+          'grid min-h-0 gap-2',
+          summaryColumn ? 'flex-1 md:grid-cols-2 [&>*]:h-full' : undefined,
+        )}
+      >
+        <EnvironmentReadinessPanel
+          title={summaryColumn ? 'STG platform' : 'Platform STG readiness'}
+          icon={Rocket}
+          overall={stgOverall}
+          isLoading={stgLoading}
+          compact={compact}
+          summaryColumn={summaryColumn}
+          readinessAnchor="stg"
+          chips={stgChips}
+          linkLabel="Launch Rocket →"
+          onLink={() => onNavigate('platform-release')}
+          onNavigate={onNavigate}
+          fixCtx={{ modeId: 'mission-launch', env: 'platform-stg' }}
+        />
+        <EnvironmentReadinessPanel
+          title={summaryColumn ? 'Platform Prod' : 'PROD environment readiness'}
+          icon={Rocket}
+          overall={prodOverallLocal}
+          isLoading={prodPanelLoading}
+          compact={compact}
+          summaryColumn={summaryColumn}
+          readinessAnchor="platform-prod"
+          chips={prodChips}
+          linkLabel="Launch Rocket →"
+          onLink={() => onNavigate('platform-release')}
+          onNavigate={onNavigate}
+          fixCtx={{ modeId: 'mission-launch', env: 'platform-prod' }}
+        />
+      </div>
     </div>
   )
 }
 
-function SharedRocketStrip({
+export function SharedRocketStrip({
   rocket,
   isLoading,
   compact = false,
@@ -903,14 +1030,14 @@ function SharedRocketStrip({
             compact ? 'text-[var(--text-dense-meta)]' : 'text-[var(--text-dense-label)]',
           )}
         >
-          Rocket IB bus
+          Shared · IB bus
         </span>
         <StatusLamp value={rocket.signal} kind="reach" />
         <DenseTag variant={tag.variant} className={compact ? 'text-[9px]' : undefined}>
           {tag.label}
         </DenseTag>
         <DenseTag variant="neutral" className="text-[9px]">
-          SHARED
+          COUPLING
         </DenseTag>
       </div>
       <div className="mt-1.5 grid gap-1.5 grid-cols-1">
@@ -923,7 +1050,7 @@ function SharedRocketStrip({
       </div>
       <ReadinessFixBar
         chips={chips}
-        ctx={{ modeId: 'satellite-deploy', env: 'prod' }}
+        ctx={{ modeId: 'mission-launch', env: 'prod' }}
         canOperate={canOperate}
         onNavigate={onNavigate}
         dense={compact}
@@ -939,10 +1066,61 @@ function SharedRocketStrip({
   )
 }
 
-function SatelliteReadinessStrip({
+/** Self-contained shared IB bus panel for Mission Launch coupling strip. */
+export function MissionSharedBusPanel({
+  compact = false,
+  onNavigate,
+  canOperate = false,
+}: {
+  compact?: boolean
+  onNavigate: (tabId: string) => void
+  canOperate?: boolean
+}) {
+  const { rocketSignal, rocketDetail } = useSatelliteProdReadiness()
+
+  const stgBusQ = useQuery({
+    queryKey: ['task-cc', 'satellite-bus', 'stg'],
+    queryFn: () => fetchSatelliteBusDeep('stg'),
+    refetchInterval: REFETCH_MS,
+  })
+
+  const prodBusQ = useQuery({
+    queryKey: ['task-cc', 'satellite-bus', 'prod'],
+    queryFn: () => fetchSatelliteBusDeep('prod'),
+    refetchInterval: REFETCH_MS,
+  })
+
+  const busForEnv = (data: typeof stgBusQ.data, env: 'stg' | 'prod'): SatelliteBusDeepResponse | undefined => {
+    if (data == null) return undefined
+    if (isAllSatelliteBusDeep(data)) return data.buses.find(b => b.environment === env)
+    return data
+  }
+
+  const stgBusReach = useMemo(() => busForEnv(stgBusQ.data, 'stg'), [stgBusQ.data])
+  const prodBusReach = useMemo(() => busForEnv(prodBusQ.data, 'prod'), [prodBusQ.data])
+
+  const rocket = useMemo(() => {
+    if (prodBusReach != null) return sharedRocketFromSocket(prodBusReach.monitor.socket)
+    if (stgBusReach != null) return sharedRocketFromSocket(stgBusReach.monitor.socket)
+    return { signal: rocketSignal, detail: rocketDetail }
+  }, [prodBusReach, stgBusReach, rocketSignal, rocketDetail])
+
+  return (
+    <SharedRocketStrip
+      rocket={rocket}
+      isLoading={stgBusQ.isLoading || prodBusQ.isLoading}
+      compact={compact}
+      onNavigate={onNavigate}
+      canOperate={canOperate}
+    />
+  )
+}
+
+export function SatelliteReadinessStrip({
   compact = false,
   summaryColumn = false,
   suppressProdBlockedBanner = false,
+  omitSharedBus = false,
   onNavigate,
   canOperate = false,
   onAgentFixStg,
@@ -954,6 +1132,8 @@ function SatelliteReadinessStrip({
   compact?: boolean
   summaryColumn?: boolean
   suppressProdBlockedBanner?: boolean
+  /** When true, IB bus is rendered by Mission Launch shared strip instead. */
+  omitSharedBus?: boolean
   onNavigate: (tabId: string) => void
   canOperate?: boolean
   onAgentFixStg?: () => void
@@ -1046,19 +1226,26 @@ function SatelliteReadinessStrip({
   const stgTradeApis = useMemo(() => tradeApiSummary(stgMatrix), [stgMatrix])
   const prodTradeApis = useMemo(() => tradeApiSummary(prodMatrix), [prodMatrix])
   const prodGate = useMemo(() => releaseGateSignal(prodGateQ.data), [prodGateQ.data])
+  const promoteVerify = usePromoteVerifyReadiness()
 
-  const stgOverall = worst(stgK8s.signal, stgDatastore.signal, stgTradeApis.signal)
+  const stgOverall = worst(
+    stgK8s.signal,
+    stgDatastore.signal,
+    stgTradeApis.signal,
+    promoteVerify.stgReleaseSignal,
+  )
   const prodOverallLocal = worst(
     prodK8s.signal,
     prodDatastore.signal,
     prodTradeApis.signal,
     snapshot.tradeProd.signal,
     prodGate.signal,
+    promoteVerify.promoteSignal,
   )
 
-  const stgLoading = missionLoading || clusterDetailQ.isLoading
+  const stgLoading = missionLoading || clusterDetailQ.isLoading || promoteVerify.isLoading
   const prodLoading =
-    missionLoading || clusterDetailQ.isLoading || prodGateQ.isLoading
+    missionLoading || clusterDetailQ.isLoading || prodGateQ.isLoading || promoteVerify.isLoading
   const rocketLoading = stgBusQ.isLoading || prodBusQ.isLoading
 
   const showProdBanner =
@@ -1071,18 +1258,25 @@ function SatelliteReadinessStrip({
     { label: 'Trade · APIs PROD', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
     { label: 'Trade · PROD matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
     { label: 'Trade · PROD gate', signal: prodGate.signal, detail: prodGate.detail },
+    {
+      label: 'Promote / cutover',
+      signal: promoteVerify.promoteSignal,
+      detail: promoteVerify.promoteDetail,
+    },
   ]
 
   return (
     <div className={cn('flex min-h-0 flex-col', summaryColumn ? 'h-full gap-1.5' : 'gap-2')}>
       {showProdBanner && <ProdBlockedBanner context="satellite" />}
-      <SharedRocketStrip
-        rocket={rocket}
-        isLoading={rocketLoading}
-        compact={compact || summaryColumn}
-        onNavigate={onNavigate}
-        canOperate={canOperate}
-      />
+      {!omitSharedBus && (
+        <SharedRocketStrip
+          rocket={rocket}
+          isLoading={rocketLoading}
+          compact={compact || summaryColumn}
+          onNavigate={onNavigate}
+          canOperate={canOperate}
+        />
+      )}
       <div
         className={cn(
           'grid min-h-0 gap-2',
@@ -1101,11 +1295,16 @@ function SatelliteReadinessStrip({
             { label: 'Trade · K8s STG', signal: stgK8s.signal, detail: stgK8s.detail },
             { label: 'Ground · PG / Redis', signal: stgDatastore.signal, detail: stgDatastore.detail },
             { label: 'Trade · APIs STG', signal: stgTradeApis.signal, detail: stgTradeApis.detail },
+            {
+              label: 'STG release',
+              signal: promoteVerify.stgReleaseSignal,
+              detail: promoteVerify.stgReleaseDetail,
+            },
           ]}
           linkLabel="Satellite Bus →"
           onLink={() => onNavigate('satellite-bus')}
           onNavigate={onNavigate}
-          fixCtx={{ modeId: 'satellite-deploy', env: 'stg' }}
+          fixCtx={{ modeId: 'mission-launch', env: 'stg' }}
           canOperate={canOperate}
           onAgentFix={onAgentFixStg}
           agentFixPending={agentFixPending}
@@ -1121,10 +1320,10 @@ function SatelliteReadinessStrip({
           summaryColumn={summaryColumn}
           readinessAnchor="trade-prod"
           chips={prodChips}
-          linkLabel="Trade Release →"
+          linkLabel="Deploy Satellite →"
           onLink={() => onNavigate('trade-release')}
           onNavigate={onNavigate}
-          fixCtx={{ modeId: 'satellite-deploy', env: 'prod' }}
+          fixCtx={{ modeId: 'mission-launch', env: 'prod' }}
           canOperate={canOperate}
           onAgentFix={onAgentFixProd}
           agentFixPending={agentFixPending}
@@ -1170,30 +1369,28 @@ export function TaskModeReadinessStrip({
   agentFixDisabled = false,
   agentFixTitle,
 }: TaskModeReadinessStripProps) {
-  if (modeId === 'rocket-launch') {
+  if (modeId === 'mission-launch') {
     return (
-      <RocketReadinessStrip
-        compact={compact}
-        summaryColumn={summaryColumn}
-        suppressProdBlockedBanner={suppressProdBlockedBanner}
-        onNavigate={onNavigate}
-      />
-    )
-  }
-  if (modeId === 'satellite-deploy') {
-    return (
-      <SatelliteReadinessStrip
-        compact={compact}
-        summaryColumn={summaryColumn}
-        suppressProdBlockedBanner={suppressProdBlockedBanner}
-        onNavigate={onNavigate}
-        canOperate={canOperate}
-        onAgentFixStg={onAgentFixStg}
-        onAgentFixProd={onAgentFixProd}
-        agentFixPending={agentFixPending}
-        agentFixDisabled={agentFixDisabled}
-        agentFixTitle={agentFixTitle}
-      />
+      <div className={summaryColumn ? 'flex flex-col gap-1.5' : 'flex flex-col gap-3'}>
+        <RocketReadinessStrip
+          compact={compact}
+          summaryColumn={summaryColumn}
+          suppressProdBlockedBanner={suppressProdBlockedBanner}
+          onNavigate={onNavigate}
+        />
+        <SatelliteReadinessStrip
+          compact={compact}
+          summaryColumn={summaryColumn}
+          suppressProdBlockedBanner={suppressProdBlockedBanner}
+          onNavigate={onNavigate}
+          canOperate={canOperate}
+          onAgentFixStg={onAgentFixStg}
+          onAgentFixProd={onAgentFixProd}
+          agentFixPending={agentFixPending}
+          agentFixDisabled={agentFixDisabled}
+          agentFixTitle={agentFixTitle}
+        />
+      </div>
     )
   }
   return null

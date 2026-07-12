@@ -1,5 +1,5 @@
 /**
- * STG delivery release workflow — authoritative for Ops Console → Satellite → Trade Deploy.
+ * STG delivery release workflow — authoritative for Ops Console → Satellite → Deploy Satellite.
  * Phase status is Projection (spine) — use resolveStgReleasePhases(context).
  * Infra detail: bifrost-trade-infra/docs/DELIVER_STG.md
  */
@@ -38,8 +38,8 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
     owner: 'Developer',
     summary: 'Commit bifrost-trade-{api,socket,worker,frontend,core} + bifrost-trade-infra. Gitea mirrors pull from GitHub.',
     actions: [
-      'Console: Satellite → Trade Deploy → Sync mirrors',
-      'Console: Satellite → Trade Deploy → Refresh Dockerfile CMs (4/4 summary)',
+      'Console: Satellite → Deploy Satellite → Sync mirrors',
+      'Console: Satellite → Deploy Satellite → Refresh Dockerfile CMs (4/4 summary)',
       'Verify Dockerfile CMs: api · frontend · worker · socket tags all green',
       'Optional: make k3s-sync-gitea-mirrors (bootstrap-gitea-mirrors.sh)',
     ],
@@ -64,9 +64,9 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
     summary:
       'Pipeline: prepare (mirror-sync + Dockerfile CMs) → Kaniko (9 API + FE + worker/socket) → rollout → verify-stg → Argo sync.',
     actions: [
-      'Console: Satellite → Trade Deploy (revision + Sync mirrors + Refresh Dockerfile CMs + Run deliver-stg)',
+      'Console: Satellite → Deploy Satellite (revision + Sync mirrors + Refresh Dockerfile CMs + Run deliver-stg)',
       'Delivery Operate tab → Active deliver run: 6-phase progress bar (Clone → … → GitOps)',
-      'Console: Satellite → Trade Deploy → Pipeline runs (full history + logs)',
+      'Console: Satellite → Deploy Satellite → Pipeline runs (full history + logs)',
       'CLI: make k3s-deliver-stg',
       'Preflight: amd64 CI node required (Rocket → Placement)',
     ],
@@ -79,7 +79,7 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
     summary: 'Automated HTTP verify runs inside pipeline; Tier B (IB/Massive/Celery) Owner sign-off on Promote.',
     actions: [
       'Pipeline task verify-stg (gateway + 9 APIs)',
-      'Satellite → Trade Deploy → Verify STG (or Mission Control → Stg smoke)',
+      'Satellite → Deploy Satellite → Verify STG (or Mission Control → Stg smoke)',
       'make k3s-verify-phase-b-stg-v2 (rollout + HTTP)',
       'Seed watchlist if Massive WS empty: scripts/k3s/seed-stg-watchlist.sh',
     ],
@@ -103,7 +103,7 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
     owner: 'Deploy Mainline / D1',
     summary: 'Prod overlay + bifrost-deliver-prod + prod matrix — spine milestone 2c-b-prod-cutover.',
     actions: [
-      'Ops Console → Satellite → Trade Deploy (seq 5 prod overlay)',
+      'Ops Console → Satellite → Deploy Satellite (seq 5 prod overlay)',
       'Implement pipeline-deliver-prod + k8s/overlays/prod',
       'Promote → Prod cutover gate (deliver-prod + prod matrix)',
     ],

@@ -35,7 +35,7 @@ export const ESCAPE_HATCH_RUNBOOK_STEPS: EscapeHatchRunbookStep[] = [
   {
     order: 5,
     title: 'Record quarterly drill',
-    detail: 'After any escape-hatch exercise, record drill on Platform Release → Escape hatch panel (90-day schedule).',
+    detail: 'After any escape-hatch exercise, record drill on Launch Rocket → Escape hatch panel (90-day schedule).',
   },
 ]
 
