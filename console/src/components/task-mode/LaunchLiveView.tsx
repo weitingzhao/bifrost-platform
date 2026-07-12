@@ -115,7 +115,7 @@ export function LaunchLiveView({
   const resolvedTaskLabel =
     taskLabel ?? (isSatellite ? 'Trade · Deploy' : 'Platform · Release')
   const resolvedDetailLabel =
-    detailLabel ?? (isSatellite ? 'Trade Release →' : 'Platform Release →')
+    detailLabel ?? (isSatellite ? 'Deploy Satellite →' : 'Launch Rocket →')
   const pipelineNameHint = isSatellite ? 'bifrost-deliver-stg' : 'bifrost-deliver-platform'
   const completeVerb = isSatellite ? 'Deploy complete' : 'Launch complete'
 
@@ -531,8 +531,8 @@ export function LaunchLiveView({
         {postDeployPending && (
           <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
             {isSatellite
-              ? 'Pipeline succeeded — confirm smoke and STG gate on Trade Release if chips stay yellow.'
-              : 'Pipeline succeeded — confirm platform STG gate on Platform Release if chips stay yellow.'}
+              ? 'Pipeline succeeded — confirm smoke and STG gate on Deploy Satellite if chips stay yellow.'
+              : 'Pipeline succeeded — confirm platform STG gate on Launch Rocket if chips stay yellow.'}
           </p>
         )}
       </section>

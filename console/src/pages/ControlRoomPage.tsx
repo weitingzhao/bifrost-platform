@@ -79,7 +79,7 @@ type ControlRoomPageProps = {
   onOpenCompute?: () => void
   onOpenDefects?: () => void
   onOpenAgentDeskTab?: () => void
-  onOpenLaunchView?: (mode: 'rocket-launch' | 'satellite-deploy') => void
+  onOpenLaunchView?: (mode: 'mission-launch') => void
 } & AmbientAgentShellProps
 
 export function ControlRoomPage({
@@ -287,7 +287,7 @@ export function ControlRoomPage({
         )}
 
         {aiTradeDeploy.error != null && (
-          <OpsFeedback variant="error" title="Failed to start Trade Deploy agent">
+          <OpsFeedback variant="error" title="Failed to start Deploy Satellite agent">
             {aiTradeDeploy.error.message}
           </OpsFeedback>
         )}

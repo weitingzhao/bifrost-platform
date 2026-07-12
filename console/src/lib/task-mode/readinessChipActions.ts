@@ -19,7 +19,7 @@ export type ReadinessChipAction = {
 }
 
 export type ReadinessChipContext = {
-  modeId: 'rocket-launch' | 'satellite-deploy' | 'daily-ops' | string
+  modeId: 'mission-launch' | 'daily-ops' | string
   env: 'stg' | 'prod' | 'platform-stg' | 'platform-prod'
 }
 
@@ -76,7 +76,11 @@ export function primaryChipNavigation(
     return { tabId: 'cluster' }
   }
   if (label.includes('ci/cd') || label.includes('gate') || label.includes('supply')) {
-    return { tabId: ctx.modeId === 'satellite-deploy' ? 'trade-release' : 'platform-release' }
+    const tradeEnv = ctx.env === 'stg' || ctx.env === 'prod'
+    return { tabId: tradeEnv ? 'trade-release' : 'platform-release' }
+  }
+  if (label.includes('promote') || label.includes('cutover') || label.includes('stg release')) {
+    return { tabId: 'trade-release' }
   }
   if (label.includes('self-health')) {
     return { tabId: 'platform-release' }
@@ -164,15 +168,16 @@ export function readinessChipFixActions(
   }
 
   if (label.includes('ci/cd') || label.includes('gate') || label.includes('supply')) {
+    const tradeEnv = ctx.env === 'stg' || ctx.env === 'prod'
     pushNavigate(
-      ctx.modeId === 'satellite-deploy' ? 'trade-release' : 'platform-release',
-      'Release pipeline',
+      tradeEnv ? 'trade-release' : 'platform-release',
+      tradeEnv ? 'Deploy Satellite' : 'Launch Rocket',
     )
     return actions
   }
 
   if (label.includes('self-health')) {
-    pushNavigate('platform-release', 'Platform release')
+    pushNavigate('platform-release', 'Launch Rocket')
     return actions
   }
 

@@ -231,7 +231,7 @@ export type PipelineRunHistoryStripProps = {
   limit?: number
   linkLabel: string
   onOpenFullHistory: () => void
-  /** Open Trade Release focused on a specific PipelineRun. */
+  /** Open Deploy Satellite focused on a specific PipelineRun. */
   onOpenRun?: (run: DeliveryPipelineRunView) => void
   /** Dense list for Task CC side column */
   compact?: boolean

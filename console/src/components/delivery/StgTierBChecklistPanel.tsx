@@ -208,7 +208,7 @@ export function StgTierBChecklistPanel({
             data != null &&
             !data.signed_off && (
               <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Sign-off pending — switch to Satellite → Trade Deploy after probes look good (admin token required).
+                Sign-off pending — switch to Satellite → Deploy Satellite after probes look good (admin token required).
               </p>
             )
           )}

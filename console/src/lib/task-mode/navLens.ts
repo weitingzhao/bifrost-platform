@@ -174,10 +174,25 @@ function resolveDailyOpsPhase(phaseId: string, input: TaskPhaseStatusInput): Tas
   }
 }
 
-function resolveRocketLaunchPhase(phaseId: string, input: TaskPhaseStatusInput): TaskPhaseStatus {
+function combineDualStatus(
+  a: TaskPhaseStatus,
+  b: TaskPhaseStatus,
+): TaskPhaseStatus {
+  if (a === 'blocked' || b === 'blocked') return 'blocked'
+  if (a === 'unknown' || b === 'unknown') return 'unknown'
+  if (a === 'done' && b === 'done') return 'done'
+  if (a === 'active' || b === 'active') return 'active'
+  if (a === 'planned' || b === 'planned') return 'planned'
+  return 'unknown'
+}
+
+/** Unified platform + trade mission launch phases. */
+function resolveMissionLaunchPhase(phaseId: string, input: TaskPhaseStatusInput): TaskPhaseStatus {
   const supply = input.supplyChain
-  const deploy = runStepStatus(input.platformStgRun)
-  const gate = gateStepStatus(input.platformStgGate)
+  const platformDeploy = runStepStatus(input.platformStgRun)
+  const platformGate = gateStepStatus(input.platformStgGate)
+  const tradeDeploy = runStepStatus(input.tradeStgRun)
+  const tradeGate = gateStepStatus(input.tradeStgGate)
 
   switch (phaseId) {
     case 'supply-chain': {
@@ -187,54 +202,42 @@ function resolveRocketLaunchPhase(phaseId: string, input: TaskPhaseStatusInput):
       const mirrorsOk = supply.mirror_credentials_configured
       return ready && mirrorsOk ? 'done' : 'active'
     }
-    case 'deliver-platform-stg':
-      if (deploy.status === 'done') return 'done'
-      if (deploy.status === 'active') return 'active'
-      if (deploy.status === 'error') return 'blocked'
-      return 'planned'
-    case 'platform-stg-gate':
-      if (gate.status === 'done') return 'done'
-      if (deploy.status !== 'done') return 'blocked'
-      return gate.status === 'active' ? 'active' : 'planned'
-    case 'deliver-platform-prod':
-      if (input.platformProdGate?.result === 'pass') return 'done'
-      if (gate.status !== 'done') return 'blocked'
-      return 'active'
-    case 'platform-prod-gate':
-      return input.platformProdGate?.result === 'pass' ? 'done' : 'planned'
-    default:
-      return 'unknown'
-  }
-}
-
-function resolveSatelliteDeployPhase(phaseId: string, input: TaskPhaseStatusInput): TaskPhaseStatus {
-  const spinePhase = input.stgReleasePhases?.find(p => p.id === phaseId)
-  if (spinePhase != null) {
-    switch (spinePhase.status) {
-      case 'done':
-        return 'done'
-      case 'active':
-        return 'active'
-      case 'blocked':
-        return 'blocked'
-      default:
-        return 'planned'
+    case 'deploy-stg': {
+      // Both must succeed; if only one finished, stay active (other still pending).
+      const platform = platformDeploy.status === 'error' ? 'blocked' as const
+        : platformDeploy.status === 'done' ? 'done' as const
+          : platformDeploy.status === 'active' ? 'active' as const
+            : 'planned' as const
+      const trade = tradeDeploy.status === 'error' ? 'blocked' as const
+        : tradeDeploy.status === 'done' ? 'done' as const
+          : tradeDeploy.status === 'active' ? 'active' as const
+            : 'planned' as const
+      return combineDualStatus(platform, trade)
     }
-  }
-
-  const tradeDeploy = runStepStatus(input.tradeStgRun)
-  const tradeGate = gateStepStatus(input.tradeStgGate)
-  switch (phaseId) {
-    case 'deliver-stg':
-      if (tradeDeploy.status === 'done') return 'done'
-      if (tradeDeploy.status === 'active') return 'active'
+    case 'stg-gate': {
+      if (platformDeploy.status !== 'done' || tradeDeploy.status !== 'done') {
+        return platformDeploy.status === 'done' || tradeDeploy.status === 'done' ? 'blocked' : 'planned'
+      }
+      const platform = platformGate.status === 'done' ? 'done' as const
+        : platformGate.status === 'active' ? 'active' as const
+          : 'planned' as const
+      const trade = tradeGate.status === 'done' ? 'done' as const
+        : tradeGate.status === 'active' ? 'active' as const
+          : 'planned' as const
+      return combineDualStatus(platform, trade)
+    }
+    case 'deploy-prod': {
+      if (platformGate.status !== 'done' || tradeGate.status !== 'done') return 'blocked'
+      if (input.platformProdGate?.result === 'pass') return 'done'
+      return 'active'
+    }
+    case 'prod-gate': {
+      const platformProdOk = input.platformProdGate?.result === 'pass'
+      const missionOk = input.snapshot?.missionOverall === 'ok'
+      if (platformProdOk && missionOk) return 'done'
+      if (platformProdOk || missionOk) return 'active'
       return 'planned'
-    case 'verify-stg':
-      if (input.tradeStgSmokeOk === true) return 'done'
-      if (tradeDeploy.status === 'done') return 'active'
-      return 'planned'
-    case 'stg-gate':
-      return tradeGate.status === 'done' ? 'done' : tradeDeploy.status === 'done' ? 'active' : 'planned'
+    }
     default:
       return 'unknown'
   }
@@ -277,12 +280,13 @@ function rawPhaseStatus(
   switch (modeId) {
     case 'daily-ops':
       return resolveDailyOpsPhase(phaseId, input)
-    case 'rocket-launch':
-      return resolveRocketLaunchPhase(phaseId, input)
-    case 'satellite-deploy':
-      return resolveSatelliteDeployPhase(phaseId, input)
+    case 'mission-launch':
+      return resolveMissionLaunchPhase(phaseId, input)
     case 'rocket-build':
     case 'satellite-build':
+    case 'engineer-build':
+    case 'ground-build':
+    case 'plugin-build':
       return resolveDevBuildPhase(phaseId, input)
     default:
       return 'unknown'

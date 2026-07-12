@@ -26,7 +26,7 @@ import type { TaskModeId } from '@/lib/task-mode/types'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 
 type DetailScope = 'mission' | MissionDegradationSegment
-type LaunchViewMode = Extract<TaskModeId, 'rocket-launch' | 'satellite-deploy'>
+type LaunchViewMode = Extract<TaskModeId, 'mission-launch'>
 
 interface MissionBoardProps {
   snapshot: MissionSnapshot
@@ -172,9 +172,9 @@ export function MissionBoard({
       }
     }
     if (item.segment === 'rocket') {
-      return { label: 'Rocket Launch →', onClick: () => onOpenLaunchView('rocket-launch') }
+      return { label: 'Mission Launch →', onClick: () => onOpenLaunchView('mission-launch') }
     }
-    return { label: 'Satellite Deploy →', onClick: () => onOpenLaunchView('satellite-deploy') }
+    return { label: 'Mission Launch →', onClick: () => onOpenLaunchView('mission-launch') }
   }
 
   const toggleScope = (scope: DetailScope) => {
@@ -213,8 +213,7 @@ export function MissionBoard({
 
   const showDetail = detailScope != null && (missionDegraded || rocketDegraded || payloadDegraded)
 
-  const launchViewLabel = (mode: LaunchViewMode) =>
-    mode === 'rocket-launch' ? 'Rocket Launch view' : 'Satellite Deploy view'
+  const launchViewLabel = (_mode: LaunchViewMode) => 'Mission Launch view'
 
   return (
     <div className="mission-board-wrap">
@@ -260,8 +259,8 @@ export function MissionBoard({
           <button
             type="button"
             className="mission-board-segment mission-board-segment-btn mission-board-segment-btn--launch"
-            onClick={() => onOpenLaunchView('rocket-launch')}
-            title={`Open ${launchViewLabel('rocket-launch')} — STG ${missionStatus(rocketLaunch.stgOverall)} · PROD ${missionStatus(rocketLaunch.prodOverall)}`}
+            onClick={() => onOpenLaunchView('mission-launch')}
+            title={`Open ${launchViewLabel('mission-launch')} — STG ${missionStatus(rocketLaunch.stgOverall)} · PROD ${missionStatus(rocketLaunch.prodOverall)}`}
           >
             <span className="mission-board-seg-label">Rocket</span>
             <span className="mission-board-seg-val" style={{ color: missionStatusColor(rocketMission) }}>
@@ -294,8 +293,8 @@ export function MissionBoard({
           <button
             type="button"
             className="mission-board-segment mission-board-segment-btn mission-board-segment-btn--launch"
-            onClick={() => onOpenLaunchView('satellite-deploy')}
-            title={`Open ${launchViewLabel('satellite-deploy')} — STG ${missionStatus(satelliteDeploy.stgOverall)} · PROD ${missionStatus(satelliteDeploy.prodOverall)}`}
+            onClick={() => onOpenLaunchView('mission-launch')}
+            title={`Open ${launchViewLabel('mission-launch')} — STG ${missionStatus(satelliteDeploy.stgOverall)} · PROD ${missionStatus(satelliteDeploy.prodOverall)}`}
           >
             <Satellite size={16} style={{ color: missionStatusColor(payloadMission) }} />
             <span className="mission-board-seg-label">Payload</span>
@@ -368,16 +367,9 @@ export function MissionBoard({
               </p>
             </div>
             <div className="mission-board-detail-actions">
-              {(detailScope === 'rocket' || detailScope === 'mission') && (
-                <Button variant="ghost" size="xs" onClick={() => onOpenLaunchView('rocket-launch')}>
-                  Rocket Launch →
-                </Button>
-              )}
-              {(detailScope === 'payload' || detailScope === 'mission') && (
-                <Button variant="ghost" size="xs" onClick={() => onOpenLaunchView('satellite-deploy')}>
-                  Satellite Deploy →
-                </Button>
-              )}
+              <Button variant="ghost" size="xs" onClick={() => onOpenLaunchView('mission-launch')}>
+                Mission Launch →
+              </Button>
               {diagnosticPrompt != null && (
                 <Button variant="outline" size="xs" onClick={() => onOpenAgentDesk({ prefill: diagnosticPrompt })}>
                   <Wrench size={12} className="mr-1" aria-hidden />

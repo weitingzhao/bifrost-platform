@@ -55,7 +55,7 @@ export function EscapeHatchPanel() {
   const drillMutation = useMutation({
     mutationFn: () =>
       recordEscapeHatchDrill({
-        notes: 'Quarterly escape hatch drill recorded from Platform Release panel',
+        notes: 'Quarterly escape hatch drill recorded from Launch Rocket panel',
         route_ids: query.data?.routes.map(r => r.id),
       }),
     onSuccess: () => {

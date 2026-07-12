@@ -45,7 +45,7 @@ export function buildDeployDebugBundle(input: DeployDebugBundleInput): string {
     '',
     `Generated: ${new Date().toISOString()}`,
     'Mode: Ops',
-    'Source: Ops Console → Rocket → Platform Release',
+    'Source: Ops Console → Rocket → Launch Rocket',
     `Target: ${target} · Pipeline: ${pipeline} · Namespace: ${namespace}`,
     `Revision: ${effectiveRevision}`,
   ]

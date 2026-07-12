@@ -1,4 +1,4 @@
-import { isTaskModeId, TASK_MODE_QUERY_PARAM } from './taskModeCatalog'
+import { resolveTaskModeId, TASK_MODE_QUERY_PARAM } from './taskModeCatalog'
 import type { TaskModeId } from './types'
 
 /** Tab segment of the location hash (before `?`). */
@@ -12,14 +12,20 @@ export function readTaskModeFromLocation(): TaskModeId | null {
   try {
     const url = new URL(window.location.href)
     const searchMode = url.searchParams.get(TASK_MODE_QUERY_PARAM)
-    if (searchMode != null && isTaskModeId(searchMode)) return searchMode
+    if (searchMode != null) {
+      const resolved = resolveTaskModeId(searchMode)
+      if (resolved != null) return resolved
+    }
 
     const raw = url.hash.replace(/^#/, '')
     const qIdx = raw.indexOf('?')
     if (qIdx >= 0) {
       const hashParams = new URLSearchParams(raw.slice(qIdx + 1))
       const hashMode = hashParams.get(TASK_MODE_QUERY_PARAM)
-      if (hashMode != null && isTaskModeId(hashMode)) return hashMode
+      if (hashMode != null) {
+        const resolved = resolveTaskModeId(hashMode)
+        if (resolved != null) return resolved
+      }
     }
   } catch {
     // ignore

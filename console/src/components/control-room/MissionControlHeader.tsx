@@ -38,7 +38,7 @@ interface MissionControlHeaderProps {
   onOpenDelivery: () => void
   onOpenPlatformRelease: () => void
   onOpenAgentDesk: (opts?: { prefill: string }) => void
-  onOpenLaunchView: (mode: 'rocket-launch' | 'satellite-deploy') => void
+  onOpenLaunchView: (mode: 'mission-launch') => void
   onOpenPromote?: () => void
   onPlaybookFix?: (opts: { scope: string; prompt: string }) => void
   playbookFixPending?: boolean

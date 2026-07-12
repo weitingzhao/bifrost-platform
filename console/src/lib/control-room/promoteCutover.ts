@@ -70,10 +70,22 @@ function prodLampFromPromote(promote: PromoteStatus): Signal {
   return 'degraded'
 }
 
+/** Live GO/NO-GO lamp for Mission Launch readiness chips (not narrative-only). */
+export function promoteVerifySignal(promote: PromoteStatus): Signal {
+  if (promote.ready) return 'ok'
+  if (promote.blockedByDecision || promote.prodFails) return 'fail'
+  return 'degraded'
+}
+
 function stgLampFromRelease(stg: StgReleaseStatus): Signal {
   if (stg.releaseReady) return 'ok'
   if (stg.smokeFails) return 'fail'
   return 'degraded'
+}
+
+/** Live GO/NO-GO lamp for STG release verify chip. */
+export function stgReleaseVerifySignal(stg: StgReleaseStatus): Signal {
+  return stgLampFromRelease(stg)
 }
 
 /** Same verdict strings as PromotePage TrackSummary + banner. */

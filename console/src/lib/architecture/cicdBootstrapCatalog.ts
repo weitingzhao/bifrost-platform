@@ -6,8 +6,8 @@
  * orphans recovery.
  *
  * Live state (not this catalog):
- * - L1 self-health + platform deliver: Rocket → Platform Release
- * - L2 trade deliver + gates: Satellite → Trade Deploy
+ * - L1 self-health + platform deliver: Rocket → Launch Rocket
+ * - L2 trade deliver + gates: Satellite → Deploy Satellite
  * - L-1 operator plane: Engineer → Operator Plane
  *
  * Aligned with: blueprintCatalog.ts (D6, north star), deliveryMainlineCatalog.ts,
@@ -339,7 +339,7 @@ export const CICD_GAPS: CicdGap[] = [
   {
     id: 'self-health',
     layer: 'L1',
-    gap: 'Implemented — /api/v1/self-health probes platform-api + console + Argo sync (STG + PROD); SelfHealthPanel on Platform Release page',
+    gap: 'Implemented — /api/v1/self-health probes platform-api + console + Argo sync (STG + PROD); SelfHealthPanel on Launch Rocket page',
     target: 'Console self-health panel: API liveness, Console reachability, Argo sync status',
     spineTask: 'p6-self-health',
   },
@@ -353,22 +353,22 @@ export const CICD_GAPS: CicdGap[] = [
   {
     id: 'platform-e2e-cicd',
     layer: 'L1',
-    gap: 'Implemented — Platform Release page consolidates end-to-end CI/CD: self-health → STG deliver → PROD deliver → independent release gates (platform-stg / platform-prod) → gate history; fully decoupled from Trade CI/CD',
-    target: 'Single Platform Release page with deliver actuation (STG + PROD), release gates, gate history, and self-health — complete end-to-end CI/CD for Platform',
+    gap: 'Implemented — Launch Rocket page consolidates end-to-end CI/CD: self-health → STG deliver → PROD deliver → independent release gates (platform-stg / platform-prod) → gate history; fully decoupled from Trade CI/CD',
+    target: 'Single Launch Rocket page with deliver actuation (STG + PROD), release gates, gate history, and self-health — complete end-to-end CI/CD for Platform',
     spineTask: 'p6-platform-e2e-cicd',
   },
   {
     id: 'escape-runbook',
     layer: 'L0',
-    gap: 'Implemented — GET /api/v1/platform/escape-hatch probes local + NodePort routes; EscapeHatchPanel on Platform Release; quarterly drill via POST /platform/escape-hatch/drill',
+    gap: 'Implemented — GET /api/v1/platform/escape-hatch probes local + NodePort routes; EscapeHatchPanel on Launch Rocket; quarterly drill via POST /platform/escape-hatch/drill',
     target: 'Documented runbook; Console shows escape route status; quarterly test schedule',
     spineTask: 'p6-escape-hatch',
   },
 ]
 
 export const CICD_RELATED_AUTHORITIES = [
-  'Live L1 self-health + platform deliver: Rocket → Platform Release',
-  'Live L2 trade deliver + release gates: Satellite → Trade Deploy',
+  'Live L1 self-health + platform deliver: Rocket → Launch Rocket',
+  'Live L2 trade deliver + release gates: Satellite → Deploy Satellite',
   'L-1 out-of-band operator plane: Engineer → Operator Plane',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
@@ -406,7 +406,7 @@ export function buildCicdBootstrapLlmPack(): string {
   const lines: string[] = [
     '# Bifrost Ops — CI/CD Bootstrap Model (L-1 / L0 / L1 / L2)',
     `# Source: ${CICD_BOOTSTRAP_SOURCE} v${CICD_BOOTSTRAP_VERSION}`,
-    'Live L1/L2 state: Rocket → Platform Release · Satellite → Trade Deploy — not this catalog.',
+    'Live L1/L2 state: Rocket → Launch Rocket · Satellite → Deploy Satellite — not this catalog.',
     '',
     '## Core principle',
     '',

@@ -206,13 +206,22 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
 
 /** Task mode lenses — focused Console navigation for ops vs dev loops (Constitution). */
 export const TASK_MODE_BLUEPRINT = {
-  version: '2026-07-07',
+  version: '2026-07-11',
   source: 'console/src/lib/task-mode/taskModeCatalog.ts',
   statement:
     'Task modes filter sidebar navigation and land on Task Control Center for phased playbooks. ' +
-    'Ops loops (daily-ops, rocket-launch, satellite-deploy) use signals + LaunchPad — no Briefing/DevAgent. ' +
-    'Dev loops (rocket-build, satellite-build) chain Briefing → Dev Agent → Delivery Board.',
-  modes: ['system', 'daily-ops', 'rocket-launch', 'satellite-deploy', 'rocket-build', 'satellite-build'] as const,
+    'Ops loops (daily-ops, mission-launch) use signals + LaunchPad — no Briefing/DevAgent. ' +
+    'Dev loops (rocket-build, satellite-build, engineer-build, ground-build, plugin-build) chain Briefing → Dev Agent → Delivery Board.',
+  modes: [
+    'system',
+    'daily-ops',
+    'mission-launch',
+    'rocket-build',
+    'satellite-build',
+    'engineer-build',
+    'ground-build',
+    'plugin-build',
+  ] as const,
   escapeHatch: 'Sidebar footer — Switch to System view restores full CONSOLE_NAV_GROUPS.',
 }
 
