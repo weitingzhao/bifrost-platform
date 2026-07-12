@@ -182,7 +182,7 @@ export const DELIVERY_RUNBOOK_COMMANDS = {
   mirrorSync: 'make k3s-sync-gitea-mirrors',
   syncConfig: 'make sync-stg-config',
   verify: 'make k3s-verify-phase-b-stg-v2',
-  gateway: 'http://trade-stg.bifrost.lan/',
+  gateway: 'http://stg.trader.bifrost.lan/',
 } as const
 
 export function buildDeliveryMainlineLlmPack(context?: OpsContextResponse): string {

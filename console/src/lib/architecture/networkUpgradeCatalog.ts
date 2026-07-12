@@ -10,11 +10,31 @@
  * - API actuation: platform-api /api/v1/network/* · networkApiContractCatalog.ts
  */
 
-export const NET_UPGRADE_VERSION = '2026-07-10-ssid-vision'
+export const NET_UPGRADE_VERSION = '2026-07-11-vip-dns'
 export const NET_UPGRADE_SOURCE = 'console/src/lib/architecture/networkUpgradeCatalog.ts'
 export const NET_UPGRADE_STATUS =
-  'WIFI CLOSED — 4× U7-Pro-Wall + Bifrost/Family/vision; permanent ZBF; Eero decommissioned; Ring Alarm Pro Bridge on VLAN 50. Core ⑤ firewall ✓ · ⑥ UniFi MCP pending.'
+  'VIP DNS landing — UniFi local DNS A→192.168.10.100 for *.trader.bifrost.lan / *.ops.bifrost.lan; Traefik Host on :80; NodePort escape retained.'
 
+/** Owner UniFi local DNS — all A records → kube-vip 192.168.10.100 (Phase 1). */
+export const VIP_DNS_RECORDS: { fqdn: string; role: string }[] = [
+  { fqdn: 'trader.bifrost.lan', role: 'Satellite PROD' },
+  { fqdn: 'stg.trader.bifrost.lan', role: 'Satellite STG' },
+  { fqdn: 'dev.trader.bifrost.lan', role: 'Satellite DEV' },
+  { fqdn: 'ops.bifrost.lan', role: 'Rocket PROD' },
+  { fqdn: 'stg.ops.bifrost.lan', role: 'Rocket STG' },
+  { fqdn: 'trade.bifrost.lan', role: 'Legacy DNS alias only — Ingress no longer matches (expect 404)' },
+  { fqdn: 'trade-stg.bifrost.lan', role: 'Legacy DNS alias only — Ingress no longer matches' },
+  { fqdn: 'trade-dev.bifrost.lan', role: 'Legacy DNS alias only — Ingress no longer matches' },
+]
+
+/** Escape hatch when hostname DNS/VIP path is unavailable. */
+export const VIP_ESCAPE_HATCH = [
+  'Satellite STG: http://192.168.10.73:30880/',
+  'Satellite DEV: http://192.168.10.73:30882/',
+  'Satellite PROD: http://192.168.10.70/ (Host 192.168.10.70)',
+  'Rocket STG: http://192.168.10.73:30879/',
+  'Rocket PROD: http://192.168.10.73:30877/',
+] as const
 /** Live deployment progress — mirrors spine streams network-upgrade-core / network-upgrade-wifi. */
 export type DeploymentProgressRow = {
   stream: string
@@ -391,7 +411,7 @@ export const POST_UPGRADE_EFFECTS: EffectRow[] = [
   {
     scenario: 'Phone/iPad → Ops Console',
     before: '❌ Same as laptop — blocked by cross-subnet',
-    after: '✅ Connect "Bifrost" WiFi → access Console at VIP:30877',
+    after: '✅ Connect "Bifrost" WiFi → http://ops.bifrost.lan/ (VIP 192.168.10.100:80 Host) · escape :30877',
   },
   {
     scenario: 'IoT isolation',
@@ -490,6 +510,13 @@ export function buildNetworkUpgradeLlmPack(): string {
     `Version: ${NET_UPGRADE_VERSION}`,
     `Source: ${NET_UPGRADE_SOURCE}`,
     'Live progress: Control Room Network Health + spine — not this catalog.',
+    '',
+    '## VIP + private DNS (published entry)',
+    'All A records → 192.168.10.100 (kube-vip). Traefik Host on :80.',
+    ...VIP_DNS_RECORDS.map(r => `- ${r.fqdn} — ${r.role}`),
+    '',
+    '### Escape hatch (NodePort / node IP)',
+    ...VIP_ESCAPE_HATCH.map(e => `- ${e}`),
     '',
     '## Current topology',
     '```',

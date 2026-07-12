@@ -184,7 +184,8 @@ func NeedsTraefikHostHeader(gatewayURL string) bool {
 	if strings.Contains(u, ":30880") || strings.Contains(u, ":30882") {
 		return false
 	}
-	// Prod Traefik matches Host(`192.168.10.70`) — IP URL needs no Host header.
+	// Prod Traefik matches Host(`192.168.10.70`) — bare node-IP :80 needs no Host header.
+	// VIP 192.168.10.100 is shared across envs — callers must set Host via ingress_host / gateway_host.
 	if strings.Contains(u, "192.168.10.70") {
 		return false
 	}

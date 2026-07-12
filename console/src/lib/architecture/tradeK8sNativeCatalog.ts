@@ -83,9 +83,9 @@ export type TradeGatewayIngressRow = {
 
 /** W1 Traefik gateway hosts — /etc/hosts or LAN DNS → nodeIp, Traefik entrypoint web (:80). */
 export const TRADE_GATEWAY_INGRESS: TradeGatewayIngressRow[] = [
-  { env: 'stg', host: 'trade-stg.bifrost.lan', nodeIp: '192.168.10.73', port: 80, legacyNodePort: '30880 (nginx retired)' },
-  { env: 'prod', host: 'trade.bifrost.lan', nodeIp: '192.168.10.70', port: 80, legacyNodePort: '30881 (nginx retired)' },
-  { env: 'dev', host: 'trade-dev.bifrost.lan', nodeIp: '192.168.10.73', port: 80, legacyNodePort: '30882 (nginx retired)' },
+  { env: 'stg', host: 'stg.trader.bifrost.lan', nodeIp: '192.168.10.100', port: 80, legacyNodePort: '30880 (escape)' },
+  { env: 'prod', host: 'trader.bifrost.lan', nodeIp: '192.168.10.100', port: 80, legacyNodePort: 'node .70:80 (escape)' },
+  { env: 'dev', host: 'dev.trader.bifrost.lan', nodeIp: '192.168.10.100', port: 80, legacyNodePort: '30882 (escape)' },
 ]
 
 export const IB_EDGE_DESIGN_PRINCIPLES = [
@@ -155,7 +155,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
     blockedBy: 'data-layer-k3s step ⑦ (optional parallel on STG)',
     delivered:
       'Retired in-cluster nginx Deployment; Traefik IngressRoute + stripPrefix middlewares per API; ' +
-      'SSE flushInterval on market/monitor paths; hosts trade-{stg,dev}.bifrost.lan / trade.bifrost.lan @ :80; ' +
+      'SSE flushInterval on market/monitor paths; hosts stg|dev.trader.bifrost.lan / trader.bifrost.lan @ VIP :80; ' +
       'smoke scripts + platform clusters.yaml ingress_base; kustomize build stg|prod|dev; cluster verify PASS.',
   },
   {
@@ -330,7 +330,7 @@ export const TRADE_K8S_NATIVE_WAVES: TradeK8sNativeWave[] = [
       'verify-phase-b-stg-v2.sh — Tier A updated for W5 StatefulSet socket rollouts + W10 Flower ' +
       'Deployment; Tier A HTTP via Traefik Host header (W1). scripts/k3s/verify-w11-trade-k8s-native.sh ' +
       '+ make k3s-verify-w11-trade-k8s-native — kustomize + Tier A HTTP + W9/W10 manifests + ' +
-      'deliver-prod preflight gate (in-cluster traefik.kube-system + Host trade-stg.bifrost.lan). ' +
+      'deliver-prod preflight gate (in-cluster traefik.kube-system + Host stg.trader.bifrost.lan). ' +
       'Tekton: bifrost-verify-stg/prod-deliver + pipeline-deliver-prod preflight-stg migrated from ' +
       'dead nginx.bifrost-stg svc to Traefik (BLOCKED if STG HTTP fails). Tier B unchanged in ' +
       'platform-api promote/tier-b (daemon/ops/socket auto probes + Owner manual sign-off). ' +

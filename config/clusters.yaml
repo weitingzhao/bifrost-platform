@@ -72,19 +72,20 @@ clusters:
           install_script: install-stack-registry.sh
           upgrade_script: install-stack-registry.sh
     stg_smoke:
-      gateway_url: http://192.168.10.73:30880
-      gateway_host: trade-stg.bifrost.lan
-      api_monitor_url: http://192.168.10.73:30880/api/monitor/status
-      frontend_url: http://192.168.10.73:30880/
-      platform_console_url: http://192.168.10.73:30879
+      gateway_url: http://192.168.10.100/
+      gateway_host: stg.trader.bifrost.lan
+      api_monitor_url: http://192.168.10.100/api/monitor/status
+      frontend_url: http://192.168.10.100/
+      platform_console_url: http://stg.ops.bifrost.lan/
       platform_api_health_url: http://192.168.10.73:30878/health
     prod_smoke:
-      gateway_url: http://192.168.10.70
-      gateway_host: trade.bifrost.lan
-      api_monitor_url: http://192.168.10.70/api/monitor/status
-      frontend_url: http://192.168.10.70/
+      gateway_url: http://192.168.10.100/
+      gateway_host: trader.bifrost.lan
+      api_monitor_url: http://192.168.10.100/api/monitor/status
+      frontend_url: http://192.168.10.100/
+      platform_console_url: http://ops.bifrost.lan/
     dev_smoke:
-      gateway_url: http://192.168.10.73:30882
-      gateway_host: trade-dev.bifrost.lan
-      api_monitor_url: http://192.168.10.73:30882/api/monitor/status
-      frontend_url: http://192.168.10.73:30882/
+      gateway_url: http://192.168.10.100/
+      gateway_host: dev.trader.bifrost.lan
+      api_monitor_url: http://192.168.10.100/api/monitor/status
+      frontend_url: http://192.168.10.100/

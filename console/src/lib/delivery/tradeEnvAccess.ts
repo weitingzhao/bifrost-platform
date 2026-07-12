@@ -1,16 +1,16 @@
 /**
  * Trade environment gateway entrypoints (Dev / STG / Prod) — single source of truth.
  *
- * IP-only LAN access (no /etc/hosts required):
- *   - DEV  → http://192.168.10.73:30882/
- *   - STG  → http://192.168.10.73:30880/
- *   - PROD → http://192.168.10.70/
+ * Preferred path (UniFi DNS → VIP → Traefik Host):
+ *   - DEV  → http://dev.trader.bifrost.lan/
+ *   - STG  → http://stg.trader.bifrost.lan/
+ *   - PROD → http://trader.bifrost.lan/
  *
- * Traefik Host hostnames (trade-*.bifrost.lan) remain on :80 for future UniFi DNS;
- * see TRADE_HOSTNAME_GATEWAYS.
+ * IP escape (NodePort / node :80) still listed when VIP is unset; with VIP set,
+ * IP gateways resolve through TRADE_INGRESS_VIP.
  */
 
-export const TRADE_INGRESS_VIP: string | null = null
+export const TRADE_INGRESS_VIP: string | null = '192.168.10.100'
 
 export type TradeEnvTier = 'DEV' | 'STG' | 'PROD'
 
@@ -19,20 +19,20 @@ interface TradeEnvDef {
   label: string
   nodeHost: string
   port: number
-  /** Optional Traefik Host ingress (requires LAN DNS or /etc/hosts). */
+  /** Traefik Host ingress (requires LAN DNS or /etc/hosts). */
   ingressHost?: string
 }
 
 const TRADE_ENV_DEFS: readonly TradeEnvDef[] = [
-  { env: 'DEV', label: 'Trade DEV', nodeHost: '192.168.10.73', port: 30882, ingressHost: 'trade-dev.bifrost.lan' },
-  { env: 'STG', label: 'Trade STG', nodeHost: '192.168.10.73', port: 30880, ingressHost: 'trade-stg.bifrost.lan' },
-  { env: 'PROD', label: 'Trade PROD', nodeHost: '192.168.10.70', port: 80, ingressHost: 'trade.bifrost.lan' },
+  { env: 'DEV', label: 'Trade DEV', nodeHost: '192.168.10.73', port: 30882, ingressHost: 'dev.trader.bifrost.lan' },
+  { env: 'STG', label: 'Trade STG', nodeHost: '192.168.10.73', port: 30880, ingressHost: 'stg.trader.bifrost.lan' },
+  { env: 'PROD', label: 'Trade PROD', nodeHost: '192.168.10.70', port: 80, ingressHost: 'trader.bifrost.lan' },
 ] as const
 
 export interface TradeEnvAccess {
   env: TradeEnvTier
   label: string
-  /** Browser URL (IP:port — works without /etc/hosts). */
+  /** Browser URL (VIP or node IP — escape without DNS). */
   gateway: string
   nodeHost: string
   port: number

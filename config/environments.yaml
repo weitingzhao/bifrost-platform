@@ -6,7 +6,7 @@ environments:
     label: Development
     probe_mode: pull
     nginx_base: http://192.168.10.73:30882
-    ingress_host: trade-dev.bifrost.lan
+    ingress_host: dev.trader.bifrost.lan
     ingress_node_ip: 192.168.10.73
     # Matrix probe: primary signal from cluster/postgres API; LAN NodePort fallback when cluster API unavailable.
     postgres:
@@ -35,7 +35,7 @@ environments:
     label: Staging
     probe_mode: pull
     nginx_base: http://192.168.10.73:30880
-    ingress_host: trade-stg.bifrost.lan
+    ingress_host: stg.trader.bifrost.lan
     ingress_node_ip: 192.168.10.73
     postgres:
       host: 192.168.10.73
@@ -48,9 +48,9 @@ environments:
   - id: prod
     label: Production
     probe_mode: pull
-    # W2 Traefik Ingress — Host trade.bifrost.lan @ K3s prod node :80
-    nginx_base: http://192.168.10.70
-    ingress_host: trade.bifrost.lan
+    # Traefik Host trader.bifrost.lan @ VIP 192.168.10.100:80 (escape: node .70)
+    nginx_base: http://192.168.10.100
+    ingress_host: trader.bifrost.lan
     ingress_node_ip: 192.168.10.70
     # CNPG @ data NS — matrix uses cluster API; LAN NodePort fallback below.
     postgres:
