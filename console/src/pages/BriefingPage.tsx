@@ -1,65 +1,61 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { fetchClusterObservability, fetchRemediationJobs, fetchSessionSnapshotLatest } from '@/api/platform'
 import { launchProgramAgent } from '@/api/programs'
-import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, SegmentControl } from '@bifrost/ui'
-import { StatusLamp } from '@/components/StatusLamp'
-import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
-import { NightlyBriefingPanel } from '@/components/briefing/NightlyBriefingPanel'
-import { TrackCardsSection } from '@/components/briefing/TrackCardsSection'
-import { FlightDirectorBriefingPanel } from '@/components/briefing/FlightDirectorBriefingPanel'
-import { BriefingSessionResultsPanel } from '@/components/briefing/BriefingSessionResultsPanel'
-import { BriefingFoldableSection } from '@/components/briefing/BriefingFoldableSection'
-import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
+import { BriefingMasterDetail } from '@/components/briefing/BriefingMasterDetail'
+import { BriefingViewTabsSection } from '@/components/briefing/BriefingViewTabsSection'
+import { BriefingWorkDigestPanel } from '@/components/briefing/BriefingWorkDigestPanel'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
 import {
   parseBriefingUrlState,
   readBriefingTaskModeContext,
+  resolveBriefingScope,
+  resolveTrackType,
   writeBriefingUrlState,
   type BriefingPackSize,
 } from '@/lib/briefing/briefingUrlState'
 import {
-  AGENT_DIALOGUE_LANGUAGE_OPTIONS,
+  defaultLaneForScopeTrack,
+  lanesForScopeTrack,
+  trackTypesForScope,
+  type BriefingScopeId,
+  type ComponentLineId,
+  type WorkTrackType,
+} from '@/lib/briefing/briefingViewTabs'
+import {
+  computeScopeWorkSummary,
+  laneLifecycleFromQueue,
+  type BriefingLaneLifecycleFilter,
+} from '@/lib/briefing/briefingStatus'
+import {
   DEFAULT_AGENT_DIALOGUE_LANGUAGE,
   type AgentDialogueLanguage,
 } from '@/lib/briefing/agentDialogueLanguage'
-import { computeSessionDelta, isEmptyDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
+import { computeSessionDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
 import { loadSnapshot, saveSnapshot, type SessionSnapshot } from '@/lib/briefing/sessionSnapshot'
 import {
-  agentDeskPrefillDisabledReason,
-  BRIEFING_AGENT_DESK_DELIVERY_HINT,
-  BRIEFING_IDE_DELIVERY_HINT,
-  isAgentDeskSuitedIntent,
-} from '@/lib/briefing/briefingDeliveryChannels'
-import { saveBriefingActiveSession } from '@/lib/briefing/briefingActiveSession'
-import {
-  buildBriefingAutomationHandoff,
-  formatAutomationHandoffJson,
-} from '@/lib/briefing/briefingAutomationHandoff'
-import { CONSOLE_UI_PROGRESS, type UiItemStatus } from '@/lib/briefing/uiProgressSnapshot'
+  loadBriefingActiveSession,
+  saveBriefingActiveSession,
+} from '@/lib/briefing/briefingActiveSession'
 import { TrackLaneSection } from '@/components/briefing/TrackLaneSection'
-import { BriefingSyncLoopPanel } from '@/components/briefing/BriefingSyncLoopPanel'
-import { BriefingReconcilePanel } from '@/components/briefing/BriefingReconcilePanel'
-import { BriefingHealthBanner } from '@/components/briefing/BriefingHealthBanner'
+import { SessionDetailSection } from '@/components/briefing/SessionDetailSection'
+import {
+  type SessionLifecycle,
+} from '@/components/briefing/SessionLaneCtaBar'
 import {
   buildReconcileBriefingOptions,
-  deriveFocusHeadline,
   hasBlockingFindings,
   reconcileBriefing,
 } from '@/lib/briefing/reconcileBriefing'
 import type { WorkIntent } from '@/lib/briefing/workIntents'
-import { WORK_INTENT_OPTIONS } from '@/lib/briefing/workIntents'
 import {
   buildQueueForLane,
-  defaultLaneForTrack,
   laneById,
   type LaneId,
 } from '@/lib/briefing/workLanes'
-import { computeAllTracks, type TrackId } from '@/lib/briefing/workTracks'
-import { summarizeCluster } from '@/lib/cluster/clusterHealth'
-import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
-import { CATALOG_VERSION } from '@/lib/environments-catalog'
+import { isEmptyLaneInit } from '@/lib/briefing/laneInitPack'
+import { computeAllTracks } from '@/lib/briefing/workTracks'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 
@@ -73,19 +69,11 @@ interface BriefingPageProps {
   platformHealthy: boolean | undefined
   auditRecords: AuditRecord[]
   auditLoading: boolean
-  onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenAudit?: () => void
-  onOpenTrustAutonomy?: () => void
 }
 
 async function copyText(text: string): Promise<void> {
   await navigator.clipboard.writeText(text)
-}
-
-function statusLamp(status: UiItemStatus) {
-  if (status === 'done') return 'ok' as const
-  if (status === 'partial') return 'degraded' as const
-  return 'unknown' as const
 }
 
 export function BriefingPage({
@@ -94,32 +82,48 @@ export function BriefingPage({
   matrices,
   matrixLoading,
   clusterSummary,
-  clusterLoading,
+  clusterLoading: _clusterLoading,
   platformHealthy,
   auditRecords,
   auditLoading,
-  onOpenAgentDesk,
   onOpenAudit,
-  onOpenTrustAutonomy,
 }: BriefingPageProps) {
-  const initialUrl = useMemo(() => parseBriefingUrlState(), [])
-  const [selectedTrack, setSelectedTrack] = useState<TrackId>(initialUrl.track ?? 'build')
+  const initialUrl = useMemo(() => {
+    const parsed = parseBriefingUrlState()
+    if (parsed.taskModeContext == null) {
+      const ctx = readBriefingTaskModeContext()
+      if (ctx != null) parsed.taskModeContext = ctx
+    }
+    return parsed
+  }, [])
+  const [selectedScope, setSelectedScope] = useState<BriefingScopeId>(() =>
+    resolveBriefingScope(initialUrl),
+  )
+  const [selectedTrackType, setSelectedTrackType] = useState<WorkTrackType>(() =>
+    resolveTrackType(initialUrl),
+  )
   const [selectedLane, setSelectedLane] = useState<LaneId>(() => {
     if (initialUrl.lane != null) return initialUrl.lane
-    return defaultLaneForTrack(initialUrl.track ?? 'build')
+    return defaultLaneForScopeTrack(resolveBriefingScope(initialUrl), resolveTrackType(initialUrl))
   })
-  const [intentOverride, setIntentOverride] = useState<WorkIntent | null>(
-    initialUrl.intent ?? null,
-  )
+  const selectedTrack = laneById(selectedLane).track
+  /** Intent always from selected lane — no UI override on Briefing page. */
+  const intent: WorkIntent = laneById(selectedLane).workIntent
   const [packSize, setPackSize] = useState<BriefingPackSize>(initialUrl.pack ?? 'compact')
   const [initialLaneSynced, setInitialLaneSynced] = useState(false)
-  const [showSessionPack, setShowSessionPack] = useState(false)
-  const [showAlignmentPack, setShowAlignmentPack] = useState(false)
   const [sessionCopied, setSessionCopied] = useState(false)
+  const [packPreviewExpanded, setPackPreviewExpanded] = useState(false)
+  const [lifecycleFilter, setLifecycleFilter] = useState<BriefingLaneLifecycleFilter | null>(null)
+  const [sessionLifecycle, setSessionLifecycle] = useState<SessionLifecycle>(() => {
+    const active = loadBriefingActiveSession()
+    if (active == null) return 'ready'
+    const initialLane =
+      initialUrl.lane ??
+      defaultLaneForScopeTrack(resolveBriefingScope(initialUrl), resolveTrackType(initialUrl))
+    return active.lane === initialLane ? 'active' : 'ready'
+  })
   const [launchingIde, setLaunchingIde] = useState(false)
   const [launchStatus, setLaunchStatus] = useState<string | null>(null)
-  const [automationCopied, setAutomationCopied] = useState(false)
-  const [alignmentCopied, setAlignmentCopied] = useState(false)
   const [agentDialogueLanguage, setAgentDialogueLanguage] = useState<AgentDialogueLanguage>(
     DEFAULT_AGENT_DIALOGUE_LANGUAGE,
   )
@@ -128,7 +132,6 @@ export function BriefingPage({
   const operateQueueQuery = useOperateQueue()
   const [localSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
-  const sessionPackAnchorRef = useRef<HTMLDivElement>(null)
 
   const serverSnapshotQuery = useQuery({
     queryKey: ['session-snapshot', 'latest'],
@@ -166,36 +169,124 @@ export function BriefingPage({
     )
   }, [context, matrices, clusterSummary, operateQueueQuery.data?.open])
 
+  /** Same lane-queue truth as TrackLaneSection — drives Work Scope summary (respects digest filter). */
+  const scopeWorkSummary = useMemo(() => {
+    const lanes = lanesForScopeTrack(selectedScope, selectedTrackType)
+    const queues = lanes.map(lane => {
+      const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+      return {
+        label: lane.label,
+        queue,
+        lifecycle: laneLifecycleFromQueue(queue),
+      }
+    })
+    const visible =
+      lifecycleFilter == null
+        ? queues
+        : queues.filter(q => q.lifecycle === lifecycleFilter)
+    return computeScopeWorkSummary(
+      visible.map(({ label, queue }) => ({ label, queue })),
+    )
+  }, [selectedScope, selectedTrackType, lifecycleFilter, context, matrices, clusterSummary])
+
+  /** Config / lane changes invalidate the "Active" session marker until re-copy. */
+  function invalidateSessionPackUi() {
+    setSessionLifecycle('ready')
+    setSessionCopied(false)
+    setPackPreviewExpanded(false)
+    setLaunchStatus(null)
+  }
+
+  /** When digest filter changes, keep selected lane inside the visible set. */
+  useEffect(() => {
+    if (lifecycleFilter == null) return
+    const lanes = lanesForScopeTrack(selectedScope, selectedTrackType)
+    const matching = lanes.filter(lane => {
+      const life = laneLifecycleFromQueue(
+        buildQueueForLane(lane.id, context, matrices, clusterSummary),
+      )
+      return life === lifecycleFilter
+    })
+    if (matching.length === 0) return
+    if (matching.some(l => l.id === selectedLane)) return
+    setSelectedLane(matching[0].id)
+    setSessionLifecycle('ready')
+    setSessionCopied(false)
+    setPackPreviewExpanded(false)
+    setLaunchStatus(null)
+  }, [
+    lifecycleFilter,
+    selectedScope,
+    selectedTrackType,
+    selectedLane,
+    context,
+    matrices,
+    clusterSummary,
+  ])
+
   useEffect(() => {
     if (!dataReady || initialLaneSynced) return
     if (initialUrl.lane == null) {
-      setSelectedLane(defaultLaneForTrack(selectedTrack, context, matrices, clusterSummary))
+      setSelectedLane(defaultLaneForScopeTrack(selectedScope, selectedTrackType))
     }
     setInitialLaneSynced(true)
   }, [
     dataReady,
     initialLaneSynced,
     initialUrl.lane,
-    selectedTrack,
-    context,
-    matrices,
-    clusterSummary,
+    selectedScope,
+    selectedTrackType,
   ])
-
-  const laneDefaultIntent = laneById(selectedLane).workIntent
-  const intent: WorkIntent = intentOverride ?? laneDefaultIntent
 
   useEffect(() => {
     writeBriefingUrlState({
+      view: selectedScope,
+      trackType: selectedTrackType,
       track: selectedTrack,
       lane: selectedLane,
-      intent:
-        intentOverride != null && intentOverride !== laneDefaultIntent
-          ? intentOverride
-          : undefined,
+      // Stop writing intent override from Briefing page; keep URL parse compat for deep links.
+      intent: undefined,
       pack: packSize === 'compact' ? undefined : packSize,
     })
-  }, [selectedTrack, selectedLane, intentOverride, laneDefaultIntent, packSize])
+  }, [selectedScope, selectedTrackType, selectedTrack, selectedLane, packSize])
+
+  function applyAllScope(clearFilter: boolean) {
+    setSelectedScope('all')
+    const types = trackTypesForScope('all')
+    const tt = types.includes(selectedTrackType) ? selectedTrackType : types[0] ?? 'build'
+    setSelectedTrackType(tt)
+    setSelectedLane(defaultLaneForScopeTrack('all', tt))
+    if (clearFilter) setLifecycleFilter(null)
+    invalidateSessionPackUi()
+  }
+
+  function handleSelectLifecycleFilter(filter: BriefingLaneLifecycleFilter | null) {
+    if (filter == null) {
+      setLifecycleFilter(null)
+      invalidateSessionPackUi()
+      return
+    }
+    setLifecycleFilter(filter)
+    setSelectedScope('all')
+    const types = trackTypesForScope('all')
+    const tt = types.includes(selectedTrackType) ? selectedTrackType : types[0] ?? 'build'
+    setSelectedTrackType(tt)
+    invalidateSessionPackUi()
+  }
+
+  function handleSelectHotLine(line: ComponentLineId) {
+    setSelectedScope(line)
+    const types = trackTypesForScope(line)
+    const tt = types.includes(selectedTrackType) ? selectedTrackType : types[0] ?? 'build'
+    setSelectedTrackType(tt)
+    setLifecycleFilter('active')
+    invalidateSessionPackUi()
+  }
+
+  function handleClearLifecycleFilter() {
+    setLifecycleFilter(null)
+    invalidateSessionPackUi()
+  }
 
   const laneQueue = useMemo(
     () => buildQueueForLane(selectedLane, context, matrices, clusterSummary),
@@ -225,15 +316,6 @@ export function BriefingPage({
 
   const packBlocked = hasBlockingFindings(packFindings)
 
-  const derivedFocusHeadline = useMemo(() => deriveFocusHeadline(context), [context])
-  const focusHeadlineDrift =
-    context != null &&
-    derivedFocusHeadline.length > 0 &&
-    context.focus.headline !== derivedFocusHeadline
-
-  const catalogVersionSynced =
-    context?.meta?.catalog_version != null &&
-    context.meta.catalog_version === CATALOG_VERSION
 
   useEffect(() => {
     if (!dataReady || previousSnapshot == null) return
@@ -299,14 +381,8 @@ export function BriefingPage({
     ],
   )
 
-  const alignmentPack = useMemo(
-    () => buildBriefingAlignmentPack(snapshotInput),
-    [snapshotInput],
-  )
 
-  const activeTrack = trackSummaries.find(t => t.id === selectedTrack) ?? trackSummaries[0]
   const activeLane = laneById(selectedLane)
-  const clusterLine = summarizeCluster(clusterSummary)
 
   async function handleLaunchIdeAgent() {
     if (!canOperate) return
@@ -321,6 +397,7 @@ export function BriefingPage({
         packSize,
         startedAt: new Date().toISOString(),
       })
+      setSessionLifecycle('active')
       const resp = await launchProgramAgent({
         session_pack: sessionPack,
         track: selectedTrack,
@@ -345,12 +422,6 @@ export function BriefingPage({
   async function handleCopySession() {
     await copyText(sessionPack)
     await handleSaveSnapshot()
-    setSessionCopied(true)
-    window.setTimeout(() => setSessionCopied(false), 2000)
-  }
-
-  function handleSendToAgentDesk() {
-    void handleSaveSnapshot()
     saveBriefingActiveSession({
       track: selectedTrack,
       lane: selectedLane,
@@ -358,537 +429,181 @@ export function BriefingPage({
       packSize,
       startedAt: new Date().toISOString(),
     })
-    onOpenAgentDesk?.({ prefill: sessionPack })
+    setSessionLifecycle('active')
+    setSessionCopied(true)
+    window.setTimeout(() => setSessionCopied(false), 2000)
   }
 
-  async function handleCopyAutomationHandoff() {
-    const handoff = buildBriefingAutomationHandoff({
-      pack: sessionPack,
-      track: selectedTrack,
-      lane: selectedLane,
-      intent,
-      packSize,
-    })
-    await copyText(formatAutomationHandoffJson(handoff))
-    setAutomationCopied(true)
-    window.setTimeout(() => setAutomationCopied(false), 2000)
-  }
 
-  async function handleCopyAlignment() {
-    await copyText(alignmentPack)
-    setAlignmentCopied(true)
-    window.setTimeout(() => setAlignmentCopied(false), 2000)
-  }
-
-  const uiProgressDone = CONSOLE_UI_PROGRESS.filter(r => r.status === 'done').length
-  const packHasWarnings = packFindings.some(f => f.severity === 'warning')
-  const agentDeskSuited = isAgentDeskSuitedIntent(intent)
-  const agentDeskDisabledReason = agentDeskPrefillDisabledReason(intent)
-
-  function handleGenerateSessionPack() {
-    setShowSessionPack(true)
-    window.requestAnimationFrame(() => {
-      sessionPackAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-  }
+  const laneIsInitMode = isEmptyLaneInit(laneQueue)
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
-      <FlightDirectorBriefingPanel onOpenTrustAutonomy={onOpenTrustAutonomy} />
-
-      <TrackCardsSection
-        tracks={trackSummaries}
-        selectedTrack={selectedTrack}
-        onSelectTrack={(id) => {
-          setSelectedTrack(id)
-          setSelectedLane(defaultLaneForTrack(id, context, matrices, clusterSummary))
-          setIntentOverride(null)
-          setShowSessionPack(false)
-        }}
-      />
-
-      <TrackLaneSection
-        track={selectedTrack}
-        selectedLane={selectedLane}
-        onSelectLane={(id) => {
-          setSelectedLane(id)
-          setIntentOverride(null)
-          setShowSessionPack(false)
-        }}
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <BriefingWorkDigestPanel
+        compact
         context={context}
         matrices={matrices}
         clusterSummary={clusterSummary}
-        migrateTrackNext={migrateTrackNext}
-        auditRecords={auditRecords}
-        auditLoading={auditLoading}
-        onOpenAudit={onOpenAudit}
-        operateQueueOpen={operateQueueQuery.data?.open}
-        operateQueueLoading={operateQueueQuery.isLoading}
+        loading={contextLoading || matrixLoading}
+        lifecycleFilter={lifecycleFilter}
+        onSelectLifecycleFilter={handleSelectLifecycleFilter}
+        onSelectHotLine={handleSelectHotLine}
+        onClearFilters={handleClearLifecycleFilter}
+        onFocusAllScope={() => applyAllScope(true)}
       />
 
-      <section className="page-section panel-elevated px-4 py-3">
-        <p className="briefing-section-kicker m-0">2 · Session briefing</p>
-        <div className="mt-1 flex min-w-0 flex-col gap-3">
-          <div className="min-w-0">
-            <h2 className="m-0 text-sm font-semibold">Generate briefing for your work</h2>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              <strong>Primary:</strong> copy the pack into a <strong>new Cursor IDE</strong> chat
-              (multi-repo workspace, rules, MCP). The pack includes live status, UI progress, spine
-              + matrix, read-first lists, and a first-reply protocol — confirm understanding, task
-              list, Source Audit — before you pick what to implement.
-            </p>
-            <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              <strong>Optional:</strong> prefill Agent Desk only for short Ops-runner tasks (cluster
-              debug, drift-style prompts). It does not replace IDE for feature or frontend work.
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-dense-meta text-muted-foreground">
-                Agent dialogue language
-              </span>
-              <SegmentControl
-                value={agentDialogueLanguage}
-                onChange={(v) => {
-                  setAgentDialogueLanguage(v as AgentDialogueLanguage)
-                  setShowSessionPack(false)
-                }}
-                options={AGENT_DIALOGUE_LANGUAGE_OPTIONS.map(opt => ({
-                  value: opt.id,
-                  label: opt.label,
-                }))}
-                size="sm"
-              />
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-dense-meta text-muted-foreground">Work intent</span>
-              <SegmentControl
-                value={intent}
-                onChange={(v) => {
-                  const next = v as WorkIntent
-                  setIntentOverride(next === laneDefaultIntent ? null : next)
-                  setShowSessionPack(false)
-                }}
-                options={WORK_INTENT_OPTIONS.map(opt => ({
-                  value: opt.id,
-                  label: opt.shortLabel,
-                }))}
-                size="sm"
-              />
-              {intentOverride != null && intentOverride !== laneDefaultIntent && (
-                <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                  Override (lane default: {laneDefaultIntent})
-                </span>
-              )}
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-dense-meta text-muted-foreground">Pack size</span>
-              <SegmentControl
-                value={packSize}
-                onChange={(v) => {
-                  setPackSize(v as BriefingPackSize)
-                  setShowSessionPack(false)
-                }}
-                options={[
-                  { value: 'compact', label: 'Compact' },
-                  { value: 'full', label: 'Full' },
-                ]}
-                size="sm"
-              />
-            </div>
-            <p className="m-0 mt-2 text-[var(--text-dense-meta)]">
-              Track:{' '}
-              <span className="font-medium text-[var(--foreground)] capitalize">
-                {activeTrack.id}
-              </span>
-              {' · '}
-              Lane:{' '}
-              <span className="font-medium text-[var(--foreground)]">
-                {activeLane.label}
-              </span>
-              <span className="text-[var(--muted-foreground)]">
-                {' '}
-                ({laneQueue.length} queue item{laneQueue.length !== 1 ? 's' : ''})
-              </span>
-            </p>
-            <BriefingReconcilePanel
+      <BriefingMasterDetail
+        master={
+          <>
+            <BriefingViewTabsSection
+              selectedScope={selectedScope}
+              selectedTrackType={selectedTrackType}
+              onSelectScope={scope => {
+                setSelectedScope(scope)
+                const types = trackTypesForScope(scope)
+                const tt = types.includes(selectedTrackType) ? selectedTrackType : types[0] ?? 'build'
+                setSelectedTrackType(tt)
+                setSelectedLane(defaultLaneForScopeTrack(scope, tt))
+                invalidateSessionPackUi()
+              }}
+              onSelectTrackType={tt => {
+                setSelectedTrackType(tt)
+                setSelectedLane(defaultLaneForScopeTrack(selectedScope, tt))
+                invalidateSessionPackUi()
+              }}
+              scopeWorkSummary={scopeWorkSummary}
+              lifecycleFilter={lifecycleFilter}
+              onClearLifecycleFilter={handleClearLifecycleFilter}
               context={context}
-              options={packReconcileOptions}
-              variant="pack"
+              matrices={matrices}
+              clusterSummary={clusterSummary}
             />
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={!dataReady || packBlocked}
-              onClick={handleGenerateSessionPack}
-              title={
-                packBlocked
-                  ? 'Resolve pack reconcile blockers before generating'
-                  : undefined
-              }
-            >
-              {packBlocked
-                ? 'Pack blocked (reconcile)'
-                : dataReady
-                  ? showSessionPack
-                    ? 'Regenerate session briefing'
-                    : 'Generate session briefing'
-                  : 'Loading spine & matrix…'}
-            </Button>
-            {showSessionPack && (
-              <span className="text-[var(--text-dense-caption)] text-[var(--success)]">
-                Pack ready — copy below or scroll to preview
-              </span>
-            )}
-          </div>
-        </div>
-
-        {showSessionPack && (
-          <div
-            ref={sessionPackAnchorRef}
-            className="mt-3 flex w-full min-w-0 scroll-mt-4 flex-col gap-3 border-t border-[var(--border)] pt-3"
-          >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
-              <div className="min-w-0 flex-1">
-                <p className="briefing-section-kicker m-0">Cursor IDE · primary</p>
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!canOperate || launchingIde || packBlocked}
-                    onClick={() => void handleLaunchIdeAgent()}
-                    title={!canOperate ? 'Operator token required' : undefined}
-                  >
-                    {launchingIde ? 'Launching…' : 'Launch IDE Agent'}
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => void handleCopySession()}>
-                    {sessionCopied ? 'Copied!' : 'Copy session pack'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleCopyAutomationHandoff()}
-                  >
-                    {automationCopied ? 'Copied!' : 'Copy automation handoff'}
-                  </Button>
-                </div>
-                <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                  {BRIEFING_IDE_DELIVERY_HINT}
-                </p>
-                {launchStatus != null && (
-                  <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--foreground)]">
-                    {launchStatus}
-                  </p>
-                )}
-              </div>
-              <div className="min-w-0 flex-1 sm:max-w-md">
-                <p className="briefing-section-kicker m-0">Agent Desk · optional</p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={
-                      !canOperate || onOpenAgentDesk == null || agentDeskDisabledReason != null
-                    }
-                    title={
-                      !canOperate
-                        ? 'Operator token required'
-                        : agentDeskDisabledReason ?? undefined
-                    }
-                    onClick={handleSendToAgentDesk}
-                  >
-                    Prefill Agent Desk
-                  </Button>
-                  {agentDeskSuited && (
-                    <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                      Ops runner
-                    </span>
-                  )}
-                </div>
-                <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                  {agentDeskDisabledReason ?? BRIEFING_AGENT_DESK_DELIVERY_HINT}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showSessionPack && (
-          <LlmPackPreview
-            charCount={sessionPack.length}
-            metaLabel={`track: ${selectedTrack} · lane: ${selectedLane} · intent: ${intent} · pack: ${packSize} · lang: ${agentDialogueLanguage}`}
-            pack={sessionPack}
-            footer="Paste into Cursor IDE for the full first-reply protocol. The Agent must reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) a Source Audit table — wait for your selection before implementing."
-          />
-        )}
-      </section>
-
-      <BriefingFoldableSection
-        kicker="Closure"
-        title="Session results"
-        description="Closed Ops-runner briefing sessions (S9 write-back). IDE work stays in Cursor — no auto-close required."
-        defaultExpanded={false}
-      >
-        <BriefingSessionResultsPanel />
-      </BriefingFoldableSection>
-
-      <section className="page-section panel-elevated px-4 py-3">
-        <h2 className="m-0 text-sm font-semibold">Live snapshot</h2>
-        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Embedded in both packs below when you generate. SYNC (pack reconcile) and HEALTH (operational
-          probes) are independent axes — see Governance → Briefing Reconciliation.
-        </p>
-        <BriefingHealthBanner
-          matrices={matrices}
-          clusterSummary={clusterSummary}
-          platformHealthy={platformHealthy}
-          loading={matrixLoading || clusterLoading}
-        />
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <SnapshotTile
-            label="Platform API"
-            reach={platformHealthy === true ? 'ok' : platformHealthy === false ? 'fail' : 'unknown'}
-            detail={platformHealthy === true ? 'healthy' : 'unreachable'}
-          />
-          <SnapshotTile
-            label="Catalog version"
-            reach={
-              contextLoading
-                ? 'unknown'
-                : catalogVersionSynced
-                  ? 'ok'
-                  : context?.meta?.catalog_version != null
-                    ? 'degraded'
-                    : 'unknown'
-            }
-            detail={contextLoading ? 'Loading…' : CATALOG_VERSION}
-            subdetail={
-              catalogVersionSynced
-                ? 'Spine + environments-catalog aligned'
-                : context?.meta?.catalog_version != null
-                  ? `Spine: ${context.meta.catalog_version} — run check_spine_catalog.sh`
-                  : undefined
-            }
-          />
-          <SnapshotTile
-            label="Spine focus"
-            reach={
-              focusHeadlineDrift
-                ? 'degraded'
-                : context != null
-                  ? 'ok'
-                  : 'unknown'
-            }
-            detail={
-              contextLoading
-                ? 'Loading…'
-                : (context?.focus.headline ?? '—')
-            }
-            subdetail={
-              focusHeadlineDrift
-                ? `Derived: ${derivedFocusHeadline} (D-D drift — run wave SYNC or patch headline)`
-                : undefined
-            }
-          />
-          <SnapshotTile
-            label="Cluster"
-            reach={clusterLine.reach}
-            detail={clusterLoading ? 'Loading…' : clusterLine.label}
-          />
-          <SnapshotTile
-            label="Prod matrix"
-            reach={
-              matrices.find(m => m.environment === 'prod') != null
-                ? summarizeMatrix(matrices.find(m => m.environment === 'prod')!).worstReach
-                : 'unknown'
-            }
-            detail={
-              matrixLoading
-                ? 'Loading…'
-                : (() => {
-                    const prod = matrices.find(m => m.environment === 'prod')
-                    if (prod == null) return '—'
-                    const s = summarizeMatrix(prod)
-                    return `ok ${s.ok} · fail ${s.fail}`
-                  })()
-            }
-          />
-        </div>
-      </section>
-
-      <BriefingFoldableSection
-        kicker="Automation"
-        title="Briefing sync loop"
-        description="Detect → propose → approve → fix. Nightly drift pipeline status."
-        defaultExpanded={false}
-        badge={packBlocked ? 'BLOCKED' : packHasWarnings ? 'WARN' : 'CLEAR'}
-        badgeVariant={packBlocked ? 'warning' : packHasWarnings ? 'info' : 'success'}
-      >
-        <BriefingSyncLoopPanel
-          context={context}
-          reconcileFindings={packFindings}
-          onOpenAgentDesk={onOpenAgentDesk}
-        />
-      </BriefingFoldableSection>
-
-      <BriefingFoldableSection
-        kicker="Automation"
-        title="Nightly agent report & drift proposals"
-        description="Layer 1–4 scan from agent host. Owner approval required for fixes."
-        defaultExpanded={false}
-      >
-        <NightlyBriefingPanel onOpenAgentDesk={onOpenAgentDesk} />
-      </BriefingFoldableSection>
-
-      <BriefingFoldableSection
-        kicker="Automation"
-        title="Since your last session"
-        description={
-          previousSnapshot != null
-            ? `Baseline: ${new Date(previousSnapshot.savedAt).toLocaleString()}${serverSnapshotQuery.data != null ? ' (server)' : ' (local)'}`
-            : 'First session — snapshot saved on briefing copy.'
+            <TrackLaneSection
+              scope={selectedScope}
+              trackType={selectedTrackType}
+              track={selectedTrack}
+              selectedLane={selectedLane}
+              onSelectLane={(id) => {
+                setSelectedLane(id)
+                invalidateSessionPackUi()
+              }}
+              lifecycleFilter={lifecycleFilter}
+              onClearLifecycleFilter={handleClearLifecycleFilter}
+              context={context}
+              matrices={matrices}
+              clusterSummary={clusterSummary}
+            />
+          </>
         }
-        defaultExpanded={false}
-        badge={sessionDelta != null && !isEmptyDelta(sessionDelta) ? 'CHANGES' : undefined}
-        badgeVariant="info"
-      >
-        <SessionDeltaPanel
-          delta={sessionDelta}
-          hasBaseline={previousSnapshot != null}
-          onOpenAgentDesk={onOpenAgentDesk}
-        />
-      </BriefingFoldableSection>
-
-      <BriefingFoldableSection
-        title="Console UI progress"
-        description={`${uiProgressDone}/${CONSOLE_UI_PROGRESS.length} done — derived from Console nav registry + overrides.`}
-        defaultExpanded={false}
-        className="page-section panel-elevated overflow-hidden px-0 py-3"
-      >
-        <div className="px-3">
-          <DenseDataTable>
-            <DenseTableHeader>
-              <DenseTableHeadRow>
-                <DenseTableHead>Area</DenseTableHead>
-                <DenseTableHead>Feature</DenseTableHead>
-                <DenseTableHead>Status</DenseTableHead>
-                <DenseTableHead>Notes</DenseTableHead>
-              </DenseTableHeadRow>
-            </DenseTableHeader>
-            <DenseTableBody>
-              {CONSOLE_UI_PROGRESS.map(row => (
-                <DenseTableRow key={`${row.area}-${row.item}`}>
-                  <DenseTableCell className="font-mono-tabular">{row.area}</DenseTableCell>
-                  <DenseTableCell>{row.item}</DenseTableCell>
-                  <DenseTableCell>
-                    <StatusLamp value={statusLamp(row.status)} kind="reach" />{' '}
-                    <span className="font-mono-tabular">{row.status}</span>
-                  </DenseTableCell>
-                  <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                    {row.notes}
-                  </DenseTableCell>
-                </DenseTableRow>
-              ))}
-            </DenseTableBody>
-          </DenseDataTable>
-        </div>
-      </BriefingFoldableSection>
-
-      <section className="briefing-maintain-panel page-section px-4 py-3">
-        <p className="briefing-section-kicker m-0">Meta · Platform maintenance</p>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="m-0 text-sm font-semibold">Align Briefing with the system</h2>
-            <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              <strong>Not</strong> for ops / debug / release work. Use this only when you need an
-              Agent to update <em>this Briefing feature</em> — sync{' '}
-              <code className="text-[var(--text-dense-meta)]">uiProgressSnapshot</code>, read-first
-              lists, and docs with the live Console tabs and platform-api routes.
-            </p>
-            <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Typical trigger: after shipping a new Console tab or API endpoint.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!dataReady}
-              onClick={() => setShowAlignmentPack(true)}
-            >
-              {dataReady ? 'Generate alignment task' : 'Loading…'}
-            </Button>
-            {showAlignmentPack && (
-              <Button variant="outline" size="sm" onClick={() => void handleCopyAlignment()}>
-                {alignmentCopied ? 'Copied!' : 'Copy alignment pack'}
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {showAlignmentPack && (
-          <LlmPackPreview
-            charCount={alignmentPack.length}
-            metaLabel="briefing_alignment"
-            pack={alignmentPack}
-            footer="Paste into a new Cursor chat dedicated to Briefing drift — separate from your day-to-day work session."
-          />
-        )}
-      </section>
+        detail={
+          !dataReady ? (
+            <section className="page-section panel-elevated flex min-h-[12rem] flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+              <p className="briefing-section-kicker m-0">Session</p>
+              <h2 className="m-0 text-sm font-semibold">Waiting for data</h2>
+              <p className="m-0 max-w-sm text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                Loading spine, matrix, and audit so the Session pack can be built. Pick a lane on the
+                left — detail opens here when ready.
+              </p>
+            </section>
+          ) : (
+            <SessionDetailSection
+              scope={selectedScope}
+              trackType={selectedTrackType}
+              track={selectedTrack}
+              lane={activeLane}
+              queue={laneQueue}
+              isInitMode={laneIsInitMode}
+              intent={intent}
+              lifecycle={sessionLifecycle}
+              dataReady={dataReady}
+              packBlocked={packBlocked}
+              canOperate={canOperate}
+              launchingIde={launchingIde}
+              sessionCopied={sessionCopied}
+              launchStatus={launchStatus}
+              onCopySession={() => void handleCopySession()}
+              onLaunchIde={() => void handleLaunchIdeAgent()}
+              context={context}
+              migrateTrackNext={migrateTrackNext}
+              auditRecords={auditRecords}
+              auditLoading={auditLoading}
+              onOpenAudit={onOpenAudit}
+              operateQueueOpen={operateQueueQuery.data?.open}
+              operateQueueLoading={operateQueueQuery.isLoading}
+              agentDialogueLanguage={agentDialogueLanguage}
+              onAgentDialogueLanguageChange={v => {
+                setAgentDialogueLanguage(v)
+                invalidateSessionPackUi()
+              }}
+              packSize={packSize}
+              onPackSizeChange={v => {
+                setPackSize(v)
+                invalidateSessionPackUi()
+              }}
+              packReconcileOptions={packReconcileOptions}
+              packPreview={
+                <LlmPackPreview
+                  charCount={sessionPack.length}
+                  metaLabel={`track: ${selectedTrack} · lane: ${selectedLane} · intent: ${intent} · pack: ${packSize} · lang: ${agentDialogueLanguage}${laneIsInitMode ? ' · init' : ''}`}
+                  pack={sessionPack}
+                  expanded={packPreviewExpanded}
+                  onToggleExpanded={() => setPackPreviewExpanded(v => !v)}
+                  footer="Paste into Cursor IDE for the first-reply protocol. The Agent must reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) Source Audit (full pack) — wait for your selection before implementing."
+                />
+              }
+            />
+          )
+        }
+      />
     </div>
   )
 }
+
 
 function LlmPackPreview({
   charCount,
   metaLabel,
   pack,
   footer,
+  expanded = true,
+  onToggleExpanded,
 }: {
   charCount: number
   metaLabel: string
   pack: string
   footer: string
+  expanded?: boolean
+  onToggleExpanded?: () => void
 }) {
+  const previewLines = pack.split('\n').slice(0, 4).join('\n')
+  const collapsible = onToggleExpanded != null
+
   return (
-    <div className="llm-content-panel mt-3">
-      <div className="llm-content-panel-toolbar">
+    <div className="llm-content-panel mt-1">
+      <div className="llm-content-panel-toolbar flex flex-wrap items-center justify-between gap-2">
         <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {charCount.toLocaleString()} chars · {metaLabel}
         </span>
+        {collapsible && (
+          <button
+            type="button"
+            className="text-[var(--text-dense-caption)] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            onClick={onToggleExpanded}
+          >
+            {expanded ? 'Collapse preview' : 'Expand preview'}
+          </button>
+        )}
       </div>
-      <pre className="llm-content-pre font-mono-tabular">{pack}</pre>
-      <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{footer}</p>
-    </div>
-  )
-}
-
-function SnapshotTile({
-  label,
-  reach,
-  detail,
-  subdetail,
-}: {
-  label: string
-  reach: 'ok' | 'degraded' | 'fail' | 'unknown'
-  detail: string
-  subdetail?: string
-}) {
-  return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
-      <div className="flex items-center gap-2">
-        <StatusLamp value={reach} kind="reach" />
-        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          {label}
-        </span>
-      </div>
-      <p className="m-0 mt-1 text-[var(--text-dense)]">{detail}</p>
-      {subdetail != null && (
-        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--warning)]">{subdetail}</p>
+      {expanded ? (
+        <pre className="llm-content-pre font-mono-tabular">{pack}</pre>
+      ) : (
+        <pre className="llm-content-pre max-h-24 overflow-hidden font-mono-tabular opacity-80">
+          {previewLines}
+          {pack.split('\n').length > 4 ? '\n…' : ''}
+        </pre>
       )}
+      <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{footer}</p>
     </div>
   )
 }

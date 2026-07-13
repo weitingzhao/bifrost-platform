@@ -35,6 +35,9 @@ export type TaskPhaseStatusInput = {
   tradeStgRun?: DeliveryPipelineRunView
   tradeStgGate?: ReleaseGateResponse
   tradeStgSmokeOk?: boolean
+  /** True after user clicked "Open scoped Briefing" (localStorage; D-A). */
+  briefingOpened?: boolean
+  /** Dev Agent API phase completion — maps Task Mode phase ids (implement / pre-push). */
   devAgentPhaseDone?: (phaseId: string) => boolean
 }
 
@@ -243,11 +246,26 @@ function resolveMissionLaunchPhase(phaseId: string, input: TaskPhaseStatusInput)
   }
 }
 
-function resolveDevBuildPhase(phaseId: string, input: TaskPhaseStatusInput): TaskPhaseStatus {
+/** Ground Build deliver-stg: Board/program progress — not Tekton pipeline runs (F3). */
+function resolveGroundDeliverStg(input: TaskPhaseStatusInput): TaskPhaseStatus {
+  const program = input.programDetail
+  if (program == null) return 'planned'
+  const signed = program.program.phases_signed ?? program.program.signed ?? 0
+  const phasesDone = program.program.phases_done ?? 0
+  if (signed > 0 || phasesDone > 0 || program.program.complete === true) return 'done'
+  if (program.active === true || program.program.active === true) return 'active'
+  return 'planned'
+}
+
+function resolveDevBuildPhase(
+  modeId: TaskModeId,
+  phaseId: string,
+  input: TaskPhaseStatusInput,
+): TaskPhaseStatus {
   const program = input.programDetail
   switch (phaseId) {
     case 'briefing':
-      return 'done'
+      return input.briefingOpened === true ? 'done' : 'planned'
     case 'implement': {
       if (input.devAgentPhaseDone?.('implement') === true) return 'done'
       return program?.active === true ? 'active' : 'planned'
@@ -255,12 +273,13 @@ function resolveDevBuildPhase(phaseId: string, input: TaskPhaseStatusInput): Tas
     case 'pre-push':
       return input.devAgentPhaseDone?.('pre-push') === true ? 'done' : 'planned'
     case 'deliver-stg': {
+      if (modeId === 'ground-build') return resolveGroundDeliverStg(input)
       const run = input.tradeStgRun ?? input.platformStgRun
       if (run != null && isPipelineRunSucceeded(run)) return 'done'
       return run != null ? 'active' : 'planned'
     }
     case 'sign-off': {
-      if (program == null) return 'unknown'
+      if (program == null) return 'planned'
       const signed = program.program.phases_signed ?? program.program.signed ?? 0
       const total = program.program.phase_count
       if (program.program.complete === true || signed >= total) return 'done'
@@ -287,7 +306,7 @@ function rawPhaseStatus(
     case 'engineer-build':
     case 'ground-build':
     case 'plugin-build':
-      return resolveDevBuildPhase(phaseId, input)
+      return resolveDevBuildPhase(modeId, phaseId, input)
     default:
       return 'unknown'
   }
@@ -307,27 +326,53 @@ export function resolveTaskPhaseStatus(
   const statusOf = (id: string) => rawPhaseStatus(modeId, id, input)
   let status = statusOf(phaseId)
 
-  if (status === 'planned' && priorPhasesDone(phase, statusOf)) {
+  const priorsDone = priorPhasesDone(phase, statusOf)
+
+  if (status === 'planned' && priorsDone) {
     const activeId = firstIncompletePhase(phases, statusOf)
     if (activeId === phaseId) status = 'active'
   }
 
-  if (status === 'active' && !priorPhasesDone(phase, statusOf)) {
-    status = 'blocked'
+  if (!priorsDone) {
+    if (status === 'active') status = 'blocked'
+    if (status === 'done') status = 'planned'
   }
 
   return status
 }
 
-/** Resolve all phases for a mode — returns map phaseId → status. */
+/** Resolve all phases for a mode — returns map phaseId → status.
+ *  Phases are resolved in order so that sequential clamping
+ *  (a later phase cannot be "done" if a prior phase is not "done")
+ *  uses resolved values of dependencies, not raw values.
+ */
 export function resolveAllTaskPhaseStatuses(
   modeId: TaskModeId,
   input: TaskPhaseStatusInput,
 ): Record<string, TaskPhaseStatus> {
   const mode = taskModeById(modeId)
+  const phases = mode.phases ?? []
   const out: Record<string, TaskPhaseStatus> = {}
-  for (const p of mode.phases ?? []) {
-    out[p.id] = resolveTaskPhaseStatus(modeId, p.id, input)
+  const rawOf = (id: string) => rawPhaseStatus(modeId, id, input)
+
+  for (const phase of phases) {
+    let status = rawOf(phase.id)
+
+    const resolvedOf = (id: string) => out[id] ?? rawOf(id)
+    const priorsDone = phase.dependsOn == null || phase.dependsOn.length === 0
+      || phase.dependsOn.every(depId => resolvedOf(depId) === 'done')
+
+    if (status === 'planned' && priorsDone) {
+      const activeId = firstIncompletePhase(phases, rawOf)
+      if (activeId === phase.id) status = 'active'
+    }
+
+    if (!priorsDone) {
+      if (status === 'active') status = 'blocked'
+      if (status === 'done') status = 'planned'
+    }
+
+    out[phase.id] = status
   }
   return out
 }

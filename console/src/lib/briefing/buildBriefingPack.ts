@@ -33,6 +33,7 @@ import {
 import type { BriefingPackSize } from '@/lib/briefing/briefingUrlState'
 import type { TaskModeBriefingContext } from '@/lib/task-mode/TaskModeContext'
 import { splitQueueByCompletion } from '@/lib/briefing/queueDisplay'
+import { formatEmptyLaneInitSection } from '@/lib/briefing/laneInitPack'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
   intent: WorkIntent
@@ -502,7 +503,7 @@ function formatLaneQueueSection(laneId: LaneId, queue: QueueItem[]): string {
   const lane = laneById(laneId)
   const lines = [`## Active lane queue — ${lane.label} (${lane.id})`, '', lane.description, '']
   if (queue.length === 0) {
-    lines.push('(empty queue)')
+    lines.push('(no active items — see completed in Console if needed)')
     return lines.join('\n')
   }
   for (const item of queue) {
@@ -534,9 +535,12 @@ export function buildBriefingPack(input: BriefingInputs): string {
     packSize === 'full' && input.trackSummaries != null && input.trackSummaries.length > 0
       ? formatTrackSection(input.trackSummaries, track)
       : null
-  const queueSection = queueForPack != null
-    ? formatLaneQueueSection(lane, queueForPack)
-    : null
+  const queueSection =
+    input.laneQueue != null && input.laneQueue.length === 0
+      ? formatEmptyLaneInitSection(lane)
+      : queueForPack != null
+        ? formatLaneQueueSection(lane, queueForPack)
+        : null
 
   const dialogueRule =
     language === 'zh'

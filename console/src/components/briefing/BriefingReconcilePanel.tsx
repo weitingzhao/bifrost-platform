@@ -17,11 +17,23 @@ type BriefingReconcilePanelProps = {
 function ReconcileBody({
   findings,
   variant,
+  compact,
 }: {
   findings: ReconcileFinding[]
   variant: 'sync' | 'pack'
+  compact?: boolean
 }) {
   if (findings.length === 0) {
+    if (compact) {
+      return (
+        <div className="flex flex-wrap items-center gap-1.5 text-[var(--text-dense-caption)]">
+          <DenseTag variant="success">SYNC</DenseTag>
+          <span className="text-[var(--muted-foreground)]">
+            {variant === 'pack' ? 'Pack gate clear' : 'Views match spine'}
+          </span>
+        </div>
+      )
+    }
     return (
       <div className="flex items-center gap-2 rounded border border-[var(--success)]/40 bg-[var(--success)]/10 px-3 py-2 text-[var(--text-dense-meta)]">
         <DenseTag variant="success">SYNC</DenseTag>
@@ -71,10 +83,11 @@ export function BriefingReconcilePanel({
   context,
   options,
   variant = 'sync',
-}: BriefingReconcilePanelProps) {
+  compact = false,
+}: BriefingReconcilePanelProps & { compact?: boolean }) {
   if (context == null) return null
   const findings = reconcileBriefing(context, options)
-  return <ReconcileBody findings={findings} variant={variant} />
+  return <ReconcileBody findings={findings} variant={variant} compact={compact} />
 }
 
 /** @deprecated Use BriefingReconcilePanel — kept for lane queue imports. */

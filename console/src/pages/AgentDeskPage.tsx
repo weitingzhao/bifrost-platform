@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronRight, Square } from 'lucide-react'
-import type { AgentBridgeResponse, OpsContextResponse, RemediationJob } from '@/api/types'
+import type { AgentBridgeResponse, AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse, RemediationJob } from '@/api/types'
 import {
   cancelRemediationJob,
   fetchAgentBridge,
@@ -12,6 +12,8 @@ import {
 } from '@/api/platform'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { CloseBriefingSessionDialog } from '@/components/briefing/CloseBriefingSessionDialog'
+import { FlightDirectorBriefingPanel } from '@/components/briefing/FlightDirectorBriefingPanel'
+import { AgentDeskSessionOpsPanels } from '@/components/agent/AgentDeskSessionOpsPanels'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { AgentTaskCatalogPanel } from '@/components/agent/AgentTaskCatalogPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
@@ -29,6 +31,10 @@ import {
 
 interface AgentDeskPageProps {
   context: OpsContextResponse | undefined
+  matrices?: MatrixResponse[]
+  clusterSummary?: ClusterSummary
+  platformHealthy?: boolean
+  auditRecords?: AuditRecord[]
   initialJobId?: string | null
   prefillPrompt?: string | null
   onInitialJobConsumed?: () => void
@@ -39,6 +45,9 @@ interface AgentDeskPageProps {
   onOpenAgentProtocol?: () => void
   onOpenAgentSystem?: () => void
   onOpenOperatorPlane?: () => void
+  onOpenTrustAutonomy?: () => void
+  onOpenDeliveryBoard?: () => void
+  onOpenBriefingReconciliation?: () => void
 }
 
 type AgentScope = 'agent-desk' | 'release' | 'deliver-stg-recover'
@@ -117,6 +126,10 @@ function runnerSummary(bridge: AgentBridgeResponse): string {
 
 export function AgentDeskPage({
   context,
+  matrices = [],
+  clusterSummary,
+  platformHealthy,
+  auditRecords = [],
   initialJobId,
   prefillPrompt,
   onInitialJobConsumed,
@@ -127,6 +140,9 @@ export function AgentDeskPage({
   onOpenAgentProtocol,
   onOpenAgentSystem,
   onOpenOperatorPlane,
+  onOpenTrustAutonomy,
+  onOpenDeliveryBoard,
+  onOpenBriefingReconciliation,
 }: AgentDeskPageProps) {
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
@@ -272,6 +288,19 @@ export function AgentDeskPage({
             </p>
           )}
         </section>
+
+        <FlightDirectorBriefingPanel onOpenTrustAutonomy={onOpenTrustAutonomy} />
+
+        <AgentDeskSessionOpsPanels
+          context={context}
+          matrices={matrices}
+          clusterSummary={clusterSummary}
+          platformHealthy={platformHealthy}
+          auditRecords={auditRecords}
+          onOpenBriefing={onOpenBriefing}
+          onOpenDeliveryBoard={onOpenDeliveryBoard}
+          onOpenBriefingReconciliation={onOpenBriefingReconciliation}
+        />
 
         {/* ── Alerts (only when something is wrong) ── */}
         {runnerBlocked && (

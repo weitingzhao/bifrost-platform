@@ -1,13 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import { ClipboardList, Code2 } from 'lucide-react'
-import { fetchDevAgentStatus } from '@/api/devAgent'
+import type { DevAgentStatusResponse } from '@/api/devAgentTypes'
 import type { ProgramDetailResponse } from '@/api/programsTypes'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { TaskBriefingLauncher } from '@/components/task-mode/TaskBriefingLauncher'
 import { TaskDevAgentStatus } from '@/components/task-mode/TaskDevAgentStatus'
-import type { TaskModeDef } from '@/lib/task-mode/types'
+import type { InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
+import type { TaskModeDef, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 
 export type DevTaskStripsProps = {
@@ -21,7 +21,27 @@ export type DevTaskStripsProps = {
   onCreateProgram?: () => void
   onCreateNewInstance?: () => void
   onNavigate: (tabId: string) => void
-  onOpenBriefing?: (opts?: BriefingUrlState) => void
+  /** Inline scoped pack — primary CTA stays on Task CC. */
+  inlineBriefingPack: InlineBriefingPackResult
+  /** Optional deep-dive into the global aggregate Briefing page. */
+  onOpenFullBriefing?: (opts?: BriefingUrlState) => void
+  onBriefingOpened?: () => void
+  /** Lifted Dev Agent status from TaskControlCenter (F2) — avoid duplicate query. */
+  devAgentStatus?: DevAgentStatusResponse
+  devAgentLoading?: boolean
+  /** Current playbook step (F11). */
+  phases?: TaskPhaseDef[]
+  phaseStatuses?: Record<string, TaskPhaseStatus>
+}
+
+function firstIncompletePhase(
+  phases: TaskPhaseDef[],
+  statuses: Record<string, TaskPhaseStatus>,
+): TaskPhaseDef | null {
+  for (const p of phases) {
+    if (statuses[p.id] !== 'done') return p
+  }
+  return null
 }
 
 export function DevTaskStrips({
@@ -35,16 +55,16 @@ export function DevTaskStrips({
   onCreateProgram,
   onCreateNewInstance,
   onNavigate,
-  onOpenBriefing,
+  inlineBriefingPack,
+  onOpenFullBriefing,
+  onBriefingOpened,
+  devAgentStatus,
+  devAgentLoading,
+  phases = [],
+  phaseStatuses = {},
 }: DevTaskStripsProps) {
   const dev = mode.dev
   if (dev == null) return null
-
-  const devAgentQ = useQuery({
-    queryKey: ['dev-agent', 'status'],
-    queryFn: fetchDevAgentStatus,
-    refetchInterval: 5000,
-  })
 
   const briefingMode: TaskModeDef =
     resolvedProgramId != null && resolvedProgramId !== dev.programId
@@ -54,14 +74,42 @@ export function DevTaskStrips({
         }
       : mode
 
+  const currentPhase =
+    phases.find(p => phaseStatuses[p.id] === 'active') ??
+    firstIncompletePhase(phases, phaseStatuses)
+  const signed = programDetail?.program.phases_signed ?? programDetail?.program.signed ?? 0
+  const phaseCount = programDetail?.program.phase_count ?? 0
+
   return (
     <div className="flex flex-col gap-3">
+      {currentPhase != null && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
+          <span className="text-[var(--text-dense-meta)] text-muted-foreground">Current step:</span>
+          <span className="text-[var(--text-dense-label)] font-semibold">{currentPhase.title}</span>
+          {currentPhase.navigateTab != null && (
+            <Button
+              variant="secondary"
+              size="xs"
+              onClick={() => onNavigate(currentPhase.navigateTab!)}
+            >
+              Open →
+            </Button>
+          )}
+        </div>
+      )}
+
       <OpsSection title="Briefing → Dev Agent → Delivery Board">
         <div className="flex flex-col gap-3 p-3">
-          <TaskBriefingLauncher mode={briefingMode} onOpenBriefing={onOpenBriefing} />
+          <TaskBriefingLauncher
+            mode={briefingMode}
+            programId={resolvedProgramId}
+            inlinePack={inlineBriefingPack}
+            onOpenFullBriefing={onOpenFullBriefing}
+            onBriefingOpened={onBriefingOpened}
+          />
           <TaskDevAgentStatus
-            status={devAgentQ.data}
-            loading={devAgentQ.isLoading}
+            status={devAgentStatus}
+            loading={devAgentLoading}
             onOpenDevAgent={() => onNavigate('dev-agent')}
           />
           {programError != null && (
@@ -75,6 +123,9 @@ export function DevTaskStrips({
                 <ClipboardList size={16} />
                 <span className="text-[var(--text-dense-label)] font-semibold">Linked program</span>
                 <DenseTag variant="neutral">{programDetail.program.id}</DenseTag>
+                <DenseTag variant={programDetail.program.complete ? 'success' : 'warning'}>
+                  {signed}/{phaseCount} signed
+                </DenseTag>
                 <StatusLamp
                   value={programDetail.program.complete ? 'ok' : 'degraded'}
                   kind="reach"

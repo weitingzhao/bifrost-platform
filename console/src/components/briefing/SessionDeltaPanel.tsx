@@ -18,7 +18,7 @@ export function SessionDeltaPanel({ delta, hasBaseline, onOpenAgentDesk }: Sessi
     return (
       <section className="page-section panel-elevated px-4 py-2">
         <div className="flex items-center gap-2">
-          <p className="briefing-section-kicker m-0">0 · Since your last session</p>
+          <p className="briefing-section-kicker m-0">Since your last session</p>
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             First session — snapshot saved on briefing copy.
           </span>
@@ -33,7 +33,7 @@ export function SessionDeltaPanel({ delta, hasBaseline, onOpenAgentDesk }: Sessi
     return (
       <section className="page-section panel-elevated px-4 py-2">
         <div className="flex items-center gap-2">
-          <p className="briefing-section-kicker m-0">0 · Since your last session</p>
+          <p className="briefing-section-kicker m-0">Since your last session</p>
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             No changes · {delta.timeSince}
           </span>
@@ -57,7 +57,7 @@ export function SessionDeltaPanel({ delta, hasBaseline, onOpenAgentDesk }: Sessi
         ) : (
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
         )}
-        <span className="briefing-section-kicker m-0">0 · Since your last session</span>
+        <span className="briefing-section-kicker m-0">Since your last session</span>
         <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {changeCount} changes · {delta.timeSince}
         </span>

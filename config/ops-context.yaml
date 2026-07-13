@@ -569,7 +569,7 @@ tracks:
               total: 6
               done: 5
               status: in_progress
-              note: "① Hardware selection & purchase ✓ ② UCG Max setup (VLAN 10/20/30/50, IDS/IPS, Controller) ✓ ③ USW-Pro-Max-24 swap + wired VLAN 10 migration ✓ ④ K3s + TWS + kube-vip validation ✓ ⑤ Firewall permanent ZBF ✓ — 2026-07-11: TEMP removed; Work→Server; Family→NAS .20 (priority fixed); IoT→Plex; Default→Server deny; audit via scripts/unifi_firewall_setup.py ⑥ UniFi API → MCP Server read integration — pending (also stream unifi-mcp-server)"
+              note: "① Hardware selection & purchase ✓ ② UCG Max setup (VLAN 10/20/30/50, IDS/IPS, Controller) ✓ ③ USW-Pro-Max-24 swap + wired VLAN 10 migration ✓ ④ K3s + TWS + kube-vip validation ✓ — 2026-07-12 Owner verified VIP DNS + HTTPS for trader/ops Hostnames (Work Mac, Family Win11, Mac Pro) · ⑤ Firewall permanent ZBF ✓ — 2026-07-11: TEMP removed; Work→Server; Family→NAS .20; Family→Trade VIP .100:80/443; IoT→Plex; Default→Server deny; audit via scripts/unifi_firewall_setup.py ⑥ UniFi API → MCP Server read integration — pending (also stream unifi-mcp-server)"
               prerequisites:
                 - "Hardware delivered (UCG Max + USW-Pro-Max-24)"
             - id: network-upgrade-wifi

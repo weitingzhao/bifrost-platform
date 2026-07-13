@@ -81,11 +81,11 @@ export type TradeGatewayIngressRow = {
   legacyNodePort: string
 }
 
-/** W1 Traefik gateway hosts — /etc/hosts or LAN DNS → nodeIp, Traefik entrypoint web (:80). */
+/** W1 Traefik gateway hosts — UniFi LAN DNS → kube-vip; Traefik websecure (:443) + HTTP→HTTPS. */
 export const TRADE_GATEWAY_INGRESS: TradeGatewayIngressRow[] = [
-  { env: 'stg', host: 'stg.trader.bifrost.lan', nodeIp: '192.168.10.100', port: 80, legacyNodePort: '30880 (escape)' },
-  { env: 'prod', host: 'trader.bifrost.lan', nodeIp: '192.168.10.100', port: 80, legacyNodePort: 'node .70:80 (escape)' },
-  { env: 'dev', host: 'dev.trader.bifrost.lan', nodeIp: '192.168.10.100', port: 80, legacyNodePort: '30882 (escape)' },
+  { env: 'stg', host: 'stg.trader.bifrost.lan', nodeIp: '192.168.10.100', port: 443, legacyNodePort: '30880 (HTTP escape)' },
+  { env: 'prod', host: 'trader.bifrost.lan', nodeIp: '192.168.10.100', port: 443, legacyNodePort: 'node .70 HTTP escape' },
+  { env: 'dev', host: 'dev.trader.bifrost.lan', nodeIp: '192.168.10.100', port: 443, legacyNodePort: '30882 (HTTP escape)' },
 ]
 
 export const IB_EDGE_DESIGN_PRINCIPLES = [

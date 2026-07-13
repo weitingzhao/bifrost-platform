@@ -10,10 +10,10 @@
  * - API actuation: platform-api /api/v1/network/* · networkApiContractCatalog.ts
  */
 
-export const NET_UPGRADE_VERSION = '2026-07-11-vip-dns'
+export const NET_UPGRADE_VERSION = '2026-07-12-vip-https-verified'
 export const NET_UPGRADE_SOURCE = 'console/src/lib/architecture/networkUpgradeCatalog.ts'
 export const NET_UPGRADE_STATUS =
-  'VIP DNS landing — UniFi local DNS A→192.168.10.100 for *.trader.bifrost.lan / *.ops.bifrost.lan; Traefik Host on :80; NodePort escape retained.'
+  'VIP DNS + HTTPS Owner-verified 2026-07-12 — UniFi A→192.168.10.100; Traefik websecure + HTTP→HTTPS; Family ZBF ALLOW VIP :80/:443; verified on Work Mac, Family Win11, Mac Pro (rocket + satellite hosts). NodePort escape retained. Core stream still open only for ⑥ UniFi MCP.'
 
 /** Owner UniFi local DNS — all A records → kube-vip 192.168.10.100 (Phase 1). */
 export const VIP_DNS_RECORDS: { fqdn: string; role: string }[] = [
@@ -51,7 +51,8 @@ export const DEPLOYMENT_PROGRESS: DeploymentProgressRow[] = [
     done: 5,
     total: 6,
     label: 'Core backbone (UCG · switch · VLAN · firewall · K3s validation)',
-    note: '⑤ Firewall permanent ZBF ✓ (2026-07-11 Family→NAS priority fix); ⑥ UniFi MCP read integration pending',
+    note:
+      '④ kube-vip + VIP DNS/HTTPS Owner-verified 2026-07-12 (Work/Family/Mac Pro) · ⑤ ZBF ✓ (Family→Trade VIP :80/:443) · ⑥ UniFi MCP read integration pending',
   },
   {
     stream: 'network-upgrade-wifi',
