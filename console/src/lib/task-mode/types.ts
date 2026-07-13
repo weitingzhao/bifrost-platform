@@ -1,5 +1,5 @@
 import type { TrackId } from '@/lib/briefing/workTracks'
-import type { LaneId } from '@/lib/briefing/workLanes'
+import type { LaneId, WorkTrackType, ComponentLineId } from '@/lib/briefing/workLanes'
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 
 /** Task mode identifiers — focused Console lenses for ops vs dev loops. */
@@ -57,6 +57,11 @@ export type DevLoopConfig = {
   programId?: string
   /** Template for spawning program instances via POST /programs/from-template. */
   templateId?: TaskModeId
+  /** Three-tier Layer 1 — component line. */
+  briefingComponentLine?: ComponentLineId
+  /** Three-tier Layer 2 — work track type. */
+  briefingTrackType?: WorkTrackType
+  /** Spine data track (for queue building). */
   briefingTrack?: TrackId
   briefingLane?: LaneId
   briefingIntent?: WorkIntent

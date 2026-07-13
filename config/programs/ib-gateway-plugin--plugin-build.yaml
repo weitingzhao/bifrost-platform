@@ -1,0 +1,99 @@
+id: ib-gateway-plugin--plugin-build
+title: IB Gateway Plugin · Plugin Build
+description: redis-ib plugin phases, program closure, hardening.
+status: active
+workspace: ""
+skill_path: ""
+model: composer-2.5
+delivery:
+    board_visible: true
+    former_location: Subcontractors → Plugin Gallery · Engineer → Briefing
+    sign_off_mechanism: api
+phases:
+    - id: IBGP0
+      title: IBGP0
+      status: pending
+      prompt_template: ""
+      verify_cmd: ""
+      acceptance: []
+      depends_on: []
+      sign_off:
+        required: true
+        checklist: []
+      agent_session: null
+    - id: IBGP1
+      title: IBGP1
+      status: pending
+      prompt_template: ""
+      verify_cmd: ""
+      acceptance: []
+      depends_on: []
+      sign_off:
+        required: true
+        checklist: []
+      agent_session: null
+    - id: IBGP2
+      title: IBGP2
+      status: pending
+      prompt_template: ""
+      verify_cmd: ""
+      acceptance: []
+      depends_on: []
+      sign_off:
+        required: true
+        checklist: []
+      agent_session: null
+    - id: IBGP3
+      title: IBGP3
+      status: pending
+      prompt_template: ""
+      verify_cmd: ""
+      acceptance: []
+      depends_on: []
+      sign_off:
+        required: true
+        checklist: []
+      agent_session: null
+    - id: IBGP4
+      title: IBGP4
+      status: pending
+      prompt_template: ""
+      verify_cmd: ""
+      acceptance: []
+      depends_on: []
+      sign_off:
+        required: true
+        checklist: []
+      agent_session: null
+    - id: PROGRAM
+      title: PROGRAM
+      status: pending
+      prompt_template: ""
+      verify_cmd: ""
+      acceptance: []
+      depends_on: []
+      sign_off:
+        required: true
+        checklist: []
+      agent_session: null
+    - id: HARDENING
+      title: HARDENING
+      status: pending
+      prompt_template: ""
+      verify_cmd: ""
+      acceptance: []
+      depends_on: []
+      sign_off:
+        required: true
+        checklist: []
+      agent_session: null
+post_completion: null
+metadata:
+    base_blueprint_id: ib-gateway-plugin
+    created_at: "2026-07-12T06:32:50Z"
+    instance_label: Plugin Build
+    owner: vision-mac-trader
+    tags:
+        - delivery-board
+        - plugin
+    template_id: plugin-build

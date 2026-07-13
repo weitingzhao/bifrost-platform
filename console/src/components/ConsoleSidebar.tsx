@@ -64,6 +64,7 @@ export function ConsoleSidebar({
     <ShellNavSidebar
         productName="Bifrost Ops"
         productBadge="Ops"
+        productContext={mode.label}
         navGroups={navGroups}
         activeId={activeTab}
         onSelect={(item) => onSelect(item.id)}

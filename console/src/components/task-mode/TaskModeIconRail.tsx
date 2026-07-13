@@ -1,4 +1,4 @@
-import { cn, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
+import { cn, DenseTag, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
 import { taskModesForSwitcher } from '@/lib/task-mode/taskModeCatalog'
 import { taskModeVisual } from '@/lib/task-mode/taskModeVisual'
 import type { LoopArchetype, TaskModeDef, TaskModeId } from '@/lib/task-mode/types'
@@ -11,6 +11,15 @@ import { useTaskMode } from '@/lib/task-mode/TaskModeContext'
  */
 
 const DECK_ORDER: LoopArchetype[] = ['system', 'ops', 'dev']
+
+const ARCHETYPE_TOOLTIP: Record<
+  LoopArchetype,
+  { label: string; variant: 'neutral' | 'warning' | 'info' }
+> = {
+  system: { label: 'System', variant: 'neutral' },
+  ops: { label: 'Ops', variant: 'warning' },
+  dev: { label: 'Build', variant: 'info' },
+}
 
 type TaskModeIconRailProps = {
   collapsed?: boolean
@@ -98,6 +107,7 @@ function ModeGlyph({
 }) {
   const visual = taskModeVisual(mode.id)
   const Icon = visual.icon
+  const archetypeBadge = ARCHETYPE_TOOLTIP[mode.loopArchetype]
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -117,7 +127,14 @@ function ModeGlyph({
         </button>
       </TooltipTrigger>
       <TooltipContent side={collapsed ? 'right' : 'bottom'} className="max-w-[14rem]">
-        <p className="m-0 text-[var(--text-dense-label)] font-semibold">{mode.label}</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <p className="m-0 text-[var(--text-dense-label)] font-semibold">{mode.label}</p>
+          {mode.loopArchetype !== 'system' && (
+            <DenseTag variant={archetypeBadge.variant} className="text-[9px]">
+              {archetypeBadge.label}
+            </DenseTag>
+          )}
+        </div>
         <p className="m-0 mt-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
           {mode.description}
         </p>

@@ -1,6 +1,7 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, DenseTag, PageHeader } from '@bifrost/ui'
+import { DenseTag, PageHeader } from '@bifrost/ui'
+import { fetchDevAgentStatus } from '@/api/devAgent'
 import {
   fetchCluster,
   fetchClusterServiceReadiness,
@@ -11,7 +12,13 @@ import {
   fetchStgSmoke,
   isAllSatelliteBusDeep,
 } from '@/api/platform'
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import { isBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
+import type {
+  ClusterObservabilityResponse,
+  ClusterSummary,
+  MatrixResponse,
+  OpsContextResponse,
+} from '@/api/types'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
 import {
   useRocketProdReadiness,
@@ -24,6 +31,7 @@ import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { useDevProgramInstance } from '@/hooks/useDevProgramInstance'
+import { useInlineBriefingPack } from '@/hooks/useInlineBriefingPack'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
@@ -74,6 +82,9 @@ import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 export type TaskControlCenterProps = AmbientAgentShellProps & {
   context?: OpsContextResponse
   matrices?: MatrixResponse[]
+  clusterSummary?: ClusterSummary
+  clusterObservability?: ClusterObservabilityResponse
+  platformHealthy?: boolean
   stgSmoke?: import('@/api/types').StgSmokeResponse
   stgGate?: import('@/api/types').ReleaseGateResponse
   lastDeliverSucceeded?: boolean
@@ -88,6 +99,9 @@ export type TaskControlCenterProps = AmbientAgentShellProps & {
 export function TaskControlCenter({
   context,
   matrices = [],
+  clusterSummary,
+  clusterObservability,
+  platformHealthy,
   stgSmoke,
   stgGate,
   lastDeliverSucceeded,
@@ -410,6 +424,69 @@ export function TaskControlCenter({
     enabled: isMissionLaunch || mode.id === 'satellite-build' || mode.id === 'plugin-build',
   })
 
+  const isDevLoop = mode.loopArchetype === 'dev'
+  const resolvedProgramId = devProgram.programId ?? mode.dev?.programId
+
+  const inlineBriefingPack = useInlineBriefingPack({
+    mode,
+    context,
+    matrices,
+    clusterSummary,
+    clusterObservability,
+    platformHealthy,
+    programId: resolvedProgramId,
+    enabled: isDevLoop,
+  })
+
+  const devAgentQ = useQuery({
+    queryKey: ['dev-agent', 'status'],
+    queryFn: fetchDevAgentStatus,
+    refetchInterval: 5000,
+    enabled: isDevLoop,
+  })
+
+  const [briefingOpenedTick, setBriefingOpenedTick] = useState(0)
+  const handleBriefingOpened = useCallback(() => {
+    setBriefingOpenedTick(t => t + 1)
+  }, [])
+
+  const briefingOpened = useMemo(() => {
+    void briefingOpenedTick
+    if (!isDevLoop) return false
+    return isBriefingOpened(mode.id, resolvedProgramId)
+  }, [isDevLoop, mode.id, resolvedProgramId, briefingOpenedTick])
+
+  const devAgentPhaseDone = useCallback(
+    (phaseId: string): boolean => {
+      const agentPhases = devAgentQ.data?.phases ?? []
+      if (agentPhases.length === 0) return false
+      const exact = agentPhases.find(p => p.id === phaseId)
+      if (exact != null) return exact.status === 'done'
+      if (phaseId === 'implement') {
+        const impl = agentPhases.find(
+          p =>
+            p.id === 'implement' ||
+            p.id.includes('implement') ||
+            /implement/i.test(p.title ?? ''),
+        )
+        return impl != null && impl.status === 'done'
+      }
+      if (phaseId === 'pre-push') {
+        const prePush = agentPhases.find(
+          p =>
+            p.id === 'pre-push' ||
+            p.id.includes('pre-push') ||
+            p.id.includes('verify') ||
+            /pre.?push/i.test(p.title ?? ''),
+        )
+        if (prePush != null) return prePush.status === 'done'
+        return agentPhases.length > 0 && agentPhases.every(p => p.status === 'done')
+      }
+      return false
+    },
+    [devAgentQ.data?.phases],
+  )
+
   const statusInput = useMemo((): TaskPhaseStatusInput => {
     const platformRuns = platformRunsQ.data?.runs
     const tradeRuns = tradeRunsQ.data?.runs
@@ -435,6 +512,8 @@ export function TaskControlCenter({
       tradeStgRun: tradeRun,
       tradeStgGate: tradeGateData,
       tradeStgSmokeOk: tradeSmokeOk,
+      briefingOpened,
+      devAgentPhaseDone: isDevLoop ? devAgentPhaseDone : undefined,
     }
   }, [
     context,
@@ -448,6 +527,9 @@ export function TaskControlCenter({
     tradeRunsQ.data,
     tradeGateQ.data,
     smokeQ.data,
+    briefingOpened,
+    isDevLoop,
+    devAgentPhaseDone,
   ])
 
   const phases = mode.phases ?? []
@@ -512,7 +594,6 @@ export function TaskControlCenter({
   }
 
   const showLaunchPad = mode.ops?.showLaunchPad === true
-  const resolvedProgramId = devProgram.programId ?? mode.dev?.programId
 
   const satelliteVerdictInput = useMemo(
     () => ({
@@ -599,19 +680,100 @@ export function TaskControlCenter({
 
   const phaseDefaultOpen = useMemo(() => {
     if (phases.length === 0) return false
+    if (isDevLoop) return false
     return !phases.every((p: TaskPhaseDef) => statuses[p.id] === 'done')
-  }, [phases, statuses])
+  }, [phases, statuses, isDevLoop])
 
   const [phaseOpen, setPhaseOpen] = useState(phaseDefaultOpen)
   useEffect(() => {
     setPhaseOpen(phaseDefaultOpen)
   }, [phaseDefaultOpen, mode.id])
 
+  const headerDescription =
+    mode.loopArchetype === 'dev'
+      ? `Briefing → implement → deliver — playbook for ${mode.label}.`
+      : mode.loopArchetype === 'ops'
+        ? `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
+        : `${mode.label} · ${loopLabel}`
+
+  const phaseProgressHint = isDevLoop
+    ? phaseOpen
+      ? 'Open — Dev playbook checklist'
+      : 'Collapsed — Dev playbook checklist'
+    : phaseOpen
+      ? 'Open — not live Go/No-Go'
+      : 'Collapsed — not live Go/No-Go'
+
+  const phaseProgressCaption = isDevLoop
+    ? 'Playbook phase status — Briefing → implement → deliver → sign-off'
+    : 'Historical phase checklist — not live environment health'
+
+  const phaseProgressBlock =
+    phases.length > 0 ? (
+      <details
+        className="rounded-lg border border-border bg-card px-3 py-1.5"
+        open={phaseOpen}
+        onToggle={e => setPhaseOpen((e.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
+            <DenseTag variant="neutral" className="text-[9px]">
+              Playbook
+            </DenseTag>
+            <DenseTag variant="neutral" className="text-[9px]">
+              {doneCount}/{phases.length} complete
+            </DenseTag>
+            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+              {phaseProgressHint}
+            </span>
+          </div>
+        </summary>
+        <p className="m-0 mb-1.5 mt-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
+          {phaseProgressCaption}
+        </p>
+        <TaskPhaseProgress
+          phases={phases}
+          statuses={statuses}
+          hints={phaseHints}
+          onOpenFullPage={handleOpenPhasePage}
+          onFixAction={handlePhaseFixAction}
+        />
+        {isMissionLaunch && (satelliteProd.prodBlocked || rocketProd.prodBlocked) && (
+          <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
+            Live readiness blocked — playbook Done does not clear release
+          </p>
+        )}
+      </details>
+    ) : null
+
+  const devStripsBlock = isDevLoop ? (
+    <DevTaskStrips
+      mode={mode}
+      canOperate={canOperate}
+      programDetail={devProgram.programDetail}
+      programLoading={devProgram.programLoading}
+      programError={devProgram.programError}
+      resolvedProgramId={resolvedProgramId}
+      createPending={devProgram.createPending}
+      onCreateProgram={devProgram.ensureProgram}
+      onCreateNewInstance={() => devProgram.createNewInstance({ instanceLabel: mode.label })}
+      onNavigate={onNavigate}
+      inlineBriefingPack={inlineBriefingPack}
+      onOpenFullBriefing={onOpenBriefing}
+      onBriefingOpened={handleBriefingOpened}
+      devAgentStatus={devAgentQ.data}
+      devAgentLoading={devAgentQ.isLoading}
+      phases={phases}
+      phaseStatuses={statuses}
+    />
+  ) : null
+
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Task Control Center"
-        description={`${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`}
+        description={headerDescription}
         actions={
           mode.loopArchetype === 'system' ? undefined : (
             <DenseTag variant={mode.loopArchetype === 'dev' ? 'info' : 'warning'}>{loopLabel}</DenseTag>
@@ -759,103 +921,39 @@ export function TaskControlCenter({
           />
         )}
 
-      {phases.length > 0 && (
-        <details
-          className="rounded-lg border border-border bg-card px-3 py-1.5"
-          open={phaseOpen}
-          onToggle={e => setPhaseOpen((e.currentTarget as HTMLDetailsElement).open)}
-        >
-          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
-              <DenseTag variant="neutral" className="text-[9px]">
-                Playbook
-              </DenseTag>
-              <DenseTag variant="neutral" className="text-[9px]">
-                {doneCount}/{phases.length} complete
-              </DenseTag>
-              <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-                {phaseOpen ? 'Open — not live Go/No-Go' : 'Collapsed — not live Go/No-Go'}
-              </span>
-            </div>
-          </summary>
-          <p className="m-0 mb-1.5 mt-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
-            Historical phase checklist — not live environment health
-          </p>
-          <TaskPhaseProgress
-            phases={phases}
-            statuses={statuses}
-            hints={phaseHints}
-            onOpenFullPage={handleOpenPhasePage}
-            onFixAction={handlePhaseFixAction}
-          />
-          {isMissionLaunch && (satelliteProd.prodBlocked || rocketProd.prodBlocked) && (
-            <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
-              Live readiness blocked — playbook Done does not clear release
-            </p>
+      {/* Dev: strips above phase progress (D-B / F6). Ops: phase progress first. */}
+      {isDevLoop ? (
+        <>
+          {devStripsBlock}
+          {phaseProgressBlock}
+        </>
+      ) : (
+        <>
+          {phaseProgressBlock}
+          {mode.loopArchetype === 'ops' && !isMissionLaunch && (
+            <OpsTaskStrips
+              mode={mode}
+              context={context}
+              matrices={matrices}
+              stgSmoke={stgSmoke}
+              stgGate={stgGate}
+              lastDeliverSucceeded={lastDeliverSucceeded}
+              tierB={tierB}
+              onNavigate={onNavigate}
+              onOpenPromote={onOpenPromote}
+              onOpenDelivery={onOpenDelivery}
+              onDispatchRelease={showLaunchPad ? dispatchReleaseAgent : undefined}
+              onDispatchTradeDeploy={showLaunchPad ? dispatchTradeDeployAgent : undefined}
+              releasePending={aiRelease.isPending}
+              tradeDeployPending={aiTradeDeploy.isPending}
+              canDispatchRelease={releaseDispatchAllowed}
+              canDispatchTradeDeploy={tradeDeployDispatchAllowed}
+              releaseDisabledReason={releaseDisabledReason}
+              tradeDeployDisabledReason={tradeDeployDisabledReason}
+              promoteOnly={mode.id === 'daily-ops'}
+            />
           )}
-        </details>
-      )}
-
-      {mode.loopArchetype === 'ops' && !isMissionLaunch && (
-        <OpsTaskStrips
-          mode={mode}
-          context={context}
-          matrices={matrices}
-          stgSmoke={stgSmoke}
-          stgGate={stgGate}
-          lastDeliverSucceeded={lastDeliverSucceeded}
-          tierB={tierB}
-          onNavigate={onNavigate}
-          onOpenPromote={onOpenPromote}
-          onOpenDelivery={onOpenDelivery}
-          onDispatchRelease={showLaunchPad ? dispatchReleaseAgent : undefined}
-          onDispatchTradeDeploy={showLaunchPad ? dispatchTradeDeployAgent : undefined}
-          releasePending={aiRelease.isPending}
-          tradeDeployPending={aiTradeDeploy.isPending}
-          canDispatchRelease={releaseDispatchAllowed}
-          canDispatchTradeDeploy={tradeDeployDispatchAllowed}
-          releaseDisabledReason={releaseDisabledReason}
-          tradeDeployDisabledReason={tradeDeployDisabledReason}
-          promoteOnly={mode.id === 'daily-ops'}
-        />
-      )}
-
-      {mode.loopArchetype === 'dev' && (
-        <DevTaskStrips
-          mode={mode}
-          canOperate={canOperate}
-          programDetail={devProgram.programDetail}
-          programLoading={devProgram.programLoading}
-          programError={devProgram.programError}
-          resolvedProgramId={resolvedProgramId}
-          createPending={devProgram.createPending}
-          onCreateProgram={devProgram.ensureProgram}
-          onCreateNewInstance={() => devProgram.createNewInstance({ instanceLabel: mode.label })}
-          onNavigate={onNavigate}
-          onOpenBriefing={onOpenBriefing}
-        />
-      )}
-
-      {resolvedProgramId != null && devProgram.programDetail != null && (
-        <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[var(--text-dense-label)] font-semibold">Program sign-off</span>
-            <DenseTag variant="neutral">{devProgram.programDetail.program.title}</DenseTag>
-            <DenseTag variant={devProgram.programDetail.program.complete ? 'success' : 'warning'}>
-              {devProgram.programDetail.program.phases_signed ?? 0}/
-              {devProgram.programDetail.program.phase_count} signed
-            </DenseTag>
-          </div>
-          <Button
-            variant="ghost"
-            size="xs"
-            className="mt-2"
-            onClick={() => onNavigate('delivery-board')}
-          >
-            Open Delivery Board →
-          </Button>
-        </div>
+        </>
       )}
     </div>
   )

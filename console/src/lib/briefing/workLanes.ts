@@ -27,7 +27,14 @@ export type MigrateLaneId = 'compose-k3s' | 'trade-k8s-native' | 'data-layer-k3s
 export type AutomateLaneId = 'platform-gitops' | 'agent-infra' | 'drift-remediation' | 'agent-services'
 export type InfraLaneId = 'network-server' | 'network-wifi' | 'ai-network'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
-export type LaneId = BuildLaneId | MigrateLaneId | AutomateLaneId | InfraLaneId | OperateLaneId
+export type FutureLaneId =
+  | 'platform-health'
+  | 'network-monitoring'
+  | 'trade-features'
+  | 'polygon-vendor'
+  | 'ib-vendor'
+  | 'vendor-health'
+export type LaneId = BuildLaneId | MigrateLaneId | AutomateLaneId | InfraLaneId | OperateLaneId | FutureLaneId
 
 export type QueueItemStatus =
   | 'done'
@@ -54,9 +61,20 @@ export interface QueueItem {
   waveActuation?: 'deliver' | 'signoff'
 }
 
+/** Component line — first layer of the three-tier Briefing model. */
+export type ComponentLineId = 'rocket' | 'satellite' | 'engineer' | 'ground' | 'operations' | 'subcontractor'
+
+/** Work track type — second layer (what *kind* of work within a component line). */
+export type WorkTrackType = 'build' | 'migrate' | 'maintain' | 'release'
+
 export interface WorkLane {
   id: LaneId
+  /** Spine data-source track (unchanged for queue building). */
   track: TrackId
+  /** Three-tier layer 1: which component line this lane belongs to. */
+  componentLine: ComponentLineId
+  /** Three-tier layer 2: what type of work this lane represents. */
+  trackType: WorkTrackType
   label: string
   shortLabel: string
   description: string
@@ -68,6 +86,8 @@ const BUILD_LANES: WorkLane[] = [
   {
     id: 'console-api',
     track: 'build',
+    componentLine: 'rocket',
+    trackType: 'build',
     label: 'Console & platform-api',
     shortLabel: 'Console',
     description: 'Ops Console pages, Briefing/Control Room, auth, audit, actuation routes.',
@@ -77,6 +97,8 @@ const BUILD_LANES: WorkLane[] = [
   {
     id: 'cluster-infra',
     track: 'build',
+    componentLine: 'rocket',
+    trackType: 'build',
     label: 'Cluster & K3s tooling',
     shortLabel: 'Cluster',
     description: 'Node lifecycle, workload actuation, metrics-server, observability stack UI.',
@@ -86,6 +108,8 @@ const BUILD_LANES: WorkLane[] = [
   {
     id: 'mcp-gitops',
     track: 'build',
+    componentLine: 'rocket',
+    trackType: 'build',
     label: 'GitOps & MCP (P3–P5)',
     shortLabel: 'GitOps',
     description: 'Argo/Tekton execution, MCP server implementation (per MCP Contract), Agent SDK integration, Vision milestones V1–V5.',
@@ -95,6 +119,8 @@ const BUILD_LANES: WorkLane[] = [
   {
     id: 'cicd-delivery',
     track: 'build',
+    componentLine: 'rocket',
+    trackType: 'build',
     label: 'CI/CD bootstrap (P6)',
     shortLabel: 'CI/CD',
     description: 'L0/L1/L2 bootstrap model — CI gates (Tekton Trigger), deliver-prod pipeline, platform prod overlay, self-health probe, gate→spine closure, escape hatch runbook.',
@@ -107,6 +133,8 @@ const MIGRATE_LANES: WorkLane[] = [
   {
     id: 'compose-k3s',
     track: 'migrate',
+    componentLine: 'satellite',
+    trackType: 'migrate',
     label: 'Compose → K3s lift-and-shift',
     shortLabel: 'K3s',
     description: 'STG v2 + prod overlay on K3s (CLOSED). Native refactor → trade-k8s-native lane.',
@@ -116,6 +144,8 @@ const MIGRATE_LANES: WorkLane[] = [
   {
     id: 'trade-k8s-native',
     track: 'migrate',
+    componentLine: 'satellite',
+    trackType: 'migrate',
     label: 'Trade K8s-native + IB Edge',
     shortLabel: 'K8s native',
     description:
@@ -126,6 +156,8 @@ const MIGRATE_LANES: WorkLane[] = [
   {
     id: 'data-layer-k3s',
     track: 'migrate',
+    componentLine: 'satellite',
+    trackType: 'migrate',
     label: 'Data layer (PG + Redis)',
     shortLabel: 'Data',
     description:
@@ -136,6 +168,8 @@ const MIGRATE_LANES: WorkLane[] = [
   {
     id: 'legacy-retire',
     track: 'migrate',
+    componentLine: 'satellite',
+    trackType: 'migrate',
     label: 'Legacy retirement (Phase 3)',
     shortLabel: 'Retire',
     description: 'SIGNED 2026-06-29 (decision D8): UI side-by-side gate dropped (Legacy already stopped; Phase 2B 9/9 domains business-equivalent). Legacy runtime stopped, bifrost-trader-engine NAS-archived read-only. UI polish continues as ordinary Design System work.',
@@ -145,6 +179,8 @@ const MIGRATE_LANES: WorkLane[] = [
   {
     id: 'trade-stack',
     track: 'migrate',
+    componentLine: 'satellite',
+    trackType: 'maintain',
     label: 'Trade stack verification',
     shortLabel: 'Verify',
     description: 'Backend repos + frontend pages — reference closed streams for regression.',
@@ -157,6 +193,8 @@ const AUTOMATE_LANES: WorkLane[] = [
   {
     id: 'platform-gitops',
     track: 'automate',
+    componentLine: 'engineer',
+    trackType: 'build',
     label: 'Platform GitOps & containerization',
     shortLabel: 'GitOps',
     description: 'Gitea mirror for bifrost-platform, Dockerfile (api + runner), K8s overlay, Argo CD Application, Tekton deliver-platform pipeline. Enables Mac Pro Cursor dev → Gitea → K3s auto-deploy.',
@@ -166,6 +204,8 @@ const AUTOMATE_LANES: WorkLane[] = [
   {
     id: 'agent-infra',
     track: 'automate',
+    componentLine: 'engineer',
+    trackType: 'build',
     label: 'Agent host & Gateway',
     shortLabel: 'Infra',
     description: 'Hermes Gateway on Mac Mini, CTRL NODE Bridge, Staleguard/ctxharness tooling, iMessage/Telegram channel.',
@@ -175,6 +215,8 @@ const AUTOMATE_LANES: WorkLane[] = [
   {
     id: 'drift-remediation',
     track: 'automate',
+    componentLine: 'engineer',
+    trackType: 'maintain',
     label: 'Drift detection & remediation',
     shortLabel: 'Drift',
     description: 'Nightly catalog drift scan, deterministic + LLM comparison, auto-fix PR, Owner morning briefing. Retrospective Agent: cross-job pattern analysis → identify systemic platform defects → self-evolving fix proposals.',
@@ -184,6 +226,8 @@ const AUTOMATE_LANES: WorkLane[] = [
   {
     id: 'agent-services',
     track: 'automate',
+    componentLine: 'engineer',
+    trackType: 'build',
     label: 'Agent services (MCP + Trade)',
     shortLabel: 'Services',
     description: 'Agent Desk in Console, Hermes MCP bridge, Trade advisory notifications.',
@@ -196,6 +240,8 @@ const INFRA_LANES: WorkLane[] = [
   {
     id: 'network-server',
     track: 'infra',
+    componentLine: 'ground',
+    trackType: 'build',
     label: 'Server LAN upgrade (router + switch)',
     shortLabel: 'Server LAN',
     description: 'UCG Max + USW-Pro-Max-24 deployment: VLAN 10/20/50, 2.5G uplinks, K3s node validation, kube-vip VIP.',
@@ -205,6 +251,8 @@ const INFRA_LANES: WorkLane[] = [
   {
     id: 'network-wifi',
     track: 'infra',
+    componentLine: 'ground',
+    trackType: 'build',
     label: 'WiFi upgrade (U7 Pro + U6 Mesh)',
     shortLabel: 'WiFi',
     description: 'Replace Eero with UniFi APs: per-floor rollout, MoCA backhaul, VLAN SSIDs (Bifrost/Family/vision), coverage benchmark.',
@@ -214,6 +262,8 @@ const INFRA_LANES: WorkLane[] = [
   {
     id: 'ai-network',
     track: 'infra',
+    componentLine: 'ground',
+    trackType: 'build',
     label: 'AI network autonomy',
     shortLabel: 'AI Net',
     description: 'UniFi MCP Server (REST API read/write), Ops Console Network dashboard, anomaly auto-response, predictive maintenance, self-healing network.',
@@ -226,6 +276,8 @@ const OPERATE_LANES: WorkLane[] = [
   {
     id: 'governance',
     track: 'operate',
+    componentLine: 'operations',
+    trackType: 'maintain',
     label: 'Governance & spine',
     shortLabel: 'Gov',
     description: 'Matrix probes, spine milestones, infra YAML, actuation guardrails, Vision/Blueprint/MCP Contract alignment.',
@@ -235,6 +287,8 @@ const OPERATE_LANES: WorkLane[] = [
   {
     id: 'troubleshoot',
     track: 'operate',
+    componentLine: 'operations',
+    trackType: 'maintain',
     label: 'Troubleshooting',
     shortLabel: 'Debug',
     description: 'Failing probes, cluster reachability, workload errors, connectivity.',
@@ -244,6 +298,8 @@ const OPERATE_LANES: WorkLane[] = [
   {
     id: 'release',
     track: 'operate',
+    componentLine: 'operations',
+    trackType: 'release',
     label: 'Release & promote',
     shortLabel: 'Release',
     description: 'Flywheel readiness, cutover blockers, release gate, prod matrix sign-off.',
@@ -253,6 +309,8 @@ const OPERATE_LANES: WorkLane[] = [
   {
     id: 'business-advisory',
     track: 'operate',
+    componentLine: 'operations',
+    trackType: 'maintain',
     label: 'Trade analysis & advisory',
     shortLabel: 'Biz',
     description: 'Read-only portfolio/market/strategy analysis; Greeks monitoring, SEPA research, risk advisory via Trade APIs.',
@@ -261,9 +319,83 @@ const OPERATE_LANES: WorkLane[] = [
   },
 ]
 
-const ALL_LANES: WorkLane[] = [...BUILD_LANES, ...MIGRATE_LANES, ...AUTOMATE_LANES, ...INFRA_LANES, ...OPERATE_LANES]
+const FUTURE_LANES: WorkLane[] = [
+  {
+    id: 'platform-health',
+    track: 'operate',
+    componentLine: 'rocket',
+    trackType: 'maintain',
+    label: 'Platform health & observability',
+    shortLabel: 'Health',
+    description: 'Console uptime, API latency, cluster workload readiness, self-health probes, alert triage.',
+    agentMode: 'Ops',
+    workIntent: 'ops',
+  },
+  {
+    id: 'trade-features',
+    track: 'build',
+    componentLine: 'satellite',
+    trackType: 'build',
+    label: 'Trade feature development',
+    shortLabel: 'Features',
+    description: 'New Trade frontend pages, API endpoint enhancements, Dense UI improvements — post-migration feature work.',
+    agentMode: 'Product',
+    workIntent: 'feature',
+  },
+  {
+    id: 'network-monitoring',
+    track: 'infra',
+    componentLine: 'ground',
+    trackType: 'maintain',
+    label: 'Network monitoring & health',
+    shortLabel: 'Monitor',
+    description: 'UniFi device health, bandwidth tracking, anomaly detection, predictive maintenance, SLA dashboards.',
+    agentMode: 'Ops',
+    workIntent: 'ops',
+  },
+  {
+    id: 'polygon-vendor',
+    track: 'automate',
+    componentLine: 'subcontractor',
+    trackType: 'build',
+    label: 'Polygon.io data pipeline',
+    shortLabel: 'Polygon',
+    description: 'Options/stock WebSocket feeds, historical OHLCV, snapshot APIs, rate-limit management, data quality.',
+    agentMode: 'Ops',
+    workIntent: 'feature',
+  },
+  {
+    id: 'ib-vendor',
+    track: 'automate',
+    componentLine: 'subcontractor',
+    trackType: 'build',
+    label: 'Interactive Brokers lifecycle',
+    shortLabel: 'IB',
+    description: 'TWS/Gateway version management, API compatibility, client ID allocation, IB Lease active-standby.',
+    agentMode: 'Ops',
+    workIntent: 'feature',
+  },
+  {
+    id: 'vendor-health',
+    track: 'operate',
+    componentLine: 'subcontractor',
+    trackType: 'maintain',
+    label: 'Vendor SLA & API health',
+    shortLabel: 'Health',
+    description: 'Third-party API uptime monitoring, latency tracking, SLA compliance, incident response playbooks.',
+    agentMode: 'Ops',
+    workIntent: 'ops',
+  },
+]
+
+const ALL_LANES: WorkLane[] = [...BUILD_LANES, ...MIGRATE_LANES, ...AUTOMATE_LANES, ...INFRA_LANES, ...OPERATE_LANES, ...FUTURE_LANES]
 
 const LANE_ID_SET = new Set<LaneId>(ALL_LANES.map(l => l.id))
+
+/** All Briefing work lanes (catalog) — for portfolio digests. */
+export function allWorkLanes(): WorkLane[] {
+  return ALL_LANES
+}
 
 export function isLaneId(id: string): id is LaneId {
   return LANE_ID_SET.has(id as LaneId)
@@ -342,6 +474,43 @@ export function lanesForTrack(track: TrackId): WorkLane[] {
       return OPERATE_LANES
   }
 }
+
+/** Get all lanes for a (componentLine, trackType) combination. */
+export function lanesForLineTrack(
+  line: ComponentLineId,
+  tt: WorkTrackType,
+): WorkLane[] {
+  return ALL_LANES.filter(l => l.componentLine === line && l.trackType === tt)
+}
+
+/** Get all lanes for a track type across every component line (All scope). */
+export function lanesForTrackType(tt: WorkTrackType): WorkLane[] {
+  return ALL_LANES.filter(l => l.trackType === tt)
+}
+
+/** Get distinct WorkTrackTypes available under a component line, in display order. */
+export function trackTypesForLine(line: ComponentLineId): WorkTrackType[] {
+  const order: WorkTrackType[] = ['build', 'migrate', 'maintain', 'release']
+  const available = new Set(ALL_LANES.filter(l => l.componentLine === line).map(l => l.trackType))
+  return order.filter(tt => available.has(tt))
+}
+
+/** Track types that exist anywhere (for All scope). */
+export function trackTypesAcrossAllLines(): WorkTrackType[] {
+  const order: WorkTrackType[] = ['build', 'migrate', 'maintain', 'release']
+  const available = new Set(ALL_LANES.map(l => l.trackType))
+  return order.filter(tt => available.has(tt))
+}
+
+/** All component line IDs in display order. */
+export const COMPONENT_LINE_IDS: ComponentLineId[] = [
+  'rocket',
+  'satellite',
+  'engineer',
+  'ground',
+  'operations',
+  'subcontractor',
+]
 
 export function laneById(id: LaneId): WorkLane {
   return ALL_LANES.find(l => l.id === id) ?? ALL_LANES[0]

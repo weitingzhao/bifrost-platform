@@ -37,6 +37,7 @@ import { BlueprintPage } from '@/pages/BlueprintPage'
 import { BriefingPage } from '@/pages/BriefingPage'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { writeBriefingUrlState } from '@/lib/briefing/briefingUrlState'
+import { componentLineForTaskMode, trackTypeForTaskMode } from '@/lib/briefing/briefingViewTabs'
 import { ClusterPage } from '@/pages/ClusterPage'
 import { ComputePage } from '@/pages/ComputePage'
 import { DeliveryBoardPage } from '@/pages/DeliveryBoardPage'
@@ -360,11 +361,13 @@ function ConsolePageInner() {
   const openAudit = () => setViewTab('audit')
   const openBriefing = useCallback((opts?: BriefingUrlState) => {
     if (opts != null) {
-      if (opts.track != null && opts.lane == null) {
-        writeBriefingUrlState({ track: opts.track, lane: undefined, intent: undefined, taskModeContext: opts.taskModeContext })
-      } else {
-        writeBriefingUrlState(opts)
+      const modeId = opts.taskModeContext?.modeId
+      const resolved = {
+        ...opts,
+        view: opts.view ?? (modeId != null ? componentLineForTaskMode(modeId) : undefined),
+        trackType: opts.trackType ?? (modeId != null ? trackTypeForTaskMode(modeId) : undefined),
       }
+      writeBriefingUrlState(resolved)
     }
     setViewTab('briefing')
   }, [setViewTab])
@@ -540,6 +543,10 @@ function ConsolePageInner() {
         {viewTab === 'agent-desk' && (
           <AgentDeskPage
             context={contextQuery.data}
+            matrices={pulseMatrices}
+            clusterSummary={clusterQuery.data}
+            platformHealthy={healthQuery.data}
+            auditRecords={auditRecords}
             initialJobId={agentDeskJobId}
             prefillPrompt={agentDeskPrefill}
             onInitialJobConsumed={() => setAgentDeskJobId(null)}
@@ -550,6 +557,9 @@ function ConsolePageInner() {
             onOpenAgentProtocol={() => setViewTab('agent-protocol')}
             onOpenAgentSystem={() => setViewTab('agent-system')}
             onOpenOperatorPlane={openOperatorPlane}
+            onOpenTrustAutonomy={() => setViewTab('agent-governance')}
+            onOpenDeliveryBoard={() => setViewTab('delivery-board')}
+            onOpenBriefingReconciliation={() => setViewTab('briefing-reconciliation')}
           />
         )}
 
@@ -574,7 +584,7 @@ function ConsolePageInner() {
           <>
             <PageHeader
               title={VIEW_TITLES.briefing}
-              description="Pick track/lane, copy pack into Cursor IDE (primary). Verify Phases 1–4 below — Phase 4 closes the roadmap program."
+              description="Plan and start work — pick scope and lane on the left, open Session on the right."
             />
             <BriefingPage
               context={contextQuery.data}
@@ -586,9 +596,7 @@ function ConsolePageInner() {
               platformHealthy={healthQuery.data}
               auditRecords={auditRecords}
               auditLoading={auditQuery.isLoading}
-              onOpenAgentDesk={openAgentDesk}
               onOpenAudit={openAudit}
-              onOpenTrustAutonomy={() => setViewTab('agent-governance')}
             />
           </>
         )}
@@ -637,6 +645,8 @@ function ConsolePageInner() {
           <TaskControlCenterPage
             context={contextQuery.data}
             matrices={pulseMatrices}
+            clusterSummary={clusterQuery.data}
+            platformHealthy={healthQuery.data}
             stgSmoke={stgSmokeQuery.data}
             stgGate={releaseGateStgQuery.data}
             lastDeliverSucceeded={lastDeliverSucceeded}
