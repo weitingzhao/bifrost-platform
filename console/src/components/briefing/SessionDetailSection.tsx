@@ -6,7 +6,6 @@ import {
   type SessionLifecycle,
 } from '@/components/briefing/SessionLaneCtaBar'
 import { TaskQueuePanel } from '@/components/briefing/TaskQueuePanel'
-import { OperateQueueHandoffPanel } from '@/components/briefing/OperateQueueHandoffPanel'
 import { BriefingReconcilePanel } from '@/components/briefing/BriefingReconcilePanel'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { BriefingScopeId, WorkTrackType } from '@/lib/briefing/briefingViewTabs'
@@ -17,15 +16,12 @@ import {
 } from '@/lib/briefing/agentDialogueLanguage'
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 import type { QueueItem, WorkLane } from '@/lib/briefing/workLanes'
-import type { TrackId } from '@/lib/briefing/workTracks'
 import type { AuditRecord, OpsContextResponse } from '@/api/types'
-import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import type { ReconcileBriefingOptions } from '@/lib/briefing/reconcileBriefing'
 
 export interface SessionDetailSectionProps {
   scope: BriefingScopeId
   trackType: WorkTrackType
-  track: TrackId
   lane: WorkLane
   queue: QueueItem[]
   isInitMode: boolean
@@ -44,8 +40,6 @@ export interface SessionDetailSectionProps {
   auditRecords?: AuditRecord[]
   auditLoading?: boolean
   onOpenAudit?: () => void
-  operateQueueOpen?: OperateQueueItem[]
-  operateQueueLoading?: boolean
   agentDialogueLanguage: AgentDialogueLanguage
   onAgentDialogueLanguageChange: (v: AgentDialogueLanguage) => void
   packSize: BriefingPackSize
@@ -62,7 +56,6 @@ export interface SessionDetailSectionProps {
 export function SessionDetailSection({
   scope,
   trackType,
-  track,
   lane,
   queue,
   isInitMode,
@@ -81,8 +74,6 @@ export function SessionDetailSection({
   auditRecords = [],
   auditLoading,
   onOpenAudit,
-  operateQueueOpen = [],
-  operateQueueLoading = false,
   agentDialogueLanguage,
   onAgentDialogueLanguageChange,
   packSize,
@@ -191,12 +182,6 @@ export function SessionDetailSection({
       </div>
 
       {previewOpen && <div className="mt-2">{packPreview}</div>}
-
-      {track === 'operate' && (
-        <div className="mt-3">
-          <OperateQueueHandoffPanel items={operateQueueOpen} loading={operateQueueLoading} />
-        </div>
-      )}
 
       <TaskQueuePanel
         items={queue}

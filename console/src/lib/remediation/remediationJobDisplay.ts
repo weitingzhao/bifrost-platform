@@ -12,7 +12,8 @@ export function remediationJobStatusLabel(job: RemediationJob): string {
 /**
  * Display label for a job scope. Delegates to the single authoritative naming
  * table in agentTaskCatalog so the timeline, init brief and capabilities panel
- * never drift apart. Add new scope→label mappings in AGENT_TASK_CATALOG only.
+ * never drift apart. Add new scope→label mappings via config/agent-tasks.yaml
+ * (GET /api/v1/agent-tasks) — UI overlays stay in agentTaskCatalog DISPLAY map.
  */
 export function remediationScopeShortLabel(scope?: string): string {
   return scopeToLabel(scope)

@@ -11,9 +11,14 @@
 
 import type { OpsContextResponse } from '@/api/types'
 import { projectWaveStatus } from '@/lib/briefing/waveProjection'
+import type { DataLayerMigrationPhase } from './dataLayerCatalogTypes'
+import { GENERATED_DATA_LAYER_PHASES } from './migrateWaves.generated'
+
+export type { DataLayerMigrationPhase } from './dataLayerCatalogTypes'
+export const DATA_LAYER_MIGRATION_PHASES = GENERATED_DATA_LAYER_PHASES
 
 export const DATA_LAYER_VERSION = '2026-06-20'
-export const DATA_LAYER_SOURCE = 'console/src/lib/architecture/dataLayerCatalog.ts'
+export const DATA_LAYER_SOURCE = 'config/migrate-waves/data-layer-k3s.yaml'
 
 export const DATA_LAYER_MIGRATE_STREAM_ID = 'data-layer-k3s'
 
@@ -153,92 +158,6 @@ export const DATA_RESPONSIBILITY: ResponsibilitySplit[] = [
 // ---------------------------------------------------------------------------
 
 export type DataLayerPhaseStatus = 'pending' | 'next' | 'in_progress' | 'done'
-
-export type DataLayerMigrationPhase = {
-  id: string
-  step: number
-  /** D-C: position in spine done count (step - 1). */
-  spineIndex: number
-  /** Display prefix in queue / next_task (①..⑦). */
-  displayCode: string
-  label: string
-  repo: string
-  verify: string
-  blockedBy?: string
-}
-
-/** Seven phases — keep in sync with ops-context.yaml tracks.migrate.streams data-layer-k3s total: 7 */
-export const DATA_LAYER_MIGRATION_PHASES: DataLayerMigrationPhase[] = [
-  {
-    id: 'data-0-cnpg-operator',
-    step: 1,
-    spineIndex: 0,
-    displayCode: '①',
-    label: 'Label ubt-k3s-02 postgres-role + deploy CloudNativePG operator + bifrost-postgres cluster (data NS)',
-    repo: 'bifrost-trade-infra/k8s/data/ + scripts/k3s/install-data-layer-phase0.sh',
-    verify: 'kubectl get cluster -n data; postgres-role capability ready on ubt-k3s-02',
-  },
-  {
-    id: 'data-1-minio-backup',
-    step: 2,
-    spineIndex: 1,
-    displayCode: '②',
-    label: 'MinIO backup target (nfs-hot) + CNPG barmanObjectStore WAL archive',
-    repo: 'bifrost-trade-infra/k8s/data/minio/ · nfs-hot StorageClass',
-    verify: 'CNPG backup status OK; test WAL archive to nfs-hot bucket',
-    blockedBy: 'data-0-cnpg-operator',
-  },
-  {
-    id: 'data-2-stg-cutover',
-    step: 3,
-    spineIndex: 2,
-    displayCode: '③',
-    label: 'STG cutover — apps connect bifrost-postgres-rw.data.svc + redis-live/queue-stg; remove bifrost-stg in-ns postgres/redis',
-    repo: 'bifrost-trade-infra/k8s/overlays/stg/',
-    verify: 'bifrost-stg daemon_control + IB ingestor Stream + deliver-stg smoke pass',
-    blockedBy: 'data-1-minio-backup',
-  },
-  {
-    id: 'data-3-dev-cutover',
-    step: 4,
-    spineIndex: 3,
-    displayCode: '④',
-    label: 'DEV cutover — bifrost-dev config → data NS endpoints; remove bifrost-dev in-ns postgres/redis',
-    repo: 'bifrost-trade-infra/k8s/overlays/dev/',
-    verify: 'Vision V1 gate :30882 + bifrost_dev schema via CNPG',
-    blockedBy: 'data-2-stg-cutover',
-  },
-  {
-    id: 'data-4-prod-pg',
-    step: 5,
-    spineIndex: 4,
-    displayCode: '⑤',
-    label: 'PROD PG migrate — pg_dump legacy .80 → CNPG bifrost_prod; maintenance window + rollback plan',
-    repo: 'bifrost-trade-infra/k8s/overlays/prod/config/',
-    verify: 'make prod-health; monitor daemon_control; D2-prime cutover sign-off',
-    blockedBy: 'data-3-dev-cutover',
-  },
-  {
-    id: 'data-5-redis-split',
-    step: 6,
-    spineIndex: 5,
-    displayCode: '⑥',
-    label: 'PROD/STG redis-live + redis-queue split (Bitnami HA); Celery → redis-queue only',
-    repo: 'bifrost-trade-infra/k8s/data/redis/',
-    verify: 'noeviction on live; Celery bars queue isolated; NetworkPolicy per env',
-    blockedBy: 'data-4-prod-pg',
-  },
-  {
-    id: 'data-6-retire-embedded',
-    step: 7,
-    spineIndex: 6,
-    displayCode: '⑦',
-    label: 'Retire embedded stateful — remove postgres/redis from bifrost-* base; bare .80 PG standby or offline',
-    repo: 'bifrost-trade-infra/k8s/base/ · bifrost-platform/config/environments.yaml',
-    verify: 'data NS only; matrix probes point at cluster endpoints; legacy .80 read-only or decommissioned',
-    blockedBy: 'data-5-redis-split',
-  },
-]
 
 export const DATA_LAYER_SESSION_CONSTRAINTS: string[] = [
   'PG hot storage: local-path on postgres node (ubt-k3s-02) — NOT nfs-hot for PGDATA',

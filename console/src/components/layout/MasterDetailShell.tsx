@@ -6,7 +6,8 @@ import { cn } from '@bifrost/ui'
  *
  * Intended reuse:
  * - Agent Briefing — page-level Summary banner above; shell = left scope/lanes · right Session
- * - Future Agent Desk — job list / job detail (same master→detail interaction)
+ * - Agent Desk — keep current composer + timeline + RemediationPanel layout for now;
+ *   do not force Master-Detail onto Desk (ops workflow is not a classic list→detail browse).
  *
  * Keep chrome on Ops tokens (`--card`, `--border`, `page-section`); no decorative themes.
  */

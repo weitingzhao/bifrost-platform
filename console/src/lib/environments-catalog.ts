@@ -68,7 +68,12 @@ export const PLATFORM_PORTS = {
   platformDocs: 8060,
 } as const
 
-/** Registered trade environments (mirrors config/environments.yaml + K3s data layer). */
+/**
+ * @deprecated Governance LLM pack side-notes only — NOT a writable/runtime registration surface.
+ * Runtime environment list / probe targets: GET /api/v1/environments (config/environments.yaml).
+ * When IPs/ports change, update config/environments.yaml first; keep this table in sync for pack text.
+ * Do not treat this as a writable registration surface.
+ */
 export const TRADE_ENVIRONMENTS = [
   {
     id: 'dev',
@@ -95,6 +100,8 @@ export const TRADE_ENVIRONMENTS = [
     host: 'K3s bifrost-prod ns',
   },
 ] as const
+
+export const ENVIRONMENTS_YAML_SOURCE = 'config/environments.yaml · GET /api/v1/environments'
 
 export const SCOPE_ROWS: ScopeRow[] = [
   {

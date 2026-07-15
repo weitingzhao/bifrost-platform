@@ -1,0 +1,57 @@
+stream_id: data-layer-k3s
+version: 1
+waves:
+  - id: data-0-cnpg-operator
+    code: ①
+    spine_index: 0
+    label: Label ubt-k3s-02 postgres-role + deploy CloudNativePG operator + bifrost-postgres cluster (data NS)
+    repo: bifrost-trade-infra/k8s/data/ + scripts/k3s/install-data-layer-phase0.sh
+    verify: kubectl get cluster -n data; postgres-role capability ready on ubt-k3s-02
+
+  - id: data-1-minio-backup
+    code: ②
+    spine_index: 1
+    label: MinIO backup target (nfs-hot) + CNPG barmanObjectStore WAL archive
+    repo: bifrost-trade-infra/k8s/data/minio/ · nfs-hot StorageClass
+    verify: CNPG backup status OK; test WAL archive to nfs-hot bucket
+    blocked_by: data-0-cnpg-operator
+
+  - id: data-2-stg-cutover
+    code: ③
+    spine_index: 2
+    label: STG cutover — apps connect bifrost-postgres-rw.data.svc + redis-live/queue-stg; remove bifrost-stg in-ns postgres/redis
+    repo: bifrost-trade-infra/k8s/overlays/stg/
+    verify: bifrost-stg daemon_control + IB ingestor Stream + deliver-stg smoke pass
+    blocked_by: data-1-minio-backup
+
+  - id: data-3-dev-cutover
+    code: ④
+    spine_index: 3
+    label: DEV cutover — bifrost-dev config → data NS endpoints; remove bifrost-dev in-ns postgres/redis
+    repo: bifrost-trade-infra/k8s/overlays/dev/
+    verify: "Vision V1 gate :30882 + bifrost_dev schema via CNPG"
+    blocked_by: data-2-stg-cutover
+
+  - id: data-4-prod-pg
+    code: ⑤
+    spine_index: 4
+    label: PROD PG migrate — pg_dump legacy .80 → CNPG bifrost_prod; maintenance window + rollback plan
+    repo: bifrost-trade-infra/k8s/overlays/prod/config/
+    verify: make prod-health; monitor daemon_control; D2-prime cutover sign-off
+    blocked_by: data-3-dev-cutover
+
+  - id: data-5-redis-split
+    code: ⑥
+    spine_index: 5
+    label: PROD/STG redis-live + redis-queue split (Bitnami HA); Celery → redis-queue only
+    repo: bifrost-trade-infra/k8s/data/redis/
+    verify: noeviction on live; Celery bars queue isolated; NetworkPolicy per env
+    blocked_by: data-4-prod-pg
+
+  - id: data-6-retire-embedded
+    code: ⑦
+    spine_index: 6
+    label: "Retire embedded stateful — remove postgres/redis from bifrost-* base; bare .80 PG standby or offline"
+    repo: bifrost-trade-infra/k8s/base/ · bifrost-platform/config/environments.yaml
+    verify: data NS only; matrix probes point at cluster endpoints; legacy .80 read-only or decommissioned
+    blocked_by: data-5-redis-split

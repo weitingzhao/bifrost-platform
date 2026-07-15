@@ -4,6 +4,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import type { MatrixResponse, RemediationJob } from '@/api/types'
 import { AgentJobBanner } from '@/components/agent/AgentJobBanner'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { useLaneCatalog } from '@/hooks/useLaneCatalog'
+import { useAgentTaskCatalog } from '@/hooks/useAgentTaskCatalog'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import {
   fetchAudit,
@@ -108,6 +110,13 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'satellite-api': 'API Health',
   'plugin-gallery': 'Plugin Gallery',
   defects: 'Defects',
+}
+
+/** Positioning copy for core Engineer / Mission Control work surfaces. */
+const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
+  briefing: 'Plan and start work — pick scope and lane, open Session.',
+  'delivery-board': 'Phased sign-off checklists — verify and close delivery programs.',
+  'agent-desk': 'Operate and observe — run agent tasks, review remediation, close sessions.',
 }
 
 const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
@@ -217,6 +226,9 @@ function ConsolePageInner() {
     queryFn: fetchContext,
     staleTime: 60_000,
   })
+
+  useLaneCatalog()
+  useAgentTaskCatalog()
 
   const envQuery = useQuery({
     queryKey: ['environments'],
@@ -443,6 +455,7 @@ function ConsolePageInner() {
   const showPageHeader = ![
     'agent-desk',
     'briefing',
+    'delivery-board',
     'autonomous-skills',
     'execution-log',
     'agent-governance',
@@ -584,7 +597,7 @@ function ConsolePageInner() {
           <>
             <PageHeader
               title={VIEW_TITLES.briefing}
-              description="Plan and start work — pick scope and lane on the left, open Session on the right."
+              description={VIEW_DESCRIPTIONS.briefing}
             />
             <BriefingPage
               context={contextQuery.data}
@@ -737,7 +750,7 @@ function ConsolePageInner() {
           <>
             <PageHeader
               title={VIEW_TITLES['delivery-board']}
-              description="Console delivery programs — phased sign-off checklists consolidated from functional pages."
+              description={VIEW_DESCRIPTIONS['delivery-board']}
             />
             <DeliveryBoardPage />
           </>

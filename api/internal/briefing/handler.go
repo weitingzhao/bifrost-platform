@@ -51,10 +51,13 @@ func (h *Handler) overlayContext() *opscontext.File {
 func (h *Handler) HandleSessionPack(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	req := PackRequest{
-		Track:    q.Get("track"),
-		Lane:     q.Get("lane"),
-		Intent:   q.Get("intent"),
-		PackSize: q.Get("pack"),
+		Track:     q.Get("track"),
+		Lane:      q.Get("lane"),
+		Intent:    q.Get("intent"),
+		PackSize:  q.Get("pack"),
+		SessionID: q.Get("session_id"),
+		ProgramID: q.Get("program_id"),
+		PhaseID:   q.Get("phase_id"),
 	}
 
 	ctx := h.overlayContext()

@@ -1,7 +1,8 @@
 /**
- * Remediation runner task catalog — scopes the Agent can run.
- * Single source of truth for every task's display label (Agent Desk
- * "Task capabilities" panel, Recent tasks timeline, init brief, cluster panel).
+ * Remediation runner task catalog — Console display + hydration.
+ * Flight Director trust matrix (Go) + this catalog load `config/agent-tasks.yaml`
+ * via GET /api/v1/agent-tasks. Core ids/scopes/labels/tiers come from the API;
+ * entryPoint / trigger / description / aliases / parentId stay as UI overlays here.
  *
  * NAMING CONVENTION — `<Domain> · <Action>`
  * ------------------------------------------
@@ -35,9 +36,11 @@
  * - `aliases`= historical / non-conforming scope strings that must still resolve
  *              to this entry's label (e.g. persisted jobs from before a fix).
  *
- * When adding a task: pick the Domain + Action from the vocabularies above,
- * give it a kebab-case scope, and add it here — do not hard-code labels elsewhere.
+ * When adding a task: edit config/agent-tasks.yaml (SSOT), then add UI overlay
+ * fields here if needed — do not hard-code labels elsewhere.
  */
+
+import type { AgentTaskApi } from '@/api/agentTasks'
 
 export type AgentTaskTier = 'manual' | 'automated' | 'escalation'
 
@@ -138,236 +141,180 @@ export const AGENT_TASK_RELATIONS: AgentTaskRelation[] = [
   },
 ]
 
-export const AGENT_TASK_CATALOG: AgentTaskEntry[] = [
-  {
-    id: 'satellite-bus-ingest-triage',
-    scope: 'satellite-bus-ingest-triage',
-    label: 'Satellite · Bus Ingest Triage',
-    domain: 'Trade',
-    action: 'Remediate',
-    tier: 'manual',
+type DisplayOverlay = {
+  entryPoint: string
+  trigger: string
+  description: string
+  parentId?: string
+  aliases?: string[]
+  /** Override domain/action when API omits them. */
+  domain?: AgentTaskDomain
+  action?: string
+}
+
+/** UI-only fields keyed by task id — not part of Flight Director YAML SSOT. */
+const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
+  'satellite-bus-ingest-triage': {
     entryPoint: 'Task CC (Satellite Deploy) · Agent Triage · or Satellite → Bus Status',
     trigger: 'Operator investigates misleading ingest inactive rows from Task CC or Bus Status',
     description:
       'Cross-check bus-deep ingest vs monitor.socket vs ib-gateway plugin; classify policy-off/managed-ok/false-alarm; safe L1 restart only (no daemon scale, D10).',
   },
-  {
-    id: 'operator-plane-remediate',
-    scope: 'operator-plane-remediate',
-    label: 'Operator · Remediate',
-    domain: 'Operator',
-    action: 'Remediate',
-    tier: 'manual',
+  'operator-plane-remediate': {
     entryPoint: 'Engineer → Operator Plane (L-1) · AI Fix',
     trigger: 'Operator clicks AI Fix when bridge/deploy probes fail',
     description:
       'Diagnose Git Bridge, agent deploy, and MCP bridge errors on L-1; guide operator through Mac Pro/Mini host fixes via manual steps.',
   },
-  {
-    id: 'ops',
-    scope: 'agent-desk',
-    label: 'Ops · Session',
-    domain: 'Operator',
-    action: 'Session',
-    tier: 'manual',
+  ops: {
     entryPoint: 'Agent Desk → Ops scope',
     trigger: 'Operator sends a prompt',
-    description: 'General SRE assistant — cluster health, spine, kubectl read, safe actuation via platform-api.',
+    description:
+      'General SRE assistant — cluster health, spine, kubectl read, safe actuation via platform-api.',
   },
-  {
-    id: 'release',
-    scope: 'release',
-    label: 'Platform · Release',
-    domain: 'Platform',
-    action: 'Release',
-    tier: 'manual',
+  release: {
     entryPoint: 'Agent Desk → Release scope · Platform release quick prompt',
     trigger: 'Operator starts a STG → PROD release of the Ops Platform',
-    description: 'Release the Ops Platform (bifrost-deliver-platform): commit & push via Git Bridge — **must include bifrost-ui on main** (Kaniko sibling COPY), STG/PROD pipelines + gates, Phase F console CSS smoke; Phase G install-ib-gateway when plugin repo changed.',
+    description:
+      'Release the Ops Platform (bifrost-deliver-platform): commit & push via Git Bridge — **must include bifrost-ui on main** (Kaniko sibling COPY), STG/PROD pipelines + gates, Phase F console CSS smoke; Phase G install-ib-gateway when plugin repo changed.',
   },
-  {
-    id: 'release-fix',
-    scope: 'release-fix',
-    label: 'Platform · Release Fix',
-    domain: 'Platform',
-    action: 'Release Fix',
-    tier: 'escalation',
+  'release-fix': {
     parentId: 'release',
     entryPoint: 'Spawned inside a Release task · visible in Recent tasks',
     trigger: 'Release Agent escalates after code/config failure (operator approves)',
     description: 'Diagnose failure, patch code/manifest, commit & push so Release can retry the failed phase.',
   },
-  {
-    id: 'trade-deploy',
-    scope: 'trade-deploy',
-    label: 'Trade · Deploy',
-    domain: 'Trade',
-    action: 'Release',
-    tier: 'manual',
+  'trade-deploy': {
     entryPoint: 'Control Room → Launch Pad · Agent Deploy · Agent Desk trade-deploy scope',
     trigger: 'Operator starts STG → PROD Trade stack deliver (bifrost-deliver-stg / bifrost-deliver-prod)',
     description:
       'Deliver Trade stack: mirror sync + Dockerfile CMs → Kaniko build → rollout bifrost-stg/prod → STG smoke + release gates. Does NOT enable live trading (D10).',
   },
-  {
-    id: 'deliver-stg-recover',
-    scope: 'deliver-stg-recover',
-    label: 'Trade · Deliver STG Recover',
-    domain: 'Trade',
-    action: 'Remediate',
-    tier: 'manual',
+  'deliver-stg-recover': {
     entryPoint: 'Control Room Mission Board · Cluster Failure triage · Deliver-stg Fix',
     trigger: 'Last bifrost-deliver-stg failed (especially stale-fail: pipeline red + STG smoke green)',
     description:
       'L1: get_delivery_run_logs → identify failing Tekton task → fix rollout/GitOps → re-run deliver-stg. Distinct from K8s node outages.',
   },
-  {
-    id: 'trade-release-fix',
-    scope: 'trade-release-fix',
-    label: 'Trade · Release Fix',
-    domain: 'Trade',
-    action: 'Release Fix',
-    tier: 'escalation',
+  'trade-release-fix': {
     parentId: 'trade-deploy',
     entryPoint: 'Spawned from trade-deploy or deliver-stg-recover · Recent tasks',
     trigger: 'Trade deliver failure requires bifrost-trade-infra / trade-* repo patch',
     description: 'Diagnose and patch trade GitOps/code; commit & push so deliver-stg can retry.',
   },
-  {
-    id: 'gitops-config-repair',
-    scope: 'gitops-config-repair',
-    label: 'Platform · GitOps Repair',
-    domain: 'Platform',
-    action: 'Fix',
-    tier: 'manual',
+  'gitops-config-repair': {
     entryPoint: 'Cluster triage · Agent Fix · deliver-stg-recover escalation',
     trigger: 'Argo ComparisonError, missing programs/config path, gitops-sync pipeline failure',
     description: 'Restore GitOps manifests, mirror sync, Argo sync, re-run deliver pipeline.',
   },
-  {
-    id: 'defect-pattern-remediate',
-    scope: 'defect-pattern-remediate',
-    label: 'Health · Pattern Fix',
-    domain: 'Health',
-    action: 'Remediate',
-    tier: 'manual',
+  'defect-pattern-remediate': {
     entryPoint: 'Defects → Recurring Patterns · Fix',
     trigger: 'Operator fixes a high-recurrence Defects pattern via routed playbook',
-    description: 'Route pattern to deliver-stg-recover, cluster remediate, or release-fix — reduce agent-desk ad-hoc.',
+    description:
+      'Route pattern to deliver-stg-recover, cluster remediate, or release-fix — reduce agent-desk ad-hoc.',
   },
-  {
-    id: 'cluster-auto',
-    scope: 'cluster_issues_full_auto',
-    label: 'Cluster · Remediate',
-    domain: 'Cluster',
-    action: 'Remediate',
-    tier: 'manual',
+  'cluster-auto': {
     entryPoint: 'Rocket → Cluster → Auto-remediate',
     trigger: 'Operator clicks Auto-remediate with open cluster issues',
-    description: 'Diagnose reported pod/node issues and apply safe remediation (restart, delete debug pods, etc.).',
+    description:
+      'Diagnose reported pod/node issues and apply safe remediation (restart, delete debug pods, etc.).',
   },
-  {
-    id: 'drift-autofix',
-    scope: 'nightly-drift-autofix',
-    label: 'Drift · Fix',
-    domain: 'Drift',
-    action: 'Fix',
-    tier: 'manual',
+  'drift-autofix': {
     entryPoint: 'Agent Briefing → approve drift proposal',
     trigger: 'Owner approves a nightly drift Layer-4 proposal',
-    description: 'Edit bifrost-platform catalog/YAML/scanners per briefingReconciliationCatalog WRITE_PATHS; branch agent/drift-YYYYMMDD, commit, push.',
+    description:
+      'Edit bifrost-platform catalog/YAML/scanners per briefingReconciliationCatalog WRITE_PATHS; branch agent/drift-YYYYMMDD, commit, push.',
   },
-  {
-    id: 'drift-brief',
-    scope: 'nightly-drift-briefing',
-    label: 'Drift · Brief',
-    domain: 'Drift',
-    action: 'Brief',
-    tier: 'automated',
+  'drift-brief': {
     entryPoint: 'Agent Briefing · nightly_drift.sh',
     trigger: 'Scheduled nightly scan (primary runner)',
-    description: 'Read-only Layer 1–3 drift summary — report only, no fixes. L3 extends per briefingReconciliationCatalog DRIFT_LAYER_MAP.',
+    description:
+      'Read-only Layer 1–3 drift summary — report only, no fixes. L3 extends per briefingReconciliationCatalog DRIFT_LAYER_MAP.',
   },
-  {
-    id: 'nightly-health',
-    scope: 'nightly-health-check',
-    label: 'Health · Check',
-    domain: 'Health',
-    action: 'Check',
-    tier: 'automated',
+  'nightly-health': {
     entryPoint: 'Skills & Schedules · launchd health job',
     trigger: 'Scheduled verification pass',
     aliases: ['Nightly scheduled health verification'],
     description: 'Confirm cluster healthy when checker reports zero issues; no destructive actions.',
   },
-  {
-    id: 'stale-pipeline-triage',
-    scope: 'stale-pipeline-triage',
-    label: 'Health · Stale Pipeline Check',
-    domain: 'Health',
-    action: 'Check',
-    tier: 'automated',
+  'stale-pipeline-triage': {
     entryPoint: 'Skills & Schedules · optional pre-health job',
     trigger: 'Scheduled L0 classification: pipeline fail vs runtime smoke',
     description: 'Read-only: classify stale-fail vs real outage; no actuation.',
   },
-  {
-    id: 'platform-self-health-recover',
-    scope: 'platform-self-health-recover',
-    label: 'Platform · Self-health Recover',
-    domain: 'Platform',
-    action: 'Remediate',
-    tier: 'manual',
+  'platform-self-health-recover': {
     entryPoint: 'Cluster Failure triage · Control self-health row',
     trigger: 'Control plane self-health probes failing (console/API routes)',
     description: 'Restart platform-prod workloads; verify console/API NodePort reachability.',
   },
-  {
-    id: 'registry-pull-recover',
-    scope: 'registry-pull-recover',
-    label: 'Infra · Registry Pull Recover',
-    domain: 'Cluster',
-    action: 'Remediate',
-    tier: 'manual',
+  'registry-pull-recover': {
     entryPoint: 'Cluster Failure triage · ImagePull rows',
     trigger: 'ImagePullBackOff / ErrImagePull from registry.cicd',
     description: 'Diagnose registry reachability and image tags; safe rollout restart after fix.',
   },
-  {
-    id: 'post-fix-verification',
-    scope: 'post-fix-verification',
-    label: 'Health · Post-fix',
-    domain: 'Health',
-    action: 'Check',
-    tier: 'manual',
+  'post-fix-verification': {
     entryPoint: 'Remediation runner · verifying phase (automatic after every job)',
     trigger: 'Agent job completes — runner calls verify_mission_snapshot',
     description:
       'Fresh matrix reprobe + verify_payload; post_fix_verification.passed must be true before declaring remediation success.',
   },
-  {
-    id: 'hermes-first-task',
-    scope: 'hermes-first-task',
-    label: 'Hermes · First task',
-    domain: 'Platform',
-    action: 'Brief',
-    tier: 'manual',
+  'hermes-first-task': {
     entryPoint: 'Control Room · Copy first-task prompt · Nous Hermes dashboard',
     trigger: 'Owner onboarding — first L0 read-only Mission health pass via Hermes + platform MCP',
     description:
       'Call get_hermes_readiness, then run hermes-mission-health-l0 prompt (verify_mission_snapshot + matrix). No actuation.',
   },
-]
+}
 
-/** scope (and legacy aliases) → display label. Built once from the catalog. */
-const SCOPE_LABEL_INDEX: Record<string, string> = (() => {
+let catalog: AgentTaskEntry[] = []
+let scopeLabelIndex: Record<string, string> = {}
+
+function rebuildScopeIndex() {
   const index: Record<string, string> = {}
-  for (const entry of AGENT_TASK_CATALOG) {
+  for (const entry of catalog) {
     index[entry.scope] = entry.label
     for (const alias of entry.aliases ?? []) index[alias] = entry.label
   }
-  return index
-})()
+  scopeLabelIndex = index
+}
+
+function asTier(t: string): AgentTaskTier {
+  if (t === 'automated' || t === 'escalation' || t === 'manual') return t
+  return 'manual'
+}
+
+function asDomain(d: string | undefined, fallback: AgentTaskDomain = 'Platform'): AgentTaskDomain {
+  const allowed: AgentTaskDomain[] = ['Operator', 'Platform', 'Trade', 'Cluster', 'Drift', 'Health']
+  if (d != null && (allowed as string[]).includes(d)) return d as AgentTaskDomain
+  return fallback
+}
+
+export function mapAgentTaskApiToEntry(api: AgentTaskApi): AgentTaskEntry {
+  const overlay = AGENT_TASK_DISPLAY[api.id]
+  return {
+    id: api.id,
+    scope: api.scope,
+    label: api.label,
+    domain: asDomain(api.domain ?? overlay?.domain),
+    action: api.action ?? overlay?.action ?? '',
+    tier: asTier(api.tier),
+    entryPoint: overlay?.entryPoint ?? '—',
+    trigger: overlay?.trigger ?? '—',
+    description: overlay?.description ?? '',
+    parentId: overlay?.parentId,
+    aliases: overlay?.aliases,
+  }
+}
+
+/** Replace in-memory catalog (hydrated from GET /api/v1/agent-tasks). */
+export function setAgentTaskCatalog(tasks: AgentTaskEntry[]): void {
+  catalog = [...tasks]
+  rebuildScopeIndex()
+}
+
+export function allAgentTasks(): AgentTaskEntry[] {
+  return catalog
+}
 
 /**
  * Resolve any scope string to its display label. Catalog scopes and their
@@ -376,7 +323,7 @@ const SCOPE_LABEL_INDEX: Record<string, string> = (() => {
  */
 export function scopeToLabel(scope?: string | null): string {
   if (scope == null || scope.trim() === '') return 'Agent session'
-  const hit = SCOPE_LABEL_INDEX[scope]
+  const hit = scopeLabelIndex[scope]
   if (hit != null) return hit
   return scope
     .replace(/[_-]+/g, ' ')
@@ -396,18 +343,18 @@ export function agentTaskTierLabel(tier: AgentTaskTier): string {
 }
 
 export function manualAgentTasks(): AgentTaskEntry[] {
-  return AGENT_TASK_CATALOG.filter(t => t.tier === 'manual')
+  return catalog.filter(t => t.tier === 'manual')
 }
 
 export function escalationChildren(parentId: string): AgentTaskEntry[] {
-  return AGENT_TASK_CATALOG.filter(t => t.parentId === parentId)
+  return catalog.filter(t => t.parentId === parentId)
 }
 
 const DOMAIN_ORDER: AgentTaskDomain[] = ['Operator', 'Platform', 'Cluster', 'Health', 'Drift', 'Trade']
 
 export function agentTasksByDomain(): { domain: AgentTaskDomain; tasks: AgentTaskEntry[] }[] {
   const groups = new Map<AgentTaskDomain, AgentTaskEntry[]>()
-  for (const task of AGENT_TASK_CATALOG) {
+  for (const task of catalog) {
     const list = groups.get(task.domain) ?? []
     list.push(task)
     groups.set(task.domain, list)
@@ -419,7 +366,7 @@ export function agentTasksByDomain(): { domain: AgentTaskDomain; tasks: AgentTas
 }
 
 export function catalogTaskById(id: string): AgentTaskEntry | undefined {
-  return AGENT_TASK_CATALOG.find(t => t.id === id)
+  return catalog.find(t => t.id === id)
 }
 
 export function agentTaskRelationKindLabel(kind: AgentTaskRelationKind): string {
@@ -430,11 +377,11 @@ export function agentTaskRelationKindLabel(kind: AgentTaskRelationKind): string 
 
 export function agentSystemSummary() {
   const tiers = { manual: 0, automated: 0, escalation: 0 }
-  for (const t of AGENT_TASK_CATALOG) tiers[t.tier] += 1
+  for (const t of catalog) tiers[t.tier] += 1
   return {
     runtimeCount: 1,
-    capabilityCount: AGENT_TASK_CATALOG.length,
-    domainCount: new Set(AGENT_TASK_CATALOG.map(t => t.domain)).size,
+    capabilityCount: catalog.length,
+    domainCount: new Set(catalog.map(t => t.domain)).size,
     relationCount: AGENT_TASK_RELATIONS.length,
     manualCount: tiers.manual,
     scheduledCount: tiers.automated,

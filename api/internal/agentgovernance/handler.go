@@ -17,11 +17,24 @@ type Handler struct {
 }
 
 func NewHandler(store *remediation.JobStore) *Handler {
+	_ = ensureAgentTasks()
 	return &Handler{store: store, overrides: NewTrustOverrideStore()}
 }
 
 func (h *Handler) HandlePerformance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ComputePerformance(h.store.List()))
+}
+
+// HandleListTasks returns YAML-backed agent task catalog (config/agent-tasks.yaml).
+func (h *Handler) HandleListTasks(w http.ResponseWriter, _ *http.Request) {
+	if err := ensureAgentTasks(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"version": "1",
+		"tasks":   TaskCatalog(),
+	})
 }
 
 func (h *Handler) HandleTrustMatrix(w http.ResponseWriter, r *http.Request) {

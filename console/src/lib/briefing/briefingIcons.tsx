@@ -39,7 +39,7 @@ export const TRACK_ICONS: Record<TrackId, LucideIcon> = {
   operate: Activity,
 }
 
-export const LANE_ICONS: Record<LaneId, LucideIcon> = {
+const LANE_ICON_MAP: Partial<Record<LaneId, LucideIcon>> = {
   'console-api': LayoutDashboard,
   'cluster-infra': Server,
   'mcp-gitops': Workflow,
@@ -67,6 +67,17 @@ export const LANE_ICONS: Record<LaneId, LucideIcon> = {
   'ib-vendor': Unplug,
   'vendor-health': Activity,
 }
+
+/** Icon for a lane id — known lanes mapped; unknown lanes fall back to LayoutDashboard. */
+export function laneIcon(id: LaneId): LucideIcon {
+  return LANE_ICON_MAP[id] ?? LayoutDashboard
+}
+
+/** @deprecated Prefer laneIcon(id) — kept for existing JSX keyed access. */
+export const LANE_ICONS: Record<string, LucideIcon> = new Proxy(
+  {} as Record<string, LucideIcon>,
+  { get: (_t, prop: string) => laneIcon(prop) },
+)
 
 interface BriefingIconBadgeProps {
   icon: LucideIcon

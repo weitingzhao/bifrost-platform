@@ -8,6 +8,7 @@ import type {
 } from '@/api/types'
 import { fetchClusterObservability } from '@/api/platform'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
+import { ensureSessionForPack } from '@/lib/briefing/ensureSessionForPack'
 import {
   buildQueueForLane,
   laneById,
@@ -51,6 +52,8 @@ export type InlineBriefingPackResult = {
   isReady: boolean
   copyToClipboard: () => Promise<boolean>
   copied: boolean
+  /** Set when Copy failed (e.g. session archive POST). */
+  copyError: string | null
 
   /** Track scoped to this Build mode. */
   track: TrackId | null
@@ -100,6 +103,7 @@ export function useInlineBriefingPack({
   const [userSelectedLane, setUserSelectedLane] = useState<LaneId | null>(null)
   const selectedLaneId = userSelectedLane ?? defaultLane
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState<string | null>(null)
   const operateQueueQ = useOperateQueue()
 
   const observabilityQ = useQuery({
@@ -158,6 +162,7 @@ export function useInlineBriefingPack({
   )
 
   const resolvedProgramId = programId ?? dev?.programId
+  const linkedPhaseId = resolvedProgramId != null && resolvedProgramId !== '' ? 'briefing' : undefined
 
   const pack = useMemo(() => {
     if (trackId == null || selectedLaneId == null || intent == null) return ''
@@ -175,6 +180,8 @@ export function useInlineBriefingPack({
         loopArchetype: mode.loopArchetype,
         programId: resolvedProgramId,
       },
+      programId: resolvedProgramId,
+      phaseId: linkedPhaseId,
       context,
       matrices,
       clusterSummary,
@@ -191,6 +198,7 @@ export function useInlineBriefingPack({
     mode.label,
     mode.loopArchetype,
     resolvedProgramId,
+    linkedPhaseId,
     context,
     matrices,
     clusterSummary,
@@ -201,13 +209,43 @@ export function useInlineBriefingPack({
   const isReady = trackId != null && selectedLaneId != null && pack.length > 0
 
   const copyToClipboard = useCallback(async (): Promise<boolean> => {
-    if (!isReady) return false
+    if (!isReady || trackId == null || selectedLaneId == null || intent == null) return false
+    setCopyError(null)
     try {
-      await navigator.clipboard.writeText(pack)
-    } catch {
+      const { pack: anchored } = await ensureSessionForPack({
+        programId: resolvedProgramId,
+        phaseId: linkedPhaseId,
+        laneId: selectedLaneId,
+        buildPack: sessionId =>
+          buildBriefingPack({
+            intent,
+            packSize: 'compact',
+            sessionDelta: null,
+            trackSummaries,
+            selectedTrack: trackId,
+            selectedLane: selectedLaneId,
+            laneQueue,
+            taskModeContext: {
+              modeId: mode.id,
+              modeLabel: mode.label,
+              loopArchetype: mode.loopArchetype,
+              programId: resolvedProgramId,
+            },
+            sessionId,
+            programId: resolvedProgramId,
+            phaseId: linkedPhaseId,
+            context,
+            matrices,
+            clusterSummary,
+            clusterObservability,
+            platformHealthy,
+          }),
+      })
       try {
+        await navigator.clipboard.writeText(anchored)
+      } catch {
         const ta = document.createElement('textarea')
-        ta.value = pack
+        ta.value = anchored
         ta.setAttribute('readonly', '')
         ta.style.position = 'fixed'
         ta.style.left = '-9999px'
@@ -216,20 +254,39 @@ export function useInlineBriefingPack({
         const ok = document.execCommand('copy')
         document.body.removeChild(ta)
         if (!ok) return false
-      } catch {
-        return false
       }
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+      return true
+    } catch (err) {
+      setCopyError(err instanceof Error ? err.message : 'Copy session failed')
+      return false
     }
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 2000)
-    return true
-  }, [isReady, pack])
+  }, [
+    isReady,
+    trackId,
+    selectedLaneId,
+    intent,
+    resolvedProgramId,
+    linkedPhaseId,
+    trackSummaries,
+    laneQueue,
+    mode.id,
+    mode.label,
+    mode.loopArchetype,
+    context,
+    matrices,
+    clusterSummary,
+    clusterObservability,
+    platformHealthy,
+  ])
 
   return {
     pack,
     isReady,
     copyToClipboard,
     copied,
+    copyError,
     track: trackId,
     laneOptions,
     selectedLaneId,

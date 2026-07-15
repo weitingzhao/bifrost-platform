@@ -4,7 +4,8 @@ export const TASK_MODE_STORAGE_KEY = 'bifrost-ops-task-mode'
 export const TASK_MODE_QUERY_PARAM = 'taskMode'
 
 export const TASK_MODE_CATALOG_VERSION = '2026-07-11'
-export const TASK_MODE_CATALOG_SOURCE = 'console/src/lib/task-mode/taskModeCatalog.ts'
+/** UI task-mode definitions. templateId must match config/programs/_templates.yaml (GET /api/v1/programs/templates). */
+export const TASK_MODE_CATALOG_SOURCE = 'console/src/lib/task-mode/taskModeCatalog.ts · templates: config/programs/_templates.yaml'
 
 /** Legacy mode ids remapped after 2026-07-11 restructure. */
 const LEGACY_TASK_MODE_ALIASES: Record<string, TaskModeId> = {
@@ -120,8 +121,6 @@ const ROCKET_BUILD_PHASES: TaskModeDef['phases'] = [
     seq: 1,
     title: 'Agent Briefing',
     summary: 'Copy scoped pack — build track, console-api lane, feature intent.',
-    navigateTab: 'briefing',
-    actions: [{ label: 'Open Briefing', tabId: 'briefing' }],
   },
   {
     id: 'implement',
@@ -165,8 +164,6 @@ const SATELLITE_BUILD_PHASES: TaskModeDef['phases'] = [
     seq: 1,
     title: 'Agent Briefing',
     summary: 'Copy scoped pack — migrate/build track for trade stack work.',
-    navigateTab: 'briefing',
-    actions: [{ label: 'Open Briefing', tabId: 'briefing' }],
   },
   {
     id: 'implement',
@@ -214,8 +211,6 @@ const ENGINEER_BUILD_PHASES: TaskModeDef['phases'] = [
     seq: 1,
     title: 'Agent Briefing',
     summary: 'Copy scoped pack — automate track, agent-infra lane.',
-    navigateTab: 'briefing',
-    actions: [{ label: 'Open Briefing', tabId: 'briefing' }],
   },
   {
     id: 'implement',
@@ -263,8 +258,6 @@ const GROUND_BUILD_PHASES: TaskModeDef['phases'] = [
     seq: 1,
     title: 'Agent Briefing',
     summary: 'Copy scoped pack — infra track, network-server lane, ops intent.',
-    navigateTab: 'briefing',
-    actions: [{ label: 'Open Briefing', tabId: 'briefing' }],
   },
   {
     id: 'implement',
@@ -312,8 +305,6 @@ const PLUGIN_BUILD_PHASES: TaskModeDef['phases'] = [
     seq: 1,
     title: 'Agent Briefing',
     summary: 'Copy scoped pack — automate track, agent-services lane, feature intent.',
-    navigateTab: 'briefing',
-    actions: [{ label: 'Open Briefing', tabId: 'briefing' }],
   },
   {
     id: 'implement',

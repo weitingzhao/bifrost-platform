@@ -114,14 +114,30 @@ type Handler struct {
 	bridgeCmd       string
 	store           *FileStore
 	operateQueue    *operatequeue.Handler
+	sessionStore    sessionValidator
+}
+
+// sessionValidator is the progress-hook surface from api/internal/sessions.
+type sessionValidator interface {
+	ValidateProgressHook(sessionID, programID, phaseID string) error
 }
 
 func (h *Handler) BindOperateQueue(oq *operatequeue.Handler) {
 	h.operateQueue = oq
 }
 
+func (h *Handler) BindSessions(sv sessionValidator) {
+	h.sessionStore = sv
+}
+
 func NewHandler(configDir string) (*Handler, error) {
 	programsDir := filepath.Join(configDir, "programs")
+	if err := InitProgramTemplates(configDir); err != nil {
+		// Temp-dir unit tests may omit _templates.yaml; fall back to repo discovery.
+		if err2 := ensureTemplatesLoaded(); err2 != nil {
+			return nil, fmt.Errorf("program templates: %w", err)
+		}
+	}
 	blueprints, err := LoadProgramBlueprints(programsDir)
 	if err != nil {
 		return nil, err
@@ -130,11 +146,12 @@ func NewHandler(configDir string) (*Handler, error) {
 	store := NewFileStore(configDir)
 	repoRoot := filepath.Dir(configDir)
 	h := &Handler{
-		bridgeCmd: "node",
-		repoRoot:  repoRoot,
-		configDir: configDir,
-		runtimes:  make(map[string]*programRuntime, len(blueprints)),
-		store:     store,
+		bridgeCmd:    "node",
+		repoRoot:     repoRoot,
+		configDir:    configDir,
+		blueprintDir: programsDir,
+		runtimes:     make(map[string]*programRuntime, len(blueprints)),
+		store:        store,
 	}
 
 	for _, bp := range blueprints {
@@ -223,6 +240,7 @@ func (h *Handler) activeRuntime() *programRuntime {
 func (h *Handler) HandlePrograms(w http.ResponseWriter, r *http.Request) {
 	boardOnly := r.URL.Query().Get("board") == "1" || r.URL.Query().Get("board") == "true"
 	templateFilter := strings.TrimSpace(r.URL.Query().Get("template_id"))
+	laneFilter := strings.TrimSpace(r.URL.Query().Get("lane_id"))
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -234,7 +252,11 @@ func (h *Handler) HandlePrograms(w http.ResponseWriter, r *http.Request) {
 		if templateFilter != "" && templateIDFromRuntime(rt) != templateFilter {
 			continue
 		}
-		list = append(list, h.buildProgramSummary(id, rt))
+		sum := h.buildProgramSummary(id, rt)
+		if laneFilter != "" && sum.LaneID != laneFilter {
+			continue
+		}
+		list = append(list, sum)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"programs": list})
 }
@@ -263,6 +285,13 @@ func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) Prog
 		AllPhasesDone: phaseCount > 0 && phasesDone == phaseCount,
 		Active:        programID == h.activeProgramID,
 		Delivery:      rt.blueprint.Delivery,
+	}
+	if rt.state != nil && rt.state.LaneID != "" {
+		summary.LaneID = rt.state.LaneID
+	} else if rt.blueprint.Metadata != nil {
+		if v, ok := rt.blueprint.Metadata["lane_id"].(string); ok {
+			summary.LaneID = strings.TrimSpace(v)
+		}
 	}
 	if rt.blueprint.Delivery != nil {
 		summary.FormerLocation = rt.blueprint.Delivery.FormerLocation

@@ -86,7 +86,7 @@ export function DevTaskStrips({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
           <span className="text-[var(--text-dense-meta)] text-muted-foreground">Current step:</span>
           <span className="text-[var(--text-dense-label)] font-semibold">{currentPhase.title}</span>
-          {currentPhase.navigateTab != null && (
+          {currentPhase.id !== 'briefing' && currentPhase.navigateTab != null && (
             <Button
               variant="secondary"
               size="xs"
@@ -98,7 +98,7 @@ export function DevTaskStrips({
         </div>
       )}
 
-      <OpsSection title="Briefing → Dev Agent → Delivery Board">
+      <OpsSection title="Dev loop">
         <div className="flex flex-col gap-3 p-3">
           <TaskBriefingLauncher
             mode={briefingMode}

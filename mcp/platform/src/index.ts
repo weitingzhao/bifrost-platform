@@ -400,20 +400,46 @@ server.tool(
 )
 
 server.tool(
-  'report_phase_progress',
-  'Report agent phase progress (operator)',
+  'create_session',
+  'Create a Session Job archive (operator). Required before report_phase_progress for a phase. Use a new session when advancing to a different phase_id.',
   {
     program_id: z.string(),
     phase_id: z.string(),
+    lane_id: z.string().optional(),
+    session_id: z.string().optional(),
+  },
+  async ({ program_id, phase_id, lane_id, session_id }) =>
+    jsonResult(
+      await platformPost('/api/v1/sessions', {
+        program_id,
+        phase_id,
+        lane_id: lane_id ?? '',
+        ...(session_id != null && session_id !== '' ? { session_id } : {}),
+      }),
+    ),
+)
+
+server.tool(
+  'report_phase_progress',
+  'Report agent phase progress (operator). session_id required — create_session (or Console Copy pack) first; must match program_id+phase_id. When phase has verify_cmd, status=done requires verify_passed=true.',
+  {
+    program_id: z.string(),
+    phase_id: z.string(),
+    session_id: z.string().describe('Session job id from create_session or pack header'),
     status: z.string(),
     summary: z.string().optional(),
     verify_passed: z.boolean().optional(),
   },
-  async ({ program_id, phase_id, status, summary, verify_passed }) =>
+  async ({ program_id, phase_id, session_id, status, summary, verify_passed }) =>
     jsonResult(
       await platformPost(
         `/api/v1/programs/${encodeURIComponent(program_id)}/phases/${encodeURIComponent(phase_id)}/progress`,
-        { status, summary: summary ?? '', verify_passed: verify_passed ?? false },
+        {
+          status,
+          summary: summary ?? '',
+          verify_passed: verify_passed ?? false,
+          session_id,
+        },
       ),
     ),
 )

@@ -59,11 +59,12 @@ export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceR
   })
 
   const createMutation = useMutation({
-    mutationFn: (body: { instance_label?: string; notes?: string }) =>
+    mutationFn: (body: { instance_label?: string; notes?: string; lane_id?: string }) =>
       createProgramFromTemplate({
         template_id: templateId!,
         instance_label: body.instance_label,
         notes: body.notes,
+        lane_id: body.lane_id ?? mode.dev?.briefingLane,
       }),
     onSuccess: data => {
       const id = data.program.id
