@@ -1,5 +1,4 @@
 import type { QueueItem, QueueItemStatus } from '@/lib/briefing/workLanes'
-import type { Reachability } from '@bifrost/ui'
 
 /** Unified Briefing work-status vocabulary (Scope / Lane / Queue). */
 export type BriefingWorkStatus = 'doing' | 'planned' | 'ready' | 'done' | 'new' | 'blocked'
@@ -29,22 +28,6 @@ export const BRIEFING_STATUS_LABEL: Record<BriefingWorkStatus, string> = {
   done: 'Done',
   new: 'New',
   blocked: 'Blocked',
-}
-
-/** StatusLamp reach mapping — one lamp language for every surface. */
-export function lampForBriefingStatus(status: BriefingWorkStatus): Reachability {
-  switch (status) {
-    case 'done':
-      return 'ok'
-    case 'doing':
-      return 'degraded'
-    case 'blocked':
-      return 'fail'
-    case 'planned':
-    case 'ready':
-    case 'new':
-      return 'unknown'
-  }
 }
 
 export function queueItemToBriefingStatus(status: QueueItemStatus): BriefingWorkStatus {

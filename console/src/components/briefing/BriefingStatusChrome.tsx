@@ -1,9 +1,20 @@
-import { StatusLamp } from '@/components/StatusLamp'
 import {
   BRIEFING_STATUS_LABEL,
-  lampForBriefingStatus,
   type BriefingWorkStatus,
 } from '@/lib/briefing/briefingStatus'
+
+/**
+ * Maturity / work-status colors — same tokens as Scope r/p/d digits.
+ * Do not map Ready/Planned through StatusLamp Reachability (both collapse to gray).
+ */
+const LAMP_CLASS: Record<BriefingWorkStatus, string> = {
+  ready: 'text-[var(--color-env-dev)]',
+  planned: 'text-[var(--color-env-stg)]',
+  doing: 'text-[var(--color-lamp-yellow)]',
+  done: 'text-[var(--color-lamp-green)]',
+  new: 'text-[var(--muted-foreground)]',
+  blocked: 'text-[var(--destructive)]',
+}
 
 const BADGE_CLASS: Record<BriefingWorkStatus, string> = {
   doing:
@@ -29,7 +40,11 @@ const METER_FILL: Record<BriefingWorkStatus, string> = {
 }
 
 export function BriefingStatusLamp({ status }: { status: BriefingWorkStatus }) {
-  return <StatusLamp value={lampForBriefingStatus(status)} kind="reach" />
+  return (
+    <span className={`status-lamp status-lamp--filled ${LAMP_CLASS[status]}`} aria-hidden>
+      ●
+    </span>
+  )
 }
 
 export function BriefingStatusBadge({
@@ -83,6 +98,72 @@ export function BriefingProgressMeter({
   )
 }
 
+/** Maturity order: Ready → Planned → Doing → Done (lane counts = full bar). */
+const LIFECYCLE_STACK: Array<{
+  key: 'ready' | 'planned' | 'doing' | 'done'
+  label: string
+  fill: string
+}> = [
+  { key: 'ready', label: 'Ready', fill: METER_FILL.ready },
+  { key: 'planned', label: 'Planned', fill: METER_FILL.planned },
+  { key: 'doing', label: 'Doing', fill: METER_FILL.doing },
+  { key: 'done', label: 'Done', fill: METER_FILL.done },
+]
+
+/** Stacked bar — each segment = lane share at that maturity stage. */
+export function BriefingLifecycleStackMeter({
+  ready,
+  planned,
+  doing,
+  done,
+  className,
+}: {
+  ready: number
+  planned: number
+  doing: number
+  done: number
+  className?: string
+}) {
+  const counts = { ready, planned, doing, done }
+  const total = ready + planned + doing + done
+  const percent = total > 0 ? Math.round((done / total) * 100) : 0
+  const tip =
+    total > 0
+      ? `Lanes: Ready ${ready} · Planned ${planned} · Doing ${doing} · Done ${done} (${total} total)`
+      : 'No lanes'
+
+  return (
+    <div className={className ?? 'mt-2'} title={tip}>
+      <div className="flex items-center justify-between text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+        <span>
+          {done}/{total}
+        </span>
+        <span>{percent}%</span>
+      </div>
+      <div
+        className="mt-0.5 flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--border)]"
+        role="img"
+        aria-label={tip}
+      >
+        {total > 0
+          ? LIFECYCLE_STACK.map(seg => {
+              const n = counts[seg.key]
+              if (n <= 0) return null
+              return (
+                <div
+                  key={seg.key}
+                  className={`h-full min-w-px transition-all ${seg.fill}`}
+                  style={{ width: `${(n / total) * 100}%` }}
+                  title={`${seg.label}: ${n}`}
+                />
+              )
+            })
+          : null}
+      </div>
+    </div>
+  )
+}
+
 /**
  * Three-tone visual language for Briefing:
  * - Highlight: only Selected Lane (primary border + primary tint)
@@ -101,7 +182,7 @@ export function briefingDigestTileClass(selected: boolean): string {
 }
 
 /**
- * Compact Scope Line chip (wide layouts) — icon + label + d/p/r.
+ * Compact Scope Line chip (wide layouts) — icon + label + r/p/d.
  * White/Gray shell; when active, underline uses View accent (`data-task-mode` → `--task-mode-accent`).
  */
 export function briefingScopeLineChipClass(active: boolean): string {
@@ -114,7 +195,7 @@ export function briefingScopeLineChipClass(active: boolean): string {
 }
 
 /**
- * Full-width Scope Line row for narrow master pane — [icon · name] …… [d/p/r].
+ * Full-width Scope Line row for narrow master pane — [icon · name] …… [r/p/d].
  * Active = accent left rail + tinted icon/label; idle = muted flat row.
  */
 export function briefingScopeLineRowClass(active: boolean): string {
@@ -142,11 +223,14 @@ export function briefingScopeGridCellClass(active: boolean, span2 = false): stri
   ].join(' ')
 }
 
-/** d/p/r digit colors — Doing / Planned / Ready (always distinct, even when inactive). */
+/**
+ * r/p/d digit colors — Ready / Planned / Doing (maturity order).
+ * Always distinct, even when the digit is zero.
+ */
 export const BRIEFING_DPR_COLOR = {
-  doing: 'text-[var(--color-lamp-yellow)]',
-  planned: 'text-[var(--color-env-stg)]',
   ready: 'text-[var(--color-env-dev)]',
+  planned: 'text-[var(--color-env-stg)]',
+  doing: 'text-[var(--color-lamp-yellow)]',
 } as const
 
 /** Scope chip (All / Line) — active = White; inactive = Gray. No primary fill. */
@@ -172,23 +256,23 @@ export function briefingTrackTypeCardClass(selected: boolean): string {
 /** Shared dashed shell for Ready lanes + New Lane entry. Highlight only when selected. */
 export function briefingDashedCardClass(selected: boolean, dimmed = false): string {
   if (selected) {
-    return 'flex flex-col rounded-lg border border-dashed border-[var(--primary)] bg-[var(--primary)]/8 px-3 py-2.5 text-left transition-colors'
+    return 'flex w-full min-w-0 flex-col rounded-lg border border-dashed border-[var(--primary)] bg-[var(--primary)]/8 px-3 py-2.5 text-left transition-colors'
   }
   if (dimmed) {
-    return 'flex flex-col rounded-lg border border-dashed border-[var(--border)]/50 bg-[var(--muted)]/20 px-3 py-2.5 text-left opacity-70 transition-colors hover:opacity-90 hover:border-[var(--primary)]/40 hover:bg-[var(--secondary)]/40'
+    return 'flex w-full min-w-0 flex-col rounded-lg border border-dashed border-[var(--border)]/50 bg-[var(--muted)]/20 px-3 py-2.5 text-left opacity-70 transition-colors hover:opacity-90 hover:border-[var(--primary)]/40 hover:bg-[var(--secondary)]/40'
   }
-  return 'flex flex-col rounded-lg border border-dashed border-[var(--border)] bg-transparent px-3 py-2.5 text-left transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--secondary)]/40 hover:text-[var(--foreground)]'
+  return 'flex w-full min-w-0 flex-col rounded-lg border border-dashed border-[var(--border)] bg-transparent px-3 py-2.5 text-left transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--secondary)]/40 hover:text-[var(--foreground)]'
 }
 
 /** Solid lane card — Highlight only for Selected Lane; White otherwise; Gray when dimmed. */
 export function briefingSolidCardClass(selected: boolean, dimmed = false): string {
   if (selected) {
-    return 'flex flex-col rounded-lg border border-[var(--primary)] bg-[var(--primary)]/8 px-3 py-2.5 text-left transition-colors'
+    return 'flex w-full min-w-0 flex-col rounded-lg border border-[var(--primary)] bg-[var(--primary)]/8 px-3 py-2.5 text-left transition-colors'
   }
   if (dimmed) {
-    return 'flex flex-col rounded-lg border border-[var(--border)]/50 bg-[var(--muted)]/30 px-3 py-2.5 text-left opacity-70 transition-colors hover:opacity-90 hover:bg-[var(--secondary)]'
+    return 'flex w-full min-w-0 flex-col rounded-lg border border-[var(--border)]/50 bg-[var(--muted)]/30 px-3 py-2.5 text-left opacity-70 transition-colors hover:opacity-90 hover:bg-[var(--secondary)]'
   }
-  return 'flex flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]'
+  return 'flex w-full min-w-0 flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]'
 }
 
 /** List-row variant of lane selection chrome. */

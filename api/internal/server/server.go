@@ -226,6 +226,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/agent/deploy", s.agentdeploy.HandleStart)
 			r.Post("/session-snapshots", s.sessionsnapshot.HandleSave)
 			r.Post("/briefing/session-results", s.briefing.HandleCloseSession)
+			r.Post("/briefing/prepare", s.devagent.HandleBriefingPrepare)
 			r.Put("/agent/skills/{id}/actuation-level", s.hermesgateway.HandleSkillActuationLevel)
 			r.Put("/agent/governance/trust-overrides/{skill_id}", s.agentgovernance.HandlePutTrustOverride)
 		})

@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
+import { ChevronRight } from 'lucide-react'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import {
-  BriefingProgressMeter,
+  BriefingLifecycleStackMeter,
   BriefingStatusBadge,
   BriefingStatusLamp,
   briefingDigestTileClass,
@@ -11,20 +12,20 @@ import {
   laneLifecycleFromQueue,
   briefingLifecycleFilterLabel,
   type BriefingLaneLifecycleFilter,
-  type BriefingWorkStatus,
 } from '@/lib/briefing/briefingStatus'
 import { componentLineById, type ComponentLineId } from '@/lib/briefing/briefingViewTabs'
 import { allWorkLanes, buildQueueForLane } from '@/lib/briefing/workLanes'
 
+/** Maturity timeline: Ready → Planned → Doing → Done. */
 const LIFECYCLE_TILES: Array<{
   filter: BriefingLaneLifecycleFilter
   label: string
   countKey: 'doing' | 'planned' | 'ready' | 'done'
-  status: BriefingWorkStatus
+  status: 'doing' | 'planned' | 'ready' | 'done'
 }> = [
-  { filter: 'active', label: 'Doing', countKey: 'doing', status: 'doing' },
-  { filter: 'planned', label: 'Planned', countKey: 'planned', status: 'planned' },
   { filter: 'empty', label: 'Ready', countKey: 'ready', status: 'ready' },
+  { filter: 'planned', label: 'Planned', countKey: 'planned', status: 'planned' },
+  { filter: 'active', label: 'Doing', countKey: 'doing', status: 'doing' },
   { filter: 'complete', label: 'Done', countKey: 'done', status: 'done' },
 ]
 
@@ -43,57 +44,97 @@ interface BriefingWorkDigestPanelProps {
   compact?: boolean
 }
 
-function DigestTile({
-  label,
-  value,
-  status,
-  selected,
-  onClick,
+type LaneCounts = {
+  doing: number
+  planned: number
+  ready: number
+  done: number
+}
+
+/**
+ * Maturity pipeline — Ready › Planned › Doing › Done.
+ * Click a stage to filter Lanes; selected stage is highlighted.
+ */
+function LifecycleStepper({
+  laneCounts,
+  lifecycleFilter,
+  onToggle,
   compact,
 }: {
-  label: string
-  value: string
-  status: BriefingWorkStatus
-  selected: boolean
-  onClick: () => void
+  laneCounts: LaneCounts
+  lifecycleFilter: BriefingLaneLifecycleFilter | null
+  onToggle: (filter: BriefingLaneLifecycleFilter) => void
   compact?: boolean
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={
-        compact
-          ? [
-              'inline-flex h-8 items-center gap-1.5 rounded-md border px-2 text-left transition-colors',
-              selected
-                ? 'border-[var(--border)] border-l-2 border-l-[var(--primary)] bg-[var(--card)]'
-                : 'border-[var(--border)]/50 bg-[var(--muted)]/30 opacity-75 hover:opacity-95',
-            ].join(' ')
-          : briefingDigestTileClass(selected)
-      }
+    <div
+      role="list"
+      aria-label="Lane maturity pipeline: Ready, Planned, Doing, Done"
+      className={[
+        'inline-flex min-w-0 max-w-full flex-wrap items-stretch overflow-hidden rounded-md border border-[var(--border)]/60 bg-[var(--muted)]/20',
+        compact ? 'p-0.5' : 'p-1',
+      ].join(' ')}
     >
-      {compact ? (
-        <>
-          <BriefingStatusLamp status={status} />
-          <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-            {label}
-          </span>
-          <span className="font-semibold tabular-nums text-[var(--text-dense-label)]">{value}</span>
-        </>
-      ) : (
-        <>
-          <div className="flex items-center gap-1.5">
-            <BriefingStatusLamp status={status} />
-            <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              {label}
-            </span>
+      {LIFECYCLE_TILES.map((tile, index) => {
+        const selected = lifecycleFilter === tile.filter
+        const isLast = index === LIFECYCLE_TILES.length - 1
+        return (
+          <div key={tile.filter} role="listitem" className="flex min-w-0 items-stretch">
+            <button
+              type="button"
+              aria-pressed={selected}
+              aria-current={selected ? 'step' : undefined}
+              title={`${tile.label} — filter Lanes (click again to clear)`}
+              onClick={() => onToggle(tile.filter)}
+              className={[
+                'inline-flex min-w-0 items-center gap-1.5 rounded-sm px-2 text-left transition-colors',
+                compact ? 'h-7' : 'h-9 px-2.5',
+                selected
+                  ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[inset_0_0_0_1px_var(--primary)]'
+                  : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/60',
+              ].join(' ')}
+            >
+              {selected ? (
+                <BriefingStatusLamp status={tile.status} />
+              ) : (
+                <span
+                  className="status-lamp status-lamp--filled text-[var(--muted-foreground)]"
+                  aria-hidden
+                >
+                  ●
+                </span>
+              )}
+              <span
+                className={[
+                  'shrink-0',
+                  compact ? 'text-[var(--text-dense-caption)]' : 'text-[var(--text-dense-meta)]',
+                  selected ? 'font-semibold' : 'font-medium',
+                ].join(' ')}
+              >
+                {tile.label}
+              </span>
+              <span
+                className={[
+                  'tabular-nums',
+                  compact ? 'text-[var(--text-dense-label)]' : 'text-[var(--text-dense-body)]',
+                  selected ? 'font-semibold' : 'font-medium',
+                ].join(' ')}
+              >
+                {laneCounts[tile.countKey]}
+              </span>
+            </button>
+            {!isLast && (
+              <span
+                aria-hidden
+                className="flex shrink-0 items-center px-0.5 text-[var(--muted-foreground)]/45"
+              >
+                <ChevronRight className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} strokeWidth={2} />
+              </span>
+            )}
           </div>
-          <p className="m-0 mt-0.5 text-lg font-semibold tabular-nums leading-none">{value}</p>
-        </>
-      )}
-    </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -141,7 +182,7 @@ export function BriefingWorkDigestPanel({
     return { summary, hotLines, laneTotal: lanes.length }
   }, [context, matrices, clusterSummary])
 
-  const { status, progress, nextStep, laneCounts } = summary
+  const { status, nextStep, laneCounts } = summary
   const hasActiveFilter = lifecycleFilter != null
 
   function toggleLifecycle(filter: BriefingLaneLifecycleFilter) {
@@ -175,25 +216,20 @@ export function BriefingWorkDigestPanel({
           </p>
         )}
 
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {LIFECYCLE_TILES.map(tile => (
-            <DigestTile
-              key={tile.filter}
-              label={tile.label}
-              value={String(laneCounts[tile.countKey])}
-              status={tile.status}
-              selected={lifecycleFilter === tile.filter}
-              onClick={() => toggleLifecycle(tile.filter)}
-              compact
-            />
-          ))}
-          {progress != null && (
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2">
+          <LifecycleStepper
+            laneCounts={laneCounts}
+            lifecycleFilter={lifecycleFilter}
+            onToggle={toggleLifecycle}
+            compact
+          />
+          {laneTotal > 0 && (
             <div className="min-w-[7rem] flex-1 basis-[7rem]">
-              <BriefingProgressMeter
-                done={progress.done}
-                total={progress.total}
-                percent={progress.percent}
-                status={status}
+              <BriefingLifecycleStackMeter
+                ready={laneCounts.ready}
+                planned={laneCounts.planned}
+                doing={laneCounts.doing}
+                done={laneCounts.done}
                 className="mt-0"
               />
             </div>
@@ -258,7 +294,7 @@ export function BriefingWorkDigestPanel({
         )}
       </div>
       <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-        Portfolio totals stay fixed. Click a status tile to filter Lanes below (All scope); click
+        Maturity pipeline (Ready → Planned → Doing → Done). Click a stage to filter Lanes; click
         again to clear. Hot line chips jump to that line with Doing filter.
       </p>
 
@@ -268,32 +304,27 @@ export function BriefingWorkDigestPanel({
         </p>
       )}
 
-      <div className="mt-3 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {LIFECYCLE_TILES.map(tile => (
-          <DigestTile
-            key={tile.filter}
-            label={tile.label}
-            value={String(laneCounts[tile.countKey])}
-            status={tile.status}
-            selected={lifecycleFilter === tile.filter}
-            onClick={() => toggleLifecycle(tile.filter)}
-          />
-        ))}
+      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3">
+        <LifecycleStepper
+          laneCounts={laneCounts}
+          lifecycleFilter={lifecycleFilter}
+          onToggle={toggleLifecycle}
+        />
         <button
           type="button"
-          className={briefingDigestTileClass(false)}
+          className={`${briefingDigestTileClass(false)} min-w-[8rem] flex-1 basis-[8rem]`}
           onClick={onClearFilters}
-          title={hasActiveFilter ? 'Clear lifecycle filter' : 'Queue progress (portfolio)'}
+          title={hasActiveFilter ? 'Clear lifecycle filter' : 'Lane maturity mix (Ready → Done)'}
         >
           <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-            Queue progress
+            Lane maturity
           </span>
-          {progress != null ? (
-            <BriefingProgressMeter
-              done={progress.done}
-              total={progress.total}
-              percent={progress.percent}
-              status={status}
+          {laneTotal > 0 ? (
+            <BriefingLifecycleStackMeter
+              ready={laneCounts.ready}
+              planned={laneCounts.planned}
+              doing={laneCounts.doing}
+              done={laneCounts.done}
               className="mt-1"
             />
           ) : (

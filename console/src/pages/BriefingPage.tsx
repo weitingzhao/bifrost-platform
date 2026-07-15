@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 import { fetchClusterObservability, fetchRemediationJobs, fetchSessionSnapshotLatest } from '@/api/platform'
-import { launchProgramAgent } from '@/api/programs'
+import { prepareBriefingForIde } from '@/api/briefing'
+import {
+  isLikelyCursorIdeBrowser,
+  launchCursorBriefingAfterPrepare,
+} from '@/lib/briefing/briefingDeliveryChannels'
 import { BriefingMasterDetail } from '@/components/briefing/BriefingMasterDetail'
 import { BriefingViewTabsSection } from '@/components/briefing/BriefingViewTabsSection'
 import { BriefingWorkDigestPanel } from '@/components/briefing/BriefingWorkDigestPanel'
@@ -18,6 +22,7 @@ import {
 } from '@/lib/briefing/briefingUrlState'
 import {
   defaultLaneForScopeTrack,
+  lanesForScope,
   lanesForScopeTrack,
   trackTypesForScope,
   type BriefingScopeId,
@@ -29,6 +34,7 @@ import {
   laneLifecycleFromQueue,
   type BriefingLaneLifecycleFilter,
 } from '@/lib/briefing/briefingStatus'
+import type { NewLaneReference } from '@/components/briefing/TrackLaneSection'
 import {
   DEFAULT_AGENT_DIALOGUE_LANGUAGE,
   type AgentDialogueLanguage,
@@ -123,11 +129,14 @@ export function BriefingPage({
       defaultLaneForScopeTrack(resolveBriefingScope(initialUrl), resolveTrackType(initialUrl))
     return active.lane === initialLane ? 'active' : 'ready'
   })
-  const [launchingIde, setLaunchingIde] = useState(false)
+  const [preparingCursor, setPreparingCursor] = useState(false)
   const [launchStatus, setLaunchStatus] = useState<string | null>(null)
   const [agentDialogueLanguage, setAgentDialogueLanguage] = useState<AgentDialogueLanguage>(
     DEFAULT_AGENT_DIALOGUE_LANGUAGE,
   )
+  const [insideCursorBrowser] = useState(() => isLikelyCursorIdeBrowser())
+  const [newLaneOpenToken, setNewLaneOpenToken] = useState(0)
+  const [newLaneReference, setNewLaneReference] = useState<NewLaneReference | null>(null)
 
   const { canOperate } = usePlatformAuth()
   const operateQueueQuery = useOperateQueue()
@@ -170,9 +179,15 @@ export function BriefingPage({
     )
   }, [context, matrices, clusterSummary, operateQueueQuery.data?.open])
 
-  /** Same lane-queue truth as TrackLaneSection — drives Work Scope summary (respects digest filter). */
+  /**
+   * Same lane-queue truth as TrackLaneSection.
+   * With a Summary lifecycle filter, include all track types so counts match portfolio digests.
+   */
   const scopeWorkSummary = useMemo(() => {
-    const lanes = lanesForScopeTrack(selectedScope, selectedTrackType)
+    const lanes =
+      lifecycleFilter != null
+        ? lanesForScope(selectedScope)
+        : lanesForScopeTrack(selectedScope, selectedTrackType)
     const queues = lanes.map(lane => {
       const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
       return {
@@ -201,7 +216,7 @@ export function BriefingPage({
   /** When digest filter changes, keep selected lane inside the visible set. */
   useEffect(() => {
     if (lifecycleFilter == null) return
-    const lanes = lanesForScopeTrack(selectedScope, selectedTrackType)
+    const lanes = lanesForScope(selectedScope)
     const matching = lanes.filter(lane => {
       const life = laneLifecycleFromQueue(
         buildQueueForLane(lane.id, context, matrices, clusterSummary),
@@ -218,7 +233,6 @@ export function BriefingPage({
   }, [
     lifecycleFilter,
     selectedScope,
-    selectedTrackType,
     selectedLane,
     context,
     matrices,
@@ -293,6 +307,18 @@ export function BriefingPage({
     () => buildQueueForLane(selectedLane, context, matrices, clusterSummary),
     [selectedLane, context, matrices, clusterSummary],
   )
+  const selectedLaneLifecycle = useMemo(
+    () => laneLifecycleFromQueue(laneQueue),
+    [laneQueue],
+  )
+  const isArchiveLane = selectedLaneLifecycle === 'complete'
+
+  /** Completed archive must never keep a work-Session ACTIVE marker. */
+  useEffect(() => {
+    if (!isArchiveLane) return
+    setSessionLifecycle('ready')
+    setLaunchStatus(null)
+  }, [isArchiveLane, selectedLane])
 
   const migrateTrackNext = useMemo(
     () => trackSummaries.find(t => t.id === 'migrate')?.nextStep ?? null,
@@ -369,6 +395,7 @@ export function BriefingPage({
         trackSummaries,
         selectedTrack,
         selectedLane,
+        selectedScope,
         laneQueue,
         agentDialogueLanguage,
         taskModeContext: readBriefingTaskModeContext(),
@@ -383,6 +410,7 @@ export function BriefingPage({
       trackSummaries,
       selectedTrack,
       selectedLane,
+      selectedScope,
       laneQueue,
       agentDialogueLanguage,
       linkedProgramId,
@@ -399,6 +427,7 @@ export function BriefingPage({
       trackSummaries,
       selectedTrack,
       selectedLane,
+      selectedScope,
       laneQueue,
       agentDialogueLanguage,
       taskModeContext: readBriefingTaskModeContext(),
@@ -410,18 +439,46 @@ export function BriefingPage({
 
   const activeLane = laneById(selectedLane)
 
-  async function handleLaunchIdeAgent() {
+  function handleUseAsReferenceForNewLane() {
+    const lane = laneById(selectedLane)
+    setLifecycleFilter(null)
+    setNewLaneReference({
+      id: lane.id,
+      label: lane.label,
+      description: lane.description,
+    })
+    setNewLaneOpenToken(t => t + 1)
+    setLaunchStatus(
+      `Opening New Lane form with reference: ${lane.label}. Completed lane stays archive-only.`,
+    )
+  }
+
+  async function handleOpenInCursor() {
     if (!canOperate) return
-    setLaunchingIde(true)
+    if (isArchiveLane) {
+      setLaunchStatus(
+        'Completed lane is archive only — use New Lane (reference) to start work.',
+      )
+      return
+    }
+    setPreparingCursor(true)
     setLaunchStatus(null)
     try {
-      const { pack } = await ensureSessionForPack({
+      const { pack, sessionId } = await ensureSessionForPack({
         programId: linkedProgramId,
         phaseId: linkedPhaseId,
         laneId: selectedLane,
         buildPack: buildAnchoredPack,
       })
       await handleSaveSnapshot()
+      await prepareBriefingForIde({
+        session_pack: pack,
+        session_id: sessionId,
+        program_id: linkedProgramId,
+        phase_id: linkedPhaseId,
+        lane: selectedLane,
+        intent,
+      })
       saveBriefingActiveSession({
         track: selectedTrack,
         lane: selectedLane,
@@ -430,36 +487,30 @@ export function BriefingPage({
         startedAt: new Date().toISOString(),
       })
       setSessionLifecycle('active')
-      const resp = await launchProgramAgent({
-        session_pack: pack,
-        track: selectedTrack,
-        lane: selectedLane,
-        intent,
-        program_id: linkedProgramId ?? 'briefing',
-      })
-      setLaunchStatus(
-        resp.agent_id
-          ? `Launched — agent ${resp.agent_id}`
-          : resp.status === 'launched'
-            ? 'Launch accepted'
-            : resp.message ?? resp.status,
-      )
+      const launch = launchCursorBriefingAfterPrepare()
+      setLaunchStatus(launch.status)
     } catch (err) {
-      setLaunchStatus(err instanceof Error ? err.message : 'Launch failed')
+      setLaunchStatus(err instanceof Error ? err.message : 'Prepare failed')
     } finally {
-      setLaunchingIde(false)
+      setPreparingCursor(false)
     }
   }
 
   async function handleCopySession() {
     try {
       const { pack } = await ensureSessionForPack({
-        programId: linkedProgramId,
-        phaseId: linkedPhaseId,
+        programId: isArchiveLane ? undefined : linkedProgramId,
+        phaseId: isArchiveLane ? undefined : linkedPhaseId,
         laneId: selectedLane,
         buildPack: buildAnchoredPack,
       })
       await copyText(pack)
+      if (isArchiveLane) {
+        setSessionCopied(true)
+        setLaunchStatus('Archive pack copied — read-only history; does not start a work Session.')
+        window.setTimeout(() => setSessionCopied(false), 2000)
+        return
+      }
       await handleSaveSnapshot()
       saveBriefingActiveSession({
         track: selectedTrack,
@@ -533,6 +584,8 @@ export function BriefingPage({
               }}
               lifecycleFilter={lifecycleFilter}
               onClearLifecycleFilter={handleClearLifecycleFilter}
+              newLaneOpenToken={newLaneOpenToken}
+              newLaneReference={newLaneReference}
               context={context}
               matrices={matrices}
               clusterSummary={clusterSummary}
@@ -545,8 +598,8 @@ export function BriefingPage({
               <p className="briefing-section-kicker m-0">Session</p>
               <h2 className="m-0 text-sm font-semibold">Waiting for data</h2>
               <p className="m-0 max-w-sm text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Loading spine, matrix, and audit so the Session pack can be built. Pick a lane on the
-                left — detail opens here when ready.
+                Loading spine, matrix, and audit so the Session pack can be built. Pick a Doing or
+                Backlog lane on the left — Completed lanes open as archive only.
               </p>
             </section>
           ) : (
@@ -558,14 +611,17 @@ export function BriefingPage({
               isInitMode={laneIsInitMode}
               intent={intent}
               lifecycle={sessionLifecycle}
+              laneLifecycle={selectedLaneLifecycle}
               dataReady={dataReady}
               packBlocked={packBlocked}
               canOperate={canOperate}
-              launchingIde={launchingIde}
+              preparingCursor={preparingCursor}
               sessionCopied={sessionCopied}
               launchStatus={launchStatus}
+              insideCursorBrowser={insideCursorBrowser}
               onCopySession={() => void handleCopySession()}
-              onLaunchIde={() => void handleLaunchIdeAgent()}
+              onOpenInCursor={() => void handleOpenInCursor()}
+              onUseAsReferenceForNewLane={handleUseAsReferenceForNewLane}
               context={context}
               migrateTrackNext={migrateTrackNext}
               auditRecords={auditRecords}
@@ -585,11 +641,15 @@ export function BriefingPage({
               packPreview={
                 <LlmPackPreview
                   charCount={sessionPack.length}
-                  metaLabel={`track: ${selectedTrack} · lane: ${selectedLane} · intent: ${intent} · pack: ${packSize} · lang: ${agentDialogueLanguage}${laneIsInitMode ? ' · init' : ''}`}
+                  metaLabel={`track: ${selectedTrack} · lane: ${selectedLane} · intent: ${intent} · pack: ${packSize} · lang: ${agentDialogueLanguage}${laneIsInitMode ? ' · init' : ''}${isArchiveLane ? ' · archive' : ''}`}
                   pack={sessionPack}
                   expanded={packPreviewExpanded}
                   onToggleExpanded={() => setPackPreviewExpanded(v => !v)}
-                  footer="Paste into Cursor IDE for the first-reply protocol. The Agent must reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) Source Audit (full pack) — wait for your selection before implementing."
+                  footer={
+                    isArchiveLane
+                      ? 'Archive pack (read-only). Completed lanes do not start a work Session — use New Lane (reference) instead.'
+                      : 'Open in Cursor (/briefing) or paste the pack into Cursor IDE for the first-reply protocol. The Agent must reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) Source Audit (full pack) — wait for your selection before implementing.'
+                  }
                 />
               }
             />
