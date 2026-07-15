@@ -10,6 +10,7 @@ export interface ProgramSummary {
   label?: string
   description: string
   status: string
+  lane_id?: string
   phase_count: number
   phases_done: number
   phases_signed?: number
@@ -111,6 +112,7 @@ export interface CreateProgramFromTemplateRequest {
   template_id: string
   instance_label?: string
   notes?: string
+  lane_id?: string
 }
 
 export type DeliveryBoardProgramOverview = {
@@ -122,6 +124,7 @@ export type DeliveryBoardProgramOverview = {
   signed: number
   complete: boolean
   signOffMechanism?: string
+  laneId?: string
 }
 
 export function mapProgramSummaryToOverview(p: ProgramSummary): DeliveryBoardProgramOverview {
@@ -135,5 +138,6 @@ export function mapProgramSummaryToOverview(p: ProgramSummary): DeliveryBoardPro
     signed,
     complete: p.complete ?? (p.phase_count > 0 && signed === p.phase_count),
     signOffMechanism: p.sign_off_mechanism ?? p.delivery?.sign_off_mechanism,
+    laneId: p.lane_id,
   }
 }

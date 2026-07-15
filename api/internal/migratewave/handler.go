@@ -16,7 +16,16 @@ type Handler struct {
 }
 
 func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
+	_ = ensureMigrateCatalog(cfg.ConfigDir())
 	return &Handler{svc: NewService(cfg), audit: audit}
+}
+
+func (h *Handler) HandleListCatalog(w http.ResponseWriter, _ *http.Request) {
+	_ = ensureMigrateCatalog("")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"streams": ListStreams(),
+		"path":    catalogPath,
+	})
 }
 
 type actuationRequest struct {

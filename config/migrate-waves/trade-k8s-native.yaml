@@ -1,0 +1,99 @@
+stream_id: trade-k8s-native
+version: 2026-06-29
+waves:
+  - id: w0-dev-mock
+    code: W0
+    spine_index: 0
+    label: Dev IB Mock Gateway — zero live TWS client_id on bifrost-dev
+    repo: bifrost-trade-socket + bifrost-trade-infra/k8s/overlays/dev
+    verify: bifrost-dev stack healthy; no eConnect to .30/.33; market pages use redis-replay
+    delivered: "config get_ib_mode + ib.mode:mock; MockIbGateway for ingestor/account/operator "
+
+  - id: w1-ingress
+    code: W1
+    spine_index: 1
+    label: Traefik Ingress replaces in-cluster nginx gateway
+    repo: bifrost-trade-infra/k8s/base + overlays
+    verify: STG/PROD via Ingress host; SSE buffering off; NodePort bootstrap-only
+    blocked_by: data-layer-k3s step ⑦ (optional parallel on STG)
+    delivered: "Retired in-cluster nginx Deployment; Traefik IngressRoute + stripPrefix middlewares per API; "
+
+  - id: w2-ops-k8s-executor
+    code: W2
+    spine_index: 2
+    label: api-ops executor_mode kubernetes — restore celery-worker Deployment
+    repo: bifrost-trade-api + bifrost-trade-infra/k8s/overlays
+    verify: Ops Celery page starts worker pod; api-ops-celery.patch replicas≠0; no subprocess
+    delivered: "KubernetesExecutor (scale/restart Deployments, delete celery pods); ops.executor_mode kubernetes in stg|prod|dev; "
+
+  - id: w3-manifest-refactor
+    code: W3
+    spine_index: 3
+    label: Kustomize API component + single image; fix prod config mount alias
+    repo: bifrost-trade-infra/k8s
+    verify: "kustomize build overlays/stg|prod; 9 domains from one image tag"
+
+  - id: w4-ib-lease-lib
+    code: W4
+    spine_index: 4
+    label: K8s Lease leader election module in bifrost-trade-socket
+    repo: bifrost-trade-socket
+    verify: "Unit tests + STG: scale socket to 2 pods — only one holds IB connection"
+    delivered: "bifrost_socket.ib.lease — coordination.k8s.io/Lease active-standby library: "
+
+  - id: w5-ib-statefulset
+    code: W5
+    spine_index: 5
+    label: IB socket StatefulSet + ServiceAccount/RBAC for Lease
+    repo: bifrost-trade-infra/k8s/base/socket
+    verify: kubectl get sts -n bifrost-stg; failover <20s; Error 326 never in logs
+    delivered: "k8s/base/socket: ib-ingestor/ib-account-agent/ib-operator migrated Deployment→StatefulSet "
+
+  - id: w6-ib-gateway-merge
+    code: W6
+    spine_index: 6
+    label: Merge ingestor+listener+worker_market → ib-market-gateway (3 gateways total)
+    repo: bifrost-trade-socket + config
+    verify: 3 client_id per TWS per env; parity smoke on /market/live
+    blocked_by: w4-ib-lease-lib, w5-ib-statefulset
+    delivered: "W6 gateway merge: ib-ingestor K8s workload → ib-market-gateway StatefulSet "
+
+  - id: w7-probes-init
+    code: W7
+    spine_index: 7
+    label: Probes + initContainers — socket/worker wait CNPG/Redis ready
+    repo: bifrost-trade-infra/k8s/base
+    verify: rollout restart during data maintenance — no crashloop before data ready
+    delivered: "New scripts/wait_for_data.py (stdlib + yaml, identical in bifrost-trade-socket & "
+
+  - id: w8-daemon-lease
+    code: W8
+    spine_index: 8
+    label: Daemon Deployment + Lease — single active auto-trade (R-DV3)
+    repo: bifrost-trade-worker + k8s/base/worker
+    verify: 2 daemon pods; only Lease holder runs FSM trading loop
+    delivered: "bifrost_worker.daemon.lease — coordination.k8s.io/Lease active-standby for GsTrading "
+
+  - id: w9-network-policy
+    code: W9
+    spine_index: 9
+    label: NetworkPolicy — env isolation + IB LAN egress allowlist
+    repo: bifrost-trade-infra/k8s/base
+    verify: "bifrost-stg cannot reach bifrost-prod redis; socket reaches .30/.33:7496"
+    delivered: "k8s/data/redis/network-policies.yaml — 5 ingress NetworkPolicies (redis-live/queue "
+
+  - id: w10-observability
+    code: W10
+    spine_index: 10
+    label: IB data-line budget ConfigMap + Celery/Flower metrics
+    repo: bifrost-trade-infra/k8s + bifrost-trade-worker
+    verify: Grafana or logs show ib_active_data_lines; Flower or celery_exporter
+    delivered: "k8s/base/observability/ib-data-line-budget.yaml — ConfigMap (account_budget=100, "
+
+  - id: w11-signoff
+    code: W11
+    spine_index: 11
+    label: STG Tier A/B + deliver-prod gate — Compose→K3s native sign-off
+    repo: bifrost-platform + bifrost-trade-infra
+    verify: make k3s-verify-phase-b-stg-v2; deliver-prod blocked if STG unhealthy
+    delivered: "verify-phase-b-stg-v2.sh — Tier A updated for W5 StatefulSet socket rollouts + W10 Flower "

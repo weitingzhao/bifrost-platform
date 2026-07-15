@@ -1,0 +1,28 @@
+# Program templates — single source of truth for from-template spawning.
+# Console taskModeCatalog.templateId must align with these ids.
+version: "1"
+templates:
+  - id: rocket-build
+    title: Rocket Build
+    description: Dev loop instance for platform Console/API work.
+    base_blueprint_id: control-room-ui
+
+  - id: satellite-build
+    title: Satellite Build
+    description: Dev loop instance for trade stack migration/build work.
+    base_blueprint_id: trade-ib-client-migration
+
+  - id: engineer-build
+    title: Engineer Build
+    description: Dev loop instance for agent infra / Dev Agent platform work.
+    base_blueprint_id: dev-agent
+
+  - id: ground-build
+    title: Ground Build
+    description: Dev loop instance for ground systems / network governance work.
+    base_blueprint_id: network-governance
+
+  - id: plugin-build
+    title: Plugin Build
+    description: Dev loop instance for platform plugin work (e.g. IB Gateway).
+    base_blueprint_id: ib-gateway-plugin

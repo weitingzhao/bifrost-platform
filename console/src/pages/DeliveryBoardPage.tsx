@@ -24,8 +24,18 @@ function programStatusVariant(signed: number, complete: boolean): DenseTagVarian
   return 'neutral'
 }
 
+function laneFilterFromHash(): string | null {
+  if (typeof window === 'undefined') return null
+  const hash = window.location.hash.replace(/^#/, '')
+  const qIdx = hash.indexOf('?')
+  if (qIdx < 0) return null
+  const lane = new URLSearchParams(hash.slice(qIdx + 1)).get('lane_id')
+  return lane != null && lane !== '' ? lane : null
+}
+
 export function DeliveryBoardPage() {
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null)
+  const [laneFilter] = useState<string | null>(() => laneFilterFromHash())
 
   const programsQuery = useQuery({
     queryKey: PROGRAMS_BOARD_QUERY_KEY,
@@ -34,10 +44,11 @@ export function DeliveryBoardPage() {
     refetchInterval: 30_000,
   })
 
-  const programs = useMemo(
-    () => (programsQuery.data?.programs ?? []).map(mapProgramSummaryToOverview),
-    [programsQuery.data],
-  )
+  const programs = useMemo(() => {
+    const all = (programsQuery.data?.programs ?? []).map(mapProgramSummaryToOverview)
+    if (laneFilter == null) return all
+    return all.filter(p => p.laneId === laneFilter)
+  }, [programsQuery.data, laneFilter])
 
   const selectedProgram = programs.find(p => p.id === selectedProgramId)
 
@@ -48,6 +59,12 @@ export function DeliveryBoardPage() {
         description="Delivery programs from platform-api GET /api/v1/programs?board=1 — sign-off persisted on server."
         overflow="visible"
       />
+
+      {laneFilter != null && (
+        <p className="m-0 text-dense-meta text-muted-foreground">
+          Filtered by Briefing lane: <span className="font-mono text-foreground">{laneFilter}</span>
+        </p>
+      )}
 
       <PostCompletionPendingPanel />
 
@@ -62,6 +79,7 @@ export function DeliveryBoardPage() {
         <DenseTableHeader>
           <DenseTableHeadRow>
             <DenseTableHead>Program</DenseTableHead>
+            <DenseTableHead>Lane</DenseTableHead>
             <DenseTableHead>Phases</DenseTableHead>
             <DenseTableHead>Signed</DenseTableHead>
             <DenseTableHead>Status</DenseTableHead>
@@ -84,6 +102,9 @@ export function DeliveryBoardPage() {
                     <span className="font-medium">{program.label}</span>
                     <span className="text-dense-meta text-muted-foreground">{program.description}</span>
                   </div>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono text-dense-meta">
+                  {program.laneId ?? '—'}
                 </DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">{program.phaseCount}</DenseTableCell>
                 <DenseTableCell className="font-mono-tabular">

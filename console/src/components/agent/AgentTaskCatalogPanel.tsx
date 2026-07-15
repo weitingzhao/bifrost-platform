@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { DenseTag } from '@bifrost/ui'
 import {
-  AGENT_TASK_CATALOG,
   AGENT_TASK_DOCTRINE_LINKS,
   agentTaskTierLabel,
+  allAgentTasks,
   escalationChildren,
   manualAgentTasks,
   type AgentTaskEntry,
@@ -50,11 +50,12 @@ function TaskRow({ task, child }: { task: AgentTaskEntry; child?: boolean }) {
 
 /** Top-level manual tasks + their escalation children; then automated tasks. */
 function catalogRoots(): AgentTaskEntry[] {
-  return AGENT_TASK_CATALOG.filter(t => t.tier !== 'escalation')
+  return allAgentTasks().filter(t => t.tier !== 'escalation')
 }
 
 export function AgentTaskCatalogPanel({ onOpenDoctrine, onOpenAgentSystem }: AgentTaskCatalogPanelProps) {
   const [open, setOpen] = useState(false)
+  const tasks = allAgentTasks()
 
   return (
     <section className="agent-task-catalog">
@@ -67,7 +68,7 @@ export function AgentTaskCatalogPanel({ onOpenDoctrine, onOpenAgentSystem }: Age
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <span>Task capabilities</span>
         <span className="agent-task-catalog__summary">
-          {manualAgentTasks().length} manual · {AGENT_TASK_CATALOG.filter(t => t.tier === 'automated').length}{' '}
+          {manualAgentTasks().length} manual · {tasks.filter(t => t.tier === 'automated').length}{' '}
           scheduled · Platform · Release → Release Fix
         </span>
       </button>

@@ -1,0 +1,154 @@
+# Agent task catalog — SSOT for Flight Director (Go) + Console
+version: "1"
+tasks:
+  - id: ops
+    scope: "agent-desk"
+    label: "Ops · Session"
+    tier: manual
+    default_level: L1
+    domain: Operator
+    action: "Session"
+
+  - id: release
+    scope: "release"
+    label: "Platform · Release"
+    tier: manual
+    default_level: L1
+    domain: Platform
+    action: "Release"
+
+  - id: release-fix
+    scope: "release-fix"
+    label: "Platform · Release Fix"
+    tier: escalation
+    default_level: L2
+    domain: Platform
+    action: "Release Fix"
+
+  - id: trade-deploy
+    scope: "trade-deploy"
+    label: "Trade · Deploy"
+    tier: manual
+    default_level: L1
+    domain: Trade
+    action: "Release"
+
+  - id: deliver-stg-recover
+    scope: "deliver-stg-recover"
+    label: "Trade · Deliver STG Recover"
+    tier: manual
+    default_level: L1
+    domain: Trade
+    action: "Remediate"
+
+  - id: trade-release-fix
+    scope: "trade-release-fix"
+    label: "Trade · Release Fix"
+    tier: escalation
+    default_level: L2
+    domain: Trade
+    action: "Release Fix"
+
+  - id: gitops-config-repair
+    scope: "gitops-config-repair"
+    label: "Platform · GitOps Repair"
+    tier: manual
+    default_level: L1
+    domain: Platform
+    action: "Fix"
+
+  - id: defect-pattern-remediate
+    scope: "defect-pattern-remediate"
+    label: "Health · Pattern Fix"
+    tier: manual
+    default_level: L1
+    domain: Health
+    action: "Remediate"
+
+  - id: stale-pipeline-triage
+    scope: "stale-pipeline-triage"
+    label: "Health · Stale Pipeline Check"
+    tier: automated
+    default_level: L0
+    domain: Health
+    action: "Check"
+
+  - id: platform-self-health-recover
+    scope: "platform-self-health-recover"
+    label: "Platform · Self-health Recover"
+    tier: manual
+    default_level: L1
+    domain: Platform
+    action: "Remediate"
+
+  - id: registry-pull-recover
+    scope: "registry-pull-recover"
+    label: "Infra · Registry Pull Recover"
+    tier: manual
+    default_level: L1
+    domain: Cluster
+    action: "Remediate"
+
+  - id: cluster-auto
+    scope: "cluster_issues_full_auto"
+    label: "Cluster · Remediate"
+    tier: manual
+    default_level: L1
+    domain: Cluster
+    action: "Remediate"
+
+  - id: drift-autofix
+    scope: "nightly-drift-autofix"
+    label: "Drift · Fix"
+    tier: manual
+    default_level: L1
+    domain: Drift
+    action: "Fix"
+
+  - id: drift-brief
+    scope: "nightly-drift-briefing"
+    label: "Drift · Brief"
+    tier: automated
+    default_level: L0
+    domain: Drift
+    action: "Brief"
+
+  - id: nightly-health
+    scope: "nightly-health-check"
+    label: "Health · Check"
+    tier: automated
+    default_level: L0
+    domain: Health
+    action: "Check"
+
+  - id: post-fix-verification
+    scope: "post-fix-verification"
+    label: "Health · Post-fix"
+    tier: manual
+    default_level: L0
+    domain: Health
+    action: "Check"
+
+  - id: hermes-first-task
+    scope: "hermes-first-task"
+    label: "Hermes · First task"
+    tier: manual
+    default_level: L0
+    domain: Platform
+    action: "Brief"
+
+  - id: satellite-bus-ingest-triage
+    scope: "satellite-bus-ingest-triage"
+    label: "Satellite · Bus Ingest Triage"
+    tier: manual
+    default_level: L0
+    domain: Trade
+    action: "Remediate"
+
+  - id: operator-plane-remediate
+    scope: "operator-plane-remediate"
+    label: "Operator · Remediate"
+    tier: manual
+    default_level: L0
+    domain: Operator
+    action: "Remediate"

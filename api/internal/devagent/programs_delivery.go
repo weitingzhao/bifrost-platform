@@ -51,6 +51,8 @@ type PhaseProgressRequest struct {
 	Status       string `json:"status"`
 	Summary      string `json:"summary,omitempty"`
 	VerifyPassed bool   `json:"verify_passed"`
+	// SessionID required — must match archived session program/phase.
+	SessionID string `json:"session_id"`
 }
 
 type ProgramCompleteRequest struct {
@@ -245,6 +247,12 @@ func (h *Handler) HandlePhaseProgress(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
+	if h.sessionStore != nil {
+		if err := h.sessionStore.ValidateProgressHook(req.SessionID, programID, phaseID); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -256,6 +264,11 @@ func (h *Handler) HandlePhaseProgress(w http.ResponseWriter, r *http.Request) {
 	}
 	if !phaseExists(rt.blueprint, phaseID) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "phase not found"})
+		return
+	}
+	verifyCmd := phaseVerifyCmd(rt.blueprint, phaseID)
+	if err := requireVerifyPassedForDone(req.Status, verifyCmd, req.VerifyPassed); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
 	if rt.state == nil {
@@ -587,4 +600,38 @@ func phaseExists(bp *ProgramBlueprint, phaseID string) bool {
 		}
 	}
 	return false
+}
+
+func phaseVerifyCmd(bp *ProgramBlueprint, phaseID string) string {
+	if bp == nil {
+		return ""
+	}
+	for _, p := range bp.Phases {
+		if p.ID == phaseID {
+			return strings.TrimSpace(p.VerifyCmd)
+		}
+	}
+	return ""
+}
+
+// isDoneLikeStatus treats "done" / "complete" as terminal phase progress.
+func isDoneLikeStatus(status string) bool {
+	s := strings.ToLower(strings.TrimSpace(status))
+	return s == "done" || s == "complete"
+}
+
+// requireVerifyPassedForDone enforces D-DU7: phases with verify_cmd cannot
+// be marked done unless the agent reports verify_passed=true.
+// The API does not execute verify_cmd (no remote shell).
+func requireVerifyPassedForDone(status, verifyCmd string, verifyPassed bool) error {
+	if !isDoneLikeStatus(status) {
+		return nil
+	}
+	if strings.TrimSpace(verifyCmd) == "" {
+		return nil
+	}
+	if verifyPassed {
+		return nil
+	}
+	return fmt.Errorf("verify_passed required when phase has verify_cmd")
 }

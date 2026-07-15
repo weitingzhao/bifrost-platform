@@ -10,10 +10,13 @@ import (
 )
 
 type PackRequest struct {
-	Track    string
-	Lane     string
-	Intent   string
-	PackSize string
+	Track     string
+	Lane      string
+	Intent    string
+	PackSize  string
+	SessionID string
+	ProgramID string
+	PhaseID   string
 }
 
 type PackResponse struct {
@@ -48,7 +51,14 @@ func BuildSessionPack(
 	var b strings.Builder
 	b.WriteString("# Bifrost Ops — Session briefing (MCP/API)\n\n")
 	b.WriteString(fmt.Sprintf("Generated: %s UTC\n", time.Now().UTC().Format(time.RFC3339)))
+	b.WriteString(fmt.Sprintf("session_id: %s\n", orDash(req.SessionID)))
+	b.WriteString(fmt.Sprintf("program_id: %s\n", orDash(req.ProgramID)))
+	b.WriteString(fmt.Sprintf("phase_id: %s\n", orDash(req.PhaseID)))
 	b.WriteString(fmt.Sprintf("Pack size: **%s** · Track: **%s** · Lane: **%s** · Intent: **%s**\n\n", packSize, orDash(req.Track), orDash(req.Lane), intent))
+	b.WriteString("## Session binding\n\n")
+	b.WriteString("Progress reports must use this session_id with matching program_id + phase_id.\n")
+	b.WriteString("To advance to another phase: MCP `create_session` with the new phase_id, then `report_phase_progress` with that new session.\n")
+	b.WriteString("When the phase defines verify_cmd, status=done requires verify_passed=true after you run verify locally.\n\n")
 
 	if ctx != nil {
 		b.WriteString("## Spine focus\n\n")

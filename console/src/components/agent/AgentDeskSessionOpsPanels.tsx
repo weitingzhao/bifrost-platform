@@ -6,7 +6,9 @@ import { Button } from '@bifrost/ui'
 import { BriefingFoldableSection } from '@/components/briefing/BriefingFoldableSection'
 import { BriefingSessionResultsPanel } from '@/components/briefing/BriefingSessionResultsPanel'
 import { NightlyBriefingPanel } from '@/components/briefing/NightlyBriefingPanel'
+import { OperateQueueHandoffPanel } from '@/components/briefing/OperateQueueHandoffPanel'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
+import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
 import { computeSessionDelta, isEmptyDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
 import { loadSnapshot, type SessionSnapshot } from '@/lib/briefing/sessionSnapshot'
@@ -40,6 +42,8 @@ export function AgentDeskSessionOpsPanels({
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
   const [showAlignmentPack, setShowAlignmentPack] = useState(false)
   const [alignmentCopied, setAlignmentCopied] = useState(false)
+
+  const operateQueueQuery = useOperateQueue()
 
   const serverSnapshotQuery = useQuery({
     queryKey: ['session-snapshot', 'latest'],
@@ -151,6 +155,24 @@ export function AgentDeskSessionOpsPanels({
           </>
         )}
       </p>
+
+      <BriefingFoldableSection
+        kicker="Operate"
+        title="Operate queue handoffs"
+        description="Projection queue (D11) — approved post-completion items awaiting ops work. Resolve from Desk, not Briefing."
+        defaultExpanded
+        badge={
+          (operateQueueQuery.data?.open.length ?? 0) > 0
+            ? String(operateQueueQuery.data?.open.length)
+            : undefined
+        }
+        badgeVariant="warning"
+      >
+        <OperateQueueHandoffPanel
+          items={operateQueueQuery.data?.open ?? []}
+          loading={operateQueueQuery.isLoading}
+        />
+      </BriefingFoldableSection>
 
       <BriefingFoldableSection
         kicker="Closure"

@@ -12,6 +12,36 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func writeTestTemplates(t *testing.T, programsDir string) {
+	t.Helper()
+	tpl := `version: "1"
+templates:
+  - id: rocket-build
+    title: Rocket Build
+    description: test
+    base_blueprint_id: control-room-ui
+  - id: satellite-build
+    title: Satellite Build
+    description: test
+    base_blueprint_id: trade-ib-client-migration
+  - id: engineer-build
+    title: Engineer Build
+    description: test
+    base_blueprint_id: dev-agent
+  - id: ground-build
+    title: Ground Build
+    description: test
+    base_blueprint_id: network-governance
+  - id: plugin-build
+    title: Plugin Build
+    description: test
+    base_blueprint_id: ib-gateway-plugin
+`
+	if err := os.WriteFile(filepath.Join(programsDir, "_templates.yaml"), []byte(tpl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestHandleCreateFromTemplate(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
@@ -19,6 +49,7 @@ func TestHandleCreateFromTemplate(t *testing.T) {
 	if err := os.MkdirAll(programsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeTestTemplates(t, programsDir)
 	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
 	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
 
@@ -100,6 +131,7 @@ func TestHandleCreateFromTemplateUnknown(t *testing.T) {
 	if err := os.MkdirAll(programsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeTestTemplates(t, programsDir)
 	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
 	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
 
@@ -129,6 +161,15 @@ phases:
 }
 
 func TestGetProgramTemplate(t *testing.T) {
+	// Load from repo config (ensures YAML is the authority).
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	configDir := filepath.Clean(filepath.Join(wd, "..", "..", "..", "config"))
+	if err := InitProgramTemplates(configDir); err != nil {
+		t.Fatal(err)
+	}
 	tmpl, ok := GetProgramTemplate("satellite-build")
 	if !ok {
 		t.Fatal("expected satellite-build template")

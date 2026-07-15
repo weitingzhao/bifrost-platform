@@ -29,7 +29,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
+	"github.com/weitingzhao/bifrost-platform/api/internal/lanes"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
+	"github.com/weitingzhao/bifrost-platform/api/internal/sessions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
@@ -82,6 +84,8 @@ type Server struct {
 	network         *network.Handler
 	ibgateway       *ibgateway.Handler
 	telemetry       *telemetry.Handler
+	lanes           *lanes.Handler
+	sessions        *sessions.Handler
 	auth            *actuation.AuthService
 	audit           *actuation.AuditLog
 	jobs            *actuation.JobStore
@@ -106,6 +110,8 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	operatequeueH := operatequeue.NewHandler(cfg.ConfigDir(), audit)
 	devagentH.BindOperateQueue(operatequeueH)
+	sessionsH := sessions.NewHandler(cfg.ConfigDir(), audit)
+	devagentH.BindSessions(sessionsH.Store())
 	visionH := vision.NewHandler(cfg, audit)
 	visionH.BindPrograms(devagentH)
 	return &Server{
@@ -142,6 +148,8 @@ func New(cfg *config.Config) (*Server, error) {
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
 		telemetry:       telemetry.NewHandler(cfg),
+		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
+		sessions:        sessionsH,
 		auth:            auth,
 		audit:           audit,
 		jobs:            jobs,
@@ -251,13 +259,22 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/operate/queue", s.operatequeue.HandleGetQueue)
+		r.Get("/lanes", s.lanes.HandleList)
+		r.Get("/lanes/{id}", s.lanes.HandleGet)
+		r.Get("/sessions", s.sessions.HandleList)
+		r.Get("/sessions/{id}", s.sessions.HandleGet)
+		r.Get("/agent-tasks", s.agentgovernance.HandleListTasks)
+		r.Get("/migrate-streams/catalog", s.migratewave.HandleListCatalog)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/operate/queue", s.operatequeue.HandleEnqueue)
 			r.Post("/operate/queue/{id}/close", s.operatequeue.HandleClose)
+			r.Post("/lanes", s.lanes.HandleCreate)
+			r.Post("/sessions", s.sessions.HandleCreate)
 		})
 		r.Route("/programs", func(r chi.Router) {
 			r.Get("/", s.devagent.HandlePrograms)
+			r.Get("/templates", s.devagent.HandleListTemplates)
 			r.Get("/post-completion/pending", s.devagent.HandleListPendingPostCompletion)
 			r.Get("/{programId}", s.devagent.HandleGetProgram)
 			r.Group(func(r chi.Router) {

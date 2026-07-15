@@ -14,13 +14,13 @@ import { AgentSystemGraph } from '@/components/agent/AgentSystemGraph'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   AGENT_RUNTIME,
-  AGENT_TASK_CATALOG,
   AGENT_TASK_DOCTRINE_LINKS,
   AGENT_TASK_RELATIONS,
   agentTaskRelationKindLabel,
   agentTaskTierLabel,
   agentTasksByDomain,
   agentSystemSummary,
+  allAgentTasks,
   catalogTaskById,
   type AgentTaskTier,
 } from '@/lib/agent/agentTaskCatalog'
@@ -159,7 +159,7 @@ export function AgentSystemPage({ onOpenDoctrine }: AgentSystemPageProps) {
             </DenseTableHeadRow>
           </DenseTableHeader>
           <DenseTableBody>
-            {AGENT_TASK_CATALOG.map(task => (
+            {allAgentTasks().map(task => (
               <DenseTableRow key={task.id}>
                 <DenseTableCell className="font-medium whitespace-nowrap">{task.label}</DenseTableCell>
                 <DenseTableCell>{task.domain}</DenseTableCell>

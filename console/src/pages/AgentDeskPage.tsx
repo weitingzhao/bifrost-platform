@@ -282,6 +282,9 @@ export function AgentDeskPage({
               )}
             </div>
           </div>
+          <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-muted-foreground">
+            Operate and observe — run agent tasks, review remediation, close sessions.
+          </p>
           {context?.focus?.headline != null && (
             <p className="agent-desk-spine-hint">
               {context.focus.headline}

@@ -70,6 +70,7 @@ type ProgramSummary struct {
 	Label            string          `json:"label,omitempty"`
 	Description      string          `json:"description"`
 	Status           string          `json:"status"`
+	LaneID           string          `json:"lane_id,omitempty"`
 	PhaseCount       int             `json:"phase_count"`
 	PhasesDone       int             `json:"phases_done"`
 	PhasesSigned     int             `json:"phases_signed,omitempty"`

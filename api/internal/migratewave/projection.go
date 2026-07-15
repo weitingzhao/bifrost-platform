@@ -122,7 +122,8 @@ func deriveFocusHeadline(ctx *opscontext.File) string {
 		ready := s.ReadyForSignoff
 		readyWaves := make([]Wave, 0)
 		var nextWave *Wave
-		for _, w := range tradeK8sNativeWaves {
+		tradeWaves, _ := wavesForStream(TradeK8sNativeStreamID)
+		for _, w := range tradeWaves {
 			switch projectWaveStatus(w.SpineIndex, s.Done, ready, s.Status) {
 			case "ready_for_signoff":
 				readyWaves = append(readyWaves, w)

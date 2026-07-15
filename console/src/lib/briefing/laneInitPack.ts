@@ -42,32 +42,65 @@ export function formatEmptyLaneInitSection(laneId: LaneId): string {
   ])
 }
 
-/** Clipboard pack for registering a brand-new lane in workLanes.ts. */
+/**
+ * Clipboard pack after registering a lane via POST /api/v1/lanes.
+ * No longer instructs editing workLanes.ts — catalog is YAML-backed.
+ */
 export function buildNewLaneInitPack(
   line: ComponentLineId,
   tt: WorkTrackType,
   description: string,
+  laneId?: string,
 ): string {
   const lineDef = componentLineById(line)
   const ttDef = trackTypeById(tt)
+  const idLine =
+    laneId != null && laneId !== ''
+      ? `**Lane ID:** \`${laneId}\` (registered via API → \`config/lanes.yaml\`)`
+      : '**Lane ID:** _(register via Briefing New Lane form → POST /api/v1/lanes)_'
   return initModeHeader('New Lane Init Pack', [
     `**Component Line:** ${lineDef.label} (\`${line}\`)`,
     `**Track Type:** ${ttDef.label} (\`${tt}\`)`,
+    idLine,
     `**Description:** ${description.trim()}`,
     '',
-    '### Your task (Register lane)',
-    'Register a new lane in the Briefing system based on the description above.',
+    '### Your task (Lane registered)',
+    'This lane is registered in `config/lanes.yaml` (single write path via platform-api).',
     '',
-    '1. Add a lane definition to `bifrost-platform/console/src/lib/briefing/workLanes.ts`:',
-    '   - Add the new ID to the appropriate `LaneId` union type',
-    `   - Create a \`WorkLane\` entry with \`componentLine: '${line}'\`, \`trackType: '${tt}'\``,
-    '   - Choose appropriate `track` (spine data source) and `workIntent`',
-    '2. Add an icon mapping in `bifrost-platform/console/src/lib/briefing/briefingIcons.tsx`',
-    '3. Run `cd bifrost-platform/console && npx tsc --noEmit && npm run build` to verify',
+    '1. Propose **3–5 initial queue items** for the new lane',
+    '2. Optionally add icon mapping in `briefingIcons.tsx` if a distinct glyph helps',
+    '3. Do **not** hardcode lane entities in `workLanes.ts` — projection only',
   ])
 }
 
 /** Whether a lane queue should use Init Mode in the session pack. */
 export function isEmptyLaneInit(queue: { length: number } | undefined | null): boolean {
   return queue == null || queue.length === 0
+}
+
+/** Default spine track for a component line when creating a lane. */
+export function defaultTrackForLine(line: ComponentLineId): string {
+  switch (line) {
+    case 'rocket':
+      return 'build'
+    case 'satellite':
+      return 'migrate'
+    case 'engineer':
+      return 'automate'
+    case 'ground':
+      return 'infra'
+    case 'operations':
+      return 'operate'
+    case 'subcontractor':
+      return 'automate'
+  }
+}
+
+export function slugLaneId(label: string): string {
+  return label
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48)
 }

@@ -82,6 +82,7 @@ export function TaskBriefingLauncher({
     isReady,
     copied,
     copyToClipboard,
+    copyError,
     track,
     laneOptions,
     selectedLaneId,
@@ -243,13 +244,16 @@ export function TaskBriefingLauncher({
             className="text-[var(--text-dense-meta)] text-muted-foreground underline-offset-2 hover:underline"
             onClick={() => onOpenFullBriefing(briefingOpts)}
           >
-            Open full Briefing page →
+            Full Briefing →
           </button>
         )}
       </div>
       <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-muted-foreground">
         Pack is scoped to the selected lane. Paste into a new Cursor chat.
       </p>
+      {copyError != null && (
+        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-destructive">{copyError}</p>
+      )}
     </div>
   )
 }
