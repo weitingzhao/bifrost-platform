@@ -7,6 +7,7 @@ import { BriefingMasterDetail } from '@/components/briefing/BriefingMasterDetail
 import { BriefingViewTabsSection } from '@/components/briefing/BriefingViewTabsSection'
 import { BriefingWorkDigestPanel } from '@/components/briefing/BriefingWorkDigestPanel'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
+import { ensureSessionForPack } from '@/lib/briefing/ensureSessionForPack'
 import {
   parseBriefingUrlState,
   readBriefingTaskModeContext,
@@ -354,6 +355,11 @@ export function BriefingPage({
     [context, matrices, clusterSummary, observabilityQuery.data, platformHealthy],
   )
 
+  const taskModeCtx = readBriefingTaskModeContext()
+  const linkedProgramId = taskModeCtx?.programId?.trim() || undefined
+  /** Briefing Copy/Launch archives a Session Job bound to the playbook briefing phase. */
+  const linkedPhaseId = linkedProgramId != null ? 'briefing' : undefined
+
   const sessionPack = useMemo(
     () =>
       buildBriefingPack({
@@ -366,6 +372,8 @@ export function BriefingPage({
         laneQueue,
         agentDialogueLanguage,
         taskModeContext: readBriefingTaskModeContext(),
+        programId: linkedProgramId,
+        phaseId: linkedPhaseId,
         ...snapshotInput,
       }),
     [
@@ -377,10 +385,28 @@ export function BriefingPage({
       selectedLane,
       laneQueue,
       agentDialogueLanguage,
+      linkedProgramId,
+      linkedPhaseId,
       snapshotInput,
     ],
   )
 
+  const buildAnchoredPack = (sessionId: string | undefined) =>
+    buildBriefingPack({
+      intent,
+      packSize,
+      sessionDelta,
+      trackSummaries,
+      selectedTrack,
+      selectedLane,
+      laneQueue,
+      agentDialogueLanguage,
+      taskModeContext: readBriefingTaskModeContext(),
+      sessionId,
+      programId: linkedProgramId,
+      phaseId: linkedPhaseId,
+      ...snapshotInput,
+    })
 
   const activeLane = laneById(selectedLane)
 
@@ -389,6 +415,12 @@ export function BriefingPage({
     setLaunchingIde(true)
     setLaunchStatus(null)
     try {
+      const { pack } = await ensureSessionForPack({
+        programId: linkedProgramId,
+        phaseId: linkedPhaseId,
+        laneId: selectedLane,
+        buildPack: buildAnchoredPack,
+      })
       await handleSaveSnapshot()
       saveBriefingActiveSession({
         track: selectedTrack,
@@ -399,11 +431,11 @@ export function BriefingPage({
       })
       setSessionLifecycle('active')
       const resp = await launchProgramAgent({
-        session_pack: sessionPack,
+        session_pack: pack,
         track: selectedTrack,
         lane: selectedLane,
         intent,
-        program_id: 'briefing',
+        program_id: linkedProgramId ?? 'briefing',
       })
       setLaunchStatus(
         resp.agent_id
@@ -420,18 +452,29 @@ export function BriefingPage({
   }
 
   async function handleCopySession() {
-    await copyText(sessionPack)
-    await handleSaveSnapshot()
-    saveBriefingActiveSession({
-      track: selectedTrack,
-      lane: selectedLane,
-      intent,
-      packSize,
-      startedAt: new Date().toISOString(),
-    })
-    setSessionLifecycle('active')
-    setSessionCopied(true)
-    window.setTimeout(() => setSessionCopied(false), 2000)
+    try {
+      const { pack } = await ensureSessionForPack({
+        programId: linkedProgramId,
+        phaseId: linkedPhaseId,
+        laneId: selectedLane,
+        buildPack: buildAnchoredPack,
+      })
+      await copyText(pack)
+      await handleSaveSnapshot()
+      saveBriefingActiveSession({
+        track: selectedTrack,
+        lane: selectedLane,
+        intent,
+        packSize,
+        startedAt: new Date().toISOString(),
+      })
+      setSessionLifecycle('active')
+      setSessionCopied(true)
+      setLaunchStatus(null)
+      window.setTimeout(() => setSessionCopied(false), 2000)
+    } catch (err) {
+      setLaunchStatus(err instanceof Error ? err.message : 'Copy session failed')
+    }
   }
 
 
@@ -510,7 +553,6 @@ export function BriefingPage({
             <SessionDetailSection
               scope={selectedScope}
               trackType={selectedTrackType}
-              track={selectedTrack}
               lane={activeLane}
               queue={laneQueue}
               isInitMode={laneIsInitMode}
@@ -529,8 +571,6 @@ export function BriefingPage({
               auditRecords={auditRecords}
               auditLoading={auditLoading}
               onOpenAudit={onOpenAudit}
-              operateQueueOpen={operateQueueQuery.data?.open}
-              operateQueueLoading={operateQueueQuery.isLoading}
               agentDialogueLanguage={agentDialogueLanguage}
               onAgentDialogueLanguageChange={v => {
                 setAgentDialogueLanguage(v)

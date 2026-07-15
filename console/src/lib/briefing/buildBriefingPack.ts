@@ -45,6 +45,10 @@ export interface BriefingInputs extends BriefingSnapshotInput {
   agentDialogueLanguage?: AgentDialogueLanguage
   packSize?: BriefingPackSize
   taskModeContext?: TaskModeBriefingContext
+  /** Archive headers — required for session↔progress validation. */
+  sessionId?: string
+  programId?: string
+  phaseId?: string
 }
 
 function formatTaskModeContextSection(ctx: TaskModeBriefingContext): string {
@@ -563,10 +567,17 @@ export function buildBriefingPack(input: BriefingInputs): string {
       migrateTrackNext: migrateTrack?.nextStep ?? null,
     }),
   )
+  const sessionID = input.sessionId?.trim() || '—'
+  const programID = input.programId?.trim() || '—'
+  const phaseID = input.phaseId?.trim() || '—'
+
   if (hasBlockingFindings(findings)) {
     return [
       '# Bifrost Ops Platform — Agent Session Briefing',
       `Generated: ${now}`,
+      `session_id: ${sessionID}`,
+      `program_id: ${programID}`,
+      `phase_id: ${phaseID}`,
       '',
       formatReconcileFindings(findings),
       '',
@@ -579,11 +590,21 @@ export function buildBriefingPack(input: BriefingInputs): string {
   const sections: string[] = [
     '# Bifrost Ops Platform — Agent Session Briefing',
     `Generated: ${now}`,
+    `session_id: ${sessionID}`,
+    `program_id: ${programID}`,
+    `phase_id: ${phaseID}`,
     `Pack size: **${packSize}**`,
     ...(staleBanner != null ? ['', staleBanner, ''] : []),
     `Work track: ${track} · Lane: ${laneMeta.label} (${lane}) · Intent: ${opt.label} (${input.intent})`,
     `Agent layer: ${opt.agentLayer} Agent · Mode: ${opt.agentMode}`,
     `Agent dialogue language: ${langMeta.agentLabel}`,
+    '',
+    '## Session binding',
+    '',
+    'Progress reports must use this `session_id` with matching `program_id` + `phase_id`.',
+    'To advance to another phase: MCP `create_session` with the new `phase_id`, then `report_phase_progress` with that new session.',
+    'Do not reuse this session_id for a different phase_id.',
+    'When the phase defines `verify_cmd`, `status=done` requires `verify_passed=true` after you run verify locally.',
     '',
     formatAgentDialogueSection(language),
     '',

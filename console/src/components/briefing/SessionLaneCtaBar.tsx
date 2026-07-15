@@ -119,6 +119,17 @@ export function SessionLaneCtaBar({
           >
             {launchingIde ? 'Launching…' : 'Launch IDE Agent'}
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              window.location.hash = `delivery-board?lane_id=${encodeURIComponent(lane.id)}`
+            }}
+            title="Filter Delivery Board programs linked to this lane"
+          >
+            Open Board
+          </Button>
         </div>
       </div>
       {launchStatus != null && (

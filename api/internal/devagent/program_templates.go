@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -15,62 +16,128 @@ import (
 
 // ProgramTemplate defines how to spawn a Delivery Board program instance for a dev task mode.
 type ProgramTemplate struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	Description     string `json:"description"`
-	BaseBlueprintID string `json:"base_blueprint_id"`
+	ID              string `yaml:"id" json:"id"`
+	Title           string `yaml:"title" json:"title"`
+	Description     string `yaml:"description" json:"description"`
+	BaseBlueprintID string `yaml:"base_blueprint_id" json:"base_blueprint_id"`
 }
 
-var programTemplates = map[string]ProgramTemplate{
-	"rocket-build": {
-		ID:              "rocket-build",
-		Title:           "Rocket Build",
-		Description:     "Dev loop instance for platform Console/API work.",
-		BaseBlueprintID: "control-room-ui",
-	},
-	"satellite-build": {
-		ID:              "satellite-build",
-		Title:           "Satellite Build",
-		Description:     "Dev loop instance for trade stack migration/build work.",
-		BaseBlueprintID: "trade-ib-client-migration",
-	},
-	"engineer-build": {
-		ID:              "engineer-build",
-		Title:           "Engineer Build",
-		Description:     "Dev loop instance for agent infra / Dev Agent platform work.",
-		BaseBlueprintID: "dev-agent",
-	},
-	"ground-build": {
-		ID:              "ground-build",
-		Title:           "Ground Build",
-		Description:     "Dev loop instance for ground systems / network governance work.",
-		BaseBlueprintID: "network-governance",
-	},
-	"plugin-build": {
-		ID:              "plugin-build",
-		Title:           "Plugin Build",
-		Description:     "Dev loop instance for platform plugin work (e.g. IB Gateway).",
-		BaseBlueprintID: "ib-gateway-plugin",
-	},
+type templatesFile struct {
+	Version   string            `yaml:"version"`
+	Templates []ProgramTemplate `yaml:"templates"`
+}
+
+var (
+	templatesMu    sync.RWMutex
+	templatesByID  map[string]ProgramTemplate
+	templatesPath  string
+	templatesLoaded bool
+)
+
+// InitProgramTemplates loads config/programs/_templates.yaml (called from NewHandler).
+func InitProgramTemplates(configDir string) error {
+	path := filepath.Join(configDir, "programs", "_templates.yaml")
+	return loadProgramTemplates(path)
+}
+
+func loadProgramTemplates(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read program templates: %w", err)
+	}
+	var file templatesFile
+	if err := yaml.Unmarshal(data, &file); err != nil {
+		return fmt.Errorf("parse program templates: %w", err)
+	}
+	if len(file.Templates) == 0 {
+		return fmt.Errorf("no templates in %s", path)
+	}
+	m := make(map[string]ProgramTemplate, len(file.Templates))
+	for _, t := range file.Templates {
+		id := strings.TrimSpace(t.ID)
+		if id == "" || strings.TrimSpace(t.BaseBlueprintID) == "" {
+			return fmt.Errorf("template missing id or base_blueprint_id in %s", path)
+		}
+		t.ID = id
+		m[id] = t
+	}
+	templatesMu.Lock()
+	templatesByID = m
+	templatesPath = path
+	templatesLoaded = true
+	templatesMu.Unlock()
+	return nil
+}
+
+func ensureTemplatesLoaded() error {
+	templatesMu.RLock()
+	ok := templatesLoaded
+	templatesMu.RUnlock()
+	if ok {
+		return nil
+	}
+	// Fallback for tests / early calls: resolve repo config relative to cwd.
+	candidates := []string{
+		filepath.Join("config", "programs", "_templates.yaml"),
+		filepath.Join("..", "config", "programs", "_templates.yaml"),
+		filepath.Join("..", "..", "..", "config", "programs", "_templates.yaml"),
+	}
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(wd, "config", "programs", "_templates.yaml"),
+			filepath.Join(wd, "..", "config", "programs", "_templates.yaml"),
+			filepath.Join(wd, "..", "..", "..", "config", "programs", "_templates.yaml"),
+		)
+	}
+	var last error
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err != nil {
+			last = err
+			continue
+		}
+		return loadProgramTemplates(p)
+	}
+	if last != nil {
+		return fmt.Errorf("program templates not loaded: %w", last)
+	}
+	return fmt.Errorf("program templates not loaded")
 }
 
 func GetProgramTemplate(templateID string) (ProgramTemplate, bool) {
-	t, ok := programTemplates[strings.TrimSpace(templateID)]
+	if err := ensureTemplatesLoaded(); err != nil {
+		return ProgramTemplate{}, false
+	}
+	templatesMu.RLock()
+	defer templatesMu.RUnlock()
+	t, ok := templatesByID[strings.TrimSpace(templateID)]
 	return t, ok
 }
 
 func ListProgramTemplates() []ProgramTemplate {
-	out := make([]ProgramTemplate, 0, len(programTemplates))
-	for _, t := range programTemplates {
+	if err := ensureTemplatesLoaded(); err != nil {
+		return nil
+	}
+	templatesMu.RLock()
+	defer templatesMu.RUnlock()
+	out := make([]ProgramTemplate, 0, len(templatesByID))
+	for _, t := range templatesByID {
 		out = append(out, t)
 	}
 	return out
+}
+
+func (h *Handler) HandleListTemplates(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"templates": ListProgramTemplates(),
+		"path":      templatesPath,
+	})
 }
 
 type CreateFromTemplateRequest struct {
 	TemplateID    string `json:"template_id"`
 	InstanceLabel string `json:"instance_label,omitempty"`
 	Notes         string `json:"notes,omitempty"`
+	LaneID        string `json:"lane_id,omitempty"`
 }
 
 var instanceSlugRe = regexp.MustCompile(`[^a-z0-9]+`)
@@ -95,7 +162,7 @@ func instanceProgramID(baseID, instanceLabel string) string {
 	return fmt.Sprintf("%s--%s", baseID, time.Now().UTC().Format("20060102150405"))
 }
 
-func cloneBlueprintInstance(base *ProgramBlueprint, tmpl ProgramTemplate, programID, instanceLabel, notes string) *ProgramBlueprint {
+func cloneBlueprintInstance(base *ProgramBlueprint, tmpl ProgramTemplate, programID, instanceLabel, notes, laneID string) *ProgramBlueprint {
 	clone := *base
 	clone.ID = programID
 	clone.Title = base.Title
@@ -116,7 +183,7 @@ func cloneBlueprintInstance(base *ProgramBlueprint, tmpl ProgramTemplate, progra
 		}
 	}
 	if clone.Metadata != nil {
-		meta := make(map[string]interface{}, len(clone.Metadata)+4)
+		meta := make(map[string]interface{}, len(clone.Metadata)+5)
 		for k, v := range clone.Metadata {
 			meta[k] = v
 		}
@@ -131,6 +198,9 @@ func cloneBlueprintInstance(base *ProgramBlueprint, tmpl ProgramTemplate, progra
 	}
 	if strings.TrimSpace(notes) != "" {
 		clone.Metadata["notes"] = strings.TrimSpace(notes)
+	}
+	if strings.TrimSpace(laneID) != "" {
+		clone.Metadata["lane_id"] = strings.TrimSpace(laneID)
 	}
 	clone.Metadata["created_at"] = time.Now().UTC().Format(time.RFC3339)
 	return &clone
@@ -195,11 +265,21 @@ func (h *Handler) registerProgramRuntime(bp *ProgramBlueprint) error {
 	if _, exists := h.runtimes[bp.ID]; exists {
 		return fmt.Errorf("program already exists: %s", bp.ID)
 	}
+	laneID := ""
+	if bp.Metadata != nil {
+		if v, ok := bp.Metadata["lane_id"].(string); ok {
+			laneID = strings.TrimSpace(v)
+		}
+	}
 	rt := &programRuntime{
 		blueprint: bp,
 		phases:    phasesFromBlueprint(bp),
 		history:   []Job{},
-		state:     &ProgramStateRecord{ProgramID: bp.ID, History: []Job{}},
+		state: &ProgramStateRecord{
+			ProgramID: bp.ID,
+			LaneID:    laneID,
+			History:   []Job{},
+		},
 	}
 	h.runtimes[bp.ID] = rt
 	return h.persistRuntimeLocked(bp.ID)
@@ -239,7 +319,7 @@ func (h *Handler) HandleCreateFromTemplate(w http.ResponseWriter, r *http.Reques
 	}
 	h.mu.Unlock()
 
-	bp := cloneBlueprintInstance(base, tmpl, programID, req.InstanceLabel, req.Notes)
+	bp := cloneBlueprintInstance(base, tmpl, programID, req.InstanceLabel, req.Notes, req.LaneID)
 	if err := writeProgramBlueprint(h.blueprintDir, bp); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

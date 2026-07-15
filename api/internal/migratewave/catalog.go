@@ -1,6 +1,6 @@
 package migratewave
 
-// Multi-stream migrate wave catalogs — keep in sync with console architecture catalogs (D-C).
+// Multi-stream migrate wave catalogs — loaded from config/migrate-waves/*.yaml.
 
 const (
 	TradeK8sNativeStreamID = "trade-k8s-native"
@@ -8,18 +8,24 @@ const (
 )
 
 type Wave struct {
-	ID         string
-	Code       string // W0..W11 or ①..⑦ display prefix
-	SpineIndex int
-	Label      string
+	ID         string `json:"id"`
+	Code       string `json:"code"`
+	SpineIndex int    `json:"spine_index"`
+	Label      string `json:"label"`
+	Repo       string `json:"repo,omitempty"`
+	Verify     string `json:"verify,omitempty"`
+	BlockedBy  string `json:"blocked_by,omitempty"`
+	Delivered  string `json:"delivered,omitempty"`
+	Goal       string `json:"goal,omitempty"`
 }
 
-var streamWaves = map[string][]Wave{
-	TradeK8sNativeStreamID: tradeK8sNativeWaves,
-	DataLayerK3sStreamID:   dataLayerK3sWaves,
-}
+// streamWaves populated by InitMigrateWaveCatalog.
+var streamWaves = map[string][]Wave{}
 
 func wavesForStream(streamID string) ([]Wave, bool) {
+	_ = ensureMigrateCatalog("")
+	catalogMu.RLock()
+	defer catalogMu.RUnlock()
 	w, ok := streamWaves[streamID]
 	return w, ok
 }

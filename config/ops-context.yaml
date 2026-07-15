@@ -147,7 +147,7 @@ milestones:
       status: NOT_STARTED
       pipeline_lane: parallel
       pipeline_after: vision-v5-convergence
-      authority: console/src/lib/briefing/workLanes.ts
+      authority: config/lanes.yaml · GET/POST /api/v1/lanes
     - id: legacy-retirement
       label: Phase 3 Legacy retirement
       status: SIGNED

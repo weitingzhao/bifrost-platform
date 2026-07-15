@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, SegmentControl } from '@bifrost/ui'
-import { Check, Copy, Plus } from 'lucide-react'
+import { Loader2, Plus } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   BRIEFING_DPR_COLOR,
   BriefingProgressMeter,
@@ -36,7 +37,13 @@ import {
 } from '@/lib/briefing/workLanes'
 import type { TrackId } from '@/lib/briefing/workTracks'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
-import { buildNewLaneInitPack } from '@/lib/briefing/laneInitPack'
+import {
+  buildNewLaneInitPack,
+  defaultTrackForLine,
+  slugLaneId,
+} from '@/lib/briefing/laneInitPack'
+import { createLane, LANES_QUERY_KEY } from '@/api/lanes'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 interface TrackLaneSectionProps {
   scope?: BriefingScopeId
@@ -111,26 +118,66 @@ function NewLaneInlineForm({
   line,
   trackType,
   onClose,
+  onCreated,
 }: {
   /** When null (All scope), user must pick a target component line. */
   line: ComponentLineId | null
   trackType: WorkTrackType
   onClose: () => void
+  onCreated?: (laneId: string) => void
 }) {
   const [targetLine, setTargetLine] = useState<ComponentLineId>(line ?? 'rocket')
+  const [label, setLabel] = useState('')
   const [description, setDescription] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const needsLinePicker = line == null
+  const qc = useQueryClient()
+  const { canOperate } = usePlatformAuth()
 
-  const handleGenerate = useCallback(() => {
-    if (description.trim() === '') return
-    const pack = buildNewLaneInitPack(targetLine, trackType, description)
-    void navigator.clipboard.writeText(pack).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }, [targetLine, trackType, description])
+  const handleCreate = useCallback(async () => {
+    const trimmedLabel = label.trim()
+    const trimmedDesc = description.trim()
+    if (trimmedLabel === '' || trimmedDesc === '') return
+    if (!canOperate) {
+      setError('Authenticate as operator to create a lane')
+      return
+    }
+    const id = slugLaneId(trimmedLabel)
+    if (id.length < 2) {
+      setError('Label must yield a valid kebab-case id')
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      const created = await createLane({
+        id,
+        track: defaultTrackForLine(targetLine),
+        component_line: targetLine,
+        track_type: trackType,
+        label: trimmedLabel,
+        short_label: trimmedLabel.slice(0, 24),
+        description: trimmedDesc,
+        agent_mode: 'Ops',
+        work_intent: 'feature',
+      })
+      await qc.invalidateQueries({ queryKey: LANES_QUERY_KEY })
+      const pack = buildNewLaneInitPack(targetLine, trackType, trimmedDesc, created.id)
+      try {
+        await navigator.clipboard.writeText(pack)
+      } catch {
+        // clipboard optional
+      }
+      onCreated?.(created.id)
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create lane')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [label, description, targetLine, trackType, qc, canOperate, onCreated, onClose])
 
   return (
     <div className="col-span-full mt-1 rounded-lg border border-dashed border-[var(--primary)]/50 bg-[var(--primary)]/5 px-4 py-3">
@@ -160,6 +207,13 @@ function NewLaneInlineForm({
           />
         </div>
       )}
+      <input
+        className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
+        placeholder="Lane label (becomes kebab-case id)"
+        value={label}
+        onChange={e => setLabel(e.target.value)}
+        autoFocus
+      />
       <textarea
         ref={inputRef}
         className="mt-2 w-full resize-none rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
@@ -167,27 +221,29 @@ function NewLaneInlineForm({
         placeholder="Describe this work direction — what problem does it solve, what will it deliver?"
         value={description}
         onChange={e => setDescription(e.target.value)}
-        autoFocus
       />
+      {error != null && (
+        <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-destructive">{error}</p>
+      )}
       <div className="mt-2 flex items-center gap-2">
         <Button
           type="button"
           size="sm"
-          disabled={description.trim() === ''}
-          onClick={handleGenerate}
+          disabled={submitting || label.trim() === '' || description.trim() === ''}
+          onClick={() => void handleCreate()}
         >
-          {copied ? (
+          {submitting ? (
             <>
-              <Check className="mr-1 h-3.5 w-3.5" /> Copied
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> Creating…
             </>
           ) : (
             <>
-              <Copy className="mr-1 h-3.5 w-3.5" /> Generate Init Pack
+              <Plus className="mr-1 h-3.5 w-3.5" /> Create via API
             </>
           )}
         </Button>
         <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          Copies to clipboard — paste into Cursor IDE
+          Writes config/lanes.yaml · copies Init Pack to clipboard
         </span>
       </div>
     </div>
@@ -701,6 +757,7 @@ export function TrackLaneSection({
                     line={newLaneTargetLine}
                     trackType={trackType}
                     onClose={() => setShowNewLane(false)}
+                    onCreated={id => onSelectLane(id)}
                   />
                 )}
               </div>
@@ -742,6 +799,7 @@ export function TrackLaneSection({
                       line={newLaneTargetLine}
                       trackType={trackType}
                       onClose={() => setShowNewLane(false)}
+                      onCreated={id => onSelectLane(id)}
                     />
                   </li>
                 )}

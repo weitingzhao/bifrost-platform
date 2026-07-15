@@ -54,6 +54,7 @@ type PostCompletionItem struct {
 type ProgramStateRecord struct {
 	Version            string                 `json:"version"`
 	ProgramID          string                 `json:"program_id"`
+	LaneID             string                 `json:"lane_id,omitempty"`
 	Phases             []Phase                `json:"phases"`
 	ActiveJob          *Job                   `json:"active_job"`
 	History            []Job                  `json:"history"`
