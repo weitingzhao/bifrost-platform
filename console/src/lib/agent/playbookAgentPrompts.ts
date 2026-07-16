@@ -23,6 +23,17 @@ export function buildPlaybookAgentPrompt(row: FailureTriageRow): string {
   switch (row.playbookId) {
     case 'deliver-stg-recover':
       return header
+    case 'platform-workload-recover':
+    case 'cicd-domain-recover':
+      return [
+        header,
+        '',
+        '## Tekton / cicd namespace workflow',
+        '1. get_pipeline_runs — identify failed PipelineRuns in cicd namespace.',
+        '2. get_delivery_run_logs for the failing run — root cause diagnosis.',
+        '3. If the run is terminal (Failed) and target deployment is healthy: delete_pipeline_run to clean up stale CR + pods (operator approval first).',
+        '4. verify_mission_snapshot to confirm failing_pods cleared.',
+      ].join('\n')
     case 'gitops-config-repair':
       return [
         header,
@@ -58,6 +69,8 @@ export function scopeForPlaybookId(playbookId: string | undefined): string | und
   if (playbookId == null) return undefined
   switch (playbookId) {
     case 'deliver-stg-recover':
+    case 'platform-workload-recover':
+    case 'cicd-domain-recover':
       return DELIVER_STG_RECOVER_SCOPE
     case 'gitops-config-repair':
       return GITOPS_CONFIG_REPAIR_SCOPE

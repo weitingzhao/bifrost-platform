@@ -41,8 +41,16 @@ import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import {
   buildPlatformProdFixPrompt,
   buildTradeProdFixPrompt,
+  pickFailingFixSignal,
+  pickFixScope,
   PROD_ENV_FIX_SCOPE,
 } from '@/lib/agent/prodEnvironmentFixPrompt'
+import {
+  buildClusterPackBody,
+  buildDispatchedFixPrompt,
+  fixScopeAgentTitle,
+  missionSnapshotToFixSignals,
+} from '@/lib/agent/readinessFixDispatch'
 import {
   buildSatelliteBusIngestTriagePrompt,
   SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
@@ -51,7 +59,6 @@ import {
 import { buildTradeEnvReadinessFixPrompt } from '@/lib/agent/tradeEnvReadinessFixPrompt'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import { missionStatus } from '@/lib/control-room/missionSignals'
-import { collectClusterIssues } from '@/lib/cluster/collectClusterIssues'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import {
   buildTradeDeployPrompt,
@@ -190,31 +197,58 @@ export function TaskControlCenter({
     }),
   })
 
-  const prodFixLabel = scopeToLabel(PROD_ENV_FIX_SCOPE)
+  const tradeProdFixSignals = useMemo(
+    () => [
+      ...(satelliteProd.rocketBlocked && satelliteProd.rocketFixSignal != null
+        ? [satelliteProd.rocketFixSignal]
+        : []),
+      ...(satelliteProd.fixSignals ?? []),
+    ],
+    [
+      satelliteProd.rocketBlocked,
+      satelliteProd.rocketFixSignal,
+      satelliteProd.fixSignals,
+    ],
+  )
+
+  const platformProdFixScope = pickFixScope(rocketProd.fixSignals ?? [])
+  const tradeProdFixScope = pickFixScope(tradeProdFixSignals)
+  const tradeStgEnvFixScope = pickFixScope(stgReadinessSignals)
+  const tradeProdEnvFixScope = pickFixScope(prodReadinessSignals)
+  const dailyOpsFixSignals = useMemo(() => missionSnapshotToFixSignals(snapshot), [snapshot])
+  const dailyOpsFixScope = pickFixScope(dailyOpsFixSignals)
 
   const aiPlatformProdFix = useAmbientAgentTask({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: platformProdFixScope,
+    label: scopeToLabel(platformProdFixScope),
     buildRequest: async () => {
+      const signals = rocketProd.fixSignals ?? []
+      const scope = pickFixScope(signals)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
-      const issues = collectClusterIssues({
-        summary: cluster,
-        serviceReadiness,
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
+      const fallback = buildPlatformProdFixPrompt({
+        prodOverall: rocketProd.prodOverall,
+        namespace: rocketProd.prodNamespace ?? 'bifrost-platform-prod',
+        signals,
       })
       return {
-        prompt: buildPlatformProdFixPrompt({
-          prodOverall: rocketProd.prodOverall,
-          namespace: rocketProd.prodNamespace ?? 'bifrost-platform-prod',
-          signals: rocketProd.fixSignals ?? [],
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: {
+            supply,
+            stgSmoke: smoke,
+            pipeline: 'bifrost-deliver-platform',
+          },
         }),
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues,
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
@@ -223,31 +257,62 @@ export function TaskControlCenter({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: tradeProdFixScope,
+    label: scopeToLabel(tradeProdFixScope),
     buildRequest: async () => {
+      const signals = tradeProdFixSignals
+      const scope = pickFixScope(signals)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
-      const issues = collectClusterIssues({
-        summary: cluster,
-        serviceReadiness,
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
+      const fallback = buildTradeProdFixPrompt({
+        prodOverall: satelliteProd.prodOverall,
+        stgNamespace: satelliteProd.stgNamespace ?? 'bifrost-stg',
+        prodNamespace: satelliteProd.prodNamespace ?? 'bifrost-prod',
+        signals,
       })
+      let busTriagePrompt: string | undefined
+      if (scope === SATELLITE_BUS_INGEST_TRIAGE_SCOPE) {
+        const data = await fetchSatelliteBusDeep('stg')
+        const bus =
+          data != null && isAllSatelliteBusDeep(data)
+            ? data.buses.find(b => b.environment === 'stg')
+            : data
+        const ingestHeadline = summarizeIngestServices(bus?.ingest.services ?? []).headline
+        const socket = bus?.monitor.socket
+        const socketRows = socket
+          ? [
+              socket.massive,
+              socket.ib_ingestor,
+              socket.ib_account_agent,
+              socket.ib_operator,
+              socket.platform_ib_gateway,
+            ]
+          : []
+        const socketOk = socketRows.filter(r => r?.reachability === 'ok').length
+        const socketHeadline =
+          socket == null
+            ? 'Monitor socket block unavailable'
+            : `${socketOk}/${socketRows.length} socket components ok`
+        busTriagePrompt = buildSatelliteBusIngestTriagePrompt({
+          env: 'stg',
+          namespace: 'bifrost-stg',
+          ingestHeadline,
+          socketHeadline,
+          busReachability: bus?.reachability,
+        })
+      }
       return {
-        prompt: buildTradeProdFixPrompt({
-          prodOverall: satelliteProd.prodOverall,
-          stgNamespace: satelliteProd.stgNamespace ?? 'bifrost-stg',
-          prodNamespace: satelliteProd.prodNamespace ?? 'bifrost-prod',
-          signals: [
-            ...(satelliteProd.rocketBlocked && satelliteProd.rocketFixSignal != null
-              ? [satelliteProd.rocketFixSignal]
-              : []),
-            ...(satelliteProd.fixSignals ?? []),
-          ],
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: { supply, stgSmoke: smoke, pipeline: 'bifrost-deliver-stg' },
+          busTriagePrompt,
         }),
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues,
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
@@ -256,26 +321,30 @@ export function TaskControlCenter({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: tradeStgEnvFixScope,
+    label: scopeToLabel(tradeStgEnvFixScope),
     buildRequest: async () => {
+      const signals = stgReadinessSignals
+      const scope = pickFixScope(signals)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
-      const issues = collectClusterIssues({
-        summary: cluster,
-        serviceReadiness,
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
+      const fallback = buildTradeEnvReadinessFixPrompt({
+        env: 'stg',
+        overall: satelliteDeploy.stgOverall,
+        namespace: 'bifrost-stg',
+        signals,
       })
       return {
-        prompt: buildTradeEnvReadinessFixPrompt({
-          env: 'stg',
-          overall: satelliteDeploy.stgOverall,
-          namespace: 'bifrost-stg',
-          signals: stgReadinessSignals,
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: { supply, stgSmoke: smoke, pipeline: 'bifrost-deliver-stg' },
         }),
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues,
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
@@ -284,26 +353,30 @@ export function TaskControlCenter({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: tradeProdEnvFixScope,
+    label: scopeToLabel(tradeProdEnvFixScope),
     buildRequest: async () => {
+      const signals = prodReadinessSignals
+      const scope = pickFixScope(signals)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
-      const issues = collectClusterIssues({
-        summary: cluster,
-        serviceReadiness,
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
+      const fallback = buildTradeEnvReadinessFixPrompt({
+        env: 'prod',
+        overall: satelliteDeploy.prodOverall,
+        namespace: 'bifrost-prod',
+        signals,
       })
       return {
-        prompt: buildTradeEnvReadinessFixPrompt({
-          env: 'prod',
-          overall: satelliteDeploy.prodOverall,
-          namespace: 'bifrost-prod',
-          signals: prodReadinessSignals,
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: { supply, stgSmoke: smoke, pipeline: 'bifrost-deliver-stg' },
         }),
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues,
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
@@ -547,21 +620,28 @@ export function TaskControlCenter({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: dailyOpsFixScope,
+    label: scopeToLabel(dailyOpsFixScope),
     buildRequest: async () => {
-      const prompt = buildDailyOpsMissionFixPrompt(snapshot)
-      if (prompt == null) {
+      const signals = missionSnapshotToFixSignals(snapshot)
+      const scope = pickFixScope(signals)
+      const diagnostic = buildDailyOpsMissionFixPrompt(snapshot)
+      if (diagnostic == null && scope === PROD_ENV_FIX_SCOPE) {
         throw new Error('Mission is NOMINAL — nothing to fix')
       }
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
       return {
-        prompt,
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues: collectClusterIssues({ summary: cluster, serviceReadiness }),
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: diagnostic ?? 'Mission diagnostic unavailable — verify_mission_snapshot and remediate open issues.',
+          extras: { supply, stgSmoke: smoke },
+        }),
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
@@ -869,7 +949,12 @@ export function TaskControlCenter({
             onAgentFixProd={() => aiTradeProdEnvFix.trigger()}
             agentFixPending={aiTradeStgEnvFix.isPending || aiTradeProdEnvFix.isPending}
             agentFixDisabled={!canOperate}
-            agentFixTitle="Diagnose STG/PROD trade readiness via Cluster · Remediate"
+            agentFixTitle={fixScopeAgentTitle(
+              tradeStgEnvFixScope,
+              scopeToLabel(tradeStgEnvFixScope),
+              pickFailingFixSignal(stgReadinessSignals)?.label ??
+                pickFailingFixSignal(prodReadinessSignals)?.label,
+            )}
             onAgentTriage={() => aiBusIngestTriage.trigger()}
             agentTriagePending={aiBusIngestTriage.isPending}
             agentTriageDisabled={aiBusIngestTriage.disabled}
@@ -894,7 +979,11 @@ export function TaskControlCenter({
             launchAgentFixTitle={
               isMissionLaunch
                 ? (aiPlatformProdFix.disabledReason ??
-                  'Start Cluster · Remediate focused on Platform Prod readiness')
+                  fixScopeAgentTitle(
+                    platformProdFixScope,
+                    scopeToLabel(platformProdFixScope),
+                    pickFailingFixSignal(rocketProd.fixSignals ?? [])?.label,
+                  ))
                 : undefined
             }
             satelliteLaunchAgentFixPending={isMissionLaunch ? aiTradeProdFix.isPending : false}
@@ -903,9 +992,11 @@ export function TaskControlCenter({
             satelliteLaunchAgentFixTitle={
               isMissionLaunch
                 ? (aiTradeProdFix.disabledReason ??
-                  (satelliteProd.blockKind === 'rocket'
-                    ? 'Start Cluster · Remediate focused on Rocket IB bus'
-                    : 'Start Cluster · Remediate focused on Trade Prod readiness'))
+                  fixScopeAgentTitle(
+                    tradeProdFixScope,
+                    scopeToLabel(tradeProdFixScope),
+                    pickFailingFixSignal(tradeProdFixSignals)?.label,
+                  ))
                 : undefined
             }
             onOpenAgentDesk={() => onOpenAgentDesk?.(ambientJobId ?? undefined)}

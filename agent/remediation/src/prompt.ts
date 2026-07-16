@@ -418,6 +418,7 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
     '- Deleting Failed/Completed/debug pods (e.g. node-debugger-*) is always safe when they are clearly garbage.',
     '- rollout restart is safe for bifrost-stg/prod Deployments when pods are crash-looping.',
     '- Tekton PipelineRun step pods may fail due to upstream build issues — diagnose logs before deleting.',
+    '- For terminal (Failed/Succeeded) PipelineRuns with stale Error pods: use delete_pipeline_run to remove the CR and its pods. This is safe when the run is already terminal and the target deployment is healthy. Requires request_operator_approval first.',
     '- MinIO (data/minio): often Pending due to nfs-hot PVC or postgres-role node binding — check events before restart.',
     '- CNPG (bifrost-postgres-*): second instance may be forming; do not delete primary without operator approval.',
     '- Kubeconfig secret missing (reachability "fail", detail mentions "/var/kubeconfig"): call sync_cluster_kubeconfig to create the bifrost-platform-kubeconfig Secret. Requires operator approval first.',

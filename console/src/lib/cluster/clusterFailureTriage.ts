@@ -92,6 +92,16 @@ function classifyPodGroup(group: PodGroup): Pick<FailureTriageRow, 'track' | 'tr
       playbookId: 'registry-pull-recover',
     }
   }
+  // cicd before crashloop/error — Tekton step pods often report reason=Error
+  if (namespace === 'cicd') {
+    return {
+      track: 'playbook',
+      trackReason: 'Tekton PipelineRun pod in cicd — delivery pipeline, not K8s node issue',
+      suggestedAction:
+        'get_pipeline_runs → identify stale Failed run → delete_pipeline_run if terminal; re-run if needed',
+      playbookId: 'deliver-stg-recover',
+    }
+  }
   if (r.includes('crashloop') || r.includes('error')) {
     return chronic
       ? {
@@ -115,11 +125,11 @@ function classifyPodGroup(group: PodGroup): Pick<FailureTriageRow, 'track' | 'tr
       playbookId: 'gitops-config-repair',
     }
   }
-  if (namespace.startsWith('kube-') || namespace === 'cicd') {
+  if (namespace.startsWith('kube-')) {
     return {
       track: 'infra',
       trackReason: 'Platform namespace pod failure',
-      suggestedAction: 'Cluster page → workload logs; Tekton/Argo rollout restart after root cause',
+      suggestedAction: 'Cluster page → workload logs; restart after root cause',
       playbookId: 'platform-workload-recover',
     }
   }

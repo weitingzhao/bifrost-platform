@@ -191,10 +191,10 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
       'Deliver Trade stack: mirror sync + Dockerfile CMs → Kaniko build → rollout bifrost-stg/prod → STG smoke + release gates. Does NOT enable live trading (D10).',
   },
   'deliver-stg-recover': {
-    entryPoint: 'Control Room Mission Board · Cluster Failure triage · Deliver-stg Fix',
+    entryPoint: 'Task CC Agent Fix (signal dispatch) · Control Room · Cluster Triage · Deliver-stg Fix',
     trigger: 'Last bifrost-deliver-stg failed (especially stale-fail: pipeline red + STG smoke green)',
     description:
-      'L1: get_delivery_run_logs → identify failing Tekton task → fix rollout/GitOps → re-run deliver-stg. Distinct from K8s node outages.',
+      'L1: get_delivery_run_logs → identify failing Tekton task → fix rollout/GitOps → delete_pipeline_run for terminal leftovers → re-run deliver-stg. Distinct from K8s node outages.',
   },
   'trade-release-fix': {
     parentId: 'trade-deploy',

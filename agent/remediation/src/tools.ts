@@ -958,6 +958,36 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       },
     },
 
+    delete_pipeline_run: {
+      description:
+        'Delete a terminal (Failed/Succeeded) Tekton PipelineRun CR and its associated pods. ' +
+        'Cleans up stale runs that inflate cluster failing_pods count. ' +
+        'Only use on terminal runs where the target deployment is healthy. ' +
+        'Requires operator approval via request_operator_approval first.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          run_id: {
+            type: 'string',
+            description: 'PipelineRun name, e.g. bifrost-deliver-platform-prod-1784212484',
+          },
+          namespace: {
+            type: 'string',
+            description: 'Namespace (default: cicd)',
+          },
+        },
+        required: ['run_id'],
+      },
+      async execute(args) {
+        const runId = String(args.run_id ?? '')
+        const ns = String(args.namespace ?? 'cicd')
+        const data = await platformDelete(
+          `/api/v1/delivery/runs/${encodeURIComponent(runId)}?ns=${encodeURIComponent(ns)}`,
+        )
+        return textResult(jsonText(data))
+      },
+    },
+
     get_stg_smoke: {
       description: 'STG runtime smoke probes (Trade + Platform targets). Green smoke + failed pipeline = stale pipeline fail, not node outage.',
       inputSchema: { type: 'object', properties: {} },

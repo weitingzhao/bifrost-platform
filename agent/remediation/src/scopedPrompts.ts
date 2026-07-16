@@ -23,6 +23,7 @@ export function buildDeliverStgRecoverRunnerPrompt(req: StartRunRequest): string
     '1. get_delivery_run_logs for last failed run — identify failing task (clone/kaniko/rollout/gitops-sync/verify-stg).',
     '2. If **rollout** failed: kubectl logs/describe; look for ROLL_FAILED deployment/xxx; fix image/config — NOT nodes.',
     '3. If **gitops-sync** or Argo ComparisonError: get_gitops_apps → fix manifest in bifrost-trade-infra → git_commit/push/mirror OR spawn_trade_release_fix.',
+    '3b. If the PipelineRun is terminal (Failed) and its remnant pods inflate failing_pods: delete_pipeline_run with operator approval to clean up the CR.',
     '4. If repo patch needed: spawn_trade_release_fix(diagnosis) — do NOT use cluster_issues_full_auto for manifest fixes.',
     '5. After fix: start_pipeline_run pipeline=bifrost-deliver-stg revision=main.',
     '6. get_stg_smoke + verify_mission_snapshot before closing.',

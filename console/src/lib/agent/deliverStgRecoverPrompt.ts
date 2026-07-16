@@ -90,6 +90,7 @@ export function buildDeliverStgRecoverPrompt(input: {
     '1. `get_delivery_run_logs` (or get_pipeline_runs) — identify failing Tekton **task** and step (clone, kaniko, rollout, gitops-sync, verify-stg).',
     '2. **If rollout failed:** inspect rollout pod logs for `ROLL_FAILED deployment/xxx`; describe failing Deployment; safe rollout_restart only after root cause identified. Do NOT cordon nodes when STG smoke is green.',
     '3. **If gitops-sync failed OR Argo ComparisonError (programs/ missing):** call `get_gitops_apps`, fix manifest in GitOps repo, `gitops_sync_app`, or escalate to `gitops-config-repair` / `spawn_trade_release_fix` for repo commits.',
+    '3b. **If PipelineRun is terminal (Failed) and remnant pods inflate failing_pods:** `delete_pipeline_run` with operator approval to clean up the CR + pods.',
     '4. If ImagePullBackOff after rollout: confirm Kaniko pushed to registry.cicd and image tag matches deployment.',
     '5. If ConfigMap/Secret missing: restore in GitOps repo — do not patch prod secrets blindly.',
     '6. If code/manifest fix needed in trade-infra or trade-* repos: call `spawn_trade_release_fix` with diagnosis — do not repeat cluster-auto.',
