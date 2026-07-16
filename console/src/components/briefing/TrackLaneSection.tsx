@@ -517,7 +517,7 @@ function CompletedLanesGroup({
         </span>
         <BriefingStatusBadge status="done" label={`${items.length}`} />
         <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          Archive · Delivery Board owns sign-off
+          Archive · Program sign-off in Session · Board is catalog
         </span>
         <span className="ml-auto text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
           {expanded ? '▾' : '▸'}
@@ -727,8 +727,8 @@ export function TrackLaneSection({
         <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2.5 text-center">
           <p className="m-0 text-sm font-medium text-[var(--foreground)]">All lanes complete</p>
           <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Start a new lane under Backlog. Program sign-off and closure belong on Delivery Board —
-            Completed below is an archive view only.
+            Start a new lane under Backlog. Program sign-off stays in Session; Delivery Board is the
+            read-only catalog. Completed below is an archive view of lanes.
           </p>
         </div>
       )}

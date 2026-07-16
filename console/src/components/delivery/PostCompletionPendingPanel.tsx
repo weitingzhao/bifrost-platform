@@ -10,7 +10,19 @@ import {
 import { OPERATE_QUEUE_QUERY_KEY } from '@/api/operateQueue'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
-export function PostCompletionPendingPanel({ programId }: { programId?: string }) {
+export function PostCompletionPendingPanel({
+  programId,
+  programIds,
+  allowApprove = true,
+  emphasize = false,
+}: {
+  programId?: string
+  /** Filter global pending items to these program ids (Briefing Session lane handoff). */
+  programIds?: string[]
+  allowApprove?: boolean
+  /** Highlight shell for Session ownership (e.g. governance handoff). */
+  emphasize?: boolean
+}) {
   const { canAdmin } = usePlatformAuth()
   const queryClient = useQueryClient()
   const [approveId, setApproveId] = useState<string | null>(null)
@@ -19,6 +31,7 @@ export function PostCompletionPendingPanel({ programId }: { programId?: string }
     queryKey: ['programs', 'post-completion', 'pending'],
     queryFn: fetchPendingPostCompletion,
     refetchInterval: 30_000,
+    enabled: programId == null,
   })
 
   const detailQuery = useQuery({
@@ -40,20 +53,32 @@ export function PostCompletionPendingPanel({ programId }: { programId?: string }
 
   const globalItems = pendingQuery.data?.items ?? []
   const programItems = detailQuery.data?.pending_post_completion_items ?? []
+  const idSet = programIds != null ? new Set(programIds) : null
   const items =
     programId != null
       ? programItems
-      : globalItems.filter(i => i.status === 'pending_review')
+      : globalItems.filter(i => {
+          if (i.status !== 'pending_review') return false
+          if (idSet != null) return idSet.has(i.program_id)
+          return true
+        })
 
   if (items.length === 0) {
     return null
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2">
+    <div
+      className={[
+        'flex flex-col gap-2 rounded-md border px-3 py-2',
+        emphasize
+          ? 'border-[var(--color-lamp-yellow)]/45 bg-[color-mix(in_srgb,var(--color-lamp-yellow)_12%,transparent)]'
+          : 'border-border bg-secondary/30',
+      ].join(' ')}
+    >
       <p className="text-dense-label font-medium m-0">Post-completion — pending Owner review</p>
       <p className="text-dense-meta text-muted-foreground m-0">
-        Approve injects items into the Operate queue (Projection API · D11).
+        Approve injects items into the Operate queue (Projection API · D11). Hosted in Briefing Session.
       </p>
       <ul className="m-0 flex flex-col gap-2 p-0 list-none">
         {items.map(item => (
@@ -67,7 +92,7 @@ export function PostCompletionPendingPanel({ programId }: { programId?: string }
                 pending_review
               </DenseTag>
             </div>
-            {canAdmin && (
+            {canAdmin && allowApprove && (
               <Button type="button" size="sm" variant="outline" onClick={() => setApproveId(item.id)}>
                 Approve
               </Button>

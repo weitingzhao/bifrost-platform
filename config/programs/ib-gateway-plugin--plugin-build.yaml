@@ -92,6 +92,7 @@ metadata:
     base_blueprint_id: ib-gateway-plugin
     created_at: "2026-07-12T06:32:50Z"
     instance_label: Plugin Build
+    lane_id: ib-vendor
     owner: vision-mac-trader
     tags:
         - delivery-board

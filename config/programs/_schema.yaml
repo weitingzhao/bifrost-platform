@@ -56,5 +56,6 @@ post_completion:
 metadata:
   created_at: string
   owner: string
+  lane_id: string   # Briefing lane id (lanes.yaml) — Delivery Board Scope→Lane filter
   prerequisite_programs: [string]
   tags: [string]

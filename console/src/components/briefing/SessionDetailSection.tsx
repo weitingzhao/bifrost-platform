@@ -10,6 +10,7 @@ import {
   withBriefingCommandHighlight,
 } from '@/components/briefing/BriefingCommandChip'
 import { TaskQueuePanel } from '@/components/briefing/TaskQueuePanel'
+import { SessionProgramDeliveryPanel } from '@/components/briefing/SessionProgramDeliveryPanel'
 import { BriefingReconcilePanel } from '@/components/briefing/BriefingReconcilePanel'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { LaneLifecycle } from '@/lib/briefing/briefingStatus'
@@ -58,8 +59,8 @@ export interface SessionDetailSectionProps {
 }
 
 /**
- * Session focus zone: CTA + pack knobs + reconcile status + queue.
- * Completed lanes render as archive (reference-only) — no work Session handoff.
+ * Session focus zone: CTA + pack knobs + reconcile status + queue + program sign-off.
+ * Completed lanes keep queue archive; program sign-off / Approve remain available here.
  */
 export function SessionDetailSection({
   scope,
@@ -111,9 +112,10 @@ export function SessionDetailSection({
       <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
         {isArchive ? (
           <>
-            Queue history below is read-only. Start work via{' '}
+            Queue history below is read-only. Program sign-off and post-completion Approve stay in
+            this Session. Start new work via{' '}
             <span className="font-medium text-[var(--foreground)]">New Lane (reference)</span> — do
-            not open a work Session or run <BriefingCommandChip /> on a completed lane.
+            not run <BriefingCommandChip /> on a completed lane.
           </>
         ) : insideCursorBrowser ? (
           lifecycle === 'active' ? (
@@ -257,6 +259,8 @@ export function SessionDetailSection({
         auditLoading={auditLoading}
         onOpenAudit={onOpenAudit}
       />
+
+      <SessionProgramDeliveryPanel laneId={lane.id} />
     </section>
   )
 }

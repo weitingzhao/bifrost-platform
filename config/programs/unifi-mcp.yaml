@@ -30,4 +30,5 @@ phases:
 metadata:
   created_at: "2026-07-07"
   owner: vision-mac-trader
+  lane_id: network-server
   tags: [delivery-board, mcp]

@@ -139,7 +139,14 @@ function PhaseDetailRow({
   )
 }
 
-export function ProgramDetailView({ programId }: { programId: string }) {
+export function ProgramDetailView({
+  programId,
+  allowSignOff = true,
+}: {
+  programId: string
+  /** When false, read-only catalog (Delivery Board). Default true for Briefing Session. */
+  allowSignOff?: boolean
+}) {
   const { canAdmin } = usePlatformAuth()
   const queryClient = useQueryClient()
   const [confirmPhaseId, setConfirmPhaseId] = useState<string | null>(null)
@@ -167,6 +174,7 @@ export function ProgramDetailView({ programId }: { programId: string }) {
   const isVisionProgram = programId === 'vision'
   const isMissionSignalProgram = programId === 'mission-signal'
   const panelSignOffOnly = isVisionProgram || isMissionSignalProgram
+  const tableAllowSignOff = allowSignOff && !panelSignOffOnly
 
   if (detailQuery.isLoading) {
     return <p className="text-dense-meta text-muted-foreground">Loading program…</p>
@@ -190,13 +198,15 @@ export function ProgramDetailView({ programId }: { programId: string }) {
       />
 
       <OpsSection
-        title="Phase sign-off"
+        title={allowSignOff ? 'Phase sign-off' : 'Phases'}
         description={
-          isVisionProgram
-            ? 'Counts sync from unified programs API. Run and sign each gate in the Vision panels below.'
-            : isMissionSignalProgram
-              ? 'Counts sync from unified programs API. Sign each phase in the Mission Signal panels below when live readiness passes.'
-              : 'Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands.'
+          !allowSignOff
+            ? 'Read-only on Delivery Board. Record Owner sign-off in Agent Briefing → Session for this lane.'
+            : isVisionProgram
+              ? 'Counts sync from unified programs API. Run and sign each gate in the Vision panels below.'
+              : isMissionSignalProgram
+                ? 'Counts sync from unified programs API. Sign each phase in the Mission Signal panels below when live readiness passes.'
+                : 'Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands.'
         }
       >
         <DenseDataTable>
@@ -215,7 +225,7 @@ export function ProgramDetailView({ programId }: { programId: string }) {
                 key={phase.id}
                 phase={phase}
                 canAdmin={canAdmin}
-                allowSignOff={!panelSignOffOnly}
+                allowSignOff={tableAllowSignOff}
                 onSignOff={setConfirmPhaseId}
               />
             ))}
@@ -227,7 +237,7 @@ export function ProgramDetailView({ programId }: { programId: string }) {
         <ProgramAgentSessionsPanel programId={programId} />
       </OpsSection>
 
-      <PostCompletionPendingPanel programId={programId} />
+      {allowSignOff && <PostCompletionPendingPanel programId={programId} />}
 
       {detail.post_completion != null &&
         ((detail.post_completion.new_capabilities?.length ?? 0) > 0 ||

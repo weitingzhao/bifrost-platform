@@ -311,7 +311,7 @@ export function surfaceStatusVariant(
   }
 }
 
-/** Archived phase statuses, surface tags, rollout wave snapshots — live sign-off on Delivery Board. */
+/** Archived phase statuses, surface tags, rollout wave snapshots — live sign-off in Briefing Session. */
 export function buildTradeIbClientMigrationHistoricalAppendix(): string {
   const lines: string[] = [
     '## Historical progress (archived — do not treat as live)',

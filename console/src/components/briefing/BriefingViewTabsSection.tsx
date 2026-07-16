@@ -31,7 +31,7 @@ import { allWorkLanes, buildQueueForLane } from '@/lib/briefing/workLanes'
 import type { TaskModeId } from '@/lib/task-mode/types'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 
-/** Active-work counts for Briefing scope tags — Done omitted (Delivery Board concern). */
+/** Active-work counts for Briefing scope tags — Done omitted (Session sign-off / Board catalog). */
 export type ScopeActiveCounts = {
   doing: number
   planned: number

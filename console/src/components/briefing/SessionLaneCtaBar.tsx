@@ -146,7 +146,7 @@ export function SessionLaneCtaBar({
             onClick={() => {
               window.location.hash = `delivery-board?lane_id=${encodeURIComponent(lane.id)}`
             }}
-            title="Filter Delivery Board programs linked to this lane"
+            title="Open Delivery Board catalog filtered to this lane (read-only — sign-off stays in Session)"
           >
             Open Board
           </Button>
@@ -238,7 +238,7 @@ export function SessionLaneCtaBar({
             onClick={() => {
               window.location.hash = `delivery-board?lane_id=${encodeURIComponent(lane.id)}`
             }}
-            title="Filter Delivery Board programs linked to this lane"
+            title="Open Delivery Board catalog filtered to this lane (read-only — sign-off stays in Session)"
           >
             Open Board
           </Button>

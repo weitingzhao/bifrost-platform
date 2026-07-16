@@ -110,7 +110,7 @@ export const IB_GATEWAY_RELATED_AUTHORITIES = [
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
 
-/** Archived phase statuses and spine progress snapshot — live sign-off on Delivery Board. */
+/** Archived phase statuses and spine progress snapshot — live sign-off in Briefing Session. */
 export function buildIbGatewayHistoricalAppendix(): string {
   const lines: string[] = [
     '## Historical progress (archived — do not treat as live)',

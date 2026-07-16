@@ -24,6 +24,18 @@
       "source": "post_completion",
       "pending_id": "e2e-retest-1783453648",
       "approved_by": "e2e-retest"
+    },
+    {
+      "id": "633e8e90-e715-47b2-9a8a-78ad96ddd7d7",
+      "program_id": "dap-smoke-test",
+      "title": "E2E Wave 3b handoff 1783453198",
+      "description": "Live acceptance test item",
+      "status": "open",
+      "created_at": "2026-07-16T00:29:01Z",
+      "updated_at": "2026-07-16T00:29:01Z",
+      "source": "post_completion",
+      "pending_id": "e2e-wave3b-1783453198",
+      "approved_by": "owner"
     }
   ]
 }

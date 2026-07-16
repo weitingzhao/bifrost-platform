@@ -20,4 +20,5 @@ phases:
 metadata:
   created_at: "2026-07-07"
   owner: vision-mac-trader
+  lane_id: agent-services
   tags: [delivery-board, dev-agent]

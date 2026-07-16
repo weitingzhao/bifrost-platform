@@ -92,6 +92,7 @@ metadata:
     base_blueprint_id: control-room-ui
     created_at: "2026-07-08T00:41:17Z"
     instance_label: Rocket Build
+    lane_id: console-api
     owner: vision-mac-trader
     tags:
         - delivery-board
