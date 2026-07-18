@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { DenseTag, PageHeader } from '@bifrost/ui'
 import { fetchDevAgentStatus } from '@/api/devAgent'
@@ -28,11 +28,10 @@ import {
 } from '@/components/task-mode/TaskModeReadinessStrip'
 import { DevTaskStrips } from '@/components/task-mode/DevTaskStrips'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
-import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { useDevProgramInstance } from '@/hooks/useDevProgramInstance'
 import { useInlineBriefingPack } from '@/hooks/useInlineBriefingPack'
-import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
+import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
@@ -49,8 +48,15 @@ import {
   buildClusterPackBody,
   buildDispatchedFixPrompt,
   fixScopeAgentTitle,
-  missionSnapshotToFixSignals,
 } from '@/lib/agent/readinessFixDispatch'
+import {
+  buildFleetCellFixPrompt,
+  cellAllowsAgentFix,
+  pickFleetFixCell,
+  resolveCellFixScope,
+} from '@/lib/control-room/fleetCellFix'
+import type { FleetCell } from '@/lib/control-room/fleetSnapshot'
+import { ViewerEnvBadge } from '@/components/task-mode/ViewerEnvBadge'
 import {
   buildSatelliteBusIngestTriagePrompt,
   SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
@@ -77,7 +83,6 @@ import {
   resolveLaunchVerdict,
 } from '@/lib/task-mode/satelliteLaunchVerdict'
 import {
-  buildDailyOpsMissionFixPrompt,
   buildPhaseHints,
   type TaskPhaseFixAction,
 } from '@/lib/task-mode/taskPhaseDiagnostics'
@@ -124,10 +129,13 @@ export function TaskControlCenter({
 }: TaskControlCenterProps) {
   const { mode } = useTaskMode()
   const { canOperate } = usePlatformAuth()
-  const { snapshot } = useMissionSnapshot()
+  const { fleet, snapshot, viewerEnv, viewerEnvLoading } = useFleetSnapshot()
   const queueQ = useOperateQueue()
+  const [fleetFixCell, setFleetFixCell] = useState<FleetCell | null>(null)
+  const fleetFixCellRef = useRef<FleetCell | null>(null)
 
   const isMissionLaunch = mode.id === 'mission-launch'
+  const isDailyOps = mode.id === 'daily-ops'
   const rocketProd = useRocketProdReadiness(isMissionLaunch)
   const satelliteProd = useSatelliteProdReadiness(isMissionLaunch)
   const promoteVerify = usePromoteVerifyReadiness(isMissionLaunch)
@@ -154,7 +162,7 @@ export function TaskControlCenter({
     refetchInterval: 20_000,
     enabled:
       isMissionLaunch ||
-      (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
+      (isDailyOps && !fleet.fleetClear),
   })
 
   const serviceReadinessForFixQ = useQuery({
@@ -163,7 +171,7 @@ export function TaskControlCenter({
     refetchInterval: 20_000,
     enabled:
       isMissionLaunch ||
-      (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
+      (isDailyOps && !fleet.fleetClear),
   })
 
   const devProgram = useDevProgramInstance(mode)
@@ -215,8 +223,22 @@ export function TaskControlCenter({
   const tradeProdFixScope = pickFixScope(tradeProdFixSignals)
   const tradeStgEnvFixScope = pickFixScope(stgReadinessSignals)
   const tradeProdEnvFixScope = pickFixScope(prodReadinessSignals)
-  const dailyOpsFixSignals = useMemo(() => missionSnapshotToFixSignals(snapshot), [snapshot])
-  const dailyOpsFixScope = pickFixScope(dailyOpsFixSignals)
+  const dailyOpsTargetCell = useMemo(() => {
+    if (fleetFixCell != null && cellAllowsAgentFix(fleetFixCell)) return fleetFixCell
+    return pickFleetFixCell(fleet)
+  }, [fleetFixCell, fleet])
+  const dailyOpsFixScope = resolveCellFixScope(dailyOpsTargetCell ?? ({
+    signal: 'ok',
+    role: 'ground',
+    env: null,
+    span: true,
+    key: '',
+    value: '',
+    detail: '',
+    probePath: '',
+    fixScope: null,
+    agentFixEnabled: false,
+  } as FleetCell)) ?? PROD_ENV_FIX_SCOPE
 
   const aiPlatformProdFix = useAmbientAgentTask({
     canOperate,
@@ -587,6 +609,8 @@ export function TaskControlCenter({
       tradeStgSmokeOk: tradeSmokeOk,
       briefingOpened,
       devAgentPhaseDone: isDevLoop ? devAgentPhaseDone : undefined,
+      fleetAgentFixAvailable:
+        isDailyOps && dailyOpsTargetCell != null && cellAllowsAgentFix(dailyOpsTargetCell),
     }
   }, [
     context,
@@ -603,6 +627,8 @@ export function TaskControlCenter({
     briefingOpened,
     isDevLoop,
     devAgentPhaseDone,
+    isDailyOps,
+    dailyOpsTargetCell,
   ])
 
   const phases = mode.phases ?? []
@@ -623,12 +649,15 @@ export function TaskControlCenter({
     scope: dailyOpsFixScope,
     label: scopeToLabel(dailyOpsFixScope),
     buildRequest: async () => {
-      const signals = missionSnapshotToFixSignals(snapshot)
-      const scope = pickFixScope(signals)
-      const diagnostic = buildDailyOpsMissionFixPrompt(snapshot)
-      if (diagnostic == null && scope === PROD_ENV_FIX_SCOPE) {
-        throw new Error('Mission is NOMINAL — nothing to fix')
+      const cell =
+        fleetFixCellRef.current ??
+        dailyOpsTargetCell ??
+        pickFleetFixCell(fleet)
+      if (cell == null || !cellAllowsAgentFix(cell)) {
+        throw new Error('Fleet is clear or selected cell is not Agent-Fixable')
       }
+      const scope = resolveCellFixScope(cell) ?? PROD_ENV_FIX_SCOPE
+      const cellPrompt = buildFleetCellFixPrompt(cell, fleet)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
@@ -637,14 +666,41 @@ export function TaskControlCenter({
       return {
         prompt: buildDispatchedFixPrompt({
           scope,
-          signals,
-          clusterFallbackPrompt: diagnostic ?? 'Mission diagnostic unavailable — verify_mission_snapshot and remediate open issues.',
+          signals: [
+            {
+              label: `${cell.role} · ${cell.env ?? 'span'}`,
+              signal: cell.signal === 'unavailable' ? 'unknown' : cell.signal,
+              detail: cell.detail,
+              fixScope: scope,
+            },
+          ],
+          clusterFallbackPrompt: cellPrompt,
           extras: { supply, stgSmoke: smoke },
         }),
         ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
+
+  const handleFleetCellFix = (cell: FleetCell) => {
+    fleetFixCellRef.current = cell
+    setFleetFixCell(cell)
+    aiDailyOpsFix.trigger()
+  }
+
+  const handleFleetPrimaryCta = () => {
+    const cta = fleet.verdict.primaryCta
+    if (cta.kind === 'navigate' && cta.tabId != null) {
+      onNavigate(cta.tabId)
+      return
+    }
+    if (cta.kind === 'agent-fix') {
+      const cell =
+        (cta.cellKey != null ? fleet.cells.find(c => c.key === cta.cellKey) : null) ??
+        pickFleetFixCell(fleet)
+      if (cell != null) handleFleetCellFix(cell)
+    }
+  }
 
   const doneCount = phases.filter((p: TaskPhaseDef) => statuses[p.id] === 'done').length
   const loopLabel =
@@ -761,8 +817,10 @@ export function TaskControlCenter({
   const phaseDefaultOpen = useMemo(() => {
     if (phases.length === 0) return false
     if (isDevLoop) return false
+    // Daily Ops — phase playbook is reference only (A7); default collapsed
+    if (isDailyOps) return false
     return !phases.every((p: TaskPhaseDef) => statuses[p.id] === 'done')
-  }, [phases, statuses, isDevLoop])
+  }, [phases, statuses, isDevLoop, isDailyOps])
 
   const [phaseOpen, setPhaseOpen] = useState(phaseDefaultOpen)
   useEffect(() => {
@@ -772,21 +830,29 @@ export function TaskControlCenter({
   const headerDescription =
     mode.loopArchetype === 'dev'
       ? `Briefing → implement → deliver — playbook for ${mode.label}.`
-      : mode.loopArchetype === 'ops'
-        ? `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
-        : `${mode.label} · ${loopLabel}`
+      : isDailyOps
+        ? `${mode.label} · Fleet Desk — viewer seat, GO|HOLD|NO-GO, role × environment board.`
+        : mode.loopArchetype === 'ops'
+          ? `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
+          : `${mode.label} · ${loopLabel}`
 
   const phaseProgressHint = isDevLoop
     ? phaseOpen
       ? 'Open — Dev playbook checklist'
       : 'Collapsed — Dev playbook checklist'
-    : phaseOpen
-      ? 'Open — not live Go/No-Go'
-      : 'Collapsed — not live Go/No-Go'
+    : isDailyOps
+      ? phaseOpen
+        ? 'Open — Reference playbook'
+        : 'Collapsed — Reference playbook'
+      : phaseOpen
+        ? 'Open — not live Go/No-Go'
+        : 'Collapsed — not live Go/No-Go'
 
   const phaseProgressCaption = isDevLoop
     ? 'Playbook phase status — Briefing → implement → deliver → sign-off'
-    : 'Historical phase checklist — not live environment health'
+    : isDailyOps
+      ? 'Reference playbook — not live fleet health (Fleet board above is authoritative)'
+      : 'Historical phase checklist — not live environment health'
 
   const phaseProgressBlock =
     phases.length > 0 ? (
@@ -799,7 +865,7 @@ export function TaskControlCenter({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
             <DenseTag variant="neutral" className="text-[9px]">
-              Playbook
+              {isDailyOps ? 'Reference playbook' : 'Playbook'}
             </DenseTag>
             <DenseTag variant="neutral" className="text-[9px]">
               {doneCount}/{phases.length} complete
@@ -856,10 +922,21 @@ export function TaskControlCenter({
         description={headerDescription}
         actions={
           mode.loopArchetype === 'system' ? undefined : (
-            <DenseTag variant={mode.loopArchetype === 'dev' ? 'info' : 'warning'}>{loopLabel}</DenseTag>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(isDailyOps || mode.loopArchetype === 'ops') && (
+                <ViewerEnvBadge viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />
+              )}
+              <DenseTag variant={mode.loopArchetype === 'dev' ? 'info' : 'warning'}>{loopLabel}</DenseTag>
+            </div>
           )
         }
       />
+
+      {isDailyOps && aiDailyOpsFix.error != null && (
+        <OpsFeedback variant="error" title="Failed to start Agent Fix">
+          {aiDailyOpsFix.error.message}
+        </OpsFeedback>
+      )}
 
       {mode.loopArchetype === 'ops' && showLaunchPad && (
         <>
@@ -888,43 +965,16 @@ export function TaskControlCenter({
               {aiTradeProdFix.error.message}
             </OpsFeedback>
           )}
-          {aiDailyOpsFix.error != null && (
-            <OpsFeedback variant="error" title="Failed to start Agent Fix">
-              {aiDailyOpsFix.error.message}
-            </OpsFeedback>
-          )}
           {aiBusIngestTriage.error != null && (
             <OpsFeedback variant="error" title="Failed to start Bus Ingest Triage">
               {aiBusIngestTriage.error.message}
-            </OpsFeedback>
-          )}
-          {mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok' && (
-            <OpsFeedback
-              variant="warning"
-              title={`Mission ${missionStatus(snapshot.missionOverall)} — fix signals before continuing`}
-              actions={
-                <AgentTriggerButton
-                  label="Agent Fix"
-                  size="xs"
-                  pending={aiDailyOpsFix.isPending}
-                  disabled={aiDailyOpsFix.disabled}
-                  title={
-                    aiDailyOpsFix.disabledReason ??
-                    'Diagnose failing rocket/payload signals and remediate via Cluster · Remediate'
-                  }
-                  onClick={() => aiDailyOpsFix.trigger()}
-                />
-              }
-            >
-              Phase 1 stays blocked until mission signals are NOMINAL. Select step 1 in Phase progress for
-              root-cause breakdown, or open Control Room for the full mission board.
             </OpsFeedback>
           )}
         </>
       )}
 
       {mode.loopArchetype === 'ops' &&
-        (isMissionLaunch || mode.id === 'daily-ops') && (
+        (isMissionLaunch || isDailyOps) && (
           <OpsTaskSummaryRow
             mode={mode}
             context={context}
@@ -962,6 +1012,9 @@ export function TaskControlCenter({
               aiBusIngestTriage.disabledReason ??
               'Cross-check Socket matrix vs Rocket IB gateway (D10 safe)'
             }
+            onFleetCellFix={isDailyOps ? handleFleetCellFix : undefined}
+            onFleetPrimaryCta={isDailyOps ? handleFleetPrimaryCta : undefined}
+            fleetAgentFixPending={isDailyOps ? aiDailyOpsFix.isPending : undefined}
             recentRuns={isMissionLaunch ? platformRunsQ.data?.runs : undefined}
             recentRunsLoading={isMissionLaunch ? platformRunsQ.isLoading : false}
             tradeRecentRuns={isMissionLaunch ? tradeRunsQ.data?.runs : undefined}
@@ -1012,7 +1065,7 @@ export function TaskControlCenter({
           />
         )}
 
-      {/* Dev: strips above phase progress (D-B / F6). Ops: phase progress first. */}
+      {/* Dev: strips above phase. Daily Ops: fleet first (summary), then reference playbook + promote. */}
       {isDevLoop ? (
         <>
           {devStripsBlock}
@@ -1041,7 +1094,10 @@ export function TaskControlCenter({
               canDispatchTradeDeploy={tradeDeployDispatchAllowed}
               releaseDisabledReason={releaseDisabledReason}
               tradeDeployDisabledReason={tradeDeployDisabledReason}
-              promoteOnly={mode.id === 'daily-ops'}
+              promoteOnly={isDailyOps}
+              onFleetCellFix={isDailyOps ? handleFleetCellFix : undefined}
+              onFleetPrimaryCta={isDailyOps ? handleFleetPrimaryCta : undefined}
+              fleetAgentFixPending={isDailyOps ? aiDailyOpsFix.isPending : undefined}
             />
           )}
         </>

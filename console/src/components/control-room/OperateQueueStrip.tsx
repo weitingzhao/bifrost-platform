@@ -1,13 +1,9 @@
-import { Button, DenseTag } from '@bifrost/ui'
+import { DenseTag } from '@bifrost/ui'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
-import { useCloseOperateQueueItem } from '@/hooks/useCloseOperateQueueItem'
-import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 export function OperateQueueStrip() {
   const queueQuery = useOperateQueue()
-  const closeMutation = useCloseOperateQueueItem()
-  const { canOperate } = usePlatformAuth()
   const openItems = queueQuery.data?.open ?? []
 
   if (queueQuery.isLoading) {
@@ -52,17 +48,7 @@ export function OperateQueueStrip() {
                 )}
               </div>
             </div>
-            {canOperate && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={closeMutation.isPending}
-                onClick={() => closeMutation.mutate(item.id)}
-              >
-                Resolve
-              </Button>
-            )}
+            <span className="text-dense-caption text-muted-foreground">Execute and verify in Agent Desk</span>
           </li>
         ))}
       </ul>

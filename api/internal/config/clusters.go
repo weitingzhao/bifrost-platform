@@ -89,6 +89,8 @@ type ClusterEntry struct {
 	Distribution        string             `yaml:"distribution" json:"distribution"`
 	APIServer           string             `yaml:"api_server" json:"api_server"`
 	KubeconfigEnv       string             `yaml:"kubeconfig_env" json:"kubeconfig_env"`
+	// ViewerEnv — optional Daily Ops seat (dev|stg|prod|dev-local); overridden by OPS_VIEWER_ENV.
+	ViewerEnv           string             `yaml:"viewer_env" json:"viewer_env,omitempty"`
 	SSHHost             string             `yaml:"ssh_host" json:"ssh_host"`
 	NodeIP              string             `yaml:"node_ip" json:"node_ip"`
 	BifrostNamespaces   []string           `yaml:"bifrost_namespaces" json:"bifrost_namespaces"`

@@ -11,13 +11,14 @@ import {
 import { LaunchPad } from '@/components/control-room/LaunchPad'
 import { gateStepStatus, runStepStatus, pickDeployPipelineRun, deployRunRetryFailed } from '@/components/delivery/ReleaseStepCommandCenter'
 import { OpsSection } from '@/components/layout/OpsSection'
-import {
-  DailyOpsMissionStrip,
-  TaskModeReadinessStrip,
-} from '@/components/task-mode/TaskModeReadinessStrip'
+import { DailyOpsFleetBoard } from '@/components/task-mode/DailyOpsFleetBoard'
+import { DailyOpsVerdictBar } from '@/components/task-mode/DailyOpsVerdictBar'
+import { TaskModeReadinessStrip } from '@/components/task-mode/TaskModeReadinessStrip'
 import { LaunchLiveView } from '@/components/task-mode/LaunchLiveView'
 import { MissionLaunchBoard } from '@/components/task-mode/MissionLaunchBoard'
+import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { operateQueueClearLabel, type FleetCell } from '@/lib/control-room/fleetSnapshot'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import { DELIVER_PLATFORM_PIPELINE } from '@/lib/delivery/deliverPlatformPhases'
@@ -61,6 +62,10 @@ export type OpsTaskStripsProps = {
   agentTriagePending?: boolean
   agentTriageDisabled?: boolean
   agentTriageTitle?: string
+  /** Daily Ops Fleet Desk — per-cell / primary Agent Fix */
+  onFleetCellFix?: (cell: FleetCell) => void
+  onFleetPrimaryCta?: () => void
+  fleetAgentFixPending?: boolean
   /** Recent PipelineRuns for the side history column. */
   recentRuns?: import('@/api/types').DeliveryPipelineRunView[]
   recentRunsLoading?: boolean
@@ -97,18 +102,33 @@ export type OpsTaskStripsProps = {
   satelliteLaunchAgentFixTitle?: string
 }
 
-function OperateQueueSummary({ onNavigate }: { onNavigate: (tab: string) => void }) {
+function OperateQueueSummary({
+  onNavigate,
+  fleetClear,
+}: {
+  onNavigate: (tab: string) => void
+  fleetClear: boolean
+}) {
   const queueQ = useOperateQueue()
   const open = queueQ.data?.open ?? []
+  const label = operateQueueClearLabel(open.length, fleetClear)
+  const clearButFleetNot = open.length === 0 && !fleetClear
 
   return (
     <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Bot size={16} />
         <span className="text-[var(--text-dense-label)] font-semibold">Operate queue</span>
-        <DenseTag variant={open.length === 0 ? 'success' : 'warning'}>
-          {open.length === 0 ? 'Clear' : `${open.length} open`}
+        <DenseTag
+          variant={open.length === 0 && fleetClear ? 'success' : clearButFleetNot ? 'neutral' : 'warning'}
+        >
+          {label}
         </DenseTag>
+        {clearButFleetNot && (
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+            Queue clear does not mean fleet clear
+          </span>
+        )}
       </div>
       {open.length > 0 && (
         <ul className="m-0 mt-2 list-none space-y-1 p-0">
@@ -124,7 +144,7 @@ function OperateQueueSummary({ onNavigate }: { onNavigate: (tab: string) => void
         className="mt-2 text-[var(--text-dense-meta)] text-primary hover:underline"
         onClick={() => onNavigate('control-room')}
       >
-        Review in Control Room →
+        Review operate items →
       </button>
     </div>
   )
@@ -558,61 +578,107 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
   }
 
   if (mode.id === 'daily-ops') {
-    return (
-      <div className="grid gap-3 md:grid-cols-2">
-        <OpsSection title="Operate summary" bodyPadding="compact">
-          <OperateQueueSummary onNavigate={onNavigate} />
-        </OpsSection>
-        {ops.showMissionSignals && (
-          <OpsSection title="Live signals" bodyPadding="compact">
-            <DailyOpsMissionStrip compact />
-          </OpsSection>
-        )}
-      </div>
-    )
+    return <DailyOpsFleetDesk props={props} compact />
   }
 
   return null
 }
 
-export function OpsTaskStrips({
-  mode,
-  context,
-  matrices = [],
-  stgSmoke,
-  stgGate,
-  lastDeliverSucceeded,
-  tierB,
-  onNavigate,
-  onOpenPromote,
-  onOpenDelivery,
-  onDispatchRelease,
-  onDispatchTradeDeploy,
-  releasePending,
-  tradeDeployPending,
-  canDispatchRelease,
-  canDispatchTradeDeploy,
-  releaseDisabledReason,
-  tradeDeployDisabledReason,
-  promoteOnly = false,
-}: OpsTaskStripsProps) {
+function DailyOpsFleetDesk({
+  props,
+  compact = false,
+}: {
+  props: SummaryRowProps
+  compact?: boolean
+}) {
+  const { fleet, isLoading } = useFleetSnapshot()
+  const {
+    onNavigate,
+    readinessCanOperate,
+    onFleetCellFix,
+    onFleetPrimaryCta,
+    fleetAgentFixPending,
+  } = props
+
+  return (
+    <div className={`flex flex-col gap-3 ${compact ? '' : ''}`}>
+      <DailyOpsVerdictBar
+        fleet={fleet}
+        isLoading={isLoading}
+        canOperate={readinessCanOperate}
+        agentFixPending={fleetAgentFixPending}
+        onPrimaryCta={() => onFleetPrimaryCta?.()}
+        onNavigate={onNavigate}
+      />
+      <DailyOpsFleetBoard
+        fleet={fleet}
+        isLoading={isLoading}
+        canOperate={readinessCanOperate}
+        agentFixPending={fleetAgentFixPending}
+        onAgentFix={onFleetCellFix}
+        onNavigate={onNavigate}
+      />
+      <div className={compact ? '' : 'grid gap-3 md:grid-cols-2'}>
+        <OpsSection title="Operate summary" bodyPadding="compact">
+          <OperateQueueSummary onNavigate={onNavigate} fleetClear={fleet.fleetClear} />
+        </OpsSection>
+      </div>
+    </div>
+  )
+}
+
+export function OpsTaskStrips(props: OpsTaskStripsProps) {
+  const {
+    mode,
+    context,
+    matrices = [],
+    stgSmoke,
+    stgGate,
+    lastDeliverSucceeded,
+    tierB,
+    onNavigate,
+    onOpenPromote,
+    onOpenDelivery,
+    onDispatchRelease,
+    onDispatchTradeDeploy,
+    releasePending,
+    tradeDeployPending,
+    canDispatchRelease,
+    canDispatchTradeDeploy,
+    releaseDisabledReason,
+    tradeDeployDisabledReason,
+    promoteOnly = false,
+  } = props
   const ops = mode.ops
   if (ops == null) return null
 
   const promoteSection =
     mode.id === 'daily-ops' ? (
-      <OpsSection title="Promote / cutover">
-        <PromoteCutoverStrip
-          context={context}
-          matrices={matrices}
-          stgSmoke={stgSmoke}
-          stgGate={stgGate}
-          lastDeliverSucceeded={lastDeliverSucceeded}
-          tierB={tierB}
-          onOpenPromote={onOpenPromote}
-          onOpenDelivery={onOpenDelivery}
-        />
-      </OpsSection>
+      <details className="rounded-lg border border-border bg-card px-3 py-1.5">
+        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[var(--text-dense-meta)] font-semibold">Release posture</span>
+            <DenseTag variant="neutral" className="text-[9px]">
+              Secondary
+            </DenseTag>
+            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+              Promote / cutover — not first-screen Daily Ops
+            </span>
+          </div>
+        </summary>
+        <div className="mt-2">
+          <PromoteCutoverStrip
+            context={context}
+            matrices={matrices}
+            stgSmoke={stgSmoke}
+            stgGate={stgGate}
+            lastDeliverSucceeded={lastDeliverSucceeded}
+            tierB={tierB}
+            onOpenPromote={onOpenPromote}
+            onOpenDelivery={onOpenDelivery}
+          />
+        </div>
+      </details>
     ) : null
 
   if (promoteOnly) {
@@ -661,17 +727,6 @@ export function OpsTaskStrips({
       <OpsSection title="Environment readiness">
         <TaskModeReadinessStrip modeId="mission-launch" onNavigate={onNavigate} />
       </OpsSection>
-    ) : mode.id === 'daily-ops' && ops.showMissionSignals ? (
-      <OpsSection title="Live signals">
-        <DailyOpsMissionStrip />
-      </OpsSection>
-    ) : null
-
-  const operateSummarySection =
-    mode.id === 'daily-ops' ? (
-      <OpsSection title="Operate summary">
-        <OperateQueueSummary onNavigate={onNavigate} />
-      </OpsSection>
     ) : null
 
   if (isPlaybookLaunch) {
@@ -689,8 +744,7 @@ export function OpsTaskStrips({
   if (mode.id === 'daily-ops') {
     return (
       <div className="flex flex-col gap-3">
-        {operateSummarySection}
-        {readinessSection}
+        {!promoteOnly && <DailyOpsFleetDesk props={props} />}
         {promoteSection}
       </div>
     )

@@ -48,8 +48,18 @@ post_completion:
   new_risks: [string]
   operate_queue_items:
     - id: string
+      source_lane_id: string
+      operate_lane: enum   # governance | troubleshoot | release | business-advisory
       title: string
       description: string
+      handoff_kind: enum   # one_off | recurring_setup
+      reason: string
+      agent_task_id: string # optional; validated against config/agent-tasks.yaml
+      acceptance_criteria: [string]
+      verification_steps: [string]
+      risk_level: enum     # low | medium | high
+      owner: string
+      due_at: string       # RFC3339
 
 # --- Metadata ---
 
@@ -57,5 +67,6 @@ metadata:
   created_at: string
   owner: string
   lane_id: string   # Briefing lane id (lanes.yaml) — Delivery Board Scope→Lane filter
+  operate_lane: enum # optional default only; each Program/item still requires Owner assessment
   prerequisite_programs: [string]
   tags: [string]

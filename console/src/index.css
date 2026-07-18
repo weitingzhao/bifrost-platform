@@ -3059,6 +3059,33 @@ html {
   line-height: 1.4;
 }
 
+/* Current attention summary — auto-fit keeps every KPI visible at narrow widths. */
+.agent-desk-now {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--secondary) 45%, var(--card));
+  padding: 0.75rem 1rem;
+}
+.agent-desk-now--compact {
+  padding-block: 0.625rem;
+}
+.agent-desk-now__grid,
+.agent-desk-digest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  gap: 0.5rem;
+  min-width: 0;
+  margin-top: 0.625rem;
+}
+.agent-desk-now__metric {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 0.45rem;
+  background: var(--background);
+  padding: 0.5rem 0.625rem;
+}
+
 /* Composer section */
 .agent-desk-composer-section {
   border-radius: 0.625rem;
@@ -3332,6 +3359,32 @@ html {
 @keyframes agent-desk-cell-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+@media (max-width: 72rem) {
+  .agent-desk-shell--panel-open {
+    padding-right: 0;
+  }
+}
+
+@media (max-width: 42rem) {
+  .agent-desk-hero > div:first-child,
+  .agent-desk-tasks-section > div:first-child,
+  .agent-desk-timeline-group__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .agent-desk-status-bar,
+  .agent-desk-timeline-legend {
+    flex-wrap: wrap;
+  }
+
+  .agent-desk-now,
+  .agent-desk-composer-section,
+  .agent-desk-tasks-section {
+    padding-inline: 0.75rem;
+  }
 }
 
 /* Agent System map (Governance → Agent System) */

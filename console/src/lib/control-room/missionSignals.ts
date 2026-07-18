@@ -238,6 +238,8 @@ export interface MissionSnapshot {
   control: ModuleState
   agent: ModuleState
   tradeDev: ModuleState
+  /** STG trade matrix (must not be dropped from payload / mission overall). */
+  tradeStg: ModuleState
   tradeProd: ModuleState
   rocketOverall: Signal
   payloadOverall: Signal
@@ -278,6 +280,14 @@ export function collectPayloadDegradationItems(snap: MissionSnapshot): MissionDe
       id: 'Trade · dev',
       signal: snap.tradeDev.signal,
       detail: snap.tradeDev.detail,
+    })
+  }
+  if (snap.tradeStg.signal !== 'ok') {
+    out.push({
+      segment: 'payload',
+      id: 'Trade · stg',
+      signal: snap.tradeStg.signal,
+      detail: snap.tradeStg.detail,
     })
   }
   if (snap.tradeProd.signal !== 'ok') {
@@ -364,6 +374,7 @@ export function buildDiagnosticPrompt(
 
   const payloadIssues: string[] = []
   if (snap.tradeDev.signal !== 'ok') payloadIssues.push(`- Trade dev (${snap.tradeDev.signal}): ${snap.tradeDev.detail}`)
+  if (snap.tradeStg.signal !== 'ok') payloadIssues.push(`- Trade stg (${snap.tradeStg.signal}): ${snap.tradeStg.detail}`)
   if (snap.tradeProd.signal !== 'ok') payloadIssues.push(`- Trade prod (${snap.tradeProd.signal}): ${snap.tradeProd.detail}`)
   if (payloadIssues.length > 0) {
     lines.push('', 'Payload issues:')
@@ -386,15 +397,28 @@ export function buildMissionSnapshot(input: {
   matrices: MatrixResponse[]
 }): MissionSnapshot {
   const dev = input.matrices.find(m => m.environment === 'dev')
+  const stgMatrix = input.matrices.find(m => m.environment === 'stg')
   const prod = input.matrices.find(m => m.environment === 'prod')
   const infra = infraSignal(input.cluster)
   const release = releaseSignal(input.supply, input.stg)
   const control = controlSignal(input.self)
   const agent = agentSignal(input.runner, input.bridge)
   const tradeDev = tradeEnvSignal(dev)
+  const tradeStg = stgMatrix
+    ? tradeEnvSignal(stgMatrix)
+    : input.stg && input.stg.targets.length > 0
+      ? (() => {
+          const ok = input.stg.targets.filter(t => t.reachability === 'ok').length
+          const total = input.stg.targets.length
+          const anyFail = input.stg.targets.some(t => t.reachability === 'fail')
+          const anyDeg = input.stg.targets.some(t => t.reachability === 'degraded')
+          const signal: Signal = anyFail ? 'fail' : anyDeg ? 'degraded' : ok === total ? 'ok' : 'degraded'
+          return { signal, value: `${ok}/${total}`, detail: `STG smoke ${ok}/${total} targets` }
+        })()
+      : { signal: 'unknown' as Signal, value: 'n/a', detail: 'No STG matrix or smoke' }
   const tradeProd = tradeEnvSignal(prod)
   const rocketOverall = worst(infra.signal, release.signal, control.signal, agent.signal)
-  const payloadOverall = worst(tradeDev.signal, tradeProd.signal)
+  const payloadOverall = worst(tradeDev.signal, tradeStg.signal, tradeProd.signal)
   const missionOverall = worst(rocketOverall, payloadOverall)
   return {
     infra,
@@ -402,6 +426,7 @@ export function buildMissionSnapshot(input: {
     control,
     agent,
     tradeDev,
+    tradeStg,
     tradeProd,
     rocketOverall,
     payloadOverall,

@@ -124,6 +124,12 @@ export function missionSnapshotToFixSignals(snap: MissionSnapshot): ProdFixSigna
       fixScope: PROD_ENV_FIX_SCOPE,
     },
     {
+      label: 'Trade · STG',
+      signal: snap.tradeStg.signal,
+      detail: snap.tradeStg.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    {
       label: 'Trade · PROD',
       signal: snap.tradeProd.signal,
       detail: snap.tradeProd.detail,

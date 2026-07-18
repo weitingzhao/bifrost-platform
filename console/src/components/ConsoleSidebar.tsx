@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { ShellNavSidebar } from '@bifrost/ui'
 import { CONSOLE_NAV_GROUPS } from '@/lib/consoleNavConfig'
 import { TaskModeIconRail } from '@/components/task-mode/TaskModeIconRail'
+import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
+import { viewerEnvBadgeLabel } from '@/lib/control-room/fleetSnapshot'
 import { buildTaskNavGroups } from '@/lib/task-mode/navLens'
 import type { TaskModeId } from '@/lib/task-mode/types'
 import { useTaskMode } from '@/lib/task-mode/TaskModeContext'
@@ -54,17 +56,22 @@ export function ConsoleSidebar({
   onModeChange?: (landingTab: string, modeId: TaskModeId) => void
 }) {
   const { modeId, mode, isTaskLens } = useTaskMode()
+  const { viewerEnv, viewerEnvLoading } = useFleetSnapshot()
 
   const navGroups = useMemo(
     () => buildTaskNavGroups(modeId, CONSOLE_NAV_GROUPS),
     [modeId],
   )
 
+  const productContext = `${mode.label} · ${
+    viewerEnvLoading ? 'Probing…' : viewerEnvBadgeLabel(viewerEnv)
+  }`
+
   return (
     <ShellNavSidebar
         productName="Bifrost Ops"
         productBadge="Ops"
-        productContext={mode.label}
+        productContext={productContext}
         navGroups={navGroups}
         activeId={activeTab}
         onSelect={(item) => onSelect(item.id)}

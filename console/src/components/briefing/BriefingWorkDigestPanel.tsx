@@ -40,6 +40,8 @@ interface BriefingWorkDigestPanelProps {
   onSelectHotLine: (line: ComponentLineId) => void
   onClearFilters: () => void
   onFocusAllScope: () => void
+  /** Open top-level New Lane dialog (describe-first, no Scope prerequisite). */
+  onNewLane?: () => void
   /** Full-width summary strip (top of Briefing Master-Detail page). */
   compact?: boolean
 }
@@ -152,6 +154,7 @@ export function BriefingWorkDigestPanel({
   onSelectHotLine,
   onClearFilters,
   onFocusAllScope,
+  onNewLane,
   compact = false,
 }: BriefingWorkDigestPanelProps) {
   const { summary, hotLines, laneTotal } = useMemo(() => {
@@ -206,6 +209,16 @@ export function BriefingWorkDigestPanel({
               onClick={onClearFilters}
             >
               {briefingLifecycleFilterLabel(lifecycleFilter)} ✕
+            </button>
+          )}
+          {onNewLane != null && (
+            <button
+              type="button"
+              className="ml-auto inline-flex items-center gap-1 rounded-md border border-[var(--primary)]/45 bg-[var(--primary)]/10 px-2 py-0.5 text-[var(--text-dense-caption)] font-semibold text-[var(--primary)] transition-colors hover:bg-[var(--primary)]/18"
+              onClick={onNewLane}
+              title="Describe work first — recommend Line and Track Type"
+            >
+              + New Lane
             </button>
           )}
         </div>

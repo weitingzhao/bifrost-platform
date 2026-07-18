@@ -17,6 +17,7 @@ export const BRIEFING_TRACK_PARAM = 'track'
 export const BRIEFING_LANE_PARAM = 'lane'
 export const BRIEFING_INTENT_PARAM = 'intent'
 export const BRIEFING_PACK_PARAM = 'pack'
+export const BRIEFING_PROGRAM_PARAM = 'program'
 export const BRIEFING_TASK_MODE_CTX_STORAGE_KEY = 'bifrost-briefing-task-mode-context'
 
 export type BriefingPackSize = 'compact' | 'full'
@@ -31,6 +32,7 @@ export interface BriefingUrlState {
   lane?: LaneId
   intent?: WorkIntent
   pack?: BriefingPackSize
+  program?: string
   taskModeContext?: TaskModeBriefingContext
 }
 
@@ -67,6 +69,7 @@ export function parseBriefingUrlState(url: URL = new URL(window.location.href)):
   const lane = url.searchParams.get(BRIEFING_LANE_PARAM)
   const intent = url.searchParams.get(BRIEFING_INTENT_PARAM)
   const pack = url.searchParams.get(BRIEFING_PACK_PARAM)
+  const program = url.searchParams.get(BRIEFING_PROGRAM_PARAM)
 
   if (view != null && isBriefingScopeId(view)) state.view = view
   if (tt != null && isWorkTrackType(tt)) state.trackType = tt
@@ -74,6 +77,7 @@ export function parseBriefingUrlState(url: URL = new URL(window.location.href)):
   if (lane != null && isLaneId(lane)) state.lane = lane
   if (intent != null && isWorkIntent(intent)) state.intent = intent
   if (pack != null && isBriefingPackSize(pack)) state.pack = pack
+  if (program != null && program.trim() !== '') state.program = program.trim()
 
   return state
 }
@@ -130,6 +134,7 @@ export function writeBriefingUrlState(
   if ('lane' in partial) setOrDelete(BRIEFING_LANE_PARAM, partial.lane)
   if ('intent' in partial) setOrDelete(BRIEFING_INTENT_PARAM, partial.intent)
   if ('pack' in partial) setOrDelete(BRIEFING_PACK_PARAM, partial.pack)
+  if ('program' in partial) setOrDelete(BRIEFING_PROGRAM_PARAM, partial.program)
 
   if ('taskModeContext' in partial) {
     if (partial.taskModeContext == null) {

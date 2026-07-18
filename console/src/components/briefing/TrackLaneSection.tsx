@@ -206,19 +206,19 @@ function NewLaneInlineForm({
   }, [label, description, targetLine, trackType, qc, canOperate, onCreated, onClose])
 
   return (
-    <div className="col-span-full mt-1 rounded-lg border border-dashed border-[var(--primary)]/50 bg-[var(--primary)]/5 px-4 py-3">
-      <div className="flex items-center justify-between">
+    <div className="col-span-full mt-1 min-w-0 max-w-full overflow-hidden rounded-lg border border-dashed border-[var(--primary)]/50 bg-[var(--primary)]/5 px-3 py-3 sm:px-4">
+      <div className="flex min-w-0 items-center justify-between gap-2">
         <p className="m-0 text-[var(--text-dense-label)] font-semibold">New lane</p>
         <button
           type="button"
-          className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          className="shrink-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
           onClick={onClose}
         >
           Cancel
         </button>
       </div>
       {needsLinePicker && (
-        <div className="mt-2">
+        <div className="mt-2 min-w-0">
           <p className="m-0 mb-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
             Target component line
           </p>
@@ -230,11 +230,12 @@ function NewLaneInlineForm({
               label: componentLineById(id).shortLabel,
             }))}
             size="xs"
+            className="flex w-full min-w-0 max-w-full flex-wrap justify-start rounded-md"
           />
         </div>
       )}
       <input
-        className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
+        className="mt-2 w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
         placeholder="Lane label (becomes kebab-case id)"
         value={label}
         onChange={e => setLabel(e.target.value)}
@@ -242,7 +243,7 @@ function NewLaneInlineForm({
       />
       <textarea
         ref={inputRef}
-        className="mt-2 w-full resize-none rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
+        className="mt-2 w-full min-w-0 resize-none rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
         rows={2}
         placeholder="Describe this work direction — what problem does it solve, what will it deliver?"
         value={description}
@@ -251,10 +252,11 @@ function NewLaneInlineForm({
       {error != null && (
         <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-destructive">{error}</p>
       )}
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
+          className="shrink-0"
           disabled={submitting || label.trim() === '' || description.trim() === ''}
           onClick={() => void handleCreate()}
         >
@@ -268,7 +270,7 @@ function NewLaneInlineForm({
             </>
           )}
         </Button>
-        <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+        <span className="min-w-0 flex-1 break-words text-[var(--text-dense-caption)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
           {reference != null
             ? `Reference: ${reference.label} · writes config/lanes.yaml · copies Init Pack`
             : 'Writes config/lanes.yaml · copies Init Pack to clipboard'}
@@ -489,18 +491,16 @@ function CompletedLanesGroup({
   items,
   selectedLane,
   onSelectLane,
-  defaultExpanded,
   showLineBadge = false,
   viewMode,
 }: {
   items: LaneWithQueue[]
   selectedLane: LaneId
   onSelectLane: (id: LaneId) => void
-  defaultExpanded: boolean
   showLineBadge?: boolean
   viewMode: LaneViewMode
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
+  const [expanded, setExpanded] = useState(false)
 
   if (items.length === 0) return null
 
@@ -628,7 +628,6 @@ export function TrackLaneSection({
   /** Backlog maturity: Ready (empty) before Planned. */
   const backlogLanes = [...groups.empty, ...groups.planned]
   const hasCompleted = groups.complete.length > 0
-  const selectedIsCompleted = groups.complete.some(l => l.lane.id === selectedLane)
   const noDoing = doingLanes.length === 0
   const noBacklog = backlogLanes.length === 0
   const allComplete =
@@ -641,8 +640,6 @@ export function TrackLaneSection({
   const newLaneTargetLine: ComponentLineId | null =
     resolvedScope != null && resolvedScope !== 'all' ? resolvedScope : null
   const filterActive = lifecycleFilter != null
-  const forceCompletedOpen =
-    lifecycleFilter === 'complete' || selectedIsCompleted
   const filterEmpty = filterActive && filteredLaneItems.length === 0
   const filterChipLabel =
     lifecycleFilter === 'active'
@@ -898,11 +895,10 @@ export function TrackLaneSection({
 
         {showCompletedBand && (
           <CompletedLanesGroup
-            key={`complete-${lifecycleFilter ?? 'all'}`}
+            key={`complete-${resolvedScope ?? 'all'}-${trackType ?? track}-${selectedLane}-${lifecycleFilter ?? 'all'}`}
             items={groups.complete}
             selectedLane={selectedLane}
             onSelectLane={onSelectLane}
-            defaultExpanded={forceCompletedOpen}
             showLineBadge={showLineBadge}
             viewMode={laneViewMode}
           />

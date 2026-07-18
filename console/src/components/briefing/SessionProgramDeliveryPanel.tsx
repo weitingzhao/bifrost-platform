@@ -8,13 +8,13 @@ import { DeliveryBoardProgramPanels } from '@/components/delivery/DeliveryBoardP
 import { PostCompletionPendingPanel } from '@/components/delivery/PostCompletionPendingPanel'
 import type { LaneId } from '@/lib/briefing/workLanes'
 
-function ProgramDeliveryFold({ program }: { program: ProgramSummary }) {
-  const [open, setOpen] = useState(() => !program.complete)
+function ProgramDeliveryFold({ program, focused }: { program: ProgramSummary; focused?: boolean }) {
+  const [open, setOpen] = useState(() => focused === true || !program.complete)
   const signed = program.signed ?? program.phases_signed ?? 0
   const total = program.phase_count
 
   return (
-    <div className="rounded-md border border-[var(--border)]/60 bg-[var(--secondary)]/15">
+    <div className="min-w-0 max-w-full rounded-md border border-[var(--border)]/60 bg-[var(--secondary)]/15">
       <button
         type="button"
         className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-[var(--secondary)]/40"
@@ -26,7 +26,10 @@ function ProgramDeliveryFold({ program }: { program: ProgramSummary }) {
         ) : (
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
         )}
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--foreground)]">
+        <span
+          className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--foreground)]"
+          title={program.label ?? program.title}
+        >
           {program.label ?? program.title}
         </span>
         <DenseTag variant={program.complete ? 'success' : signed > 0 ? 'warning' : 'neutral'}>
@@ -46,7 +49,7 @@ function ProgramDeliveryFold({ program }: { program: ProgramSummary }) {
  * Briefing Session host for program phase sign-off + post-completion Approve (D12 API).
  * Delivery Board remains a read-only catalog.
  */
-export function SessionProgramDeliveryPanel({ laneId }: { laneId: LaneId }) {
+export function SessionProgramDeliveryPanel({ laneId, focusedProgramId }: { laneId: LaneId; focusedProgramId?: string }) {
   const programsQuery = useQuery({
     queryKey: PROGRAMS_BOARD_QUERY_KEY,
     queryFn: fetchDeliveryBoardPrograms,
@@ -75,13 +78,13 @@ export function SessionProgramDeliveryPanel({ laneId }: { laneId: LaneId }) {
   }
 
   return (
-    <div className="mt-3 flex flex-col gap-3 border-t border-[var(--border)]/60 pt-3">
+    <div className="mt-3 flex min-w-0 max-w-full flex-col gap-3 border-t border-[var(--border)]/60 pt-3">
       <div>
         <p className="briefing-section-kicker m-0">Delivery</p>
         <h3 className="m-0 mt-0.5 text-sm font-semibold">Program sign-off</h3>
-        <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+        <p className="m-0 mt-1 break-words text-[var(--text-dense-caption)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
           Owner phase sign-off and post-completion Approve for lane{' '}
-          <span className="font-mono text-[var(--foreground)]">{laneId}</span>. Progress is visible
+          <span className="break-all font-mono text-[var(--foreground)]">{laneId}</span>. Progress is visible
           on Delivery Board (read-only catalog).
         </p>
       </div>
@@ -91,7 +94,7 @@ export function SessionProgramDeliveryPanel({ laneId }: { laneId: LaneId }) {
       )}
 
       {lanePrograms.map(p => (
-        <ProgramDeliveryFold key={p.id} program={p} />
+        <ProgramDeliveryFold key={p.id} program={p} focused={p.id === focusedProgramId} />
       ))}
     </div>
   )

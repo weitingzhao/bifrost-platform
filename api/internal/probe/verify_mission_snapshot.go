@@ -42,6 +42,7 @@ type PostFixVerification struct {
 type VerifyMissionSnapshotResponse struct {
 	GeneratedAt         time.Time              `json:"generated_at"`
 	TradeDev            TradeEnvSnapshot       `json:"trade_dev"`
+	TradeStg            TradeEnvSnapshot       `json:"trade_stg"`
 	TradeProd           TradeEnvSnapshot       `json:"trade_prod"`
 	PayloadOverall      MissionSignal          `json:"payload_overall"`
 	PayloadVerification VerifyPayloadResponse  `json:"payload_verification"`
@@ -174,7 +175,7 @@ func VerifyMissionSnapshot(
 
 	payloadVerify := VerifyPayload(envs, matrices, ds)
 
-	var devSnap, prodSnap TradeEnvSnapshot
+	var devSnap, stgSnap, prodSnap TradeEnvSnapshot
 	for _, env := range envs {
 		matrix, ok := matrixByEnv[env.ID]
 		if !ok {
@@ -184,16 +185,19 @@ func VerifyMissionSnapshot(
 		switch env.ID {
 		case "dev":
 			devSnap = snap
+		case "stg":
+			stgSnap = snap
 		case "prod":
 			prodSnap = snap
 		}
 	}
 
-	payloadOverall := worstMissionSignal(devSnap.Signal, prodSnap.Signal)
+	payloadOverall := worstMissionSignal(devSnap.Signal, stgSnap.Signal, prodSnap.Signal)
 
 	return VerifyMissionSnapshotResponse{
 		GeneratedAt:         now,
 		TradeDev:            devSnap,
+		TradeStg:            stgSnap,
 		TradeProd:           prodSnap,
 		PayloadOverall:      payloadOverall,
 		PayloadVerification: payloadVerify,

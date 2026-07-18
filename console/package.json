@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test:fleet": "npx tsx scripts/fleet-snapshot-test.ts"
   },
   "dependencies": {
     "@bifrost/ui": "file:../../bifrost-ui",

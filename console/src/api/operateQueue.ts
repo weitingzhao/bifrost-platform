@@ -1,4 +1,5 @@
 import type {
+  CloseOperateQueueRequest,
   EnqueueOperateQueueRequest,
   OperateQueueResponse,
 } from './operateQueueTypes'
@@ -40,6 +41,7 @@ export async function enqueueOperateQueueItem(
 
 export async function closeOperateQueueItem(
   itemId: string,
+  body: CloseOperateQueueRequest,
 ): Promise<import('./operateQueueTypes').OperateQueueItem> {
   const token = getPlatformOperatorToken()
   const headers = new Headers({ 'Content-Type': 'application/json' })
@@ -47,8 +49,24 @@ export async function closeOperateQueueItem(
   const r = await fetch(`/api/v1/operate/queue/${encodeURIComponent(itemId)}/close`, {
     method: 'POST',
     headers,
-    body: '{}',
+    body: JSON.stringify(body),
   })
   if (!r.ok) throw await parseError('operate queue close', r)
+  return r.json() as Promise<import('./operateQueueTypes').OperateQueueItem>
+}
+
+export async function recordOperateQueueExecution(
+  itemId: string,
+  executionJobId: string,
+): Promise<import('./operateQueueTypes').OperateQueueItem> {
+  const token = getPlatformOperatorToken()
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
+  const r = await fetch(`/api/v1/operate/queue/${encodeURIComponent(itemId)}/execution`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ execution_job_id: executionJobId }),
+  })
+  if (!r.ok) throw await parseError('operate queue execution', r)
   return r.json() as Promise<import('./operateQueueTypes').OperateQueueItem>
 }

@@ -115,12 +115,14 @@ export const WAVE3_P0_DECISIONS: Wave3P0Decision[] = [
     id: 'D11',
     topic: 'Operate Queue API',
     rule:
-      'Post-completion approve injects into GET/POST /api/v1/operate/queue (data/operate/queue.json). Not spine tracks.operate.',
+      'Post-completion remains NOT ASSESSED until Briefing Owner decision. Only approved structured handoffs inject into GET/POST /api/v1/operate/queue (data/operate/queue.json); NO HANDOFF is explicit, and verified closure remains in recent_closed. Not spine tracks.operate.',
     wave3Deliverables: [
       'Operate queue store + GET list + POST enqueue on approve',
       'Control Room strip: open operate queue items',
       'Briefing operate track reads queue API',
       'MCP get_operate_queue (read)',
+      'Structured reason/task/criteria/verification/risk contract with legacy JSON compatibility',
+      'Agent Desk Start/Prepare → execution_job_id → evidence-gated close',
     ],
   },
   {
@@ -423,6 +425,34 @@ export const FLIGHT_DIRECTOR_STEPS: FlightDirectorStep[] = [
     detail: '24h digest: jobs completed/failed, escalations, promotion/demotion flags — replaces manual Audit scanning.',
   },
 ]
+
+/**
+ * Daily Ops Fleet Desk — per-cell Agent Fix (do not silently pickFixScope across roles).
+ * Engineer CRITICAL → navigate Operator Plane / Ground; Agent Fix disabled on engineer cells.
+ */
+export const DAILY_OPS_FLEET_DESK = {
+  version: '2026-07-18',
+  source: 'console/src/lib/control-room/fleetSnapshot.ts · fleetCellFix.ts',
+  roles: ['rocket', 'satellite', 'engineer', 'ground', 'vendor'] as const,
+  envColumns: ['dev', 'stg', 'prod', 'dev-local'] as const,
+  verdict: 'GO | HOLD | NO-GO',
+  rules: [
+    'Operate queue Clear must not be presented as equal to fleet clear when scored cells are non-NOMINAL.',
+    'Unavailable probe paths stay unavailable — never silent green; excluded from GO|HOLD|NO-GO scoring.',
+    'Prod/STG viewer cannot assume Mac 127.0.0.1 Ground bridge (Wave 5.3).',
+    'Viewer seat: OPS_VIEWER_ENV > (in-cluster only) clusters.yaml viewer_env > dev. Local make start defaults DEV; Prod in-cluster uses yaml prod pin.',
+    'D10 live trading remains BLOCKED.',
+  ],
+  /** Acceptance checkpoints (Fleet Desk QA R0–R4). */
+  acceptance: [
+    'Q1: Structural unavailable (Mac / Rocket DEV pull) does not HOLD — GO when scored cells are ok.',
+    'Q2: Local (no KUBERNETES_SERVICE_HOST) → DEV; Prod in-cluster → yaml viewer_env=prod; OPS_VIEWER_ENV always overrides.',
+    'Q3: Operate Clear ≠ fleet clear when fleetClear=false; fleetClear follows scored verdict.',
+    'Q4: Daily Ops Agent Fix error surfaces without Launch Pad; phase Agent Fix aligns with pickFleetFixCell.',
+    'Q5: Satellite scopes do not cross — stg=deliver-stg-recover, prod/dev=cluster_issues_full_auto.',
+    'Q6: Ground=operator-plane/bridge; Vendor=IB/Massive primary; viewer badge Probing… while loading.',
+  ],
+} as const
 
 /** Mission Signal Phase 6 — Flight Director daily ops (briefing digest + trust overrides). */
 export const FLIGHT_DIRECTOR_OPS_STEPS: FlightDirectorStep[] = [

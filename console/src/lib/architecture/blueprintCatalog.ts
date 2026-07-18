@@ -206,11 +206,13 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
 
 /** Task mode lenses — focused Console navigation for ops vs dev loops (Constitution). */
 export const TASK_MODE_BLUEPRINT = {
-  version: '2026-07-11',
+  version: '2026-07-18',
   source: 'console/src/lib/task-mode/taskModeCatalog.ts',
   statement:
     'Task modes filter sidebar navigation and land on Task Control Center for phased playbooks. ' +
-    'Ops loops (daily-ops, mission-launch) use signals + LaunchPad — no Briefing/DevAgent. ' +
+    'Daily Ops uses Fleet Desk (viewer env badge · GO|HOLD|NO-GO verdict · role×env board with probePath / per-cell Agent Fix); ' +
+    'unavailable cells are display-only (Excluded from GO); Prod pins clusters.yaml viewer_env=prod (OPS_VIEWER_ENV overrides). ' +
+    'Mission Launch keeps readiness + LaunchPad. Ops loops — no Briefing/DevAgent. ' +
     'Dev loops (rocket-build, satellite-build, engineer-build, ground-build, plugin-build) chain Briefing → Dev Agent → Delivery Board.',
   modes: [
     'system',

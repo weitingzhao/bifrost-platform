@@ -1576,7 +1576,10 @@ export function TaskModeReadinessStrip({
   return null
 }
 
-/** Condensed mission signals for Daily Ops (unchanged generic strip). */
+/**
+ * @deprecated Daily Ops main path uses DailyOpsFleetBoard (Fleet Desk).
+ * Kept for secondary/legacy embeds only — do not wire as Task CC primary.
+ */
 export function DailyOpsMissionStrip({ compact = false }: { compact?: boolean }) {
   const { snapshot, isLoading } = useMissionSnapshot()
   const status = missionStatus(snapshot.missionOverall)

@@ -1,10 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { SegmentControl } from '@bifrost/ui'
 import { ChevronDown, ChevronRight, Languages, Package } from 'lucide-react'
-import {
-  SessionLaneCtaBar,
-  type SessionLifecycle,
-} from '@/components/briefing/SessionLaneCtaBar'
+import { SessionLaneCtaBar, type SessionLifecycle } from '@/components/briefing/SessionLaneCtaBar'
+import { MoveLaneBar } from '@/components/briefing/MoveLaneBar'
 import {
   BriefingCommandChip,
   withBriefingCommandHighlight,
@@ -14,7 +12,7 @@ import { SessionProgramDeliveryPanel } from '@/components/briefing/SessionProgra
 import { BriefingReconcilePanel } from '@/components/briefing/BriefingReconcilePanel'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { LaneLifecycle } from '@/lib/briefing/briefingStatus'
-import type { BriefingScopeId, WorkTrackType } from '@/lib/briefing/briefingViewTabs'
+import type { BriefingScopeId, ComponentLineId, WorkTrackType } from '@/lib/briefing/briefingViewTabs'
 import type { BriefingPackSize } from '@/lib/briefing/briefingUrlState'
 import {
   AGENT_DIALOGUE_LANGUAGE_OPTIONS,
@@ -56,6 +54,9 @@ export interface SessionDetailSectionProps {
   packReconcileOptions: ReconcileBriefingOptions
   /** Collapsed by default — inspect generated pack text only. */
   packPreview: ReactNode
+  focusedProgramId?: string
+  /** After PATCH reclassification — sync Briefing Scope / Track Type filters. */
+  onLaneMoved?: (line: ComponentLineId, trackType: WorkTrackType) => void
 }
 
 /**
@@ -92,6 +93,8 @@ export function SessionDetailSection({
   onPackSizeChange,
   packReconcileOptions,
   packPreview,
+  focusedProgramId,
+  onLaneMoved,
 }: SessionDetailSectionProps) {
   const { canAdmin } = usePlatformAuth()
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -101,21 +104,19 @@ export function SessionDetailSection({
     <section
       className={
         isArchive
-          ? 'page-section panel-elevated border-[var(--border)]/60 px-3 py-2.5'
-          : 'page-section panel-elevated border-[var(--primary)]/25 px-3 py-2.5'
+          ? 'page-section panel-elevated w-full min-w-0 max-w-full overflow-x-hidden border-[var(--border)]/60 px-3 py-2.5'
+          : 'page-section panel-elevated w-full min-w-0 max-w-full overflow-x-hidden border-[var(--primary)]/25 px-3 py-2.5'
       }
     >
       <p className="briefing-section-kicker m-0">{isArchive ? 'Archive' : 'Session'}</p>
       <h2 className="m-0 mt-0.5 text-sm font-semibold">
-        {isArchive ? 'Completed lane (reference)' : 'Selected lane detail'}
+        {isArchive ? 'Completed lane' : 'Selected lane detail'}
       </h2>
-      <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+      <p className="m-0 mt-1 break-words text-[var(--text-dense-caption)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
         {isArchive ? (
           <>
-            Queue history below is read-only. Program sign-off and post-completion Approve stay in
-            this Session. Start new work via{' '}
-            <span className="font-medium text-[var(--foreground)]">New Lane (reference)</span> — do
-            not run <BriefingCommandChip /> on a completed lane.
+            Read-only history for this completed lane. Delivery sign-off and post-completion review
+            remain available below. Create a new lane to start new work.
           </>
         ) : insideCursorBrowser ? (
           lifecycle === 'active' ? (
@@ -161,6 +162,10 @@ export function SessionDetailSection({
       </div>
 
       {!isArchive && (
+        <MoveLaneBar lane={lane} canOperate={canOperate} onMoved={onLaneMoved} />
+      )}
+
+      {!isArchive && (
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-[var(--border)]/60 pt-2">
           <div
             className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)]/50 bg-[var(--muted)]/20 px-1.5 py-0.5"
@@ -204,7 +209,7 @@ export function SessionDetailSection({
             />
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div className="order-last min-w-0 basis-full">
             <BriefingReconcilePanel
               context={context}
               options={packReconcileOptions}
@@ -242,12 +247,12 @@ export function SessionDetailSection({
             ) : (
               <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             )}
-            {previewOpen ? 'Hide archive pack' : 'Archive pack preview'}
+            {previewOpen ? 'Hide archive pack' : 'Preview archive pack'}
           </button>
         </div>
       )}
 
-      {previewOpen && <div className="mt-2">{packPreview}</div>}
+      {previewOpen && <div className="mt-2 min-w-0 max-w-full overflow-x-auto">{packPreview}</div>}
 
       <TaskQueuePanel
         items={queue}
@@ -260,7 +265,7 @@ export function SessionDetailSection({
         onOpenAudit={onOpenAudit}
       />
 
-      <SessionProgramDeliveryPanel laneId={lane.id} />
+      <SessionProgramDeliveryPanel laneId={lane.id} focusedProgramId={focusedProgramId} />
     </section>
   )
 }

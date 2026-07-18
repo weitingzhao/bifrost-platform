@@ -42,6 +42,21 @@ interface SessionLaneCtaBarProps {
   embedded?: boolean
 }
 
+function LaneProblemBlock({ description }: { description: string }) {
+  const trimmed = description.trim()
+  if (trimmed === '') return null
+  return (
+    <div className="min-w-0 rounded-md border border-[var(--border)]/60 bg-[var(--background)]/70 px-2.5 py-2">
+      <p className="m-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+        Problem
+      </p>
+      <p className="m-0 mt-1 whitespace-pre-wrap break-words text-[var(--text-dense-label)] leading-snug text-[var(--foreground)] [overflow-wrap:anywhere]">
+        {trimmed}
+      </p>
+    </div>
+  )
+}
+
 export function SessionLaneCtaBar({
   scope,
   trackType,
@@ -83,173 +98,190 @@ export function SessionLaneCtaBar({
     insideCursor: insideCursorBrowser,
     packReady,
   })
-  const primaryVariant = packReady ? 'outline' : 'default'
-
-  const metaHint = isArchive
-    ? 'Archive only — no work Session. Use as reference when creating a New Lane.'
+  const packHint = isArchive
+    ? 'Read-only reference — create a new lane to continue work.'
     : packReady
       ? insideCursorBrowser
-        ? 'Pack ready — run /briefing in this chat (or re-prepare to refresh)'
-        : 'Pack prepared / copied this session'
+        ? 'Pack ready — run /briefing in this chat (or re-prepare to refresh).'
+        : 'Pack prepared / copied this session.'
       : insideCursorBrowser
-        ? 'Prepare pack, then run /briefing in this chat'
-        : 'Open in Cursor (/briefing) or copy pack to start'
+        ? 'Prepare pack, then run /briefing in this chat.'
+        : 'Open in Cursor (/briefing) or copy pack to start.'
 
-  const body = isArchive ? (
-    <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <BriefingStatusLamp status={lifecycleStatus} />
-            {!embedded && <p className="briefing-section-kicker m-0">Archive · completed lane</p>}
+  const sessionMeta = isArchive
+    ? `${queueCount} archived item${queueCount !== 1 ? 's' : ''} · Intent: ${intentLabel}`
+    : `Queue: ${queueSummary} · Intent: ${intentLabel}`
+
+  /** Solid / bordered chrome so actions never read as plain text on tinted Session card. */
+  const actionPrimaryClass =
+    'h-8 border border-[var(--primary)]/40 bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm hover:bg-[var(--primary)]/90'
+  const actionSecondaryClass =
+    'h-8 border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] shadow-sm hover:bg-[var(--muted)]/60'
+
+  const body = (
+    <div className="flex min-w-0 flex-col gap-2.5">
+      {/* 1. Status + title */}
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <BriefingStatusLamp status={lifecycleStatus} />
+          {!embedded && (
+            <p className="briefing-section-kicker m-0">
+              {isArchive ? 'Archive · completed lane' : 'Session · selected lane'}
+            </p>
+          )}
+          {isArchive ? (
             <BriefingStatusBadge status="done" label="Archive" />
-          </div>
-          <p className="m-0 mt-1.5 text-sm font-semibold text-[var(--foreground)]">
-            {scopeLabel} · {trackLabel} · {lane.label}
-          </p>
-          <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Queue: {queueSummary}
-            {' · '}
-            Intent from lane: {intentLabel}
-            {' · '}
-            {metaHint}
-          </p>
+          ) : (
+            <>
+              <BriefingStatusBadge
+                status={lifecycleStatus}
+                label={packReady ? 'Active' : 'Ready'}
+              />
+              {isInitMode && <BriefingStatusBadge status="new" label="Init" />}
+            </>
+          )}
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            disabled={!canOperate || onUseAsReferenceForNewLane == null}
-            onClick={() => onUseAsReferenceForNewLane?.()}
-            title={
-              !canOperate
-                ? 'Operator token required to create a lane'
-                : 'Open New Lane on the Lanes board with this completed lane as reference'
-            }
-          >
-            New Lane (reference)
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!dataReady}
-            onClick={onCopySession}
-            title="Copy read-only archive pack (history / audit) — does not start a work Session"
-          >
-            {sessionCopied ? 'Copied!' : 'Copy archive pack'}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              window.location.hash = `delivery-board?lane_id=${encodeURIComponent(lane.id)}`
-            }}
-            title="Open Delivery Board catalog filtered to this lane (read-only — sign-off stays in Session)"
-          >
-            Open Board
-          </Button>
-        </div>
+        <p
+          className="m-0 mt-1.5 break-words text-sm font-semibold text-[var(--foreground)] [overflow-wrap:anywhere]"
+          title={`${scopeLabel} · ${trackLabel} · ${lane.label}`}
+        >
+          {scopeLabel} · {trackLabel} · {lane.label}
+        </p>
       </div>
+
+      {/* 2. Owner-authored problem (distinct surface) */}
+      <LaneProblemBlock description={lane.description} />
+
+      {/* 3. Session facts only */}
+      <p className="m-0 break-words text-[var(--text-dense-meta)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
+        {sessionMeta}
+      </p>
+
+      {/* 4. Actions + pack guidance */}
+      <div className="min-w-0 border-t border-[var(--border)]/55 pt-2.5">
+        <p className="m-0 mb-1.5 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+          Actions
+        </p>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-[var(--border)]/60 bg-[var(--background)]/55 p-2">
+          {isArchive ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                className={actionPrimaryClass}
+                disabled={!canOperate || onUseAsReferenceForNewLane == null}
+                onClick={() => onUseAsReferenceForNewLane?.()}
+                title={
+                  !canOperate
+                    ? 'Operator token required to create a lane'
+                    : 'Open New Lane on the Lanes board with this completed lane as reference'
+                }
+              >
+                Create lane from reference
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={actionSecondaryClass}
+                disabled={!dataReady}
+                onClick={onCopySession}
+                title="Copy read-only archive pack (history / audit) — does not start a work Session"
+              >
+                {sessionCopied ? 'Copied!' : 'Copy archive pack'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={actionSecondaryClass}
+                onClick={() => {
+                  window.location.hash = `delivery-board?lane_id=${encodeURIComponent(lane.id)}`
+                }}
+                title="Open Delivery Board catalog filtered to this lane (read-only — sign-off stays in Session)"
+              >
+                View Board catalog
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                className={actionPrimaryClass}
+                disabled={!canOperate || preparingCursor || packBlocked || !dataReady}
+                onClick={onOpenInCursor}
+                title={
+                  !canOperate
+                    ? 'Operator token required'
+                    : packBlocked
+                      ? 'Resolve pack reconcile blockers before opening'
+                      : !dataReady
+                        ? 'Loading spine & matrix…'
+                        : packReady
+                          ? insideCursorBrowser
+                            ? 'Rewrite active-pack.md (pack already ready — run /briefing in this chat)'
+                            : 'Prepare again and open a new Cursor Agent with /briefing'
+                          : insideCursorBrowser
+                            ? 'Write pack for /briefing in this Cursor chat (no new Agent deep link)'
+                            : 'Prepare pack + open Cursor with /briefing'
+                }
+              >
+                {openLabel}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={actionSecondaryClass}
+                disabled={!dataReady || packBlocked}
+                onClick={onCopySession}
+                title={
+                  packBlocked
+                    ? 'Resolve pack reconcile blockers before copying'
+                    : !dataReady
+                      ? 'Loading spine & matrix…'
+                      : 'Fallback: copy pack and paste into a new Cursor chat'
+                }
+              >
+                {!dataReady
+                  ? 'Loading…'
+                  : packBlocked
+                    ? 'Pack blocked'
+                    : sessionCopied
+                      ? 'Copied!'
+                      : isInitMode
+                        ? 'Copy Init pack'
+                        : 'Copy session pack'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={actionSecondaryClass}
+                onClick={() => {
+                  window.location.hash = `delivery-board?lane_id=${encodeURIComponent(lane.id)}`
+                }}
+                title="Open Delivery Board catalog filtered to this lane (read-only — sign-off stays in Session)"
+              >
+                Open Board
+              </Button>
+            </>
+          )}
+        </div>
+        <p className="m-0 mt-1.5 break-words text-[var(--text-dense-caption)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
+          {withBriefingCommandHighlight(packHint)}
+        </p>
+      </div>
+
       {launchStatus != null && (
-        <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--foreground)]">
+        <p className="m-0 break-words rounded-md border border-[var(--border)]/50 bg-[var(--secondary)]/40 px-2 py-1.5 text-[var(--text-dense-caption)] text-[var(--foreground)] [overflow-wrap:anywhere]">
           {withBriefingCommandHighlight(launchStatus)}
         </p>
       )}
-    </>
-  ) : (
-    <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <BriefingStatusLamp status={lifecycleStatus} />
-            {!embedded && <p className="briefing-section-kicker m-0">Session · selected lane</p>}
-            <BriefingStatusBadge
-              status={lifecycleStatus}
-              label={packReady ? 'Active' : 'Ready'}
-            />
-            {isInitMode && <BriefingStatusBadge status="new" label="Init" />}
-          </div>
-          <p className="m-0 mt-1.5 text-sm font-semibold text-[var(--foreground)]">
-            {scopeLabel} · {trackLabel} · {lane.label}
-          </p>
-          <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Queue: {queueSummary}
-            {' · '}
-            Intent from lane: {intentLabel}
-            {' · '}
-            {withBriefingCommandHighlight(metaHint)}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={primaryVariant}
-            disabled={!canOperate || preparingCursor || packBlocked || !dataReady}
-            onClick={onOpenInCursor}
-            title={
-              !canOperate
-                ? 'Operator token required'
-                : packBlocked
-                  ? 'Resolve pack reconcile blockers before opening'
-                  : !dataReady
-                    ? 'Loading spine & matrix…'
-                    : packReady
-                      ? insideCursorBrowser
-                        ? 'Rewrite active-pack.md (pack already ready — run /briefing in this chat)'
-                        : 'Prepare again and open a new Cursor Agent with /briefing'
-                      : insideCursorBrowser
-                        ? 'Write pack for /briefing in this Cursor chat (no new Agent deep link)'
-                        : 'Prepare pack + open Cursor with /briefing'
-            }
-          >
-            {openLabel}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!dataReady || packBlocked}
-            onClick={onCopySession}
-            title={
-              packBlocked
-                ? 'Resolve pack reconcile blockers before copying'
-                : !dataReady
-                  ? 'Loading spine & matrix…'
-                  : 'Fallback: copy pack and paste into a new Cursor chat'
-            }
-          >
-            {!dataReady
-              ? 'Loading…'
-              : packBlocked
-                ? 'Pack blocked'
-                : sessionCopied
-                  ? 'Copied!'
-                  : isInitMode
-                    ? 'Copy Init pack'
-                    : 'Copy session pack'}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              window.location.hash = `delivery-board?lane_id=${encodeURIComponent(lane.id)}`
-            }}
-            title="Open Delivery Board catalog filtered to this lane (read-only — sign-off stays in Session)"
-          >
-            Open Board
-          </Button>
-        </div>
-      </div>
-      {launchStatus != null && (
-        <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--foreground)]">
-          {withBriefingCommandHighlight(launchStatus)}
-        </p>
-      )}
-    </>
+    </div>
   )
 
   if (embedded) {
@@ -257,8 +289,8 @@ export function SessionLaneCtaBar({
       <div
         className={
           isArchive
-            ? 'rounded-md border border-[var(--border)]/70 bg-[var(--secondary)]/30 px-3 py-2.5'
-            : 'rounded-md border border-[var(--primary)]/30 bg-[var(--primary)]/5 px-3 py-2.5'
+            ? 'w-full min-w-0 max-w-full rounded-md border border-[var(--border)]/70 bg-[var(--secondary)]/30 px-3 py-2.5'
+            : 'w-full min-w-0 max-w-full rounded-md border border-[var(--primary)]/30 bg-[var(--primary)]/5 px-3 py-2.5'
         }
       >
         {body}

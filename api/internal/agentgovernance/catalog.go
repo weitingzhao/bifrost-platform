@@ -23,6 +23,16 @@ func TaskCatalog() []TaskDef {
 	return out
 }
 
+// TaskByID resolves a task from the config/agent-tasks.yaml SSOT.
+func TaskByID(id string) (TaskDef, bool) {
+	for _, task := range TaskCatalog() {
+		if task.ID == id {
+			return task, true
+		}
+	}
+	return TaskDef{}, false
+}
+
 func scopeAliases() map[string]string {
 	m := make(map[string]string)
 	for _, t := range TaskCatalog() {

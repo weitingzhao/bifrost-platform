@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
+import type { ReactNode } from 'react'
 import { fetchFlightDirectorSnapshot } from '@/api/platform'
 
 interface FlightDirectorBriefingPanelProps {
@@ -26,8 +27,9 @@ export function FlightDirectorBriefingPanel({ onOpenTrustAutonomy }: FlightDirec
         )}
       </div>
       <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-        Daily digest from remediation JobStore — what Agent completed, failed, escalated, and earned-autonomy
-        hints. Replaces manual Audit scanning for autonomous outcomes (Mission Signal Phase 6).
+        Last {brief?.period_hours ?? 24} hours from remediation JobStore and the current trust matrix.
+        Completed and failed count jobs; escalations count approval-request events, so escalations can
+        exceed completed jobs. Promotion and demotion values count skills.
       </p>
 
       {snapshotQ.isLoading && (
@@ -39,12 +41,24 @@ export function FlightDirectorBriefingPanel({ onOpenTrustAutonomy }: FlightDirec
         </p>
       )}
       {brief != null && (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <DigestTile label="Completed" value={String(brief.jobs_completed)} />
-          <DigestTile label="Failed" value={String(brief.jobs_failed)} />
-          <DigestTile label="Escalations" value={String(brief.escalations)} />
-          <DigestTile label="Promo pending" value={String(brief.promotion_pending)} />
-          <DigestTile label="Demotions" value={String(brief.demotions)} />
+        <div className="agent-desk-digest-grid mt-3">
+          <DigestTile label="Completed jobs" value={String(brief.jobs_completed)} />
+          <DigestTile label="Failed jobs" value={String(brief.jobs_failed)} />
+          <DigestTile label="Approval events" value={String(brief.escalations)} />
+          <DigestTile
+            label="Skills eligible"
+            value={String(brief.promotion_pending)}
+            action={
+              brief.promotion_pending > 0 && onOpenTrustAutonomy != null
+                ? (
+                    <Button variant="ghost" size="sm" onClick={onOpenTrustAutonomy}>
+                      Review promotions
+                    </Button>
+                  )
+                : undefined
+            }
+          />
+          <DigestTile label="Skills flagged" value={String(brief.demotions)} />
         </div>
       )}
       {brief?.summary != null && (
@@ -61,11 +75,20 @@ export function FlightDirectorBriefingPanel({ onOpenTrustAutonomy }: FlightDirec
   )
 }
 
-function DigestTile({ label, value }: { label: string; value: string }) {
+function DigestTile({
+  label,
+  value,
+  action,
+}: {
+  label: string
+  value: string
+  action?: ReactNode
+}) {
   return (
-    <div className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+    <div className="min-w-0 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2">
       <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">{label}</span>
       <p className="m-0 text-lg font-semibold tabular-nums">{value}</p>
+      {action}
     </div>
   )
 }

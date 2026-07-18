@@ -1776,6 +1776,7 @@ export interface PostFixVerificationView {
 export interface VerifyMissionSnapshotResponse {
   generated_at: string
   trade_dev: TradeEnvSnapshotView
+  trade_stg: TradeEnvSnapshotView
   trade_prod: TradeEnvSnapshotView
   payload_overall: MissionMatrixSignal
   payload_verification: VerifyPayloadResponse
@@ -1931,6 +1932,8 @@ export interface SelfHealthResponse {
   generated_at: string
   probes: SelfHealthProbe[]
   overall: SelfHealthProbeStatus
+  /** Seat where this platform-api instance is viewed from (OPS_VIEWER_ENV / cluster). */
+  viewer_env?: string
 }
 
 export type EscapeRouteStatus = 'ok' | 'degraded' | 'fail' | 'unknown' | 'documented'

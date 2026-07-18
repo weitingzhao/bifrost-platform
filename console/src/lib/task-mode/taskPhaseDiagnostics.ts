@@ -58,12 +58,19 @@ function dependencyBlockReason(
   return null
 }
 
-function dailyOpsFixActions(phaseId: string, rootCauses: string[]): TaskPhaseFixAction[] {
+function dailyOpsFixActions(
+  phaseId: string,
+  rootCauses: string[],
+  fleetAgentFixAvailable: boolean,
+): TaskPhaseFixAction[] {
   const actions: TaskPhaseFixAction[] = [
     { label: 'Open Control Room', tabId: 'control-room', kind: 'navigate' },
   ]
   if (phaseId === 'scan-signals' || phaseId === 'verify-mission') {
-    actions.push({ label: 'Agent Fix', kind: 'agent-fix' })
+    // Align with Fleet Primary / pickFleetFixCell — hide Agent Fix when no fixable cell
+    if (fleetAgentFixAvailable) {
+      actions.push({ label: 'Agent Fix', kind: 'agent-fix' })
+    }
     actions.push({ label: 'Runtime Map', tabId: 'runtime-map', kind: 'navigate' })
     actions.push({ label: 'Cluster', tabId: 'cluster', kind: 'navigate' })
   }
@@ -76,9 +83,7 @@ function dailyOpsFixActions(phaseId: string, rootCauses: string[]): TaskPhaseFix
   if (rootCauses.some(c => c.toLowerCase().includes('trade prod'))) {
     actions.push({ label: 'Satellite Bus', tabId: 'satellite-bus', kind: 'navigate' })
   }
-  if (rootCauses.some(c => c.toLowerCase().includes('release'))) {
-    actions.push({ label: 'Launch Rocket', tabId: 'platform-release', kind: 'navigate' })
-  }
+  // Daily Ops: no Launch Rocket CTA (Mission Launch owns release actuation)
   return actions
 }
 
@@ -95,6 +100,7 @@ export function explainTaskPhase(
 
   if (modeId === 'daily-ops') {
     const rootCauses = missionIssueLines(snap)
+    const fleetFix = input.fleetAgentFixAvailable === true
     const missionLine =
       snap != null
         ? `Mission ${missionStatus(snap.missionOverall)} — rocket ${missionStatus(snap.rocketOverall)}, payload ${missionStatus(snap.payloadOverall)}.`
@@ -104,16 +110,16 @@ export function explainTaskPhase(
       case 'scan-signals': {
         if (status === 'blocked') {
           return {
-            reason: `Scan blocked: mission signals CRITICAL. ${missionLine}`,
+            reason: `Scan blocked: fleet / mission not clear. ${missionLine}`,
             rootCauses,
-            fixActions: dailyOpsFixActions(phase.id, rootCauses),
+            fixActions: dailyOpsFixActions(phase.id, rootCauses, fleetFix),
           }
         }
         if (status === 'active') {
           return {
             reason: `Mission not NOMINAL yet. ${missionLine}`,
             rootCauses,
-            fixActions: dailyOpsFixActions(phase.id, rootCauses),
+            fixActions: dailyOpsFixActions(phase.id, rootCauses, fleetFix),
           }
         }
         break
@@ -124,8 +130,8 @@ export function explainTaskPhase(
         if (status === 'blocked' && depReason != null) {
           return {
             reason: depReason,
-            rootCauses: phase.id === 'verify-mission' ? rootCauses : [depReason],
-            fixActions: dailyOpsFixActions('scan-signals', rootCauses),
+            rootCauses: [depReason],
+            fixActions: dailyOpsFixActions(phase.id, [], fleetFix),
           }
         }
         if (phase.id === 'operate-queue' && status === 'active') {
@@ -133,21 +139,21 @@ export function explainTaskPhase(
           return {
             reason: `${open} open operate-queue item${open === 1 ? '' : 's'} need triage or closure in Control Room.`,
             rootCauses: [`Operate queue: ${open} open`],
-            fixActions: dailyOpsFixActions(phase.id, []),
+            fixActions: dailyOpsFixActions(phase.id, [], fleetFix),
           }
         }
         if (phase.id === 'triage-defects' && status === 'active') {
           return {
-            reason: 'Mission CAUTION/CRITICAL — triage open defects before closing the queue.',
-            rootCauses,
-            fixActions: dailyOpsFixActions(phase.id, rootCauses),
+            reason: 'Triage open defects before closing the operate queue (see Fleet Desk for seat signals).',
+            rootCauses: rootCauses.slice(0, 3),
+            fixActions: dailyOpsFixActions(phase.id, rootCauses, fleetFix),
           }
         }
         if (phase.id === 'verify-mission' && status === 'planned') {
           return {
             reason: 'Complete prior steps, then re-probe mission snapshot.',
-            rootCauses: snap?.missionOverall === 'ok' ? [] : rootCauses,
-            fixActions: dailyOpsFixActions(phase.id, rootCauses),
+            rootCauses: snap?.missionOverall === 'ok' ? [] : rootCauses.slice(0, 3),
+            fixActions: dailyOpsFixActions(phase.id, rootCauses, fleetFix),
           }
         }
         break

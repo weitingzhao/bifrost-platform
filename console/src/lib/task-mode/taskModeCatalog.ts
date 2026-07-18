@@ -3,7 +3,7 @@ import type { TaskModeDef, TaskModeId } from './types'
 export const TASK_MODE_STORAGE_KEY = 'bifrost-ops-task-mode'
 export const TASK_MODE_QUERY_PARAM = 'taskMode'
 
-export const TASK_MODE_CATALOG_VERSION = '2026-07-11'
+export const TASK_MODE_CATALOG_VERSION = '2026-07-18'
 /** UI task-mode definitions. templateId must match config/programs/_templates.yaml (GET /api/v1/programs/templates). */
 export const TASK_MODE_CATALOG_SOURCE = 'console/src/lib/task-mode/taskModeCatalog.ts · templates: config/programs/_templates.yaml'
 
@@ -17,10 +17,10 @@ const DAILY_OPS_PHASES: TaskModeDef['phases'] = [
   {
     id: 'scan-signals',
     seq: 1,
-    title: 'Scan mission signals',
-    summary: 'Review Control Room mission / rocket / payload signals before acting.',
-    navigateTab: 'control-room',
-    actions: [{ label: 'Open Control Room', tabId: 'control-room' }],
+    title: 'Scan fleet board',
+    summary: 'Review Fleet Desk verdict + role×env cells (probePath) before acting. Reference playbook only.',
+    navigateTab: 'task-cc',
+    actions: [{ label: 'Task Control Center', tabId: 'task-cc' }],
   },
   {
     id: 'triage-defects',
@@ -359,7 +359,8 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
   {
     id: 'daily-ops',
     label: 'Daily Ops',
-    description: 'Ops loop — scan signals, triage defects, close operate queue.',
+    description:
+      'Ops loop — Fleet Desk (viewer seat · GO|HOLD|NO-GO · role×env board), triage defects, close operate queue without equating queue Clear to fleet clear.',
     loopArchetype: 'ops',
     landingTab: 'task-cc',
     phases: DAILY_OPS_PHASES,

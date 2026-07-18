@@ -233,10 +233,6 @@ export function ProgramDetailView({
         </DenseDataTable>
       </OpsSection>
 
-      <OpsSection title="Agent sessions">
-        <ProgramAgentSessionsPanel programId={programId} />
-      </OpsSection>
-
       {allowSignOff && <PostCompletionPendingPanel programId={programId} />}
 
       {detail.post_completion != null &&
@@ -265,6 +261,10 @@ export function ProgramDetailView({
             )}
           </OpsSection>
         )}
+
+      <OpsSection title="Agent sessions">
+        <ProgramAgentSessionsPanel programId={programId} />
+      </OpsSection>
 
       <ConfirmDialog
         open={confirmPhaseId != null}

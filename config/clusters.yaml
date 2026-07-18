@@ -2,9 +2,13 @@
 # Kubeconfig path: PLATFORM_KUBECONFIG env (default ~/.kube/bifrost-k3s.yaml).
 
 clusters:
+  # DefaultCluster = first entry.
+  # viewer_env applies only to in-cluster platform-api (see ResolveViewerEnv).
+  # Local make start ignores this pin and defaults to DEV unless OPS_VIEWER_ENV is set.
   - id: bifrost-bootstrap
     label: K3s bootstrap
     distribution: k3s
+    viewer_env: prod
     api_server: https://192.168.10.73:6443
     kubeconfig_env: PLATFORM_KUBECONFIG
     ssh_host: vision@192.168.10.73

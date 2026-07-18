@@ -39,6 +39,8 @@ export type TaskPhaseStatusInput = {
   briefingOpened?: boolean
   /** Dev Agent API phase completion — maps Task Mode phase ids (implement / pre-push). */
   devAgentPhaseDone?: (phaseId: string) => boolean
+  /** Daily Ops: true when pickFleetFixCell finds an Agent-Fixable cell (align phase CTA). */
+  fleetAgentFixAvailable?: boolean
 }
 
 function filterGroupItems(group: ShellNavGroup, allowed: Set<string>): ShellNavGroup | null {

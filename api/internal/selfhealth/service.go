@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,8 @@ type SelfHealthResponse struct {
 	GeneratedAt time.Time         `json:"generated_at"`
 	Probes      []SelfHealthProbe `json:"probes"`
 	Overall     ProbeStatus       `json:"overall"`
+	// ViewerEnv — seat for Daily Ops Fleet Desk (OPS_VIEWER_ENV or cluster viewer_env).
+	ViewerEnv string `json:"viewer_env,omitempty"`
 }
 
 type Service struct {
@@ -108,6 +111,42 @@ func (s *Service) Probe(ctx context.Context) SelfHealthResponse {
 		GeneratedAt: time.Now().UTC(),
 		Probes:      probes,
 		Overall:     overall,
+		ViewerEnv:   ResolveViewerEnv(s.cfg),
+	}
+}
+
+// ResolveViewerEnv returns the Console/Fleet Desk viewer seat.
+// Priority:
+//  1. OPS_VIEWER_ENV (explicit override — local or Prod)
+//  2. clusters.yaml viewer_env — only when running in-cluster (KUBERNETES_SERVICE_HOST)
+//  3. "dev" — local make start / Mac hybrid seat (local always loads clusters.yaml;
+//     must not inherit Prod's viewer_env: prod from DefaultCluster)
+func ResolveViewerEnv(cfg *config.Config) string {
+	if v := strings.TrimSpace(os.Getenv("OPS_VIEWER_ENV")); v != "" {
+		return normalizeViewerEnv(v)
+	}
+	if runningInCluster() {
+		if cfg != nil {
+			if entry := cfg.DefaultCluster(); entry != nil {
+				if v := strings.TrimSpace(entry.ViewerEnv); v != "" {
+					return normalizeViewerEnv(v)
+				}
+			}
+		}
+	}
+	return "dev"
+}
+
+func runningInCluster() bool {
+	return strings.TrimSpace(os.Getenv("KUBERNETES_SERVICE_HOST")) != ""
+}
+
+func normalizeViewerEnv(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "dev", "stg", "prod", "dev-local":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return "dev"
 	}
 }
 

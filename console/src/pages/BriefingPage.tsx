@@ -46,6 +46,7 @@ import {
   saveBriefingActiveSession,
 } from '@/lib/briefing/briefingActiveSession'
 import { TrackLaneSection } from '@/components/briefing/TrackLaneSection'
+import { NewLaneDialog } from '@/components/briefing/NewLaneDialog'
 import { SessionDetailSection } from '@/components/briefing/SessionDetailSection'
 import {
   type SessionLifecycle,
@@ -137,6 +138,7 @@ export function BriefingPage({
   const [insideCursorBrowser] = useState(() => isLikelyCursorIdeBrowser())
   const [newLaneOpenToken, setNewLaneOpenToken] = useState(0)
   const [newLaneReference, setNewLaneReference] = useState<NewLaneReference | null>(null)
+  const [newLaneDialogOpen, setNewLaneDialogOpen] = useState(false)
 
   const { canOperate } = usePlatformAuth()
   const operateQueueQuery = useOperateQueue()
@@ -453,6 +455,28 @@ export function BriefingPage({
     )
   }
 
+  function handleTopLevelNewLaneCreated(
+    laneId: string,
+    line: ComponentLineId,
+    trackType: WorkTrackType,
+  ) {
+    setLifecycleFilter(null)
+    setSelectedScope(line)
+    setSelectedTrackType(trackType)
+    setSelectedLane(laneId as LaneId)
+    invalidateSessionPackUi()
+    setLaunchStatus(
+      `Lane created — switched to ${line} · ${trackType}. Init Pack copied to clipboard.`,
+    )
+  }
+
+  function handleLaneMoved(line: ComponentLineId, trackType: WorkTrackType) {
+    setSelectedScope(line)
+    setSelectedTrackType(trackType)
+    invalidateSessionPackUi()
+    setLaunchStatus(`Lane reclassified → ${line} · ${trackType}`)
+  }
+
   async function handleOpenInCursor() {
     if (!canOperate) return
     if (isArchiveLane) {
@@ -544,6 +568,13 @@ export function BriefingPage({
         onSelectHotLine={handleSelectHotLine}
         onClearFilters={handleClearLifecycleFilter}
         onFocusAllScope={() => applyAllScope(true)}
+        onNewLane={() => setNewLaneDialogOpen(true)}
+      />
+
+      <NewLaneDialog
+        open={newLaneDialogOpen}
+        onOpenChange={setNewLaneDialogOpen}
+        onCreated={handleTopLevelNewLaneCreated}
       />
 
       <BriefingMasterDetail
@@ -604,6 +635,7 @@ export function BriefingPage({
             </section>
           ) : (
             <SessionDetailSection
+              focusedProgramId={initialUrl.program}
               scope={selectedScope}
               trackType={selectedTrackType}
               lane={activeLane}
@@ -622,6 +654,7 @@ export function BriefingPage({
               onCopySession={() => void handleCopySession()}
               onOpenInCursor={() => void handleOpenInCursor()}
               onUseAsReferenceForNewLane={handleUseAsReferenceForNewLane}
+              onLaneMoved={handleLaneMoved}
               context={context}
               migrateTrackNext={migrateTrackNext}
               auditRecords={auditRecords}

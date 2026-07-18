@@ -31,7 +31,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/lanes"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
-	"github.com/weitingzhao/bifrost-platform/api/internal/sessions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
@@ -42,6 +41,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/retrospective"
 	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
+	"github.com/weitingzhao/bifrost-platform/api/internal/sessions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/sessionsnapshot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
@@ -109,6 +109,8 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("devagent: %w", err)
 	}
 	operatequeueH := operatequeue.NewHandler(cfg.ConfigDir(), audit)
+	operatequeueH.BindRemediationJobs(remediationH.Store())
+	operatequeueH.BindLifecycleObserver(devagentH)
 	devagentH.BindOperateQueue(operatequeueH)
 	sessionsH := sessions.NewHandler(cfg.ConfigDir(), audit)
 	devagentH.BindSessions(sessionsH.Store())
@@ -269,8 +271,10 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/operate/queue", s.operatequeue.HandleEnqueue)
+			r.Post("/operate/queue/{id}/execution", s.operatequeue.HandleRecordExecution)
 			r.Post("/operate/queue/{id}/close", s.operatequeue.HandleClose)
 			r.Post("/lanes", s.lanes.HandleCreate)
+			r.Patch("/lanes/{id}", s.lanes.HandleUpdate)
 			r.Post("/sessions", s.sessions.HandleCreate)
 		})
 		r.Route("/programs", func(r chi.Router) {
@@ -297,6 +301,8 @@ func (s *Server) Router() http.Handler {
 				r.Use(s.auth.Require(actuation.RoleAdmin))
 				r.Post("/{programId}/phases/{phaseId}/signoff", s.devagent.HandlePhaseSignoff)
 				r.Post("/post-completion/{itemId}/approve", s.devagent.HandleApprovePostCompletionItem)
+				r.Post("/post-completion/{itemId}/reject", s.devagent.HandleRejectPostCompletionItem)
+				r.Post("/{programId}/post-completion/no-handoff", s.devagent.HandleNoPostCompletionHandoff)
 			})
 		})
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)

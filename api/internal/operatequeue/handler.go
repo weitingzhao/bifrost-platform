@@ -8,11 +8,27 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
 type Handler struct {
-	store *Store
-	audit *actuation.AuditLog
+	store    *Store
+	audit    *actuation.AuditLog
+	jobs     *remediation.JobStore
+	observer LifecycleObserver
+}
+
+type LifecycleObserver interface {
+	OnOperateQueueExecution(item Item)
+	OnOperateQueueClosed(item Item)
+}
+
+func (h *Handler) BindRemediationJobs(jobs *remediation.JobStore) {
+	h.jobs = jobs
+}
+
+func (h *Handler) BindLifecycleObserver(observer LifecycleObserver) {
+	h.observer = observer
 }
 
 func NewHandler(configDir string, audit *actuation.AuditLog) *Handler {
@@ -62,7 +78,18 @@ func (h *Handler) HandleClose(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
 		return
 	}
-	closed, err := h.store.Close(id)
+	var req CloseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	jobDone := false
+	if item, ok := h.store.FindByID(id); ok && item.ExecutionJobID != "" && h.jobs != nil {
+		if job, found := h.jobs.Get(item.ExecutionJobID); found {
+			jobDone = job.Status == remediation.JobDone
+		}
+	}
+	closed, err := h.store.Close(id, req, jobDone)
 	if err != nil {
 		msg := err.Error()
 		switch msg {
@@ -75,7 +102,37 @@ func (h *Handler) HandleClose(w http.ResponseWriter, r *http.Request) {
 	}
 	h.audit.Record(r, "operate.queue.close", closed.ID, StatusClosed,
 		fmt.Sprintf("program=%s", closed.ProgramID))
+	if h.observer != nil {
+		h.observer.OnOperateQueueClosed(closed)
+	}
 	writeJSON(w, http.StatusOK, closed)
+}
+
+func (h *Handler) HandleRecordExecution(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	var req ExecutionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	if h.jobs == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "remediation job store unavailable"})
+		return
+	}
+	if _, ok := h.jobs.Get(strings.TrimSpace(req.ExecutionJobID)); !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "execution job not found"})
+		return
+	}
+	item, err := h.store.RecordExecution(id, req.ExecutionJobID)
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	h.audit.Record(r, "operate.queue.execution", item.ID, item.Status, "job="+item.ExecutionJobID)
+	if h.observer != nil {
+		h.observer.OnOperateQueueExecution(item)
+	}
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (h *Handler) InjectFromApproval(r *http.Request, params ApprovalInjectParams) (Item, error) {
