@@ -142,6 +142,7 @@ export function DailyOpsFleetCellDetail({
   dataUpdatedAt,
   primaryBlocker,
   primaryActionLabel,
+  suppressSuggestedNext = false,
   onAgentFix,
   onNavigate,
   onReprobe,
@@ -155,6 +156,8 @@ export function DailyOpsFleetCellDetail({
   dataUpdatedAt?: number
   primaryBlocker?: DailyOpsBlocker
   primaryActionLabel?: string
+  /** P7 — remediating: Ops loop already shows Next:; skip duplicate Suggested next. */
+  suppressSuggestedNext?: boolean
   onAgentFix?: (cell: FleetCell) => void
   onNavigate: (tabId: string) => void
   onReprobe?: () => void
@@ -225,9 +228,14 @@ export function DailyOpsFleetCellDetail({
               {isSpan ? 'all envs (span)' : `${ROLE_LABEL[cell.role]} · ${envLabel}`}
             </span>
           </p>
-          {nextAction != null && nextAction !== '' && (
+          {nextAction != null && nextAction !== '' && !suppressSuggestedNext && (
             <p className="m-0 mt-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
               Suggested next: <span className="text-foreground">{nextAction}</span>
+            </p>
+          )}
+          {suppressSuggestedNext && (
+            <p className="m-0 mt-0.5 text-[var(--text-dense-micro)] text-muted-foreground/80">
+              Next: see Ops loop
             </p>
           )}
           <p

@@ -94,7 +94,7 @@ check('injects IB virtual when vendor has massive probe but no IB probe', () => 
   const ib = out[0].standards.find(s => s.id === 'ib-feed')
   assert.ok(ib != null, 'expected ib-feed virtual')
   assert.equal(ib!.source, 'checklist')
-  assert.equal(ib!.required, false)
+  assert.equal(ib!.required, true)
   assert.equal(ib!.signal, 'unknown')
 })
 
@@ -123,13 +123,29 @@ check('injects IB when only massive-polygon placeholder exists (claimed by massi
   assert.ok(ib != null && ib.source === 'checklist')
 })
 
-check('IB virtual is observe / required false — does not NO-GO vendor cell', () => {
+check('IB virtual is required — Vendor cannot GO without IB Client', () => {
   const vendor = cell('vendor', null, [
     std('api-massive', 'feed'),
     std('hermes', 'tooling'),
   ])
   const out = injectChecklistVirtualStandards([vendor])[0]
-  // All required probes ok; virtual unknown + required false
+  const ib = out.standards.find(s => s.id === 'ib-feed')
+  assert.equal(ib?.required, true)
+  assert.equal(ib?.signal, 'unknown')
+  assert.equal(resolveCellGate(out), 'NO-GO')
+})
+
+check('IB probe ok allows Vendor GO when other required feeds ok', () => {
+  const vendor = cell('vendor', null, [
+    std('api-massive', 'feed'),
+    std('ib-feed', 'feed'),
+    std('hermes', 'tooling'),
+  ])
+  const out = injectChecklistVirtualStandards([vendor])[0]
+  assert.equal(
+    out.standards.some(s => s.id === 'ib-feed' && s.source === 'checklist'),
+    false,
+  )
   assert.equal(resolveCellGate(out), 'GO')
 })
 
@@ -210,18 +226,63 @@ check('catalog boardProjection contract', () => {
   assertChecklistBoardProjectionContract()
 })
 
-check('buildFleetSnapshot public exit includes union (same as hook)', () => {
+check('buildFleetSnapshot public exit includes IB Client probe (required)', () => {
   const fleet = buildFleetSnapshot({ viewerEnv: 'dev', matrices: [] })
   const ib = fleet.cells
     .find(c => c.role === 'vendor')
     ?.standards.find(s => s.id === 'ib-feed')
-  assert.ok(ib != null && ib.source === 'checklist', 'IB virtual must be injected via public exit')
+  assert.ok(ib != null, 'IB Client standard must exist')
+  assert.equal(ib!.required, true)
+  // Without ibGateway input → unknown probe (not checklist virtual)
+  assert.equal(ib!.source ?? 'probe', 'probe')
+  assert.equal(ib!.signal, 'unknown')
+  const vendor = fleet.cells.find(c => c.role === 'vendor')!
+  assert.equal(resolveCellGate(vendor), 'NO-GO')
   const audit = auditChecklistFleetUnion(fleet)
   assert.ok(
     !audit.checklistNeedsProjection.some(x => x.itemId === 'ib-feed'),
-    'IB must be satisfied by virtual projection after finalize',
+    'ib-feed covered by probe',
   )
-  assert.ok(audit.virtualCount >= 1)
+})
+
+check('buildFleetSnapshot Vendor GO when IB Gateway plugin ok', () => {
+  const fleet = buildFleetSnapshot({
+    viewerEnv: 'dev',
+    matrices: [],
+    ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
+    bridge: {
+      generated_at: 't',
+      remediation_runner: { url: '', status: 'ok' },
+      runners: [],
+      git_bridge: { status: 'ok' },
+      satellite_probe_bridge: { status: 'ok' },
+      hermes_mcp: { status: 'unavailable' },
+      nous_hermes: {
+        status: 'ok',
+        gateway_running: true,
+        active_agents: 0,
+        active_sessions: 0,
+        mcp_tool_count: 0,
+      },
+      platform_mcp: {
+        server_name: 'x',
+        server_version: '0',
+        tool_count: 0,
+        implemented_count: 0,
+        agent_tool_count: 0,
+        transport: 'stdio',
+        script_path: '',
+      },
+      nightly_report: { available: false },
+    },
+  })
+  const vendor = fleet.cells.find(c => c.role === 'vendor')!
+  const ib = vendor.standards.find(s => s.id === 'ib-feed')!
+  assert.equal(ib.signal, 'ok')
+  assert.equal(ib.required, true)
+  const requiredOk = vendor.standards.filter(s => s.required !== false).every(s => s.signal === 'ok')
+  assert.ok(requiredOk, 'required standards should be ok')
+  assert.equal(resolveCellGate(vendor), 'GO')
 })
 
 console.log(`\n${passed} passed`)

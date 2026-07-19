@@ -8,6 +8,7 @@ import {
   fetchRemediationHealth,
   fetchAgentBridge,
   fetchMatrix,
+  fetchIbGatewayStatus,
   isAllMatrices,
 } from '@/api/platform'
 import type { MatrixResponse } from '@/api/types'
@@ -51,6 +52,11 @@ export function useFleetSnapshot(): {
   const runnerQ = useQuery({ queryKey: ['cockpit', 'runner'], queryFn: fetchRemediationHealth, refetchInterval: REFETCH })
   const bridgeQ = useQuery({ queryKey: ['cockpit', 'bridge'], queryFn: fetchAgentBridge, refetchInterval: REFETCH })
   const matrixQ = useQuery({ queryKey: ['cockpit', 'matrix'], queryFn: () => fetchMatrix(), refetchInterval: REFETCH })
+  const ibGatewayQ = useQuery({
+    queryKey: ['cockpit', 'ib-gateway'],
+    queryFn: fetchIbGatewayStatus,
+    refetchInterval: REFETCH,
+  })
 
   const matrices = useMemo((): MatrixResponse[] => {
     const data = matrixQ.data
@@ -83,6 +89,7 @@ export function useFleetSnapshot(): {
         bridge: bridgeQ.data,
         matrices,
         groundBridgeReady,
+        ibGateway: ibGatewayQ.data,
       }),
     [
       viewerEnv,
@@ -94,6 +101,7 @@ export function useFleetSnapshot(): {
       bridgeQ.data,
       matrices,
       groundBridgeReady,
+      ibGatewayQ.data,
     ],
   )
 
@@ -118,7 +126,8 @@ export function useFleetSnapshot(): {
     selfQ.isLoading ||
     runnerQ.isLoading ||
     bridgeQ.isLoading ||
-    matrixQ.isLoading
+    matrixQ.isLoading ||
+    ibGatewayQ.isLoading
 
   const dataUpdatedAt = Math.max(
     clusterQ.dataUpdatedAt,
@@ -128,6 +137,7 @@ export function useFleetSnapshot(): {
     runnerQ.dataUpdatedAt,
     bridgeQ.dataUpdatedAt,
     matrixQ.dataUpdatedAt,
+    ibGatewayQ.dataUpdatedAt,
   )
 
   return { fleet, snapshot, matrices, viewerEnv, viewerEnvLoading, dataUpdatedAt, isLoading }

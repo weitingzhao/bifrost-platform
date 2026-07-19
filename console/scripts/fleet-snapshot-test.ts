@@ -20,6 +20,7 @@ import {
   getCell,
   normalizeViewerEnv,
   operateQueueClearLabel,
+  resolveCellGate,
   resolveFleetVerdict,
   viewerEnvBadgeLabel,
   type FleetCell,
@@ -292,6 +293,7 @@ check('all green + Mac seat ok → GO + fleetClear', () => {
     cluster: clusterOk,
     groundBridgeReady: true,
     runner: { status: 'ok' },
+    ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
@@ -322,6 +324,9 @@ check('all green + Mac seat ok → GO + fleetClear', () => {
   assert.ok(eng)
   assert.equal(eng.signal, 'ok')
   assert.match(eng.detail, /Mac seat/)
+  const vendor = getCell(snap, 'vendor', 'span')
+  assert.ok(vendor)
+  assert.equal(resolveCellGate(vendor), 'GO')
   assert.equal(snap.verdict.kind, 'GO')
   assert.equal(snap.fleetClear, true)
   assert.equal(snap.fleetNominal, true)
@@ -337,6 +342,7 @@ check('PROD viewer all green + Rocket DEV structural unavailable → GO (Mac inf
     cluster: clusterOk,
     groundBridgeReady: false,
     runner: { status: 'ok' },
+    ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
@@ -373,6 +379,195 @@ check('PROD viewer all green + Rocket DEV structural unavailable → GO (Mac inf
   assert.match(eng.detail, /Mac seat/)
   assert.equal(snap.verdict.kind, 'GO')
   assert.equal(snap.fleetClear, true)
+})
+
+check('Vendor NO-GO when IB Gateway plugin missing or fail', () => {
+  const snap = buildFleetSnapshot({
+    viewerEnv: 'dev',
+    matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
+    self: selfHealth(['dev', 'stg', 'prod']),
+    stg: stgSmokeOk,
+    supply: supplyOk,
+    cluster: clusterOk,
+    groundBridgeReady: true,
+    runner: { status: 'ok' },
+    ibGateway: { reachability: 'fail', reachable: false, error: 'IB Client not running' },
+    bridge: {
+      generated_at: 't',
+      remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
+      git_bridge: { status: 'ok', dirty_repos: 0 },
+      satellite_probe_bridge: { status: 'ok' },
+      hermes_mcp: { status: 'ok' },
+      nous_hermes: {
+        status: 'ok',
+        gateway_running: true,
+        active_agents: 0,
+        active_sessions: 0,
+        mcp_tool_count: 0,
+      },
+      platform_mcp: {
+        server_name: 'p',
+        server_version: '1',
+        tool_count: 0,
+        implemented_count: 0,
+        agent_tool_count: 0,
+        transport: 'stdio',
+        script_path: '',
+      },
+      nightly_report: { available: false },
+    },
+  })
+  const vendor = getCell(snap, 'vendor', 'span')!
+  assert.equal(resolveCellGate(vendor), 'NO-GO')
+  assert.match(vendor.detail, /IB/i)
+  assert.equal(snap.verdict.kind, 'NO-GO')
+  assert.equal(vendor.agentFixEnabled, false)
+})
+
+check('Vendor IB fails when live heartbeat stale despite connected flag', () => {
+  const now = Date.now()
+  const snap = buildFleetSnapshot({
+    viewerEnv: 'dev',
+    matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
+    self: selfHealth(['dev', 'stg', 'prod']),
+    stg: stgSmokeOk,
+    supply: supplyOk,
+    cluster: clusterOk,
+    groundBridgeReady: true,
+    runner: { status: 'ok' },
+    ibGateway: {
+      mode: 'live',
+      reachability: 'ok',
+      reachable: true,
+      summary: 'live · connected (optimistic)',
+      ingestor_health: {
+        connected: 'True',
+        client_id: '70',
+        last_msg_ts: String(now / 1000 - 200),
+      },
+      account_health: {
+        host_connected: 'True',
+        host_client_id: '70',
+        last_msg_ts: String(now / 1000 - 200),
+      },
+      sample_tick_nvda: JSON.stringify({
+        bid: -1,
+        ask: -1,
+        last: 201,
+        ts: now / 1000 - 200,
+      }),
+      account_snapshot: JSON.stringify({
+        host_connected: true,
+        secondary_connected: true,
+        accounts_snapshot: [{ account_id: 'U1' }],
+        updated_at: now / 1000 - 200,
+      }),
+    },
+    bridge: {
+      generated_at: 't',
+      remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
+      git_bridge: { status: 'ok', dirty_repos: 0 },
+      satellite_probe_bridge: { status: 'ok' },
+      hermes_mcp: { status: 'ok' },
+      nous_hermes: {
+        status: 'ok',
+        gateway_running: true,
+        active_agents: 0,
+        active_sessions: 0,
+        mcp_tool_count: 0,
+      },
+      platform_mcp: {
+        server_name: 'p',
+        server_version: '1',
+        tool_count: 0,
+        implemented_count: 0,
+        agent_tool_count: 0,
+        transport: 'stdio',
+        script_path: '',
+      },
+      nightly_report: { available: false },
+    },
+  })
+  const vendor = getCell(snap, 'vendor', 'span')!
+  const ib = vendor.standards.find(s => s.id === 'ib-feed')!
+  assert.equal(ib.signal, 'fail')
+  // Stale snapshot fires before heartbeat — either reason is a fail.
+  assert.match(ib.reason, /stale|ghost|empty/i)
+  assert.equal(resolveCellGate(vendor), 'NO-GO')
+})
+
+check('Vendor IB fails on ghost session (connected + empty accounts_snapshot)', () => {
+  const now = Date.now()
+  const snap = buildFleetSnapshot({
+    viewerEnv: 'dev',
+    matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
+    self: selfHealth(['dev', 'stg', 'prod']),
+    stg: stgSmokeOk,
+    supply: supplyOk,
+    cluster: clusterOk,
+    groundBridgeReady: true,
+    runner: { status: 'ok' },
+    ibGateway: {
+      mode: 'live',
+      reachability: 'ok',
+      reachable: true,
+      summary: 'live · ib-gateway 1/1 · host=true secondary=true · redis-ib ok',
+      ingestor_health: {
+        connected: 'True',
+        client_id: '70',
+        last_msg_ts: String(now / 1000),
+      },
+      account_health: {
+        host_connected: 'True',
+        host_client_id: '70',
+        secondary_connected: 'True',
+        secondary_client_id: '72',
+        last_msg_ts: String(now / 1000),
+      },
+      sample_tick_nvda: JSON.stringify({
+        bid: -1,
+        ask: -1,
+        last: 201.26,
+        ts: now / 1000,
+      }),
+      account_snapshot: JSON.stringify({
+        host_connected: true,
+        secondary_connected: true,
+        accounts_snapshot: [],
+        updated_at: now / 1000,
+      }),
+    },
+    bridge: {
+      generated_at: 't',
+      remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
+      git_bridge: { status: 'ok', dirty_repos: 0 },
+      satellite_probe_bridge: { status: 'ok' },
+      hermes_mcp: { status: 'ok' },
+      nous_hermes: {
+        status: 'ok',
+        gateway_running: true,
+        active_agents: 0,
+        active_sessions: 0,
+        mcp_tool_count: 0,
+      },
+      platform_mcp: {
+        server_name: 'p',
+        server_version: '1',
+        tool_count: 0,
+        implemented_count: 0,
+        agent_tool_count: 0,
+        transport: 'stdio',
+        script_path: '',
+      },
+      nightly_report: { available: false },
+    },
+  })
+  const vendor = getCell(snap, 'vendor', 'span')!
+  const ib = vendor.standards.find(s => s.id === 'ib-feed')!
+  assert.equal(ib.signal, 'fail')
+  assert.match(ib.reason, /ghost|empty/i)
+  assert.equal(resolveCellGate(vendor), 'NO-GO')
+  assert.equal(vendor.agentFixEnabled, false)
 })
 
 check('fail → NO-GO; degraded → NO-GO (not green)', () => {

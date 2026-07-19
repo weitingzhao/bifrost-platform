@@ -15,6 +15,12 @@ import {
   dailyOpsStepStatuses,
   resolveDailyOpsWorkflow,
 } from '../src/lib/control-room/dailyOpsWorkflow'
+import {
+  fixPathLabel,
+  fixTargetNextStep,
+  resolveAmbientJobFixTarget,
+  type DailyOpsBlocker,
+} from '../src/lib/control-room/dailyOpsPrimaryBlocker'
 import { buildFleetSnapshot } from '../src/lib/control-room/buildFleetSnapshot'
 import { pickFleetFixCell } from '../src/lib/control-room/fleetCellFix'
 
@@ -186,6 +192,64 @@ check('agentPending → remediate View agent', () => {
   assert.equal(r.primaryAction.kind, 'view-agent')
   assert.match(r.primaryAction.label, /View agent/i)
   assert.equal(r.primaryAction.tabId, 'agent-desk')
+  // Fix target binding: keep primary blocker while Agent is in flight
+  assert.ok(r.primaryBlocker)
+})
+
+check('Fix target helpers: Manual Mac seat + misaligned git job', () => {
+  const mac: DailyOpsBlocker = {
+    itemId: 'mac-probe-bridge',
+    stepId: 'engineer-seat',
+    stepOrder: 3,
+    label: 'Mac seat · probe-bridge',
+    group: 'seat',
+    signal: 'fail',
+    fixCapability: 'manual',
+    fixScope: null,
+    manualAction: 'Physical: verify Mac is powered on',
+    critical: false,
+    cellKey: 'engineer:span',
+    standardId: 'mac-seat',
+    reason: 'not_configured',
+  }
+  assert.equal(fixPathLabel(mac), 'Manual')
+  assert.equal(fixTargetNextStep(mac, 'Mac seat: verify power & bridge →'), 'Mac seat: verify power & bridge')
+  assert.equal(fixTargetNextStep(mac, 'View agent'), 'Mac seat: verify power & bridge')
+
+  const job = resolveAmbientJobFixTarget({
+    checklistItemId: 'git-bridge',
+    primaryBlocker: mac,
+    scopeFallbackLabel: 'Operator plane',
+  })
+  assert.ok(job)
+  assert.equal(job.label, 'Git bridge healthy + clean')
+  assert.equal(job.pathLabel, 'Semi/Auto')
+  assert.equal(job.alignsWithPrimary, false)
+})
+
+check('Fix target helpers: job aligns with primary git blocker', () => {
+  const git: DailyOpsBlocker = {
+    itemId: 'git-bridge',
+    stepId: 'engineer-seat',
+    stepOrder: 3,
+    label: 'Git bridge healthy + clean',
+    group: 'automation',
+    signal: 'degraded',
+    fixCapability: 'semi_auto',
+    fixScope: 'operator-plane-remediate',
+    critical: false,
+    cellKey: 'engineer:span',
+    standardId: 'git-bridge',
+    reason: 'dirty',
+  }
+  assert.equal(fixPathLabel(git), 'Semi/Auto')
+  const job = resolveAmbientJobFixTarget({
+    checklistItemId: 'git-bridge',
+    jobScope: 'operator-plane-remediate',
+    primaryBlocker: git,
+  })
+  assert.ok(job)
+  assert.equal(job.alignsWithPrimary, true)
 })
 
 check('agentJustSucceeded + !fleetClear → verify', () => {
@@ -267,6 +331,11 @@ check('Engineer CRITICAL Mac seat FAIL → manual-next (not AI Fix)', () => {
   assert.ok(r.primaryAction.secondary)
   assert.equal(r.primaryAction.secondary?.kind, 'operator-plan')
   assert.match(r.primaryAction.secondary?.label ?? '', /Also: AI Fix/i)
+  // Execution → Now Fix target must share this primary blocker
+  assert.ok(r.primaryBlocker)
+  assert.equal(r.primaryBlocker?.itemId, 'mac-probe-bridge')
+  assert.equal(fixPathLabel(r.primaryBlocker!), 'Manual')
+  assert.equal(fixTargetNextStep(r.primaryBlocker!, r.primaryAction.label), r.primaryAction.label)
   const steps = dailyOpsStepStatuses(r)
   assert.equal(steps.remediate, 'active')
 })

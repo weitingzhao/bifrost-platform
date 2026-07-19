@@ -5,9 +5,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
   DenseTag,
-  cn,
 } from '@bifrost/ui'
-import { Bot, ChevronRight, Loader2, Rocket, Satellite } from 'lucide-react'
+import { ChevronRight, Rocket, Satellite } from 'lucide-react'
 import {
   fetchPipelineRuns,
   fetchReleaseGate,
@@ -19,10 +18,8 @@ import { gateStepStatus, runStepStatus, pickDeployPipelineRun, deployRunRetryFai
 import { OpsSection } from '@/components/layout/OpsSection'
 import { DailyOpsFleetBoard } from '@/components/task-mode/DailyOpsFleetBoard'
 import { DailyOpsFleetCellDetail } from '@/components/task-mode/DailyOpsFleetCellDetail'
-import {
-  DailyOpsAgentLivePanel,
-  DailyOpsProcessStrip,
-} from '@/components/task-mode/DailyOpsProcessStrip'
+import { DailyOpsProcessStrip } from '@/components/task-mode/DailyOpsProcessStrip'
+import { DailyOpsExecutionPanel } from '@/components/task-mode/DailyOpsExecutionPanel'
 import { DailyOpsOperatorPlanPanel } from '@/components/task-mode/DailyOpsOperatorPlanPanel'
 import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
 import type { DailyOpsWorkflowResult } from '@/lib/control-room/dailyOpsWorkflow'
@@ -31,8 +28,7 @@ import { LaunchLiveView } from '@/components/task-mode/LaunchLiveView'
 import { MissionLaunchBoard } from '@/components/task-mode/MissionLaunchBoard'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useDailyOpsChecklistCoverage } from '@/hooks/useDailyOpsChecklistCoverage'
-import { useOperateQueue } from '@/hooks/useOperateQueue'
-import { operateQueueClearLabel, type FleetCell } from '@/lib/control-room/fleetSnapshot'
+import { type FleetCell } from '@/lib/control-room/fleetSnapshot'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import { DELIVER_PLATFORM_PIPELINE } from '@/lib/delivery/deliverPlatformPhases'
@@ -135,6 +131,8 @@ export type OpsTaskStripsProps = {
   /** Ambient agent job — opens Launch Live View for trade-deploy / release scope. */
   ambientJobId?: string | null
   ambientJobScope?: string | null
+  /** Adopt existing remediation job as ambient (Queue → Now). */
+  onStartAgentJob?: (job: { id: string; scope: string; label: string }) => void
   /** Checklist auto-dispatch / related remediation jobs for Action column. */
   activeDispatchJobs?: import('@/api/types').RemediationJob[]
   /** Namespace for the mode's deliver pipeline runs (trade STG or platform). */
@@ -155,97 +153,6 @@ export type OpsTaskStripsProps = {
   satelliteLaunchAgentFixActive?: boolean
   satelliteLaunchAgentFixDisabled?: boolean
   satelliteLaunchAgentFixTitle?: string
-}
-
-function OperateQueueSummary({
-  onNavigate,
-  fleetClear,
-  remediating = false,
-}: {
-  onNavigate: (tab: string) => void
-  fleetClear: boolean
-  /** When remediating with open items, strip uses warning tone. */
-  remediating?: boolean
-}) {
-  const queueQ = useOperateQueue()
-  const open = queueQ.data?.open ?? []
-  const label = operateQueueClearLabel(open.length, fleetClear)
-  const clearButFleetNot = open.length === 0 && !fleetClear
-  const warnTone = open.length > 0 && remediating
-  const [listOpen, setListOpen] = useState(false)
-
-  return (
-    <div
-      className={cn(
-        'rounded-md border px-2.5 py-1.5',
-        warnTone
-          ? 'border-amber-500/45 bg-amber-500/10'
-          : 'border-border/60 bg-secondary/80',
-      )}
-    >
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <Bot
-          size={14}
-          className={cn('shrink-0', warnTone ? 'text-amber-800 dark:text-amber-200' : 'text-muted-foreground')}
-          aria-hidden
-        />
-        <span
-          className={cn(
-            'text-[var(--text-dense-caption)] font-medium',
-            warnTone ? 'text-amber-900 dark:text-amber-100' : 'text-muted-foreground',
-          )}
-        >
-          Operate queue · {open.length} open
-        </span>
-        <DenseTag
-          variant={open.length === 0 && fleetClear ? 'success' : clearButFleetNot ? 'neutral' : 'warning'}
-          className="text-[8px]"
-        >
-          {label}
-        </DenseTag>
-        {clearButFleetNot && (
-          <span className="text-[var(--text-dense-micro)] text-muted-foreground">
-            Queue clear ≠ fleet clear
-          </span>
-        )}
-        <span className="ml-auto flex shrink-0 items-center gap-2">
-          {open.length > 0 && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:text-foreground"
-              aria-expanded={listOpen}
-              onClick={() => setListOpen(v => !v)}
-            >
-              <ChevronRight
-                className={cn('size-3 transition-transform', listOpen && 'rotate-90')}
-                aria-hidden
-              />
-              {listOpen ? 'Hide' : 'List'}
-            </button>
-          )}
-          <button
-            type="button"
-            className={cn(
-              'text-[var(--text-dense-caption)] font-medium hover:underline',
-              warnTone ? 'text-amber-900 dark:text-amber-100' : 'text-primary',
-            )}
-            onClick={() => onNavigate('control-room')}
-          >
-            Review →
-          </button>
-        </span>
-      </div>
-      {listOpen && open.length > 0 && (
-        <ul className="m-0 mt-1.5 list-none space-y-0.5 border-t border-border/40 pt-1.5 p-0">
-          {open.slice(0, 3).map(item => (
-            <li key={item.id} className="truncate text-[var(--text-dense-meta)] text-muted-foreground">
-              {item.title}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
 }
 
 export function PlatformStgReleaseStrip({
@@ -720,6 +627,7 @@ function DailyOpsFleetDesk({
     onOpenAgentDesk,
     ambientJobId,
     ambientJobScope,
+    onStartAgentJob,
     activeDispatchJobs,
   } = props
   const [selectedCellKey, setSelectedCellKey] = useState<string | null>(null)
@@ -789,6 +697,21 @@ function DailyOpsFleetDesk({
   const isChecklistAmbient =
     ambientJobScope === DAILY_OPS_CHECKLIST_RUN_SCOPE || checklistCheckActive === true
 
+  // P3 — Fix / Also AI Fix → scroll Execution → Now into view
+  useEffect(() => {
+    if (!showStartingHint && !hasAmbientJob && checklistItemFixActiveId == null) return
+    requestAnimationFrame(() => {
+      document
+        .querySelector('[data-daily-ops-execution]')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }, [showStartingHint, hasAmbientJob, checklistItemFixActiveId, ambientJobId])
+
+  const handleVerifyReprobe = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: ['cockpit'] })
+    void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+  }, [qc])
+
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-3">
       {fleetWorkflow != null && (
@@ -827,23 +750,6 @@ function DailyOpsFleetDesk({
           checklistCheckActive={checklistCheckActive || isChecklistAmbient}
           checklistCheckStatusHint={checklistCheckStatusHint}
         />
-      )}
-
-      {/* Agent progress — only while a job is active */}
-      {hasAmbientJob && ambientJobId != null && (
-        <div className="sticky top-0 z-20 -mx-0.5 bg-[var(--card)]/95 px-0.5 py-0.5 backdrop-blur-sm">
-          <DailyOpsAgentLivePanel
-            jobId={ambientJobId}
-            jobScope={ambientJobScope}
-            onOpenAgentDesk={onOpenAgentDesk}
-          />
-        </div>
-      )}
-      {showStartingHint && (
-        <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-secondary px-3 py-2 text-[var(--text-dense-caption)] text-muted-foreground">
-          <Loader2 className="size-3 animate-spin" aria-hidden />
-          Starting Agent…
-        </div>
       )}
 
       {/* Checklist | Fleet Board + in-column Cell Detail */}
@@ -906,21 +812,46 @@ function DailyOpsFleetDesk({
               dataUpdatedAt={dataUpdatedAt}
               primaryBlocker={fleetWorkflow?.primaryBlocker}
               primaryActionLabel={fleetWorkflow?.primaryAction.label}
+              suppressSuggestedNext={fleetWorkflow?.activePhase === 'remediate'}
               onAgentFix={onFleetCellFix}
               onNavigate={onNavigate}
-              onReprobe={() => {
-                void qc.invalidateQueries({ queryKey: ['cockpit'] })
-              }}
+              onReprobe={handleVerifyReprobe}
               onClose={() => setSelectedCellKey(null)}
             />
           )}
         </div>
       </div>
 
-      <OperateQueueSummary
+      <DailyOpsExecutionPanel
         onNavigate={onNavigate}
         fleetClear={fleet.fleetClear}
-        remediating={fleetWorkflow?.activePhase === 'remediate'}
+        remediating={
+          fleetWorkflow?.activePhase === 'remediate' ||
+          fleetWorkflow?.activePhase === 'verify'
+        }
+        ambientJobId={ambientJobId}
+        ambientJobScope={ambientJobScope}
+        onOpenAgentDesk={onOpenAgentDesk}
+        showStartingHint={showStartingHint}
+        primaryBlocker={fleetWorkflow?.primaryBlocker}
+        primaryActionLabel={fleetWorkflow?.primaryAction.label}
+        checklistItemFixActiveId={checklistItemFixActiveId}
+        onVerifyReprobe={handleVerifyReprobe}
+        onAdoptJob={onStartAgentJob}
+        onOpsLoopAction={
+          fleetWorkflow != null
+            ? () => {
+                if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
+                  onOperatorPlanFix?.()
+                  return
+                }
+                onFleetWorkflowAction?.()
+              }
+            : undefined
+        }
+        opsLoopActionLabel={
+          fleetWorkflow != null ? `${fleetWorkflow.primaryAction.label} →` : 'Ops loop →'
+        }
       />
     </div>
   )

@@ -24,7 +24,7 @@ export type OperateQueueItem = {
   created_at: string
   updated_at?: string
   closed_at?: string
-  source?: 'post_completion' | 'manual'
+  source?: 'post_completion' | 'manual' | 'checklist_dispatch'
   pending_id?: string
   approved_by?: string
 }

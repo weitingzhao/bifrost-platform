@@ -207,6 +207,18 @@ export function resolveDailyOpsWorkflow(
     const fixCell = pickFleetFixCell(fleet)
     const cellKey =
       fleet.verdict.primaryCta.cellKey ?? fixCell?.key ?? fleet.verdict.worstCell?.key
+    // Keep primary blocker while Agent runs so Execution → Now can compare
+    // Running (job) vs Loop next (same catalog target as pre-flight CTA).
+    const pendingBlockers =
+      fixCell != null
+        ? collectDailyOpsBlockers(fleet, { cell: fixCell })
+        : (() => {
+            const eng = engineerEscalateCell(fleet)
+            return eng != null
+              ? collectDailyOpsBlockers(fleet, { cell: eng })
+              : collectDailyOpsBlockers(fleet)
+          })()
+    const primary = pickPrimaryBlocker(pendingBlockers)
     return {
       activePhase: 'remediate',
       blockers,
@@ -215,8 +227,10 @@ export function resolveDailyOpsWorkflow(
         label: 'View agent',
         tabId: 'agent-desk',
         cellKey,
+        blockerItemId: primary?.itemId,
       },
       targetCellKey: cellKey,
+      primaryBlocker: primary ?? undefined,
     }
   }
 

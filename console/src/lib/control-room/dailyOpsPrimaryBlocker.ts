@@ -165,6 +165,121 @@ export function nextStepBanner(primary: DailyOpsBlocker): string {
   return `Next: AI Fix · ${shortLabel(primary.label)}`
 }
 
+/**
+ * Path chip for Execution → Now Fix target bar.
+ * Manual/observe → Manual|Observe; agent-capable → Semi/Auto (matches Ops loop CTA family).
+ */
+export function fixPathLabel(
+  b: Pick<DailyOpsBlocker, 'fixCapability' | 'fixScope'>,
+): string {
+  if (b.fixCapability === 'observe') return 'Observe'
+  if (blockerRequiresManualPath(b)) return 'Manual'
+  return 'Semi/Auto'
+}
+
+/** Short next-step copy aligned with Ops loop primary CTA (not a second resolver). */
+export function fixTargetNextStep(
+  primary: DailyOpsBlocker,
+  primaryActionLabel?: string | null,
+): string {
+  const fromCta = primaryActionLabel?.replace(/\s*→\s*$/, '').trim()
+  // In-flight strip CTA — not the underlying fix-target next step.
+  if (
+    fromCta != null &&
+    fromCta !== '' &&
+    !/^view agent$/i.test(fromCta)
+  ) {
+    return fromCta
+  }
+  if (blockerRequiresManualPath(primary)) return manualPrimaryCtaLabel(primary)
+  return `AI Fix · ${shortLabel(primary.label)}`
+}
+
+/** Catalog items that share a remediation fixScope (job ↔ checklist link). */
+export function checklistItemsByFixScope(fixScope: string | null | undefined): ChecklistItem[] {
+  if (fixScope == null || fixScope === '') return []
+  const out: ChecklistItem[] = []
+  for (const step of DAILY_OPS_CHECKLIST) {
+    for (const item of step.items) {
+      if (item.fixScope === fixScope) out.push(item)
+    }
+  }
+  return out
+}
+
+export type AmbientJobFixTarget = {
+  /** Prefer checklist label when job maps to an item; else scope display. */
+  label: string
+  itemId: string | null
+  pathLabel: string
+  fixScope: string | null
+  /** True when job target is the same checklist item as primary blocker. */
+  alignsWithPrimary: boolean
+}
+
+/**
+ * Resolve ambient remediation job → Fix target for Now bar.
+ * Prefer explicit checklist item id; else match fixScope (prefer primary blocker when shared scope).
+ */
+export function resolveAmbientJobFixTarget(opts: {
+  jobScope?: string | null
+  checklistItemId?: string | null
+  primaryBlocker?: DailyOpsBlocker | null
+  scopeFallbackLabel?: string | null
+}): AmbientJobFixTarget | null {
+  const scope =
+    opts.jobScope != null && opts.jobScope !== '' ? opts.jobScope : null
+  const itemId =
+    opts.checklistItemId != null && opts.checklistItemId !== ''
+      ? opts.checklistItemId
+      : null
+
+  let item: ChecklistItem | null = itemId != null ? checklistItemById(itemId) : null
+  if (item == null && scope != null) {
+    const byScope = checklistItemsByFixScope(scope)
+    if (opts.primaryBlocker != null && opts.primaryBlocker.fixScope === scope) {
+      const hit = byScope.find(i => i.id === opts.primaryBlocker!.itemId)
+      if (hit != null) item = hit
+    }
+    if (item == null && byScope.length === 1) item = byScope[0] ?? null
+    if (item == null && byScope.length > 1) {
+      // Shared scope (e.g. operator-plane): prefer primary if present, else first.
+      item =
+        byScope.find(i => i.id === opts.primaryBlocker?.itemId) ?? byScope[0] ?? null
+    }
+  }
+
+  if (item == null && scope == null && itemId == null) return null
+
+  const label =
+    item?.label ??
+    (opts.scopeFallbackLabel != null && opts.scopeFallbackLabel !== ''
+      ? opts.scopeFallbackLabel
+      : (scope ?? 'Agent run'))
+
+  const pathSource: Pick<DailyOpsBlocker, 'fixCapability' | 'fixScope'> =
+    item != null
+      ? { fixCapability: item.fixCapability, fixScope: item.fixScope }
+      : opts.primaryBlocker != null && opts.primaryBlocker.fixScope === scope
+        ? opts.primaryBlocker
+        : { fixCapability: 'semi_auto', fixScope: scope }
+
+  const alignsWithPrimary =
+    opts.primaryBlocker != null &&
+    (item?.id === opts.primaryBlocker.itemId ||
+      (item == null &&
+        scope != null &&
+        opts.primaryBlocker.fixScope === scope))
+
+  return {
+    label,
+    itemId: item?.id ?? null,
+    pathLabel: fixPathLabel(pathSource),
+    fixScope: item?.fixScope ?? scope,
+    alignsWithPrimary,
+  }
+}
+
 /** Lookup catalog item (tests / UI hints). */
 export function checklistItemById(itemId: string): ChecklistItem | null {
   for (const step of DAILY_OPS_CHECKLIST) {

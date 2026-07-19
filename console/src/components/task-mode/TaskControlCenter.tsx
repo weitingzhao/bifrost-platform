@@ -870,7 +870,7 @@ export function TaskControlCenter({
     }
   }
 
-  // Ambient job ended after Daily Ops Agent Fix → Verify (re-probe)
+  // Ambient job ended after Daily Ops Agent Fix → Verify (re-probe) only on success
   // Checklist AI Check done/failed → refresh signals / KPIs / jobs
   useEffect(() => {
     const prevId = prevAmbientJobIdRef.current
@@ -887,8 +887,24 @@ export function TaskControlCenter({
         void qc.invalidateQueries({ queryKey: ['cockpit'] })
       }
       if (dailyOpsFixStartedRef.current && prevScope !== DAILY_OPS_CHECKLIST_RUN_SCOPE) {
-        setAgentJustSucceeded(true)
+        // Only enter Verify when the job actually succeeded (not failed/cancelled)
+        const jobsCaches = [
+          qc.getQueryData<{ jobs: { id: string; status: string }[] }>(['remediation', 'jobs']),
+          qc.getQueryData<{ jobs: { id: string; status: string }[] }>([
+            'remediation',
+            'jobs',
+            'checklist-dispatch',
+          ]),
+        ]
+        const ended = jobsCaches
+          .flatMap(c => c?.jobs ?? [])
+          .find(j => j.id === prevId)
+        if (ended?.status === 'done') {
+          setAgentJustSucceeded(true)
+        }
         void qc.invalidateQueries({ queryKey: ['cockpit'] })
+        void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+        void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
       }
     }
   }, [ambientJobId, ambientJobScope, qc])
@@ -1364,6 +1380,7 @@ export function TaskControlCenter({
             onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId ?? ambientJobId ?? undefined)}
             ambientJobId={ambientJobId}
             ambientJobScope={ambientJobScope}
+            onStartAgentJob={isDailyOps ? onStartAgentJob : undefined}
             activeDispatchJobs={isDailyOps ? activeDispatchJobs : undefined}
             pipelineRunsNamespace={isMissionLaunch ? platformRunsQ.data?.namespace : undefined}
             platformStgGate={platformStgGateQ.data}

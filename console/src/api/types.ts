@@ -2172,6 +2172,8 @@ export interface IbGatewayStatusResponse {
   account_health?: Record<string, string>
   operator_health?: Record<string, string>
   sample_tick_nvda?: string
+  /** Raw JSON from redis-ib `ib:account:snapshot:v1` — used for ghost-session detection. */
+  account_snapshot?: string
   operator_consumer_group?: string
   cutover?: IbGatewayCutoverStatus
   autonomy?: string

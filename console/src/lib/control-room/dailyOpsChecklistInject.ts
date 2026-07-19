@@ -51,7 +51,14 @@ function cellHasProbeForItem(
 
 function buildVirtualStandard(item: ChecklistItem): FleetStandard {
   const proj = item.boardProjection!
-  const required = proj.required !== false && item.fixCapability !== 'observe'
+  // Explicit required:true wins (e.g. IB observe-but-required-for-Vendor-GO).
+  // Explicit required:false stays optional. Otherwise observe → not required.
+  const required =
+    proj.required === true
+      ? true
+      : proj.required === false
+        ? false
+        : item.fixCapability !== 'observe'
   return {
     id: proj.standardId,
     label: proj.label,

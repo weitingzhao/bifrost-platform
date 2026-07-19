@@ -1326,8 +1326,10 @@ function ItemTableRow({
   return (
     <DenseTableRow
       className={cn(
-        remediating && 'bg-sky-500/10 ring-1 ring-inset ring-sky-500/30',
+        remediating && 'bg-sky-500/15 ring-2 ring-inset ring-sky-500/45',
       )}
+      data-checklist-item-id={item.id}
+      data-checklist-remediating={remediating ? 'true' : undefined}
     >
       <DenseTableCell className={cellTight}>
         <StatusLamp value={lampValue(overallSignal)} kind="reach" />
@@ -1373,9 +1375,12 @@ function ItemTableRow({
                 aria-label={`Ops Agent Fix · ${item.label}`}
                 className={cn(
                   'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border shadow-sm transition-colors',
-                  'border-sky-500/55 bg-sky-500/15 text-sky-800 hover:bg-sky-500/25 dark:text-sky-200',
-                  'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-sky-500/15',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40',
+                  // Secondary to Ops loop primary CTA (P4)
+                  'border-border/70 bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+                  'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+                  remediating &&
+                    'border-sky-500/55 bg-sky-500/15 text-sky-800 hover:bg-sky-500/25 dark:text-sky-200',
                 )}
                 onClick={e => {
                   e.stopPropagation()

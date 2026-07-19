@@ -449,10 +449,13 @@ export function DailyOpsAgentLivePanel({
   jobId,
   jobScope,
   onOpenAgentDesk,
+  onVerifyReprobe,
 }: {
   jobId: string
   jobScope?: string | null
   onOpenAgentDesk?: (jobId?: string) => void
+  /** Same as Ops loop Verify → Re-probe fleet (invalidate cockpit / checklist). */
+  onVerifyReprobe?: () => void
 }) {
   const qc = useQueryClient()
   const { job, events, connected, error } = useRemediationStream(jobId)
@@ -466,6 +469,13 @@ export function DailyOpsAgentLivePanel({
     job?.status === 'done' || job?.status === 'failed' || job?.status === 'cancelled'
   const isApproval = job?.phase === 'awaiting_approval' && !isTerminal
   const failed = job?.status === 'failed' || job?.status === 'cancelled'
+  const succeeded = job?.status === 'done'
+  const failReason =
+    job?.error != null && job.error.trim() !== ''
+      ? job.error.trim().slice(0, 160)
+      : job?.summary != null && job.summary.trim() !== ''
+        ? job.summary.trim().slice(0, 160)
+        : null
 
   const pendingApproval = useMemo(() => {
     if (!isApproval) return null
@@ -613,6 +623,43 @@ export function DailyOpsAgentLivePanel({
             ))}
           </ul>
         </details>
+      )}
+
+      {/* P5 — terminal → verify surface (same Re-probe as Ops loop Verify CTA) */}
+      {succeeded && (
+        <div className="mt-2 rounded-md border border-emerald-500/35 bg-emerald-500/8 px-2.5 py-2">
+          <p className="m-0 text-[var(--text-dense-caption)] font-medium text-emerald-800 dark:text-emerald-200">
+            Agent done — confirm the problem surface turned green
+          </p>
+          <p className="m-0 mt-0.5 text-[var(--text-dense-micro)] text-muted-foreground">
+            Next: Re-probe fleet (same as Ops loop Verify)
+          </p>
+          {onVerifyReprobe != null && (
+            <button
+              type="button"
+              className="mt-1.5 rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-meta)] font-medium text-primary hover:bg-muted"
+              onClick={() => {
+                onVerifyReprobe()
+                void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+                void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+              }}
+            >
+              Re-probe fleet
+            </button>
+          )}
+        </div>
+      )}
+      {failed && (
+        <div className="mt-2 rounded-md border border-destructive/35 bg-destructive/5 px-2.5 py-2">
+          <p className="m-0 text-[var(--text-dense-caption)] font-medium text-destructive">
+            Agent {job?.status === 'cancelled' ? 'cancelled' : 'failed'} — stay on Remediate
+          </p>
+          {failReason != null && (
+            <p className="m-0 mt-0.5 truncate text-[var(--text-dense-caption)] text-muted-foreground" title={failReason}>
+              {failReason}
+            </p>
+          )}
+        </div>
       )}
     </div>
   )
