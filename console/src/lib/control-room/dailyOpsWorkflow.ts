@@ -1,12 +1,27 @@
 /**
  * Daily Ops Task Control Center — Discover → Remediate → Verify → Clear.
  * Pure resolver; Fleet board remains health ground truth.
+ *
+ * Remediate primary CTA follows the highest-priority Checklist blocker:
+ * - full_auto / semi_auto + fixScope → Agent Fix / AI Fix · Operator Plan
+ * - manual / observe / null scope → Manual next step (no sparkles AI Fix)
  */
 import {
   cellAllowsAgentFix,
   lookupFleetFixRoute,
   pickFleetFixCell,
 } from '@/lib/control-room/fleetCellFix'
+import {
+  blockerAllowsAiFix,
+  blockerRequiresManualPath,
+  collectDailyOpsBlockers,
+  manualPrimaryCtaLabel,
+  nextStepBanner,
+  pickPrimaryBlocker,
+  pickSecondaryAiBlocker,
+  secondaryAiCtaLabel,
+  type DailyOpsBlocker,
+} from '@/lib/control-room/dailyOpsPrimaryBlocker'
 import {
   resolveCellGate,
   type FleetSnapshot,
@@ -20,10 +35,12 @@ export type DailyOpsWorkflowPrimaryAction = {
    * Full Operator Plane page is escape hatch only (secondary link).
    * ai-check — Discover primary: Checklist probe (daily-ops-checklist-run).
    * run-check — Clear idle re-check (same Checklist probe; label differs).
+   * manual-next — Physical / observe / null-scope blocker — not Agent Fix.
    */
   kind:
     | 'agent-fix'
     | 'operator-plan'
+    | 'manual-next'
     | 'navigate'
     | 'verify'
     | 'clear-queue'
@@ -34,6 +51,20 @@ export type DailyOpsWorkflowPrimaryAction = {
   label: string
   tabId?: string
   cellKey?: string
+  /** Checklist item driving this CTA (when derived from blockers). */
+  blockerItemId?: string
+  /** Copy / toast hint for manual-next. */
+  manualHint?: string
+  /**
+   * Outline/muted secondary when primary is manual but an AI-fixable sibling exists.
+   * e.g. Also: AI Fix (git dirty)
+   */
+  secondary?: {
+    kind: 'operator-plan' | 'agent-fix'
+    label: string
+    cellKey?: string
+    blockerItemId?: string
+  }
 }
 
 export type DailyOpsWorkflowResult = {
@@ -41,6 +72,8 @@ export type DailyOpsWorkflowResult = {
   blockers: string[]
   primaryAction: DailyOpsWorkflowPrimaryAction
   targetCellKey?: string
+  /** Structured primary blocker (Checklist × Fleet) when on remediate. */
+  primaryBlocker?: DailyOpsBlocker
 }
 
 export type DailyOpsStepStatus = 'done' | 'active' | 'blocked' | 'planned'
@@ -73,6 +106,76 @@ function engineerEscalateCell(fleet: FleetSnapshot) {
   return worst
 }
 
+function d10Blockers(): string[] {
+  return ['D10 live trading remains BLOCKED — no Agent Fix for trade execution unlock.']
+}
+
+function remediateFromEngineer(
+  fleet: FleetSnapshot,
+  eng: NonNullable<ReturnType<typeof engineerEscalateCell>>,
+): DailyOpsWorkflowResult {
+  const blockers = d10Blockers()
+  const tabId =
+    eng.escalateTabId ??
+    lookupFleetFixRoute('engineer', 'span')?.navigateTabId ??
+    'operator-plane'
+
+  const engBlockers = collectDailyOpsBlockers(fleet, { cell: eng })
+  const primary = pickPrimaryBlocker(engBlockers)
+
+  if (primary != null && blockerRequiresManualPath(primary)) {
+    const secondaryAi = pickSecondaryAiBlocker(engBlockers, primary)
+    blockers.push(nextStepBanner(primary))
+    return {
+      activePhase: 'remediate',
+      blockers,
+      primaryAction: {
+        kind: 'manual-next',
+        label: manualPrimaryCtaLabel(primary),
+        tabId,
+        cellKey: eng.key,
+        blockerItemId: primary.itemId,
+        manualHint: primary.manualAction ?? primary.reason,
+        secondary:
+          secondaryAi != null
+            ? {
+                kind: 'operator-plan',
+                label: secondaryAiCtaLabel(secondaryAi),
+                cellKey: eng.key,
+                blockerItemId: secondaryAi.itemId,
+              }
+            : undefined,
+      },
+      targetCellKey: eng.key,
+      primaryBlocker: primary,
+    }
+  }
+
+  // AI-fixable primary (or no catalog match) → Operator Plan AI Fix
+  if (primary != null) {
+    blockers.push(nextStepBanner(primary))
+  } else {
+    blockers.push(
+      eng.agentFixDisabledReason ??
+        'Engineer CRITICAL — review Operator Plan in-place (fleet cell Agent Fix disabled)',
+    )
+  }
+
+  return {
+    activePhase: 'remediate',
+    blockers,
+    primaryAction: {
+      kind: 'operator-plan',
+      label: 'AI Fix · Operator Plan',
+      tabId,
+      cellKey: eng.key,
+      blockerItemId: primary?.itemId,
+    },
+    targetCellKey: eng.key,
+    primaryBlocker: primary ?? undefined,
+  }
+}
+
 /**
  * Resolve the pinned Daily Ops workflow phase from fleet + agent/queue signals.
  *
@@ -82,7 +185,7 @@ function engineerEscalateCell(fleet: FleetSnapshot) {
  * 3. agentJustSucceeded && !fleetClear → verify
  * 4. fleetClear && queueOpen>0 → clear
  * 5. !fleetClear && fixable → remediate (agent-fix)
- * 6. !fleetClear && engineer escalate → remediate (inline Operator Plan + AI Fix)
+ * 6. !fleetClear && engineer escalate → remediate (manual-next | operator-plan by blocker)
  * 7. !fleetClear → discover (AI Check — daily-ops-checklist-run)
  */
 export function resolveDailyOpsWorkflow(
@@ -90,9 +193,7 @@ export function resolveDailyOpsWorkflow(
 ): DailyOpsWorkflowResult {
   const { fleet, agentPending = false, agentJustSucceeded = false } = input
   const queueOpen = input.queueOpen ?? 0
-  const blockers: string[] = []
-
-  blockers.push('D10 live trading remains BLOCKED — no Agent Fix for trade execution unlock.')
+  const blockers = d10Blockers()
 
   if (fleet.fleetClear && queueOpen === 0) {
     return {
@@ -144,6 +245,25 @@ export function resolveDailyOpsWorkflow(
   // NO-GO path — prefer Remediate when a worst / fixable cell is ready
   const fixCell = pickFleetFixCell(fleet)
   if (fixCell != null && cellAllowsAgentFix(fixCell)) {
+    const cellBlockers = collectDailyOpsBlockers(fleet, { cell: fixCell })
+    const primary = pickPrimaryBlocker(cellBlockers)
+    // Rare: fixable cell whose primary catalog item is actually manual — defer to manual CTA
+    if (primary != null && blockerRequiresManualPath(primary) && !blockerAllowsAiFix(primary)) {
+      blockers.push(nextStepBanner(primary))
+      return {
+        activePhase: 'remediate',
+        blockers,
+        primaryAction: {
+          kind: 'manual-next',
+          label: manualPrimaryCtaLabel(primary),
+          cellKey: fixCell.key,
+          blockerItemId: primary.itemId,
+          manualHint: primary.manualAction ?? primary.reason,
+        },
+        targetCellKey: fixCell.key,
+        primaryBlocker: primary,
+      }
+    }
     return {
       activePhase: 'remediate',
       blockers,
@@ -151,32 +271,16 @@ export function resolveDailyOpsWorkflow(
         kind: 'agent-fix',
         label: 'Agent Fix',
         cellKey: fixCell.key,
+        blockerItemId: primary?.itemId,
       },
       targetCellKey: fixCell.key,
+      primaryBlocker: primary ?? undefined,
     }
   }
 
   const eng = engineerEscalateCell(fleet)
   if (eng != null) {
-    const tabId =
-      eng.escalateTabId ??
-      lookupFleetFixRoute('engineer', 'span')?.navigateTabId ??
-      'operator-plane'
-    blockers.push(
-      eng.agentFixDisabledReason ??
-        'Engineer CRITICAL — review Operator Plan in-place (fleet cell Agent Fix disabled)',
-    )
-    return {
-      activePhase: 'remediate',
-      blockers,
-      primaryAction: {
-        kind: 'operator-plan',
-        label: 'AI Fix · Operator Plan',
-        tabId,
-        cellKey: eng.key,
-      },
-      targetCellKey: eng.key,
-    }
+    return remediateFromEngineer(fleet, eng)
   }
 
   if (!fleet.fleetClear) {
@@ -227,7 +331,7 @@ export function dailyOpsStepStatuses(
       continue
     }
     if (idx === activeIdx) {
-      // operator-plan / agent-fix / view-agent are actionable remediate — active, not blocked
+      // operator-plan / agent-fix / manual-next / view-agent are actionable remediate — active
       out[phase.id] = 'active'
       continue
     }

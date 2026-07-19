@@ -132,6 +132,9 @@ check('buildChecklistCoverageIndex dry-run by default', () => {
   assert.equal(idx.excludedCount, 1)
   assert.equal(idx.runTouchedCount, 0)
   assert.equal(idx.virtualCount, 0)
+  assert.equal(idx.boardMatchedCount + idx.uncoveredCount, idx.boardTotalCount)
+  assert.equal(idx.boardMatchedCount, idx.coveredCount)
+  assert.ok(idx.boardTotalCount > idx.boardMatchedCount)
 
   const cluster = lookupCoverage(idx, { key: 'ground:span' }, { id: 'cluster-api' })
   assert.ok(cluster?.hit != null)

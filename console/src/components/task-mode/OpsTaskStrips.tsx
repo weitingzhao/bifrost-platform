@@ -1,7 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DenseTag } from '@bifrost/ui'
-import { Bot, Loader2, Rocket, Satellite } from 'lucide-react'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  DenseTag,
+  cn,
+} from '@bifrost/ui'
+import { Bot, ChevronRight, Loader2, Rocket, Satellite } from 'lucide-react'
 import {
   fetchPipelineRuns,
   fetchReleaseGate,
@@ -58,7 +64,10 @@ export type OpsTaskStripsProps = {
   canDispatchTradeDeploy?: boolean
   releaseDisabledReason?: string
   tradeDeployDisabledReason?: string
-  /** When true, only render Promote / cutover (summary row rendered separately). */
+  /**
+   * When true, only render Release posture (Mission Launch board / summary rendered separately).
+   * Daily Ops must not pass this — Release posture lives on Mission Launch TCC only.
+   */
   promoteOnly?: boolean
   readinessCanOperate?: boolean
   onAgentFixStg?: () => void
@@ -77,7 +86,7 @@ export type OpsTaskStripsProps = {
   /** Pinned Discover → Remediate → Verify → Clear process strip */
   fleetWorkflow?: DailyOpsWorkflowResult
   fleetAgentFixError?: string | null
-  /** Single primary CTA path for Daily Ops Process strip (replaces dual Verdict+Workflow). */
+  /** Single primary CTA path for Daily Ops Ops loop (replaces dual Verdict+Workflow). */
   onFleetWorkflowAction?: () => void
   /**
    * Operator Plane AI Fix (scope operator-plane-remediate) — Engineer CRITICAL.
@@ -151,47 +160,90 @@ export type OpsTaskStripsProps = {
 function OperateQueueSummary({
   onNavigate,
   fleetClear,
+  remediating = false,
 }: {
   onNavigate: (tab: string) => void
   fleetClear: boolean
+  /** When remediating with open items, strip uses warning tone. */
+  remediating?: boolean
 }) {
   const queueQ = useOperateQueue()
   const open = queueQ.data?.open ?? []
   const label = operateQueueClearLabel(open.length, fleetClear)
   const clearButFleetNot = open.length === 0 && !fleetClear
+  const warnTone = open.length > 0 && remediating
+  const [listOpen, setListOpen] = useState(false)
 
   return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Bot size={16} />
-        <span className="text-[var(--text-dense-label)] font-semibold">Operate queue</span>
+    <div
+      className={cn(
+        'rounded-md border px-2.5 py-1.5',
+        warnTone
+          ? 'border-amber-500/45 bg-amber-500/10'
+          : 'border-border/60 bg-secondary/80',
+      )}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <Bot
+          size={14}
+          className={cn('shrink-0', warnTone ? 'text-amber-800 dark:text-amber-200' : 'text-muted-foreground')}
+          aria-hidden
+        />
+        <span
+          className={cn(
+            'text-[var(--text-dense-caption)] font-medium',
+            warnTone ? 'text-amber-900 dark:text-amber-100' : 'text-muted-foreground',
+          )}
+        >
+          Operate queue · {open.length} open
+        </span>
         <DenseTag
           variant={open.length === 0 && fleetClear ? 'success' : clearButFleetNot ? 'neutral' : 'warning'}
+          className="text-[8px]"
         >
           {label}
         </DenseTag>
         {clearButFleetNot && (
-          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-            Queue clear does not mean fleet clear
+          <span className="text-[var(--text-dense-micro)] text-muted-foreground">
+            Queue clear ≠ fleet clear
           </span>
         )}
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {open.length > 0 && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:text-foreground"
+              aria-expanded={listOpen}
+              onClick={() => setListOpen(v => !v)}
+            >
+              <ChevronRight
+                className={cn('size-3 transition-transform', listOpen && 'rotate-90')}
+                aria-hidden
+              />
+              {listOpen ? 'Hide' : 'List'}
+            </button>
+          )}
+          <button
+            type="button"
+            className={cn(
+              'text-[var(--text-dense-caption)] font-medium hover:underline',
+              warnTone ? 'text-amber-900 dark:text-amber-100' : 'text-primary',
+            )}
+            onClick={() => onNavigate('control-room')}
+          >
+            Review →
+          </button>
+        </span>
       </div>
-      {open.length > 0 && (
-        <ul className="m-0 mt-2 list-none space-y-1 p-0">
+      {listOpen && open.length > 0 && (
+        <ul className="m-0 mt-1.5 list-none space-y-0.5 border-t border-border/40 pt-1.5 p-0">
           {open.slice(0, 3).map(item => (
-            <li key={item.id} className="text-[var(--text-dense-meta)] text-muted-foreground">
+            <li key={item.id} className="truncate text-[var(--text-dense-meta)] text-muted-foreground">
               {item.title}
             </li>
           ))}
         </ul>
       )}
-      <button
-        type="button"
-        className="mt-2 text-[var(--text-dense-meta)] text-primary hover:underline"
-        onClick={() => onNavigate('control-room')}
-      >
-        Review operate items →
-      </button>
     </div>
   )
 }
@@ -624,7 +676,7 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
   }
 
   if (mode.id === 'daily-ops') {
-    return <DailyOpsFleetDesk props={props} compact />
+    return <DailyOpsFleetDesk props={props} />
   }
 
   return null
@@ -632,13 +684,12 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
 
 function DailyOpsFleetDesk({
   props,
-  compact = false,
 }: {
   props: SummaryRowProps
-  compact?: boolean
 }) {
-  const { fleet, isLoading } = useFleetSnapshot()
+  const { fleet, isLoading, dataUpdatedAt } = useFleetSnapshot()
   const checklistCoverage = useDailyOpsChecklistCoverage(fleet)
+  const qc = useQueryClient()
   const {
     onNavigate,
     readinessCanOperate,
@@ -740,23 +791,6 @@ function DailyOpsFleetDesk({
 
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-3">
-      {/* Agent progress pinned above process strip while remediating */}
-      {hasAmbientJob && ambientJobId != null && (
-        <div className="sticky top-0 z-20 -mx-0.5 bg-[var(--card)]/95 px-0.5 py-0.5 backdrop-blur-sm">
-          <DailyOpsAgentLivePanel
-            jobId={ambientJobId}
-            jobScope={ambientJobScope}
-            onOpenAgentDesk={onOpenAgentDesk}
-          />
-        </div>
-      )}
-      {showStartingHint && (
-        <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-secondary px-3 py-2 text-[var(--text-dense-caption)] text-muted-foreground">
-          <Loader2 className="size-3 animate-spin" aria-hidden />
-          Starting Agent…
-        </div>
-      )}
-
       {fleetWorkflow != null && (
         <DailyOpsProcessStrip
           fleet={fleet}
@@ -774,8 +808,16 @@ function DailyOpsFleetDesk({
             }
             onFleetWorkflowAction?.()
           }}
+          onSecondaryAction={
+            fleetWorkflow.primaryAction.secondary?.kind === 'operator-plan'
+              ? () => onOperatorPlanFix?.()
+              : fleetWorkflow.primaryAction.secondary?.kind === 'agent-fix'
+                ? () => onFleetWorkflowAction?.()
+                : undefined
+          }
           onOpenAgentDesk={onOpenAgentDesk}
           onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
+          onNavigate={onNavigate}
           operatorPlanFixPending={operatorPlanFixPending}
           operatorPlanFixDisabled={operatorPlanFixDisabled}
           operatorPlanFixTitle={operatorPlanFixTitle}
@@ -787,7 +829,24 @@ function DailyOpsFleetDesk({
         />
       )}
 
-      {/* Checklist | Fleet Board — side-by-side from xl */}
+      {/* Agent progress — only while a job is active */}
+      {hasAmbientJob && ambientJobId != null && (
+        <div className="sticky top-0 z-20 -mx-0.5 bg-[var(--card)]/95 px-0.5 py-0.5 backdrop-blur-sm">
+          <DailyOpsAgentLivePanel
+            jobId={ambientJobId}
+            jobScope={ambientJobScope}
+            onOpenAgentDesk={onOpenAgentDesk}
+          />
+        </div>
+      )}
+      {showStartingHint && (
+        <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-secondary px-3 py-2 text-[var(--text-dense-caption)] text-muted-foreground">
+          <Loader2 className="size-3 animate-spin" aria-hidden />
+          Starting Agent…
+        </div>
+      )}
+
+      {/* Checklist | Fleet Board + in-column Cell Detail */}
       <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] xl:items-start">
         {!isLoading && (
           <div className="min-w-0 rounded-lg border border-border bg-secondary px-3 py-2">
@@ -796,6 +855,7 @@ function DailyOpsFleetDesk({
               fleet={fleet}
               coverage={checklistCoverage}
               activeFlashStepId={activeFlashStepId}
+              workflowPhase={fleetWorkflow?.activePhase}
               onFlashStep={handleFlashChecklistStep}
               onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
               activeDispatchJobs={activeDispatchJobs}
@@ -822,7 +882,7 @@ function DailyOpsFleetDesk({
             />
           </div>
         )}
-        <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-2">
           <DailyOpsFleetBoard
             fleet={fleet}
             isLoading={isLoading}
@@ -832,6 +892,7 @@ function DailyOpsFleetDesk({
             coverage={checklistCoverage}
             flashKeys={flashKeys}
             flashNonce={flashNonce}
+            workflowPhase={fleetWorkflow?.activePhase}
             onAgentFix={onFleetCellFix}
             onSelectCell={cell => setSelectedCellKey(cell?.key ?? null)}
             onNavigate={onNavigate}
@@ -842,19 +903,25 @@ function DailyOpsFleetDesk({
               canOperate={readinessCanOperate}
               agentFixPending={fleetAgentFixPending}
               coverage={checklistCoverage}
+              dataUpdatedAt={dataUpdatedAt}
+              primaryBlocker={fleetWorkflow?.primaryBlocker}
+              primaryActionLabel={fleetWorkflow?.primaryAction.label}
               onAgentFix={onFleetCellFix}
               onNavigate={onNavigate}
+              onReprobe={() => {
+                void qc.invalidateQueries({ queryKey: ['cockpit'] })
+              }}
               onClose={() => setSelectedCellKey(null)}
             />
           )}
         </div>
       </div>
 
-      <div className={compact ? 'min-w-0' : 'grid min-w-0 gap-3 md:grid-cols-2'}>
-        <OpsSection title="Operate summary" bodyPadding="compact">
-          <OperateQueueSummary onNavigate={onNavigate} fleetClear={fleet.fleetClear} />
-        </OpsSection>
-      </div>
+      <OperateQueueSummary
+        onNavigate={onNavigate}
+        fleetClear={fleet.fleetClear}
+        remediating={fleetWorkflow?.activePhase === 'remediate'}
+      />
     </div>
   )
 }
@@ -884,33 +951,43 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
   const ops = mode.ops
   if (ops == null) return null
 
+  /** Release posture (STG/Prod · Tier A·B) — Mission Launch TCC only; not Daily Ops. */
   const promoteSection =
-    mode.id === 'daily-ops' ? (
-      <details className="rounded-lg border border-border bg-card px-3 py-1.5">
-        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-          <div className="flex flex-wrap items-center gap-2">
+    mode.id === 'mission-launch' ? (
+      <Collapsible defaultOpen className="group/release rounded-lg border border-border bg-card px-3 py-1.5">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full cursor-pointer flex-wrap items-center gap-2 text-left"
+          >
+            <ChevronRight
+              className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/release:rotate-90"
+              aria-hidden
+            />
             <span className="text-[var(--text-dense-meta)] font-semibold">Release posture</span>
             <DenseTag variant="neutral" className="text-[9px]">
-              Secondary
+              STG / Prod
             </DenseTag>
             <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-              Promote / cutover — not first-screen Daily Ops
+              Promote / cutover · Tier A·B
             </span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="mt-2">
+            <PromoteCutoverStrip
+              context={context}
+              matrices={matrices}
+              stgSmoke={stgSmoke}
+              stgGate={stgGate}
+              lastDeliverSucceeded={lastDeliverSucceeded}
+              tierB={tierB}
+              onOpenPromote={onOpenPromote}
+              onOpenDelivery={onOpenDelivery}
+            />
           </div>
-        </summary>
-        <div className="mt-2">
-          <PromoteCutoverStrip
-            context={context}
-            matrices={matrices}
-            stgSmoke={stgSmoke}
-            stgGate={stgGate}
-            lastDeliverSucceeded={lastDeliverSucceeded}
-            tierB={tierB}
-            onOpenPromote={onOpenPromote}
-            onOpenDelivery={onOpenDelivery}
-          />
-        </div>
-      </details>
+        </CollapsibleContent>
+      </Collapsible>
     ) : null
 
   if (promoteOnly) {
@@ -974,17 +1051,16 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
   }
 
   if (mode.id === 'daily-ops') {
-    return (
+    // Fleet Desk is rendered via OpsTaskSummaryRow; Daily Ops never shows Release posture.
+    return promoteOnly ? null : (
       <div className="flex flex-col gap-3">
-        {!promoteOnly && <DailyOpsFleetDesk props={props} />}
-        {promoteSection}
+        <DailyOpsFleetDesk props={props} />
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-3">
-      {promoteSection}
       {readinessSection}
     </div>
   )

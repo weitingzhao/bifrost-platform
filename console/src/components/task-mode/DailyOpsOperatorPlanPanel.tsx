@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   DenseDataTable,
   DenseTag,
   DenseTableBody,
@@ -15,9 +18,11 @@ import {
 } from '@bifrost/ui'
 import {
   CheckCircle2,
+  ChevronRight,
   Circle,
   AlertTriangle,
   Eye,
+  ListFilter,
   Wrench,
   Bot,
   Hand,
@@ -38,6 +43,7 @@ import {
   findActiveChecklistRunJob,
   fleetAgentSignalDisagree,
   formatDispatchHeaderStrip,
+  type ChecklistHeaderProgress,
   type ChecklistItemProgress,
 } from '@/lib/control-room/checklistProgress'
 import {
@@ -62,6 +68,7 @@ import {
   formatChecklistTouchAge,
   type ChecklistCoverageIndex,
 } from '@/lib/control-room/dailyOpsChecklistCoverage'
+import { useNowMs } from '@/hooks/useNowMs'
 import type {
   FleetCell,
   FleetCellSignal,
@@ -70,6 +77,7 @@ import type {
   FleetSnapshot,
   FleetStandard,
 } from '@/lib/control-room/fleetSnapshot'
+import type { DailyOpsWorkflowPhase } from '@/lib/control-room/dailyOpsWorkflow'
 import {
   FLEET_ROLE_COLOR,
   FLEET_ROLE_ICON,
@@ -388,6 +396,8 @@ export type DailyOpsOperatorPlanPanelProps = {
   ambientJobScope?: string | null
   /** When true (split layout beside Fleet Board), use single-column step cards. */
   compactColumns?: boolean
+  /** Process strip phase — Remediate collapses governance meta + defaults to failing-only. */
+  workflowPhase?: DailyOpsWorkflowPhase
 }
 
 export function DailyOpsOperatorPlanPanel({
@@ -415,11 +425,26 @@ export function DailyOpsOperatorPlanPanel({
   ambientJobId = null,
   ambientJobScope = null,
   compactColumns = false,
+  workflowPhase,
 }: DailyOpsOperatorPlanPanelProps) {
+  const nowMs = useNowMs()
   const resolved = useMemo(() => resolveChecklist(fleet), [fleet])
   const checkBusy = checklistCheckPending || checklistCheckActive
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null)
+  const remediatingPhase = workflowPhase === 'remediate'
+  const [showMeta, setShowMeta] = useState(!remediatingPhase)
+  const [failingOnly, setFailingOnly] = useState(remediatingPhase)
+
+  useEffect(() => {
+    if (workflowPhase === 'remediate') {
+      setShowMeta(false)
+      setFailingOnly(true)
+    } else if (workflowPhase === 'discover') {
+      setShowMeta(true)
+      setFailingOnly(false)
+    }
+  }, [workflowPhase])
 
   const agentRemediating =
     (ambientJobId != null && ambientJobId !== '') ||
@@ -548,6 +573,18 @@ export function DailyOpsOperatorPlanPanel({
     void copyFailoverPack(buildChecklistCursorFailoverPack(failoverInputs))
   }, [copyFailoverPack, failoverInputs])
 
+  const visibleSteps = useMemo(() => {
+    if (!failingOnly) return resolved
+    return resolved
+      .map(rs => ({
+        ...rs,
+        items: rs.items.filter(
+          i => i.overallSignal === 'fail' || i.overallSignal === 'degraded',
+        ),
+      }))
+      .filter(rs => rs.items.length > 0 || rs.stepSignal === 'fail' || rs.stepSignal === 'degraded')
+  }, [resolved, failingOnly])
+
   return (
     <div
       className={cn(
@@ -622,25 +659,103 @@ export function DailyOpsOperatorPlanPanel({
                 : `Ask for AI (${attentionCount})`}
           </Button>
         )}
+        {copyState === 'copied' && copiedItemId == null && (
+          <span className="text-[8px] text-muted-foreground">
+            Next: paste into Cursor · then re-check strip
+          </span>
+        )}
         {checklistItemFixError != null && checklistItemFixError !== '' && (
           <span className="text-[8px] text-destructive" title={checklistItemFixError}>
             Item Fix failed
           </span>
         )}
-        <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-          {compactColumns
-            ? 'Split layout · Path = capability · Do = Ops Fix / Ask AI'
-            : 'Two-column · Path = capability · Do icons = Ops Fix / Ask AI'}
-        </span>
-        {coverage != null && (
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          className={cn(
+            'h-6 cursor-pointer gap-1 px-2 text-[10px]',
+            failingOnly
+              ? 'border-primary/50 bg-primary/5 text-foreground hover:bg-primary/10'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+          title={failingOnly ? 'Click to show all checklist items' : 'Click to show failing items only'}
+          aria-label={failingOnly ? 'Showing fails. Click to show all' : 'Show fails only'}
+          onClick={() => setFailingOnly(v => !v)}
+        >
+          <ListFilter className="size-3 shrink-0" aria-hidden />
+          {failingOnly ? (
+            <>
+              <span className="font-normal text-muted-foreground">showing fails</span>
+              <span className="text-muted-foreground" aria-hidden>
+                ·
+              </span>
+              <span className="font-semibold text-primary underline underline-offset-2">Show all</span>
+            </>
+          ) : (
+            <span>Failing only</span>
+          )}
+        </Button>
+        {remediatingPhase && (
+          <button
+            type="button"
+            className="text-[var(--text-dense-meta)] text-muted-foreground hover:text-primary hover:underline"
+            onClick={() => setShowMeta(v => !v)}
+          >
+            {showMeta ? 'Hide meta' : 'Show meta'}
+          </button>
+        )}
+        {showMeta && (
           <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-            · board ✓d {coverage.coveredCount}
-            {coverage.runTouchedCount > 0 ? ` · ✓r ${coverage.runTouchedCount}` : ''}
-            {coverage.virtualCount > 0 ? ` · chk ${coverage.virtualCount}` : ''}
-            {coverage.uncoveredCount > 0
-              ? ` · ?${coverage.uncoveredCount} gap`
-              : ' · union ok'}
-            · dry-run {formatChecklistTouchAge(coverage.dryRunAt)}
+            {compactColumns
+              ? 'Split layout · Path = capability · Do = Ops Fix / Ask AI'
+              : 'Two-column · Path = capability · Do icons = Ops Fix / Ask AI'}
+          </span>
+        )}
+        {showMeta && coverage != null && (
+          <span
+            className="text-[var(--text-dense-caption)] text-muted-foreground"
+            title="Coverage: Checklist↔Fleet Board match ratio (excludes path + checklist-only virtuals)"
+          >
+            {' · Coverage '}
+            <span className="text-emerald-600 dark:text-emerald-300">
+              ✓d {coverage.boardMatchedCount}/{coverage.boardTotalCount}
+            </span>
+            {coverage.runTouchedCount > 0 && (
+              <>
+                {' · '}
+                <span className="text-sky-700 dark:text-sky-300">
+                  ✓r {coverage.runTouchedCount}
+                </span>
+              </>
+            )}
+            {coverage.virtualCount > 0 && (
+              <>
+                {' · '}
+                <span className="text-violet-700 dark:text-violet-300">
+                  chk {coverage.virtualCount}
+                </span>
+              </>
+            )}
+            {coverage.uncoveredCount > 0 ? (
+              <>
+                {' · '}
+                <span className="text-amber-700 dark:text-amber-300">
+                  ?{coverage.uncoveredCount} gap
+                </span>
+              </>
+            ) : (
+              <span className="text-emerald-700/80 dark:text-emerald-300/80"> · union ok</span>
+            )}
+            <span className="text-muted-foreground">
+              {' · dry-run '}
+              {formatChecklistTouchAge(coverage.dryRunAt, nowMs)}
+            </span>
+          </span>
+        )}
+        {!showMeta && remediatingPhase && coverage != null && (
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+            ✓d {coverage.boardMatchedCount}/{coverage.boardTotalCount}
           </span>
         )}
         <button
@@ -653,20 +768,18 @@ export function DailyOpsOperatorPlanPanel({
         </button>
       </div>
 
-      {(headerProgress.proberLabel != null || dispatchStrip != null) && (
+      {showMeta && (headerProgress.proberLabel != null || dispatchStrip != null) && (
         <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
           {headerProgress.proberLabel != null && (
             <span className="font-medium text-sky-700 dark:text-sky-300" title="daily-ops-checklist-run">
               {headerProgress.proberLabel}
             </span>
           )}
-          {dispatchStrip != null && (
-            <span title="last_dispatch gates + linked remediation jobs">{dispatchStrip}</span>
-          )}
+          {dispatchStrip != null && <DispatchHeaderStrip header={headerProgress} />}
         </div>
       )}
 
-      <ChecklistLegend />
+      {showMeta && <ChecklistLegend />}
 
       {/* Two columns from lg: dependency order flows top→bottom then left→right */}
       <div
@@ -675,7 +788,7 @@ export function DailyOpsOperatorPlanPanel({
           !compactColumns && 'lg:columns-2',
         )}
       >
-        {resolved.map(rs => (
+        {visibleSteps.map(rs => (
           <div key={rs.step.id} className="mb-2 break-inside-avoid">
             <StepCard
               resolved={rs}
@@ -707,87 +820,136 @@ export function DailyOpsOperatorPlanPanel({
             />
           </div>
         ))}
+        {failingOnly && visibleSteps.length === 0 && (
+          <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
+            No failing items — toggle All items to review the full checklist.
+          </p>
+        )}
       </div>
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Legend
+// Legend (collapsed by default — icon / status help)
 // ---------------------------------------------------------------------------
 
+const CHECKLIST_LEGEND_OPEN_KEY = 'daily-ops-checklist-legend-open'
+
+function readChecklistLegendOpen(): boolean {
+  try {
+    return window.localStorage.getItem(CHECKLIST_LEGEND_OPEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeChecklistLegendOpen(open: boolean) {
+  try {
+    window.localStorage.setItem(CHECKLIST_LEGEND_OPEN_KEY, open ? '1' : '0')
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 function ChecklistLegend() {
+  const [open, setOpen] = useState(readChecklistLegendOpen)
+
   return (
-    <div className="mb-2 flex flex-col gap-1 rounded border border-border/40 bg-muted/20 px-2 py-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="font-semibold text-foreground/80">Legend</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-0.5">
-            <StatusLamp value="ok" kind="reach" />
-            <span>ok</span>
-          </span>
-          <span className="inline-flex items-center gap-0.5">
-            <StatusLamp value="degraded" kind="reach" />
-            <span>degraded</span>
-          </span>
-          <span className="inline-flex items-center gap-0.5">
-            <StatusLamp value="fail" kind="reach" />
-            <span>fail</span>
-          </span>
-          <span className="inline-flex items-center gap-0.5">
-            <StatusLamp value="unknown" kind="reach" />
-            <span>unknown / unavailable (no probe or not scored)</span>
-          </span>
-        </span>
-        <span className="text-border">|</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span>Env</span>
-          {ENV_ORDER.map(env => (
-            <span key={env} className={cn('font-mono text-[8px] font-semibold', ENV_TONE_CLASS[env])}>
-              {ENV_LABEL[env][0]}
-              <span className="font-normal text-muted-foreground">={ENV_LABEL[env]}</span>
+    <Collapsible
+      open={open}
+      onOpenChange={next => {
+        setOpen(next)
+        writeChecklistLegendOpen(next)
+      }}
+      className="group/legend mb-2"
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-1 text-[var(--text-dense-caption)] text-muted-foreground hover:text-foreground"
+          aria-expanded={open}
+        >
+          <ChevronRight
+            className="size-3 shrink-0 transition-transform group-data-[state=open]/legend:rotate-90"
+            aria-hidden
+          />
+          <span>{open ? 'Hide legend' : 'Show legend'}</span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-1.5 flex flex-col gap-1 rounded border border-border/40 bg-muted/20 px-2 py-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-semibold text-foreground/80">Legend</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-0.5">
+                <StatusLamp value="ok" kind="reach" />
+                <span>ok</span>
+              </span>
+              <span className="inline-flex items-center gap-0.5">
+                <StatusLamp value="degraded" kind="reach" />
+                <span>degraded</span>
+              </span>
+              <span className="inline-flex items-center gap-0.5">
+                <StatusLamp value="fail" kind="reach" />
+                <span>fail</span>
+              </span>
+              <span className="inline-flex items-center gap-0.5">
+                <StatusLamp value="unknown" kind="reach" />
+                <span>unknown / unavailable (no probe or not scored)</span>
+              </span>
             </span>
-          ))}
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="inline-flex items-center gap-1">
-          <DenseTag variant="neutral" className="text-[8px]">
-            gate
-          </DenseTag>
-          <span>= catalog gate-critical (can block downstream) — not a live fail</span>
-        </span>
-        <span className="text-border">|</span>
-        {FIX_LEGEND.map(({ capability, blurb }) => {
-          const Icon = FIX_ICON[capability]
-          return (
-            <span key={capability} className="inline-flex items-center gap-1">
-              <DenseTag
-                variant="neutral"
-                className={cn('text-[8px]', FIX_TONE_CLASS[capability])}
-                title={FIX_TITLE[capability]}
-              >
-                <Icon className="mr-0.5 inline size-2.5" />
-                {FIX_LABEL[capability]}
+            <span className="text-border">|</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span>Env</span>
+              {ENV_ORDER.map(env => (
+                <span key={env} className={cn('font-mono text-[8px] font-semibold', ENV_TONE_CLASS[env])}>
+                  {ENV_LABEL[env][0]}
+                  <span className="font-normal text-muted-foreground">={ENV_LABEL[env]}</span>
+                </span>
+              ))}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="inline-flex items-center gap-1">
+              <DenseTag variant="neutral" className="text-[8px]">
+                gate
               </DenseTag>
-              <span>{blurb}</span>
+              <span>= catalog gate-critical (can block downstream) — not a live fail</span>
             </span>
-          )
-        })}
-        <span className="text-border">|</span>
-        <span className="inline-flex items-center gap-1">
-          <span className="font-semibold text-foreground/70">Do</span>
-          <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-sky-500/55 bg-sky-500/15">
-            <Sparkles className="size-2.5 text-sky-700 dark:text-sky-300" aria-hidden />
-          </span>
-          <span>= Ops Fix</span>
-          <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-border bg-background">
-            <Copy className="size-2.5" aria-hidden />
-          </span>
-          <span>= Ask AI (Cursor copy)</span>
-        </span>
-      </div>
-    </div>
+            <span className="text-border">|</span>
+            {FIX_LEGEND.map(({ capability, blurb }) => {
+              const Icon = FIX_ICON[capability]
+              return (
+                <span key={capability} className="inline-flex items-center gap-1">
+                  <DenseTag
+                    variant="neutral"
+                    className={cn('text-[8px]', FIX_TONE_CLASS[capability])}
+                    title={FIX_TITLE[capability]}
+                  >
+                    <Icon className="mr-0.5 inline size-2.5" />
+                    {FIX_LABEL[capability]}
+                  </DenseTag>
+                  <span>{blurb}</span>
+                </span>
+              )
+            })}
+            <span className="text-border">|</span>
+            <span className="inline-flex items-center gap-1">
+              <span className="font-semibold text-foreground/70">Do</span>
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-sky-500/55 bg-sky-500/15">
+                <Sparkles className="size-2.5 text-sky-700 dark:text-sky-300" aria-hidden />
+              </span>
+              <span>= Ops Fix</span>
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-border bg-background">
+                <Copy className="size-2.5" aria-hidden />
+              </span>
+              <span>= Ask AI (Cursor copy)</span>
+            </span>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
@@ -1117,12 +1279,16 @@ function ItemTableRow({
   if (showManualHint) {
     notes.push(truncateNote(item.manualAction!))
   }
+  if (progress.state === 'notify') {
+    notes.push('Next: follow manual / physical step')
+  }
 
   const noteTitle = [
     disagree
       ? `fleet≠agent — fleet=${overallSignal} · agent=${agentSignal ?? 'n/a'} (lamps stay fleet)`
       : null,
     showManualHint ? `Manual: ${item.manualAction}` : null,
+    progress.state === 'notify' ? 'Next: follow manual / physical step' : null,
     badEnvs.length > 0
       ? `failing: ${badEnvs.map(e => ENV_LABEL[e.env]).join(' · ')}`
       : null,
@@ -1334,6 +1500,84 @@ const PROGRESS_TONE: Record<ChecklistItemProgress['state'], string> = {
   skip: 'border-slate-500/40 text-slate-600 dark:text-slate-400',
   done: 'border-emerald-500/40 text-emerald-700 dark:text-emerald-300',
   failed: 'border-destructive/50 text-destructive',
+}
+
+/** Colored last AI Check dispatch strip — numbers use semantic tones; labels stay muted. */
+function DispatchHeaderStrip({ header }: { header: ChecklistHeaderProgress }) {
+  type Part = { key: string; count: number; label: string; countClass: string }
+  const parts: Part[] = []
+  if (header.remediating > 0) {
+    parts.push({
+      key: 'remediating',
+      count: header.remediating,
+      label: 'remediating',
+      countClass: 'text-sky-700 dark:text-sky-300',
+    })
+  }
+  if (
+    (header.dispatchAuto > 0 && header.remediating === 0) ||
+    (header.dispatchAuto > header.remediating && header.remediating > 0)
+  ) {
+    parts.push({
+      key: 'auto',
+      count: header.dispatchAuto,
+      label: 'auto',
+      countClass: 'text-sky-700 dark:text-sky-300',
+    })
+  }
+  if (header.dispatchQueued > 0) {
+    parts.push({
+      key: 'queued',
+      count: header.dispatchQueued,
+      label: 'queued',
+      countClass: 'text-violet-700 dark:text-violet-300',
+    })
+  }
+  if (header.dispatchNotify > 0) {
+    parts.push({
+      key: 'notify',
+      count: header.dispatchNotify,
+      label: 'notify',
+      countClass: 'text-amber-700 dark:text-amber-300',
+    })
+  }
+  if (header.dispatchSkip > 0) {
+    parts.push({
+      key: 'skip',
+      count: header.dispatchSkip,
+      label: 'skip',
+      countClass: 'text-foreground/70',
+    })
+  }
+  if (header.done > 0) {
+    parts.push({
+      key: 'done',
+      count: header.done,
+      label: 'done',
+      countClass: 'text-emerald-700 dark:text-emerald-300',
+    })
+  }
+  if (header.failed > 0) {
+    parts.push({
+      key: 'failed',
+      count: header.failed,
+      label: 'failed',
+      countClass: 'text-destructive',
+    })
+  }
+  if (parts.length === 0) return null
+  return (
+    <span title="Gates from the most recent AI Check report_checklist_signals last_dispatch + linked remediation jobs">
+      <span className="text-muted-foreground">Last AI Check dispatch:</span>
+      {parts.map((p, i) => (
+        <span key={p.key}>
+          {i > 0 ? <span className="text-muted-foreground"> · </span> : ' '}
+          <span className={p.countClass}>{p.count}</span>
+          <span className="text-muted-foreground"> {p.label}</span>
+        </span>
+      ))}
+    </span>
+  )
 }
 
 function DispatchActionBadge({

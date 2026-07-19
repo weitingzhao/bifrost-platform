@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { DenseTag, cn } from '@bifrost/ui'
-import { Check } from 'lucide-react'
+import { Check, Hand } from 'lucide-react'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
@@ -43,6 +43,17 @@ const STEP_LABEL: Record<DailyOpsStepStatus, string> = {
   planned: 'text-muted-foreground/50',
 }
 
+/** Deep links only — live Discover→Clear lives in the Ops loop stepper + CTA. */
+const DAILY_OPS_HELP_LINKS: { label: string; tabId: string }[] = [
+  { label: 'Control Room', tabId: 'control-room' },
+  { label: 'Runtime Map', tabId: 'runtime-map' },
+  { label: 'Cluster', tabId: 'cluster' },
+  { label: 'Operator Plane', tabId: 'operator-plane' },
+  { label: 'Agent Desk', tabId: 'agent-desk' },
+  { label: 'Defects', tabId: 'defects' },
+  { label: 'Agent Protocol', tabId: 'agent-protocol' },
+]
+
 export type DailyOpsProcessStripProps = {
   fleet: FleetSnapshot
   workflow: DailyOpsWorkflowResult
@@ -56,9 +67,13 @@ export type DailyOpsProcessStripProps = {
   ambientJobId?: string | null
   ambientJobScope?: string | null
   onPrimaryAction: () => void
+  /** Outline secondary when primary is manual but an AI-fixable sibling exists. */
+  onSecondaryAction?: () => void
   onOpenAgentDesk?: (jobId?: string) => void
   /** Escape hatch when inline Operator Plan is not enough (MCP / deploy / smoke). */
   onOpenFullOperatorPlane?: () => void
+  /** Help · reference deep links (muted, collapsed) — not a phase strip. */
+  onNavigate?: (tabId: string) => void
   /** Operator Plane Fix (operator-plane-remediate) — not Checklist AI Check. */
   operatorPlanFixPending?: boolean
   operatorPlanFixDisabled?: boolean
@@ -72,8 +87,9 @@ export type DailyOpsProcessStripProps = {
 }
 
 /**
- * Single Daily Ops Process strip — viewer env + GO/NO-GO + circle stepper + one CTA.
- * Checklist + Fleet Board live beside each other in DailyOpsFleetDesk; Agent progress pins above.
+ * Ops loop (UI name) — viewer env + GO/NO-GO + circle stepper + one CTA.
+ * Help · reference is a muted collapsed deep-link entry in the strip header (not a footer row).
+ * Checklist + Fleet Board live beside each other in DailyOpsFleetDesk; Agent progress follows Ops loop when a job is active.
  */
 export function DailyOpsProcessStrip({
   fleet,
@@ -85,8 +101,10 @@ export function DailyOpsProcessStrip({
   showReadyHint = false,
   ambientJobId = null,
   onPrimaryAction,
+  onSecondaryAction,
   onOpenAgentDesk,
   onOpenFullOperatorPlane,
+  onNavigate,
   operatorPlanFixPending = false,
   operatorPlanFixDisabled = false,
   operatorPlanFixTitle,
@@ -101,6 +119,7 @@ export function DailyOpsProcessStrip({
   const stepStatuses = dailyOpsStepStatuses(workflow)
   const isAgentFix = action.kind === 'agent-fix'
   const isOperatorPlan = action.kind === 'operator-plan'
+  const isManualNext = action.kind === 'manual-next'
   const isViewAgent = action.kind === 'view-agent'
   /** Discover AI Check + Clear idle re-check — same Checklist probe scope. */
   const isChecklistPrimary =
@@ -111,13 +130,65 @@ export function DailyOpsProcessStrip({
     checklistCheckStatusHint != null && checklistCheckStatusHint !== ''
       ? `Checking… · ${checklistCheckStatusHint}`
       : 'Checking…'
-  const showOperatorPlanPanel =
-    isOperatorPlan ||
-    (workflow.activePhase === 'remediate' &&
-      workflow.blockers.some(b => /Engineer|Operator Plan/i.test(b)))
+  const nextBanner = workflow.blockers.find(b => b.startsWith('Next:'))
+  const showRemediateBanner =
+    workflow.activePhase === 'remediate' &&
+    (isManualNext ||
+      isOperatorPlan ||
+      nextBanner != null ||
+      workflow.blockers.some(b => /Engineer|Operator Plan|Next:/i.test(b)))
+  const [manualCopied, setManualCopied] = useState(false)
+
+  const handleManualPrimary = () => {
+    const hint = action.manualHint ?? action.label
+    void navigator.clipboard?.writeText(hint).then(
+      () => {
+        setManualCopied(true)
+        window.setTimeout(() => setManualCopied(false), 2500)
+      },
+      () => {
+        /* ignore */
+      },
+    )
+    onPrimaryAction()
+  }
 
   return (
     <div className="rounded-lg border border-border bg-secondary px-3 py-2">
+      <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-[var(--text-dense-meta)] font-semibold text-foreground">
+          Ops loop
+        </span>
+        <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+          Discover → Remediate → Verify → Clear — Fleet Desk is health ground truth
+        </span>
+        {onNavigate != null && (
+          <details className="ml-auto min-w-0 max-w-full">
+            <summary className="cursor-pointer list-none text-[var(--text-dense-caption)] text-muted-foreground/80 underline-offset-2 hover:text-muted-foreground hover:underline [&::-webkit-details-marker]:hidden">
+              Help
+              <span className="ml-1 no-underline text-muted-foreground/60">· reference</span>
+            </summary>
+            <div className="mt-1 rounded border border-border/40 bg-background/50 px-2 py-1.5">
+              <p className="m-0 mb-1.5 text-[var(--text-dense-micro)] text-muted-foreground">
+                Reference only — Ops loop + Fleet board are authoritative.
+              </p>
+              <ul className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 p-0">
+                {DAILY_OPS_HELP_LINKS.map(link => (
+                  <li key={link.tabId}>
+                    <button
+                      type="button"
+                      className="text-[var(--text-dense-caption)] text-muted-foreground hover:text-primary hover:underline"
+                      onClick={() => onNavigate(link.tabId)}
+                    >
+                      {link.label} →
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        )}
+      </div>
       <div className="flex min-h-[44px] flex-wrap items-center gap-x-3 gap-y-1.5">
         <ViewerEnvBadge viewerEnv={viewerEnv} isLoading={isLoading} />
         <DenseTag variant={VERDICT_VARIANT[verdict.kind]}>
@@ -129,7 +200,7 @@ export function DailyOpsProcessStrip({
 
         <ol
           className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-0"
-          aria-label="Daily Ops process"
+          aria-label="Ops loop"
         >
           {DAILY_OPS_WORKFLOW_PHASES.map((phase, idx) => {
             const status = stepStatuses[phase.id]
@@ -180,18 +251,35 @@ export function DailyOpsProcessStrip({
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {showReadyHint &&
-            (isAgentFix || isOperatorPlan || isChecklistPrimary) &&
+            (isAgentFix || isOperatorPlan || isChecklistPrimary || isManualNext) &&
             !fixPending &&
             !checkBusy &&
-            canOperate && (
+            (isManualNext || canOperate) && (
               <DenseTag variant="info" className="text-[9px]">
-                {isOperatorPlan
-                  ? 'Ready · Operator Plan'
-                  : isChecklistPrimary
-                    ? 'Ready · AI Check'
-                    : 'Ready to Agent Fix'}
+                {isManualNext
+                  ? 'Ready · Manual next'
+                  : isOperatorPlan
+                    ? 'Ready · Operator Plan'
+                    : isChecklistPrimary
+                      ? 'Ready · AI Check'
+                      : 'Ready to Agent Fix'}
               </DenseTag>
             )}
+          {isManualNext && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded border border-fuchsia-500/45 bg-background px-2 py-0.5 text-[var(--text-dense-meta)] font-medium text-fuchsia-700 hover:bg-fuchsia-500/10 dark:text-fuchsia-300"
+              title={
+                action.manualHint != null && action.manualHint !== ''
+                  ? action.manualHint
+                  : 'Physical / manual next step — Agent Fix cannot finish this alone'
+              }
+              onClick={handleManualPrimary}
+            >
+              <Hand className="size-3 shrink-0" aria-hidden />
+              {action.label}
+            </button>
+          )}
           {isChecklistPrimary && (
             <AgentTriggerButton
               label={action.label}
@@ -255,6 +343,31 @@ export function DailyOpsProcessStrip({
               )}
             </>
           )}
+          {isManualNext && action.secondary != null && onSecondaryAction != null && (
+            <button
+              type="button"
+              className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary"
+              disabled={!canOperate || operatorPlanFixPending}
+              title={
+                !canOperate
+                  ? 'Authenticate as operator to run secondary AI Fix'
+                  : 'Secondary — AI-fixable sibling blocker (not the primary red light)'
+              }
+              onClick={onSecondaryAction}
+            >
+              {action.secondary.label}
+            </button>
+          )}
+          {isManualNext && onOpenFullOperatorPlane != null && (
+            <button
+              type="button"
+              className="rounded border border-transparent px-1.5 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:text-primary hover:underline"
+              onClick={onOpenFullOperatorPlane}
+              title="MCP, host deploy, self-smoke"
+            >
+              Full page →
+            </button>
+          )}
           {isViewAgent && (
             <AgentTriggerButton
               label="Agent Fix"
@@ -294,14 +407,31 @@ export function DailyOpsProcessStrip({
 
       {(workflow.blockers.length > 0 || agentFixError) && (
         <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-t border-border/50 pt-1.5">
-          {showOperatorPlanPanel && (
-            <p className="m-0 text-[var(--text-dense-caption)] text-warning">
-              Engineer CRITICAL — use Operator Plan AI Fix (fleet cell Agent Fix disabled)
+          {showRemediateBanner && (
+            <p
+              className={cn(
+                'm-0 text-[var(--text-dense-caption)]',
+                isManualNext ? 'text-fuchsia-700 dark:text-fuchsia-300' : 'text-warning',
+              )}
+            >
+              {nextBanner ??
+                (isManualNext
+                  ? `Next: ${action.label}`
+                  : isOperatorPlan
+                    ? `Next: ${action.label}`
+                    : 'Engineer plane — review Operator Plan')}
+              {manualCopied && isManualNext && (
+                <span className="ml-2 text-muted-foreground">· Copied next step</span>
+              )}
             </p>
           )}
           {workflow.activePhase !== 'clear' &&
             workflow.blockers.some(b => b.includes('D10')) &&
-            (isAgentFix || isOperatorPlan || isViewAgent || workflow.activePhase === 'remediate') && (
+            (isAgentFix ||
+              isOperatorPlan ||
+              isManualNext ||
+              isViewAgent ||
+              workflow.activePhase === 'remediate') && (
               <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
                 D10: live trading remains BLOCKED.
               </p>

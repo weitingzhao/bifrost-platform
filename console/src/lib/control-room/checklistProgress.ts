@@ -384,7 +384,7 @@ export function formatDispatchHeaderStrip(header: ChecklistHeaderProgress): stri
   if (header.done > 0) parts.push(`${header.done} done`)
   if (header.failed > 0) parts.push(`${header.failed} failed`)
   if (parts.length === 0) return null
-  return `Dispatch: ${parts.join(' · ')}`
+  return `Last AI Check dispatch: ${parts.join(' · ')}`
 }
 
 /** Prompt aligned with scripts/agent/daily_ops_checklist.sh */

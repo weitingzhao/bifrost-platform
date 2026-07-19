@@ -938,6 +938,21 @@ export function TaskControlCenter({
       handleOperatorPlanFix()
       return
     }
+    if (action.kind === 'manual-next') {
+      const hint = action.manualHint ?? action.label
+      void navigator.clipboard?.writeText(hint).then(
+        () => {
+          /* copied — strip title already shows the next step */
+        },
+        () => {
+          /* clipboard may be denied; label still visible */
+        },
+      )
+      if (action.tabId != null) {
+        // Stay on TCC; Operator Plan panel is already inline. Full page only via escape link.
+      }
+      return
+    }
     if (action.kind === 'view-agent') {
       onOpenAgentDesk?.(ambientJobId ?? undefined)
       return
@@ -1086,7 +1101,7 @@ export function TaskControlCenter({
     mode.loopArchetype === 'dev'
       ? `Briefing → implement → deliver — playbook for ${mode.label}.`
       : isDailyOps
-        ? `${mode.label} · Process strip Discover → Remediate → Verify → Clear — Fleet Desk is health ground truth.`
+        ? `Ops loop — Discover → Remediate → Verify → Clear — Fleet Desk is health ground truth.`
         : mode.loopArchetype === 'ops'
           ? `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
           : `${mode.label} · ${loopLabel}`
@@ -1095,42 +1110,16 @@ export function TaskControlCenter({
     ? phaseOpen
       ? 'Open — Dev playbook checklist'
       : 'Collapsed — Dev playbook checklist'
-    : isDailyOps
-      ? phaseOpen
-        ? 'Open — Reference playbook'
-        : 'Collapsed — Reference playbook'
-      : phaseOpen
-        ? 'Open — not live Go/No-Go'
-        : 'Collapsed — not live Go/No-Go'
+    : phaseOpen
+      ? 'Open — not live Go/No-Go'
+      : 'Collapsed — not live Go/No-Go'
 
   const phaseProgressCaption = isDevLoop
     ? 'Playbook phase status — Briefing → implement → deliver → sign-off'
-    : isDailyOps
-      ? 'Reference playbook — not live fleet health (Process strip + Fleet board above are authoritative)'
-      : 'Historical phase checklist — not live environment health'
+    : 'Historical phase checklist — not live environment health'
 
-  /** Daily Ops: Process strip replaces the large Phase Progress block (Help link only). */
-  const phaseProgressBlock = isDailyOps ? (
-    phases.length > 0 ? (
-      <details className="rounded border border-transparent px-1 py-0.5">
-        <summary className="cursor-pointer list-none text-[var(--text-dense-caption)] text-muted-foreground underline-offset-2 hover:underline [&::-webkit-details-marker]:hidden">
-          Help — workflow playbook ({doneCount}/{phases.length})
-        </summary>
-        <div className="mt-1.5 rounded-lg border border-border bg-card px-3 py-1.5">
-          <p className="m-0 mb-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
-            {phaseProgressCaption}
-          </p>
-          <TaskPhaseProgress
-            phases={phases}
-            statuses={statuses}
-            hints={phaseHints}
-            onOpenFullPage={handleOpenPhasePage}
-            onFixAction={handlePhaseFixAction}
-          />
-        </div>
-      </details>
-    ) : null
-  ) : phases.length > 0 ? (
+  /** Daily Ops: no phase strip — Help · reference lives inside Ops loop (DailyOpsProcessStrip). */
+  const phaseProgressBlock = isDailyOps ? null : phases.length > 0 ? (
     <details
       className="rounded-lg border border-border bg-card px-3 py-1.5"
       open={phaseOpen}
@@ -1386,7 +1375,7 @@ export function TaskControlCenter({
           />
         )}
 
-      {/* Dev: strips above phase. Daily Ops: fleet first (summary), then reference playbook + promote. */}
+      {/* Dev: strips above phase. Daily Ops: Ops loop (Help inside) → Agent → Checklist|Board → Operate (no Release). Mission Launch: board + Release posture. */}
       {isDevLoop ? (
         <>
           {devStripsBlock}
@@ -1395,7 +1384,7 @@ export function TaskControlCenter({
       ) : (
         <>
           {phaseProgressBlock}
-          {mode.loopArchetype === 'ops' && !isMissionLaunch && (
+          {isMissionLaunch && (
             <OpsTaskStrips
               mode={mode}
               context={context}
@@ -1415,59 +1404,7 @@ export function TaskControlCenter({
               canDispatchTradeDeploy={tradeDeployDispatchAllowed}
               releaseDisabledReason={releaseDisabledReason}
               tradeDeployDisabledReason={tradeDeployDisabledReason}
-              promoteOnly={isDailyOps}
-              onFleetCellFix={isDailyOps ? handleFleetCellFix : undefined}
-              onFleetPrimaryCta={isDailyOps ? handleFleetPrimaryCta : undefined}
-              fleetAgentFixPending={isDailyOps ? dailyOpsAgentPending : undefined}
-              fleetWorkflow={dailyOpsWorkflow ?? undefined}
-              fleetAgentFixError={isDailyOps ? (aiDailyOpsFix.error?.message ?? null) : undefined}
-              onFleetWorkflowAction={isDailyOps ? handleFleetWorkflowAction : undefined}
-              onOperatorPlanFix={isDailyOps ? handleOperatorPlanFix : undefined}
-              operatorPlanFixPending={isDailyOps ? aiOperatorPlaneFix.isPending : undefined}
-              operatorPlanFixDisabled={isDailyOps ? aiOperatorPlaneFix.disabled : undefined}
-              operatorPlanFixTitle={
-                isDailyOps
-                  ? (aiOperatorPlaneFix.disabledReason ??
-                    'Start Operator · Remediate with current bridge probe')
-                  : undefined
-              }
-              operatorPlanFixError={
-                isDailyOps ? (aiOperatorPlaneFix.error?.message ?? null) : undefined
-              }
-              onChecklistCheck={isDailyOps ? handleChecklistCheck : undefined}
-              checklistCheckPending={isDailyOps ? aiChecklistCheck.isPending : undefined}
-              checklistCheckDisabled={isDailyOps ? checklistCheckDisabled : undefined}
-              checklistCheckTitle={isDailyOps ? checklistCheckTitle : undefined}
-              checklistCheckError={
-                isDailyOps ? (aiChecklistCheck.error?.message ?? null) : undefined
-              }
-              checklistCheckActive={isDailyOps ? checklistCheckActive : undefined}
-              checklistCheckStatusHint={
-                isDailyOps ? (activeChecklistRunJob?.phase ?? null) : undefined
-              }
-              onChecklistItemFix={isDailyOps ? handleChecklistItemFix : undefined}
-              checklistItemFixPending={isDailyOps ? aiChecklistItemFix.isPending : undefined}
-              checklistItemFixDisabled={
-                isDailyOps
-                  ? checklistItemFixBlocked != null || !runnerHealthy
-                  : undefined
-              }
-              checklistItemFixTitle={
-                isDailyOps
-                  ? !runnerHealthy
-                    ? 'Remediation runner not healthy — check Engineer · runners-ha'
-                    : (checklistItemFixBlocked ??
-                      'Start Ops Agent Fix for this checklist item (not Cursor Ask for AI)')
-                  : undefined
-              }
-              checklistItemFixError={
-                isDailyOps ? (aiChecklistItemFix.error?.message ?? null) : undefined
-              }
-              checklistItemFixActiveId={isDailyOps ? checklistItemFixActiveId : undefined}
-              ambientJobId={ambientJobId}
-              ambientJobScope={ambientJobScope}
-              activeDispatchJobs={isDailyOps ? activeDispatchJobs : undefined}
-              onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId ?? ambientJobId ?? undefined)}
+              promoteOnly
             />
           )}
         </>

@@ -1,4 +1,6 @@
-import { DenseTag, cn } from '@bifrost/ui'
+import { useEffect, useMemo, useState } from 'react'
+import { Button, DenseTag, cn } from '@bifrost/ui'
+import { ListFilter } from 'lucide-react'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { StatusLamp } from '@/components/StatusLamp'
 import type {
@@ -26,6 +28,8 @@ import {
   touchKindShortLabel,
   type ChecklistCoverageIndex,
 } from '@/lib/control-room/dailyOpsChecklistCoverage'
+import type { DailyOpsWorkflowPhase } from '@/lib/control-room/dailyOpsWorkflow'
+import { useNowMs } from '@/hooks/useNowMs'
 import {
   FLEET_ROLE_COLOR,
   FLEET_ROLE_ICON,
@@ -36,10 +40,68 @@ const ROLE_LABEL = FLEET_ROLE_LABEL
 const ROLE_ICON = FLEET_ROLE_ICON
 const ROLE_COLOR = FLEET_ROLE_COLOR
 
+/** Board row order — issues-only mode re-sorts problem roles to the top. */
+const BOARD_ROLE_ORDER: FleetRole[] = ['rocket', 'satellite', 'engineer', 'ground', 'vendor']
+const SPAN_ROLES: ReadonlySet<FleetRole> = new Set(['engineer', 'ground', 'vendor'])
+
 const COL_LABEL: Record<FleetEnvColumn, string> = {
   dev: 'DEV',
   stg: 'STG',
   prod: 'PROD',
+}
+
+const ISSUES_ONLY_STORAGE_PREFIX = 'daily-ops-fleet-issues-only:'
+
+function cellHasIssues(cell: FleetCell): boolean {
+  const gate = resolveCellGate(cell)
+  if (gate === 'NO-GO') return true
+  const required = cell.standards.filter(s => s.required !== false)
+  if (required.length === 0) return cell.signal !== 'ok' && gate !== 'N/A'
+  return required.some(s => s.signal !== 'ok')
+}
+
+function roleCells(snap: FleetSnapshot, role: FleetRole): FleetCell[] {
+  return snap.cells.filter(c => c.role === role)
+}
+
+function roleHasIssues(snap: FleetSnapshot, role: FleetRole): boolean {
+  return roleCells(snap, role).some(cellHasIssues)
+}
+
+/** One-line quiet summary for an all-green role (issues-only mode). */
+function roleGoSummaryLabel(snap: FleetSnapshot, role: FleetRole): string {
+  const cells = roleCells(snap, role)
+  if (SPAN_ROLES.has(role)) {
+    return `${ROLE_LABEL[role]} · GO`
+  }
+  const envCount = cells.length > 0 ? cells.length : snap.columns.length
+  return `${ROLE_LABEL[role]} · GO · ${envCount} envs`
+}
+
+function readStoredIssuesOnly(phase: DailyOpsWorkflowPhase | undefined): boolean | null {
+  if (phase == null || typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(`${ISSUES_ONLY_STORAGE_PREFIX}${phase}`)
+    if (raw === '1') return true
+    if (raw === '0') return false
+  } catch {
+    /* ignore quota / private mode */
+  }
+  return null
+}
+
+function writeStoredIssuesOnly(phase: DailyOpsWorkflowPhase | undefined, value: boolean): void {
+  if (phase == null || typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(`${ISSUES_ONLY_STORAGE_PREFIX}${phase}`, value ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Remediate defaults to issues-first; Discover / Verify / Clear default Show all. */
+function defaultIssuesOnly(phase: DailyOpsWorkflowPhase | undefined): boolean {
+  return phase === 'remediate'
 }
 
 function gateTagVariant(gate: FleetCellGate): 'success' | 'danger' | 'category' {
@@ -100,11 +162,13 @@ function StandardChip({
   cellKey,
   coverage,
   flash,
+  nowMs,
 }: {
   s: FleetStandard
   cellKey: string
   coverage?: ChecklistCoverageIndex | null
   flash?: boolean
+  nowMs: number
 }) {
   const required = s.required !== false
   const isVirtual = s.source === 'checklist'
@@ -113,8 +177,9 @@ function StandardChip({
   const excluded = entry?.excluded === true
   const uncovered = entry != null && !excluded && hit == null
   const isRun = hit?.touchKind === 'run'
-  const touchAgeCompact = hit != null ? formatChecklistTouchAgeCompact(hit.touchedAt) : null
-  const coverageLine = describeCoverageEntry(entry)
+  const touchAgeCompact =
+    hit != null ? formatChecklistTouchAgeCompact(hit.touchedAt, nowMs) : null
+  const coverageLine = describeCoverageEntry(entry, nowMs)
   const sourceLine = isVirtual
     ? 'Checklist projection · not from matrix probe'
     : 'Matrix / bridge probe'
@@ -145,7 +210,7 @@ function StandardChip({
               ? 'text-sky-700 dark:text-sky-300'
               : 'text-emerald-700/90 dark:text-emerald-300/90',
           )}
-          aria-label={`Checklist ${hit.touchKind} touched ${formatChecklistTouchAge(hit.touchedAt)}`}
+          aria-label={`Checklist ${hit.touchKind} touched ${formatChecklistTouchAge(hit.touchedAt, nowMs)}`}
         >
           <span aria-hidden>✓</span>
           <span className="font-semibold uppercase" aria-hidden>
@@ -179,6 +244,7 @@ function FleetCellCard({
   coverage,
   flashKeys,
   flashNonce,
+  nowMs,
   onAgentFix,
   onSelect,
 }: {
@@ -195,6 +261,7 @@ function FleetCellCard({
   flashKeys?: ReadonlySet<string>
   /** Remount animation when the same keys flash again */
   flashNonce?: number
+  nowMs: number
   onAgentFix?: (cell: FleetCell) => void
   onSelect: (cell: FleetCell) => void
 }) {
@@ -202,9 +269,15 @@ function FleetCellCard({
   const allowFix = cellAllowsAgentFix(cell)
   const showFix = gate === 'NO-GO'
   const sections = groupStandards(cell.standards)
+  // GO cells: collapse green pills by default; Detail expands chips (and opens side panel).
+  const showChips = gate !== 'GO' || selected === true
   const cellFlashing =
     flashKeys != null &&
     cell.standards.some(s => flashKeys.has(coverageKey(cell.key, s.id)))
+
+  const required = cell.standards.filter(s => s.required !== false)
+  const okCount = required.filter(s => s.signal === 'ok').length
+  const totalCount = required.length > 0 ? required.length : cell.standards.length
 
   return (
     <div
@@ -231,6 +304,11 @@ function FleetCellCard({
         <span className="min-w-0 truncate font-mono text-[var(--text-dense-micro)] text-muted-foreground">
           {cell.value}
         </span>
+        {!showChips && gate === 'GO' && totalCount > 0 && (
+          <span className="font-mono text-[8px] text-muted-foreground">
+            {okCount}/{totalCount} ok
+          </span>
+        )}
         <span className="ml-auto flex shrink-0 items-center gap-1">
           <button
             type="button"
@@ -256,55 +334,64 @@ function FleetCellCard({
         </span>
       </div>
 
-      {/* Every condition as colored chip, grouped */}
-      <div
-        className={cn(
-          'flex min-w-0 gap-1.5',
-          wide ? 'flex-row flex-wrap' : 'flex-col',
-        )}
-      >
-        {sections.map(section => {
-          const scored = section.items.filter(i => i.required !== false)
-          const ok = scored.filter(i => i.signal === 'ok').length
-          const total = scored.length > 0 ? scored.length : section.items.length
-          const groupBad = scored.some(i => i.signal !== 'ok')
-          return (
-            <div
-              key={section.group}
-              className={cn('min-w-0', wide ? 'min-w-[9rem] flex-1' : '')}
-            >
+      {/* Every condition as colored chip, grouped — GO defaults collapsed */}
+      {showChips && (
+        <div
+          className={cn(
+            'flex min-w-0 gap-1.5',
+            wide ? 'flex-row flex-wrap' : 'flex-col',
+          )}
+        >
+          {sections.map(section => {
+            const scored = section.items.filter(i => i.required !== false)
+            const ok = scored.filter(i => i.signal === 'ok').length
+            const total = scored.length > 0 ? scored.length : section.items.length
+            const groupBad = scored.some(i => i.signal !== 'ok')
+            return (
               <div
-                className={cn(
-                  'mb-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide',
-                  groupBad ? 'text-foreground' : 'text-muted-foreground',
-                )}
+                key={section.group}
+                className={cn('min-w-0', wide ? 'min-w-[9rem] flex-1' : '')}
               >
-                {section.label}{' '}
-                <span className="font-normal text-muted-foreground">
-                  {ok}/{total}
-                </span>
+                <div
+                  className={cn(
+                    'mb-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide',
+                    groupBad ? 'text-foreground' : 'text-muted-foreground',
+                  )}
+                >
+                  {section.label}{' '}
+                  <span className="font-normal text-muted-foreground">
+                    {ok}/{total}
+                  </span>
+                </div>
+                <div className="flex min-w-0 flex-wrap gap-0.5">
+                  {[...section.items]
+                    .sort((a, b) => {
+                      const rank = (s: FleetStandard) =>
+                        s.signal === 'fail'
+                          ? 3
+                          : s.signal === 'degraded'
+                            ? 2
+                            : s.signal === 'unknown'
+                              ? 1
+                              : 0
+                      return rank(b) - rank(a)
+                    })
+                    .map(s => (
+                      <StandardChip
+                        key={`${s.id}-${flashKeys?.has(coverageKey(cell.key, s.id)) ? flashNonce : 0}`}
+                        s={s}
+                        cellKey={cell.key}
+                        coverage={coverage}
+                        flash={flashKeys?.has(coverageKey(cell.key, s.id)) === true}
+                        nowMs={nowMs}
+                      />
+                    ))}
+                </div>
               </div>
-              <div className="flex min-w-0 flex-wrap gap-0.5">
-                {[...section.items]
-                  .sort((a, b) => {
-                    const rank = (s: FleetStandard) =>
-                      s.signal === 'fail' ? 3 : s.signal === 'degraded' ? 2 : s.signal === 'unknown' ? 1 : 0
-                    return rank(b) - rank(a)
-                  })
-                  .map(s => (
-                    <StandardChip
-                      key={`${s.id}-${flashKeys?.has(coverageKey(cell.key, s.id)) ? flashNonce : 0}`}
-                      s={s}
-                      cellKey={cell.key}
-                      coverage={coverage}
-                      flash={flashKeys?.has(coverageKey(cell.key, s.id)) === true}
-                    />
-                  ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -326,6 +413,7 @@ export function DailyOpsFleetBoard({
   coverage,
   flashKeys,
   flashNonce = 0,
+  workflowPhase,
   onAgentFix,
   onSelectCell,
   onNavigate,
@@ -340,18 +428,192 @@ export function DailyOpsFleetBoard({
   /** Coverage keys flashing from Checklist section click */
   flashKeys?: ReadonlySet<string>
   flashNonce?: number
+  /** Process strip phase — Remediate defaults to issues-first; others Show all. */
+  workflowPhase?: DailyOpsWorkflowPhase
   onAgentFix?: (cell: FleetCell) => void
   onSelectCell: (cell: FleetCell | null) => void
   onNavigate: (tabId: string) => void
 }) {
+  const nowMs = useNowMs()
   const worstKey = fleet.verdict.worstCell?.key
-  const spanRoles: FleetRole[] = ['engineer', 'ground', 'vendor']
+  const remediatingPhase = workflowPhase === 'remediate'
+  const [issuesOnly, setIssuesOnly] = useState(() => {
+    const stored = readStoredIssuesOnly(workflowPhase)
+    return stored ?? defaultIssuesOnly(workflowPhase)
+  })
+  /** Issues-only: which all-green roles are expanded past the quiet summary. */
+  const [expandedGoRoles, setExpandedGoRoles] = useState<ReadonlySet<FleetRole>>(
+    () => new Set(),
+  )
+
+  useEffect(() => {
+    const stored = readStoredIssuesOnly(workflowPhase)
+    setIssuesOnly(stored ?? defaultIssuesOnly(workflowPhase))
+    setExpandedGoRoles(new Set())
+  }, [workflowPhase])
+
+  const toggleIssuesOnly = () => {
+    setIssuesOnly(prev => {
+      const next = !prev
+      writeStoredIssuesOnly(workflowPhase, next)
+      if (!next) setExpandedGoRoles(new Set())
+      return next
+    })
+  }
+
+  const toggleGoRoleExpanded = (role: FleetRole) => {
+    setExpandedGoRoles(prev => {
+      const next = new Set(prev)
+      if (next.has(role)) next.delete(role)
+      else next.add(role)
+      return next
+    })
+  }
+
+  const orderedRoles = useMemo(() => {
+    if (!issuesOnly) return BOARD_ROLE_ORDER
+    return [...BOARD_ROLE_ORDER].sort((a, b) => {
+      const ai = roleHasIssues(fleet, a) ? 0 : 1
+      const bi = roleHasIssues(fleet, b) ? 0 : 1
+      if (ai !== bi) return ai - bi
+      return BOARD_ROLE_ORDER.indexOf(a) - BOARD_ROLE_ORDER.indexOf(b)
+    })
+  }, [fleet, issuesOnly])
+
+  const issueRoleCount = useMemo(
+    () => BOARD_ROLE_ORDER.filter(r => roleHasIssues(fleet, r)).length,
+    [fleet],
+  )
 
   const envColCount = Math.max(fleet.columns.length, 1)
   // Fixed role gutter so labels stay readable in split layout (~556px pane).
   // Percent-only (was 9%) truncates "Satellite" / "Engineer" under table-fixed.
   const roleColWidth = '5.75rem'
   const envColPct = 100 / envColCount
+  const colSpanAll = fleet.columns.length
+
+  const renderRoleLabel = (role: FleetRole, opts?: { onHide?: () => void }) => {
+    const Icon = ROLE_ICON[role]
+    return (
+      <div className="flex max-w-full flex-col items-start gap-0.5">
+        <button
+          type="button"
+          className="inline-flex max-w-full items-center gap-1 text-[var(--text-dense-meta)] font-medium text-foreground hover:text-primary hover:underline"
+          title={`Open ${ROLE_LABEL[role]}`}
+          onClick={() => onNavigate(fleetRoleNavigateTab(role))}
+        >
+          <Icon className={cn('size-3 shrink-0', ROLE_COLOR[role])} aria-hidden />
+          <span className="whitespace-nowrap">{ROLE_LABEL[role]}</span>
+        </button>
+        {opts?.onHide != null && (
+          <button
+            type="button"
+            className="text-[var(--text-dense-caption)] font-medium text-primary hover:underline"
+            onClick={opts.onHide}
+          >
+            Hide
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const renderGoSummaryRow = (role: FleetRole) => {
+    return (
+      <tr key={role} className="border-t border-border/40">
+        <td className="whitespace-nowrap px-1 py-1 align-middle">{renderRoleLabel(role)}</td>
+        <td className="min-w-0 px-0.5 py-1 align-middle" colSpan={colSpanAll}>
+          <div className="flex min-w-0 items-center gap-1.5 rounded border border-border/50 bg-background/40 px-1.5 py-1">
+            <StatusLamp value="ok" kind="reach" />
+            <DenseTag variant="success" className="text-[8px]">
+              GO
+            </DenseTag>
+            <span className="min-w-0 truncate text-[var(--text-dense-caption)] text-muted-foreground">
+              {roleGoSummaryLabel(fleet, role)}
+            </span>
+            <button
+              type="button"
+              className="ml-auto shrink-0 text-[var(--text-dense-caption)] font-medium text-primary hover:underline"
+              onClick={() => toggleGoRoleExpanded(role)}
+            >
+              Detail
+            </button>
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
+  const renderEnvRoleRow = (role: FleetRole, opts?: { onHide?: () => void }) => (
+    <tr key={role}>
+      <td className="whitespace-nowrap px-1 py-1 align-top">
+        {renderRoleLabel(role, opts?.onHide != null ? { onHide: opts.onHide } : undefined)}
+      </td>
+      {fleet.columns.map(col => {
+        const cell = findCell(fleet, role, col)
+        if (cell == null) {
+          return (
+            <td key={col} className="min-w-0 px-0.5 py-1 align-top">
+              <div className="rounded border border-dashed border-border/50 px-2 py-3 text-[var(--text-dense-caption)] text-muted-foreground">
+                —
+              </div>
+            </td>
+          )
+        }
+        return (
+          <td key={col} className="min-w-0 px-0.5 py-1 align-top">
+            <FleetCellCard
+              cell={cell}
+              highlight={cell.key === worstKey}
+              selected={cell.key === selectedCellKey}
+              prodWeight={col === 'prod'}
+              canOperate={canOperate}
+              agentFixPending={agentFixPending}
+              coverage={coverage}
+              flashKeys={flashKeys}
+              flashNonce={flashNonce}
+              nowMs={nowMs}
+              onAgentFix={onAgentFix}
+              onSelect={c => onSelectCell(selectedCellKey === c.key ? null : c)}
+            />
+          </td>
+        )
+      })}
+    </tr>
+  )
+
+  const renderSpanRoleRow = (role: FleetRole, opts?: { onHide?: () => void }) => {
+    const cell = findCell(fleet, role, 'span')
+    return (
+      <tr key={role}>
+        <td className="whitespace-nowrap px-1 py-1 align-top">
+          {renderRoleLabel(role, opts?.onHide != null ? { onHide: opts.onHide } : undefined)}
+        </td>
+        <td className="min-w-0 px-0.5 py-1 align-top" colSpan={colSpanAll}>
+          {cell != null ? (
+            <FleetCellCard
+              cell={cell}
+              wide
+              highlight={cell.key === worstKey}
+              selected={cell.key === selectedCellKey}
+              canOperate={canOperate}
+              agentFixPending={agentFixPending}
+              coverage={coverage}
+              flashKeys={flashKeys}
+              flashNonce={flashNonce}
+              nowMs={nowMs}
+              onAgentFix={onAgentFix}
+              onSelect={c => onSelectCell(selectedCellKey === c.key ? null : c)}
+            />
+          ) : (
+            <div className="rounded border border-dashed border-border/50 px-2 py-3 text-[var(--text-dense-caption)] text-muted-foreground">
+              —
+            </div>
+          )}
+        </td>
+      </tr>
+    )
+  }
 
   return (
     <div
@@ -361,8 +623,48 @@ export function DailyOpsFleetBoard({
       <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
         <span className="text-[var(--text-dense-label)] font-semibold">Fleet board</span>
         <DenseTag variant="neutral" className="text-[9px]">
-          All checks · grouped
+          {issuesOnly ? 'Issues first' : 'All checks · grouped'}
         </DenseTag>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          className={cn(
+            'h-6 cursor-pointer gap-1 px-2 text-[10px]',
+            issuesOnly
+              ? 'border-primary/50 bg-primary/5 text-foreground hover:bg-primary/10'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+          title={
+            issuesOnly
+              ? 'Click to show all roles'
+              : 'Click to show failing / non-green roles only'
+          }
+          aria-label={
+            issuesOnly ? 'Showing issues. Click to show all roles' : 'Show issues only'
+          }
+          onClick={toggleIssuesOnly}
+        >
+          <ListFilter className="size-3 shrink-0" aria-hidden />
+          {issuesOnly ? (
+            <>
+              <span className="font-normal text-muted-foreground">showing issues</span>
+              <span className="text-muted-foreground" aria-hidden>
+                ·
+              </span>
+              <span className="font-semibold text-primary underline underline-offset-2">
+                Show all roles
+              </span>
+            </>
+          ) : (
+            <span>Issues only</span>
+          )}
+        </Button>
+        {issuesOnly && remediatingPhase && issueRoleCount > 0 && (
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+            {issueRoleCount} role{issueRoleCount === 1 ? '' : 's'} need attention
+          </span>
+        )}
         {isLoading && (
           <span className="text-[var(--text-dense-caption)] text-muted-foreground">Probing…</span>
         )}
@@ -372,9 +674,13 @@ export function DailyOpsFleetBoard({
           </DenseTag>
         )}
         {coverage != null && (
-          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+          <span
+            className="text-[var(--text-dense-caption)] text-muted-foreground"
+            title="Coverage: Checklist↔Fleet Board match ratio (excludes path + checklist-only virtuals)"
+          >
+            <span className="opacity-80">Coverage </span>
             <span className="text-emerald-600 dark:text-emerald-300">
-              ✓d {coverage.coveredCount}
+              ✓d {coverage.boardMatchedCount}/{coverage.boardTotalCount}
             </span>
             {coverage.runTouchedCount > 0 && (
               <>
@@ -404,7 +710,7 @@ export function DailyOpsFleetBoard({
             )}
             <span
               className="ml-1 opacity-70"
-              title="d=dry-run · r=run · chk=checklist virtual projection"
+              title="d=dry-run match/total board · r=run · chk=checklist virtual (not in denominator)"
             >
               · ✓d|r · chk· = checklist-only
             </span>
@@ -440,95 +746,22 @@ export function DailyOpsFleetBoard({
           </tr>
         </thead>
         <tbody>
-          {(['rocket', 'satellite'] as FleetRole[]).map(role => {
-            const Icon = ROLE_ICON[role]
-            return (
-            <tr key={role}>
-              <td className="whitespace-nowrap px-1 py-1 align-top">
-                <button
-                  type="button"
-                  className="inline-flex max-w-full items-center gap-1 text-[var(--text-dense-meta)] font-medium text-foreground hover:text-primary hover:underline"
-                  title={`Open ${ROLE_LABEL[role]}`}
-                  onClick={() => onNavigate(fleetRoleNavigateTab(role))}
-                >
-                  <Icon className={cn('size-3 shrink-0', ROLE_COLOR[role])} aria-hidden />
-                  <span className="whitespace-nowrap">{ROLE_LABEL[role]}</span>
-                </button>
-              </td>
-              {fleet.columns.map(col => {
-                const cell = findCell(fleet, role, col)
-                if (cell == null) {
-                  return (
-                    <td key={col} className="min-w-0 px-0.5 py-1 align-top">
-                      <div className="rounded border border-dashed border-border/50 px-2 py-3 text-[var(--text-dense-caption)] text-muted-foreground">
-                        —
-                      </div>
-                    </td>
-                  )
+          {orderedRoles.map(role => {
+            const problem = roleHasIssues(fleet, role)
+            if (issuesOnly && !problem) {
+              if (expandedGoRoles.has(role)) {
+                const onHide = () => toggleGoRoleExpanded(role)
+                if (SPAN_ROLES.has(role)) {
+                  return renderSpanRoleRow(role, { onHide })
                 }
-                return (
-                  <td key={col} className="min-w-0 px-0.5 py-1 align-top">
-                    <FleetCellCard
-                      cell={cell}
-                      highlight={cell.key === worstKey}
-                      selected={cell.key === selectedCellKey}
-                      prodWeight={col === 'prod'}
-                      canOperate={canOperate}
-                      agentFixPending={agentFixPending}
-                      coverage={coverage}
-                      flashKeys={flashKeys}
-                      flashNonce={flashNonce}
-                      onAgentFix={onAgentFix}
-                      onSelect={c =>
-                        onSelectCell(selectedCellKey === c.key ? null : c)
-                      }
-                    />
-                  </td>
-                )
-              })}
-            </tr>
-          )})}
-          {spanRoles.map(role => {
-            const cell = findCell(fleet, role, 'span')
-            const SpanIcon = ROLE_ICON[role]
-            return (
-              <tr key={role}>
-                <td className="whitespace-nowrap px-1 py-1 align-top">
-                  <button
-                    type="button"
-                    className="inline-flex max-w-full items-center gap-1 text-[var(--text-dense-meta)] font-medium text-foreground hover:text-primary hover:underline"
-                    title={`Open ${ROLE_LABEL[role]}`}
-                    onClick={() => onNavigate(fleetRoleNavigateTab(role))}
-                  >
-                    <SpanIcon className={cn('size-3 shrink-0', ROLE_COLOR[role])} aria-hidden />
-                    <span className="whitespace-nowrap">{ROLE_LABEL[role]}</span>
-                  </button>
-                </td>
-                <td className="min-w-0 px-0.5 py-1 align-top" colSpan={fleet.columns.length}>
-                  {cell != null ? (
-                    <FleetCellCard
-                      cell={cell}
-                      wide
-                      highlight={cell.key === worstKey}
-                      selected={cell.key === selectedCellKey}
-                      canOperate={canOperate}
-                      agentFixPending={agentFixPending}
-                      coverage={coverage}
-                      flashKeys={flashKeys}
-                      flashNonce={flashNonce}
-                      onAgentFix={onAgentFix}
-                      onSelect={c =>
-                        onSelectCell(selectedCellKey === c.key ? null : c)
-                      }
-                    />
-                  ) : (
-                    <div className="rounded border border-dashed border-border/50 px-2 py-3 text-[var(--text-dense-caption)] text-muted-foreground">
-                      —
-                    </div>
-                  )}
-                </td>
-              </tr>
-            )
+                return renderEnvRoleRow(role, { onHide })
+              }
+              return renderGoSummaryRow(role)
+            }
+            if (SPAN_ROLES.has(role)) {
+              return renderSpanRoleRow(role)
+            }
+            return renderEnvRoleRow(role)
           })}
         </tbody>
       </table>

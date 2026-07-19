@@ -367,7 +367,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
     id: 'daily-ops',
     label: 'Daily Ops',
     description:
-      'Ops loop — Process strip Discover → Remediate → Verify → Clear. Fleet Desk is health ground truth; single primary CTA; Agent Fix binds to Remediate; queue Clear ≠ fleet clear.',
+      'Ops loop — Discover → Remediate → Verify → Clear. Fleet Desk is health ground truth; single primary CTA; Agent Fix binds to Remediate; queue Clear ≠ fleet clear.',
     loopArchetype: 'ops',
     landingTab: 'task-cc',
     phases: DAILY_OPS_PHASES,
@@ -396,7 +396,8 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
   {
     id: 'mission-launch',
     label: 'Mission Launch',
-    description: 'Ops loop — unified platform + trade STG → gate → PROD mission.',
+    description:
+      'Ops loop — unified platform + trade STG → gate → PROD mission. Task Control Center shows Launch board + Release posture (Promote / cutover · Tier A·B).',
     loopArchetype: 'ops',
     landingTab: 'task-cc',
     phases: MISSION_LAUNCH_PHASES,

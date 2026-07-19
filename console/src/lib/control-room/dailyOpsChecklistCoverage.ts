@@ -54,12 +54,27 @@ export type ChecklistCoverageEntry = {
 export type ChecklistCoverageIndex = {
   /** `${cellKey}::${standardId}` → entry */
   byKey: Map<string, ChecklistCoverageEntry>
+  /**
+   * Matched standards including checklist virtual projections.
+   * Prefer `boardMatchedCount` for Board coverage ratio UI.
+   */
   coveredCount: number
+  /**
+   * Unmatched Fleet Board probes (non-path, non-virtual) — coverage gap.
+   * Invariant: boardMatchedCount + uncoveredCount === boardTotalCount.
+   */
   uncoveredCount: number
   excludedCount: number
   runTouchedCount: number
-  /** Standards with source:'checklist' (virtual projections) */
+  /** Standards with source:'checklist' (virtual projections; not in board denominator) */
   virtualCount: number
+  /**
+   * Fleet Board standards that participate in coverage:
+   * exclude `path` group and checklist-only virtuals (`source:'checklist'`).
+   */
+  boardTotalCount: number
+  /** Matched subset of boardTotalCount (excludes virtual) */
+  boardMatchedCount: number
   /** Wall-clock of this dry-run pass */
   dryRunAt: string
 }
@@ -183,11 +198,14 @@ export function touchKindLabel(kind: ChecklistTouchKind): string {
   return kind === 'run' ? 'run' : 'dry-run'
 }
 
-export function describeCoverageEntry(entry: ChecklistCoverageEntry | undefined): string {
+export function describeCoverageEntry(
+  entry: ChecklistCoverageEntry | undefined,
+  nowMs: number = Date.now(),
+): string {
   if (entry == null) return 'No coverage data'
   if (entry.excluded) return 'Excluded from Daily Ops Checklist (structural path)'
   if (entry.hit == null) return 'Not touched by Daily Ops Checklist'
-  const age = formatChecklistTouchAge(entry.hit.touchedAt)
+  const age = formatChecklistTouchAge(entry.hit.touchedAt, nowMs)
   const kind = touchKindLabel(entry.hit.touchKind)
   return `Checklist ${entry.hit.stepOrder}. ${entry.hit.stepLabel} · ${entry.hit.itemLabel} · ${kind} · ${age}`
 }
@@ -210,11 +228,14 @@ export function buildChecklistCoverageIndex(
   let excludedCount = 0
   let runTouchedCount = 0
   let virtualCount = 0
+  let boardTotalCount = 0
+  let boardMatchedCount = 0
 
   for (const cell of fleet.cells) {
     for (const standard of cell.standards) {
       const key = coverageKey(cell.key, standard.id)
-      if (standard.source === 'checklist') virtualCount += 1
+      const isVirtual = standard.source === 'checklist'
+      if (isVirtual) virtualCount += 1
       if (standard.group === 'path') {
         excludedCount += 1
         byKey.set(key, {
@@ -233,7 +254,11 @@ export function buildChecklistCoverageIndex(
       })
 
       if (matched == null) {
-        uncoveredCount += 1
+        // Virtuals are checklist-only — never inflate Board gap / denominator.
+        if (!isVirtual) {
+          uncoveredCount += 1
+          boardTotalCount += 1
+        }
         byKey.set(key, {
           cellKey: cell.key,
           standardId: standard.id,
@@ -245,6 +270,10 @@ export function buildChecklistCoverageIndex(
       }
 
       coveredCount += 1
+      if (!isVirtual) {
+        boardMatchedCount += 1
+        boardTotalCount += 1
+      }
       const existing = nextStore[key] ?? {}
       nextStore[key] = { ...existing, dryRunAt }
       const display = resolveDisplayTouch(nextStore[key], dryRunAt)
@@ -280,6 +309,8 @@ export function buildChecklistCoverageIndex(
     excludedCount,
     runTouchedCount,
     virtualCount,
+    boardTotalCount,
+    boardMatchedCount,
     dryRunAt,
   }
 }

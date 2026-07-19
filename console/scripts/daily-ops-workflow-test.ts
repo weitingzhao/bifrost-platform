@@ -228,18 +228,65 @@ check('D10 blocker present on remediate path', () => {
   assert.ok(r.blockers.some(b => b.includes('D10')))
 })
 
-check('Engineer CRITICAL → remediate inline Operator Plan AI Fix', () => {
+check('Engineer CRITICAL Mac seat FAIL → manual-next (not AI Fix)', () => {
+  const fleet = clearFleet()
+  const eng = fleet.cells.find(c => c.role === 'engineer')
+  assert.ok(eng)
+  eng.signal = 'fail'
+  eng.standards = eng.standards.map(s => {
+    if (s.id === 'mac-seat') {
+      return { ...s, signal: 'fail' as const, reason: 'Mac seat · probe-bridge not_configured' }
+    }
+    if (s.id === 'git-bridge') {
+      return { ...s, signal: 'degraded' as const, reason: 'Git bridge 1 dirty repo(s)' }
+    }
+    return { ...s, signal: 'ok' as const }
+  })
+  eng.escalateTabId = 'operator-plane'
+  eng.agentFixEnabled = false
+  eng.detail = 'Mac seat CRITICAL'
+  fleet.fleetClear = false
+  fleet.verdict = {
+    kind: 'NO-GO',
+    topReason: eng.detail,
+    primaryCta: {
+      label: 'Open Operator Plane',
+      tabId: 'operator-plane',
+      cellKey: eng.key,
+      kind: 'navigate',
+    },
+    worstCell: eng,
+  }
+  const r = resolveDailyOpsWorkflow({ fleet, queueOpen: 0 })
+  assert.equal(r.activePhase, 'remediate')
+  assert.equal(r.primaryAction.kind, 'manual-next')
+  assert.match(r.primaryAction.label, /Mac seat/i)
+  assert.notEqual(r.primaryAction.kind, 'operator-plan')
+  assert.ok(r.blockers.some(b => b.startsWith('Next:')))
+  // Mixed: secondary AI Fix for git dirty sibling
+  assert.ok(r.primaryAction.secondary)
+  assert.equal(r.primaryAction.secondary?.kind, 'operator-plan')
+  assert.match(r.primaryAction.secondary?.label ?? '', /Also: AI Fix/i)
+  const steps = dailyOpsStepStatuses(r)
+  assert.equal(steps.remediate, 'active')
+})
+
+check('Engineer CRITICAL AI-fixable only → Operator Plan AI Fix', () => {
   const fleet = clearFleet()
   // Force engineer cell to fail for escalate path
   const eng = fleet.cells.find(c => c.role === 'engineer')
   assert.ok(eng)
   eng.signal = 'fail'
-  eng.standards = eng.standards.map(s =>
-    s.required === false ? s : { ...s, signal: 'fail' as const },
-  )
+  eng.standards = eng.standards.map(s => {
+    if (s.id === 'mac-seat') {
+      return { ...s, signal: 'ok' as const, required: false }
+    }
+    // runners / git fail — semi_auto with fixScope
+    return { ...s, signal: 'fail' as const }
+  })
   eng.escalateTabId = 'operator-plane'
   eng.agentFixEnabled = false
-  eng.detail = 'Mac seat CRITICAL'
+  eng.detail = 'Runners CRITICAL'
   // Recompute verdict-like inputs via resolveDailyOpsWorkflow (uses pickFleetFixCell + engineer escalate)
   // Mutate snapshot verdict worstCell for engineer escalate helper
   fleet.fleetClear = false
@@ -259,7 +306,7 @@ check('Engineer CRITICAL → remediate inline Operator Plan AI Fix', () => {
   assert.equal(r.primaryAction.kind, 'operator-plan')
   assert.equal(r.primaryAction.tabId, 'operator-plane')
   assert.equal(r.primaryAction.label, 'AI Fix · Operator Plan')
-  assert.ok(r.blockers.some(b => /Engineer|Operator Plan/i.test(b)))
+  assert.ok(r.blockers.some(b => /Next:|Engineer|Operator Plan/i.test(b)))
   const steps = dailyOpsStepStatuses(r)
   assert.equal(steps.remediate, 'active')
 })
