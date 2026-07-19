@@ -37,6 +37,7 @@ func Catalog() []ToolView {
 		tool("get_stack_addons", "CI/CD stack add-on status", "read", "GET", "/api/v1/stack/addons", "viewer", "P4", true),
 		tool("get_delivery_pipelines", "Tekton pipeline catalog", "read", "GET", "/api/v1/delivery/pipelines", "viewer", "P3", true),
 		tool("get_delivery_run_logs", "PipelineRun log tail", "read", "GET", "/api/v1/delivery/runs/{id}/logs", "viewer", "P3", true),
+		tool("delete_pipeline_run", "Delete terminal Tekton PipelineRun CR + pods (operator; cleans failing_pods leftovers)", "routine", "DELETE", "/api/v1/delivery/runs/{id}", "operator", "P3", true),
 		tool("ensure_bifrost_namespaces", "Create Bifrost namespaces idempotently", "routine", "POST", "/api/v1/cluster/namespaces/ensure-bifrost", "operator", "P1", true),
 		tool("rollout_restart_deployment", "Rollout restart a Deployment", "routine", "POST", "/api/v1/cluster/workloads/rollout-restart", "operator", "P1", true),
 		tool("scale_deployment", "Scale a Deployment", "routine", "POST", "/api/v1/cluster/workloads/scale", "operator", "P1", true),
@@ -86,6 +87,9 @@ func Catalog() []ToolView {
 		tool("get_operate_queue", "Open + recently closed structured Agent Desk handoffs (D11)", "read", "GET", "/api/v1/operate/queue", "viewer", "Agent", true),
 		tool("record_operate_queue_execution", "Attach real remediation execution_job_id to open handoff", "routine", "POST", "/api/v1/operate/queue/{id}/execution", "operator", "Agent", true),
 		tool("close_operate_queue_item", "Close with completion evidence; linked job must be done and post-fix verification passed", "routine", "POST", "/api/v1/operate/queue/{id}/close", "operator", "Agent", true),
+		tool("get_checklist_signals", "Latest Daily Ops Checklist per-item signals + KPIs", "read", "GET", "/api/v1/checklist/signals", "viewer", "Agent", true),
+		tool("report_checklist_signals", "Merge Daily Ops Checklist probe signals (runner daily-ops-checklist-run)", "routine", "POST", "/api/v1/checklist/signals", "operator", "Agent", true),
+		tool("get_checklist_kpis", "Checklist quiet-success streak + last-run summary", "read", "GET", "/api/v1/checklist/kpis", "viewer", "Agent", true),
 	}
 }
 

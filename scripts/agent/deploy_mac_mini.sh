@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Deploy agent stack (remediation-runner + Nous Hermes MCP + nightly drift) to Mac Mini.
-# Invoked by: python scripts/run_agent.py deploy
+# Invoked by: python scripts/run_agent.py deploy · Console Operator Plane → Update primary/standby
+#
+# Non-interactive only: Console cannot type SSH passwords. Uses BatchMode + publickey.
+# Optional: AGENT_DEPLOY_SSH_IDENTITY=/path/to/key (default: ~/.ssh/id_ed25519 then id_rsa)
 set -euo pipefail
 
 REMOTE="${1:-vision@192.168.10.50}"
@@ -20,9 +23,57 @@ INFRA_LOCAL="$(cd "${PLATFORM_LOCAL}/../bifrost-trade-infra" 2>/dev/null && pwd 
 WORKSPACE_REMOTE="${REMOTE_DIR}/workspace"
 REMOTE_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
-run_remote() {
-  ssh "${REMOTE}" "export PATH=${REMOTE_PATH}; $*"
+resolve_ssh_identity() {
+  if [[ -n "${AGENT_DEPLOY_SSH_IDENTITY:-}" && -f "${AGENT_DEPLOY_SSH_IDENTITY}" ]]; then
+    printf '%s' "${AGENT_DEPLOY_SSH_IDENTITY}"
+    return 0
+  fi
+  local home="${HOME:-}"
+  for cand in "${home}/.ssh/id_ed25519" "${home}/.ssh/id_rsa" "${home}/.ssh/bifrost_deploy"; do
+    if [[ -f "${cand}" ]]; then
+      printf '%s' "${cand}"
+      return 0
+    fi
+  done
+  return 1
 }
+
+SSH_IDENTITY=""
+if SSH_IDENTITY="$(resolve_ssh_identity)"; then
+  echo "==> SSH identity: ${SSH_IDENTITY} (BatchMode — no password prompt)"
+else
+  echo "ERROR: no SSH private key found. Set AGENT_DEPLOY_SSH_IDENTITY or install ~/.ssh/id_ed25519." >&2
+  echo "Console deploy cannot enter passwords — configure key-based SSH from the platform-api host to ${REMOTE}." >&2
+  exit 2
+fi
+
+# Prefer publickey only; never hang waiting for a TTY password (Console has no input).
+SSH_OPTS=(
+  -o BatchMode=yes
+  -o IdentitiesOnly=yes
+  -o IdentityFile="${SSH_IDENTITY}"
+  -o PreferredAuthentications=publickey
+  -o PubkeyAuthentication=yes
+  -o ConnectTimeout=15
+  -o StrictHostKeyChecking=accept-new
+)
+RSYNC_SSH="ssh ${SSH_OPTS[*]}"
+
+run_remote() {
+  ssh "${SSH_OPTS[@]}" "${REMOTE}" "export PATH=${REMOTE_PATH}; $*"
+}
+
+run_scp() {
+  scp "${SSH_OPTS[@]}" "$@"
+}
+
+echo "==> Preflight SSH (BatchMode) → ${REMOTE}"
+if ! ssh "${SSH_OPTS[@]}" "${REMOTE}" 'echo ok' >/dev/null; then
+  echo "ERROR: SSH BatchMode failed for ${REMOTE} with ${SSH_IDENTITY}." >&2
+  echo "Fix: ssh-copy-id -i ${SSH_IDENTITY}.pub ${REMOTE}" >&2
+  echo "Console cannot type passwords — key auth is required for Update primary/standby." >&2
+  exit 2
+fi
 
 echo "==> Deploying agent stack to ${REMOTE}:${REMOTE_DIR}"
 
@@ -46,28 +97,28 @@ run_remote "
 
 echo "==> Syncing drift-scan workspace"
 run_remote "mkdir -p ${WORKSPACE_REMOTE}/bifrost-platform/console/src/lib ${WORKSPACE_REMOTE}/bifrost-platform/config ${WORKSPACE_REMOTE}/bifrost-platform/agent"
-rsync -az "${PLATFORM_LOCAL}/console/src/lib/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-platform/console/src/lib/"
-rsync -az "${PLATFORM_LOCAL}/config/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-platform/config/"
-rsync -az "${PLATFORM_LOCAL}/agent/drift/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-platform/agent/drift/"
+rsync -az -e "${RSYNC_SSH}" "${PLATFORM_LOCAL}/console/src/lib/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-platform/console/src/lib/"
+rsync -az -e "${RSYNC_SSH}" "${PLATFORM_LOCAL}/config/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-platform/config/"
+rsync -az -e "${RSYNC_SSH}" "${PLATFORM_LOCAL}/agent/drift/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-platform/agent/drift/"
 if [[ -n "${INFRA_LOCAL}" && -d "${INFRA_LOCAL}/docs" ]]; then
   run_remote "mkdir -p ${WORKSPACE_REMOTE}/bifrost-trade-infra/docs"
-  rsync -az "${INFRA_LOCAL}/docs/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-trade-infra/docs/"
+  rsync -az -e "${RSYNC_SSH}" "${INFRA_LOCAL}/docs/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-trade-infra/docs/"
 fi
 if [[ -n "${INFRA_LOCAL}" && -d "${INFRA_LOCAL}/k8s" ]]; then
   run_remote "mkdir -p ${WORKSPACE_REMOTE}/bifrost-trade-infra/k8s"
-  rsync -az "${INFRA_LOCAL}/k8s/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-trade-infra/k8s/"
+  rsync -az -e "${RSYNC_SSH}" "${INFRA_LOCAL}/k8s/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-trade-infra/k8s/"
 fi
 
-rsync -az --delete \
+rsync -az --delete -e "${RSYNC_SSH}" \
   --exclude='node_modules' \
   --exclude='.env' \
   "${AGENT_SRC}/" "${REMOTE}:${REMOTE_DIR}/src/"
 
 KUBECONFIG_LOCAL="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
 if [[ -f "${KUBECONFIG_LOCAL}" ]]; then
-  ssh "${REMOTE}" "mkdir -p ~/.kube"
-  scp "${KUBECONFIG_LOCAL}" "${REMOTE}:~/.kube/bifrost-k3s.yaml"
-  ssh "${REMOTE}" "chmod 600 ~/.kube/bifrost-k3s.yaml"
+  run_remote "mkdir -p ~/.kube"
+  run_scp "${KUBECONFIG_LOCAL}" "${REMOTE}:~/.kube/bifrost-k3s.yaml"
+  run_remote "chmod 600 ~/.kube/bifrost-k3s.yaml"
   echo "  kubeconfig synced"
 else
   echo "  WARNING: kubeconfig not found at ${KUBECONFIG_LOCAL}"
@@ -98,13 +149,33 @@ ENVEOF
 "
 
 echo "==> config/env.local.sh (role + peer watchdog config, always rewritten)"
+# Optional AGENT_PLATFORM_API_URL → PLATFORM_API_URL on the Mini:
+# Point remediation runners at Mac Pro :8780 (or any platform-api that serves
+# /checklist/signals) when cluster NodePort lags behind. Preserves env.local
+# sourcing from env.sh — do not remove AGENT_ROLE / peer watchdog lines.
+_PLATFORM_API_LINE=""
+if [[ -n "${AGENT_PLATFORM_API_URL:-}" ]]; then
+  _PLATFORM_API_LINE="export PLATFORM_API_URL=${AGENT_PLATFORM_API_URL}"
+fi
 run_remote "cat > ${REMOTE_DIR}/config/env.local.sh << 'ENVEOF'
 # Managed by deploy_mac_mini.sh — role + mutual-watchdog peer config.
+# Optional PLATFORM_API_URL: checklist AI Check / report_checklist_signals need
+# a platform-api that exposes /api/v1/checklist/signals (often Mac Pro :8780).
 export AGENT_ROLE=${AGENT_ROLE}
 export PEER_AGENT_SSH=${PEER_SSH}
 export PEER_AGENT_URL=${PEER_URL}
+${_PLATFORM_API_LINE}
 ENVEOF
 echo '  wrote env.local.sh (role=${AGENT_ROLE} peer_ssh=${PEER_SSH} peer_url=${PEER_URL})'"
+unset _PLATFORM_API_LINE
+
+# Ensure env.sh sources env.local.sh (override PLATFORM_API_URL etc.)
+run_remote "
+  if [ -f ${REMOTE_DIR}/config/env.sh ] && ! grep -q 'env.local.sh' ${REMOTE_DIR}/config/env.sh; then
+    printf '\n[ -f \"\$HOME/bifrost-agent/config/env.local.sh\" ] && source \"\$HOME/bifrost-agent/config/env.local.sh\"\n' >> ${REMOTE_DIR}/config/env.sh
+    echo '  appended env.local.sh source to env.sh'
+  fi
+"
 
 if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
   echo "==> Syncing secrets + bridge config to remote .env"
@@ -119,7 +190,7 @@ if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
         echo "export ${line}" >> "${TMP_OUT}"
       fi
     done < "${TMP_ENV}"
-    scp -q "${TMP_OUT}" "${REMOTE}:${REMOTE_DIR}/config/.env"
+    run_scp -q "${TMP_OUT}" "${REMOTE}:${REMOTE_DIR}/config/.env"
     run_remote "chmod 600 ${REMOTE_DIR}/config/.env"
     echo "  remote .env updated"
     rm -f "${TMP_OUT}"
@@ -128,10 +199,10 @@ if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
 fi
 
 echo "==> Installing launchd + nightly_drift.sh"
-scp "${DEPLOY_DIR}/com.bifrost.remediation-runner.plist" "${REMOTE}:~/Library/LaunchAgents/"
-scp "${DEPLOY_DIR}/com.bifrost.nightly-drift.plist" "${REMOTE}:~/Library/LaunchAgents/"
-scp "${SCRIPT_DIR}/nightly_drift.sh" "${REMOTE}:${REMOTE_DIR}/nightly_drift.sh"
-ssh "${REMOTE}" "chmod +x ${REMOTE_DIR}/nightly_drift.sh"
+run_scp "${DEPLOY_DIR}/com.bifrost.remediation-runner.plist" "${REMOTE}:~/Library/LaunchAgents/"
+run_scp "${DEPLOY_DIR}/com.bifrost.nightly-drift.plist" "${REMOTE}:~/Library/LaunchAgents/"
+run_scp "${SCRIPT_DIR}/nightly_drift.sh" "${REMOTE}:${REMOTE_DIR}/nightly_drift.sh"
+run_remote "chmod +x ${REMOTE_DIR}/nightly_drift.sh"
 
 run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.remediation-runner 2>/dev/null || true"
 run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.remediation-runner.plist"
@@ -149,9 +220,9 @@ fi
 # Mutual watchdog — only install if peer config is provided.
 if [[ -n "${PEER_SSH}" && -n "${PEER_URL}" ]]; then
   echo "==> Installing peer watchdog (peer=${PEER_URL})"
-  scp "${SCRIPT_DIR}/peer_watchdog.sh" "${REMOTE}:${REMOTE_DIR}/peer_watchdog.sh"
-  ssh "${REMOTE}" "chmod +x ${REMOTE_DIR}/peer_watchdog.sh"
-  scp "${DEPLOY_DIR}/com.bifrost.peer-watchdog.plist" "${REMOTE}:~/Library/LaunchAgents/"
+  run_scp "${SCRIPT_DIR}/peer_watchdog.sh" "${REMOTE}:${REMOTE_DIR}/peer_watchdog.sh"
+  run_remote "chmod +x ${REMOTE_DIR}/peer_watchdog.sh"
+  run_scp "${DEPLOY_DIR}/com.bifrost.peer-watchdog.plist" "${REMOTE}:~/Library/LaunchAgents/"
   run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.peer-watchdog 2>/dev/null || true"
   run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.peer-watchdog.plist"
 else
@@ -161,7 +232,7 @@ fi
 echo "==> Syncing Bifrost MCP server (for Nous Hermes Agent)"
 MCP_SRC="${PLATFORM_LOCAL}/mcp/platform"
 run_remote "mkdir -p ${REMOTE_DIR}/mcp-platform"
-rsync -az --delete \
+rsync -az --delete -e "${RSYNC_SSH}" \
   --exclude='node_modules' \
   "${MCP_SRC}/" "${REMOTE}:${REMOTE_DIR}/mcp-platform/"
 run_remote "cd ${REMOTE_DIR}/mcp-platform && npm install --no-audit --no-fund"

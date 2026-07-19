@@ -11,8 +11,8 @@ import {
   isAllMatrices,
 } from '@/api/platform'
 import type { MatrixResponse } from '@/api/types'
+import { buildFleetSnapshot } from '@/lib/control-room/buildFleetSnapshot'
 import {
-  buildFleetSnapshot,
   normalizeViewerEnv,
   type FleetSnapshot,
   type FleetViewerEnv,
@@ -22,7 +22,7 @@ import { buildMissionSnapshot, type MissionSnapshot } from '@/lib/control-room/m
 const REFETCH = 20_000
 
 /**
- * EffectiveTradeBridgeURL seat awareness (Wave 5.3).
+ * Mac seat readiness for Engineer row (not a board column).
  * Prod/STG viewers cannot reach Mac 127.0.0.1 — only mark ready when bridge reports ok
  * AND viewer is on a Mac-adjacent seat (dev / dev-local).
  */

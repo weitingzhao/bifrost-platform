@@ -7,6 +7,8 @@ export const DEFECT_PATTERN_REMEDIATE_SCOPE = 'defect-pattern-remediate'
 export const STALE_PIPELINE_TRIAGE_SCOPE = 'stale-pipeline-triage'
 export const PLATFORM_SELF_HEALTH_RECOVER_SCOPE = 'platform-self-health-recover'
 export const REGISTRY_PULL_RECOVER_SCOPE = 'registry-pull-recover'
+/** AI Check on Daily Ops Checklist (prober) — not Operator Plane Fix / fleet cell Fix. */
+export const DAILY_OPS_CHECKLIST_RUN_SCOPE = 'daily-ops-checklist-run'
 
 /** Maps cluster triage playbookId → remediation scope for one-click Fix. */
 export const PLAYBOOK_ID_TO_SCOPE: Record<string, string> = {

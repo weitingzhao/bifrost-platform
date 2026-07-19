@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DenseTag } from '@bifrost/ui'
-import { Bot, Rocket, Satellite } from 'lucide-react'
+import { Bot, Loader2, Rocket, Satellite } from 'lucide-react'
 import {
   fetchPipelineRuns,
   fetchReleaseGate,
@@ -12,11 +12,19 @@ import { LaunchPad } from '@/components/control-room/LaunchPad'
 import { gateStepStatus, runStepStatus, pickDeployPipelineRun, deployRunRetryFailed } from '@/components/delivery/ReleaseStepCommandCenter'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { DailyOpsFleetBoard } from '@/components/task-mode/DailyOpsFleetBoard'
-import { DailyOpsVerdictBar } from '@/components/task-mode/DailyOpsVerdictBar'
+import { DailyOpsFleetCellDetail } from '@/components/task-mode/DailyOpsFleetCellDetail'
+import {
+  DailyOpsAgentLivePanel,
+  DailyOpsProcessStrip,
+} from '@/components/task-mode/DailyOpsProcessStrip'
+import { DailyOpsOperatorPlanPanel } from '@/components/task-mode/DailyOpsOperatorPlanPanel'
+import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
+import type { DailyOpsWorkflowResult } from '@/lib/control-room/dailyOpsWorkflow'
 import { TaskModeReadinessStrip } from '@/components/task-mode/TaskModeReadinessStrip'
 import { LaunchLiveView } from '@/components/task-mode/LaunchLiveView'
 import { MissionLaunchBoard } from '@/components/task-mode/MissionLaunchBoard'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
+import { useDailyOpsChecklistCoverage } from '@/hooks/useDailyOpsChecklistCoverage'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { operateQueueClearLabel, type FleetCell } from '@/lib/control-room/fleetSnapshot'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
@@ -66,6 +74,42 @@ export type OpsTaskStripsProps = {
   onFleetCellFix?: (cell: FleetCell) => void
   onFleetPrimaryCta?: () => void
   fleetAgentFixPending?: boolean
+  /** Pinned Discover → Remediate → Verify → Clear process strip */
+  fleetWorkflow?: DailyOpsWorkflowResult
+  fleetAgentFixError?: string | null
+  /** Single primary CTA path for Daily Ops Process strip (replaces dual Verdict+Workflow). */
+  onFleetWorkflowAction?: () => void
+  /**
+   * Operator Plane AI Fix (scope operator-plane-remediate) — Engineer CRITICAL.
+   * Do NOT conflate with Checklist AI Check (daily-ops-checklist-run).
+   */
+  onOperatorPlanFix?: () => void
+  operatorPlanFixPending?: boolean
+  operatorPlanFixDisabled?: boolean
+  operatorPlanFixTitle?: string
+  operatorPlanFixError?: string | null
+  /** Checklist AI Check — scope daily-ops-checklist-run (prober + dispatch gates). */
+  onChecklistCheck?: () => void
+  checklistCheckPending?: boolean
+  checklistCheckDisabled?: boolean
+  checklistCheckTitle?: string
+  checklistCheckError?: string | null
+  checklistCheckActive?: boolean
+  checklistCheckStatusHint?: string | null
+  /** Row Fix — Ops Agent for checklist item fixScope. */
+  onChecklistItemFix?: (args: {
+    itemId: string
+    fixScope: string
+    label: string
+    prompt: string
+  }) => void
+  checklistItemFixPending?: boolean
+  checklistItemFixDisabled?: boolean
+  checklistItemFixTitle?: string
+  checklistItemFixError?: string | null
+  checklistItemFixActiveId?: string | null
+  /** Wave 4.1 — open Operate Queue for checklist_dispatch Action rows. */
+  onOpenOperateQueue?: (queueId?: string) => void
   /** Recent PipelineRuns for the side history column. */
   recentRuns?: import('@/api/types').DeliveryPipelineRunView[]
   recentRunsLoading?: boolean
@@ -78,10 +122,12 @@ export type OpsTaskStripsProps = {
   launchAgentFixActive?: boolean
   launchAgentFixDisabled?: boolean
   launchAgentFixTitle?: string
-  onOpenAgentDesk?: () => void
+  onOpenAgentDesk?: (jobId?: string) => void
   /** Ambient agent job — opens Launch Live View for trade-deploy / release scope. */
   ambientJobId?: string | null
   ambientJobScope?: string | null
+  /** Checklist auto-dispatch / related remediation jobs for Action column. */
+  activeDispatchJobs?: import('@/api/types').RemediationJob[]
   /** Namespace for the mode's deliver pipeline runs (trade STG or platform). */
   pipelineRunsNamespace?: string
   /** Rocket Launch Live View post-deploy chips. */
@@ -592,33 +638,219 @@ function DailyOpsFleetDesk({
   compact?: boolean
 }) {
   const { fleet, isLoading } = useFleetSnapshot()
+  const checklistCoverage = useDailyOpsChecklistCoverage(fleet)
   const {
     onNavigate,
     readinessCanOperate,
     onFleetCellFix,
-    onFleetPrimaryCta,
     fleetAgentFixPending,
+    fleetWorkflow,
+    fleetAgentFixError,
+    onFleetWorkflowAction,
+    onOperatorPlanFix,
+    operatorPlanFixPending,
+    operatorPlanFixDisabled,
+    operatorPlanFixTitle,
+    operatorPlanFixError,
+    onChecklistCheck,
+    checklistCheckPending,
+    checklistCheckDisabled,
+    checklistCheckTitle,
+    checklistCheckError,
+    checklistCheckActive,
+    checklistCheckStatusHint,
+    onChecklistItemFix,
+    checklistItemFixPending,
+    checklistItemFixDisabled,
+    checklistItemFixTitle,
+    checklistItemFixError,
+    checklistItemFixActiveId,
+    onOpenOperateQueue,
+    onOpenAgentDesk,
+    ambientJobId,
+    ambientJobScope,
+    activeDispatchJobs,
   } = props
+  const [selectedCellKey, setSelectedCellKey] = useState<string | null>(null)
+  const [flashKeys, setFlashKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const [flashNonce, setFlashNonce] = useState(0)
+  const [activeFlashStepId, setActiveFlashStepId] = useState<string | null>(null)
+  const flashClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const selectedCell = useMemo(
+    () => fleet.cells.find(c => c.key === selectedCellKey) ?? null,
+    [fleet.cells, selectedCellKey],
+  )
+
+  const handleFlashChecklistStep = useCallback((stepId: string, coverageKeys: string[]) => {
+    if (flashClearTimerRef.current != null) {
+      clearTimeout(flashClearTimerRef.current)
+      flashClearTimerRef.current = null
+    }
+    setActiveFlashStepId(stepId)
+    setFlashKeys(new Set(coverageKeys))
+    setFlashNonce(n => n + 1)
+    // Scroll Fleet Board into view for long pages
+    requestAnimationFrame(() => {
+      document
+        .querySelector('[data-daily-ops-fleet-board]')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+    flashClearTimerRef.current = setTimeout(() => {
+      setFlashKeys(new Set())
+      setActiveFlashStepId(null)
+      flashClearTimerRef.current = null
+    }, 2000)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (flashClearTimerRef.current != null) clearTimeout(flashClearTimerRef.current)
+    }
+  }, [])
+
+  // Discover / Remediate: auto-select worst / target cell into Detail
+  useEffect(() => {
+    if (fleetWorkflow == null) return
+    if (fleetWorkflow.activePhase !== 'discover' && fleetWorkflow.activePhase !== 'remediate') {
+      return
+    }
+    const key = fleetWorkflow.targetCellKey
+    if (key != null && key !== selectedCellKey) {
+      setSelectedCellKey(key)
+    }
+  }, [fleetWorkflow?.activePhase, fleetWorkflow?.targetCellKey])
+
+  const stripError =
+    fleetWorkflow?.primaryAction.kind === 'operator-plan'
+      ? (operatorPlanFixError ?? fleetAgentFixError)
+      : fleetAgentFixError
+
+  const hasAmbientJob = ambientJobId != null && ambientJobId !== ''
+  const itemFixStarting = checklistItemFixPending || checklistItemFixActiveId != null
+  const showStartingHint =
+    !hasAmbientJob &&
+    (itemFixStarting ||
+      checklistCheckPending ||
+      (fleetAgentFixPending === true && fleetWorkflow?.activePhase === 'remediate'))
+  const engineerCell =
+    fleet.cells.find(c => c.role === 'engineer') ?? null
+  const isChecklistAmbient =
+    ambientJobScope === DAILY_OPS_CHECKLIST_RUN_SCOPE || checklistCheckActive === true
 
   return (
-    <div className={`flex flex-col gap-3 ${compact ? '' : ''}`}>
-      <DailyOpsVerdictBar
-        fleet={fleet}
-        isLoading={isLoading}
-        canOperate={readinessCanOperate}
-        agentFixPending={fleetAgentFixPending}
-        onPrimaryCta={() => onFleetPrimaryCta?.()}
-        onNavigate={onNavigate}
-      />
-      <DailyOpsFleetBoard
-        fleet={fleet}
-        isLoading={isLoading}
-        canOperate={readinessCanOperate}
-        agentFixPending={fleetAgentFixPending}
-        onAgentFix={onFleetCellFix}
-        onNavigate={onNavigate}
-      />
-      <div className={compact ? '' : 'grid gap-3 md:grid-cols-2'}>
+    <div className="flex min-w-0 max-w-full flex-col gap-3">
+      {/* Agent progress pinned above process strip while remediating */}
+      {hasAmbientJob && ambientJobId != null && (
+        <div className="sticky top-0 z-20 -mx-0.5 bg-[var(--card)]/95 px-0.5 py-0.5 backdrop-blur-sm">
+          <DailyOpsAgentLivePanel
+            jobId={ambientJobId}
+            jobScope={ambientJobScope}
+            onOpenAgentDesk={onOpenAgentDesk}
+          />
+        </div>
+      )}
+      {showStartingHint && (
+        <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-secondary px-3 py-2 text-[var(--text-dense-caption)] text-muted-foreground">
+          <Loader2 className="size-3 animate-spin" aria-hidden />
+          Starting Agent…
+        </div>
+      )}
+
+      {fleetWorkflow != null && (
+        <DailyOpsProcessStrip
+          fleet={fleet}
+          workflow={fleetWorkflow}
+          isLoading={isLoading}
+          canOperate={readinessCanOperate}
+          agentFixPending={fleetAgentFixPending}
+          agentFixError={stripError}
+          showReadyHint
+          ambientJobId={ambientJobId}
+          onPrimaryAction={() => {
+            if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
+              onOperatorPlanFix?.()
+              return
+            }
+            onFleetWorkflowAction?.()
+          }}
+          onOpenAgentDesk={onOpenAgentDesk}
+          onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
+          operatorPlanFixPending={operatorPlanFixPending}
+          operatorPlanFixDisabled={operatorPlanFixDisabled}
+          operatorPlanFixTitle={operatorPlanFixTitle}
+          checklistCheckPending={checklistCheckPending}
+          checklistCheckDisabled={checklistCheckDisabled}
+          checklistCheckTitle={checklistCheckTitle}
+          checklistCheckActive={checklistCheckActive || isChecklistAmbient}
+          checklistCheckStatusHint={checklistCheckStatusHint}
+        />
+      )}
+
+      {/* Checklist | Fleet Board — side-by-side from xl */}
+      <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] xl:items-start">
+        {!isLoading && (
+          <div className="min-w-0 rounded-lg border border-border bg-secondary px-3 py-2">
+            <DailyOpsOperatorPlanPanel
+              engineerCell={engineerCell}
+              fleet={fleet}
+              coverage={checklistCoverage}
+              activeFlashStepId={activeFlashStepId}
+              onFlashStep={handleFlashChecklistStep}
+              onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
+              activeDispatchJobs={activeDispatchJobs}
+              onChecklistCheck={onChecklistCheck}
+              checklistCheckPending={checklistCheckPending}
+              checklistCheckDisabled={checklistCheckDisabled}
+              checklistCheckTitle={checklistCheckTitle}
+              checklistCheckError={checklistCheckError}
+              checklistCheckActive={checklistCheckActive || isChecklistAmbient}
+              checklistCheckStatusHint={checklistCheckStatusHint}
+              onChecklistItemFix={onChecklistItemFix}
+              checklistItemFixPending={checklistItemFixPending}
+              checklistItemFixDisabled={checklistItemFixDisabled}
+              checklistItemFixTitle={checklistItemFixTitle}
+              checklistItemFixError={checklistItemFixError}
+              checklistItemFixActiveId={checklistItemFixActiveId}
+              ambientJobId={ambientJobId}
+              ambientJobScope={ambientJobScope}
+              onOpenDispatchJob={jobId => onOpenAgentDesk?.(jobId)}
+              onOpenOperateQueue={
+                onOpenOperateQueue ?? (() => onNavigate('control-room'))
+              }
+              compactColumns
+            />
+          </div>
+        )}
+        <div className="flex min-w-0 flex-col gap-3">
+          <DailyOpsFleetBoard
+            fleet={fleet}
+            isLoading={isLoading}
+            canOperate={readinessCanOperate}
+            agentFixPending={fleetAgentFixPending}
+            selectedCellKey={selectedCellKey}
+            coverage={checklistCoverage}
+            flashKeys={flashKeys}
+            flashNonce={flashNonce}
+            onAgentFix={onFleetCellFix}
+            onSelectCell={cell => setSelectedCellKey(cell?.key ?? null)}
+            onNavigate={onNavigate}
+          />
+          {selectedCell != null && (
+            <DailyOpsFleetCellDetail
+              cell={selectedCell}
+              canOperate={readinessCanOperate}
+              agentFixPending={fleetAgentFixPending}
+              coverage={checklistCoverage}
+              onAgentFix={onFleetCellFix}
+              onNavigate={onNavigate}
+              onClose={() => setSelectedCellKey(null)}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className={compact ? 'min-w-0' : 'grid min-w-0 gap-3 md:grid-cols-2'}>
         <OpsSection title="Operate summary" bodyPadding="compact">
           <OperateQueueSummary onNavigate={onNavigate} fleetClear={fleet.fleetClear} />
         </OpsSection>

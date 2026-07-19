@@ -13,41 +13,48 @@ const LEGACY_TASK_MODE_ALIASES: Record<string, TaskModeId> = {
   'satellite-deploy': 'mission-launch',
 }
 
+/** Aligned with Daily Ops workflow bar: Discover → Remediate → Verify → Clear. */
 const DAILY_OPS_PHASES: TaskModeDef['phases'] = [
   {
-    id: 'scan-signals',
+    id: 'discover',
     seq: 1,
-    title: 'Scan fleet board',
-    summary: 'Review Fleet Desk verdict + role×env cells (probePath) before acting. Reference playbook only.',
+    title: 'Discover',
+    summary:
+      'Review Fleet Desk verdict + role×env board (ground truth). Pin worst cell before remediating.',
     navigateTab: 'task-cc',
     actions: [{ label: 'Task Control Center', tabId: 'task-cc' }],
   },
   {
-    id: 'triage-defects',
+    id: 'remediate',
     seq: 2,
-    title: 'Triage defects',
-    summary: 'Classify open defects and link to runtime map or cluster drill-down.',
-    dependsOn: ['scan-signals'],
-    navigateTab: 'defects',
-    actions: [{ label: 'Open Defects', tabId: 'defects' }],
+    title: 'Remediate',
+    summary:
+      'Agent Fix on the worst fixable cell. Engineer CRITICAL → Operator Plane (Agent Fix disabled). D10 blocked.',
+    dependsOn: ['discover'],
+    navigateTab: 'task-cc',
+    actions: [
+      { label: 'Task Control Center', tabId: 'task-cc' },
+      { label: 'Operator Plane', tabId: 'operator-plane' },
+    ],
   },
   {
-    id: 'operate-queue',
+    id: 'verify',
     seq: 3,
-    title: 'Operate queue',
-    summary: 'Close post-completion and manual operate queue items.',
-    dependsOn: ['triage-defects'],
-    navigateTab: 'control-room',
-    actions: [{ label: 'Control Room queue strip', tabId: 'control-room' }],
+    title: 'Verify',
+    summary: 'Re-probe fleet after Agent Fix — confirm scored cells return to GO.',
+    dependsOn: ['remediate'],
+    navigateTab: 'task-cc',
+    actions: [{ label: 'Task Control Center', tabId: 'task-cc' }],
   },
   {
-    id: 'verify-mission',
+    id: 'clear',
     seq: 4,
-    title: 'Verify mission snapshot',
-    summary: 'Confirm matrix + cluster probes nominal after any actuation.',
-    dependsOn: ['operate-queue'],
-    navigateTab: 'runtime-map',
-    actions: [{ label: 'Runtime Map', tabId: 'runtime-map' }],
+    title: 'Clear',
+    summary:
+      'Fleet clear + operate queue clear. Queue Clear ≠ fleet clear when fleetClear=false.',
+    dependsOn: ['verify'],
+    navigateTab: 'control-room',
+    actions: [{ label: 'Control Room queue', tabId: 'control-room' }],
   },
 ]
 
@@ -360,7 +367,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
     id: 'daily-ops',
     label: 'Daily Ops',
     description:
-      'Ops loop — Fleet Desk (viewer seat · GO|HOLD|NO-GO · role×env board), triage defects, close operate queue without equating queue Clear to fleet clear.',
+      'Ops loop — Process strip Discover → Remediate → Verify → Clear. Fleet Desk is health ground truth; single primary CTA; Agent Fix binds to Remediate; queue Clear ≠ fleet clear.',
     loopArchetype: 'ops',
     landingTab: 'task-cc',
     phases: DAILY_OPS_PHASES,

@@ -15,8 +15,8 @@ import {
   DELIVER_STG_RECOVER_SCOPE,
 } from '../src/lib/agent/agentScopes'
 import { PROD_ENV_FIX_SCOPE } from '../src/lib/agent/prodEnvironmentFixPrompt'
+import { buildFleetSnapshot } from '../src/lib/control-room/buildFleetSnapshot'
 import {
-  buildFleetSnapshot,
   getCell,
   normalizeViewerEnv,
   operateQueueClearLabel,
@@ -140,7 +140,12 @@ check('STG satellite from smoke when matrix missing', () => {
   const stgSat = getCell(snap, 'satellite', 'stg')
   assert.ok(stgSat)
   assert.equal(stgSat.signal, 'ok')
-  assert.match(stgSat.probePath, /stg/)
+  assert.ok(stgSat.standards.length > 0)
+  assert.ok(
+    stgSat.standards.some(
+      s => s.id === 'stg-smoke' || s.group === 'api' || s.group === 'release' || /fe|gw/i.test(s.label),
+    ),
+  )
 })
 
 check('STG unavailable when matrix and smoke missing', () => {
@@ -181,16 +186,61 @@ check('viewer=prod rocket DEV unavailable without dev probes', () => {
   assert.equal(rocketDev.signal, 'unavailable')
 })
 
-check('dev-local satellite unavailable without ground bridge', () => {
+check('board columns are DEV/STG/PROD only — no Mac column', () => {
   const snap = buildFleetSnapshot({
     viewerEnv: 'prod',
     matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
     self: selfHealth(['prod', 'stg'], 'ok', 'prod'),
     groundBridgeReady: false,
   })
-  const sat = getCell(snap, 'satellite', 'dev-local')
-  assert.ok(sat)
-  assert.equal(sat.signal, 'unavailable')
+  assert.deepEqual(snap.columns, ['dev', 'stg', 'prod'])
+  assert.equal(getCell(snap, 'satellite', 'dev-local' as never), undefined)
+  assert.equal(getCell(snap, 'rocket', 'dev-local' as never), undefined)
+})
+
+check('Engineer folds Mac seat; local bridge fail degrades Engineer', () => {
+  const snap = buildFleetSnapshot({
+    viewerEnv: 'dev',
+    matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
+    self: selfHealth(['dev', 'stg', 'prod']),
+    stg: stgSmokeOk,
+    supply: supplyOk,
+    cluster: clusterOk,
+    groundBridgeReady: false,
+    runner: { status: 'ok' },
+    bridge: {
+      generated_at: 't',
+      remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
+      git_bridge: { status: 'ok', dirty_repos: 0 },
+      satellite_probe_bridge: { status: 'fail', error: 'not_configured' },
+      hermes_mcp: { status: 'ok' },
+      nous_hermes: {
+        status: 'ok',
+        gateway_running: true,
+        active_agents: 0,
+        active_sessions: 0,
+        mcp_tool_count: 0,
+      },
+      platform_mcp: {
+        server_name: 'p',
+        server_version: '1',
+        tool_count: 0,
+        implemented_count: 0,
+        agent_tool_count: 0,
+        transport: 'stdio',
+        script_path: '',
+      },
+      nightly_report: { available: false },
+    },
+  })
+  const eng = getCell(snap, 'engineer', 'span')
+  assert.ok(eng)
+  assert.equal(eng.signal, 'fail')
+  assert.match(eng.detail, /Mac seat/)
+  // Ground no longer owns Mac bridge
+  const ground = getCell(snap, 'ground', 'span')
+  assert.ok(ground)
+  assert.equal(ground.signal, 'ok')
 })
 
 check('Engineer CRITICAL → Operator Plane CTA', () => {
@@ -204,10 +254,20 @@ check('Engineer CRITICAL → Operator Plane CTA', () => {
       value: 'down',
       detail: 'Runners down',
       probePath: 'bridge',
+      standards: [
+        {
+          id: 'runners',
+          label: 'Agent runners (HA)',
+          signal: 'fail',
+          reason: 'Runners down',
+          group: 'automation',
+        },
+      ],
       fixScope: null,
       agentFixEnabled: false,
       agentFixDisabledReason: 'Engineer CRITICAL',
       escalateTabId: 'operator-plane',
+      countsTowardVerdict: true,
     },
   ]
   const v = resolveFleetVerdict(cells)
@@ -222,7 +282,7 @@ check('operateQueueClearLabel demotes Clear', () => {
   assert.equal(operateQueueClearLabel(2, false), '2 open')
 })
 
-check('all green + Mac unavailable → GO + fleetClear', () => {
+check('all green + Mac seat ok → GO + fleetClear', () => {
   const snap = buildFleetSnapshot({
     viewerEnv: 'dev',
     matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
@@ -230,8 +290,7 @@ check('all green + Mac unavailable → GO + fleetClear', () => {
     stg: stgSmokeOk,
     supply: supplyOk,
     cluster: clusterOk,
-    // Mac thin-client seat unavailable; Ground bridge seat itself can still be ok
-    groundBridgeReady: false,
+    groundBridgeReady: true,
     runner: { status: 'ok' },
     bridge: {
       generated_at: 't',
@@ -258,19 +317,17 @@ check('all green + Mac unavailable → GO + fleetClear', () => {
       nightly_report: { available: false },
     },
   })
-  const macSat = getCell(snap, 'satellite', 'dev-local')
-  const macRocket = getCell(snap, 'rocket', 'dev-local')
-  assert.ok(macSat)
-  assert.equal(macSat.signal, 'unavailable')
-  assert.ok(macRocket)
-  assert.equal(macRocket.signal, 'unavailable')
-  assert.equal(macSat.countsTowardVerdict, false)
+  assert.deepEqual(snap.columns, ['dev', 'stg', 'prod'])
+  const eng = getCell(snap, 'engineer', 'span')
+  assert.ok(eng)
+  assert.equal(eng.signal, 'ok')
+  assert.match(eng.detail, /Mac seat/)
   assert.equal(snap.verdict.kind, 'GO')
   assert.equal(snap.fleetClear, true)
   assert.equal(snap.fleetNominal, true)
 })
 
-check('PROD viewer all green + Rocket DEV structural unavailable → GO', () => {
+check('PROD viewer all green + Rocket DEV structural unavailable → GO (Mac info-only)', () => {
   const snap = buildFleetSnapshot({
     viewerEnv: 'prod',
     matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
@@ -309,14 +366,16 @@ check('PROD viewer all green + Rocket DEV structural unavailable → GO', () => 
   assert.ok(rocketDev)
   assert.equal(rocketDev.signal, 'unavailable')
   assert.equal(rocketDev.countsTowardVerdict, false)
-  // Structural Mac / DEV pull unavailable must not HOLD the prod seat
-  assert.equal(getCell(snap, 'rocket', 'dev-local')?.signal, 'unavailable')
-  assert.equal(getCell(snap, 'satellite', 'dev-local')?.signal, 'unavailable')
+  // Remote Mac fail must not NO-GO Engineer / fleet
+  const eng = getCell(snap, 'engineer', 'span')
+  assert.ok(eng)
+  assert.equal(eng.signal, 'ok')
+  assert.match(eng.detail, /Mac seat/)
   assert.equal(snap.verdict.kind, 'GO')
   assert.equal(snap.fleetClear, true)
 })
 
-check('fail → NO-GO; degraded → HOLD', () => {
+check('fail → NO-GO; degraded → NO-GO (not green)', () => {
   const failSnap = buildFleetSnapshot({
     viewerEnv: 'dev',
     matrices: [matrix('dev', false), matrix('stg'), matrix('prod')],
@@ -337,12 +396,21 @@ check('fail → NO-GO; degraded → HOLD', () => {
       value: '1/2',
       detail: 'partial',
       probePath: 'matrix',
+      standards: [
+        {
+          id: 'svc',
+          label: 'service',
+          signal: 'degraded',
+          reason: 'partial',
+          group: 'api',
+        },
+      ],
       fixScope: PROD_ENV_FIX_SCOPE,
       agentFixEnabled: true,
       countsTowardVerdict: true,
     },
   ]
-  assert.equal(resolveFleetVerdict(degCells).kind, 'HOLD')
+  assert.equal(resolveFleetVerdict(degCells).kind, 'NO-GO')
 })
 
 check('fleetCellFix engineer blocked; satellite scopes do not cross', () => {

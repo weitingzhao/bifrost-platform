@@ -41,13 +41,6 @@ const ROUTE_TABLE: FleetFixRoute[] = [
     agentFixAllowed: true,
   },
   {
-    role: 'rocket',
-    env: 'dev-local',
-    fixScope: null,
-    agentFixAllowed: false,
-    disabledReason: 'No Rocket seat on Mac thin-client',
-  },
-  {
     role: 'satellite',
     env: 'dev',
     fixScope: PROD_ENV_FIX_SCOPE,
@@ -66,20 +59,12 @@ const ROUTE_TABLE: FleetFixRoute[] = [
     agentFixAllowed: true,
   },
   {
-    role: 'satellite',
-    env: 'dev-local',
-    fixScope: null,
-    agentFixAllowed: false,
-    navigateTabId: 'operator-plane',
-    disabledReason: 'Requires Ground bridge — not Agent Fix',
-  },
-  {
     role: 'engineer',
     env: 'span',
     fixScope: null,
     agentFixAllowed: false,
     navigateTabId: 'operator-plane',
-    disabledReason: 'Engineer CRITICAL → Operator Plane / Ground',
+    disabledReason: 'Engineer CRITICAL / Mac seat → Operator Plane (Agent Fix disabled)',
   },
   {
     role: 'ground',

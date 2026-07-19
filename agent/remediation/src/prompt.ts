@@ -1,8 +1,11 @@
 import type { StartRunRequest } from './types.js'
 import {
+  buildDailyOpsChecklistRunPrompt,
+  buildDataLayerRecoverRunnerPrompt,
   buildDefectPatternRemediateRunnerPrompt,
   buildDeliverStgRecoverRunnerPrompt,
   buildGitopsConfigRepairRunnerPrompt,
+  buildMassiveFeedRecoverRunnerPrompt,
   buildPlatformSelfHealthRecoverRunnerPrompt,
   buildRegistryPullRecoverRunnerPrompt,
   buildStalePipelineTriageRunnerPrompt,
@@ -27,7 +30,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -109,15 +112,29 @@ function buildOperatorPlaneRemediatePrompt(req: StartRunRequest): string {
     '## Task',
     body !== '' ? body : 'Diagnose and fix Operator Plane bridge/deploy errors.',
     '',
-    '## Safety',
-    '- Do NOT schedule Git Bridge or remediation runner into K8s — L-1 fate isolation is mandatory.',
+    '## Runners HA playbook',
+    '1. get_agent_bridge + get_remediation_health — confirm primary/standby runner roles and heartbeats.',
+    '2. peer_agent_health — if peer :8781 is down, wait for launchd peer_watchdog (~60s) before acting.',
+    '3. If peer still down: restart_peer_agent (SSH kickstart). Re-check get_agent_bridge.',
+    '4. If both runners down: request_operator_manual_steps on both Mac Minis (launchd bifrost remediation-runner).',
+    '',
+    '## Git Bridge / deploy playbook',
     '- Use request_operator_manual_steps for Mac Pro host actions (launchd, .env edits, make start, git-bridge daemon).',
     '- Use git_* tools only after Git Bridge is reachable from this runner.',
-    '- Do not run Platform Release unless operator explicitly asks.',
     '',
-    'Begin with diagnosis, then manual steps for host fixes, then verify git_workspace_status and report.',
+    '## Safety',
+    '- Do NOT schedule Git Bridge or remediation runner into K8s — L-1 fate isolation is mandatory.',
+    '- Do not run Platform Release unless operator explicitly asks.',
+    '- D10: do not enable live trading / scale daemon for execution.',
+    '',
+    'Begin with diagnosis, then HA/manual steps, then verify get_agent_bridge + git_workspace_status and report.',
   ]
   return lines.join('\n')
+}
+
+function promptMentions(req: StartRunRequest, ...needles: string[]): boolean {
+  const hay = `${req.scope ?? ''} ${req.prompt ?? ''}`.toLowerCase()
+  return needles.some(n => hay.includes(n.toLowerCase()))
 }
 
 function buildReleasePrompt(req: StartRunRequest): string {
@@ -378,6 +395,15 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
   if (req.scope === 'satellite-bus-ingest-triage') {
     return buildAgentDeskPrompt(req)
+  }
+  if (req.scope === 'daily-ops-checklist-run') {
+    return buildDailyOpsChecklistRunPrompt(req)
+  }
+  if (req.scope === 'massive-feed-recover' || promptMentions(req, 'Playbook: massive-feed-recover')) {
+    return buildMassiveFeedRecoverRunnerPrompt(req)
+  }
+  if (req.scope === 'data-layer-recover' || promptMentions(req, 'Playbook: data-layer-recover')) {
+    return buildDataLayerRecoverRunnerPrompt(req)
   }
 
   const issueList = Array.isArray(req.issues) ? req.issues : []

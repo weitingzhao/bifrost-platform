@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -46,7 +47,7 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		Prompt:           req.Prompt,
 	}
 
-	job, err := h.runner.Start(r.Context(), runReq)
+	job, err := h.StartInternal(r.Context(), runReq)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{
 			"error":   "remediation runner unavailable",
@@ -56,13 +57,23 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job.Actor = principal.Name
-	job.Scope = req.Scope
-	h.store.Put(*job)
-
 	h.audit.Record(r, "remediation.start", job.ID, "started", req.Scope)
 
 	writeJSON(w, http.StatusAccepted, job)
+}
+
+// StartInternal starts a runner job and archives it (used by HTTP + checklist dispatch).
+func (h *Handler) StartInternal(ctx context.Context, runReq StartRunnerRequest) (*Job, error) {
+	job, err := h.runner.Start(ctx, runReq)
+	if err != nil {
+		return nil, err
+	}
+	if runReq.Actor != "" {
+		job.Actor = runReq.Actor
+	}
+	job.Scope = runReq.Scope
+	h.store.Put(*job)
+	return job, nil
 }
 
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {

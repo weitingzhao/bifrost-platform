@@ -152,3 +152,11 @@ tasks:
     default_level: L0
     domain: Operator
     action: "Remediate"
+
+  - id: daily-ops-checklist-run
+    scope: "daily-ops-checklist-run"
+    label: "Health · Checklist Run"
+    tier: automated
+    default_level: L0
+    domain: Health
+    action: "Check"

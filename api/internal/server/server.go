@@ -18,6 +18,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/briefing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
+	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
@@ -66,6 +67,7 @@ type Server struct {
 	tradeagent      *tradeagent.Handler
 	devagent        *devagent.Handler
 	operatequeue    *operatequeue.Handler
+	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
 	remediation     *remediation.Handler
 	agentreport     *agentreport.Handler
@@ -112,6 +114,9 @@ func New(cfg *config.Config) (*Server, error) {
 	operatequeueH.BindRemediationJobs(remediationH.Store())
 	operatequeueH.BindLifecycleObserver(devagentH)
 	devagentH.BindOperateQueue(operatequeueH)
+	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
+	checklistH.BindRemediation(remediationH)
+	checklistH.BindOperateQueue(operatequeueH)
 	sessionsH := sessions.NewHandler(cfg.ConfigDir(), audit)
 	devagentH.BindSessions(sessionsH.Store())
 	visionH := vision.NewHandler(cfg, audit)
@@ -132,6 +137,7 @@ func New(cfg *config.Config) (*Server, error) {
 		tradeagent:      tradeagent.NewHandler(),
 		devagent:        devagentH,
 		operatequeue:    operatequeueH,
+		checklist:       checklistH,
 		opsagent:        opsagent.NewHandler(audit),
 		remediation:     remediationH,
 		agentreport:     agentreport.NewHandler(),
@@ -262,6 +268,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/operate/queue", s.operatequeue.HandleGetQueue)
+		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
+		r.Get("/checklist/kpis", s.checklist.HandleGetKPIs)
 		r.Get("/lanes", s.lanes.HandleList)
 		r.Get("/lanes/{id}", s.lanes.HandleGet)
 		r.Get("/sessions", s.sessions.HandleList)
@@ -273,6 +281,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/operate/queue", s.operatequeue.HandleEnqueue)
 			r.Post("/operate/queue/{id}/execution", s.operatequeue.HandleRecordExecution)
 			r.Post("/operate/queue/{id}/close", s.operatequeue.HandleClose)
+			r.Post("/checklist/signals", s.checklist.HandlePostSignals)
 			r.Post("/lanes", s.lanes.HandleCreate)
 			r.Patch("/lanes/{id}", s.lanes.HandleUpdate)
 			r.Post("/sessions", s.sessions.HandleCreate)

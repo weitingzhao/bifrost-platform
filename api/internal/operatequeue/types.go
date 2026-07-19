@@ -8,8 +8,9 @@ const (
 )
 
 const (
-	SourcePostCompletion = "post_completion"
-	SourceManual         = "manual"
+	SourcePostCompletion     = "post_completion"
+	SourceManual             = "manual"
+	SourceChecklistDispatch  = "checklist_dispatch"
 )
 
 const (

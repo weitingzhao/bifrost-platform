@@ -66,18 +66,18 @@ function dailyOpsFixActions(
   const actions: TaskPhaseFixAction[] = [
     { label: 'Open Control Room', tabId: 'control-room', kind: 'navigate' },
   ]
-  if (phaseId === 'scan-signals' || phaseId === 'verify-mission') {
-    // Align with Fleet Primary / pickFleetFixCell — hide Agent Fix when no fixable cell
-    if (fleetAgentFixAvailable) {
+  if (phaseId === 'discover' || phaseId === 'remediate' || phaseId === 'verify') {
+    // Align with workflow Remediate / pickFleetFixCell — hide Agent Fix when no fixable cell
+    if (fleetAgentFixAvailable && phaseId === 'remediate') {
       actions.push({ label: 'Agent Fix', kind: 'agent-fix' })
+    }
+    if (phaseId === 'remediate') {
+      actions.push({ label: 'Operator Plane', tabId: 'operator-plane', kind: 'navigate' })
     }
     actions.push({ label: 'Runtime Map', tabId: 'runtime-map', kind: 'navigate' })
     actions.push({ label: 'Cluster', tabId: 'cluster', kind: 'navigate' })
   }
-  if (phaseId === 'triage-defects') {
-    actions.push({ label: 'Open Defects', tabId: 'defects', kind: 'navigate' })
-  }
-  if (phaseId === 'operate-queue') {
+  if (phaseId === 'clear') {
     actions.push({ label: 'Control Room queue', tabId: 'control-room', kind: 'navigate' })
   }
   if (rootCauses.some(c => c.toLowerCase().includes('trade prod'))) {
@@ -107,26 +107,26 @@ export function explainTaskPhase(
         : 'Mission snapshot probing.'
 
     switch (phase.id) {
-      case 'scan-signals': {
+      case 'discover': {
         if (status === 'blocked') {
           return {
-            reason: `Scan blocked: fleet / mission not clear. ${missionLine}`,
+            reason: `Discover blocked: fleet / mission not clear. ${missionLine}`,
             rootCauses,
             fixActions: dailyOpsFixActions(phase.id, rootCauses, fleetFix),
           }
         }
         if (status === 'active') {
           return {
-            reason: `Mission not NOMINAL yet. ${missionLine}`,
+            reason: `Fleet not clear — review board before remediating. ${missionLine}`,
             rootCauses,
             fixActions: dailyOpsFixActions(phase.id, rootCauses, fleetFix),
           }
         }
         break
       }
-      case 'triage-defects':
-      case 'operate-queue':
-      case 'verify-mission': {
+      case 'remediate':
+      case 'verify':
+      case 'clear': {
         if (status === 'blocked' && depReason != null) {
           return {
             reason: depReason,
@@ -134,26 +134,28 @@ export function explainTaskPhase(
             fixActions: dailyOpsFixActions(phase.id, [], fleetFix),
           }
         }
-        if (phase.id === 'operate-queue' && status === 'active') {
-          const open = input.operateQueueOpenCount ?? 0
+        if (phase.id === 'remediate' && status === 'active') {
           return {
-            reason: `${open} open operate-queue item${open === 1 ? '' : 's'} need triage or closure in Control Room.`,
-            rootCauses: [`Operate queue: ${open} open`],
-            fixActions: dailyOpsFixActions(phase.id, [], fleetFix),
-          }
-        }
-        if (phase.id === 'triage-defects' && status === 'active') {
-          return {
-            reason: 'Triage open defects before closing the operate queue (see Fleet Desk for seat signals).',
+            reason: fleetFix
+              ? `Agent Fix ready on worst fixable cell. ${missionLine}`
+              : `Remediate via Operator Plane when Engineer CRITICAL; otherwise pick a fixable cell. ${missionLine}`,
             rootCauses: rootCauses.slice(0, 3),
             fixActions: dailyOpsFixActions(phase.id, rootCauses, fleetFix),
           }
         }
-        if (phase.id === 'verify-mission' && status === 'planned') {
+        if (phase.id === 'verify' && (status === 'planned' || status === 'active')) {
           return {
-            reason: 'Complete prior steps, then re-probe mission snapshot.',
+            reason: 'Re-probe fleet after Agent Fix — confirm scored cells return to GO.',
             rootCauses: snap?.missionOverall === 'ok' ? [] : rootCauses.slice(0, 3),
             fixActions: dailyOpsFixActions(phase.id, rootCauses, fleetFix),
+          }
+        }
+        if (phase.id === 'clear' && status === 'active') {
+          const open = input.operateQueueOpenCount ?? 0
+          return {
+            reason: `${open} open operate-queue item${open === 1 ? '' : 's'} — Clear = fleet clear + queue empty.`,
+            rootCauses: [`Operate queue: ${open} open`],
+            fixActions: dailyOpsFixActions(phase.id, [], fleetFix),
           }
         }
         break

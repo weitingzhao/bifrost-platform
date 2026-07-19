@@ -6321,3 +6321,33 @@ button.infra-stack-chip:hover {
   color: var(--task-mode-accent, #f59e0b);
 }
 
+/* Daily Ops: Checklist section → Fleet Board chip flash */
+@keyframes checklist-fleet-chip-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);
+    outline-color: color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+  25%,
+  75% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 70%, transparent);
+    outline-color: color-mix(in srgb, var(--primary) 80%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
+    outline-color: var(--primary);
+  }
+}
+
+.checklist-fleet-chip-flash {
+  outline: 1px solid transparent;
+  outline-offset: 1px;
+  animation: checklist-fleet-chip-flash 0.55s ease-in-out 3;
+  z-index: 1;
+}
+
+.checklist-fleet-cell-flash {
+  animation: checklist-fleet-chip-flash 0.55s ease-in-out 3;
+}
+
+

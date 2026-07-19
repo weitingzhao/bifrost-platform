@@ -1,7 +1,11 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ChevronRight } from 'lucide-react'
 import {
   Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -168,29 +172,31 @@ export function AgentMcpPanel({
 
       {bridge != null && (
         <div className="flex flex-wrap gap-2">
-          {bridge.runners != null && bridge.runners.length > 0 ? (
-            bridge.runners.map(r => (
-              <DenseTag key={r.url} variant={bridgeStatusVariant(r.status)}>
-                Runner {r.role ?? ''} {r.status}
-                {r.active ? ' · active' : ''}
-              </DenseTag>
-            ))
-          ) : (
-            <DenseTag variant={bridgeStatusVariant(bridge.remediation_runner.status)}>
-              Runner {bridge.remediation_runner.status}
-            </DenseTag>
-          )}
           <DenseTag variant={bridgeStatusVariant(bridge.git_bridge.status)}>
             Git Bridge {bridge.git_bridge.status}
-            {bridge.git_bridge.status === 'ok' && bridge.git_bridge.dirty_repos != null && bridge.git_bridge.dirty_repos > 0
+            {bridge.git_bridge.status === 'ok' &&
+            bridge.git_bridge.dirty_repos != null &&
+            bridge.git_bridge.dirty_repos > 0
               ? ` · ${bridge.git_bridge.dirty_repos} dirty`
               : ''}
           </DenseTag>
           <DenseTag variant={bridgeStatusVariant(bridge.satellite_probe_bridge?.status ?? 'not_configured')}>
             Probe Bridge {bridge.satellite_probe_bridge?.status ?? 'not_configured'}
           </DenseTag>
-          <DenseTag variant={bridgeStatusVariant(bridge.hermes_mcp.status)}>
+          <DenseTag
+            variant={
+              bridge.hermes_mcp.status === 'unavailable' ||
+              bridge.hermes_mcp.status === 'not_configured'
+                ? 'neutral'
+                : bridgeStatusVariant(bridge.hermes_mcp.status)
+            }
+            title="Optional — does not block Agent Desk or sign-off"
+          >
             Hermes MCP {bridge.hermes_mcp.status}
+            {bridge.hermes_mcp.status === 'unavailable' ||
+            bridge.hermes_mcp.status === 'not_configured'
+              ? ' · optional'
+              : ''}
           </DenseTag>
           <DenseTag variant="success">
             {bridge.platform_mcp.server_name} · {bridge.platform_mcp.implemented_count} tools
@@ -232,26 +238,24 @@ export function AgentMcpPanel({
         </p>
       )}
 
-      {bridge != null && bridge.hermes_mcp.status === 'not_configured' && bridge.hermes_mcp.note != null && (
-        <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          Hermes MCP is optional — not required for Agent Desk or nightly drift sign-off.{' '}
-          {bridge.hermes_mcp.note}
-        </p>
-      )}
-
-      {bridge != null && bridge.hermes_mcp.status === 'unavailable' && (
-        <OpsFeedback variant="warning" title="Hermes MCP optional — currently unreachable">
-          <code className="font-mono-tabular">HERMES_MCP_URL</code> is set but the endpoint did not
-          respond. This does <strong>not</strong> block sign-off: Console uses platform MCP (stdio) +
-          remediation runner. Remove the env var or fix Hermes on the agent host to clear this badge.
-          {bridge.hermes_mcp.url != null && (
-            <span className="mt-1 block font-mono-tabular text-[var(--text-dense-caption)]">
-              {bridge.hermes_mcp.url}
-              {bridge.hermes_mcp.error != null && ` — ${bridge.hermes_mcp.error}`}
-            </span>
-          )}
-        </OpsFeedback>
-      )}
+      {bridge != null &&
+        (bridge.hermes_mcp.status === 'not_configured' ||
+          bridge.hermes_mcp.status === 'unavailable') && (
+          <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            Hermes MCP is optional and does not block Agent Desk or sign-off
+            {bridge.hermes_mcp.status === 'unavailable' && bridge.hermes_mcp.url != null && (
+              <>
+                {' '}
+                · <code className="font-mono-tabular">{bridge.hermes_mcp.url}</code>
+                {bridge.hermes_mcp.error != null && ` — ${bridge.hermes_mcp.error}`}
+              </>
+            )}
+            {bridge.hermes_mcp.status === 'not_configured' && bridge.hermes_mcp.note != null && (
+              <> · {bridge.hermes_mcp.note}</>
+            )}
+            .
+          </p>
+        )}
 
       {nightlyMsg != null && (
         <OpsFeedback
@@ -284,60 +288,80 @@ export function AgentMcpPanel({
         </OpsFeedback>
       )}
 
-      <CatalogSection title={`Agent MCP tools (${agentTools.filter(t => t.implemented).length} implemented)`}>
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Tool</DenseTableHead>
-              <DenseTableHead>Level</DenseTableHead>
-              <DenseTableHead>API</DenseTableHead>
-              <DenseTableHead>Status</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {toolsQuery.isLoading ? (
-              <DenseTableRow>
-                <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
-                  Loading catalog…
-                </DenseTableCell>
-              </DenseTableRow>
-            ) : agentTools.length === 0 ? (
-              <DenseTableRow>
-                <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
-                  No Agent-phase tools in catalog
-                </DenseTableCell>
-              </DenseTableRow>
-            ) : (
-              agentTools.map(tool => (
-                <DenseTableRow key={tool.name}>
-                  <DenseTableCell>
-                    <div className="font-mono-tabular font-medium">{tool.name}</div>
-                    <div className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                      {tool.description}
-                    </div>
-                  </DenseTableCell>
-                  <DenseTableCell>
-                    <DenseTag variant={levelTagVariant(tool.level)}>{tool.level}</DenseTag>
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
-                    {tool.method != null && tool.method !== '' ? `${tool.method} ${tool.route ?? ''}` : '—'}
-                  </DenseTableCell>
-                  <DenseTableCell>
-                    <DenseTag variant={tool.implemented ? 'success' : 'neutral'}>
-                      {tool.implemented ? 'implemented' : 'planned'}
-                    </DenseTag>
-                  </DenseTableCell>
-                </DenseTableRow>
-              ))
-            )}
-          </DenseTableBody>
-        </DenseDataTable>
-      </CatalogSection>
-
-      <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-        In Cursor Agent chat, try <code className="font-mono-tabular">get_agent_bridge</code> or{' '}
-        <code className="font-mono-tabular">get_remediation_health</code> after pasting the MCP config.
-      </p>
+      <Collapsible defaultOpen={false} className="group/tools">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-2 py-1.5 text-left text-[var(--text-dense-meta)] hover:bg-[var(--secondary)]/70"
+          >
+            <ChevronRight className="size-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform group-data-[state=open]/tools:rotate-90" />
+            <span className="font-semibold">
+              Agent MCP tools ({agentTools.filter(t => t.implemented).length} implemented)
+            </span>
+            <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              Reference — expand to browse catalog
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <CatalogSection title="Tool catalog">
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Tool</DenseTableHead>
+                  <DenseTableHead>Level</DenseTableHead>
+                  <DenseTableHead>API</DenseTableHead>
+                  <DenseTableHead>Status</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {toolsQuery.isLoading ? (
+                  <DenseTableRow>
+                    <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
+                      Loading catalog…
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ) : agentTools.length === 0 ? (
+                  <DenseTableRow>
+                    <DenseTableCell colSpan={4} className="text-[var(--muted-foreground)]">
+                      No Agent-phase tools in catalog
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ) : (
+                  agentTools.map(tool => (
+                    <DenseTableRow key={tool.name}>
+                      <DenseTableCell>
+                        <div className="font-mono-tabular font-medium">{tool.name}</div>
+                        <div className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                          {tool.description}
+                        </div>
+                      </DenseTableCell>
+                      <DenseTableCell>
+                        <DenseTag variant={levelTagVariant(tool.level)}>{tool.level}</DenseTag>
+                      </DenseTableCell>
+                      <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
+                        {tool.method != null && tool.method !== ''
+                          ? `${tool.method} ${tool.route ?? ''}`
+                          : '—'}
+                      </DenseTableCell>
+                      <DenseTableCell>
+                        <DenseTag variant={tool.implemented ? 'success' : 'neutral'}>
+                          {tool.implemented ? 'implemented' : 'planned'}
+                        </DenseTag>
+                      </DenseTableCell>
+                    </DenseTableRow>
+                  ))
+                )}
+              </DenseTableBody>
+            </DenseDataTable>
+          </CatalogSection>
+          <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            In Cursor Agent chat, try <code className="font-mono-tabular">get_agent_bridge</code> or{' '}
+            <code className="font-mono-tabular">get_remediation_health</code> after pasting the MCP
+            config.
+          </p>
+        </CollapsibleContent>
+      </Collapsible>
     </section>
   )
 }

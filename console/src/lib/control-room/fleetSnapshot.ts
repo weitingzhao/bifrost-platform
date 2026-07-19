@@ -1,6 +1,7 @@
 /**
  * Daily Ops Fleet Desk — role × environment board + GO|HOLD|NO-GO verdict.
- * Pure functions; UI and hooks consume buildFleetSnapshot().
+ * Pure probe-lattice builders; UI and scripts should call
+ * `buildFleetSnapshot` from `./buildFleetSnapshot` (core + Checklist union).
  */
 import type {
   AgentBridgeResponse,
@@ -16,6 +17,7 @@ import {
   PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
 } from '@/lib/agent/agentScopes'
 import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
+import { tradeReadinessTargets } from '@/lib/control-room/matrixSummary'
 import {
   agentSignal,
   controlSignal,
@@ -28,11 +30,106 @@ import {
 } from '@/lib/control-room/missionSignals'
 
 export type FleetRole = 'rocket' | 'satellite' | 'engineer' | 'ground' | 'vendor'
-export type FleetEnvColumn = 'dev' | 'stg' | 'prod' | 'dev-local'
+/** Board columns — deploy environments only. Mac seat is Engineer, not a column. */
+export type FleetEnvColumn = 'dev' | 'stg' | 'prod'
 export type FleetViewerEnv = 'dev' | 'stg' | 'prod' | 'dev-local'
 
 /** Cell health — unavailable is honest path-missing, never silent green. */
 export type FleetCellSignal = Signal | 'unavailable'
+
+/**
+ * Standard taxonomy — board shows group rollups; Detail lists members.
+ *
+ * | Group        | Roles                         |
+ * |--------------|-------------------------------|
+ * | control      | Rocket — platform-api/console |
+ * | gitops       | Rocket — Argo apps            |
+ * | release      | Rocket STG — deliver / smoke  |
+ * | edge         | Satellite — nginx             |
+ * | api          | Satellite — trade APIs        |
+ * | datastore    | Satellite — postgres/redis    |
+ * | automation   | Engineer — runners / git      |
+ * | seat         | Engineer — Mac probe-bridge   |
+ * | cluster      | Ground — API / nodes / pods   |
+ * | feed         | Vendor — Massive / IB         |
+ * | tooling      | Vendor — Hermes               |
+ * | path         | Structural unavailable        |
+ */
+export type FleetStandardGroup =
+  | 'control'
+  | 'gitops'
+  | 'release'
+  | 'edge'
+  | 'api'
+  | 'datastore'
+  | 'automation'
+  | 'seat'
+  | 'cluster'
+  | 'feed'
+  | 'tooling'
+  | 'path'
+
+export const FLEET_STANDARD_GROUP_LABEL: Record<FleetStandardGroup, string> = {
+  control: 'Control',
+  gitops: 'GitOps',
+  release: 'Release',
+  edge: 'Edge',
+  api: 'APIs',
+  datastore: 'Data',
+  automation: 'Automation',
+  seat: 'Mac seat',
+  cluster: 'Cluster',
+  feed: 'Feeds',
+  tooling: 'Tooling',
+  path: 'Path',
+}
+
+export const FLEET_STANDARD_GROUP_ORDER: FleetStandardGroup[] = [
+  'control',
+  'gitops',
+  'release',
+  'edge',
+  'api',
+  'datastore',
+  'automation',
+  'seat',
+  'cluster',
+  'feed',
+  'tooling',
+  'path',
+]
+
+/** Origin of a fleet standard — probe from matrix/bridge, or checklist virtual projection. */
+export type FleetStandardSource = 'probe' | 'checklist'
+
+/**
+ * One acceptance standard for a fleet cell.
+ * Any required standard that is not green (ok) → cell NO-GO.
+ */
+export type FleetStandard = {
+  id: string
+  label: string
+  signal: FleetCellSignal
+  /** Taxonomy group for rollup + Detail sections */
+  group: FleetStandardGroup
+  /** Human reason — shown in Detail panel */
+  reason: string
+  /** When false, informational only (e.g. Mac seat from Prod viewer). Default true. */
+  required?: boolean
+  /** Default `probe`. Checklist-only dimensions use `checklist` virtual chips. */
+  source?: FleetStandardSource
+}
+
+export type FleetGroupRollup = {
+  group: FleetStandardGroup
+  label: string
+  ok: number
+  total: number
+  signal: FleetCellSignal
+}
+
+/** Cell gate — binary for scored cells; N/A for structural unavailable. */
+export type FleetCellGate = 'GO' | 'NO-GO' | 'N/A'
 
 export type FleetVerdictKind = 'GO' | 'HOLD' | 'NO-GO'
 
@@ -54,7 +151,10 @@ export type FleetCell = {
   signal: FleetCellSignal
   value: string
   detail: string
+  /** Kept for Agent Fix prompts — not shown on Fleet board */
   probePath: string
+  /** Acceptance standards — any non-green required standard ⇒ NO-GO */
+  standards: FleetStandard[]
   /** Remediation scope when Agent Fix is allowed */
   fixScope: string | null
   agentFixEnabled: boolean
@@ -62,10 +162,202 @@ export type FleetCell = {
   /** When Engineer CRITICAL — Primary CTA redirects here */
   escalateTabId?: string
   /**
-   * When false, cell is display-only for GO|HOLD|NO-GO (structural unavailable).
+   * When false, cell is display-only for GO|NO-GO (structural unavailable).
    * Defaults to signal !== 'unavailable' when omitted.
    */
   countsTowardVerdict?: boolean
+}
+
+export function std(
+  id: string,
+  label: string,
+  signal: FleetCellSignal,
+  reason: string,
+  group: FleetStandardGroup,
+  required = true,
+  source: FleetStandardSource = 'probe',
+): FleetStandard {
+  return { id, label, signal, reason, group, required, source }
+}
+
+/** Required standards must all be green (ok) for GO. */
+export function resolveCellGate(cell: FleetCell): FleetCellGate {
+  if (!cellCountsTowardVerdict(cell)) return 'N/A'
+  const required = cell.standards.filter(s => s.required !== false)
+  if (required.length === 0) {
+    return cell.signal === 'ok' ? 'GO' : 'NO-GO'
+  }
+  return required.every(s => s.signal === 'ok') ? 'GO' : 'NO-GO'
+}
+
+export function signalFromStandards(standards: FleetStandard[]): FleetCellSignal {
+  const required = standards.filter(s => s.required !== false)
+  if (required.length === 0) return 'unknown'
+  if (required.every(s => s.signal === 'ok')) return 'ok'
+  if (required.some(s => s.signal === 'fail')) return 'fail'
+  if (required.some(s => s.signal === 'degraded')) return 'degraded'
+  if (required.some(s => s.signal === 'unavailable')) return 'unavailable'
+  return 'unknown'
+}
+
+/** Compact board: one row per group (ok/total + worst signal). */
+export function rollupStandards(standards: FleetStandard[]): FleetGroupRollup[] {
+  const map = new Map<FleetStandardGroup, FleetStandard[]>()
+  for (const s of standards) {
+    const list = map.get(s.group) ?? []
+    list.push(s)
+    map.set(s.group, list)
+  }
+  const out: FleetGroupRollup[] = []
+  for (const group of FLEET_STANDARD_GROUP_ORDER) {
+    const members = map.get(group)
+    if (members == null || members.length === 0) continue
+    const required = members.filter(m => m.required !== false)
+    const scored = required.length > 0 ? required : members
+    const ok = scored.filter(m => m.signal === 'ok').length
+    out.push({
+      group,
+      label: FLEET_STANDARD_GROUP_LABEL[group],
+      ok,
+      total: scored.length,
+      signal: signalFromStandards(scored),
+    })
+  }
+  return out
+}
+
+/** Group standards for Detail panel sections. */
+export function groupStandards(
+  standards: FleetStandard[],
+): Array<{ group: FleetStandardGroup; label: string; items: FleetStandard[] }> {
+  const map = new Map<FleetStandardGroup, FleetStandard[]>()
+  for (const s of standards) {
+    const list = map.get(s.group) ?? []
+    list.push(s)
+    map.set(s.group, list)
+  }
+  return FLEET_STANDARD_GROUP_ORDER.filter(g => map.has(g)).map(group => ({
+    group,
+    label: FLEET_STANDARD_GROUP_LABEL[group],
+    items: map.get(group)!,
+  }))
+}
+
+function labelProbeId(id: string): string {
+  return id
+    .replace(/^platform-api-/, 'platform-api · ')
+    .replace(/^platform-console-/, 'console · ')
+    .replace(/^argo-/, 'argo · ')
+    .replace(/-/g, ' ')
+}
+
+function rocketProbeGroup(category: string, id: string): FleetStandardGroup {
+  const c = category.toLowerCase()
+  const i = id.toLowerCase()
+  if (c === 'argo' || c === 'gitops' || i.includes('argo')) return 'gitops'
+  return 'control'
+}
+
+/**
+ * Rocket self-health standards — scoped to column env.
+ * - stg/prod: only probes tagged that env (+ argo apps for that env when id matches)
+ * - local (viewer DEV seat): roll up Control + GitOps from seat probes (may include remote URLs)
+ */
+function standardsFromSelfProbes(
+  self: SelfHealthResponse | undefined,
+  scope: 'local' | 'dev' | 'stg' | 'prod',
+): FleetStandard[] {
+  if (!self) {
+    return [std('self-health', 'Platform self-health', 'unknown', 'Probing…', 'control')]
+  }
+
+  let probes = self.probes
+  if (scope === 'dev' || scope === 'stg' || scope === 'prod') {
+    probes = self.probes.filter(p => {
+      if (p.env === scope) return true
+      // Argo apps often tagged by id suffix
+      if (rocketProbeGroup(p.category, p.id) === 'gitops') {
+        return p.id.toLowerCase().includes(scope) || p.env === scope
+      }
+      return false
+    })
+  }
+  // scope === 'local': all seat probes (local platform-api view), still grouped Control/GitOps
+
+  if (probes.length === 0) {
+    return [
+      std(
+        `self-health-${scope}`,
+        scope === 'local' ? 'Platform self-health' : `Platform self-health (${scope})`,
+        'unknown',
+        `No probes for scope=${scope}`,
+        'control',
+      ),
+    ]
+  }
+
+  return probes.map(p =>
+    std(
+      p.id,
+      labelProbeId(p.id),
+      p.status as FleetCellSignal,
+      p.detail || p.status,
+      rocketProbeGroup(p.category, p.id),
+    ),
+  )
+}
+
+function satelliteTargetGroup(id: string, category: string): FleetStandardGroup {
+  const i = id.toLowerCase()
+  const c = category.toLowerCase()
+  if (i.includes('nginx') || c.includes('edge') || i.includes('spa')) return 'edge'
+  if (
+    i.includes('postgres') ||
+    i.includes('redis') ||
+    c === 'datastore' ||
+    c.includes('data')
+  ) {
+    return 'datastore'
+  }
+  return 'api'
+}
+
+function standardsFromMatrix(matrix: MatrixResponse): FleetStandard[] {
+  const targets = tradeReadinessTargets(matrix.targets)
+  if (targets.length === 0) {
+    return [std('matrix', 'Trade readiness targets', 'unknown', 'No scored targets', 'api')]
+  }
+  return targets.map(t =>
+    std(
+      t.id,
+      t.id,
+      t.reachability as FleetCellSignal,
+      t.detail || t.reachability,
+      satelliteTargetGroup(t.id, t.category),
+    ),
+  )
+}
+
+/** Single rollup standard for STG smoke (avoid listing every URL on the board). */
+function stgSmokeStandard(stg: StgSmokeResponse): FleetStandard {
+  const ok = stg.targets.filter(t => t.reachability === 'ok').length
+  const total = stg.targets.length
+  const anyFail = stg.targets.some(t => t.reachability === 'fail')
+  const anyDeg = stg.targets.some(t => t.reachability === 'degraded')
+  const signal: FleetCellSignal = anyFail
+    ? 'fail'
+    : anyDeg
+      ? 'degraded'
+      : ok === total && total > 0
+        ? 'ok'
+        : 'degraded'
+  return std(
+    'stg-smoke',
+    `STG smoke ${ok}/${total}`,
+    signal,
+    stg.targets.map(t => `${t.id}:${t.reachability}`).join(' · ') || 'No smoke targets',
+    'release',
+  )
 }
 
 /** Structural / path-missing unavailable cells never enter FAIL/HOLD scoring. */
@@ -94,7 +386,28 @@ export type FleetSnapshot = {
 }
 
 export const FLEET_ROLES: FleetRole[] = ['rocket', 'satellite', 'engineer', 'ground', 'vendor']
-export const FLEET_COLUMNS: FleetEnvColumn[] = ['dev', 'stg', 'prod', 'dev-local']
+export const FLEET_COLUMNS: FleetEnvColumn[] = ['dev', 'stg', 'prod']
+
+/** Deep-link target for a fleet cell / role row. */
+export function fleetCellNavigateTab(cell: Pick<FleetCell, 'role' | 'escalateTabId'>): string {
+  if (cell.escalateTabId) return cell.escalateTabId
+  return fleetRoleNavigateTab(cell.role)
+}
+
+export function fleetRoleNavigateTab(role: FleetRole): string {
+  switch (role) {
+    case 'rocket':
+      return 'cluster'
+    case 'satellite':
+      return 'satellite-bus'
+    case 'engineer':
+      return 'agent-desk'
+    case 'ground':
+      return 'operator-plane'
+    case 'vendor':
+      return 'satellite-bus'
+  }
+}
 
 export function normalizeViewerEnv(raw: string | undefined | null): FleetViewerEnv {
   const v = (raw ?? '').trim().toLowerCase()
@@ -162,22 +475,6 @@ export function buildRocketCell(input: {
   const { env, viewerEnv, self, supply, stg } = input
   const key = cellKey('rocket', env)
 
-  if (env === 'dev-local') {
-    return {
-      key,
-      role: 'rocket',
-      env,
-      span: false,
-      signal: 'unavailable',
-      value: 'n/a',
-      detail: 'Rocket has no Mac thin-client seat — platform-api runs on cluster or local Console host',
-      probePath: 'n/a (no rocket seat on dev-local)',
-      fixScope: null,
-      agentFixEnabled: false,
-      agentFixDisabledReason: 'No Rocket probe path for dev-local',
-    }
-  }
-
   if (env === 'stg') {
     const release = releaseSignal(supply, stg)
     const stgHealth = selfHealthEnvSignal(self, 'stg')
@@ -187,85 +484,114 @@ export function buildRocketCell(input: {
       stgHealth.signal === 'unknown' &&
       (self == null || self.probes.filter(p => p.env === 'stg').length === 0)
     if (unreachable) {
-      return {
+      return unavailableCell(
         key,
-        role: 'rocket',
+        'rocket',
         env,
-        span: false,
-        signal: 'unavailable',
-        value: '—',
-        detail: 'STG platform pull probes not reachable from this viewer seat',
-        probePath: 'GET /api/v1/self-health?env=stg · supply-chain · stg-smoke',
-        fixScope: null,
-        agentFixEnabled: false,
-        agentFixDisabledReason: 'Probe path unavailable from this viewer',
-      }
+        'STG platform pull probes not reachable from this viewer seat',
+        'Probe path unavailable from this viewer',
+      )
     }
-    const state: ModuleState = {
-      signal: combined,
-      value: release.value !== '…' ? release.value : stgHealth.value,
-      detail: [stgHealth.detail, release.detail].filter(Boolean).join(' · '),
-    }
-    return rocketCellFromState(key, env, state, DELIVER_STG_RECOVER_SCOPE, 'GET /api/v1/self-health (stg) + supply-chain + stg-smoke')
-  }
-
-  if (env === 'prod') {
-    const prodHealth = selfHealthEnvSignal(self, 'prod')
+    const standards: FleetStandard[] = [
+      ...standardsFromSelfProbes(self, 'stg'),
+      std('deliver-stg', 'STG deliver pipeline', release.signal, release.detail, 'release'),
+      ...(stg && stg.targets.length > 0 ? [stgSmokeStandard(stg)] : []),
+    ]
     return rocketCellFromState(
       key,
       env,
-      prodHealth,
+      {
+        signal: combined,
+        value: release.value !== '…' ? release.value : stgHealth.value,
+        detail: [stgHealth.detail, release.detail].filter(Boolean).join(' · '),
+      },
+      DELIVER_STG_RECOVER_SCOPE,
+      standards,
+    )
+  }
+
+  if (env === 'prod') {
+    const standards = standardsFromSelfProbes(self, 'prod')
+    const prodHealth = selfHealthEnvSignal(self, 'prod')
+    const derived = signalFromStandards(standards)
+    return rocketCellFromState(
+      key,
+      env,
+      {
+        ...prodHealth,
+        signal: derived === 'unavailable' ? prodHealth.signal : (derived as Signal),
+      },
       PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
-      'GET /api/v1/self-health (prod) · Argo bifrost-platform-prod',
+      standards,
     )
   }
 
   // env === 'dev'
   if (viewerEnv === 'dev' || viewerEnv === 'dev-local') {
     const control = controlSignal(self)
-    const devTagged = selfHealthEnvSignal(self, 'dev')
-    const hasDevTagged = devTagged.signal !== 'unknown'
-    // Prefer overall control when viewer is on the same host as platform-api
-    const state: ModuleState = hasDevTagged
-      ? {
-          signal: worst(control.signal, devTagged.signal),
-          value: control.value,
-          detail: `${control.detail} · ${devTagged.detail}`,
-        }
-      : control
+    // Local seat: Control + GitOps from this platform-api view (not a dump of STG/PROD as "DEV")
+    const standards = standardsFromSelfProbes(self, 'local')
+    const derived = signalFromStandards(standards)
     return rocketCellFromState(
       key,
       env,
-      state,
+      {
+        signal: derived === 'unavailable' ? control.signal : (derived as Signal),
+        value: control.value,
+        detail: control.detail,
+      },
       PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
-      'GET /api/v1/self-health (viewer-local) · platform-api / console',
+      standards,
     )
   }
 
   // Viewer on prod/stg — Rocket DEV via cluster pull
   const devPull = selfHealthEnvSignal(self, 'dev')
   if (devPull.signal === 'unknown' && (self == null || self.probes.filter(p => p.env === 'dev').length === 0)) {
-    return {
+    return unavailableCell(
       key,
-      role: 'rocket',
+      'rocket',
       env,
-      span: false,
-      signal: 'unavailable',
-      value: '—',
-      detail: 'DEV platform pull probes not configured / unreachable from this viewer seat',
-      probePath: 'GET /api/v1/self-health (dev) — cluster pull',
-      fixScope: null,
-      agentFixEnabled: false,
-      agentFixDisabledReason: 'Probe path unavailable from this viewer',
-    }
+      'DEV platform pull probes not configured / unreachable from this viewer seat',
+      'Probe path unavailable from this viewer',
+    )
   }
+  const standards = standardsFromSelfProbes(self, 'dev')
+  const derived = signalFromStandards(standards)
   return rocketCellFromState(
     key,
     env,
-    devPull,
+    {
+      ...devPull,
+      signal: derived === 'unavailable' ? devPull.signal : (derived as Signal),
+    },
     PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
-    'GET /api/v1/self-health (dev) — cluster pull',
+    standards,
   )
+}
+
+function unavailableCell(
+  key: string,
+  role: FleetRole,
+  env: FleetEnvColumn,
+  detail: string,
+  disabledReason: string,
+): FleetCell {
+  return {
+    key,
+    role,
+    env,
+    span: false,
+    signal: 'unavailable',
+    value: '—',
+    detail,
+    probePath: '',
+    standards: [std('probe-path', 'Probe path reachable', 'unavailable', detail, 'path', false)],
+    fixScope: null,
+    agentFixEnabled: false,
+    agentFixDisabledReason: disabledReason,
+    countsTowardVerdict: false,
+  }
 }
 
 function rocketCellFromState(
@@ -273,23 +599,27 @@ function rocketCellFromState(
   env: FleetEnvColumn,
   state: ModuleState,
   fixScope: string,
-  probePath: string,
+  standards: FleetStandard[],
 ): FleetCell {
-  const ok = state.signal === 'ok'
+  const signal = signalFromStandards(standards)
+  const cellSignal: FleetCellSignal =
+    signal === 'unavailable' ? moduleToCellSignal(state) : signal
+  const ok = cellSignal === 'ok'
   return {
     key,
     role: 'rocket',
     env,
     span: false,
-    signal: moduleToCellSignal(state),
+    signal: cellSignal,
     value: state.value,
     detail: state.detail,
-    probePath,
+    probePath: '',
+    standards,
     fixScope: ok ? null : fixScope,
-    agentFixEnabled: !ok && state.signal !== 'unknown',
+    agentFixEnabled: !ok && cellSignal !== 'unknown',
     agentFixDisabledReason: ok
       ? undefined
-      : state.signal === 'unknown'
+      : cellSignal === 'unknown'
         ? 'Still probing'
         : undefined,
   }
@@ -299,40 +629,14 @@ export function buildSatelliteCell(input: {
   env: FleetEnvColumn
   matrices: MatrixResponse[]
   stg?: StgSmokeResponse
-  bridge?: AgentBridgeResponse
-  /** When false, Prod→Mac / bridge seats stay unavailable (Wave 5.3) */
-  groundBridgeReady?: boolean
 }): FleetCell {
-  const { env, matrices, stg, bridge, groundBridgeReady = false } = input
+  const { env, matrices, stg } = input
   const key = cellKey('satellite', env)
-
-  if (env === 'dev-local') {
-    const probeBridge = bridge?.satellite_probe_bridge
-    if (!groundBridgeReady || probeBridge == null || probeBridge.status !== 'ok') {
-      return {
-        key,
-        role: 'satellite',
-        env,
-        span: false,
-        signal: 'unavailable',
-        value: '—',
-        detail:
-          'Mac thin-client trade probes require satellite-probe-bridge; Prod/cluster cannot reach 127.0.0.1 on the notebook',
-        probePath: 'bridge GET · environments.yaml probe_mode=bridge · trade_bridge_url',
-        fixScope: null,
-        agentFixEnabled: false,
-        agentFixDisabledReason: 'Ground bridge not ready for this seat',
-      }
-    }
-    const matrix = matrices.find(m => m.environment === 'dev-local' || m.environment === 'dev')
-    const state = tradeEnvSignal(matrix)
-    return satelliteCellFromState(key, env, state, 'bridge · matrix dev-local/dev')
-  }
 
   if (env === 'stg') {
     const matrix = matrices.find(m => m.environment === 'stg')
     if (matrix) {
-      return satelliteCellFromState(key, env, tradeEnvSignal(matrix), 'GET /api/v1/matrix?env=stg')
+      return satelliteCellFromState(key, env, tradeEnvSignal(matrix), standardsFromMatrix(matrix))
     }
     // Fallback: STG smoke when matrix omitted (legacy gap — must not drop STG)
     if (stg && stg.targets.length > 0) {
@@ -345,41 +649,29 @@ export function buildSatelliteCell(input: {
         key,
         env,
         { signal, value: `${ok}/${total}`, detail: `STG smoke ${ok}/${total} targets` },
-        'GET /api/v1/stg-smoke (matrix stg missing)',
+        [stgSmokeStandard(stg)],
       )
     }
-    return {
+    return unavailableCell(
       key,
-      role: 'satellite',
+      'satellite',
       env,
-      span: false,
-      signal: 'unavailable',
-      value: '—',
-      detail: 'No STG matrix or smoke probe payload',
-      probePath: 'GET /api/v1/matrix?env=stg · GET /api/v1/stg-smoke',
-      fixScope: null,
-      agentFixEnabled: false,
-      agentFixDisabledReason: 'STG probe path missing',
-    }
+      'No STG matrix or smoke probe payload',
+      'STG probe path missing',
+    )
   }
 
   const matrix = matrices.find(m => m.environment === env)
   if (!matrix) {
-    return {
+    return unavailableCell(
       key,
-      role: 'satellite',
+      'satellite',
       env,
-      span: false,
-      signal: 'unavailable',
-      value: '—',
-      detail: `No matrix for environment=${env}`,
-      probePath: `GET /api/v1/matrix?env=${env}`,
-      fixScope: null,
-      agentFixEnabled: false,
-      agentFixDisabledReason: 'Matrix missing for this environment',
-    }
+      `No matrix for environment=${env}`,
+      'Matrix missing for this environment',
+    )
   }
-  return satelliteCellFromState(key, env, tradeEnvSignal(matrix), `GET /api/v1/matrix?env=${env}`)
+  return satelliteCellFromState(key, env, tradeEnvSignal(matrix), standardsFromMatrix(matrix))
 }
 
 function satelliteFixScopeForEnv(env: FleetEnvColumn): string {
@@ -391,90 +683,203 @@ function satelliteCellFromState(
   key: string,
   env: FleetEnvColumn,
   state: ModuleState,
-  probePath: string,
+  standards: FleetStandard[],
 ): FleetCell {
-  const ok = state.signal === 'ok'
+  const derived = signalFromStandards(standards)
+  const cellSignal: FleetCellSignal =
+    derived === 'unavailable' ? moduleToCellSignal(state) : derived
+  const ok = cellSignal === 'ok'
   const fixScope = satelliteFixScopeForEnv(env)
   return {
     key,
     role: 'satellite',
     env,
     span: false,
-    signal: moduleToCellSignal(state),
+    signal: cellSignal,
     value: state.value,
     detail: state.detail,
-    probePath,
+    probePath: '',
+    standards,
     fixScope: ok ? null : fixScope,
-    agentFixEnabled: !ok && state.signal !== 'unknown',
-    agentFixDisabledReason: state.signal === 'unknown' ? 'Still probing' : undefined,
+    agentFixEnabled: !ok && cellSignal !== 'unknown',
+    agentFixDisabledReason: cellSignal === 'unknown' ? 'Still probing' : undefined,
     countsTowardVerdict: true,
   }
 }
 
+/**
+ * Engineer = AI Agent plane + Mac seat (probe-bridge / thin-client).
+ * Mac is not a board column — it is the Engineer's physical workstation.
+ * Prod/STG viewers cannot reach Mac 127.0.0.1 — Mac seat is informational only there.
+ */
 export function buildEngineerCell(input: {
   runner?: RemediationHealthResponse
   bridge?: AgentBridgeResponse
+  viewerEnv?: FleetViewerEnv
+  groundBridgeReady?: boolean
 }): FleetCell {
   const state = agentSignal(input.runner, input.bridge)
-  const critical = state.signal === 'fail'
+  const viewerEnv = normalizeViewerEnv(input.viewerEnv)
+  const viewerRemote = viewerEnv === 'prod' || viewerEnv === 'stg'
+  const probeBridge = input.bridge?.satellite_probe_bridge
+  const bridge = input.bridge
+  const runners = bridge?.runners ?? []
+
+  let runnerSig: Signal
+  let runnerReason: string
+  if (runners.length >= 2) {
+    const upCount = runners.filter(r => r.status === 'ok').length
+    if (upCount === runners.length) {
+      runnerSig = 'ok'
+      runnerReason = `Runners ${upCount}/${runners.length} (HA)`
+    } else if (upCount === 0) {
+      runnerSig = 'fail'
+      runnerReason = 'All runners down'
+    } else {
+      runnerSig = 'degraded'
+      runnerReason = `Runner failover active (${upCount}/${runners.length} up)`
+    }
+  } else if (runners.length === 1) {
+    runnerSig = runners[0].status === 'ok' ? 'ok' : 'fail'
+    runnerReason = runnerSig === 'ok' ? 'Runner up (no standby)' : 'Runner down'
+  } else {
+    runnerSig = input.runner == null ? 'unknown' : input.runner.status === 'ok' ? 'ok' : 'fail'
+    runnerReason =
+      runnerSig === 'ok' ? 'Runner up' : runnerSig === 'unknown' ? 'Runner status unknown' : 'Runner down'
+  }
+
+  const gb = bridge?.git_bridge
+  const dirty = gb?.dirty_repos ?? 0
+  const gitSig: Signal =
+    gb == null ? 'unknown' : gb.status !== 'ok' ? 'fail' : dirty > 0 ? 'degraded' : 'ok'
+  const gitReason =
+    gb == null
+      ? 'Git bridge status unknown'
+      : gb.status !== 'ok'
+        ? 'Git bridge down'
+        : dirty > 0
+          ? `Git bridge ${dirty} dirty repo(s)`
+          : 'Git bridge clean'
+
+  let macSig: Signal = 'unknown'
+  let macReason = 'Mac seat: probing'
+  if (viewerRemote) {
+    macSig =
+      probeBridge == null
+        ? 'ok'
+        : probeBridge.status === 'ok'
+          ? 'ok'
+          : (probeBridge.status as Signal) === 'degraded'
+            ? 'degraded'
+            : 'fail'
+    macReason =
+      probeBridge == null
+        ? 'Mac seat N/A from this viewer (info only)'
+        : `Mac seat · probe-bridge ${probeBridge.status} (info only from remote)`
+  } else if (probeBridge != null) {
+    macSig =
+      probeBridge.status === 'ok' ? 'ok' : probeBridge.status === 'degraded' ? 'degraded' : 'fail'
+    macReason =
+      probeBridge.status === 'ok'
+        ? 'Mac seat · probe-bridge ok'
+        : `Mac seat · probe-bridge ${probeBridge.status}${
+            probeBridge.error ? `: ${probeBridge.error}` : ''
+          }`
+  } else if (input.groundBridgeReady === false) {
+    macSig = 'degraded'
+    macReason = 'Mac seat · probe-bridge not ready'
+  }
+
+  const standards: FleetStandard[] = [
+    std('runners', 'Agent runners (HA)', runnerSig, runnerReason, 'automation'),
+    std('git-bridge', 'Git bridge clean', gitSig, gitReason, 'automation'),
+    std('mac-seat', 'Mac seat · probe-bridge', macSig, macReason, 'seat', !viewerRemote),
+  ]
+  const signal = signalFromStandards(standards)
+  const critical = signal === 'fail'
+  const value =
+    signal === 'ok'
+      ? state.value
+      : signal === 'fail'
+        ? 'down'
+        : signal === 'degraded'
+          ? 'drift'
+          : state.value
+
   return {
     key: cellKey('engineer', 'span'),
     role: 'engineer',
     env: null,
     span: true,
-    signal: moduleToCellSignal(state),
-    value: state.value,
-    detail: state.detail,
-    probePath: 'GET /api/v1/agent/bridge · remediation health',
+    signal,
+    value,
+    detail: standards.map(s => s.reason).join(' · '),
+    probePath: '',
+    standards,
     fixScope: null,
     agentFixEnabled: false,
     agentFixDisabledReason: critical
       ? 'Engineer CRITICAL — use Operator Plane / Ground (Agent Fix disabled)'
-      : state.signal === 'ok'
+      : signal === 'ok'
         ? undefined
         : 'Engineer plane uses Operator Plane remediation, not cell Agent Fix',
-    escalateTabId: critical ? 'operator-plane' : undefined,
+    escalateTabId: critical || signal === 'degraded' ? 'operator-plane' : undefined,
+    countsTowardVerdict: true,
   }
 }
 
+/** Ground = cluster / Operator Plane infrastructure — Mac seat belongs to Engineer. */
 export function buildGroundCell(input: {
   cluster?: ClusterSummary
-  viewerEnv: FleetViewerEnv
-  groundBridgeReady?: boolean
-  bridge?: AgentBridgeResponse
 }): FleetCell {
-  const infra = infraSignal(input.cluster)
-  const probeBridge = input.bridge?.satellite_probe_bridge
-  const viewerRemote = input.viewerEnv === 'prod' || input.viewerEnv === 'stg'
+  const cluster = input.cluster
+  const infra = infraSignal(cluster)
 
-  let bridgeSig: Signal = 'unknown'
-  let bridgeDetail = 'Satellite probe bridge: probing'
-  if (viewerRemote) {
-    // Prod/STG cannot reach Mac 127.0.0.1 — bridge outcome is informational only
-    bridgeSig = 'ok'
-    bridgeDetail =
-      probeBridge == null
-        ? 'Mac bridge N/A from this viewer seat (Wave 5)'
-        : probeBridge.status === 'ok'
-          ? 'Satellite probe bridge ok'
-          : `Mac bridge ${probeBridge.status} (excluded from Ground seat scoring)`
-  } else if (probeBridge != null) {
-    bridgeSig =
-      probeBridge.status === 'ok' ? 'ok' : probeBridge.status === 'degraded' ? 'degraded' : 'fail'
-    bridgeDetail =
-      probeBridge.status === 'ok'
-        ? 'Satellite probe bridge ok'
-        : `Satellite probe bridge ${probeBridge.status}${probeBridge.error ? `: ${probeBridge.error}` : ''}`
-  } else if (input.groundBridgeReady === false) {
-    bridgeSig = 'degraded'
-    bridgeDetail = 'Ground bridge not ready for Mac thin-client seat'
-  }
+  const apiSig: Signal = cluster == null ? 'unknown' : (cluster.reachability as Signal)
+  const nodesOk =
+    cluster != null &&
+    cluster.reachability === 'ok' &&
+    cluster.nodes_total > 0 &&
+    cluster.nodes_ready >= cluster.nodes_total
+  const nodesSig: Signal =
+    cluster == null ? 'unknown' : cluster.reachability === 'fail' ? 'fail' : nodesOk ? 'ok' : 'degraded'
+  const podsSig: Signal =
+    cluster == null ? 'unknown' : cluster.failing_pods > 0 ? 'degraded' : cluster.reachability === 'fail' ? 'fail' : 'ok'
 
-  // Operator-plane / bridge first; cluster infra supports the seat
-  const signal = worst(bridgeSig, infra.signal)
+  const standards: FleetStandard[] = [
+    std(
+      'cluster-api',
+      'Cluster API reachable',
+      apiSig,
+      cluster == null ? 'Cluster: probing' : cluster.detail || cluster.reachability,
+      'cluster',
+    ),
+    std(
+      'nodes-ready',
+      'All nodes Ready',
+      nodesSig,
+      cluster == null
+        ? 'Nodes: probing'
+        : `${cluster.nodes_ready}/${cluster.nodes_total} nodes Ready${
+            (cluster.elastic_standby ?? 0) > 0 ? ` (+${cluster.elastic_standby} standby)` : ''
+          }`,
+      'cluster',
+    ),
+    std(
+      'failing-pods',
+      'No failing pods',
+      podsSig,
+      cluster == null
+        ? 'Pods: probing'
+        : cluster.failing_pods > 0
+          ? `${cluster.failing_pods} failing pods`
+          : 'No failing pods',
+      'cluster',
+    ),
+  ]
+  const signal = signalFromStandards(standards)
   const value =
     signal === 'ok' ? 'ready' : signal === 'fail' ? 'down' : signal === 'degraded' ? 'drift' : infra.value
-  const detail = ['Operator plane', bridgeDetail, infra.detail].filter(Boolean).join(' · ')
 
   return {
     key: cellKey('ground', 'span'),
@@ -483,9 +888,9 @@ export function buildGroundCell(input: {
     span: true,
     signal,
     value,
-    detail,
-    probePath:
-      'GET /api/v1/agent/bridge (satellite_probe_bridge) · GET /api/v1/cluster · Operator Plane',
+    detail: standards.map(s => s.reason).join(' · '),
+    probePath: '',
+    standards,
     fixScope: signal === 'ok' ? null : PROD_ENV_FIX_SCOPE,
     agentFixEnabled: signal !== 'ok' && signal !== 'unknown',
     agentFixDisabledReason: signal === 'unknown' ? 'Still probing' : undefined,
@@ -494,88 +899,94 @@ export function buildGroundCell(input: {
   }
 }
 
-function vendorIbMassiveFromMatrices(matrices: MatrixResponse[]): {
-  signal: Signal
-  value: string
-  detail: string
-} | null {
-  const targets = matrices.flatMap(m =>
-    m.targets.filter(
-      t =>
-        t.auth !== 'blocked' &&
-        (t.id === 'api-massive' ||
-          t.id.includes('massive') ||
-          (t.id.includes('ib') && t.category !== 'trade_write')),
-    ),
+function isMassiveVendorTarget(t: { id: string; auth?: string }): boolean {
+  if (t.auth === 'blocked') return false
+  const id = t.id.toLowerCase()
+  return id === 'api-massive' || id.includes('massive') || id.includes('polygon')
+}
+
+function isIbVendorTarget(t: { id: string; auth?: string; category?: string }): boolean {
+  if (t.auth === 'blocked') return false
+  if (t.category === 'trade_write') return false
+  const id = t.id.toLowerCase()
+  // Exclude shared placeholders claimed by Massive (e.g. massive-ib)
+  if (id.includes('massive') || id.includes('polygon')) return false
+  return id.includes('ib') || id.includes('ibkr')
+}
+
+function vendorTargets(matrices: MatrixResponse[]) {
+  return matrices.flatMap(m =>
+    m.targets.filter(t => isMassiveVendorTarget(t) || isIbVendorTarget(t)),
   )
-  if (targets.length === 0) return null
-  const ok = targets.filter(t => t.reachability === 'ok').length
-  const anyFail = targets.some(t => t.reachability === 'fail')
-  const anyDeg = targets.some(t => t.reachability === 'degraded')
-  const signal: Signal = anyFail ? 'fail' : anyDeg ? 'degraded' : ok === targets.length ? 'ok' : 'degraded'
-  const massive = targets.filter(t => t.id.includes('massive'))
-  const ib = targets.filter(t => t.id.includes('ib'))
-  const parts = [
-    massive.length > 0
-      ? `Massive ${massive.filter(t => t.reachability === 'ok').length}/${massive.length}`
-      : null,
-    ib.length > 0
-      ? `IB ${ib.filter(t => t.reachability === 'ok').length}/${ib.length}`
-      : massive.length > 0
-        ? 'IB (matrix write path blocked — see Satellite Bus)'
-        : null,
-  ].filter(Boolean)
-  return {
-    signal,
-    value: `${ok}/${targets.length}`,
-    detail: parts.join(' · ') || `${ok}/${targets.length} vendor probes`,
-  }
 }
 
 export function buildVendorCell(input: {
   bridge?: AgentBridgeResponse
   matrices?: MatrixResponse[]
 }): FleetCell {
-  const gb = input.bridge?.git_bridge
   const hermes = input.bridge?.nous_hermes ?? input.bridge?.hermes_mcp
-  const primary = vendorIbMassiveFromMatrices(input.matrices ?? [])
+  const targets = vendorTargets(input.matrices ?? [])
+  const massiveTargets = targets.filter(t => isMassiveVendorTarget(t))
+  const ibTargets = targets.filter(t => isIbVendorTarget(t))
 
-  const gitLine =
-    gb == null
-      ? 'Git bridge ?'
-      : gb.status !== 'ok'
-        ? 'Git bridge down'
-        : `Git bridge ok (${gb.dirty_repos ?? 0} dirty)`
-  const hermesLine = hermes == null ? 'Hermes ?' : `Hermes ${hermes.status}`
-  const secondary = `${gitLine} · ${hermesLine}`
-
-  let signal: FleetCellSignal = 'unknown'
-  let value = '…'
-  let detail = 'Vendor IB/Massive: probing'
-  let probePath = 'GET /api/v1/matrix (api-massive · IB) · bridge secondary'
-
-  if (primary != null) {
-    signal = primary.signal
-    value = primary.value
-    detail = `${primary.detail} · secondary: ${secondary}`
-  } else if (gb != null || hermes != null) {
-    // Fallback when matrix vendor probes absent — keep Git/Hermes as soft signal only
-    const gitSig: Signal =
-      gb == null ? 'unknown' : gb.status !== 'ok' ? 'fail' : (gb.dirty_repos ?? 0) > 0 ? 'degraded' : 'ok'
-    const hermesSig: Signal =
-      hermes == null
-        ? 'unknown'
-        : hermes.status === 'ok'
-          ? 'ok'
-          : hermes.status === 'degraded'
-            ? 'degraded'
-            : 'fail'
-    signal = worst(gitSig, hermesSig)
-    value =
-      signal === 'ok' ? 'ready' : signal === 'fail' ? 'down' : signal === 'degraded' ? 'drift' : '…'
-    detail = `IB/Massive matrix n/a · secondary: ${secondary}`
-    probePath = 'GET /api/v1/agent/bridge (git_bridge · hermes) — matrix vendor probes missing'
+  const standards: FleetStandard[] = []
+  for (const t of massiveTargets) {
+    standards.push(
+      std(t.id, t.id, t.reachability as FleetCellSignal, t.detail || t.reachability, 'feed'),
+    )
   }
+  for (const t of ibTargets) {
+    standards.push(
+      std(t.id, t.id, t.reachability as FleetCellSignal, t.detail || t.reachability, 'feed'),
+    )
+  }
+  if (massiveTargets.length === 0) {
+    // Stable id for Checklist match (massive|polygon). Informational — do not alone NO-GO.
+    standards.push(
+      std(
+        'massive-polygon',
+        'Massive / Polygon feed',
+        'unknown',
+        'Massive/Polygon matrix targets not present',
+        'feed',
+        false,
+      ),
+    )
+  }
+  // IB: no synthetic probe — Checklist boardProjection (observe / D10) injects ib-feed when absent.
+
+  const hermesSig: Signal =
+    hermes == null
+      ? 'unknown'
+      : hermes.status === 'ok'
+        ? 'ok'
+        : hermes.status === 'degraded'
+          ? 'degraded'
+          : 'fail'
+  standards.push(
+    std(
+      'hermes',
+      'Hermes ready',
+      hermesSig,
+      hermes == null ? 'Hermes status unknown' : `Hermes ${hermes.status}`,
+      'tooling',
+    ),
+  )
+
+  // Git bridge is scored on Engineer (automation) — do not mirror on Vendor (closes Board→Checklist gap).
+
+  const signal = signalFromStandards(standards)
+  const okCount = targets.filter(t => t.reachability === 'ok').length
+  const value =
+    targets.length > 0
+      ? `${okCount}/${targets.length}`
+      : signal === 'ok'
+        ? 'ready'
+        : signal === 'fail'
+          ? 'down'
+          : signal === 'degraded'
+            ? 'drift'
+            : '…'
 
   return {
     key: cellKey('vendor', 'span'),
@@ -584,9 +995,13 @@ export function buildVendorCell(input: {
     span: true,
     signal,
     value,
-    detail,
-    probePath,
-    fixScope: signal === 'ok' ? null : primary != null ? PROD_ENV_FIX_SCOPE : GITOPS_HINT_SCOPE,
+    detail: standards
+      .filter(s => s.required !== false)
+      .map(s => s.reason)
+      .join(' · '),
+    probePath: '',
+    standards,
+    fixScope: signal === 'ok' ? null : targets.length > 0 ? PROD_ENV_FIX_SCOPE : GITOPS_HINT_SCOPE,
     agentFixEnabled: signal === 'fail' || signal === 'degraded',
     agentFixDisabledReason: signal === 'unknown' ? 'Still probing' : undefined,
     countsTowardVerdict: true,
@@ -622,76 +1037,59 @@ export function pickWorstCell(cells: FleetCell[]): FleetCell | null {
 
 /**
  * Verdict rules (unavailable excluded from scoring — display only):
- * - NO-GO: any scored fail
- * - HOLD: any scored degraded / unknown (no fail)
- * - GO: all scored cells ok
- * Engineer fail → Primary CTA navigates to Operator Plane / Ground (not Agent Fix)
+ * - GO: every scored cell gate is GO (all required standards green)
+ * - NO-GO: any scored cell has a non-green required standard
+ * Engineer fail/degraded → Primary CTA navigates to Operator Plane (not Agent Fix)
  */
 export function resolveFleetVerdict(cells: FleetCell[]): FleetVerdict {
   const scored = cells.filter(cellCountsTowardVerdict)
   const worstCell = pickWorstCell(scored)
   if (worstCell == null) {
     return {
-      kind: 'HOLD',
+      kind: 'NO-GO',
       topReason: scored.length === 0 ? 'No scored fleet cells' : 'No fleet cells',
       primaryCta: { label: 'Open Control Room', tabId: 'control-room', kind: 'navigate' },
       worstCell: null,
     }
   }
 
-  const hasFail = scored.some(c => c.signal === 'fail')
-  const hasHold = scored.some(c => c.signal === 'degraded' || c.signal === 'unknown')
-
-  if (hasFail) {
-    if (worstCell.role === 'engineer' && worstCell.escalateTabId) {
-      return {
-        kind: 'NO-GO',
-        topReason: worstCell.detail,
-        primaryCta: {
-          label: 'Open Operator Plane',
-          tabId: worstCell.escalateTabId,
-          cellKey: worstCell.key,
-          kind: 'navigate',
-        },
-        worstCell,
-      }
+  const anyNoGo = scored.some(c => resolveCellGate(c) === 'NO-GO')
+  if (!anyNoGo) {
+    return {
+      kind: 'GO',
+      topReason: 'All required standards green',
+      primaryCta: { label: 'Fleet clear', kind: 'none' },
+      worstCell: null,
     }
+  }
+
+  if (worstCell.role === 'engineer' && worstCell.escalateTabId) {
     return {
       kind: 'NO-GO',
       topReason: worstCell.detail,
       primaryCta: {
-        label: 'Agent Fix',
+        label: 'Open Operator Plane',
+        tabId: worstCell.escalateTabId,
         cellKey: worstCell.key,
-        kind: worstCell.agentFixEnabled ? 'agent-fix' : 'navigate',
-        tabId: worstCell.agentFixEnabled ? undefined : 'control-room',
+        kind: 'navigate',
       },
       worstCell,
     }
   }
-
-  if (hasHold) {
-    return {
-      kind: 'HOLD',
-      topReason: worstCell.detail,
-      primaryCta: {
-        label: 'Agent Fix',
-        cellKey: worstCell.key,
-        kind: worstCell.agentFixEnabled ? 'agent-fix' : 'navigate',
-        tabId: worstCell.agentFixEnabled ? undefined : 'control-room',
-      },
-      worstCell,
-    }
-  }
-
   return {
-    kind: 'GO',
-    topReason: 'All scored fleet cells nominal',
-    primaryCta: { label: 'Fleet clear', kind: 'none' },
-    worstCell: null,
+    kind: 'NO-GO',
+    topReason: worstCell.detail,
+    primaryCta: {
+      label: 'Agent Fix',
+      cellKey: worstCell.key,
+      kind: worstCell.agentFixEnabled ? 'agent-fix' : 'navigate',
+      tabId: worstCell.agentFixEnabled ? undefined : 'control-room',
+    },
+    worstCell,
   }
 }
 
-export function buildFleetSnapshot(input: {
+export type BuildFleetSnapshotInput = {
   viewerEnv: FleetViewerEnv
   cluster?: ClusterSummary
   supply?: SupplyChainResponse
@@ -700,16 +1098,17 @@ export function buildFleetSnapshot(input: {
   runner?: RemediationHealthResponse
   bridge?: AgentBridgeResponse
   matrices: MatrixResponse[]
-  /** Wave 5.3 — when false, Mac bridge seats stay unavailable */
+  /** Mac seat readiness for Engineer row (local viewer only scores bridge) */
   groundBridgeReady?: boolean
-  /** Include optional Mac thin-client column (default true) */
-  includeDevLocal?: boolean
-}): FleetSnapshot {
+}
+
+/**
+ * Probe lattice only — no Checklist virtual chips.
+ * Prefer {@link buildFleetSnapshot} (core + union finalize) for UI / scripts.
+ */
+export function buildFleetSnapshotCore(input: BuildFleetSnapshotInput): FleetSnapshot {
   const viewerEnv = normalizeViewerEnv(input.viewerEnv)
-  const includeDevLocal = input.includeDevLocal !== false
-  const columns: FleetEnvColumn[] = includeDevLocal
-    ? [...FLEET_COLUMNS]
-    : (['dev', 'stg', 'prod'] as FleetEnvColumn[])
+  const columns: FleetEnvColumn[] = [...FLEET_COLUMNS]
 
   const cells: FleetCell[] = []
 
@@ -728,21 +1127,19 @@ export function buildFleetSnapshot(input: {
         env,
         matrices: input.matrices,
         stg: input.stg,
-        bridge: input.bridge,
-        groundBridgeReady: input.groundBridgeReady,
       }),
     )
   }
 
-  cells.push(buildEngineerCell({ runner: input.runner, bridge: input.bridge }))
   cells.push(
-    buildGroundCell({
-      cluster: input.cluster,
+    buildEngineerCell({
+      runner: input.runner,
+      bridge: input.bridge,
       viewerEnv,
       groundBridgeReady: input.groundBridgeReady,
-      bridge: input.bridge,
     }),
   )
+  cells.push(buildGroundCell({ cluster: input.cluster }))
   cells.push(buildVendorCell({ bridge: input.bridge, matrices: input.matrices }))
 
   const annotated = cells.map(c => ({
@@ -751,7 +1148,7 @@ export function buildFleetSnapshot(input: {
   }))
   const verdict = resolveFleetVerdict(annotated)
   const scored = annotated.filter(cellCountsTowardVerdict)
-  const fleetNominal = scored.length > 0 && scored.every(c => c.signal === 'ok')
+  const fleetNominal = scored.length > 0 && scored.every(c => resolveCellGate(c) === 'GO')
   const fleetClear = fleetNominal
 
   return {

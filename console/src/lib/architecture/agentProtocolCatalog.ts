@@ -428,29 +428,56 @@ export const FLIGHT_DIRECTOR_STEPS: FlightDirectorStep[] = [
 
 /**
  * Daily Ops Fleet Desk — per-cell Agent Fix (do not silently pickFixScope across roles).
- * Engineer CRITICAL → navigate Operator Plane / Ground; Agent Fix disabled on engineer cells.
+ * Engineer CRITICAL → inline Operator Plan + AI Fix on TCC; full Operator Plane is escape hatch.
  */
 export const DAILY_OPS_FLEET_DESK = {
-  version: '2026-07-18',
-  source: 'console/src/lib/control-room/fleetSnapshot.ts · fleetCellFix.ts',
+  version: '2026-07-19-row-fix-ask-ai',
+  source:
+    'console/src/lib/control-room/fleetSnapshot.ts · fleetCellFix.ts · dailyOpsWorkflow.ts · DailyOpsProcessStrip.tsx · DailyOpsOperatorPlanPanel.tsx · checklistDispatch.ts · checklistProgress.ts · checklistCursorFailoverPrompt.ts · dailyOpsChecklistCatalog.ts',
   roles: ['rocket', 'satellite', 'engineer', 'ground', 'vendor'] as const,
-  envColumns: ['dev', 'stg', 'prod', 'dev-local'] as const,
-  verdict: 'GO | HOLD | NO-GO',
+  envColumns: ['dev', 'stg', 'prod'] as const,
+  verdict: 'GO | NO-GO',
+  workflow: ['discover', 'remediate', 'verify', 'clear'] as const,
   rules: [
-    'Operate queue Clear must not be presented as equal to fleet clear when scored cells are non-NOMINAL.',
-    'Unavailable probe paths stay unavailable — never silent green; excluded from GO|HOLD|NO-GO scoring.',
-    'Prod/STG viewer cannot assume Mac 127.0.0.1 Ground bridge (Wave 5.3).',
-    'Viewer seat: OPS_VIEWER_ENV > (in-cluster only) clusters.yaml viewer_env > dev. Local make start defaults DEV; Prod in-cluster uses yaml prod pin.',
+    'Single Process strip above Fleet board: viewer env + GO/NO-GO + circle Discover→Remediate→Verify→Clear + one primary CTA.',
+    'Fleet board is health ground truth; old Phase Progress is reference-only (Help link).',
+    'At most one primary CTA — no dual VerdictBar + WorkflowBar buttons.',
+    'Stage-driven single primary CTA: Discover → AI Check (daily-ops-checklist-run); Remediate → Agent Fix / AI Fix · Operator Plan; Verify → Re-probe; Clear → Clear queue / Run daily check.',
+    'Remediate binds Agent Fix via pickFleetFixCell / cellAllowsAgentFix; Engineer CRITICAL → operator-plan (inline Operator Plan + AI Fix · Operator Plan); fleet cell Agent Fix stays disabled.',
+    'Full Operator Plane page is secondary escape (MCP / host deploy / self-smoke) — not the default primary CTA.',
+    'Agent Fix running: CTA becomes View agent; compact Agent progress panel (phases + elapsed) links to Agent Desk.',
+    'Verify = re-probe fleet after Agent Fix; Clear = fleetClear + operate queue open===0.',
+    'W3 Auto-remediate default OFF — Assisted “Ready to Agent Fix” hint only; never auto-trigger.',
+    'Checklist AI Check (scope daily-ops-checklist-run): Process strip owns the green primary; Checklist header keeps muted Re-check + Ask for AI secondary — never two magic-wand primaries.',
+    'Naming lock: AI Check ≠ Fleet cell Fix ≠ Operator Plane Fix (operator-plane-remediate).',
+    'Action column live progress from last_dispatch + jobs; Skip · dedup 24h / Skip · D10 never imply in-progress.',
+    'Notes fleet≠agent when agent signals disagree with fleet polarity; lamps remain fleet-sourced (no full merge).',
+    'Action: auto job click → Agent Desk; queue → Control Room Operate Queue; Queued (busy) when concurrent auto demote.',
+    'Row Fix: per non-ok full_auto/semi_auto item with fixScope → ambient startRemediation(scope); observe/manual null-scope → Ask for AI only.',
+    'Ask for AI: copy Cursor IDE failover pack (header all non-ok or per-row) — paste into Cursor Agent when Ops Agent path fails or is blocked.',
+    'Trust boundary: checklist-run is L0 probe; actuation only via existing remediation scopes + Operate Queue. Concurrent auto limit 1; 24h dedup per item.',
+    'D10: IB feed fixCapability=observe — never auto-dispatch (skip).',
+    'Standards taxonomy: Control/GitOps/Release · Edge/APIs/Data · Automation/Mac seat · Cluster · Feeds/Tooling.',
+    'Board shows group rollups (ok/total); leaf standards only when failing; full grouped list in Detail.',
+    'Any non-green required standard ⇒ cell NO-GO; fleet GO only when every scored cell is GO.',
+    'Mac seat is Engineer — not a fourth env column. Prod/STG viewer: Mac seat informational only.',
+    'Viewer seat: OPS_VIEWER_ENV > (in-cluster only) clusters.yaml viewer_env > dev.',
     'D10 live trading remains BLOCKED.',
   ],
-  /** Acceptance checkpoints (Fleet Desk QA R0–R4). */
+  /** Acceptance checkpoints (Fleet Desk QA + Process strip). */
   acceptance: [
-    'Q1: Structural unavailable (Mac / Rocket DEV pull) does not HOLD — GO when scored cells are ok.',
+    'Q1: Structural unavailable (Rocket DEV pull) does not NO-GO — GO when scored cells are ok.',
     'Q2: Local (no KUBERNETES_SERVICE_HOST) → DEV; Prod in-cluster → yaml viewer_env=prod; OPS_VIEWER_ENV always overrides.',
     'Q3: Operate Clear ≠ fleet clear when fleetClear=false; fleetClear follows scored verdict.',
-    'Q4: Daily Ops Agent Fix error surfaces without Launch Pad; phase Agent Fix aligns with pickFleetFixCell.',
+    'Q4: Daily Ops Agent Fix error surfaces without Launch Pad; Process strip Remediate CTA aligns with pickFleetFixCell.',
     'Q5: Satellite scopes do not cross — stg=deliver-stg-recover, prod/dev=cluster_issues_full_auto.',
-    'Q6: Ground=operator-plane/bridge; Vendor=IB/Massive primary; viewer badge Probing… while loading.',
+    'Q6: Compact group rollups on board; Detail below board lists standards by group; no GET API strings.',
+    'Q7: Single Process strip (no dual Verdict+Workflow cards); circle stepper shows done/active/blocked; at most one primary CTA.',
+    'Q8: Engineer CRITICAL → inline Operator Plan + AI Fix · Operator Plan; Full page → only as secondary; canOperate gates; D10 copy on remediate.',
+    'Q9: Discover strip primary is AI Check; Clear idle offers Run daily check (same Checklist probe); Agent Fix in flight shows progress panel + View agent (not spinner-only).',
+    'Q10: Strip AI Check / Checklist Re-check start daily-ops-checklist-run; Action column shows live progress; Operator Plane Fix stays separate; no dual green AI Check+AI Fix.',
+    'Q11: Notes show fleet≠agent on polarity mismatch; Action opens job/queue; Queued (busy) when auto demoted by concurrency.',
+    'Q12: Non-ok row shows Fix (Ops Agent when fixScope) and/or Ask for AI (Cursor failover copy); header Ask for AI packs all non-ok items.',
   ],
 } as const
 

@@ -72,6 +72,23 @@ func (h *Handler) HandleEnqueue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, saved)
 }
 
+// EnqueueChecklistDispatch adds a semi_auto checklist handoff (source=checklist_dispatch).
+func (h *Handler) EnqueueChecklistDispatch(req EnqueueRequest) (Item, error) {
+	item, err := NewItemFromManual(req)
+	if err != nil {
+		return Item{}, err
+	}
+	item.Source = SourceChecklistDispatch
+	if strings.TrimSpace(item.Reason) == "" {
+		item.Reason = "checklist_dispatch"
+	}
+	saved, err := h.store.Add(item)
+	if err != nil {
+		return Item{}, err
+	}
+	return saved, nil
+}
+
 func (h *Handler) HandleClose(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if id == "" {

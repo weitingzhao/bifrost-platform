@@ -1,16 +1,19 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DenseTag, PageHeader } from '@bifrost/ui'
 import { fetchDevAgentStatus } from '@/api/devAgent'
 import {
+  fetchAgentBridge,
   fetchCluster,
   fetchClusterServiceReadiness,
   fetchPipelineRuns,
   fetchReleaseGate,
+  fetchRemediationJobs,
   fetchSatelliteBusDeep,
   fetchSupplyChain,
   fetchStgSmoke,
   isAllSatelliteBusDeep,
+  startRemediation,
 } from '@/api/platform'
 import { isBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
 import type {
@@ -37,6 +40,16 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { ambientAgentBlockedReason } from '@/lib/agent/ambientAgent'
+import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
+import {
+  DAILY_OPS_CHECKLIST_RUN_PROMPT,
+  findActiveChecklistRunJob,
+} from '@/lib/control-room/checklistProgress'
+import {
+  buildOperatorPlaneFixPrompt,
+  OPERATOR_PLANE_FIX_SCOPE,
+} from '@/lib/agent/operatorPlaneFixPrompt'
 import {
   buildPlatformProdFixPrompt,
   buildTradeProdFixPrompt,
@@ -55,6 +68,8 @@ import {
   pickFleetFixCell,
   resolveCellFixScope,
 } from '@/lib/control-room/fleetCellFix'
+import { resolveDailyOpsWorkflow } from '@/lib/control-room/dailyOpsWorkflow'
+import { recordChecklistRunTouch } from '@/lib/control-room/dailyOpsChecklistCoverage'
 import type { FleetCell } from '@/lib/control-room/fleetSnapshot'
 import { ViewerEnvBadge } from '@/components/task-mode/ViewerEnvBadge'
 import {
@@ -129,13 +144,56 @@ export function TaskControlCenter({
 }: TaskControlCenterProps) {
   const { mode } = useTaskMode()
   const { canOperate } = usePlatformAuth()
+  const qc = useQueryClient()
   const { fleet, snapshot, viewerEnv, viewerEnvLoading } = useFleetSnapshot()
   const queueQ = useOperateQueue()
   const [fleetFixCell, setFleetFixCell] = useState<FleetCell | null>(null)
   const fleetFixCellRef = useRef<FleetCell | null>(null)
+  /** Tracks Daily Ops Agent Fix lifecycle for workflow Verify phase. */
+  const dailyOpsFixStartedRef = useRef(false)
+  /** Tracks Checklist AI Check (daily-ops-checklist-run) for signals invalidate. */
+  const checklistCheckStartedRef = useRef(false)
+  const prevAmbientJobIdRef = useRef<string | null | undefined>(undefined)
+  const prevAmbientJobScopeRef = useRef<string | null | undefined>(undefined)
+  const [agentJustSucceeded, setAgentJustSucceeded] = useState(false)
 
   const isMissionLaunch = mode.id === 'mission-launch'
   const isDailyOps = mode.id === 'daily-ops'
+  const checklistCheckAmbient =
+    ambientJobId != null && ambientJobScope === DAILY_OPS_CHECKLIST_RUN_SCOPE
+  const [checklistJobsPollFast, setChecklistJobsPollFast] = useState(false)
+  const checklistDispatchJobsQ = useQuery({
+    queryKey: ['remediation', 'jobs', 'checklist-dispatch'],
+    queryFn: fetchRemediationJobs,
+    enabled: isDailyOps,
+    refetchInterval:
+      checklistCheckAmbient || checklistJobsPollFast ? 3_000 : 15_000,
+  })
+  const activeDispatchJobs = useMemo(() => {
+    const jobs = checklistDispatchJobsQ.data?.jobs ?? []
+    return jobs.filter(
+      j =>
+        j.status === 'running' ||
+        j.actor === 'checklist-dispatch' ||
+        j.scope === DAILY_OPS_CHECKLIST_RUN_SCOPE,
+    )
+  }, [checklistDispatchJobsQ.data?.jobs])
+  const activeChecklistRunJob = useMemo(
+    () => findActiveChecklistRunJob(checklistDispatchJobsQ.data?.jobs ?? []),
+    [checklistDispatchJobsQ.data?.jobs],
+  )
+  useEffect(() => {
+    setChecklistJobsPollFast(activeChecklistRunJob != null || checklistCheckAmbient)
+  }, [activeChecklistRunJob, checklistCheckAmbient])
+  const runnerHealthy = useMemo(() => {
+    const eng = fleet.cells.find(c => c.role === 'engineer')
+    if (eng == null) return false
+    return eng.standards.some(
+      s =>
+        (s.id === 'runners-ha' || /runner/i.test(s.id) || /runner/i.test(s.label ?? '')) &&
+        s.signal === 'ok',
+    )
+  }, [fleet.cells])
   const rocketProd = useRocketProdReadiness(isMissionLaunch)
   const satelliteProd = useSatelliteProdReadiness(isMissionLaunch)
   const promoteVerify = usePromoteVerifyReadiness(isMissionLaunch)
@@ -236,6 +294,7 @@ export function TaskControlCenter({
     value: '',
     detail: '',
     probePath: '',
+    standards: [],
     fixScope: null,
     agentFixEnabled: false,
   } as FleetCell)) ?? PROD_ENV_FIX_SCOPE
@@ -682,11 +741,120 @@ export function TaskControlCenter({
     },
   })
 
+  const aiOperatorPlaneFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: OPERATOR_PLANE_FIX_SCOPE,
+    label: scopeToLabel(OPERATOR_PLANE_FIX_SCOPE),
+    buildRequest: async () => {
+      const bridge = await fetchAgentBridge()
+      return { prompt: buildOperatorPlaneFixPrompt(bridge) }
+    },
+  })
+
+  /** Checklist AI Check — scope daily-ops-checklist-run (not Operator Plane Fix). */
+  const aiChecklistCheck = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: DAILY_OPS_CHECKLIST_RUN_SCOPE,
+    label: scopeToLabel(DAILY_OPS_CHECKLIST_RUN_SCOPE),
+    buildRequest: () => ({ prompt: DAILY_OPS_CHECKLIST_RUN_PROMPT }),
+  })
+
   const handleFleetCellFix = (cell: FleetCell) => {
     fleetFixCellRef.current = cell
     setFleetFixCell(cell)
+    dailyOpsFixStartedRef.current = true
+    setAgentJustSucceeded(false)
+    // Mark standards in this cell as a real checklist run (vs dry-run coverage).
+    recordChecklistRunTouch(cell)
     aiDailyOpsFix.trigger()
   }
+
+  const handleOperatorPlanFix = () => {
+    dailyOpsFixStartedRef.current = true
+    setAgentJustSucceeded(false)
+    const engineerCell = fleet.cells.find(c => c.role === 'engineer')
+    if (engineerCell != null) recordChecklistRunTouch(engineerCell)
+    aiOperatorPlaneFix.trigger()
+  }
+
+  const handleChecklistCheck = () => {
+    checklistCheckStartedRef.current = true
+    aiChecklistCheck.trigger()
+  }
+
+  const checklistItemFixRef = useRef<{
+    itemId: string
+    scope: string
+    label: string
+    prompt: string
+  } | null>(null)
+  const [checklistItemFixActiveId, setChecklistItemFixActiveId] = useState<string | null>(
+    null,
+  )
+
+  const aiChecklistItemFix = useMutation({
+    mutationFn: async () => {
+      const r = checklistItemFixRef.current
+      if (r == null) throw new Error('No checklist item selected for Fix')
+      return startRemediation({ scope: r.scope, prompt: r.prompt })
+    },
+    onSuccess: job => {
+      const r = checklistItemFixRef.current
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+      onStartAgentJob?.({
+        id: job.id,
+        scope: r?.scope ?? job.scope ?? 'checklist-item-fix',
+        label: r?.label ?? scopeToLabel(r?.scope ?? job.scope ?? 'checklist-item-fix'),
+      })
+    },
+  })
+
+  // Keep row/section highlight until ambient job ends (not merely until mutate settles).
+  useEffect(() => {
+    if (ambientJobId == null) setChecklistItemFixActiveId(null)
+  }, [ambientJobId])
+
+  const checklistItemFixBlocked = ambientAgentBlockedReason(
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+  )
+
+  const handleChecklistItemFix = (args: {
+    itemId: string
+    fixScope: string
+    label: string
+    prompt: string
+  }) => {
+    checklistItemFixRef.current = {
+      itemId: args.itemId,
+      scope: args.fixScope,
+      label: args.label,
+      prompt: args.prompt,
+    }
+    setChecklistItemFixActiveId(args.itemId)
+    setAgentJustSucceeded(false)
+    aiChecklistItemFix.mutate()
+  }
+
+  const checklistCheckActive =
+    isDailyOps &&
+    (aiChecklistCheck.isPending ||
+      checklistCheckAmbient ||
+      activeChecklistRunJob != null)
+
+  const checklistCheckDisabled =
+    aiChecklistCheck.disabled || !runnerHealthy
+
+  const checklistCheckTitle = !runnerHealthy
+    ? 'Remediation runner not healthy — check Engineer · runners-ha'
+    : (aiChecklistCheck.disabledReason ??
+      'AI Check: daily-ops-checklist-run probe → report_checklist_signals (not Operator Plane Fix)')
 
   const handleFleetPrimaryCta = () => {
     const cta = fleet.verdict.primaryCta
@@ -702,6 +870,92 @@ export function TaskControlCenter({
     }
   }
 
+  // Ambient job ended after Daily Ops Agent Fix → Verify (re-probe)
+  // Checklist AI Check done/failed → refresh signals / KPIs / jobs
+  useEffect(() => {
+    const prevId = prevAmbientJobIdRef.current
+    const prevScope = prevAmbientJobScopeRef.current
+    prevAmbientJobIdRef.current = ambientJobId
+    prevAmbientJobScopeRef.current = ambientJobScope
+
+    if (prevId != null && ambientJobId == null) {
+      if (prevScope === DAILY_OPS_CHECKLIST_RUN_SCOPE || checklistCheckStartedRef.current) {
+        checklistCheckStartedRef.current = false
+        void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+        void qc.invalidateQueries({ queryKey: ['checklist', 'kpis'] })
+        void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+        void qc.invalidateQueries({ queryKey: ['cockpit'] })
+      }
+      if (dailyOpsFixStartedRef.current && prevScope !== DAILY_OPS_CHECKLIST_RUN_SCOPE) {
+        setAgentJustSucceeded(true)
+        void qc.invalidateQueries({ queryKey: ['cockpit'] })
+      }
+    }
+  }, [ambientJobId, ambientJobScope, qc])
+
+  useEffect(() => {
+    if (fleet.fleetClear) {
+      setAgentJustSucceeded(false)
+      dailyOpsFixStartedRef.current = false
+    }
+  }, [fleet.fleetClear])
+
+  const dailyOpsAgentPending =
+    isDailyOps &&
+    (aiDailyOpsFix.isPending ||
+      aiOperatorPlaneFix.isPending ||
+      (ambientJobId != null && dailyOpsFixStartedRef.current))
+
+  const dailyOpsWorkflow = useMemo(() => {
+    if (!isDailyOps) return null
+    return resolveDailyOpsWorkflow({
+      fleet,
+      agentPending: dailyOpsAgentPending,
+      agentJustSucceeded,
+      queueOpen: queueQ.data?.open.length ?? 0,
+    })
+  }, [
+    isDailyOps,
+    fleet,
+    dailyOpsAgentPending,
+    agentJustSucceeded,
+    queueQ.data?.open.length,
+  ])
+
+  const handleFleetWorkflowAction = () => {
+    if (dailyOpsWorkflow == null) return
+    const action = dailyOpsWorkflow.primaryAction
+    if (action.kind === 'agent-fix') {
+      const cell =
+        (action.cellKey != null ? fleet.cells.find(c => c.key === action.cellKey) : null) ??
+        pickFleetFixCell(fleet)
+      if (cell != null && cellAllowsAgentFix(cell)) {
+        handleFleetCellFix(cell)
+      }
+      return
+    }
+    if (action.kind === 'operator-plan') {
+      handleOperatorPlanFix()
+      return
+    }
+    if (action.kind === 'view-agent') {
+      onOpenAgentDesk?.(ambientJobId ?? undefined)
+      return
+    }
+    if (action.kind === 'navigate' || action.kind === 'clear-queue') {
+      if (action.tabId != null) onNavigate(action.tabId)
+      return
+    }
+    if (action.kind === 'ai-check' || action.kind === 'run-check') {
+      // Discover AI Check + Clear idle re-check → daily-ops-checklist-run
+      handleChecklistCheck()
+      return
+    }
+    if (action.kind === 'verify') {
+      void qc.invalidateQueries({ queryKey: ['cockpit'] })
+    }
+  }
+
   const doneCount = phases.filter((p: TaskPhaseDef) => statuses[p.id] === 'done').length
   const loopLabel =
     mode.loopArchetype === 'ops' ? 'Ops loop' : mode.loopArchetype === 'dev' ? 'Dev loop' : 'System'
@@ -713,7 +967,8 @@ export function TaskControlCenter({
   const handlePhaseFixAction = (action: TaskPhaseFixAction, _phase: TaskPhaseDef) => {
     if (action.kind === 'agent-fix') {
       if (mode.id === 'daily-ops') {
-        aiDailyOpsFix.trigger()
+        const cell = pickFleetFixCell(fleet)
+        if (cell != null) handleFleetCellFix(cell)
         return
       }
       if (isMissionLaunch) {
@@ -831,7 +1086,7 @@ export function TaskControlCenter({
     mode.loopArchetype === 'dev'
       ? `Briefing → implement → deliver — playbook for ${mode.label}.`
       : isDailyOps
-        ? `${mode.label} · Fleet Desk — viewer seat, GO|HOLD|NO-GO, role × environment board.`
+        ? `${mode.label} · Process strip Discover → Remediate → Verify → Clear — Fleet Desk is health ground truth.`
         : mode.loopArchetype === 'ops'
           ? `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
           : `${mode.label} · ${loopLabel}`
@@ -851,47 +1106,67 @@ export function TaskControlCenter({
   const phaseProgressCaption = isDevLoop
     ? 'Playbook phase status — Briefing → implement → deliver → sign-off'
     : isDailyOps
-      ? 'Reference playbook — not live fleet health (Fleet board above is authoritative)'
+      ? 'Reference playbook — not live fleet health (Process strip + Fleet board above are authoritative)'
       : 'Historical phase checklist — not live environment health'
 
-  const phaseProgressBlock =
+  /** Daily Ops: Process strip replaces the large Phase Progress block (Help link only). */
+  const phaseProgressBlock = isDailyOps ? (
     phases.length > 0 ? (
-      <details
-        className="rounded-lg border border-border bg-card px-3 py-1.5"
-        open={phaseOpen}
-        onToggle={e => setPhaseOpen((e.currentTarget as HTMLDetailsElement).open)}
-      >
-        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
-            <DenseTag variant="neutral" className="text-[9px]">
-              {isDailyOps ? 'Reference playbook' : 'Playbook'}
-            </DenseTag>
-            <DenseTag variant="neutral" className="text-[9px]">
-              {doneCount}/{phases.length} complete
-            </DenseTag>
-            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-              {phaseProgressHint}
-            </span>
-          </div>
+      <details className="rounded border border-transparent px-1 py-0.5">
+        <summary className="cursor-pointer list-none text-[var(--text-dense-caption)] text-muted-foreground underline-offset-2 hover:underline [&::-webkit-details-marker]:hidden">
+          Help — workflow playbook ({doneCount}/{phases.length})
         </summary>
-        <p className="m-0 mb-1.5 mt-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
-          {phaseProgressCaption}
-        </p>
-        <TaskPhaseProgress
-          phases={phases}
-          statuses={statuses}
-          hints={phaseHints}
-          onOpenFullPage={handleOpenPhasePage}
-          onFixAction={handlePhaseFixAction}
-        />
-        {isMissionLaunch && (satelliteProd.prodBlocked || rocketProd.prodBlocked) && (
-          <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
-            Live readiness blocked — playbook Done does not clear release
+        <div className="mt-1.5 rounded-lg border border-border bg-card px-3 py-1.5">
+          <p className="m-0 mb-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
+            {phaseProgressCaption}
           </p>
-        )}
+          <TaskPhaseProgress
+            phases={phases}
+            statuses={statuses}
+            hints={phaseHints}
+            onOpenFullPage={handleOpenPhasePage}
+            onFixAction={handlePhaseFixAction}
+          />
+        </div>
       </details>
     ) : null
+  ) : phases.length > 0 ? (
+    <details
+      className="rounded-lg border border-border bg-card px-3 py-1.5"
+      open={phaseOpen}
+      onToggle={e => setPhaseOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
+          <DenseTag variant="neutral" className="text-[9px]">
+            Playbook
+          </DenseTag>
+          <DenseTag variant="neutral" className="text-[9px]">
+            {doneCount}/{phases.length} complete
+          </DenseTag>
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+            {phaseProgressHint}
+          </span>
+        </div>
+      </summary>
+      <p className="m-0 mb-1.5 mt-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
+        {phaseProgressCaption}
+      </p>
+      <TaskPhaseProgress
+        phases={phases}
+        statuses={statuses}
+        hints={phaseHints}
+        onOpenFullPage={handleOpenPhasePage}
+        onFixAction={handlePhaseFixAction}
+      />
+      {isMissionLaunch && (satelliteProd.prodBlocked || rocketProd.prodBlocked) && (
+        <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
+          Live readiness blocked — playbook Done does not clear release
+        </p>
+      )}
+    </details>
+  ) : null
 
   const devStripsBlock = isDevLoop ? (
     <DevTaskStrips
@@ -1014,7 +1289,52 @@ export function TaskControlCenter({
             }
             onFleetCellFix={isDailyOps ? handleFleetCellFix : undefined}
             onFleetPrimaryCta={isDailyOps ? handleFleetPrimaryCta : undefined}
-            fleetAgentFixPending={isDailyOps ? aiDailyOpsFix.isPending : undefined}
+            fleetAgentFixPending={isDailyOps ? dailyOpsAgentPending : undefined}
+            fleetWorkflow={dailyOpsWorkflow ?? undefined}
+            fleetAgentFixError={isDailyOps ? (aiDailyOpsFix.error?.message ?? null) : undefined}
+            onFleetWorkflowAction={isDailyOps ? handleFleetWorkflowAction : undefined}
+            onOperatorPlanFix={isDailyOps ? handleOperatorPlanFix : undefined}
+            operatorPlanFixPending={isDailyOps ? aiOperatorPlaneFix.isPending : undefined}
+            operatorPlanFixDisabled={isDailyOps ? aiOperatorPlaneFix.disabled : undefined}
+            operatorPlanFixTitle={
+              isDailyOps
+                ? (aiOperatorPlaneFix.disabledReason ??
+                  'Start Operator · Remediate with current bridge probe')
+                : undefined
+            }
+            operatorPlanFixError={
+              isDailyOps ? (aiOperatorPlaneFix.error?.message ?? null) : undefined
+            }
+            onChecklistCheck={isDailyOps ? handleChecklistCheck : undefined}
+            checklistCheckPending={isDailyOps ? aiChecklistCheck.isPending : undefined}
+            checklistCheckDisabled={isDailyOps ? checklistCheckDisabled : undefined}
+            checklistCheckTitle={isDailyOps ? checklistCheckTitle : undefined}
+            checklistCheckError={
+              isDailyOps ? (aiChecklistCheck.error?.message ?? null) : undefined
+            }
+            checklistCheckActive={isDailyOps ? checklistCheckActive : undefined}
+            checklistCheckStatusHint={
+              isDailyOps ? (activeChecklistRunJob?.phase ?? null) : undefined
+            }
+            onChecklistItemFix={isDailyOps ? handleChecklistItemFix : undefined}
+            checklistItemFixPending={isDailyOps ? aiChecklistItemFix.isPending : undefined}
+            checklistItemFixDisabled={
+              isDailyOps
+                ? checklistItemFixBlocked != null || !runnerHealthy
+                : undefined
+            }
+            checklistItemFixTitle={
+              isDailyOps
+                ? !runnerHealthy
+                  ? 'Remediation runner not healthy — check Engineer · runners-ha'
+                  : (checklistItemFixBlocked ??
+                    'Start Ops Agent Fix for this checklist item (not Cursor Ask for AI)')
+                : undefined
+            }
+            checklistItemFixError={
+              isDailyOps ? (aiChecklistItemFix.error?.message ?? null) : undefined
+            }
+            checklistItemFixActiveId={isDailyOps ? checklistItemFixActiveId : undefined}
             recentRuns={isMissionLaunch ? platformRunsQ.data?.runs : undefined}
             recentRunsLoading={isMissionLaunch ? platformRunsQ.isLoading : false}
             tradeRecentRuns={isMissionLaunch ? tradeRunsQ.data?.runs : undefined}
@@ -1052,9 +1372,10 @@ export function TaskControlCenter({
                   ))
                 : undefined
             }
-            onOpenAgentDesk={() => onOpenAgentDesk?.(ambientJobId ?? undefined)}
+            onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId ?? ambientJobId ?? undefined)}
             ambientJobId={ambientJobId}
             ambientJobScope={ambientJobScope}
+            activeDispatchJobs={isDailyOps ? activeDispatchJobs : undefined}
             pipelineRunsNamespace={isMissionLaunch ? platformRunsQ.data?.namespace : undefined}
             platformStgGate={platformStgGateQ.data}
             platformProdGate={platformProdGateQ.data}
@@ -1097,7 +1418,56 @@ export function TaskControlCenter({
               promoteOnly={isDailyOps}
               onFleetCellFix={isDailyOps ? handleFleetCellFix : undefined}
               onFleetPrimaryCta={isDailyOps ? handleFleetPrimaryCta : undefined}
-              fleetAgentFixPending={isDailyOps ? aiDailyOpsFix.isPending : undefined}
+              fleetAgentFixPending={isDailyOps ? dailyOpsAgentPending : undefined}
+              fleetWorkflow={dailyOpsWorkflow ?? undefined}
+              fleetAgentFixError={isDailyOps ? (aiDailyOpsFix.error?.message ?? null) : undefined}
+              onFleetWorkflowAction={isDailyOps ? handleFleetWorkflowAction : undefined}
+              onOperatorPlanFix={isDailyOps ? handleOperatorPlanFix : undefined}
+              operatorPlanFixPending={isDailyOps ? aiOperatorPlaneFix.isPending : undefined}
+              operatorPlanFixDisabled={isDailyOps ? aiOperatorPlaneFix.disabled : undefined}
+              operatorPlanFixTitle={
+                isDailyOps
+                  ? (aiOperatorPlaneFix.disabledReason ??
+                    'Start Operator · Remediate with current bridge probe')
+                  : undefined
+              }
+              operatorPlanFixError={
+                isDailyOps ? (aiOperatorPlaneFix.error?.message ?? null) : undefined
+              }
+              onChecklistCheck={isDailyOps ? handleChecklistCheck : undefined}
+              checklistCheckPending={isDailyOps ? aiChecklistCheck.isPending : undefined}
+              checklistCheckDisabled={isDailyOps ? checklistCheckDisabled : undefined}
+              checklistCheckTitle={isDailyOps ? checklistCheckTitle : undefined}
+              checklistCheckError={
+                isDailyOps ? (aiChecklistCheck.error?.message ?? null) : undefined
+              }
+              checklistCheckActive={isDailyOps ? checklistCheckActive : undefined}
+              checklistCheckStatusHint={
+                isDailyOps ? (activeChecklistRunJob?.phase ?? null) : undefined
+              }
+              onChecklistItemFix={isDailyOps ? handleChecklistItemFix : undefined}
+              checklistItemFixPending={isDailyOps ? aiChecklistItemFix.isPending : undefined}
+              checklistItemFixDisabled={
+                isDailyOps
+                  ? checklistItemFixBlocked != null || !runnerHealthy
+                  : undefined
+              }
+              checklistItemFixTitle={
+                isDailyOps
+                  ? !runnerHealthy
+                    ? 'Remediation runner not healthy — check Engineer · runners-ha'
+                    : (checklistItemFixBlocked ??
+                      'Start Ops Agent Fix for this checklist item (not Cursor Ask for AI)')
+                  : undefined
+              }
+              checklistItemFixError={
+                isDailyOps ? (aiChecklistItemFix.error?.message ?? null) : undefined
+              }
+              checklistItemFixActiveId={isDailyOps ? checklistItemFixActiveId : undefined}
+              ambientJobId={ambientJobId}
+              ambientJobScope={ambientJobScope}
+              activeDispatchJobs={isDailyOps ? activeDispatchJobs : undefined}
+              onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId ?? ambientJobId ?? undefined)}
             />
           )}
         </>

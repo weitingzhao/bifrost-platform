@@ -14,9 +14,14 @@ import {
   PROD_ENV_FIX_SCOPE,
   type ProdFixSignal,
 } from '@/lib/agent/prodEnvironmentFixPrompt'
+import { OPERATOR_PLANE_FIX_SCOPE } from '@/lib/agent/operatorPlaneFixPrompt'
 import { SATELLITE_BUS_INGEST_TRIAGE_SCOPE } from '@/lib/agent/satelliteBusIngestTriagePrompt'
 import { collectClusterIssues } from '@/lib/cluster/collectClusterIssues'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
+
+/** Playbook markers consumed by remediation runner prompt routing (avoid generic fallback). */
+export const MASSIVE_FEED_PLAYBOOK = 'Playbook: massive-feed-recover'
+export const DATA_LAYER_PLAYBOOK = 'Playbook: data-layer-recover'
 
 export { pickFixScope, pickFailingFixSignal }
 
@@ -83,6 +88,53 @@ export function buildDispatchedFixPrompt(input: {
         'classify policy-off/managed-ok/false-alarm; safe L1 restart only (D10 — no daemon scale).',
       ].join('\n')
     )
+  }
+
+  if (scope === OPERATOR_PLANE_FIX_SCOPE) {
+    return [
+      'Playbook: operator-plane-remediate',
+      '',
+      failing != null
+        ? `Issue: ${failing.label} (${failing.signal}): ${failing.detail}`
+        : 'Issue: Operator Plane runners / git-bridge degraded',
+      '',
+      '## Runners HA',
+      '1. get_agent_bridge + get_remediation_health',
+      '2. peer_agent_health → restart_peer_agent if peer still down after watchdog window',
+      '3. request_operator_manual_steps for Mac Pro git-bridge / .env when needed',
+      '',
+      'D10: observe IB only — no live trade enablement.',
+    ].join('\n')
+  }
+
+  if (scope === PROD_ENV_FIX_SCOPE && failing != null) {
+    const label = `${failing.label} ${failing.detail}`.toLowerCase()
+    if (/massive|polygon/.test(label)) {
+      return [
+        MASSIVE_FEED_PLAYBOOK,
+        '',
+        `Issue: ${failing.label} (${failing.signal}): ${failing.detail}`,
+        '',
+        '1. verify_mission_snapshot + verify_payload for massive targets',
+        '2. get_cluster_summary — massive-ws / api-massive pods',
+        '3. rollout_restart_deployment with approval; or manual API key rotation',
+        '4. verify_mission_snapshot before close',
+        '',
+        'D10: do not scale daemon or enable live trading.',
+      ].join('\n')
+    }
+    if (/postgres|cnpg|redis|datastore|data layer/.test(label)) {
+      return [
+        DATA_LAYER_PLAYBOOK,
+        '',
+        `Issue: ${failing.label} (${failing.signal}): ${failing.detail}`,
+        '',
+        '1. verify_payload + verify_mission_snapshot (DATA_LAYER vs PROBE_DRIFT)',
+        '2. get_cluster_summary — data NS pods/PVCs/CNPG',
+        '3. Redis: safe rollout restart; Postgres: approve before primary disruption',
+        '4. verify_mission_snapshot before close',
+      ].join('\n')
+    }
   }
 
   return clusterFallbackPrompt

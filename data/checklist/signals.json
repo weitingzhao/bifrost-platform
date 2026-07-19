@@ -1,0 +1,208 @@
+{
+  "version": "2026-07-19",
+  "updated_at": "2026-07-19T06:14:30Z",
+  "last_run_id": "5c32bd7b-2813-4a77-bf3f-5e7b2487a76e",
+  "source": "daily-ops-checklist-run",
+  "signals": [
+    {
+      "item_id": "massive-polygon",
+      "signal": "ok",
+      "detail": "stg-api-massive /api/massive/health HTTP 200",
+      "env": "stg"
+    },
+    {
+      "item_id": "nodes-ready",
+      "signal": "ok",
+      "detail": "5/5 nodes Ready; 1 elastic standby registered (6 registered, 5 ready)",
+      "env": "span"
+    },
+    {
+      "item_id": "platform-api",
+      "signal": "ok",
+      "detail": "Mission matrix 12/12 STG reachable; stg-api-ops/trading/strategy health HTTP 200",
+      "env": "stg"
+    },
+    {
+      "item_id": "postgres",
+      "signal": "degraded",
+      "detail": "STG+PROD NOMINAL (matrix/cluster agree); dev-local Mac PG unreachable — payload overall DATA_LAYER",
+      "env": "span"
+    },
+    {
+      "item_id": "argo-apps",
+      "signal": "ok",
+      "detail": "5/5 Argo CD apps Synced+Healthy; argocd-server 1/1 Ready",
+      "env": "span"
+    },
+    {
+      "item_id": "runners-ha",
+      "signal": "ok",
+      "detail": "Primary 192.168.10.50:8781 ok; standby 192.168.10.52:8781 ok; both active",
+      "env": "span"
+    },
+    {
+      "item_id": "redis",
+      "signal": "degraded",
+      "detail": "STG+PROD NOMINAL (matrix/cluster agree); dev-local Mac Redis unreachable — payload overall DATA_LAYER",
+      "env": "span"
+    },
+    {
+      "item_id": "hermes-tooling",
+      "signal": "degraded",
+      "detail": "Local hermes_mcp 127.0.0.1:8782 connection refused; Nous Hermes gateway 10.50:9119 running (v0.17.0); platform MCP 67/68 tools",
+      "env": "dev"
+    },
+    {
+      "item_id": "cluster-api",
+      "signal": "ok",
+      "detail": "K3s API reachable (api_reachability=ok); server v1.35.5+k3s1 @ 192.168.10.73:6443",
+      "env": "span"
+    },
+    {
+      "item_id": "git-bridge",
+      "signal": "degraded",
+      "detail": "Git bridge ok @ 192.168.10.40:8785 but 1 dirty repo in workspace (9 repos)",
+      "env": "dev"
+    },
+    {
+      "item_id": "trade-apis",
+      "signal": "ok",
+      "detail": "Mission matrix dev/stg/prod 12/12; STG smoke 9/9 API domains reachable",
+      "env": "stg"
+    },
+    {
+      "item_id": "stg-smoke",
+      "signal": "ok",
+      "detail": "STG smoke 9/9 API domains reachable (HTTP 200)",
+      "env": "stg"
+    },
+    {
+      "item_id": "mac-probe-bridge",
+      "signal": "degraded",
+      "detail": "satellite_probe_bridge not_configured; dev-local matrix PG/Redis fail (DATA_LAYER)",
+      "env": "dev"
+    },
+    {
+      "item_id": "deliver-pipeline",
+      "signal": "ok",
+      "detail": "8 Tekton pipelines in cicd; deliver-stg/prod/platform build_ready=true; reachability ok",
+      "env": "span"
+    },
+    {
+      "item_id": "platform-console",
+      "signal": "ok",
+      "detail": "Argo bifrost-platform-stg/prod Synced+Healthy; stg-frontend HTTP 200",
+      "env": "stg"
+    },
+    {
+      "item_id": "nginx-edge",
+      "signal": "ok",
+      "detail": "STG nginx edge stg-frontend HTTP 200 @ 192.168.10.100",
+      "env": "stg"
+    },
+    {
+      "item_id": "ib-feed",
+      "signal": "unknown",
+      "detail": "No dedicated ib-feed probe in evidence; D10 observe-only — skip auto-dispatch",
+      "env": "span"
+    },
+    {
+      "item_id": "failing-pods",
+      "signal": "ok",
+      "detail": "failing_pods=0; running=830 pending=0",
+      "env": "span"
+    }
+  ],
+  "last_dispatch": [
+    {
+      "item_id": "postgres",
+      "gate": "skip",
+      "fix_scope": "cluster_issues_full_auto",
+      "detail": "dedup: dispatched within last 24h window",
+      "at": "2026-07-19T06:14:30Z"
+    },
+    {
+      "item_id": "redis",
+      "gate": "skip",
+      "fix_scope": "cluster_issues_full_auto",
+      "detail": "dedup: dispatched within last 24h window",
+      "at": "2026-07-19T06:14:30Z"
+    },
+    {
+      "item_id": "hermes-tooling",
+      "gate": "skip",
+      "fix_scope": "operator-plane-remediate",
+      "detail": "dedup: dispatched within last 24h window",
+      "at": "2026-07-19T06:14:30Z"
+    },
+    {
+      "item_id": "git-bridge",
+      "gate": "skip",
+      "fix_scope": "operator-plane-remediate",
+      "detail": "dedup: dispatched within last 24h window",
+      "at": "2026-07-19T06:14:30Z"
+    },
+    {
+      "item_id": "mac-probe-bridge",
+      "gate": "notify",
+      "detail": "Mac seat · probe-bridge — operator notify only: satellite_probe_bridge not_configured; dev-local matrix PG/Redis fail (DATA_LAYER)",
+      "at": "2026-07-19T06:14:30Z"
+    }
+  ],
+  "quiet_success_streak": 0,
+  "last_fail_at": "2026-07-19T06:14:30Z",
+  "last_all_ok_at": "2026-07-19T05:54:28Z",
+  "history": [
+    {
+      "at": "2026-07-19T05:54:12Z",
+      "ok": 1,
+      "fail": 4,
+      "unknown": 0,
+      "all_ok": false
+    },
+    {
+      "at": "2026-07-19T05:54:28Z",
+      "ok": 18,
+      "fail": 0,
+      "unknown": 0,
+      "all_ok": true
+    },
+    {
+      "at": "2026-07-19T05:54:28Z",
+      "ok": 17,
+      "fail": 1,
+      "unknown": 0,
+      "all_ok": false
+    },
+    {
+      "at": "2026-07-19T06:12:39Z",
+      "ok": 9,
+      "fail": 8,
+      "unknown": 1,
+      "all_ok": false
+    },
+    {
+      "at": "2026-07-19T06:12:46Z",
+      "ok": 9,
+      "fail": 9,
+      "unknown": 0,
+      "all_ok": false
+    },
+    {
+      "at": "2026-07-19T06:13:57Z",
+      "run_id": "46b1adec-2067-4757-9d6c-91eac494c9a9",
+      "ok": 12,
+      "fail": 5,
+      "unknown": 1,
+      "all_ok": false
+    },
+    {
+      "at": "2026-07-19T06:14:30Z",
+      "run_id": "5c32bd7b-2813-4a77-bf3f-5e7b2487a76e",
+      "ok": 12,
+      "fail": 5,
+      "unknown": 1,
+      "all_ok": false
+    }
+  ]
+}

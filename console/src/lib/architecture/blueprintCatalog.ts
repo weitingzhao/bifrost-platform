@@ -210,7 +210,7 @@ export const TASK_MODE_BLUEPRINT = {
   source: 'console/src/lib/task-mode/taskModeCatalog.ts',
   statement:
     'Task modes filter sidebar navigation and land on Task Control Center for phased playbooks. ' +
-    'Daily Ops uses Fleet Desk (viewer env badge · GO|HOLD|NO-GO verdict · role×env board with probePath / per-cell Agent Fix); ' +
+    'Daily Ops uses Fleet Desk (Process strip: viewer env · GO|HOLD|NO-GO · circle Discover→Clear · single CTA · Agent live panel · role×env board with probePath / per-cell Agent Fix); ' +
     'unavailable cells are display-only (Excluded from GO); Prod pins clusters.yaml viewer_env=prod (OPS_VIEWER_ENV overrides). ' +
     'Mission Launch keeps readiness + LaunchPad. Ops loops — no Briefing/DevAgent. ' +
     'Dev loops (rocket-build, satellite-build, engineer-build, ground-build, plugin-build) chain Briefing → Dev Agent → Delivery Board.',
