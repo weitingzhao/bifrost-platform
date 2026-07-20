@@ -657,32 +657,89 @@ export function RemediationPanel({
             ? { height: decisionZoneHeight, maxHeight: '85vh' }
             : undefined
         }
-        aria-label="Operator decision"
+        aria-label={
+          pendingApproval != null
+            ? 'Operator decision'
+            : job?.phase === 'awaiting_approval'
+              ? 'Waiting for decision options'
+              : 'Agent status'
+        }
       >
-        <p className="remediation-decision-zone__title">
-          {pendingApproval != null ? (
-          pendingApproval.meta?.kind === 'manual_steps'
-            ? 'Your action — manual steps required'
-            : 'Your decision — action required'
-          ) : 'Your decision'}
-        </p>
         {pendingApproval != null && viewJobId != null ? (
-          <RemediationApprovalBlock
-            event={pendingApproval}
-            submitting={respondMutation.isPending}
-            onOpenServerConsole={onOpenServerConsole}
-            onRespond={(optionId, note, commitMessage) =>
-              respondMutation.mutate({ id: viewJobId, optionId, note, commitMessage })
-            }
-          />
+          <>
+            <p className="remediation-decision-zone__title">
+              {pendingApproval.meta?.kind === 'manual_steps'
+                ? 'Your action — manual steps required'
+                : 'Your decision — action required'}
+            </p>
+            <RemediationApprovalBlock
+              event={pendingApproval}
+              submitting={respondMutation.isPending}
+              onOpenServerConsole={onOpenServerConsole}
+              onRespond={(optionId, note, commitMessage) =>
+                respondMutation.mutate({ id: viewJobId, optionId, note, commitMessage })
+              }
+            />
+          </>
         ) : job?.phase === 'awaiting_approval' && isLiveView ? (
-          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Waiting for agent to present options…
-          </p>
+          <>
+            <p className="remediation-decision-zone__title">Your decision — waiting</p>
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Agent is preparing options. Choices will appear here — you do not need to act in
+              Activity until then.
+            </p>
+          </>
+        ) : isRunning ? (
+          <>
+            <p className="remediation-decision-zone__title">
+              {job?.phase === 'diagnosing'
+                ? 'Diagnosing — no decision needed'
+                : job?.phase === 'verifying'
+                  ? 'Verifying — no decision needed'
+                  : 'Remediating — no decision needed'}
+            </p>
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Agent is working (tools stream in Activity). There is nothing to approve right now.
+              If this looks stuck, use <span className="font-medium text-foreground">Stop</span>{' '}
+              below, then retry or Ask AI.
+            </p>
+            {jobId != null && onStop != null && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={stopping}
+                  onClick={() => {
+                    stop()
+                    onStop(jobId)
+                  }}
+                >
+                  {stopping ? 'Stopping…' : 'Stop agent'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={askAiPrompt === ''}
+                  onClick={() => void handleAskAi()}
+                >
+                  {askAiState === 'copied' ? 'Copied for AI!' : 'Ask AI to resolve'}
+                </Button>
+              </div>
+            )}
+          </>
         ) : (
-          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            No pending choice. Tool calls and reasoning stream in Activity below.
-          </p>
+          <>
+            <p className="remediation-decision-zone__title">Session</p>
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              {job?.status === 'done'
+                ? 'Completed — no further decision required.'
+                : job?.status === 'failed'
+                  ? 'Failed — use Ask AI / Copy report, or start a new task.'
+                  : job?.status === 'cancelled'
+                    ? 'Stopped — start a new task when ready.'
+                    : 'No pending choice.'}
+            </p>
+          </>
         )}
       </section>
 
