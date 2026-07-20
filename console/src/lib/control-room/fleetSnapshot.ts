@@ -214,14 +214,27 @@ export function rollupStandards(standards: FleetStandard[]): FleetGroupRollup[] 
     const members = map.get(group)
     if (members == null || members.length === 0) continue
     const required = members.filter(m => m.required !== false)
+    // Optional-only groups (e.g. Rocket RELEASE on DEV/PROD = N/A) still roll up for display.
     const scored = required.length > 0 ? required : members
     const ok = scored.filter(m => m.signal === 'ok').length
+    const signal: FleetCellSignal =
+      required.length > 0
+        ? signalFromStandards(required)
+        : scored.every(m => m.signal === 'ok')
+          ? 'ok'
+          : scored.some(m => m.signal === 'fail')
+            ? 'fail'
+            : scored.some(m => m.signal === 'degraded')
+              ? 'degraded'
+              : scored.some(m => m.signal === 'unavailable')
+                ? 'unavailable'
+                : 'unknown'
     out.push({
       group,
       label: FLEET_STANDARD_GROUP_LABEL[group],
       ok,
       total: scored.length,
-      signal: signalFromStandards(scored),
+      signal,
     })
   }
   return out
@@ -358,6 +371,18 @@ function stgSmokeStandard(stg: StgSmokeResponse): FleetStandard {
     signal,
     stg.targets.map(t => `${t.id}:${t.reachability}`).join(' · ') || 'No smoke targets',
     'release',
+  )
+}
+
+/** Release (deliver + STG smoke) is STG-column only — DEV/PROD show N/A, not scored for GO. */
+function rocketReleaseNotApplicable(): FleetStandard {
+  return std(
+    'release-na',
+    'Release lane',
+    'ok',
+    'N/A — deliver / STG smoke apply to the STG column only',
+    'release',
+    false,
   )
 }
 
@@ -512,7 +537,7 @@ export function buildRocketCell(input: {
   }
 
   if (env === 'prod') {
-    const standards = standardsFromSelfProbes(self, 'prod')
+    const standards = [...standardsFromSelfProbes(self, 'prod'), rocketReleaseNotApplicable()]
     const prodHealth = selfHealthEnvSignal(self, 'prod')
     const derived = signalFromStandards(standards)
     return rocketCellFromState(
@@ -531,7 +556,7 @@ export function buildRocketCell(input: {
   if (viewerEnv === 'dev' || viewerEnv === 'dev-local') {
     const control = controlSignal(self)
     // Local seat: Control + GitOps from this platform-api view (not a dump of STG/PROD as "DEV")
-    const standards = standardsFromSelfProbes(self, 'local')
+    const standards = [...standardsFromSelfProbes(self, 'local'), rocketReleaseNotApplicable()]
     const derived = signalFromStandards(standards)
     return rocketCellFromState(
       key,
@@ -557,7 +582,7 @@ export function buildRocketCell(input: {
       'Probe path unavailable from this viewer',
     )
   }
-  const standards = standardsFromSelfProbes(self, 'dev')
+  const standards = [...standardsFromSelfProbes(self, 'dev'), rocketReleaseNotApplicable()]
   const derived = signalFromStandards(standards)
   return rocketCellFromState(
     key,

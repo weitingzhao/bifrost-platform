@@ -470,15 +470,9 @@ export function DailyOpsFleetBoard({
     })
   }
 
-  const orderedRoles = useMemo(() => {
-    if (!issuesOnly) return BOARD_ROLE_ORDER
-    return [...BOARD_ROLE_ORDER].sort((a, b) => {
-      const ai = roleHasIssues(fleet, a) ? 0 : 1
-      const bi = roleHasIssues(fleet, b) ? 0 : 1
-      if (ai !== bi) return ai - bi
-      return BOARD_ROLE_ORDER.indexOf(a) - BOARD_ROLE_ORDER.indexOf(b)
-    })
-  }, [fleet, issuesOnly])
+  // Stable role order across Viewer seats (DEV/STG/PROD). "Issues only" collapses
+  // green roles to a summary row — it must not reorder ROLE, or seats look inconsistent.
+  const orderedRoles = BOARD_ROLE_ORDER
 
   const issueRoleCount = useMemo(
     () => BOARD_ROLE_ORDER.filter(r => roleHasIssues(fleet, r)).length,
@@ -623,7 +617,7 @@ export function DailyOpsFleetBoard({
       <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
         <span className="text-[var(--text-dense-label)] font-semibold">Fleet board</span>
         <DenseTag variant="neutral" className="text-[9px]">
-          {issuesOnly ? 'Issues first' : 'All checks · grouped'}
+          {issuesOnly ? 'Issues only' : 'All checks · grouped'}
         </DenseTag>
         <Button
           type="button"
