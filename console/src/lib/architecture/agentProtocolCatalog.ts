@@ -118,7 +118,7 @@ export const WAVE3_P0_DECISIONS: Wave3P0Decision[] = [
       'Post-completion remains NOT ASSESSED until Briefing Owner decision. Only approved structured handoffs inject into GET/POST /api/v1/operate/queue (data/operate/queue.json); NO HANDOFF is explicit, and verified closure remains in recent_closed. Not spine tracks.operate.',
     wave3Deliverables: [
       'Operate queue store + GET list + POST enqueue on approve',
-      'Control Room strip: open operate queue items (deep-link to Agent Desk)',
+      'Control Room strip: open-count summary + deep-link to Agent Desk (full list in TCC / Desk)',
       'Briefing operate track reads queue API',
       'MCP get_operate_queue (read)',
       'Structured reason/task/criteria/verification/risk contract with legacy JSON compatibility',

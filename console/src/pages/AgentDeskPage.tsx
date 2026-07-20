@@ -20,6 +20,7 @@ import { AgentTaskCatalogPanel } from '@/components/agent/AgentTaskCatalogPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import { recordOperateQueueExecution, OPERATE_QUEUE_QUERY_KEY } from '@/api/operateQueue'
 import { catalogTaskById } from '@/lib/agent/agentTaskCatalog'
@@ -46,9 +47,11 @@ interface AgentDeskPageProps {
   initialJobId?: string | null
   prefillPrompt?: string | null
   focusHandoffId?: string | null
+  focusDecisionBriefs?: boolean
   onInitialJobConsumed?: () => void
   onPrefillConsumed?: () => void
   onFocusHandoffConsumed?: () => void
+  onFocusDecisionBriefsConsumed?: () => void
   onOpenBriefing?: () => void
   onOpenCluster?: () => void
   onOpenMcpContract?: () => void
@@ -144,9 +147,11 @@ export function AgentDeskPage({
   initialJobId,
   prefillPrompt,
   focusHandoffId,
+  focusDecisionBriefs = false,
   onInitialJobConsumed,
   onPrefillConsumed,
   onFocusHandoffConsumed,
+  onFocusDecisionBriefsConsumed,
   onOpenBriefing,
   onOpenCluster,
   onOpenMcpContract,
@@ -174,6 +179,7 @@ export function AgentDeskPage({
   )
   const briefingActiveSession = loadBriefingActiveSession()
   const operateQueueQuery = useOperateQueue()
+  const decisionBriefsQuery = usePendingDecisionBriefs()
 
   useEffect(() => {
     if (initialJobId == null) return
@@ -198,6 +204,19 @@ export function AgentDeskPage({
     if (focusHandoffId == null || focusHandoffId === '') return
     setDeskView('operate')
   }, [focusHandoffId])
+
+  useEffect(() => {
+    if (!focusDecisionBriefs) return
+    setDeskView('operate')
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.querySelector('[data-decision-brief-id]')
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+      onFocusDecisionBriefsConsumed?.()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [focusDecisionBriefs, onFocusDecisionBriefsConsumed])
 
   const healthQuery = useQuery({
     queryKey: ['remediation', 'health'],
@@ -391,7 +410,13 @@ export function AgentDeskPage({
               value={deskView}
               onChange={value => setDeskView(value as AgentDeskView)}
               options={[
-                { value: 'operate', label: 'Operate' },
+                {
+                  value: 'operate',
+                  label:
+                    decisionBriefsQuery.pendingCount > 0
+                      ? `Operate (${decisionBriefsQuery.pendingCount})`
+                      : 'Operate',
+                },
                 { value: 'observe', label: 'Observe' },
                 { value: 'review', label: 'Review' },
               ]}

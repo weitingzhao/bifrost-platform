@@ -85,6 +85,10 @@ export type DailyOpsProcessStripProps = {
   checklistCheckTitle?: string
   checklistCheckActive?: boolean
   checklistCheckStatusHint?: string | null
+  /** Open operate-queue count — when > 0 during Remediate/Clear, show Sweep Queue CTA. */
+  queueOpen?: number
+  onSweepQueue?: () => void
+  sweepQueuePending?: boolean
 }
 
 /**
@@ -114,10 +118,17 @@ export function DailyOpsProcessStrip({
   checklistCheckTitle,
   checklistCheckActive = false,
   checklistCheckStatusHint = null,
+  queueOpen = 0,
+  onSweepQueue,
+  sweepQueuePending = false,
 }: DailyOpsProcessStripProps) {
   const { verdict, viewerEnv } = fleet
   const action = workflow.primaryAction
   const stepStatuses = dailyOpsStepStatuses(workflow)
+  const showSweepQueue =
+    queueOpen > 0 &&
+    onSweepQueue != null &&
+    (workflow.activePhase === 'remediate' || workflow.activePhase === 'clear')
   const isAgentFix = action.kind === 'agent-fix'
   const isOperatorPlan = action.kind === 'operator-plan'
   const isProposeCommit = action.kind === 'propose-commit'
@@ -440,6 +451,21 @@ export function DailyOpsProcessStrip({
             <DenseTag variant="success" className="text-[9px]">
               {action.label}
             </DenseTag>
+          )}
+          {showSweepQueue && (
+            <button
+              type="button"
+              className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary"
+              disabled={!canOperate || sweepQueuePending}
+              title={
+                canOperate
+                  ? `Triage ${queueOpen} open queue item${queueOpen === 1 ? '' : 's'} (stale dismiss + re-classify; auto-drain off)`
+                  : 'Operator authentication required'
+              }
+              onClick={onSweepQueue}
+            >
+              {sweepQueuePending ? 'Sweeping…' : `Sweep Queue (${queueOpen})`}
+            </button>
           )}
         </div>
       </div>

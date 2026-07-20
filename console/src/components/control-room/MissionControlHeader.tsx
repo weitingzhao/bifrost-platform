@@ -39,6 +39,8 @@ interface MissionControlHeaderProps {
   onOpenPlatformRelease: () => void
   onOpenAgentDesk: (opts?: { prefill: string }) => void
   onOpenLaunchView: (mode: 'mission-launch') => void
+  /** Trade readiness IB → Daily Ops Fleet Vendor */
+  onOpenFleetVendor?: () => void
   onOpenPromote?: () => void
   onPlaybookFix?: (opts: { scope: string; prompt: string }) => void
   playbookFixPending?: boolean
@@ -199,8 +201,7 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
             matrices={matrices}
             context={context}
             onOpenRuntimeMap={props.onOpenRuntimeMap}
-            onOpenDelivery={props.onOpenDelivery}
-            onOpenPromote={props.onOpenPromote}
+            onOpenFleetVendor={props.onOpenFleetVendor}
           />
         </div>
       </OpsSection>

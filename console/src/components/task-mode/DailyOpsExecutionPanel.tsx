@@ -1,14 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bot, ChevronRight, History, Loader2, Target } from 'lucide-react'
-import { ConfirmDialog, DenseTag, SegmentControl, cn } from '@bifrost/ui'
+import { Button, ConfirmDialog, DenseTag, SegmentControl, cn } from '@bifrost/ui'
 import { fetchRemediationJobs } from '@/api/platform'
+import {
+  formatSweepSummary,
+  OPERATE_SWEEP_LAST_KEY,
+  type SweepResponse,
+} from '@/api/operateBriefs'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import type { RemediationJob } from '@/api/types'
 import { DailyOpsAgentLivePanel } from '@/components/task-mode/DailyOpsProcessStrip'
 import { GitDirtyDetailsPanel } from '@/components/task-mode/GitDirtyDetailsPanel'
+import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { useDismissOperateQueueItem } from '@/hooks/useDismissOperateQueueItem'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { useOperateDrainStatus, useOperateSweep } from '@/hooks/useOperateSweep'
+import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
@@ -111,7 +119,7 @@ type HistoryRow =
 
 const HISTORY_LIMIT = 12
 
-type QueueFilter = 'all' | QueueLane
+type QueueFilter = 'all' | QueueLane | 'drain'
 
 function DailyOpsFixTargetBar({
   primaryBlocker,
@@ -305,7 +313,11 @@ export function DailyOpsExecutionPanel({
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
   const [dismissItem, setDismissItem] = useState<OperateQueueItem | null>(null)
   const [dismissEvidence, setDismissEvidence] = useState('')
+  const [autoDrain, setAutoDrain] = useState(false)
   const dismissMutation = useDismissOperateQueueItem()
+  const sweepMutation = useOperateSweep()
+  const drainStatusQuery = useOperateDrainStatus()
+  const briefsQuery = usePendingDecisionBriefs()
   const { canOperate } = usePlatformAuth()
   const showDirtyPanel =
     primaryBlocker != null && isGitDirtyBlocker(primaryBlocker) && !hasAmbientJob
@@ -318,6 +330,32 @@ export function DailyOpsExecutionPanel({
   const open = queueQ.data?.open ?? []
   const recentClosed = queueQ.data?.recent_closed ?? []
 
+  const lastSweepQ = useQuery({
+    queryKey: OPERATE_SWEEP_LAST_KEY,
+    queryFn: async (): Promise<SweepResponse | null> => null,
+    enabled: false,
+    staleTime: Infinity,
+  })
+  const lastSweep = lastSweepQ.data
+  const sweepSummary = lastSweep != null ? formatSweepSummary(lastSweep) : null
+
+  const drainItemIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const row of lastSweep?.queued ?? []) {
+      if (row.item_id) ids.add(row.item_id)
+    }
+    for (const id of drainStatusQuery.data?.queued_item_ids ?? []) {
+      if (id) ids.add(id)
+    }
+    const activeId = drainStatusQuery.data?.current_item_id
+    if (activeId) ids.add(activeId)
+    return ids
+  }, [
+    lastSweep,
+    drainStatusQuery.data?.queued_item_ids,
+    drainStatusQuery.data?.current_item_id,
+  ])
+
   const jobsQ = useQuery({
     queryKey: ['remediation', 'jobs'],
     queryFn: fetchRemediationJobs,
@@ -325,14 +363,29 @@ export function DailyOpsExecutionPanel({
   })
   const allJobs = jobsQ.data?.jobs ?? []
 
-  const partitioned = useMemo(() => partitionOpenQueue(open), [open])
+  const partitioned = useMemo(
+    () => partitionOpenQueue(open, { drainItemIds }),
+    [open, drainItemIds],
+  )
   const badgeCount = partitioned.actionable
 
   const visibleQueue = useMemo(() => {
     if (queueFilter === 'human') return partitioned.human
     if (queueFilter === 'agent') return partitioned.agent
-    return [...partitioned.human, ...partitioned.agent]
+    if (queueFilter === 'drain') return partitioned.drain
+    return [...partitioned.drain, ...partitioned.human, ...partitioned.agent]
   }, [queueFilter, partitioned])
+
+  function handleSweep() {
+    sweepMutation.mutate(
+      { auto_drain: autoDrain },
+      {
+        onSuccess: () => {
+          setTab('queue-history')
+        },
+      },
+    )
+  }
 
   const jobFixTarget = useMemo(
     () =>
@@ -576,6 +629,16 @@ export function DailyOpsExecutionPanel({
                   Agent {partitioned.agentActionable}
                 </DenseTag>
               )}
+              {partitioned.drainCount > 0 && (
+                <DenseTag variant="category" className="text-[8px]">
+                  Drain {partitioned.drainCount}
+                </DenseTag>
+              )}
+              {briefsQuery.pendingCount > 0 && (
+                <DenseTag variant="danger" className="text-[8px]">
+                  Decisions {briefsQuery.pendingCount}
+                </DenseTag>
+              )}
               {partitioned.noise.length > 0 && (
                 <span className="text-[var(--text-dense-micro)] text-muted-foreground">
                   · {partitioned.noise.length} skip/dedup hidden
@@ -586,7 +649,74 @@ export function DailyOpsExecutionPanel({
                   Queue clear ≠ fleet clear
                 </span>
               )}
+              <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                <label
+                  className="inline-flex items-center gap-1 text-[var(--text-dense-micro)] text-muted-foreground"
+                  title="When enabled, STILL_NEEDED items start serial drain after triage"
+                >
+                  <input
+                    type="checkbox"
+                    className="size-3 accent-[var(--primary)]"
+                    checked={autoDrain}
+                    disabled={!canOperate || sweepMutation.isPending}
+                    onChange={e => setAutoDrain(e.target.checked)}
+                  />
+                  Auto-drain
+                </label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!canOperate || sweepMutation.isPending}
+                  title={
+                    canOperate
+                      ? autoDrain
+                        ? 'Triage queue, dismiss stale, and start serial drain'
+                        : 'Triage queue and dismiss stale (safe default — no auto drain)'
+                      : 'Operator authentication required'
+                  }
+                  onClick={handleSweep}
+                >
+                  {sweepMutation.isPending ? 'Sweeping…' : 'Sweep'}
+                </Button>
+              </div>
             </div>
+            {sweepSummary != null && (
+              <OpsFeedback variant="success" title="Sweep complete" className="mb-1.5">
+                {sweepSummary}
+              </OpsFeedback>
+            )}
+            {sweepMutation.isError && (
+              <OpsFeedback variant="error" title="Sweep failed" className="mb-1.5">
+                {(sweepMutation.error as Error).message}
+              </OpsFeedback>
+            )}
+            {(drainStatusQuery.data?.active ||
+              (drainStatusQuery.data?.current_job_id != null &&
+                drainStatusQuery.data.current_job_id !== '') ||
+              (drainStatusQuery.data?.queued_count ?? 0) > 0) && (
+              <p className="m-0 mb-1.5 text-[var(--text-dense-micro)] text-muted-foreground">
+                Drain
+                {drainStatusQuery.data?.active ? ' active' : ''}
+                {drainStatusQuery.data?.current_title
+                  ? ` · ${drainStatusQuery.data.current_title}`
+                  : drainStatusQuery.data?.current_item_id
+                    ? ` · item ${drainStatusQuery.data.current_item_id}`
+                    : ''}
+                {drainStatusQuery.data?.current_job_id
+                  ? ` · job ${drainStatusQuery.data.current_job_id}`
+                  : ''}
+                {(drainStatusQuery.data?.queued_count ?? 0) > 0
+                  ? ` · ${drainStatusQuery.data?.queued_count} queued`
+                  : ''}
+                {drainStatusQuery.data?.paused
+                  ? ` · paused${drainStatusQuery.data.pause_reason ? ` (${drainStatusQuery.data.pause_reason})` : ''}`
+                  : ''}
+                {drainStatusQuery.data?.last_error && !drainStatusQuery.data.paused
+                  ? ` · ${drainStatusQuery.data.last_error}`
+                  : ''}
+              </p>
+            )}
             <SegmentControl
               size="xs"
               ariaLabel="Queue lane"
@@ -597,6 +727,9 @@ export function DailyOpsExecutionPanel({
                 { value: 'all', label: `All (${badgeCount})` },
                 { value: 'human', label: `Human (${partitioned.humanActionable})` },
                 { value: 'agent', label: `Agent (${partitioned.agentActionable})` },
+                ...(partitioned.drainCount > 0
+                  ? [{ value: 'drain', label: `Drain (${partitioned.drainCount})` }]
+                  : []),
               ]}
             />
             {queueQ.isLoading ? (

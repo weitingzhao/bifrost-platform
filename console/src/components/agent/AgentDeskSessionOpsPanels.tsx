@@ -8,6 +8,8 @@ import { BriefingSessionResultsPanel } from '@/components/briefing/BriefingSessi
 import { NightlyBriefingPanel } from '@/components/briefing/NightlyBriefingPanel'
 import { OperateQueueHandoffPanel } from '@/components/briefing/OperateQueueHandoffPanel'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
+import { DecisionBriefPanel } from '@/components/operate/DecisionBriefPanel'
+import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
 import { computeSessionDelta, isEmptyDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
@@ -31,6 +33,8 @@ export type AgentDeskSessionOpsPanelsProps = {
   onNavigateRecurringSetup?: () => void
   focusHandoffId?: string | null
   onFocusHandoffConsumed?: () => void
+  focusDecisionBriefId?: string | null
+  onFocusDecisionBriefConsumed?: () => void
 }
 
 /**
@@ -54,6 +58,8 @@ export function AgentDeskSessionOpsPanels({
   onNavigateRecurringSetup,
   focusHandoffId,
   onFocusHandoffConsumed,
+  focusDecisionBriefId,
+  onFocusDecisionBriefConsumed,
 }: AgentDeskSessionOpsPanelsProps) {
   const [localSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
@@ -61,6 +67,9 @@ export function AgentDeskSessionOpsPanels({
   const [alignmentCopied, setAlignmentCopied] = useState(false)
 
   const operateQueueQuery = useOperateQueue()
+  const decisionBriefsQuery = usePendingDecisionBriefs({
+    enabled: mode !== 'review',
+  })
 
   const serverSnapshotQuery = useQuery({
     queryKey: ['session-snapshot', 'latest'],
@@ -176,30 +185,51 @@ export function AgentDeskSessionOpsPanels({
       )}
 
       {mode !== 'review' && (
-        <BriefingFoldableSection
-          kicker="Operate"
-          title="Operate queue handoffs"
-          description="Approved post-completion handoffs awaiting execution. Open the source or prepare an Agent task; close only after the work is complete."
-          defaultExpanded
-          badge={
-            (operateQueueQuery.data?.open.length ?? 0) > 0
-              ? String(operateQueueQuery.data?.open.length)
-              : undefined
-          }
-          badgeVariant="warning"
-        >
-          <OperateQueueHandoffPanel
-            items={operateQueueQuery.data?.open ?? []}
-            loading={operateQueueQuery.isLoading}
-            onOpenSource={onOpenHandoffSource}
-            onPrepareAgent={onPrepareHandoffAgent}
-            onStartAgent={onStartHandoffAgent}
-            onObserveJob={onObserveHandoffJob}
-            onNavigateSetup={onNavigateRecurringSetup}
-            focusHandoffId={focusHandoffId}
-            onFocusHandoffConsumed={onFocusHandoffConsumed}
-          />
-        </BriefingFoldableSection>
+        <>
+          {(decisionBriefsQuery.pendingCount > 0 || decisionBriefsQuery.isLoading) && (
+            <BriefingFoldableSection
+              kicker="Operate"
+              title="Decision briefs"
+              description="Owner decisions for ambiguous or high-risk queue items before remediation runs."
+              defaultExpanded
+              badge={
+                decisionBriefsQuery.pendingCount > 0
+                  ? String(decisionBriefsQuery.pendingCount)
+                  : undefined
+              }
+              badgeVariant="warning"
+            >
+              <DecisionBriefPanel
+                focusBriefId={focusDecisionBriefId}
+                onFocusBriefConsumed={onFocusDecisionBriefConsumed}
+              />
+            </BriefingFoldableSection>
+          )}
+          <BriefingFoldableSection
+            kicker="Operate"
+            title="Operate queue handoffs"
+            description="Approved post-completion handoffs awaiting execution. Open the source or prepare an Agent task; close only after the work is complete."
+            defaultExpanded
+            badge={
+              (operateQueueQuery.data?.open.length ?? 0) > 0
+                ? String(operateQueueQuery.data?.open.length)
+                : undefined
+            }
+            badgeVariant="warning"
+          >
+            <OperateQueueHandoffPanel
+              items={operateQueueQuery.data?.open ?? []}
+              loading={operateQueueQuery.isLoading}
+              onOpenSource={onOpenHandoffSource}
+              onPrepareAgent={onPrepareHandoffAgent}
+              onStartAgent={onStartHandoffAgent}
+              onObserveJob={onObserveHandoffJob}
+              onNavigateSetup={onNavigateRecurringSetup}
+              focusHandoffId={focusHandoffId}
+              onFocusHandoffConsumed={onFocusHandoffConsumed}
+            />
+          </BriefingFoldableSection>
+        </>
       )}
 
       {mode !== 'operate' && (

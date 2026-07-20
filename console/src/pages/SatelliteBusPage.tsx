@@ -39,10 +39,9 @@ import {
   SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
   summarizeIngestServices,
 } from '@/lib/agent/satelliteBusIngestTriagePrompt'
-import {
-  buildPayloadReadinessRows,
-  type PayloadReadinessRow,
-} from '@/lib/control-room/payloadReadiness'
+import { PayloadReadinessTable } from '@/components/control-room/PayloadDepthPanel'
+import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
+import { projectPayloadReadinessRows } from '@/lib/control-room/payloadReadiness'
 import {
   buildSocketHealthMatrix,
   classifyTradingDaemon,
@@ -541,38 +540,6 @@ function MonitorKvTable({ rows, loading }: { rows: MonitorKvRow[]; loading?: boo
   )
 }
 
-function PayloadReadinessTable({ rows }: { rows: PayloadReadinessRow[] }) {
-  return (
-    <DenseDataTable>
-      <DenseTableHeader>
-        <DenseTableHeadRow>
-          <DenseTableHead>Subsystem</DenseTableHead>
-          <DenseTableHead>Role</DenseTableHead>
-          <DenseTableHead>Dev</DenseTableHead>
-          <DenseTableHead>Prod</DenseTableHead>
-        </DenseTableHeadRow>
-      </DenseTableHeader>
-      <DenseTableBody>
-        {rows.map(row => (
-          <DenseTableRow key={row.id}>
-            <DenseTableCell className="font-medium">{row.label}</DenseTableCell>
-            <DenseTableCell className="text-[var(--muted-foreground)]">{row.role}</DenseTableCell>
-            <DenseTableCell>
-              <StatusLamp value={row.dev.signal} kind="reach" />{' '}
-              <span className="text-[var(--text-dense-meta)]">{row.dev.detail}</span>
-            </DenseTableCell>
-            <DenseTableCell>
-              <StatusLamp value={row.prod.signal} kind="reach" />{' '}
-              <span className="text-[var(--text-dense-meta)]">{row.prod.detail}</span>
-              {row.envDiverges && <DenseTag variant="warning" className="ml-2">Diverged</DenseTag>}
-            </DenseTableCell>
-          </DenseTableRow>
-        ))}
-      </DenseTableBody>
-    </DenseDataTable>
-  )
-}
-
 export function SatelliteBusPage({
   onOpenCluster,
   onOpenTelemetry,
@@ -676,7 +643,8 @@ export function SatelliteBusPage({
     return [data]
   }, [matrixQuery.data])
 
-  const payloadRows = useMemo(() => buildPayloadReadinessRows(matrices), [matrices])
+  const { fleet } = useFleetSnapshot()
+  const payloadRows = useMemo(() => projectPayloadReadinessRows(fleet), [fleet])
   const envMatrix = matrices.find(m => m.environment === tradeEnv)
   const tradeApi = tradeApiTargets(envMatrix)
 
@@ -1247,8 +1215,8 @@ export function SatelliteBusPage({
         sectionRef={clusterSectionRef}
         highlight={highlightSection === 'cluster'}
       >
-        <OpsSection variant="flat" title="Payload readiness (matrix L0)" bodyPadding="none" overflow="hidden">
-          <PayloadReadinessTable rows={payloadRows} />
+        <OpsSection variant="flat" title="Payload readiness (Fleet projection)" bodyPadding="none" overflow="hidden">
+          <PayloadReadinessTable rows={payloadRows} showActions={false} />
         </OpsSection>
         <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-[var(--border)]">
           <OpsSection variant="flat" title="Service domains" bodyPadding="none" overflow="hidden">

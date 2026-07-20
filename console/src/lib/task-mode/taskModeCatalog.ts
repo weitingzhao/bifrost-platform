@@ -53,8 +53,8 @@ const DAILY_OPS_PHASES: TaskModeDef['phases'] = [
     summary:
       'Fleet clear + operate queue clear. Queue Clear ≠ fleet clear when fleetClear=false.',
     dependsOn: ['verify'],
-    navigateTab: 'control-room',
-    actions: [{ label: 'Control Room queue', tabId: 'control-room' }],
+    navigateTab: 'agent-desk',
+    actions: [{ label: 'Agent Desk queue', tabId: 'agent-desk' }],
   },
 ]
 

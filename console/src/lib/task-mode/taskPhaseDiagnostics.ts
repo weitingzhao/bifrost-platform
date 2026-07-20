@@ -78,7 +78,7 @@ function dailyOpsFixActions(
     actions.push({ label: 'Cluster', tabId: 'cluster', kind: 'navigate' })
   }
   if (phaseId === 'clear') {
-    actions.push({ label: 'Control Room queue', tabId: 'control-room', kind: 'navigate' })
+    actions.push({ label: 'Agent Desk queue', tabId: 'agent-desk', kind: 'navigate' })
   }
   if (rootCauses.some(c => c.toLowerCase().includes('trade prod'))) {
     actions.push({ label: 'Satellite Bus', tabId: 'satellite-bus', kind: 'navigate' })

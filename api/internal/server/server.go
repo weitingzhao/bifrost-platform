@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -112,11 +113,26 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	operatequeueH := operatequeue.NewHandler(cfg.ConfigDir(), audit)
 	operatequeueH.BindRemediationJobs(remediationH.Store())
+	operatequeueH.BindRemediationStarter(remediationH)
 	operatequeueH.BindLifecycleObserver(devagentH)
+	remediationH.BindTerminalObserver(operatequeueH)
 	devagentH.BindOperateQueue(operatequeueH)
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
 	checklistH.BindRemediation(remediationH)
 	checklistH.BindOperateQueue(operatequeueH)
+	operatequeueH.BindEvidenceSource(operatequeue.EvidenceFunc(func() (operatequeue.EvidenceBundle, error) {
+		resp, err := checklistH.Store().Get()
+		if err != nil {
+			return operatequeue.EvidenceBundle{}, err
+		}
+		sigs := make([]operatequeue.EvidenceSignal, 0, len(resp.Signals))
+		for _, s := range resp.Signals {
+			sigs = append(sigs, operatequeue.EvidenceSignal{
+				ItemID: s.ItemID, Signal: s.Signal, Detail: s.Detail,
+			})
+		}
+		return operatequeue.BundleFromSignals(sigs, time.Now().UTC()), nil
+	}))
 	sessionsH := sessions.NewHandler(cfg.ConfigDir(), audit)
 	devagentH.BindSessions(sessionsH.Store())
 	visionH := vision.NewHandler(cfg, audit)
@@ -268,6 +284,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/operate/queue", s.operatequeue.HandleGetQueue)
+		r.Get("/operate/briefs", s.operatequeue.HandleListBriefs)
+		r.Get("/operate/drain/status", s.operatequeue.HandleDrainStatus)
 		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
 		r.Get("/checklist/kpis", s.checklist.HandleGetKPIs)
 		r.Get("/lanes", s.lanes.HandleList)
@@ -282,6 +300,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/operate/queue/{id}/execution", s.operatequeue.HandleRecordExecution)
 			r.Post("/operate/queue/{id}/close", s.operatequeue.HandleClose)
 			r.Post("/operate/queue/{id}/dismiss", s.operatequeue.HandleDismiss)
+			r.Post("/operate/sweep", s.operatequeue.HandleSweep)
+			r.Post("/operate/briefs/{id}/decide", s.operatequeue.HandleDecideBrief)
 			r.Post("/checklist/signals", s.checklist.HandlePostSignals)
 			r.Post("/lanes", s.lanes.HandleCreate)
 			r.Patch("/lanes/{id}", s.lanes.HandleUpdate)

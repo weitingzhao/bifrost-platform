@@ -23,8 +23,11 @@ func NewHandler(configDir string, audit *actuation.AuditLog) *Handler {
 	}
 }
 
-func (h *Handler) BindRemediation(r *remediation.Handler) { h.remediation = r }
+func (h *Handler) BindRemediation(r *remediation.Handler)   { h.remediation = r }
 func (h *Handler) BindOperateQueue(o *operatequeue.Handler) { h.operate = o }
+
+// Store exposes the checklist signal cache for read-only consumers (e.g. queue sweep).
+func (h *Handler) Store() *Store { return h.store }
 
 func (h *Handler) HandleGetSignals(w http.ResponseWriter, _ *http.Request) {
 	resp, err := h.store.Get()

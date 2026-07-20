@@ -65,9 +65,16 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
-      "status": "open",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope cluster_issues_full_auto is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
       "created_at": "2026-07-19T05:54:12Z",
-      "updated_at": "2026-07-19T05:54:12Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
       "source": "checklist_dispatch"
     },
     {
@@ -89,9 +96,16 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
-      "status": "open",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope cluster_issues_full_auto is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
       "created_at": "2026-07-19T06:12:39Z",
-      "updated_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
       "source": "checklist_dispatch"
     },
     {
@@ -113,9 +127,10 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
+      "execution_job_id": "58edb121-c76b-4cfc-b7b3-185cc9f3da03",
       "status": "open",
       "created_at": "2026-07-19T06:12:39Z",
-      "updated_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:41:19Z",
       "source": "checklist_dispatch"
     },
     {
@@ -161,9 +176,16 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
-      "status": "open",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope deliver-stg-recover is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
       "created_at": "2026-07-19T06:12:39Z",
-      "updated_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
       "source": "checklist_dispatch"
     },
     {
@@ -185,9 +207,16 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
-      "status": "open",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope cluster_issues_full_auto is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
       "created_at": "2026-07-19T06:12:39Z",
-      "updated_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
       "source": "checklist_dispatch"
     },
     {
@@ -209,9 +238,16 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
-      "status": "open",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope operator-plane-remediate is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
       "created_at": "2026-07-19T06:12:39Z",
-      "updated_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
       "source": "checklist_dispatch"
     },
     {
@@ -281,9 +317,64 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
-      "status": "open",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope cluster_issues_full_auto is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
       "created_at": "2026-07-19T06:13:58Z",
-      "updated_at": "2026-07-19T06:13:58Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "4ce4308b-d221-4d32-8c5b-7978f4c3a2f6",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Git bridge healthy + clean",
+      "description": "semi_auto handoff for item git-bridge\n\nBridge reachable but 1 dirty repo: bifrost-platform on feat/data-unification-phases-a-d (+3341/-313 uncommitted)",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "git-dirty-remediate",
+      "acceptance_criteria": [
+        "Checklist item git-bridge returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "status": "open",
+      "created_at": "2026-07-20T05:21:27Z",
+      "updated_at": "2026-07-20T05:21:27Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "510be1cb-a4df-4cc1-81be-049e4a0a5aa7",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Hermes AI tooling",
+      "description": "semi_auto handoff for item hermes-tooling\n\nhermes_mcp unavailable (127.0.0.1:8782 connection refused); Nous Hermes gateway ok v0.17.0; platform_mcp 69 tools",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item hermes-tooling returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "status": "open",
+      "created_at": "2026-07-20T05:21:27Z",
+      "updated_at": "2026-07-20T05:21:27Z",
       "source": "checklist_dispatch"
     }
   ]

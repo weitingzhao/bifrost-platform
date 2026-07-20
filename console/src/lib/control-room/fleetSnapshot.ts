@@ -1025,7 +1025,7 @@ export function buildVendorCell(input: {
             : GITOPS_HINT_SCOPE,
     agentFixEnabled,
     agentFixDisabledReason: ibBlocking
-      ? 'IB Client required — observe only (D10). Open Plugin Gallery / verify TWS Gateway.'
+      ? 'IB Client required — observe only (D10). If TWS is already running: Reconnect Gateway (rollout restart data/ib-gateway), then Re-probe.'
       : signal === 'unknown'
         ? 'Still probing'
         : undefined,

@@ -81,6 +81,8 @@ type ControlRoomPageProps = {
   onOpenDefects?: () => void
   onOpenAgentDeskTab?: () => void
   onOpenLaunchView?: (mode: 'mission-launch') => void
+  /** Trade readiness IB Fleet CTA → Daily Ops TCC */
+  onOpenFleetVendor?: () => void
 } & AmbientAgentShellProps
 
 export function ControlRoomPage({
@@ -110,6 +112,7 @@ export function ControlRoomPage({
   onOpenDefects,
   onOpenAgentDeskTab,
   onOpenLaunchView,
+  onOpenFleetVendor,
   ambientJobId,
   onStartAgentJob,
 }: ControlRoomPageProps) {
@@ -256,6 +259,7 @@ export function ControlRoomPage({
           onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
           onOpenAgentDesk={openAgentDeskPrefill}
           onOpenLaunchView={mode => onOpenLaunchView?.(mode)}
+          onOpenFleetVendor={onOpenFleetVendor}
           onOpenPromote={handleOpenPromotePreflight}
           onPlaybookFix={handlePlaybookFix}
           playbookFixPending={playbookFixMutation.isPending}

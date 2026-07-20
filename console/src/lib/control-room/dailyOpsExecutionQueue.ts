@@ -86,20 +86,31 @@ export function actionableOpenCount(open: OperateQueueItem[]): number {
   return open.filter(i => !isOperateQueueNoise(i)).length
 }
 
-export function partitionOpenQueue(open: OperateQueueItem[]): {
+export function partitionOpenQueue(
+  open: OperateQueueItem[],
+  opts?: { drainItemIds?: ReadonlySet<string> },
+): {
   human: OperateQueueItem[]
   agent: OperateQueueItem[]
+  drain: OperateQueueItem[]
   noise: OperateQueueItem[]
   actionable: number
   humanActionable: number
   agentActionable: number
+  drainCount: number
 } {
+  const drainIds = opts?.drainItemIds
   const human: OperateQueueItem[] = []
   const agent: OperateQueueItem[] = []
+  const drain: OperateQueueItem[] = []
   const noise: OperateQueueItem[] = []
   for (const item of open) {
     if (isOperateQueueNoise(item)) {
       noise.push(item)
+      continue
+    }
+    if (drainIds != null && drainIds.has(item.id)) {
+      drain.push(item)
       continue
     }
     const lane = queueLaneForOrigin(originFromOperateItem(item))
@@ -109,10 +120,12 @@ export function partitionOpenQueue(open: OperateQueueItem[]): {
   return {
     human,
     agent,
+    drain,
     noise,
-    actionable: human.length + agent.length,
+    actionable: human.length + agent.length + drain.length,
     humanActionable: human.length,
     agentActionable: agent.length,
+    drainCount: drain.length,
   }
 }
 

@@ -28,6 +28,8 @@ import { LaunchLiveView } from '@/components/task-mode/LaunchLiveView'
 import { MissionLaunchBoard } from '@/components/task-mode/MissionLaunchBoard'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useDailyOpsChecklistCoverage } from '@/hooks/useDailyOpsChecklistCoverage'
+import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { useOperateSweep } from '@/hooks/useOperateSweep'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import { type FleetCell } from '@/lib/control-room/fleetSnapshot'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
@@ -604,6 +606,9 @@ function DailyOpsFleetDesk({
   const { fleet, isLoading, dataUpdatedAt } = useFleetSnapshot()
   const checklistCoverage = useDailyOpsChecklistCoverage(fleet)
   const qc = useQueryClient()
+  const operateQueueQuery = useOperateQueue()
+  const sweepMutation = useOperateSweep()
+  const queueOpen = operateQueueQuery.data?.open.length ?? 0
   const {
     onNavigate,
     readinessCanOperate,
@@ -780,6 +785,16 @@ function DailyOpsFleetDesk({
           checklistCheckTitle={checklistCheckTitle}
           checklistCheckActive={checklistCheckActive || isChecklistAmbient}
           checklistCheckStatusHint={checklistCheckStatusHint}
+          queueOpen={queueOpen}
+          sweepQueuePending={sweepMutation.isPending}
+          onSweepQueue={() => {
+            sweepMutation.mutate({ auto_drain: false })
+            requestAnimationFrame(() => {
+              document
+                .querySelector('[data-daily-ops-execution]')
+                ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+            })
+          }}
         />
       )}
 

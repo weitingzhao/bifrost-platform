@@ -1,4 +1,4 @@
-import { GitCompare, Link2, ShieldAlert } from 'lucide-react'
+import { GitCompare, Link2 } from 'lucide-react'
 import {
   Button,
   DenseDataTable,
@@ -11,54 +11,140 @@ import {
   StatusLamp,
 } from '@bifrost/ui'
 import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import {
   buildPayloadCouplingSummary,
-  buildPayloadReadinessRows,
   countEnvDivergences,
+  payloadReadinessStatusLabel,
+  projectPayloadReadinessRows,
+  type EnvReadinessCell,
+  type PayloadReadinessRow,
 } from '@/lib/control-room/payloadReadiness'
-import { signalColor, type Signal } from '@/lib/control-room/missionSignals'
+import { signalColor } from '@/lib/control-room/missionSignals'
+import type { FleetEnvColumn } from '@/lib/control-room/fleetSnapshot'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 
 interface PayloadDepthPanelProps {
-  matrices: MatrixResponse[]
   context?: OpsContextResponse
+  matrices: MatrixResponse[]
   onOpenRuntimeMap: OpenRuntimeMapFn
-  onOpenDelivery?: () => void
-  onOpenPromote?: () => void
+  /** IB row — open TCC Fleet Vendor (no Runtime Map write-path target). */
+  onOpenFleetVendor?: () => void
 }
 
-function ReadinessStatus({ cell }: { cell: { signal: Signal; detail: string; policyBlocked: boolean } }) {
-  if (cell.policyBlocked) {
-    return (
-      <span className="payload-readiness-policy" title={cell.detail}>
-        <ShieldAlert size={12} />
-        L0 blocked
-      </span>
-    )
-  }
-  const label =
-    cell.signal === 'ok'
-      ? 'NOMINAL'
-      : cell.signal === 'degraded'
-        ? 'CAUTION'
-        : cell.signal === 'fail'
-          ? 'CRITICAL'
-          : 'PROBING'
+function ReadinessStatus({ cell }: { cell: EnvReadinessCell }) {
+  const label = payloadReadinessStatusLabel(cell.signal)
   return (
-    <span className="payload-readiness-status" style={{ color: signalColor(cell.signal) }}>
+    <span
+      className="payload-readiness-status"
+      style={{ color: signalColor(cell.signal) }}
+      title={cell.detail}
+    >
       {label}
     </span>
   )
 }
 
-export function PayloadDepthPanel({
-  matrices,
-  context,
+function cellForEnv(row: PayloadReadinessRow, env: FleetEnvColumn): EnvReadinessCell {
+  if (env === 'dev') return row.dev
+  if (env === 'stg') return row.stg
+  return row.prod
+}
+
+/** Shared Trade readiness table (Control Room + Satellite Bus). */
+export function PayloadReadinessTable({
+  rows,
   onOpenRuntimeMap,
-  onOpenDelivery,
-  onOpenPromote,
+  onOpenFleetVendor,
+  showActions = true,
+}: {
+  rows: PayloadReadinessRow[]
+  onOpenRuntimeMap?: OpenRuntimeMapFn
+  onOpenFleetVendor?: () => void
+  showActions?: boolean
+}) {
+  return (
+    <DenseDataTable>
+      <DenseTableHeader>
+        <DenseTableHeadRow>
+          <DenseTableHead>Component</DenseTableHead>
+          <DenseTableHead>Role</DenseTableHead>
+          <DenseTableHead>dev</DenseTableHead>
+          <DenseTableHead>stg</DenseTableHead>
+          <DenseTableHead>prod</DenseTableHead>
+          {showActions && <DenseTableHead />}
+        </DenseTableHeadRow>
+      </DenseTableHeader>
+      <DenseTableBody>
+        {rows.map(row => (
+          <DenseTableRow
+            key={row.id}
+            className={row.envDiverges ? 'payload-readiness-row--diverge' : undefined}
+          >
+            <DenseTableCell>
+              <span className="payload-readiness-label">{row.label}</span>
+            </DenseTableCell>
+            <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              {row.role}
+            </DenseTableCell>
+            <DenseTableCell>
+              <ReadinessStatus cell={row.dev} />
+            </DenseTableCell>
+            <DenseTableCell>
+              <ReadinessStatus cell={row.stg} />
+            </DenseTableCell>
+            <DenseTableCell>
+              <ReadinessStatus cell={row.prod} />
+            </DenseTableCell>
+            {showActions && (
+              <DenseTableCell>
+                {row.mapMode === 'fleet-vendor' ? (
+                  onOpenFleetVendor != null ? (
+                    <Button variant="ghost" size="xs" onClick={onOpenFleetVendor}>
+                      Fleet
+                    </Button>
+                  ) : null
+                ) : (
+                  (() => {
+                    if (onOpenRuntimeMap == null) return null
+                    const preferEnv: FleetEnvColumn =
+                      row.dev.signal === 'fail' || row.dev.signal === 'degraded'
+                        ? 'dev'
+                        : row.stg.signal === 'fail' || row.stg.signal === 'degraded'
+                          ? 'stg'
+                          : row.prod.signal === 'fail' || row.prod.signal === 'degraded'
+                            ? 'prod'
+                            : 'dev'
+                    const targetId = cellForEnv(row, preferEnv).mapTargetId
+                    if (targetId == null || targetId === '') return null
+                    return (
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => onOpenRuntimeMap({ env: preferEnv, targetId })}
+                      >
+                        Map
+                      </Button>
+                    )
+                  })()
+                )}
+              </DenseTableCell>
+            )}
+          </DenseTableRow>
+        ))}
+      </DenseTableBody>
+    </DenseDataTable>
+  )
+}
+
+export function PayloadDepthPanel({
+  context,
+  matrices,
+  onOpenRuntimeMap,
+  onOpenFleetVendor,
 }: PayloadDepthPanelProps) {
-  const rows = buildPayloadReadinessRows(matrices)
+  const { fleet, isLoading } = useFleetSnapshot()
+  const rows = projectPayloadReadinessRows(fleet)
   const divergences = countEnvDivergences(rows)
   const coupling = buildPayloadCouplingSummary(context, matrices)
 
@@ -68,98 +154,47 @@ export function PayloadDepthPanel({
         <div className="payload-readiness-block__head">
           <h4 className="payload-readiness-block__title">Trade readiness</h4>
           <p className="payload-readiness-block__desc">
-            Daemon, Celery/Ops, IB edge, datastore, and UI — dev vs prod at a glance.
+            Satellite / Vendor payload — projected from Fleet Desk (same truth as Daily Ops).
           </p>
           {divergences > 0 && (
             <span className="payload-depth-diverge-badge">
               <GitCompare size={12} />
-              {divergences} dev/prod {divergences === 1 ? 'delta' : 'deltas'}
+              {divergences} env {divergences === 1 ? 'delta' : 'deltas'}
             </span>
           )}
         </div>
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Component</DenseTableHead>
-              <DenseTableHead>Role</DenseTableHead>
-              <DenseTableHead>dev</DenseTableHead>
-              <DenseTableHead>prod</DenseTableHead>
-              <DenseTableHead />
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {rows.map(row => (
-              <DenseTableRow
-                key={row.id}
-                className={row.envDiverges ? 'payload-readiness-row--diverge' : undefined}
-              >
-                <DenseTableCell>
-                  <span className="payload-readiness-label">{row.label}</span>
-                </DenseTableCell>
-                <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                  {row.role}
-                </DenseTableCell>
-                <DenseTableCell>
-                  <ReadinessStatus cell={row.dev} />
-                </DenseTableCell>
-                <DenseTableCell>
-                  <ReadinessStatus cell={row.prod} />
-                </DenseTableCell>
-                <DenseTableCell>
-                  {!row.policyBlocked && (
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => {
-                        const env =
-                          row.dev.signal === 'fail' || row.dev.signal === 'degraded'
-                            ? 'dev'
-                            : row.prod.signal === 'fail' || row.prod.signal === 'degraded'
-                              ? 'prod'
-                              : 'dev'
-                        onOpenRuntimeMap({ env, targetId: row.targetId })
-                      }}
-                    >
-                      Map
-                    </Button>
-                  )}
-                </DenseTableCell>
-              </DenseTableRow>
-            ))}
-          </DenseTableBody>
-        </DenseDataTable>
+        {isLoading && rows.every(r => r.dev.signal === 'unknown') ? (
+          <p className="m-0 px-1 text-[var(--text-dense-meta)] text-muted-foreground">
+            Loading Fleet snapshot…
+          </p>
+        ) : (
+          <PayloadReadinessTable
+            rows={rows}
+            onOpenRuntimeMap={onOpenRuntimeMap}
+            onOpenFleetVendor={onOpenFleetVendor}
+          />
+        )}
       </div>
 
       {coupling != null && (
-        <div className={`payload-coupling-hint payload-coupling-hint--${coupling.lamp}`}>
+        <p
+          className={`payload-coupling-hint payload-coupling-hint--readonly payload-coupling-hint--${coupling.lamp}`}
+          title={
+            !coupling.promote.ready && coupling.promote.reasons.length > 0
+              ? coupling.promote.reasons.join(' · ')
+              : undefined
+          }
+        >
           <StatusLamp value={coupling.lamp} kind="reach" />
-          <div className="payload-coupling-hint__body">
-            <div className="payload-coupling-hint__headline">
-              <Link2 size={14} />
-              {coupling.headline}
-            </div>
-            <div className="payload-coupling-hint__detail">{coupling.detail}</div>
-            {!coupling.promote.ready && coupling.promote.reasons.length > 1 && (
-              <ul className="payload-coupling-hint__reasons">
-                {coupling.promote.reasons.slice(1, 4).map(r => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="payload-coupling-hint__actions">
-            {onOpenPromote != null && (
-              <Button variant="default" size="xs" onClick={onOpenPromote}>
-                Promote
-              </Button>
-            )}
-            {onOpenDelivery != null && (
-              <Button variant="outline" size="xs" onClick={onOpenDelivery}>
-                Delivery
-              </Button>
-            )}
-          </div>
-        </div>
+          <span className="payload-coupling-hint__headline">
+            <Link2 size={14} aria-hidden />
+            {coupling.headline}
+          </span>
+          <span className="payload-coupling-hint__detail">{coupling.detail}</span>
+          <span className="payload-coupling-hint__aside">
+            Actuate via Rocket · Satellite / Promote
+          </span>
+        </p>
       )}
     </div>
   )

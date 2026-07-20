@@ -1,21 +1,30 @@
 /**
- * Control Room Phase 2 — Payload depth: trade readiness rows mapped from matrix probes.
+ * Trade readiness rows for Control Room / Satellite Bus — projected from FleetSnapshot
+ * (same truth as TCC Fleet Desk). No independent matrix/L0-blocked path.
  */
 
-import type { MatrixResponse, OpsContextResponse, Reachability, Target } from '@/api/types'
+import type { MatrixResponse, OpsContextResponse } from '@/api/types'
 import { evaluatePromoteStatus, type PromoteStatus } from '@/lib/control-room/matrixSummary'
-import { worst, type Signal } from '@/lib/control-room/missionSignals'
+import { type Signal } from '@/lib/control-room/missionSignals'
+import type {
+  FleetCell,
+  FleetCellSignal,
+  FleetEnvColumn,
+  FleetSnapshot,
+  FleetStandard,
+} from '@/lib/control-room/fleetSnapshot'
+import { cellKey } from '@/lib/control-room/fleetSnapshot'
 
 export type PayloadReadinessRowId = 'daemon' | 'celery' | 'ib' | 'datastore' | 'frontend'
+
+export type PayloadMapMode = 'runtime-map' | 'fleet-vendor'
 
 export type PayloadReadinessRowDef = {
   id: PayloadReadinessRowId
   label: string
   role: string
-  /** Primary matrix target id for this row */
-  targetId: string
-  /** Platform L0 policy — never probed for write path */
-  policyBlocked?: boolean
+  fleetRole: 'satellite' | 'vendor'
+  mapMode: PayloadMapMode
 }
 
 export const PAYLOAD_READINESS_ROWS: PayloadReadinessRowDef[] = [
@@ -23,45 +32,53 @@ export const PAYLOAD_READINESS_ROWS: PayloadReadinessRowDef[] = [
     id: 'daemon',
     label: 'Daemon',
     role: 'GsTrading FSM · monitor API health',
-    targetId: 'api-monitor',
+    fleetRole: 'satellite',
+    mapMode: 'runtime-map',
   },
   {
     id: 'celery',
     label: 'Celery / Ops',
     role: 'Workers · Flower · ops API health',
-    targetId: 'api-ops',
+    fleetRole: 'satellite',
+    mapMode: 'runtime-map',
   },
   {
     id: 'ib',
     label: 'IB edge',
     role: 'Operator RPC · ingestor · account agent',
-    targetId: 'ib-operator-rpc',
-    policyBlocked: true,
+    fleetRole: 'vendor',
+    mapMode: 'fleet-vendor',
   },
   {
     id: 'datastore',
     label: 'PG / Redis',
     role: 'PostgreSQL + Redis TCP from probe host',
-    targetId: 'postgres',
+    fleetRole: 'satellite',
+    mapMode: 'runtime-map',
   },
   {
     id: 'frontend',
     label: 'Trade UI',
     role: 'Nginx SPA entry',
-    targetId: 'nginx-spa',
+    fleetRole: 'satellite',
+    mapMode: 'runtime-map',
   },
 ]
+
+export const PAYLOAD_READINESS_ENVS: FleetEnvColumn[] = ['dev', 'stg', 'prod']
 
 export type EnvReadinessCell = {
   signal: Signal
   detail: string
-  policyBlocked: boolean
+  /** Runtime Map target when mapMode is runtime-map */
+  mapTargetId?: string | null
 }
 
 export type PayloadReadinessRow = PayloadReadinessRowDef & {
   dev: EnvReadinessCell
+  stg: EnvReadinessCell
   prod: EnvReadinessCell
-  /** dev and prod reachability differ (ignores policy-blocked IB row) */
+  /** True when any pair of env signals diverge (ignoring unknown) */
   envDiverges: boolean
 }
 
@@ -72,63 +89,142 @@ export type PayloadCouplingSummary = {
   detail: string
 }
 
-function findTarget(matrices: MatrixResponse[], env: string, targetId: string): Target | undefined {
-  const matrix = matrices.find(m => m.environment === env)
-  return matrix?.targets.find(t => t.id === targetId)
+function toDisplaySignal(s: FleetCellSignal): Signal {
+  if (s === 'unavailable') return 'unknown'
+  return s
 }
 
-function datastoreSignal(matrices: MatrixResponse[], env: string): EnvReadinessCell {
-  const pg = findTarget(matrices, env, 'postgres')
-  const redis = findTarget(matrices, env, 'redis')
-  const signals = [pg?.reachability, redis?.reachability].filter(Boolean) as Reachability[]
-  const signal = worst(...signals.map(r => r as Signal))
-  const parts: string[] = []
-  if (pg != null) parts.push(`PG ${pg.reachability}`)
-  if (redis != null) parts.push(`Redis ${redis.reachability}`)
-  return {
-    signal: signals.length === 0 ? 'unknown' : signal,
-    detail: parts.length > 0 ? parts.join(' · ') : 'probing',
-    policyBlocked: false,
+function worstFleetSignals(signals: FleetCellSignal[]): FleetCellSignal {
+  if (signals.length === 0) return 'unknown'
+  if (signals.includes('fail')) return 'fail'
+  if (signals.includes('degraded')) return 'degraded'
+  if (signals.includes('unavailable')) return 'unavailable'
+  if (signals.includes('unknown')) return 'unknown'
+  return 'ok'
+}
+
+function findFleetCell(
+  fleet: FleetSnapshot,
+  role: 'satellite' | 'vendor',
+  env: FleetEnvColumn,
+): FleetCell | undefined {
+  const key = cellKey(role, env)
+  return fleet.cells.find(c => c.key === key)
+}
+
+function matchDaemon(s: FleetStandard): boolean {
+  const id = s.id.toLowerCase()
+  if (id.includes('massive')) return false
+  return id === 'api-monitor' || id.includes('api-monitor') || (id.includes('monitor') && s.group === 'api')
+}
+
+function matchCelery(s: FleetStandard): boolean {
+  const id = s.id.toLowerCase()
+  return id === 'api-ops' || id.includes('api-ops')
+}
+
+function matchIb(s: FleetStandard): boolean {
+  return s.id === 'ib-feed'
+}
+
+function matchDatastore(s: FleetStandard): boolean {
+  const id = s.id.toLowerCase()
+  return s.group === 'datastore' || id.includes('postgres') || id.includes('redis')
+}
+
+function matchFrontend(s: FleetStandard): boolean {
+  const id = s.id.toLowerCase()
+  return s.group === 'edge' || id.includes('nginx') || id.includes('spa')
+}
+
+function matcherForRow(id: PayloadReadinessRowId): (s: FleetStandard) => boolean {
+  switch (id) {
+    case 'daemon':
+      return matchDaemon
+    case 'celery':
+      return matchCelery
+    case 'ib':
+      return matchIb
+    case 'datastore':
+      return matchDatastore
+    case 'frontend':
+      return matchFrontend
   }
 }
 
-function cellFromTarget(t: Target | undefined, policyBlocked: boolean): EnvReadinessCell {
-  if (policyBlocked) {
+function mapTargetForMatched(id: PayloadReadinessRowId, matched: FleetStandard[]): string | null {
+  if (matched.length === 0) return null
+  if (id === 'datastore') {
+    const pg = matched.find(s => s.id.toLowerCase().includes('postgres'))
+    if (pg != null) return pg.id
+    const redis = matched.find(s => s.id.toLowerCase().includes('redis'))
+    return redis?.id ?? matched[0]?.id ?? null
+  }
+  return matched[0]?.id ?? null
+}
+
+function resolveEnvCell(
+  def: PayloadReadinessRowDef,
+  fleet: FleetSnapshot,
+  env: FleetEnvColumn,
+): EnvReadinessCell {
+  const cell = findFleetCell(fleet, def.fleetRole, env)
+  if (cell == null) {
+    return { signal: 'unknown', detail: `No Fleet cell ${def.fleetRole}:${env}`, mapTargetId: null }
+  }
+
+  const standards = cell.standards ?? []
+  const matched = standards.filter(matcherForRow(def.id))
+
+  if (matched.length > 0) {
+    const signal = worstFleetSignals(matched.map(s => s.signal))
+    const detail = matched.map(s => s.reason).filter(Boolean).join(' · ') || matched[0].label
     return {
-      signal: 'unknown',
-      detail: t?.detail ?? 'L0 blocked — platform must not invoke trade write path',
-      policyBlocked: true,
+      signal: toDisplaySignal(signal),
+      detail,
+      mapTargetId: def.mapMode === 'runtime-map' ? mapTargetForMatched(def.id, matched) : null,
     }
   }
-  if (t == null) {
-    return { signal: 'unknown', detail: 'not probed', policyBlocked: false }
+
+  // STG satellite often only has stg-smoke rollup
+  if (def.fleetRole === 'satellite') {
+    const smoke = standards.find(s => s.id === 'stg-smoke')
+    if (smoke != null) {
+      return {
+        signal: toDisplaySignal(smoke.signal),
+        detail: `STG smoke rollup · ${smoke.reason}`,
+        mapTargetId: null,
+      }
+    }
   }
+
   return {
-    signal: t.reachability as Signal,
-    detail: t.detail || t.reachability,
-    policyBlocked: false,
+    signal: 'unknown',
+    detail: 'No matching Fleet standard',
+    mapTargetId: null,
   }
 }
 
-function cellForRow(
-  matrices: MatrixResponse[],
-  env: string,
-  row: PayloadReadinessRowDef,
-): EnvReadinessCell {
-  if (row.id === 'datastore') return datastoreSignal(matrices, env)
-  return cellFromTarget(findTarget(matrices, env, row.targetId), row.policyBlocked === true)
+function envDiverges(cells: EnvReadinessCell[]): boolean {
+  const known = cells.filter(c => c.signal !== 'unknown')
+  if (known.length < 2) return false
+  const first = known[0].signal
+  return known.some(c => c.signal !== first)
 }
 
-export function buildPayloadReadinessRows(matrices: MatrixResponse[]): PayloadReadinessRow[] {
+/** Project Trade readiness rows from Fleet (TCC ground truth). */
+export function projectPayloadReadinessRows(fleet: FleetSnapshot): PayloadReadinessRow[] {
   return PAYLOAD_READINESS_ROWS.map(def => {
-    const dev = cellForRow(matrices, 'dev', def)
-    const prod = cellForRow(matrices, 'prod', def)
-    const envDiverges =
-      !def.policyBlocked &&
-      dev.signal !== prod.signal &&
-      dev.signal !== 'unknown' &&
-      prod.signal !== 'unknown'
-    return { ...def, dev, prod, envDiverges }
+    const dev = resolveEnvCell(def, fleet, 'dev')
+    const stg = resolveEnvCell(def, fleet, 'stg')
+    const prod = resolveEnvCell(def, fleet, 'prod')
+    return {
+      ...def,
+      dev,
+      stg,
+      prod,
+      envDiverges: envDiverges([dev, stg, prod]),
+    }
   })
 }
 
@@ -164,4 +260,15 @@ export function buildPayloadCouplingSummary(
     headline: 'Coupling gate blocked',
     detail: primaryReason,
   }
+}
+
+/** Display label for readiness cell (shared UI). */
+export function payloadReadinessStatusLabel(signal: Signal): string {
+  return signal === 'ok'
+    ? 'NOMINAL'
+    : signal === 'degraded'
+      ? 'CAUTION'
+      : signal === 'fail'
+        ? 'CRITICAL'
+        : 'PROBING'
 }

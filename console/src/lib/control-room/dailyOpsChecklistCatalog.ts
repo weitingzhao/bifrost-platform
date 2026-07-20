@@ -459,11 +459,11 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         group: 'feed',
         idPattern: '(^|[-_])ib($|[-_])|ib-gateway|ibkr|^ib-feed$',
         healthyCriteria:
-          'IB Gateway plugin live socket quality: connected + client_id + non-empty account snapshot (managedAccounts) + fresh heartbeat (≤90s) + fresh sample tick; during US RTH also requires usable BBO. Empty accounts_snapshot while claiming connected = ghost TWS API client → fail. Required for Vendor GO. D10: observe/manual only.',
+          'IB Gateway plugin live socket quality: connected + client_id + non-empty account snapshot (managedAccounts) + fresh heartbeat (≤90s) + fresh sample tick; during US RTH also requires usable BBO. Empty accounts_snapshot while claiming connected = ghost TWS API client → fail. Stale snapshot while TWS looks fine = reconnect ib-gateway (rollout restart), not a Mac Mini TWS restart. Required for Vendor GO. D10: observe/manual reconnect only — no Agent Fix / no live trading.',
         fixScope: null,
         fixCapability: 'observe',
         manualAction:
-          'IB Client / Gateway: open Plugin Gallery → IB Gateway; on Mac Mini verify TWS/Gateway running, API port, client_id. D10: no live trade execution.',
+          'If TWS is already running and client_id/slots look connected: Operator → Reconnect Gateway (rollout restart data/ib-gateway), then Re-probe. Only check Mac Mini TWS/API port when slots are disconnected or client_id missing. D10: no live trade execution.',
         boardProjection: {
           standardId: 'ib-feed',
           label: 'IB Client / Gateway',

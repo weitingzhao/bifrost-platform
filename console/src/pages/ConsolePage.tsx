@@ -8,6 +8,7 @@ import { useLaneCatalog } from '@/hooks/useLaneCatalog'
 import { useAgentTaskCatalog } from '@/hooks/useAgentTaskCatalog'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import {
+  isOpenAgentDeskFocusDecisionBriefs,
   isOpenAgentDeskFocusHandoff,
   isOpenAgentDeskPrefill,
   type OpenAgentDeskArg,
@@ -189,6 +190,7 @@ function ConsolePageInner() {
   const [agentDeskJobId, setAgentDeskJobId] = useState<string | null>(null)
   const [agentDeskPrefill, setAgentDeskPrefill] = useState<string | null>(null)
   const [agentDeskFocusHandoffId, setAgentDeskFocusHandoffId] = useState<string | null>(null)
+  const [agentDeskFocusDecisionBriefs, setAgentDeskFocusDecisionBriefs] = useState(false)
   /** Shell-level ambient agent job — survives tab switches. */
   const [ambientJob, setAmbientJob] = useState<AmbientAgentJob | null>(null)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
@@ -395,14 +397,24 @@ function ConsolePageInner() {
       setAgentDeskJobId(jobIdOrOpts)
       setAgentDeskPrefill(null)
       setAgentDeskFocusHandoffId(null)
+      setAgentDeskFocusDecisionBriefs(false)
     } else if (jobIdOrOpts != null && isOpenAgentDeskPrefill(jobIdOrOpts)) {
       setAgentDeskPrefill(jobIdOrOpts.prefill)
       setAgentDeskJobId(null)
       setAgentDeskFocusHandoffId(null)
+      setAgentDeskFocusDecisionBriefs(false)
     } else if (jobIdOrOpts != null && isOpenAgentDeskFocusHandoff(jobIdOrOpts)) {
       setAgentDeskFocusHandoffId(jobIdOrOpts.focusHandoffId)
       setAgentDeskJobId(null)
       setAgentDeskPrefill(null)
+      setAgentDeskFocusDecisionBriefs(false)
+    } else if (jobIdOrOpts != null && isOpenAgentDeskFocusDecisionBriefs(jobIdOrOpts)) {
+      setAgentDeskFocusDecisionBriefs(true)
+      setAgentDeskJobId(null)
+      setAgentDeskPrefill(null)
+      setAgentDeskFocusHandoffId(null)
+    } else {
+      setAgentDeskFocusDecisionBriefs(false)
     }
     setViewTab('agent-desk')
   }, [setViewTab])
@@ -434,6 +446,11 @@ function ConsolePageInner() {
     },
     [setModeId, setViewTab],
   )
+
+  const openDailyOpsFleet = useCallback(() => {
+    setModeId('daily-ops')
+    setViewTab('task-cc', { taskMode: 'daily-ops' })
+  }, [setModeId, setViewTab])
 
   const handleTaskModeChange = useCallback(
     (landingTab: string, nextModeId: TaskModeId) => {
@@ -577,9 +594,11 @@ function ConsolePageInner() {
             initialJobId={agentDeskJobId}
             prefillPrompt={agentDeskPrefill}
             focusHandoffId={agentDeskFocusHandoffId}
+            focusDecisionBriefs={agentDeskFocusDecisionBriefs}
             onInitialJobConsumed={() => setAgentDeskJobId(null)}
             onPrefillConsumed={() => setAgentDeskPrefill(null)}
             onFocusHandoffConsumed={() => setAgentDeskFocusHandoffId(null)}
+            onFocusDecisionBriefsConsumed={() => setAgentDeskFocusDecisionBriefs(false)}
             onOpenBriefing={openBriefing}
             onOpenCluster={openCluster}
             onOpenMcpContract={() => setViewTab('mcp-contract')}
@@ -665,6 +684,7 @@ function ConsolePageInner() {
                 onOpenDefects={openDefects}
                 onOpenAgentDeskTab={openAgentDeskTab}
                 onOpenLaunchView={openLaunchView}
+                onOpenFleetVendor={openDailyOpsFleet}
               />
             </Suspense>
           </>
