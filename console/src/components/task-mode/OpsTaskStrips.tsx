@@ -872,6 +872,11 @@ function DailyOpsFleetDesk({
               onNavigate={onNavigate}
               onReprobe={handleVerifyReprobe}
               onClose={() => setSelectedCellKey(null)}
+              onProposeCommit={onProposeCommit}
+              onProposeStash={onProposeStash}
+              proposeCommitPending={proposeCommitPending}
+              proposeCommitDisabled={proposeCommitDisabled}
+              proposeCommitTitle={proposeCommitTitle}
             />
           )}
         </div>

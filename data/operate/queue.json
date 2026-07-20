@@ -152,9 +152,10 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
+      "execution_job_id": "4776c45f-1c46-4aa7-bcd8-6276d2eaa68d",
       "status": "open",
       "created_at": "2026-07-19T06:12:39Z",
-      "updated_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:41:52Z",
       "source": "checklist_dispatch"
     },
     {

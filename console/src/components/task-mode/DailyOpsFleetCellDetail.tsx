@@ -191,6 +191,11 @@ export function DailyOpsFleetCellDetail({
   onNavigate,
   onReprobe,
   onClose,
+  onProposeCommit,
+  onProposeStash,
+  proposeCommitPending = false,
+  proposeCommitDisabled = false,
+  proposeCommitTitle,
 }: {
   cell: FleetCell
   canOperate?: boolean
@@ -206,6 +211,12 @@ export function DailyOpsFleetCellDetail({
   onNavigate: (tabId: string) => void
   onReprobe?: () => void
   onClose: () => void
+  /** git-dirty-remediate — propose commit (operator approval). */
+  onProposeCommit?: () => void
+  onProposeStash?: () => void
+  proposeCommitPending?: boolean
+  proposeCommitDisabled?: boolean
+  proposeCommitTitle?: string
 }) {
   const nowMs = useNowMs()
   const gate = resolveCellGate(cell)
@@ -239,6 +250,7 @@ export function DailyOpsFleetCellDetail({
 
   const primaryFail = failing[0]
   const ibFeedFailing = failing.some(s => s.id === 'ib-feed')
+  const gitBridgeFailing = failing.some(s => s.id === 'git-bridge')
   const primaryManual = useMemo(() => {
     if (primaryFail == null) return null
     const matched = matchStandardToChecklistItem(primaryFail.id, primaryFail.group, {
@@ -251,7 +263,9 @@ export function DailyOpsFleetCellDetail({
   const suggestedNext =
     ibFeedFailing
       ? 'Reconnect Gateway (TWS OK → refresh plugin session)'
-      : nextAction
+      : gitBridgeFailing
+        ? 'Propose commit (git-dirty-remediate · approval required)'
+        : nextAction
 
   const failureBrief = useMemo(() => {
     const lines = [
@@ -281,6 +295,13 @@ export function DailyOpsFleetCellDetail({
         'POST /api/v1/plugins/ib-gateway/control/reconnect — rollout restart data/ib-gateway (does not touch live trading).',
       )
     }
+    if (gitBridgeFailing) {
+      lines.push(
+        '',
+        '### Operator actuation',
+        'Start remediation scope git-dirty-remediate — Propose commit or Stash; request_operator_approval before write. Never auto-discard WIP.',
+      )
+    }
     return lines.join('\n')
   }, [
     cell.role,
@@ -292,6 +313,7 @@ export function DailyOpsFleetCellDetail({
     failing,
     primaryManual,
     ibFeedFailing,
+    gitBridgeFailing,
   ])
 
   async function handleCopyFailure() {
@@ -533,6 +555,43 @@ export function DailyOpsFleetCellDetail({
               {reconnectPending ? 'Reconnecting…' : 'Reconnect Gateway'}
             </Button>
           )}
+          {gitBridgeFailing && onProposeCommit != null && (
+            <Button
+              type="button"
+              size="xs"
+              variant="default"
+              disabled={
+                !canOperate || proposeCommitPending || proposeCommitDisabled || reconnectPending
+              }
+              title={
+                !canOperate
+                  ? 'Operator authentication required'
+                  : (proposeCommitTitle ??
+                    'Start git-dirty-remediate — approval required before commit/stash')
+              }
+              onClick={() => onProposeCommit()}
+            >
+              {proposeCommitPending ? 'Starting…' : 'Propose commit'}
+            </Button>
+          )}
+          {gitBridgeFailing && onProposeStash != null && (
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              disabled={
+                !canOperate || proposeCommitPending || proposeCommitDisabled || reconnectPending
+              }
+              title={
+                !canOperate
+                  ? 'Operator authentication required'
+                  : 'Start git-dirty-remediate toward stash (approval required; never drop WIP)'
+              }
+              onClick={() => onProposeStash()}
+            >
+              Stash
+            </Button>
+          )}
           {gate === 'NO-GO' && allowFix && onAgentFix != null && (
             <AgentTriggerButton
               label="Agent Fix"
@@ -585,7 +644,9 @@ export function DailyOpsFleetCellDetail({
           <p className="m-0 mt-1 text-[var(--text-dense-micro)] text-muted-foreground">
             {ibFeedFailing
               ? 'No Agent Fix for IB — if TWS is already running, use Reconnect Gateway above (plugin session refresh).'
-              : 'No Agent Fix for this cell — use the manual path above.'}
+              : gitBridgeFailing
+                ? 'No cell Agent Fix for Engineer — use Propose commit / Stash above (git-dirty-remediate; approval required).'
+                : 'No Agent Fix for this cell — use the manual path above.'}
           </p>
         )}
       </div>
