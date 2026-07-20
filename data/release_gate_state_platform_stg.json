@@ -1,6 +1,6 @@
 {
   "tier": "platform-stg",
-  "at": "2026-07-20T18:44:09.098638Z",
+  "at": "2026-07-20T18:56:41.53547Z",
   "result": "pass",
   "revision": "main",
   "log_path": "bifrost-trade-infra/scripts/release_gate.log",
@@ -10,7 +10,7 @@
       "label": "Last bifrost-deliver-platform success",
       "required": true,
       "reachability": "ok",
-      "detail": "bifrost-deliver-platform-1784570830 (True)"
+      "detail": "bifrost-deliver-platform-1784573553 (True)"
     },
     {
       "id": "platform-stg-console",
