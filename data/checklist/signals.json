@@ -1,38 +1,14 @@
 {
   "version": "2026-07-19",
-  "updated_at": "2026-07-20T05:22:14Z",
-  "last_run_id": "b4be86a1-17f7-49cf-a19d-651b138cab31",
+  "updated_at": "2026-07-20T06:13:03Z",
+  "last_run_id": "4776c45f-1c46-4aa7-bcd8-6276d2eaa68d",
   "source": "daily-ops-checklist-run",
   "signals": [
-    {
-      "item_id": "trade-apis",
-      "signal": "ok",
-      "detail": "STG smoke 9/9 API domains reachable; mission matrix trade_stg 12/12 services reachable",
-      "env": "stg"
-    },
-    {
-      "item_id": "failing-pods",
-      "signal": "ok",
-      "detail": "failing_pods=0; running=830 pending=0",
-      "env": "span"
-    },
-    {
-      "item_id": "cluster-api",
-      "signal": "ok",
-      "detail": "K3s API reachable (api_reachability=ok); server v1.35.5+k3s1 @ 192.168.10.73:6443",
-      "env": "span"
-    },
     {
       "item_id": "platform-console",
       "signal": "ok",
       "detail": "Platform GitOps apps Healthy/Synced; mission matrix 12/12 STG reachable",
       "env": "stg"
-    },
-    {
-      "item_id": "argo-apps",
-      "signal": "ok",
-      "detail": "5/5 applications Synced+Healthy; argocd-server Ready 1/1",
-      "env": "span"
     },
     {
       "item_id": "runners-ha",
@@ -41,51 +17,15 @@
       "env": "span"
     },
     {
-      "item_id": "stg-smoke",
-      "signal": "ok",
-      "detail": "STG 9/9 API domains reachable (all HTTP 200)",
-      "env": "stg"
-    },
-    {
       "item_id": "postgres",
       "signal": "ok",
       "detail": "Cluster envs dev/stg/prod NOMINAL (matrix+cluster agree); dev-local Mac thin client offline (expected)",
       "env": "span"
     },
     {
-      "item_id": "nginx-edge",
-      "signal": "ok",
-      "detail": "STG frontend HTTP 200 @ 192.168.10.100; probe bridge nginx base ok",
-      "env": "stg"
-    },
-    {
-      "item_id": "ib-feed",
-      "signal": "unknown",
-      "detail": "No dedicated IB feed probe in evidence; D10 observe-only (no auto-dispatch)",
-      "env": "stg"
-    },
-    {
-      "item_id": "hermes-tooling",
-      "signal": "degraded",
-      "detail": "nous_hermes gateway running (192.168.10.50:9119 ok); local hermes_mcp @ 127.0.0.1:8782 connection refused; platform_mcp ok (68/69 tools)",
-      "env": "span"
-    },
-    {
       "item_id": "git-bridge",
       "signal": "degraded",
       "detail": "Bridge ok (8785) but 1 dirty repo: bifrost-platform on feat/data-unification-phases-a-d with staged+modified+untracked changes",
-      "env": "span"
-    },
-    {
-      "item_id": "platform-api",
-      "signal": "ok",
-      "detail": "Mission matrix nominal; bifrost-platform-stg/prod Argo Synced+Healthy",
-      "env": "stg"
-    },
-    {
-      "item_id": "deliver-pipeline",
-      "signal": "ok",
-      "detail": "8 Tekton pipelines in cicd; deliver-stg/prod/platform pipelines build_ready=true",
       "env": "span"
     },
     {
@@ -101,16 +41,75 @@
       "env": "span"
     },
     {
+      "item_id": "nodes-ready",
+      "signal": "ok",
+      "detail": "5/5 nodes Ready (6 registered, 1 elastic standby); no cordoned nodes",
+      "env": "span"
+    },
+    {
+      "item_id": "argo-apps",
+      "signal": "ok",
+      "detail": "5/5 applications Synced+Healthy; argocd-server Ready 1/1",
+      "env": "span"
+    },
+    {
+      "item_id": "stg-smoke",
+      "signal": "ok",
+      "detail": "STG 9/9 API domains reachable (all HTTP 200)",
+      "env": "stg"
+    },
+    {
+      "item_id": "nginx-edge",
+      "signal": "ok",
+      "detail": "STG frontend HTTP 200 @ 192.168.10.100; probe bridge nginx base ok",
+      "env": "stg"
+    },
+    {
+      "item_id": "ib-feed",
+      "signal": "unknown",
+      "detail": "No dedicated IB feed probe in evidence; D10 observe-only (no auto-dispatch)",
+      "env": "stg"
+    },
+    {
+      "item_id": "hermes-tooling",
+      "signal": "ok",
+      "detail": "nous_hermes v0.17.0 ok @ 192.168.10.50:9119; gateway running; platform_mcp 69 tools. LLM key pending operator config in ~/.hermes/.env for get_hermes_readiness."
+    },
+    {
       "item_id": "massive-polygon",
       "signal": "ok",
       "detail": "stg-api-massive /api/massive/health HTTP 200",
       "env": "stg"
     },
     {
-      "item_id": "nodes-ready",
+      "item_id": "failing-pods",
       "signal": "ok",
-      "detail": "5/5 nodes Ready (6 registered, 1 elastic standby); no cordoned nodes",
+      "detail": "failing_pods=0; running=830 pending=0",
       "env": "span"
+    },
+    {
+      "item_id": "cluster-api",
+      "signal": "ok",
+      "detail": "K3s API reachable (api_reachability=ok); server v1.35.5+k3s1 @ 192.168.10.73:6443",
+      "env": "span"
+    },
+    {
+      "item_id": "platform-api",
+      "signal": "ok",
+      "detail": "Mission matrix nominal; bifrost-platform-stg/prod Argo Synced+Healthy",
+      "env": "stg"
+    },
+    {
+      "item_id": "deliver-pipeline",
+      "signal": "ok",
+      "detail": "8 Tekton pipelines in cicd; deliver-stg/prod/platform pipelines build_ready=true",
+      "env": "span"
+    },
+    {
+      "item_id": "trade-apis",
+      "signal": "ok",
+      "detail": "STG smoke 9/9 API domains reachable; mission matrix trade_stg 12/12 services reachable",
+      "env": "stg"
     }
   ],
   "last_dispatch": [
@@ -130,7 +129,7 @@
     }
   ],
   "quiet_success_streak": 0,
-  "last_fail_at": "2026-07-20T05:22:14Z",
+  "last_fail_at": "2026-07-20T06:13:03Z",
   "last_all_ok_at": "2026-07-19T05:54:28Z",
   "history": [
     {
@@ -197,6 +196,14 @@
       "run_id": "b4be86a1-17f7-49cf-a19d-651b138cab31",
       "ok": 15,
       "fail": 2,
+      "unknown": 1,
+      "all_ok": false
+    },
+    {
+      "at": "2026-07-20T06:13:03Z",
+      "run_id": "4776c45f-1c46-4aa7-bcd8-6276d2eaa68d",
+      "ok": 16,
+      "fail": 1,
       "unknown": 1,
       "all_ok": false
     }
