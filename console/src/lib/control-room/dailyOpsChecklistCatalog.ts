@@ -373,22 +373,24 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
   },
 
   // =========================================================================
-  // Step 6: Release Readiness (Rocket STG · release)
+  // Step 6: Release Readiness — Launch Pad / Promote (not Fleet Rocket)
+  // Deliver + STG smoke stay on the delivery track; Rocket board = Control+GitOps only.
   // =========================================================================
   {
     id: 'release-readiness',
     order: 6,
-    label: 'Rocket · Release Readiness',
+    label: 'Launch Pad · STG Deliver Track',
     purpose:
-      'STG deliver pipeline + smoke targets gate all production releases. Must be green before any promote/cutover.',
-    fleetMapping: [{ role: 'rocket', env: 'stg' }],
+      'STG deliver pipeline + smoke gate promote/cutover. Tracked on Launch Pad / Promote — not scored on Fleet Rocket.',
+    fleetMapping: [],
     groups: ['release'],
     items: [
       {
         id: 'deliver-pipeline',
         label: 'STG deliver pipeline',
         group: 'release',
-        idPattern: '^deliver-stg$',
+        // Patterns intentionally do not match Fleet Rocket (no Release group there).
+        idPattern: '^deliver-stg-launchpad$',
         healthyCriteria:
           'Last STG pipeline run succeeded; no stuck/failed terminal runs blocking the gate',
         fixScope: DELIVER_STG_RECOVER_SCOPE,
@@ -403,12 +405,12 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         id: 'stg-smoke',
         label: 'STG smoke targets',
         group: 'release',
-        idPattern: '^stg-smoke$',
+        idPattern: '^stg-smoke-launchpad$',
         healthyCriteria: 'All STG smoke probe targets reachability=ok',
         fixScope: DELIVER_STG_RECOVER_SCOPE,
         fixCapability: 'semi_auto',
         manualAction:
-          'If smoke fails from config drift: fix STG K8s overlay; if pod crash: rollout restart',
+          'If smoke fails from config drift: fix STG K8s overlay NodePort escape hatches; if pod crash: rollout restart',
         agentTools: ['get_stg_smoke', 'rollout_restart_deployment', 'run_release_gate'],
       },
     ],

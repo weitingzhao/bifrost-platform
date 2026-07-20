@@ -23,7 +23,6 @@ import {
   agentSignal,
   controlSignal,
   infraSignal,
-  releaseSignal,
   tradeEnvSignal,
   worst,
   type ModuleState,
@@ -45,7 +44,7 @@ export type FleetCellSignal = Signal | 'unavailable'
  * |--------------|-------------------------------|
  * | control      | Rocket — platform-api/console |
  * | gitops       | Rocket — Argo apps            |
- * | release      | Rocket STG — deliver / smoke  |
+ * | release      | (unused on Fleet Rocket; Launch Pad / Promote) |
  * | edge         | Satellite — nginx             |
  * | api          | Satellite — trade APIs        |
  * | datastore    | Satellite — postgres/redis    |
@@ -374,18 +373,6 @@ function stgSmokeStandard(stg: StgSmokeResponse): FleetStandard {
   )
 }
 
-/** Release (deliver + STG smoke) is STG-column only — DEV/PROD show N/A, not scored for GO. */
-function rocketReleaseNotApplicable(): FleetStandard {
-  return std(
-    'release-na',
-    'Release lane',
-    'ok',
-    'N/A — deliver / STG smoke apply to the STG column only',
-    'release',
-    false,
-  )
-}
-
 /** Structural / path-missing unavailable cells never enter FAIL/HOLD scoring. */
 export function cellCountsTowardVerdict(cell: FleetCell): boolean {
   if (cell.countsTowardVerdict != null) return cell.countsTowardVerdict
@@ -486,10 +473,9 @@ function selfHealthEnvSignal(
 }
 
 /**
- * Rocket cell for a column — Wave 0.4:
- * - viewer=dev: DEV uses local controlSignal (self) + reachable platform/dev probes
- * - viewer=prod|stg: DEV/STG from cluster pull (self-health env probes); unreachable → unavailable
- * - prod column always from prod self-health / release overlay on stg
+ * Rocket cell for a column — Control + GitOps only.
+ * Deliver / STG smoke live on Launch Pad + Promote, not on Fleet Rocket
+ * (Owner: Rocket board is platform health, not the release pipeline lane).
  */
 export function buildRocketCell(input: {
   env: FleetEnvColumn
@@ -498,13 +484,11 @@ export function buildRocketCell(input: {
   supply?: SupplyChainResponse
   stg?: StgSmokeResponse
 }): FleetCell {
-  const { env, viewerEnv, self, supply, stg } = input
+  const { env, viewerEnv, self } = input
   const key = cellKey('rocket', env)
 
   if (env === 'stg') {
-    const release = releaseSignal(supply, stg)
     const stgHealth = selfHealthEnvSignal(self, 'stg')
-    const combined = worst(release.signal, stgHealth.signal)
     const unreachable =
       viewerEnv !== 'dev' &&
       stgHealth.signal === 'unknown' &&
@@ -518,26 +502,22 @@ export function buildRocketCell(input: {
         'Probe path unavailable from this viewer',
       )
     }
-    const standards: FleetStandard[] = [
-      ...standardsFromSelfProbes(self, 'stg'),
-      std('deliver-stg', 'STG deliver pipeline', release.signal, release.detail, 'release'),
-      ...(stg && stg.targets.length > 0 ? [stgSmokeStandard(stg)] : []),
-    ]
+    const standards = standardsFromSelfProbes(self, 'stg')
+    const derived = signalFromStandards(standards)
     return rocketCellFromState(
       key,
       env,
       {
-        signal: combined,
-        value: release.value !== '…' ? release.value : stgHealth.value,
-        detail: [stgHealth.detail, release.detail].filter(Boolean).join(' · '),
+        ...stgHealth,
+        signal: derived === 'unavailable' ? stgHealth.signal : (derived as Signal),
       },
-      DELIVER_STG_RECOVER_SCOPE,
+      PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
       standards,
     )
   }
 
   if (env === 'prod') {
-    const standards = [...standardsFromSelfProbes(self, 'prod'), rocketReleaseNotApplicable()]
+    const standards = standardsFromSelfProbes(self, 'prod')
     const prodHealth = selfHealthEnvSignal(self, 'prod')
     const derived = signalFromStandards(standards)
     return rocketCellFromState(
@@ -556,7 +536,7 @@ export function buildRocketCell(input: {
   if (viewerEnv === 'dev' || viewerEnv === 'dev-local') {
     const control = controlSignal(self)
     // Local seat: Control + GitOps from this platform-api view (not a dump of STG/PROD as "DEV")
-    const standards = [...standardsFromSelfProbes(self, 'local'), rocketReleaseNotApplicable()]
+    const standards = standardsFromSelfProbes(self, 'local')
     const derived = signalFromStandards(standards)
     return rocketCellFromState(
       key,
@@ -582,7 +562,7 @@ export function buildRocketCell(input: {
       'Probe path unavailable from this viewer',
     )
   }
-  const standards = [...standardsFromSelfProbes(self, 'dev'), rocketReleaseNotApplicable()]
+  const standards = standardsFromSelfProbes(self, 'dev')
   const derived = signalFromStandards(standards)
   return rocketCellFromState(
     key,
