@@ -184,7 +184,7 @@ check('fleetClear + queue open → clear queue', () => {
   const r = resolveDailyOpsWorkflow({ fleet: clearFleet(), queueOpen: 2 })
   assert.equal(r.activePhase, 'clear')
   assert.equal(r.primaryAction.kind, 'clear-queue')
-  assert.equal(r.primaryAction.tabId, 'control-room')
+  assert.equal(r.primaryAction.tabId, 'agent-desk')
 })
 
 check('agentPending → remediate View agent', () => {

@@ -1,8 +1,13 @@
 import { DenseTag } from '@bifrost/ui'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { OpsSection } from '@/components/layout/OpsSection'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 
-export function OperateQueueStrip() {
+export function OperateQueueStrip({
+  onOpenAgentDesk,
+}: {
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
+}) {
   const queueQuery = useOperateQueue()
   const openItems = queueQuery.data?.open ?? []
 
@@ -10,7 +15,7 @@ export function OperateQueueStrip() {
     return (
       <OpsSection
         title="Operate queue"
-        description="Open handoff items from approved post-completion (Projection layer · D11)."
+        description="Open handoff items (diagnosis projection). Execute in Agent Desk."
         bodyPadding="compact"
       >
         <p className="m-0 text-dense-meta text-muted-foreground">Loading operate queue…</p>
@@ -25,7 +30,7 @@ export function OperateQueueStrip() {
   return (
     <OpsSection
       title="Operate queue"
-      description="Owner-approved post-completion items ready for day-to-day ops work."
+      description="Diagnosis projection of open handoffs — Start / Prepare / Dismiss in Agent Desk."
       bodyPadding="compact"
       overflow="visible"
     >
@@ -48,7 +53,17 @@ export function OperateQueueStrip() {
                 )}
               </div>
             </div>
-            <span className="text-dense-caption text-muted-foreground">Execute and verify in Agent Desk</span>
+            {onOpenAgentDesk != null ? (
+              <button
+                type="button"
+                className="shrink-0 text-dense-caption font-medium text-primary hover:underline"
+                onClick={() => onOpenAgentDesk({ focusHandoffId: item.id })}
+              >
+                Open in Agent Desk
+              </button>
+            ) : (
+              <span className="text-dense-caption text-muted-foreground">Open in Agent Desk</span>
+            )}
           </li>
         ))}
       </ul>

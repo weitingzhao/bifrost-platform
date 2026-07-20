@@ -28,6 +28,7 @@ import { LaunchLiveView } from '@/components/task-mode/LaunchLiveView'
 import { MissionLaunchBoard } from '@/components/task-mode/MissionLaunchBoard'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useDailyOpsChecklistCoverage } from '@/hooks/useDailyOpsChecklistCoverage'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import { type FleetCell } from '@/lib/control-room/fleetSnapshot'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
@@ -133,7 +134,7 @@ export type OpsTaskStripsProps = {
   launchAgentFixActive?: boolean
   launchAgentFixDisabled?: boolean
   launchAgentFixTitle?: string
-  onOpenAgentDesk?: (jobId?: string) => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   /** Ambient agent job — opens Launch Live View for trade-deploy / release scope. */
   ambientJobId?: string | null
   ambientJobScope?: string | null
@@ -812,7 +813,16 @@ function DailyOpsFleetDesk({
               ambientJobScope={ambientJobScope}
               onOpenDispatchJob={jobId => onOpenAgentDesk?.(jobId)}
               onOpenOperateQueue={
-                onOpenOperateQueue ?? (() => onNavigate('control-room'))
+                onOpenOperateQueue ??
+                ((queueId?: string) => {
+                  if (queueId != null && onOpenAgentDesk != null) {
+                    onOpenAgentDesk({ focusHandoffId: queueId })
+                  } else if (onOpenAgentDesk != null) {
+                    onOpenAgentDesk()
+                  } else {
+                    onNavigate('agent-desk')
+                  }
+                })
               }
               compactColumns
             />
@@ -853,7 +863,6 @@ function DailyOpsFleetDesk({
       </div>
 
       <DailyOpsExecutionPanel
-        onNavigate={onNavigate}
         fleetClear={fleet.fleetClear}
         remediating={
           fleetWorkflow?.activePhase === 'remediate' ||

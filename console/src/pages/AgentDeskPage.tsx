@@ -45,8 +45,10 @@ interface AgentDeskPageProps {
   auditRecords?: AuditRecord[]
   initialJobId?: string | null
   prefillPrompt?: string | null
+  focusHandoffId?: string | null
   onInitialJobConsumed?: () => void
   onPrefillConsumed?: () => void
+  onFocusHandoffConsumed?: () => void
   onOpenBriefing?: () => void
   onOpenCluster?: () => void
   onOpenMcpContract?: () => void
@@ -141,8 +143,10 @@ export function AgentDeskPage({
   auditRecords = [],
   initialJobId,
   prefillPrompt,
+  focusHandoffId,
   onInitialJobConsumed,
   onPrefillConsumed,
+  onFocusHandoffConsumed,
   onOpenBriefing,
   onOpenCluster,
   onOpenMcpContract,
@@ -189,6 +193,11 @@ export function AgentDeskPage({
     if (initialJobId == null) setDeskView('operate')
     onPrefillConsumed?.()
   }, [initialJobId, prefillPrompt, onPrefillConsumed])
+
+  useEffect(() => {
+    if (focusHandoffId == null || focusHandoffId === '') return
+    setDeskView('operate')
+  }, [focusHandoffId])
 
   const healthQuery = useQuery({
     queryKey: ['remediation', 'health'],
@@ -515,6 +524,8 @@ export function AgentDeskPage({
             onStartHandoffAgent={handleStartHandoffAgent}
             onObserveHandoffJob={handleObserveHandoffJob}
             onNavigateRecurringSetup={onOpenAgentSystem}
+            focusHandoffId={focusHandoffId}
+            onFocusHandoffConsumed={onFocusHandoffConsumed}
           />
         )}
 

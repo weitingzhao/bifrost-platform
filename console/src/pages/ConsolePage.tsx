@@ -8,6 +8,11 @@ import { useLaneCatalog } from '@/hooks/useLaneCatalog'
 import { useAgentTaskCatalog } from '@/hooks/useAgentTaskCatalog'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import {
+  isOpenAgentDeskFocusHandoff,
+  isOpenAgentDeskPrefill,
+  type OpenAgentDeskArg,
+} from '@/lib/agent/openAgentDesk'
+import {
   fetchAudit,
   fetchCluster,
   fetchContext,
@@ -183,6 +188,7 @@ function ConsolePageInner() {
   const { modeId, setModeId } = useTaskMode()
   const [agentDeskJobId, setAgentDeskJobId] = useState<string | null>(null)
   const [agentDeskPrefill, setAgentDeskPrefill] = useState<string | null>(null)
+  const [agentDeskFocusHandoffId, setAgentDeskFocusHandoffId] = useState<string | null>(null)
   /** Shell-level ambient agent job — survives tab switches. */
   const [ambientJob, setAmbientJob] = useState<AmbientAgentJob | null>(null)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
@@ -384,14 +390,22 @@ function ConsolePageInner() {
     setViewTab('briefing')
   }, [setViewTab])
   const openOperatorPlane = () => setViewTab('operator-plane')
-  const openAgentDesk = useCallback((jobIdOrOpts?: string | { prefill: string }) => {
+  const openAgentDesk = useCallback((jobIdOrOpts?: OpenAgentDeskArg) => {
     if (typeof jobIdOrOpts === 'string') {
       setAgentDeskJobId(jobIdOrOpts)
-    } else if (jobIdOrOpts != null && 'prefill' in jobIdOrOpts) {
+      setAgentDeskPrefill(null)
+      setAgentDeskFocusHandoffId(null)
+    } else if (jobIdOrOpts != null && isOpenAgentDeskPrefill(jobIdOrOpts)) {
       setAgentDeskPrefill(jobIdOrOpts.prefill)
+      setAgentDeskJobId(null)
+      setAgentDeskFocusHandoffId(null)
+    } else if (jobIdOrOpts != null && isOpenAgentDeskFocusHandoff(jobIdOrOpts)) {
+      setAgentDeskFocusHandoffId(jobIdOrOpts.focusHandoffId)
+      setAgentDeskJobId(null)
+      setAgentDeskPrefill(null)
     }
     setViewTab('agent-desk')
-  }, [])
+  }, [setViewTab])
 
   const startAmbientAgentJob = useCallback((job: AmbientAgentJob) => {
     setAmbientJob(job)
@@ -562,8 +576,10 @@ function ConsolePageInner() {
             auditRecords={auditRecords}
             initialJobId={agentDeskJobId}
             prefillPrompt={agentDeskPrefill}
+            focusHandoffId={agentDeskFocusHandoffId}
             onInitialJobConsumed={() => setAgentDeskJobId(null)}
             onPrefillConsumed={() => setAgentDeskPrefill(null)}
+            onFocusHandoffConsumed={() => setAgentDeskFocusHandoffId(null)}
             onOpenBriefing={openBriefing}
             onOpenCluster={openCluster}
             onOpenMcpContract={() => setViewTab('mcp-contract')}
@@ -671,7 +687,7 @@ function ConsolePageInner() {
             ambientJobId={ambientJob?.id ?? null}
             ambientJobScope={ambientJob?.scope ?? null}
             onStartAgentJob={startAmbientAgentJob}
-            onOpenAgentDesk={id => openAgentDesk(id)}
+            onOpenAgentDesk={openAgentDesk}
           />
         )}
 

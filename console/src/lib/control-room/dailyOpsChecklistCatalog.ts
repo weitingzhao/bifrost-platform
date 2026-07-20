@@ -683,7 +683,7 @@ export const DAILY_OPS_CHECKLIST_META = {
     'AI Check (TCC) = scope daily-ops-checklist-run; Operator Plane Fix = operator-plane-remediate; Git dirty = git-dirty-remediate — do not conflate.',
     'Action live progress: checking (header) / Auto · phase / Queued / Queued (busy) / Skip · dedup 24h / Skip · D10 / Notify / Done / Failed — Skip never means in-progress.',
     'Notes: fleet≠agent when agent checklist signal polarity disagrees with fleet lamps (lamps stay fleet-sourced).',
-    'Action: auto→open job; queue→Control Room Operate Queue; notify/manual→manualAction hint.',
+    'Action: auto→open job; queue→Agent Desk Operate handoffs; notify/manual→manualAction hint.',
     'Row Fix = Ops ambient startRemediation(item.fixScope) for full_auto/semi_auto when non-ok; observe/manual without scope → Ask for AI only.',
     'Ask for AI = copy Cursor IDE failover pack (per-row or header all non-ok) — paste into Cursor Agent when Ops Agent path fails.',
     'While ambient Agent Fix runs, matching Checklist step(s) pulse-highlight (item_id and/or fixScope → checklistStepIdsForRemediation).',

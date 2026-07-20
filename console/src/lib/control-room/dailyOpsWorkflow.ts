@@ -286,7 +286,7 @@ export function resolveDailyOpsWorkflow(
       primaryAction: {
         kind: 'clear-queue',
         label: `Clear queue (${queueOpen})`,
-        tabId: 'control-room',
+        tabId: 'agent-desk',
       },
     }
   }

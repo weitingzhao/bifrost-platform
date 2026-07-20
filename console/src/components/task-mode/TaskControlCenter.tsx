@@ -23,6 +23,7 @@ import type {
   OpsContextResponse,
 } from '@/api/types'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import {
   useRocketProdReadiness,
   usePromoteVerifyReadiness,
@@ -124,7 +125,7 @@ export type TaskControlCenterProps = AmbientAgentShellProps & {
   onOpenBriefing?: (opts?: BriefingUrlState) => void
   onOpenPromote?: () => void
   onOpenDelivery?: () => void
-  onOpenAgentDesk?: (jobId?: string) => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
 }
 
 export function TaskControlCenter({
@@ -1441,7 +1442,9 @@ export function TaskControlCenter({
                   ))
                 : undefined
             }
-            onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId ?? ambientJobId ?? undefined)}
+            onOpenAgentDesk={arg =>
+              onOpenAgentDesk?.(arg ?? ambientJobId ?? undefined)
+            }
             ambientJobId={ambientJobId}
             ambientJobScope={ambientJobScope}
             onStartAgentJob={isDailyOps ? onStartAgentJob : undefined}

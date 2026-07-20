@@ -21,6 +21,7 @@ import {
   type DailyOpsWorkflowResult,
 } from '@/lib/control-room/dailyOpsWorkflow'
 import type { FleetSnapshot, FleetVerdictKind } from '@/lib/control-room/fleetSnapshot'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 
 const VERDICT_VARIANT: Record<FleetVerdictKind, 'success' | 'warning' | 'danger'> = {
   GO: 'success',
@@ -69,7 +70,7 @@ export type DailyOpsProcessStripProps = {
   onPrimaryAction: () => void
   /** Outline secondary when primary is manual but an AI-fixable sibling exists. */
   onSecondaryAction?: () => void
-  onOpenAgentDesk?: (jobId?: string) => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   /** Escape hatch when inline Operator Plan is not enough (MCP / deploy / smoke). */
   onOpenFullOperatorPlane?: () => void
   /** Help · reference deep links (muted, collapsed) — not a phase strip. */
@@ -491,7 +492,7 @@ export function DailyOpsAgentLivePanel({
 }: {
   jobId: string
   jobScope?: string | null
-  onOpenAgentDesk?: (jobId?: string) => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   /** Same as Ops loop Verify → Re-probe fleet (invalidate cockpit / checklist). */
   onVerifyReprobe?: () => void
 }) {

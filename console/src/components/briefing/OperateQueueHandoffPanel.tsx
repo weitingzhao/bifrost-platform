@@ -1,5 +1,5 @@
-import { Button, ConfirmDialog, DenseTag, SegmentControl } from '@bifrost/ui'
-import { useMemo, useState } from 'react'
+import { Button, ConfirmDialog, DenseTag, SegmentControl, cn } from '@bifrost/ui'
+import { useEffect, useMemo, useState } from 'react'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import { useCloseOperateQueueItem } from '@/hooks/useCloseOperateQueueItem'
 import { useDismissOperateQueueItem } from '@/hooks/useDismissOperateQueueItem'
@@ -17,6 +17,9 @@ interface OperateQueueHandoffPanelProps {
   onStartAgent?: (item: OperateQueueItem) => void
   onObserveJob?: (jobId: string) => void
   onNavigateSetup?: () => void
+  /** Deep-link focus from TCC / Control Room — scroll + highlight, then consume. */
+  focusHandoffId?: string | null
+  onFocusHandoffConsumed?: () => void
 }
 
 export function OperateQueueHandoffPanel({
@@ -27,6 +30,8 @@ export function OperateQueueHandoffPanel({
   onStartAgent,
   onObserveJob,
   onNavigateSetup,
+  focusHandoffId,
+  onFocusHandoffConsumed,
 }: OperateQueueHandoffPanelProps) {
   const closeMutation = useCloseOperateQueueItem()
   const dismissMutation = useDismissOperateQueueItem()
@@ -40,6 +45,32 @@ export function OperateQueueHandoffPanel({
   const [dismissReason, setDismissReason] = useState<'stale' | 'resolved' | 'other'>('stale')
   const [closeVerificationError, setCloseVerificationError] = useState<string | null>(null)
   const [checkingVerification, setCheckingVerification] = useState(false)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (focusHandoffId == null || focusHandoffId === '') return
+    const id = focusHandoffId
+    const match = items.find(item => item.id === id)
+    if (match != null) {
+      const lane = effectiveOperateLane(match)
+      setLaneFilter(prev => (prev === 'all' || prev === lane ? prev : 'all'))
+    }
+    setHighlightedId(id)
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-operate-handoff-id="${CSS.escape(id)}"]`)
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    })
+    onFocusHandoffConsumed?.()
+    return () => window.cancelAnimationFrame(frame)
+  }, [focusHandoffId, items, onFocusHandoffConsumed])
+
+  useEffect(() => {
+    if (highlightedId == null) return
+    const clearHighlight = window.setTimeout(() => setHighlightedId(null), 4000)
+    return () => window.clearTimeout(clearHighlight)
+  }, [highlightedId])
   const lanes = useMemo(
     () => Array.from(new Set(items.map(effectiveOperateLane))),
     [items],
@@ -173,7 +204,16 @@ export function OperateQueueHandoffPanel({
       )}
       <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
         {visibleItems.map(item => (
-          <li key={item.id} className="flex flex-wrap items-start justify-between gap-2 rounded border border-[var(--border)] px-2 py-1.5">
+          <li
+            key={item.id}
+            data-operate-handoff-id={item.id}
+            className={cn(
+              'flex flex-wrap items-start justify-between gap-2 rounded border px-2 py-1.5',
+              highlightedId === item.id
+                ? 'border-amber-500/60 bg-amber-500/10 ring-1 ring-amber-500/35'
+                : 'border-[var(--border)]',
+            )}
+          >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-dense-label font-medium">{item.title}</span>

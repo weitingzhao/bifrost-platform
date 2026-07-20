@@ -29,6 +29,7 @@ import {
   type DailyOpsBlocker,
 } from '@/lib/control-room/dailyOpsPrimaryBlocker'
 import { operateQueueClearLabel } from '@/lib/control-room/fleetSnapshot'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import {
   formatRemediationJobWhen,
   remediationJobStatusLabel,
@@ -38,13 +39,12 @@ import {
 export type DailyOpsExecutionTab = 'now' | 'queue-history'
 
 export type DailyOpsExecutionPanelProps = {
-  onNavigate: (tab: string) => void
   fleetClear: boolean
   /** When remediating with active job or open queue, strip uses warning tone. */
   remediating?: boolean
   ambientJobId?: string | null
   ambientJobScope?: string | null
-  onOpenAgentDesk?: (jobId?: string) => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   /** Pending start before ambient job id is assigned. */
   showStartingHint?: boolean
   /** Empty Now → Ops loop primary CTA (Discover / Remediate / …). */
@@ -200,7 +200,7 @@ function QueueItemRow({
   item,
   allJobs,
   ambientJobId,
-  onNavigate,
+  onOpenAgentDesk,
   onFocusNow,
   onAdoptJob,
   onDismiss,
@@ -209,7 +209,7 @@ function QueueItemRow({
   item: OperateQueueItem
   allJobs: RemediationJob[]
   ambientJobId?: string | null
-  onNavigate: (tab: string) => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   onFocusNow: () => void
   onAdoptJob?: (job: { id: string; scope: string; label: string }) => void
   onDismiss?: (item: OperateQueueItem) => void
@@ -269,9 +269,9 @@ function QueueItemRow({
         <button
           type="button"
           className="inline-flex shrink-0 items-center gap-0.5 text-[var(--text-dense-caption)] text-primary hover:underline"
-          onClick={() => onNavigate('control-room')}
+          onClick={() => onOpenAgentDesk?.({ focusHandoffId: item.id })}
         >
-          Open Control Room
+          Open Agent Desk
           <ChevronRight className="size-3" aria-hidden />
         </button>
       )}
@@ -280,7 +280,6 @@ function QueueItemRow({
 }
 
 export function DailyOpsExecutionPanel({
-  onNavigate,
   fleetClear,
   remediating = false,
   ambientJobId,
@@ -483,9 +482,9 @@ export function DailyOpsExecutionPanel({
               'text-[var(--text-dense-caption)] font-medium hover:underline',
               activeTone ? 'text-amber-900 dark:text-amber-100' : 'text-primary',
             )}
-            onClick={() => onNavigate('control-room')}
+            onClick={() => onOpenAgentDesk?.()}
           >
-            Open Control Room
+            Open Agent Desk
           </button>
         </span>
       </div>
@@ -618,7 +617,7 @@ export function DailyOpsExecutionPanel({
                     item={item}
                     allJobs={allJobs}
                     ambientJobId={ambientJobId}
-                    onNavigate={onNavigate}
+                    onOpenAgentDesk={onOpenAgentDesk}
                     onFocusNow={focusNow}
                     onAdoptJob={onAdoptJob}
                     canDismiss={canOperate}
@@ -629,8 +628,14 @@ export function DailyOpsExecutionPanel({
                   />
                 ))}
                 {visibleQueue.length > 8 && (
-                  <li className="text-[var(--text-dense-micro)] text-muted-foreground">
-                    +{visibleQueue.length - 8} more in Control Room
+                  <li>
+                    <button
+                      type="button"
+                      className="text-[var(--text-dense-micro)] text-primary hover:underline"
+                      onClick={() => onOpenAgentDesk?.()}
+                    >
+                      +{visibleQueue.length - 8} more in Agent Desk
+                    </button>
                   </li>
                 )}
               </ul>
@@ -667,13 +672,6 @@ export function DailyOpsExecutionPanel({
                   >
                     Agent Desk →
                   </button>
-                  <button
-                    type="button"
-                    className="text-[var(--text-dense-caption)] text-primary hover:underline"
-                    onClick={() => onNavigate('control-room')}
-                  >
-                    Open Control Room
-                  </button>
                 </div>
               </div>
             ) : historyRows.length === 0 ? (
@@ -688,13 +686,6 @@ export function DailyOpsExecutionPanel({
                     onClick={() => onOpenAgentDesk?.()}
                   >
                     Agent Desk →
-                  </button>
-                  <button
-                    type="button"
-                    className="text-[var(--text-dense-caption)] text-primary hover:underline"
-                    onClick={() => onNavigate('control-room')}
-                  >
-                    Open Control Room
                   </button>
                 </div>
               </div>

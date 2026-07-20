@@ -38,6 +38,7 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
@@ -69,7 +70,7 @@ type ControlRoomPageProps = {
   onOpenCluster: () => void
   onOpenAudit: () => void
   onOpenBriefing: (opts?: BriefingUrlState) => void
-  onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   onOpenPlatformRelease?: () => void
   onOpenTradeDeploy?: () => void
   onOpenPromote?: () => void
@@ -326,7 +327,7 @@ export function ControlRoomPage({
           onOpenDelivery={onOpenDelivery}
         />
 
-        <OperateQueueStrip />
+        <OperateQueueStrip onOpenAgentDesk={onOpenAgentDesk} />
 
         <MissionSignalProgramStrip onOpenDelivery={onOpenDelivery} />
 

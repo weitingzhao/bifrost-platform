@@ -29,6 +29,8 @@ export type AgentDeskSessionOpsPanelsProps = {
   onStartHandoffAgent?: (item: OperateQueueItem) => void
   onObserveHandoffJob?: (jobId: string) => void
   onNavigateRecurringSetup?: () => void
+  focusHandoffId?: string | null
+  onFocusHandoffConsumed?: () => void
 }
 
 /**
@@ -50,6 +52,8 @@ export function AgentDeskSessionOpsPanels({
   onStartHandoffAgent,
   onObserveHandoffJob,
   onNavigateRecurringSetup,
+  focusHandoffId,
+  onFocusHandoffConsumed,
 }: AgentDeskSessionOpsPanelsProps) {
   const [localSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
@@ -192,6 +196,8 @@ export function AgentDeskSessionOpsPanels({
             onStartAgent={onStartHandoffAgent}
             onObserveJob={onObserveHandoffJob}
             onNavigateSetup={onNavigateRecurringSetup}
+            focusHandoffId={focusHandoffId}
+            onFocusHandoffConsumed={onFocusHandoffConsumed}
           />
         </BriefingFoldableSection>
       )}

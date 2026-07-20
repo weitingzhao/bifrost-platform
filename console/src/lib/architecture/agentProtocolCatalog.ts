@@ -118,7 +118,7 @@ export const WAVE3_P0_DECISIONS: Wave3P0Decision[] = [
       'Post-completion remains NOT ASSESSED until Briefing Owner decision. Only approved structured handoffs inject into GET/POST /api/v1/operate/queue (data/operate/queue.json); NO HANDOFF is explicit, and verified closure remains in recent_closed. Not spine tracks.operate.',
     wave3Deliverables: [
       'Operate queue store + GET list + POST enqueue on approve',
-      'Control Room strip: open operate queue items',
+      'Control Room strip: open operate queue items (deep-link to Agent Desk)',
       'Briefing operate track reads queue API',
       'MCP get_operate_queue (read)',
       'Structured reason/task/criteria/verification/risk contract with legacy JSON compatibility',
@@ -454,7 +454,7 @@ export const DAILY_OPS_FLEET_DESK = {
     'Operate Queue: Close (verified) requires evidence + job/post-fix gates; Dismiss allows stale/resolved close with evidence without those gates.',
     'Action column live progress from last_dispatch + jobs; Skip · dedup 24h / Skip · D10 never imply in-progress.',
     'Notes fleet≠agent when agent signals disagree with fleet polarity; lamps remain fleet-sourced (no full merge).',
-    'Action: auto job click → Agent Desk; queue → Control Room Operate Queue; Queued (busy) when concurrent auto demote.',
+    'Action: auto job click → Agent Desk; queue → Agent Desk Operate handoffs; Queued (busy) when concurrent auto demote.',
     'Row Fix: per non-ok full_auto/semi_auto item with fixScope → ambient startRemediation(scope); observe/manual null-scope → Ask for AI only.',
     'Ask for AI: copy Cursor IDE failover pack (header all non-ok or per-row) — paste into Cursor Agent when Ops Agent path fails or is blocked.',
     'Trust boundary: checklist-run is L0 probe; actuation only via existing remediation scopes + Operate Queue. Concurrent auto limit 1; 24h dedup per item.',
