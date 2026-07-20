@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bot, ChevronRight, History, Loader2, Target } from 'lucide-react'
-import { DenseTag, SegmentControl, cn } from '@bifrost/ui'
+import { ConfirmDialog, DenseTag, SegmentControl, cn } from '@bifrost/ui'
 import { fetchRemediationJobs } from '@/api/platform'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import type { RemediationJob } from '@/api/types'
 import { DailyOpsAgentLivePanel } from '@/components/task-mode/DailyOpsProcessStrip'
+import { GitDirtyDetailsPanel } from '@/components/task-mode/GitDirtyDetailsPanel'
+import { useDismissOperateQueueItem } from '@/hooks/useDismissOperateQueueItem'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   isRecentClosedItem,
@@ -21,6 +24,7 @@ import {
 import {
   fixPathLabel,
   fixTargetNextStep,
+  isGitDirtyBlocker,
   resolveAmbientJobFixTarget,
   type DailyOpsBlocker,
 } from '@/lib/control-room/dailyOpsPrimaryBlocker'
@@ -59,6 +63,10 @@ export type DailyOpsExecutionPanelProps = {
   onVerifyReprobe?: () => void
   /** Adopt an existing remediation job as ambient (Queue → Now). */
   onAdoptJob?: (job: { id: string; scope: string; label: string }) => void
+  /** Start git-dirty propose-commit / stash agent (approval required). */
+  onProposeCommit?: () => void
+  onProposeStash?: () => void
+  proposeCommitPending?: boolean
 }
 
 function originTagProps(kind: QueueOriginKind): {
@@ -195,6 +203,8 @@ function QueueItemRow({
   onNavigate,
   onFocusNow,
   onAdoptJob,
+  onDismiss,
+  canDismiss,
 }: {
   item: OperateQueueItem
   allJobs: RemediationJob[]
@@ -202,6 +212,8 @@ function QueueItemRow({
   onNavigate: (tab: string) => void
   onFocusNow: () => void
   onAdoptJob?: (job: { id: string; scope: string; label: string }) => void
+  onDismiss?: (item: OperateQueueItem) => void
+  canDismiss?: boolean
 }) {
   const origin = originFromOperateItem(item)
   const tag = originTagProps(origin)
@@ -224,6 +236,16 @@ function QueueItemRow({
         <DenseTag variant={jobChip.variant} className="shrink-0 text-[8px]">
           {jobChip.label}
         </DenseTag>
+      )}
+      {canDismiss && onDismiss != null && (
+        <button
+          type="button"
+          className="shrink-0 text-[var(--text-dense-caption)] text-muted-foreground hover:underline"
+          title="Dismiss stale or resolved handoff with evidence"
+          onClick={() => onDismiss(item)}
+        >
+          Dismiss
+        </button>
       )}
       {canOpenNow ? (
         <button
@@ -272,6 +294,9 @@ export function DailyOpsExecutionPanel({
   checklistItemFixActiveId = null,
   onVerifyReprobe,
   onAdoptJob,
+  onProposeCommit,
+  onProposeStash,
+  proposeCommitPending = false,
 }: DailyOpsExecutionPanelProps) {
   const hasAmbientJob = ambientJobId != null && ambientJobId !== ''
   const preferNow =
@@ -279,6 +304,12 @@ export function DailyOpsExecutionPanel({
 
   const [tab, setTab] = useState<DailyOpsExecutionTab>(preferNow ? 'now' : 'queue-history')
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
+  const [dismissItem, setDismissItem] = useState<OperateQueueItem | null>(null)
+  const [dismissEvidence, setDismissEvidence] = useState('')
+  const dismissMutation = useDismissOperateQueueItem()
+  const { canOperate } = usePlatformAuth()
+  const showDirtyPanel =
+    primaryBlocker != null && isGitDirtyBlocker(primaryBlocker) && !hasAmbientJob
 
   useEffect(() => {
     if (preferNow) setTab('now')
@@ -467,6 +498,14 @@ export function DailyOpsExecutionPanel({
             jobTarget={hasAmbientJob || showStartingHint ? jobFixTarget : null}
             hasAmbientJob={hasAmbientJob || showStartingHint}
           />
+          {showDirtyPanel && (
+            <GitDirtyDetailsPanel
+              className="mb-2 rounded-md border border-amber-500/35 bg-amber-500/5 px-2.5 py-2"
+              onProposeCommit={onProposeCommit}
+              onProposeStash={onProposeStash}
+              proposeDisabled={!canOperate || proposeCommitPending}
+            />
+          )}
           {hasAmbientJob && ambientJobId != null ? (
             <DailyOpsAgentLivePanel
               jobId={ambientJobId}
@@ -582,6 +621,11 @@ export function DailyOpsExecutionPanel({
                     onNavigate={onNavigate}
                     onFocusNow={focusNow}
                     onAdoptJob={onAdoptJob}
+                    canDismiss={canOperate}
+                    onDismiss={item => {
+                      setDismissItem(item)
+                      setDismissEvidence('')
+                    }}
                   />
                 ))}
                 {visibleQueue.length > 8 && (
@@ -711,6 +755,50 @@ export function DailyOpsExecutionPanel({
           </section>
         </div>
       )}
+      <div className={dismissItem == null ? 'hidden' : 'mt-2'}>
+        <label
+          className="text-[var(--text-dense-caption)] font-medium text-muted-foreground"
+          htmlFor="exec-dismiss-evidence"
+        >
+          Dismiss evidence
+        </label>
+        <textarea
+          id="exec-dismiss-evidence"
+          className="mt-1 min-h-14 w-full rounded border border-border bg-background px-2 py-1 text-[var(--text-dense-meta)]"
+          placeholder="operator: already resolved / fleet clean…"
+          value={dismissEvidence}
+          onChange={e => setDismissEvidence(e.target.value)}
+        />
+      </div>
+      <ConfirmDialog
+        open={dismissItem != null}
+        title="Dismiss queue item"
+        message="Close this handoff as stale or resolved with evidence. Skips linked-job / post-fix gates."
+        confirmLabel="Dismiss"
+        confirming={dismissMutation.isPending}
+        onConfirm={() => {
+          if (dismissItem == null || dismissEvidence.trim() === '') return
+          const normalized = /^(operator|dismiss):/i.test(dismissEvidence.trim())
+            ? dismissEvidence.trim()
+            : `operator: ${dismissEvidence.trim()}`
+          dismissMutation.mutate(
+            {
+              itemId: dismissItem.id,
+              body: { completion_evidence: [normalized], reason: 'stale' },
+            },
+            {
+              onSuccess: () => {
+                setDismissItem(null)
+                setDismissEvidence('')
+              },
+            },
+          )
+        }}
+        onCancel={() => {
+          setDismissItem(null)
+          setDismissEvidence('')
+        }}
+      />
     </div>
   )
 }

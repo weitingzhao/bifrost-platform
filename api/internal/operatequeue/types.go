@@ -109,6 +109,13 @@ type CloseRequest struct {
 	PostFixVerificationPassed bool     `json:"post_fix_verification_passed,omitempty"`
 }
 
+// DismissRequest soft-closes a stale/resolved handoff without requiring a linked
+// execution job to be done or post-fix verification. Evidence is still required.
+type DismissRequest struct {
+	CompletionEvidence []string `json:"completion_evidence"`
+	Reason             string   `json:"reason,omitempty"` // stale | resolved | other
+}
+
 type ExecutionRequest struct {
 	ExecutionJobID string `json:"execution_job_id"`
 }

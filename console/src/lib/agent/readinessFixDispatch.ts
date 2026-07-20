@@ -107,6 +107,22 @@ export function buildDispatchedFixPrompt(input: {
     ].join('\n')
   }
 
+  if (scope === 'git-dirty-remediate') {
+    return [
+      'Playbook: git-dirty-remediate',
+      '',
+      failing != null
+        ? `Issue: ${failing.label} (${failing.signal}): ${failing.detail}`
+        : 'Issue: Git bridge dirty repos',
+      '',
+      '1. git_workspace_status + git_diff',
+      '2. request_operator_approval → git_commit (or git_stash if operator prefers)',
+      '3. Re-check git_workspace_status',
+      '',
+      'Never auto-commit/stash without approval. Never discard Owner WIP. D10: no live trading.',
+    ].join('\n')
+  }
+
   if (scope === PROD_ENV_FIX_SCOPE && failing != null) {
     const label = `${failing.label} ${failing.detail}`.toLowerCase()
     if (/massive|polygon/.test(label)) {

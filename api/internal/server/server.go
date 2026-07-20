@@ -281,6 +281,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/operate/queue", s.operatequeue.HandleEnqueue)
 			r.Post("/operate/queue/{id}/execution", s.operatequeue.HandleRecordExecution)
 			r.Post("/operate/queue/{id}/close", s.operatequeue.HandleClose)
+			r.Post("/operate/queue/{id}/dismiss", s.operatequeue.HandleDismiss)
 			r.Post("/checklist/signals", s.checklist.HandlePostSignals)
 			r.Post("/lanes", s.lanes.HandleCreate)
 			r.Patch("/lanes/{id}", s.lanes.HandleUpdate)

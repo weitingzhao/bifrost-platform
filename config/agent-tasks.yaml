@@ -153,6 +153,14 @@ tasks:
     domain: Operator
     action: "Remediate"
 
+  - id: git-dirty-remediate
+    scope: "git-dirty-remediate"
+    label: "Git · Dirty Remediate"
+    tier: manual
+    default_level: L0
+    domain: Operator
+    action: "Remediate"
+
   - id: daily-ops-checklist-run
     scope: "daily-ops-checklist-run"
     label: "Health · Checklist Run"

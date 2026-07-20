@@ -151,6 +151,10 @@ func (h *Handler) executeDispatch(ctx context.Context, signals []ItemSignal) []D
 			out = append(out, a)
 		case "queue":
 			meta, _ := ItemByID(a.ItemID)
+			agentTaskID := "daily-ops-checklist-run"
+			if a.ItemID == "git-bridge" || meta.FixScope == "git-dirty-remediate" {
+				agentTaskID = "git-dirty-remediate"
+			}
 			item, err := h.operate.EnqueueChecklistDispatch(operatequeue.EnqueueRequest{
 				ProgramID:   "daily-ops-checklist",
 				OperateLane: "troubleshoot",
@@ -158,7 +162,7 @@ func (h *Handler) executeDispatch(ctx context.Context, signals []ItemSignal) []D
 				Description: fmt.Sprintf("semi_auto handoff for item %s\n\n%s", a.ItemID, sigDetail[a.ItemID]),
 				HandoffKind: operatequeue.HandoffOneOff,
 				Reason:      "checklist_dispatch",
-				AgentTaskID: "daily-ops-checklist-run",
+				AgentTaskID: agentTaskID,
 				AcceptanceCriteria: []string{
 					fmt.Sprintf("Checklist item %s returns ok", a.ItemID),
 				},
@@ -203,7 +207,9 @@ func buildFixPrompt(itemID, detail string) string {
 		playbook = "Playbook: massive-feed-recover\n"
 	case "postgres", "redis":
 		playbook = "Playbook: data-layer-recover\n"
-	case "runners-ha", "git-bridge", "hermes-tooling":
+	case "git-bridge":
+		playbook = "Playbook: git-dirty-remediate\n"
+	case "runners-ha", "hermes-tooling":
 		playbook = "Playbook: operator-plane-remediate\n"
 	}
 	return fmt.Sprintf(

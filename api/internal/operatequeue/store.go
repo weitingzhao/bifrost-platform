@@ -186,6 +186,59 @@ func (s *Store) Close(id string, req CloseRequest, executionJobDone bool) (Item,
 	return Item{}, fmt.Errorf("item not found")
 }
 
+// Dismiss soft-closes an open item when it is stale or already resolved outside
+// the verified Close path. Still requires completion_evidence; does not require
+// execution job done or post_fix_verification.
+func (s *Store) Dismiss(id string, req DismissRequest) (Item, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rec, err := s.loadLocked()
+	if err != nil {
+		return Item{}, err
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Item{}, fmt.Errorf("id required")
+	}
+	evidence := cleanStrings(req.CompletionEvidence)
+	if len(evidence) == 0 {
+		return Item{}, fmt.Errorf("completion_evidence required")
+	}
+	reason := strings.ToLower(strings.TrimSpace(req.Reason))
+	if reason == "" {
+		reason = "stale"
+	}
+	if reason != "stale" && reason != "resolved" && reason != "other" {
+		return Item{}, fmt.Errorf("reason must be stale, resolved, or other")
+	}
+	tag := "dismiss:" + reason
+	if !hasEvidence(evidence, tag) {
+		evidence = append([]string{tag}, evidence...)
+	}
+	for i := range rec.Items {
+		if rec.Items[i].ID != id {
+			continue
+		}
+		if rec.Items[i].Status == StatusClosed {
+			return rec.Items[i], nil
+		}
+		if rec.Items[i].Status != StatusOpen {
+			return Item{}, fmt.Errorf("item not open")
+		}
+		now := time.Now().UTC().Format(time.RFC3339)
+		rec.Items[i].Status = StatusClosed
+		rec.Items[i].CompletionEvidence = evidence
+		rec.Items[i].UpdatedAt = now
+		rec.Items[i].ClosedAt = now
+		if err := s.saveLocked(rec); err != nil {
+			return Item{}, err
+		}
+		return rec.Items[i], nil
+	}
+	return Item{}, fmt.Errorf("item not found")
+}
+
 func (s *Store) RecordExecution(id, jobID string) (Item, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

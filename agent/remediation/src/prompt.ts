@@ -30,7 +30,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -99,6 +99,36 @@ function buildNightlyDriftAutofixPrompt(req: StartRunRequest): string {
     body !== '' ? body : '(missing proposal body)',
     '',
     'Complete the fix and report: branch, commits, PR steps.',
+  ]
+  return lines.join('\n')
+}
+
+function buildGitDirtyRemediatePrompt(req: StartRunRequest): string {
+  const body = req.prompt?.trim() ?? ''
+  const lines: string[] = [
+    'You are the Bifrost Git Dirty remediation agent.',
+    'You clear Engineer Fleet dirty_repos via Git Bridge — with operator approval. You do NOT auto-clean.',
+    '',
+    '## Task',
+    body !== ''
+      ? body
+      : 'Review dirty repos, propose commit (or optional stash), wait for operator approval, then act.',
+    '',
+    '## Required playbook',
+    '1. git_workspace_status — list dirty repos, files, +N/−M.',
+    '2. git_diff — summarize changes per dirty repo.',
+    '3. Choose path:',
+    '   A) Propose commit (default): draft a clear multi-repo commit message → request_operator_approval(commit_message=...) → on approve: git_commit → optionally git_push if operator asked.',
+    '   B) Stash to clear Fleet (only if operator/prompt asks): request_operator_approval with note describing stash intent → on approve: git_stash (never drop).',
+    '4. Re-check git_workspace_status — report remaining dirty repos.',
+    '',
+    '## Safety',
+    '- NEVER call git_commit or git_stash without prior request_operator_approval in this run.',
+    '- NEVER discard Owner WIP (no git reset --hard, no stash drop, no force push).',
+    '- D10: do not enable live trading.',
+    '- This is NOT a magic "AI Fix that clears dirty" — operator must approve the commit/stash message.',
+    '',
+    'Begin with git_workspace_status, then present a propose-commit (or stash) plan.',
   ]
   return lines.join('\n')
 }
@@ -359,6 +389,9 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
   if (req.scope === 'operator-plane-remediate') {
     return buildOperatorPlaneRemediatePrompt(req)
+  }
+  if (req.scope === 'git-dirty-remediate') {
+    return buildGitDirtyRemediatePrompt(req)
   }
   if (req.scope === 'release') {
     return buildReleasePrompt(req)

@@ -212,7 +212,24 @@ export function AgentMcpPanel({
           Git Bridge on {bridge.git_bridge.url} — {bridge.git_bridge.repo_count ?? 0} repos, workspace{' '}
           <code className="font-mono-tabular">{bridge.git_bridge.workspace}</code>
           {bridge.git_bridge.dirty_repos != null && bridge.git_bridge.dirty_repos > 0 && (
-            <span> · <strong>{bridge.git_bridge.dirty_repos} repos with uncommitted changes</strong></span>
+            <span>
+              {' '}
+              · <strong>{bridge.git_bridge.dirty_repos} repos with uncommitted changes</strong>
+              {bridge.git_bridge.dirty_repo_details != null &&
+                bridge.git_bridge.dirty_repo_details.length > 0 && (
+                  <span className="font-mono-tabular">
+                    {' '}
+                    (
+                    {bridge.git_bridge.dirty_repo_details
+                      .map(
+                        d =>
+                          `${d.repo} +${d.insertions}/−${d.deletions}`,
+                      )
+                      .join('; ')}
+                    )
+                  </span>
+                )}
+            </span>
           )}
         </p>
       )}

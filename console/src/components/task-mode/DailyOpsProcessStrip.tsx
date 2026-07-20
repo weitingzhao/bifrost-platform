@@ -119,12 +119,14 @@ export function DailyOpsProcessStrip({
   const stepStatuses = dailyOpsStepStatuses(workflow)
   const isAgentFix = action.kind === 'agent-fix'
   const isOperatorPlan = action.kind === 'operator-plan'
+  const isProposeCommit = action.kind === 'propose-commit'
   const isManualNext = action.kind === 'manual-next'
   const isViewAgent = action.kind === 'view-agent'
   /** Discover AI Check + Clear idle re-check — same Checklist probe scope. */
   const isChecklistPrimary =
     action.kind === 'ai-check' || action.kind === 'run-check'
-  const fixPending = isOperatorPlan ? operatorPlanFixPending : agentFixPending
+  const fixPending =
+    isOperatorPlan || isProposeCommit ? operatorPlanFixPending : agentFixPending
   const checkBusy = checklistCheckPending || checklistCheckActive
   const checkActiveLabel =
     checklistCheckStatusHint != null && checklistCheckStatusHint !== ''
@@ -135,8 +137,9 @@ export function DailyOpsProcessStrip({
     workflow.activePhase === 'remediate' &&
     (isManualNext ||
       isOperatorPlan ||
+      isProposeCommit ||
       nextBanner != null ||
-      workflow.blockers.some(b => /Engineer|Operator Plan|Next:/i.test(b)))
+      workflow.blockers.some(b => /Engineer|Operator Plan|Next:|Propose commit|dirty/i.test(b)))
   const [manualCopied, setManualCopied] = useState(false)
 
   const handleManualPrimary = () => {
@@ -251,18 +254,24 @@ export function DailyOpsProcessStrip({
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {showReadyHint &&
-            (isAgentFix || isOperatorPlan || isChecklistPrimary || isManualNext) &&
+            (isAgentFix ||
+              isOperatorPlan ||
+              isProposeCommit ||
+              isChecklistPrimary ||
+              isManualNext) &&
             !fixPending &&
             !checkBusy &&
             (isManualNext || canOperate) && (
               <DenseTag variant="info" className="text-[9px]">
                 {isManualNext
                   ? 'Ready · Manual next'
-                  : isOperatorPlan
-                    ? 'Ready · Operator Plan'
-                    : isChecklistPrimary
-                      ? 'Ready · AI Check'
-                      : 'Ready to Agent Fix'}
+                  : isProposeCommit
+                    ? 'Ready · Propose commit'
+                    : isOperatorPlan
+                      ? 'Ready · Operator Plan'
+                      : isChecklistPrimary
+                        ? 'Ready · AI Check'
+                        : 'Ready to Agent Fix'}
               </DenseTag>
             )}
           {isManualNext && (
@@ -343,15 +352,44 @@ export function DailyOpsProcessStrip({
               )}
             </>
           )}
-          {isManualNext && action.secondary != null && onSecondaryAction != null && (
+          {isProposeCommit && (
+            <>
+              <AgentTriggerButton
+                label={action.label}
+                size="xs"
+                pending={operatorPlanFixPending}
+                pendingLabel="Starting…"
+                disabled={!canOperate || operatorPlanFixDisabled || operatorPlanFixPending}
+                title={
+                  !canOperate
+                    ? 'Authenticate as operator to propose commit'
+                    : (operatorPlanFixTitle ??
+                      'Start git-dirty-remediate — approval required before commit/stash')
+                }
+                onClick={onPrimaryAction}
+              />
+              {action.secondary != null && onSecondaryAction != null && (
+                <button
+                  type="button"
+                  className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary"
+                  disabled={!canOperate || operatorPlanFixPending}
+                  title="Optional — stash dirty repos after operator approval (never drops WIP)"
+                  onClick={onSecondaryAction}
+                >
+                  {action.secondary.label}
+                </button>
+              )}
+            </>
+          )}
+          {(isManualNext || isProposeCommit) && action.secondary != null && onSecondaryAction != null && isManualNext && (
             <button
               type="button"
               className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary"
               disabled={!canOperate || operatorPlanFixPending}
               title={
                 !canOperate
-                  ? 'Authenticate as operator to run secondary AI Fix'
-                  : 'Secondary — AI-fixable sibling blocker (not the primary red light)'
+                  ? 'Authenticate as operator to run secondary action'
+                  : 'Secondary — Propose commit for git dirty sibling (approval required)'
               }
               onClick={onSecondaryAction}
             >

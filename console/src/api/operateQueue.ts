@@ -55,6 +55,22 @@ export async function closeOperateQueueItem(
   return r.json() as Promise<import('./operateQueueTypes').OperateQueueItem>
 }
 
+export async function dismissOperateQueueItem(
+  itemId: string,
+  body: import('./operateQueueTypes').DismissOperateQueueRequest,
+): Promise<import('./operateQueueTypes').OperateQueueItem> {
+  const token = getPlatformOperatorToken()
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
+  const r = await fetch(`/api/v1/operate/queue/${encodeURIComponent(itemId)}/dismiss`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) throw await parseError('operate queue dismiss', r)
+  return r.json() as Promise<import('./operateQueueTypes').OperateQueueItem>
+}
+
 export async function recordOperateQueueExecution(
   itemId: string,
   executionJobId: string,

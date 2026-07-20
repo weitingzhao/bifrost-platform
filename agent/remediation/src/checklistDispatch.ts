@@ -23,7 +23,7 @@ const ITEM_META: Record<string, { capability: FixCapability; scope: string | nul
   'platform-console': { capability: 'full_auto', scope: 'platform-self-health-recover' },
   'argo-apps': { capability: 'semi_auto', scope: 'platform-self-health-recover' },
   'runners-ha': { capability: 'semi_auto', scope: 'operator-plane-remediate' },
-  'git-bridge': { capability: 'semi_auto', scope: 'operator-plane-remediate' },
+  'git-bridge': { capability: 'semi_auto', scope: 'git-dirty-remediate' },
   'mac-probe-bridge': { capability: 'manual', scope: null },
   postgres: { capability: 'semi_auto', scope: 'cluster_issues_full_auto' },
   redis: { capability: 'full_auto', scope: 'cluster_issues_full_auto' },

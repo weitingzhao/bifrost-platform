@@ -93,6 +93,12 @@ export type OpsTaskStripsProps = {
   operatorPlanFixDisabled?: boolean
   operatorPlanFixTitle?: string
   operatorPlanFixError?: string | null
+  /** Git dirty — propose commit / stash (scope git-dirty-remediate). */
+  onProposeCommit?: () => void
+  onProposeStash?: () => void
+  proposeCommitPending?: boolean
+  proposeCommitDisabled?: boolean
+  proposeCommitTitle?: string
   /** Checklist AI Check — scope daily-ops-checklist-run (prober + dispatch gates). */
   onChecklistCheck?: () => void
   checklistCheckPending?: boolean
@@ -610,6 +616,11 @@ function DailyOpsFleetDesk({
     operatorPlanFixDisabled,
     operatorPlanFixTitle,
     operatorPlanFixError,
+    onProposeCommit,
+    onProposeStash,
+    proposeCommitPending,
+    proposeCommitDisabled,
+    proposeCommitTitle,
     onChecklistCheck,
     checklistCheckPending,
     checklistCheckDisabled,
@@ -725,6 +736,10 @@ function DailyOpsFleetDesk({
           showReadyHint
           ambientJobId={ambientJobId}
           onPrimaryAction={() => {
+            if (fleetWorkflow.primaryAction.kind === 'propose-commit') {
+              onProposeCommit?.()
+              return
+            }
             if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
               onOperatorPlanFix?.()
               return
@@ -732,18 +747,33 @@ function DailyOpsFleetDesk({
             onFleetWorkflowAction?.()
           }}
           onSecondaryAction={
-            fleetWorkflow.primaryAction.secondary?.kind === 'operator-plan'
-              ? () => onOperatorPlanFix?.()
-              : fleetWorkflow.primaryAction.secondary?.kind === 'agent-fix'
-                ? () => onFleetWorkflowAction?.()
-                : undefined
+            fleetWorkflow.primaryAction.secondary?.kind === 'propose-commit'
+              ? () => {
+                  const label = fleetWorkflow.primaryAction.secondary?.label ?? ''
+                  if (/stash/i.test(label)) onProposeStash?.()
+                  else onProposeCommit?.()
+                }
+              : fleetWorkflow.primaryAction.secondary?.kind === 'operator-plan'
+                ? () => onOperatorPlanFix?.()
+                : fleetWorkflow.primaryAction.secondary?.kind === 'agent-fix'
+                  ? () => onFleetWorkflowAction?.()
+                  : undefined
           }
           onOpenAgentDesk={onOpenAgentDesk}
           onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
           onNavigate={onNavigate}
-          operatorPlanFixPending={operatorPlanFixPending}
-          operatorPlanFixDisabled={operatorPlanFixDisabled}
-          operatorPlanFixTitle={operatorPlanFixTitle}
+          operatorPlanFixPending={
+            Boolean(operatorPlanFixPending) || Boolean(proposeCommitPending)
+          }
+          operatorPlanFixDisabled={
+            Boolean(operatorPlanFixDisabled) || Boolean(proposeCommitDisabled)
+          }
+          operatorPlanFixTitle={
+            fleetWorkflow.primaryAction.kind === 'propose-commit'
+              ? (proposeCommitTitle ??
+                'Start git-dirty-remediate — approval required before commit/stash')
+              : operatorPlanFixTitle
+          }
           checklistCheckPending={checklistCheckPending}
           checklistCheckDisabled={checklistCheckDisabled}
           checklistCheckTitle={checklistCheckTitle}
@@ -841,6 +871,10 @@ function DailyOpsFleetDesk({
         onOpsLoopAction={
           fleetWorkflow != null
             ? () => {
+                if (fleetWorkflow.primaryAction.kind === 'propose-commit') {
+                  onProposeCommit?.()
+                  return
+                }
                 if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
                   onOperatorPlanFix?.()
                   return
@@ -852,6 +886,9 @@ function DailyOpsFleetDesk({
         opsLoopActionLabel={
           fleetWorkflow != null ? `${fleetWorkflow.primaryAction.label} →` : 'Ops loop →'
         }
+        onProposeCommit={onProposeCommit}
+        onProposeStash={onProposeStash}
+        proposeCommitPending={proposeCommitPending}
       />
     </div>
   )

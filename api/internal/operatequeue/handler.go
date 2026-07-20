@@ -125,6 +125,36 @@ func (h *Handler) HandleClose(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, closed)
 }
 
+func (h *Handler) HandleDismiss(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	var req DismissRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	closed, err := h.store.Dismiss(id, req)
+	if err != nil {
+		msg := err.Error()
+		switch msg {
+		case "item not found":
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": msg})
+		default:
+			writeJSON(w, http.StatusConflict, map[string]string{"error": msg})
+		}
+		return
+	}
+	h.audit.Record(r, "operate.queue.dismiss", closed.ID, StatusClosed,
+		fmt.Sprintf("program=%s", closed.ProgramID))
+	if h.observer != nil {
+		h.observer.OnOperateQueueClosed(closed)
+	}
+	writeJSON(w, http.StatusOK, closed)
+}
+
 func (h *Handler) HandleRecordExecution(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	var req ExecutionRequest

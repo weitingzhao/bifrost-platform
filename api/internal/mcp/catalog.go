@@ -87,6 +87,7 @@ func Catalog() []ToolView {
 		tool("get_operate_queue", "Open + recently closed structured Agent Desk handoffs (D11)", "read", "GET", "/api/v1/operate/queue", "viewer", "Agent", true),
 		tool("record_operate_queue_execution", "Attach real remediation execution_job_id to open handoff", "routine", "POST", "/api/v1/operate/queue/{id}/execution", "operator", "Agent", true),
 		tool("close_operate_queue_item", "Close with completion evidence; linked job must be done and post-fix verification passed", "routine", "POST", "/api/v1/operate/queue/{id}/close", "operator", "Agent", true),
+		tool("dismiss_operate_queue_item", "Dismiss stale/resolved handoff with evidence (skips job/post-fix gates)", "routine", "POST", "/api/v1/operate/queue/{id}/dismiss", "operator", "Agent", true),
 		tool("get_checklist_signals", "Latest Daily Ops Checklist per-item signals + KPIs", "read", "GET", "/api/v1/checklist/signals", "viewer", "Agent", true),
 		tool("report_checklist_signals", "Merge Daily Ops Checklist probe signals (runner daily-ops-checklist-run)", "routine", "POST", "/api/v1/checklist/signals", "operator", "Agent", true),
 		tool("get_checklist_kpis", "Checklist quiet-success streak + last-run summary", "read", "GET", "/api/v1/checklist/kpis", "viewer", "Agent", true),

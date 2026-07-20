@@ -15,6 +15,8 @@ import {
   blockerAllowsAiFix,
   blockerRequiresManualPath,
   collectDailyOpsBlockers,
+  gitDirtyPrimaryCtaLabel,
+  isGitDirtyBlocker,
   manualPrimaryCtaLabel,
   nextStepBanner,
   pickPrimaryBlocker,
@@ -40,6 +42,7 @@ export type DailyOpsWorkflowPrimaryAction = {
   kind:
     | 'agent-fix'
     | 'operator-plan'
+    | 'propose-commit'
     | 'manual-next'
     | 'navigate'
     | 'verify'
@@ -57,10 +60,10 @@ export type DailyOpsWorkflowPrimaryAction = {
   manualHint?: string
   /**
    * Outline/muted secondary when primary is manual but an AI-fixable sibling exists.
-   * e.g. Also: AI Fix (git dirty)
+   * e.g. Also: Propose commit (git dirty)
    */
   secondary?: {
-    kind: 'operator-plan' | 'agent-fix'
+    kind: 'operator-plan' | 'agent-fix' | 'propose-commit'
     label: string
     cellKey?: string
     blockerItemId?: string
@@ -126,6 +129,22 @@ function remediateFromEngineer(
   if (primary != null && blockerRequiresManualPath(primary)) {
     const secondaryAi = pickSecondaryAiBlocker(engBlockers, primary)
     blockers.push(nextStepBanner(primary))
+    const secondary =
+      secondaryAi != null
+        ? isGitDirtyBlocker(secondaryAi)
+          ? {
+              kind: 'propose-commit' as const,
+              label: secondaryAiCtaLabel(secondaryAi),
+              cellKey: eng.key,
+              blockerItemId: secondaryAi.itemId,
+            }
+          : {
+              kind: 'operator-plan' as const,
+              label: secondaryAiCtaLabel(secondaryAi),
+              cellKey: eng.key,
+              blockerItemId: secondaryAi.itemId,
+            }
+        : undefined
     return {
       activePhase: 'remediate',
       blockers,
@@ -136,15 +155,31 @@ function remediateFromEngineer(
         cellKey: eng.key,
         blockerItemId: primary.itemId,
         manualHint: primary.manualAction ?? primary.reason,
-        secondary:
-          secondaryAi != null
-            ? {
-                kind: 'operator-plan',
-                label: secondaryAiCtaLabel(secondaryAi),
-                cellKey: eng.key,
-                blockerItemId: secondaryAi.itemId,
-              }
-            : undefined,
+        secondary,
+      },
+      targetCellKey: eng.key,
+      primaryBlocker: primary,
+    }
+  }
+
+  // Git dirty primary → Propose commit (approval path), not magic AI Fix
+  if (primary != null && isGitDirtyBlocker(primary)) {
+    blockers.push(nextStepBanner(primary))
+    return {
+      activePhase: 'remediate',
+      blockers,
+      primaryAction: {
+        kind: 'propose-commit',
+        label: gitDirtyPrimaryCtaLabel(primary),
+        tabId,
+        cellKey: eng.key,
+        blockerItemId: primary.itemId,
+        secondary: {
+          kind: 'propose-commit',
+          label: 'Also: Stash to clear Fleet',
+          cellKey: eng.key,
+          blockerItemId: primary.itemId,
+        },
       },
       targetCellKey: eng.key,
       primaryBlocker: primary,

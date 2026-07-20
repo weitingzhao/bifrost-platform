@@ -55,3 +55,9 @@ export type CloseOperateQueueRequest = {
   completion_evidence: string[]
   post_fix_verification_passed?: boolean
 }
+
+export type DismissOperateQueueRequest = {
+  completion_evidence: string[]
+  /** stale | resolved | other */
+  reason?: 'stale' | 'resolved' | 'other'
+}

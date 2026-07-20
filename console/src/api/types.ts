@@ -1457,6 +1457,17 @@ export interface RunnerStatus {
   error?: string
 }
 
+/** Per-repo dirty summary from git-bridge via /api/v1/agent/bridge. */
+export interface GitDirtyRepoDetail {
+  repo: string
+  branch?: string
+  staged?: string[]
+  modified?: string[]
+  untracked?: string[]
+  insertions: number
+  deletions: number
+}
+
 export interface AgentBridgeResponse {
   generated_at: string
   remediation_runner: RunnerStatus
@@ -1467,6 +1478,7 @@ export interface AgentBridgeResponse {
     workspace?: string
     repo_count?: number
     dirty_repos?: number
+    dirty_repo_details?: GitDirtyRepoDetail[]
     error?: string
   }
   satellite_probe_bridge: {

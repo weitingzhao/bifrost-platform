@@ -75,11 +75,22 @@ export function manualPrimaryCtaLabel(b: DailyOpsBlocker): string {
 }
 
 export function secondaryAiCtaLabel(b: DailyOpsBlocker): string {
-  const hint =
-    b.group === 'automation' && /git/i.test(b.label)
-      ? 'git dirty'
-      : shortLabel(b.label, 18)
+  if (b.itemId === 'git-bridge' || (b.group === 'automation' && /git/i.test(b.label))) {
+    return 'Also: Propose commit (git dirty)'
+  }
+  const hint = shortLabel(b.label, 18)
   return `Also: AI Fix (${hint})`
+}
+
+/** Primary CTA when Engineer drift is git dirty — not misleading "AI Fix". */
+export function gitDirtyPrimaryCtaLabel(_b?: DailyOpsBlocker): string {
+  return 'Propose commit'
+}
+
+export function isGitDirtyBlocker(b: Pick<DailyOpsBlocker, 'itemId' | 'fixScope' | 'label'>): boolean {
+  if (b.itemId === 'git-bridge') return true
+  if (b.fixScope === 'git-dirty-remediate') return true
+  return /git/i.test(b.label) && /dirty|bridge/i.test(b.label)
 }
 
 function unhealthySignal(s: FleetCellSignal): s is 'fail' | 'degraded' {
@@ -162,6 +173,9 @@ export function nextStepBanner(primary: DailyOpsBlocker): string {
   if (blockerRequiresManualPath(primary)) {
     return `Next: ${manualPrimaryCtaLabel(primary)}`
   }
+  if (isGitDirtyBlocker(primary)) {
+    return 'Next: Review dirty repos · Propose commit'
+  }
   return `Next: AI Fix · ${shortLabel(primary.label)}`
 }
 
@@ -192,6 +206,7 @@ export function fixTargetNextStep(
     return fromCta
   }
   if (blockerRequiresManualPath(primary)) return manualPrimaryCtaLabel(primary)
+  if (isGitDirtyBlocker(primary)) return 'Review dirty repos · Propose commit'
   return `AI Fix · ${shortLabel(primary.label)}`
 }
 

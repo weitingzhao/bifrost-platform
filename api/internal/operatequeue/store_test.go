@@ -119,6 +119,44 @@ func TestStoreClose(t *testing.T) {
 	}
 }
 
+func TestStoreDismissSkipsJobGates(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+
+	store := NewStore(configDir)
+	item, err := store.Add(Item{
+		ID: "q-dismiss", ProgramID: "p1", Title: "Stale handoff", Status: StatusOpen,
+		CreatedAt: "2026-07-07T00:00:00Z", Source: SourceManual,
+		ExecutionJobID: "job-still-running",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Close would fail without job done; Dismiss must succeed with evidence.
+	if _, err := store.Close(item.ID, CloseRequest{
+		CompletionEvidence: []string{"operator: tried close"},
+	}, false); err == nil {
+		t.Fatal("expected Close to require completed execution job")
+	}
+
+	closed, err := store.Dismiss(item.ID, DismissRequest{
+		CompletionEvidence: []string{"operator: fleet already clean; handoff stale"},
+		Reason:             "stale",
+	})
+	if err != nil {
+		t.Fatalf("Dismiss: %v", err)
+	}
+	if closed.Status != StatusClosed {
+		t.Fatalf("expected closed, got %+v", closed)
+	}
+	if !hasEvidence(closed.CompletionEvidence, "dismiss:stale") {
+		t.Fatalf("expected dismiss:stale tag, got %+v", closed.CompletionEvidence)
+	}
+}
+
 func TestLegacyJSONLoadsWithDefaults(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")

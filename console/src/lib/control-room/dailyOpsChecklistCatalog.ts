@@ -23,6 +23,7 @@ import {
 } from '@/lib/agent/agentScopes'
 import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { OPERATOR_PLANE_FIX_SCOPE } from '@/lib/agent/operatorPlaneFixPrompt'
+import { GIT_DIRTY_FIX_SCOPE } from '@/lib/agent/gitDirtyRemediatePrompt'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -252,11 +253,18 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         idPattern: '^git-bridge$',
         healthyCriteria:
           'git_bridge.status=ok AND dirty_repos=0. Degraded = reachable but dirty repos exist.',
-        fixScope: OPERATOR_PLANE_FIX_SCOPE,
+        fixScope: GIT_DIRTY_FIX_SCOPE,
         fixCapability: 'semi_auto',
         manualAction:
-          'On Mac Pro: start git-bridge daemon (launchd); fix GIT_BRIDGE_URL; commit or stash dirty repos',
-        agentTools: ['get_agent_bridge', 'request_operator_manual_steps'],
+          'Review dirty repos on Engineer; Propose commit (operator approval) or Stash to clear Fleet — never auto-discard WIP',
+        agentTools: [
+          'get_agent_bridge',
+          'git_workspace_status',
+          'git_diff',
+          'request_operator_approval',
+          'git_commit',
+          'git_stash',
+        ],
       },
       {
         id: 'mac-probe-bridge',
@@ -672,7 +680,7 @@ export const DAILY_OPS_CHECKLIST_META = {
     'Vendor feeds: Massive/Polygon uses stable massive-polygon probe id; IB Client scored from plugins/ib-gateway/status with socket-quality gate (empty accounts_snapshot / stale heartbeat / missing client_id / RTH no-BBO → fail) — no Vendor GO without a live TWS API feed.',
     'boardProjection.required=true overrides observe default so missing IB probe cannot hide behind a green Vendor cell.',
     'Step-2: daily-ops-checklist-run prober + checklistDispatch (full_auto→auto, semi_auto→queue, manual/observe→notify); D10 never auto-dispatches IB.',
-    'AI Check (TCC) = scope daily-ops-checklist-run; Operator Plane Fix = operator-plane-remediate — do not conflate.',
+    'AI Check (TCC) = scope daily-ops-checklist-run; Operator Plane Fix = operator-plane-remediate; Git dirty = git-dirty-remediate — do not conflate.',
     'Action live progress: checking (header) / Auto · phase / Queued / Queued (busy) / Skip · dedup 24h / Skip · D10 / Notify / Done / Failed — Skip never means in-progress.',
     'Notes: fleet≠agent when agent checklist signal polarity disagrees with fleet lamps (lamps stay fleet-sourced).',
     'Action: auto→open job; queue→Control Room Operate Queue; notify/manual→manualAction hint.',

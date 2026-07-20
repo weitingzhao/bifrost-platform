@@ -51,6 +51,10 @@ import {
   OPERATOR_PLANE_FIX_SCOPE,
 } from '@/lib/agent/operatorPlaneFixPrompt'
 import {
+  buildGitDirtyRemediatePrompt,
+  GIT_DIRTY_FIX_SCOPE,
+} from '@/lib/agent/gitDirtyRemediatePrompt'
+import {
   buildPlatformProdFixPrompt,
   buildTradeProdFixPrompt,
   pickFailingFixSignal,
@@ -753,6 +757,33 @@ export function TaskControlCenter({
     },
   })
 
+  const gitDirtyIntentRef = useRef<'commit' | 'stash'>('commit')
+  const aiGitDirtyFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: GIT_DIRTY_FIX_SCOPE,
+    label: scopeToLabel(GIT_DIRTY_FIX_SCOPE),
+    buildRequest: async () => {
+      const bridge = await fetchAgentBridge()
+      const base = buildGitDirtyRemediatePrompt(bridge)
+      const intent = gitDirtyIntentRef.current
+      const extra =
+        intent === 'stash'
+          ? [
+              '',
+              '## Operator intent: STASH (not commit)',
+              'Prefer git_stash after request_operator_approval. Do not git_commit unless operator changes mind.',
+            ].join('\n')
+          : [
+              '',
+              '## Operator intent: PROPOSE COMMIT',
+              'Draft commit_message → request_operator_approval → git_commit. Stash only if operator rejects commit and asks to stash.',
+            ].join('\n')
+      return { prompt: `${base}${extra}` }
+    },
+  })
+
   /** Checklist AI Check — scope daily-ops-checklist-run (not Operator Plane Fix). */
   const aiChecklistCheck = useAmbientAgentTask({
     canOperate,
@@ -779,6 +810,24 @@ export function TaskControlCenter({
     const engineerCell = fleet.cells.find(c => c.role === 'engineer')
     if (engineerCell != null) recordChecklistRunTouch(engineerCell)
     aiOperatorPlaneFix.trigger()
+  }
+
+  const handleProposeCommit = () => {
+    dailyOpsFixStartedRef.current = true
+    setAgentJustSucceeded(false)
+    gitDirtyIntentRef.current = 'commit'
+    const engineerCell = fleet.cells.find(c => c.role === 'engineer')
+    if (engineerCell != null) recordChecklistRunTouch(engineerCell)
+    aiGitDirtyFix.trigger()
+  }
+
+  const handleProposeStash = () => {
+    dailyOpsFixStartedRef.current = true
+    setAgentJustSucceeded(false)
+    gitDirtyIntentRef.current = 'stash'
+    const engineerCell = fleet.cells.find(c => c.role === 'engineer')
+    if (engineerCell != null) recordChecklistRunTouch(engineerCell)
+    aiGitDirtyFix.trigger()
   }
 
   const handleChecklistCheck = () => {
@@ -920,6 +969,7 @@ export function TaskControlCenter({
     isDailyOps &&
     (aiDailyOpsFix.isPending ||
       aiOperatorPlaneFix.isPending ||
+      aiGitDirtyFix.isPending ||
       (ambientJobId != null && dailyOpsFixStartedRef.current))
 
   const dailyOpsWorkflow = useMemo(() => {
@@ -952,6 +1002,10 @@ export function TaskControlCenter({
     }
     if (action.kind === 'operator-plan') {
       handleOperatorPlanFix()
+      return
+    }
+    if (action.kind === 'propose-commit') {
+      handleProposeCommit()
       return
     }
     if (action.kind === 'manual-next') {
@@ -1309,6 +1363,16 @@ export function TaskControlCenter({
             }
             operatorPlanFixError={
               isDailyOps ? (aiOperatorPlaneFix.error?.message ?? null) : undefined
+            }
+            onProposeCommit={isDailyOps ? handleProposeCommit : undefined}
+            onProposeStash={isDailyOps ? handleProposeStash : undefined}
+            proposeCommitPending={isDailyOps ? aiGitDirtyFix.isPending : undefined}
+            proposeCommitDisabled={isDailyOps ? aiGitDirtyFix.disabled : undefined}
+            proposeCommitTitle={
+              isDailyOps
+                ? (aiGitDirtyFix.disabledReason ??
+                  'Start git-dirty-remediate — approval required before commit/stash')
+                : undefined
             }
             onChecklistCheck={isDailyOps ? handleChecklistCheck : undefined}
             checklistCheckPending={isDailyOps ? aiChecklistCheck.isPending : undefined}

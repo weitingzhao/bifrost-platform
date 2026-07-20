@@ -578,6 +578,23 @@ server.tool(
     ),
 )
 
+server.tool(
+  'dismiss_operate_queue_item',
+  'Dismiss stale/resolved Operate Queue handoff with evidence (skips job/post-fix gates)',
+  {
+    item_id: z.string(),
+    completion_evidence: z.array(z.string()).min(1),
+    reason: z.enum(['stale', 'resolved', 'other']).optional(),
+  },
+  async ({ item_id, completion_evidence, reason }) =>
+    jsonResult(
+      await platformPost(`/api/v1/operate/queue/${encodeURIComponent(item_id)}/dismiss`, {
+        completion_evidence,
+        reason: reason ?? 'stale',
+      }),
+    ),
+)
+
 } // end platform tools (non-prometheus focus)
 
 async function main() {

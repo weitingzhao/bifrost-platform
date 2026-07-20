@@ -2,6 +2,7 @@ import { Button, ConfirmDialog, DenseTag, SegmentControl } from '@bifrost/ui'
 import { useMemo, useState } from 'react'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import { useCloseOperateQueueItem } from '@/hooks/useCloseOperateQueueItem'
+import { useDismissOperateQueueItem } from '@/hooks/useDismissOperateQueueItem'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { effectiveOperateLane } from '@/lib/operate/handoff'
@@ -28,11 +29,15 @@ export function OperateQueueHandoffPanel({
   onNavigateSetup,
 }: OperateQueueHandoffPanelProps) {
   const closeMutation = useCloseOperateQueueItem()
+  const dismissMutation = useDismissOperateQueueItem()
   const { canOperate } = usePlatformAuth()
   const [preparedItemId, setPreparedItemId] = useState<string | null>(null)
   const [laneFilter, setLaneFilter] = useState('all')
   const [closeItem, setCloseItem] = useState<OperateQueueItem | null>(null)
+  const [dismissItem, setDismissItem] = useState<OperateQueueItem | null>(null)
   const [evidence, setEvidence] = useState('')
+  const [dismissEvidence, setDismissEvidence] = useState('')
+  const [dismissReason, setDismissReason] = useState<'stale' | 'resolved' | 'other'>('stale')
   const [closeVerificationError, setCloseVerificationError] = useState<string | null>(null)
   const [checkingVerification, setCheckingVerification] = useState(false)
   const lanes = useMemo(
@@ -80,6 +85,29 @@ export function OperateQueueHandoffPanel({
       },
     })
   }
+
+  async function handleDismiss() {
+    if (dismissItem == null || dismissEvidence.trim() === '') return
+    const normalizedEvidence = /^(schedule|skill|operator|dismiss):/i.test(dismissEvidence.trim())
+      ? dismissEvidence.trim()
+      : `operator: ${dismissEvidence.trim()}`
+    dismissMutation.mutate(
+      {
+        itemId: dismissItem.id,
+        body: {
+          completion_evidence: [normalizedEvidence],
+          reason: dismissReason,
+        },
+      },
+      {
+        onSuccess: () => {
+          setDismissItem(null)
+          setDismissEvidence('')
+          setDismissReason('stale')
+        },
+      },
+    )
+  }
   if (loading) {
     return (
       <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
@@ -123,9 +151,19 @@ export function OperateQueueHandoffPanel({
           The operate queue was refreshed from platform-api.
         </OpsFeedback>
       )}
+      {dismissMutation.isSuccess && (
+        <OpsFeedback variant="success" title="Handoff dismissed" className="mt-2">
+          Stale or resolved handoff closed with evidence (no post-fix gate).
+        </OpsFeedback>
+      )}
       {closeMutation.isError && (
         <OpsFeedback variant="error" title="Handoff could not be closed" className="mt-2">
           {(closeMutation.error as Error).message}
+        </OpsFeedback>
+      )}
+      {dismissMutation.isError && (
+        <OpsFeedback variant="error" title="Handoff could not be dismissed" className="mt-2">
+          {(dismissMutation.error as Error).message}
         </OpsFeedback>
       )}
       {closeVerificationError != null && (
@@ -218,11 +256,23 @@ export function OperateQueueHandoffPanel({
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={closeMutation.isPending}
+                  disabled={closeMutation.isPending || dismissMutation.isPending}
                   title="Close this handoff through the existing operate queue API after execution is complete"
                   onClick={() => setCloseItem(item)}
                 >
                   Close handoff
+                </Button>
+              )}
+              {canOperate && item.status === 'open' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={closeMutation.isPending || dismissMutation.isPending}
+                  title="Dismiss stale or already-resolved handoff with evidence (skips job/post-fix gates)"
+                  onClick={() => setDismissItem(item)}
+                >
+                  Dismiss
                 </Button>
               )}
             </div>
@@ -241,6 +291,36 @@ export function OperateQueueHandoffPanel({
           onChange={event => setEvidence(event.target.value)}
         />
       </div>
+      <div className={dismissItem == null ? 'hidden' : 'mt-2'}>
+        <label className="text-dense-caption font-medium text-[var(--muted-foreground)]" htmlFor="dismiss-reason">
+          Dismiss reason
+        </label>
+        <SegmentControl
+          ariaLabel="Dismiss reason"
+          className="mt-1"
+          size="sm"
+          value={dismissReason}
+          onChange={v => setDismissReason(v as 'stale' | 'resolved' | 'other')}
+          options={[
+            { value: 'stale', label: 'Stale' },
+            { value: 'resolved', label: 'Resolved' },
+            { value: 'other', label: 'Other' },
+          ]}
+        />
+        <label
+          className="mt-2 block text-dense-caption font-medium text-[var(--muted-foreground)]"
+          htmlFor="dismiss-evidence"
+        >
+          Dismiss evidence
+        </label>
+        <textarea
+          id="dismiss-evidence"
+          className="mt-1 min-h-16 w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-dense-meta"
+          placeholder="operator: fleet already clean / handoff superseded…"
+          value={dismissEvidence}
+          onChange={event => setDismissEvidence(event.target.value)}
+        />
+      </div>
       <ConfirmDialog
         open={closeItem != null}
         title="Close verified handoff"
@@ -252,6 +332,19 @@ export function OperateQueueHandoffPanel({
           setCloseItem(null)
           setEvidence('')
           setCloseVerificationError(null)
+        }}
+      />
+      <ConfirmDialog
+        open={dismissItem != null}
+        title="Dismiss handoff"
+        message="Use when the item is stale or already resolved outside the verified Close path. Requires evidence; does not require a finished execution job."
+        confirmLabel="Dismiss handoff"
+        confirming={dismissMutation.isPending}
+        onConfirm={() => void handleDismiss()}
+        onCancel={() => {
+          setDismissItem(null)
+          setDismissEvidence('')
+          setDismissReason('stale')
         }}
       />
     </div>

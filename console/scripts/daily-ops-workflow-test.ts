@@ -151,6 +151,7 @@ function clearFleet() {
     groundBridgeReady: true,
     runner: { status: 'ok' },
     bridge: bridgeOk,
+    ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
   })
 }
 
@@ -165,6 +166,7 @@ function noGoSatelliteDev() {
     groundBridgeReady: true,
     runner: { status: 'ok' },
     bridge: bridgeOk,
+    ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
   })
 }
 
@@ -236,7 +238,7 @@ check('Fix target helpers: job aligns with primary git blocker', () => {
     group: 'automation',
     signal: 'degraded',
     fixCapability: 'semi_auto',
-    fixScope: 'operator-plane-remediate',
+    fixScope: 'git-dirty-remediate',
     critical: false,
     cellKey: 'engineer:span',
     standardId: 'git-bridge',
@@ -245,11 +247,46 @@ check('Fix target helpers: job aligns with primary git blocker', () => {
   assert.equal(fixPathLabel(git), 'Semi/Auto')
   const job = resolveAmbientJobFixTarget({
     checklistItemId: 'git-bridge',
-    jobScope: 'operator-plane-remediate',
+    jobScope: 'git-dirty-remediate',
     primaryBlocker: git,
   })
   assert.ok(job)
   assert.equal(job.alignsWithPrimary, true)
+})
+
+check('git dirty primary → Propose commit (not AI Fix · Operator Plan)', () => {
+  const fleet = clearFleet()
+  const eng = fleet.cells.find(c => c.role === 'engineer')
+  assert.ok(eng)
+  eng.signal = 'degraded'
+  eng.standards = eng.standards.map(s => {
+    if (s.id === 'git-bridge') {
+      return { ...s, signal: 'degraded' as const, reason: 'Git bridge 1 dirty repo(s)' }
+    }
+    if (s.id === 'mac-seat') {
+      return { ...s, signal: 'ok' as const }
+    }
+    return { ...s, signal: 'ok' as const }
+  })
+  eng.escalateTabId = 'operator-plane'
+  eng.agentFixEnabled = false
+  eng.detail = 'Git dirty'
+  fleet.fleetClear = false
+  fleet.verdict = {
+    kind: 'NO-GO',
+    topReason: eng.detail,
+    primaryCta: {
+      label: 'Open Operator Plane',
+      tabId: 'operator-plane',
+      cellKey: eng.key,
+    },
+    worstCell: eng,
+  }
+  const r = resolveDailyOpsWorkflow({ fleet, queueOpen: 0 })
+  assert.equal(r.activePhase, 'remediate')
+  assert.equal(r.primaryAction.kind, 'propose-commit')
+  assert.equal(r.primaryAction.label, 'Propose commit')
+  assert.ok(r.blockers.some(b => /Review dirty repos/i.test(b)))
 })
 
 check('agentJustSucceeded + !fleetClear → verify', () => {
@@ -327,10 +364,10 @@ check('Engineer CRITICAL Mac seat FAIL → manual-next (not AI Fix)', () => {
   assert.match(r.primaryAction.label, /Mac seat/i)
   assert.notEqual(r.primaryAction.kind, 'operator-plan')
   assert.ok(r.blockers.some(b => b.startsWith('Next:')))
-  // Mixed: secondary AI Fix for git dirty sibling
+  // Mixed: secondary Propose commit for git dirty sibling (not magic AI Fix)
   assert.ok(r.primaryAction.secondary)
-  assert.equal(r.primaryAction.secondary?.kind, 'operator-plan')
-  assert.match(r.primaryAction.secondary?.label ?? '', /Also: AI Fix/i)
+  assert.equal(r.primaryAction.secondary?.kind, 'propose-commit')
+  assert.match(r.primaryAction.secondary?.label ?? '', /Also: Propose commit/i)
   // Execution → Now Fix target must share this primary blocker
   assert.ok(r.primaryBlocker)
   assert.equal(r.primaryBlocker?.itemId, 'mac-probe-bridge')

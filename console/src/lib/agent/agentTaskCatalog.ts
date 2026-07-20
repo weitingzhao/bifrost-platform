@@ -178,6 +178,12 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     description:
       'Diagnose Git Bridge, agent deploy, and MCP bridge errors on L-1; guide operator through Mac Pro/Mini host fixes via manual steps.',
   },
+  'git-dirty-remediate': {
+    entryPoint: 'Daily Ops · Engineer dirty · Propose commit / Stash',
+    trigger: 'Operator reviews dirty repos and proposes commit (or stash) with approval',
+    description:
+      'git_workspace_status → git_diff → request_operator_approval → git_commit or git_stash. Never auto-clears dirty or discards Owner WIP.',
+  },
   ops: {
     entryPoint: 'Agent Desk → Ops scope',
     trigger: 'Operator sends a prompt',
