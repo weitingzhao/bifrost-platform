@@ -175,13 +175,13 @@ func (e *Environment) EffectiveTradeBridgeURL() string {
 	return strings.TrimRight(strings.TrimSpace(os.Getenv("SATELLITE_PROBE_BRIDGE_URL")), "/")
 }
 
-// NeedsTraefikHostHeader is false for IP NodePort gateways (:30880/:30882) and bare-IP :80 routes.
+// NeedsTraefikHostHeader is false for IP NodePort gateways (:30880/:30881/:30882) and bare-IP :80 routes.
 func NeedsTraefikHostHeader(gatewayURL string) bool {
 	u := strings.TrimSpace(gatewayURL)
 	if u == "" {
 		return false
 	}
-	if strings.Contains(u, ":30880") || strings.Contains(u, ":30882") {
+	if strings.Contains(u, ":30880") || strings.Contains(u, ":30881") || strings.Contains(u, ":30882") {
 		return false
 	}
 	// Prod Traefik matches Host(`192.168.10.70`) — bare node-IP :80 needs no Host header.
