@@ -2,6 +2,7 @@ package ibgateway
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -68,6 +69,8 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 
 	tick, _ := s.redisCLI("GET", "ib:ingester:tick:NVDA|STK|||")
 	resp.SampleTick = tick
+	snapshot, _ := s.redisCLI("GET", "ib:account:snapshot:v1")
+	resp.AccountSnapshot = snapshot
 	resp.Slots = s.readSlots()
 
 	connected := strings.EqualFold(resp.IngestorHealth["connected"], "true")
@@ -78,6 +81,19 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	resp.Reachable = deployOK && resp.RedisReach == probe.ReachOK && connected
 	resp.Reachability = classifyReach(deployOK, connected, hostOK, secOK, mode)
 	resp.Summary = fmt.Sprintf("%s · ib-gateway %s · host=%t secondary=%t · redis-ib ok", mode, ready, hostOK, secOK)
+
+	// Socket-quality gate: Redis "connected" alone is not enough for Vendor GO.
+	if q := assessSocketFeedQuality(mode, resp.IngestorHealth, resp.AccountHealth, resp.SampleTick, resp.AccountSnapshot, now); q.Reach != probe.ReachOK {
+		resp.Reachability = worseReach(resp.Reachability, q.Reach)
+		if q.Reach == probe.ReachFail {
+			resp.Reachable = false
+		}
+		resp.Summary = fmt.Sprintf("%s · %s", resp.Summary, q.Reason)
+		if resp.Hint == "" {
+			resp.Hint = q.Hint
+		}
+	}
+
 	resp.Cutover = s.readCutoverStatus(ctx)
 	return resp
 }
@@ -275,4 +291,258 @@ func classifyReach(deployOK, ingestorOK, hostOK, secOK bool, mode string) probe.
 		return probe.ReachDegraded
 	}
 	return probe.ReachOK
+}
+
+type feedQuality struct {
+	Reach  probe.Reachability
+	Reason string
+	Hint   string
+}
+
+func worseReach(a, b probe.Reachability) probe.Reachability {
+	order := map[probe.Reachability]int{
+		probe.ReachOK:       0,
+		probe.ReachUnknown:  1,
+		probe.ReachDegraded: 2,
+		probe.ReachFail:     3,
+	}
+	if order[b] > order[a] {
+		return b
+	}
+	return a
+}
+
+// assessSocketFeedQuality downgrades optimistic Redis "connected" when heartbeat/tick/
+// account-snapshot evidence shows the TWS API socket is not delivering a live session.
+func assessSocketFeedQuality(
+	mode string,
+	ingestor, account map[string]string,
+	sampleTick string,
+	accountSnapshot string,
+	now time.Time,
+) feedQuality {
+	if !strings.EqualFold(mode, "live") {
+		return feedQuality{Reach: probe.ReachOK}
+	}
+	connected := strings.EqualFold(ingestor["connected"], "true")
+	if !connected {
+		return feedQuality{
+			Reach:  probe.ReachFail,
+			Reason: "ingestor not connected",
+			Hint:   "Check TWS API on .30/.32 (port 7496) and TrustedIPs for K3s nodes (.73/.54/.56)",
+		}
+	}
+	cid := strings.TrimSpace(ingestor["client_id"])
+	if cid == "" || cid == "0" {
+		hostCID := strings.TrimSpace(account["host_client_id"])
+		if hostCID == "" || hostCID == "0" {
+			return feedQuality{
+				Reach:  probe.ReachFail,
+				Reason: "connected flag set but no client_id — TWS API session missing",
+				Hint:   "On Win11 TWS: API Clients should show Platform client ids (70/72). Verify TrustedIPs + Enable Socket Clients.",
+			}
+		}
+	}
+	// Ghost-session detector: plugin may keep ib_insync "connected" while TWS has no
+	// live API clients — managedAccounts / account snapshot stay empty.
+	if q := assessAccountSnapshotQuality(accountSnapshot, now); q.Reach != probe.ReachOK {
+		return q
+	}
+	if age, ok := parseUnixAgeSec(ingestor["last_msg_ts"], now); ok && age > 90 {
+		return feedQuality{
+			Reach:  probe.ReachFail,
+			Reason: fmt.Sprintf("IB socket heartbeat stale (%.0fs)", age),
+			Hint:   "Redis health still marked connected but last_msg is stale — treat as dead TWS API socket",
+		}
+	}
+	if age, ok := parseUnixAgeSec(account["last_msg_ts"], now); ok && age > 90 {
+		return feedQuality{
+			Reach:  probe.ReachFail,
+			Reason: fmt.Sprintf("IB account heartbeat stale (%.0fs)", age),
+			Hint:   "Account-agent last_msg stale — Host/Secondary TWS API session likely down",
+		}
+	}
+	tick := strings.TrimSpace(sampleTick)
+	if tick == "" {
+		return feedQuality{
+			Reach:  probe.ReachDegraded,
+			Reason: "no sample tick (NVDA) on redis-ib",
+			Hint:   "Deployment may be up but market-data path from TWS is empty",
+		}
+	}
+	bid, ask, last, tickTS, tickOK := parseSampleTick(tick)
+	if !tickOK {
+		return feedQuality{
+			Reach:  probe.ReachDegraded,
+			Reason: "sample tick unparseable",
+		}
+	}
+	if tickTS > 0 {
+		age := float64(now.Unix()) - tickTS
+		if tickTS > 1e12 {
+			age = float64(now.UnixMilli()) - tickTS
+			age = age / 1000
+		}
+		if age > 180 {
+			return feedQuality{
+				Reach:  probe.ReachFail,
+				Reason: fmt.Sprintf("sample tick stale (%.0fs) — socket not delivering", age),
+				Hint:   "Fresh Redis connected flag with frozen tick usually means TWS API client is not live",
+			}
+		}
+	}
+	if inUSEquityRTH(now) && bid <= 0 && ask <= 0 {
+		reason := "RTH but no usable BBO (bid/ask≤0)"
+		if last > 0 {
+			reason += fmt.Sprintf(" · last=%.2f only", last)
+		}
+		return feedQuality{
+			Reach:  probe.ReachFail,
+			Reason: reason,
+			Hint:   "During market hours missing BBO strongly indicates TWS socket/market-data failure — check API Clients on .30/.32",
+		}
+	}
+	return feedQuality{Reach: probe.ReachOK}
+}
+
+// assessAccountSnapshotQuality fails when Redis claims a live IB session but the
+// account snapshot has zero managed accounts (ghost / half-dead TWS API client).
+func assessAccountSnapshotQuality(raw string, now time.Time) feedQuality {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return feedQuality{
+			Reach:  probe.ReachFail,
+			Reason: "no account snapshot on redis-ib — TWS API session not verified",
+			Hint:   "IB Gateway writes ib:account:snapshot:v1 every market loop; missing key means socket path is dead",
+		}
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return feedQuality{
+			Reach:  probe.ReachDegraded,
+			Reason: "account snapshot unparseable",
+		}
+	}
+	if updated, ok := asFloatOK(m["updated_at"]); ok {
+		age := float64(now.Unix()) - updated
+		if age > 90 {
+			return feedQuality{
+				Reach:  probe.ReachFail,
+				Reason: fmt.Sprintf("account snapshot stale (%.0fs)", age),
+				Hint:   "Snapshot not refreshing — treat as dead TWS API client",
+			}
+		}
+	}
+	accounts, _ := m["accounts_snapshot"].([]any)
+	if len(accounts) == 0 {
+		hostClaim := truthy(m["host_connected"])
+		secClaim := truthy(m["secondary_connected"])
+		if hostClaim || secClaim {
+			return feedQuality{
+				Reach:  probe.ReachFail,
+				Reason: "connected but accounts_snapshot empty — ghost TWS API client",
+				Hint:   "Plugin claims Host/Secondary connected but managedAccounts is empty. TWS API Clients on .30/.32 likely show no session — reconnect IB Gateway / verify Socket Client.",
+			}
+		}
+		return feedQuality{
+			Reach:  probe.ReachFail,
+			Reason: "account snapshot has no managed accounts",
+			Hint:   "TWS API session not delivering account data",
+		}
+	}
+	return feedQuality{Reach: probe.ReachOK}
+}
+
+func truthy(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		return strings.EqualFold(t, "true") || t == "1"
+	case float64:
+		return t != 0
+	default:
+		return false
+	}
+}
+
+func asFloatOK(v any) (float64, bool) {
+	f := asFloat(v)
+	if v == nil {
+		return 0, false
+	}
+	switch v.(type) {
+	case float64, float32, int, int64, json.Number, string:
+		return f, true
+	default:
+		return 0, false
+	}
+}
+
+func parseUnixAgeSec(raw string, now time.Time) (float64, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false
+	}
+	var ts float64
+	if _, err := fmt.Sscanf(raw, "%f", &ts); err != nil {
+		return 0, false
+	}
+	if ts > 1e12 { // ms
+		ts = ts / 1000
+	}
+	return float64(now.Unix()) - ts, true
+}
+
+func parseSampleTick(raw string) (bid, ask, last, ts float64, ok bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw[0] != '{' {
+		return 0, 0, 0, 0, false
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return 0, 0, 0, 0, false
+	}
+	bid = asFloat(m["bid"])
+	ask = asFloat(m["ask"])
+	last = asFloat(m["last"])
+	ts = asFloat(m["ts"])
+	return bid, ask, last, ts, true
+}
+
+func asFloat(v any) float64 {
+	switch t := v.(type) {
+	case float64:
+		return t
+	case float32:
+		return float64(t)
+	case int:
+		return float64(t)
+	case int64:
+		return float64(t)
+	case json.Number:
+		f, _ := t.Float64()
+		return f
+	case string:
+		var f float64
+		_, _ = fmt.Sscanf(t, "%f", &f)
+		return f
+	default:
+		return 0
+	}
+}
+
+// inUSEquityRTH approximates America/New_York regular session Mon–Fri 09:30–16:00.
+func inUSEquityRTH(now time.Time) bool {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		loc = time.FixedZone("EST", -5*3600)
+	}
+	local := now.In(loc)
+	wd := local.Weekday()
+	if wd == time.Saturday || wd == time.Sunday {
+		return false
+	}
+	mins := local.Hour()*60 + local.Minute()
+	return mins >= 9*60+30 && mins < 16*60
 }

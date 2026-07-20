@@ -27,26 +27,34 @@ import {
   type WorkTrackType,
   type WorkTrackTypeDef,
 } from '@/lib/briefing/briefingViewTabs'
-import { buildQueueForLane } from '@/lib/briefing/workLanes'
+import { allWorkLanes, buildQueueForLane } from '@/lib/briefing/workLanes'
 import type { TaskModeId } from '@/lib/task-mode/types'
 import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
 
-/** Active-work counts for Briefing scope tags — Done omitted (Delivery Board concern). */
+/** Active-work counts for Briefing scope tags — Done omitted (Session sign-off / Board catalog). */
 export type ScopeActiveCounts = {
   doing: number
   planned: number
   ready: number
 }
 
+/**
+ * Portfolio-wide r/p/d for a Scope Line (all track types).
+ * Must match Summary digests — do NOT gate by the selected Track Type card.
+ * Track Type has its own lane totals below.
+ */
 function countActiveLanes(
   scope: BriefingScopeId,
-  trackType: WorkTrackType,
   context: OpsContextResponse | undefined,
   matrices: MatrixResponse[],
   clusterSummary: ClusterSummary | undefined,
 ): ScopeActiveCounts {
   const counts: ScopeActiveCounts = { doing: 0, planned: 0, ready: 0 }
-  for (const lane of lanesForScopeTrack(scope, trackType)) {
+  const lanes =
+    scope === 'all'
+      ? allWorkLanes()
+      : allWorkLanes().filter(l => l.componentLine === scope)
+  for (const lane of lanes) {
     const life = laneLifecycleFromQueue(
       buildQueueForLane(lane.id, context, matrices, clusterSummary),
     )
@@ -57,15 +65,34 @@ function countActiveLanes(
   return counts
 }
 
+/** Open lanes for a Track Type card — Ready + Planned + Doing (Done excluded). */
+function countOpenLanes(
+  scope: BriefingScopeId,
+  trackType: WorkTrackType,
+  context: OpsContextResponse | undefined,
+  matrices: MatrixResponse[],
+  clusterSummary: ClusterSummary | undefined,
+): number {
+  let n = 0
+  for (const lane of lanesForScopeTrack(scope, trackType)) {
+    const life = laneLifecycleFromQueue(
+      buildQueueForLane(lane.id, context, matrices, clusterSummary),
+    )
+    if (life !== 'complete') n += 1
+  }
+  return n
+}
+
+/** Maturity order: Ready → Planned → Doing. */
 function formatDPR(c: ScopeActiveCounts): string {
-  return `${c.doing}/${c.planned}/${c.ready}`
+  return `${c.ready}/${c.planned}/${c.doing}`
 }
 
 function totalActive(c: ScopeActiveCounts): number {
-  return c.doing + c.planned + c.ready
+  return c.ready + c.planned + c.doing
 }
 
-/** Colored d/p/r digits — zero stays muted so non-zero status pops. */
+/** Colored r/p/d digits — zero stays muted so non-zero status pops. */
 function ScopeDprCounts({ counts }: { counts: ScopeActiveCounts }) {
   const sep = 'text-[var(--muted-foreground)]/40'
   const digit = (n: number, tone: keyof typeof BRIEFING_DPR_COLOR) =>
@@ -73,18 +100,18 @@ function ScopeDprCounts({ counts }: { counts: ScopeActiveCounts }) {
 
   return (
     <span className="font-mono text-[var(--text-dense-micro)] leading-none tabular-nums tracking-tight">
-      <span className={digit(counts.doing, 'doing')}>{counts.doing}</span>
+      <span className={digit(counts.ready, 'ready')}>{counts.ready}</span>
       <span className={sep}>/</span>
       <span className={digit(counts.planned, 'planned')}>{counts.planned}</span>
       <span className={sep}>/</span>
-      <span className={digit(counts.ready, 'ready')}>{counts.ready}</span>
+      <span className={digit(counts.doing, 'doing')}>{counts.doing}</span>
     </span>
   )
 }
 
 /**
- * Compact grid cell for Scope Line picker — icon · name · d/p/r in one row.
- * Selected accent matches the View theme via `data-task-mode` CSS var.
+ * Compact grid cell for Scope Line picker — icon · name · r/p/d in one row.
+ * Idle: icon + label muted. Selected: icon = View accent (matches underline), label = foreground.
  */
 function ScopeGridCell({
   label,
@@ -109,9 +136,11 @@ function ScopeGridCell({
       type="button"
       aria-pressed={selected}
       data-task-mode={taskMode}
-      title={`${label}: ${formatDPR(counts)} · Doing / Planned / Ready`}
+      title={`${label}: ${formatDPR(counts)} · Ready / Planned / Doing (all track types)`}
       className={[
         briefingScopeGridCellClass(selected, span2),
+        // Drive idle text+icon together so neither stays stuck on button foreground white.
+        selected ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]',
         quiet ? 'opacity-55' : '',
       ].join(' ')}
       onClick={onSelect}
@@ -119,7 +148,8 @@ function ScopeGridCell({
       <Icon
         className={[
           'h-3 w-3 shrink-0 transition-colors',
-          selected ? 'text-[var(--task-mode-accent)]' : 'text-[var(--muted-foreground)]',
+          // Selected icon must use the same View accent as the cell underline.
+          selected ? 'text-[var(--task-mode-accent)]' : '',
         ].join(' ')}
         strokeWidth={2}
         aria-hidden
@@ -127,9 +157,7 @@ function ScopeGridCell({
       <span
         className={[
           'min-w-0 truncate text-[var(--text-dense-caption)] transition-colors',
-          selected
-            ? 'font-semibold text-[var(--task-mode-accent)]'
-            : 'font-medium text-[var(--muted-foreground)]',
+          selected ? 'font-semibold' : 'font-medium',
         ].join(' ')}
       >
         {label}
@@ -144,12 +172,13 @@ function ScopeGridCell({
 function TrackTypeCard({
   def,
   selected,
-  laneCount,
+  openLaneCount,
   onSelect,
 }: {
   def: WorkTrackTypeDef
   selected: boolean
-  laneCount: number
+  /** Ready + Planned + Doing — Done omitted. */
+  openLaneCount: number
   onSelect: () => void
 }) {
   const Icon = def.icon
@@ -158,10 +187,11 @@ function TrackTypeCard({
       type="button"
       className={briefingTrackTypeCardClass(selected)}
       onClick={onSelect}
+      title={`${def.label}: ${openLaneCount} open lane${openLaneCount === 1 ? '' : 's'} (Ready / Planned / Doing — Done excluded)`}
     >
       <span
         className={[
-          'flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
+          'flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors',
           selected
             ? 'bg-[var(--foreground)]/10 text-[var(--foreground)]'
             : 'bg-[var(--border)]/60 text-[var(--muted-foreground)]',
@@ -169,11 +199,30 @@ function TrackTypeCard({
       >
         <Icon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
       </span>
-      <span className="min-w-0 flex-1 truncate text-[var(--text-dense-label)] font-semibold">
+      <span
+        className={[
+          'min-w-0 flex-1 truncate text-[var(--text-dense-label)] transition-colors',
+          selected
+            ? 'font-semibold text-[var(--foreground)]'
+            : 'font-medium text-[var(--muted-foreground)]',
+        ].join(' ')}
+      >
         {def.label}
       </span>
-      <span className="shrink-0 font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-        {laneCount} {laneCount === 1 ? 'lane' : 'lanes'}
+      <span
+        className={[
+          'shrink-0 font-mono text-[var(--text-dense-caption)] tabular-nums',
+          openLaneCount > 0
+            ? 'font-semibold text-[var(--foreground)]'
+            : 'text-[var(--muted-foreground)]/50',
+        ].join(' ')}
+      >
+        <span className={openLaneCount > 0 ? 'text-[var(--primary)]' : undefined}>
+          {openLaneCount}
+        </span>{' '}
+        <span className={openLaneCount > 0 ? 'text-[var(--muted-foreground)]' : undefined}>
+          open
+        </span>
       </span>
     </button>
   )
@@ -217,12 +266,20 @@ export function BriefingViewTabsSection({
     const byLine = Object.fromEntries(
       COMPONENT_LINE_DEFS.map(line => [
         line.id,
-        countActiveLanes(line.id, selectedTrackType, context, matrices, clusterSummary),
+        countActiveLanes(line.id, context, matrices, clusterSummary),
       ]),
     ) as Record<ComponentLineId, ScopeActiveCounts>
-    const all = countActiveLanes('all', selectedTrackType, context, matrices, clusterSummary)
+    const all = countActiveLanes('all', context, matrices, clusterSummary)
     return { byLine, all }
-  }, [selectedTrackType, context, matrices, clusterSummary])
+  }, [context, matrices, clusterSummary])
+
+  const trackTypeOpenCounts = useMemo(() => {
+    const map = new Map<WorkTrackType, number>()
+    for (const def of trackTypeDefs) {
+      map.set(def.id, countOpenLanes(selectedScope, def.id, context, matrices, clusterSummary))
+    }
+    return map
+  }, [trackTypeDefs, selectedScope, context, matrices, clusterSummary])
 
   return (
     <section className="page-section panel-elevated px-3 py-2">
@@ -237,12 +294,15 @@ export function BriefingViewTabsSection({
           <span className="text-[var(--text-dense-caption)] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
             Line
           </span>
-          <p className="m-0 flex items-center gap-0.5 font-mono text-[var(--text-dense-micro)] leading-none">
-            <span className={BRIEFING_DPR_COLOR.doing}>d</span>
+          <p
+            className="m-0 flex items-center gap-0.5 font-mono text-[var(--text-dense-micro)] leading-none"
+            title="Ready / Planned / Doing — maturity order, all track types (matches Summary)"
+          >
+            <span className={BRIEFING_DPR_COLOR.ready}>r</span>
             <span className="text-[var(--muted-foreground)]/40">/</span>
             <span className={BRIEFING_DPR_COLOR.planned}>p</span>
             <span className="text-[var(--muted-foreground)]/40">/</span>
-            <span className={BRIEFING_DPR_COLOR.ready}>r</span>
+            <span className={BRIEFING_DPR_COLOR.doing}>d</span>
           </p>
         </div>
 
@@ -293,7 +353,7 @@ export function BriefingViewTabsSection({
                 key={def.id}
                 def={def}
                 selected={selectedTrackType === def.id}
-                laneCount={lanesForScopeTrack(selectedScope, def.id).length}
+                openLaneCount={trackTypeOpenCounts.get(def.id) ?? 0}
                 onSelect={() => onSelectTrackType(def.id)}
               />
             ))}
@@ -309,9 +369,11 @@ export function BriefingViewTabsSection({
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <div className="flex flex-wrap items-center gap-1.5">
               <BriefingStatusLamp status={status} />
-              <span className="text-[var(--text-dense-label)] font-semibold">{scopeDef.label}</span>
+              <span className="text-[var(--text-dense-label)] font-semibold text-[var(--muted-foreground)]">
+                {scopeDef.label}
+              </span>
               <span className="rounded bg-border px-1.5 py-0.5 text-[var(--text-dense-caption)] font-medium uppercase tracking-wider text-muted-foreground">
-                {ttDef.label}
+                {lifecycleFilter != null ? 'All tracks' : ttDef.label}
               </span>
               {isAll && <BriefingStatusBadge status="ready" label="Aggregate" />}
               <BriefingStatusBadge status={status} />
@@ -326,7 +388,7 @@ export function BriefingViewTabsSection({
               )}
             </div>
             <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
-              {laneCounts.doing} doing · {laneCounts.planned} planned · {laneCounts.ready} ready
+              {laneCounts.ready} ready · {laneCounts.planned} planned · {laneCounts.doing} doing
             </p>
             {nextStep != null && nextStep !== '' ? (
               <p className="m-0 truncate text-[var(--text-dense-caption)]">

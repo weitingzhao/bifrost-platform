@@ -32,53 +32,6 @@ function runnerTagVariant(status: string | undefined): 'success' | 'warning' | '
   return 'warning'
 }
 
-function SmokeTestSection() {
-  const smokeMutation = useMutation({ mutationFn: fetchRunnerSmoke })
-  const result: RunnerSmokeResponse | undefined = smokeMutation.data
-
-  return (
-    <OpsSection
-      title="Self-smoke"
-      description="Dry-run connectivity checks on the active Runner — Cursor key, platform-api, kubeconfig, kubectl cluster access."
-      bodyPadding="compact"
-    >
-      <div className="flex items-center gap-3 pt-1">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={smokeMutation.isPending}
-          onClick={() => smokeMutation.mutate()}
-        >
-          {smokeMutation.isPending ? 'Running…' : 'Run smoke'}
-        </Button>
-        {result != null && (
-          <DenseTag variant={result.status === 'pass' ? 'success' : 'danger'}>
-            {result.status} · v{result.version} ({result.role})
-          </DenseTag>
-        )}
-        {smokeMutation.isError && (
-          <span className="text-[var(--text-dense-caption)] text-[var(--destructive)]">
-            {(smokeMutation.error as Error).message}
-          </span>
-        )}
-      </div>
-      {result != null && result.checks.length > 0 && (
-        <div className="mt-2 flex flex-col gap-0.5 text-[var(--text-dense-meta)]">
-          {result.checks.map(c => (
-            <span key={c.id} className="inline-flex items-center gap-1.5">
-              <StatusLamp value={c.status === 'pass' ? 'ok' : 'fail'} kind="reach" />
-              <span>{c.label}</span>
-              {c.detail != null && (
-                <span className="text-[var(--muted-foreground)]">— {c.detail}</span>
-              )}
-            </span>
-          ))}
-        </div>
-      )}
-    </OpsSection>
-  )
-}
-
 export function OperatorPlanePage({
   onOpenMcpContract,
   onOpenBriefing,
@@ -102,6 +55,9 @@ export function OperatorPlanePage({
     refetchInterval: 60_000,
   })
 
+  const smokeMutation = useMutation({ mutationFn: fetchRunnerSmoke })
+  const smokeResult: RunnerSmokeResponse | undefined = smokeMutation.data
+
   const aiFix = useAmbientAgentTask({
     canOperate,
     ambientJobId,
@@ -124,6 +80,7 @@ export function OperatorPlanePage({
         : []
 
   const gitBridgeBad = bridge?.git_bridge?.status === 'unavailable'
+  const showLegacyScheduler = hermes != null && hermes.status !== 'not_configured'
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -145,7 +102,12 @@ export function OperatorPlanePage({
         <p className="m-0 text-[var(--text-dense-meta)] text-destructive">{aiFix.error.message}</p>
       )}
 
-      <OpsSection title="Runner heartbeats" bodyPadding="compact" overflow="visible">
+      <OpsSection
+        title="Runner heartbeats"
+        description="Primary + standby runners and Hermes Agent. Smoke checks Cursor key, platform-api, kubeconfig, and kubectl."
+        bodyPadding="compact"
+        overflow="visible"
+      >
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {runners.length === 0 && (
             <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -214,36 +176,72 @@ export function OperatorPlanePage({
               )}
             </span>
           )}
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 opacity-60">
-            <StatusLamp
-              value={hermes?.status === 'ok' ? 'ok' : hermes?.status === 'unavailable' ? 'fail' : 'unknown'}
-              kind="reach"
-            />
-            <span className="text-[var(--text-dense-meta)] font-medium">Scheduler (legacy)</span>
-            <DenseTag
-              variant={
-                hermes?.status === 'ok'
-                  ? 'success'
-                  : hermes?.status === 'unavailable'
-                    ? 'danger'
-                    : 'neutral'
-              }
-            >
-              {hermes?.status ?? 'not_configured'}
-            </DenseTag>
-          </span>
-          {gitBridgeBad && (
-            <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              Git Bridge needs attention · use AI Fix to run Operator · Remediate
+          {showLegacyScheduler && (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 opacity-60">
+              <StatusLamp
+                value={
+                  hermes?.status === 'ok' ? 'ok' : hermes?.status === 'unavailable' ? 'fail' : 'unknown'
+                }
+                kind="reach"
+              />
+              <span className="text-[var(--text-dense-meta)] font-medium">Scheduler (legacy)</span>
+              <DenseTag
+                variant={
+                  hermes?.status === 'ok'
+                    ? 'success'
+                    : hermes?.status === 'unavailable'
+                      ? 'danger'
+                      : 'neutral'
+                }
+              >
+                {hermes?.status ?? 'not_configured'}
+              </DenseTag>
             </span>
           )}
+          <span className="grow" />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={smokeMutation.isPending || bridge?.remediation_runner.status !== 'ok'}
+            title="Dry-run connectivity on the active runner"
+            onClick={() => smokeMutation.mutate()}
+          >
+            {smokeMutation.isPending ? 'Smoke…' : 'Run smoke'}
+          </Button>
+          {smokeResult != null && (
+            <DenseTag variant={smokeResult.status === 'pass' ? 'success' : 'danger'}>
+              smoke {smokeResult.status}
+            </DenseTag>
+          )}
         </div>
+        {smokeMutation.isError && (
+          <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-destructive">
+            {(smokeMutation.error as Error).message}
+          </p>
+        )}
+        {smokeResult != null && smokeResult.checks.length > 0 && (
+          <div className="mt-2 flex flex-col gap-0.5 text-[var(--text-dense-meta)]">
+            {smokeResult.checks.map(c => (
+              <span key={c.id} className="inline-flex items-center gap-1.5">
+                <StatusLamp value={c.status === 'pass' ? 'ok' : 'fail'} kind="reach" />
+                <span>{c.label}</span>
+                {c.detail != null && (
+                  <span className="text-[var(--muted-foreground)]">— {c.detail}</span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+        {gitBridgeBad && (
+          <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            Git Bridge needs attention · use AI Fix to run Operator · Remediate
+          </p>
+        )}
       </OpsSection>
 
-      <SmokeTestSection />
+      <AgentHostDeployPanel />
 
       <AgentMcpPanel onOpenMcpContract={onOpenMcpContract} onOpenBriefing={onOpenBriefing} />
-      <AgentHostDeployPanel />
     </div>
   )
 }

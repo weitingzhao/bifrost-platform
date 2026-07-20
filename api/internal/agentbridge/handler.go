@@ -53,12 +53,24 @@ type NousHermesStatus struct {
 }
 
 type GitBridgeStatus struct {
-	URL        string `json:"url,omitempty"`
-	Status     string `json:"status"` // not_configured | ok | unavailable
-	Workspace  string `json:"workspace,omitempty"`
-	RepoCount  int    `json:"repo_count,omitempty"`
-	DirtyRepos int    `json:"dirty_repos,omitempty"`
-	Error      string `json:"error,omitempty"`
+	URL               string              `json:"url,omitempty"`
+	Status            string              `json:"status"` // not_configured | ok | unavailable
+	Workspace         string              `json:"workspace,omitempty"`
+	RepoCount         int                 `json:"repo_count,omitempty"`
+	DirtyRepos        int                 `json:"dirty_repos,omitempty"`
+	DirtyRepoDetails  []GitDirtyRepoDetail `json:"dirty_repo_details,omitempty"`
+	Error             string              `json:"error,omitempty"`
+}
+
+// GitDirtyRepoDetail is a compact dirty summary for Console (repos / files / +N/−M).
+type GitDirtyRepoDetail struct {
+	Repo       string   `json:"repo"`
+	Branch     string   `json:"branch,omitempty"`
+	Staged     []string `json:"staged,omitempty"`
+	Modified   []string `json:"modified,omitempty"`
+	Untracked  []string `json:"untracked,omitempty"`
+	Insertions int      `json:"insertions"`
+	Deletions  int      `json:"deletions"`
 }
 
 type SatelliteProbeBridgeStatus struct {
@@ -237,18 +249,45 @@ func probeGitBridge(ctx context.Context, client *http.Client) GitBridgeStatus {
 		Workspace  string   `json:"workspace"`
 		DirtyRepos []string `json:"dirty_repos"`
 		Repos      []struct {
-			Repo string `json:"repo"`
+			Repo       string   `json:"repo"`
+			Branch     string   `json:"branch"`
+			Dirty      bool     `json:"dirty"`
+			Staged     []string `json:"staged"`
+			Modified   []string `json:"modified"`
+			Untracked  []string `json:"untracked"`
+			Insertions int      `json:"insertions"`
+			Deletions  int      `json:"deletions"`
 		} `json:"repos"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return GitBridgeStatus{URL: url, Status: "ok"}
 	}
+	details := make([]GitDirtyRepoDetail, 0)
+	for _, r := range body.Repos {
+		if !r.Dirty {
+			continue
+		}
+		details = append(details, GitDirtyRepoDetail{
+			Repo:       r.Repo,
+			Branch:     r.Branch,
+			Staged:     r.Staged,
+			Modified:   r.Modified,
+			Untracked:  r.Untracked,
+			Insertions: r.Insertions,
+			Deletions:  r.Deletions,
+		})
+	}
+	dirtyCount := len(body.DirtyRepos)
+	if dirtyCount == 0 {
+		dirtyCount = len(details)
+	}
 	return GitBridgeStatus{
-		URL:        url,
-		Status:     "ok",
-		Workspace:  body.Workspace,
-		RepoCount:  len(body.Repos),
-		DirtyRepos: len(body.DirtyRepos),
+		URL:              url,
+		Status:           "ok",
+		Workspace:        body.Workspace,
+		RepoCount:        len(body.Repos),
+		DirtyRepos:       dirtyCount,
+		DirtyRepoDetails: details,
 	}
 }
 

@@ -38,6 +38,7 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
@@ -69,7 +70,7 @@ type ControlRoomPageProps = {
   onOpenCluster: () => void
   onOpenAudit: () => void
   onOpenBriefing: (opts?: BriefingUrlState) => void
-  onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   onOpenPlatformRelease?: () => void
   onOpenTradeDeploy?: () => void
   onOpenPromote?: () => void
@@ -80,6 +81,8 @@ type ControlRoomPageProps = {
   onOpenDefects?: () => void
   onOpenAgentDeskTab?: () => void
   onOpenLaunchView?: (mode: 'mission-launch') => void
+  /** Trade readiness IB Fleet CTA → Daily Ops TCC */
+  onOpenFleetVendor?: () => void
 } & AmbientAgentShellProps
 
 export function ControlRoomPage({
@@ -109,6 +112,7 @@ export function ControlRoomPage({
   onOpenDefects,
   onOpenAgentDeskTab,
   onOpenLaunchView,
+  onOpenFleetVendor,
   ambientJobId,
   onStartAgentJob,
 }: ControlRoomPageProps) {
@@ -255,6 +259,7 @@ export function ControlRoomPage({
           onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
           onOpenAgentDesk={openAgentDeskPrefill}
           onOpenLaunchView={mode => onOpenLaunchView?.(mode)}
+          onOpenFleetVendor={onOpenFleetVendor}
           onOpenPromote={handleOpenPromotePreflight}
           onPlaybookFix={handlePlaybookFix}
           playbookFixPending={playbookFixMutation.isPending}
@@ -326,7 +331,7 @@ export function ControlRoomPage({
           onOpenDelivery={onOpenDelivery}
         />
 
-        <OperateQueueStrip />
+        <OperateQueueStrip onOpenAgentDesk={onOpenAgentDesk} />
 
         <MissionSignalProgramStrip onOpenDelivery={onOpenDelivery} />
 

@@ -1,14 +1,17 @@
 {
-  "version": "2026-07-07",
+  "version": "2026-07-16",
   "items": [
     {
       "id": "40a3b782-81fb-493b-ad3a-6a9751746d9d",
       "program_id": "dap-smoke-test",
       "title": "E2E Wave 3b 1783453223",
       "description": "Live acceptance",
-      "status": "open",
+      "handoff_kind": "one_off",
+      "risk_level": "low",
+      "status": "closed",
       "created_at": "2026-07-07T19:40:23Z",
-      "updated_at": "2026-07-07T19:40:23Z",
+      "updated_at": "2026-07-16T22:06:38Z",
+      "closed_at": "2026-07-16T22:06:38Z",
       "source": "post_completion",
       "pending_id": "e2e-wave3b-1783453223",
       "approved_by": "e2e-owner"
@@ -18,12 +21,383 @@
       "program_id": "dap-smoke-test",
       "title": "E2E retest 1783453648",
       "description": "Post-restart verification",
-      "status": "open",
+      "handoff_kind": "one_off",
+      "risk_level": "low",
+      "status": "closed",
       "created_at": "2026-07-07T19:47:28Z",
-      "updated_at": "2026-07-07T19:47:28Z",
+      "updated_at": "2026-07-16T22:08:01Z",
+      "closed_at": "2026-07-16T22:08:01Z",
       "source": "post_completion",
       "pending_id": "e2e-retest-1783453648",
       "approved_by": "e2e-retest"
+    },
+    {
+      "id": "633e8e90-e715-47b2-9a8a-78ad96ddd7d7",
+      "program_id": "dap-smoke-test",
+      "title": "E2E Wave 3b handoff 1783453198",
+      "description": "Live acceptance test item",
+      "handoff_kind": "one_off",
+      "risk_level": "low",
+      "status": "closed",
+      "created_at": "2026-07-16T00:29:01Z",
+      "updated_at": "2026-07-16T22:08:02Z",
+      "closed_at": "2026-07-16T22:08:02Z",
+      "source": "post_completion",
+      "pending_id": "e2e-wave3b-1783453198",
+      "approved_by": "owner"
+    },
+    {
+      "id": "bdf49c9e-07e9-4677-b15a-77984e87c2e8",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Massive / Polygon feed",
+      "description": "semi_auto handoff for item massive-polygon\n\nQA Massive semi",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item massive-polygon returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope cluster_issues_full_auto is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
+      "created_at": "2026-07-19T05:54:12Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "57cc7319-74b7-4d1f-ba11-13775a07d2da",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Trade APIs (9 domains)",
+      "description": "semi_auto handoff for item trade-apis\n\ntrade_prod 2/12 reachable; prod HTTP_FAIL on 9 api-* services; STG smoke all trade APIs DNS fail",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item trade-apis returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope cluster_issues_full_auto is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
+      "created_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "8207932b-4d0d-489a-8609-7df07130894d",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Git bridge healthy + clean",
+      "description": "semi_auto handoff for item git-bridge\n\ngit_bridge status=not_configured",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item git-bridge returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "execution_job_id": "58edb121-c76b-4cfc-b7b3-185cc9f3da03",
+      "status": "open",
+      "created_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:41:19Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "6b10a0e4-5e42-4697-a53e-f50927c4f781",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Hermes AI tooling",
+      "description": "semi_auto handoff for item hermes-tooling\n\nhermes_mcp and nous_hermes not_configured; HERMES_GATEWAY_URL unset; gateway not running",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item hermes-tooling returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "execution_job_id": "4776c45f-1c46-4aa7-bcd8-6276d2eaa68d",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope operator-plane-remediate is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
+      "created_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T06:16:46Z",
+      "closed_at": "2026-07-20T06:16:46Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "5741e8fa-8a76-4abb-b1cd-23295fea0162",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · STG smoke targets",
+      "description": "semi_auto handoff for item stg-smoke\n\n0/10 STG targets reachable; DNS lookup stg.trader.bifrost.lan fails (no such host)",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item stg-smoke returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope deliver-stg-recover is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
+      "created_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "d1151067-4f70-45d6-8db3-a4da61bec2b8",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Massive / Polygon feed",
+      "description": "semi_auto handoff for item massive-polygon\n\nstg-api-massive and prod api-massive health endpoints unreachable",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item massive-polygon returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope cluster_issues_full_auto is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
+      "created_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "46442b25-eada-4ea4-b487-9602a76e1b58",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Agent runners (HA)",
+      "description": "semi_auto handoff for item runners-ha\n\nPrimary remediation runner unavailable (127.0.0.1:8781 connection refused); only primary listed",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item runners-ha returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope operator-plane-remediate is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
+      "created_at": "2026-07-19T06:12:39Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "3fca409a-3cd3-456f-a1da-d2c49e0cde97",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Git bridge healthy + clean",
+      "description": "semi_auto handoff for item git-bridge\n\nGit bridge ok at 192.168.10.40:8785 (9 repos); 1 dirty repo in workspace",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item git-bridge returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "status": "open",
+      "created_at": "2026-07-19T06:13:58Z",
+      "updated_at": "2026-07-19T06:13:58Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "84a93645-5bf3-427a-9486-fcc84b6c4a23",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Hermes AI tooling",
+      "description": "semi_auto handoff for item hermes-tooling\n\nnous_hermes gateway ok (192.168.10.50:9119); local hermes_mcp 127.0.0.1:8782 connection refused; platform_mcp 67/68 tools",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item hermes-tooling returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope operator-plane-remediate is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
+      "created_at": "2026-07-19T06:13:58Z",
+      "updated_at": "2026-07-20T06:15:36Z",
+      "closed_at": "2026-07-20T06:15:36Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "5c54d4b8-988d-476a-9565-36e4f9965358",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · PostgreSQL reachable",
+      "description": "semi_auto handoff for item postgres\n\nCluster dev/stg/prod NOMINAL; dev-local Mac probe DATA_LAYER (matrix fail, cluster unknown)",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item postgres returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope cluster_issues_full_auto is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
+      "created_at": "2026-07-19T06:13:58Z",
+      "updated_at": "2026-07-20T05:21:36Z",
+      "closed_at": "2026-07-20T05:21:36Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "4ce4308b-d221-4d32-8c5b-7978f4c3a2f6",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Git bridge healthy + clean",
+      "description": "semi_auto handoff for item git-bridge\n\nBridge reachable but 1 dirty repo: bifrost-platform on feat/data-unification-phases-a-d (+3341/-313 uncommitted)",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "git-dirty-remediate",
+      "acceptance_criteria": [
+        "Checklist item git-bridge returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "status": "open",
+      "created_at": "2026-07-20T05:21:27Z",
+      "updated_at": "2026-07-20T05:21:27Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "510be1cb-a4df-4cc1-81be-049e4a0a5aa7",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Hermes AI tooling",
+      "description": "semi_auto handoff for item hermes-tooling\n\nhermes_mcp unavailable (127.0.0.1:8782 connection refused); Nous Hermes gateway ok v0.17.0; platform_mcp 69 tools",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item hermes-tooling returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope operator-plane-remediate is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
+      "created_at": "2026-07-20T05:21:27Z",
+      "updated_at": "2026-07-20T06:15:36Z",
+      "closed_at": "2026-07-20T06:15:36Z",
+      "source": "checklist_dispatch"
     }
   ]
 }

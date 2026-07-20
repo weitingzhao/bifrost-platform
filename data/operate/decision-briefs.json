@@ -1,0 +1,37 @@
+{
+  "version": "2026-07-19",
+  "briefs": [
+    {
+      "id": "b212a110-905f-48c9-9140-a0af564d4037",
+      "item_id": "8207932b-4d0d-489a-8609-7df07130894d",
+      "title": "Checklist · Git bridge healthy + clean",
+      "created_at": "2026-07-20T05:41:52Z",
+      "fleet_signal": "unknown",
+      "fleet_detail": "job status=done post_fix_passed=false",
+      "item_age": "23h29m",
+      "fix_scope": "git-dirty-remediate",
+      "risk_level": "medium",
+      "source": "checklist_dispatch",
+      "suggestion": "HOLD",
+      "suggestion_reason": "job status=done post_fix_passed=false",
+      "open_question": "Remediation did not close cleanly — approve a retry, dismiss, or hold?",
+      "full_brief": "## Decision Brief: Checklist · Git bridge healthy + clean\n\n**Item**: 8207932b-4d0d-489a-8609-7df07130894d | **Age**: 23h29m | **Risk**: medium\n**Source**: checklist_dispatch | **Scope**: git-dirty-remediate\n\n### Fleet Evidence\n- Cell: job status=done post_fix_passed=false → unknown\n- Standards: none\n- Detail: job status=done post_fix_passed=false\n\n### Suggestion: HOLD\njob status=done post_fix_passed=false\n\n### Open Question\nRemediation did not close cleanly — approve a retry, dismiss, or hold?\n\n---\nCopy this brief to Cursor IDE Agent for analysis, or decide below.\n"
+    },
+    {
+      "id": "8c42980a-a72d-46f4-80ba-c655debb005f",
+      "item_id": "6b10a0e4-5e42-4697-a53e-f50927c4f781",
+      "title": "Checklist · Hermes AI tooling",
+      "created_at": "2026-07-20T06:16:46Z",
+      "fleet_signal": "unknown",
+      "fleet_detail": "job status=done post_fix_passed=false",
+      "item_age": "24h4m",
+      "fix_scope": "operator-plane-remediate",
+      "risk_level": "medium",
+      "source": "checklist_dispatch",
+      "suggestion": "HOLD",
+      "suggestion_reason": "job status=done post_fix_passed=false",
+      "open_question": "Remediation did not close cleanly — approve a retry, dismiss, or hold?",
+      "full_brief": "## Decision Brief: Checklist · Hermes AI tooling\n\n**Item**: 6b10a0e4-5e42-4697-a53e-f50927c4f781 | **Age**: 24h4m | **Risk**: medium\n**Source**: checklist_dispatch | **Scope**: operator-plane-remediate\n\n### Fleet Evidence\n- Cell: job status=done post_fix_passed=false → unknown\n- Standards: none\n- Detail: job status=done post_fix_passed=false\n\n### Suggestion: HOLD\njob status=done post_fix_passed=false\n\n### Open Question\nRemediation did not close cleanly — approve a retry, dismiss, or hold?\n\n---\nCopy this brief to Cursor IDE Agent for analysis, or decide below.\n"
+    }
+  ]
+}

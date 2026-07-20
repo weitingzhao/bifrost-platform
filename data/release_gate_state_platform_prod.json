@@ -1,6 +1,6 @@
 {
   "tier": "platform-prod",
-  "at": "2026-07-08T02:57:34.595212Z",
+  "at": "2026-07-20T06:15:26.305166Z",
   "result": "pass",
   "revision": "main",
   "log_path": "bifrost-trade-infra/scripts/release_gate.log",
@@ -10,14 +10,14 @@
       "label": "Last bifrost-deliver-platform-prod success",
       "required": true,
       "reachability": "ok",
-      "detail": "bifrost-deliver-platform-prod-1783479211 (True)"
+      "detail": "bifrost-deliver-platform-prod-1784527872 (True)"
     },
     {
       "id": "platform-prod-console",
       "label": "platform-prod-console",
       "required": true,
       "reachability": "ok",
-      "detail": "HTTP 200 from http://192.168.10.73:30877"
+      "detail": "HTTP 200 from https://ops.bifrost.lan/"
     },
     {
       "id": "platform-prod-api",
@@ -31,7 +31,7 @@
       "label": "Platform STG gate pass",
       "required": true,
       "reachability": "ok",
-      "detail": "STG gate pass at 2026-07-01T16:31:03Z"
+      "detail": "STG gate pass at 2026-07-20T06:10:59Z"
     }
   ],
   "triggered_by": "admin",

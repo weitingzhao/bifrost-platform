@@ -1,7 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
-import { DenseTag } from '@bifrost/ui'
-import { Bot, Rocket, Satellite } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  DenseTag,
+} from '@bifrost/ui'
+import { ChevronRight, Rocket, Satellite } from 'lucide-react'
 import {
   fetchPipelineRuns,
   fetchReleaseGate,
@@ -11,13 +16,22 @@ import {
 import { LaunchPad } from '@/components/control-room/LaunchPad'
 import { gateStepStatus, runStepStatus, pickDeployPipelineRun, deployRunRetryFailed } from '@/components/delivery/ReleaseStepCommandCenter'
 import { OpsSection } from '@/components/layout/OpsSection'
-import {
-  DailyOpsMissionStrip,
-  TaskModeReadinessStrip,
-} from '@/components/task-mode/TaskModeReadinessStrip'
+import { DailyOpsFleetBoard } from '@/components/task-mode/DailyOpsFleetBoard'
+import { DailyOpsFleetCellDetail } from '@/components/task-mode/DailyOpsFleetCellDetail'
+import { DailyOpsProcessStrip } from '@/components/task-mode/DailyOpsProcessStrip'
+import { DailyOpsExecutionPanel } from '@/components/task-mode/DailyOpsExecutionPanel'
+import { DailyOpsOperatorPlanPanel } from '@/components/task-mode/DailyOpsOperatorPlanPanel'
+import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
+import type { DailyOpsWorkflowResult } from '@/lib/control-room/dailyOpsWorkflow'
+import { TaskModeReadinessStrip } from '@/components/task-mode/TaskModeReadinessStrip'
 import { LaunchLiveView } from '@/components/task-mode/LaunchLiveView'
 import { MissionLaunchBoard } from '@/components/task-mode/MissionLaunchBoard'
+import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
+import { useDailyOpsChecklistCoverage } from '@/hooks/useDailyOpsChecklistCoverage'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { useOperateSweep } from '@/hooks/useOperateSweep'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
+import { type FleetCell } from '@/lib/control-room/fleetSnapshot'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import { DELIVER_PLATFORM_PIPELINE } from '@/lib/delivery/deliverPlatformPhases'
@@ -49,7 +63,10 @@ export type OpsTaskStripsProps = {
   canDispatchTradeDeploy?: boolean
   releaseDisabledReason?: string
   tradeDeployDisabledReason?: string
-  /** When true, only render Promote / cutover (summary row rendered separately). */
+  /**
+   * When true, only render Release posture (Mission Launch board / summary rendered separately).
+   * Daily Ops must not pass this — Release posture lives on Mission Launch TCC only.
+   */
   promoteOnly?: boolean
   readinessCanOperate?: boolean
   onAgentFixStg?: () => void
@@ -61,6 +78,52 @@ export type OpsTaskStripsProps = {
   agentTriagePending?: boolean
   agentTriageDisabled?: boolean
   agentTriageTitle?: string
+  /** Daily Ops Fleet Desk — per-cell / primary Agent Fix */
+  onFleetCellFix?: (cell: FleetCell) => void
+  onFleetPrimaryCta?: () => void
+  fleetAgentFixPending?: boolean
+  /** Pinned Discover → Remediate → Verify → Clear process strip */
+  fleetWorkflow?: DailyOpsWorkflowResult
+  fleetAgentFixError?: string | null
+  /** Single primary CTA path for Daily Ops Ops loop (replaces dual Verdict+Workflow). */
+  onFleetWorkflowAction?: () => void
+  /**
+   * Operator Plane AI Fix (scope operator-plane-remediate) — Engineer CRITICAL.
+   * Do NOT conflate with Checklist AI Check (daily-ops-checklist-run).
+   */
+  onOperatorPlanFix?: () => void
+  operatorPlanFixPending?: boolean
+  operatorPlanFixDisabled?: boolean
+  operatorPlanFixTitle?: string
+  operatorPlanFixError?: string | null
+  /** Git dirty — propose commit / stash (scope git-dirty-remediate). */
+  onProposeCommit?: () => void
+  onProposeStash?: () => void
+  proposeCommitPending?: boolean
+  proposeCommitDisabled?: boolean
+  proposeCommitTitle?: string
+  /** Checklist AI Check — scope daily-ops-checklist-run (prober + dispatch gates). */
+  onChecklistCheck?: () => void
+  checklistCheckPending?: boolean
+  checklistCheckDisabled?: boolean
+  checklistCheckTitle?: string
+  checklistCheckError?: string | null
+  checklistCheckActive?: boolean
+  checklistCheckStatusHint?: string | null
+  /** Row Fix — Ops Agent for checklist item fixScope. */
+  onChecklistItemFix?: (args: {
+    itemId: string
+    fixScope: string
+    label: string
+    prompt: string
+  }) => void
+  checklistItemFixPending?: boolean
+  checklistItemFixDisabled?: boolean
+  checklistItemFixTitle?: string
+  checklistItemFixError?: string | null
+  checklistItemFixActiveId?: string | null
+  /** Wave 4.1 — open Operate Queue for checklist_dispatch Action rows. */
+  onOpenOperateQueue?: (queueId?: string) => void
   /** Recent PipelineRuns for the side history column. */
   recentRuns?: import('@/api/types').DeliveryPipelineRunView[]
   recentRunsLoading?: boolean
@@ -73,10 +136,14 @@ export type OpsTaskStripsProps = {
   launchAgentFixActive?: boolean
   launchAgentFixDisabled?: boolean
   launchAgentFixTitle?: string
-  onOpenAgentDesk?: () => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   /** Ambient agent job — opens Launch Live View for trade-deploy / release scope. */
   ambientJobId?: string | null
   ambientJobScope?: string | null
+  /** Adopt existing remediation job as ambient (Queue → Now). */
+  onStartAgentJob?: (job: { id: string; scope: string; label: string }) => void
+  /** Checklist auto-dispatch / related remediation jobs for Action column. */
+  activeDispatchJobs?: import('@/api/types').RemediationJob[]
   /** Namespace for the mode's deliver pipeline runs (trade STG or platform). */
   pipelineRunsNamespace?: string
   /** Rocket Launch Live View post-deploy chips. */
@@ -95,39 +162,6 @@ export type OpsTaskStripsProps = {
   satelliteLaunchAgentFixActive?: boolean
   satelliteLaunchAgentFixDisabled?: boolean
   satelliteLaunchAgentFixTitle?: string
-}
-
-function OperateQueueSummary({ onNavigate }: { onNavigate: (tab: string) => void }) {
-  const queueQ = useOperateQueue()
-  const open = queueQ.data?.open ?? []
-
-  return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-      <div className="flex items-center gap-2">
-        <Bot size={16} />
-        <span className="text-[var(--text-dense-label)] font-semibold">Operate queue</span>
-        <DenseTag variant={open.length === 0 ? 'success' : 'warning'}>
-          {open.length === 0 ? 'Clear' : `${open.length} open`}
-        </DenseTag>
-      </div>
-      {open.length > 0 && (
-        <ul className="m-0 mt-2 list-none space-y-1 p-0">
-          {open.slice(0, 3).map(item => (
-            <li key={item.id} className="text-[var(--text-dense-meta)] text-muted-foreground">
-              {item.title}
-            </li>
-          ))}
-        </ul>
-      )}
-      <button
-        type="button"
-        className="mt-2 text-[var(--text-dense-meta)] text-primary hover:underline"
-        onClick={() => onNavigate('control-room')}
-      >
-        Review in Control Room →
-      </button>
-    </div>
-  )
 }
 
 export function PlatformStgReleaseStrip({
@@ -558,61 +592,399 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
   }
 
   if (mode.id === 'daily-ops') {
-    return (
-      <div className="grid gap-3 md:grid-cols-2">
-        <OpsSection title="Operate summary" bodyPadding="compact">
-          <OperateQueueSummary onNavigate={onNavigate} />
-        </OpsSection>
-        {ops.showMissionSignals && (
-          <OpsSection title="Live signals" bodyPadding="compact">
-            <DailyOpsMissionStrip compact />
-          </OpsSection>
-        )}
-      </div>
-    )
+    return <DailyOpsFleetDesk props={props} />
   }
 
   return null
 }
 
-export function OpsTaskStrips({
-  mode,
-  context,
-  matrices = [],
-  stgSmoke,
-  stgGate,
-  lastDeliverSucceeded,
-  tierB,
-  onNavigate,
-  onOpenPromote,
-  onOpenDelivery,
-  onDispatchRelease,
-  onDispatchTradeDeploy,
-  releasePending,
-  tradeDeployPending,
-  canDispatchRelease,
-  canDispatchTradeDeploy,
-  releaseDisabledReason,
-  tradeDeployDisabledReason,
-  promoteOnly = false,
-}: OpsTaskStripsProps) {
+function DailyOpsFleetDesk({
+  props,
+}: {
+  props: SummaryRowProps
+}) {
+  const { fleet, isLoading, dataUpdatedAt } = useFleetSnapshot()
+  const checklistCoverage = useDailyOpsChecklistCoverage(fleet)
+  const qc = useQueryClient()
+  const operateQueueQuery = useOperateQueue()
+  const sweepMutation = useOperateSweep()
+  const queueOpen = operateQueueQuery.data?.open.length ?? 0
+  const {
+    onNavigate,
+    readinessCanOperate,
+    onFleetCellFix,
+    fleetAgentFixPending,
+    fleetWorkflow,
+    fleetAgentFixError,
+    onFleetWorkflowAction,
+    onOperatorPlanFix,
+    operatorPlanFixPending,
+    operatorPlanFixDisabled,
+    operatorPlanFixTitle,
+    operatorPlanFixError,
+    onProposeCommit,
+    onProposeStash,
+    proposeCommitPending,
+    proposeCommitDisabled,
+    proposeCommitTitle,
+    onChecklistCheck,
+    checklistCheckPending,
+    checklistCheckDisabled,
+    checklistCheckTitle,
+    checklistCheckError,
+    checklistCheckActive,
+    checklistCheckStatusHint,
+    onChecklistItemFix,
+    checklistItemFixPending,
+    checklistItemFixDisabled,
+    checklistItemFixTitle,
+    checklistItemFixError,
+    checklistItemFixActiveId,
+    onOpenOperateQueue,
+    onOpenAgentDesk,
+    ambientJobId,
+    ambientJobScope,
+    onStartAgentJob,
+    activeDispatchJobs,
+  } = props
+  const [selectedCellKey, setSelectedCellKey] = useState<string | null>(null)
+  const [flashKeys, setFlashKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const [flashNonce, setFlashNonce] = useState(0)
+  const [activeFlashStepId, setActiveFlashStepId] = useState<string | null>(null)
+  const flashClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const selectedCell = useMemo(
+    () => fleet.cells.find(c => c.key === selectedCellKey) ?? null,
+    [fleet.cells, selectedCellKey],
+  )
+
+  const handleFlashChecklistStep = useCallback((stepId: string, coverageKeys: string[]) => {
+    if (flashClearTimerRef.current != null) {
+      clearTimeout(flashClearTimerRef.current)
+      flashClearTimerRef.current = null
+    }
+    setActiveFlashStepId(stepId)
+    setFlashKeys(new Set(coverageKeys))
+    setFlashNonce(n => n + 1)
+    // Scroll Fleet Board into view for long pages
+    requestAnimationFrame(() => {
+      document
+        .querySelector('[data-daily-ops-fleet-board]')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+    flashClearTimerRef.current = setTimeout(() => {
+      setFlashKeys(new Set())
+      setActiveFlashStepId(null)
+      flashClearTimerRef.current = null
+    }, 2000)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (flashClearTimerRef.current != null) clearTimeout(flashClearTimerRef.current)
+    }
+  }, [])
+
+  // Discover / Remediate: auto-select worst / target cell into Detail
+  useEffect(() => {
+    if (fleetWorkflow == null) return
+    if (fleetWorkflow.activePhase !== 'discover' && fleetWorkflow.activePhase !== 'remediate') {
+      return
+    }
+    const key = fleetWorkflow.targetCellKey
+    if (key != null && key !== selectedCellKey) {
+      setSelectedCellKey(key)
+    }
+  }, [fleetWorkflow?.activePhase, fleetWorkflow?.targetCellKey])
+
+  const stripError =
+    fleetWorkflow?.primaryAction.kind === 'operator-plan'
+      ? (operatorPlanFixError ?? fleetAgentFixError)
+      : fleetAgentFixError
+
+  const hasAmbientJob = ambientJobId != null && ambientJobId !== ''
+  const itemFixStarting = checklistItemFixPending || checklistItemFixActiveId != null
+  const showStartingHint =
+    !hasAmbientJob &&
+    (itemFixStarting ||
+      checklistCheckPending ||
+      (fleetAgentFixPending === true && fleetWorkflow?.activePhase === 'remediate'))
+  const engineerCell =
+    fleet.cells.find(c => c.role === 'engineer') ?? null
+  const isChecklistAmbient =
+    ambientJobScope === DAILY_OPS_CHECKLIST_RUN_SCOPE || checklistCheckActive === true
+
+  // P3 — Fix / Also AI Fix → scroll Execution → Now into view
+  useEffect(() => {
+    if (!showStartingHint && !hasAmbientJob && checklistItemFixActiveId == null) return
+    requestAnimationFrame(() => {
+      document
+        .querySelector('[data-daily-ops-execution]')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }, [showStartingHint, hasAmbientJob, checklistItemFixActiveId, ambientJobId])
+
+  const handleVerifyReprobe = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: ['cockpit'] })
+    void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+  }, [qc])
+
+  return (
+    <div className="flex min-w-0 max-w-full flex-col gap-3">
+      {fleetWorkflow != null && (
+        <DailyOpsProcessStrip
+          fleet={fleet}
+          workflow={fleetWorkflow}
+          isLoading={isLoading}
+          canOperate={readinessCanOperate}
+          agentFixPending={fleetAgentFixPending}
+          agentFixError={stripError}
+          showReadyHint
+          ambientJobId={ambientJobId}
+          onPrimaryAction={() => {
+            if (fleetWorkflow.primaryAction.kind === 'propose-commit') {
+              onProposeCommit?.()
+              return
+            }
+            if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
+              onOperatorPlanFix?.()
+              return
+            }
+            onFleetWorkflowAction?.()
+          }}
+          onSecondaryAction={
+            fleetWorkflow.primaryAction.secondary?.kind === 'propose-commit'
+              ? () => {
+                  const label = fleetWorkflow.primaryAction.secondary?.label ?? ''
+                  if (/stash/i.test(label)) onProposeStash?.()
+                  else onProposeCommit?.()
+                }
+              : fleetWorkflow.primaryAction.secondary?.kind === 'operator-plan'
+                ? () => onOperatorPlanFix?.()
+                : fleetWorkflow.primaryAction.secondary?.kind === 'agent-fix'
+                  ? () => onFleetWorkflowAction?.()
+                  : undefined
+          }
+          onOpenAgentDesk={onOpenAgentDesk}
+          onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
+          onNavigate={onNavigate}
+          operatorPlanFixPending={
+            Boolean(operatorPlanFixPending) || Boolean(proposeCommitPending)
+          }
+          operatorPlanFixDisabled={
+            Boolean(operatorPlanFixDisabled) || Boolean(proposeCommitDisabled)
+          }
+          operatorPlanFixTitle={
+            fleetWorkflow.primaryAction.kind === 'propose-commit'
+              ? (proposeCommitTitle ??
+                'Start git-dirty-remediate — approval required before commit/stash')
+              : operatorPlanFixTitle
+          }
+          checklistCheckPending={checklistCheckPending}
+          checklistCheckDisabled={checklistCheckDisabled}
+          checklistCheckTitle={checklistCheckTitle}
+          checklistCheckActive={checklistCheckActive || isChecklistAmbient}
+          checklistCheckStatusHint={checklistCheckStatusHint}
+          queueOpen={queueOpen}
+          sweepQueuePending={sweepMutation.isPending}
+          onSweepQueue={() => {
+            sweepMutation.mutate({ auto_drain: false })
+            requestAnimationFrame(() => {
+              document
+                .querySelector('[data-daily-ops-execution]')
+                ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+            })
+          }}
+        />
+      )}
+
+      {/* Checklist | Fleet Board + in-column Cell Detail */}
+      <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] xl:items-start">
+        {!isLoading && (
+          <div className="min-w-0 rounded-lg border border-border bg-secondary px-3 py-2">
+            <DailyOpsOperatorPlanPanel
+              engineerCell={engineerCell}
+              fleet={fleet}
+              coverage={checklistCoverage}
+              activeFlashStepId={activeFlashStepId}
+              workflowPhase={fleetWorkflow?.activePhase}
+              onFlashStep={handleFlashChecklistStep}
+              onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
+              activeDispatchJobs={activeDispatchJobs}
+              onChecklistCheck={onChecklistCheck}
+              checklistCheckPending={checklistCheckPending}
+              checklistCheckDisabled={checklistCheckDisabled}
+              checklistCheckTitle={checklistCheckTitle}
+              checklistCheckError={checklistCheckError}
+              checklistCheckActive={checklistCheckActive || isChecklistAmbient}
+              checklistCheckStatusHint={checklistCheckStatusHint}
+              onChecklistItemFix={onChecklistItemFix}
+              checklistItemFixPending={checklistItemFixPending}
+              checklistItemFixDisabled={checklistItemFixDisabled}
+              checklistItemFixTitle={checklistItemFixTitle}
+              checklistItemFixError={checklistItemFixError}
+              checklistItemFixActiveId={checklistItemFixActiveId}
+              ambientJobId={ambientJobId}
+              ambientJobScope={ambientJobScope}
+              onOpenDispatchJob={jobId => onOpenAgentDesk?.(jobId)}
+              onOpenOperateQueue={
+                onOpenOperateQueue ??
+                ((queueId?: string) => {
+                  if (queueId != null && onOpenAgentDesk != null) {
+                    onOpenAgentDesk({ focusHandoffId: queueId })
+                  } else if (onOpenAgentDesk != null) {
+                    onOpenAgentDesk()
+                  } else {
+                    onNavigate('agent-desk')
+                  }
+                })
+              }
+              compactColumns
+            />
+          </div>
+        )}
+        <div className="flex min-w-0 flex-col gap-2">
+          <DailyOpsFleetBoard
+            fleet={fleet}
+            isLoading={isLoading}
+            canOperate={readinessCanOperate}
+            agentFixPending={fleetAgentFixPending}
+            selectedCellKey={selectedCellKey}
+            coverage={checklistCoverage}
+            flashKeys={flashKeys}
+            flashNonce={flashNonce}
+            workflowPhase={fleetWorkflow?.activePhase}
+            onAgentFix={onFleetCellFix}
+            onSelectCell={cell => setSelectedCellKey(cell?.key ?? null)}
+            onNavigate={onNavigate}
+          />
+          {selectedCell != null && (
+            <DailyOpsFleetCellDetail
+              cell={selectedCell}
+              canOperate={readinessCanOperate}
+              agentFixPending={fleetAgentFixPending}
+              coverage={checklistCoverage}
+              dataUpdatedAt={dataUpdatedAt}
+              primaryBlocker={fleetWorkflow?.primaryBlocker}
+              primaryActionLabel={fleetWorkflow?.primaryAction.label}
+              suppressSuggestedNext={fleetWorkflow?.activePhase === 'remediate'}
+              onAgentFix={onFleetCellFix}
+              onNavigate={onNavigate}
+              onReprobe={handleVerifyReprobe}
+              onClose={() => setSelectedCellKey(null)}
+              onProposeCommit={onProposeCommit}
+              onProposeStash={onProposeStash}
+              proposeCommitPending={proposeCommitPending}
+              proposeCommitDisabled={proposeCommitDisabled}
+              proposeCommitTitle={proposeCommitTitle}
+            />
+          )}
+        </div>
+      </div>
+
+      <DailyOpsExecutionPanel
+        fleetClear={fleet.fleetClear}
+        remediating={
+          fleetWorkflow?.activePhase === 'remediate' ||
+          fleetWorkflow?.activePhase === 'verify'
+        }
+        ambientJobId={ambientJobId}
+        ambientJobScope={ambientJobScope}
+        onOpenAgentDesk={onOpenAgentDesk}
+        showStartingHint={showStartingHint}
+        primaryBlocker={fleetWorkflow?.primaryBlocker}
+        primaryActionLabel={fleetWorkflow?.primaryAction.label}
+        checklistItemFixActiveId={checklistItemFixActiveId}
+        onVerifyReprobe={handleVerifyReprobe}
+        onAdoptJob={onStartAgentJob}
+        onOpsLoopAction={
+          fleetWorkflow != null
+            ? () => {
+                if (fleetWorkflow.primaryAction.kind === 'propose-commit') {
+                  onProposeCommit?.()
+                  return
+                }
+                if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
+                  onOperatorPlanFix?.()
+                  return
+                }
+                onFleetWorkflowAction?.()
+              }
+            : undefined
+        }
+        opsLoopActionLabel={
+          fleetWorkflow != null ? `${fleetWorkflow.primaryAction.label} →` : 'Ops loop →'
+        }
+        onProposeCommit={onProposeCommit}
+        onProposeStash={onProposeStash}
+        proposeCommitPending={proposeCommitPending}
+      />
+    </div>
+  )
+}
+
+export function OpsTaskStrips(props: OpsTaskStripsProps) {
+  const {
+    mode,
+    context,
+    matrices = [],
+    stgSmoke,
+    stgGate,
+    lastDeliverSucceeded,
+    tierB,
+    onNavigate,
+    onOpenPromote,
+    onOpenDelivery,
+    onDispatchRelease,
+    onDispatchTradeDeploy,
+    releasePending,
+    tradeDeployPending,
+    canDispatchRelease,
+    canDispatchTradeDeploy,
+    releaseDisabledReason,
+    tradeDeployDisabledReason,
+    promoteOnly = false,
+  } = props
   const ops = mode.ops
   if (ops == null) return null
 
+  /** Release posture (STG/Prod · Tier A·B) — Mission Launch TCC only; not Daily Ops. */
   const promoteSection =
-    mode.id === 'daily-ops' ? (
-      <OpsSection title="Promote / cutover">
-        <PromoteCutoverStrip
-          context={context}
-          matrices={matrices}
-          stgSmoke={stgSmoke}
-          stgGate={stgGate}
-          lastDeliverSucceeded={lastDeliverSucceeded}
-          tierB={tierB}
-          onOpenPromote={onOpenPromote}
-          onOpenDelivery={onOpenDelivery}
-        />
-      </OpsSection>
+    mode.id === 'mission-launch' ? (
+      <Collapsible defaultOpen className="group/release rounded-lg border border-border bg-card px-3 py-1.5">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full cursor-pointer flex-wrap items-center gap-2 text-left"
+          >
+            <ChevronRight
+              className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/release:rotate-90"
+              aria-hidden
+            />
+            <span className="text-[var(--text-dense-meta)] font-semibold">Release posture</span>
+            <DenseTag variant="neutral" className="text-[9px]">
+              STG / Prod
+            </DenseTag>
+            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+              Promote / cutover · Tier A·B
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="mt-2">
+            <PromoteCutoverStrip
+              context={context}
+              matrices={matrices}
+              stgSmoke={stgSmoke}
+              stgGate={stgGate}
+              lastDeliverSucceeded={lastDeliverSucceeded}
+              tierB={tierB}
+              onOpenPromote={onOpenPromote}
+              onOpenDelivery={onOpenDelivery}
+            />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     ) : null
 
   if (promoteOnly) {
@@ -661,17 +1033,6 @@ export function OpsTaskStrips({
       <OpsSection title="Environment readiness">
         <TaskModeReadinessStrip modeId="mission-launch" onNavigate={onNavigate} />
       </OpsSection>
-    ) : mode.id === 'daily-ops' && ops.showMissionSignals ? (
-      <OpsSection title="Live signals">
-        <DailyOpsMissionStrip />
-      </OpsSection>
-    ) : null
-
-  const operateSummarySection =
-    mode.id === 'daily-ops' ? (
-      <OpsSection title="Operate summary">
-        <OperateQueueSummary onNavigate={onNavigate} />
-      </OpsSection>
     ) : null
 
   if (isPlaybookLaunch) {
@@ -687,18 +1048,16 @@ export function OpsTaskStrips({
   }
 
   if (mode.id === 'daily-ops') {
-    return (
+    // Fleet Desk is rendered via OpsTaskSummaryRow; Daily Ops never shows Release posture.
+    return promoteOnly ? null : (
       <div className="flex flex-col gap-3">
-        {operateSummarySection}
-        {readinessSection}
-        {promoteSection}
+        <DailyOpsFleetDesk props={props} />
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-3">
-      {promoteSection}
       {readinessSection}
     </div>
   )

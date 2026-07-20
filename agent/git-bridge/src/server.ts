@@ -37,6 +37,59 @@ function isGitRepo(dir: string): boolean {
   return fs.existsSync(path.join(dir, '.git'))
 }
 
+/** Parse `git diff --numstat` lines into insertions/deletions (untracked counted as +lines). */
+function parseNumstat(output: string): { insertions: number; deletions: number } {
+  let insertions = 0
+  let deletions = 0
+  if (output === '') return { insertions, deletions }
+  for (const line of output.split('\n')) {
+    const parts = line.split('\t')
+    if (parts.length < 3) continue
+    const add = parts[0] === '-' ? 0 : parseInt(parts[0] ?? '0', 10) || 0
+    const del = parts[1] === '-' ? 0 : parseInt(parts[1] ?? '0', 10) || 0
+    insertions += add
+    deletions += del
+  }
+  return { insertions, deletions }
+}
+
+function repoLineStats(dir: string): { insertions: number; deletions: number } {
+  let insertions = 0
+  let deletions = 0
+  try {
+    const staged = parseNumstat(git(dir, 'diff --cached --numstat'))
+    const unstaged = parseNumstat(git(dir, 'diff --numstat'))
+    insertions = staged.insertions + unstaged.insertions
+    deletions = staged.deletions + unstaged.deletions
+  } catch {
+    // ignore
+  }
+  // Untracked files are not in numstat; count their lines via filesystem when small enough.
+  try {
+    const untracked = git(dir, 'ls-files --others --exclude-standard')
+    if (untracked !== '') {
+      for (const file of untracked.split('\n')) {
+        if (file === '') continue
+        try {
+          const full = path.join(dir, file)
+          const content = fs.readFileSync(full, 'utf-8')
+          if (content.length > 2_000_000) {
+            insertions += 1
+            continue
+          }
+          const lines = content === '' ? 0 : content.split('\n').length
+          insertions += lines
+        } catch {
+          insertions += 1
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return { insertions, deletions }
+}
+
 // ---------------------------------------------------------------------------
 // GET /health
 // ---------------------------------------------------------------------------
@@ -59,6 +112,8 @@ app.get('/status', (_req, res) => {
     modified: string[]
     untracked: string[]
     ahead: number
+    insertions: number
+    deletions: number
   }> = []
 
   for (const name of MANAGED_REPOS) {
@@ -94,6 +149,7 @@ app.get('/status', (_req, res) => {
       const dirty = lines.length > 0
       const onDeployBranch = branch === DEPLOY_BRANCH
       const headSha = git(dir, 'rev-parse --short HEAD')
+      const stats = dirty ? repoLineStats(dir) : { insertions: 0, deletions: 0 }
 
       results.push({
         repo: name,
@@ -106,6 +162,8 @@ app.get('/status', (_req, res) => {
         modified,
         untracked,
         ahead,
+        insertions: stats.insertions,
+        deletions: stats.deletions,
       })
     } catch (err) {
       results.push({
@@ -119,6 +177,8 @@ app.get('/status', (_req, res) => {
         modified: [],
         untracked: [],
         ahead: 0,
+        insertions: 0,
+        deletions: 0,
       })
     }
   }
@@ -241,6 +301,67 @@ app.post('/push', (req, res) => {
       const branch = git(dir, 'rev-parse --abbrev-ref HEAD')
       const output = git(dir, `push origin ${branch}`)
       results.push({ repo: name, status: 'pushed', detail: output || `pushed ${ahead} commit(s)` })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      results.push({ repo: name, status: 'error', detail: msg.slice(0, 300) })
+    }
+  }
+
+  res.json({ results })
+})
+
+// ---------------------------------------------------------------------------
+// POST /stash — stash working tree changes (never drop; requires operator intent)
+// ---------------------------------------------------------------------------
+app.post('/stash', (req, res) => {
+  const { repos, message, include_untracked } = req.body as {
+    repos: string[]
+    message?: string
+    include_untracked?: boolean
+  }
+
+  if (!Array.isArray(repos) || repos.length === 0) {
+    res.status(400).json({ error: 'repos[] required' })
+    return
+  }
+
+  const stashMsg =
+    typeof message === 'string' && message.trim() !== ''
+      ? message.trim()
+      : 'bifrost-git-bridge: stash to clear Fleet dirty'
+  const withUntracked = include_untracked !== false
+  const results: Array<{
+    repo: string
+    status: 'stashed' | 'skipped' | 'error'
+    detail: string
+  }> = []
+
+  for (const name of repos) {
+    if (!MANAGED_REPOS.includes(name)) {
+      results.push({ repo: name, status: 'error', detail: 'not a managed repo' })
+      continue
+    }
+    const dir = path.join(WORKSPACE, name)
+    if (!isGitRepo(dir)) {
+      results.push({ repo: name, status: 'error', detail: 'not a git repo' })
+      continue
+    }
+
+    try {
+      const statusBefore = git(dir, 'status --porcelain')
+      if (statusBefore === '') {
+        results.push({ repo: name, status: 'skipped', detail: 'working tree clean' })
+        continue
+      }
+
+      const flags = withUntracked ? '-u' : ''
+      const safeMsg = stashMsg.replace(/"/g, '\\"')
+      const output = git(dir, `stash push ${flags} -m "${safeMsg}"`.replace(/\s+/g, ' ').trim())
+      results.push({
+        repo: name,
+        status: 'stashed',
+        detail: output || 'stashed',
+      })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       results.push({ repo: name, status: 'error', detail: msg.slice(0, 300) })

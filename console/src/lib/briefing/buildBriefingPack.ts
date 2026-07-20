@@ -32,8 +32,16 @@ import {
 } from '@/lib/briefing/reconcileBriefing'
 import type { BriefingPackSize } from '@/lib/briefing/briefingUrlState'
 import type { TaskModeBriefingContext } from '@/lib/task-mode/TaskModeContext'
-import { splitQueueByCompletion } from '@/lib/briefing/queueDisplay'
+import {
+  formatQueueStageSummary,
+  splitQueueByCompletion,
+} from '@/lib/briefing/queueDisplay'
 import { formatEmptyLaneInitSection } from '@/lib/briefing/laneInitPack'
+import {
+  briefingScopeById,
+  trackTypeById,
+  type BriefingScopeId,
+} from '@/lib/briefing/briefingViewTabs'
 
 export interface BriefingInputs extends BriefingSnapshotInput {
   intent: WorkIntent
@@ -41,6 +49,8 @@ export interface BriefingInputs extends BriefingSnapshotInput {
   trackSummaries?: TrackSummary[]
   selectedTrack?: TrackId
   selectedLane?: LaneId
+  /** Layer-1 scope (Rocket / Satellite / …). Falls back to lane.componentLine. */
+  selectedScope?: BriefingScopeId
   laneQueue?: QueueItem[]
   agentDialogueLanguage?: AgentDialogueLanguage
   packSize?: BriefingPackSize
@@ -222,9 +232,11 @@ function formatFirstResponseProtocol(
 
 function formatCompactFirstResponseProtocol(
   language: AgentDialogueLanguage,
-  track: TrackId,
+  scopeLabel: string,
+  trackTypeLabel: string,
   lane: LaneId,
   intent: WorkIntent,
+  queueStage: string,
 ): string {
   const lang = agentDialogueLanguageById(language)
   const laneMeta = laneById(lane)
@@ -232,8 +244,8 @@ function formatCompactFirstResponseProtocol(
 
   const confirmStep =
     language === 'zh'
-      ? '用**中文**简述你对本 briefing 的理解（track/lane/intent、blocker、范围），请 Owner 确认后再动手。'
-      : 'Summarize your understanding (track/lane/intent, blockers, scope) in **English** and ask Owner to confirm before implementing.'
+      ? '用**中文**简述你对本 briefing 的理解（**Scope / Track / Lane / Queue stage**、intent、blocker、范围），请 Owner 确认后再动手。'
+      : 'Summarize your understanding (**Scope / Track / Lane / Queue stage**, intent, blockers, scope) in **English** and ask Owner to confirm before implementing.'
 
   const taskListStep =
     language === 'zh'
@@ -243,7 +255,9 @@ function formatCompactFirstResponseProtocol(
   return [
     '## Required first response (compact pack)',
     '',
-    `Dialogue language: **${lang.agentLabel}** · ${track} / ${laneMeta.label} / ${intentMeta.label}`,
+    `Dialogue language: **${lang.agentLabel}**`,
+    `Session anchor: **${scopeLabel}** · **${trackTypeLabel}** · **${laneMeta.label}** (${lane}) · intent **${intentMeta.label}**`,
+    `Queue stage: ${queueStage}`,
     '',
     '1. **Confirm understanding** — ' + confirmStep,
     '2. **Propose task list** — ' + taskListStep,
@@ -503,16 +517,33 @@ function formatTrackSection(tracks: TrackSummary[], selected: TrackId): string {
   return lines.join('\n')
 }
 
-function formatLaneQueueSection(laneId: LaneId, queue: QueueItem[]): string {
+function formatLaneQueueSection(
+  laneId: LaneId,
+  active: QueueItem[],
+  completedCount: number,
+  packSize: BriefingPackSize,
+): string {
   const lane = laneById(laneId)
   const lines = [`## Active lane queue — ${lane.label} (${lane.id})`, '', lane.description, '']
-  if (queue.length === 0) {
-    lines.push('(no active items — see completed in Console if needed)')
-    return lines.join('\n')
+  if (active.length === 0) {
+    if (completedCount > 0) {
+      lines.push(
+        `(no active items — ${completedCount} completed hidden in compact; see Console Task Queue or Full pack)`,
+      )
+    } else {
+      lines.push('(no active items — see completed in Console if needed)')
+    }
+  } else {
+    for (const item of active) {
+      const note = item.note ? ` — ${item.note}` : ''
+      lines.push(`- [${item.status}] ${item.label}${note}`)
+    }
   }
-  for (const item of queue) {
-    const note = item.note ? ` — ${item.note}` : ''
-    lines.push(`- [${item.status}] ${item.label}${note}`)
+  if (packSize === 'compact' && completedCount > 0) {
+    lines.push(
+      '',
+      `_Compact summary: completed ${completedCount} (omitted) — expand Full pack or Console for history._`,
+    )
   }
   return lines.join('\n')
 }
@@ -528,11 +559,19 @@ export function buildBriefingPack(input: BriefingInputs): string {
   const track = input.selectedTrack ?? 'build'
   const lane = input.selectedLane ?? 'console-api'
   const laneMeta = laneById(lane)
+  const scopeId: BriefingScopeId = input.selectedScope ?? laneMeta.componentLine
+  const scopeMeta = briefingScopeById(scopeId)
+  const trackTypeMeta = trackTypeById(laneMeta.trackType)
+  const queueItems = input.laneQueue ?? []
+  const queueSplit =
+    input.laneQueue != null ? splitQueueByCompletion(input.laneQueue) : { active: [], completed: [] }
+  const queueStage =
+    input.laneQueue != null ? formatQueueStageSummary(input.laneQueue) : 'active 0/0 · top: (none active) · completed: 0'
 
-  const queueForPack =
-    packSize === 'compact' && input.laneQueue != null
-      ? splitQueueByCompletion(input.laneQueue).active
-      : input.laneQueue
+  const queueActiveForPack =
+    packSize === 'compact' ? queueSplit.active : input.laneQueue != null ? queueItems : null
+  const completedCountForPack =
+    packSize === 'compact' ? queueSplit.completed.length : 0
 
   const deltaSection = input.sessionDelta != null ? formatDeltaForPack(input.sessionDelta) : null
   const trackSection =
@@ -542,8 +581,8 @@ export function buildBriefingPack(input: BriefingInputs): string {
   const queueSection =
     input.laneQueue != null && input.laneQueue.length === 0
       ? formatEmptyLaneInitSection(lane)
-      : queueForPack != null
-        ? formatLaneQueueSection(lane, queueForPack)
+      : queueActiveForPack != null
+        ? formatLaneQueueSection(lane, queueActiveForPack, completedCountForPack, packSize)
         : null
 
   const dialogueRule =
@@ -553,7 +592,14 @@ export function buildBriefingPack(input: BriefingInputs): string {
 
   const firstResponseProtocol =
     packSize === 'compact'
-      ? formatCompactFirstResponseProtocol(language, track, lane, input.intent)
+      ? formatCompactFirstResponseProtocol(
+          language,
+          scopeMeta.shortLabel,
+          trackTypeMeta.label,
+          lane,
+          input.intent,
+          queueStage,
+        )
       : formatFirstResponseProtocol(language, track, lane, input.intent)
 
   // Reconcile gate (D-B): blocker findings hard-block the pack; warnings stamp a banner.
@@ -595,7 +641,9 @@ export function buildBriefingPack(input: BriefingInputs): string {
     `phase_id: ${phaseID}`,
     `Pack size: **${packSize}**`,
     ...(staleBanner != null ? ['', staleBanner, ''] : []),
-    `Work track: ${track} · Lane: ${laneMeta.label} (${lane}) · Intent: ${opt.label} (${input.intent})`,
+    `Scope: **${scopeMeta.shortLabel}** (${scopeId}) · Track: **${trackTypeMeta.label}** (${laneMeta.trackType}) · Lane: **${laneMeta.label}** (${lane})`,
+    `Intent: ${opt.label} (${input.intent}) · Spine track id: ${track}`,
+    `Queue stage: ${queueStage}`,
     `Agent layer: ${opt.agentLayer} Agent · Mode: ${opt.agentMode}`,
     `Agent dialogue language: ${langMeta.agentLabel}`,
     '',

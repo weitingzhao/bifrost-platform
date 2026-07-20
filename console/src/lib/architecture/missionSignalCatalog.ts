@@ -97,7 +97,7 @@ export const MISSION_SIGNAL_PHASES: MissionSignalPhaseDef[] = [
   {
     id: 'P7',
     title: 'Program closure',
-    summary: 'Maintenance mode — P1–P6 signed on Delivery Board; event-driven patches only.',
+    summary: 'Maintenance mode — P1–P6 signed via Briefing Session (Board catalog); event-driven patches only.',
     dependsOn: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'],
     acceptance: [
       'All phases P1–P6 signed via programs API',

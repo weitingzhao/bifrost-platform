@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, SegmentControl } from '@bifrost/ui'
 import { Loader2, Plus } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -20,6 +20,7 @@ import {
 import {
   briefingScopeById,
   componentLineById,
+  lanesForScope,
   lanesForScopeTrack,
   trackTypeById,
   type BriefingScopeId,
@@ -45,6 +46,12 @@ import {
 import { createLane, LANES_QUERY_KEY } from '@/api/lanes'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
+export type NewLaneReference = {
+  id: LaneId
+  label: string
+  description: string
+}
+
 interface TrackLaneSectionProps {
   scope?: BriefingScopeId
   /** @deprecated Prefer scope */
@@ -56,6 +63,10 @@ interface TrackLaneSectionProps {
   /** Digest-driven lifecycle filter; null = show every lifecycle. */
   lifecycleFilter?: LaneLifecycle | null
   onClearLifecycleFilter?: () => void
+  /** Increment to open the New Lane form (e.g. from Archive Session CTA). */
+  newLaneOpenToken?: number
+  /** Prefill New Lane description from a completed lane. */
+  newLaneReference?: NewLaneReference | null
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
   clusterSummary: ClusterSummary | undefined
@@ -84,12 +95,21 @@ function LaneCard({
       className={briefingSolidCardClass(selected)}
       onClick={onSelect}
     >
-      <div className="flex items-start gap-2.5">
+      <div className="flex min-w-0 items-start gap-2.5">
         <BriefingIconBadge icon={LANE_ICONS[lane.id]} selected={selected} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <BriefingStatusLamp status={status} />
-            <span className="min-w-0 flex-1 text-sm font-semibold">{lane.label}</span>
+            <span
+              className={[
+                'min-w-0 flex-1 truncate text-sm transition-colors',
+                selected
+                  ? 'font-semibold text-[var(--foreground)]'
+                  : 'font-medium text-[var(--muted-foreground)]',
+              ].join(' ')}
+            >
+              {lane.label}
+            </span>
             {showLineBadge && (
               <span className="shrink-0 rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
                 {lineShort}
@@ -97,7 +117,7 @@ function LaneCard({
             )}
             <BriefingStatusBadge status={status} />
           </div>
-          <p className="m-0 mt-1 line-clamp-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          <p className="m-0 mt-1 line-clamp-2 break-words text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             {lane.description}
           </p>
           {progress != null && (
@@ -117,18 +137,24 @@ function LaneCard({
 function NewLaneInlineForm({
   line,
   trackType,
+  reference,
   onClose,
   onCreated,
 }: {
   /** When null (All scope), user must pick a target component line. */
   line: ComponentLineId | null
   trackType: WorkTrackType
+  reference?: NewLaneReference | null
   onClose: () => void
   onCreated?: (laneId: string) => void
 }) {
   const [targetLine, setTargetLine] = useState<ComponentLineId>(line ?? 'rocket')
   const [label, setLabel] = useState('')
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState(() =>
+    reference != null
+      ? `Reference (completed): ${reference.label} (${reference.id})\n${reference.description}\n\nNext work direction: `
+      : '',
+  )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -180,19 +206,19 @@ function NewLaneInlineForm({
   }, [label, description, targetLine, trackType, qc, canOperate, onCreated, onClose])
 
   return (
-    <div className="col-span-full mt-1 rounded-lg border border-dashed border-[var(--primary)]/50 bg-[var(--primary)]/5 px-4 py-3">
-      <div className="flex items-center justify-between">
+    <div className="col-span-full mt-1 min-w-0 max-w-full overflow-hidden rounded-lg border border-dashed border-[var(--primary)]/50 bg-[var(--primary)]/5 px-3 py-3 sm:px-4">
+      <div className="flex min-w-0 items-center justify-between gap-2">
         <p className="m-0 text-[var(--text-dense-label)] font-semibold">New lane</p>
         <button
           type="button"
-          className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          className="shrink-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
           onClick={onClose}
         >
           Cancel
         </button>
       </div>
       {needsLinePicker && (
-        <div className="mt-2">
+        <div className="mt-2 min-w-0">
           <p className="m-0 mb-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
             Target component line
           </p>
@@ -204,11 +230,12 @@ function NewLaneInlineForm({
               label: componentLineById(id).shortLabel,
             }))}
             size="xs"
+            className="flex w-full min-w-0 max-w-full flex-wrap justify-start rounded-md"
           />
         </div>
       )}
       <input
-        className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
+        className="mt-2 w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
         placeholder="Lane label (becomes kebab-case id)"
         value={label}
         onChange={e => setLabel(e.target.value)}
@@ -216,7 +243,7 @@ function NewLaneInlineForm({
       />
       <textarea
         ref={inputRef}
-        className="mt-2 w-full resize-none rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
+        className="mt-2 w-full min-w-0 resize-none rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
         rows={2}
         placeholder="Describe this work direction — what problem does it solve, what will it deliver?"
         value={description}
@@ -225,10 +252,11 @@ function NewLaneInlineForm({
       {error != null && (
         <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-destructive">{error}</p>
       )}
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
+          className="shrink-0"
           disabled={submitting || label.trim() === '' || description.trim() === ''}
           onClick={() => void handleCreate()}
         >
@@ -242,8 +270,10 @@ function NewLaneInlineForm({
             </>
           )}
         </Button>
-        <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          Writes config/lanes.yaml · copies Init Pack to clipboard
+        <span className="min-w-0 flex-1 break-words text-[var(--text-dense-caption)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
+          {reference != null
+            ? `Reference: ${reference.label} · writes config/lanes.yaml · copies Init Pack`
+            : 'Writes config/lanes.yaml · copies Init Pack to clipboard'}
         </span>
       </div>
     </div>
@@ -279,12 +309,21 @@ function EmptyLaneCard({
       className={briefingDashedCardClass(selected)}
       onClick={onSelect}
     >
-      <div className="flex items-start gap-2.5">
+      <div className="flex min-w-0 items-start gap-2.5">
         <BriefingIconBadge icon={LANE_ICONS[lane.id]} selected={selected} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <BriefingStatusLamp status="ready" />
-            <span className="min-w-0 flex-1 text-sm font-semibold">{lane.label}</span>
+            <span
+              className={[
+                'min-w-0 flex-1 truncate text-sm transition-colors',
+                selected
+                  ? 'font-semibold text-[var(--foreground)]'
+                  : 'font-medium text-[var(--muted-foreground)]',
+              ].join(' ')}
+            >
+              {lane.label}
+            </span>
             {showLineBadge && (
               <span className="shrink-0 rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
                 {lineShort}
@@ -292,7 +331,7 @@ function EmptyLaneCard({
             )}
             <BriefingStatusBadge status="ready" />
           </div>
-          <p className="m-0 mt-1 line-clamp-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          <p className="m-0 mt-1 line-clamp-2 break-words text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             {lane.description}
           </p>
           <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
@@ -322,8 +361,12 @@ function NewLaneEntry({ onClick }: { onClick: () => void }) {
   )
 }
 
-/** Tag cards: 4 across on large screens (5 felt cramped). */
-const LANE_TAG_GRID = 'grid grid-cols-2 gap-2 lg:grid-cols-4'
+/**
+ * Tag cards live in the Briefing master pane (~320–400px).
+ * Viewport `lg:` must not force 4 columns here — the pane stays narrow while
+ * the page is wide, which previously crushed cards into vertical text strips.
+ */
+const LANE_TAG_GRID = 'grid min-w-0 grid-cols-1 gap-2'
 
 type LaneViewMode = 'tag' | 'list'
 
@@ -333,7 +376,7 @@ function LaneBandHeader({
   count,
   hint,
   trailing,
-  /** Optional split counts for Backlog (planned / ready) — same palette as Scope d/p/r. */
+  /** Optional split counts for Backlog — maturity order ready → planned. */
   splitCounts,
 }: {
   status: 'doing' | 'planned' | 'done'
@@ -351,11 +394,11 @@ function LaneBandHeader({
       </span>
       {splitCounts != null ? (
         <span className="inline-flex items-center gap-1.5 font-mono text-[var(--text-dense-caption)] tabular-nums">
-          <BriefingStatusBadge status="planned" label={`${splitCounts.planned}`} />
-          <span className={BRIEFING_DPR_COLOR.planned}>planned</span>
-          <span className="text-[var(--muted-foreground)]/40">·</span>
           <BriefingStatusBadge status="ready" label={`${splitCounts.ready}`} />
           <span className={BRIEFING_DPR_COLOR.ready}>ready</span>
+          <span className="text-[var(--muted-foreground)]/40">·</span>
+          <BriefingStatusBadge status="planned" label={`${splitCounts.planned}`} />
+          <span className={BRIEFING_DPR_COLOR.planned}>planned</span>
         </span>
       ) : (
         <BriefingStatusBadge status={status} label={`${count}`} />
@@ -395,7 +438,14 @@ function LaneListRow({
       className={briefingLaneListRowClass(selected, { emptyHint })}
     >
       <BriefingStatusLamp status={status} />
-      <span className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)] font-semibold">
+      <span
+        className={[
+          'min-w-0 flex-1 truncate text-[var(--text-dense-meta)] transition-colors',
+          selected
+            ? 'font-semibold text-[var(--foreground)]'
+            : 'font-medium text-[var(--muted-foreground)]',
+        ].join(' ')}
+      >
         {lane.label}
       </span>
       {showLineBadge && (
@@ -441,18 +491,16 @@ function CompletedLanesGroup({
   items,
   selectedLane,
   onSelectLane,
-  defaultExpanded,
   showLineBadge = false,
   viewMode,
 }: {
   items: LaneWithQueue[]
   selectedLane: LaneId
   onSelectLane: (id: LaneId) => void
-  defaultExpanded: boolean
   showLineBadge?: boolean
   viewMode: LaneViewMode
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
+  const [expanded, setExpanded] = useState(false)
 
   if (items.length === 0) return null
 
@@ -469,7 +517,7 @@ function CompletedLanesGroup({
         </span>
         <BriefingStatusBadge status="done" label={`${items.length}`} />
         <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          Archive · Delivery Board owns sign-off
+          Archive · Program sign-off in Session · Board is catalog
         </span>
         <span className="ml-auto text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
           {expanded ? '▾' : '▸'}
@@ -523,21 +571,33 @@ export function TrackLaneSection({
   onSelectLane,
   lifecycleFilter = null,
   onClearLifecycleFilter,
+  newLaneOpenToken = 0,
+  newLaneReference = null,
   context,
   matrices,
   clusterSummary,
 }: TrackLaneSectionProps) {
   const resolvedScope: BriefingScopeId | undefined = scope ?? componentLine
+  /** Summary lifecycle filter → all track types (match portfolio Ready/Planned/Doing counts). */
+  const crossTrack = lifecycleFilter != null
   const lanes =
-    resolvedScope != null && trackType != null
-      ? lanesForScopeTrack(resolvedScope, trackType)
+    resolvedScope != null
+      ? crossTrack
+        ? lanesForScope(resolvedScope)
+        : trackType != null
+          ? lanesForScopeTrack(resolvedScope, trackType)
+          : lanesForTrack(track)
       : lanesForTrack(track)
   const [showNewLane, setShowNewLane] = useState(false)
   const [laneViewMode, setLaneViewMode] = useState<LaneViewMode>('list')
-  const showLineBadge = resolvedScope === 'all'
+  const [activeReference, setActiveReference] = useState<NewLaneReference | null>(null)
+  const showLineBadge = resolvedScope === 'all' || crossTrack
 
-  const trackTypeLabel =
-    trackType != null ? trackTypeById(trackType).label : track
+  const trackTypeLabel = crossTrack
+    ? 'All tracks'
+    : trackType != null
+      ? trackTypeById(trackType).label
+      : track
 
   const laneItems: LaneWithQueue[] = useMemo(
     () =>
@@ -565,9 +625,9 @@ export function TrackLaneSection({
   }, [filteredLaneItems])
 
   const doingLanes = groups.active
-  const backlogLanes = [...groups.planned, ...groups.empty]
+  /** Backlog maturity: Ready (empty) before Planned. */
+  const backlogLanes = [...groups.empty, ...groups.planned]
   const hasCompleted = groups.complete.length > 0
-  const selectedIsCompleted = groups.complete.some(l => l.lane.id === selectedLane)
   const noDoing = doingLanes.length === 0
   const noBacklog = backlogLanes.length === 0
   const allComplete =
@@ -580,8 +640,6 @@ export function TrackLaneSection({
   const newLaneTargetLine: ComponentLineId | null =
     resolvedScope != null && resolvedScope !== 'all' ? resolvedScope : null
   const filterActive = lifecycleFilter != null
-  const forceCompletedOpen =
-    lifecycleFilter === 'complete' || selectedIsCompleted
   const filterEmpty = filterActive && filteredLaneItems.length === 0
   const filterChipLabel =
     lifecycleFilter === 'active'
@@ -603,6 +661,13 @@ export function TrackLaneSection({
         : false
   const showCompletedBand =
     hasCompleted && (lifecycleFilter == null || lifecycleFilter === 'complete')
+
+  useEffect(() => {
+    if (newLaneOpenToken <= 0) return
+    if (!canCreateLane) return
+    setActiveReference(newLaneReference)
+    setShowNewLane(true)
+  }, [newLaneOpenToken, newLaneReference, canCreateLane])
 
   return (
     <section className="page-section panel-elevated px-3 py-2.5">
@@ -640,8 +705,8 @@ export function TrackLaneSection({
       </div>
       <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
         {filterActive
-          ? `Showing ${filterChipLabel?.toLowerCase()} only. Clear filter for full board.`
-          : 'Doing → Backlog → Completed. Pick a lane for Session.'}
+          ? `Showing ${filterChipLabel?.toLowerCase()} only across all track types (matches Summary). Clear filter for Track Type board.`
+          : 'Doing / Backlog → work Session. Completed = archive (reference for New Lane only).'}
       </p>
 
       {filterEmpty && (
@@ -659,8 +724,8 @@ export function TrackLaneSection({
         <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2.5 text-center">
           <p className="m-0 text-sm font-medium text-[var(--foreground)]">All lanes complete</p>
           <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Start a new lane under Backlog. Program sign-off and closure belong on Delivery Board —
-            Completed below is an archive view only.
+            Start a new lane under Backlog. Program sign-off stays in Session; Delivery Board is the
+            read-only catalog. Completed below is an archive view of lanes.
           </p>
         </div>
       )}
@@ -729,6 +794,15 @@ export function TrackLaneSection({
             />
             {laneViewMode === 'tag' ? (
               <div className={LANE_TAG_GRID}>
+                {groups.empty.map(({ lane }) => (
+                  <EmptyLaneCard
+                    key={lane.id}
+                    lane={lane}
+                    selected={selectedLane === lane.id}
+                    onSelect={() => onSelectLane(lane.id)}
+                    showLineBadge={showLineBadge}
+                  />
+                ))}
                 {groups.planned.map(({ lane, progress, lifecycle }) => (
                   <LaneCard
                     key={lane.id}
@@ -740,41 +814,30 @@ export function TrackLaneSection({
                     showLineBadge={showLineBadge}
                   />
                 ))}
-                {groups.empty.map(({ lane }) => (
-                  <EmptyLaneCard
-                    key={lane.id}
-                    lane={lane}
-                    selected={selectedLane === lane.id}
-                    onSelect={() => onSelectLane(lane.id)}
-                    showLineBadge={showLineBadge}
-                  />
-                ))}
                 {canCreateLane && !showNewLane && (
-                  <NewLaneEntry onClick={() => setShowNewLane(true)} />
+                  <NewLaneEntry
+                    onClick={() => {
+                      setActiveReference(null)
+                      setShowNewLane(true)
+                    }}
+                  />
                 )}
                 {canCreateLane && showNewLane && trackType != null && (
                   <NewLaneInlineForm
+                    key={activeReference?.id ?? 'new-lane'}
                     line={newLaneTargetLine}
                     trackType={trackType}
-                    onClose={() => setShowNewLane(false)}
+                    reference={activeReference}
+                    onClose={() => {
+                      setShowNewLane(false)
+                      setActiveReference(null)
+                    }}
                     onCreated={id => onSelectLane(id)}
                   />
                 )}
               </div>
             ) : (
               <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                {groups.planned.map(({ lane, progress, lifecycle }) => (
-                  <li key={lane.id}>
-                    <LaneListRow
-                      lane={lane}
-                      progress={progress}
-                      lifecycle={lifecycle}
-                      selected={selectedLane === lane.id}
-                      onSelect={() => onSelectLane(lane.id)}
-                      showLineBadge={showLineBadge}
-                    />
-                  </li>
-                ))}
                 {groups.empty.map(({ lane, progress, lifecycle }) => (
                   <li key={lane.id}>
                     <LaneListRow
@@ -788,17 +851,39 @@ export function TrackLaneSection({
                     />
                   </li>
                 ))}
+                {groups.planned.map(({ lane, progress, lifecycle }) => (
+                  <li key={lane.id}>
+                    <LaneListRow
+                      lane={lane}
+                      progress={progress}
+                      lifecycle={lifecycle}
+                      selected={selectedLane === lane.id}
+                      onSelect={() => onSelectLane(lane.id)}
+                      showLineBadge={showLineBadge}
+                    />
+                  </li>
+                ))}
                 {canCreateLane && !showNewLane && (
                   <li>
-                    <NewLaneListEntry onClick={() => setShowNewLane(true)} />
+                    <NewLaneListEntry
+                      onClick={() => {
+                        setActiveReference(null)
+                        setShowNewLane(true)
+                      }}
+                    />
                   </li>
                 )}
                 {canCreateLane && showNewLane && trackType != null && (
                   <li>
                     <NewLaneInlineForm
+                      key={activeReference?.id ?? 'new-lane'}
                       line={newLaneTargetLine}
                       trackType={trackType}
-                      onClose={() => setShowNewLane(false)}
+                      reference={activeReference}
+                      onClose={() => {
+                        setShowNewLane(false)
+                        setActiveReference(null)
+                      }}
                       onCreated={id => onSelectLane(id)}
                     />
                   </li>
@@ -810,11 +895,10 @@ export function TrackLaneSection({
 
         {showCompletedBand && (
           <CompletedLanesGroup
-            key={`complete-${lifecycleFilter ?? 'all'}`}
+            key={`complete-${resolvedScope ?? 'all'}-${trackType ?? track}-${selectedLane}-${lifecycleFilter ?? 'all'}`}
             items={groups.complete}
             selectedLane={selectedLane}
             onSelectLane={onSelectLane}
-            defaultExpanded={forceCompletedOpen}
             showLineBadge={showLineBadge}
             viewMode={laneViewMode}
           />

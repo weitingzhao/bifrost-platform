@@ -231,7 +231,7 @@ decisions:
     - id: D11
       status: SIGNED
       topic: Operate Queue — post-completion handoff contract (Wave 3 P0)
-      conclusion: "Approved post-completion items inject into a dedicated Projection-layer Operate Queue API (GET/POST /api/v1/operate/queue), persisted under data/operate/queue.json — not spine tracks.operate. Flow: submit_post_completion → pending_review → Owner approve → queue item status open → Control Room + Briefing operate track consume read-only. Items carry program_id, optional operate lane (governance/troubleshoot/release/business-advisory), title, description. Spine tracks.operate remains strategic flywheel classification only."
+      conclusion: "Approved post-completion items inject into a dedicated Projection-layer Operate Queue API (GET/POST /api/v1/operate/queue), persisted under data/operate/queue.json — not spine tracks.operate. Backward-compatible structured extension: Program completion remains NOT ASSESSED until Briefing Owner decision; flow is submit_post_completion → pending_review → Owner approve or reject / explicit NO HANDOFF → queue open → Agent Desk execution_job_id → evidence-gated close with recent_closed history. Handoffs carry source/operate lane, kind, reason, validated agent task, acceptance criteria, verification steps, risk, owner/due, execution and completion evidence. Lane metadata is only a default and never decides handoff. Spine tracks.operate remains strategic flywheel classification only."
       signed_at: "2026-07-07"
       authority: "console/src/lib/architecture/agentProtocolCatalog.ts · config/programs/_schema.yaml"
     - id: D12

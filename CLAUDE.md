@@ -46,6 +46,15 @@
 | platform-console | 5180 |
 | bifrost-trade-frontend | 5173（业务，独立） |
 
+## Viewer env（Daily Ops Fleet Desk）
+
+Seat 优先级：`OPS_VIEWER_ENV` →（仅 in-cluster）`clusters.yaml` `viewer_env` → `dev`。
+
+- **本地 `make start`**：无 `KUBERNETES_SERVICE_HOST` → 默认 **DEV**（即使加载了钉 `viewer_env: prod` 的 clusters.yaml）。`.env.example` 建议 `OPS_VIEWER_ENV=dev`。
+- **Prod 部署（in-cluster）**：DefaultCluster 钉 `viewer_env: prod`；也可用 `OPS_VIEWER_ENV=prod`。
+- 本地模拟 Prod 座位：`OPS_VIEWER_ENV=prod`。
+- 见 `.env.example` 与 Governance → Agent Protocol → `DAILY_OPS_FLEET_DESK.acceptance`（Q1–Q6）。
+
 ## 命令
 
 ```bash

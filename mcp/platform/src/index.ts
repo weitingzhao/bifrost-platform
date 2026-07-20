@@ -6,7 +6,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { jsonResult, platformDelete, platformGet, platformPost } from './platformClient.js'
+import { jsonResult, platformDelete, platformGet, platformPatch, platformPost } from './platformClient.js'
 import { registerPrometheusBridge } from './prometheusBridge.js'
 
 const SERVER_NAME = 'mcp-server-platform'
@@ -260,6 +260,30 @@ server.tool(
   async body => jsonResult(await platformPost('/api/v1/briefing/session-results', body)),
 )
 
+server.tool(
+  'update_lane',
+  'Reclassify a Briefing lane (component_line / track_type / track / description). ID and label are immutable.',
+  {
+    id: z.string(),
+    component_line: z.string().optional(),
+    track_type: z.string().optional(),
+    track: z.string().optional(),
+    short_label: z.string().optional(),
+    description: z.string().optional(),
+    agent_mode: z.string().optional(),
+    work_intent: z.string().optional(),
+  },
+  async ({ id, ...patch }) => {
+    const body: Record<string, string> = {}
+    for (const [k, v] of Object.entries(patch)) {
+      if (typeof v === 'string' && v.trim() !== '') body[k] = v
+    }
+    return jsonResult(
+      await platformPatch(`/api/v1/lanes/${encodeURIComponent(id)}`, body),
+    )
+  },
+)
+
 server.tool('get_agent_bridge', 'Agent host + MCP bridge status', {}, async () =>
   jsonResult(await platformGet('/api/v1/agent/bridge')),
 )
@@ -452,7 +476,21 @@ server.tool(
     new_capabilities: z.array(z.string()).optional(),
     new_risks: z.array(z.string()).optional(),
     operate_queue_items: z
-      .array(z.object({ id: z.string().optional(), title: z.string(), description: z.string().optional() }))
+      .array(z.object({
+        id: z.string().optional(),
+        source_lane_id: z.string().optional(),
+        operate_lane: z.enum(['governance', 'troubleshoot', 'release', 'business-advisory']),
+        title: z.string(),
+        description: z.string().optional(),
+        handoff_kind: z.enum(['one_off', 'recurring_setup']),
+        reason: z.string(),
+        agent_task_id: z.string().optional().describe('Validated config/agent-tasks.yaml task id'),
+        acceptance_criteria: z.array(z.string()).min(1),
+        verification_steps: z.array(z.string()).min(1),
+        risk_level: z.enum(['low', 'medium', 'high']),
+        owner: z.string().optional(),
+        due_at: z.string().datetime().optional(),
+      }))
       .optional(),
   },
   async ({ program_id, new_capabilities, new_risks, operate_queue_items }) =>
@@ -479,6 +517,32 @@ server.tool(
 )
 
 server.tool(
+  'reject_post_completion_item',
+  'Owner reject a pending operational handoff; does not inject Operate Queue (admin)',
+  { item_id: z.string(), reason: z.string().min(1), decision_by: z.string().optional() },
+  async ({ item_id, reason, decision_by }) =>
+    jsonResult(
+      await platformPost(`/api/v1/programs/post-completion/${encodeURIComponent(item_id)}/reject`, {
+        reason,
+        decision_by: decision_by ?? '',
+      }),
+    ),
+)
+
+server.tool(
+  'record_no_post_completion_handoff',
+  'Record explicit Owner NO HANDOFF assessment for a Program (admin)',
+  { program_id: z.string(), reason: z.string().min(1), decision_by: z.string().optional() },
+  async ({ program_id, reason, decision_by }) =>
+    jsonResult(
+      await platformPost(`/api/v1/programs/${encodeURIComponent(program_id)}/post-completion/no-handoff`, {
+        reason,
+        decision_by: decision_by ?? '',
+      }),
+    ),
+)
+
+server.tool(
   'get_operate_queue',
   'Open operate queue items (Projection layer · D11)',
   {},
@@ -486,12 +550,48 @@ server.tool(
 )
 
 server.tool(
-  'close_operate_queue_item',
-  'Mark operate queue item resolved (operator)',
-  { item_id: z.string() },
-  async ({ item_id }) =>
+  'record_operate_queue_execution',
+  'Attach a real remediation job to an open Operate Queue handoff (operator)',
+  { item_id: z.string(), execution_job_id: z.string() },
+  async ({ item_id, execution_job_id }) =>
     jsonResult(
-      await platformPost(`/api/v1/operate/queue/${encodeURIComponent(item_id)}/close`, {}),
+      await platformPost(`/api/v1/operate/queue/${encodeURIComponent(item_id)}/execution`, {
+        execution_job_id,
+      }),
+    ),
+)
+
+server.tool(
+  'close_operate_queue_item',
+  'Close only with persisted completion evidence; linked jobs must be done and post-fix verification passed (operator)',
+  {
+    item_id: z.string(),
+    completion_evidence: z.array(z.string()).min(1),
+    post_fix_verification_passed: z.boolean().optional(),
+  },
+  async ({ item_id, completion_evidence, post_fix_verification_passed }) =>
+    jsonResult(
+      await platformPost(`/api/v1/operate/queue/${encodeURIComponent(item_id)}/close`, {
+        completion_evidence,
+        post_fix_verification_passed: post_fix_verification_passed ?? false,
+      }),
+    ),
+)
+
+server.tool(
+  'dismiss_operate_queue_item',
+  'Dismiss stale/resolved Operate Queue handoff with evidence (skips job/post-fix gates)',
+  {
+    item_id: z.string(),
+    completion_evidence: z.array(z.string()).min(1),
+    reason: z.enum(['stale', 'resolved', 'other']).optional(),
+  },
+  async ({ item_id, completion_evidence, reason }) =>
+    jsonResult(
+      await platformPost(`/api/v1/operate/queue/${encodeURIComponent(item_id)}/dismiss`, {
+        completion_evidence,
+        reason: reason ?? 'stale',
+      }),
     ),
 )
 

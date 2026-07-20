@@ -81,3 +81,52 @@ lanes:
 		t.Fatalf("expected id validation, got %v", err)
 	}
 }
+
+func TestUpdateLane(t *testing.T) {
+	dir := t.TempDir()
+	seed := `version: "1"
+lanes:
+  - id: move-me
+    track: build
+    component_line: rocket
+    track_type: build
+    label: Move Me
+    short_label: Move Me
+    description: Original description.
+    agent_mode: Ops
+    work_intent: feature
+`
+	path := filepath.Join(dir, "lanes.yaml")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(dir)
+
+	updated, err := store.Update("move-me", UpdateRequest{
+		ComponentLine: "satellite",
+		TrackType:     "migrate",
+		Track:         "migrate",
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.ComponentLine != "satellite" || updated.TrackType != "migrate" || updated.Track != "migrate" {
+		t.Fatalf("unexpected update result: %+v", updated)
+	}
+	if updated.Label != "Move Me" || updated.ID != "move-me" {
+		t.Fatalf("id/label must stay immutable: %+v", updated)
+	}
+
+	got, ok, err := store.Get("move-me")
+	if err != nil || !ok {
+		t.Fatalf("get after update: ok=%v err=%v", ok, err)
+	}
+	if got.ComponentLine != "satellite" {
+		t.Fatalf("persisted line wrong: %+v", got)
+	}
+
+	_, err = store.Update("missing-lane", UpdateRequest{ComponentLine: "rocket"})
+	if err == nil || !IsValidation(err) {
+		t.Fatalf("expected not-found validation, got %v", err)
+	}
+}

@@ -113,3 +113,64 @@ func (s *Store) Create(lane Lane) (Lane, error) {
 	}
 	return lane, nil
 }
+
+// Update merges non-empty patch fields into an existing lane and rewrites lanes.yaml.
+// ID and Label are never changed.
+func (s *Store) Update(id string, patch UpdateRequest) (Lane, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Lane{}, errf("id required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	file, err := s.loadLocked()
+	if err != nil {
+		return Lane{}, err
+	}
+
+	idx := -1
+	for i, existing := range file.Lanes {
+		if existing.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return Lane{}, errf("lane not found: " + id)
+	}
+
+	updated := file.Lanes[idx]
+	if v := strings.TrimSpace(patch.Track); v != "" {
+		updated.Track = v
+	}
+	if v := strings.TrimSpace(patch.ComponentLine); v != "" {
+		updated.ComponentLine = v
+	}
+	if v := strings.TrimSpace(patch.TrackType); v != "" {
+		updated.TrackType = v
+	}
+	if v := strings.TrimSpace(patch.ShortLabel); v != "" {
+		updated.ShortLabel = v
+	}
+	if v := strings.TrimSpace(patch.Description); v != "" {
+		updated.Description = v
+	}
+	if v := strings.TrimSpace(patch.AgentMode); v != "" {
+		updated.AgentMode = v
+	}
+	if v := strings.TrimSpace(patch.WorkIntent); v != "" {
+		updated.WorkIntent = v
+	}
+
+	if err := ValidateLane(updated); err != nil {
+		return Lane{}, err
+	}
+
+	file.Lanes[idx] = updated
+	if err := s.saveLocked(file); err != nil {
+		return Lane{}, err
+	}
+	return updated, nil
+}

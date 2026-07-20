@@ -139,6 +139,18 @@ export const AGENT_TASK_RELATIONS: AgentTaskRelation[] = [
     kind: 'on-failure',
     label: 'Checker reports open issues',
   },
+  {
+    fromId: 'daily-ops-checklist-run',
+    toId: 'cluster-auto',
+    kind: 'on-failure',
+    label: 'Checklist infra/data items fail after retry',
+  },
+  {
+    fromId: 'daily-ops-checklist-run',
+    toId: 'deliver-stg-recover',
+    kind: 'on-failure',
+    label: 'Checklist release-readiness items fail after retry',
+  },
 ]
 
 type DisplayOverlay = {
@@ -166,6 +178,12 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     description:
       'Diagnose Git Bridge, agent deploy, and MCP bridge errors on L-1; guide operator through Mac Pro/Mini host fixes via manual steps.',
   },
+  'git-dirty-remediate': {
+    entryPoint: 'Daily Ops · Engineer dirty · Propose commit / Stash',
+    trigger: 'Operator reviews dirty repos and proposes commit (or stash) with approval',
+    description:
+      'git_workspace_status → git_diff → request_operator_approval → git_commit or git_stash. Never auto-clears dirty or discards Owner WIP.',
+  },
   ops: {
     entryPoint: 'Agent Desk → Ops scope',
     trigger: 'Operator sends a prompt',
@@ -191,10 +209,10 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
       'Deliver Trade stack: mirror sync + Dockerfile CMs → Kaniko build → rollout bifrost-stg/prod → STG smoke + release gates. Does NOT enable live trading (D10).',
   },
   'deliver-stg-recover': {
-    entryPoint: 'Control Room Mission Board · Cluster Failure triage · Deliver-stg Fix',
+    entryPoint: 'Task CC Agent Fix (signal dispatch) · Control Room · Cluster Triage · Deliver-stg Fix',
     trigger: 'Last bifrost-deliver-stg failed (especially stale-fail: pipeline red + STG smoke green)',
     description:
-      'L1: get_delivery_run_logs → identify failing Tekton task → fix rollout/GitOps → re-run deliver-stg. Distinct from K8s node outages.',
+      'L1: get_delivery_run_logs → identify failing Tekton task → fix rollout/GitOps → delete_pipeline_run for terminal leftovers → re-run deliver-stg. Distinct from K8s node outages.',
   },
   'trade-release-fix': {
     parentId: 'trade-deploy',
@@ -241,6 +259,13 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     entryPoint: 'Skills & Schedules · optional pre-health job',
     trigger: 'Scheduled L0 classification: pipeline fail vs runtime smoke',
     description: 'Read-only: classify stale-fail vs real outage; no actuation.',
+  },
+  'daily-ops-checklist-run': {
+    entryPoint:
+      'Daily Ops → Checklist · AI Check · scripts/agent/daily_ops_checklist.sh · launchd / market-open',
+    trigger: 'TCC AI Check or scheduled Daily Ops Checklist probe (18 items)',
+    description:
+      'L0 prober (AI Check): verify_mission_snapshot + bridge/gitops/smoke/pipelines → report_checklist_signals. Not Operator Plane Fix. Auto-dispatch gated by fixCapability (D10 skip IB).',
   },
   'platform-self-health-recover': {
     entryPoint: 'Cluster Failure triage · Control self-health row',

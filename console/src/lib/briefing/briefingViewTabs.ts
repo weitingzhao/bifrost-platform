@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import {
   COMPONENT_LINE_IDS,
+  allWorkLanes,
   trackTypesForLine,
   trackTypesAcrossAllLines,
   lanesForLineTrack,
@@ -186,6 +187,15 @@ export function trackTypeDefsForLine(line: ComponentLineId): WorkTrackTypeDef[] 
 export function lanesForScopeTrack(scope: BriefingScopeId, tt: WorkTrackType): WorkLane[] {
   if (scope === 'all') return lanesForTrackType(tt)
   return lanesForLineTrack(scope, tt)
+}
+
+/**
+ * All lanes under a scope across every track type.
+ * Used when Summary lifecycle filter is active so board counts match portfolio digests.
+ */
+export function lanesForScope(scope: BriefingScopeId): WorkLane[] {
+  if (scope === 'all') return allWorkLanes()
+  return allWorkLanes().filter(l => l.componentLine === scope)
 }
 
 /* ── Cross-layer queries ── */

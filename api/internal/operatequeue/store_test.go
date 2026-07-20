@@ -87,7 +87,9 @@ func TestStoreClose(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	closed, err := store.Close(item.ID)
+	closed, err := store.Close(item.ID, CloseRequest{
+		CompletionEvidence: []string{"operator: verified manually"},
+	}, false)
 	if err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -106,12 +108,149 @@ func TestStoreClose(t *testing.T) {
 		t.Fatalf("expected 1 recent_closed, got %d", len(list.RecentClosed))
 	}
 
-	again, err := store.Close(item.ID)
+	again, err := store.Close(item.ID, CloseRequest{
+		CompletionEvidence: []string{"operator: verified manually"},
+	}, false)
 	if err != nil {
 		t.Fatalf("idempotent close: %v", err)
 	}
 	if again.Status != StatusClosed {
 		t.Fatalf("idempotent close status = %q", again.Status)
+	}
+}
+
+func TestStoreDismissSkipsJobGates(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+
+	store := NewStore(configDir)
+	item, err := store.Add(Item{
+		ID: "q-dismiss", ProgramID: "p1", Title: "Stale handoff", Status: StatusOpen,
+		CreatedAt: "2026-07-07T00:00:00Z", Source: SourceManual,
+		ExecutionJobID: "job-still-running",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Close would fail without job done; Dismiss must succeed with evidence.
+	if _, err := store.Close(item.ID, CloseRequest{
+		CompletionEvidence: []string{"operator: tried close"},
+	}, false); err == nil {
+		t.Fatal("expected Close to require completed execution job")
+	}
+
+	closed, err := store.Dismiss(item.ID, DismissRequest{
+		CompletionEvidence: []string{"operator: fleet already clean; handoff stale"},
+		Reason:             "stale",
+	})
+	if err != nil {
+		t.Fatalf("Dismiss: %v", err)
+	}
+	if closed.Status != StatusClosed {
+		t.Fatalf("expected closed, got %+v", closed)
+	}
+	if !hasEvidence(closed.CompletionEvidence, "dismiss:stale") {
+		t.Fatalf("expected dismiss:stale tag, got %+v", closed.CompletionEvidence)
+	}
+}
+
+func TestLegacyJSONLoadsWithDefaults(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	dataDir := filepath.Join(dir, "data")
+	os.Setenv("PLATFORM_DATA_DIR", dataDir)
+	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	path := filepath.Join(dataDir, "operate", "queue.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"items":[{"id":"legacy","program_id":"p","lane":"release","title":"Legacy","status":"open","created_at":"2026-01-01T00:00:00Z"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	list, err := NewStore(configDir).List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := list.Open[0]
+	if got.OperateLane != "release" || got.HandoffKind != HandoffOneOff || got.RiskLevel != RiskLow {
+		t.Fatalf("legacy normalization failed: %+v", got)
+	}
+}
+
+func TestStructuredValidationRejectsInvalidEnumsAndTask(t *testing.T) {
+	base := EnqueueOperateQueueRequestForTest()
+	base.HandoffKind = "forever"
+	if err := ValidateStructuredHandoff(base); err == nil {
+		t.Fatal("expected invalid handoff_kind")
+	}
+	base = EnqueueOperateQueueRequestForTest()
+	base.AgentTaskID = "not-in-catalog"
+	if err := ValidateStructuredHandoff(base); err == nil {
+		t.Fatal("expected invalid agent_task_id")
+	}
+}
+
+func TestExecutionAndVerifiedClose(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	store := NewStore(configDir)
+	item, err := store.Add(Item{
+		ID: "execution", ProgramID: "p", Title: "Execute", Status: StatusOpen,
+		HandoffKind: HandoffOneOff, CreatedAt: "2026-01-01T00:00:00Z",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err = store.RecordExecution(item.ID, "job-1")
+	if err != nil || item.ExecutionJobID != "job-1" {
+		t.Fatalf("RecordExecution: item=%+v err=%v", item, err)
+	}
+	req := CloseRequest{CompletionEvidence: []string{"job:job-1", "post_fix_verification:passed"}}
+	if _, err := store.Close(item.ID, req, false); err == nil {
+		t.Fatal("expected incomplete job rejection")
+	}
+	if _, err := store.Close(item.ID, req, true); err == nil {
+		t.Fatal("expected post-fix verification rejection")
+	}
+	req.PostFixVerificationPassed = true
+	closed, err := store.Close(item.ID, req, true)
+	if err != nil || closed.ExecutionJobID != "job-1" || len(closed.CompletionEvidence) != 2 {
+		t.Fatalf("verified close: item=%+v err=%v", closed, err)
+	}
+}
+
+func TestRecurringSetupRequiresSetupEvidence(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	store := NewStore(configDir)
+	item, err := store.Add(Item{
+		ID: "recurring", ProgramID: "p", Title: "Schedule", Status: StatusOpen,
+		HandoffKind: HandoffRecurringSetup, CreatedAt: "2026-01-01T00:00:00Z",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Close(item.ID, CloseRequest{CompletionEvidence: []string{"checked"}}, false); err == nil {
+		t.Fatal("expected recurring evidence rejection")
+	}
+	if _, err := store.Close(item.ID, CloseRequest{CompletionEvidence: []string{"schedule: nightly-health verified"}}, false); err != nil {
+		t.Fatalf("expected recurring close success: %v", err)
+	}
+}
+
+func EnqueueOperateQueueRequestForTest() EnqueueRequest {
+	return EnqueueRequest{
+		ProgramID: "p", Title: "Handoff", OperateLane: "governance",
+		HandoffKind: HandoffOneOff, Reason: "reason",
+		AcceptanceCriteria: []string{"accepted"}, VerificationSteps: []string{"verified"},
+		RiskLevel: RiskLow,
 	}
 }
 

@@ -1,8 +1,11 @@
 import type { StartRunRequest } from './types.js'
 import {
+  buildDailyOpsChecklistRunPrompt,
+  buildDataLayerRecoverRunnerPrompt,
   buildDefectPatternRemediateRunnerPrompt,
   buildDeliverStgRecoverRunnerPrompt,
   buildGitopsConfigRepairRunnerPrompt,
+  buildMassiveFeedRecoverRunnerPrompt,
   buildPlatformSelfHealthRecoverRunnerPrompt,
   buildRegistryPullRecoverRunnerPrompt,
   buildStalePipelineTriageRunnerPrompt,
@@ -27,7 +30,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -100,6 +103,36 @@ function buildNightlyDriftAutofixPrompt(req: StartRunRequest): string {
   return lines.join('\n')
 }
 
+function buildGitDirtyRemediatePrompt(req: StartRunRequest): string {
+  const body = req.prompt?.trim() ?? ''
+  const lines: string[] = [
+    'You are the Bifrost Git Dirty remediation agent.',
+    'You clear Engineer Fleet dirty_repos via Git Bridge — with operator approval. You do NOT auto-clean.',
+    '',
+    '## Task',
+    body !== ''
+      ? body
+      : 'Review dirty repos, propose commit (or optional stash), wait for operator approval, then act.',
+    '',
+    '## Required playbook',
+    '1. git_workspace_status — list dirty repos, files, +N/−M.',
+    '2. git_diff — summarize changes per dirty repo.',
+    '3. Choose path:',
+    '   A) Propose commit (default): draft a clear multi-repo commit message → request_operator_approval(commit_message=...) → on approve: git_commit → optionally git_push if operator asked.',
+    '   B) Stash to clear Fleet (only if operator/prompt asks): request_operator_approval with note describing stash intent → on approve: git_stash (never drop).',
+    '4. Re-check git_workspace_status — report remaining dirty repos.',
+    '',
+    '## Safety',
+    '- NEVER call git_commit or git_stash without prior request_operator_approval in this run.',
+    '- NEVER discard Owner WIP (no git reset --hard, no stash drop, no force push).',
+    '- D10: do not enable live trading.',
+    '- This is NOT a magic "AI Fix that clears dirty" — operator must approve the commit/stash message.',
+    '',
+    'Begin with git_workspace_status, then present a propose-commit (or stash) plan.',
+  ]
+  return lines.join('\n')
+}
+
 function buildOperatorPlaneRemediatePrompt(req: StartRunRequest): string {
   const body = req.prompt?.trim() ?? ''
   const lines: string[] = [
@@ -109,15 +142,29 @@ function buildOperatorPlaneRemediatePrompt(req: StartRunRequest): string {
     '## Task',
     body !== '' ? body : 'Diagnose and fix Operator Plane bridge/deploy errors.',
     '',
-    '## Safety',
-    '- Do NOT schedule Git Bridge or remediation runner into K8s — L-1 fate isolation is mandatory.',
+    '## Runners HA playbook',
+    '1. get_agent_bridge + get_remediation_health — confirm primary/standby runner roles and heartbeats.',
+    '2. peer_agent_health — if peer :8781 is down, wait for launchd peer_watchdog (~60s) before acting.',
+    '3. If peer still down: restart_peer_agent (SSH kickstart). Re-check get_agent_bridge.',
+    '4. If both runners down: request_operator_manual_steps on both Mac Minis (launchd bifrost remediation-runner).',
+    '',
+    '## Git Bridge / deploy playbook',
     '- Use request_operator_manual_steps for Mac Pro host actions (launchd, .env edits, make start, git-bridge daemon).',
     '- Use git_* tools only after Git Bridge is reachable from this runner.',
-    '- Do not run Platform Release unless operator explicitly asks.',
     '',
-    'Begin with diagnosis, then manual steps for host fixes, then verify git_workspace_status and report.',
+    '## Safety',
+    '- Do NOT schedule Git Bridge or remediation runner into K8s — L-1 fate isolation is mandatory.',
+    '- Do not run Platform Release unless operator explicitly asks.',
+    '- D10: do not enable live trading / scale daemon for execution.',
+    '',
+    'Begin with diagnosis, then HA/manual steps, then verify get_agent_bridge + git_workspace_status and report.',
   ]
   return lines.join('\n')
+}
+
+function promptMentions(req: StartRunRequest, ...needles: string[]): boolean {
+  const hay = `${req.scope ?? ''} ${req.prompt ?? ''}`.toLowerCase()
+  return needles.some(n => hay.includes(n.toLowerCase()))
 }
 
 function buildReleasePrompt(req: StartRunRequest): string {
@@ -343,6 +390,9 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   if (req.scope === 'operator-plane-remediate') {
     return buildOperatorPlaneRemediatePrompt(req)
   }
+  if (req.scope === 'git-dirty-remediate') {
+    return buildGitDirtyRemediatePrompt(req)
+  }
   if (req.scope === 'release') {
     return buildReleasePrompt(req)
   }
@@ -378,6 +428,15 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
   if (req.scope === 'satellite-bus-ingest-triage') {
     return buildAgentDeskPrompt(req)
+  }
+  if (req.scope === 'daily-ops-checklist-run') {
+    return buildDailyOpsChecklistRunPrompt(req)
+  }
+  if (req.scope === 'massive-feed-recover' || promptMentions(req, 'Playbook: massive-feed-recover')) {
+    return buildMassiveFeedRecoverRunnerPrompt(req)
+  }
+  if (req.scope === 'data-layer-recover' || promptMentions(req, 'Playbook: data-layer-recover')) {
+    return buildDataLayerRecoverRunnerPrompt(req)
   }
 
   const issueList = Array.isArray(req.issues) ? req.issues : []
@@ -418,6 +477,7 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
     '- Deleting Failed/Completed/debug pods (e.g. node-debugger-*) is always safe when they are clearly garbage.',
     '- rollout restart is safe for bifrost-stg/prod Deployments when pods are crash-looping.',
     '- Tekton PipelineRun step pods may fail due to upstream build issues — diagnose logs before deleting.',
+    '- For terminal (Failed/Succeeded) PipelineRuns with stale Error pods: use delete_pipeline_run to remove the CR and its pods. This is safe when the run is already terminal and the target deployment is healthy. Requires request_operator_approval first.',
     '- MinIO (data/minio): often Pending due to nfs-hot PVC or postgres-role node binding — check events before restart.',
     '- CNPG (bifrost-postgres-*): second instance may be forming; do not delete primary without operator approval.',
     '- Kubeconfig secret missing (reachability "fail", detail mentions "/var/kubeconfig"): call sync_cluster_kubeconfig to create the bifrost-platform-kubeconfig Secret. Requires operator approval first.',

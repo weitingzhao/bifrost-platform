@@ -26,9 +26,19 @@ type AgentSessionConfig struct {
 }
 
 type OperateQueueItemBlueprint struct {
-	ID          string `yaml:"id" json:"id"`
-	Title       string `yaml:"title" json:"title"`
-	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	ID                 string   `yaml:"id" json:"id"`
+	SourceLaneID       string   `yaml:"source_lane_id,omitempty" json:"source_lane_id,omitempty"`
+	OperateLane        string   `yaml:"operate_lane,omitempty" json:"operate_lane,omitempty"`
+	Title              string   `yaml:"title" json:"title"`
+	Description        string   `yaml:"description,omitempty" json:"description,omitempty"`
+	HandoffKind        string   `yaml:"handoff_kind,omitempty" json:"handoff_kind,omitempty"`
+	Reason             string   `yaml:"reason,omitempty" json:"reason,omitempty"`
+	AgentTaskID        string   `yaml:"agent_task_id,omitempty" json:"agent_task_id,omitempty"`
+	AcceptanceCriteria []string `yaml:"acceptance_criteria,omitempty" json:"acceptance_criteria,omitempty"`
+	VerificationSteps  []string `yaml:"verification_steps,omitempty" json:"verification_steps,omitempty"`
+	RiskLevel          string   `yaml:"risk_level,omitempty" json:"risk_level,omitempty"`
+	Owner              string   `yaml:"owner,omitempty" json:"owner,omitempty"`
+	DueAt              string   `yaml:"due_at,omitempty" json:"due_at,omitempty"`
 }
 
 type PostCompletionBlueprint struct {
@@ -193,12 +203,12 @@ func promptForPhase(bp *ProgramBlueprint, phaseID string) string {
 		}
 		if strings.TrimSpace(p.PromptTemplate) != "" {
 			return renderPrompt(p.PromptTemplate, map[string]string{
-				"id":           bp.ID,
-				"skill_path":   bp.SkillPath,
-				"workspace":    bp.Workspace,
-				"phase_id":     p.ID,
-				"phase_title":  p.Title,
-				"verify_cmd":   p.VerifyCmd,
+				"id":          bp.ID,
+				"skill_path":  bp.SkillPath,
+				"workspace":   bp.Workspace,
+				"phase_id":    p.ID,
+				"phase_title": p.Title,
+				"verify_cmd":  p.VerifyCmd,
 			})
 		}
 		break

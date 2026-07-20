@@ -41,34 +41,55 @@ type AgentSessionRecord struct {
 }
 
 type PostCompletionItem struct {
-	ID          string `json:"id"`
-	ProgramID   string `json:"program_id"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Status      string `json:"status"` // pending_review | approved | rejected
-	CreatedAt   string `json:"created_at"`
-	ApprovedAt  string `json:"approved_at,omitempty"`
-	ApprovedBy  string `json:"approved_by,omitempty"`
+	ID                 string   `json:"id"`
+	ProgramID          string   `json:"program_id"`
+	SourceLaneID       string   `json:"source_lane_id,omitempty"`
+	OperateLane        string   `json:"operate_lane,omitempty"`
+	Title              string   `json:"title"`
+	Description        string   `json:"description,omitempty"`
+	HandoffKind        string   `json:"handoff_kind,omitempty"`
+	Reason             string   `json:"reason,omitempty"`
+	AgentTaskID        string   `json:"agent_task_id,omitempty"`
+	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
+	VerificationSteps  []string `json:"verification_steps,omitempty"`
+	RiskLevel          string   `json:"risk_level,omitempty"`
+	Owner              string   `json:"owner,omitempty"`
+	DueAt              string   `json:"due_at,omitempty"`
+	ExecutionJobID     string   `json:"execution_job_id,omitempty"`
+	CompletionEvidence []string `json:"completion_evidence,omitempty"`
+	Status             string   `json:"status"` // pending_review | approved | rejected | in_operate | closed
+	CreatedAt          string   `json:"created_at"`
+	ApprovedAt         string   `json:"approved_at,omitempty"`
+	ApprovedBy         string   `json:"approved_by,omitempty"`
+	RejectedAt         string   `json:"rejected_at,omitempty"`
+	RejectedBy         string   `json:"rejected_by,omitempty"`
+	DecisionNote       string   `json:"decision_note,omitempty"`
 }
 
 type ProgramStateRecord struct {
-	Version            string                 `json:"version"`
-	ProgramID          string                 `json:"program_id"`
-	LaneID             string                 `json:"lane_id,omitempty"`
-	Phases             []Phase                `json:"phases"`
-	ActiveJob          *Job                   `json:"active_job"`
-	History            []Job                  `json:"history"`
-	PhaseSignOffs      []PhaseSignOffRecord   `json:"phase_sign_offs,omitempty"`
-	PhaseProgress      []PhaseProgressRecord  `json:"phase_progress,omitempty"`
-	AgentSessions      []AgentSessionRecord   `json:"agent_sessions,omitempty"`
-	PostCompletion     *PostCompletionState   `json:"post_completion,omitempty"`
-	UpdatedAt          string                 `json:"updated_at"`
+	Version        string                `json:"version"`
+	ProgramID      string                `json:"program_id"`
+	LaneID         string                `json:"lane_id,omitempty"`
+	Phases         []Phase               `json:"phases"`
+	ActiveJob      *Job                  `json:"active_job"`
+	History        []Job                 `json:"history"`
+	PhaseSignOffs  []PhaseSignOffRecord  `json:"phase_sign_offs,omitempty"`
+	PhaseProgress  []PhaseProgressRecord `json:"phase_progress,omitempty"`
+	AgentSessions  []AgentSessionRecord  `json:"agent_sessions,omitempty"`
+	PostCompletion *PostCompletionState  `json:"post_completion,omitempty"`
+	UpdatedAt      string                `json:"updated_at"`
 }
 
 type PostCompletionState struct {
-	SubmittedAt     string   `json:"submitted_at,omitempty"`
-	NewCapabilities []string `json:"new_capabilities,omitempty"`
-	NewRisks        []string `json:"new_risks,omitempty"`
+	SubmittedAt         string                      `json:"submitted_at,omitempty"`
+	AssessedAt          string                      `json:"assessed_at,omitempty"`
+	AssessedBy          string                      `json:"assessed_by,omitempty"`
+	AssessmentStatus    string                      `json:"assessment_status,omitempty"`
+	NoHandoffReason     string                      `json:"no_handoff_reason,omitempty"`
+	SuggestedAssessment string                      `json:"suggested_assessment,omitempty"`
+	NewCapabilities     []string                    `json:"new_capabilities,omitempty"`
+	NewRisks            []string                    `json:"new_risks,omitempty"`
+	SuggestedItems      []OperateQueueItemBlueprint `json:"suggested_items,omitempty"`
 }
 
 type ActiveProgramRecord struct {
@@ -256,6 +277,14 @@ func (s *FileStore) LoadPendingPostCompletion() ([]PostCompletionItem, error) {
 	}
 	if items == nil {
 		return []PostCompletionItem{}, nil
+	}
+	for i := range items {
+		if items[i].HandoffKind == "" {
+			items[i].HandoffKind = "one_off"
+		}
+		if items[i].RiskLevel == "" {
+			items[i].RiskLevel = "low"
+		}
 	}
 	return items, nil
 }

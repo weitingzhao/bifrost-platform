@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,9 +13,15 @@ import (
 )
 
 type Handler struct {
-	runner *RunnerClient
-	audit  *actuation.AuditLog
-	store  *JobStore
+	runner     *RunnerClient
+	audit      *actuation.AuditLog
+	store      *JobStore
+	onTerminal TerminalObserver
+}
+
+// TerminalObserver is notified when a remediation job reaches a terminal status.
+type TerminalObserver interface {
+	OnRemediationTerminal(job Job)
 }
 
 func NewHandler(audit *actuation.AuditLog) *Handler {
@@ -27,6 +34,20 @@ func NewHandler(audit *actuation.AuditLog) *Handler {
 
 // Store returns the underlying JobStore for cross-package consumers (e.g. retrospective analyzer).
 func (h *Handler) Store() *JobStore { return h.store }
+
+func (h *Handler) BindTerminalObserver(obs TerminalObserver) {
+	h.onTerminal = obs
+}
+
+func (h *Handler) notifyTerminal(job *Job) {
+	if h.onTerminal == nil || job == nil {
+		return
+	}
+	switch job.Status {
+	case JobDone, JobFailed, JobCancelled:
+		h.onTerminal.OnRemediationTerminal(*job)
+	}
+}
 
 func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	var req StartRequest
@@ -46,23 +67,33 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		Prompt:           req.Prompt,
 	}
 
-	job, err := h.runner.Start(r.Context(), runReq)
+	job, err := h.StartInternal(r.Context(), runReq)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{
-			"error":   "remediation runner unavailable",
-			"detail":  err.Error(),
-			"hint":    "Start sidecar: make dev-agent",
+			"error":  "remediation runner unavailable",
+			"detail": err.Error(),
+			"hint":   "Start sidecar: make dev-agent",
 		})
 		return
 	}
 
-	job.Actor = principal.Name
-	job.Scope = req.Scope
-	h.store.Put(*job)
-
 	h.audit.Record(r, "remediation.start", job.ID, "started", req.Scope)
 
 	writeJSON(w, http.StatusAccepted, job)
+}
+
+// StartInternal starts a runner job and archives it (used by HTTP + checklist dispatch).
+func (h *Handler) StartInternal(ctx context.Context, runReq StartRunnerRequest) (*Job, error) {
+	job, err := h.runner.Start(ctx, runReq)
+	if err != nil {
+		return nil, err
+	}
+	if runReq.Actor != "" {
+		job.Actor = runReq.Actor
+	}
+	job.Scope = runReq.Scope
+	h.store.Put(*job)
+	return job, nil
 }
 
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +115,11 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
 		return
 	}
+	prev, _ := h.store.Get(id)
 	h.store.Put(*job)
+	if prev == nil || prev.Status != job.Status {
+		h.notifyTerminal(job)
+	}
 	writeJSON(w, http.StatusOK, job)
 }
 
@@ -175,6 +210,7 @@ func (h *Handler) HandleStream(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 		if envelope.Type == "job" && envelope.Job != nil {
+			prev, _ := h.store.Get(envelope.Job.ID)
 			h.store.Put(*envelope.Job)
 			if envelope.Job.Status == JobDone {
 				h.audit.RecordDirect(
@@ -194,6 +230,9 @@ func (h *Handler) HandleStream(w http.ResponseWriter, r *http.Request) {
 					"failed",
 					envelope.Job.Error,
 				)
+			}
+			if prev == nil || prev.Status != envelope.Job.Status {
+				h.notifyTerminal(envelope.Job)
 			}
 		}
 		_, writeErr := w.Write([]byte("data: " + string(payload) + "\n\n"))

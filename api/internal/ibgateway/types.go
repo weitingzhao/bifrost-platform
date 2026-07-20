@@ -33,11 +33,12 @@ type StatusResponse struct {
 	Deployment     DeploymentStatus   `json:"deployment"`
 	RedisReach     probe.Reachability `json:"redis_reachability"`
 	Slots          []SlotStatus       `json:"slots"`
-	IngestorHealth map[string]string  `json:"ingestor_health,omitempty"`
-	AccountHealth  map[string]string  `json:"account_health,omitempty"`
-	OperatorHealth map[string]string  `json:"operator_health,omitempty"`
-	SampleTick     string             `json:"sample_tick_nvda,omitempty"`
-	ConsumerGroup  string             `json:"operator_consumer_group,omitempty"`
+	IngestorHealth  map[string]string `json:"ingestor_health,omitempty"`
+	AccountHealth   map[string]string `json:"account_health,omitempty"`
+	OperatorHealth  map[string]string `json:"operator_health,omitempty"`
+	SampleTick      string            `json:"sample_tick_nvda,omitempty"`
+	AccountSnapshot string            `json:"account_snapshot,omitempty"`
+	ConsumerGroup   string            `json:"operator_consumer_group,omitempty"`
 	Cutover        *CutoverStatus     `json:"cutover,omitempty"`
 	Autonomy       string             `json:"autonomy"`
 	Error          string             `json:"error,omitempty"`

@@ -22,7 +22,21 @@ export function useLaneCatalog() {
     const current = allWorkLanes()
     const changed =
       current.length !== mapped.length ||
-      mapped.some((l, i) => current[i]?.id !== l.id || current[i]?.label !== l.label)
+      mapped.some((l, i) => {
+        const cur = current[i]
+        if (cur == null) return true
+        return (
+          cur.id !== l.id ||
+          cur.label !== l.label ||
+          cur.shortLabel !== l.shortLabel ||
+          cur.description !== l.description ||
+          cur.componentLine !== l.componentLine ||
+          cur.trackType !== l.trackType ||
+          cur.track !== l.track ||
+          cur.agentMode !== l.agentMode ||
+          cur.workIntent !== l.workIntent
+        )
+      })
     if (changed) {
       setLaneCatalog(mapped)
     }

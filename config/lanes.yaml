@@ -1,263 +1,263 @@
-# Briefing work lanes — single source of truth (git).
-# Mutate via POST /api/v1/lanes (schema-validated); do not hardcode in Console TS.
 version: "1"
 lanes:
-  - id: console-api
-    track: build
-    component_line: rocket
-    track_type: build
-    label: Console & platform-api
-    short_label: Console
-    description: Ops Console pages, Briefing/Control Room, auth, audit, actuation routes.
-    agent_mode: Ops
-    work_intent: feature
-
-  - id: cluster-infra
-    track: build
-    component_line: rocket
-    track_type: build
-    label: Cluster & K3s tooling
-    short_label: Cluster
-    description: Node lifecycle, workload actuation, metrics-server, observability stack UI.
-    agent_mode: Ops
-    work_intent: cluster
-
-  - id: mcp-gitops
-    track: build
-    component_line: rocket
-    track_type: build
-    label: GitOps & MCP (P3–P5)
-    short_label: GitOps
-    description: Argo/Tekton execution, MCP server implementation (per MCP Contract), Agent SDK integration, Vision milestones V1–V5.
-    agent_mode: Ops
-    work_intent: feature
-
-  - id: cicd-delivery
-    track: build
-    component_line: rocket
-    track_type: build
-    label: CI/CD bootstrap (P6)
-    short_label: CI/CD
-    description: L0/L1/L2 bootstrap model — CI gates (Tekton Trigger), deliver-prod pipeline, platform prod overlay, self-health probe, gate→spine closure, escape hatch runbook.
-    agent_mode: Ops
-    work_intent: feature
-
-  - id: compose-k3s
-    track: migrate
-    component_line: satellite
-    track_type: migrate
-    label: Compose → K3s lift-and-shift
-    short_label: K3s
-    description: STG v2 + prod overlay on K3s (CLOSED). Native refactor → trade-k8s-native lane.
-    agent_mode: Ops
-    work_intent: ops
-
-  - id: trade-k8s-native
-    track: migrate
-    component_line: satellite
-    track_type: migrate
-    label: Trade K8s-native + IB Edge
-    short_label: K8s native
-    description: "Ideal K8s runtime: Traefik Ingress, Ops kubernetes executor, IB Lease active-standby, 3 gateways/env, dev mock. Authority: migrate-waves YAML."
-    agent_mode: Ops
-    work_intent: cluster
-
-  - id: data-layer-k3s
-    track: migrate
-    component_line: satellite
-    track_type: migrate
-    label: Data layer (PG + Redis)
-    short_label: Data
-    description: "Lift stateful services to data NS: CloudNativePG (R-DV1 DBs), redis-live/queue per env, NAS backups. Spine stream data-layer-k3s."
-    agent_mode: Ops
-    work_intent: cluster
-
-  - id: legacy-retire
-    track: migrate
-    component_line: satellite
-    track_type: migrate
-    label: Legacy retirement (Phase 3)
-    short_label: Retire
-    description: "SIGNED 2026-06-29 (decision D8): UI side-by-side gate dropped (Legacy already stopped; Phase 2B 9/9 domains business-equivalent). Legacy runtime stopped, bifrost-trader-engine NAS-archived read-only. UI polish continues as ordinary Design System work."
-    agent_mode: Ops
-    work_intent: ops
-
-  - id: trade-stack
-    track: migrate
-    component_line: satellite
-    track_type: maintain
-    label: Trade stack verification
-    short_label: Verify
-    description: Backend repos + frontend pages — reference closed streams for regression.
-    agent_mode: Product
-    work_intent: frontend
-
-  - id: platform-gitops
-    track: automate
-    component_line: engineer
-    track_type: build
-    label: Platform GitOps & containerization
-    short_label: GitOps
-    description: Gitea mirror for bifrost-platform, Dockerfile (api + runner), K8s overlay, Argo CD Application, Tekton deliver-platform pipeline. Enables Mac Pro Cursor dev → Gitea → K3s auto-deploy.
-    agent_mode: Ops
-    work_intent: automate
-
-  - id: agent-infra
-    track: automate
-    component_line: engineer
-    track_type: build
-    label: Agent host & Gateway
-    short_label: Infra
-    description: Hermes Gateway on Mac Mini, CTRL NODE Bridge, Staleguard/ctxharness tooling, iMessage/Telegram channel.
-    agent_mode: Ops
-    work_intent: automate
-
-  - id: drift-remediation
-    track: automate
-    component_line: engineer
-    track_type: maintain
-    label: Drift detection & remediation
-    short_label: Drift
-    description: "Nightly catalog drift scan, deterministic + LLM comparison, auto-fix PR, Owner morning briefing. Retrospective Agent: cross-job pattern analysis → identify systemic platform defects → self-evolving fix proposals."
-    agent_mode: Ops
-    work_intent: automate
-
-  - id: agent-services
-    track: automate
-    component_line: engineer
-    track_type: build
-    label: Agent services (MCP + Trade)
-    short_label: Services
-    description: Agent Desk in Console, Hermes MCP bridge, Trade advisory notifications.
-    agent_mode: Ops
-    work_intent: automate
-
-  - id: network-server
-    track: infra
-    component_line: ground
-    track_type: build
-    label: Server LAN upgrade (router + switch)
-    short_label: Server LAN
-    description: "UCG Max + USW-Pro-Max-24 deployment: VLAN 10/20/50, 2.5G uplinks, K3s node validation, kube-vip VIP."
-    agent_mode: Ops
-    work_intent: ops
-
-  - id: network-wifi
-    track: infra
-    component_line: ground
-    track_type: build
-    label: WiFi upgrade (U7 Pro + U6 Mesh)
-    short_label: WiFi
-    description: "Replace Eero with UniFi APs: per-floor rollout, MoCA backhaul, VLAN SSIDs (Bifrost/Family/vision), coverage benchmark."
-    agent_mode: Ops
-    work_intent: ops
-
-  - id: ai-network
-    track: infra
-    component_line: ground
-    track_type: build
-    label: AI network autonomy
-    short_label: AI Net
-    description: UniFi MCP Server (REST API read/write), Ops Console Network dashboard, anomaly auto-response, predictive maintenance, self-healing network.
-    agent_mode: Ops
-    work_intent: automate
-
-  - id: governance
-    track: operate
-    component_line: operations
-    track_type: maintain
-    label: Governance & spine
-    short_label: Gov
-    description: Matrix probes, spine milestones, infra YAML, actuation guardrails, Vision/Blueprint/MCP Contract alignment.
-    agent_mode: Ops
-    work_intent: ops
-
-  - id: troubleshoot
-    track: operate
-    component_line: operations
-    track_type: maintain
-    label: Troubleshooting
-    short_label: Debug
-    description: Failing probes, cluster reachability, workload errors, connectivity.
-    agent_mode: Ops
-    work_intent: debug
-
-  - id: release
-    track: operate
-    component_line: operations
-    track_type: release
-    label: Release & promote
-    short_label: Release
-    description: Flywheel readiness, cutover blockers, release gate, prod matrix sign-off.
-    agent_mode: Promote
-    work_intent: release
-
-  - id: business-advisory
-    track: operate
-    component_line: operations
-    track_type: maintain
-    label: Trade analysis & advisory
-    short_label: Biz
-    description: Read-only portfolio/market/strategy analysis; Greeks monitoring, SEPA research, risk advisory via Trade APIs.
-    agent_mode: Ops
-    work_intent: business
-
-  - id: platform-health
-    track: operate
-    component_line: rocket
-    track_type: maintain
-    label: Platform health & observability
-    short_label: Health
-    description: Console uptime, API latency, cluster workload readiness, self-health probes, alert triage.
-    agent_mode: Ops
-    work_intent: ops
-
-  - id: trade-features
-    track: build
-    component_line: satellite
-    track_type: build
-    label: Trade feature development
-    short_label: Features
-    description: New Trade frontend pages, API endpoint enhancements, Dense UI improvements — post-migration feature work.
-    agent_mode: Product
-    work_intent: feature
-
-  - id: network-monitoring
-    track: infra
-    component_line: ground
-    track_type: maintain
-    label: Network monitoring & health
-    short_label: Monitor
-    description: UniFi device health, bandwidth tracking, anomaly detection, predictive maintenance, SLA dashboards.
-    agent_mode: Ops
-    work_intent: ops
-
-  - id: polygon-vendor
-    track: automate
-    component_line: subcontractor
-    track_type: build
-    label: Polygon.io data pipeline
-    short_label: Polygon
-    description: Options/stock WebSocket feeds, historical OHLCV, snapshot APIs, rate-limit management, data quality.
-    agent_mode: Ops
-    work_intent: feature
-
-  - id: ib-vendor
-    track: automate
-    component_line: subcontractor
-    track_type: build
-    label: Interactive Brokers lifecycle
-    short_label: IB
-    description: TWS/Gateway version management, API compatibility, client ID allocation, IB Lease active-standby.
-    agent_mode: Ops
-    work_intent: feature
-
-  - id: vendor-health
-    track: operate
-    component_line: subcontractor
-    track_type: maintain
-    label: Vendor SLA & API health
-    short_label: Health
-    description: Third-party API uptime monitoring, latency tracking, SLA compliance, incident response playbooks.
-    agent_mode: Ops
-    work_intent: ops
+    - id: console-api
+      track: build
+      component_line: rocket
+      track_type: build
+      label: Console & platform-api
+      short_label: Console
+      description: Ops Console pages, Briefing/Control Room, auth, audit, actuation routes.
+      agent_mode: Ops
+      work_intent: feature
+    - id: cluster-infra
+      track: build
+      component_line: rocket
+      track_type: build
+      label: Cluster & K3s tooling
+      short_label: Cluster
+      description: Node lifecycle, workload actuation, metrics-server, observability stack UI.
+      agent_mode: Ops
+      work_intent: cluster
+    - id: mcp-gitops
+      track: build
+      component_line: rocket
+      track_type: build
+      label: GitOps & MCP (P3–P5)
+      short_label: GitOps
+      description: Argo/Tekton execution, MCP server implementation (per MCP Contract), Agent SDK integration, Vision milestones V1–V5.
+      agent_mode: Ops
+      work_intent: feature
+    - id: cicd-delivery
+      track: build
+      component_line: rocket
+      track_type: build
+      label: CI/CD bootstrap (P6)
+      short_label: CI/CD
+      description: L0/L1/L2 bootstrap model — CI gates (Tekton Trigger), deliver-prod pipeline, platform prod overlay, self-health probe, gate→spine closure, escape hatch runbook.
+      agent_mode: Ops
+      work_intent: feature
+    - id: compose-k3s
+      track: migrate
+      component_line: satellite
+      track_type: migrate
+      label: Compose → K3s lift-and-shift
+      short_label: K3s
+      description: STG v2 + prod overlay on K3s (CLOSED). Native refactor → trade-k8s-native lane.
+      agent_mode: Ops
+      work_intent: ops
+    - id: trade-k8s-native
+      track: migrate
+      component_line: satellite
+      track_type: migrate
+      label: Trade K8s-native + IB Edge
+      short_label: K8s native
+      description: 'Ideal K8s runtime: Traefik Ingress, Ops kubernetes executor, IB Lease active-standby, 3 gateways/env, dev mock. Authority: migrate-waves YAML.'
+      agent_mode: Ops
+      work_intent: cluster
+    - id: data-layer-k3s
+      track: migrate
+      component_line: satellite
+      track_type: migrate
+      label: Data layer (PG + Redis)
+      short_label: Data
+      description: 'Lift stateful services to data NS: CloudNativePG (R-DV1 DBs), redis-live/queue per env, NAS backups. Spine stream data-layer-k3s.'
+      agent_mode: Ops
+      work_intent: cluster
+    - id: legacy-retire
+      track: migrate
+      component_line: satellite
+      track_type: migrate
+      label: Legacy retirement (Phase 3)
+      short_label: Retire
+      description: 'SIGNED 2026-06-29 (decision D8): UI side-by-side gate dropped (Legacy already stopped; Phase 2B 9/9 domains business-equivalent). Legacy runtime stopped, bifrost-trader-engine NAS-archived read-only. UI polish continues as ordinary Design System work.'
+      agent_mode: Ops
+      work_intent: ops
+    - id: trade-stack
+      track: migrate
+      component_line: satellite
+      track_type: maintain
+      label: Trade stack verification
+      short_label: Verify
+      description: Backend repos + frontend pages — reference closed streams for regression.
+      agent_mode: Product
+      work_intent: frontend
+    - id: platform-gitops
+      track: automate
+      component_line: engineer
+      track_type: build
+      label: Platform GitOps & containerization
+      short_label: GitOps
+      description: Gitea mirror for bifrost-platform, Dockerfile (api + runner), K8s overlay, Argo CD Application, Tekton deliver-platform pipeline. Enables Mac Pro Cursor dev → Gitea → K3s auto-deploy.
+      agent_mode: Ops
+      work_intent: automate
+    - id: agent-infra
+      track: automate
+      component_line: engineer
+      track_type: build
+      label: Agent host & Gateway
+      short_label: Infra
+      description: Hermes Gateway on Mac Mini, CTRL NODE Bridge, Staleguard/ctxharness tooling, iMessage/Telegram channel.
+      agent_mode: Ops
+      work_intent: automate
+    - id: drift-remediation
+      track: automate
+      component_line: engineer
+      track_type: maintain
+      label: Drift detection & remediation
+      short_label: Drift
+      description: 'Nightly catalog drift scan, deterministic + LLM comparison, auto-fix PR, Owner morning briefing. Retrospective Agent: cross-job pattern analysis → identify systemic platform defects → self-evolving fix proposals.'
+      agent_mode: Ops
+      work_intent: automate
+    - id: agent-services
+      track: automate
+      component_line: engineer
+      track_type: build
+      label: Agent services (MCP + Trade)
+      short_label: Services
+      description: Agent Desk in Console, Hermes MCP bridge, Trade advisory notifications.
+      agent_mode: Ops
+      work_intent: automate
+    - id: network-server
+      track: infra
+      component_line: ground
+      track_type: build
+      label: Server LAN upgrade (router + switch)
+      short_label: Server LAN
+      description: 'UCG Max + USW-Pro-Max-24 deployment: VLAN 10/20/50, 2.5G uplinks, K3s node validation, kube-vip VIP.'
+      agent_mode: Ops
+      work_intent: ops
+    - id: network-wifi
+      track: infra
+      component_line: ground
+      track_type: build
+      label: WiFi upgrade (U7 Pro + U6 Mesh)
+      short_label: WiFi
+      description: 'Replace Eero with UniFi APs: per-floor rollout, MoCA backhaul, VLAN SSIDs (Bifrost/Family/vision), coverage benchmark.'
+      agent_mode: Ops
+      work_intent: ops
+    - id: ai-network
+      track: infra
+      component_line: ground
+      track_type: build
+      label: AI network autonomy
+      short_label: AI Net
+      description: UniFi MCP Server (REST API read/write), Ops Console Network dashboard, anomaly auto-response, predictive maintenance, self-healing network.
+      agent_mode: Ops
+      work_intent: automate
+    - id: governance
+      track: operate
+      component_line: operations
+      track_type: maintain
+      label: Governance & spine
+      short_label: Gov
+      description: Matrix probes, spine milestones, infra YAML, actuation guardrails, Vision/Blueprint/MCP Contract alignment.
+      agent_mode: Ops
+      work_intent: ops
+    - id: troubleshoot
+      track: operate
+      component_line: operations
+      track_type: maintain
+      label: Troubleshooting
+      short_label: Debug
+      description: Failing probes, cluster reachability, workload errors, connectivity.
+      agent_mode: Ops
+      work_intent: debug
+    - id: release
+      track: operate
+      component_line: operations
+      track_type: release
+      label: Release & promote
+      short_label: Release
+      description: Flywheel readiness, cutover blockers, release gate, prod matrix sign-off.
+      agent_mode: Promote
+      work_intent: release
+    - id: business-advisory
+      track: operate
+      component_line: operations
+      track_type: maintain
+      label: Trade analysis & advisory
+      short_label: Biz
+      description: Read-only portfolio/market/strategy analysis; Greeks monitoring, SEPA research, risk advisory via Trade APIs.
+      agent_mode: Ops
+      work_intent: business
+    - id: platform-health
+      track: operate
+      component_line: rocket
+      track_type: maintain
+      label: Platform health & observability
+      short_label: Health
+      description: Console uptime, API latency, cluster workload readiness, self-health probes, alert triage.
+      agent_mode: Ops
+      work_intent: ops
+    - id: trade-features
+      track: build
+      component_line: satellite
+      track_type: build
+      label: Trade feature development
+      short_label: Features
+      description: New Trade frontend pages, API endpoint enhancements, Dense UI improvements — post-migration feature work.
+      agent_mode: Product
+      work_intent: feature
+    - id: network-monitoring
+      track: infra
+      component_line: ground
+      track_type: maintain
+      label: Network monitoring & health
+      short_label: Monitor
+      description: UniFi device health, bandwidth tracking, anomaly detection, predictive maintenance, SLA dashboards.
+      agent_mode: Ops
+      work_intent: ops
+    - id: polygon-vendor
+      track: automate
+      component_line: subcontractor
+      track_type: build
+      label: Polygon.io data pipeline
+      short_label: Polygon
+      description: Options/stock WebSocket feeds, historical OHLCV, snapshot APIs, rate-limit management, data quality.
+      agent_mode: Ops
+      work_intent: feature
+    - id: ib-vendor
+      track: automate
+      component_line: subcontractor
+      track_type: build
+      label: Interactive Brokers lifecycle
+      short_label: IB
+      description: TWS/Gateway version management, API compatibility, client ID allocation, IB Lease active-standby.
+      agent_mode: Ops
+      work_intent: feature
+    - id: vendor-health
+      track: operate
+      component_line: subcontractor
+      track_type: maintain
+      label: Vendor SLA & API health
+      short_label: Health
+      description: Third-party API uptime monitoring, latency tracking, SLA compliance, incident response playbooks.
+      agent_mode: Ops
+      work_intent: ops
+    - id: celery
+      track: build
+      component_line: rocket
+      track_type: build
+      label: Celery 相关的队列实现方案
+      short_label: Celery 相关的队列实现方案
+      description: 需要你看一下目前卫星采用的backend 语言，我想你看一下关于Celery 部分实现的具体业务。基于这个，你先看看Trade System和Celery相关的代码，我们再来讨论
+      agent_mode: Ops
+      work_intent: feature
+    - id: qa-describe-first-4894
+      track: migrate
+      component_line: satellite
+      track_type: migrate
+      label: QA Trade bars pipeline
+      short_label: QA Trade bars
+      description: Migrate legacy trade daemon bars backfill to K8s-native worker — acceptance test lane
+      agent_mode: Ops
+      work_intent: feature
+    - id: trade-system-celery
+      track: build
+      component_line: rocket
+      track_type: build
+      label: 分析目前Trade System使用的Celery 相关的后台作业调度方案
+      short_label: 分析目前Trade System使用的Celer
+      description: 基于目前Trade System使用的Python语言，之前Trade采用的后台Task方案是Celery，在基于k8s的运行环境下，和Trade 系统的业务需求，最Ideal的Worker 方式还是Celery吗？如果是的话，那目前Celery在目前环境下的运行方式也是Ideal的方式吗？
+      agent_mode: Ops
+      work_intent: feature

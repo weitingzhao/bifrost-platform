@@ -2751,12 +2751,17 @@ html {
 .payload-coupling-hint {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--secondary);
+  margin: 0;
+}
+
+.payload-coupling-hint--readonly {
+  align-items: baseline;
 }
 
 .payload-coupling-hint--ok {
@@ -2771,13 +2776,8 @@ html {
   border-color: color-mix(in srgb, var(--color-lamp-red) 35%, var(--border));
 }
 
-.payload-coupling-hint__body {
-  flex: 1;
-  min-width: 12rem;
-}
-
 .payload-coupling-hint__headline {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   font-size: var(--text-dense-label);
@@ -2785,9 +2785,19 @@ html {
 }
 
 .payload-coupling-hint__detail {
-  margin-top: 0.25rem;
   font-size: var(--text-dense-meta);
   color: var(--muted-foreground);
+}
+
+.payload-coupling-hint__aside {
+  margin-left: auto;
+  font-size: var(--text-dense-caption);
+  color: var(--muted-foreground);
+}
+
+.payload-coupling-hint__body {
+  flex: 1;
+  min-width: 12rem;
 }
 
 .payload-coupling-hint__reasons {
@@ -2798,10 +2808,7 @@ html {
 }
 
 .payload-coupling-hint__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-left: auto;
+  display: none;
 }
 
 .promote-cutover-strip {
@@ -3057,6 +3064,33 @@ html {
   font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
   line-height: 1.4;
+}
+
+/* Current attention summary — auto-fit keeps every KPI visible at narrow widths. */
+.agent-desk-now {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--secondary) 45%, var(--card));
+  padding: 0.75rem 1rem;
+}
+.agent-desk-now--compact {
+  padding-block: 0.625rem;
+}
+.agent-desk-now__grid,
+.agent-desk-digest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  gap: 0.5rem;
+  min-width: 0;
+  margin-top: 0.625rem;
+}
+.agent-desk-now__metric {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 0.45rem;
+  background: var(--background);
+  padding: 0.5rem 0.625rem;
 }
 
 /* Composer section */
@@ -3332,6 +3366,32 @@ html {
 @keyframes agent-desk-cell-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+@media (max-width: 72rem) {
+  .agent-desk-shell--panel-open {
+    padding-right: 0;
+  }
+}
+
+@media (max-width: 42rem) {
+  .agent-desk-hero > div:first-child,
+  .agent-desk-tasks-section > div:first-child,
+  .agent-desk-timeline-group__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .agent-desk-status-bar,
+  .agent-desk-timeline-legend {
+    flex-wrap: wrap;
+  }
+
+  .agent-desk-now,
+  .agent-desk-composer-section,
+  .agent-desk-tasks-section {
+    padding-inline: 0.75rem;
+  }
 }
 
 /* Agent System map (Governance → Agent System) */
@@ -6267,4 +6327,34 @@ button.infra-stack-chip:hover {
   text-transform: uppercase;
   color: var(--task-mode-accent, #f59e0b);
 }
+
+/* Daily Ops: Checklist section → Fleet Board chip flash */
+@keyframes checklist-fleet-chip-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);
+    outline-color: color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+  25%,
+  75% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 70%, transparent);
+    outline-color: color-mix(in srgb, var(--primary) 80%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
+    outline-color: var(--primary);
+  }
+}
+
+.checklist-fleet-chip-flash {
+  outline: 1px solid transparent;
+  outline-offset: 1px;
+  animation: checklist-fleet-chip-flash 0.55s ease-in-out 3;
+  z-index: 1;
+}
+
+.checklist-fleet-cell-flash {
+  animation: checklist-fleet-chip-flash 0.55s ease-in-out 3;
+}
+
 

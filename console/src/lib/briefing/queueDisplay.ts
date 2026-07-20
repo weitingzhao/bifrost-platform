@@ -21,3 +21,13 @@ export function splitQueueByCompletion(items: QueueItem[]): {
   }
   return { active, completed }
 }
+
+/** One-line lane stage for pack headers (active/total + top status + completed count). */
+export function formatQueueStageSummary(items: QueueItem[]): string {
+  const { active, completed } = splitQueueByCompletion(items)
+  const total = items.length
+  const top = active[0]
+  const topPart =
+    top != null ? `top: [${top.status}] ${top.label}` : 'top: (none active)'
+  return `active ${active.length}/${total} · ${topPart} · completed: ${completed.length}`
+}

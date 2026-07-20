@@ -43,6 +43,12 @@ import {
 import { classifyPlatformIbGateway } from '@/lib/satellite/socketHealthSemantics'
 import type { TaskModeId } from '@/lib/task-mode/types'
 import type { ProdFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
+import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
+import {
+  DELIVER_STG_RECOVER_SCOPE,
+  PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
+} from '@/lib/agent/agentScopes'
+import { SATELLITE_BUS_INGEST_TRIAGE_SCOPE } from '@/lib/agent/satelliteBusIngestTriagePrompt'
 import {
   evaluatePromoteStatus,
   evaluateStgReleaseStatus,
@@ -229,7 +235,7 @@ export function isProdReleaseBlocked(signal: Signal): boolean {
   return signal === 'fail' || signal === 'degraded'
 }
 
-type EnvChip = { label: string; signal: Signal; detail: string }
+type EnvChip = { label: string; signal: Signal; detail: string; fixScope?: string }
 
 type EnvironmentReadinessPanelProps = {
   title: string
@@ -558,16 +564,37 @@ export function useSatelliteProdReadiness(enabled = true) {
     isLoading,
     prodDisabledReason,
     fixSignals: [
-      { label: 'Trade · K8s PROD', signal: k8s.signal, detail: k8s.detail },
-      { label: 'Ground · PG / Redis', signal: datastore.signal, detail: datastore.detail },
-      { label: 'Trade · APIs PROD', signal: tradeApis.signal, detail: tradeApis.detail },
-      { label: 'Trade · PROD matrix', signal: tradeSnapshot.signal, detail: tradeSnapshot.detail },
-      { label: 'Trade · PROD gate', signal: gate.signal, detail: gate.detail },
+      { label: 'Trade · K8s PROD', signal: k8s.signal, detail: k8s.detail, fixScope: PROD_ENV_FIX_SCOPE },
+      {
+        label: 'Ground · PG / Redis',
+        signal: datastore.signal,
+        detail: datastore.detail,
+        fixScope: PROD_ENV_FIX_SCOPE,
+      },
+      {
+        label: 'Trade · APIs PROD',
+        signal: tradeApis.signal,
+        detail: tradeApis.detail,
+        fixScope: PROD_ENV_FIX_SCOPE,
+      },
+      {
+        label: 'Trade · PROD matrix',
+        signal: tradeSnapshot.signal,
+        detail: tradeSnapshot.detail,
+        fixScope: PROD_ENV_FIX_SCOPE,
+      },
+      {
+        label: 'Trade · PROD gate',
+        signal: gate.signal,
+        detail: gate.detail,
+        fixScope: DELIVER_STG_RECOVER_SCOPE,
+      },
     ] as ProdFixSignal[],
     rocketFixSignal: {
       label: 'Rocket · IB socket',
       signal: rocket.signal,
       detail: rocket.detail,
+      fixScope: SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
     } as ProdFixSignal,
     prodNamespace: PROD_NS,
     stgNamespace: STG_NS,
@@ -614,10 +641,30 @@ export function useRocketProdReadiness(enabled = true) {
     isLoading,
     prodDisabledReason: prodBlocked ? 'Prod readiness blocked — fix environment first' : undefined,
     fixSignals: [
-      { label: 'K8s · Platform PROD NS', signal: k8sProd.signal, detail: k8sProd.detail },
-      { label: 'Self-health PROD', signal: selfProd.signal, detail: selfProd.detail },
-      { label: 'PROD release gate', signal: gate.signal, detail: gate.detail },
-      { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
+      {
+        label: 'K8s · Platform PROD NS',
+        signal: k8sProd.signal,
+        detail: k8sProd.detail,
+        fixScope: PROD_ENV_FIX_SCOPE,
+      },
+      {
+        label: 'Self-health PROD',
+        signal: selfProd.signal,
+        detail: selfProd.detail,
+        fixScope: PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
+      },
+      {
+        label: 'PROD release gate',
+        signal: gate.signal,
+        detail: gate.detail,
+        fixScope: DELIVER_STG_RECOVER_SCOPE,
+      },
+      {
+        label: 'Supply chain',
+        signal: snapshot.release.signal,
+        detail: snapshot.release.detail,
+        fixScope: DELIVER_STG_RECOVER_SCOPE,
+      },
     ] as ProdFixSignal[],
     prodNamespace: PLATFORM_PROD,
   }
@@ -705,15 +752,40 @@ export function useRocketLaunchOverall(enabled = true): LaunchViewOverall {
     prodGateQ.isLoading
 
   const fixSignals: ProdFixSignal[] = [
-    { label: 'Cluster · infra', signal: clusterInfra.signal, detail: clusterInfra.detail },
-    { label: 'STG · K8s NS', signal: k8sStgNs.signal, detail: k8sStgNs.detail },
-    { label: 'STG · CI/CD', signal: cicdSignal, detail: cicdDetail },
-    { label: 'STG · Release gate', signal: stgGate.signal, detail: stgGate.detail },
-    { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
-    { label: 'STG · Self-health', signal: selfStg.signal, detail: selfStg.detail },
-    { label: 'PROD · Platform NS', signal: k8sProd.signal, detail: k8sProd.detail },
-    { label: 'PROD · Self-health', signal: selfProd.signal, detail: selfProd.detail },
-    { label: 'PROD · Release gate', signal: prodGate.signal, detail: prodGate.detail },
+    { label: 'Cluster · infra', signal: clusterInfra.signal, detail: clusterInfra.detail, fixScope: PROD_ENV_FIX_SCOPE },
+    { label: 'STG · K8s NS', signal: k8sStgNs.signal, detail: k8sStgNs.detail, fixScope: PROD_ENV_FIX_SCOPE },
+    { label: 'STG · CI/CD', signal: cicdSignal, detail: cicdDetail, fixScope: DELIVER_STG_RECOVER_SCOPE },
+    {
+      label: 'STG · Release gate',
+      signal: stgGate.signal,
+      detail: stgGate.detail,
+      fixScope: DELIVER_STG_RECOVER_SCOPE,
+    },
+    {
+      label: 'Supply chain',
+      signal: snapshot.release.signal,
+      detail: snapshot.release.detail,
+      fixScope: DELIVER_STG_RECOVER_SCOPE,
+    },
+    {
+      label: 'STG · Self-health',
+      signal: selfStg.signal,
+      detail: selfStg.detail,
+      fixScope: PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
+    },
+    { label: 'PROD · Platform NS', signal: k8sProd.signal, detail: k8sProd.detail, fixScope: PROD_ENV_FIX_SCOPE },
+    {
+      label: 'PROD · Self-health',
+      signal: selfProd.signal,
+      detail: selfProd.detail,
+      fixScope: PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
+    },
+    {
+      label: 'PROD · Release gate',
+      signal: prodGate.signal,
+      detail: prodGate.detail,
+      fixScope: DELIVER_STG_RECOVER_SCOPE,
+    },
   ]
 
   return { overall, stgOverall, prodOverall, isLoading, fixSignals }
@@ -812,16 +884,56 @@ export function useSatelliteDeployOverall(enabled = true): LaunchViewOverall {
     prodGateQ.isLoading
 
   const fixSignals: ProdFixSignal[] = [
-    { label: 'Ground · Cluster infra', signal: clusterInfra.signal, detail: clusterInfra.detail },
-    { label: 'Trade · K8s STG', signal: stgK8sNs.signal, detail: stgK8sNs.detail },
-    { label: 'Ground · PG / Redis STG', signal: stgDatastore.signal, detail: stgDatastore.detail },
-    { label: 'Trade · APIs STG', signal: stgTradeApis.signal, detail: stgTradeApis.detail },
-    { label: 'Trade · K8s PROD', signal: prodK8sNs.signal, detail: prodK8sNs.detail },
-    { label: 'Ground · PG / Redis PROD', signal: prodDatastore.signal, detail: prodDatastore.detail },
-    { label: 'Trade · APIs PROD', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
-    { label: 'Trade · PROD matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
-    { label: 'Trade · PROD gate', signal: prodGate.signal, detail: prodGate.detail },
-    { label: 'Rocket · IB socket', signal: rocket.signal, detail: rocket.detail },
+    {
+      label: 'Ground · Cluster infra',
+      signal: clusterInfra.signal,
+      detail: clusterInfra.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    { label: 'Trade · K8s STG', signal: stgK8sNs.signal, detail: stgK8sNs.detail, fixScope: PROD_ENV_FIX_SCOPE },
+    {
+      label: 'Ground · PG / Redis STG',
+      signal: stgDatastore.signal,
+      detail: stgDatastore.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    {
+      label: 'Trade · APIs STG',
+      signal: stgTradeApis.signal,
+      detail: stgTradeApis.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    { label: 'Trade · K8s PROD', signal: prodK8sNs.signal, detail: prodK8sNs.detail, fixScope: PROD_ENV_FIX_SCOPE },
+    {
+      label: 'Ground · PG / Redis PROD',
+      signal: prodDatastore.signal,
+      detail: prodDatastore.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    {
+      label: 'Trade · APIs PROD',
+      signal: prodTradeApis.signal,
+      detail: prodTradeApis.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    {
+      label: 'Trade · PROD matrix',
+      signal: snapshot.tradeProd.signal,
+      detail: snapshot.tradeProd.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    {
+      label: 'Trade · PROD gate',
+      signal: prodGate.signal,
+      detail: prodGate.detail,
+      fixScope: DELIVER_STG_RECOVER_SCOPE,
+    },
+    {
+      label: 'Rocket · IB socket',
+      signal: rocket.signal,
+      detail: rocket.detail,
+      fixScope: SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
+    },
   ]
 
   return {
@@ -925,28 +1037,59 @@ export function RocketReadinessStrip({
 
   const stgChips: EnvChip[] = summaryColumn
     ? [
-        { label: 'Rocket · K8s STG', signal: k8sStg.signal, detail: k8sStg.detail },
-        { label: 'CI/CD', signal: cicdSignal, detail: cicdDetail },
-        { label: 'Self-health STG', signal: selfStg.signal, detail: selfStg.detail },
-        { label: 'STG gate', signal: stgGate.signal, detail: stgGate.detail },
+        { label: 'Rocket · K8s STG', signal: k8sStg.signal, detail: k8sStg.detail, fixScope: PROD_ENV_FIX_SCOPE },
+        { label: 'CI/CD', signal: cicdSignal, detail: cicdDetail, fixScope: DELIVER_STG_RECOVER_SCOPE },
+        {
+          label: 'Self-health STG',
+          signal: selfStg.signal,
+          detail: selfStg.detail,
+          fixScope: PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
+        },
+        { label: 'STG gate', signal: stgGate.signal, detail: stgGate.detail, fixScope: DELIVER_STG_RECOVER_SCOPE },
       ]
     : [
-        { label: 'Rocket · K8s STG', signal: k8sStg.signal, detail: k8sStg.detail },
-        { label: 'CI/CD', signal: cicdSignal, detail: cicdDetail },
-        { label: 'Self-health STG', signal: selfStg.signal, detail: selfStg.detail },
-        { label: 'STG release gate', signal: stgGate.signal, detail: stgGate.detail },
-        { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
+        { label: 'Rocket · K8s STG', signal: k8sStg.signal, detail: k8sStg.detail, fixScope: PROD_ENV_FIX_SCOPE },
+        { label: 'CI/CD', signal: cicdSignal, detail: cicdDetail, fixScope: DELIVER_STG_RECOVER_SCOPE },
+        {
+          label: 'Self-health STG',
+          signal: selfStg.signal,
+          detail: selfStg.detail,
+          fixScope: PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
+        },
+        {
+          label: 'STG release gate',
+          signal: stgGate.signal,
+          detail: stgGate.detail,
+          fixScope: DELIVER_STG_RECOVER_SCOPE,
+        },
+        {
+          label: 'Supply chain',
+          signal: snapshot.release.signal,
+          detail: snapshot.release.detail,
+          fixScope: DELIVER_STG_RECOVER_SCOPE,
+        },
       ]
 
   const prodChips: EnvChip[] = [
-    { label: 'Rocket · K8s PROD', signal: k8sProd.signal, detail: k8sProd.detail },
-    { label: 'Self-health PROD', signal: selfProd.signal, detail: selfProd.detail },
-    { label: 'PROD gate', signal: prodGate.signal, detail: prodGate.detail },
-    { label: 'Supply chain', signal: snapshot.release.signal, detail: snapshot.release.detail },
+    { label: 'Rocket · K8s PROD', signal: k8sProd.signal, detail: k8sProd.detail, fixScope: PROD_ENV_FIX_SCOPE },
+    {
+      label: 'Self-health PROD',
+      signal: selfProd.signal,
+      detail: selfProd.detail,
+      fixScope: PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
+    },
+    { label: 'PROD gate', signal: prodGate.signal, detail: prodGate.detail, fixScope: DELIVER_STG_RECOVER_SCOPE },
+    {
+      label: 'Supply chain',
+      signal: snapshot.release.signal,
+      detail: snapshot.release.detail,
+      fixScope: DELIVER_STG_RECOVER_SCOPE,
+    },
     {
       label: 'Promote / cutover',
       signal: promoteVerify.promoteSignal,
       detail: promoteVerify.promoteDetail,
+      fixScope: DELIVER_STG_RECOVER_SCOPE,
     },
   ]
 
@@ -1007,7 +1150,12 @@ export function SharedRocketStrip({
 }) {
   const tag = stripOverallTag(rocket.signal, isLoading)
   const chips: EnvChip[] = [
-    { label: 'Rocket · IB socket', signal: rocket.signal, detail: rocket.detail },
+    {
+      label: 'Rocket · IB socket',
+      signal: rocket.signal,
+      detail: rocket.detail,
+      fixScope: SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
+    },
   ]
   const openBus = () => {
     setSatelliteBusFocus('rocket')
@@ -1253,15 +1401,36 @@ export function SatelliteReadinessStrip({
     (tradeProdBlocked || isProdReleaseBlocked(prodOverallLocal) || isProdReleaseBlocked(tradeProdOverall))
 
   const prodChips: EnvChip[] = [
-    { label: 'Trade · K8s PROD', signal: prodK8s.signal, detail: prodK8s.detail },
-    { label: 'Ground · PG / Redis', signal: prodDatastore.signal, detail: prodDatastore.detail },
-    { label: 'Trade · APIs PROD', signal: prodTradeApis.signal, detail: prodTradeApis.detail },
-    { label: 'Trade · PROD matrix', signal: snapshot.tradeProd.signal, detail: snapshot.tradeProd.detail },
-    { label: 'Trade · PROD gate', signal: prodGate.signal, detail: prodGate.detail },
+    { label: 'Trade · K8s PROD', signal: prodK8s.signal, detail: prodK8s.detail, fixScope: PROD_ENV_FIX_SCOPE },
+    {
+      label: 'Ground · PG / Redis',
+      signal: prodDatastore.signal,
+      detail: prodDatastore.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    {
+      label: 'Trade · APIs PROD',
+      signal: prodTradeApis.signal,
+      detail: prodTradeApis.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    {
+      label: 'Trade · PROD matrix',
+      signal: snapshot.tradeProd.signal,
+      detail: snapshot.tradeProd.detail,
+      fixScope: PROD_ENV_FIX_SCOPE,
+    },
+    {
+      label: 'Trade · PROD gate',
+      signal: prodGate.signal,
+      detail: prodGate.detail,
+      fixScope: DELIVER_STG_RECOVER_SCOPE,
+    },
     {
       label: 'Promote / cutover',
       signal: promoteVerify.promoteSignal,
       detail: promoteVerify.promoteDetail,
+      fixScope: DELIVER_STG_RECOVER_SCOPE,
     },
   ]
 
@@ -1292,13 +1461,24 @@ export function SatelliteReadinessStrip({
           summaryColumn={summaryColumn}
           readinessAnchor="stg"
           chips={[
-            { label: 'Trade · K8s STG', signal: stgK8s.signal, detail: stgK8s.detail },
-            { label: 'Ground · PG / Redis', signal: stgDatastore.signal, detail: stgDatastore.detail },
-            { label: 'Trade · APIs STG', signal: stgTradeApis.signal, detail: stgTradeApis.detail },
+            { label: 'Trade · K8s STG', signal: stgK8s.signal, detail: stgK8s.detail, fixScope: PROD_ENV_FIX_SCOPE },
+            {
+              label: 'Ground · PG / Redis',
+              signal: stgDatastore.signal,
+              detail: stgDatastore.detail,
+              fixScope: PROD_ENV_FIX_SCOPE,
+            },
+            {
+              label: 'Trade · APIs STG',
+              signal: stgTradeApis.signal,
+              detail: stgTradeApis.detail,
+              fixScope: PROD_ENV_FIX_SCOPE,
+            },
             {
               label: 'STG release',
               signal: promoteVerify.stgReleaseSignal,
               detail: promoteVerify.stgReleaseDetail,
+              fixScope: DELIVER_STG_RECOVER_SCOPE,
             },
           ]}
           linkLabel="Satellite Bus →"
@@ -1396,7 +1576,10 @@ export function TaskModeReadinessStrip({
   return null
 }
 
-/** Condensed mission signals for Daily Ops (unchanged generic strip). */
+/**
+ * @deprecated Daily Ops main path uses DailyOpsFleetBoard (Fleet Desk).
+ * Kept for secondary/legacy embeds only — do not wire as Task CC primary.
+ */
 export function DailyOpsMissionStrip({ compact = false }: { compact?: boolean }) {
   const { snapshot, isLoading } = useMissionSnapshot()
   const status = missionStatus(snapshot.missionOverall)

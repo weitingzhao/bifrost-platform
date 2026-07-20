@@ -84,7 +84,7 @@ export function AgentHostDeployPanel() {
       leading={<StatusLamp value={jobReach(displayJob)} kind="reach" />}
       description={
         data?.hint ??
-        'Push remediation-runner code to each Mac Mini and restart launchd — same as deploy_mac_mini.sh. Standby also installs the peer watchdog.'
+        'Push remediation-runner via deploy_mac_mini.sh. Requires SSH publickey from this host (BatchMode) — Console cannot type passwords. Optional AGENT_DEPLOY_SSH_IDENTITY in platform .env.'
       }
       bodyPadding="compact"
       overflow="visible"
@@ -201,7 +201,7 @@ export function AgentHostDeployPanel() {
         title={`Update ${confirmTarget?.role ?? 'agent'} on Mini`}
         message={
           confirmTarget != null
-            ? `This runs deploy_mac_mini.sh from platform-api → ${confirmTarget.remote} (role=${confirmTarget.role}${confirmTarget.peer_ssh != null && confirmTarget.peer_ssh !== '' ? `, watchdog peer ${confirmTarget.peer_ssh}` : ''}): rsync remediation src, npm install, sync kubeconfig, restart launchd runner${confirmTarget.role === 'standby' ? ' + peer watchdog (nightly-drift disabled)' : ' + peer watchdog'} (~1–3 min).`
+            ? `This runs deploy_mac_mini.sh from platform-api → ${confirmTarget.remote} (role=${confirmTarget.role}${confirmTarget.peer_ssh != null && confirmTarget.peer_ssh !== '' ? `, watchdog peer ${confirmTarget.peer_ssh}` : ''}): SSH BatchMode (no password), rsync remediation src, npm install, sync kubeconfig, restart launchd runner${confirmTarget.role === 'standby' ? ' + peer watchdog (nightly-drift disabled)' : ' + peer watchdog'} (~1–3 min). If it hangs on Password:, cancel and fix key auth (ssh-copy-id / AGENT_DEPLOY_SSH_IDENTITY).`
             : ''
         }
         confirmLabel="Update agent"

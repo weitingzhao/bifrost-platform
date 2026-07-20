@@ -57,6 +57,7 @@ _PLATFORM_DOTENV_KEYS = frozenset({
     "PLATFORM_ADMIN_TOKEN",
     "PLATFORM_LISTEN",
     "PLATFORM_CONFIG",
+    "OPS_VIEWER_ENV",
     "REMEDIATION_RUNNER_URL",
     "REMEDIATION_RUNNER_STANDBY_URL",
     "REMEDIATION_RUNNER_PORT",
@@ -74,6 +75,11 @@ _PLATFORM_DOTENV_KEYS = frozenset({
 
 def _normalize_platform_env() -> None:
     """Expand $HOME/~ and resolve infra script paths before starting API (cwd=api/)."""
+    # Local Fleet Desk seat: default DEV so make start never inherits clusters.yaml prod pin.
+    # Prod in-cluster uses KUBERNETES_SERVICE_HOST + yaml viewer_env (or OPS_VIEWER_ENV=prod).
+    if not os.environ.get("OPS_VIEWER_ENV", "").strip():
+        os.environ["OPS_VIEWER_ENV"] = "dev"
+
     kc = os.environ.get("PLATFORM_KUBECONFIG", "")
     if kc:
         os.environ["PLATFORM_KUBECONFIG"] = os.path.expanduser(os.path.expandvars(kc))

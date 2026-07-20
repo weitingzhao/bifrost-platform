@@ -249,7 +249,7 @@ func deployConfig() (enabled bool, scriptPath string, hint string) {
 		hint = fmt.Sprintf("Deploy script missing at %s", scriptPath)
 		return true, scriptPath, hint
 	}
-	hint = "Runs deploy_mac_mini.sh via platform-api (rsync + launchctl restart on agent host)"
+	hint = "Runs deploy_mac_mini.sh via platform-api (rsync + launchctl). Requires SSH publickey (BatchMode) — Console cannot type passwords."
 	return true, scriptPath, hint
 }
 
@@ -373,6 +373,9 @@ func deployExtraEnv() []string {
 	}
 	if kc := strings.TrimSpace(os.Getenv("KUBECONFIG")); kc != "" {
 		out = append(out, fmt.Sprintf("KUBECONFIG=%s", kc))
+	}
+	if id := strings.TrimSpace(os.Getenv("AGENT_DEPLOY_SSH_IDENTITY")); id != "" {
+		out = append(out, "AGENT_DEPLOY_SSH_IDENTITY="+id)
 	}
 	return out
 }

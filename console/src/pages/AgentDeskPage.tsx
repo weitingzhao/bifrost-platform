@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
+import { Button, DenseTag, SegmentControl, StatusLamp } from '@bifrost/ui'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronRight, Square } from 'lucide-react'
 import type { AgentBridgeResponse, AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse, RemediationJob } from '@/api/types'
@@ -13,11 +13,20 @@ import {
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { CloseBriefingSessionDialog } from '@/components/briefing/CloseBriefingSessionDialog'
 import { FlightDirectorBriefingPanel } from '@/components/briefing/FlightDirectorBriefingPanel'
+import { BriefingFoldableSection } from '@/components/briefing/BriefingFoldableSection'
 import { AgentDeskSessionOpsPanels } from '@/components/agent/AgentDeskSessionOpsPanels'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { AgentTaskCatalogPanel } from '@/components/agent/AgentTaskCatalogPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
+import type { OperateQueueItem } from '@/api/operateQueueTypes'
+import { recordOperateQueueExecution, OPERATE_QUEUE_QUERY_KEY } from '@/api/operateQueue'
+import { catalogTaskById } from '@/lib/agent/agentTaskCatalog'
+import { buildBriefingDeepLink } from '@/lib/briefing/briefingUrlState'
+import { isLaneId } from '@/lib/briefing/workLanes'
+import { buildHandoffAgentPrompt } from '@/lib/operate/handoff'
 import {
   attachJobToBriefingSession,
   loadBriefingActiveSession,
@@ -37,8 +46,12 @@ interface AgentDeskPageProps {
   auditRecords?: AuditRecord[]
   initialJobId?: string | null
   prefillPrompt?: string | null
+  focusHandoffId?: string | null
+  focusDecisionBriefs?: boolean
   onInitialJobConsumed?: () => void
   onPrefillConsumed?: () => void
+  onFocusHandoffConsumed?: () => void
+  onFocusDecisionBriefsConsumed?: () => void
   onOpenBriefing?: () => void
   onOpenCluster?: () => void
   onOpenMcpContract?: () => void
@@ -50,7 +63,8 @@ interface AgentDeskPageProps {
   onOpenBriefingReconciliation?: () => void
 }
 
-type AgentScope = 'agent-desk' | 'release' | 'deliver-stg-recover'
+type AgentScope = string
+type AgentDeskView = 'operate' | 'observe' | 'review'
 
 interface QuickPrompt {
   id: string
@@ -132,8 +146,12 @@ export function AgentDeskPage({
   auditRecords = [],
   initialJobId,
   prefillPrompt,
+  focusHandoffId,
+  focusDecisionBriefs = false,
   onInitialJobConsumed,
   onPrefillConsumed,
+  onFocusHandoffConsumed,
+  onFocusDecisionBriefsConsumed,
   onOpenBriefing,
   onOpenCluster,
   onOpenMcpContract,
@@ -155,12 +173,19 @@ export function AgentDeskPage({
   const [stopConfirm, setStopConfirm] = useState<{ jobId: string; label: string } | null>(null)
   const [closeSessionJob, setCloseSessionJob] = useState<RemediationJob | null>(null)
   const [trackedJob, setTrackedJob] = useState<RemediationJob | null>(null)
+  const [handoffLinkError, setHandoffLinkError] = useState<string | null>(null)
+  const [deskView, setDeskView] = useState<AgentDeskView>(
+    initialJobId != null ? 'observe' : 'operate',
+  )
   const briefingActiveSession = loadBriefingActiveSession()
+  const operateQueueQuery = useOperateQueue()
+  const decisionBriefsQuery = usePendingDecisionBriefs()
 
   useEffect(() => {
     if (initialJobId == null) return
     setJobId(initialJobId)
     setPanelOpen(true)
+    setDeskView('observe')
     onInitialJobConsumed?.()
   }, [initialJobId, onInitialJobConsumed])
 
@@ -171,8 +196,27 @@ export function AgentDeskPage({
   useEffect(() => {
     if (prefillPrompt == null || prefillPrompt === '') return
     setComposerText(prefillPrompt)
+    if (initialJobId == null) setDeskView('operate')
     onPrefillConsumed?.()
-  }, [prefillPrompt, onPrefillConsumed])
+  }, [initialJobId, prefillPrompt, onPrefillConsumed])
+
+  useEffect(() => {
+    if (focusHandoffId == null || focusHandoffId === '') return
+    setDeskView('operate')
+  }, [focusHandoffId])
+
+  useEffect(() => {
+    if (!focusDecisionBriefs) return
+    setDeskView('operate')
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.querySelector('[data-decision-brief-id]')
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+      onFocusDecisionBriefsConsumed?.()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [focusDecisionBriefs, onFocusDecisionBriefsConsumed])
 
   const healthQuery = useQuery({
     queryKey: ['remediation', 'health'],
@@ -198,7 +242,7 @@ export function AgentDeskPage({
   )
 
   const startMutation = useMutation({
-    mutationFn: async ({ prompt, scope }: { prompt: string; scope: AgentScope }) => {
+    mutationFn: async ({ prompt, scope }: { prompt: string; scope: AgentScope; handoff?: OperateQueueItem }) => {
       const spineNote =
         context?.focus?.headline != null ? `Spine focus: ${context.focus.headline}\n\n` : ''
       return startRemediation({
@@ -206,15 +250,22 @@ export function AgentDeskPage({
         prompt: `${spineNote}${prompt.trim()}`,
       })
     },
-    onSuccess: (job, { prompt }) => {
+    onSuccess: (job, { prompt, handoff }) => {
       setUserPrompts(prev => ({ ...prev, [job.id]: prompt }))
       setInitialJob(job)
       setTrackedJob(job)
       setJobId(job.id)
       setPanelOpen(true)
+      setDeskView('observe')
       setComposerText('')
       attachJobToBriefingSession(job.id)
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      if (handoff != null) {
+        setHandoffLinkError(null)
+        void recordOperateQueueExecution(handoff.id, job.id)
+          .then(() => qc.invalidateQueries({ queryKey: OPERATE_QUEUE_QUERY_KEY }))
+          .catch(error => setHandoffLinkError((error as Error).message))
+      }
     },
   })
 
@@ -235,6 +286,22 @@ export function AgentDeskPage({
 
   const bridge = bridgeQuery.data
   const gitBridgeStatus = bridge?.git_bridge?.status
+  const nowSummary = useMemo(() => {
+    const cutoff = Date.now() - 86_400_000
+    const jobs = jobsQuery.data?.jobs ?? []
+    return {
+      activeTasks: jobs.filter(
+        job => job.status === 'running' && job.phase !== 'awaiting_approval',
+      ).length,
+      pendingApprovals: jobs.filter(
+        job => job.status === 'running' && job.phase === 'awaiting_approval',
+      ).length,
+      openHandoffs: operateQueueQuery.data?.open.length ?? 0,
+      blockingFailures: jobs.filter(
+        job => job.status === 'failed' && Date.parse(job.updated_at) >= cutoff,
+      ).length,
+    }
+  }, [jobsQuery.data?.jobs, operateQueueQuery.data?.open.length])
 
   const handleSend = useCallback(
     (text: string, scopeOverride?: AgentScope) => {
@@ -246,6 +313,53 @@ export function AgentDeskPage({
   )
 
   const activeUserPrompt = jobId != null ? userPrompts[jobId] : undefined
+
+  const handleOpenHandoffSource = useCallback(
+    (item: OperateQueueItem) => {
+      if (item.source === 'post_completion') {
+        const lane = item.source_lane_id != null && isLaneId(item.source_lane_id)
+          ? item.source_lane_id
+          : undefined
+        window.location.assign(buildBriefingDeepLink({ lane, program: item.program_id }))
+      }
+      else onOpenDeliveryBoard?.()
+    },
+    [onOpenBriefing, onOpenDeliveryBoard],
+  )
+
+  const handlePrepareHandoffAgent = useCallback((item: OperateQueueItem) => {
+    setSelectedScope('agent-desk')
+    setComposerText(
+      [
+        `Execute the approved operate handoff for program ${item.program_id}.`,
+        `Handoff: ${item.title}`,
+        item.description != null && item.description !== '' ? `Context: ${item.description}` : '',
+        item.pending_id != null && item.pending_id !== '' ? `Source item: ${item.pending_id}` : '',
+        'Verify the source context before acting. Do not enable live trading (D10). Do not close the handoff until execution is complete and verified.',
+      ].filter(Boolean).join('\n'),
+    )
+    setDeskView('operate')
+  }, [])
+
+  const handleStartHandoffAgent = useCallback((item: OperateQueueItem) => {
+    if (item.agent_task_id == null) {
+      handlePrepareHandoffAgent(item)
+      return
+    }
+    const task = catalogTaskById(item.agent_task_id)
+    if (task == null || !canOperate || runnerBlocked) {
+      handlePrepareHandoffAgent(item)
+      return
+    }
+    const prompt = buildHandoffAgentPrompt(item)
+    startMutation.mutate({ prompt, scope: task.scope, handoff: item })
+  }, [canOperate, handlePrepareHandoffAgent, runnerBlocked, startMutation])
+
+  const handleObserveHandoffJob = useCallback((targetJobId: string) => {
+    setJobId(targetJobId)
+    setPanelOpen(true)
+    setDeskView('observe')
+  }, [])
 
   return (
     <div className={`agent-desk-shell${panelOpen ? ' agent-desk-shell--panel-open' : ''}`}>
@@ -264,7 +378,7 @@ export function AgentDeskPage({
                 <DenseTag variant={statusVariant(gitBridgeStatus)}>
                   Git Bridge
                   {gitBridgeStatus === 'ok' && bridge?.git_bridge?.dirty_repos != null && bridge.git_bridge.dirty_repos > 0
-                    ? ` · ${bridge.git_bridge.dirty_repos}`
+                    ? ` · ${bridge.git_bridge.dirty_repos} dirty ${bridge.git_bridge.dirty_repos === 1 ? 'repo' : 'repos'}`
                     : ''}
                 </DenseTag>
               </div>
@@ -283,30 +397,45 @@ export function AgentDeskPage({
             </div>
           </div>
           <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-muted-foreground">
-            Operate and observe — run agent tasks, review remediation, close sessions.
+            Choose next work, observe live tasks, and review outcomes.
           </p>
           {context?.focus?.headline != null && (
             <p className="agent-desk-spine-hint">
               {context.focus.headline}
             </p>
           )}
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)]/60 pt-2">
+            <SegmentControl
+              ariaLabel="Agent Desk view"
+              value={deskView}
+              onChange={value => setDeskView(value as AgentDeskView)}
+              options={[
+                {
+                  value: 'operate',
+                  label:
+                    decisionBriefsQuery.pendingCount > 0
+                      ? `Operate (${decisionBriefsQuery.pendingCount})`
+                      : 'Operate',
+                },
+                { value: 'observe', label: 'Observe' },
+                { value: 'review', label: 'Review' },
+              ]}
+              size="sm"
+            />
+            <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              {deskView === 'operate'
+                ? 'Choose and start the next safe action.'
+                : deskView === 'observe'
+                  ? 'Track active work and inspect task details.'
+                  : 'Review outcomes, drift, alignment, and daily signals.'}
+            </span>
+          </div>
         </section>
 
-        <FlightDirectorBriefingPanel onOpenTrustAutonomy={onOpenTrustAutonomy} />
-
-        <AgentDeskSessionOpsPanels
-          context={context}
-          matrices={matrices}
-          clusterSummary={clusterSummary}
-          platformHealthy={platformHealthy}
-          auditRecords={auditRecords}
-          onOpenBriefing={onOpenBriefing}
-          onOpenDeliveryBoard={onOpenDeliveryBoard}
-          onOpenBriefingReconciliation={onOpenBriefingReconciliation}
-        />
+        {deskView === 'operate' && <AgentDeskNowSummary {...nowSummary} />}
 
         {/* ── Alerts (only when something is wrong) ── */}
-        {runnerBlocked && (
+        {deskView === 'operate' && runnerBlocked && (
           <OpsFeedback variant="error" title="Runner unreachable — agent tasks blocked">
             Start with <code className="font-mono-tabular">make start</code> or set{' '}
             <code className="font-mono-tabular">REMEDIATION_RUNNER_URL</code> in{' '}
@@ -318,95 +447,118 @@ export function AgentDeskPage({
             )}
           </OpsFeedback>
         )}
-        {runnerWarnCursor && (
+        {deskView === 'operate' && runnerWarnCursor && (
           <OpsFeedback variant="warning" title="CURSOR_API_KEY not set on runner">
             Agent runs will fail — add key to <code className="font-mono-tabular">.env</code>.
           </OpsFeedback>
         )}
-        {!canOperate && (
+        {deskView === 'operate' && !canOperate && (
           <OpsFeedback variant="warning" title="Authenticate as operator to use Agent Desk">
             Use the header auth button before starting agent tasks.
           </OpsFeedback>
         )}
 
         {/* ── Composer: the primary interaction ── */}
-        <section className="agent-desk-composer-section">
-          <div className="agent-desk-quick-row">
-            {QUICK_PROMPTS.map(item => (
-              <button
-                key={item.id}
-                type="button"
-                className={`agent-desk-quick-btn${item.scope === 'release' || item.scope === 'deliver-stg-recover' ? ' agent-desk-quick-btn--accent' : ''}`}
+        {deskView === 'operate' && (
+          <section className="agent-desk-composer-section">
+            <div className="agent-desk-quick-row">
+              {QUICK_PROMPTS.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`agent-desk-quick-btn${item.scope === 'release' || item.scope === 'deliver-stg-recover' ? ' agent-desk-quick-btn--accent' : ''}`}
+                  disabled={!canOperate || startMutation.isPending || runnerBlocked}
+                  onClick={() => handleSend(item.prompt, item.scope)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <div className="agent-desk-composer">
+              <textarea
+                className="agent-desk-composer__input"
+                rows={3}
+                placeholder={selectedScope === 'release'
+                  ? 'Describe what to release…'
+                  : 'Ask the ops agent…'}
+                value={composerText}
                 disabled={!canOperate || startMutation.isPending || runnerBlocked}
-                onClick={() => handleSend(item.prompt, item.scope)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <div className="agent-desk-composer">
-            <textarea
-              className="agent-desk-composer__input"
-              rows={3}
-              placeholder={selectedScope === 'release'
-                ? 'Describe what to release…'
-                : 'Ask the ops agent…'}
-              value={composerText}
-              disabled={!canOperate || startMutation.isPending || runnerBlocked}
-              onChange={e => setComposerText(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSend(composerText)
-                }
-              }}
-            />
-            <div className="agent-desk-composer__footer">
-              <div className="agent-desk-scope-row">
-                {(['agent-desk', 'release'] as const).map(s => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`agent-desk-scope-chip${selectedScope === s ? ' agent-desk-scope-chip--active' : ''}`}
-                    onClick={() => setSelectedScope(s)}
-                  >
-                    {s === 'agent-desk' ? 'Ops' : 'Release'}
-                  </button>
-                ))}
+                onChange={e => setComposerText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSend(composerText)
+                  }
+                }}
+              />
+              <div className="agent-desk-composer__footer">
+                <div className="agent-desk-scope-row">
+                  {(['agent-desk', 'release'] as const).map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`agent-desk-scope-chip${selectedScope === s ? ' agent-desk-scope-chip--active' : ''}`}
+                      onClick={() => setSelectedScope(s)}
+                    >
+                      {s === 'agent-desk' ? 'Ops' : 'Release'}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!canOperate || startMutation.isPending || runnerBlocked || composerText.trim() === ''}
+                  onClick={() => handleSend(composerText)}
+                >
+                  {startMutation.isPending ? 'Starting…' : 'Send'}
+                </Button>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                disabled={!canOperate || startMutation.isPending || runnerBlocked || composerText.trim() === ''}
-                onClick={() => handleSend(composerText)}
-              >
-                {startMutation.isPending ? 'Starting…' : 'Send'}
-              </Button>
             </div>
-          </div>
-          {startMutation.isError && (
-            <OpsFeedback variant="error" title="Task failed to start" className="mt-2">
-              {(startMutation.error as Error).message}
-            </OpsFeedback>
-          )}
-          {activeUserPrompt != null && (
-            <div className="agent-desk-user-bubble mt-2">
-              <p className="agent-desk-user-bubble__label">Your request</p>
-              <p className="agent-desk-user-bubble__body">{activeUserPrompt}</p>
-            </div>
-          )}
-        </section>
+            {startMutation.isError && (
+              <OpsFeedback variant="error" title="Task failed to start" className="mt-2">
+                {(startMutation.error as Error).message}
+              </OpsFeedback>
+            )}
+            {handoffLinkError != null && (
+              <OpsFeedback variant="error" title="Task started but handoff link failed" className="mt-2">
+                {handoffLinkError}
+              </OpsFeedback>
+            )}
+            {activeUserPrompt != null && (
+              <div className="agent-desk-user-bubble mt-2">
+                <p className="agent-desk-user-bubble__label">Your request</p>
+                <p className="agent-desk-user-bubble__body">{activeUserPrompt}</p>
+              </div>
+            )}
+          </section>
+        )}
 
-        <AgentTaskCatalogPanel
-          onOpenAgentSystem={onOpenAgentSystem}
-          onOpenDoctrine={tab => {
-            if (tab === 'mcp-contract') onOpenMcpContract?.()
-            else onOpenAgentProtocol?.()
-          }}
-        />
+        {deskView === 'operate' && (
+          <AgentDeskSessionOpsPanels
+            context={context}
+            matrices={matrices}
+            clusterSummary={clusterSummary}
+            platformHealthy={platformHealthy}
+            auditRecords={auditRecords}
+            onOpenBriefing={onOpenBriefing}
+            onOpenDeliveryBoard={onOpenDeliveryBoard}
+            onOpenBriefingReconciliation={onOpenBriefingReconciliation}
+            mode="operate"
+            onOpenHandoffSource={handleOpenHandoffSource}
+            onPrepareHandoffAgent={handlePrepareHandoffAgent}
+            onStartHandoffAgent={handleStartHandoffAgent}
+            onObserveHandoffJob={handleObserveHandoffJob}
+            onNavigateRecurringSetup={onOpenAgentSystem}
+            focusHandoffId={focusHandoffId}
+            onFocusHandoffConsumed={onFocusHandoffConsumed}
+          />
+        )}
 
         {/* ── Recent tasks ── */}
-        <section className="agent-desk-tasks-section">
+        {deskView === 'observe' && (
+          <>
+            <AgentDeskNowSummary {...nowSummary} compact />
+            <section className="agent-desk-tasks-section">
           <div className="flex items-center justify-between">
             <h3 className="agent-desk-section-title">Recent tasks</h3>
             <div className="flex items-center gap-3">
@@ -508,6 +660,7 @@ export function AgentDeskPage({
                         setInitialJob(job)
                         setJobId(job.id)
                         setPanelOpen(true)
+                        setDeskView('observe')
                       }}
                     />
                   ))}
@@ -516,7 +669,42 @@ export function AgentDeskPage({
               )
             })}
           </div>
-        </section>
+            </section>
+          </>
+        )}
+
+        {deskView === 'review' && (
+          <>
+            <AgentDeskSessionOpsPanels
+              context={context}
+              matrices={matrices}
+              clusterSummary={clusterSummary}
+              platformHealthy={platformHealthy}
+              auditRecords={auditRecords}
+              onOpenBriefing={onOpenBriefing}
+              onOpenDeliveryBoard={onOpenDeliveryBoard}
+              onOpenBriefingReconciliation={onOpenBriefingReconciliation}
+              mode="review"
+              onOpenHandoffSource={handleOpenHandoffSource}
+              onObserveHandoffJob={handleObserveHandoffJob}
+            />
+            <BriefingFoldableSection
+              kicker="Review"
+              title="Flight Director · 24h digest"
+              description="Job outcomes, approval events, and current trust-matrix skill signals."
+              defaultExpanded={false}
+            >
+              <FlightDirectorBriefingPanel onOpenTrustAutonomy={onOpenTrustAutonomy} />
+            </BriefingFoldableSection>
+            <AgentTaskCatalogPanel
+              onOpenAgentSystem={onOpenAgentSystem}
+              onOpenDoctrine={tab => {
+                if (tab === 'mcp-contract') onOpenMcpContract?.()
+                else onOpenAgentProtocol?.()
+              }}
+            />
+          </>
+        )}
 
         {/* ── Infrastructure → moved to Operator Plane (L-1) ── */}
         <section className="agent-desk-infra-section">
@@ -597,5 +785,78 @@ export function AgentDeskPage({
         onCancel={() => setStopConfirm(null)}
       />
     </div>
+  )
+}
+
+function AgentDeskNowSummary({
+  activeTasks,
+  pendingApprovals,
+  openHandoffs,
+  blockingFailures,
+  compact = false,
+}: {
+  activeTasks: number
+  pendingApprovals: number
+  openHandoffs: number
+  blockingFailures: number
+  compact?: boolean
+}) {
+  const metrics = [
+    {
+      label: 'Active tasks',
+      value: activeTasks,
+      detail: 'running now',
+      variant: activeTasks > 0 ? 'success' as const : 'neutral' as const,
+    },
+    {
+      label: 'Pending approvals',
+      value: pendingApprovals,
+      detail: 'operator decisions',
+      variant: pendingApprovals > 0 ? 'warning' as const : 'neutral' as const,
+    },
+    {
+      label: 'Open handoffs',
+      value: openHandoffs,
+      detail: 'awaiting execution',
+      variant: openHandoffs > 0 ? 'warning' as const : 'neutral' as const,
+    },
+    {
+      label: 'Blocking failures',
+      value: blockingFailures,
+      detail: '24h failed-job proxy',
+      variant: blockingFailures > 0 ? 'danger' as const : 'neutral' as const,
+    },
+  ]
+
+  return (
+    <section className={`agent-desk-now${compact ? ' agent-desk-now--compact' : ''}`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <div>
+          <p className="m-0 text-[var(--text-dense-caption)] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+            {compact ? 'Active work' : 'Now'}
+          </p>
+          {!compact && (
+            <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Current work requiring attention or execution.
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="agent-desk-now__grid">
+        {metrics.map(metric => (
+          <div key={metric.label} className="agent-desk-now__metric">
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="truncate text-[var(--text-dense-label)] font-medium">
+                {metric.label}
+              </span>
+              <DenseTag variant={metric.variant}>{metric.value}</DenseTag>
+            </div>
+            <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              {metric.detail}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }

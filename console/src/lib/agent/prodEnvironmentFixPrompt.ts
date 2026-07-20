@@ -7,6 +7,19 @@ export type ProdFixSignal = {
   label: string
   signal: Signal
   detail: string
+  /** Agent Task scope when this signal is not ok. Fallback: cluster_issues_full_auto */
+  fixScope?: string
+}
+
+/** Pick fixScope from the first non-ok signal. Fallback: cluster_issues_full_auto. */
+export function pickFixScope(signals: ProdFixSignal[]): string {
+  const first = signals.find(s => s.signal !== 'ok')
+  return first?.fixScope ?? PROD_ENV_FIX_SCOPE
+}
+
+/** First non-ok signal (for UI titles / dispatcher hints). */
+export function pickFailingFixSignal(signals: ProdFixSignal[]): ProdFixSignal | undefined {
+  return signals.find(s => s.signal !== 'ok')
 }
 
 export function buildPlatformProdFixPrompt(input: {
@@ -31,6 +44,7 @@ export function buildPlatformProdFixPrompt(input: {
     '3. For self-health PROD probes failing: verify platform-api/console NodePorts and HA replicas in bifrost-platform-prod.',
     '4. For PROD release gate failing: inspect gate history; fix underlying probe failures before re-running gate — do NOT bypass gates.',
     '5. For supply chain / Dockerfile CM issues: sync mirrors and refresh Kaniko ConfigMaps (Launch Rocket page).',
+    '6. For cicd namespace Failed/Error pods (Tekton PipelineRun remnants): get_pipeline_runs to identify the stale run; if the underlying deployment is healthy and the run is terminal (Failed/Succeeded), delete_pipeline_run (with operator approval) to clean up. This clears failing_pods without affecting running workloads.',
     '',
     failing.length > 0
       ? `Priority targets (${failing.length} non-ok): ${failing.map(f => f.label).join(', ')}.`

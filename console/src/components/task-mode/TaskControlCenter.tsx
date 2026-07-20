@@ -1,16 +1,19 @@
-import { useCallback, useMemo, useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DenseTag, PageHeader } from '@bifrost/ui'
 import { fetchDevAgentStatus } from '@/api/devAgent'
 import {
+  fetchAgentBridge,
   fetchCluster,
   fetchClusterServiceReadiness,
   fetchPipelineRuns,
   fetchReleaseGate,
+  fetchRemediationJobs,
   fetchSatelliteBusDeep,
   fetchSupplyChain,
   fetchStgSmoke,
   isAllSatelliteBusDeep,
+  startRemediation,
 } from '@/api/platform'
 import { isBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
 import type {
@@ -20,6 +23,7 @@ import type {
   OpsContextResponse,
 } from '@/api/types'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import {
   useRocketProdReadiness,
   usePromoteVerifyReadiness,
@@ -28,21 +32,51 @@ import {
 } from '@/components/task-mode/TaskModeReadinessStrip'
 import { DevTaskStrips } from '@/components/task-mode/DevTaskStrips'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
-import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { useDevProgramInstance } from '@/hooks/useDevProgramInstance'
 import { useInlineBriefingPack } from '@/hooks/useInlineBriefingPack'
-import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
+import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { ambientAgentBlockedReason } from '@/lib/agent/ambientAgent'
+import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
+import {
+  DAILY_OPS_CHECKLIST_RUN_PROMPT,
+  findActiveChecklistRunJob,
+} from '@/lib/control-room/checklistProgress'
+import {
+  buildOperatorPlaneFixPrompt,
+  OPERATOR_PLANE_FIX_SCOPE,
+} from '@/lib/agent/operatorPlaneFixPrompt'
+import {
+  buildGitDirtyRemediatePrompt,
+  GIT_DIRTY_FIX_SCOPE,
+} from '@/lib/agent/gitDirtyRemediatePrompt'
 import {
   buildPlatformProdFixPrompt,
   buildTradeProdFixPrompt,
+  pickFailingFixSignal,
+  pickFixScope,
   PROD_ENV_FIX_SCOPE,
 } from '@/lib/agent/prodEnvironmentFixPrompt'
+import {
+  buildClusterPackBody,
+  buildDispatchedFixPrompt,
+  fixScopeAgentTitle,
+} from '@/lib/agent/readinessFixDispatch'
+import {
+  buildFleetCellFixPrompt,
+  cellAllowsAgentFix,
+  pickFleetFixCell,
+  resolveCellFixScope,
+} from '@/lib/control-room/fleetCellFix'
+import { resolveDailyOpsWorkflow } from '@/lib/control-room/dailyOpsWorkflow'
+import { recordChecklistRunTouch } from '@/lib/control-room/dailyOpsChecklistCoverage'
+import type { FleetCell } from '@/lib/control-room/fleetSnapshot'
+import { ViewerEnvBadge } from '@/components/task-mode/ViewerEnvBadge'
 import {
   buildSatelliteBusIngestTriagePrompt,
   SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
@@ -51,7 +85,6 @@ import {
 import { buildTradeEnvReadinessFixPrompt } from '@/lib/agent/tradeEnvReadinessFixPrompt'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import { missionStatus } from '@/lib/control-room/missionSignals'
-import { collectClusterIssues } from '@/lib/cluster/collectClusterIssues'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import {
   buildTradeDeployPrompt,
@@ -70,7 +103,6 @@ import {
   resolveLaunchVerdict,
 } from '@/lib/task-mode/satelliteLaunchVerdict'
 import {
-  buildDailyOpsMissionFixPrompt,
   buildPhaseHints,
   type TaskPhaseFixAction,
 } from '@/lib/task-mode/taskPhaseDiagnostics'
@@ -93,7 +125,7 @@ export type TaskControlCenterProps = AmbientAgentShellProps & {
   onOpenBriefing?: (opts?: BriefingUrlState) => void
   onOpenPromote?: () => void
   onOpenDelivery?: () => void
-  onOpenAgentDesk?: (jobId?: string) => void
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
 }
 
 export function TaskControlCenter({
@@ -117,10 +149,56 @@ export function TaskControlCenter({
 }: TaskControlCenterProps) {
   const { mode } = useTaskMode()
   const { canOperate } = usePlatformAuth()
-  const { snapshot } = useMissionSnapshot()
+  const qc = useQueryClient()
+  const { fleet, snapshot, viewerEnv, viewerEnvLoading } = useFleetSnapshot()
   const queueQ = useOperateQueue()
+  const [fleetFixCell, setFleetFixCell] = useState<FleetCell | null>(null)
+  const fleetFixCellRef = useRef<FleetCell | null>(null)
+  /** Tracks Daily Ops Agent Fix lifecycle for workflow Verify phase. */
+  const dailyOpsFixStartedRef = useRef(false)
+  /** Tracks Checklist AI Check (daily-ops-checklist-run) for signals invalidate. */
+  const checklistCheckStartedRef = useRef(false)
+  const prevAmbientJobIdRef = useRef<string | null | undefined>(undefined)
+  const prevAmbientJobScopeRef = useRef<string | null | undefined>(undefined)
+  const [agentJustSucceeded, setAgentJustSucceeded] = useState(false)
 
   const isMissionLaunch = mode.id === 'mission-launch'
+  const isDailyOps = mode.id === 'daily-ops'
+  const checklistCheckAmbient =
+    ambientJobId != null && ambientJobScope === DAILY_OPS_CHECKLIST_RUN_SCOPE
+  const [checklistJobsPollFast, setChecklistJobsPollFast] = useState(false)
+  const checklistDispatchJobsQ = useQuery({
+    queryKey: ['remediation', 'jobs', 'checklist-dispatch'],
+    queryFn: fetchRemediationJobs,
+    enabled: isDailyOps,
+    refetchInterval:
+      checklistCheckAmbient || checklistJobsPollFast ? 3_000 : 15_000,
+  })
+  const activeDispatchJobs = useMemo(() => {
+    const jobs = checklistDispatchJobsQ.data?.jobs ?? []
+    return jobs.filter(
+      j =>
+        j.status === 'running' ||
+        j.actor === 'checklist-dispatch' ||
+        j.scope === DAILY_OPS_CHECKLIST_RUN_SCOPE,
+    )
+  }, [checklistDispatchJobsQ.data?.jobs])
+  const activeChecklistRunJob = useMemo(
+    () => findActiveChecklistRunJob(checklistDispatchJobsQ.data?.jobs ?? []),
+    [checklistDispatchJobsQ.data?.jobs],
+  )
+  useEffect(() => {
+    setChecklistJobsPollFast(activeChecklistRunJob != null || checklistCheckAmbient)
+  }, [activeChecklistRunJob, checklistCheckAmbient])
+  const runnerHealthy = useMemo(() => {
+    const eng = fleet.cells.find(c => c.role === 'engineer')
+    if (eng == null) return false
+    return eng.standards.some(
+      s =>
+        (s.id === 'runners-ha' || /runner/i.test(s.id) || /runner/i.test(s.label ?? '')) &&
+        s.signal === 'ok',
+    )
+  }, [fleet.cells])
   const rocketProd = useRocketProdReadiness(isMissionLaunch)
   const satelliteProd = useSatelliteProdReadiness(isMissionLaunch)
   const promoteVerify = usePromoteVerifyReadiness(isMissionLaunch)
@@ -147,7 +225,7 @@ export function TaskControlCenter({
     refetchInterval: 20_000,
     enabled:
       isMissionLaunch ||
-      (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
+      (isDailyOps && !fleet.fleetClear),
   })
 
   const serviceReadinessForFixQ = useQuery({
@@ -156,7 +234,7 @@ export function TaskControlCenter({
     refetchInterval: 20_000,
     enabled:
       isMissionLaunch ||
-      (mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok'),
+      (isDailyOps && !fleet.fleetClear),
   })
 
   const devProgram = useDevProgramInstance(mode)
@@ -190,31 +268,73 @@ export function TaskControlCenter({
     }),
   })
 
-  const prodFixLabel = scopeToLabel(PROD_ENV_FIX_SCOPE)
+  const tradeProdFixSignals = useMemo(
+    () => [
+      ...(satelliteProd.rocketBlocked && satelliteProd.rocketFixSignal != null
+        ? [satelliteProd.rocketFixSignal]
+        : []),
+      ...(satelliteProd.fixSignals ?? []),
+    ],
+    [
+      satelliteProd.rocketBlocked,
+      satelliteProd.rocketFixSignal,
+      satelliteProd.fixSignals,
+    ],
+  )
+
+  const platformProdFixScope = pickFixScope(rocketProd.fixSignals ?? [])
+  const tradeProdFixScope = pickFixScope(tradeProdFixSignals)
+  const tradeStgEnvFixScope = pickFixScope(stgReadinessSignals)
+  const tradeProdEnvFixScope = pickFixScope(prodReadinessSignals)
+  const dailyOpsTargetCell = useMemo(() => {
+    if (fleetFixCell != null && cellAllowsAgentFix(fleetFixCell)) return fleetFixCell
+    return pickFleetFixCell(fleet)
+  }, [fleetFixCell, fleet])
+  const dailyOpsFixScope = resolveCellFixScope(dailyOpsTargetCell ?? ({
+    signal: 'ok',
+    role: 'ground',
+    env: null,
+    span: true,
+    key: '',
+    value: '',
+    detail: '',
+    probePath: '',
+    standards: [],
+    fixScope: null,
+    agentFixEnabled: false,
+  } as FleetCell)) ?? PROD_ENV_FIX_SCOPE
 
   const aiPlatformProdFix = useAmbientAgentTask({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: platformProdFixScope,
+    label: scopeToLabel(platformProdFixScope),
     buildRequest: async () => {
+      const signals = rocketProd.fixSignals ?? []
+      const scope = pickFixScope(signals)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
-      const issues = collectClusterIssues({
-        summary: cluster,
-        serviceReadiness,
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
+      const fallback = buildPlatformProdFixPrompt({
+        prodOverall: rocketProd.prodOverall,
+        namespace: rocketProd.prodNamespace ?? 'bifrost-platform-prod',
+        signals,
       })
       return {
-        prompt: buildPlatformProdFixPrompt({
-          prodOverall: rocketProd.prodOverall,
-          namespace: rocketProd.prodNamespace ?? 'bifrost-platform-prod',
-          signals: rocketProd.fixSignals ?? [],
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: {
+            supply,
+            stgSmoke: smoke,
+            pipeline: 'bifrost-deliver-platform',
+          },
         }),
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues,
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
@@ -223,31 +343,62 @@ export function TaskControlCenter({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: tradeProdFixScope,
+    label: scopeToLabel(tradeProdFixScope),
     buildRequest: async () => {
+      const signals = tradeProdFixSignals
+      const scope = pickFixScope(signals)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
-      const issues = collectClusterIssues({
-        summary: cluster,
-        serviceReadiness,
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
+      const fallback = buildTradeProdFixPrompt({
+        prodOverall: satelliteProd.prodOverall,
+        stgNamespace: satelliteProd.stgNamespace ?? 'bifrost-stg',
+        prodNamespace: satelliteProd.prodNamespace ?? 'bifrost-prod',
+        signals,
       })
+      let busTriagePrompt: string | undefined
+      if (scope === SATELLITE_BUS_INGEST_TRIAGE_SCOPE) {
+        const data = await fetchSatelliteBusDeep('stg')
+        const bus =
+          data != null && isAllSatelliteBusDeep(data)
+            ? data.buses.find(b => b.environment === 'stg')
+            : data
+        const ingestHeadline = summarizeIngestServices(bus?.ingest.services ?? []).headline
+        const socket = bus?.monitor.socket
+        const socketRows = socket
+          ? [
+              socket.massive,
+              socket.ib_ingestor,
+              socket.ib_account_agent,
+              socket.ib_operator,
+              socket.platform_ib_gateway,
+            ]
+          : []
+        const socketOk = socketRows.filter(r => r?.reachability === 'ok').length
+        const socketHeadline =
+          socket == null
+            ? 'Monitor socket block unavailable'
+            : `${socketOk}/${socketRows.length} socket components ok`
+        busTriagePrompt = buildSatelliteBusIngestTriagePrompt({
+          env: 'stg',
+          namespace: 'bifrost-stg',
+          ingestHeadline,
+          socketHeadline,
+          busReachability: bus?.reachability,
+        })
+      }
       return {
-        prompt: buildTradeProdFixPrompt({
-          prodOverall: satelliteProd.prodOverall,
-          stgNamespace: satelliteProd.stgNamespace ?? 'bifrost-stg',
-          prodNamespace: satelliteProd.prodNamespace ?? 'bifrost-prod',
-          signals: [
-            ...(satelliteProd.rocketBlocked && satelliteProd.rocketFixSignal != null
-              ? [satelliteProd.rocketFixSignal]
-              : []),
-            ...(satelliteProd.fixSignals ?? []),
-          ],
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: { supply, stgSmoke: smoke, pipeline: 'bifrost-deliver-stg' },
+          busTriagePrompt,
         }),
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues,
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
@@ -256,26 +407,30 @@ export function TaskControlCenter({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: tradeStgEnvFixScope,
+    label: scopeToLabel(tradeStgEnvFixScope),
     buildRequest: async () => {
+      const signals = stgReadinessSignals
+      const scope = pickFixScope(signals)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
-      const issues = collectClusterIssues({
-        summary: cluster,
-        serviceReadiness,
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
+      const fallback = buildTradeEnvReadinessFixPrompt({
+        env: 'stg',
+        overall: satelliteDeploy.stgOverall,
+        namespace: 'bifrost-stg',
+        signals,
       })
       return {
-        prompt: buildTradeEnvReadinessFixPrompt({
-          env: 'stg',
-          overall: satelliteDeploy.stgOverall,
-          namespace: 'bifrost-stg',
-          signals: stgReadinessSignals,
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: { supply, stgSmoke: smoke, pipeline: 'bifrost-deliver-stg' },
         }),
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues,
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
@@ -284,26 +439,30 @@ export function TaskControlCenter({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: tradeProdEnvFixScope,
+    label: scopeToLabel(tradeProdEnvFixScope),
     buildRequest: async () => {
+      const signals = prodReadinessSignals
+      const scope = pickFixScope(signals)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
-      const issues = collectClusterIssues({
-        summary: cluster,
-        serviceReadiness,
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
+      const fallback = buildTradeEnvReadinessFixPrompt({
+        env: 'prod',
+        overall: satelliteDeploy.prodOverall,
+        namespace: 'bifrost-prod',
+        signals,
       })
       return {
-        prompt: buildTradeEnvReadinessFixPrompt({
-          env: 'prod',
-          overall: satelliteDeploy.prodOverall,
-          namespace: 'bifrost-prod',
-          signals: prodReadinessSignals,
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: { supply, stgSmoke: smoke, pipeline: 'bifrost-deliver-stg' },
         }),
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues,
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
@@ -514,6 +673,8 @@ export function TaskControlCenter({
       tradeStgSmokeOk: tradeSmokeOk,
       briefingOpened,
       devAgentPhaseDone: isDevLoop ? devAgentPhaseDone : undefined,
+      fleetAgentFixAvailable:
+        isDailyOps && dailyOpsTargetCell != null && cellAllowsAgentFix(dailyOpsTargetCell),
     }
   }, [
     context,
@@ -530,6 +691,8 @@ export function TaskControlCenter({
     briefingOpened,
     isDevLoop,
     devAgentPhaseDone,
+    isDailyOps,
+    dailyOpsTargetCell,
   ])
 
   const phases = mode.phases ?? []
@@ -547,24 +710,337 @@ export function TaskControlCenter({
     canOperate,
     ambientJobId,
     onStartAgentJob,
-    scope: PROD_ENV_FIX_SCOPE,
-    label: prodFixLabel,
+    scope: dailyOpsFixScope,
+    label: scopeToLabel(dailyOpsFixScope),
     buildRequest: async () => {
-      const prompt = buildDailyOpsMissionFixPrompt(snapshot)
-      if (prompt == null) {
-        throw new Error('Mission is NOMINAL — nothing to fix')
+      const cell =
+        fleetFixCellRef.current ??
+        dailyOpsTargetCell ??
+        pickFleetFixCell(fleet)
+      if (cell == null || !cellAllowsAgentFix(cell)) {
+        throw new Error('Fleet is clear or selected cell is not Agent-Fixable')
       }
+      const scope = resolveCellFixScope(cell) ?? PROD_ENV_FIX_SCOPE
+      const cellPrompt = buildFleetCellFixPrompt(cell, fleet)
       const cluster = clusterForFixQ.data ?? (await fetchCluster())
       const serviceReadiness =
         serviceReadinessForFixQ.data ?? (await fetchClusterServiceReadiness())
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const [supply, smoke] = await Promise.all([fetchSupplyChain(), fetchStgSmoke()])
       return {
-        prompt,
-        cluster_summary: cluster,
-        service_readiness: serviceReadiness,
-        issues: collectClusterIssues({ summary: cluster, serviceReadiness }),
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals: [
+            {
+              label: `${cell.role} · ${cell.env ?? 'span'}`,
+              signal: cell.signal === 'unavailable' ? 'unknown' : cell.signal,
+              detail: cell.detail,
+              fixScope: scope,
+            },
+          ],
+          clusterFallbackPrompt: cellPrompt,
+          extras: { supply, stgSmoke: smoke },
+        }),
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
       }
     },
   })
+
+  const aiOperatorPlaneFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: OPERATOR_PLANE_FIX_SCOPE,
+    label: scopeToLabel(OPERATOR_PLANE_FIX_SCOPE),
+    buildRequest: async () => {
+      const bridge = await fetchAgentBridge()
+      return { prompt: buildOperatorPlaneFixPrompt(bridge) }
+    },
+  })
+
+  const gitDirtyIntentRef = useRef<'commit' | 'stash'>('commit')
+  const aiGitDirtyFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: GIT_DIRTY_FIX_SCOPE,
+    label: scopeToLabel(GIT_DIRTY_FIX_SCOPE),
+    buildRequest: async () => {
+      const bridge = await fetchAgentBridge()
+      const base = buildGitDirtyRemediatePrompt(bridge)
+      const intent = gitDirtyIntentRef.current
+      const extra =
+        intent === 'stash'
+          ? [
+              '',
+              '## Operator intent: STASH (not commit)',
+              'Prefer git_stash after request_operator_approval. Do not git_commit unless operator changes mind.',
+            ].join('\n')
+          : [
+              '',
+              '## Operator intent: PROPOSE COMMIT',
+              'Draft commit_message → request_operator_approval → git_commit. Stash only if operator rejects commit and asks to stash.',
+            ].join('\n')
+      return { prompt: `${base}${extra}` }
+    },
+  })
+
+  /** Checklist AI Check — scope daily-ops-checklist-run (not Operator Plane Fix). */
+  const aiChecklistCheck = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: DAILY_OPS_CHECKLIST_RUN_SCOPE,
+    label: scopeToLabel(DAILY_OPS_CHECKLIST_RUN_SCOPE),
+    buildRequest: () => ({ prompt: DAILY_OPS_CHECKLIST_RUN_PROMPT }),
+  })
+
+  const handleFleetCellFix = (cell: FleetCell) => {
+    fleetFixCellRef.current = cell
+    setFleetFixCell(cell)
+    dailyOpsFixStartedRef.current = true
+    setAgentJustSucceeded(false)
+    // Mark standards in this cell as a real checklist run (vs dry-run coverage).
+    recordChecklistRunTouch(cell)
+    aiDailyOpsFix.trigger()
+  }
+
+  const handleOperatorPlanFix = () => {
+    dailyOpsFixStartedRef.current = true
+    setAgentJustSucceeded(false)
+    const engineerCell = fleet.cells.find(c => c.role === 'engineer')
+    if (engineerCell != null) recordChecklistRunTouch(engineerCell)
+    aiOperatorPlaneFix.trigger()
+  }
+
+  const handleProposeCommit = () => {
+    dailyOpsFixStartedRef.current = true
+    setAgentJustSucceeded(false)
+    gitDirtyIntentRef.current = 'commit'
+    const engineerCell = fleet.cells.find(c => c.role === 'engineer')
+    if (engineerCell != null) recordChecklistRunTouch(engineerCell)
+    aiGitDirtyFix.trigger()
+  }
+
+  const handleProposeStash = () => {
+    dailyOpsFixStartedRef.current = true
+    setAgentJustSucceeded(false)
+    gitDirtyIntentRef.current = 'stash'
+    const engineerCell = fleet.cells.find(c => c.role === 'engineer')
+    if (engineerCell != null) recordChecklistRunTouch(engineerCell)
+    aiGitDirtyFix.trigger()
+  }
+
+  const handleChecklistCheck = () => {
+    checklistCheckStartedRef.current = true
+    aiChecklistCheck.trigger()
+  }
+
+  const checklistItemFixRef = useRef<{
+    itemId: string
+    scope: string
+    label: string
+    prompt: string
+  } | null>(null)
+  const [checklistItemFixActiveId, setChecklistItemFixActiveId] = useState<string | null>(
+    null,
+  )
+
+  const aiChecklistItemFix = useMutation({
+    mutationFn: async () => {
+      const r = checklistItemFixRef.current
+      if (r == null) throw new Error('No checklist item selected for Fix')
+      return startRemediation({ scope: r.scope, prompt: r.prompt })
+    },
+    onSuccess: job => {
+      const r = checklistItemFixRef.current
+      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+      onStartAgentJob?.({
+        id: job.id,
+        scope: r?.scope ?? job.scope ?? 'checklist-item-fix',
+        label: r?.label ?? scopeToLabel(r?.scope ?? job.scope ?? 'checklist-item-fix'),
+      })
+    },
+  })
+
+  // Keep row/section highlight until ambient job ends (not merely until mutate settles).
+  useEffect(() => {
+    if (ambientJobId == null) setChecklistItemFixActiveId(null)
+  }, [ambientJobId])
+
+  const checklistItemFixBlocked = ambientAgentBlockedReason(
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+  )
+
+  const handleChecklistItemFix = (args: {
+    itemId: string
+    fixScope: string
+    label: string
+    prompt: string
+  }) => {
+    checklistItemFixRef.current = {
+      itemId: args.itemId,
+      scope: args.fixScope,
+      label: args.label,
+      prompt: args.prompt,
+    }
+    setChecklistItemFixActiveId(args.itemId)
+    setAgentJustSucceeded(false)
+    aiChecklistItemFix.mutate()
+  }
+
+  const checklistCheckActive =
+    isDailyOps &&
+    (aiChecklistCheck.isPending ||
+      checklistCheckAmbient ||
+      activeChecklistRunJob != null)
+
+  const checklistCheckDisabled =
+    aiChecklistCheck.disabled || !runnerHealthy
+
+  const checklistCheckTitle = !runnerHealthy
+    ? 'Remediation runner not healthy — check Engineer · runners-ha'
+    : (aiChecklistCheck.disabledReason ??
+      'AI Check: daily-ops-checklist-run probe → report_checklist_signals (not Operator Plane Fix)')
+
+  const handleFleetPrimaryCta = () => {
+    const cta = fleet.verdict.primaryCta
+    if (cta.kind === 'navigate' && cta.tabId != null) {
+      onNavigate(cta.tabId)
+      return
+    }
+    if (cta.kind === 'agent-fix') {
+      const cell =
+        (cta.cellKey != null ? fleet.cells.find(c => c.key === cta.cellKey) : null) ??
+        pickFleetFixCell(fleet)
+      if (cell != null) handleFleetCellFix(cell)
+    }
+  }
+
+  // Ambient job ended after Daily Ops Agent Fix → Verify (re-probe) only on success
+  // Checklist AI Check done/failed → refresh signals / KPIs / jobs
+  useEffect(() => {
+    const prevId = prevAmbientJobIdRef.current
+    const prevScope = prevAmbientJobScopeRef.current
+    prevAmbientJobIdRef.current = ambientJobId
+    prevAmbientJobScopeRef.current = ambientJobScope
+
+    if (prevId != null && ambientJobId == null) {
+      if (prevScope === DAILY_OPS_CHECKLIST_RUN_SCOPE || checklistCheckStartedRef.current) {
+        checklistCheckStartedRef.current = false
+        void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+        void qc.invalidateQueries({ queryKey: ['checklist', 'kpis'] })
+        void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+        void qc.invalidateQueries({ queryKey: ['cockpit'] })
+      }
+      if (dailyOpsFixStartedRef.current && prevScope !== DAILY_OPS_CHECKLIST_RUN_SCOPE) {
+        // Only enter Verify when the job actually succeeded (not failed/cancelled)
+        const jobsCaches = [
+          qc.getQueryData<{ jobs: { id: string; status: string }[] }>(['remediation', 'jobs']),
+          qc.getQueryData<{ jobs: { id: string; status: string }[] }>([
+            'remediation',
+            'jobs',
+            'checklist-dispatch',
+          ]),
+        ]
+        const ended = jobsCaches
+          .flatMap(c => c?.jobs ?? [])
+          .find(j => j.id === prevId)
+        if (ended?.status === 'done') {
+          setAgentJustSucceeded(true)
+        }
+        void qc.invalidateQueries({ queryKey: ['cockpit'] })
+        void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+        void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      }
+    }
+  }, [ambientJobId, ambientJobScope, qc])
+
+  useEffect(() => {
+    if (fleet.fleetClear) {
+      setAgentJustSucceeded(false)
+      dailyOpsFixStartedRef.current = false
+    }
+  }, [fleet.fleetClear])
+
+  const dailyOpsAgentPending =
+    isDailyOps &&
+    (aiDailyOpsFix.isPending ||
+      aiOperatorPlaneFix.isPending ||
+      aiGitDirtyFix.isPending ||
+      (ambientJobId != null && dailyOpsFixStartedRef.current))
+
+  const dailyOpsWorkflow = useMemo(() => {
+    if (!isDailyOps) return null
+    return resolveDailyOpsWorkflow({
+      fleet,
+      agentPending: dailyOpsAgentPending,
+      agentJustSucceeded,
+      queueOpen: queueQ.data?.open.length ?? 0,
+    })
+  }, [
+    isDailyOps,
+    fleet,
+    dailyOpsAgentPending,
+    agentJustSucceeded,
+    queueQ.data?.open.length,
+  ])
+
+  const handleFleetWorkflowAction = () => {
+    if (dailyOpsWorkflow == null) return
+    const action = dailyOpsWorkflow.primaryAction
+    if (action.kind === 'agent-fix') {
+      const cell =
+        (action.cellKey != null ? fleet.cells.find(c => c.key === action.cellKey) : null) ??
+        pickFleetFixCell(fleet)
+      if (cell != null && cellAllowsAgentFix(cell)) {
+        handleFleetCellFix(cell)
+      }
+      return
+    }
+    if (action.kind === 'operator-plan') {
+      handleOperatorPlanFix()
+      return
+    }
+    if (action.kind === 'propose-commit') {
+      handleProposeCommit()
+      return
+    }
+    if (action.kind === 'manual-next') {
+      const hint = action.manualHint ?? action.label
+      void navigator.clipboard?.writeText(hint).then(
+        () => {
+          /* copied — strip title already shows the next step */
+        },
+        () => {
+          /* clipboard may be denied; label still visible */
+        },
+      )
+      if (action.tabId != null) {
+        // Stay on TCC; Operator Plan panel is already inline. Full page only via escape link.
+      }
+      return
+    }
+    if (action.kind === 'view-agent') {
+      onOpenAgentDesk?.(ambientJobId ?? undefined)
+      return
+    }
+    if (action.kind === 'navigate' || action.kind === 'clear-queue') {
+      if (action.tabId != null) onNavigate(action.tabId)
+      return
+    }
+    if (action.kind === 'ai-check' || action.kind === 'run-check') {
+      // Discover AI Check + Clear idle re-check → daily-ops-checklist-run
+      handleChecklistCheck()
+      return
+    }
+    if (action.kind === 'verify') {
+      void qc.invalidateQueries({ queryKey: ['cockpit'] })
+    }
+  }
 
   const doneCount = phases.filter((p: TaskPhaseDef) => statuses[p.id] === 'done').length
   const loopLabel =
@@ -577,7 +1053,8 @@ export function TaskControlCenter({
   const handlePhaseFixAction = (action: TaskPhaseFixAction, _phase: TaskPhaseDef) => {
     if (action.kind === 'agent-fix') {
       if (mode.id === 'daily-ops') {
-        aiDailyOpsFix.trigger()
+        const cell = pickFleetFixCell(fleet)
+        if (cell != null) handleFleetCellFix(cell)
         return
       }
       if (isMissionLaunch) {
@@ -681,8 +1158,10 @@ export function TaskControlCenter({
   const phaseDefaultOpen = useMemo(() => {
     if (phases.length === 0) return false
     if (isDevLoop) return false
+    // Daily Ops — phase playbook is reference only (A7); default collapsed
+    if (isDailyOps) return false
     return !phases.every((p: TaskPhaseDef) => statuses[p.id] === 'done')
-  }, [phases, statuses, isDevLoop])
+  }, [phases, statuses, isDevLoop, isDailyOps])
 
   const [phaseOpen, setPhaseOpen] = useState(phaseDefaultOpen)
   useEffect(() => {
@@ -692,9 +1171,11 @@ export function TaskControlCenter({
   const headerDescription =
     mode.loopArchetype === 'dev'
       ? `Briefing → implement → deliver — playbook for ${mode.label}.`
-      : mode.loopArchetype === 'ops'
-        ? `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
-        : `${mode.label} · ${loopLabel}`
+      : isDailyOps
+        ? `Ops loop — Discover → Remediate → Verify → Clear — Fleet Desk is health ground truth.`
+        : mode.loopArchetype === 'ops'
+          ? `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
+          : `${mode.label} · ${loopLabel}`
 
   const phaseProgressHint = isDevLoop
     ? phaseOpen
@@ -708,44 +1189,44 @@ export function TaskControlCenter({
     ? 'Playbook phase status — Briefing → implement → deliver → sign-off'
     : 'Historical phase checklist — not live environment health'
 
-  const phaseProgressBlock =
-    phases.length > 0 ? (
-      <details
-        className="rounded-lg border border-border bg-card px-3 py-1.5"
-        open={phaseOpen}
-        onToggle={e => setPhaseOpen((e.currentTarget as HTMLDetailsElement).open)}
-      >
-        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
-            <DenseTag variant="neutral" className="text-[9px]">
-              Playbook
-            </DenseTag>
-            <DenseTag variant="neutral" className="text-[9px]">
-              {doneCount}/{phases.length} complete
-            </DenseTag>
-            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-              {phaseProgressHint}
-            </span>
-          </div>
-        </summary>
-        <p className="m-0 mb-1.5 mt-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
-          {phaseProgressCaption}
+  /** Daily Ops: no phase strip — Help · reference lives inside Ops loop (DailyOpsProcessStrip). */
+  const phaseProgressBlock = isDailyOps ? null : phases.length > 0 ? (
+    <details
+      className="rounded-lg border border-border bg-card px-3 py-1.5"
+      open={phaseOpen}
+      onToggle={e => setPhaseOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[var(--text-dense-meta)] font-semibold">Phase progress</span>
+          <DenseTag variant="neutral" className="text-[9px]">
+            Playbook
+          </DenseTag>
+          <DenseTag variant="neutral" className="text-[9px]">
+            {doneCount}/{phases.length} complete
+          </DenseTag>
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+            {phaseProgressHint}
+          </span>
+        </div>
+      </summary>
+      <p className="m-0 mb-1.5 mt-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
+        {phaseProgressCaption}
+      </p>
+      <TaskPhaseProgress
+        phases={phases}
+        statuses={statuses}
+        hints={phaseHints}
+        onOpenFullPage={handleOpenPhasePage}
+        onFixAction={handlePhaseFixAction}
+      />
+      {isMissionLaunch && (satelliteProd.prodBlocked || rocketProd.prodBlocked) && (
+        <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
+          Live readiness blocked — playbook Done does not clear release
         </p>
-        <TaskPhaseProgress
-          phases={phases}
-          statuses={statuses}
-          hints={phaseHints}
-          onOpenFullPage={handleOpenPhasePage}
-          onFixAction={handlePhaseFixAction}
-        />
-        {isMissionLaunch && (satelliteProd.prodBlocked || rocketProd.prodBlocked) && (
-          <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-warning">
-            Live readiness blocked — playbook Done does not clear release
-          </p>
-        )}
-      </details>
-    ) : null
+      )}
+    </details>
+  ) : null
 
   const devStripsBlock = isDevLoop ? (
     <DevTaskStrips
@@ -776,10 +1257,21 @@ export function TaskControlCenter({
         description={headerDescription}
         actions={
           mode.loopArchetype === 'system' ? undefined : (
-            <DenseTag variant={mode.loopArchetype === 'dev' ? 'info' : 'warning'}>{loopLabel}</DenseTag>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(isDailyOps || mode.loopArchetype === 'ops') && (
+                <ViewerEnvBadge viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />
+              )}
+              <DenseTag variant={mode.loopArchetype === 'dev' ? 'info' : 'warning'}>{loopLabel}</DenseTag>
+            </div>
           )
         }
       />
+
+      {isDailyOps && aiDailyOpsFix.error != null && (
+        <OpsFeedback variant="error" title="Failed to start Agent Fix">
+          {aiDailyOpsFix.error.message}
+        </OpsFeedback>
+      )}
 
       {mode.loopArchetype === 'ops' && showLaunchPad && (
         <>
@@ -808,43 +1300,16 @@ export function TaskControlCenter({
               {aiTradeProdFix.error.message}
             </OpsFeedback>
           )}
-          {aiDailyOpsFix.error != null && (
-            <OpsFeedback variant="error" title="Failed to start Agent Fix">
-              {aiDailyOpsFix.error.message}
-            </OpsFeedback>
-          )}
           {aiBusIngestTriage.error != null && (
             <OpsFeedback variant="error" title="Failed to start Bus Ingest Triage">
               {aiBusIngestTriage.error.message}
-            </OpsFeedback>
-          )}
-          {mode.id === 'daily-ops' && snapshot.missionOverall !== 'ok' && (
-            <OpsFeedback
-              variant="warning"
-              title={`Mission ${missionStatus(snapshot.missionOverall)} — fix signals before continuing`}
-              actions={
-                <AgentTriggerButton
-                  label="Agent Fix"
-                  size="xs"
-                  pending={aiDailyOpsFix.isPending}
-                  disabled={aiDailyOpsFix.disabled}
-                  title={
-                    aiDailyOpsFix.disabledReason ??
-                    'Diagnose failing rocket/payload signals and remediate via Cluster · Remediate'
-                  }
-                  onClick={() => aiDailyOpsFix.trigger()}
-                />
-              }
-            >
-              Phase 1 stays blocked until mission signals are NOMINAL. Select step 1 in Phase progress for
-              root-cause breakdown, or open Control Room for the full mission board.
             </OpsFeedback>
           )}
         </>
       )}
 
       {mode.loopArchetype === 'ops' &&
-        (isMissionLaunch || mode.id === 'daily-ops') && (
+        (isMissionLaunch || isDailyOps) && (
           <OpsTaskSummaryRow
             mode={mode}
             context={context}
@@ -869,7 +1334,12 @@ export function TaskControlCenter({
             onAgentFixProd={() => aiTradeProdEnvFix.trigger()}
             agentFixPending={aiTradeStgEnvFix.isPending || aiTradeProdEnvFix.isPending}
             agentFixDisabled={!canOperate}
-            agentFixTitle="Diagnose STG/PROD trade readiness via Cluster · Remediate"
+            agentFixTitle={fixScopeAgentTitle(
+              tradeStgEnvFixScope,
+              scopeToLabel(tradeStgEnvFixScope),
+              pickFailingFixSignal(stgReadinessSignals)?.label ??
+                pickFailingFixSignal(prodReadinessSignals)?.label,
+            )}
             onAgentTriage={() => aiBusIngestTriage.trigger()}
             agentTriagePending={aiBusIngestTriage.isPending}
             agentTriageDisabled={aiBusIngestTriage.disabled}
@@ -877,6 +1347,64 @@ export function TaskControlCenter({
               aiBusIngestTriage.disabledReason ??
               'Cross-check Socket matrix vs Rocket IB gateway (D10 safe)'
             }
+            onFleetCellFix={isDailyOps ? handleFleetCellFix : undefined}
+            onFleetPrimaryCta={isDailyOps ? handleFleetPrimaryCta : undefined}
+            fleetAgentFixPending={isDailyOps ? dailyOpsAgentPending : undefined}
+            fleetWorkflow={dailyOpsWorkflow ?? undefined}
+            fleetAgentFixError={isDailyOps ? (aiDailyOpsFix.error?.message ?? null) : undefined}
+            onFleetWorkflowAction={isDailyOps ? handleFleetWorkflowAction : undefined}
+            onOperatorPlanFix={isDailyOps ? handleOperatorPlanFix : undefined}
+            operatorPlanFixPending={isDailyOps ? aiOperatorPlaneFix.isPending : undefined}
+            operatorPlanFixDisabled={isDailyOps ? aiOperatorPlaneFix.disabled : undefined}
+            operatorPlanFixTitle={
+              isDailyOps
+                ? (aiOperatorPlaneFix.disabledReason ??
+                  'Start Operator · Remediate with current bridge probe')
+                : undefined
+            }
+            operatorPlanFixError={
+              isDailyOps ? (aiOperatorPlaneFix.error?.message ?? null) : undefined
+            }
+            onProposeCommit={isDailyOps ? handleProposeCommit : undefined}
+            onProposeStash={isDailyOps ? handleProposeStash : undefined}
+            proposeCommitPending={isDailyOps ? aiGitDirtyFix.isPending : undefined}
+            proposeCommitDisabled={isDailyOps ? aiGitDirtyFix.disabled : undefined}
+            proposeCommitTitle={
+              isDailyOps
+                ? (aiGitDirtyFix.disabledReason ??
+                  'Start git-dirty-remediate — approval required before commit/stash')
+                : undefined
+            }
+            onChecklistCheck={isDailyOps ? handleChecklistCheck : undefined}
+            checklistCheckPending={isDailyOps ? aiChecklistCheck.isPending : undefined}
+            checklistCheckDisabled={isDailyOps ? checklistCheckDisabled : undefined}
+            checklistCheckTitle={isDailyOps ? checklistCheckTitle : undefined}
+            checklistCheckError={
+              isDailyOps ? (aiChecklistCheck.error?.message ?? null) : undefined
+            }
+            checklistCheckActive={isDailyOps ? checklistCheckActive : undefined}
+            checklistCheckStatusHint={
+              isDailyOps ? (activeChecklistRunJob?.phase ?? null) : undefined
+            }
+            onChecklistItemFix={isDailyOps ? handleChecklistItemFix : undefined}
+            checklistItemFixPending={isDailyOps ? aiChecklistItemFix.isPending : undefined}
+            checklistItemFixDisabled={
+              isDailyOps
+                ? checklistItemFixBlocked != null || !runnerHealthy
+                : undefined
+            }
+            checklistItemFixTitle={
+              isDailyOps
+                ? !runnerHealthy
+                  ? 'Remediation runner not healthy — check Engineer · runners-ha'
+                  : (checklistItemFixBlocked ??
+                    'Start Ops Agent Fix for this checklist item (not Cursor Ask for AI)')
+                : undefined
+            }
+            checklistItemFixError={
+              isDailyOps ? (aiChecklistItemFix.error?.message ?? null) : undefined
+            }
+            checklistItemFixActiveId={isDailyOps ? checklistItemFixActiveId : undefined}
             recentRuns={isMissionLaunch ? platformRunsQ.data?.runs : undefined}
             recentRunsLoading={isMissionLaunch ? platformRunsQ.isLoading : false}
             tradeRecentRuns={isMissionLaunch ? tradeRunsQ.data?.runs : undefined}
@@ -894,7 +1422,11 @@ export function TaskControlCenter({
             launchAgentFixTitle={
               isMissionLaunch
                 ? (aiPlatformProdFix.disabledReason ??
-                  'Start Cluster · Remediate focused on Platform Prod readiness')
+                  fixScopeAgentTitle(
+                    platformProdFixScope,
+                    scopeToLabel(platformProdFixScope),
+                    pickFailingFixSignal(rocketProd.fixSignals ?? [])?.label,
+                  ))
                 : undefined
             }
             satelliteLaunchAgentFixPending={isMissionLaunch ? aiTradeProdFix.isPending : false}
@@ -903,14 +1435,20 @@ export function TaskControlCenter({
             satelliteLaunchAgentFixTitle={
               isMissionLaunch
                 ? (aiTradeProdFix.disabledReason ??
-                  (satelliteProd.blockKind === 'rocket'
-                    ? 'Start Cluster · Remediate focused on Rocket IB bus'
-                    : 'Start Cluster · Remediate focused on Trade Prod readiness'))
+                  fixScopeAgentTitle(
+                    tradeProdFixScope,
+                    scopeToLabel(tradeProdFixScope),
+                    pickFailingFixSignal(tradeProdFixSignals)?.label,
+                  ))
                 : undefined
             }
-            onOpenAgentDesk={() => onOpenAgentDesk?.(ambientJobId ?? undefined)}
+            onOpenAgentDesk={arg =>
+              onOpenAgentDesk?.(arg ?? ambientJobId ?? undefined)
+            }
             ambientJobId={ambientJobId}
             ambientJobScope={ambientJobScope}
+            onStartAgentJob={isDailyOps ? onStartAgentJob : undefined}
+            activeDispatchJobs={isDailyOps ? activeDispatchJobs : undefined}
             pipelineRunsNamespace={isMissionLaunch ? platformRunsQ.data?.namespace : undefined}
             platformStgGate={platformStgGateQ.data}
             platformProdGate={platformProdGateQ.data}
@@ -921,7 +1459,7 @@ export function TaskControlCenter({
           />
         )}
 
-      {/* Dev: strips above phase progress (D-B / F6). Ops: phase progress first. */}
+      {/* Dev: strips above phase. Daily Ops: Ops loop (Help inside) → Agent → Checklist|Board → Operate (no Release). Mission Launch: board + Release posture. */}
       {isDevLoop ? (
         <>
           {devStripsBlock}
@@ -930,7 +1468,7 @@ export function TaskControlCenter({
       ) : (
         <>
           {phaseProgressBlock}
-          {mode.loopArchetype === 'ops' && !isMissionLaunch && (
+          {isMissionLaunch && (
             <OpsTaskStrips
               mode={mode}
               context={context}
@@ -950,7 +1488,7 @@ export function TaskControlCenter({
               canDispatchTradeDeploy={tradeDeployDispatchAllowed}
               releaseDisabledReason={releaseDisabledReason}
               tradeDeployDisabledReason={tradeDeployDisabledReason}
-              promoteOnly={mode.id === 'daily-ops'}
+              promoteOnly
             />
           )}
         </>

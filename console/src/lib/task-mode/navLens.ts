@@ -39,6 +39,8 @@ export type TaskPhaseStatusInput = {
   briefingOpened?: boolean
   /** Dev Agent API phase completion — maps Task Mode phase ids (implement / pre-push). */
   devAgentPhaseDone?: (phaseId: string) => boolean
+  /** Daily Ops: true when pickFleetFixCell finds an Agent-Fixable cell (align phase CTA). */
+  fleetAgentFixAvailable?: boolean
 }
 
 function filterGroupItems(group: ShellNavGroup, allowed: Set<string>): ShellNavGroup | null {
@@ -153,25 +155,23 @@ function firstIncompletePhase(phases: TaskPhaseDef[], statusOf: (id: string) => 
 
 function resolveDailyOpsPhase(phaseId: string, input: TaskPhaseStatusInput): TaskPhaseStatus {
   const snap = input.snapshot
+  const open = input.operateQueueOpenCount ?? 0
+  const fleetOk = snap?.missionOverall === 'ok'
   switch (phaseId) {
-    case 'scan-signals':
+    case 'discover':
       if (snap == null) return 'unknown'
-      return snap.missionOverall === 'ok'
-        ? 'done'
-        : snap.missionOverall === 'fail'
-          ? 'blocked'
-          : 'active'
-    case 'triage-defects':
+      return fleetOk ? 'done' : snap.missionOverall === 'fail' ? 'blocked' : 'active'
+    case 'remediate':
       if (snap == null) return 'unknown'
-      return snap.missionOverall === 'ok' ? 'done' : 'active'
-    case 'operate-queue': {
-      const open = input.operateQueueOpenCount ?? 0
+      return fleetOk ? 'done' : 'active'
+    case 'verify':
+      if (snap == null) return 'unknown'
+      return fleetOk ? 'done' : 'planned'
+    case 'clear': {
+      if (!fleetOk) return 'planned'
       if (open === 0) return 'done'
-      return open > 0 ? 'active' : 'planned'
+      return 'active'
     }
-    case 'verify-mission':
-      if (snap == null) return 'unknown'
-      return snap.missionOverall === 'ok' ? 'done' : 'planned'
     default:
       return 'unknown'
   }

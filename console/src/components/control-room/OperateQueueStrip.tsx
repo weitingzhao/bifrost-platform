@@ -1,71 +1,75 @@
-import { Button, DenseTag } from '@bifrost/ui'
+import { DenseTag } from '@bifrost/ui'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
-import { useCloseOperateQueueItem } from '@/hooks/useCloseOperateQueueItem'
-import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import { OpsSection } from '@/components/layout/OpsSection'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 
-export function OperateQueueStrip() {
+/**
+ * Control Room projection only — full queue list + Start/Dismiss live in
+ * TCC Execution and Agent Desk. Avoid a third full copy of the same handoffs.
+ */
+export function OperateQueueStrip({
+  onOpenAgentDesk,
+}: {
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
+}) {
   const queueQuery = useOperateQueue()
-  const closeMutation = useCloseOperateQueueItem()
-  const { canOperate } = usePlatformAuth()
-  const openItems = queueQuery.data?.open ?? []
+  const briefsQuery = usePendingDecisionBriefs()
+  const openCount = queueQuery.data?.open.length ?? 0
+  const pendingBriefs = briefsQuery.pendingCount
 
-  if (queueQuery.isLoading) {
+  if (queueQuery.isLoading && briefsQuery.isLoading) {
     return (
-      <OpsSection
-        title="Operate queue"
-        description="Open handoff items from approved post-completion (Projection layer · D11)."
-        bodyPadding="compact"
-      >
+      <OpsSection title="Operate queue" bodyPadding="compact">
         <p className="m-0 text-dense-meta text-muted-foreground">Loading operate queue…</p>
       </OpsSection>
     )
   }
 
-  if (openItems.length === 0) {
+  if (openCount === 0 && pendingBriefs === 0) {
     return null
   }
+
+  const summary =
+    pendingBriefs > 0 && openCount > 0
+      ? `${openCount} handoff${openCount === 1 ? '' : 's'} + ${pendingBriefs} decision${pendingBriefs === 1 ? '' : 's'} awaiting`
+      : pendingBriefs > 0
+        ? `${pendingBriefs} decision${pendingBriefs === 1 ? '' : 's'} awaiting`
+        : 'Handoffs awaiting Start / Prepare / Dismiss'
 
   return (
     <OpsSection
       title="Operate queue"
-      description="Owner-approved post-completion items ready for day-to-day ops work."
+      description="Commander summary — full list and execution are in Daily Ops TCC / Agent Desk."
       bodyPadding="compact"
       overflow="visible"
     >
-      <ul className="m-0 flex list-none flex-col gap-2 p-0">
-        {openItems.map(item => (
-          <li
-            key={item.id}
-            className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-border bg-background px-3 py-2"
+      <div className="flex flex-wrap items-center gap-2">
+        {openCount > 0 && (
+          <DenseTag variant="warning">{openCount} open</DenseTag>
+        )}
+        {pendingBriefs > 0 && (
+          <DenseTag variant="danger">{pendingBriefs} decisions</DenseTag>
+        )}
+        <span className="text-dense-meta text-muted-foreground">{summary}</span>
+        {onOpenAgentDesk != null ? (
+          <button
+            type="button"
+            className="ml-auto shrink-0 text-dense-caption font-medium text-primary hover:underline"
+            onClick={() =>
+              onOpenAgentDesk(
+                pendingBriefs > 0 ? { focusDecisionBriefs: true } : undefined,
+              )
+            }
           >
-            <div className="min-w-0">
-              <p className="m-0 text-dense-label font-medium">{item.title}</p>
-              {item.description && (
-                <p className="m-0 mt-0.5 text-dense-meta text-muted-foreground">{item.description}</p>
-              )}
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <DenseTag variant="warning">open</DenseTag>
-                <span className="text-dense-caption text-muted-foreground">{item.program_id}</span>
-                {item.lane && (
-                  <DenseTag variant="category">{item.lane}</DenseTag>
-                )}
-              </div>
-            </div>
-            {canOperate && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={closeMutation.isPending}
-                onClick={() => closeMutation.mutate(item.id)}
-              >
-                Resolve
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
+            Open Agent Desk →
+          </button>
+        ) : (
+          <span className="ml-auto text-dense-caption text-muted-foreground">
+            Open Agent Desk
+          </span>
+        )}
+      </div>
     </OpsSection>
   )
 }

@@ -13,10 +13,21 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { fetchDeliveryBoardPrograms, PROGRAMS_BOARD_QUERY_KEY } from '@/api/programs'
 import { mapProgramSummaryToOverview } from '@/api/programsTypes'
+import { BriefingStatusBadge, BriefingStatusLamp } from '@/components/briefing/BriefingStatusChrome'
+import { DeliveryBoardCompleteGrid } from '@/components/delivery/DeliveryBoardCompleteGrid'
+import { DeliveryBoardFilterChrome } from '@/components/delivery/DeliveryBoardFilterChrome'
 import { DeliveryBoardHistoricalArchive } from '@/components/delivery/DeliveryBoardHistoricalArchive'
 import { DeliveryBoardProgramPanels } from '@/components/delivery/DeliveryBoardProgramPanels'
-import { PostCompletionPendingPanel } from '@/components/delivery/PostCompletionPendingPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  isBriefingScopeId,
+  isWorkTrackType,
+  lanesForScope,
+  lanesForScopeTrack,
+  type BriefingScopeId,
+  type WorkTrackType,
+} from '@/lib/briefing/briefingViewTabs'
+import { laneById, type LaneId } from '@/lib/briefing/workLanes'
 
 function programStatusVariant(signed: number, complete: boolean): DenseTagVariant {
   if (complete) return 'success'
@@ -24,18 +35,118 @@ function programStatusVariant(signed: number, complete: boolean): DenseTagVarian
   return 'neutral'
 }
 
-function laneFilterFromHash(): string | null {
-  if (typeof window === 'undefined') return null
+function filtersFromHash(): {
+  scope: BriefingScopeId
+  trackType: WorkTrackType | null
+  laneId: LaneId | null
+} {
+  if (typeof window === 'undefined') return { scope: 'all', trackType: null, laneId: null }
   const hash = window.location.hash.replace(/^#/, '')
   const qIdx = hash.indexOf('?')
-  if (qIdx < 0) return null
-  const lane = new URLSearchParams(hash.slice(qIdx + 1)).get('lane_id')
-  return lane != null && lane !== '' ? lane : null
+  if (qIdx < 0) return { scope: 'all', trackType: null, laneId: null }
+  const params = new URLSearchParams(hash.slice(qIdx + 1))
+  const lane = params.get('lane_id')
+  const scopeRaw = params.get('scope')
+  const ttRaw = params.get('tt')
+  const laneId = lane != null && lane !== '' ? lane : null
+  let scope: BriefingScopeId = 'all'
+  let trackType: WorkTrackType | null = null
+  if (scopeRaw != null && isBriefingScopeId(scopeRaw)) {
+    scope = scopeRaw
+  } else if (laneId != null) {
+    const laneDef = laneById(laneId)
+    if (laneDef.componentLine) scope = laneDef.componentLine
+  }
+  if (ttRaw != null && isWorkTrackType(ttRaw)) {
+    trackType = ttRaw
+  } else if (laneId != null) {
+    trackType = laneById(laneId).trackType
+  }
+  return { scope, trackType, laneId }
+}
+
+function writeFiltersToHash(
+  scope: BriefingScopeId,
+  trackType: WorkTrackType | null,
+  laneId: LaneId | null,
+) {
+  const params = new URLSearchParams()
+  if (scope !== 'all') params.set('scope', scope)
+  if (trackType != null) params.set('tt', trackType)
+  if (laneId != null) params.set('lane_id', laneId)
+  const q = params.toString()
+  const base = 'delivery-board'
+  window.location.hash = q ? `${base}?${q}` : base
+}
+
+function ProgramBandTable({
+  programs,
+  selectedProgramId,
+  onSelect,
+}: {
+  programs: ReturnType<typeof mapProgramSummaryToOverview>[]
+  selectedProgramId: string | null
+  onSelect: (id: string) => void
+}) {
+  if (programs.length === 0) {
+    return <p className="m-0 text-dense-meta text-muted-foreground">None</p>
+  }
+  return (
+    <DenseDataTable>
+      <DenseTableHeader>
+        <DenseTableHeadRow>
+          <DenseTableHead>Program</DenseTableHead>
+          <DenseTableHead>Lane</DenseTableHead>
+          <DenseTableHead>Phases</DenseTableHead>
+          <DenseTableHead>Signed</DenseTableHead>
+          <DenseTableHead>Status</DenseTableHead>
+          <DenseTableHead>Former location</DenseTableHead>
+        </DenseTableHeadRow>
+      </DenseTableHeader>
+      <DenseTableBody>
+        {programs.map(program => {
+          const selected = selectedProgramId === program.id
+          return (
+            <DenseTableRow
+              key={program.id}
+              className={selected ? 'bg-secondary/40' : 'cursor-pointer hover:bg-secondary/20'}
+              onClick={() => onSelect(program.id)}
+            >
+              <DenseTableCell>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-medium">{program.label}</span>
+                  <span className="text-dense-meta text-muted-foreground">{program.description}</span>
+                </div>
+              </DenseTableCell>
+              <DenseTableCell className="font-mono text-dense-meta">
+                {program.laneId ?? '—'}
+              </DenseTableCell>
+              <DenseTableCell className="font-mono-tabular">{program.phaseCount}</DenseTableCell>
+              <DenseTableCell className="font-mono-tabular">
+                {program.signed}/{program.phaseCount}
+              </DenseTableCell>
+              <DenseTableCell>
+                <DenseTag variant={programStatusVariant(program.signed, program.complete)}>
+                  {program.complete ? 'Complete' : program.signed > 0 ? 'In progress' : 'Not started'}
+                </DenseTag>
+              </DenseTableCell>
+              <DenseTableCell className="text-dense-meta text-muted-foreground">
+                {program.formerLocation}
+              </DenseTableCell>
+            </DenseTableRow>
+          )
+        })}
+      </DenseTableBody>
+    </DenseDataTable>
+  )
 }
 
 export function DeliveryBoardPage() {
+  const initial = filtersFromHash()
+  const [scope, setScope] = useState<BriefingScopeId>(initial.scope)
+  const [trackType, setTrackType] = useState<WorkTrackType | null>(initial.trackType)
+  const [laneFilter, setLaneFilter] = useState<LaneId | null>(initial.laneId)
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null)
-  const [laneFilter] = useState<string | null>(() => laneFilterFromHash())
 
   const programsQuery = useQuery({
     queryKey: PROGRAMS_BOARD_QUERY_KEY,
@@ -44,29 +155,80 @@ export function DeliveryBoardPage() {
     refetchInterval: 30_000,
   })
 
+  const allPrograms = useMemo(
+    () => (programsQuery.data?.programs ?? []).map(mapProgramSummaryToOverview),
+    [programsQuery.data],
+  )
+
+  const lanesWithPrograms = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of allPrograms) {
+      if (p.laneId) set.add(p.laneId)
+    }
+    return set
+  }, [allPrograms])
+
   const programs = useMemo(() => {
-    const all = (programsQuery.data?.programs ?? []).map(mapProgramSummaryToOverview)
-    if (laneFilter == null) return all
-    return all.filter(p => p.laneId === laneFilter)
-  }, [programsQuery.data, laneFilter])
+    const laneIds = new Set(
+      (trackType != null ? lanesForScopeTrack(scope, trackType) : lanesForScope(scope)).map(
+        l => l.id,
+      ),
+    )
+    return allPrograms.filter(p => {
+      if (laneFilter != null) return p.laneId === laneFilter
+      if (scope === 'all' && trackType == null) return true
+      return p.laneId != null && laneIds.has(p.laneId)
+    })
+  }, [allPrograms, scope, trackType, laneFilter])
+
+  const bands = useMemo(() => {
+    const complete = programs.filter(p => p.complete)
+    const inProgress = programs.filter(p => !p.complete && p.signed > 0)
+    const notStarted = programs.filter(p => !p.complete && p.signed <= 0)
+    return { complete, inProgress, notStarted }
+  }, [programs])
 
   const selectedProgram = programs.find(p => p.id === selectedProgramId)
+
+  const handleScopeChange = (next: BriefingScopeId) => {
+    setScope(next)
+    setTrackType(null)
+    setLaneFilter(null)
+    writeFiltersToHash(next, null, null)
+  }
+
+  const handleTrackTypeChange = (next: WorkTrackType | null) => {
+    setTrackType(next)
+    setLaneFilter(null)
+    writeFiltersToHash(scope, next, null)
+  }
+
+  const handleLaneChange = (next: LaneId | null) => {
+    setLaneFilter(next)
+    writeFiltersToHash(scope, trackType, next)
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedProgramId(prev => (prev === id ? null : id))
+  }
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <OpsSection
         title="Program overview"
-        description="Delivery programs from platform-api GET /api/v1/programs?board=1 — sign-off persisted on server."
+        description="Read-only catalog from platform-api GET /api/v1/programs?board=1. Program sign-off and post-completion Approve live in Agent Briefing → Session."
         overflow="visible"
       />
 
-      {laneFilter != null && (
-        <p className="m-0 text-dense-meta text-muted-foreground">
-          Filtered by Briefing lane: <span className="font-mono text-foreground">{laneFilter}</span>
-        </p>
-      )}
-
-      <PostCompletionPendingPanel />
+      <DeliveryBoardFilterChrome
+        scope={scope}
+        trackType={trackType}
+        laneId={laneFilter}
+        onScopeChange={handleScopeChange}
+        onTrackTypeChange={handleTrackTypeChange}
+        onLaneChange={handleLaneChange}
+        lanesWithPrograms={lanesWithPrograms}
+      />
 
       {programsQuery.isLoading && (
         <p className="text-dense-meta text-muted-foreground">Loading programs…</p>
@@ -75,62 +237,59 @@ export function DeliveryBoardPage() {
         <p className="text-dense-meta text-destructive">Failed to load delivery programs from API.</p>
       )}
 
-      <DenseDataTable>
-        <DenseTableHeader>
-          <DenseTableHeadRow>
-            <DenseTableHead>Program</DenseTableHead>
-            <DenseTableHead>Lane</DenseTableHead>
-            <DenseTableHead>Phases</DenseTableHead>
-            <DenseTableHead>Signed</DenseTableHead>
-            <DenseTableHead>Status</DenseTableHead>
-            <DenseTableHead>Former location</DenseTableHead>
-          </DenseTableHeadRow>
-        </DenseTableHeader>
-        <DenseTableBody>
-          {programs.map(program => {
-            const selected = selectedProgramId === program.id
-            return (
-              <DenseTableRow
-                key={program.id}
-                className={selected ? 'bg-secondary/40' : 'cursor-pointer hover:bg-secondary/20'}
-                onClick={() =>
-                  setSelectedProgramId(prev => (prev === program.id ? null : program.id))
-                }
-              >
-                <DenseTableCell>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-medium">{program.label}</span>
-                    <span className="text-dense-meta text-muted-foreground">{program.description}</span>
-                  </div>
-                </DenseTableCell>
-                <DenseTableCell className="font-mono text-dense-meta">
-                  {program.laneId ?? '—'}
-                </DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{program.phaseCount}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">
-                  {program.signed}/{program.phaseCount}
-                </DenseTableCell>
-                <DenseTableCell>
-                  <DenseTag variant={programStatusVariant(program.signed, program.complete)}>
-                    {program.complete ? 'Complete' : program.signed > 0 ? 'In progress' : 'Not started'}
-                  </DenseTag>
-                </DenseTableCell>
-                <DenseTableCell className="text-dense-meta text-muted-foreground">
-                  {program.formerLocation}
-                </DenseTableCell>
-              </DenseTableRow>
-            )
-          })}
-        </DenseTableBody>
-      </DenseDataTable>
+      {!programsQuery.isLoading && !programsQuery.isError && programs.length === 0 && (
+        <p className="m-0 text-dense-meta text-muted-foreground">
+          No programs match this Scope → Lane filter.
+        </p>
+      )}
+
+      {bands.inProgress.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <BriefingStatusLamp status="doing" />
+            <span className="text-dense-meta font-semibold uppercase tracking-wide text-muted-foreground">
+              In progress
+            </span>
+            <BriefingStatusBadge status="doing" label={`${bands.inProgress.length}`} />
+          </div>
+          <ProgramBandTable
+            programs={bands.inProgress}
+            selectedProgramId={selectedProgramId}
+            onSelect={toggleSelect}
+          />
+        </div>
+      )}
+
+      {bands.notStarted.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <BriefingStatusLamp status="ready" />
+            <span className="text-dense-meta font-semibold uppercase tracking-wide text-muted-foreground">
+              Not started
+            </span>
+            <BriefingStatusBadge status="ready" label={`${bands.notStarted.length}`} />
+          </div>
+          <ProgramBandTable
+            programs={bands.notStarted}
+            selectedProgramId={selectedProgramId}
+            onSelect={toggleSelect}
+          />
+        </div>
+      )}
+
+      <DeliveryBoardCompleteGrid
+        programs={bands.complete}
+        selectedProgramId={selectedProgramId}
+        onSelect={toggleSelect}
+      />
 
       {selectedProgramId != null && selectedProgram != null && (
         <OpsSection
           title={selectedProgram.label}
-          description={`${selectedProgram.signed}/${selectedProgram.phaseCount} phases signed · formerly ${selectedProgram.formerLocation}`}
+          description={`${selectedProgram.signed}/${selectedProgram.phaseCount} phases signed · read-only on Delivery Board · sign-off in Briefing Session`}
           overflow="visible"
         >
-          <DeliveryBoardProgramPanels programId={selectedProgramId} />
+          <DeliveryBoardProgramPanels programId={selectedProgramId} allowSignOff={false} />
         </OpsSection>
       )}
 

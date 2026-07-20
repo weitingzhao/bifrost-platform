@@ -38,6 +38,7 @@ phases:
 metadata:
   created_at: "2026-07-04"
   owner: "vision-mac-trader"
+  lane_id: governance
   prerequisite_programs: []
   tags:
     - smoke

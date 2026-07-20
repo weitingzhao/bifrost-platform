@@ -1457,6 +1457,17 @@ export interface RunnerStatus {
   error?: string
 }
 
+/** Per-repo dirty summary from git-bridge via /api/v1/agent/bridge. */
+export interface GitDirtyRepoDetail {
+  repo: string
+  branch?: string
+  staged?: string[]
+  modified?: string[]
+  untracked?: string[]
+  insertions: number
+  deletions: number
+}
+
 export interface AgentBridgeResponse {
   generated_at: string
   remediation_runner: RunnerStatus
@@ -1467,6 +1478,7 @@ export interface AgentBridgeResponse {
     workspace?: string
     repo_count?: number
     dirty_repos?: number
+    dirty_repo_details?: GitDirtyRepoDetail[]
     error?: string
   }
   satellite_probe_bridge: {
@@ -1776,6 +1788,7 @@ export interface PostFixVerificationView {
 export interface VerifyMissionSnapshotResponse {
   generated_at: string
   trade_dev: TradeEnvSnapshotView
+  trade_stg: TradeEnvSnapshotView
   trade_prod: TradeEnvSnapshotView
   payload_overall: MissionMatrixSignal
   payload_verification: VerifyPayloadResponse
@@ -1931,6 +1944,8 @@ export interface SelfHealthResponse {
   generated_at: string
   probes: SelfHealthProbe[]
   overall: SelfHealthProbeStatus
+  /** Seat where this platform-api instance is viewed from (OPS_VIEWER_ENV / cluster). */
+  viewer_env?: string
 }
 
 export type EscapeRouteStatus = 'ok' | 'degraded' | 'fail' | 'unknown' | 'documented'
@@ -2169,6 +2184,8 @@ export interface IbGatewayStatusResponse {
   account_health?: Record<string, string>
   operator_health?: Record<string, string>
   sample_tick_nvda?: string
+  /** Raw JSON from redis-ib `ib:account:snapshot:v1` — used for ghost-session detection. */
+  account_snapshot?: string
   operator_consumer_group?: string
   cutover?: IbGatewayCutoverStatus
   autonomy?: string

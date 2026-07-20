@@ -37,6 +37,18 @@ type CreateRequest struct {
 	WorkIntent    string `json:"work_intent"`
 }
 
+// UpdateRequest patches mutable lane fields. ID and Label are immutable
+// (avoid breaking queue / session references). Empty strings mean "leave unchanged".
+type UpdateRequest struct {
+	Track         string `json:"track,omitempty"`
+	ComponentLine string `json:"component_line,omitempty"`
+	TrackType     string `json:"track_type,omitempty"`
+	ShortLabel    string `json:"short_label,omitempty"`
+	Description   string `json:"description,omitempty"`
+	AgentMode     string `json:"agent_mode,omitempty"`
+	WorkIntent    string `json:"work_intent,omitempty"`
+}
+
 var laneIDRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 
 var allowedTracks = map[string]bool{

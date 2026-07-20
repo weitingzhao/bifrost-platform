@@ -3,7 +3,7 @@ import type { TaskModeDef, TaskModeId } from './types'
 export const TASK_MODE_STORAGE_KEY = 'bifrost-ops-task-mode'
 export const TASK_MODE_QUERY_PARAM = 'taskMode'
 
-export const TASK_MODE_CATALOG_VERSION = '2026-07-11'
+export const TASK_MODE_CATALOG_VERSION = '2026-07-18'
 /** UI task-mode definitions. templateId must match config/programs/_templates.yaml (GET /api/v1/programs/templates). */
 export const TASK_MODE_CATALOG_SOURCE = 'console/src/lib/task-mode/taskModeCatalog.ts · templates: config/programs/_templates.yaml'
 
@@ -13,41 +13,48 @@ const LEGACY_TASK_MODE_ALIASES: Record<string, TaskModeId> = {
   'satellite-deploy': 'mission-launch',
 }
 
+/** Aligned with Daily Ops workflow bar: Discover → Remediate → Verify → Clear. */
 const DAILY_OPS_PHASES: TaskModeDef['phases'] = [
   {
-    id: 'scan-signals',
+    id: 'discover',
     seq: 1,
-    title: 'Scan mission signals',
-    summary: 'Review Control Room mission / rocket / payload signals before acting.',
-    navigateTab: 'control-room',
-    actions: [{ label: 'Open Control Room', tabId: 'control-room' }],
+    title: 'Discover',
+    summary:
+      'Review Fleet Desk verdict + role×env board (ground truth). Pin worst cell before remediating.',
+    navigateTab: 'task-cc',
+    actions: [{ label: 'Task Control Center', tabId: 'task-cc' }],
   },
   {
-    id: 'triage-defects',
+    id: 'remediate',
     seq: 2,
-    title: 'Triage defects',
-    summary: 'Classify open defects and link to runtime map or cluster drill-down.',
-    dependsOn: ['scan-signals'],
-    navigateTab: 'defects',
-    actions: [{ label: 'Open Defects', tabId: 'defects' }],
+    title: 'Remediate',
+    summary:
+      'Agent Fix on the worst fixable cell. Engineer CRITICAL → Operator Plane (Agent Fix disabled). D10 blocked.',
+    dependsOn: ['discover'],
+    navigateTab: 'task-cc',
+    actions: [
+      { label: 'Task Control Center', tabId: 'task-cc' },
+      { label: 'Operator Plane', tabId: 'operator-plane' },
+    ],
   },
   {
-    id: 'operate-queue',
+    id: 'verify',
     seq: 3,
-    title: 'Operate queue',
-    summary: 'Close post-completion and manual operate queue items.',
-    dependsOn: ['triage-defects'],
-    navigateTab: 'control-room',
-    actions: [{ label: 'Control Room queue strip', tabId: 'control-room' }],
+    title: 'Verify',
+    summary: 'Re-probe fleet after Agent Fix — confirm scored cells return to GO.',
+    dependsOn: ['remediate'],
+    navigateTab: 'task-cc',
+    actions: [{ label: 'Task Control Center', tabId: 'task-cc' }],
   },
   {
-    id: 'verify-mission',
+    id: 'clear',
     seq: 4,
-    title: 'Verify mission snapshot',
-    summary: 'Confirm matrix + cluster probes nominal after any actuation.',
-    dependsOn: ['operate-queue'],
-    navigateTab: 'runtime-map',
-    actions: [{ label: 'Runtime Map', tabId: 'runtime-map' }],
+    title: 'Clear',
+    summary:
+      'Fleet clear + operate queue clear. Queue Clear ≠ fleet clear when fleetClear=false.',
+    dependsOn: ['verify'],
+    navigateTab: 'agent-desk',
+    actions: [{ label: 'Agent Desk queue', tabId: 'agent-desk' }],
   },
 ]
 
@@ -359,7 +366,8 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
   {
     id: 'daily-ops',
     label: 'Daily Ops',
-    description: 'Ops loop — scan signals, triage defects, close operate queue.',
+    description:
+      'Ops loop — Discover → Remediate → Verify → Clear. Fleet Desk is health ground truth; single primary CTA; Agent Fix binds to Remediate; queue Clear ≠ fleet clear.',
     loopArchetype: 'ops',
     landingTab: 'task-cc',
     phases: DAILY_OPS_PHASES,
@@ -388,7 +396,8 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
   {
     id: 'mission-launch',
     label: 'Mission Launch',
-    description: 'Ops loop — unified platform + trade STG → gate → PROD mission.',
+    description:
+      'Ops loop — unified platform + trade STG → gate → PROD mission. Task Control Center shows Launch board + Release posture (Promote / cutover · Tier A·B).',
     loopArchetype: 'ops',
     landingTab: 'task-cc',
     phases: MISSION_LAUNCH_PHASES,

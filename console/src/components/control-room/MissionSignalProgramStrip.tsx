@@ -8,6 +8,7 @@ import {
   MISSION_SIGNAL_PROGRAM_ID,
   MISSION_SIGNAL_PHASES,
 } from '@/lib/architecture/missionSignalCatalog'
+import { buildBriefingDeepLink } from '@/lib/briefing/briefingUrlState'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 
 type MissionSignalProgramStripProps = {
@@ -56,14 +57,31 @@ export function MissionSignalProgramStrip({ onOpenDelivery }: MissionSignalProgr
   return (
     <OpsSection
       title="Mission Signal program"
-      description="Delivery Board P1–P7 · live cockpit truth on Control Room."
+      description="P1–P7 progress · sign-off in Briefing Session (platform-health) · Board catalog is read-only."
       bodyPadding="compact"
       actions={
-        onOpenDelivery != null ? (
-          <Button type="button" size="sm" variant="outline" onClick={onOpenDelivery}>
-            Open Delivery Board
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              window.location.assign(
+                buildBriefingDeepLink({
+                  view: 'rocket',
+                  trackType: 'maintain',
+                  lane: 'platform-health',
+                }),
+              )
+            }}
+          >
+            Sign off in Briefing
           </Button>
-        ) : undefined
+          {onOpenDelivery != null ? (
+            <Button type="button" size="sm" variant="outline" onClick={onOpenDelivery}>
+              Board catalog
+            </Button>
+          ) : null}
+        </div>
       }
     >
       <div className="flex flex-wrap items-center gap-2">

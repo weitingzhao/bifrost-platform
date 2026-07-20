@@ -539,6 +539,121 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
         return textResult(jsonText(data))
       },
     },
+    get_agent_bridge: {
+      description:
+        'Agent host + MCP bridge status (runners HA roles, git_bridge, hermes, remediation_runner). Required for Engineer · runners-ha checklist.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/agent/bridge')
+        return textResult(jsonText(data))
+      },
+    },
+    get_remediation_health: {
+      description: 'Remediation runner health probe via platform-api (primary/standby).',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/remediation/health')
+        return textResult(jsonText(data))
+      },
+    },
+    get_cluster_nodes: {
+      description: 'Kubernetes node list (Ready / SchedulingDisabled / cordoned).',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/cluster/nodes')
+        return textResult(jsonText(data))
+      },
+    },
+    get_delivery_pipelines: {
+      description: 'Tekton pipeline catalog (deliver-stg / deliver-prod / platform pipelines).',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/delivery/pipelines')
+        return textResult(jsonText(data))
+      },
+    },
+    get_operate_queue: {
+      description: 'Open + recently closed Operate Queue handoffs (D11 / checklist semi_auto).',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/operate/queue')
+        return textResult(jsonText(data))
+      },
+    },
+    cordon_node: {
+      description: 'Cordon a node (no new scheduling). Requires operator approval first.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Node name' },
+        },
+        required: ['name'],
+      },
+      async execute(args) {
+        const name = String(args.name ?? '')
+        const data = await platformPost(`/api/v1/cluster/nodes/${encodeURIComponent(name)}/cordon`, {})
+        return textResult(jsonText(data))
+      },
+    },
+    uncordon_node: {
+      description: 'Uncordon a node. Requires operator approval first.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Node name' },
+        },
+        required: ['name'],
+      },
+      async execute(args) {
+        const name = String(args.name ?? '')
+        const data = await platformPost(`/api/v1/cluster/nodes/${encodeURIComponent(name)}/uncordon`, {})
+        return textResult(jsonText(data))
+      },
+    },
+    report_checklist_signals: {
+      description:
+        'Merge Daily Ops Checklist per-item signals into platform-api (POST /api/v1/checklist/signals). ' +
+        'Call at end of daily-ops-checklist-run with all 18 item_ids.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          signals: {
+            type: 'array',
+            description: 'Per-item signals',
+            items: {
+              type: 'object',
+              properties: {
+                item_id: { type: 'string' },
+                signal: { type: 'string', description: 'ok | degraded | fail | unknown' },
+                detail: { type: 'string' },
+                env: { type: 'string', description: 'dev | stg | prod | span' },
+              },
+              required: ['item_id', 'signal'],
+            },
+          },
+          run_id: {
+            type: 'string',
+            description: 'Optional remediation job id for this probe run',
+          },
+          auto_dispatch: {
+            type: 'boolean',
+            description: 'When true, platform may enqueue/dispatch fixes per fixCapability gates',
+          },
+        },
+        required: ['signals'],
+      },
+      async execute(args) {
+        const signals = Array.isArray(args.signals) ? args.signals : []
+        const body = {
+          signals,
+          run_id: args.run_id != null ? String(args.run_id) : jobId,
+          auto_dispatch: args.auto_dispatch === true,
+          source: 'daily-ops-checklist-run',
+        }
+        const data = await platformPost('/api/v1/checklist/signals', body)
+        return textResult(jsonText(data))
+      },
+    },
 
     sync_cluster_kubeconfig: {
       description:
@@ -936,6 +1051,38 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       },
     },
 
+    git_stash: {
+      description:
+        'Stash dirty working-tree changes in specified repos (includes untracked by default). NEVER call without prior request_operator_approval. Does not drop stashes. Use when operator chooses "Stash to clear Fleet" instead of commit.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repos: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Repo names to stash',
+          },
+          message: {
+            type: 'string',
+            description: 'Stash message (shown in git stash list)',
+          },
+          include_untracked: {
+            type: 'boolean',
+            description: 'Include untracked files (default true)',
+          },
+        },
+        required: ['repos'],
+      },
+      async execute(args) {
+        const repos = Array.isArray(args.repos) ? args.repos.map(String) : []
+        const message = args.message != null ? String(args.message) : undefined
+        const include_untracked =
+          args.include_untracked === undefined ? true : Boolean(args.include_untracked)
+        const data = await gitBridgePost('/stash', { repos, message, include_untracked })
+        return textResult(jsonText(data))
+      },
+    },
+
     // ── Delivery / GitOps read tools (deliver-stg-recover, gitops-config-repair) ──
 
     get_delivery_run_logs: {
@@ -954,6 +1101,36 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       async execute(args) {
         const runId = String(args.run_id ?? '')
         const data = await platformGet(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/logs`)
+        return textResult(jsonText(data))
+      },
+    },
+
+    delete_pipeline_run: {
+      description:
+        'Delete a terminal (Failed/Succeeded) Tekton PipelineRun CR and its associated pods. ' +
+        'Cleans up stale runs that inflate cluster failing_pods count. ' +
+        'Only use on terminal runs where the target deployment is healthy. ' +
+        'Requires operator approval via request_operator_approval first.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          run_id: {
+            type: 'string',
+            description: 'PipelineRun name, e.g. bifrost-deliver-platform-prod-1784212484',
+          },
+          namespace: {
+            type: 'string',
+            description: 'Namespace (default: cicd)',
+          },
+        },
+        required: ['run_id'],
+      },
+      async execute(args) {
+        const runId = String(args.run_id ?? '')
+        const ns = String(args.namespace ?? 'cicd')
+        const data = await platformDelete(
+          `/api/v1/delivery/runs/${encodeURIComponent(runId)}?ns=${encodeURIComponent(ns)}`,
+        )
         return textResult(jsonText(data))
       },
     },

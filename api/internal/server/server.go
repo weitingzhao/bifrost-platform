@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -18,6 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/briefing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
+	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
@@ -31,7 +33,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/lanes"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
-	"github.com/weitingzhao/bifrost-platform/api/internal/sessions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
@@ -42,6 +43,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/retrospective"
 	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
+	"github.com/weitingzhao/bifrost-platform/api/internal/sessions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/sessionsnapshot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
@@ -66,6 +68,7 @@ type Server struct {
 	tradeagent      *tradeagent.Handler
 	devagent        *devagent.Handler
 	operatequeue    *operatequeue.Handler
+	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
 	remediation     *remediation.Handler
 	agentreport     *agentreport.Handler
@@ -109,7 +112,27 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("devagent: %w", err)
 	}
 	operatequeueH := operatequeue.NewHandler(cfg.ConfigDir(), audit)
+	operatequeueH.BindRemediationJobs(remediationH.Store())
+	operatequeueH.BindRemediationStarter(remediationH)
+	operatequeueH.BindLifecycleObserver(devagentH)
+	remediationH.BindTerminalObserver(operatequeueH)
 	devagentH.BindOperateQueue(operatequeueH)
+	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
+	checklistH.BindRemediation(remediationH)
+	checklistH.BindOperateQueue(operatequeueH)
+	operatequeueH.BindEvidenceSource(operatequeue.EvidenceFunc(func() (operatequeue.EvidenceBundle, error) {
+		resp, err := checklistH.Store().Get()
+		if err != nil {
+			return operatequeue.EvidenceBundle{}, err
+		}
+		sigs := make([]operatequeue.EvidenceSignal, 0, len(resp.Signals))
+		for _, s := range resp.Signals {
+			sigs = append(sigs, operatequeue.EvidenceSignal{
+				ItemID: s.ItemID, Signal: s.Signal, Detail: s.Detail,
+			})
+		}
+		return operatequeue.BundleFromSignals(sigs, time.Now().UTC()), nil
+	}))
 	sessionsH := sessions.NewHandler(cfg.ConfigDir(), audit)
 	devagentH.BindSessions(sessionsH.Store())
 	visionH := vision.NewHandler(cfg, audit)
@@ -130,6 +153,7 @@ func New(cfg *config.Config) (*Server, error) {
 		tradeagent:      tradeagent.NewHandler(),
 		devagent:        devagentH,
 		operatequeue:    operatequeueH,
+		checklist:       checklistH,
 		opsagent:        opsagent.NewHandler(audit),
 		remediation:     remediationH,
 		agentreport:     agentreport.NewHandler(),
@@ -226,6 +250,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/agent/deploy", s.agentdeploy.HandleStart)
 			r.Post("/session-snapshots", s.sessionsnapshot.HandleSave)
 			r.Post("/briefing/session-results", s.briefing.HandleCloseSession)
+			r.Post("/briefing/prepare", s.devagent.HandleBriefingPrepare)
 			r.Put("/agent/skills/{id}/actuation-level", s.hermesgateway.HandleSkillActuationLevel)
 			r.Put("/agent/governance/trust-overrides/{skill_id}", s.agentgovernance.HandlePutTrustOverride)
 		})
@@ -259,6 +284,10 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/operate/queue", s.operatequeue.HandleGetQueue)
+		r.Get("/operate/briefs", s.operatequeue.HandleListBriefs)
+		r.Get("/operate/drain/status", s.operatequeue.HandleDrainStatus)
+		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
+		r.Get("/checklist/kpis", s.checklist.HandleGetKPIs)
 		r.Get("/lanes", s.lanes.HandleList)
 		r.Get("/lanes/{id}", s.lanes.HandleGet)
 		r.Get("/sessions", s.sessions.HandleList)
@@ -268,8 +297,14 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/operate/queue", s.operatequeue.HandleEnqueue)
+			r.Post("/operate/queue/{id}/execution", s.operatequeue.HandleRecordExecution)
 			r.Post("/operate/queue/{id}/close", s.operatequeue.HandleClose)
+			r.Post("/operate/queue/{id}/dismiss", s.operatequeue.HandleDismiss)
+			r.Post("/operate/sweep", s.operatequeue.HandleSweep)
+			r.Post("/operate/briefs/{id}/decide", s.operatequeue.HandleDecideBrief)
+			r.Post("/checklist/signals", s.checklist.HandlePostSignals)
 			r.Post("/lanes", s.lanes.HandleCreate)
+			r.Patch("/lanes/{id}", s.lanes.HandleUpdate)
 			r.Post("/sessions", s.sessions.HandleCreate)
 		})
 		r.Route("/programs", func(r chi.Router) {
@@ -296,6 +331,8 @@ func (s *Server) Router() http.Handler {
 				r.Use(s.auth.Require(actuation.RoleAdmin))
 				r.Post("/{programId}/phases/{phaseId}/signoff", s.devagent.HandlePhaseSignoff)
 				r.Post("/post-completion/{itemId}/approve", s.devagent.HandleApprovePostCompletionItem)
+				r.Post("/post-completion/{itemId}/reject", s.devagent.HandleRejectPostCompletionItem)
+				r.Post("/{programId}/post-completion/no-handoff", s.devagent.HandleNoPostCompletionHandoff)
 			})
 		})
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)

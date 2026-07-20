@@ -115,24 +115,27 @@ export const WAVE3_P0_DECISIONS: Wave3P0Decision[] = [
     id: 'D11',
     topic: 'Operate Queue API',
     rule:
-      'Post-completion approve injects into GET/POST /api/v1/operate/queue (data/operate/queue.json). Not spine tracks.operate.',
+      'Post-completion remains NOT ASSESSED until Briefing Owner decision. Only approved structured handoffs inject into GET/POST /api/v1/operate/queue (data/operate/queue.json); NO HANDOFF is explicit, and verified closure remains in recent_closed. Not spine tracks.operate.',
     wave3Deliverables: [
       'Operate queue store + GET list + POST enqueue on approve',
-      'Control Room strip: open operate queue items',
+      'Control Room strip: open-count summary + deep-link to Agent Desk (full list in TCC / Desk)',
       'Briefing operate track reads queue API',
       'MCP get_operate_queue (read)',
+      'Structured reason/task/criteria/verification/risk contract with legacy JSON compatibility',
+      'Agent Desk Start/Prepare → execution_job_id → evidence-gated close',
     ],
   },
   {
     id: 'D12',
     topic: 'Sign-off single path api',
     rule:
-      'Only POST /api/v1/programs/{id}/phases/{pid}/signoff writes phase_sign_offs. Remove dev_agent/vision_gate mechanisms.',
+      'Only POST /api/v1/programs/{id}/phases/{pid}/signoff writes phase_sign_offs. Remove dev_agent/vision_gate mechanisms. UI host = Briefing Session; Delivery Board is read-only catalog.',
     wave3Deliverables: [
       'Dev Agent approve → programs signoff API',
       'Vision gate Owner sign → programs signoff API (gate JSON = run artifact only)',
       'YAML: all programs sign_off_mechanism: api',
-      'Remove vision_gate branch from programs_delivery.go reads; unify Delivery Board',
+      'Remove vision_gate branch from programs_delivery.go reads',
+      'Briefing Session hosts phase Sign-off + post-completion Approve; Board Scope→Lane catalog only',
     ],
   },
 ]
@@ -423,6 +426,64 @@ export const FLIGHT_DIRECTOR_STEPS: FlightDirectorStep[] = [
   },
 ]
 
+/**
+ * Daily Ops Fleet Desk — per-cell Agent Fix (do not silently pickFixScope across roles).
+ * Engineer CRITICAL → inline Operator Plan + AI Fix on TCC; full Operator Plane is escape hatch.
+ */
+export const DAILY_OPS_FLEET_DESK = {
+  version: '2026-07-19-row-fix-ask-ai',
+  source:
+    'console/src/lib/control-room/fleetSnapshot.ts · fleetCellFix.ts · dailyOpsWorkflow.ts · dailyOpsPrimaryBlocker.ts · DailyOpsProcessStrip.tsx · DailyOpsOperatorPlanPanel.tsx · checklistDispatch.ts · checklistProgress.ts · checklistCursorFailoverPrompt.ts · dailyOpsChecklistCatalog.ts',
+  roles: ['rocket', 'satellite', 'engineer', 'ground', 'vendor'] as const,
+  envColumns: ['dev', 'stg', 'prod'] as const,
+  verdict: 'GO | NO-GO',
+  workflow: ['discover', 'remediate', 'verify', 'clear'] as const,
+  rules: [
+    'Ops loop above Fleet board: viewer env + GO/NO-GO + circle Discover→Remediate→Verify→Clear + one primary CTA.',
+    'Fleet board is health ground truth; Help · reference is a muted collapsed entry inside Ops loop (deep links only — not a footer row or phase strip).',
+    'At most one primary CTA — no dual VerdictBar + WorkflowBar buttons.',
+    'Stage-driven single primary CTA: Discover → AI Check (daily-ops-checklist-run); Remediate → blocker-typed CTA (see below); Verify → Re-probe; Clear → Clear queue / Run daily check.',
+    'Remediate primary CTA follows highest-priority Checklist×Fleet blocker (fail>degraded; manual/observe before AI-fixable at same severity): git-bridge dirty → Propose commit (git-dirty-remediate, approval required); other full_auto/semi_auto+scope → Agent Fix / AI Fix · Operator Plan; manual/observe/null-scope → Manual next step (no sparkles AI Fix); mixed → primary manual + outline Also: Propose commit (git dirty) / Also: AI Fix (sibling).',
+    'Engineer CRITICAL: fleet cell Agent Fix stays disabled; git dirty uses Propose commit / Stash (not magic AI Fix that clears dirty); other AI-fixable → Operator Plan; else Manual next (e.g. Mac seat). Full Operator Plane page is escape hatch only.',
+    'Full Operator Plane page is secondary escape (MCP / host deploy / self-smoke) — not the default primary CTA.',
+    'Agent Fix running: CTA becomes View agent; compact Agent progress panel (phases + elapsed) links to Agent Desk.',
+    'Verify = re-probe fleet after Agent Fix; Clear = fleetClear + operate queue open===0.',
+    'W3 Auto-remediate default OFF — Assisted “Ready to Agent Fix” hint only; never auto-trigger.',
+    'Checklist AI Check (scope daily-ops-checklist-run): Ops loop owns the green primary; Checklist header keeps muted Re-check + Ask for AI secondary — never two magic-wand primaries.',
+    'Naming lock: AI Check ≠ Fleet cell Fix ≠ Operator Plane Fix (operator-plane-remediate) ≠ Git Dirty Remediate (git-dirty-remediate).',
+    'Operate Queue: Close (verified) requires evidence + job/post-fix gates; Dismiss allows stale/resolved close with evidence without those gates.',
+    'Action column live progress from last_dispatch + jobs; Skip · dedup 24h / Skip · D10 never imply in-progress.',
+    'Notes fleet≠agent when agent signals disagree with fleet polarity; lamps remain fleet-sourced (no full merge).',
+    'Action: auto job click → Agent Desk; queue → Agent Desk Operate handoffs; Queued (busy) when concurrent auto demote.',
+    'Row Fix: per non-ok full_auto/semi_auto item with fixScope → ambient startRemediation(scope); observe/manual null-scope → Ask for AI only.',
+    'Ask for AI: copy Cursor IDE failover pack (header all non-ok or per-row) — paste into Cursor Agent when Ops Agent path fails or is blocked.',
+    'Trust boundary: checklist-run is L0 probe; actuation only via existing remediation scopes + Operate Queue. Concurrent auto limit 1; 24h dedup per item.',
+    'D10: IB feed fixCapability=observe — never auto-dispatch (skip).',
+    'Standards taxonomy: Control/GitOps/Release · Edge/APIs/Data · Automation/Mac seat · Cluster · Feeds/Tooling.',
+    'Board shows group rollups (ok/total); leaf standards only when failing; full grouped list in Detail.',
+    'Any non-green required standard ⇒ cell NO-GO; fleet GO only when every scored cell is GO.',
+    'Mac seat is Engineer — not a fourth env column. Prod/STG viewer: Mac seat informational only.',
+    'Viewer seat: OPS_VIEWER_ENV > (in-cluster only) clusters.yaml viewer_env > dev.',
+    'D10 live trading remains BLOCKED.',
+  ],
+  /** Acceptance checkpoints (Fleet Desk QA + Ops loop). */
+  acceptance: [
+    'Q1: Structural unavailable (Rocket DEV pull) does not NO-GO — GO when scored cells are ok.',
+    'Q2: Local (no KUBERNETES_SERVICE_HOST) → DEV; Prod in-cluster → yaml viewer_env=prod; OPS_VIEWER_ENV always overrides.',
+    'Q3: Operate Clear ≠ fleet clear when fleetClear=false; fleetClear follows scored verdict.',
+    'Q4: Daily Ops Agent Fix error surfaces without Launch Pad; Ops loop Remediate CTA aligns with pickFleetFixCell.',
+    'Q5: Satellite scopes do not cross — stg=deliver-stg-recover, prod/dev=cluster_issues_full_auto.',
+    'Q6: Compact group rollups on board; Detail below board lists standards by group; no GET API strings.',
+    'Q7: Single Ops loop strip (no dual Verdict+Workflow cards); circle stepper shows done/active/blocked; at most one primary CTA.',
+    'Q8: Engineer CRITICAL → blocker-typed CTA (manual-next for seat/manual/observe; Propose commit for git dirty; AI Fix · Operator Plan when other AI-fixable); Full page → secondary; canOperate gates; D10 copy on remediate.',
+    'Q9: Discover strip primary is AI Check; Clear idle offers Run daily check (same Checklist probe); Agent Fix in flight shows progress panel + View agent (not spinner-only).',
+    'Q10: Strip AI Check / Checklist Re-check start daily-ops-checklist-run; git dirty handoff uses git-dirty-remediate; Operator Plane Fix stays separate; no dual green AI Check+AI Fix.',
+    'Q11: Notes show fleet≠agent on polarity mismatch; Action opens job/queue; Queued (busy) when auto demoted by concurrency; Queue Dismiss available with evidence for stale/resolved.',
+    'Q12: Non-ok row shows Fix (Ops Agent when fixScope) and/or Ask for AI (Cursor failover copy); header Ask for AI packs all non-ok items.',
+    'Q13: Dirty details panel lists repo/files/+N/−M from git-bridge via agent/bridge; Propose commit never auto-commits without approval card.',
+  ],
+} as const
+
 /** Mission Signal Phase 6 — Flight Director daily ops (briefing digest + trust overrides). */
 export const FLIGHT_DIRECTOR_OPS_STEPS: FlightDirectorStep[] = [
   {
@@ -451,7 +512,7 @@ export const MISSION_SIGNAL_CLOSURE_STEPS: FlightDirectorStep[] = [
     step: '1. Program status',
     tool: 'Control Room → Mission Signal strip',
     required: true,
-    detail: 'P1–P6 show ✓ when Owner signed each phase on Delivery Board · mission-signal; all six unlock Phase 7 closure.',
+    detail: 'P1–P6 show ✓ when Owner signed each phase via Briefing Session · mission-signal (visible on Delivery Board catalog); all six unlock Phase 7 closure.',
   },
   {
     step: '2. Agent Protocol reference',
@@ -700,7 +761,7 @@ export function buildAgentProtocolLlmPack(): string {
     ...FLIGHT_DIRECTOR_OPS_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
     '',
     '## Mission Signal Program closure (Phase 7)',
-    '- Control Room status strip: P1 Signal Truth → P6 Flight Director Ops — all signed on Delivery Board · mission-signal before program closure.',
+    '- Control Room status strip: P1 Signal Truth → P6 Flight Director Ops — all signed via Briefing Session · mission-signal (Board catalog) before program closure.',
     ...MISSION_SIGNAL_CLOSURE_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
     '- After Owner sign-off: Mission Signal enters maintenance mode; new work is scoped patches, not program phases.',
     '',

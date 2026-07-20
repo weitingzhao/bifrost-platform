@@ -173,6 +173,7 @@ export function useInlineBriefingPack({
       trackSummaries,
       selectedTrack: trackId,
       selectedLane: selectedLaneId,
+      selectedScope: componentLineForTaskMode(mode.id),
       laneQueue,
       taskModeContext: {
         modeId: mode.id,
@@ -224,6 +225,7 @@ export function useInlineBriefingPack({
             trackSummaries,
             selectedTrack: trackId,
             selectedLane: selectedLaneId,
+            selectedScope: componentLineForTaskMode(mode.id),
             laneQueue,
             taskModeContext: {
               modeId: mode.id,

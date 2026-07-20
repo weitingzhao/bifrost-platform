@@ -15,36 +15,36 @@ import (
 )
 
 type ProgramDetailBoardResponse struct {
-	Program        ProgramSummary        `json:"program"`
-	Phases         []PhaseDetailBoard    `json:"phases"`
-	Bridge         BridgeConfig          `json:"bridge,omitempty"`
-	Active         bool                  `json:"active"`
-	AgentSessions  []AgentSessionRecord  `json:"agent_sessions,omitempty"`
-	PostCompletion *PostCompletionState  `json:"post_completion,omitempty"`
-	PendingItems   []PostCompletionItem  `json:"pending_post_completion_items,omitempty"`
+	Program        ProgramSummary       `json:"program"`
+	Phases         []PhaseDetailBoard   `json:"phases"`
+	Bridge         BridgeConfig         `json:"bridge,omitempty"`
+	Active         bool                 `json:"active"`
+	AgentSessions  []AgentSessionRecord `json:"agent_sessions,omitempty"`
+	PostCompletion *PostCompletionState `json:"post_completion,omitempty"`
+	PendingItems   []PostCompletionItem `json:"pending_post_completion_items,omitempty"`
 }
 
 type PhaseDetailBoard struct {
-	ID             string              `json:"id"`
-	Title          string              `json:"title"`
-	Status         string              `json:"status"`
-	SignedOff      bool                `json:"signed_off"`
-	SignedOffAt    string              `json:"signed_off_at,omitempty"`
-	SignedOffBy    string              `json:"signed_off_by,omitempty"`
-	VerifyCmd      string              `json:"verify_cmd,omitempty"`
-	Acceptance     []string            `json:"acceptance,omitempty"`
-	DependsOn      []string            `json:"depends_on,omitempty"`
-	SignOff        *PhaseSignOffConfig `json:"sign_off,omitempty"`
-	AgentSession   *AgentSessionConfig `json:"agent_session,omitempty"`
+	ID             string               `json:"id"`
+	Title          string               `json:"title"`
+	Status         string               `json:"status"`
+	SignedOff      bool                 `json:"signed_off"`
+	SignedOffAt    string               `json:"signed_off_at,omitempty"`
+	SignedOffBy    string               `json:"signed_off_by,omitempty"`
+	VerifyCmd      string               `json:"verify_cmd,omitempty"`
+	Acceptance     []string             `json:"acceptance,omitempty"`
+	DependsOn      []string             `json:"depends_on,omitempty"`
+	SignOff        *PhaseSignOffConfig  `json:"sign_off,omitempty"`
+	AgentSession   *AgentSessionConfig  `json:"agent_session,omitempty"`
 	Progress       *PhaseProgressRecord `json:"progress,omitempty"`
-	RenderedPrompt string              `json:"rendered_prompt,omitempty"`
-	SkillInjected  bool                `json:"skill_injected,omitempty"`
+	RenderedPrompt string               `json:"rendered_prompt,omitempty"`
+	SkillInjected  bool                 `json:"skill_injected,omitempty"`
 }
 
 type PhaseSignoffRequest struct {
-	SignedOffBy  string `json:"signed_off_by,omitempty"`
-	SignedOffAt  string `json:"signed_off_at,omitempty"`
-	Notes        string `json:"notes,omitempty"`
+	SignedOffBy string `json:"signed_off_by,omitempty"`
+	SignedOffAt string `json:"signed_off_at,omitempty"`
+	Notes       string `json:"notes,omitempty"`
 }
 
 type PhaseProgressRequest struct {
@@ -56,13 +56,14 @@ type PhaseProgressRequest struct {
 }
 
 type ProgramCompleteRequest struct {
-	NewCapabilities   []string `json:"new_capabilities,omitempty"`
-	NewRisks          []string `json:"new_risks,omitempty"`
-	OperateQueueItems []struct {
-		ID          string `json:"id"`
-		Title       string `json:"title"`
-		Description string `json:"description,omitempty"`
-	} `json:"operate_queue_items,omitempty"`
+	NewCapabilities   []string                    `json:"new_capabilities,omitempty"`
+	NewRisks          []string                    `json:"new_risks,omitempty"`
+	OperateQueueItems []OperateQueueItemBlueprint `json:"operate_queue_items,omitempty"`
+}
+
+type PostCompletionDecisionRequest struct {
+	Reason     string `json:"reason"`
+	DecisionBy string `json:"decision_by,omitempty"`
 }
 
 type LaunchRequest struct {
@@ -169,7 +170,7 @@ func (h *Handler) programDetailBoardResponse(programID string, rt *programRuntim
 	}
 	pending, _ := h.store.LoadPendingPostCompletion()
 	for _, item := range pending {
-		if item.ProgramID == programID && item.Status == "pending_review" {
+		if item.ProgramID == programID {
 			resp.PendingItems = append(resp.PendingItems, item)
 		}
 	}
@@ -325,19 +326,31 @@ func (h *Handler) HandleProgramComplete(w http.ResponseWriter, r *http.Request) 
 	if len(risks) == 0 && rt.blueprint.PostCompletion != nil {
 		risks = rt.blueprint.PostCompletion.NewRisks
 	}
-	rt.state.PostCompletion = &PostCompletionState{
-		SubmittedAt: now, NewCapabilities: caps, NewRisks: risks,
-	}
-
 	items := req.OperateQueueItems
 	if len(items) == 0 && rt.blueprint.PostCompletion != nil {
-		for _, b := range rt.blueprint.PostCompletion.OperateQueueItems {
-			items = append(items, struct {
-				ID          string `json:"id"`
-				Title       string `json:"title"`
-				Description string `json:"description,omitempty"`
-			}{ID: b.ID, Title: b.Title, Description: b.Description})
+		items = append(items, rt.blueprint.PostCompletion.OperateQueueItems...)
+	}
+	sourceLaneID := sourceLaneForRuntime(rt)
+	defaultOperateLane := operateLaneForRuntime(rt)
+	normalized := make([]OperateQueueItemBlueprint, 0, len(items))
+	for _, item := range items {
+		item = normalizeHandoffBlueprint(item, sourceLaneID, defaultOperateLane)
+		if err := validateHandoffBlueprint(item); err != nil {
+			h.mu.Unlock()
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
 		}
+		normalized = append(normalized, item)
+	}
+	assessmentStatus := "not_assessed"
+	if len(normalized) > 0 {
+		assessmentStatus = "pending_review"
+	}
+	rt.state.PostCompletion = &PostCompletionState{
+		SubmittedAt: now, AssessmentStatus: assessmentStatus,
+		NewCapabilities: caps, NewRisks: risks,
+		SuggestedItems:      buildDraftHandoffSuggestions(rt.blueprint, caps, risks),
+		SuggestedAssessment: suggestedAssessment(rt.blueprint, caps, risks),
 	}
 	h.mu.Unlock()
 
@@ -347,13 +360,17 @@ func (h *Handler) HandleProgramComplete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var created []PostCompletionItem
-	for _, it := range items {
+	for _, it := range normalized {
 		id := it.ID
 		if id == "" {
 			id = uuid.New().String()
 		}
 		item := PostCompletionItem{
-			ID: id, ProgramID: programID, Title: it.Title, Description: it.Description,
+			ID: id, ProgramID: programID, SourceLaneID: it.SourceLaneID,
+			OperateLane: it.OperateLane, Title: it.Title, Description: it.Description,
+			HandoffKind: it.HandoffKind, Reason: it.Reason, AgentTaskID: it.AgentTaskID,
+			AcceptanceCriteria: it.AcceptanceCriteria, VerificationSteps: it.VerificationSteps,
+			RiskLevel: it.RiskLevel, Owner: it.Owner, DueAt: it.DueAt,
 			Status: "pending_review", CreatedAt: now,
 		}
 		pending = append(pending, item)
@@ -373,8 +390,8 @@ func (h *Handler) HandleProgramComplete(w http.ResponseWriter, r *http.Request) 
 	h.mu.Unlock()
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"program_id": programID,
-		"submitted_at": now,
+		"program_id":    programID,
+		"submitted_at":  now,
 		"pending_items": created,
 	})
 }
@@ -408,10 +425,6 @@ func (h *Handler) HandleApprovePostCompletionItem(w http.ResponseWriter, r *http
 			pending[i].ApprovedBy = by
 			item := pending[i]
 			approved = &item
-			if err := h.store.SavePendingPostCompletion(pending); err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-				return
-			}
 			break
 		}
 	}
@@ -419,26 +432,30 @@ func (h *Handler) HandleApprovePostCompletionItem(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "item not found"})
 		return
 	}
+	if approved.OperateLane == "" {
+		approved.OperateLane = h.operateLaneForProgram(approved.ProgramID)
+	}
 
 	resp := map[string]any{
-		"id":           approved.ID,
-		"program_id":   approved.ProgramID,
-		"title":        approved.Title,
-		"description":  approved.Description,
-		"status":       approved.Status,
-		"created_at":   approved.CreatedAt,
-		"approved_at":  approved.ApprovedAt,
-		"approved_by":  approved.ApprovedBy,
+		"id":          approved.ID,
+		"program_id":  approved.ProgramID,
+		"title":       approved.Title,
+		"description": approved.Description,
+		"status":      approved.Status,
+		"created_at":  approved.CreatedAt,
+		"approved_at": approved.ApprovedAt,
+		"approved_by": approved.ApprovedBy,
 	}
 
 	if h.operateQueue != nil {
 		queueItem, err := h.operateQueue.InjectFromApproval(r, operatequeue.ApprovalInjectParams{
-			PendingID:   approved.ID,
-			ProgramID:   approved.ProgramID,
-			Title:       approved.Title,
-			Description: approved.Description,
-			Lane:        h.operateLaneForProgram(approved.ProgramID),
-			ApprovedBy:  by,
+			PendingID: approved.ID, ProgramID: approved.ProgramID,
+			SourceLaneID: approved.SourceLaneID, OperateLane: approved.OperateLane,
+			Title: approved.Title, Description: approved.Description,
+			HandoffKind: approved.HandoffKind, Reason: approved.Reason,
+			AgentTaskID: approved.AgentTaskID, AcceptanceCriteria: approved.AcceptanceCriteria,
+			VerificationSteps: approved.VerificationSteps, RiskLevel: approved.RiskLevel,
+			Owner: approved.Owner, DueAt: approved.DueAt, ApprovedBy: by,
 		})
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -446,8 +463,180 @@ func (h *Handler) HandleApprovePostCompletionItem(w http.ResponseWriter, r *http
 		}
 		resp["operate_queue_item"] = queueItem
 	}
+	if err := h.store.SavePendingPostCompletion(pending); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	h.setProgramAssessmentStatus(approved.ProgramID, "approved", now, by, "")
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleRejectPostCompletionItem(w http.ResponseWriter, r *http.Request) {
+	itemID := chi.URLParam(r, "itemId")
+	var req PostCompletionDecisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reason required"})
+		return
+	}
+	by := strings.TrimSpace(req.DecisionBy)
+	if by == "" {
+		by = "owner"
+	}
+	items, err := h.store.LoadPendingPostCompletion()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	var rejected *PostCompletionItem
+	for i := range items {
+		if items[i].ID != itemID {
+			continue
+		}
+		if items[i].Status != "pending_review" {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "item not pending review"})
+			return
+		}
+		items[i].Status = "rejected"
+		items[i].RejectedAt = now
+		items[i].RejectedBy = by
+		items[i].DecisionNote = reason
+		copy := items[i]
+		rejected = &copy
+		break
+	}
+	if rejected == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "item not found"})
+		return
+	}
+	if err := h.store.SavePendingPostCompletion(items); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	h.refreshProgramAssessmentFromItems(rejected.ProgramID, items, now, by)
+	writeJSON(w, http.StatusOK, rejected)
+}
+
+func (h *Handler) HandleNoPostCompletionHandoff(w http.ResponseWriter, r *http.Request) {
+	programID := chi.URLParam(r, "programId")
+	var req PostCompletionDecisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reason required"})
+		return
+	}
+	by := strings.TrimSpace(req.DecisionBy)
+	if by == "" {
+		by = "owner"
+	}
+	h.mu.Lock()
+	_, exists := h.runtimes[programID]
+	h.mu.Unlock()
+	if !exists {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
+		return
+	}
+	items, err := h.store.LoadPendingPostCompletion()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	for i := range items {
+		if items[i].ProgramID == programID && items[i].Status == "pending_review" {
+			items[i].Status = "rejected"
+			items[i].RejectedAt = now
+			items[i].RejectedBy = by
+			items[i].DecisionNote = "No handoff: " + reason
+		}
+	}
+	if err := h.store.SavePendingPostCompletion(items); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	h.setProgramAssessmentStatus(programID, "no_handoff", now, by, reason)
+	h.mu.Lock()
+	resp := h.programDetailBoardResponse(programID, h.runtimes[programID])
+	h.mu.Unlock()
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) setProgramAssessmentStatus(programID, status, at, by, noHandoffReason string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	rt := h.runtimes[programID]
+	if rt == nil {
+		return
+	}
+	if rt.state == nil {
+		rt.state = &ProgramStateRecord{ProgramID: programID, History: []Job{}}
+	}
+	if rt.state.PostCompletion == nil {
+		rt.state.PostCompletion = &PostCompletionState{}
+	}
+	rt.state.PostCompletion.AssessmentStatus = status
+	rt.state.PostCompletion.AssessedAt = at
+	rt.state.PostCompletion.AssessedBy = by
+	rt.state.PostCompletion.NoHandoffReason = noHandoffReason
+	_ = h.persistRuntimeLocked(programID)
+}
+
+func (h *Handler) refreshProgramAssessmentFromItems(programID string, items []PostCompletionItem, at, by string) {
+	hasPending := false
+	hasApproved := false
+	for _, item := range items {
+		if item.ProgramID != programID {
+			continue
+		}
+		hasPending = hasPending || item.Status == "pending_review"
+		hasApproved = hasApproved || item.Status == "approved"
+	}
+	status := "not_assessed"
+	if hasApproved {
+		status = "approved"
+	} else if hasPending {
+		status = "pending_review"
+	}
+	h.setProgramAssessmentStatus(programID, status, at, by, "")
+}
+
+func (h *Handler) OnOperateQueueExecution(queueItem operatequeue.Item) {
+	items, err := h.store.LoadPendingPostCompletion()
+	if err == nil {
+		for i := range items {
+			if items[i].ID == queueItem.PendingID {
+				items[i].Status = "in_operate"
+				items[i].ExecutionJobID = queueItem.ExecutionJobID
+			}
+		}
+		_ = h.store.SavePendingPostCompletion(items)
+	}
+	h.setProgramAssessmentStatus(queueItem.ProgramID, "in_operate", queueItem.UpdatedAt, queueItem.ApprovedBy, "")
+}
+
+func (h *Handler) OnOperateQueueClosed(queueItem operatequeue.Item) {
+	items, err := h.store.LoadPendingPostCompletion()
+	if err == nil {
+		for i := range items {
+			if items[i].ID == queueItem.PendingID {
+				items[i].Status = "closed"
+				items[i].ExecutionJobID = queueItem.ExecutionJobID
+				items[i].CompletionEvidence = append([]string(nil), queueItem.CompletionEvidence...)
+			}
+		}
+		_ = h.store.SavePendingPostCompletion(items)
+	}
+	h.setProgramAssessmentStatus(queueItem.ProgramID, "closed", queueItem.ClosedAt, queueItem.ApprovedBy, "")
 }
 
 func (h *Handler) operateLaneForProgram(programID string) string {
@@ -461,6 +650,135 @@ func (h *Handler) operateLaneForProgram(programID string) string {
 		return strings.TrimSpace(lane)
 	}
 	return ""
+}
+
+func sourceLaneForRuntime(rt *programRuntime) string {
+	if rt == nil {
+		return ""
+	}
+	if rt.state != nil && strings.TrimSpace(rt.state.LaneID) != "" {
+		return strings.TrimSpace(rt.state.LaneID)
+	}
+	if rt.blueprint != nil && rt.blueprint.Metadata != nil {
+		if lane, ok := rt.blueprint.Metadata["lane_id"].(string); ok {
+			return strings.TrimSpace(lane)
+		}
+	}
+	return ""
+}
+
+func operateLaneForRuntime(rt *programRuntime) string {
+	if rt == nil || rt.blueprint == nil || rt.blueprint.Metadata == nil {
+		return ""
+	}
+	if lane, ok := rt.blueprint.Metadata["operate_lane"].(string); ok {
+		return strings.TrimSpace(lane)
+	}
+	return ""
+}
+
+func normalizeHandoffBlueprint(item OperateQueueItemBlueprint, sourceLaneID, defaultOperateLane string) OperateQueueItemBlueprint {
+	item.Title = strings.TrimSpace(item.Title)
+	item.Description = strings.TrimSpace(item.Description)
+	if item.SourceLaneID == "" {
+		item.SourceLaneID = sourceLaneID
+	}
+	if item.OperateLane == "" {
+		item.OperateLane = defaultOperateLane
+	}
+	if item.OperateLane == "" {
+		item.OperateLane = "governance"
+	}
+	if item.HandoffKind == "" {
+		item.HandoffKind = operatequeue.HandoffOneOff
+	}
+	if item.Reason == "" {
+		item.Reason = item.Description
+	}
+	if item.Reason == "" {
+		item.Reason = item.Title
+	}
+	if len(item.AcceptanceCriteria) == 0 {
+		item.AcceptanceCriteria = []string{"The operational responsibility is implemented and observable."}
+	}
+	if len(item.VerificationSteps) == 0 {
+		item.VerificationSteps = []string{"Verify the outcome and record completion evidence."}
+	}
+	if item.RiskLevel == "" {
+		item.RiskLevel = operatequeue.RiskLow
+	}
+	return item
+}
+
+func validateHandoffBlueprint(item OperateQueueItemBlueprint) error {
+	if item.Title == "" {
+		return fmt.Errorf("title required")
+	}
+	return operatequeue.ValidateStructuredHandoff(operatequeue.EnqueueRequest{
+		OperateLane: item.OperateLane, HandoffKind: item.HandoffKind, Reason: item.Reason,
+		AgentTaskID: item.AgentTaskID, AcceptanceCriteria: item.AcceptanceCriteria,
+		VerificationSteps: item.VerificationSteps, RiskLevel: item.RiskLevel, DueAt: item.DueAt,
+	})
+}
+
+func suggestedAssessment(bp *ProgramBlueprint, capabilities, risks []string) string {
+	text := strings.ToLower(strings.Join(append(append([]string{}, capabilities...), risks...), " "))
+	if bp != nil {
+		text += " " + strings.ToLower(bp.Title+" "+bp.Description)
+	}
+	if strings.Contains(text, "ui") || strings.Contains(text, "documentation") || strings.Contains(text, "docs") {
+		if !strings.Contains(text, "deploy") && !strings.Contains(text, "runtime") && !strings.Contains(text, "database") {
+			return "no_handoff"
+		}
+	}
+	return "handoff"
+}
+
+func buildDraftHandoffSuggestions(bp *ProgramBlueprint, capabilities, risks []string) []OperateQueueItemBlueprint {
+	text := strings.ToLower(strings.Join(append(append([]string{}, capabilities...), risks...), " "))
+	if bp != nil {
+		text += " " + strings.ToLower(bp.Title+" "+bp.Description)
+	}
+	sourceLane := ""
+	operateLane := "governance"
+	if bp != nil {
+		sourceLane = sourceLaneForRuntime(&programRuntime{blueprint: bp})
+		operateLane = operateLaneForRuntime(&programRuntime{blueprint: bp})
+		if operateLane == "" {
+			operateLane = "governance"
+		}
+	}
+	base := OperateQueueItemBlueprint{
+		SourceLaneID: sourceLane, OperateLane: operateLane, HandoffKind: operatequeue.HandoffOneOff,
+		RiskLevel: operatequeue.RiskMedium,
+	}
+	switch {
+	case strings.Contains(text, "secret") || strings.Contains(text, "certificate") || strings.Contains(text, "cert"):
+		base.Title = "Establish rotation ownership"
+		base.Reason = "New secret or certificate lifecycle requires an explicit operator owner."
+		base.AcceptanceCriteria = []string{"Rotation owner and cadence are recorded."}
+		base.VerificationSteps = []string{"Verify the active credential and rotation record."}
+	case strings.Contains(text, "database") || strings.Contains(text, "schema") || strings.Contains(text, "migration"):
+		base.Title = "Verify database migration operations"
+		base.Reason = "Schema changes create post-delivery migration verification responsibility."
+		base.AcceptanceCriteria = []string{"Migration is applied and backward-compatible checks pass."}
+		base.VerificationSteps = []string{"Verify schema state and dependent workload health."}
+	case strings.Contains(text, "pipeline") || strings.Contains(text, "ci/cd"):
+		base.Title = "Establish pipeline recovery ownership"
+		base.Reason = "The delivered pipeline requires an owned recovery and verification path."
+		base.AgentTaskID = "deliver-stg-recover"
+		base.AcceptanceCriteria = []string{"Recovery path is documented and a representative run succeeds."}
+		base.VerificationSteps = []string{"Inspect the latest run and verify environment smoke checks."}
+	case strings.Contains(text, "deploy") || strings.Contains(text, "runtime") || strings.Contains(text, "service"):
+		base.Title = "Establish runtime observation"
+		base.Reason = "The deployed runtime requires ongoing observation after Program completion."
+		base.AgentTaskID = "ops"
+		base.AcceptanceCriteria = []string{"Runtime health and ownership are visible in Agent Desk."}
+		base.VerificationSteps = []string{"Verify health, alerts, and a completed observation pass."}
+	default:
+		return nil
+	}
+	return []OperateQueueItemBlueprint{base}
 }
 
 func (h *Handler) HandleListPendingPostCompletion(w http.ResponseWriter, _ *http.Request) {

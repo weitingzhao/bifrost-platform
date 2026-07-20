@@ -92,18 +92,26 @@ function QueueItemRow({
   const workStatus = queueItemToBriefingStatus(item.status)
 
   return (
-    <li className="border-b border-[var(--border)] last:border-b-0">
-      <div className="flex w-full items-start gap-2 px-3 py-2">
+    <li className="min-w-0 border-b border-[var(--border)] last:border-b-0">
+      <div className="flex w-full min-w-0 items-start gap-2 px-3 py-2">
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-start gap-2 text-left transition-colors hover:bg-[var(--secondary)]/40 disabled:cursor-default"
+          className="flex min-w-0 flex-1 flex-wrap items-start gap-2 text-left transition-colors hover:bg-[var(--secondary)]/40 disabled:cursor-default"
           disabled={!hasDetail}
           onClick={() => hasDetail && setExpanded(!expanded)}
         >
           <BriefingStatusLamp status={workStatus} />
-          <div className="min-w-0 flex-1">
-            <p className="m-0 text-[var(--text-dense)]">{item.label}</p>
-            <code className="mt-0.5 inline-block rounded bg-[var(--secondary)] px-1 py-px font-mono text-dense-caption text-[var(--muted-foreground)]">
+          <div className="min-w-0 flex-1 basis-48">
+            <p
+              className="m-0 break-words text-[var(--text-dense)] [overflow-wrap:anywhere]"
+              title={item.label}
+            >
+              {item.label}
+            </p>
+            <code
+              className="mt-0.5 inline-block max-w-full break-all rounded bg-[var(--secondary)] px-1 py-px font-mono text-dense-caption text-[var(--muted-foreground)]"
+              title={item.id}
+            >
               {item.id}
             </code>
             {!expanded && parsed != null && parsed.preamble !== '' && (
@@ -117,7 +125,7 @@ function QueueItemRow({
               </p>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
             {item.progress != null && item.progress.total > 0 && (
               <span className="font-mono text-dense-caption text-[var(--muted-foreground)]">
                 {item.progress.done}/{item.progress.total}
@@ -196,7 +204,7 @@ function QueueItemRow({
       {expanded && (
         <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-8">
           {parsed != null && parsed.preamble !== '' && (
-            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--foreground)]">
+            <p className="m-0 break-words text-[var(--text-dense-meta)] text-[var(--foreground)] [overflow-wrap:anywhere]">
               {parsed.preamble}
             </p>
           )}
@@ -217,7 +225,7 @@ function QueueItemRow({
                         {done ? '✓' : '○'}
                       </span>
                       <span
-                        className={`text-[var(--text-dense-meta)] ${done ? 'text-[var(--muted-foreground)] line-through' : ''}`}
+                        className={`min-w-0 break-words text-[var(--text-dense-meta)] [overflow-wrap:anywhere] ${done ? 'text-[var(--muted-foreground)] line-through' : ''}`}
                       >
                         {ms}
                       </span>
@@ -244,7 +252,7 @@ function QueueItemRow({
                         {met ? '✓' : '○'}
                       </span>
                       <span
-                        className={`text-[var(--text-dense-meta)] ${met ? 'text-[var(--muted-foreground)]' : ''}`}
+                        className={`min-w-0 break-words text-[var(--text-dense-meta)] [overflow-wrap:anywhere] ${met ? 'text-[var(--muted-foreground)]' : ''}`}
                       >
                         {pre}
                       </span>
@@ -357,15 +365,18 @@ export function TaskQueuePanel({
   }
 
   return (
-    <div className="mt-3 overflow-hidden rounded-lg border border-[var(--border)]">
-      <header className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--background)] px-3 py-2">
-        <div className="flex items-center gap-2">
+    <div className="mt-3 min-w-0 max-w-full overflow-hidden rounded-lg border border-[var(--border)]">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--background)] px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
           <BriefingIconBadge icon={LANE_ICONS[lane.id]} size="sm" />
-          <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+          <h3
+            className="m-0 min-w-0 break-words text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] [overflow-wrap:anywhere]"
+            title={`Task queue · ${lane.shortLabel}`}
+          >
             Task queue · {lane.shortLabel}
           </h3>
         </div>
-        <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+        <span className="shrink-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {active.length} active
           {completed.length > 0 ? ` · ${completed.length} completed` : ''}
         </span>

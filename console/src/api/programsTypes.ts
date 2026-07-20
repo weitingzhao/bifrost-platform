@@ -62,11 +62,34 @@ export interface PostCompletionItem {
   program_id: string
   title: string
   description?: string
-  status: 'pending_review' | 'approved' | 'rejected'
+  source_lane_id?: string
+  operate_lane?: import('./operateQueueTypes').OperateLane | string
+  handoff_kind?: import('./operateQueueTypes').HandoffKind
+  reason?: string
+  agent_task_id?: string
+  acceptance_criteria?: string[]
+  verification_steps?: string[]
+  risk_level?: import('./operateQueueTypes').RiskLevel
+  owner?: string
+  due_at?: string
+  status: 'pending_review' | 'approved' | 'rejected' | 'in_operate' | 'closed'
   created_at: string
   approved_at?: string
   approved_by?: string
+  rejected_at?: string
+  rejected_by?: string
+  decision_note?: string
+  execution_job_id?: string
+  completion_evidence?: string[]
 }
+
+export type PostCompletionAssessmentStatus =
+  | 'not_assessed'
+  | 'no_handoff'
+  | 'pending_review'
+  | 'approved'
+  | 'in_operate'
+  | 'closed'
 
 export interface ProgramDetailResponse {
   program: ProgramSummary
@@ -83,8 +106,30 @@ export interface ProgramDetailResponse {
     submitted_at?: string
     new_capabilities?: string[]
     new_risks?: string[]
+    assessed_at?: string
+    assessed_by?: string
+    assessment_status?: PostCompletionAssessmentStatus
+    no_handoff_reason?: string
+    suggested_assessment?: 'handoff' | 'no_handoff'
+    suggested_items?: PostCompletionDraftItem[]
   }
   pending_post_completion_items?: PostCompletionItem[]
+}
+
+export interface PostCompletionDraftItem {
+  id?: string
+  source_lane_id?: string
+  operate_lane?: import('./operateQueueTypes').OperateLane | string
+  title: string
+  description?: string
+  handoff_kind?: import('./operateQueueTypes').HandoffKind
+  reason?: string
+  agent_task_id?: string
+  acceptance_criteria?: string[]
+  verification_steps?: string[]
+  risk_level?: import('./operateQueueTypes').RiskLevel
+  owner?: string
+  due_at?: string
 }
 
 export interface ProgramsListResponse {

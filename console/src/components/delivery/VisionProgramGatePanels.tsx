@@ -19,7 +19,7 @@ export function VisionProgramGatePanels() {
     <section className="page-section panel-elevated px-2 py-2 flex flex-col gap-3">
       <p className="text-dense-label font-medium m-0 px-3 pt-2">Vision gates</p>
       <p className="text-dense-meta text-muted-foreground m-0 px-3">
-        Run gate checks and record Owner sign-off per gate. Phase table above syncs from unified programs API.
+        Run gate checks here in Briefing Session (lane governance). Delivery Board shows progress as a read-only catalog.
       </p>
       {VISION_GATES.map(({ id, Panel }) => (
         <div key={id} className="border-t border-border/50 pt-1 first:border-t-0">

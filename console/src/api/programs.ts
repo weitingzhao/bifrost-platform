@@ -5,6 +5,7 @@ import type {
   ProgramDetailResponse,
   ProgramsListResponse,
   CreateProgramFromTemplateRequest,
+  PostCompletionDraftItem,
 } from './programsTypes'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
@@ -17,6 +18,25 @@ async function parseError(prefix: string, r: Response): Promise<Error> {
     // keep status detail
   }
   return new Error(`${prefix}: ${detail}`)
+}
+
+export async function submitProgramPostCompletion(
+  programId: string,
+  body: {
+    new_capabilities?: string[]
+    new_risks?: string[]
+    operate_queue_items?: PostCompletionDraftItem[]
+  },
+): Promise<{ program_id: string; submitted_at: string; pending_items: import('./programsTypes').PostCompletionItem[] }> {
+  const r = await programsFetch(`/api/v1/programs/${encodeURIComponent(programId)}/complete`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<{
+    program_id: string
+    submitted_at: string
+    pending_items: import('./programsTypes').PostCompletionItem[]
+  }>
 }
 
 async function programsFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -87,6 +107,28 @@ export async function approvePostCompletionItem(
     body: JSON.stringify(body ?? {}),
   })
   return r.json() as Promise<{ id: string; status: string }>
+}
+
+export async function rejectPostCompletionItem(
+  itemId: string,
+  body: { reason: string; decision_by?: string },
+): Promise<import('./programsTypes').PostCompletionItem> {
+  const r = await programsFetch(`/api/v1/programs/post-completion/${encodeURIComponent(itemId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<import('./programsTypes').PostCompletionItem>
+}
+
+export async function recordNoPostCompletionHandoff(
+  programId: string,
+  body: { reason: string; decision_by?: string },
+): Promise<ProgramDetailResponse> {
+  const r = await programsFetch(
+    `/api/v1/programs/${encodeURIComponent(programId)}/post-completion/no-handoff`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+  return r.json() as Promise<ProgramDetailResponse>
 }
 
 export async function fetchPendingPostCompletion(): Promise<{ items: import('./programsTypes').PostCompletionItem[] }> {

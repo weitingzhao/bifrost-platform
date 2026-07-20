@@ -32,6 +32,21 @@ export async function platformPost(path: string, body?: unknown): Promise<unknow
   return text === '' ? {} : (JSON.parse(text) as unknown)
 }
 
+export async function platformPatch(path: string, body?: unknown): Promise<unknown> {
+  const headers: Record<string, string> = {
+    ...(authHeaders() as Record<string, string>),
+    'Content-Type': 'application/json',
+  }
+  const r = await fetch(`${base}${path}`, {
+    method: 'PATCH',
+    headers,
+    body: body == null ? '{}' : JSON.stringify(body),
+  })
+  const text = await r.text()
+  if (!r.ok) throw new Error(`PATCH ${path}: HTTP ${r.status} ${text}`)
+  return text === '' ? {} : (JSON.parse(text) as unknown)
+}
+
 export async function platformDelete(path: string): Promise<unknown> {
   const r = await fetch(`${base}${path}`, { method: 'DELETE', headers: authHeaders() })
   const text = await r.text()

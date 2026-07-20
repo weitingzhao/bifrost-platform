@@ -8,10 +8,13 @@ import { BriefingSessionResultsPanel } from '@/components/briefing/BriefingSessi
 import { NightlyBriefingPanel } from '@/components/briefing/NightlyBriefingPanel'
 import { OperateQueueHandoffPanel } from '@/components/briefing/OperateQueueHandoffPanel'
 import { SessionDeltaPanel } from '@/components/briefing/SessionDeltaPanel'
+import { DecisionBriefPanel } from '@/components/operate/DecisionBriefPanel'
+import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { buildBriefingAlignmentPack } from '@/lib/briefing/buildBriefingAlignmentPack'
 import { computeSessionDelta, isEmptyDelta, type SessionDelta } from '@/lib/briefing/sessionDiff'
 import { loadSnapshot, type SessionSnapshot } from '@/lib/briefing/sessionSnapshot'
+import type { OperateQueueItem } from '@/api/operateQueueTypes'
 
 export type AgentDeskSessionOpsPanelsProps = {
   context: OpsContextResponse | undefined
@@ -22,6 +25,16 @@ export type AgentDeskSessionOpsPanelsProps = {
   onOpenBriefing?: () => void
   onOpenBriefingReconciliation?: () => void
   onOpenDeliveryBoard?: () => void
+  mode?: 'operate' | 'review' | 'all'
+  onOpenHandoffSource?: (item: OperateQueueItem) => void
+  onPrepareHandoffAgent?: (item: OperateQueueItem) => void
+  onStartHandoffAgent?: (item: OperateQueueItem) => void
+  onObserveHandoffJob?: (jobId: string) => void
+  onNavigateRecurringSetup?: () => void
+  focusHandoffId?: string | null
+  onFocusHandoffConsumed?: () => void
+  focusDecisionBriefId?: string | null
+  onFocusDecisionBriefConsumed?: () => void
 }
 
 /**
@@ -37,6 +50,16 @@ export function AgentDeskSessionOpsPanels({
   onOpenBriefing,
   onOpenBriefingReconciliation,
   onOpenDeliveryBoard,
+  mode = 'all',
+  onOpenHandoffSource,
+  onPrepareHandoffAgent,
+  onStartHandoffAgent,
+  onObserveHandoffJob,
+  onNavigateRecurringSetup,
+  focusHandoffId,
+  onFocusHandoffConsumed,
+  focusDecisionBriefId,
+  onFocusDecisionBriefConsumed,
 }: AgentDeskSessionOpsPanelsProps) {
   const [localSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
@@ -44,6 +67,9 @@ export function AgentDeskSessionOpsPanels({
   const [alignmentCopied, setAlignmentCopied] = useState(false)
 
   const operateQueueQuery = useOperateQueue()
+  const decisionBriefsQuery = usePendingDecisionBriefs({
+    enabled: mode !== 'review',
+  })
 
   const serverSnapshotQuery = useQuery({
     queryKey: ['session-snapshot', 'latest'],
@@ -113,130 +139,182 @@ export function AgentDeskSessionOpsPanels({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
-      <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-        Session ops moved here from Agent Briefing — Desk owns runner closure and drift review;
-        Briefing stays on planned / doing / new work.
-        {onOpenBriefing != null && (
-          <>
-            {' '}
-            <button
-              type="button"
-              className="font-medium text-[var(--foreground)] underline-offset-2 hover:underline"
-              onClick={onOpenBriefing}
-            >
-              Open Briefing
-            </button>
-          </>
-        )}
-        {onOpenDeliveryBoard != null && (
-          <>
-            {' · '}
-            <button
-              type="button"
-              className="font-medium text-[var(--foreground)] underline-offset-2 hover:underline"
-              onClick={onOpenDeliveryBoard}
-            >
-              Delivery Board
-            </button>
-            {' for program sign-off'}
-          </>
-        )}
-        {onOpenBriefingReconciliation != null && (
-          <>
-            {' · '}
-            <button
-              type="button"
-              className="font-medium text-[var(--foreground)] underline-offset-2 hover:underline"
-              onClick={onOpenBriefingReconciliation}
-            >
-              Briefing Reconciliation
-            </button>
-            {' for sync loop'}
-          </>
-        )}
-      </p>
-
-      <BriefingFoldableSection
-        kicker="Operate"
-        title="Operate queue handoffs"
-        description="Projection queue (D11) — approved post-completion items awaiting ops work. Resolve from Desk, not Briefing."
-        defaultExpanded
-        badge={
-          (operateQueueQuery.data?.open.length ?? 0) > 0
-            ? String(operateQueueQuery.data?.open.length)
-            : undefined
-        }
-        badgeVariant="warning"
-      >
-        <OperateQueueHandoffPanel
-          items={operateQueueQuery.data?.open ?? []}
-          loading={operateQueueQuery.isLoading}
-        />
-      </BriefingFoldableSection>
-
-      <BriefingFoldableSection
-        kicker="Closure"
-        title="Session results"
-        description="Closed Ops-runner briefing sessions (S9 write-back). IDE work stays in Cursor — no auto-close required."
-        defaultExpanded={false}
-      >
-        <BriefingSessionResultsPanel />
-      </BriefingFoldableSection>
-
-      <BriefingFoldableSection
-        kicker="Automation"
-        title="Nightly agent report & drift proposals"
-        description="Layer 1–4 scan from agent host. Owner approval required for fixes."
-        defaultExpanded={false}
-      >
-        <NightlyBriefingPanel />
-      </BriefingFoldableSection>
-
-      <BriefingFoldableSection
-        kicker="Automation"
-        title="Since your last session"
-        description={
-          previousSnapshot != null
-            ? `Baseline: ${new Date(previousSnapshot.savedAt).toLocaleString()}${serverSnapshotQuery.data != null ? ' (server)' : ' (local)'}`
-            : 'First session — snapshot saved when you copy a Briefing pack.'
-        }
-        defaultExpanded={false}
-        badge={sessionDelta != null && !isEmptyDelta(sessionDelta) ? 'CHANGES' : undefined}
-        badgeVariant="info"
-      >
-        <SessionDeltaPanel
-          delta={sessionDelta}
-          hasBaseline={previousSnapshot != null}
-        />
-      </BriefingFoldableSection>
-
-      <BriefingFoldableSection
-        kicker="Meta"
-        title="Align Briefing with the system"
-        description="Not for ops / release work. Use only when Briefing itself drifted from Console tabs or platform-api routes."
-        defaultExpanded={false}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAlignmentPack(true)}
-          >
-            Generate alignment task
-          </Button>
-          {showAlignmentPack && (
-            <Button type="button" variant="outline" size="sm" onClick={() => void handleCopyAlignment()}>
-              {alignmentCopied ? 'Copied!' : 'Copy alignment pack'}
-            </Button>
+      {mode !== 'operate' && (
+        <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Review runner outcomes and drift here. Program phase sign-off and post-completion approval
+          remain in Agent Briefing Session.
+          {onOpenBriefing != null && (
+            <>
+              {' '}
+              <button
+                type="button"
+                className="font-medium text-[var(--foreground)] underline-offset-2 hover:underline"
+                onClick={onOpenBriefing}
+              >
+                Open Briefing
+              </button>
+            </>
           )}
-        </div>
-        {showAlignmentPack && (
-          <pre className="llm-content-pre mt-3 max-h-64 overflow-auto font-mono-tabular text-[var(--text-dense-caption)]">
-            {alignmentPack}
-          </pre>
-        )}
-      </BriefingFoldableSection>
+          {onOpenDeliveryBoard != null && (
+            <>
+              {' · '}
+              <button
+                type="button"
+                className="font-medium text-[var(--foreground)] underline-offset-2 hover:underline"
+                onClick={onOpenDeliveryBoard}
+              >
+                Delivery Board
+              </button>
+              {' is a read-only program catalog'}
+            </>
+          )}
+          {onOpenBriefingReconciliation != null && (
+            <>
+              {' · '}
+              <button
+                type="button"
+                className="font-medium text-[var(--foreground)] underline-offset-2 hover:underline"
+                onClick={onOpenBriefingReconciliation}
+              >
+                Briefing Reconciliation
+              </button>
+              {' for sync loop'}
+            </>
+          )}
+        </p>
+      )}
+
+      {mode !== 'review' && (
+        <>
+          {(decisionBriefsQuery.pendingCount > 0 || decisionBriefsQuery.isLoading) && (
+            <BriefingFoldableSection
+              kicker="Operate"
+              title="Decision briefs"
+              description="Owner decisions for ambiguous or high-risk queue items before remediation runs."
+              defaultExpanded
+              badge={
+                decisionBriefsQuery.pendingCount > 0
+                  ? String(decisionBriefsQuery.pendingCount)
+                  : undefined
+              }
+              badgeVariant="warning"
+            >
+              <DecisionBriefPanel
+                focusBriefId={focusDecisionBriefId}
+                onFocusBriefConsumed={onFocusDecisionBriefConsumed}
+              />
+            </BriefingFoldableSection>
+          )}
+          <BriefingFoldableSection
+            kicker="Operate"
+            title="Operate queue handoffs"
+            description="Approved post-completion handoffs awaiting execution. Open the source or prepare an Agent task; close only after the work is complete."
+            defaultExpanded
+            badge={
+              (operateQueueQuery.data?.open.length ?? 0) > 0
+                ? String(operateQueueQuery.data?.open.length)
+                : undefined
+            }
+            badgeVariant="warning"
+          >
+            <OperateQueueHandoffPanel
+              items={operateQueueQuery.data?.open ?? []}
+              loading={operateQueueQuery.isLoading}
+              onOpenSource={onOpenHandoffSource}
+              onPrepareAgent={onPrepareHandoffAgent}
+              onStartAgent={onStartHandoffAgent}
+              onObserveJob={onObserveHandoffJob}
+              onNavigateSetup={onNavigateRecurringSetup}
+              focusHandoffId={focusHandoffId}
+              onFocusHandoffConsumed={onFocusHandoffConsumed}
+            />
+          </BriefingFoldableSection>
+        </>
+      )}
+
+      {mode !== 'operate' && (
+        <>
+          {(operateQueueQuery.data?.recent_closed.length ?? 0) > 0 && (
+            <BriefingFoldableSection
+              kicker="Review"
+              title="Recently closed handoffs"
+              description="Verified closure evidence retained by the Operate Queue."
+              defaultExpanded={false}
+              badge={String(operateQueueQuery.data?.recent_closed.length ?? 0)}
+              badgeVariant="success"
+            >
+              <OperateQueueHandoffPanel
+                items={operateQueueQuery.data?.recent_closed ?? []}
+                onOpenSource={onOpenHandoffSource}
+                onObserveJob={onObserveHandoffJob}
+              />
+            </BriefingFoldableSection>
+          )}
+          <BriefingFoldableSection
+            kicker="Closure"
+            title="Session results"
+            description="Closed Ops-runner briefing sessions (S9 write-back). IDE work stays in Cursor — no auto-close required."
+            defaultExpanded={false}
+          >
+            <BriefingSessionResultsPanel />
+          </BriefingFoldableSection>
+
+          <BriefingFoldableSection
+            kicker="Automation"
+            title="Nightly agent report & drift proposals"
+            description="Layer 1–4 scan from agent host. Owner approval required for fixes."
+            defaultExpanded={false}
+          >
+            <NightlyBriefingPanel />
+          </BriefingFoldableSection>
+
+          <BriefingFoldableSection
+            kicker="Automation"
+            title="Since your last session"
+            description={
+              previousSnapshot != null
+                ? `Baseline: ${new Date(previousSnapshot.savedAt).toLocaleString()}${serverSnapshotQuery.data != null ? ' (server)' : ' (local)'}`
+                : 'First session — snapshot saved when you copy a Briefing pack.'
+            }
+            defaultExpanded={false}
+            badge={sessionDelta != null && !isEmptyDelta(sessionDelta) ? 'CHANGES' : undefined}
+            badgeVariant="info"
+          >
+            <SessionDeltaPanel
+              delta={sessionDelta}
+              hasBaseline={previousSnapshot != null}
+            />
+          </BriefingFoldableSection>
+
+          <BriefingFoldableSection
+            kicker="Meta"
+            title="Align Briefing with the system"
+            description="Not for ops / release work. Use only when Briefing itself drifted from Console tabs or platform-api routes."
+            defaultExpanded={false}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAlignmentPack(true)}
+              >
+                Generate alignment task
+              </Button>
+              {showAlignmentPack && (
+                <Button type="button" variant="outline" size="sm" onClick={() => void handleCopyAlignment()}>
+                  {alignmentCopied ? 'Copied!' : 'Copy alignment pack'}
+                </Button>
+              )}
+            </div>
+            {showAlignmentPack && (
+              <pre className="llm-content-pre mt-3 max-h-64 overflow-auto font-mono-tabular text-[var(--text-dense-caption)]">
+                {alignmentPack}
+              </pre>
+            )}
+          </BriefingFoldableSection>
+        </>
+      )}
     </div>
   )
 }
