@@ -50,7 +50,7 @@ const COL_LABEL: Record<FleetEnvColumn, string> = {
   prod: 'PROD',
 }
 
-const ISSUES_ONLY_STORAGE_PREFIX = 'daily-ops-fleet-issues-only:'
+const ISSUES_ONLY_STORAGE_PREFIX = 'daily-ops-fleet-issues-only:v2:'
 
 function cellHasIssues(cell: FleetCell): boolean {
   const gate = resolveCellGate(cell)
@@ -99,9 +99,9 @@ function writeStoredIssuesOnly(phase: DailyOpsWorkflowPhase | undefined, value: 
   }
 }
 
-/** Remediate defaults to issues-first; Discover / Verify / Clear default Show all. */
-function defaultIssuesOnly(phase: DailyOpsWorkflowPhase | undefined): boolean {
-  return phase === 'remediate'
+/** All Ops loop phases default to Issues only (operator can still Show all). */
+function defaultIssuesOnly(_phase: DailyOpsWorkflowPhase | undefined): boolean {
+  return true
 }
 
 function gateTagVariant(gate: FleetCellGate): 'success' | 'danger' | 'category' {
@@ -428,7 +428,7 @@ export function DailyOpsFleetBoard({
   /** Coverage keys flashing from Checklist section click */
   flashKeys?: ReadonlySet<string>
   flashNonce?: number
-  /** Process strip phase — Remediate defaults to issues-first; others Show all. */
+  /** Process strip phase — all phases default Issues only; Show all is opt-in. */
   workflowPhase?: DailyOpsWorkflowPhase
   onAgentFix?: (cell: FleetCell) => void
   onSelectCell: (cell: FleetCell | null) => void

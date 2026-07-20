@@ -396,7 +396,7 @@ export type DailyOpsOperatorPlanPanelProps = {
   ambientJobScope?: string | null
   /** When true (split layout beside Fleet Board), use single-column step cards. */
   compactColumns?: boolean
-  /** Process strip phase — Remediate collapses governance meta + defaults to failing-only. */
+  /** Process strip phase — Remediate collapses governance meta; all phases default failing-only. */
   workflowPhase?: DailyOpsWorkflowPhase
 }
 
@@ -434,16 +434,16 @@ export function DailyOpsOperatorPlanPanel({
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null)
   const remediatingPhase = workflowPhase === 'remediate'
   const [showMeta, setShowMeta] = useState(!remediatingPhase)
-  const [failingOnly, setFailingOnly] = useState(remediatingPhase)
+  // All Ops loop phases default to Failing only (Show all is opt-in).
+  const [failingOnly, setFailingOnly] = useState(true)
 
   useEffect(() => {
     if (workflowPhase === 'remediate') {
       setShowMeta(false)
-      setFailingOnly(true)
     } else if (workflowPhase === 'discover') {
       setShowMeta(true)
-      setFailingOnly(false)
     }
+    setFailingOnly(true)
   }, [workflowPhase])
 
   const agentRemediating =
