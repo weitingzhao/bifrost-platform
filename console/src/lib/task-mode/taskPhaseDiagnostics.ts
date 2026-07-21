@@ -74,7 +74,7 @@ function dailyOpsFixActions(
     if (phaseId === 'remediate') {
       actions.push({ label: 'Operator Plane', tabId: 'operator-plane', kind: 'navigate' })
     }
-    actions.push({ label: 'Runtime Map', tabId: 'runtime-map', kind: 'navigate' })
+    actions.push({ label: 'Topology', tabId: 'runtime-map', kind: 'navigate' })
     actions.push({ label: 'Cluster', tabId: 'cluster', kind: 'navigate' })
   }
   if (phaseId === 'clear') {

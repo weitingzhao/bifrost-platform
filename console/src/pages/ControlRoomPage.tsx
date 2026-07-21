@@ -16,6 +16,7 @@ import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystems
 import { OperateQueueStrip } from '@/components/control-room/OperateQueueStrip'
 import { MissionSignalProgramStrip } from '@/components/control-room/MissionSignalProgramStrip'
 import { WorkTracksStrip } from '@/components/control-room/WorkTracksStrip'
+import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader'
 import {
   DualFlywheelPanel,
   type ControlRoomSelection,
@@ -232,6 +233,10 @@ export function ControlRoomPage({
 
   return (
     <div className="control-room-layout flex w-full min-w-0 flex-col gap-4">
+      <ConsolePageHeader
+        title="Control Room"
+        help="Mission diagnosis — payload reachability, rocket/satellite launches, agent loop, and command intent. Topology opens as a drill-down sheet."
+      />
       <section className="control-room-diagnosis flex flex-col gap-4" aria-label="Mission diagnosis">
         {banner != null && (
           <MissionVerifyBanner

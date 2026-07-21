@@ -27,6 +27,12 @@ import {
   OPENING_PROMPTS,
   buildAgentProtocolLlmPack,
 } from '@/lib/architecture/agentProtocolCatalog'
+import {
+  SYSTEM_DOMAIN_SOURCE,
+  SYSTEM_DOMAIN_VARIANT,
+  SYSTEM_DOMAIN_VERSION,
+  SYSTEM_DOMAINS,
+} from '@/lib/architecture/systemDomainCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
@@ -87,6 +93,32 @@ export function AgentProtocolPage() {
                 <DenseTableCell className="font-mono-tabular text-xs">{m.defaultUI}</DenseTableCell>
                 <DenseTableCell>{m.agentMay}</DenseTableCell>
                 <DenseTableCell className="text-[var(--muted-foreground)]">{m.agentMustNot}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
+      </CatalogSection>
+
+      <CatalogSection
+        title="System Domains (Apollo)"
+        description={`Agent remediation scopes project via scopeToDomain() — ${SYSTEM_DOMAIN_SOURCE} v${SYSTEM_DOMAIN_VERSION}. Distinct from AgentTaskDomain (Operator|Platform|Trade|…).`}
+      >
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Domain</DenseTableHead>
+              <DenseTableHead>Id</DenseTableHead>
+              <DenseTableHead>Purpose</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {SYSTEM_DOMAINS.map(d => (
+              <DenseTableRow key={d.id}>
+                <DenseTableCell>
+                  <DenseTag variant={SYSTEM_DOMAIN_VARIANT[d.id]}>{d.label}</DenseTag>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono text-[var(--text-dense-meta)]">{d.id}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{d.purpose}</DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>

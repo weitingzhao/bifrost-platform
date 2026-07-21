@@ -408,14 +408,14 @@ export function MissionBoard({
                   id={`${target.environment} · ${target.id}`}
                   detail={target.detail ?? 'Reachability probe failed'}
                   action={{
-                    label: 'Runtime Map',
+                    label: 'Topology',
                     onClick: () => onOpenRuntimeMap({ env: target.environment }),
                   }}
                 />
               ))}
               {visibleTargets.length > 12 && (
                 <p className="mission-board-detail-more">
-                  + {visibleTargets.length - 12} more failing targets — open Runtime Map for full list.
+                  + {visibleTargets.length - 12} more failing targets — open topology for full list.
                 </p>
               )}
             </div>

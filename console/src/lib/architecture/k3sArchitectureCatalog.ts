@@ -2,7 +2,7 @@
  * K3s platform target architecture.
  *
  * Static catalog for LLM packs and Placement registry (NAMESPACE_ALLOCATION).
- * Live cluster state: Rocket → Cluster / Placement / Runtime Map.
+ * Live cluster state: Rocket → Cluster / Placement / Control Room topology sheet.
  * Migrated from bifrost-trade-infra/docs/K3S_PLATFORM_ARCHITECTURE.md (2026-06-15).
  */
 
@@ -328,7 +328,7 @@ export const RELATED_AUTHORITIES = [
   'Execution order + hardware map: roadmapCatalog.ts (Platform Roadmap UI)',
   'Bootstrap runbook: k3sBootstrapCatalog.ts',
   'North star: blueprintCatalog.ts · Blueprint § AI Native Platform',
-  'Live cluster: Rocket → Cluster · Placement · Runtime Map',
+  'Live cluster: Rocket → Cluster · Placement · Control Room topology sheet',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
 
@@ -356,7 +356,7 @@ export function buildK3sArchitectureLlmPack(): string {
   const lines: string[] = [
     '# Bifrost Ops — K3s Platform Architecture (target design)',
     `# Source: ${K3S_ARCH_SOURCE} v${K3S_ARCH_VERSION}`,
-    'Live state: Rocket → Cluster / Placement / Runtime Map — not this catalog.',
+    'Live state: Rocket → Cluster / Placement / Control Room topology sheet — not this catalog.',
     '',
     '## Background',
     `Compose problem: ${BACKGROUND_COMPOSE}`,

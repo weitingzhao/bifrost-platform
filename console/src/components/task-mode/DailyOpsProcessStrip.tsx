@@ -47,7 +47,7 @@ const STEP_LABEL: Record<DailyOpsStepStatus, string> = {
 /** Deep links only — live Discover→Clear lives in the Ops loop stepper + CTA. */
 const DAILY_OPS_HELP_LINKS: { label: string; tabId: string }[] = [
   { label: 'Control Room', tabId: 'control-room' },
-  { label: 'Runtime Map', tabId: 'runtime-map' },
+  { label: 'Topology', tabId: 'runtime-map' },
   { label: 'Cluster', tabId: 'cluster' },
   { label: 'Operator Plane', tabId: 'operator-plane' },
   { label: 'Agent Desk', tabId: 'agent-desk' },

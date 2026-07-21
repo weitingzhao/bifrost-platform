@@ -104,7 +104,7 @@ function intentTaskSection(intent: WorkIntent, ctx?: OpsContextResponse): string
       'config/ops-context.yaml — milestone ops-ui-actuation',
     ],
     debug: [
-      'Ops Console → Mission Control → Runtime Map (failing matrix targets)',
+      'Ops Console → Mission Control → Control Room → Runtime Map sheet (failing matrix targets)',
       'Ops Console → Rocket → Cluster (kubeconfig, failing pods)',
       'Ops Console → Governance → Standards — probe contract',
       'context.probe_hints in GET /api/v1/context',
@@ -710,7 +710,7 @@ export function buildBriefingPack(input: BriefingInputs): string {
     sections.push(
       '',
       '## Related Console views',
-      '- Mission Control: Control Room → Runtime Map (business topology + matrix, L0)',
+      '- Mission Control: Control Room → Runtime Map sheet (business topology + matrix, L0)',
       '- Rocket: Placement (K8s node-pool / policy gap, L0)',
       '- Rocket: Cluster (L0 read + L1 actuation)',
       '- Mission Control: Audit · Engineer → Agent Briefing (actuation history)',

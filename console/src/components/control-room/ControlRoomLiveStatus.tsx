@@ -134,10 +134,10 @@ export function ControlRoomLiveStatus({
 
       <OpsSection
         title="Environment reachability"
-        description="Summary only — open Runtime Map for hardware topology and per-target drill-down."
+        description="Summary only — open topology for hardware map and per-target drill-down."
         actions={
           <Button variant="ghost" size="xs" onClick={() => onOpenRuntimeMap()}>
-            Open Runtime Map
+            Open topology
           </Button>
         }
         bodyPadding="none"

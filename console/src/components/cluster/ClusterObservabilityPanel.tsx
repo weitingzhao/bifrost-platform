@@ -85,7 +85,7 @@ export function ClusterObservabilityPanel({
         )}
         {onOpenRuntimeMap != null && (
           <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenRuntimeMap}>
-            Open Runtime Map
+            Open topology
           </Button>
         )}
         {onInstallLayerB != null && data?.layer_b_status !== 'ready' && (

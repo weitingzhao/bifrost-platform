@@ -48,6 +48,12 @@ import {
   SPINE_STATUS_SEMANTICS_NOTE,
 } from '@/lib/architecture/spineSemantics'
 import {
+  SYSTEM_DOMAIN_SOURCE,
+  SYSTEM_DOMAIN_VARIANT,
+  SYSTEM_DOMAIN_VERSION,
+  SYSTEM_DOMAINS,
+} from '@/lib/architecture/systemDomainCatalog'
+import {
   BLUEPRINT_ZONE_ANCHORS,
 } from '@/lib/architecture/blueprintZones'
 
@@ -237,6 +243,32 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
             </div>
           ))}
         </div>
+      </CatalogSection>
+
+      <CatalogSection
+        title="System Domains (Apollo)"
+        description={`Sidebar planes — SSOT ${SYSTEM_DOMAIN_SOURCE} v${SYSTEM_DOMAIN_VERSION}. Defects / Audit / Agent scopes project onto these domains.`}
+      >
+        <DenseDataTable>
+          <DenseTableHeader>
+            <DenseTableHeadRow>
+              <DenseTableHead>Domain</DenseTableHead>
+              <DenseTableHead>Id</DenseTableHead>
+              <DenseTableHead>Purpose</DenseTableHead>
+            </DenseTableHeadRow>
+          </DenseTableHeader>
+          <DenseTableBody>
+            {SYSTEM_DOMAINS.map(d => (
+              <DenseTableRow key={d.id}>
+                <DenseTableCell>
+                  <DenseTag variant={SYSTEM_DOMAIN_VARIANT[d.id]}>{d.label}</DenseTag>
+                </DenseTableCell>
+                <DenseTableCell className="font-mono text-[var(--text-dense-meta)]">{d.id}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{d.purpose}</DenseTableCell>
+              </DenseTableRow>
+            ))}
+          </DenseTableBody>
+        </DenseDataTable>
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">

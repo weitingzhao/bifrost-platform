@@ -10,8 +10,9 @@ import {
   SPINE_MILESTONE_STATUS_DEFINITIONS,
   SPINE_STATUS_SEMANTICS_NOTE,
 } from '@/lib/architecture/spineSemantics'
+import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog'
 
-export const BLUEPRINT_VERSION = '2026-07-03'
+export const BLUEPRINT_VERSION = '2026-07-20'
 export const BLUEPRINT_SOURCE = 'console/src/lib/architecture/blueprintCatalog.ts'
 
 /** Slow-changing principles — North Star, design rules, forbidden actions. */
@@ -188,13 +189,19 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Control Room', plane: 'Mission Control', purpose: 'Mission diagnosis — KPIs, matrix, flywheels, commander cockpit' },
   { view: 'Task Control Center', plane: 'Mission Control', purpose: 'Task mode phased playbook — ops/dev loop lens with nav filter' },
   {
+    view: 'Defects',
+    plane: 'Mission Control',
+    purpose:
+      'Cross-job Agent remediation pattern analysis — filter by System Domain (systemDomainCatalog.ts)',
+  },
+  {
     view: 'Network Health (Control Room)',
     plane: 'Mission Control',
     purpose:
       'Ground-floor LAN — spine + catalog projection, ZBF status, live UniFi probe; catalogs: networkUpgradeCatalog.ts + networkApiContractCatalog.ts',
   },
   { view: 'Delivery', plane: 'Rocket', purpose: 'CI/CD pipelines and release coupling' },
-  { view: 'Runtime Map', plane: 'Mission Control', purpose: 'Topology-first runtime diagnosis' },
+  { view: 'Runtime Map', plane: 'Mission Control', purpose: 'Topology drill-down sheet from Control Room (not a top-level daily page)' },
   { view: 'Placement', plane: 'Rocket', purpose: 'Workload placement policy and violations' },
   { view: 'Cluster', plane: 'Rocket', purpose: 'Cluster operations' },
   { view: 'Audit', plane: 'Mission Control', purpose: 'Platform actuation audit history' },
@@ -268,7 +275,7 @@ export const SUCCESS_CRITERIA: SuccessCriterion[] = [
   {
     area: 'Runtime',
     criterion:
-      'Runtime Map, Control Room, and Operate views form a closed Observe→Act loop with deep-links; live readiness is Projection (matrix/gate)',
+      'Control Room → Runtime Map sheet + Operate views form a closed Observe→Act loop with deep-links; live readiness is Projection (matrix/gate)',
   },
   { area: 'Spine', criterion: 'GET /api/v1/context + Program page always shows north star' },
   { area: 'MCP', criterion: 'MCP Tools and UI — same permissions, same audit (AI Agent self-interaction loop)' },
@@ -448,6 +455,8 @@ export function buildBlueprintConstitutionPack(): string {
     '',
     '## Design principles',
     ...DESIGN_PRINCIPLES.map(p => `${p.id}. **${p.title}** — ${p.description}`),
+    '',
+    buildSystemDomainLlmPack(),
     '',
     '## Console views',
     ...CONSOLE_VIEWS.map(v => `- **${v.view}** [${v.plane}]: ${v.purpose}`),

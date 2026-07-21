@@ -16,7 +16,6 @@ import {
   History,
   LifeBuoy,
   LineChart,
-  Map,
   MapPinned,
   Microscope,
   Network,
@@ -36,13 +35,15 @@ import {
 /**
  * Ops Console sidebar — seven system-domain groups (Apollo model).
  *
+ * System Domain SSOT (ids + purpose + scope→domain): systemDomainCatalog.ts
+ *
  * Instead of verb-based lenses (Observe / Operate / Architecture) the
  * navigation is organised by **system domain** so each domain self-contains
  * its observe, operate, and governance dimensions.
  *
  * | Group            | Domain                | Intent                                           |
  * |------------------|-----------------------|--------------------------------------------------|
- * | Mission Control  | Cross-domain ops hub  | Control Room, topology, defects, audit, delivery   |
+ * | Mission Control  | Cross-domain ops hub  | Control Room (+ Runtime Map sheet), defects, audit, delivery |
  * | Rocket           | Ops Platform itself   | K8s cluster, Launch Rocket, placement             |
  * | Ground Systems   | Infrastructure        | Server console, network, compute                  |
  * | Satellite        | Payload satellite(s)  | Bus, telemetry, API health, Deploy Satellite      |
@@ -64,7 +65,6 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'control-room', label: 'Control Room', icon: Gauge },
-          { id: 'runtime-map', label: 'Runtime Map', icon: Map },
           { id: 'defects', label: 'Defects', icon: Microscope },
           { id: 'audit', label: 'Audit', icon: History },
           { id: 'delivery-board', label: 'Delivery Board', icon: ClipboardList },

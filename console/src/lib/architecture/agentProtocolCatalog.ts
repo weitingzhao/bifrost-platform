@@ -3,9 +3,14 @@
  *
  * Authoritative source for Ops Console → Governance → Agent Protocol.
  * Single source of truth — do not duplicate elsewhere.
+ *
+ * System Domain taxonomy (Apollo planes / Defects filters): systemDomainCatalog.ts
+ * — AgentTaskDomain remains the task-subject vocabulary; map scopes via scopeToDomain().
  */
 
-export const AGENT_PROTOCOL_VERSION = '2026-07-07'
+import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog'
+
+export const AGENT_PROTOCOL_VERSION = '2026-07-20'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 export type AgentModeRow = {
@@ -687,6 +692,8 @@ export function buildAgentProtocolLlmPack(): string {
     '## Agent modes (per-session intent)',
     ...AGENT_MODES.map(m =>
       `- **${m.mode}** [${m.flywheel}]: UI=${m.defaultUI} | May: ${m.agentMay} | Must-not: ${m.agentMustNot}`),
+    '',
+    buildSystemDomainLlmPack(),
     '',
     '## Three-layer Agent architecture',
     ...AGENT_LAYERS.map(a =>

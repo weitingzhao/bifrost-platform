@@ -130,7 +130,7 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
         description="Business stack reachability. Ops Platform exists to keep this payload stable, released, and maintained."
         actions={
           <Button variant="ghost" size="xs" onClick={() => props.onOpenRuntimeMap()}>
-            Open Runtime Map
+            Open topology
           </Button>
         }
         bodyPadding="none"

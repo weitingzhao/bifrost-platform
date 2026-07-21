@@ -376,7 +376,6 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
       includeTabs: [
         'task-cc',
         'control-room',
-        'runtime-map',
         'defects',
         'audit',
         'cluster',
@@ -413,7 +412,6 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
         'satellite-bus',
         'satellite-telemetry',
         'satellite-api',
-        'runtime-map',
         'audit',
       ],
     },

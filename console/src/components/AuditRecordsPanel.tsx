@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
   DenseTag,
+  DenseTagButton,
   DenseDataTable,
   DenseTableHeader,
   DenseTableBody,
@@ -10,16 +11,24 @@ import {
   DenseTableHead,
   DenseTableCell,
   DenseTableDetailRow,
-  SegmentControl,
+  cn,
   type DenseTagVariant,
 } from '@bifrost/ui'
 import type { AuditRecord } from '@/api/types'
 import {
   ACTUATION_CATEGORY_OPTIONS,
-  filterAuditByCategory,
+  ACTUATION_CATEGORY_VARIANT,
+  ACTUATION_ORIGIN_OPTIONS,
+  actuationCategory,
+  actuationCategoryLabel,
+  actuationOrigin,
+  actuationOriginLabel,
+  actuationOriginTagClass,
+  filterAuditRecords,
   formatMigrateWaveAuditLabel,
   isMigrateWaveAudit,
   type ActuationCategory,
+  type ActuationOrigin,
 } from '@/lib/audit/actuationCatalog'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
@@ -53,6 +62,17 @@ function actionLabel(record: AuditRecord): string {
   return record.action
 }
 
+function categoryFilterVariant(id: ActuationCategory): DenseTagVariant {
+  if (id === 'all') return 'neutral'
+  return ACTUATION_CATEGORY_VARIANT[id]
+}
+
+function filterChipClass(selected: boolean): string {
+  return cn(
+    selected ? 'ring-1 ring-current/40 brightness-110' : 'opacity-55 hover:opacity-90',
+  )
+}
+
 interface AuditRecordsPanelProps {
   records: AuditRecord[]
   isLoading: boolean
@@ -78,6 +98,7 @@ export function AuditRecordsPanel({
   showCategoryFilter = true,
 }: AuditRecordsPanelProps) {
   const [category, setCategory] = useState<ActuationCategory>(initialCategory)
+  const [origin, setOrigin] = useState<ActuationOrigin | 'all'>('all')
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const toggleExpanded = (id: string) =>
     setExpanded(prev => {
@@ -87,9 +108,10 @@ export function AuditRecordsPanel({
       return next
     })
   const filtered = useMemo(
-    () => filterAuditByCategory(records, category),
-    [records, category],
+    () => filterAuditRecords(records, category, origin),
+    [records, category, origin],
   )
+  const filtersActive = category !== 'all' || origin !== 'all'
   const visible = filtered.slice(0, limit)
   const qc = useQueryClient()
   const auditFetching = useIsFetching({ queryKey: ['platform', 'audit'] }) > 0
@@ -100,7 +122,9 @@ export function AuditRecordsPanel({
       actions={
         <div className="flex items-center gap-3">
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {isLoading ? '...' : `${filtered.length}${category !== 'all' ? ` / ${records.length}` : ''} records`}
+            {isLoading
+              ? '...'
+              : `${filtered.length}${filtersActive ? ` / ${records.length}` : ''} records`}
           </span>
           {showRefresh ? (
             <SectionRefreshButton
@@ -124,32 +148,82 @@ export function AuditRecordsPanel({
       bodyClassName="ops-section-body--table"
     >
       {showCategoryFilter && (
-        <div className="border-b border-[var(--border)] px-3 py-2">
-          <SegmentControl
-            value={category}
-            onChange={v => setCategory(v as ActuationCategory)}
-            options={ACTUATION_CATEGORY_OPTIONS.map(o => ({ value: o.id, label: o.label }))}
-            size="sm"
-          />
+        <div className="flex flex-col gap-2 border-b border-[var(--border)] px-3 py-2">
+          <div
+            className="flex flex-wrap items-center gap-1.5"
+            role="group"
+            aria-label="Actuation category filter"
+          >
+            <span className="mr-1 shrink-0 text-[var(--text-dense-meta)] font-medium text-muted-foreground">
+              Category:
+            </span>
+            {ACTUATION_CATEGORY_OPTIONS.map(opt => {
+              const selected = category === opt.id
+              return (
+                <DenseTagButton
+                  key={opt.id}
+                  size="pill"
+                  variant={categoryFilterVariant(opt.id)}
+                  aria-pressed={selected}
+                  className={filterChipClass(selected)}
+                  onClick={() => setCategory(opt.id)}
+                >
+                  {opt.label}
+                </DenseTagButton>
+              )
+            })}
+          </div>
+          <div
+            className="flex flex-wrap items-center gap-1.5"
+            role="group"
+            aria-label="Actuation origin filter"
+          >
+            <span className="mr-1 shrink-0 text-[var(--text-dense-meta)] font-medium text-muted-foreground">
+              Origin:
+            </span>
+            {ACTUATION_ORIGIN_OPTIONS.map(opt => {
+              const selected = origin === opt.id
+              const originTone =
+                opt.id === 'all' ? 'border-border bg-muted/50 text-muted-foreground font-semibold' : actuationOriginTagClass(opt.id)
+              return (
+                <DenseTagButton
+                  key={opt.id}
+                  size="pill"
+                  variant="neutral"
+                  aria-pressed={selected}
+                  className={cn(originTone, filterChipClass(selected))}
+                  onClick={() => setOrigin(opt.id)}
+                >
+                  {opt.label}
+                </DenseTagButton>
+              )
+            })}
+          </div>
         </div>
       )}
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>
-            <DenseTableHead className="w-[5%] whitespace-nowrap" />
-            <DenseTableHead className="w-[12%] whitespace-nowrap">Time</DenseTableHead>
-            <DenseTableHead className="w-[14%] whitespace-nowrap">Actor</DenseTableHead>
-            <DenseTableHead className="w-[16%] whitespace-nowrap">Action</DenseTableHead>
-            <DenseTableHead className="w-[16%] whitespace-nowrap">Target</DenseTableHead>
-            <DenseTableHead className="w-[10%] whitespace-nowrap">Status</DenseTableHead>
-            <DenseTableHead className="w-[27%]">Detail</DenseTableHead>
+            <DenseTableHead className="w-[4%] whitespace-nowrap" />
+            <DenseTableHead className="w-[10%] whitespace-nowrap">Time</DenseTableHead>
+            <DenseTableHead className="w-[11%] whitespace-nowrap">Category</DenseTableHead>
+            <DenseTableHead className="w-[9%] whitespace-nowrap">Origin</DenseTableHead>
+            <DenseTableHead className="w-[11%] whitespace-nowrap">Actor</DenseTableHead>
+            <DenseTableHead className="w-[14%] whitespace-nowrap">Action</DenseTableHead>
+            <DenseTableHead className="w-[14%] whitespace-nowrap">Target</DenseTableHead>
+            <DenseTableHead className="w-[9%] whitespace-nowrap">Status</DenseTableHead>
+            <DenseTableHead className="w-[18%]">Detail</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
           {visible.length === 0 ? (
             <DenseTableRow>
-              <DenseTableCell colSpan={7} className="text-[var(--muted-foreground)]">
-                {isLoading ? 'Loading...' : category === 'all' ? 'No actuation records yet' : 'No records in this category'}
+              <DenseTableCell colSpan={9} className="text-[var(--muted-foreground)]">
+                {isLoading
+                  ? 'Loading...'
+                  : filtersActive
+                    ? 'No records match filters'
+                    : 'No actuation records yet'}
               </DenseTableCell>
             </DenseTableRow>
           ) : (
@@ -157,6 +231,8 @@ export function AuditRecordsPanel({
               const detail = record.detail ?? ''
               const isExpanded = expanded.has(record.id)
               const hasDetail = detail.trim().length > 0
+              const cat = actuationCategory(record.action)
+              const rowOrigin = actuationOrigin(record)
               return (
                 <Fragment key={record.id}>
                   <DenseTableRow
@@ -175,6 +251,24 @@ export function AuditRecordsPanel({
                     <DenseTableCell className="font-mono-tabular whitespace-nowrap" title={new Date(record.at).toLocaleString()}>
                       {relativeTime(record.at)}
                     </DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag variant={ACTUATION_CATEGORY_VARIANT[cat]}>{actuationCategoryLabel(cat)}</DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag
+                        variant="neutral"
+                        className={actuationOriginTagClass(rowOrigin)}
+                        title={
+                          rowOrigin === 'agent'
+                            ? 'Agent/job terminal or agent.* write (Actor may still be the operator who started the job)'
+                            : rowOrigin === 'system'
+                              ? 'Platform/system principal (ops-agent, queue-sweep, …)'
+                              : 'Operator/admin write or human control of an Agent job (start / respond / cancel)'
+                        }
+                      >
+                        {actuationOriginLabel(rowOrigin)}
+                      </DenseTag>
+                    </DenseTableCell>
                     <DenseTableCell className="font-mono-tabular truncate" title={record.actor}>{record.actor}</DenseTableCell>
                     <DenseTableCell className="font-mono-tabular truncate" title={actionLabel(record)}>{actionLabel(record)}</DenseTableCell>
                     <DenseTableCell className="font-mono-tabular truncate" title={record.target}>{record.target}</DenseTableCell>
@@ -187,7 +281,7 @@ export function AuditRecordsPanel({
                   </DenseTableRow>
                   {hasDetail && isExpanded && (
                     <DenseTableDetailRow>
-                      <DenseTableCell colSpan={7}>
+                      <DenseTableCell colSpan={9}>
                         <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-[var(--text-dense-meta)] leading-relaxed text-[var(--foreground)]">
                           {detail}
                         </pre>

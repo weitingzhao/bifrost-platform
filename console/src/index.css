@@ -1236,27 +1236,6 @@ html {
   margin-top: 0.5rem;
 }
 
-.satellite-bus-summary-card {
-  border-left-width: 3px;
-  border-left-style: solid;
-}
-
-.satellite-bus-summary-card--rocket {
-  border-left-color: var(--scope-rocket);
-}
-
-.satellite-bus-summary-card--trade-multi-env {
-  border-left-color: var(--scope-multi-env);
-}
-
-.satellite-bus-summary-card--trade-single-env {
-  border-left-color: var(--scope-trade);
-}
-
-.satellite-bus-summary-card--ground {
-  border-left-color: var(--scope-ground);
-}
-
 .cluster-kpi-strip .cluster-kpi-gauge {
   padding: 0.375rem 0.5rem 0.5rem;
 }

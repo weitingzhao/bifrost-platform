@@ -60,15 +60,26 @@ function formatAge(epoch: number): string {
   return `${Math.floor(min / 60)}h ago`
 }
 
+import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
+
 interface FocusStripProps {
   onNavigate?: (tab: string) => void
   onOpenAgentDeskWithPrefill?: (prefill: string) => void
+  onOpenRuntimeMap?: OpenRuntimeMapFn
 }
 
-export function FocusStrip({ onNavigate, onOpenAgentDeskWithPrefill }: FocusStripProps) {
+export function FocusStrip({
+  onNavigate,
+  onOpenAgentDeskWithPrefill,
+  onOpenRuntimeMap,
+}: FocusStripProps) {
   const [expanded, setExpanded] = useState(false)
   const { snapshot, dataUpdatedAt } = useMissionSnapshot()
   const nav = (tab: string) => () => onNavigate?.(tab)
+  const openMap = (env: string) => () => {
+    if (onOpenRuntimeMap != null) onOpenRuntimeMap({ env })
+    else onNavigate?.('runtime-map')
+  }
 
   const mission = missionStatus(snapshot.missionOverall)
   const diagnosticPrompt = buildDiagnosticPrompt(snapshot)
@@ -86,7 +97,7 @@ export function FocusStrip({ onNavigate, onOpenAgentDeskWithPrefill }: FocusStri
           <button
             type="button"
             className="cockpit-env"
-            onClick={nav('runtime-map')}
+            onClick={openMap('dev')}
             title={`Trade dev — ${snapshot.tradeDev.detail}`}
           >
             <span className="cockpit-env-dot" style={{ color: signalColor(snapshot.tradeDev.signal) }}>
@@ -97,7 +108,7 @@ export function FocusStrip({ onNavigate, onOpenAgentDeskWithPrefill }: FocusStri
           <button
             type="button"
             className="cockpit-env"
-            onClick={nav('runtime-map')}
+            onClick={openMap('prod')}
             title={`Trade prod — ${snapshot.tradeProd.detail}`}
           >
             <span className="cockpit-env-dot" style={{ color: signalColor(snapshot.tradeProd.signal) }}>

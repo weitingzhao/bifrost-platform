@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { DenseTag, PageHeader } from '@bifrost/ui'
+import { DenseTag } from '@bifrost/ui'
+import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader'
 import { fetchDevAgentStatus } from '@/api/devAgent'
 import {
   fetchAgentBridge,
@@ -1252,9 +1253,9 @@ export function TaskControlCenter({
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
+      <ConsolePageHeader
         title="Task Control Center"
-        description={headerDescription}
+        help={headerDescription}
         actions={
           mode.loopArchetype === 'system' ? undefined : (
             <div className="flex flex-wrap items-center gap-1.5">

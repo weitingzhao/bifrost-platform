@@ -30,7 +30,7 @@ import {
 import { consoleNavPlane } from '@/lib/consoleNavConfig'
 import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 import type { OpenRuntimeMapFn, RuntimeMapNavigateOptions } from '@/lib/runtime-map/runtimeMapNavigation'
-import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
+import { type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
 import { PlatformAuthBar } from '@/components/PlatformAuthBar'
 import { ConsoleHeader, OpsContextBar } from '@/components/ConsoleHeader'
@@ -57,7 +57,7 @@ import { SatelliteTelemetryPage } from '@/pages/SatelliteTelemetryPage'
 import { PlacementPage } from '@/pages/PlacementPage'
 import { PlatformReleasePage } from '@/pages/PlatformReleasePage'
 import { TradeReleasePage } from '@/pages/TradeReleasePage'
-import { RuntimeMapPage } from '@/pages/RuntimeMapPage'
+import { ControlRoomRuntimeMapSheet } from '@/components/control-room/ControlRoomRuntimeMapSheet'
 import { ServerConsolePage } from '@/pages/ServerConsolePage'
 import { DesignSystemPage } from '@/pages/DesignSystemPage'
 import { RoadmapPage } from '@/pages/RoadmapPage'
@@ -147,7 +147,6 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'platform-release',
   'cluster',
   'placement',
-  'runtime-map',
 ]
 
 const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
@@ -194,6 +193,7 @@ function ConsolePageInner() {
   /** Shell-level ambient agent job — survives tab switches. */
   const [ambientJob, setAmbientJob] = useState<AmbientAgentJob | null>(null)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
+  const [runtimeMapSheetOpen, setRuntimeMapSheetOpen] = useState(false)
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
 
@@ -228,6 +228,13 @@ function ConsolePageInner() {
       window.history.replaceState(null, '', expected)
     }
   }, [viewTab, modeId])
+
+  /** Legacy hash / deep-link `#runtime-map` → Control Room + topology sheet. */
+  useEffect(() => {
+    if (viewTab !== 'runtime-map') return
+    setRuntimeMapSheetOpen(true)
+    setViewTab('control-room')
+  }, [viewTab, setViewTab])
 
   const contextQuery = useQuery({
     queryKey: ['context'],
@@ -274,7 +281,7 @@ function ConsolePageInner() {
       viewTab === 'placement' ||
       viewTab === 'control-room' ||
       viewTab === 'task-cc' ||
-      viewTab === 'runtime-map' ||
+      runtimeMapSheetOpen ||
       viewTab === 'satellite-bus',
   })
 
@@ -324,14 +331,14 @@ function ConsolePageInner() {
     queryKey: ['matrix', envForRuntime],
     queryFn: () => fetchMatrix(envForRuntime),
     refetchInterval: 30_000,
-    enabled: viewTab === 'runtime-map',
+    enabled: runtimeMapSheetOpen || viewTab === 'runtime-map',
   })
 
   const topologyQuery = useQuery({
     queryKey: ['topology', envForRuntime],
     queryFn: () => fetchTopology(envForRuntime),
     refetchInterval: 30_000,
-    enabled: viewTab === 'runtime-map',
+    enabled: runtimeMapSheetOpen || viewTab === 'runtime-map',
   })
 
   const pulseMatrices = useMemo((): MatrixResponse[] => {
@@ -370,7 +377,7 @@ function ConsolePageInner() {
       setEnvFilter('prod')
     }
     setRuntimeMapFocus(options ?? null)
-    setViewTab('runtime-map')
+    setRuntimeMapSheetOpen(true)
   }, [envFilter])
   const openCluster = () => setViewTab('cluster')
   const openNetwork = () => setViewTab('network')
@@ -482,7 +489,6 @@ function ConsolePageInner() {
   }
 
 
-  const showEnvStrip = viewTab === 'runtime-map'
   const showPageHeader = ![
     'agent-desk',
     'briefing',
@@ -512,6 +518,7 @@ function ConsolePageInner() {
     'plugin-gallery',
     'platform-release',
     'defects',
+    'audit',
   ].includes(viewTab)
 
   const runtimeLoading = topologyQuery.isLoading || runtimeMatrixQuery.isLoading
@@ -551,6 +558,7 @@ function ConsolePageInner() {
               <FocusStrip
                 onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
                 onOpenAgentDeskWithPrefill={prefill => openAgentDesk({ prefill })}
+                onOpenRuntimeMap={openRuntimeMap}
               />
             </OpsContextBar>
           )}
@@ -571,16 +579,6 @@ function ConsolePageInner() {
           <PageHeader
             title={VIEW_TITLES[viewTab]}
             description="L0 read-only probes — collapse the sidebar to use full width."
-          />
-        )}
-
-        {envQuery.data && showEnvStrip && (
-          <EnvironmentStrip
-            environments={envQuery.data}
-            selected={envFilter}
-            onSelect={id => {
-              setEnvFilter(id)
-            }}
           />
         )}
 
@@ -712,13 +710,7 @@ function ConsolePageInner() {
         )}
 
         {viewTab === 'audit' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES.audit}
-              description="Canonical actuation history for platform-api — GitOps sync, cluster operations, and other operator actions."
-            />
-            <AuditPage records={auditRecords} isLoading={auditQuery.isLoading} />
-          </>
+          <AuditPage records={auditRecords} isLoading={auditQuery.isLoading} />
         )}
 
         {viewTab === 'defects' && (
@@ -726,31 +718,6 @@ function ConsolePageInner() {
             canOperate={canOperate}
             onStartAgentJob={startAmbientAgentJob}
           />
-        )}
-
-        {viewTab === 'runtime-map' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES['runtime-map']}
-              description="Hardware topology and SCOPE stack — per-environment drill-down, gap analysis, and runtime-scoped Agent packs."
-            />
-            {envFilter === 'all' && (
-              <p className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Runtime Map uses a single environment — showing Production. Select Dev or Prod.
-              </p>
-            )}
-            <RuntimeMapPage
-              topology={topologyQuery.data}
-              matrix={runtimeMatrix}
-              context={contextQuery.data}
-              clusterSummary={clusterQuery.data}
-              isLoading={runtimeLoading}
-              error={runtimeError}
-              initialFocus={runtimeMapFocus}
-              onInitialFocusConsumed={clearRuntimeMapFocus}
-              onOpenCluster={openCluster}
-            />
-          </>
         )}
 
         {viewTab === 'cluster' && (
@@ -907,6 +874,23 @@ function ConsolePageInner() {
         {viewTab === 'mcp-contract' && <McpContractPage />}
 
         {viewTab === 'design-system' && <DesignSystemPage />}
+
+        <ControlRoomRuntimeMapSheet
+          open={runtimeMapSheetOpen}
+          onOpenChange={setRuntimeMapSheetOpen}
+          environments={envQuery.data}
+          envFilter={envFilter}
+          onEnvFilterChange={setEnvFilter}
+          topology={topologyQuery.data}
+          matrix={runtimeMatrix}
+          context={contextQuery.data}
+          clusterSummary={clusterQuery.data}
+          isLoading={runtimeLoading}
+          error={runtimeError}
+          initialFocus={runtimeMapFocus}
+          onInitialFocusConsumed={clearRuntimeMapFocus}
+          onOpenCluster={openCluster}
+        />
       </PageShell>
       </SidebarInset>
     </SidebarProvider>
