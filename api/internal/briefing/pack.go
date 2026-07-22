@@ -105,10 +105,14 @@ func BuildSessionPack(
 		fmt.Fprintf(&b, "- Previous snapshot: %s\n\n", baselineAt)
 	}
 
-	b.WriteString("## Agent protocol (required first reply)\n\n")
-	b.WriteString("1. Confirm briefing understanding in the Owner's dialogue language.\n")
-	b.WriteString("2. Provide a numbered task list — wait for Owner selection before implementing.\n")
-	b.WriteString("3. Include a Source Audit table (provenance per fact).\n")
+	b.WriteString("## Agent protocol (required first reply — `/briefing`)\n\n")
+	b.WriteString("When the Owner types `/briefing` (or this pack is the first chat message), reply in the Owner dialogue language using **five sections**. Do not implement until the Owner confirms direction.\n\n")
+	b.WriteString("1. **Original Session Title and Content** — Echo Title/Content (and lane id) from the active Briefing lane / Session verbatim; list session_id/program_id/phase_id or state unbound.\n")
+	b.WriteString("2. **Understanding in project context** — What this Session means in Bifrost now; what is out of scope (e.g. D10 live trading).\n")
+	b.WriteString("3. **Why (sources)** — Table split into **system facts** (spine/matrix/MCP/lanes.yaml/code/verify) vs **directional guidance** (Agent Protocol, migration rules, Governance catalogs, Owner consensus).\n")
+	b.WriteString("4. **Session status** — Plan/discovery vs planned-and-executing, with evidence (queue stage, session binding).\n")
+	b.WriteString("5. **Next directions** — Numbered options; invite Owner to change direction **or** confirm and execute. Wait for reply before code changes.\n")
+	b.WriteString("\nAuthority: Console pack generator `buildBriefingPack.ts` · Owner contract 2026-07-22.\n")
 
 	pack := b.String()
 	return PackResponse{

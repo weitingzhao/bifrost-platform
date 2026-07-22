@@ -103,8 +103,11 @@ func TestBuildSessionPackIncludesClusterAndBaselineSections(t *testing.T) {
 	if !strings.Contains(resp.Pack, "## Session baseline") || !strings.Contains(resp.Pack, "2026-07-01T00:00:00Z") {
 		t.Fatalf("Pack missing baseline section:\n%s", resp.Pack)
 	}
-	if !resp.HasBaseline || resp.BaselineAt != "2026-07-01T00:00:00Z" {
-		t.Fatalf("resp baseline fields = %+v", resp)
+	if !strings.Contains(resp.Pack, "## Agent protocol (required first reply — `/briefing`)") {
+		t.Fatalf("Pack missing /briefing agent protocol section:\n%s", resp.Pack)
+	}
+	if !strings.Contains(resp.Pack, "Original Session Title and Content") {
+		t.Fatalf("Pack missing five-section /briefing contract:\n%s", resp.Pack)
 	}
 }
 

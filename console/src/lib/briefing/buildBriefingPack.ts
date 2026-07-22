@@ -198,36 +198,18 @@ function formatFirstResponseProtocol(
   const lang = agentDialogueLanguageById(language)
   const laneMeta = laneById(lane)
   const intentMeta = workIntentById(intent)
-
-  const confirmStep =
-    language === 'zh'
-      ? 'Summarize your understanding of this briefing in **Chinese**: active track/lane, work intent, queue priorities, spine blockers, and scope constraints. Ask the Owner to confirm or correct before any implementation.'
-      : 'Summarize your understanding of this briefing in **English**: active track/lane, work intent, queue priorities, spine blockers, and scope constraints. Ask the Owner to confirm or correct before any implementation.'
-
-  const taskListStep =
-    language === 'zh'
-      ? 'Based on the briefing, active lane queue, spine, and matrix below, propose a **numbered task list** (3–7 concrete items). Each item: one-sentence scope + primary repo/files. Mark your recommended default with *(recommended)*.'
-      : 'Based on the briefing, active lane queue, spine, and matrix below, propose a **numbered task list** (3–7 concrete items). Each item: one-sentence scope + primary repo/files. Mark your recommended default with *(recommended)*.'
-
-  const waitStep =
-    language === 'zh'
-      ? '**Do not start implementation** until the Owner confirms your understanding and selects task(s) (or adjusts the list).'
-      : '**Do not start implementation** until the Owner confirms your understanding and selects task(s) (or adjusts the list).'
-
   return [
     '## Required first response (before any work)',
     '',
     `Dialogue language for this session: **${lang.agentLabel}**`,
     `Context scope: track **${track}** · lane **${laneMeta.label}** (${lane}) · intent **${intentMeta.label}** (${intent})`,
     '',
-    'Your **first reply** in this new chat MUST include:',
-    '',
-    '1. **Confirm understanding** — ' + confirmStep,
-    '2. **Propose task list** — ' + taskListStep,
-    '3. **Source audit** — ' + formatSourceAuditInstruction(language),
-    '4. **Wait for selection** — ' + waitStep,
-    '',
-    'Only after Owner confirmation and task selection should you read the read-first list and begin work.',
+    formatSlashBriefingFirstReplyTemplate(language, {
+      laneLabel: laneMeta.label,
+      laneId: lane,
+      laneDescription: laneMeta.description,
+      compact: false,
+    }),
   ].join('\n')
 }
 
@@ -242,17 +224,6 @@ function formatCompactFirstResponseProtocol(
   const lang = agentDialogueLanguageById(language)
   const laneMeta = laneById(lane)
   const intentMeta = workIntentById(intent)
-
-  const confirmStep =
-    language === 'zh'
-      ? '用**中文**简述你对本 briefing 的理解（**Scope / Track / Lane / Queue stage**、intent、blocker、范围），请 Owner 确认后再动手。'
-      : 'Summarize your understanding (**Scope / Track / Lane / Queue stage**, intent, blockers, scope) in **English** and ask Owner to confirm before implementing.'
-
-  const taskListStep =
-    language === 'zh'
-      ? '提出 **3–5 条**编号任务清单，标出 *(recommended)* 默认项，等 Owner 选择。'
-      : 'Propose a **numbered list** of 3–5 tasks, mark *(recommended)*, and wait for Owner selection.'
-
   return [
     '## Required first response (compact pack)',
     '',
@@ -260,62 +231,107 @@ function formatCompactFirstResponseProtocol(
     `Session anchor: **${scopeLabel}** · **${trackTypeLabel}** · **${laneMeta.label}** (${lane}) · intent **${intentMeta.label}**`,
     `Queue stage: ${queueStage}`,
     '',
-    '1. **Confirm understanding** — ' + confirmStep,
-    '2. **Propose task list** — ' + taskListStep,
-    '3. **Wait** — no implementation until Owner confirms.',
-    '',
-    '_Compact pack: skip full Source Audit unless Owner requests it or you detect contradictions._',
+    formatSlashBriefingFirstReplyTemplate(language, {
+      laneLabel: laneMeta.label,
+      laneId: lane,
+      laneDescription: laneMeta.description,
+      compact: true,
+      queueStage,
+    }),
   ].join('\n')
 }
 
-function formatSourceAuditInstruction(language: AgentDialogueLanguage): string {
+/**
+ * Owner-ratified `/briefing` first-reply contract (2026-07-22).
+ * Five sections: echo Session → understanding → sources → Plan vs Exec → next directions.
+ */
+function formatSlashBriefingFirstReplyTemplate(
+  language: AgentDialogueLanguage,
+  opts: {
+    laneLabel: string
+    laneId: string
+    laneDescription: string
+    compact: boolean
+    queueStage?: string
+  },
+): string {
   if (language === 'zh') {
+    const queueHint =
+      opts.queueStage != null && opts.queueStage !== ''
+        ? `当前 Queue stage 提示：\`${opts.queueStage}\`。`
+        : '结合本 pack 的 Queue stage / Lane Init Mode / Delivery session 绑定判断。'
     return [
-      'After reading this briefing and the read-first references, produce a **Source Audit** table and a **Contradiction Report**.',
+      '当 Owner 输入 `/briefing`（或本 pack 作为新 chat 首条上下文）时，你的**第一条回复**必须按下列 **1–5 节**组织，**用中文**与 Owner 对话。在 Owner 确认方向之前**不要开始实现**。',
       '',
-      '   **Source Audit table** — For each key fact you relied on to form your understanding above, state its provenance:',
+      '### 1. 原始 Session Title 与 Content',
+      '原样列出 Owner 的 Session（不要改写）：',
+      `- **Title**: ${opts.laneLabel}`,
+      `- **Content**: ${opts.laneDescription}`,
+      `- **Lane id**: \`${opts.laneId}\``,
+      '若 pack 绑定了 `session_id` / `program_id` / `phase_id`，一并列出。若缺失，明确写「未绑定 Delivery Session」。',
       '',
-      '   | # | Key fact (brief) | Source | Discovery method |',
-      '   |---|---|---|---|',
-      '   | 1 | e.g. "k3s-phase1 CLOSED" | Briefing § Milestones | Direct extraction |',
-      '   | 2 | e.g. "metrics-server installed" | `config/clusters.yaml` | Read tool (secondary search) |',
-      '   | 3 | e.g. "Layer B not detected" | platform-api `/cluster/observability` | MCP / HTTP probe |',
+      '### 2. 基于项目现状的理解',
+      '用你自己的话说明：这段 Title/Content 在当前 Bifrost 项目里意味着什么（裁决 / 分析 / 实现 / 运维），以及明确**不在范围内**的事项（例如 D10 冻结下的 live trading）。',
       '',
-      '   Discovery method values: `Direct extraction` (from this briefing text), `Read tool` (opened a file based on briefing clues), `Grep/Search` (searched codebase), `MCP call`, `Web search`, `Inference` (deduced from multiple sources).',
+      '### 3. 为什么这么理解（资料与源）',
+      '用表格列出依据，并区分两类源：',
+      '- **系统提供（事实）**：spine / matrix / MCP / `lanes.yaml` / 代码与 verify 证据',
+      '- **方向性指导**：Agent Protocol、migration / workspace 规则、Governance catalog、本会话 Owner 共识',
+      opts.compact
+        ? '_Compact：每类至少 1–2 行即可；发现矛盾时再展开。_'
+        : '每条关键事实一行；若 briefing 与二次探查矛盾，另附简短 Contradiction 说明。',
       '',
-      '   **Contradiction Report** — List any discrepancy between what this briefing states and what you found via secondary search:',
+      '### 4. 当前 Session 状态',
+      '明确二选一（或过渡态），并给证据：',
+      '- **Plan / 发现**：Backlog READY、空队列、无 session 绑定、尚无验收/verify',
+      '- **已计划、执行中**：Doing、有 queue 项、有 session_id + phase progress',
+      queueHint,
       '',
-      '   | Briefing states | Actual finding (source) | Severity |',
-      '   |---|---|---|',
-      '   | "..." | "..." (file/API) | low / medium / high |',
-      '',
-      '   If no contradictions found, explicitly state: "No contradictions detected between briefing and secondary sources."',
-      '',
-      '   This audit helps the Owner assess briefing freshness and identify generator drift.',
+      '### 5. 接下来的任务方向（可讨论可执行）',
+      '基于 1–4 给出下一步方向（编号 3–7 条为宜），并**显式邀请 Owner**：',
+      '- 改变方向 / 收窄范围，或',
+      '- 确认后按你列的任务直接执行',
+      '在 Owner 回复确认或调整之前，不要开始改代码。',
     ].join('\n')
   }
+
+  const queueHint =
+    opts.queueStage != null && opts.queueStage !== ''
+      ? `Queue stage hint: \`${opts.queueStage}\`.`
+      : 'Infer from Queue stage / Lane Init Mode / Delivery session binding in this pack.'
+
   return [
-    'After reading this briefing and the read-first references, produce a **Source Audit** table and a **Contradiction Report**.',
+    'When the Owner types `/briefing` (or this pack is the first message in a new chat), your **first reply** MUST use the **five sections below**. Reply in the Owner dialogue language. **Do not implement** until the Owner confirms direction.',
     '',
-    '   **Source Audit table** — For each key fact you relied on to form your understanding above, state its provenance:',
+    '### 1. Original Session Title and Content',
+    'Echo the Owner Session verbatim (do not rewrite):',
+    `- **Title**: ${opts.laneLabel}`,
+    `- **Content**: ${opts.laneDescription}`,
+    `- **Lane id**: \`${opts.laneId}\``,
+    'Also list `session_id` / `program_id` / `phase_id` when bound; if missing, state **No Delivery Session bound**.',
     '',
-    '   | # | Key fact (brief) | Source | Discovery method |',
-    '   |---|---|---|---|',
-    '   | 1 | e.g. "k3s-phase1 CLOSED" | Briefing § Milestones | Direct extraction |',
-    '   | 2 | e.g. "metrics-server installed" | `config/clusters.yaml` | Read tool (secondary search) |',
-    '   | 3 | e.g. "Layer B not detected" | platform-api `/cluster/observability` | MCP / HTTP probe |',
+    '### 2. Understanding in project context',
+    'In your own words: what this Title/Content means in the current Bifrost project (decision / analysis / implementation / ops), and what is **explicitly out of scope** (e.g. live trading under D10 freeze).',
     '',
-    '   Discovery method values: `Direct extraction` (from this briefing text), `Read tool` (opened a file based on briefing clues), `Grep/Search` (searched codebase), `MCP call`, `Web search`, `Inference` (deduced from multiple sources).',
+    '### 3. Why you understand it that way (sources)',
+    'Table of evidence, split into two kinds:',
+    '- **System facts**: spine / matrix / MCP / `lanes.yaml` / code / verify evidence',
+    '- **Directional guidance**: Agent Protocol, migration/workspace rules, Governance catalogs, Owner consensus in this chat',
+    opts.compact
+      ? '_Compact: 1–2 rows per kind is enough; expand only if contradictions appear._'
+      : 'One row per material fact; add a short Contradiction note if briefing disagrees with secondary probes.',
     '',
-    '   **Contradiction Report** — List any discrepancy between what this briefing states and what you found via secondary search:',
+    '### 4. Current Session status',
+    'State clearly (with evidence):',
+    '- **Plan / discovery**: Backlog READY, empty queue, no session binding, no acceptance/verify yet',
+    '- **Planned and in execution**: Doing, queue items present, session_id + phase progress',
+    queueHint,
     '',
-    '   | Briefing states | Actual finding (source) | Severity |',
-    '   |---|---|---|',
-    '   | "..." | "..." (file/API) | low / medium / high |',
-    '',
-    '   If no contradictions found, explicitly state: "No contradictions detected between briefing and secondary sources."',
-    '',
-    '   This audit helps the Owner assess briefing freshness and identify generator drift.',
+    '### 5. Next task directions (discuss or execute)',
+    'Based on §1–4, propose next directions (about 3–7 numbered items) and **explicitly invite the Owner** to either:',
+    '- change / narrow direction, or',
+    '- confirm and execute the listed tasks',
+    'Do not start code changes until the Owner replies.',
   ].join('\n')
 }
 
@@ -365,7 +381,7 @@ function suggestedOpening(
   }
 
   const lang = agentDialogueLanguageById(language)
-  const firstReplyHint = ` First reply ONLY in ${lang.agentLabel}: (1) your understanding of this briefing for Owner confirmation, (2) a numbered task list for Owner to pick from, (3) a Source Audit table + Contradiction Report — no implementation yet.`
+  const firstReplyHint = ` First reply ONLY in ${lang.agentLabel} using the five-section /briefing template: (1) echo Session Title+Content, (2) project understanding, (3) sources (system facts vs guidance), (4) Plan vs Exec status, (5) next directions + invite Owner to discuss or execute — no implementation yet.`
 
   return base + firstReplyHint
 }
@@ -700,8 +716,8 @@ export function buildBriefingPack(input: BriefingInputs): string {
     '## Session discipline',
     `- ${dialogueRule} English for UI strings and code identifiers.`,
     packSize === 'compact'
-      ? '- Compact pack: confirm understanding + task list; implement after Owner selects.'
-      : '- First reply: confirm briefing understanding + propose task list + Source Audit (provenance table + contradiction report) — wait for Owner selection before implementing.',
+      ? '- Compact pack: five-section /briefing first reply (§1–5); implement only after Owner confirms direction.'
+      : '- First reply: five-section /briefing template (Title+Content → understanding → sources → Plan/Exec → next directions) — wait for Owner confirmation before implementing.',
     '- One repo / one variable per task unless Owner expands scope.',
     '- bifrost-trader-engine/ is read-only reference — never edit.',
     '- Phase 1 trade stack: New Frontend + Legacy API only — do not migrate bifrost-trade-api yet.',

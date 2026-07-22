@@ -121,7 +121,10 @@ function matchDaemon(s: FleetStandard): boolean {
 
 function matchCelery(s: FleetStandard): boolean {
   const id = s.id.toLowerCase()
-  return id === 'api-ops' || id.includes('api-ops')
+  if (id === 'api-ops' || id.includes('api-ops')) return true
+  if (id.includes('celery')) return true
+  if (id === 'flower' || id.includes('flower')) return true
+  return false
 }
 
 function matchIb(s: FleetStandard): boolean {

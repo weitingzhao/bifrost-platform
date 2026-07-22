@@ -109,6 +109,30 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
+func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	if err := h.store.Delete(id); err != nil {
+		if IsValidation(err) {
+			status := http.StatusBadRequest
+			if strings.HasPrefix(err.Error(), "lane not found") {
+				status = http.StatusNotFound
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if h.audit != nil {
+		h.audit.Record(r, "lanes.delete", id, "deleted", "removed from lanes.yaml")
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "deleted"})
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

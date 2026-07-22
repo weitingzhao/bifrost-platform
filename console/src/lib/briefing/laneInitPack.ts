@@ -13,11 +13,13 @@ function initModeHeader(title: string, lines: string[]): string {
     '',
     ...lines,
     '',
-    '### First-reply protocol',
-    '1. Confirm understanding of this Init Mode briefing.',
-    '2. Propose the items below (or adjusted list) — mark one *(recommended)*.',
-    '3. **Wait for Owner confirmation** before implementing.',
-    '4. After Owner confirms, use existing MCP tools (e.g. `report_phase_progress`) to write back progress — do not invent new endpoints.',
+    '### First-reply protocol (`/briefing` five sections)',
+    '1. **Echo** Session Title + Content (this lane label/description) verbatim.',
+    '2. **Understanding** — what Init Mode means here (propose initial queue, not implement yet).',
+    '3. **Sources** — system facts (empty queue, lane catalog) vs guidance (this Init Mode section).',
+    '4. **Status** — Plan/discovery (Ready / empty queue) until Owner confirms the proposed queue.',
+    '5. **Next directions** — propose 3–5 initial queue items; invite Owner to adjust or confirm, then execute.',
+    'After Owner confirms, use existing MCP tools (e.g. `report_phase_progress`) to write back progress — do not invent new endpoints.',
   ].join('\n')
 }
 

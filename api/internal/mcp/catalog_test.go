@@ -63,6 +63,7 @@ var stdioMirroredTools = map[string]bool{
 	"close_briefing_session":              true,
 	"prepare_briefing":                    true,
 	"update_lane":                         true,
+	"delete_lane":                         true,
 	"get_agent_bridge":                    true,
 	"get_hermes_readiness":                true,
 	"get_hermes_first_task":               true,
@@ -125,8 +126,8 @@ func TestCatalogImplementedAllHaveStdioMirror(t *testing.T) {
 			t.Errorf("%s: catalog Implemented=true but missing from stdioMirroredTools (wire mcp/platform or drop Implemented)", tool.Name)
 		}
 	}
-	if len(stdioMirroredTools) != 72 {
-		t.Errorf("stdioMirroredTools size=%d want 72 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
+	if len(stdioMirroredTools) != 73 {
+		t.Errorf("stdioMirroredTools size=%d want 73 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
 	}
 }
 

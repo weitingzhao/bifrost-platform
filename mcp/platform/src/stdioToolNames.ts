@@ -41,6 +41,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'close_briefing_session',
   'prepare_briefing',
   'update_lane',
+  'delete_lane',
   'get_agent_bridge',
   'get_hermes_readiness',
   'get_hermes_first_task',

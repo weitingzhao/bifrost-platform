@@ -1,0 +1,128 @@
+id: trade-celery-k8s-ideal
+title: "Trade Celery / Massive K8s Ideal"
+description: "Hemostasis for Massive Celery on K8s — all-queues consumer + Beat, honest Ops control plane, per-queue Deployments, observability, PROD parity. D10 remains BLOCKED."
+status: active
+
+delivery:
+  board_visible: true
+  sign_off_mechanism: api
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+model: composer-2.5
+
+phases:
+  - id: W0
+    title: "Baseline + governance"
+    status: done
+    prompt_template: |
+      Document STG celery baseline (command, active_queues, llen, beat, flower, job_massive).
+      Register program trade-celery-k8s-ideal · lane trade-system-celery.
+      Authority: tradeCeleryK8sIdealCatalog.ts
+    verify_cmd: "test -f bifrost-platform/config/programs/trade-celery-k8s-ideal.yaml && test -f bifrost-platform/console/src/lib/architecture/tradeCeleryK8sIdealCatalog.ts"
+    acceptance:
+      - "TCKI_W0_STG_EVIDENCE captured in catalog"
+      - "Program YAML registered with lane trade-system-celery"
+    sign_off:
+      required: true
+      checklist:
+        - "Baseline evidence reviewed"
+
+  - id: W1
+    title: "Hemostasis — all-queues + Beat"
+    status: done
+    prompt_template: |
+      Fix celery-worker entry to consume all canonical queues (systemd/run_celery.py or explicit -Q).
+      Add celery-beat Deployment replicas=1. Set STG executor_mode=kubernetes.
+      Verify: {{verify_cmd}}
+      D10: daemon replicas must stay 0.
+    verify_cmd: "make -C bifrost-platform-plugin verify-trade-celery-massive-loop-stg"
+    acceptance:
+      - "active_queues includes Massive queues + stocks_ib"
+      - "celery-beat Running"
+      - "daemon replicas=0"
+    depends_on:
+      - W0
+    sign_off:
+      required: true
+      checklist:
+        - "STG Massive loop hemostasis verified"
+
+  - id: W2
+    title: "Honest control plane"
+    status: done
+    prompt_template: |
+      KubernetesExecutor: honest list_instances (deployment/replicas/ready); remap/reject fake systemd scale.
+      Expose beat_running + consuming_queues on capabilities/health.
+      FE Celery page: hide Add/Recreate/broker start-stop under executor_mode=kubernetes.
+    verify_cmd: "cd bifrost-trade-api && python -m pytest tests/test_ops_executor_kubernetes.py -q"
+    acceptance:
+      - "API tests pass for kubernetes executor honesty"
+      - "FE hides systemd-only actions when kubernetes"
+    depends_on:
+      - W1
+    sign_off:
+      required: true
+      checklist:
+        - "Ops Celery page truthful on K8s"
+
+  - id: W3
+    title: "Per-queue Deployments"
+    status: done
+    prompt_template: |
+      Split into 5 Deployments matching worker_profiles with correct -Q and solo.
+      Map KubernetesExecutor scale to named Deployments + max_worker_instances.
+      Conservative default replicas. D10: daemon stays 0.
+    verify_cmd: "make -C bifrost-platform-plugin verify-trade-celery-massive-loop-stg"
+    acceptance:
+      - "Five profile Deployments present"
+      - "Scale maps to named Deployments"
+    depends_on:
+      - W1
+    sign_off:
+      required: true
+      checklist:
+        - "Per-queue topology verified on STG"
+
+  - id: W4
+    title: "Observability"
+    status: done
+    prompt_template: |
+      Fix matchCelery (not only api-ops). Satellite Bus Ready for celery-worker/beat/flower.
+      Flower deep link if easy. No KEDA.
+    verify_cmd: "echo 'W4 catalog + FE/console typecheck'"
+    acceptance:
+      - "matchCelery includes celery workloads"
+      - "Satellite Bus shows celery-worker/beat/flower"
+    depends_on:
+      - W1
+    sign_off:
+      required: false
+
+  - id: W5
+    title: "PROD + Owner sign-off"
+    status: pending
+    prompt_template: |
+      Apply same patterns to prod overlay. Update COMPOSE_ON_K8S_GAPS Ops control row.
+      Owner sign-off checklist in tradeCeleryK8sIdealCatalog. D10 still BLOCKED.
+    verify_cmd: "echo 'W5 Owner sign-off — STG-first; D10 BLOCKED'"
+    acceptance:
+      - "PROD manifests mirror STG celery patterns"
+      - "Owner checklist present; D10 BLOCKED"
+    depends_on:
+      - W3
+      - W4
+    sign_off:
+      required: true
+      checklist:
+        - "STG verified before PROD promote"
+        - "D10 remains BLOCKED"
+
+metadata:
+  created_at: "2026-07-22"
+  owner: "vision-mac-trader"
+  lane_id: trade-system-celery
+  tags:
+    - celery
+    - massive
+    - k8s
+    - trade

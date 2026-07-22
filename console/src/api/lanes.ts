@@ -86,4 +86,14 @@ export async function patchLane(
   return r.json() as Promise<LaneApiRecord>
 }
 
+export async function deleteLane(id: string): Promise<{ id: string; status: string }> {
+  const headers = authHeaders(true)
+  const r = await fetch(`/api/v1/lanes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers,
+  })
+  if (!r.ok) throw await parseError('delete lane', r)
+  return r.json() as Promise<{ id: string; status: string }>
+}
+
 export const LANES_QUERY_KEY = ['lanes'] as const

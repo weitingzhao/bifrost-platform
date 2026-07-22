@@ -305,6 +305,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/checklist/signals", s.checklist.HandlePostSignals)
 			r.Post("/lanes", s.lanes.HandleCreate)
 			r.Patch("/lanes/{id}", s.lanes.HandleUpdate)
+			r.Delete("/lanes/{id}", s.lanes.HandleDelete)
 			r.Post("/sessions", s.sessions.HandleCreate)
 		})
 		r.Route("/programs", func(r chi.Router) {

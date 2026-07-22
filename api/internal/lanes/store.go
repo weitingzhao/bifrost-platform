@@ -174,3 +174,33 @@ func (s *Store) Update(id string, patch UpdateRequest) (Lane, error) {
 	}
 	return updated, nil
 }
+
+// Delete removes a lane by id from lanes.yaml.
+func (s *Store) Delete(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errf("id required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	file, err := s.loadLocked()
+	if err != nil {
+		return err
+	}
+
+	idx := -1
+	for i, existing := range file.Lanes {
+		if existing.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return errf("lane not found: " + id)
+	}
+
+	file.Lanes = append(file.Lanes[:idx], file.Lanes[idx+1:]...)
+	return s.saveLocked(file)
+}

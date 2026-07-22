@@ -82,6 +82,51 @@ lanes:
 	}
 }
 
+func TestDeleteLane(t *testing.T) {
+	dir := t.TempDir()
+	seed := `version: "1"
+lanes:
+  - id: keep-me
+    track: build
+    component_line: rocket
+    track_type: build
+    label: Keep
+    short_label: Keep
+    description: Stays.
+    agent_mode: Ops
+    work_intent: feature
+  - id: drop-me
+    track: build
+    component_line: rocket
+    track_type: build
+    label: Drop
+    short_label: Drop
+    description: Remove me.
+    agent_mode: Ops
+    work_intent: feature
+`
+	path := filepath.Join(dir, "lanes.yaml")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(dir)
+
+	if err := store.Delete("drop-me"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, ok, err := store.Get("drop-me"); err != nil || ok {
+		t.Fatalf("drop-me should be gone: ok=%v err=%v", ok, err)
+	}
+	if _, ok, err := store.Get("keep-me"); err != nil || !ok {
+		t.Fatalf("keep-me should remain: ok=%v err=%v", ok, err)
+	}
+
+	err := store.Delete("drop-me")
+	if err == nil || !IsValidation(err) {
+		t.Fatalf("expected not found validation, got %v", err)
+	}
+}
+
 func TestUpdateLane(t *testing.T) {
 	dir := t.TempDir()
 	seed := `version: "1"

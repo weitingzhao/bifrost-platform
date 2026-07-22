@@ -346,6 +346,14 @@ server.tool(
   },
 )
 
+server.tool(
+  'delete_lane',
+  'Delete a Briefing work lane from lanes.yaml (operator).',
+  { id: z.string() },
+  async ({ id }) =>
+    jsonResult(await platformDelete(`/api/v1/lanes/${encodeURIComponent(id)}`)),
+)
+
 server.tool('get_agent_bridge', 'Agent host + MCP bridge status', {}, async () =>
   jsonResult(await platformGet('/api/v1/agent/bridge')),
 )

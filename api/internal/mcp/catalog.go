@@ -117,7 +117,8 @@ func functionFor(name, method string) string {
 		strings.HasPrefix(name, "dismiss_"),
 		strings.HasPrefix(name, "create_session"),
 		strings.HasPrefix(name, "prepare_briefing"),
-		strings.HasPrefix(name, "update_lane"):
+		strings.HasPrefix(name, "update_lane"),
+		strings.HasPrefix(name, "delete_lane"):
 		return "govern"
 	default:
 		if method == "GET" || method == "" {
@@ -215,6 +216,7 @@ func Catalog() []ToolView {
 		tool("close_briefing_session", "Record Agent Desk session close to audit (operator)", "routine", "POST", "/api/v1/briefing/session-results", "operator", "Agent", true),
 		tool("prepare_briefing", "Write briefing pack to data/briefing/active-pack.md for Cursor IDE /briefing (Console)", "routine", "POST", "/api/v1/briefing/prepare", "operator", "Console", true),
 		tool("update_lane", "Reclassify a Briefing lane (component_line / track_type / track / description)", "routine", "PATCH", "/api/v1/lanes/{id}", "operator", "Agent", true),
+		tool("delete_lane", "Delete a Briefing work lane from lanes.yaml", "routine", "DELETE", "/api/v1/lanes/{id}", "operator", "Agent", true),
 		tool("get_agent_bridge", "Agent host + MCP bridge status (runner, Hermes slot, platform MCP)", "read", "GET", "/api/v1/agent/bridge", "viewer", "Agent", true),
 		tool("get_hermes_readiness", "Hermes gateway + LLM key + platform MCP readiness for first L0 task", "read", "GET", "/api/v1/agent/hermes/readiness", "viewer", "Agent", true),
 		tool("get_hermes_first_task", "Canonical Hermes First Task prompt (L0 read-only Mission health pass)", "read", "GET", "/api/v1/agent/hermes/first-task", "viewer", "Agent", true),

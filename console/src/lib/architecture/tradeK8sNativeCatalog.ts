@@ -108,7 +108,7 @@ export type GapRow = { area: string; current: string; ideal: string; priority: '
 
 export const COMPOSE_ON_K8S_GAPS: GapRow[] = [
   { area: 'Ingress', current: 'Traefik IngressRoute + stripPrefix (W1); nginx retired', ideal: 'Traefik Ingress + ClusterIP; NodePort bootstrap-only', priority: 'P0' },
-  { area: 'Ops control', current: 'executor_mode kubernetes + api-ops RBAC (W2); celery-worker Deployment restored', ideal: 'Typed worker profiles via per-queue Deployments (future)', priority: 'P0' },
+  { area: 'Ops control', current: 'executor_mode kubernetes + per-queue celery Deployments (trade-celery-k8s-ideal W1–W3); honest list_instances', ideal: 'Stable Ops scale UX + optional HPA after STG soak', priority: 'P1' },
   { area: 'IB HA', current: 'Deployment replicas:1 Recreate', ideal: 'StatefulSet + Lease; standby hot, active-only eConnect', priority: 'P0' },
   { area: 'IB client budget', current: '6 roles/env × 3 env risk = 18 IDs', ideal: '3 gateways/env; dev mock; Lease prevents double-connect', priority: 'P0' },
   { area: 'Config', current: 'prod aliases config.stg.yaml mount path', ideal: 'Per-env config keys; BIFROST_ENV consistent', priority: 'P1' },

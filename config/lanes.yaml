@@ -234,15 +234,6 @@ lanes:
       description: Third-party API uptime monitoring, latency tracking, SLA compliance, incident response playbooks.
       agent_mode: Ops
       work_intent: ops
-    - id: celery
-      track: build
-      component_line: rocket
-      track_type: build
-      label: Celery 相关的队列实现方案
-      short_label: Celery 相关的队列实现方案
-      description: 需要你看一下目前卫星采用的backend 语言，我想你看一下关于Celery 部分实现的具体业务。基于这个，你先看看Trade System和Celery相关的代码，我们再来讨论
-      agent_mode: Ops
-      work_intent: feature
     - id: qa-describe-first-4894
       track: migrate
       component_line: satellite

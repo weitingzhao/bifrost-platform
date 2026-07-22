@@ -12,7 +12,7 @@
 
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 
-export const BRIEFING_RECONCILIATION_VERSION = '2026-07-01'
+export const BRIEFING_RECONCILIATION_VERSION = '2026-07-22'
 export const BRIEFING_RECONCILIATION_SOURCE =
   'console/src/lib/architecture/briefingReconciliationCatalog.ts'
 
@@ -60,6 +60,15 @@ export const DESIGN_DECISIONS: DesignDecisionRow[] = [
     decision:
       'focus.headline MUST contain the active wave id substring (e.g. "W3"); absence => stale ' +
       '(warning). Avoids free-text headline drifting from next_task.',
+  },
+  {
+    id: 'D-E',
+    topic: '/briefing first-reply contract',
+    decision:
+      'Owner types /briefing → Agent first reply MUST use five sections: ' +
+      '(1) echo Session Title+Content, (2) project understanding, (3) sources split system-facts vs directional guidance, ' +
+      '(4) Plan/discovery vs executing, (5) next directions + invite discuss-or-execute. ' +
+      'No implementation until Owner confirms. Authority: buildBriefingPack.ts + api/internal/briefing/pack.go (2026-07-22).',
   },
 ]
 
@@ -272,7 +281,7 @@ export const WRITE_PATHS: WritePathRow[] = [
   },
   {
     actor: 'Agent session (Cursor)',
-    path: 'Read briefing only; Source Audit + Contradiction Report on first reply',
+    path: 'Read briefing; first reply = five-section /briefing template (Title+Content → understanding → sources → Plan/Exec → next directions)',
     mayWriteProgress: false,
     audit: 'session transcript',
   },
@@ -394,7 +403,7 @@ export const ANTI_PATTERNS: AntiPatternRow[] = [
   {
     pattern: 'Silent contradictory pack',
     why: 'Agent trusts briefing; wrong task scope',
-    fix: 'RECONCILE_GATE_RULES → BRIEFING_STALE banner + Source Audit protocol',
+    fix: 'RECONCILE_GATE_RULES → BRIEFING_STALE banner + five-section /briefing first-reply protocol (D-E)',
   },
   {
     pattern: 'deployMainlineCatalog hardcoded IN_PROGRESS vs spine SIGNED',

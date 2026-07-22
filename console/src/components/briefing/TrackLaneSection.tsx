@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Button, SegmentControl } from '@bifrost/ui'
-import { Loader2, Plus } from 'lucide-react'
+import { Button, ConfirmDialog, IconActionButton, SegmentControl } from '@bifrost/ui'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   BRIEFING_DPR_COLOR,
@@ -20,6 +20,7 @@ import {
 import {
   briefingScopeById,
   componentLineById,
+  defaultLaneForScopeTrack,
   lanesForScope,
   lanesForScopeTrack,
   trackTypeById,
@@ -45,7 +46,7 @@ import {
   defaultTrackForLine,
   slugLaneId,
 } from '@/lib/briefing/laneInitPack'
-import { createLane, LANES_QUERY_KEY } from '@/api/lanes'
+import { createLane, deleteLane, LANES_QUERY_KEY } from '@/api/lanes'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 export type NewLaneReference = {
@@ -74,12 +75,36 @@ interface TrackLaneSectionProps {
   clusterSummary: ClusterSummary | undefined
 }
 
+function LaneDeleteButton({
+  lane,
+  onDelete,
+}: {
+  lane: WorkLane
+  onDelete: () => void
+}) {
+  return (
+    <IconActionButton
+      title="Delete lane"
+      ariaLabel={`Delete lane ${lane.label}`}
+      tone="danger"
+      onClick={e => {
+        e.stopPropagation()
+        e.preventDefault()
+        onDelete()
+      }}
+    >
+      <Trash2 className="size-3.5" />
+    </IconActionButton>
+  )
+}
+
 function LaneCard({
   lane,
   selected,
   progress,
   lifecycle,
   onSelect,
+  onDelete,
   showLineBadge = false,
 }: {
   lane: WorkLane
@@ -87,52 +112,56 @@ function LaneCard({
   progress: ReturnType<typeof queueProgress>
   lifecycle: LaneLifecycle
   onSelect: () => void
+  onDelete?: () => void
   showLineBadge?: boolean
 }) {
   const status = lifecycleToBriefingStatus(lifecycle)
   const lineShort = componentLineById(lane.componentLine).shortLabel
   return (
-    <button
-      type="button"
-      className={briefingSolidCardClass(selected)}
-      onClick={onSelect}
-    >
+    <div className={briefingSolidCardClass(selected)}>
       <div className="flex min-w-0 items-start gap-2.5">
-        <BriefingIconBadge icon={LANE_ICONS[lane.id]} selected={selected} />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <BriefingStatusLamp status={status} />
-            <span
-              className={[
-                'min-w-0 flex-1 truncate text-sm transition-colors',
-                selected
-                  ? 'font-semibold text-[var(--foreground)]'
-                  : 'font-medium text-[var(--muted-foreground)]',
-              ].join(' ')}
-            >
-              {lane.label}
-            </span>
-            {showLineBadge && (
-              <span className="shrink-0 rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-                {lineShort}
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-start gap-2.5 border-0 bg-transparent p-0 text-left"
+          onClick={onSelect}
+        >
+          <BriefingIconBadge icon={LANE_ICONS[lane.id]} selected={selected} />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <BriefingStatusLamp status={status} />
+              <span
+                className={[
+                  'min-w-0 flex-1 truncate text-sm transition-colors',
+                  selected
+                    ? 'font-semibold text-[var(--foreground)]'
+                    : 'font-medium text-[var(--muted-foreground)]',
+                ].join(' ')}
+              >
+                {lane.label}
               </span>
+              {showLineBadge && (
+                <span className="shrink-0 rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+                  {lineShort}
+                </span>
+              )}
+              <BriefingStatusBadge status={status} />
+            </div>
+            <p className="m-0 mt-1 line-clamp-2 break-words text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              {lane.description}
+            </p>
+            {progress != null && (
+              <BriefingProgressMeter
+                done={progress.done}
+                total={progress.total}
+                percent={progress.percent}
+                status={status}
+              />
             )}
-            <BriefingStatusBadge status={status} />
           </div>
-          <p className="m-0 mt-1 line-clamp-2 break-words text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {lane.description}
-          </p>
-          {progress != null && (
-            <BriefingProgressMeter
-              done={progress.done}
-              total={progress.total}
-              percent={progress.percent}
-              status={status}
-            />
-          )}
-        </div>
+        </button>
+        {onDelete != null && <LaneDeleteButton lane={lane} onDelete={onDelete} />}
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -297,51 +326,56 @@ function EmptyLaneCard({
   lane,
   selected,
   onSelect,
+  onDelete,
   showLineBadge = false,
 }: {
   lane: WorkLane
   selected: boolean
   onSelect: () => void
+  onDelete?: () => void
   showLineBadge?: boolean
 }) {
   const lineShort = componentLineById(lane.componentLine).shortLabel
   return (
-    <button
-      type="button"
-      className={briefingDashedCardClass(selected)}
-      onClick={onSelect}
-    >
+    <div className={briefingDashedCardClass(selected)}>
       <div className="flex min-w-0 items-start gap-2.5">
-        <BriefingIconBadge icon={LANE_ICONS[lane.id]} selected={selected} />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <BriefingStatusLamp status="ready" />
-            <span
-              className={[
-                'min-w-0 flex-1 truncate text-sm transition-colors',
-                selected
-                  ? 'font-semibold text-[var(--foreground)]'
-                  : 'font-medium text-[var(--muted-foreground)]',
-              ].join(' ')}
-            >
-              {lane.label}
-            </span>
-            {showLineBadge && (
-              <span className="shrink-0 rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-                {lineShort}
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-start gap-2.5 border-0 bg-transparent p-0 text-left"
+          onClick={onSelect}
+        >
+          <BriefingIconBadge icon={LANE_ICONS[lane.id]} selected={selected} />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <BriefingStatusLamp status="ready" />
+              <span
+                className={[
+                  'min-w-0 flex-1 truncate text-sm transition-colors',
+                  selected
+                    ? 'font-semibold text-[var(--foreground)]'
+                    : 'font-medium text-[var(--muted-foreground)]',
+                ].join(' ')}
+              >
+                {lane.label}
               </span>
-            )}
-            <BriefingStatusBadge status="ready" />
+              {showLineBadge && (
+                <span className="shrink-0 rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+                  {lineShort}
+                </span>
+              )}
+              <BriefingStatusBadge status="ready" />
+            </div>
+            <p className="m-0 mt-1 line-clamp-2 break-words text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              {lane.description}
+            </p>
+            <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              No queue yet — select to generate a pack and start
+            </p>
           </div>
-          <p className="m-0 mt-1 line-clamp-2 break-words text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {lane.description}
-          </p>
-          <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-            No queue yet — select to generate a pack and start
-          </p>
-        </div>
+        </button>
+        {onDelete != null && <LaneDeleteButton lane={lane} onDelete={onDelete} />}
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -419,6 +453,7 @@ function LaneListRow({
   lifecycle,
   selected,
   onSelect,
+  onDelete,
   showLineBadge,
   emptyHint,
 }: {
@@ -427,6 +462,7 @@ function LaneListRow({
   lifecycle: LaneLifecycle
   selected: boolean
   onSelect: () => void
+  onDelete?: () => void
   showLineBadge: boolean
   /** When lifecycle is empty, show ready hint instead of progress. */
   emptyHint?: boolean
@@ -434,38 +470,41 @@ function LaneListRow({
   const status = lifecycleToBriefingStatus(lifecycle)
   const lineShort = componentLineById(lane.componentLine).shortLabel
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={briefingLaneListRowClass(selected, { emptyHint })}
-    >
-      <BriefingStatusLamp status={status} />
-      <span
-        className={[
-          'min-w-0 flex-1 truncate text-[var(--text-dense-meta)] transition-colors',
-          selected
-            ? 'font-semibold text-[var(--foreground)]'
-            : 'font-medium text-[var(--muted-foreground)]',
-        ].join(' ')}
+    <div className={briefingLaneListRowClass(selected, { emptyHint })}>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 items-center gap-2 border-0 bg-transparent p-0 text-left"
       >
-        {lane.label}
-      </span>
-      {showLineBadge && (
-        <span className="shrink-0 rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-          {lineShort}
+        <BriefingStatusLamp status={status} />
+        <span
+          className={[
+            'min-w-0 flex-1 truncate text-[var(--text-dense-meta)] transition-colors',
+            selected
+              ? 'font-semibold text-[var(--foreground)]'
+              : 'font-medium text-[var(--muted-foreground)]',
+          ].join(' ')}
+        >
+          {lane.label}
         </span>
-      )}
-      {emptyHint ? (
-        <span className="shrink-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          No queue yet
-        </span>
-      ) : progress != null ? (
-        <span className="shrink-0 font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          {progress.done}/{progress.total}
-        </span>
-      ) : null}
-      <BriefingStatusBadge status={status} />
-    </button>
+        {showLineBadge && (
+          <span className="shrink-0 rounded bg-[var(--border)] px-1.5 py-0.5 text-dense-caption font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+            {lineShort}
+          </span>
+        )}
+        {emptyHint ? (
+          <span className="shrink-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            No queue yet
+          </span>
+        ) : progress != null ? (
+          <span className="shrink-0 font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            {progress.done}/{progress.total}
+          </span>
+        ) : null}
+        <BriefingStatusBadge status={status} />
+      </button>
+      {onDelete != null && <LaneDeleteButton lane={lane} onDelete={onDelete} />}
+    </div>
   )
 }
 
@@ -493,12 +532,14 @@ function CompletedLanesGroup({
   items,
   selectedLane,
   onSelectLane,
+  onRequestDelete,
   showLineBadge = false,
   viewMode,
 }: {
   items: LaneWithQueue[]
   selectedLane: LaneId
   onSelectLane: (id: LaneId) => void
+  onRequestDelete?: (lane: WorkLane) => void
   showLineBadge?: boolean
   viewMode: LaneViewMode
 }) {
@@ -535,6 +576,9 @@ function CompletedLanesGroup({
               progress={progress}
               lifecycle={lifecycle}
               onSelect={() => onSelectLane(lane.id)}
+              onDelete={
+                onRequestDelete != null ? () => onRequestDelete(lane) : undefined
+              }
               showLineBadge={showLineBadge}
             />
           ))}
@@ -550,6 +594,9 @@ function CompletedLanesGroup({
                 lifecycle={lifecycle}
                 selected={selectedLane === lane.id}
                 onSelect={() => onSelectLane(lane.id)}
+                onDelete={
+                  onRequestDelete != null ? () => onRequestDelete(lane) : undefined
+                }
                 showLineBadge={showLineBadge}
               />
             </li>
@@ -593,7 +640,57 @@ export function TrackLaneSection({
   const [showNewLane, setShowNewLane] = useState(false)
   const [laneViewMode, setLaneViewMode] = useState<LaneViewMode>('list')
   const [activeReference, setActiveReference] = useState<NewLaneReference | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<WorkLane | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const showLineBadge = resolvedScope === 'all' || crossTrack
+  const qc = useQueryClient()
+  const { canOperate } = usePlatformAuth()
+
+  const requestDelete = useCallback(
+    (lane: WorkLane) => {
+      if (!canOperate) return
+      setDeleteError(null)
+      setDeleteTarget(lane)
+    },
+    [canOperate],
+  )
+
+  const confirmDelete = useCallback(async () => {
+    if (deleteTarget == null) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteLane(deleteTarget.id)
+      await qc.invalidateQueries({ queryKey: LANES_QUERY_KEY })
+      if (selectedLane === deleteTarget.id) {
+        const remaining = lanes.filter(l => l.id !== deleteTarget.id)
+        const fallback =
+          remaining[0]?.id ??
+          (trackType != null && resolvedScope != null
+            ? defaultLaneForScopeTrack(resolvedScope, trackType)
+            : remaining[0]?.id)
+        if (fallback != null && fallback !== selectedLane) {
+          onSelectLane(fallback)
+        }
+      }
+      setDeleteTarget(null)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDeleting(false)
+    }
+  }, [
+    deleteTarget,
+    qc,
+    selectedLane,
+    lanes,
+    trackType,
+    resolvedScope,
+    onSelectLane,
+  ])
+
+  const deleteHandler = canOperate ? requestDelete : undefined
 
   const trackTypeLabel = crossTrack
     ? 'All tracks'
@@ -760,6 +857,9 @@ export function TrackLaneSection({
                     progress={progress}
                     lifecycle={lifecycle}
                     onSelect={() => onSelectLane(lane.id)}
+                    onDelete={
+                      deleteHandler != null ? () => deleteHandler(lane) : undefined
+                    }
                     showLineBadge={showLineBadge}
                   />
                 ))}
@@ -774,6 +874,9 @@ export function TrackLaneSection({
                       lifecycle={lifecycle}
                       selected={selectedLane === lane.id}
                       onSelect={() => onSelectLane(lane.id)}
+                      onDelete={
+                        deleteHandler != null ? () => deleteHandler(lane) : undefined
+                      }
                       showLineBadge={showLineBadge}
                     />
                   </li>
@@ -802,6 +905,9 @@ export function TrackLaneSection({
                     lane={lane}
                     selected={selectedLane === lane.id}
                     onSelect={() => onSelectLane(lane.id)}
+                    onDelete={
+                      deleteHandler != null ? () => deleteHandler(lane) : undefined
+                    }
                     showLineBadge={showLineBadge}
                   />
                 ))}
@@ -813,6 +919,9 @@ export function TrackLaneSection({
                     progress={progress}
                     lifecycle={lifecycle}
                     onSelect={() => onSelectLane(lane.id)}
+                    onDelete={
+                      deleteHandler != null ? () => deleteHandler(lane) : undefined
+                    }
                     showLineBadge={showLineBadge}
                   />
                 ))}
@@ -848,6 +957,9 @@ export function TrackLaneSection({
                       lifecycle={lifecycle}
                       selected={selectedLane === lane.id}
                       onSelect={() => onSelectLane(lane.id)}
+                      onDelete={
+                        deleteHandler != null ? () => deleteHandler(lane) : undefined
+                      }
                       showLineBadge={showLineBadge}
                       emptyHint
                     />
@@ -861,6 +973,9 @@ export function TrackLaneSection({
                       lifecycle={lifecycle}
                       selected={selectedLane === lane.id}
                       onSelect={() => onSelectLane(lane.id)}
+                      onDelete={
+                        deleteHandler != null ? () => deleteHandler(lane) : undefined
+                      }
                       showLineBadge={showLineBadge}
                     />
                   </li>
@@ -901,11 +1016,36 @@ export function TrackLaneSection({
             items={groups.complete}
             selectedLane={selectedLane}
             onSelectLane={onSelectLane}
+            onRequestDelete={deleteHandler}
             showLineBadge={showLineBadge}
             viewMode={laneViewMode}
           />
         )}
       </div>
+
+      <ConfirmDialog
+        open={deleteTarget != null}
+        title="Delete lane"
+        message={
+          deleteTarget != null
+            ? `Remove “${deleteTarget.label}” (${deleteTarget.id}) from the Briefing catalog? This writes lanes.yaml and cannot be undone from the UI.`
+            : ''
+        }
+        confirmLabel="Confirm delete"
+        confirming={deleting}
+        onConfirm={() => {
+          void confirmDelete()
+        }}
+        onCancel={() => {
+          if (!deleting) {
+            setDeleteTarget(null)
+            setDeleteError(null)
+          }
+        }}
+      />
+      {deleteError != null && (
+        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-destructive">{deleteError}</p>
+      )}
     </section>
   )
 }

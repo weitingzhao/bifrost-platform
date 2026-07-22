@@ -333,6 +333,29 @@ function buildRuntimeConsumers(
     raw: celery,
   })
 
+  // W4 trade-celery-k8s-ideal — surface Beat + Flower as first-class Satellite Bus nodes.
+  rows.push({
+    id: 'celery-beat',
+    label: 'Celery Beat',
+    kind: 'runtime',
+    requirement: 'required',
+    health: celery == null ? 'unknown' : celery.broker_connected ? 'ok' : 'degraded',
+    stateLabel: celery == null ? 'UNKNOWN' : celery.broker_connected ? 'EXPECTED' : 'DEGRADED',
+    detail:
+      'Deployment celery-beat (singleton). Schedules Massive jobs; confirm Ready via verify-trade-celery-massive-loop-stg.',
+    probePath: `bus-deep[${env}].monitor.celery (+ deploy/celery-beat)`,
+  })
+  rows.push({
+    id: 'flower',
+    label: 'Flower',
+    kind: 'runtime',
+    requirement: 'optional',
+    health: celery == null ? 'unknown' : celery.broker_connected ? 'ok' : 'degraded',
+    stateLabel: celery == null ? 'UNKNOWN' : 'READY',
+    detail: 'Deployment flower :5555 — Celery monitoring UI (ClusterIP).',
+    probePath: `bus-deep[${env}].monitor.celery (+ deploy/flower)`,
+  })
+
   const sync = bus?.monitor.account_sync
   let syncHealth: BusNodeHealth
   let syncState: string
