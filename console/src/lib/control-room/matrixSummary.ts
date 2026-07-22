@@ -62,7 +62,7 @@ export function tradeReadinessTargets(targets: Target[]): Target[] {
   )
 }
 
-/** Summarize only readiness-scored targets (for API Health badge / launch lamps). */
+/** Summarize only readiness-scored targets (for Control Room / launch lamps). */
 export function summarizeTradeReadiness(targets: Target[]): MatrixSummary {
   const scored = targets.filter(countsTowardTradeReadiness)
   let ok = 0

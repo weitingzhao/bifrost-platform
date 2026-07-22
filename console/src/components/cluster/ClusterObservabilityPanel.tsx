@@ -10,6 +10,7 @@ interface ClusterObservabilityPanelProps {
   isLoading: boolean
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
+  onOpenObservability?: () => void
   onInstallLayerB?: () => void
   installLayerBPending?: boolean
   installLayerBDisabled?: boolean
@@ -48,6 +49,7 @@ export function ClusterObservabilityPanel({
   isLoading,
   onOpenStandards,
   onOpenRuntimeMap,
+  onOpenObservability,
   onInstallLayerB,
   installLayerBPending = false,
   installLayerBDisabled = false,
@@ -86,6 +88,11 @@ export function ClusterObservabilityPanel({
         {onOpenRuntimeMap != null && (
           <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenRuntimeMap}>
             Open topology
+          </Button>
+        )}
+        {onOpenObservability != null && (
+          <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" onClick={onOpenObservability}>
+            View Observability
           </Button>
         )}
         {onInstallLayerB != null && data?.layer_b_status !== 'ready' && (

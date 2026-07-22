@@ -50,12 +50,12 @@ export const SYSTEM_DOMAINS: SystemDomainRow[] = [
     id: 'mission-control',
     label: 'Mission Control',
     purpose:
-      'Cross-domain ops hub — Control Room, Task CC, Defects, Audit, Delivery Board; topology drill-down sheet',
+      'Cross-domain ops hub — Control Room, Observability, Task CC, Defects, Audit, Delivery Board; topology drill-down sheet',
   },
   {
     id: 'rocket',
     label: 'Rocket',
-    purpose: 'Ops Platform itself — K8s cluster, Launch Rocket, placement, platform CI/CD',
+    purpose: 'Ops Platform itself — K8s cluster, Launch Rocket, fleet placement (facility constraints), platform CI/CD',
   },
   {
     id: 'ground-systems',
@@ -65,7 +65,7 @@ export const SYSTEM_DOMAINS: SystemDomainRow[] = [
   {
     id: 'satellite',
     label: 'Satellite',
-    purpose: 'Trade payload — bus, telemetry, API health, Deploy Satellite',
+    purpose: 'Trade payload — bus, Satellite Runtime, API & Auth Probes, Deploy Satellite',
   },
   {
     id: 'subcontractors',
@@ -150,6 +150,7 @@ export const SCOPE_TO_SYSTEM_DOMAIN: Record<string, SystemDomainId> = {
   // Engineer — agent / operator plane
   ops: 'engineer',
   'agent-desk': 'engineer',
+  'agent-capability': 'engineer',
   'operator-plane-remediate': 'engineer',
   'git-dirty-remediate': 'engineer',
 

@@ -5,11 +5,15 @@
  * Migrated from bifrost-trade-infra/docs/PLATFORM_ROADMAP.md (2026-06-15).
  */
 
-export const ROADMAP_VERSION = '2026-06-29'
+export const ROADMAP_VERSION = '2026-07-21'
 export const ROADMAP_SOURCE = 'console/src/lib/architecture/roadmapCatalog.ts'
 
 export const ROADMAP_STATUS =
-  'K3s is prod runtime — data layer on CNPG (.80 retired), dev/stg/prod on K3s; Phase 3 Legacy retirement SIGNED (2026-06-29, decision D8). Phase B/C below is the original Compose→K3s journey, kept for context.'
+  'K3s is prod runtime — data layer on CNPG (.80 retired), dev/stg/prod on K3s; Phase 3 Legacy retirement SIGNED (2026-06-29, decision D8). The Compose→K3s journey (Phase overview + Phase A/B runbooks) is archived history — active work is Phase C + spine.'
+
+/** One-line archive summary — the only Phase A/B trace in the default LLM pack. */
+export const ROADMAP_ARCHIVE_SUMMARY =
+  'Archive · Compose → K3s journey: Phase A (2C-B cutover + resource activation) DONE 2026-06-29 (decision D8); Phase B (K3s bootstrap + GitOps + CNPG) SIGNED journey, delivered. Full runbooks live in the Roadmap page archive section (roadmapCatalog.ts PHASE_A_*/PHASE_B_* constants) — request only if auditing history.'
 
 export type RoadmapHardwareRow = {
   device: string
@@ -214,9 +218,15 @@ export const RELATED_DOCS: RelatedDocRow[] = [
   { topic: 'Docker build / rebuild', authority: 'bifrost-trade-infra/docs/DOCKER_BUILD.md' },
 ]
 
+/**
+ * Default LLM pack — active baseline only.
+ * Phase A/B runbooks are collapsed to ROADMAP_ARCHIVE_SUMMARY (one line);
+ * the PHASE_A_* / PHASE_B_* constants remain exported for the UI archive
+ * section and audits.
+ */
 export function buildRoadmapLlmPack(): string {
   const lines: string[] = [
-    '# Bifrost Ops — Platform Roadmap (Compose → K3s)',
+    '# Bifrost Ops — Platform Roadmap (active baseline)',
     `# Source: ${ROADMAP_SOURCE} v${ROADMAP_VERSION}`,
     `Status: ${ROADMAP_STATUS}`,
     '',
@@ -229,40 +239,17 @@ export function buildRoadmapLlmPack(): string {
     '## §2 Software baseline',
     ...SOFTWARE_BASELINE.map(r => `- **${r.milestone}** [${r.status}]: ${r.meaning}`),
     '',
-    '## §3 Phase overview',
-    PHASE_OVERVIEW,
+    '## Archive (history — not current work)',
+    ROADMAP_ARCHIVE_SUMMARY,
     '',
-    '## §4 Phase A — 2C-B + resource activation (current priority)',
-    '### A1 2C-B cutover',
-    ...PHASE_A_2CB_STEPS.map(s => `- ${s.step}: ${s.action}`),
-    '### A2 Mac Mini roles',
-    ...PHASE_A_MAC_MINI.map(r => `- ${r.machine}: ${r.service} (${r.connection})`),
-    '### A3 4090 trial rules',
-    ...PHASE_A_GPU_RULES.map(r => `- ${r}`),
-    '### A4 Compose-era deliverables',
-    ...PHASE_A_DELIVERABLES.map(r => `- ${r.artifact}: ${r.description}`),
-    `Exit: ${PHASE_A_EXIT}`,
-    '',
-    '## §5 Phase B — K3s + GitOps',
-    `Prereq: ${PHASE_B_PREREQ}`,
-    'Bootstrap:',
-    ...PHASE_B_BOOTSTRAP.map(s => `- ${s}`),
-    'Data migration:',
-    ...PHASE_B_DATA_MIGRATION.map(s => `- ${s}`),
-    `App order: ${PHASE_B_APP_ORDER}`,
-    ...PHASE_B_CICD.map(r => `- **${r.component}** @ ${r.location}: ${r.role}`),
-    'Repo layout:',
-    ...PHASE_B_REPO_LAYOUT.map(s => `- ${s}`),
-    `Exit: ${PHASE_B_EXIT}`,
-    '',
-    '## §6 Phase C — AI-native ops + downstream',
+    '## Phase C — AI-native ops + downstream (active)',
     ...PHASE_C_OPS_PLATFORM.map(r => `- **${r.capability}**: ${r.implementation}`),
     ...PHASE_C_DOWNSTREAM.map(s => `- ${s}`),
     '',
-    '## §7 Optional hardware (12–18 months)',
+    '## Optional hardware (12–18 months)',
     ...OPTIONAL_HARDWARE.map(r => `- ${r.item}: when ${r.trigger}`),
     '',
-    '## §8 Owner checklist',
+    '## Owner checklist',
     ...OWNER_CHECKLIST.map(q => `- [ ] ${q}`),
     '',
     '## Related authorities',

@@ -23,9 +23,10 @@ import {
 
 interface PlacementPageProps {
   onOpenDelivery?: () => void
+  onOpenCluster?: () => void
 }
 
-export function PlacementPage({ onOpenDelivery }: PlacementPageProps) {
+export function PlacementPage({ onOpenDelivery, onOpenCluster }: PlacementPageProps) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
 
   const placementQuery = useQuery({
@@ -60,6 +61,8 @@ export function PlacementPage({ onOpenDelivery }: PlacementPageProps) {
               reachability: placement.reachability,
               detail: placement.detail,
               violations: placement.violations,
+              pools: placement.pools,
+              rules: placement.rules,
             }
           : undefined,
       ),
@@ -78,10 +81,10 @@ export function PlacementPage({ onOpenDelivery }: PlacementPageProps) {
   }, [llmPack])
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
+    <div className="flex w-full min-w-0 flex-col gap-3">
       <OpsSection
         title="Summary"
-        description={`Workload placement governance — catalog v${PLACEMENT_CATALOG_VERSION}. Live vs planned node pools and scheduling policy.`}
+        description={`Fleet facility constraints (catalog v${PLACEMENT_CATALOG_VERSION}) — live vs planned node pools for Rocket CI, Satellite runtime, and shared infra. Hosted under Rocket; not a satellite-only plan.`}
         actions={
           <Button size="sm" onClick={() => void handleCopy()}>
             {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy LLM pack'}
@@ -168,7 +171,22 @@ export function PlacementPage({ onOpenDelivery }: PlacementPageProps) {
                   {rule.satisfied ? 'OK' : 'Gap'}
                 </DenseTableCell>
                 <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                  {rule.gap_reason ?? (rule.planned_binding != null ? `target ${rule.planned_binding}` : '—')}
+                  <span className="inline-flex flex-wrap items-center gap-2">
+                    <span>
+                      {rule.gap_reason ?? (rule.planned_binding != null ? `target ${rule.planned_binding}` : '—')}
+                    </span>
+                    {!rule.satisfied && onOpenCluster != null ? (
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto px-0 py-0 text-[var(--text-dense-caption)]"
+                        onClick={onOpenCluster}
+                      >
+                        View nodes
+                      </Button>
+                    ) : null}
+                  </span>
                 </DenseTableCell>
               </DenseTableRow>
             ))}
@@ -213,7 +231,19 @@ export function PlacementPage({ onOpenDelivery }: PlacementPageProps) {
       />
 
       {placement != null && placement.violations.length > 0 && (
-        <OpsSection title="Violations" bodyPadding="none" overflow="hidden" bodyClassName="ops-section-body--table">
+        <OpsSection
+          title="Violations"
+          bodyPadding="none"
+          overflow="hidden"
+          bodyClassName="ops-section-body--table"
+          actions={
+            onOpenCluster != null ? (
+              <Button size="sm" variant="outline" onClick={onOpenCluster}>
+                Open Cluster
+              </Button>
+            ) : undefined
+          }
+        >
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>

@@ -202,7 +202,7 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   },
   { view: 'Delivery', plane: 'Rocket', purpose: 'CI/CD pipelines and release coupling' },
   { view: 'Runtime Map', plane: 'Mission Control', purpose: 'Topology drill-down sheet from Control Room (not a top-level daily page)' },
-  { view: 'Placement', plane: 'Rocket', purpose: 'Workload placement policy and violations' },
+  { view: 'Placement', plane: 'Rocket', purpose: 'Fleet facility constraints — node-pool / scheduling policy vs live cluster (Rocket CI, Satellite, shared infra)' },
   { view: 'Cluster', plane: 'Rocket', purpose: 'Cluster operations' },
   { view: 'Audit', plane: 'Mission Control', purpose: 'Platform actuation audit history' },
   { view: 'Promote', plane: 'Rocket', purpose: 'Release readiness (flywheels A + B)' },

@@ -68,6 +68,32 @@ func PresetQueries() []QuerySpec {
 				return `cnpg_pg_stat_replication_replay_lag_seconds{namespace="data"}`
 			},
 		},
+		// Rocket — node evidence (whitelist presets only; never expose free-form PromQL UI).
+		{
+			ID:    "node_cpu_usage",
+			Title: "Node CPU usage",
+			Unit:  "ratio",
+			Build: func(_ string) string {
+				return `1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))`
+			},
+		},
+		{
+			ID:    "node_memory_usage",
+			Title: "Node memory usage",
+			Unit:  "ratio",
+			Build: func(_ string) string {
+				return `(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))`
+			},
+		},
+		// Subcontractors — IB Gateway scrape presence (namespace=data).
+		{
+			ID:    "ib_gateway_up",
+			Title: "IB Gateway scrape up",
+			Unit:  "up",
+			Build: func(_ string) string {
+				return `up{namespace="data",job=~".*ib-gateway.*"}`
+			},
+		},
 	}
 }
 
@@ -85,9 +111,17 @@ func DefaultNamespace() string {
 	return "bifrost-stg"
 }
 
+// allowedNamespaces whitelists values interpolated into PromQL selectors.
+// Anything else falls back to the default namespace (no injection surface).
+var allowedNamespaces = map[string]bool{
+	"bifrost-dev":  true,
+	"bifrost-stg":  true,
+	"bifrost-prod": true,
+}
+
 func ResolveNamespace(raw string) string {
 	ns := strings.TrimSpace(raw)
-	if ns == "" {
+	if !allowedNamespaces[ns] {
 		return DefaultNamespace()
 	}
 	return ns

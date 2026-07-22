@@ -9,8 +9,20 @@
  * Single source of truth — do not duplicate elsewhere.
  */
 
-export const VISION_VERSION = '2026-06-28'
+export const VISION_VERSION = '2026-07-21'
 export const VISION_SOURCE = 'console/src/lib/architecture/dualFlywheelVisionCatalog.ts'
+
+/**
+ * One-paragraph SIGNED archive summary — the only V1–V5 delivery trace in the
+ * default LLM pack. Detailed deliverables stay in VISION_MILESTONES for the
+ * UI archive section and audits.
+ */
+export const VISION_ARCHIVE_SUMMARY =
+  'Archive · V1–V5 convergence delivery history (SIGNED / delivered): V1 Dev inner-loop on K3s, ' +
+  'V2 Dev Agent closed-loop (push → Tekton → STG verify), V3 Ops Agent L1/L2 (Alertmanager → MCP actuation), ' +
+  'V4 Business Agent read-only (9 Trade API domains + daily brief), V5 full convergence (one Cursor window). ' +
+  'Detailed deliverables, agent loop steps, and the V1–V5 spine map live in the Vision page archive section ' +
+  '(dualFlywheelVisionCatalog.ts VISION_MILESTONES + *AgentLoopCatalog.ts + visionSpineMap.ts) — request only if auditing history.'
 
 // ---------------------------------------------------------------------------
 // Core thesis
@@ -507,12 +519,8 @@ export function buildDualFlywheelVisionLlmPack(): string {
     '## Model allocation',
     ...MODEL_ALLOCATION.map(m => `- ${m.task}: **${m.model}** — ${m.reason}`),
     '',
-    '## Convergence milestones (V1–V5)',
-    ...VISION_MILESTONES.flatMap(m => [
-      `### ${m.id}: ${m.title} [${m.flywheels}]`,
-      ...m.deliverables.map(d => `- ${d}`),
-      `→ Unlocks: ${m.unlocks}`,
-    ]),
+    '## Convergence milestones (V1–V5 — archived, SIGNED)',
+    VISION_ARCHIVE_SUMMARY,
     '',
     '## Absolute boundaries',
     ...VISION_BOUNDARIES.map(b => `- **${b.rule}**: ${b.detail} — enforced by: ${b.enforced}`),

@@ -21,8 +21,7 @@ import {
 import { buildSyncLoopFixPack } from '@/lib/briefing/briefingFixPack'
 import type { ReconcileFinding } from '@/lib/briefing/reconcileBriefing'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-
-type OpenAgentDeskArg = string | { prefill: string }
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 
 export function BriefingSyncLoopPanel({
   reconcileFindings,
@@ -114,7 +113,13 @@ export function BriefingSyncLoopPanel({
 
   function handleStepAction(stepId: string, jobId?: string) {
     if (stepId === 'owner-approval') {
-      document.getElementById('drift-proposals')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      // Approval surface (DriftProposalPanel) lives on Agent Desk; scroll only when mounted locally.
+      const local = document.getElementById('drift-proposals')
+      if (local != null) {
+        local.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else {
+        onOpenAgentDesk?.()
+      }
       return
     }
     if (stepId === 'nightly-scan' && canOperate && runnerOk) {
@@ -135,6 +140,7 @@ export function BriefingSyncLoopPanel({
           <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Live status of the briefing reconciliation pipeline. Runtime SYNC (Console) uses the same
             rules as nightly Layer 3 — fixes require Owner approval (no unattended spine writes).
+            Proposal review and fix execution live in Agent Desk.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -291,9 +297,12 @@ export function BriefingSyncLoopPanel({
                         variant="ghost"
                         size="sm"
                         className="h-auto self-start px-0 py-0 text-[var(--text-dense-meta)]"
+                        disabled={onOpenAgentDesk == null}
                         onClick={() => handleStepAction(step.id, step.actionJobId)}
                       >
-                        {step.action === 'scroll-proposals' ? 'Go to proposals ↓' : 'Open Agent Desk'}
+                        {step.action === 'scroll-proposals'
+                          ? 'Review in Agent Desk →'
+                          : 'Open Agent Desk →'}
                       </Button>
                     )}
                   </div>

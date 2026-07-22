@@ -150,6 +150,8 @@ export const ACTUATION_API_ROUTES: ActuationApiRoute[] = [
   { phase: 'P4', method: 'POST', route: '/api/v1/promote/release-gate?tier=stg|prod', role: 'admin', purpose: 'Run STG or Prod release gate' },
   { phase: 'P4', method: 'GET', route: '/api/v1/telemetry/overview', role: 'viewer', purpose: 'PromQL telemetry snapshot (Layer C)' },
   { phase: 'P4', method: 'GET', route: '/api/v1/telemetry/query', role: 'viewer', purpose: 'Single preset PromQL query' },
+  { phase: 'P4', method: 'GET', route: '/api/v1/telemetry/alerts', role: 'viewer', purpose: 'Prometheus firing/pending alerts for Observability hub' },
+  { phase: 'P4', method: 'GET', route: '/api/v1/telemetry/targets', role: 'viewer', purpose: 'Prometheus scrape targets for Observability hub' },
   { phase: 'P4', method: 'GET', route: '/api/v1/promote/tier-b', role: 'viewer', purpose: 'Tier B extended STG acceptance probes + sign-off state' },
   { phase: 'P4', method: 'POST', route: '/api/v1/promote/tier-b/signoff', role: 'admin', purpose: 'Record Tier B Owner sign-off' },
   { phase: 'P5', method: 'GET', route: '/api/v1/mcp/tools', role: 'viewer', purpose: 'MCP tool catalog (mirrors platform-api)' },
@@ -180,13 +182,13 @@ export const OBSERVABILITY_LAYERS: LayerDescription[] = [
     layer: 'Console surfaces',
     scope: 'Layer A/B install state, Grafana deep-link',
     dataSource: 'GET /api/v1/cluster/metrics + /api/v1/cluster/observability',
-    notes: 'Ground Systems → Compute (nodes) · Satellite → Bus Status (payload telemetry backbone) · Rocket → Cluster (full Layer B panel)',
+    notes: 'Rocket → Cluster (Layer A/B install) · Mission Control → Observability (system health) · Satellite → Bus Status (payload backbone)',
   },
   {
     layer: 'C — Telemetry',
     scope: 'Trade API + datastore runtime metrics via PromQL',
-    dataSource: 'GET /api/v1/telemetry/overview + /api/v1/telemetry/query',
-    notes: 'Satellite → Telemetry · proxy to in-cluster Prometheus · MCP mcp-server-prometheus available',
+    dataSource: 'GET /api/v1/telemetry/overview + /alerts + /targets (whitelist presets)',
+    notes: 'Mission Control → Observability (hub) · Satellite → Satellite Runtime (scoped golden signals)',
   },
 ]
 

@@ -33,10 +33,17 @@ import {
   buildBriefingReconciliationLlmPack,
 } from '@/lib/architecture/briefingReconciliationCatalog'
 import { reconcileBriefing } from '@/lib/briefing/reconcileBriefing'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
-export function BriefingReconciliationPage({ context }: { context?: OpsContextResponse }) {
+export function BriefingReconciliationPage({
+  context,
+  onOpenAgentDesk,
+}: {
+  context?: OpsContextResponse
+  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
+}) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
 
   const reconcileFindings = useMemo(() => reconcileBriefing(context), [context])
@@ -81,7 +88,11 @@ export function BriefingReconciliationPage({ context }: { context?: OpsContextRe
 
       <CatalogSpineDriftPanel findings={reconcileFindings} />
 
-      <BriefingSyncLoopPanel context={context} reconcileFindings={reconcileFindings} />
+      <BriefingSyncLoopPanel
+        context={context}
+        reconcileFindings={reconcileFindings}
+        onOpenAgentDesk={onOpenAgentDesk}
+      />
 
       <CatalogSection title="Automation loop (catalog spec)">
         <DenseDataTable>

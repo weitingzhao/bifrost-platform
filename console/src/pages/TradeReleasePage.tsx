@@ -1,4 +1,4 @@
-import { DenseTag } from '@bifrost/ui'
+import { Button, DenseTag } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
@@ -16,6 +16,13 @@ import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { DeliveryReleaseWorkflowPanel } from '@/components/delivery/DeliveryReleaseWorkflowPanel'
 import { DeployActionBar } from '@/components/delivery/DeployActionBar'
 import { GateActionBar } from '@/components/delivery/GateActionBar'
+import {
+  LaneDetailCollapse,
+  LaneDetailContextStrip,
+  LaneGateSummaryLine,
+  LaneStateStrip,
+  LiveTradingFreezeNote,
+} from '@/components/delivery/LaneDetailShell'
 import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
 import { PipelineRunsPanel } from '@/components/delivery/PipelineRunsPanel'
 import {
@@ -29,7 +36,10 @@ import { StgSmokePanel } from '@/components/delivery/StgSmokePanel'
 import { StgTierBChecklistPanel } from '@/components/delivery/StgTierBChecklistPanel'
 import { SupplyChainPanel } from '@/components/delivery/SupplyChainPanel'
 import { TradeEnvAccessBar } from '@/components/delivery/TradeEnvAccessBar'
+import { PlatformGateHistorySection } from '@/components/promote/PlatformReleaseGateSection'
 import { ReleaseGateCompareSection } from '@/components/promote/ReleaseGateCompareSection'
+import { useLaneStepFocus } from '@/hooks/useLaneStepFocus'
+import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import { isPipelineRunFailed, isPipelineRunRunning } from '@/lib/delivery/pipelineRunAskPack'
 
@@ -94,10 +104,21 @@ interface TradeReleasePageProps {
   context: OpsContextResponse | undefined
   isLoading?: boolean
   onOpenPlacement?: () => void
+  /** Compact evidence deep links — health is computed on those surfaces, not here. */
+  onOpenSatelliteBus?: () => void
+  onOpenObservability?: () => void
+  onOpenApiHealth?: () => void
 }
 
-export function TradeReleasePage({ context, isLoading = false, onOpenPlacement }: TradeReleasePageProps) {
-  const [activeIndex, setActiveIndex] = useState(0)
+export function TradeReleasePage({
+  context,
+  isLoading = false,
+  onOpenPlacement,
+  onOpenSatelliteBus,
+  onOpenObservability,
+  onOpenApiHealth,
+}: TradeReleasePageProps) {
+  const [detailReason] = useState(readLaneDetailReasonFromLocation)
 
   const stgRuns = useQuery({
     queryKey: ['delivery', 'runs', STG_PIPELINE],
@@ -135,14 +156,21 @@ export function TradeReleasePage({ context, isLoading = false, onOpenPlacement }
     refetchInterval: 30_000,
   })
 
-  if (isLoading || !context) {
-    return <p className="text-muted-foreground">Loading release context…</p>
-  }
-
   const stgDeploy = runStepStatus(stgRuns.data?.runs?.[0])
   const prodDeploy = runStepStatus(prodRuns.data?.runs?.[0])
   const stgGateStep = gateStepStatus(stgGate.data)
   const prodGateStep = gateStepStatus(prodGate.data)
+
+  const [activeIndex, setActiveIndex] = useLaneStepFocus({
+    statuses: [stgDeploy.status, stgGateStep.status, prodDeploy.status, prodGateStep.status],
+    ready:
+      !stgRuns.isLoading && !prodRuns.isLoading && !stgGate.isLoading && !prodGate.isLoading,
+    reason: detailReason,
+  })
+
+  if (isLoading || !context) {
+    return <p className="text-muted-foreground">Loading release context…</p>
+  }
 
   const steps: FlowStep[] = [
     { key: 'stg-deploy', label: 'Staging Deploy', env: 'STG', status: stgDeploy.status, statusLabel: stgDeploy.label },
@@ -167,8 +195,15 @@ export function TradeReleasePage({ context, isLoading = false, onOpenPlacement }
     case 0:
       stepDetail = (
         <>
-          <SupplyChainPanel layout="operate" />
           {showStgActiveRun && <DeliveryActiveRunPanel target={TRADE_STG_TARGET} />}
+          <LaneDetailCollapse
+            title="Artifact evidence · supply chain"
+            summaryExtra={<SupplyChainSummaryLine />}
+            defaultOpen={false}
+            bodyClassName="p-3"
+          >
+            <SupplyChainPanel layout="operate" hideDeliverAction />
+          </LaneDetailCollapse>
         </>
       )
       break
@@ -195,6 +230,7 @@ export function TradeReleasePage({ context, isLoading = false, onOpenPlacement }
     case 2:
       stepDetail = (
         <>
+          <LiveTradingFreezeNote />
           <PlatformDeliverActuatePanel target={TRADE_PROD_TARGET} hideActions />
           {showProdActiveRun && <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} />}
           <PipelineRunsPanel
@@ -209,25 +245,61 @@ export function TradeReleasePage({ context, isLoading = false, onOpenPlacement }
       break
     default:
       stepDetail = (
-        <ReleaseGateCompareSection
-          stgGate={stgGate.data}
-          stgGateLoading={stgGate.isLoading}
-          stgGateError={stgGate.error instanceof Error ? stgGate.error.message : null}
-          prodGate={prodGate.data}
-          prodGateLoading={prodGate.isLoading}
-          prodGateError={prodGate.error instanceof Error ? prodGate.error.message : null}
-        />
+        <>
+          <LiveTradingFreezeNote />
+          <LaneDetailCollapse
+            key="prod-gate-detail"
+            title="Gate check detail — STG vs Prod"
+            summaryExtra={<LaneGateSummaryLine gate={prodGate.data} />}
+            defaultOpen={prodGateStep.status === 'error'}
+            bodyClassName="p-3"
+          >
+            <ReleaseGateCompareSection
+              stgGate={stgGate.data}
+              stgGateLoading={stgGate.isLoading}
+              stgGateError={stgGate.error instanceof Error ? stgGate.error.message : null}
+              prodGate={prodGate.data}
+              prodGateLoading={prodGate.isLoading}
+              prodGateError={prodGate.error instanceof Error ? prodGate.error.message : null}
+            />
+          </LaneDetailCollapse>
+        </>
       )
       break
   }
 
-  return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-2 rounded-lg border border-border/50 bg-secondary/30 px-4 py-2.5">
-        <TradeEnvAccessBar />
-        <SupplyChainSummaryLine />
-        <ReleaseStateBanner tier="trade" />
+  const evidenceLinks =
+    onOpenSatelliteBus != null || onOpenObservability != null || onOpenApiHealth != null ? (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
+          Evidence
+        </span>
+        {onOpenSatelliteBus != null && (
+          <Button size="xs" variant="ghost" onClick={onOpenSatelliteBus}>
+            Bus Status
+          </Button>
+        )}
+        {onOpenObservability != null && (
+          <Button size="xs" variant="ghost" onClick={onOpenObservability}>
+            Observability
+          </Button>
+        )}
+        {onOpenApiHealth != null && (
+          <Button size="xs" variant="ghost" onClick={onOpenApiHealth}>
+            API & Auth Probes
+          </Button>
+        )}
       </div>
+    ) : undefined
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <LaneDetailContextStrip reason={detailReason} />
+
+      <LaneStateStrip laneLabel="Satellite" actions={evidenceLinks}>
+        <TradeEnvAccessBar />
+        <ReleaseStateBanner tier="trade" />
+      </LaneStateStrip>
 
       <ReleaseStepCommandCenter
         steps={steps}
@@ -243,15 +315,21 @@ export function TradeReleasePage({ context, isLoading = false, onOpenPlacement }
 
       <div className="flex flex-col gap-3">{stepDetail}</div>
 
-      <details className="group rounded-lg border border-border/50 bg-card">
-        <summary className="cursor-pointer list-none px-4 py-3 text-dense-label font-medium text-foreground hover:bg-secondary/30">
-          CI/CD pipeline topology and release workflow
-        </summary>
-        <div className="flex flex-col gap-4 border-t border-border/50 px-4 py-3">
-          <DeliveryReleaseWorkflowPanel context={context} stgSmoke={stgSmoke.data} />
-          <DeliveryFlow context={context} />
-        </div>
-      </details>
+      <LaneDetailCollapse title="Audit · gate run history">
+        <PlatformGateHistorySection
+          stgTier="stg"
+          prodTier="prod"
+          description="Chronological log of Trade release gate runs."
+        />
+      </LaneDetailCollapse>
+
+      <LaneDetailCollapse
+        title="CI/CD pipeline topology and release workflow"
+        bodyClassName="flex flex-col gap-4 px-4 py-3"
+      >
+        <DeliveryReleaseWorkflowPanel context={context} stgSmoke={stgSmoke.data} />
+        <DeliveryFlow context={context} />
+      </LaneDetailCollapse>
     </div>
   )
 }

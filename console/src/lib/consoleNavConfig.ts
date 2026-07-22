@@ -43,10 +43,10 @@ import {
  *
  * | Group            | Domain                | Intent                                           |
  * |------------------|-----------------------|--------------------------------------------------|
- * | Mission Control  | Cross-domain ops hub  | Control Room (+ Runtime Map sheet), defects, audit, delivery |
+ * | Mission Control  | Cross-domain ops hub  | Control Room, Observability, defects, audit, delivery |
  * | Rocket           | Ops Platform itself   | K8s cluster, Launch Rocket, placement             |
  * | Ground Systems   | Infrastructure        | Server console, network, compute                  |
- * | Satellite        | Payload satellite(s)  | Bus, telemetry, API health, Deploy Satellite      |
+ * | Satellite        | Payload satellite(s)  | Bus, runtime, API & Auth Probes, Deploy Satellite |
  * | Subcontractors   | External plugins      | Plugin Gallery, future plugins                    |
  * | Engineer         | AI Agent              | Workspace, autonomous, trust, L-1 plane           |
  * | Governance       | Cross-domain ref lib  | Strategic vision, standards, AI strategy           |
@@ -65,6 +65,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'control-room', label: 'Control Room', icon: Gauge },
+          { id: 'observability', label: 'Observability', icon: LineChart },
           { id: 'defects', label: 'Defects', icon: Microscope },
           { id: 'audit', label: 'Audit', icon: History },
           { id: 'delivery-board', label: 'Delivery Board', icon: ClipboardList },
@@ -80,8 +81,8 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'satellite-bus', label: 'Bus Status', icon: Activity },
-          { id: 'satellite-telemetry', label: 'Telemetry', icon: LineChart },
-          { id: 'satellite-api', label: 'API Health', icon: Gauge },
+          { id: 'satellite-telemetry', label: 'Satellite Runtime', icon: LineChart },
+          { id: 'satellite-api', label: 'API & Auth Probes', icon: Gauge },
           { id: 'trade-release', label: 'Deploy Satellite', icon: Workflow },
         ],
       },
@@ -109,6 +110,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: 'Workspace',
         items: [
           { id: 'agent-desk', label: 'Agent Desk', icon: Bot },
+          { id: 'agent-capability', label: 'Agent Capability', icon: Network },
           { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
           { id: 'dev-agent', label: 'Dev Agent', icon: Code2 },
         ],
@@ -205,6 +207,7 @@ export type ConsoleNavPlane =
 /** Map view tab id → sidebar plane (for headers, briefing packs, catalog cross-refs). */
 export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'control-room': 'Mission Control',
+  observability: 'Mission Control',
   'task-cc': 'Mission Control',
   'runtime-map': 'Mission Control',
   defects: 'Mission Control',
@@ -222,6 +225,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'trade-release': 'Satellite',
   'plugin-gallery': 'Subcontractors',
   'agent-desk': 'Engineer',
+  'agent-capability': 'Engineer',
   briefing: 'Engineer',
   'dev-agent': 'Engineer',
   'autonomous-skills': 'Engineer',

@@ -28,6 +28,8 @@ import {
   isAllMatrices,
 } from '@/api/platform'
 import { consoleNavPlane } from '@/lib/consoleNavConfig'
+import { BackToMissionLaunchButton } from '@/components/delivery/LaneDetailShell'
+import { LANE_DETAIL_SUBTITLE } from '@/lib/delivery/laneDetailContext'
 import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 import type { OpenRuntimeMapFn, RuntimeMapNavigateOptions } from '@/lib/runtime-map/runtimeMapNavigation'
 import { type EnvFilter } from '@/components/EnvironmentStrip'
@@ -37,6 +39,7 @@ import { ConsoleHeader, OpsContextBar } from '@/components/ConsoleHeader'
 import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
+import { AgentCapabilityPage } from '@/pages/AgentCapabilityPage'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
 import { BriefingReconciliationPage } from '@/pages/BriefingReconciliationPage'
 import { AgentSystemPage } from '@/pages/AgentSystemPage'
@@ -53,6 +56,7 @@ import { NetworkPage } from '@/pages/NetworkPage'
 import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
 import { SatelliteApiHealthPage } from '@/pages/SatelliteApiHealthPage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
+import { ObservabilityPage } from '@/pages/ObservabilityPage'
 import { SatelliteTelemetryPage } from '@/pages/SatelliteTelemetryPage'
 import { PlacementPage } from '@/pages/PlacementPage'
 import { PlatformReleasePage } from '@/pages/PlatformReleasePage'
@@ -83,6 +87,7 @@ const ControlRoomPage = lazy(() =>
 
 const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'agent-desk': 'Agent Desk',
+  'agent-capability': 'Agent Capability',
   briefing: 'Agent Briefing',
   'autonomous-skills': 'Skills & Schedules',
   'execution-log': 'Execution Log',
@@ -90,6 +95,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'agent-system': 'Agent System',
   'operator-plane': 'Operator Plane',
   'control-room': 'Control Room',
+  observability: 'Observability',
   'task-cc': 'Task Control Center',
   audit: 'Audit',
   'runtime-map': 'Runtime Map',
@@ -112,8 +118,8 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   network: 'Network',
   compute: 'Compute',
   'satellite-bus': 'Bus Status',
-  'satellite-telemetry': 'Telemetry',
-  'satellite-api': 'API Health',
+  'satellite-telemetry': 'Satellite Runtime',
+  'satellite-api': 'API & Auth Probes',
   'plugin-gallery': 'Plugin Gallery',
   defects: 'Defects',
 }
@@ -123,6 +129,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   briefing: 'Plan and start work — pick scope and lane, open Session.',
   'delivery-board': 'Phased sign-off checklists — verify and close delivery programs.',
   'agent-desk': 'Operate and observe — run agent tasks, review remediation, close sessions.',
+  'agent-capability':
+    'Live capability readiness — which agent scopes are ready, running, awaiting approval, or failed.',
 }
 
 const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
@@ -141,6 +149,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'satellite-api',
   'plugin-gallery',
   'control-room',
+  'observability',
   'task-cc',
   'delivery-board',
   'trade-release',
@@ -167,6 +176,7 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   'ib-gateway-plugin': 'control-room',
   'trade-ib-client-migration': 'control-room',
   'cluster-observability': 'cluster',
+  telemetry: 'satellite-telemetry',
 }
 
 function isConsoleViewTab(value: string): value is ConsoleViewTab {
@@ -383,6 +393,7 @@ function ConsolePageInner() {
   const openNetwork = () => setViewTab('network')
   const openSatelliteApi = () => setViewTab('satellite-api')
   const openSatelliteTelemetry = () => setViewTab('satellite-telemetry')
+  const openObservability = () => setViewTab('observability')
   const openPluginGallery = () => setViewTab('plugin-gallery')
   const openPlacement = () => setViewTab('placement')
   const openAudit = () => setViewTab('audit')
@@ -487,40 +498,6 @@ function ConsolePageInner() {
       window.setTimeout(() => setGovCopyState('idle'), 3000)
     }
   }
-
-
-  const showPageHeader = ![
-    'agent-desk',
-    'briefing',
-    'delivery-board',
-    'autonomous-skills',
-    'execution-log',
-    'agent-governance',
-    'operator-plane',
-    'dev-agent',
-    'control-room',
-    'task-cc',
-    'runtime-map',
-    'cluster',
-    'trade-release',
-    'blueprint',
-    'platform-standards',
-    'agent-protocol',
-    'briefing-reconciliation',
-    'mcp-contract',
-    'design-system',
-    'console',
-    'network',
-    'compute',
-    'satellite-bus',
-    'satellite-telemetry',
-    'satellite-api',
-    'plugin-gallery',
-    'platform-release',
-    'defects',
-    'audit',
-  ].includes(viewTab)
-
   const runtimeLoading = topologyQuery.isLoading || runtimeMatrixQuery.isLoading
   const runtimeError =
     (topologyQuery.error as Error | null) ?? (runtimeMatrixQuery.error as Error | null)
@@ -537,7 +514,6 @@ function ConsolePageInner() {
       <SidebarInset className="min-w-0 overflow-x-hidden">
         <div className="console-shell-chrome sticky top-0 z-20 bg-card">
           <ConsoleHeader
-            title={VIEW_TITLES[viewTab]}
             plane={consoleNavPlane(viewTab)}
             healthy={healthQuery.data}
             onRefresh={refreshAll}
@@ -575,13 +551,6 @@ function ConsolePageInner() {
           )}
         </div>
       <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
-        {showPageHeader && (
-          <PageHeader
-            title={VIEW_TITLES[viewTab]}
-            description="L0 read-only probes — collapse the sidebar to use full width."
-          />
-        )}
-
         {viewTab === 'agent-desk' && (
           <AgentDeskPage
             context={contextQuery.data}
@@ -607,6 +576,10 @@ function ConsolePageInner() {
             onOpenDeliveryBoard={() => setViewTab('delivery-board')}
             onOpenBriefingReconciliation={() => setViewTab('briefing-reconciliation')}
           />
+        )}
+
+        {viewTab === 'agent-capability' && (
+          <AgentCapabilityPage onOpenAgentDesk={openAgentDesk} />
         )}
 
         {viewTab === 'operator-plane' && (
@@ -733,6 +706,7 @@ function ConsolePageInner() {
               onOpenServerConsole={() => setViewTab('console')}
               onOpenAgentDesk={openAgentDesk}
               onOpenDefects={() => setViewTab('defects')}
+              onOpenObservability={openObservability}
               ambientJobId={ambientJob?.id ?? null}
               onStartAgentJob={startAmbientAgentJob}
             />
@@ -743,9 +717,9 @@ function ConsolePageInner() {
           <>
             <PageHeader
               title={VIEW_TITLES.placement}
-              description="Node pools, scheduling policy, and CI readiness — live cluster vs planned topology."
+              description="Fleet facility constraints — node pools and scheduling policy for Rocket CI, Satellite STG, and shared infra. Not satellite-only planning."
             />
-            <PlacementPage onOpenDelivery={openDelivery} />
+            <PlacementPage onOpenDelivery={openDelivery} onOpenCluster={openCluster} />
           </>
         )}
 
@@ -763,12 +737,16 @@ function ConsolePageInner() {
           <>
             <PageHeader
               title={VIEW_TITLES['trade-release']}
-              description="End-to-end satellite CI/CD — STG deploy → gate → PROD deploy → gate."
+              description={LANE_DETAIL_SUBTITLE}
+              actions={<BackToMissionLaunchButton onClick={() => openLaunchView('mission-launch')} />}
             />
             <TradeReleasePage
               context={contextQuery.data}
               isLoading={contextQuery.isLoading}
               onOpenPlacement={openPlacement}
+              onOpenSatelliteBus={openSatelliteBus}
+              onOpenObservability={openObservability}
+              onOpenApiHealth={openSatelliteApi}
             />
           </>
         )}
@@ -777,7 +755,8 @@ function ConsolePageInner() {
           <>
             <PageHeader
               title={VIEW_TITLES['platform-release']}
-              description="End-to-end rocket CI/CD — Staging deploy → gate → Production deploy → gate."
+              description={LANE_DETAIL_SUBTITLE}
+              actions={<BackToMissionLaunchButton onClick={() => openLaunchView('mission-launch')} />}
             />
             <PlatformReleasePage
               ambientJobId={ambientJob?.id ?? null}
@@ -803,6 +782,7 @@ function ConsolePageInner() {
           <SatelliteBusPage
             onOpenCluster={openCluster}
             onOpenTelemetry={openSatelliteTelemetry}
+            onOpenObservability={openObservability}
             onOpenPluginGallery={openPluginGallery}
             onOpenApiHealth={openSatelliteApi}
             ambientJobId={ambientJob?.id ?? null}
@@ -810,10 +790,19 @@ function ConsolePageInner() {
           />
         )}
 
-        {viewTab === 'satellite-api' && <SatelliteApiHealthPage />}
+        {viewTab === 'satellite-api' && (
+          <SatelliteApiHealthPage onOpenObservability={openObservability} />
+        )}
 
         {viewTab === 'satellite-telemetry' && (
-          <SatelliteTelemetryPage onOpenCluster={openCluster} />
+          <SatelliteTelemetryPage
+            onOpenCluster={openCluster}
+            onOpenObservability={openObservability}
+          />
+        )}
+
+        {viewTab === 'observability' && (
+          <ObservabilityPage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
         )}
 
         {viewTab === 'plugin-gallery' && <PluginGalleryPage />}
@@ -865,10 +854,15 @@ function ConsolePageInner() {
           />
         )}
 
-        {viewTab === 'agent-protocol' && <AgentProtocolPage />}
+        {viewTab === 'agent-protocol' && (
+          <AgentProtocolPage
+            onOpenDeliveryBoard={() => setViewTab('delivery-board')}
+            onOpenAgentSystem={() => setViewTab('agent-system')}
+          />
+        )}
 
         {viewTab === 'briefing-reconciliation' && (
-          <BriefingReconciliationPage context={contextQuery.data} />
+          <BriefingReconciliationPage context={contextQuery.data} onOpenAgentDesk={openAgentDesk} />
         )}
 
         {viewTab === 'mcp-contract' && <McpContractPage />}

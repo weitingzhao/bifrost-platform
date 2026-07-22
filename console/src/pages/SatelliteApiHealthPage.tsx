@@ -1,3 +1,11 @@
+/**
+ * Satellite → API & Auth Probes (tab id: satellite-api).
+ *
+ * Probe-detail page for Trade satellite matrix targets — HTTP reachability,
+ * ops auth, and D10 blocked write paths. System health verdict lives in
+ * Mission Control → Observability; this page must not surface a readiness badge.
+ */
+
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import {
@@ -21,7 +29,6 @@ import { fetchMatrix, isAllMatrices } from '@/api/platform'
 import type { MatrixResponse, Target } from '@/api/types'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { consumeSatelliteApiEnv } from '@/lib/task-mode/readinessChipActions'
-import { summarizeTradeReadiness } from '@/lib/control-room/matrixSummary'
 
 const ENV_OPTIONS = [
   { value: 'dev', label: 'Dev' },
@@ -31,7 +38,8 @@ const ENV_OPTIONS = [
 
 type MatrixEnv = (typeof ENV_OPTIONS)[number]['value']
 
-const CATEGORY_ORDER = ['trade_frontend', 'trade_api', 'datastore', 'trade_auth', 'trade_write'] as const
+/** Main probe table — write paths are listed in a dedicated D10 section. */
+const CATEGORY_ORDER = ['trade_frontend', 'trade_api', 'datastore', 'trade_auth'] as const
 
 function categoryLabel(category: string): string {
   switch (category) {
@@ -53,11 +61,11 @@ function categoryLabel(category: string): string {
 function authVariant(auth: string): 'success' | 'warning' | 'danger' | 'neutral' {
   if (auth === 'ok') return 'success'
   if (auth === 'skipped') return 'neutral'
-  if (auth === 'missing' || auth === 'invalid') return 'warning'
+  // missing / invalid / blocked → danger (auth issues are this page's unique value)
   return 'danger'
 }
 
-function sortTargets(targets: Target[]): Target[] {
+function sortProbeTargets(targets: Target[]): Target[] {
   return [...targets].sort((a, b) => {
     const ai = CATEGORY_ORDER.indexOf(a.category as (typeof CATEGORY_ORDER)[number])
     const bi = CATEGORY_ORDER.indexOf(b.category as (typeof CATEGORY_ORDER)[number])
@@ -68,7 +76,25 @@ function sortTargets(targets: Target[]): Target[] {
   })
 }
 
-export function SatelliteApiHealthPage() {
+function AuthCell({ target }: { target: Target }) {
+  const level = target.authorization_level?.trim()
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <DenseTag variant={authVariant(target.auth)}>{target.auth}</DenseTag>
+      {level != null && level !== '' && (
+        <span className="font-mono-tabular text-[var(--text-dense-caption)] text-muted-foreground">
+          {level}
+        </span>
+      )}
+    </div>
+  )
+}
+
+export function SatelliteApiHealthPage({
+  onOpenObservability,
+}: {
+  onOpenObservability?: () => void
+} = {}) {
   const focusedEnv = consumeSatelliteApiEnv()
   const [env, setEnv] = useState<MatrixEnv>(focusedEnv ?? 'prod')
   const [selected, setSelected] = useState<Target | null>(null)
@@ -87,37 +113,44 @@ export function SatelliteApiHealthPage() {
   }, [matrixQuery.data])
 
   const matrix = matrices.find(m => m.environment === env)
-  const targets = sortTargets(matrix?.targets ?? [])
-  const apiTargets = targets.filter(t => t.category === 'trade_api')
-  const readiness = summarizeTradeReadiness(targets)
-  const excludedCount = targets.length - readiness.total
-  const readinessOk = readiness.ok === readiness.total && readiness.total > 0
+  const allTargets = matrix?.targets ?? []
+  const writeTargets = useMemo(
+    () =>
+      [...allTargets.filter(t => t.category === 'trade_write')].sort((a, b) =>
+        a.id.localeCompare(b.id),
+      ),
+    [allTargets],
+  )
+  const probeTargets = useMemo(
+    () => sortProbeTargets(allTargets.filter(t => t.category !== 'trade_write')),
+    [allTargets],
+  )
+  const apiTargets = probeTargets.filter(t => t.category === 'trade_api')
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <PageHeader
-        title="API Health"
-        description="Per-environment matrix probes for Trade satellite endpoints — HTTP reachability and ops auth."
+        title="API & Auth Probes"
+        description="Per-environment matrix probes for Trade satellite endpoints — HTTP reachability, ops auth, and D10 blocked write paths. Health verdict → Mission Control → Observability."
       />
 
-      <OpsSection title="Environment matrix" bodyPadding="default" overflow="visible">
+      <OpsSection title="Endpoint probes" bodyPadding="default" overflow="visible">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Environment:</span>
           <SegmentControl value={env} options={[...ENV_OPTIONS]} onChange={v => setEnv(v as MatrixEnv)} />
-          <DenseTag variant={readinessOk ? 'success' : 'warning'}>
-            {matrixQuery.isLoading
-              ? '…'
-              : `${readiness.ok}/${readiness.total} readiness OK`}
-          </DenseTag>
-          {excludedCount > 0 && (
-            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-              {excludedCount} policy / skipped (not scored)
-            </span>
-          )}
           {matrix?.generated_at != null && (
             <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               Probed {new Date(matrix.generated_at).toLocaleString()}
             </span>
+          )}
+          {onOpenObservability != null && (
+            <button
+              type="button"
+              className="focus-strip-link text-[var(--text-dense-caption)] ml-auto"
+              onClick={onOpenObservability}
+            >
+              View Observability
+            </button>
           )}
         </div>
 
@@ -138,14 +171,14 @@ export function SatelliteApiHealthPage() {
                   Loading matrix…
                 </DenseTableCell>
               </DenseTableRow>
-            ) : targets.length === 0 ? (
+            ) : probeTargets.length === 0 ? (
               <DenseTableRow>
                 <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
-                  No targets for {env}
+                  No probe targets for {env}
                 </DenseTableCell>
               </DenseTableRow>
             ) : (
-              targets.map(target => (
+              probeTargets.map(target => (
                 <DenseTableRow
                   key={target.id}
                   className="cursor-pointer hover:bg-[var(--secondary)]"
@@ -158,7 +191,7 @@ export function SatelliteApiHealthPage() {
                     <span className="font-mono-tabular">{target.reachability}</span>
                   </DenseTableCell>
                   <DenseTableCell>
-                    <DenseTag variant={authVariant(target.auth)}>{target.auth}</DenseTag>
+                    <AuthCell target={target} />
                   </DenseTableCell>
                   <DenseTableCell className="max-w-xs truncate text-[var(--muted-foreground)]">
                     {target.detail || '—'}
@@ -172,6 +205,59 @@ export function SatelliteApiHealthPage() {
         <p className="m-0 mt-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {apiTargets.length} Trade API domains · click a row for URL and authorization detail.
         </p>
+      </OpsSection>
+
+      <OpsSection
+        variant="flat"
+        title="Write paths blocked (D10)"
+        bodyPadding="default"
+        overflow="visible"
+        description="Platform L0 must not probe live write paths (trade-execution-freeze / R-DV3). Auth=blocked is intentional governance evidence, not a reachability failure."
+      >
+        {writeTargets.length === 0 ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
+            {matrixQuery.isLoading ? 'Loading…' : 'No trade_write targets in this matrix.'}
+          </p>
+        ) : (
+          <>
+            <p className="m-0 mb-2 text-[var(--text-dense-caption)] text-muted-foreground">
+              {writeTargets.length === 1
+                ? '1 write-path target blocked by policy (D10)'
+                : `${writeTargets.length} write-path targets blocked by policy (D10)`}
+            </p>
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Target</DenseTableHead>
+                  <DenseTableHead>Reach</DenseTableHead>
+                  <DenseTableHead>Auth</DenseTableHead>
+                  <DenseTableHead>Detail</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {writeTargets.map(target => (
+                  <DenseTableRow
+                    key={target.id}
+                    className="cursor-pointer hover:bg-[var(--secondary)]"
+                    onClick={() => setSelected(target)}
+                  >
+                    <DenseTableCell className="font-mono-tabular font-medium">{target.id}</DenseTableCell>
+                    <DenseTableCell>
+                      <StatusLamp value={target.reachability} kind="reach" />{' '}
+                      <span className="font-mono-tabular">{target.reachability}</span>
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      <AuthCell target={target} />
+                    </DenseTableCell>
+                    <DenseTableCell className="max-w-xs truncate text-[var(--muted-foreground)]">
+                      {target.detail || '—'}
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          </>
+        )}
       </OpsSection>
 
       <Sheet open={selected != null} onOpenChange={open => !open && setSelected(null)}>
@@ -195,7 +281,9 @@ export function SatelliteApiHealthPage() {
                 </div>
                 <div>
                   <dt className="text-[var(--muted-foreground)]">Auth</dt>
-                  <dd className="m-0">{selected.auth}</dd>
+                  <dd className="m-0">
+                    <AuthCell target={selected} />
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-[var(--muted-foreground)]">Authorization level</dt>

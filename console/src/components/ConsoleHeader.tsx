@@ -9,14 +9,12 @@ export type ConsoleHeaderAmbientAgent = {
 }
 
 export function ConsoleHeader({
-  title,
   plane,
   healthy,
   onRefresh,
   ambientAgent,
   children,
 }: {
-  title?: string
   /** Sidebar plane — system domain label shown in header chrome. */
   plane?: ConsoleNavPlane
   healthy: boolean | undefined
@@ -35,17 +33,10 @@ export function ConsoleHeader({
     >
       <SidebarTrigger />
 
-      {title != null && title !== '' && (
-        <div className="flex min-w-0 items-baseline gap-2">
-          {plane != null && (
-            <span className="hidden shrink-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
-              {plane}
-            </span>
-          )}
-          <h1 className="min-w-0 truncate text-sm font-semibold text-foreground sm:max-w-[11rem]">
-            {title}
-          </h1>
-        </div>
+      {plane != null && (
+        <span className="hidden shrink-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+          {plane}
+        </span>
       )}
 
       <div className="flex-1" />

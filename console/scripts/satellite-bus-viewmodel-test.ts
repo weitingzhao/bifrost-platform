@@ -255,6 +255,17 @@ check('g) unrelated Ground/ops degraded => no verdict poisoning', () => {
   assert.equal(vm.attention.length, 0)
 })
 
+check('h) K8s workload readiness is evidence-only — cannot enter the verdict', () => {
+  // Boundary guard: the view-model input deliberately has no workloads field,
+  // so K8s workload evidence cannot influence Bus Health by construction.
+  type WorkloadsExcluded = 'workloads' extends keyof SatelliteBusViewModelInput ? never : true
+  const workloadsExcluded: WorkloadsExcluded = true
+  assert.equal(workloadsExcluded, true)
+  // And no verdict copy attributes Bus Health to K8s workload readiness.
+  const vm = buildSatelliteBusViewModel(input('stg', { stg: bus('stg', { daemonPolicyOff: true }) }))
+  assert.doesNotMatch(JSON.stringify(vm), /workload|k8s/i)
+})
+
 check('daemon unexpected down (not policy-off) => DEGRADED runtime issue, not UNAVAILABLE', () => {
   const vm = buildSatelliteBusViewModel(
     input('dev', { dev: bus('dev', { daemonAlive: false, accountSyncOk: false }) }),

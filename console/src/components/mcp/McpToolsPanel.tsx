@@ -9,12 +9,23 @@ import {
   DenseTableHeader,
   DenseTableRow,
   DenseTag,
+  DenseTagButton,
 } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import type { McpToolLevel, McpToolView } from '@/api/types'
+import type {
+  McpToolFunction,
+  McpToolLevel,
+  McpToolOwnerRole,
+  McpToolView,
+} from '@/api/types'
 import { fetchMcpStatus, fetchMcpTools } from '@/api/platform'
 import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  SYSTEM_DOMAIN_ICON,
+  SYSTEM_DOMAIN_VARIANT,
+  type SystemDomainId,
+} from '@/lib/architecture/systemDomainCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
@@ -56,41 +67,130 @@ function buildCursorConfigJson(status: {
   )
 }
 
-const ACCEPTANCE_STEPS = [
-  {
-    phase: 'P1–P2',
-    title: 'Control Room + Cluster wizard',
-    path: 'Mission Control → Control Room',
-    checks: 'Work Tracks build lane shows Phase P5 · 10/10. Runtime → Cluster → wizard (Maintain / Compute off / Join).',
-  },
-  {
-    phase: 'P3',
-    title: 'GitOps + Tekton execution',
-    path: 'Program → Delivery → Operate',
-    checks: 'GitOps panel: Sync (operator) / Rollback (admin). Pipeline runs: Start run + logs.',
-  },
-  {
-    phase: 'P4',
-    title: 'Stack install wizard',
-    path: 'Program → Delivery → Operate',
-    checks: 'CI/CD stack install wizard: Registry → Gitea → Tekton steps with admin confirm.',
-  },
-  {
-    phase: 'P5',
-    title: 'MCP catalog & Cursor setup',
-    path: 'Governance → MCP Contract',
-    checks: 'Tool catalog mirrors platform-api. Paste Cursor config into ~/.cursor/mcp.json — verify in Cursor Settings → Tools & MCP.',
-  },
+/** Display order for functional capability domains (matches Go ValidCapabilities). */
+const CAPABILITY_ORDER = [
+  'meta',
+  'mission',
+  'cluster',
+  'gitops',
+  'delivery',
+  'stack',
+  'release',
+  'agent',
 ] as const
+
+type CapabilityId = (typeof CAPABILITY_ORDER)[number]
+
+const CAPABILITY_META: Record<CapabilityId, { label: string; purpose: string }> = {
+  meta: {
+    label: 'MCP Runtime',
+    purpose: 'Discover the MCP surface and verify the bridge runtime.',
+  },
+  mission: {
+    label: 'Mission Intelligence',
+    purpose: 'Read environment truth, context, audit evidence, and mission verification.',
+  },
+  cluster: {
+    label: 'Cluster Operations',
+    purpose: 'Observe, provision, and operate Kubernetes nodes and workloads.',
+  },
+  gitops: {
+    label: 'GitOps',
+    purpose: 'Inspect, synchronize, and roll back Argo CD applications.',
+  },
+  delivery: {
+    label: 'Delivery Pipelines',
+    purpose: 'Inspect and operate Tekton pipelines, runs, logs, and revisions.',
+  },
+  stack: {
+    label: 'Platform Stack',
+    purpose: 'Inspect, install, and upgrade platform add-ons.',
+  },
+  release: {
+    label: 'Release Control',
+    purpose: 'Evaluate release evidence, gates, smoke checks, and Owner sign-off.',
+  },
+  agent: {
+    label: 'Agent Operations',
+    purpose: 'Coordinate agent sessions, remediation, governance, and handoffs.',
+  },
+}
+
+const FUNCTION_LABEL: Record<McpToolFunction, string> = {
+  discover: 'Discover',
+  observe: 'Observe',
+  verify: 'Verify',
+  provision: 'Provision',
+  operate: 'Operate',
+  deliver: 'Deliver',
+  govern: 'Govern',
+  release: 'Release',
+}
+
+const OWNER_ROLE_META: Record<
+  McpToolOwnerRole,
+  { label: string; domain: SystemDomainId }
+> = {
+  rocket: { label: 'Rocket', domain: 'rocket' },
+  satellite: { label: 'Satellite', domain: 'satellite' },
+  engineer: { label: 'Engineer', domain: 'engineer' },
+  ground_systems: { label: 'Ground Systems', domain: 'ground-systems' },
+  subcontractors: { label: 'Subcontractors', domain: 'subcontractors' },
+}
+
+/** Same selected/unselected chip pattern as Defects / Audit filter rows. */
+function capabilityChipClass(selected: boolean): string {
+  return selected
+    ? 'ring-1 ring-current/40 brightness-110'
+    : 'opacity-55 hover:opacity-90'
+}
+
+function capabilitySortKey(capability: string | undefined): number {
+  if (capability == null || capability === '') return 99
+  const idx = (CAPABILITY_ORDER as readonly string[]).indexOf(capability)
+  return idx === -1 ? 98 : idx
+}
+
+function OwnerRoleCell({ role }: { role: McpToolOwnerRole }) {
+  const meta = OWNER_ROLE_META[role]
+  const Icon = SYSTEM_DOMAIN_ICON[meta.domain]
+  return (
+    <DenseTag
+      variant={SYSTEM_DOMAIN_VARIANT[meta.domain]}
+      className="inline-flex items-center gap-1 whitespace-nowrap"
+    >
+      <Icon className="size-3 shrink-0" aria-hidden="true" />
+      {meta.label}
+    </DenseTag>
+  )
+}
 
 export function McpToolsPanel() {
   const [copyState, setCopyState] = useState<CopyState>('idle')
+  const [capabilityFilter, setCapabilityFilter] = useState<'all' | CapabilityId>('all')
+  const [showSetup, setShowSetup] = useState(false)
 
   const toolsQuery = useQuery({ queryKey: ['mcp', 'tools'], queryFn: fetchMcpTools })
   const statusQuery = useQuery({ queryKey: ['mcp', 'status'], queryFn: fetchMcpStatus })
 
-  const tools = toolsQuery.data?.tools ?? []
+  const tools = useMemo(() => {
+    const raw = toolsQuery.data?.tools ?? []
+    return [...raw].sort((a, b) => {
+      const ca = capabilitySortKey(a.capability)
+      const cb = capabilitySortKey(b.capability)
+      if (ca !== cb) return ca - cb
+      return a.name.localeCompare(b.name)
+    })
+  }, [toolsQuery.data?.tools])
   const implemented = tools.filter(t => t.implemented)
+  const capabilityGroups = useMemo(
+    () =>
+      CAPABILITY_ORDER.map(capability => ({
+        capability,
+        tools: tools.filter(tool => tool.capability === capability),
+      })).filter(group => group.tools.length > 0),
+    [tools],
+  )
   const catalogReachable = toolsQuery.isSuccess && statusQuery.isSuccess
   const catalogError =
     toolsQuery.error != null
@@ -119,141 +219,161 @@ export function McpToolsPanel() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <OpsSection
-        title="MCP catalog & setup (P5)"
-        description="Live tool catalog from platform-api. The stdio MCP server runs inside Cursor — this page does not monitor that process."
+        title={`Tool catalog (${implemented.length} implemented)`}
+        description="Grouped by Capability (where it works). Function states what it does; Owner Role states which Apollo team it primarily serves. Level remains the authorization boundary."
         actions={
-          <Button size="sm" variant="outline" disabled={cursorJson === ''} onClick={() => void handleCopyCursor()}>
-            {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Cursor config'}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setShowSetup(v => !v)}>
+              {showSetup ? 'Hide setup' : 'Setup'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={cursorJson === ''}
+              onClick={() => void handleCopyCursor()}
+            >
+              {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Cursor config'}
+            </Button>
+          </div>
         }
-        bodyPadding="default"
+        bodyPadding="none"
         overflow="visible"
       >
         {toolsQuery.isLoading || statusQuery.isLoading ? (
-          <p className="m-0 text-[var(--muted-foreground)]">Loading catalog from platform-api…</p>
+          <div className="px-3 py-2 text-[var(--muted-foreground)]">Loading catalog from platform-api…</div>
         ) : catalogError != null ? (
-          <p className="m-0 text-[var(--destructive)]">{catalogError}</p>
-        ) : statusQuery.data != null ? (
-          <div className="flex flex-col gap-3 text-[var(--text-dense-meta)]">
-            <div className="flex flex-wrap items-center gap-2">
-              <DenseTag variant={catalogReachable ? 'success' : 'neutral'}>
-                {catalogReachable ? 'API catalog reachable' : 'Catalog loading'}
-              </DenseTag>
-              <DenseTag variant="neutral">Cursor MCP runtime not observable here</DenseTag>
-              <span className="text-[var(--muted-foreground)]">
-                {statusQuery.data.server_name} v{statusQuery.data.server_version} ·{' '}
-                {statusQuery.data.implemented_count}/{statusQuery.data.tool_count} tools · transport{' '}
-                {statusQuery.data.transport}
-              </span>
+          <div className="px-3 py-2 text-[var(--destructive)]">{catalogError}</div>
+        ) : (
+          <div className="flex flex-col text-[var(--text-dense-meta)]">
+            {statusQuery.data != null ? (
+              <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
+                <DenseTag variant={catalogReachable ? 'success' : 'neutral'}>
+                  {catalogReachable ? 'API reachable' : 'Catalog loading'}
+                </DenseTag>
+                <span className="text-[var(--muted-foreground)]">
+                  {statusQuery.data.server_name} v{statusQuery.data.server_version} ·{' '}
+                  {statusQuery.data.implemented_count}/{statusQuery.data.tool_count} tools · transport{' '}
+                  {statusQuery.data.transport} · Cursor MCP runtime not observable here
+                </span>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2 px-3 py-2">
+              <DenseTagButton
+                variant={capabilityFilter === 'all' ? 'info' : 'neutral'}
+                aria-pressed={capabilityFilter === 'all'}
+                className={capabilityChipClass(capabilityFilter === 'all')}
+                onClick={() => setCapabilityFilter('all')}
+              >
+                All · {tools.length}
+              </DenseTagButton>
+              {capabilityGroups.map(group => (
+                <DenseTagButton
+                  key={group.capability}
+                  variant={capabilityFilter === group.capability ? 'info' : 'neutral'}
+                  aria-pressed={capabilityFilter === group.capability}
+                  className={capabilityChipClass(capabilityFilter === group.capability)}
+                  onClick={() =>
+                    setCapabilityFilter(prev => (prev === group.capability ? 'all' : group.capability))
+                  }
+                >
+                  {CAPABILITY_META[group.capability].label} · {group.tools.length}
+                </DenseTagButton>
+              ))}
             </div>
 
-            <p className="m-0 font-mono-tabular text-[var(--muted-foreground)]">
-              platform-api: {statusQuery.data.platform_api_url} · script: {statusQuery.data.script_path}
-            </p>
-
-            <div className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2">
-              <p className="m-0 font-medium text-[var(--foreground)]">Cursor setup</p>
-              <ol className="m-0 mt-1 list-decimal space-y-1 pl-4 text-[var(--muted-foreground)]">
-                <li>
-                  Open <code className="font-mono-tabular">~/.cursor/mcp.json</code> (Cursor Settings → Tools &amp; MCP →
-                  Open JSON). File must be valid JSON — an empty file causes{' '}
-                  <code className="font-mono-tabular">Unexpected end of JSON input</code>.
-                </li>
-                <li>
-                  Paste the copied config (merge with existing <code className="font-mono-tabular">mcpServers</code>{' '}
-                  if needed). Set{' '}
-                  <code className="font-mono-tabular">PLATFORM_OPERATOR_TOKEN</code> to{' '}
-                  <code className="font-mono-tabular">platform-operator-dev</code> or{' '}
-                  <code className="font-mono-tabular">platform-admin-dev</code>.
-                </li>
-                <li>
-                  Restart Cursor or reload MCP. Confirm under Settings → Tools &amp; MCP that{' '}
-                  <code className="font-mono-tabular">bifrost-platform</code> shows tools (not &quot;No MCP Tools&quot;).
-                </li>
-                <li>
-                  In Agent chat, invoke <code className="font-mono-tabular">platform_mcp_health</code> to verify the
-                  stdio server can reach platform-api.
-                </li>
-              </ol>
-            </div>
+            {showSetup && statusQuery.data != null ? (
+              <div className="mx-3 mb-2 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+                <p className="m-0 font-medium text-[var(--foreground)]">Cursor setup</p>
+                <p className="m-0 mt-1 font-mono-tabular text-[var(--muted-foreground)]">
+                  platform-api: {statusQuery.data.platform_api_url} · script: {statusQuery.data.script_path}
+                </p>
+                <ol className="m-0 mt-1 list-decimal space-y-1 pl-4 text-[var(--muted-foreground)]">
+                  <li>
+                    Open <code className="font-mono-tabular">~/.cursor/mcp.json</code> (Cursor Settings → Tools &amp;
+                    MCP → Open JSON). File must be valid JSON — an empty file causes{' '}
+                    <code className="font-mono-tabular">Unexpected end of JSON input</code>.
+                  </li>
+                  <li>
+                    Paste the copied config (merge with existing <code className="font-mono-tabular">mcpServers</code>{' '}
+                    if needed). Set <code className="font-mono-tabular">PLATFORM_OPERATOR_TOKEN</code> to{' '}
+                    <code className="font-mono-tabular">platform-operator-dev</code> or{' '}
+                    <code className="font-mono-tabular">platform-admin-dev</code>.
+                  </li>
+                  <li>
+                    Restart Cursor or reload MCP. Confirm under Settings → Tools &amp; MCP that{' '}
+                    <code className="font-mono-tabular">bifrost-platform</code> shows tools (not &quot;No MCP
+                    Tools&quot;).
+                  </li>
+                  <li>
+                    In Agent chat, invoke <code className="font-mono-tabular">platform_mcp_health</code> to verify the
+                    stdio server can reach platform-api.
+                  </li>
+                </ol>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        )}
       </OpsSection>
 
-      <CatalogSection title="Build track UI acceptance (P1–P5)">
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Phase</DenseTableHead>
-              <DenseTableHead>Area</DenseTableHead>
-              <DenseTableHead>Navigate</DenseTableHead>
-              <DenseTableHead>Verify</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {ACCEPTANCE_STEPS.map(step => (
-              <DenseTableRow key={step.phase}>
-                <DenseTableCell>
-                  <DenseTag variant="category">{step.phase}</DenseTag>
-                </DenseTableCell>
-                <DenseTableCell className="font-medium">{step.title}</DenseTableCell>
-                <DenseTableCell className="text-[var(--muted-foreground)]">{step.path}</DenseTableCell>
-                <DenseTableCell className="text-[var(--muted-foreground)]">{step.checks}</DenseTableCell>
-              </DenseTableRow>
-            ))}
-          </DenseTableBody>
-        </DenseDataTable>
-      </CatalogSection>
-
-      <CatalogSection title={`Tool catalog (${implemented.length} implemented)`}>
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Tool</DenseTableHead>
-              <DenseTableHead>Level</DenseTableHead>
-              <DenseTableHead>API</DenseTableHead>
-              <DenseTableHead>Phase</DenseTableHead>
-              <DenseTableHead>Status</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {toolsQuery.isLoading ? (
-              <DenseTableRow>
-                <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
-                  Loading catalog…
-                </DenseTableCell>
-              </DenseTableRow>
-            ) : tools.length === 0 ? (
-              <DenseTableRow>
-                <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
-                  No tools in catalog
-                </DenseTableCell>
-              </DenseTableRow>
-            ) : (
-              tools.map((tool: McpToolView) => (
-                <DenseTableRow key={tool.name}>
-                  <DenseTableCell>
-                    <div className="font-mono-tabular font-medium">{tool.name}</div>
-                    <div className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{tool.description}</div>
-                  </DenseTableCell>
-                  <DenseTableCell>
-                    <DenseTag variant={levelTagVariant(tool.level)}>{tool.level}</DenseTag>
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
-                    {tool.method != null && tool.method !== '' ? `${tool.method} ${tool.route ?? ''}` : '—'}
-                  </DenseTableCell>
-                  <DenseTableCell>{tool.phase ?? '—'}</DenseTableCell>
-                  <DenseTableCell>
-                    <DenseTag variant={tool.implemented ? 'success' : 'neutral'}>
-                      {tool.implemented ? 'implemented' : 'planned'}
-                    </DenseTag>
-                  </DenseTableCell>
-                </DenseTableRow>
-              ))
-            )}
-          </DenseTableBody>
-        </DenseDataTable>
-      </CatalogSection>
+      {capabilityGroups
+        .filter(group => capabilityFilter === 'all' || group.capability === capabilityFilter)
+        .map(group => {
+        const meta = CAPABILITY_META[group.capability]
+        return (
+          <CatalogSection
+            key={group.capability}
+            title={`${meta.label} · ${group.tools.length}`}
+            description={`${meta.purpose} Capability: ${group.capability}.`}
+          >
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Tool</DenseTableHead>
+                  <DenseTableHead>Function</DenseTableHead>
+                  <DenseTableHead>Owner Role</DenseTableHead>
+                  <DenseTableHead>Level</DenseTableHead>
+                  <DenseTableHead>API</DenseTableHead>
+                  <DenseTableHead>Status</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {group.tools.map((tool: McpToolView) => (
+                  <DenseTableRow key={tool.name}>
+                    <DenseTableCell>
+                      <div className="font-mono-tabular font-medium">{tool.name}</div>
+                      <div className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                        {tool.description}
+                      </div>
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      {tool.function != null ? (
+                        <DenseTag variant="neutral">{FUNCTION_LABEL[tool.function]}</DenseTag>
+                      ) : (
+                        '—'
+                      )}
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      {tool.owner_role != null ? <OwnerRoleCell role={tool.owner_role} /> : '—'}
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag variant={levelTagVariant(tool.level)}>{tool.level}</DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
+                      {tool.method != null && tool.method !== '' ? `${tool.method} ${tool.route ?? ''}` : '—'}
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag variant={tool.implemented ? 'success' : 'neutral'}>
+                        {tool.implemented ? 'implemented' : 'planned'}
+                      </DenseTag>
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          </CatalogSection>
+        )
+      })}
     </div>
   )
 }

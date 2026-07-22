@@ -3,9 +3,14 @@ import {
   AGENT_TASK_RELATIONS,
   agentTaskRelationKindLabel,
   agentTasksByDomain,
+  allAgentTasks,
   type AgentTaskEntry,
   type AgentTaskRelationKind,
 } from '@/lib/agent/agentTaskCatalog'
+import {
+  liveStatusStroke,
+  type AgentCapabilityLiveStatus,
+} from '@/lib/agent/agentCapabilityViewModel'
 
 /**
  * Deterministic node+edge graph of the agent capabilities.
@@ -13,6 +18,9 @@ import {
  *   0 Read/Observe · 1 Act/Write · 2 Escalation.
  * Edges = AGENT_TASK_RELATIONS (escalation / approval / on-failure), each
  * with a distinct stroke so "who triggers whom" reads at a glance.
+ *
+ * Optional liveStatusByTaskId overlays StatusLamp-consistent colors without
+ * changing Governance → Agent System (design-only default).
  */
 
 const COL_X = [168, 410, 638]
@@ -49,8 +57,33 @@ interface NodePos {
   cy: number
 }
 
-export function AgentSystemGraph() {
+export type AgentSystemGraphProps = {
+  /** When set, node stroke/fill follows live status instead of design tier. */
+  liveStatusByTaskId?: Record<string, AgentCapabilityLiveStatus>
+  /** Soft-highlight relation keys `fromId→toId` (Wave 2 escalation focus). */
+  highlightedEdgeKeys?: ReadonlySet<string> | string[]
+  /** Dim nodes whose ids are not in this set (filter chips). */
+  visibleTaskIds?: ReadonlySet<string> | string[]
+  onNodeClick?: (taskId: string) => void
+}
+
+function asIdSet(ids: ReadonlySet<string> | string[] | undefined): Set<string> | null {
+  if (ids == null) return null
+  return ids instanceof Set ? ids : new Set(ids)
+}
+
+export function AgentSystemGraph({
+  liveStatusByTaskId,
+  highlightedEdgeKeys,
+  visibleTaskIds,
+  onNodeClick,
+}: AgentSystemGraphProps = {}) {
   const [hoverId, setHoverId] = useState<string | null>(null)
+  // Catalog hydrates async from GET /api/v1/agent-tasks — must recompute when it fills.
+  const taskCount = allAgentTasks().length
+  const liveMode = liveStatusByTaskId != null
+  const highlightSet = useMemo(() => asIdSet(highlightedEdgeKeys), [highlightedEdgeKeys])
+  const visibleSet = useMemo(() => asIdSet(visibleTaskIds), [visibleTaskIds])
 
   const { nodes, vbHeight } = useMemo(() => {
     const groups = agentTasksByDomain()
@@ -62,9 +95,12 @@ export function AgentSystemGraph() {
         placed.push({ task, cx: COL_X[col], cy })
       }
     })
-    const height = TOP_Y + (groups.length - 1) * ROW_GAP + NODE_H / 2 + 28
+    const height =
+      groups.length === 0
+        ? 80
+        : TOP_Y + (groups.length - 1) * ROW_GAP + NODE_H / 2 + 28
     return { nodes: placed, vbHeight: height }
-  }, [])
+  }, [taskCount])
 
   const posById = useMemo(() => {
     const m = new Map<string, NodePos>()
@@ -88,17 +124,26 @@ export function AgentSystemGraph() {
     const ty = to.cy
     const dx = Math.max(28, (tx - sx) / 2)
     const path = `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`
-    const active = hoverId == null || hoverId === rel.fromId || hoverId === rel.toId
-    return { rel, path, active, mx: (sx + tx) / 2, my: (sy + ty) / 2 }
+    const edgeKey = `${rel.fromId}→${rel.toId}`
+    const softHot = highlightSet?.has(edgeKey) ?? false
+    const active =
+      hoverId == null || hoverId === rel.fromId || hoverId === rel.toId || softHot
+    return { rel, path, active, softHot, edgeKey, mx: (sx + tx) / 2, my: (sy + ty) / 2 }
   }).filter((e): e is NonNullable<typeof e> => e != null)
 
   return (
     <div className="agent-graph">
+      {taskCount === 0 ? (
+        <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Loading capability map from platform-api…
+        </p>
+      ) : (
+      <>
       <svg
         className="agent-graph__svg"
         viewBox={`0 0 ${VB_W} ${vbHeight}`}
         role="img"
-        aria-label="Agent capability relationship graph"
+        aria-label={liveMode ? 'Live agent capability map' : 'Agent capability relationship graph'}
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
@@ -133,11 +178,11 @@ export function AgentSystemGraph() {
         ))}
 
         {/* Edges */}
-        {edges.map(({ rel, path, active }) => (
+        {edges.map(({ rel, path, active, softHot }) => (
           <path
             key={`${rel.fromId}-${rel.toId}`}
             d={path}
-            className={`${edgeClass(rel.kind)}${active ? '' : ' agent-graph-edge--dim'}`}
+            className={`${edgeClass(rel.kind)}${active ? '' : ' agent-graph-edge--dim'}${softHot ? ' agent-graph-edge--live-hot' : ''}`}
             markerEnd={`url(#agent-graph-arrow-${rel.kind})`}
           >
             <title>{`${agentTaskRelationKindLabel(rel.kind)} — ${rel.label}`}</title>
@@ -146,17 +191,34 @@ export function AgentSystemGraph() {
 
         {/* Nodes */}
         {nodes.map(({ task, cx, cy }) => {
-          const dim = hoverId != null && hoverId !== task.id &&
-            !edges.some(e => (e.rel.fromId === hoverId && e.rel.toId === task.id) ||
-              (e.rel.toId === hoverId && e.rel.fromId === task.id))
+          const filteredOut = visibleSet != null && !visibleSet.has(task.id)
+          const dim =
+            filteredOut ||
+            (hoverId != null &&
+              hoverId !== task.id &&
+              !edges.some(
+                e =>
+                  (e.rel.fromId === hoverId && e.rel.toId === task.id) ||
+                  (e.rel.toId === hoverId && e.rel.fromId === task.id),
+              ))
+          const liveStatus = liveStatusByTaskId?.[task.id]
+          const stroke =
+            liveStatus != null ? liveStatusStroke(liveStatus) : tierStroke(task.tier)
+          const clickable = onNodeClick != null
           return (
             <g
               key={task.id}
-              className={`agent-graph-node${dim ? ' agent-graph-node--dim' : ''}`}
+              className={`agent-graph-node${dim ? ' agent-graph-node--dim' : ''}${clickable ? ' agent-graph-node--clickable' : ''}${liveStatus != null ? ` agent-graph-node--live-${liveStatus}` : ''}`}
               onMouseEnter={() => setHoverId(task.id)}
               onMouseLeave={() => setHoverId(null)}
+              onClick={clickable ? () => onNodeClick(task.id) : undefined}
+              style={clickable ? { cursor: 'pointer' } : undefined}
             >
-              <title>{`${task.label} — ${task.description}`}</title>
+              <title>
+                {liveStatus != null
+                  ? `${task.label} — ${liveStatus}${task.description ? ` · ${task.description}` : ''}`
+                  : `${task.label} — ${task.description}`}
+              </title>
               <rect
                 x={cx - NODE_W / 2}
                 y={cy - NODE_H / 2}
@@ -164,13 +226,24 @@ export function AgentSystemGraph() {
                 height={NODE_H}
                 rx={8}
                 className="agent-graph-node__box"
-                style={{ stroke: tierStroke(task.tier) }}
+                style={{
+                  stroke,
+                  ...(liveStatus === 'running' || liveStatus === 'awaiting'
+                    ? {
+                        fill: `color-mix(in srgb, ${stroke} 12%, var(--card))`,
+                      }
+                    : liveStatus === 'failed'
+                      ? {
+                          fill: `color-mix(in srgb, ${stroke} 10%, var(--card))`,
+                        }
+                      : {}),
+                }}
               />
               <text x={cx} y={cy - 3} textAnchor="middle" className="agent-graph-node__label">
                 {task.label}
               </text>
               <text x={cx} y={cy + 12} textAnchor="middle" className="agent-graph-node__action">
-                {task.action}
+                {liveStatus != null ? `${task.action} · ${liveStatus}` : task.action}
               </text>
             </g>
           )
@@ -185,6 +258,8 @@ export function AgentSystemGraph() {
           </span>
         ))}
       </div>
+      </>
+      )}
     </div>
   )
 }

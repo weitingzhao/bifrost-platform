@@ -65,6 +65,7 @@ import {
   tradeSingleEnvScope,
   type BusStatusScope,
 } from '@/lib/satellite/busStatusScope'
+import { filterTradeApiTargets, tradeApiTargetCounts } from '@/lib/satellite/tradeApiTargets'
 import {
   buildSatelliteBusViewModel,
   busHealthToReach,
@@ -102,23 +103,6 @@ const CRITICAL_PROCESS_PATTERNS = [
   { pattern: /celery|worker/i, label: 'Celery worker' },
   { pattern: /flower/i, label: 'Flower' },
 ]
-
-function tradeApiTargets(matrix: MatrixResponse | undefined): { ok: number; total: number } {
-  if (matrix == null) return { ok: 0, total: 0 }
-  const tradeTargets = filterTradeApiTargets(matrix)
-  const ok = tradeTargets.filter(t => t.reachability === 'ok').length
-  return { ok, total: tradeTargets.length }
-}
-
-function filterTradeApiTargets(matrix: MatrixResponse): Target[] {
-  return matrix.targets.filter(
-    t =>
-      t.category === 'trade_api' ||
-      t.category === 'trade_frontend' ||
-      t.id === 'nginx-spa' ||
-      t.id.startsWith('api-'),
-  )
-}
 
 /** `policy-off` must always surface as EXPECTED OFF in visible copy. */
 function displayReachLabel(label: string): string {
@@ -336,7 +320,7 @@ function RocketSocketBusRow({ row }: { row: SocketHealthRow }) {
       <DenseTableHeader>
         <DenseTableHeadRow>
           <DenseTableHead>Service</DenseTableHead>
-          <DenseTableHead>Role</DenseTableHead>
+          <DenseTableHead className="whitespace-nowrap">Requirement</DenseTableHead>
           <DenseTableHead>Reach</DenseTableHead>
           <DenseTableHead>Detail</DenseTableHead>
         </DenseTableHeadRow>
@@ -508,7 +492,7 @@ function ConsumerTable({
       <DenseTableHeader>
         <DenseTableHeadRow>
           <DenseTableHead>Consumer</DenseTableHead>
-          <DenseTableHead>Role</DenseTableHead>
+          <DenseTableHead className="whitespace-nowrap">Requirement</DenseTableHead>
           <DenseTableHead>State</DenseTableHead>
           <DenseTableHead>Detail</DenseTableHead>
           <DenseTableHead className="w-14" />
@@ -672,6 +656,7 @@ function inspectView(target: InspectTarget): InspectView {
 export function SatelliteBusPage({
   onOpenCluster,
   onOpenTelemetry,
+  onOpenObservability,
   onOpenPluginGallery,
   onOpenApiHealth,
   ambientJobId,
@@ -679,6 +664,7 @@ export function SatelliteBusPage({
 }: {
   onOpenCluster?: () => void
   onOpenTelemetry?: () => void
+  onOpenObservability?: () => void
   onOpenPluginGallery?: () => void
   onOpenApiHealth?: () => void
 } & AmbientAgentShellProps) {
@@ -782,7 +768,7 @@ export function SatelliteBusPage({
   const { fleet } = useFleetSnapshot()
   const payloadRows = useMemo(() => projectPayloadReadinessRows(fleet), [fleet])
   const envMatrix = matrices.find(m => m.environment === tradeEnv)
-  const tradeApi = tradeApiTargets(envMatrix)
+  const tradeApi = tradeApiTargetCounts(envMatrix)
 
   const busDeepAllQuery = useQuery({
     queryKey: ['satellite', 'bus-deep', 'all'],
@@ -1031,7 +1017,7 @@ export function SatelliteBusPage({
             />
             {onOpenApiHealth != null && (
               <button type="button" className="focus-strip-link text-[var(--text-dense-caption)]" onClick={onOpenApiHealth}>
-                API Health
+                API & Auth Probes
               </button>
             )}
             {onOpenPluginGallery != null && (
@@ -1065,7 +1051,7 @@ export function SatelliteBusPage({
             APIs {viewModel.metrics.apiOk}/{viewModel.metrics.apiTotal}
           </span>
           <span className="font-mono-tabular">
-            runtime {viewModel.metrics.runtimeOk}/{viewModel.metrics.runtimeTotal}
+            monitor consumers {viewModel.metrics.runtimeOk}/{viewModel.metrics.runtimeTotal}
           </span>
           <span className="ml-auto">Bus health only — not Launch/Fleet GO&#8201;/&#8201;NO-GO</span>
         </div>
@@ -1182,7 +1168,7 @@ export function SatelliteBusPage({
             title="Runtime consumers"
             bodyPadding="none"
             overflow="hidden"
-            description="Daemon / APIs / workers / account sync — issues here degrade the bus verdict but never mark it unavailable"
+            description="Monitor consumers — trading daemon / Trade APIs / Celery workers / account sync. Issues here degrade the bus verdict but never mark it unavailable. K8s workload readiness is Evidence and does not affect Bus Health"
           >
             <ConsumerTable
               rows={viewModel.runtimeConsumers}
@@ -1235,6 +1221,7 @@ export function SatelliteBusPage({
             observabilityLoading={observabilityQuery.isLoading}
             onOpenCluster={onOpenCluster}
             onOpenTelemetry={onOpenTelemetry}
+            onOpenObservability={onOpenObservability}
           />
         </div>
       </SecondaryGroup>
@@ -1299,7 +1286,7 @@ export function SatelliteBusPage({
           title="Trade API reachability"
           bodyPadding="none"
           overflow="hidden"
-          description={`Matrix L0 HTTP probes for ${tradeEnv.toUpperCase()} · full detail on API Health`}
+          description={`Matrix L0 HTTP probes for ${tradeEnv.toUpperCase()} · full detail on API & Auth Probes`}
         >
           <TradeApiReachTable targets={tradeApiTargetRows} loading={matrixQuery.isLoading} />
         </OpsSection>
@@ -1308,7 +1295,7 @@ export function SatelliteBusPage({
           title="Critical processes"
           bodyPadding="none"
           overflow="hidden"
-          description={`K8s workloads in ${ns}`}
+          description={`K8s workload readiness in ${ns} — evidence only, not part of the Bus Health verdict`}
         >
           <DenseDataTable>
             <DenseTableHeader>
@@ -1424,7 +1411,7 @@ export function SatelliteBusPage({
                       className="focus-strip-link text-[var(--text-dense-caption)]"
                       onClick={onOpenApiHealth}
                     >
-                      API Health
+                      API & Auth Probes
                     </button>
                   )}
                 </div>

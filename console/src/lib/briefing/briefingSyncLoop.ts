@@ -189,7 +189,7 @@ export function buildBriefingSyncLoopSteps(input: {
   let approvalDetail = 'No approval needed when scan is clean'
   if (pending.length > 0) {
     approvalStatus = 'active'
-    approvalDetail = `${pending.length} pending — approve or reject below`
+    approvalDetail = `${pending.length} pending — approve or reject in Agent Desk`
   } else if (latestProposal?.status === 'rejected') {
     approvalStatus = 'ok'
     approvalDetail = `Last proposal rejected · ${latestProposal.id.slice(0, 8)}`

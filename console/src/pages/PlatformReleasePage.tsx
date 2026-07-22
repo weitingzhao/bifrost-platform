@@ -2,9 +2,16 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { fetchPipelineRuns, fetchReleaseGate, fetchReleaseState } from '@/api/platform'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
 import { DeployActionBar } from '@/components/delivery/DeployActionBar'
 import { GateActionBar } from '@/components/delivery/GateActionBar'
+import {
+  LaneDetailCollapse,
+  LaneDetailContextStrip,
+  LaneGateSummaryLine,
+  LaneStateStrip,
+} from '@/components/delivery/LaneDetailShell'
 import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
 import { ReleaseEnvAccessBar } from '@/components/delivery/ReleaseEnvAccessBar'
 import { ReleaseHealthStrip } from '@/components/delivery/ReleaseHealthStrip'
@@ -18,13 +25,13 @@ import {
   type FlowStep,
 } from '@/components/delivery/ReleaseStepCommandCenter'
 import { ReleaseStateBanner } from '@/components/delivery/ReleaseStateBanner'
-import { OpsSection } from '@/components/layout/OpsSection'
 import {
   PlatformGateHistorySection,
   PlatformStageGatePanel,
 } from '@/components/promote/PlatformReleaseGateSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
+import { useLaneStepFocus } from '@/hooks/useLaneStepFocus'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
@@ -32,6 +39,7 @@ import {
   PLATFORM_RELEASE_SCOPE,
 } from '@/lib/agent/platformReleaseAgentPrompt'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
+import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import { deriveReleaseIdentity } from '@/lib/delivery/releaseStepTypes'
 
 const AI_RELEASE_LABEL = 'AI Release'
@@ -57,12 +65,14 @@ function renderPlatformStepActions(activeIndex: number) {
   }
 }
 
+type PlatformReleasePageProps = AmbientAgentShellProps
+
 export function PlatformReleasePage({
   ambientJobId,
   onStartAgentJob,
-}: AmbientAgentShellProps = {}) {
+}: PlatformReleasePageProps = {}) {
   const { canOperate } = usePlatformAuth()
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [detailReason] = useState(readLaneDetailReasonFromLocation)
 
   const releaseStateQuery = useQuery({
     queryKey: ['promote', 'release-state', 'platform'],
@@ -102,6 +112,13 @@ export function PlatformReleasePage({
     { key: 'prod-deploy', label: 'Production Deploy', env: 'PROD', status: prodDeploy.status, statusLabel: prodDeploy.label },
     { key: 'prod-gate', label: 'Production Gate', env: 'PROD', status: prodGateStep.status, statusLabel: prodGateStep.label },
   ]
+
+  const [activeIndex, setActiveIndex] = useLaneStepFocus({
+    statuses: [stgDeploy.status, stgGateStep.status, prodDeploy.status, prodGateStep.status],
+    ready:
+      !stgRuns.isLoading && !prodRuns.isLoading && !stgGate.isLoading && !prodGate.isLoading,
+    reason: detailReason,
+  })
 
   const releaseIdentity = deriveReleaseIdentity(
     stgRuns.data?.runs?.[0],
@@ -143,14 +160,15 @@ export function PlatformReleasePage({
       break
     case 1:
       stepDetail = (
-        <OpsSection
-          title="STG release gate"
-          description="Platform staging gate checks and blockers."
-          bodyPadding="compact"
-          overflow="hidden"
+        <LaneDetailCollapse
+          key="stg-gate-detail"
+          title="STG gate check detail"
+          summaryExtra={<LaneGateSummaryLine gate={stgGate.data} />}
+          defaultOpen={stgGateStep.status === 'error'}
+          bodyClassName="p-3"
         >
           <PlatformStageGatePanel tier="platform-stg" label="STG" hideActions />
-        </OpsSection>
+        </LaneDetailCollapse>
       )
       break
     case 2:
@@ -163,35 +181,31 @@ export function PlatformReleasePage({
       break
     default:
       stepDetail = (
-        <OpsSection
-          title="PROD release gate"
-          description="Platform production gate checks and blockers."
-          bodyPadding="compact"
-          overflow="hidden"
+        <LaneDetailCollapse
+          key="prod-gate-detail"
+          title="PROD gate check detail"
+          summaryExtra={<LaneGateSummaryLine gate={prodGate.data} />}
+          defaultOpen={prodGateStep.status === 'error'}
+          bodyClassName="p-3"
         >
           <PlatformStageGatePanel tier="platform-prod" label="PROD" hideActions />
-        </OpsSection>
+        </LaneDetailCollapse>
       )
       break
   }
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
+    <div className="flex w-full min-w-0 flex-col gap-3">
       {aiRelease.error != null && (
         <p className="m-0 text-dense-meta text-destructive">{aiRelease.error.message}</p>
       )}
 
-      <div className="flex flex-col gap-2 rounded-lg border border-border/50 bg-secondary/30 px-4 py-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-          <ReleaseHealthStrip />
-          <ReleaseEnvAccessBar />
-        </div>
+      <LaneDetailContextStrip reason={detailReason} />
+
+      <LaneStateStrip laneLabel="Rocket">
+        <ReleaseEnvAccessBar />
         <ReleaseStateBanner tier="platform" />
-      </div>
-
-      <SelfHealthPanel />
-
-      <EscapeHatchPanel />
+      </LaneStateStrip>
 
       <ReleaseStepCommandCenter
         steps={steps}
@@ -203,23 +217,37 @@ export function PlatformReleasePage({
         stgGate={stgGate.data}
         prodGate={prodGate.data}
         renderStepActions={renderPlatformStepActions}
-        onAiRelease={() => aiRelease.trigger()}
-        aiReleasePending={aiRelease.isPending}
-        aiReleaseDisabled={aiRelease.disabled}
-        aiReleaseDisabledReason={aiRelease.disabledReason}
-        aiReleaseLabel={AI_RELEASE_LABEL}
       />
 
       <div className="flex flex-col gap-3">{stepDetail}</div>
 
-      <details open className="group rounded-lg border border-border/50 bg-card">
-        <summary className="cursor-pointer list-none px-4 py-3 text-dense-label font-medium text-foreground hover:bg-secondary/30">
-          Audit · gate run history
-        </summary>
-        <div className="border-t border-border/50">
-          <PlatformGateHistorySection />
+      <LaneDetailCollapse
+        title="Evidence · control plane self-health"
+        summaryExtra={<ReleaseHealthStrip />}
+        bodyClassName="p-3"
+      >
+        <SelfHealthPanel />
+      </LaneDetailCollapse>
+
+      <LaneDetailCollapse title="Advanced recovery" bodyClassName="flex flex-col gap-3 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/50 bg-secondary/20 px-3 py-2">
+          <span className="text-dense-meta text-muted-foreground">
+            Delegate this lane's release to an agent. Primary Agent Launch lives in Mission Launch TCC.
+          </span>
+          <AgentTriggerButton
+            label={AI_RELEASE_LABEL}
+            pending={aiRelease.isPending}
+            disabled={aiRelease.disabled}
+            title={aiRelease.disabledReason ?? AI_RELEASE_LABEL}
+            onClick={() => aiRelease.trigger()}
+          />
         </div>
-      </details>
+        <EscapeHatchPanel />
+      </LaneDetailCollapse>
+
+      <LaneDetailCollapse title="Audit · gate run history">
+        <PlatformGateHistorySection />
+      </LaneDetailCollapse>
     </div>
   )
 }

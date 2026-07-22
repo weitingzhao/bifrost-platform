@@ -95,4 +95,3 @@ clusters:
       gateway_host: dev.trader.bifrost.lan
       api_monitor_url: http://192.168.10.73:30882/api/monitor/status
       frontend_url: http://192.168.10.73:30882/
-      frontend_url: http://192.168.10.100/

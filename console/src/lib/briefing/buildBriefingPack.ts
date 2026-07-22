@@ -711,7 +711,7 @@ export function buildBriefingPack(input: BriefingInputs): string {
       '',
       '## Related Console views',
       '- Mission Control: Control Room → Runtime Map sheet (business topology + matrix, L0)',
-      '- Rocket: Placement (K8s node-pool / policy gap, L0)',
+      '- Rocket: Placement (fleet facility constraints — node-pool / policy gap for CI + STG + shared infra, L0)',
       '- Rocket: Cluster (L0 read + L1 actuation)',
       '- Mission Control: Audit · Engineer → Agent Briefing (actuation history)',
       '- Governance catalogs: Vision, Blueprint, dataLayerCatalog.ts, cicdBootstrapCatalog.ts, MCP Contract',

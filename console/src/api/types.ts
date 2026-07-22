@@ -804,6 +804,37 @@ export interface TelemetryOverviewResponse {
   generated_at: string
 }
 
+export interface TelemetryAlertEntry {
+  labels: Record<string, string>
+  annotations: Record<string, string>
+  state: string
+  active_at?: string
+  value?: string
+}
+
+export interface TelemetryAlertsResponse {
+  prometheus_url?: string
+  alerts: TelemetryAlertEntry[]
+  generated_at: string
+}
+
+export interface TelemetryTargetEntry {
+  labels: Record<string, string>
+  scrape_pool?: string
+  scrape_url?: string
+  health: string
+  last_error?: string
+  last_scrape?: string
+  last_scrape_duration?: number
+}
+
+export interface TelemetryTargetsResponse {
+  prometheus_url?: string
+  active_targets: TelemetryTargetEntry[]
+  dropped_targets?: TelemetryTargetEntry[]
+  generated_at: string
+}
+
 export type ArgoCDStatus = 'not_installed' | 'installed' | 'degraded' | 'unavailable'
 
 export interface GitOpsArgoCDServerView {
@@ -878,6 +909,22 @@ export interface StackAddonsResponse {
 }
 
 export type McpToolLevel = 'read' | 'routine' | 'confirm' | 'pr' | 'forbidden'
+export type McpToolFunction =
+  | 'discover'
+  | 'observe'
+  | 'verify'
+  | 'provision'
+  | 'operate'
+  | 'deliver'
+  | 'govern'
+  | 'release'
+/** Apollo fleet roles (teams) — Mission Control is a Console module, not a role. */
+export type McpToolOwnerRole =
+  | 'rocket'
+  | 'satellite'
+  | 'engineer'
+  | 'ground_systems'
+  | 'subcontractors'
 
 export interface McpToolView {
   name: string
@@ -886,7 +933,14 @@ export interface McpToolView {
   method?: string
   route?: string
   role?: string
+  /** Historical delivery batch (P0–P6 / Agent) — kept for Blueprint projection. */
   phase?: string
+  /** Functional domain for Governance Tool Catalog (meta/mission/cluster/…). */
+  capability?: string
+  /** Stable action taxonomy, independent of the capability domain. */
+  function: McpToolFunction
+  /** Apollo fleet role primarily served by this tool; not an auth role. */
+  owner_role: McpToolOwnerRole
   implemented: boolean
 }
 

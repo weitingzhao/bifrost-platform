@@ -138,6 +138,11 @@ export type SatelliteBusViewModel = {
   crossEnvIssues: BusAttentionIssue[]
 }
 
+/**
+ * Inputs for the Bus Health verdict. Intentionally excludes K8s workload
+ * readiness: workloads are namespace operational evidence (Evidence layer),
+ * not part of the shared IB bus path, and must never affect Bus Health.
+ */
 export type SatelliteBusViewModelInput = {
   selectedEnv: TradeEnvId
   buses: Partial<Record<BusEnvId, SatelliteBusDeepResponse>>
@@ -531,8 +536,8 @@ export function buildSatelliteBusViewModel(
       scopeLabel: 'SELECTED',
       health: namespaceNodeHealth,
       stateLabel: nodeStateLabel(namespaceNodeHealth),
-      headline: `${runtimeOk}/${scoredRuntime.length} runtime consumers ok${expectedOff > 0 ? ` · expected-off neutral` : ''}`,
-      detail: `Selected namespace runtime — daemon / APIs / workers / account sync in ${namespace}`,
+      headline: `${runtimeOk}/${scoredRuntime.length} monitor consumers ok${expectedOff > 0 ? ` · expected-off neutral` : ''}`,
+      detail: `Selected namespace monitor consumers — trading daemon / Trade APIs / Celery / account sync in ${namespace}`,
       probePath: `bus-deep[${selectedEnv}].monitor + matrix[${selectedEnv}]`,
     },
   ]
@@ -572,7 +577,7 @@ export function buildSatelliteBusViewModel(
     topReason = `Optional consumer needs attention: ${failedOptional.map(r => r.label).join(', ')}`
   } else if (runtimeIssues.length > 0) {
     health = 'degraded'
-    topReason = `Runtime consumer needs attention: ${runtimeIssues.map(r => r.label).join(', ')}`
+    topReason = `Monitor consumer needs attention: ${runtimeIssues.map(r => r.label).join(', ')}`
   } else if (unknownRequired.length > 0 || gatewayHealth === 'unknown') {
     health = 'unknown'
     topReason =

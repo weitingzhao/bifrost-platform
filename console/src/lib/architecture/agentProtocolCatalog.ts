@@ -10,8 +10,20 @@
 
 import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog'
 
-export const AGENT_PROTOCOL_VERSION = '2026-07-20'
+export const AGENT_PROTOCOL_VERSION = '2026-07-21'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
+
+/**
+ * Mission Signal P4–P7 are program delivery/history, not per-session protocol.
+ * Detailed step tables (HERMES_FIRST_TASK_STEPS, FLIGHT_DIRECTOR_STEPS,
+ * FLIGHT_DIRECTOR_OPS_STEPS, MISSION_SIGNAL_CLOSURE_STEPS) stay exported for
+ * program surfaces; the default LLM pack carries only this reference line.
+ */
+export const MISSION_SIGNAL_PROGRAM_REFERENCE =
+  'Mission Signal Phases 4–7 (Hermes First Task, Flight Director governance, Flight Director operations, ' +
+  'program closure) are program delivery history — see Delivery Board (Mission Control) and Agent System ' +
+  '(Governance) for status and step detail. Active per-session protocol remains: modes, domains, forbidden ' +
+  'actions, D10 freeze, and the P2/P3 diagnostic playbooks above.'
 
 export type AgentModeRow = {
   mode: string
@@ -751,26 +763,8 @@ export function buildAgentProtocolLlmPack(): string {
     ...MISSION_POST_FIX_LOOP.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
     '- Runner emits event kind=post_fix_verification on job complete; Control Room banner shows reprobe result.',
     '',
-    '## Hermes First Task (L0 — Mission Signal Phase 4)',
-    `- Readiness: \`${HERMES_FIRST_TASK_MCP.readiness}\``,
-    `- Prompt: \`${HERMES_FIRST_TASK_MCP.firstTask}\` — task id hermes-mission-health-l0`,
-    ...HERMES_FIRST_TASK_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
-    '',
-    '## Flight Director governance (Mission Signal Phase 5)',
-    `- Performance: \`${FLIGHT_DIRECTOR_MCP.performance}\``,
-    `- Trust: \`${FLIGHT_DIRECTOR_MCP.trustMatrix}\``,
-    `- Snapshot: \`${FLIGHT_DIRECTOR_MCP.snapshot}\` (includes capability map + 24h briefing)`,
-    ...FLIGHT_DIRECTOR_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
-    '- Data source: remediation runner JobStore (Hermes/GPU LLM path optional — bypass OK for governance KPIs).',
-    '',
-    '## Flight Director operations (Mission Signal Phase 6)',
-    '- Trust override: PUT /api/v1/agent/governance/trust-overrides/{skill_id} — level or action accept_promotion / apply_demotion.',
-    ...FLIGHT_DIRECTOR_OPS_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
-    '',
-    '## Mission Signal Program closure (Phase 7)',
-    '- Control Room status strip: P1 Signal Truth → P6 Flight Director Ops — all signed via Briefing Session · mission-signal (Board catalog) before program closure.',
-    ...MISSION_SIGNAL_CLOSURE_STEPS.map(s => `- ${s.step}: \`${s.tool}\` — ${s.detail}`),
-    '- After Owner sign-off: Mission Signal enters maintenance mode; new work is scoped patches, not program phases.',
+    '## Mission Signal program references (P4–P7 — program history, not per-session protocol)',
+    MISSION_SIGNAL_PROGRAM_REFERENCE,
     '',
     '## Example opening prompts',
     ...OPENING_PROMPTS.map(p => `- [${p.mode}] "${p.example}"`),

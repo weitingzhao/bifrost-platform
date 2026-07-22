@@ -9,7 +9,11 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "test:fleet": "npx tsx scripts/fleet-snapshot-test.ts",
-    "test:satellite-bus": "npx tsx scripts/satellite-bus-viewmodel-test.ts"
+    "test:satellite-bus": "npx tsx scripts/satellite-bus-viewmodel-test.ts",
+    "test:observability": "npx tsx scripts/observability-viewmodel-test.ts",
+    "test:agent-capability": "npx tsx scripts/agent-capability-viewmodel-test.ts",
+    "test:governance-pack": "npx tsx scripts/governance-active-pack-test.ts",
+    "test:lane-detail": "npx tsx scripts/lane-detail-context-test.ts"
   },
   "dependencies": {
     "@bifrost/ui": "file:../../bifrost-ui",

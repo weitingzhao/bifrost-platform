@@ -1,13 +1,164 @@
 package mcp
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 const (
 	ServerName    = "mcp-server-platform"
 	ServerVersion = "0.1.0"
 )
 
+// ValidCapabilities is the closed set of functional domains for MCP tools.
+var ValidCapabilities = map[string]struct{}{
+	"meta":     {},
+	"mission":  {},
+	"cluster":  {},
+	"gitops":   {},
+	"delivery": {},
+	"stack":    {},
+	"release":  {},
+	"agent":    {},
+}
+
+var ValidFunctions = map[string]struct{}{
+	"discover":  {},
+	"observe":   {},
+	"verify":    {},
+	"provision": {},
+	"operate":   {},
+	"deliver":   {},
+	"govern":    {},
+	"release":   {},
+}
+
+// ValidOwnerRoles are Apollo fleet roles (teams), not Console modules —
+// Mission Control is a module surface, so it is intentionally absent here.
+var ValidOwnerRoles = map[string]struct{}{
+	"rocket":         {},
+	"satellite":      {},
+	"engineer":       {},
+	"ground_systems": {},
+	"subcontractors": {},
+}
+
+// capabilityFor derives a functional domain from tool name + API route.
+// Delivery-batch labels stay in Phase; Capability is what Governance surfaces.
+func capabilityFor(name, route string) string {
+	if strings.HasPrefix(name, "platform_mcp_") || strings.HasPrefix(route, "/api/v1/mcp") {
+		return "meta"
+	}
+	switch {
+	case strings.HasPrefix(route, "/api/v1/matrix"),
+		strings.HasPrefix(route, "/api/v1/mission"),
+		strings.HasPrefix(route, "/api/v1/environments"),
+		strings.HasPrefix(route, "/api/v1/context"),
+		strings.HasPrefix(route, "/api/v1/auth"),
+		strings.HasPrefix(route, "/api/v1/audit"):
+		return "mission"
+	case strings.HasPrefix(route, "/api/v1/cluster"):
+		return "cluster"
+	case strings.HasPrefix(route, "/api/v1/gitops"):
+		return "gitops"
+	case strings.HasPrefix(route, "/api/v1/delivery"):
+		return "delivery"
+	case strings.HasPrefix(route, "/api/v1/stack"):
+		return "stack"
+	case strings.HasPrefix(route, "/api/v1/promote"):
+		return "release"
+	case strings.HasPrefix(route, "/api/v1/briefing"),
+		strings.HasPrefix(route, "/api/v1/lanes"),
+		strings.HasPrefix(route, "/api/v1/agent"),
+		strings.HasPrefix(route, "/api/v1/remediation"),
+		strings.HasPrefix(route, "/api/v1/programs"),
+		strings.HasPrefix(route, "/api/v1/sessions"),
+		strings.HasPrefix(route, "/api/v1/operate"),
+		strings.HasPrefix(route, "/api/v1/checklist"):
+		return "agent"
+	default:
+		if route == "" {
+			return "meta"
+		}
+		return "mission"
+	}
+}
+
+// functionFor classifies what the tool does, independently of where it operates.
+func functionFor(name, method string) string {
+	switch {
+	case name == "platform_mcp_capabilities":
+		return "discover"
+	case strings.HasPrefix(name, "verify_"):
+		return "verify"
+	case strings.HasPrefix(name, "get_"),
+		strings.HasPrefix(name, "list_"),
+		name == "platform_mcp_health":
+		return "observe"
+	case strings.HasPrefix(name, "ensure_"),
+		strings.HasPrefix(name, "join_"),
+		strings.HasPrefix(name, "wake_"),
+		strings.HasPrefix(name, "stack_install_"),
+		strings.HasPrefix(name, "stack_upgrade_"):
+		return "provision"
+	case strings.Contains(name, "release_gate"),
+		strings.HasPrefix(name, "sign_tier_"):
+		return "release"
+	case strings.HasPrefix(name, "gitops_"),
+		strings.HasPrefix(name, "start_pipeline_"),
+		strings.HasPrefix(name, "delete_pipeline_"):
+		return "deliver"
+	case strings.HasPrefix(name, "report_"),
+		strings.HasPrefix(name, "submit_"),
+		strings.HasPrefix(name, "approve_"),
+		strings.HasPrefix(name, "reject_"),
+		strings.HasPrefix(name, "record_"),
+		strings.HasPrefix(name, "close_"),
+		strings.HasPrefix(name, "dismiss_"),
+		strings.HasPrefix(name, "create_session"),
+		strings.HasPrefix(name, "prepare_briefing"),
+		strings.HasPrefix(name, "update_lane"):
+		return "govern"
+	default:
+		if method == "GET" || method == "" {
+			return "observe"
+		}
+		return "operate"
+	}
+}
+
+// ownerRoleFor identifies the Apollo fleet role (team) primarily served by
+// the tool. Mission Control is a Console module, not a role, so mission
+// intelligence tools map to the fleet team whose asset they inspect.
+// Authorization remains in Role/Level (viewer/operator/admin).
+func ownerRoleFor(capability, route string) string {
+	switch capability {
+	case "meta":
+		return "engineer"
+	case "mission":
+		// Trade-environment probes serve the Satellite team; platform
+		// spine/auth/audit serve the Rocket (Ops Platform) team.
+		switch {
+		case strings.HasPrefix(route, "/api/v1/matrix"),
+			strings.HasPrefix(route, "/api/v1/mission"),
+			strings.HasPrefix(route, "/api/v1/environments"):
+			return "satellite"
+		default:
+			return "rocket"
+		}
+	case "cluster":
+		return "ground_systems"
+	case "gitops", "delivery", "stack", "release":
+		return "rocket"
+	case "agent":
+		return "engineer"
+	default:
+		return "rocket"
+	}
+}
+
 func tool(name, desc, level, method, route, role, phase string, implemented bool) ToolView {
+	capability := capabilityFor(name, route)
 	return ToolView{
 		Name:        name,
 		Description: desc,
@@ -16,6 +167,9 @@ func tool(name, desc, level, method, route, role, phase string, implemented bool
 		Route:       route,
 		Role:        role,
 		Phase:       phase,
+		Capability:  capability,
+		Function:    functionFor(name, method),
+		OwnerRole:   ownerRoleFor(capability, route),
 		Implemented: implemented,
 	}
 }
@@ -105,7 +259,7 @@ func ToolsResponseNow() ToolsResponse {
 	return ToolsResponse{
 		ServerName:       ServerName,
 		ServerVersion:    ServerVersion,
-		ContractVersion:  "2026-06-19",
+		ContractVersion:  "2026-07-21",
 		Tools:            tools,
 		ImplementedCount: impl,
 		GeneratedAt:      time.Now().UTC(),

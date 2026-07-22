@@ -23,6 +23,7 @@ import { buildIbGatewayPluginLlmPack } from './ibGatewayPluginCatalog'
 import { buildTradeIbClientMigrationLlmPack } from './tradeIbClientMigrationCatalog'
 import { buildRoadmapLlmPack } from './roadmapCatalog'
 import { buildTradeK8sNativeLlmPack } from './tradeK8sNativeCatalog'
+import { buildObservabilityLlmPack } from './observabilityCatalog'
 import { buildStandardsLlmPack } from './standardsCatalog'
 
 /**
@@ -46,6 +47,7 @@ export function buildFullArchitectureLlmPack(spine?: OpsContextResponse): string
     buildIbGatewayPluginLlmPack(),
     buildTradeIbClientMigrationLlmPack(),
     buildStandardsLlmPack(),
+    buildObservabilityLlmPack(),
     buildAgentProtocolLlmPack(),
     buildBriefingReconciliationLlmPack(spine),
     buildMcpContractLlmPack(),

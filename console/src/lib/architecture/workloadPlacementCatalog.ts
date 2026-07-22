@@ -1,23 +1,28 @@
 /**
  * Workload placement governance — Ops Console catalog + LLM packs.
- * Live evaluation: GET /api/v1/cluster/placement
+ * Product framing: fleet facility constraints (Rocket CI, Satellite STG, shared infra),
+ * hosted under Rocket — not satellite-only planning.
+ * Live evaluation SSOT: api/internal/placement/evaluate.go via GET /api/v1/cluster/placement.
+ * This file mirrors that contract for Cluster namespace strip + offline LLM packs.
  */
 
 import { NAMESPACE_ALLOCATION, type NamespaceRow } from '@/lib/architecture/k3sArchitectureCatalog'
+import type { ClusterPlacementPool, ClusterPlacementRule } from '@/api/types'
 
-export const PLACEMENT_CATALOG_VERSION = '2026-06-19-gpu-server'
+export const PLACEMENT_CATALOG_VERSION = '2026-07-21-sync-go-evaluator'
 export const PLACEMENT_CATALOG_SOURCE = 'console/src/lib/architecture/workloadPlacementCatalog.ts'
 
-export type NodePoolId = 'amd64_ci' | 'amd64_general' | 'arm64_edge' | 'gpu' | 'compute_warehouse'
+/** Pool ids aligned with api/internal/placement/evaluate.go poolDefs. */
+export type NodePoolId = 'amd64_ci' | 'amd64_general' | 'arm64_edge' | 'nfs_client' | 'gpu'
 
 export type WorkloadClass =
   | 'cicd_build'
   | 'cicd_control'
   | 'stg_runtime'
   | 'data'
+  | 'nfs_storage'
   | 'monitoring'
   | 'ai'
-  | 'warehouse'
   | 'frontend_edge'
 
 export type NodePoolDef = {
@@ -25,6 +30,8 @@ export type NodePoolDef = {
   label: string
   arch?: string
   workloadLabel?: string
+  /** Capability id mirror (e.g. nfs-client) — optional metadata for LLM pack. */
+  capabilityId?: string
   status: 'live' | 'planned'
   plannedHost?: string
 }
@@ -34,18 +41,17 @@ export const NODE_POOLS: NodePoolDef[] = [
   { id: 'amd64_general', label: 'amd64 general runtime', arch: 'amd64', status: 'live' },
   { id: 'arm64_edge', label: 'arm64 edge / frontend', arch: 'arm64', status: 'live' },
   {
-    id: 'compute_warehouse',
-    label: '4090 compute · data warehouse · solution',
-    workloadLabel: 'warehouse',
+    id: 'nfs_client',
+    label: 'NFS PV clients',
+    capabilityId: 'nfs-client',
     status: 'live',
-    plannedHost: 'gpu-server @ 192.168.10.60',
   },
   {
     id: 'gpu',
-    label: 'GPU / AI inference · heavy CI',
+    label: 'GPU workloads',
     workloadLabel: 'gpu',
-    status: 'live',
-    plannedHost: 'gpu-server @ 192.168.10.60',
+    status: 'planned',
+    plannedHost: 'gpu-server',
   },
 ]
 
@@ -58,6 +64,7 @@ export type PlacementRuleDef = {
   plannedBinding: string
 }
 
+/** Rules aligned with api/internal/placement/evaluate.go ruleDefs. */
 export const PLACEMENT_RULES: PlacementRuleDef[] = [
   {
     workloadClass: 'cicd_build',
@@ -92,6 +99,14 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     plannedBinding: 'mini-pc-b / mini-pc-a',
   },
   {
+    workloadClass: 'nfs_storage',
+    namespace: 'kube-system · bifrost-*',
+    services: 'nfs-subdir-provisioner · NFS PVC mounts',
+    requiredSelector: 'storage.nfs/client=true',
+    poolId: 'nfs_client',
+    plannedBinding: 'ubt-k3s-01/02/04',
+  },
+  {
     workloadClass: 'monitoring',
     namespace: 'monitoring',
     services: 'Prometheus · Loki · Grafana',
@@ -100,20 +115,20 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     plannedBinding: 'mini-pc-c (second batch)',
   },
   {
-    workloadClass: 'warehouse',
-    namespace: 'data',
-    services: 'MinIO · ClickHouse · OLAP · warehouse sync · local analytics',
-    requiredSelector: 'node-role=warehouse',
-    poolId: 'compute_warehouse',
-    plannedBinding: 'gpu-server @ 192.168.10.60',
-  },
-  {
     workloadClass: 'ai',
     namespace: 'ai',
     services: 'Ollama · Open-WebUI',
     requiredSelector: 'workload=gpu',
     poolId: 'gpu',
-    plannedBinding: 'gpu-server @ 192.168.10.60',
+    plannedBinding: 'gpu-server',
+  },
+  {
+    workloadClass: 'frontend_edge',
+    namespace: 'bifrost',
+    services: 'trade-frontend (edge)',
+    requiredSelector: 'kubernetes.io/arch=arm64 (optional)',
+    poolId: 'arm64_edge',
+    plannedBinding: 'ops-vm-ubt-01',
   },
 ]
 
@@ -141,31 +156,67 @@ export function buildPlacementLlmPack(liveSummary?: {
   reachability?: string
   detail?: string
   violations?: { severity: string; message: string }[]
+  pools?: ClusterPlacementPool[]
+  rules?: ClusterPlacementRule[]
 }): string {
   const lines = [
     'Mode: Ops',
     '',
-    '## Workload placement governance',
+    '## Fleet facility constraints (Placement)',
     `Catalog: ${PLACEMENT_CATALOG_SOURCE} v${PLACEMENT_CATALOG_VERSION}`,
+    'Scope: Rocket CI, Satellite STG runtime, and shared infra — not satellite-only planning.',
+    'Live SSOT: api/internal/placement/evaluate.go via GET /api/v1/cluster/placement',
     '',
     '## Node pools',
-    ...NODE_POOLS.map(
-      p =>
-        `- ${p.id}: ${p.label}${p.arch != null ? ` (arch=${p.arch})` : ''}${p.workloadLabel != null ? ` (workload=${p.workloadLabel})` : ''} [${p.status}]${p.plannedHost != null ? ` → planned ${p.plannedHost}` : ''}`,
-    ),
-    '',
-    '## Placement rules',
-    ...PLACEMENT_RULES.map(
-      r =>
+  ]
+
+  if (liveSummary?.pools != null && liveSummary.pools.length > 0) {
+    for (const p of liveSummary.pools) {
+      const arch = p.arch != null && p.arch !== '' ? ` (arch=${p.arch})` : ''
+      const wl =
+        p.workload_label != null && p.workload_label !== '' ? ` (workload=${p.workload_label})` : ''
+      const planned =
+        p.planned_host != null && p.planned_host !== '' ? ` → planned ${p.planned_host}` : ''
+      lines.push(
+        `- ${p.id}: ${p.label}${arch}${wl} [${p.status}] ready ${p.nodes_ready}/${p.nodes_total}${planned}`,
+      )
+    }
+  } else {
+    for (const p of NODE_POOLS) {
+      lines.push(
+        `- ${p.id}: ${p.label}${p.arch != null ? ` (arch=${p.arch})` : ''}${p.workloadLabel != null ? ` (workload=${p.workloadLabel})` : ''}${p.capabilityId != null ? ` (capability=${p.capabilityId})` : ''} [${p.status}]${p.plannedHost != null ? ` → planned ${p.plannedHost}` : ''}`,
+      )
+    }
+  }
+
+  lines.push('', '## Placement rules')
+
+  if (liveSummary?.rules != null && liveSummary.rules.length > 0) {
+    for (const r of liveSummary.rules) {
+      const gap = r.gap_reason != null && r.gap_reason !== '' ? ` · gap: ${r.gap_reason}` : ''
+      const binding =
+        r.planned_binding != null && r.planned_binding !== '' ? ` · target ${r.planned_binding}` : ''
+      lines.push(
+        `- ${r.workload_class} · ns ${r.namespace}: ${r.required_selector} · pool ${r.pool_id}${binding} · ${r.satisfied ? 'OK' : 'Gap'}${gap}`,
+      )
+    }
+  } else {
+    for (const r of PLACEMENT_RULES) {
+      lines.push(
         `- ${r.workloadClass} · ns ${r.namespace}: ${r.requiredSelector} · pool ${r.poolId} · target ${r.plannedBinding}`,
-    ),
+      )
+    }
+  }
+
+  lines.push(
     '',
     '## CI scheduling contract',
     'Tekton PipelineRuns with Kaniko must use taskRunTemplate:',
     '  nodeSelector.kubernetes.io/arch=amd64',
     '  tolerations: control-plane NoSchedule',
     '',
-  ]
+  )
+
   if (liveSummary != null) {
     lines.push('## Live cluster (GET /api/v1/cluster/placement)')
     if (liveSummary.reachability != null) lines.push(`- reachability: ${liveSummary.reachability}`)

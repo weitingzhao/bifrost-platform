@@ -10,6 +10,9 @@ type ToolView struct {
 	Route       string `json:"route,omitempty"`
 	Role        string `json:"role,omitempty"`
 	Phase       string `json:"phase,omitempty"`
+	Capability  string `json:"capability"`
+	Function    string `json:"function"`
+	OwnerRole   string `json:"owner_role"`
 	Implemented bool   `json:"implemented"`
 }
 
@@ -23,15 +26,15 @@ type ToolsResponse struct {
 }
 
 type StatusResponse struct {
-	ServerName      string            `json:"server_name"`
-	ServerVersion   string            `json:"server_version"`
-	Transport       string            `json:"transport"`
-	PlatformAPIURL  string            `json:"platform_api_url"`
-	ScriptPath      string            `json:"script_path"`
-	CursorConfig    CursorConfigHints `json:"cursor_config"`
-	ToolCount       int               `json:"tool_count"`
-	ImplementedCount int              `json:"implemented_count"`
-	GeneratedAt     time.Time         `json:"generated_at"`
+	ServerName       string            `json:"server_name"`
+	ServerVersion    string            `json:"server_version"`
+	Transport        string            `json:"transport"`
+	PlatformAPIURL   string            `json:"platform_api_url"`
+	ScriptPath       string            `json:"script_path"`
+	CursorConfig     CursorConfigHints `json:"cursor_config"`
+	ToolCount        int               `json:"tool_count"`
+	ImplementedCount int               `json:"implemented_count"`
+	GeneratedAt      time.Time         `json:"generated_at"`
 }
 
 type CursorConfigHints struct {

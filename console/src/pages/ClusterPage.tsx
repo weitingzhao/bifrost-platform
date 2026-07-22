@@ -104,6 +104,7 @@ export function ClusterPage({
   onOpenServerConsole,
   onOpenAgentDesk,
   onOpenDefects,
+  onOpenObservability,
   ambientJobId: _ambientJobId,
   onStartAgentJob,
 }: {
@@ -113,6 +114,7 @@ export function ClusterPage({
   onOpenServerConsole?: () => void
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenDefects?: () => void
+  onOpenObservability?: () => void
   ambientJobId?: string | null
   onStartAgentJob?: (job: AmbientAgentJob) => void
 }) {
@@ -1184,6 +1186,7 @@ cd ../bifrost-platform && make start`}
             isLoading={observabilityQuery.isLoading}
             onOpenStandards={onOpenStandards}
             onOpenRuntimeMap={onOpenRuntimeMap}
+            onOpenObservability={onOpenObservability}
             onInstallLayerB={handleInstallLayerB}
             installLayerBPending={layerBInstallMutation.isPending}
             installLayerBDisabled={layerBInstallBlockedReason != null}

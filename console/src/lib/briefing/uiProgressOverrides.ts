@@ -25,7 +25,7 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
   },
   placement: {
     status: 'done',
-    notes: 'Node pools + policy matrix + violations; GET /cluster/placement',
+    notes: 'Fleet facility constraints — node pools + policy matrix + CI readiness; GET /cluster/placement',
   },
   delivery: {
     status: 'partial',

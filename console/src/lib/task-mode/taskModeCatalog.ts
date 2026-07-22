@@ -376,6 +376,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
       includeTabs: [
         'task-cc',
         'control-room',
+        'observability',
         'defects',
         'audit',
         'cluster',
@@ -405,6 +406,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
       includeTabs: [
         'task-cc',
         'control-room',
+        'observability',
         'platform-release',
         'trade-release',
         'cluster',

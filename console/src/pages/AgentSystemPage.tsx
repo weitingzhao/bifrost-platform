@@ -12,6 +12,7 @@ import {
 import { CatalogSection } from '@/components/CatalogSection'
 import { AgentSystemGraph } from '@/components/agent/AgentSystemGraph'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { useAgentTaskCatalog } from '@/hooks/useAgentTaskCatalog'
 import {
   AGENT_RUNTIME,
   AGENT_TASK_DOCTRINE_LINKS,
@@ -38,13 +39,15 @@ interface AgentSystemPageProps {
 }
 
 export function AgentSystemPage({ onOpenDoctrine }: AgentSystemPageProps) {
+  // Subscribe to GET /api/v1/agent-tasks so this page re-renders when the module catalog hydrates.
+  useAgentTaskCatalog()
   const summary = agentSystemSummary()
   const domainGroups = agentTasksByDomain()
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
+    <div className="flex w-full min-w-0 flex-col gap-3">
       <OpsSection
-        title="Mental model"
+        title="Mental model & runtime"
         description="One remediation runner executes every capability below. Domains group related tasks; actions deepen from read → write → release."
         bodyPadding="compact"
         overflow="visible"
@@ -73,24 +76,18 @@ export function AgentSystemPage({ onOpenDoctrine }: AgentSystemPageProps) {
             </span>
           </div>
         </div>
+        <div className="agent-system-runtime-line">
+          <span className="agent-system-runtime__name">{AGENT_RUNTIME.label}</span>
+          <code className="font-mono-tabular text-[var(--text-dense-meta)]">:{AGENT_RUNTIME.port}</code>
+          <DenseTag variant="success">{AGENT_RUNTIME.sdk}</DenseTag>
+          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Host: {AGENT_RUNTIME.host} · Storage: JSON per job (runner + platform-api archive)
+          </span>
+        </div>
       </OpsSection>
 
-      <CatalogSection title="Runtime">
-        <div className="agent-system-runtime px-3 py-3">
-          <div className="agent-system-runtime__head">
-            <span className="agent-system-runtime__name">{AGENT_RUNTIME.label}</span>
-            <code className="font-mono-tabular text-[var(--text-dense-meta)]">:{AGENT_RUNTIME.port}</code>
-            <DenseTag variant="success">{AGENT_RUNTIME.sdk}</DenseTag>
-          </div>
-          <p className="agent-system-runtime__desc">{AGENT_RUNTIME.description}</p>
-          <p className="agent-system-runtime__meta">
-            Host: {AGENT_RUNTIME.host} · Storage: JSON per job (runner + platform-api archive)
-          </p>
-        </div>
-      </CatalogSection>
-
       <CatalogSection title="Capabilities by domain">
-        <div className="agent-system-domains px-3 py-3">
+        <div className="agent-system-domains px-3 py-2">
           {domainGroups.map(({ domain, tasks }) => (
             <div key={domain} className="agent-system-domain">
               <p className="agent-system-domain__title">{domain}</p>
@@ -98,10 +95,18 @@ export function AgentSystemPage({ onOpenDoctrine }: AgentSystemPageProps) {
                 {tasks.map(task => (
                   <li key={task.id} className="agent-system-domain__item">
                     <div className="agent-system-domain__item-head">
-                      <span className="agent-system-domain__label">{task.label}</span>
+                      <span
+                        className="agent-system-domain__label"
+                        title={
+                          task.parentId != null
+                            ? `${task.action} — escalation of ${catalogTaskById(task.parentId)?.label ?? task.parentId}`
+                            : task.action
+                        }
+                      >
+                        {task.label}
+                      </span>
                       <DenseTag variant={tierVariant(task.tier)}>{agentTaskTierLabel(task.tier)}</DenseTag>
                     </div>
-                    <p className="agent-system-domain__action">{task.action}</p>
                     {task.parentId != null && (
                       <p className="agent-system-domain__parent">
                         Escalation of {catalogTaskById(task.parentId)?.label ?? task.parentId}
@@ -112,15 +117,17 @@ export function AgentSystemPage({ onOpenDoctrine }: AgentSystemPageProps) {
               </ul>
             </div>
           ))}
-          <div className="agent-system-domain agent-system-domain--reserved">
-            <p className="agent-system-domain__title">Trade</p>
-            <p className="agent-system-domain__reserved">Reserved — Trade · Release (future)</p>
-          </div>
+          {!domainGroups.some(g => g.domain === 'Trade') && (
+            <div className="agent-system-domain agent-system-domain--reserved">
+              <p className="agent-system-domain__title">Trade</p>
+              <p className="agent-system-domain__reserved">Reserved — Trade · Release (future)</p>
+            </div>
+          )}
         </div>
       </CatalogSection>
 
       <CatalogSection title="Capability map">
-        <div className="px-3 py-3">
+        <div className="min-w-0 overflow-x-auto px-3 py-3">
           <AgentSystemGraph />
           <div className="agent-system-chains agent-system-chains--under-graph">
             {AGENT_TASK_RELATIONS.map(rel => {

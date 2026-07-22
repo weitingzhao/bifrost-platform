@@ -47,9 +47,14 @@ export type SupplyChainPanelLayout = 'operate' | 'observe' | 'full'
 interface SupplyChainPanelProps {
   /** operate: actuation bar only; observe: inventory tables; full: all sections */
   layout?: SupplyChainPanelLayout
+  /** Hide the deliver-stg trigger when the host page already owns the deploy CTA. */
+  hideDeliverAction?: boolean
 }
 
-export function SupplyChainPanel({ layout = 'full' }: SupplyChainPanelProps) {
+export function SupplyChainPanel({
+  layout = 'full',
+  hideDeliverAction = false,
+}: SupplyChainPanelProps) {
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
   const [revision, setRevision] = useState('main')
@@ -112,7 +117,9 @@ export function SupplyChainPanel({ layout = 'full' }: SupplyChainPanelProps) {
         : 'Trade STG supply chain'
   const sectionDescription =
     layout === 'operate'
-      ? 'Revision + mirror sync + deliver-stg. Switch target above for Ops Platform STG.'
+      ? hideDeliverAction
+        ? 'Revision + mirror sync + Dockerfile CMs. Deploy runs from the step actions above.'
+        : 'Revision + mirror sync + deliver-stg. Switch target above for Ops Platform STG.'
       : layout === 'observe'
         ? 'Kaniko Dockerfile ConfigMaps (Trade + Platform) and STG deployment images.'
         : 'Gitea mirrors, Dockerfile ConfigMaps, and STG images. Trade deliver-stg + shared CMs for platform.'
@@ -187,13 +194,15 @@ export function SupplyChainPanel({ layout = 'full' }: SupplyChainPanelProps) {
               >
                 {refreshMutation.isPending ? 'Refreshing…' : 'Refresh Dockerfile CMs'}
               </Button>
-              <Button
-                size="sm"
-                disabled={pending}
-                onClick={() => deliverMutation.mutate(revision.trim() || 'main')}
-              >
-                {deliverMutation.isPending ? 'Starting…' : 'Run deliver-stg'}
-              </Button>
+              {!hideDeliverAction && (
+                <Button
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => deliverMutation.mutate(revision.trim() || 'main')}
+                >
+                  {deliverMutation.isPending ? 'Starting…' : 'Run deliver-stg'}
+                </Button>
+              )}
             </>
           )}
         </div>

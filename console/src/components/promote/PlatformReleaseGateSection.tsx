@@ -239,8 +239,19 @@ export function PlatformStageGatePanel({ tier, label, hideActions }: PlatformSta
 // Gate history — standalone bottom section
 // ---------------------------------------------------------------------------
 
-export function PlatformGateHistorySection() {
-  const [tier, setTier] = useState<ReleaseGateTier>(STG_TIER)
+interface PlatformGateHistorySectionProps {
+  /** Gate tiers to toggle between — defaults to Platform STG/PROD; pass trade tiers for the Satellite lane. */
+  stgTier?: ReleaseGateTier
+  prodTier?: ReleaseGateTier
+  description?: string
+}
+
+export function PlatformGateHistorySection({
+  stgTier = STG_TIER,
+  prodTier = PROD_TIER,
+  description = 'Chronological log of Platform release gate runs.',
+}: PlatformGateHistorySectionProps = {}) {
+  const [tier, setTier] = useState<ReleaseGateTier>(stgTier)
   const { data, isLoading, error } = useQuery({
     queryKey: ['promote', 'gate-history', tier],
     queryFn: () => fetchGateHistory(tier),
@@ -248,25 +259,25 @@ export function PlatformGateHistorySection() {
   })
 
   const entries = data?.entries ?? []
-  const tierLabel = tier === STG_TIER ? 'STG' : 'PROD'
+  const tierLabel = tier === stgTier ? 'STG' : 'PROD'
 
   return (
     <OpsSection
       title="Release history"
-      description="Chronological log of Platform release gate runs."
+      description={description}
       actions={
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className={`rounded px-2 py-0.5 text-[var(--text-dense-meta)] font-medium transition-colors ${tier === STG_TIER ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
-            onClick={() => setTier(STG_TIER)}
+            className={`rounded px-2 py-0.5 text-[var(--text-dense-meta)] font-medium transition-colors ${tier === stgTier ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
+            onClick={() => setTier(stgTier)}
           >
             STG
           </button>
           <button
             type="button"
-            className={`rounded px-2 py-0.5 text-[var(--text-dense-meta)] font-medium transition-colors ${tier === PROD_TIER ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
-            onClick={() => setTier(PROD_TIER)}
+            className={`rounded px-2 py-0.5 text-[var(--text-dense-meta)] font-medium transition-colors ${tier === prodTier ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
+            onClick={() => setTier(prodTier)}
           >
             Prod
           </button>
@@ -284,7 +295,7 @@ export function PlatformGateHistorySection() {
       )}
       {!isLoading && entries.length === 0 && (
         <p className="px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          No Platform gate runs recorded yet for {tierLabel}.
+          No gate runs recorded yet for {tierLabel}.
         </p>
       )}
       {entries.length > 0 && (

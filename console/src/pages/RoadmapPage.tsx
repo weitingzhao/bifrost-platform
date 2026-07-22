@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
+import { GovernanceArchiveSection } from '@/components/architecture/GovernanceArchiveSection'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   HARDWARE_MAPPING,
@@ -124,11 +125,15 @@ export function RoadmapPage() {
         </DenseDataTable>
       </CatalogSection>
 
-      <CatalogSection title="§3 Three-phase overview">
+      <GovernanceArchiveSection
+        title="Archive · Compose → K3s journey"
+        summary="Phase A DONE (2026-06-29, decision D8) · Phase B journey SIGNED and delivered — active work is Phase C and the spine. Runbooks below are history for audit only."
+      >
+      <CatalogSection title="Phase overview (Compose → K3s)">
         <ProseBlock>{PHASE_OVERVIEW}</ProseBlock>
       </CatalogSection>
 
-      <CatalogSection title="§4 Phase A — 2C-B + resource activation (current priority)">
+      <CatalogSection title="Phase A — 2C-B + resource activation (DONE)">
         <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           A1 · 2C-B production cutover
         </div>
@@ -187,7 +192,7 @@ export function RoadmapPage() {
         <ProseBlock>{`Exit: ${PHASE_A_EXIT}`}</ProseBlock>
       </CatalogSection>
 
-      <CatalogSection title="§5 Phase B — K3s foundation + GitOps">
+      <CatalogSection title="Phase B — K3s foundation + GitOps (delivered)">
         <ProseBlock>{`Prerequisite: ${PHASE_B_PREREQ}`}</ProseBlock>
         <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           Bootstrap sequence
@@ -231,8 +236,9 @@ export function RoadmapPage() {
         </ul>
         <ProseBlock>{`Exit: ${PHASE_B_EXIT}`}</ProseBlock>
       </CatalogSection>
+      </GovernanceArchiveSection>
 
-      <CatalogSection title="§6 Phase C — AI-native ops + downstream">
+      <CatalogSection title="§3 Phase C — AI-native ops + downstream (active)">
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
@@ -257,7 +263,7 @@ export function RoadmapPage() {
       </CatalogSection>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <CatalogSection title="§7 Optional hardware (12–18 months)">
+        <CatalogSection title="§4 Optional hardware (12–18 months)">
           <DenseDataTable>
             <DenseTableBody>
               {OPTIONAL_HARDWARE.map(r => (
@@ -270,7 +276,7 @@ export function RoadmapPage() {
           </DenseDataTable>
         </CatalogSection>
 
-        <CatalogSection title="§8 Owner decision checklist">
+        <CatalogSection title="§5 Owner decision checklist">
           <ul className="m-0 list-none px-3 py-2 text-[var(--text-dense)]">
             {OWNER_CHECKLIST.map(q => (
               <li key={q} className="py-0.5">☐ {q}</li>

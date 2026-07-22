@@ -12,7 +12,7 @@ export type ReadinessChipAction = {
   tabId?: string
   /** Satellite Bus section scroll target */
   busFocus?: 'rocket' | 'socket' | 'ingest' | 'monitor' | 'trade-apis' | 'workers' | 'cluster'
-  /** Prefill Satellite API Health env when navigating there */
+  /** Prefill Satellite API & Auth Probes env when navigating there */
   apiEnv?: 'dev' | 'stg' | 'prod'
   actuation?: ReadinessActuation
   requiresOperate?: boolean
@@ -39,7 +39,7 @@ function chipMatchesTradeApis(label: string): boolean {
 export type ChipNavigation = {
   tabId: string
   busFocus?: ReadinessChipAction['busFocus']
-  /** Prefill Satellite API Health env segment when tabId is satellite-api. */
+  /** Prefill Satellite API & Auth Probes env segment when tabId is satellite-api. */
   apiEnv?: 'dev' | 'stg' | 'prod'
 }
 
@@ -64,7 +64,7 @@ export function primaryChipNavigation(
   if (chipMatchesTradeApis(label)) {
     return { tabId: 'satellite-api', apiEnv: tradeApiEnv(ctx) }
   }
-  // Full Trade connectivity matrix (mission tradeProd) — land on API Health for that env.
+  // Full Trade connectivity matrix (mission tradeProd) — land on API & Auth Probes for that env.
   if (
     label.includes('prod matrix') ||
     label.includes('stg matrix') ||
@@ -139,7 +139,7 @@ export function readinessChipFixActions(
   }
 
   if (chipMatchesTradeApis(label)) {
-    pushNavigate('satellite-api', 'API health', undefined, tradeApiEnv(ctx))
+    pushNavigate('satellite-api', 'API & Auth Probes', undefined, tradeApiEnv(ctx))
     pushNavigate('satellite-bus', 'API reachability', 'trade-apis')
     return actions
   }
@@ -149,7 +149,7 @@ export function readinessChipFixActions(
     label.includes('stg matrix') ||
     (label.includes('matrix') && (label.includes('trade') || label.includes('prod') || label.includes('stg')))
   ) {
-    pushNavigate('satellite-api', 'API Health matrix', undefined, tradeApiEnv(ctx))
+    pushNavigate('satellite-api', 'API & Auth Probes', undefined, tradeApiEnv(ctx))
     pushNavigate('control-room', 'Control Room')
     return actions
   }

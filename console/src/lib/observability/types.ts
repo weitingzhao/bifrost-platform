@@ -1,0 +1,208 @@
+/**
+ * Observability hub — shared verdict / signal types.
+ *
+ * Single source of truth for Mission Control → Observability.
+ * Do not re-derive overall/domain verdicts on Satellite / Cluster pages.
+ */
+
+import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
+
+/** System-level health verdict (display labels are uppercase). */
+export type ObservabilityVerdict =
+  | 'healthy'
+  | 'degraded'
+  | 'critical'
+  | 'unknown'
+  | 'not_observed'
+
+export const VERDICT_LABELS: Record<ObservabilityVerdict, string> = {
+  healthy: 'HEALTHY',
+  degraded: 'DEGRADED',
+  critical: 'CRITICAL',
+  unknown: 'UNKNOWN',
+  not_observed: 'NOT OBSERVED',
+}
+
+/** Per-signal state. EXPECTED OFF is neutral (never fails a required rollup). */
+export type SignalState =
+  | 'healthy'
+  | 'degraded'
+  | 'critical'
+  | 'unknown'
+  | 'not_observed'
+  | 'expected_off'
+
+export type SignalRole = 'required' | 'evidence'
+
+export type SignalScope = 'env' | 'shared'
+
+export type SignalSourceKind =
+  | 'telemetry_metric'
+  | 'telemetry_target'
+  | 'telemetry_alert'
+  | 'cluster_observability'
+  | 'cluster_metrics'
+  | 'matrix'
+  | 'bus_deep'
+  | 'ib_gateway'
+  | 'agent_bridge'
+  | 'self_health'
+  | 'remediation'
+  | 'none'
+
+export type ObservabilityEnvId = 'dev' | 'stg' | 'prod' | 'shared'
+
+export type AlertSeverity = 'critical' | 'warning' | 'info' | 'unknown'
+
+export type SignalDef = {
+  id: string
+  label: string
+  domain: SystemDomainId
+  scope: SignalScope
+  role: SignalRole
+  source: SignalSourceKind
+  /** When true, absence of data → NOT OBSERVED (never fake HEALTHY). */
+  optionalContract?: boolean
+  detailRoute?: string
+  grafanaDashboardId?: string
+  /** Affected domains when this shared signal fails (shared deps counted once). */
+  affectsDomains?: SystemDomainId[]
+  description?: string
+}
+
+export type EvaluatedSignal = {
+  def: SignalDef
+  state: SignalState
+  summary: string
+  freshnessMs?: number
+  stale?: boolean
+  env: ObservabilityEnvId
+  evidence?: string
+  /** Linked alert ids / target scrape pools contributing to this signal. */
+  linkedIds?: string[]
+}
+
+export type DomainHealth = {
+  domain: SystemDomainId
+  label: string
+  verdict: ObservabilityVerdict
+  reason: string
+  coverage: { observed: number; required: number; evidence: number }
+  alertCount: number
+  envScope: 'env' | 'shared' | 'mixed' | 'none'
+  signals: EvaluatedSignal[]
+  sharedDependencyIds: string[]
+}
+
+export type AttentionItem = {
+  id: string
+  severity: AlertSeverity
+  domain: SystemDomainId
+  env: ObservabilityEnvId
+  signalId: string
+  signalLabel: string
+  since?: string
+  owner: string
+  action: string
+  summary: string
+  /** Structured triage for Wave 4 attention detail. */
+  triage: {
+    whatHappened: string
+    whyVerdictChanged: string
+    affectedDomains: SystemDomainId[]
+    evidence: string
+    recommendedDestination: string
+    detailRoute?: string
+    grafanaUrl?: string | null
+  }
+}
+
+export type ScrapeTargetView = {
+  id: string
+  job: string
+  instance: string
+  namespace?: string
+  health: 'up' | 'down' | 'unknown'
+  lastScrape?: string
+  lastError?: string
+  role: SignalRole
+  domain: SystemDomainId
+  env: ObservabilityEnvId
+}
+
+export type MappedAlert = {
+  id: string
+  name: string
+  state: string
+  severity: AlertSeverity
+  domain: SystemDomainId | null
+  /** null = unmapped — does not affect verdict until domain+severity mapped. */
+  mapped: boolean
+  env: ObservabilityEnvId
+  summary: string
+  activeAt?: string
+  labels: Record<string, string>
+  annotations: Record<string, string>
+}
+
+export type SystemVerdict = {
+  overall: ObservabilityVerdict
+  label: string
+  domainCounts: Record<ObservabilityVerdict, number>
+  firingAlerts: number
+  mappedFiringAlerts: number
+  primaryCause: string
+  env: ObservabilityEnvId
+  freshnessMs: number | null
+  stale: boolean
+  generatedAt: string
+}
+
+export type DependencyPathHop = {
+  id: string
+  label: string
+  scope: SignalScope
+  state: SignalState
+  summary: string
+}
+
+export type GoldenSignalRow = {
+  id: string
+  label: string
+  unit?: string
+  status: 'ok' | 'empty' | 'error' | 'unknown'
+  valueLabel: string
+  detail?: string
+}
+
+export type SelectedDomainDetail = {
+  domain: SystemDomainId
+  dependencyPath: DependencyPathHop[]
+  goldenSignals: GoldenSignalRow[]
+  alerts: MappedAlert[]
+  scrapeTargets: ScrapeTargetView[]
+  detailLinks: { label: string; route: string }[]
+  grafanaLinks: { label: string; url: string | null; available: boolean }[]
+}
+
+export type GrafanaDashboardEntry = {
+  id: string
+  title: string
+  domain: SystemDomainId
+  env: ObservabilityEnvId | 'all'
+  purpose: string
+  /** Grafana uid path segment — null means unavailable (no bad link). */
+  uid: string | null
+  slug: string
+}
+
+export type ObservabilityViewModel = {
+  system: SystemVerdict
+  domains: DomainHealth[]
+  attention: AttentionItem[]
+  selected: SelectedDomainDetail
+  dashboards: Array<GrafanaDashboardEntry & { available: boolean; url: string | null }>
+  layerBStatus: string
+  prometheusConfigured: boolean
+  grafanaBaseUrl: string | null
+}

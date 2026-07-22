@@ -1,3 +1,9 @@
+/**
+ * Satellite → Satellite Runtime
+ * Scoped golden signals for the selected Trade namespace.
+ * Global Layer B readiness / system verdict → Mission Control → Observability.
+ */
+
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import {
@@ -16,10 +22,11 @@ import {
   fetchClusterObservability,
   fetchTelemetryOverview,
 } from '@/api/platform'
-import type { LayerBStatus, TelemetryMetricResult } from '@/api/types'
+import type { TelemetryMetricResult } from '@/api/types'
+import { MonitoringCoverageStrip } from '@/components/observability/MonitoringCoverageStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
-import { StatusLamp } from '@/components/StatusLamp'
+import { buildGrafanaDashboardUrl } from '@/lib/observability'
 
 const TRADE_ENV_OPTIONS = [
   { value: 'dev', label: 'Dev' },
@@ -42,17 +49,6 @@ const DATA_METRIC_IDS = [
   'pg_connections',
   'pg_replication_lag',
 ] as const
-
-function layerBLamp(status: LayerBStatus | undefined) {
-  switch (status) {
-    case 'ready':
-      return 'ok' as const
-    case 'partial':
-      return 'degraded' as const
-    default:
-      return 'unknown' as const
-  }
-}
 
 function metricByID(metrics: TelemetryMetricResult[] | undefined, id: string): TelemetryMetricResult | undefined {
   return metrics?.find(m => m.id === id)
@@ -99,14 +95,13 @@ function buildApiPerformanceRows(metrics: TelemetryMetricResult[] | undefined) {
 
 interface SatelliteTelemetryPageProps {
   onOpenCluster?: () => void
+  onOpenObservability?: () => void
 }
 
-function tradeDashboardUrl(grafanaUrl: string | undefined): string | null {
-  if (grafanaUrl == null || grafanaUrl.trim() === '') return null
-  return `${grafanaUrl.replace(/\/$/, '')}/d/bifrost-trade-overview/bifrost-trade-overview`
-}
-
-export function SatelliteTelemetryPage({ onOpenCluster }: SatelliteTelemetryPageProps) {
+export function SatelliteTelemetryPage({
+  onOpenCluster,
+  onOpenObservability,
+}: SatelliteTelemetryPageProps) {
   const [tradeEnv, setTradeEnv] = useState<TradeEnv>('stg')
   const ns = TRADE_NS[tradeEnv]
 
@@ -136,14 +131,19 @@ export function SatelliteTelemetryPage({ onOpenCluster }: SatelliteTelemetryPage
   }, [telemetryQuery.data?.metrics])
 
   const layerB = observabilityQuery.data?.layer_b_status
-  const tradeDashUrl = tradeDashboardUrl(observabilityQuery.data?.grafana_url)
-  const promConfigured = telemetryQuery.error == null || telemetryQuery.isSuccess
+  const tradeDashUrl = buildGrafanaDashboardUrl({
+    grafanaBaseUrl: observabilityQuery.data?.grafana_url,
+    dashboardId: 'satellite-trade-overview',
+    env: tradeEnv,
+    namespace: ns,
+  })
   const telemetryUnavailable =
     telemetryQuery.error instanceof Error &&
     telemetryQuery.error.message.includes('503')
+  const prometheusConfigured = !telemetryUnavailable
 
   const apiMetricsEmpty =
-    promConfigured &&
+    prometheusConfigured &&
     API_METRIC_IDS.every(id => {
       const metric = metricByID(telemetryQuery.data?.metrics, id)
       return metric == null || metric.status === 'empty'
@@ -152,8 +152,8 @@ export function SatelliteTelemetryPage({ onOpenCluster }: SatelliteTelemetryPage
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="Telemetry"
-        description="Runtime metrics via platform-api PromQL proxy (Layer C). Requires Trade /metrics scrape (Track 4A/4B) and Layer B Prometheus."
+        title="Satellite Runtime"
+        description="Trade-namespace golden signals via platform-api preset PromQL proxy. System-wide health → Mission Control → Observability."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground shrink-0">Trade NS:</span>
@@ -173,63 +173,37 @@ export function SatelliteTelemetryPage({ onOpenCluster }: SatelliteTelemetryPage
         }
       />
 
-      <OpsSection title="Observability readiness" bodyPadding="default" overflow="visible">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <StatusLamp value={layerBLamp(layerB)} kind="reach" />
-            <span className="text-[var(--text-dense-label)] font-medium">Layer B</span>
-            <span className="text-[var(--text-dense-meta)] text-muted-foreground">
-              {observabilityQuery.isLoading ? '…' : (layerB ?? 'unknown')}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <StatusLamp
-              value={telemetryUnavailable ? 'fail' : promConfigured ? 'ok' : 'unknown'}
-              kind="reach"
-            />
-            <span className="text-[var(--text-dense-label)] font-medium">Prometheus</span>
-            <span className="text-[var(--text-dense-meta)] text-muted-foreground">
-              {telemetryUnavailable ? 'not configured' : promConfigured ? 'reachable' : '…'}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {observabilityQuery.data?.grafana_url != null &&
-              observabilityQuery.data.grafana_url !== '' &&
-              layerB === 'ready' && (
-                <Button size="sm" asChild>
-                  <a href={observabilityQuery.data.grafana_url} target="_blank" rel="noreferrer">
-                    Open Grafana
-                  </a>
-                </Button>
-              )}
-            {tradeDashUrl != null && layerB === 'ready' && (
-              <Button variant="outline" size="sm" asChild>
-                <a href={tradeDashUrl} target="_blank" rel="noreferrer">
-                  Open Trade Dashboard
-                </a>
-              </Button>
-            )}
-            {layerB !== 'ready' && onOpenCluster != null && (
-              <Button variant="outline" size="sm" onClick={onOpenCluster}>
-                Rocket → Cluster
-              </Button>
-            )}
-          </div>
+      <MonitoringCoverageStrip
+        layerB={layerB}
+        prometheusConfigured={prometheusConfigured}
+        loading={observabilityQuery.isLoading}
+        onOpenCluster={onOpenCluster}
+        onOpenObservability={onOpenObservability}
+      />
+
+      {tradeDashUrl != null && layerB === 'ready' && (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <a href={tradeDashUrl} target="_blank" rel="noreferrer">
+              Open Trade Dashboard
+            </a>
+          </Button>
         </div>
-        {telemetryUnavailable && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-muted-foreground">
-            Configure{' '}
-            <code className="font-mono text-[var(--text-dense-caption)]">observability_urls.prometheus</code>{' '}
-            or PLATFORM_PROMETHEUS_URL on platform-api.
-          </p>
-        )}
-        {apiMetricsEmpty && !telemetryUnavailable && (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-muted-foreground">
-            No scrape data yet. Deploy Track 4A/4B, sync Argo, then wait ~2 minutes for Prometheus targets
-            to become UP.
-          </p>
-        )}
-      </OpsSection>
+      )}
+
+      {telemetryUnavailable && (
+        <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
+          Configure{' '}
+          <code className="font-mono text-[var(--text-dense-caption)]">observability_urls.prometheus</code>{' '}
+          or PLATFORM_PROMETHEUS_URL on platform-api. Missing data is not treated as healthy.
+        </p>
+      )}
+      {apiMetricsEmpty && !telemetryUnavailable && (
+        <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
+          No scrape data yet for {ns}. Deploy Track 4A/4B, sync Argo, then wait ~2 minutes for Prometheus
+          targets to become UP.
+        </p>
+      )}
 
       <OpsSection title="API Performance" bodyPadding="none" overflow="hidden">
         <DenseDataTable>
@@ -274,7 +248,12 @@ export function SatelliteTelemetryPage({ onOpenCluster }: SatelliteTelemetryPage
         </DenseDataTable>
       </OpsSection>
 
-      <OpsSection title="Data Layer" bodyPadding="none" overflow="hidden">
+      <OpsSection
+        title="Shared data layer (evidence)"
+        description="redis-ib / CNPG — shared dependencies; system rollup on Observability"
+        bodyPadding="none"
+        overflow="hidden"
+      >
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>

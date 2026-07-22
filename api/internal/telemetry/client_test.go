@@ -75,6 +75,20 @@ func TestResolveNamespace(t *testing.T) {
 	if ResolveNamespace("bifrost-prod") != "bifrost-prod" {
 		t.Fatal("explicit ns")
 	}
+	// Non-whitelisted values must never reach PromQL interpolation.
+	for _, raw := range []string{
+		`bifrost-stg"} or up{`,
+		"data",
+		"monitoring",
+		"bifrost-stg ",
+	} {
+		if got := ResolveNamespace(raw); got != DefaultNamespace() && got != "bifrost-stg" {
+			t.Fatalf("injection candidate %q resolved to %q", raw, got)
+		}
+	}
+	if ResolveNamespace(`evil"}`) != DefaultNamespace() {
+		t.Fatal("injection candidate should fall back to default")
+	}
 }
 
 func TestHandlerOverviewPrometheusMissing(t *testing.T) {

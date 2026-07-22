@@ -6,7 +6,7 @@
  * what MCP servers must expose, how permissions work, and what is forbidden.
  */
 
-export const MCP_CONTRACT_VERSION = '2026-06-19'
+export const MCP_CONTRACT_VERSION = '2026-07-21'
 /** Governance prose lives here; live tool inventory is GET /api/v1/mcp/tools (Go authoritative). */
 export const MCP_CONTRACT_SOURCE =
   'console/src/lib/standards/mcpContractCatalog.ts · tools: GET /api/v1/mcp/tools'
