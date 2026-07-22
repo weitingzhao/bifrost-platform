@@ -105,17 +105,7 @@ func ValidateLane(l Lane) error {
 }
 
 func (r CreateRequest) ToLane() Lane {
-	return Lane{
-		ID:            r.ID,
-		Track:         r.Track,
-		ComponentLine: r.ComponentLine,
-		TrackType:     r.TrackType,
-		Label:         r.Label,
-		ShortLabel:    r.ShortLabel,
-		Description:   r.Description,
-		AgentMode:     r.AgentMode,
-		WorkIntent:    r.WorkIntent,
-	}
+	return Lane(r)
 }
 
 type validationError struct{ msg string }

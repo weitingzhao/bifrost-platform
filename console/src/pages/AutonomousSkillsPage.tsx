@@ -11,8 +11,8 @@ import {
   StatusLamp,
 } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { fetchHermesSkills, fetchHermesSchedules } from '@/api/platform'
-import type { HermesSkill, HermesSchedule, HermesActuationLevel } from '@/api/types'
+import { fetchHermesSkills, fetchHermesSchedules } from '@/api/hermes'
+import type { HermesSkill, HermesSchedule, HermesActuationLevel } from '@/api/agentTypes'
 
 function triggerTag(trigger: HermesSkill['trigger']) {
   switch (trigger) {

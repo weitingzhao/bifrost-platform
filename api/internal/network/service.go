@@ -21,15 +21,19 @@ var zoneSpecs = []struct {
 	{"Bifrost Default", "Default"},
 }
 
+// expectedPolicyNames must match permanent POLICY_SPECS in scripts/unifi_firewall_setup.py
+// (not TEMP_* and not stale catalog aliases like "Family → NAS Plex/SMB").
 var expectedPolicyNames = []string{
+	"Bifrost | ALLOW Work → Server",
+	"Bifrost | ALLOW Family → NAS",
+	"Bifrost | ALLOW Family → Trade VIP",
+	"Bifrost | ALLOW IoT → NAS Plex",
+	"Bifrost | ALLOW Server → IoT",
 	"Bifrost | REJECT Family → Server",
 	"Bifrost | REJECT IoT → Server",
 	"Bifrost | REJECT IoT → Family",
 	"Bifrost | REJECT Family → IoT",
-	"Bifrost | ALLOW Work → Server",
-	"Bifrost | ALLOW Family → NAS Plex/SMB",
-	"Bifrost | ALLOW IoT → NAS Plex",
-	"Bifrost | ALLOW Server → IoT",
+	"Bifrost | REJECT Default → Server (transition)",
 }
 
 type networkRef struct {

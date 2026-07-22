@@ -5,7 +5,7 @@
  * Governance Phase 4 / briefingReconciliationCatalog gate-catalog-spine-parity.
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   LEGACY_RETIREMENT_MILESTONE_ID,
   ALL_MAINLINE_PHASE_DEFINITIONS,

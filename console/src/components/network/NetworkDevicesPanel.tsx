@@ -7,7 +7,7 @@ import {
   DenseTableHeader,
   DenseTableRow,
 } from '@bifrost/ui'
-import type { NetworkDevicesResponse } from '@/api/types'
+import type { NetworkDevicesResponse } from '@/api/networkTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 interface NetworkDevicesPanelProps {

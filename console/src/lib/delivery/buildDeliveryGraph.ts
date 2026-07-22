@@ -1,4 +1,5 @@
-import type { GitOpsAppsResponse, OpsContextResponse, StackAddonsResponse } from '@/api/types'
+import type { GitOpsAppsResponse, StackAddonsResponse } from '@/api/deliveryTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { Edge, Node } from '@xyflow/react'
 
 export type DeliveryNodeStatus = 'live' | 'planned' | 'blocked' | 'degraded'

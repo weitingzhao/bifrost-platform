@@ -12,8 +12,8 @@ func TestStoreAddAndList(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	store := NewStore(configDir)
 	item, err := store.Add(Item{
@@ -42,8 +42,8 @@ func TestStoreAddAndList(t *testing.T) {
 func TestStoreIdempotentPendingID(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	store := NewStore(configDir)
 	first := NewItemFromApproval(ApprovalInjectParams{
@@ -75,8 +75,8 @@ func TestStoreIdempotentPendingID(t *testing.T) {
 func TestStoreClose(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	store := NewStore(configDir)
 	item, err := store.Add(Item{
@@ -122,8 +122,8 @@ func TestStoreClose(t *testing.T) {
 func TestStoreDismissSkipsJobGates(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	store := NewStore(configDir)
 	item, err := store.Add(Item{
@@ -136,9 +136,9 @@ func TestStoreDismissSkipsJobGates(t *testing.T) {
 	}
 
 	// Close would fail without job done; Dismiss must succeed with evidence.
-	if _, err := store.Close(item.ID, CloseRequest{
+	if _, closeErr := store.Close(item.ID, CloseRequest{
 		CompletionEvidence: []string{"operator: tried close"},
-	}, false); err == nil {
+	}, false); closeErr == nil {
 		t.Fatal("expected Close to require completed execution job")
 	}
 
@@ -161,8 +161,8 @@ func TestLegacyJSONLoadsWithDefaults(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
 	dataDir := filepath.Join(dir, "data")
-	os.Setenv("PLATFORM_DATA_DIR", dataDir)
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", dataDir)
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 	path := filepath.Join(dataDir, "operate", "queue.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -196,8 +196,8 @@ func TestStructuredValidationRejectsInvalidEnumsAndTask(t *testing.T) {
 func TestExecutionAndVerifiedClose(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 	store := NewStore(configDir)
 	item, err := store.Add(Item{
 		ID: "execution", ProgramID: "p", Title: "Execute", Status: StatusOpen,
@@ -211,10 +211,10 @@ func TestExecutionAndVerifiedClose(t *testing.T) {
 		t.Fatalf("RecordExecution: item=%+v err=%v", item, err)
 	}
 	req := CloseRequest{CompletionEvidence: []string{"job:job-1", "post_fix_verification:passed"}}
-	if _, err := store.Close(item.ID, req, false); err == nil {
+	if _, closeErr := store.Close(item.ID, req, false); closeErr == nil {
 		t.Fatal("expected incomplete job rejection")
 	}
-	if _, err := store.Close(item.ID, req, true); err == nil {
+	if _, forceCloseErr := store.Close(item.ID, req, true); forceCloseErr == nil {
 		t.Fatal("expected post-fix verification rejection")
 	}
 	req.PostFixVerificationPassed = true
@@ -227,8 +227,8 @@ func TestExecutionAndVerifiedClose(t *testing.T) {
 func TestRecurringSetupRequiresSetupEvidence(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 	store := NewStore(configDir)
 	item, err := store.Add(Item{
 		ID: "recurring", ProgramID: "p", Title: "Schedule", Status: StatusOpen,

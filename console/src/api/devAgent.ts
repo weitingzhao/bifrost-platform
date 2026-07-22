@@ -5,30 +5,10 @@ import type {
   DevAgentProgramsResponse,
   DevAgentStatusResponse,
 } from './devAgentTypes'
-import { getPlatformOperatorToken } from '@/lib/platformAuth'
-
-async function parseError(prefix: string, r: Response): Promise<Error> {
-  let detail = `HTTP ${r.status}`
-  try {
-    const body = (await r.json()) as { error?: string; message?: string; detail?: string }
-    detail = body.error ?? body.message ?? detail
-    if (body.detail != null && body.detail.trim() !== '' && body.detail !== detail) {
-      detail = `${detail} — ${body.detail.trim()}`
-    }
-  } catch {
-    // keep status detail
-  }
-  return new Error(`${prefix}: ${detail}`)
-}
+import { authedFetch } from './client'
 
 async function devAgentFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const token = getPlatformOperatorToken()
-  const headers = new Headers(init.headers)
-  headers.set('Content-Type', 'application/json')
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(path, { ...init, headers })
-  if (!r.ok) throw await parseError('dev-agent', r)
-  return r
+  return authedFetch('dev-agent', path, init)
 }
 
 export async function fetchDevAgentStatus(): Promise<DevAgentStatusResponse> {

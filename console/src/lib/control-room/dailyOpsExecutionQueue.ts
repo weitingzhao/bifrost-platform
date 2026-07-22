@@ -3,7 +3,7 @@
  * Human vs Agent lanes + noise filter for open-count trust.
  */
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
-import type { RemediationJob } from '@/api/types'
+import type { RemediationJob } from '@/api/remediationTypes'
 import { remediationJobStatusLabel } from '@/lib/remediation/remediationJobDisplay'
 
 export type QueueOriginKind = 'agent' | 'human' | 'skipped' | 'ask-ai' | 'handoff' | 'queue'

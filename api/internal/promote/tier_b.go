@@ -157,7 +157,7 @@ func (s *Service) probeTierBHTTP(ctx context.Context, id, label, url string) Tie
 			Reachability: probe.ReachFail, Detail: err.Error(),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	reach := probe.ReachOK

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button, DenseTag, SegmentControl } from '@bifrost/ui'
-import type { TopologyResponse } from '@/api/types'
+import type { TopologyResponse } from '@/api/matrixTypes'
 import { buildGapOverview, type GapOverview } from '@/lib/runtime-map/gapAnalysis'
 import {
   buildInfraMapLayout,

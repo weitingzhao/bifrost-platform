@@ -13,7 +13,7 @@
 export const NET_UPGRADE_VERSION = '2026-07-12-vip-https-verified'
 export const NET_UPGRADE_SOURCE = 'console/src/lib/architecture/networkUpgradeCatalog.ts'
 export const NET_UPGRADE_STATUS =
-  'VIP DNS + HTTPS Owner-verified 2026-07-12 — UniFi A→192.168.10.100; Traefik websecure + HTTP→HTTPS; Family ZBF ALLOW VIP :80/:443; verified on Work Mac, Family Win11, Mac Pro (rocket + satellite hosts). NodePort escape retained. Core stream still open only for ⑥ UniFi MCP.'
+  'VIP DNS + HTTPS Owner-verified 2026-07-12 — UniFi A→192.168.10.100; Traefik websecure + HTTP→HTTPS; Family ZBF ALLOW VIP :80/:443; verified on Work Mac, Family Win11, Mac Pro (rocket + satellite hosts). NodePort escape retained. Core stream CLOSED 2026-07-22 — ⑥ UniFi MCP via unifi-mcp-server 4/4.'
 
 /** Owner UniFi local DNS — all A records → kube-vip 192.168.10.100 (Phase 1). */
 export const VIP_DNS_RECORDS: { fqdn: string; role: string }[] = [
@@ -48,11 +48,11 @@ export type DeploymentProgressRow = {
 export const DEPLOYMENT_PROGRESS: DeploymentProgressRow[] = [
   {
     stream: 'network-upgrade-core',
-    done: 5,
+    done: 6,
     total: 6,
     label: 'Core backbone (UCG · switch · VLAN · firewall · K3s validation)',
     note:
-      '④ kube-vip + VIP DNS/HTTPS Owner-verified 2026-07-12 (Work/Family/Mac Pro) · ⑤ ZBF ✓ (Family→Trade VIP :80/:443) · ⑥ UniFi MCP read integration pending',
+      'CLOSED 2026-07-22 — ④ kube-vip + VIP DNS/HTTPS ✓ · ⑤ ZBF ✓ · ⑥ UniFi MCP via unifi-mcp-server 4/4',
   },
   {
     stream: 'network-upgrade-wifi',

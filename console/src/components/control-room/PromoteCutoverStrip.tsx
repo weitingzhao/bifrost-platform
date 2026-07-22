@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import { Check, Copy, Rocket, X } from 'lucide-react'
-import type { MatrixResponse, OpsContextResponse, ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 import {
   buildPromoteCutoverModel,
   stashPromotePreflightPack,

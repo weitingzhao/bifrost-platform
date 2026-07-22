@@ -2,7 +2,7 @@ import { Button, cn, DenseTag } from '@bifrost/ui'
 import { ArrowLeft, ChevronDown } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
-import type { ReleaseGateResponse } from '@/api/types'
+import type { ReleaseGateResponse } from '@/api/deliveryTypes'
 import {
   LANE_DETAIL_REASON_COPY,
   type LaneDetailReason,

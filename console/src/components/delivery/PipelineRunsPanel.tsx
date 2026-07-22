@@ -13,13 +13,8 @@ import {
 import { useIsFetching, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import type { DeliveryPipelineRunView, DeliveryPipelinesResponse } from '@/api/types'
-import {
-  deletePipelineRun,
-  fetchPipelineRunLogs,
-  fetchPipelineRuns,
-  startPipelineRun,
-} from '@/api/platform'
+import type { DeliveryPipelineRunView, DeliveryPipelinesResponse } from '@/api/deliveryTypes'
+import { deletePipelineRun, fetchPipelineRunLogs, fetchPipelineRuns, startPipelineRun } from '@/api/delivery'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeliveryBrandLabel } from '@/components/delivery/DeliveryBrandLabel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'

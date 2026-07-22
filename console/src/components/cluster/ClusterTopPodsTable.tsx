@@ -1,5 +1,5 @@
 import { DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
-import type { ClusterMetricsResponse, ClusterPodMetric } from '@/api/types'
+import type { ClusterMetricsResponse, ClusterPodMetric } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'

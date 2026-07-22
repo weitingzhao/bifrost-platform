@@ -37,7 +37,9 @@ import {
   type WorkTrackType,
 } from '@/lib/briefing/workLanes'
 import type { TrackId } from '@/lib/briefing/workTracks'
-import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   buildNewLaneInitPack,
   defaultTrackForLine,

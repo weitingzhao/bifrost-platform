@@ -250,19 +250,3 @@ func HasCapability(labels map[string]string, id string) bool {
 	}
 	return false
 }
-
-func catalogEntryForNodeCapability(id string) (CapabilityCatalogEntry, bool) {
-	for _, def := range capabilityDefs {
-		if def.id == id {
-			return CapabilityCatalogEntry{
-				ID:          def.id,
-				Label:       def.label,
-				Category:    def.category,
-				Scope:       "node",
-				LabelHint:   def.labelHint,
-				RequiredFor: def.requiredFor,
-			}, true
-		}
-	}
-	return CapabilityCatalogEntry{}, false
-}

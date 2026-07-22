@@ -23,3 +23,29 @@ func TestFirstTask_L0ReadOnly(t *testing.T) {
 		t.Fatalf("tools %v", task.RequiredMcpTools)
 	}
 }
+
+func TestBuild_LlmKeyMissingBlockerDetail(t *testing.T) {
+	t.Setenv("NOUS_HERMES_URL", "")
+	t.Setenv("HERMES_LLM_KEY_CONFIGURED", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	resp := Build(t.Context(), NewHandler().httpClient)
+	if resp.Ready {
+		t.Fatal("expected not ready without nous + llm")
+	}
+	if len(resp.BlockerDetails) == 0 {
+		t.Fatal("expected blocker_details")
+	}
+	found := false
+	for _, d := range resp.BlockerDetails {
+		if d.Code == "NOUS_HERMES_URL_MISSING" {
+			found = true
+			if d.Remediation == "" {
+				t.Fatal("missing remediation")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("codes %v", resp.BlockerDetails)
+	}
+}

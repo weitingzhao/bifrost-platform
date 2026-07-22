@@ -1,4 +1,4 @@
-import type { MatrixResponse, Target, TopologyResponse } from '@/api/types'
+import type { MatrixResponse, Target, TopologyResponse } from '@/api/matrixTypes'
 
 const REACH_ORDER: Record<string, number> = {
   fail: 0,

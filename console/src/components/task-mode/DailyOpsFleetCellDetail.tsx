@@ -11,7 +11,7 @@ import {
 import { ChevronRight, Copy } from 'lucide-react'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { StatusLamp } from '@/components/StatusLamp'
-import { postIbGatewayControl } from '@/api/platform'
+import { postIbGatewayControl } from '@/api/network'
 import { cellAllowsAgentFix } from '@/lib/control-room/fleetCellFix'
 import type { DailyOpsBlocker } from '@/lib/control-room/dailyOpsPrimaryBlocker'
 import {
@@ -292,7 +292,7 @@ export function DailyOpsFleetCellDetail({
       lines.push(
         '',
         '### Operator actuation',
-        'POST /api/v1/plugins/ib-gateway/control/reconnect — rollout restart data/ib-gateway (does not touch live trading).',
+        'Reconnect Gateway via plugin control (IB Gateway reconnect) — does not touch live trading.',
       )
     }
     if (gitBridgeFailing) {

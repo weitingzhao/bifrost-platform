@@ -12,15 +12,10 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import {
-  fetchGateHistory,
-  fetchPipelineRuns,
-  fetchReleaseGate,
-  fetchSelfHealth,
-  runReleaseGate,
-  type ReleaseGateTier,
-} from '@/api/platform'
-import type { GateHistoryEntry, ReleaseGateCheckView } from '@/api/types'
+import { fetchGateHistory, fetchReleaseGate, runReleaseGate, type ReleaseGateTier } from '@/api/promote'
+import { fetchPipelineRuns } from '@/api/delivery'
+import { fetchSelfHealth } from '@/api/core'
+import type { GateHistoryEntry, ReleaseGateCheckView } from '@/api/deliveryTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { deliveryTargetById, type DeliveryTargetId } from '@/lib/delivery/deliveryTargets'

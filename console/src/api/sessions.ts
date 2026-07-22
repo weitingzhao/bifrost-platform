@@ -1,4 +1,4 @@
-import { getPlatformOperatorToken } from '@/lib/platformAuth'
+import { authHeaders, parseError } from './client'
 
 export interface SessionRecord {
   session_id: string
@@ -22,22 +22,9 @@ export interface CreateSessionRequest {
   cursor_agent_id?: string
 }
 
-async function parseError(prefix: string, r: Response): Promise<Error> {
-  let detail = `HTTP ${r.status}`
-  try {
-    const body = (await r.json()) as { error?: string; message?: string }
-    detail = body.error ?? body.message ?? detail
-  } catch {
-    // keep status detail
-  }
-  return new Error(`${prefix}: ${detail}`)
-}
-
 /** POST /api/v1/sessions — requires operator token. */
 export async function createSession(body: CreateSessionRequest): Promise<SessionRecord> {
-  const token = getPlatformOperatorToken()
-  const headers = new Headers({ 'Content-Type': 'application/json' })
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
+  const headers = authHeaders(true)
   const r = await fetch('/api/v1/sessions', {
     method: 'POST',
     headers,

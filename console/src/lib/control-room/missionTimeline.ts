@@ -3,7 +3,9 @@
  * commander-facing accountability trail (Control Room Phase 4).
  */
 
-import type { AgentNightlyReportResponse, AuditRecord, RemediationJob } from '@/api/types'
+import type { AgentNightlyReportResponse } from '@/api/agentTypes'
+import type { AuditRecord } from '@/api/auditTypes'
+import type { RemediationJob } from '@/api/remediationTypes'
 import { parseNightlyLayerResults } from '@/lib/briefing/briefingSyncLoop'
 import {
   formatRemediationJobWhen,

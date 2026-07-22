@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, DenseTag } from '@bifrost/ui'
-import type { MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
+import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { ComponentIcon } from '@/components/runtime-map/ComponentIcon'
 import { StatusLamp } from '@/components/StatusLamp'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'

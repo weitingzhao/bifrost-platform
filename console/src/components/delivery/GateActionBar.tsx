@@ -1,13 +1,9 @@
 import { Button } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import {
-  fetchPipelineRuns,
-  fetchReleaseGate,
-  fetchSelfHealth,
-  runReleaseGate,
-  type ReleaseGateTier,
-} from '@/api/platform'
+import { fetchPipelineRuns } from '@/api/delivery'
+import { fetchReleaseGate, runReleaseGate, type ReleaseGateTier } from '@/api/promote'
+import { fetchSelfHealth } from '@/api/core'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { DeliveryTargetConfig } from '@/lib/delivery/deliveryTargets'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'

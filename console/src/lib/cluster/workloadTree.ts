@@ -1,4 +1,4 @@
-import type { ClusterWorkload } from '@/api/types'
+import type { ClusterWorkload } from '@/api/clusterTypes'
 
 export interface DeploymentGroup {
   deployment: ClusterWorkload

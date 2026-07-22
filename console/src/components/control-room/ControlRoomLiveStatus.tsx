@@ -9,7 +9,10 @@ import {
   DenseTableRow,
   StatusLamp,
 } from '@bifrost/ui'
-import type { ClusterSummary, MatrixResponse, OpsContextResponse, StgSmokeResponse } from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import type { StgSmokeResponse } from '@/api/deliveryTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { flywheelLabel } from '@/components/FocusStrip'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'

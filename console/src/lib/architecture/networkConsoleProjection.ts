@@ -4,7 +4,7 @@
  * Live UniFi probe: GET /api/v1/network/status + audit (UMS3).
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   DEPLOYMENT_PROGRESS,
   FIREWALL_APPLIED,

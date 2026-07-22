@@ -1,15 +1,8 @@
 import type { ReactNode } from 'react'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
-import type {
-  DeliveryPipelinesResponse,
-  GitOpsAppsResponse,
-  MatrixResponse,
-  OpsContextResponse,
-  ReleaseGateResponse,
-  StackAddonsResponse,
-  StgSmokeResponse,
-  TierBStatusResponse,
-} from '@/api/types'
+import type { DeliveryPipelinesResponse, GitOpsAppsResponse, ReleaseGateResponse, StackAddonsResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { AuditPageLink } from '@/components/AuditPageLink'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {

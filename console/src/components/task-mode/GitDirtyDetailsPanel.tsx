@@ -1,7 +1,7 @@
 import { DenseTag } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import { fetchAgentBridge } from '@/api/platform'
-import type { GitDirtyRepoDetail } from '@/api/types'
+import { fetchAgentBridge } from '@/api/agentOps'
+import type { GitDirtyRepoDetail } from '@/api/agentTypes'
 
 function fileList(detail: GitDirtyRepoDetail): string[] {
   const out: string[] = []

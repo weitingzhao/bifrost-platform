@@ -1,5 +1,7 @@
-import type { AuditRecord, Reachability, RemediationJob } from '@/api/types'
-import { saveSessionSnapshot } from '@/api/platform'
+import type { AuditRecord } from '@/api/auditTypes'
+import type { Reachability } from '@/api/matrixTypes'
+import type { RemediationJob } from '@/api/remediationTypes'
+import { saveSessionSnapshot } from '@/api/sessionSnapshots'
 import type { BriefingSnapshotInput } from '@/lib/briefing/briefingSnapshot'
 
 const STORAGE_KEY = 'bifrost_session_snapshot'

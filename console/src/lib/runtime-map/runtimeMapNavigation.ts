@@ -1,4 +1,4 @@
-import type { MatrixResponse } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
 
 /** Deep-link options when navigating from Control Room (or elsewhere) to Runtime Map. */
 export type RuntimeMapNavigateOptions = {

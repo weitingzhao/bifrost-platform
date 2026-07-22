@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react'
 import {
-  Button,
   DenseDataTable,
   DenseTableHeader,
   DenseTableBody,
@@ -9,13 +8,16 @@ import {
   DenseTableHead,
   DenseTableCell,
   DenseTag,
-  DenseTagButton,
   SegmentControl,
 } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import { CatalogSection } from '@/components/CatalogSection'
-import { OpsSection } from '@/components/layout/OpsSection'
-import { fetchMcpTools } from '@/api/platform'
+import {
+  GovernanceCatalogShell,
+  type GovernanceCatalogSection,
+  type GovernanceCatalogShortcut,
+} from '@/components/architecture/GovernanceCatalogShell'
+import { fetchMcpTools } from '@/api/mcp'
 import {
   MCP_AUTH_STANDARDS,
   MCP_CONTRACT_SOURCE,
@@ -32,38 +34,48 @@ import { McpToolsPanel } from '@/components/mcp/McpToolsPanel'
 
 type CopyState = 'idle' | 'copied' | 'error'
 type McpView = 'tools' | 'contract'
-type ContractLens = 'all' | 'inventory' | 'interface' | 'governance'
+type ContractSection = 'inventory' | 'interface' | 'governance'
 
-const CONTRACT_LENSES: Array<{
-  id: Exclude<ContractLens, 'all'>
-  label: string
-  sectionCount: number
-}> = [
-  { id: 'inventory', label: 'Inventory', sectionCount: 2 },
-  { id: 'interface', label: 'Interface', sectionCount: 2 },
-  { id: 'governance', label: 'Governance', sectionCount: 3 },
+const CONTRACT_SECTIONS: Array<GovernanceCatalogSection<ContractSection>> = [
+  {
+    id: 'inventory',
+    label: 'Inventory',
+    badge: 'WHO',
+    summary: 'Core contract statement and registered MCP servers.',
+    hint: 'Contract · Server registry',
+  },
+  {
+    id: 'interface',
+    label: 'Interface',
+    badge: 'HOW',
+    summary: 'Required tools and authentication / transport standards.',
+    hint: 'Required interface · Auth & transport',
+  },
+  {
+    id: 'governance',
+    label: 'Governance',
+    badge: 'MUST',
+    summary: 'Permission levels, deny list, and decoupling enforcement.',
+    hint: 'Permissions · Deny list · Decoupling',
+  },
 ]
 
-const TOTAL_CONTRACT_SECTIONS = CONTRACT_LENSES.reduce((n, l) => n + l.sectionCount, 0)
+const CONTRACT_SHORTCUTS: Array<GovernanceCatalogShortcut<ContractSection>> = [
+  { label: 'Which servers exist? → Inventory', sectionId: 'inventory' },
+  { label: 'Required tools? → Interface', sectionId: 'interface' },
+  { label: 'What is forbidden? → Governance', sectionId: 'governance' },
+]
 
-function contractLensChipClass(selected: boolean): string {
-  return selected
-    ? 'ring-1 ring-current/40 brightness-110'
-    : 'opacity-55 hover:opacity-90'
-}
+const TOTAL_CONTRACT_SECTIONS = 7
 
 export function McpContractPage() {
   const [view, setView] = useState<McpView>('tools')
   const [copyState, setCopyState] = useState<CopyState>('idle')
-  const [contractLens, setContractLens] = useState<ContractLens>('all')
+  const [section, setSection] = useState<ContractSection>('inventory')
 
   // Deduped with McpToolsPanel via identical queryKey — no extra request.
   const toolsQuery = useQuery({ queryKey: ['mcp', 'tools'], queryFn: fetchMcpTools })
   const toolCount = toolsQuery.data?.tools.length
-
-  const showInventory = contractLens === 'all' || contractLens === 'inventory'
-  const showInterface = contractLens === 'all' || contractLens === 'interface'
-  const showGovernance = contractLens === 'all' || contractLens === 'governance'
 
   const handleCopy = useCallback(async () => {
     const text = buildMcpContractLlmPack()
@@ -93,51 +105,24 @@ export function McpContractPage() {
       {view === 'tools' ? (
         <McpToolsPanel />
       ) : (
-        <>
-          <OpsSection
-            title="Contract overview"
-            description={
-              <>
-                Standards for building MCP servers — permissions, deny-list, and decoupling enforcement.
-                Source:{' '}
-                <code className="font-mono-tabular text-[var(--primary)]">{MCP_CONTRACT_SOURCE}</code>
-                {' '}(v{MCP_CONTRACT_VERSION}). Inventory = who · Interface = how · Governance = what is allowed.
-              </>
-            }
-            actions={
-              <Button size="sm" className="shrink-0" onClick={() => void handleCopy()}>
-                {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-              </Button>
-            }
-            bodyPadding="none"
-            overflow="visible"
-          >
-            <div className="flex flex-wrap gap-2 px-3 py-2">
-              <DenseTagButton
-                variant={contractLens === 'all' ? 'info' : 'neutral'}
-                aria-pressed={contractLens === 'all'}
-                className={contractLensChipClass(contractLens === 'all')}
-                onClick={() => setContractLens('all')}
-              >
-                All · {TOTAL_CONTRACT_SECTIONS}
-              </DenseTagButton>
-              {CONTRACT_LENSES.map(lens => (
-                <DenseTagButton
-                  key={lens.id}
-                  variant={contractLens === lens.id ? 'info' : 'neutral'}
-                  aria-pressed={contractLens === lens.id}
-                  className={contractLensChipClass(contractLens === lens.id)}
-                  onClick={() =>
-                    setContractLens(prev => (prev === lens.id ? 'all' : lens.id))
-                  }
-                >
-                  {lens.label} · {lens.sectionCount}
-                </DenseTagButton>
-              ))}
-            </div>
-          </OpsSection>
-
-          {showInventory ? (
+        <GovernanceCatalogShell
+          description={
+            <>
+              Standards for building MCP servers — permissions, deny-list, and decoupling enforcement.
+              Source:{' '}
+              <code className="font-mono-tabular text-[var(--primary)]">{MCP_CONTRACT_SOURCE}</code>
+              {' '}(v{MCP_CONTRACT_VERSION}). Inventory = who · Interface = how · Governance = what is allowed.
+            </>
+          }
+          sections={CONTRACT_SECTIONS}
+          value={section}
+          onChange={setSection}
+          shortcuts={CONTRACT_SHORTCUTS}
+          tabAriaLabel="MCP Contract section"
+          onCopyForLlm={handleCopy}
+          copyState={copyState}
+        >
+          {section === 'inventory' ? (
             <>
               <CatalogSection title="Core Contract">
                 <div className="px-3 py-3 text-[var(--text-dense)]">
@@ -176,7 +161,7 @@ export function McpContractPage() {
             </>
           ) : null}
 
-          {showInterface ? (
+          {section === 'interface' ? (
             <div className="grid gap-4 md:grid-cols-2">
               <CatalogSection title="Required Interface">
                 <DenseDataTable>
@@ -220,7 +205,7 @@ export function McpContractPage() {
             </div>
           ) : null}
 
-          {showGovernance ? (
+          {section === 'governance' ? (
             <>
               <CatalogSection title="Permission Levels">
                 <DenseDataTable>
@@ -294,7 +279,7 @@ export function McpContractPage() {
               </CatalogSection>
             </>
           ) : null}
-        </>
+        </GovernanceCatalogShell>
       )}
     </div>
   )

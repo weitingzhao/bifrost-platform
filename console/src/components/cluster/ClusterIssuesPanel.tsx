@@ -12,12 +12,8 @@ import {
 } from '@bifrost/ui'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import type {
-  ClusterPostgresStatusResponse,
-  ClusterServiceReadinessResponse,
-  ClusterSummary,
-  RemediationJob,
-} from '@/api/types'
+import type { ClusterPostgresStatusResponse, ClusterServiceReadinessResponse, ClusterSummary } from '@/api/clusterTypes'
+import type { RemediationJob } from '@/api/remediationTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   collectClusterIssues,

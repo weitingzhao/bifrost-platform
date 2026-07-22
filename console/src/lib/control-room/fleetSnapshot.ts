@@ -3,16 +3,12 @@
  * Pure probe-lattice builders; UI and scripts should call
  * `buildFleetSnapshot` from `./buildFleetSnapshot` (core + Checklist union).
  */
-import type {
-  AgentBridgeResponse,
-  ClusterSummary,
-  IbGatewayStatusResponse,
-  MatrixResponse,
-  RemediationHealthResponse,
-  SelfHealthResponse,
-  StgSmokeResponse,
-  SupplyChainResponse,
-} from '@/api/types'
+import type { AgentBridgeResponse } from '@/api/agentTypes'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
+import type { MatrixResponse, SelfHealthResponse } from '@/api/matrixTypes'
+import type { RemediationHealthResponse } from '@/api/remediationTypes'
+import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import {
   DELIVER_STG_RECOVER_SCOPE,
   PLATFORM_SELF_HEALTH_RECOVER_SCOPE,

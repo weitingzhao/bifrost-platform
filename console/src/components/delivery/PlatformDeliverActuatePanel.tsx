@@ -11,7 +11,7 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { fetchRevisions, fetchSupplyChain, startPipelineRun } from '@/api/platform'
+import { fetchRevisions, fetchSupplyChain, startPipelineRun } from '@/api/delivery'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { isRevisionDeployReady, RevisionPicker } from '@/components/delivery/RevisionPicker'
 import { isRefDeployBlocked, RefPreflightStatus, useRefPreflight } from '@/components/delivery/RefPreflightPanel'

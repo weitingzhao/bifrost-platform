@@ -1,5 +1,5 @@
 import { DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
-import type { MatrixResponse } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { StatusLamp } from './StatusLamp'
 

@@ -15,8 +15,9 @@ import {
   DenseTableRow,
   DenseTag,
 } from '@bifrost/ui'
-import type { McpToolLevel } from '@/api/types'
-import { fetchAgentBridge, fetchMcpStatus, fetchMcpTools, triggerNightlyDriftScan } from '@/api/platform'
+import type { McpToolLevel } from '@/api/agentTypes'
+import { fetchAgentBridge, triggerNightlyDriftScan } from '@/api/agentOps'
+import { fetchMcpStatus, fetchMcpTools } from '@/api/mcp'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { CatalogSection } from '@/components/CatalogSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'

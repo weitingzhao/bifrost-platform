@@ -1,4 +1,4 @@
-import type { RemediationEvent, RemediationJob } from '@/api/types'
+import type { RemediationEvent, RemediationJob } from '@/api/remediationTypes'
 
 export type AgentLiveFeed = {
   kind: 'status' | 'tool' | 'thinking' | 'error'

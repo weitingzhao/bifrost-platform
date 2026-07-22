@@ -202,7 +202,7 @@ func (s *Service) probeHTTP(ctx context.Context, id, label, url string) RoutePro
 	if err != nil {
 		return RouteProbe{ID: id, Label: label, URL: url, Status: RouteFail, Detail: err.Error(), LatencyMs: latency}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	st := RouteOK
 	detail := fmt.Sprintf("HTTP %d", resp.StatusCode)
 	if resp.StatusCode >= 500 {

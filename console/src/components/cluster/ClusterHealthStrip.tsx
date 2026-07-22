@@ -1,4 +1,4 @@
-import type { ClusterSummary } from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
 import { DenseTag } from '@bifrost/ui'
 import { StatusLamp } from '@/components/StatusLamp'
 import { apiReachability, clusterHealthHint } from '@/lib/cluster/clusterHealthHint'

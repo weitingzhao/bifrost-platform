@@ -26,13 +26,14 @@ func BuildMatrixDatastoreSnapshot(pg PostgresStatusResponse, redis RedisStatusRe
 		snap.ByEnv[db.Environment] = row
 	}
 
-	if pg.Reachability == probe.ReachFail {
+	switch pg.Reachability {
+	case probe.ReachFail:
 		for env, row := range snap.ByEnv {
 			row.Postgres = probe.ReachFail
 			row.PostgresDetail = pg.Summary
 			snap.ByEnv[env] = row
 		}
-	} else if pg.Reachability == probe.ReachDegraded {
+	case probe.ReachDegraded:
 		for env, row := range snap.ByEnv {
 			if row.Postgres == probe.ReachOK {
 				row.Postgres = probe.ReachDegraded

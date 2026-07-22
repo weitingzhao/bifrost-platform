@@ -47,7 +47,7 @@ func (s *Service) S3Gate(ctx context.Context) V1GateResponse {
 		Blockers:     blockers,
 		Checks:       checks,
 		Reachability: reach,
-		Detail:       fmt.Sprintf("Vision S3 Briefing ↔ Vision alignment gate %s (%d checks)", result, len(checks)),
+		Detail:       fmt.Sprintf("vision S3 Briefing ↔ Vision alignment gate %s (%d checks)", result, len(checks)),
 		GeneratedAt:  now,
 	}
 	if rec != nil {
@@ -81,13 +81,13 @@ func (s *Service) RunS3Gate(ctx context.Context, triggeredBy string) (RunGateRes
 		Result:      result,
 		Checks:      checks,
 		TriggeredBy: triggeredBy,
-		Summary:     fmt.Sprintf("Vision S3 gate %s (%d checks)", result, len(checks)),
+		Summary:     fmt.Sprintf("vision S3 gate %s (%d checks)", result, len(checks)),
 	}
 	if err := s.s3store.SaveGate(rec); err != nil {
 		return RunGateResponse{}, err
 	}
 	gate := s.S3Gate(ctx)
-	msg := fmt.Sprintf("Vision S3 gate %s", result)
+	msg := fmt.Sprintf("vision S3 gate %s", result)
 	if !gate.Ready {
 		msg += fmt.Sprintf(" (blocked: %s)", strings.Join(gate.Blockers, "; "))
 	}
@@ -106,7 +106,7 @@ func (s *Service) SignS3(ctx context.Context, notes, signedBy string) (SignoffRe
 	now := time.Now().UTC()
 	gate := s.S3Gate(ctx)
 	if !gate.Ready {
-		return SignoffResponse{}, fmt.Errorf("Vision S3 gate not ready — run gate first and fix blockers")
+		return SignoffResponse{}, fmt.Errorf("vision S3 gate not ready — run gate first and fix blockers")
 	}
 	rec := V1SignoffRecord{
 		At:       now,
@@ -127,7 +127,7 @@ func (s *Service) SignS3(ctx context.Context, notes, signedBy string) (SignoffRe
 		Action:      "vision.s3-signoff",
 		Target:      "vision-s3-briefing-alignment",
 		Changed:     true,
-		Message:     "Vision S3 Briefing ↔ Vision alignment SIGNED",
+		Message:     "vision S3 Briefing ↔ Vision alignment SIGNED",
 		Gate:        gate,
 		GeneratedAt: now,
 	}, nil
@@ -165,7 +165,7 @@ func (s *Service) collectS3Checks(ctx context.Context) []GateCheck {
 
 func (s *Service) checkV1Prerequisite() GateCheck {
 	check := GateCheck{
-		ID: "v1-prerequisite", Label: "Vision V1 signed (prerequisite)", Required: true,
+		ID: "v1-prerequisite", Label: "vision V1 signed (prerequisite)", Required: true,
 		Reachability: probe.ReachFail, Detail: "V1 signoff not recorded",
 	}
 	signoff, err := s.store.LoadSignoff()

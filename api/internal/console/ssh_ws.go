@@ -157,19 +157,19 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Printf("console ws upgrade: %v", err)
 		return
 	}
-	defer ws.Close()
+	defer func() { _ = ws.Close() }()
 
 	client, jumpClient, agentConn, err := dialSSH(target, h.ssh)
 	if err != nil {
 		_ = ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n\x1b[31mSSH connect failed: %v\x1b[0m\r\n", err)))
 		return
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	if jumpClient != nil {
-		defer jumpClient.Close()
+		defer func() { _ = jumpClient.Close() }()
 	}
 	if agentConn != nil {
-		defer agentConn.Close()
+		defer func() { _ = agentConn.Close() }()
 	}
 
 	session, err := client.NewSession()
@@ -177,7 +177,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		_ = ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n\x1b[31mSSH session: %v\x1b[0m\r\n", err)))
 		return
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	stdin, err := session.StdinPipe()
 	if err != nil {

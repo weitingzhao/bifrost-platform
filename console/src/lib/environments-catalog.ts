@@ -8,7 +8,7 @@
  */
 
 import type { DenseTagVariant } from '@bifrost/ui'
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 
 export const CATALOG_VERSION = '2026-06-29-ai-compute-strategy'
 export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'

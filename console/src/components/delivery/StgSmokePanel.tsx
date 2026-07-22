@@ -7,7 +7,7 @@ import {
   DenseTableHeader,
   DenseTableRow,
 } from '@bifrost/ui'
-import type { StgSmokeResponse } from '@/api/types'
+import type { StgSmokeResponse } from '@/api/deliveryTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'

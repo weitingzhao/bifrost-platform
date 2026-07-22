@@ -102,10 +102,6 @@ func aggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView
 	return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus)
 }
 
-func aggregateDeliverPlatformPhases(taskStatus map[string]string) []PipelinePhaseView {
-	return aggregateDeliverPhases(deliverPlatformPhaseDefs, taskStatus)
-}
-
 func aggregateDeliverPlatformProdPhases(taskStatus map[string]string) []PipelinePhaseView {
 	return aggregateDeliverPhases(deliverPlatformProdPhaseDefs, taskStatus)
 }

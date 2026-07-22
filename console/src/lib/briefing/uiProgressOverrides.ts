@@ -20,16 +20,21 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
     notes: 'Topology SVG, SCOPE stack, matrix probes, runtime LLM pack',
   },
   cluster: {
-    status: 'partial',
-    notes: 'Node wizard, drawer actuation, Layer A metrics, P1 workload actuation',
+    status: 'done',
+    notes:
+      'P1 workload actuation + P2 node wizard/join/drain/cordon + Layer A metrics; Layer B prometheus ensure admin-only (deferred)',
   },
   placement: {
     status: 'done',
     notes: 'Fleet facility constraints — node pools + policy matrix + CI readiness; GET /cluster/placement',
   },
-  delivery: {
-    status: 'partial',
-    notes: 'Stack install wizard + GitOps sync/rollback + Tekton pipeline runs',
+  'platform-release': {
+    status: 'done',
+    notes: 'Launch Rocket STG/PROD deliver + gates + self-health/escape + CI/CD stack install wizard',
+  },
+  'trade-release': {
+    status: 'done',
+    notes: 'Deploy Satellite Tekton STG/PROD + release gates + GitOps sync/rollback quick actions',
   },
   program: {
     status: 'done',
@@ -48,11 +53,11 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
     notes: 'SSH/WebSocket terminal (topology allowlist)',
   },
   'mcp-contract': {
-    status: 'partial',
-    notes: 'mcp-server-platform proxies platform-api; get_session_briefing (Phase 3)',
+    status: 'done',
+    notes: 'Live GET /mcp/tools catalog; mcp-server-platform + unifi proxy platform-api incl. get_session_briefing',
   },
   audit: {
     status: 'done',
-    notes: 'Actuation audit log incl. briefing.session.close',
+    notes: 'Actuation audit log incl. briefing.session.close + Download JSON export (Wave A A3)',
   },
 }

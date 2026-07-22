@@ -2,13 +2,9 @@
  * Control Room Phase 5 — Promote / cutover go-no-go model (aligned with PromotePage).
  */
 
-import type {
-  MatrixResponse,
-  OpsContextResponse,
-  ReleaseGateResponse,
-  StgSmokeResponse,
-  TierBStatusResponse,
-} from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 import { buildPromotePack } from '@/lib/control-room/agentContextPacks'
 import {
   evaluatePromoteStatus,

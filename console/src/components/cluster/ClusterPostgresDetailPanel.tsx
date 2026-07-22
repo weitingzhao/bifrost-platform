@@ -10,12 +10,8 @@ import {
 } from '@bifrost/ui'
 import { useQueryClient } from '@tanstack/react-query'
 import { CopyChip } from '@/components/cluster/CopyChip'
-import type {
-  ClusterPostgresStatusResponse,
-  ClusterServiceReadinessResponse,
-  Reachability,
-  ServiceDomain,
-} from '@/api/types'
+import type { ClusterPostgresStatusResponse, ClusterServiceReadinessResponse, ServiceDomain } from '@/api/clusterTypes'
+import type { Reachability } from '@/api/matrixTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'

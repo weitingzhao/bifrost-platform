@@ -1,9 +1,5 @@
-import type {
-  ClusterPostgresStatusResponse,
-  ClusterServiceReadinessResponse,
-  ClusterSummary,
-  Reachability,
-} from '@/api/types'
+import type { ClusterPostgresStatusResponse, ClusterServiceReadinessResponse, ClusterSummary } from '@/api/clusterTypes'
+import type { Reachability } from '@/api/matrixTypes'
 
 export type ClusterIssueCategory = 'pods' | 'nodes' | 'elastic' | 'data'
 

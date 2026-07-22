@@ -10,8 +10,8 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { fetchHermesExecutions } from '@/api/platform'
-import type { HermesExecution, HermesExecutionResult } from '@/api/types'
+import { fetchHermesExecutions } from '@/api/hermes'
+import type { HermesExecution, HermesExecutionResult } from '@/api/agentTypes'
 
 function resultTag(result: HermesExecutionResult) {
   switch (result) {

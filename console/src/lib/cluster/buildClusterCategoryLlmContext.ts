@@ -1,4 +1,5 @@
-import type { OpsContextResponse, ServiceDomain, ClusterPostgresStatusResponse, ClusterRedisStatusResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import type { ServiceDomain, ClusterPostgresStatusResponse, ClusterRedisStatusResponse } from '@/api/clusterTypes'
 import {
   PG_DEPLOY_PRINCIPLES,
   REDIS_DEPLOY_PRINCIPLES,

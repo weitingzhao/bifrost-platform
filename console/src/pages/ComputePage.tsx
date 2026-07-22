@@ -1,20 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { Button, PageHeader } from '@bifrost/ui'
-import {
-  cordonNode,
-  drainNode,
-  fetchClusterMetrics,
-  fetchClusterNodes,
-  fetchJoinProfiles,
-  fetchNodePower,
-  joinClusterNode,
-  powerOffComputeNode,
-  scaleDeployment,
-  uncordonNode,
-  wakeComputeNode,
-} from '@/api/platform'
-import type { ClusterNode, ComputeWorkloadStatus } from '@/api/types'
+import { cordonNode, drainNode, joinClusterNode, powerOffComputeNode, scaleDeployment, uncordonNode, wakeComputeNode } from '@/api/clusterActuation'
+import { fetchClusterMetrics, fetchClusterNodes, fetchJoinProfiles, fetchNodePower } from '@/api/cluster'
+import type { ClusterNode, ComputeWorkloadStatus } from '@/api/clusterTypes'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
 import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPanel'

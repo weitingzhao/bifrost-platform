@@ -12,9 +12,9 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { fetchVisionS3Gate, runVisionS3Gate, signVisionS3 } from '@/api/platform'
+import { fetchVisionS3Gate, runVisionS3Gate, signVisionS3 } from '@/api/vision'
 import { invalidateProgramDeliveryQueries } from '@/api/programs'
-import type { VisionV1GateResponse } from '@/api/types'
+import type { VisionV1GateResponse } from '@/api/deliveryTypes'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 

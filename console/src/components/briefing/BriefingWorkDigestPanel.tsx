@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { ChevronRight } from 'lucide-react'
-import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   BriefingLifecycleStackMeter,
   BriefingStatusBadge,

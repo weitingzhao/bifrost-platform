@@ -186,7 +186,7 @@ func (s *Service) PodLogs(ctx context.Context, namespace, name string, tailLines
 	if err != nil {
 		return LogsResponse{}, err
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	data, err := io.ReadAll(stream)
 	if err != nil {
 		return LogsResponse{}, err

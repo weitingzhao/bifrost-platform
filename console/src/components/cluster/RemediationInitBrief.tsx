@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { RemediationJob } from '@/api/types'
+import type { RemediationJob } from '@/api/remediationTypes'
 import { remediationScopeShortLabel } from '@/lib/remediation/remediationJobDisplay'
 
 interface RemediationInitBriefProps {

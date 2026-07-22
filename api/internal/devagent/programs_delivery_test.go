@@ -22,8 +22,8 @@ func TestHandleApprovePostCompletionInjectsOperateQueue(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	store := NewFileStore(configDir)
 	pending := []PostCompletionItem{{
@@ -85,8 +85,8 @@ func TestHandleApprovePostCompletionInjectsOperateQueue(t *testing.T) {
 func TestRejectDoesNotInjectQueue(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 	store := NewFileStore(configDir)
 	if err := store.SavePendingPostCompletion([]PostCompletionItem{{
 		ID: "reject-1", ProgramID: "p", Title: "Reject", Status: "pending_review",
@@ -114,8 +114,8 @@ func TestRejectDoesNotInjectQueue(t *testing.T) {
 func TestNoHandoffDistinctFromNotAssessed(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 	h := &Handler{
 		store: NewFileStore(configDir),
 		runtimes: map[string]*programRuntime{
@@ -156,8 +156,8 @@ func TestLegacyHandoffBlueprintNormalizesForStructuredQueue(t *testing.T) {
 func TestQueueLifecycleWritesProgramAssessmentAndEvidence(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 	store := NewFileStore(configDir)
 	if err := store.SavePendingPostCompletion([]PostCompletionItem{{
 		ID: "pending", ProgramID: "p", Title: "Handoff", Status: "approved",

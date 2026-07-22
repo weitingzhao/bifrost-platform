@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { Copy, Check } from 'lucide-react'
 import { StatusLamp } from '@/components/StatusLamp'
-import type { Reachability } from '@/api/types'
+import type { Reachability } from '@/api/matrixTypes'
 
 export interface ClusterCategoryCardProps {
   title: string

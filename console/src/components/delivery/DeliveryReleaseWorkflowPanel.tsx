@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { DenseTag, StatusLamp } from '@bifrost/ui'
-import type { OpsContextResponse, StgSmokeResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import type { StgSmokeResponse } from '@/api/deliveryTypes'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { evaluateStgDeliverStatus } from '@/lib/control-room/matrixSummary'
 import {

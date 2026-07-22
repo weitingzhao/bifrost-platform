@@ -1,5 +1,5 @@
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
-import type { ClusterObservabilityResponse, LayerBStatus } from '@/api/types'
+import type { ClusterObservabilityResponse, LayerBStatus } from '@/api/clusterTypes'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'

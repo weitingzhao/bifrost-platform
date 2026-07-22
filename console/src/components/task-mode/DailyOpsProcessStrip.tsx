@@ -6,7 +6,7 @@ import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { ViewerEnvBadge } from '@/components/task-mode/ViewerEnvBadge'
-import { respondRemediationJob } from '@/api/platform'
+import { respondRemediationJob } from '@/api/remediation'
 import { useRemediationStream } from '@/hooks/useRemediationStream'
 import {
   deriveAgentLiveFeed,
@@ -20,8 +20,9 @@ import {
   type DailyOpsStepStatus,
   type DailyOpsWorkflowResult,
 } from '@/lib/control-room/dailyOpsWorkflow'
-import type { FleetSnapshot, FleetVerdictKind } from '@/lib/control-room/fleetSnapshot'
+import type { FleetVerdictKind } from '@/lib/control-room/fleetSnapshot'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
+import { useDailyOpsContext } from '@/components/task-mode/daily-ops/DailyOpsContext'
 
 const VERDICT_VARIANT: Record<FleetVerdictKind, 'success' | 'warning' | 'danger'> = {
   GO: 'success',
@@ -56,21 +57,13 @@ const DAILY_OPS_HELP_LINKS: { label: string; tabId: string }[] = [
 ]
 
 export type DailyOpsProcessStripProps = {
-  fleet: FleetSnapshot
   workflow: DailyOpsWorkflowResult
-  isLoading?: boolean
-  canOperate?: boolean
-  agentFixPending?: boolean
   agentFixError?: string | null
   /** W3: Assisted hint only — Auto-remediate stays OFF. */
   showReadyHint?: boolean
-  /** Ambient remediation job — drives View agent CTA state. */
-  ambientJobId?: string | null
-  ambientJobScope?: string | null
   onPrimaryAction: () => void
   /** Outline secondary when primary is manual but an AI-fixable sibling exists. */
   onSecondaryAction?: () => void
-  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   /** Escape hatch when inline Operator Plan is not enough (MCP / deploy / smoke). */
   onOpenFullOperatorPlane?: () => void
   /** Help · reference deep links (muted, collapsed) — not a phase strip. */
@@ -79,12 +72,6 @@ export type DailyOpsProcessStripProps = {
   operatorPlanFixPending?: boolean
   operatorPlanFixDisabled?: boolean
   operatorPlanFixTitle?: string
-  /** Checklist AI Check (daily-ops-checklist-run) — Discover / Clear strip primary. */
-  checklistCheckPending?: boolean
-  checklistCheckDisabled?: boolean
-  checklistCheckTitle?: string
-  checklistCheckActive?: boolean
-  checklistCheckStatusHint?: string | null
   /** Open operate-queue count — when > 0 during Remediate/Clear, show Sweep Queue CTA. */
   queueOpen?: number
   onSweepQueue?: () => void
@@ -97,31 +84,33 @@ export type DailyOpsProcessStripProps = {
  * Checklist + Fleet Board live beside each other in DailyOpsFleetDesk; Agent progress follows Ops loop when a job is active.
  */
 export function DailyOpsProcessStrip({
-  fleet,
   workflow,
-  isLoading = false,
-  canOperate = false,
-  agentFixPending = false,
   agentFixError = null,
   showReadyHint = false,
-  ambientJobId = null,
   onPrimaryAction,
   onSecondaryAction,
-  onOpenAgentDesk,
   onOpenFullOperatorPlane,
   onNavigate,
   operatorPlanFixPending = false,
   operatorPlanFixDisabled = false,
   operatorPlanFixTitle,
-  checklistCheckPending = false,
-  checklistCheckDisabled = false,
-  checklistCheckTitle,
-  checklistCheckActive = false,
-  checklistCheckStatusHint = null,
   queueOpen = 0,
   onSweepQueue,
   sweepQueuePending = false,
 }: DailyOpsProcessStripProps) {
+  const {
+    fleet,
+    isLoading = false,
+    canOperate = false,
+    agentFixPending = false,
+    ambientJobId = null,
+    onOpenAgentDesk,
+    checklistCheckPending = false,
+    checklistCheckDisabled = false,
+    checklistCheckTitle,
+    checklistCheckActive = false,
+    checklistCheckStatusHint = null,
+  } = useDailyOpsContext()
   const { verdict, viewerEnv } = fleet
   const action = workflow.primaryAction
   const stepStatuses = dailyOpsStepStatuses(workflow)
@@ -153,16 +142,20 @@ export function DailyOpsProcessStrip({
       nextBanner != null ||
       workflow.blockers.some(b => /Engineer|Operator Plan|Next:|Propose commit|dirty/i.test(b)))
   const [manualCopied, setManualCopied] = useState(false)
+  const [manualCopyError, setManualCopyError] = useState<string | null>(null)
 
   const handleManualPrimary = () => {
     const hint = action.manualHint ?? action.label
     void navigator.clipboard?.writeText(hint).then(
       () => {
+        setManualCopyError(null)
         setManualCopied(true)
         window.setTimeout(() => setManualCopied(false), 2500)
       },
       () => {
-        /* ignore */
+        setManualCopied(false)
+        setManualCopyError('Clipboard copy failed — copy the hint manually from Detail')
+        window.setTimeout(() => setManualCopyError(null), 4000)
       },
     )
     onPrimaryAction()
@@ -470,7 +463,7 @@ export function DailyOpsProcessStrip({
         </div>
       </div>
 
-      {(workflow.blockers.length > 0 || agentFixError) && (
+      {(workflow.blockers.length > 0 || agentFixError || manualCopyError) && (
         <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-t border-border/50 pt-1.5">
           {showRemediateBanner && (
             <p
@@ -503,6 +496,9 @@ export function DailyOpsProcessStrip({
             )}
           {agentFixError != null && agentFixError !== '' && (
             <p className="m-0 text-[var(--text-dense-caption)] text-destructive">{agentFixError}</p>
+          )}
+          {manualCopyError != null && (
+            <p className="m-0 text-[var(--text-dense-caption)] text-destructive">{manualCopyError}</p>
           )}
         </div>
       )}

@@ -2,14 +2,9 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, DenseTag } from '@bifrost/ui'
 import { Check, Copy, Sparkles, BookOpen } from 'lucide-react'
-import type { OpsContextResponse } from '@/api/types'
-import {
-  fetchAgentBridge,
-  fetchAgentNightlyReport,
-  fetchDriftProposals,
-  fetchRemediationJobs,
-  triggerNightlyDriftScan,
-} from '@/api/platform'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { fetchAgentBridge, fetchAgentNightlyReport, fetchDriftProposals, triggerNightlyDriftScan } from '@/api/agentOps'
+import { fetchRemediationJobs } from '@/api/remediation'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { BRIEFING_SYNC_LOOP_STEPS } from '@/lib/architecture/briefingReconciliationCatalog'

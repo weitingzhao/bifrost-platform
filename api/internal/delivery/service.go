@@ -233,8 +233,8 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 		return resp, empty, err
 	}
 
-	if _, err := dyn.Resource(pipelineGVR).Namespace(ns).Get(ctx, pipelineName, metav1.GetOptions{}); err != nil {
-		resp.Message = fmt.Sprintf("pipeline %s not found in %s: %v", pipelineName, ns, err)
+	if _, getErr := dyn.Resource(pipelineGVR).Namespace(ns).Get(ctx, pipelineName, metav1.GetOptions{}); getErr != nil {
+		resp.Message = fmt.Sprintf("pipeline %s not found in %s: %v", pipelineName, ns, getErr)
 		return resp, empty, fmt.Errorf("%s", resp.Message)
 	}
 
@@ -539,30 +539,7 @@ func (s *Service) StgSmoke(ctx context.Context) StgSmokeResponse {
 		return out
 	}
 
-	apiOK := 0
-	apiTotal := 0
-	for _, t := range out.Targets {
-		if strings.HasPrefix(t.ID, "stg-api-") {
-			apiTotal++
-			if t.Reachability == probe.ReachOK || t.Reachability == probe.ReachDegraded {
-				apiOK++
-			}
-		}
-	}
-	switch {
-	case apiTotal > 0 && apiOK == apiTotal:
-		out.Reachability = probe.ReachOK
-		out.Detail = fmt.Sprintf("stg %d/%d API domains reachable", apiOK, apiTotal)
-	case apiOK > 0:
-		out.Reachability = probe.ReachDegraded
-		out.Detail = fmt.Sprintf("stg %d/%d API domains reachable", apiOK, apiTotal)
-	case len(out.Targets) > 0 && out.Targets[0].Reachability == probe.ReachFail:
-		out.Reachability = probe.ReachFail
-		out.Detail = "stg smoke unreachable"
-	default:
-		out.Reachability = probe.ReachDegraded
-		out.Detail = "stg smoke partial"
-	}
+	out.Reachability, out.Detail = aggregateStgSmoke(out.Targets)
 	return out
 }
 
@@ -572,6 +549,61 @@ func stgAPIProbePath(domain string) string {
 		return "/status"
 	}
 	return "/health"
+}
+
+// smokeHTTPStatus maps an HTTP status code to smoke probe reachability + detail.
+func smokeHTTPStatus(statusCode int) (probe.Reachability, string) {
+	detail := fmt.Sprintf("HTTP %d", statusCode)
+	switch {
+	case statusCode == 200:
+		return probe.ReachOK, detail
+	case statusCode == 503:
+		return probe.ReachDegraded, detail
+	case statusCode >= 400:
+		return probe.ReachFail, detail
+	default:
+		return probe.ReachUnknown, detail
+	}
+}
+
+// aggregateStgSmoke derives overall STG smoke reachability from probe targets.
+// API domains (id prefix "stg-api-") drive the primary rollup; frontend-only
+// failures fall through to the first-target / partial heuristics.
+func aggregateStgSmoke(targets []StgSmokeTargetView) (probe.Reachability, string) {
+	apiOK := 0
+	apiTotal := 0
+	for _, t := range targets {
+		if strings.HasPrefix(t.ID, "stg-api-") {
+			apiTotal++
+			if t.Reachability == probe.ReachOK || t.Reachability == probe.ReachDegraded {
+				apiOK++
+			}
+		}
+	}
+	switch {
+	case apiTotal > 0 && apiOK == apiTotal:
+		return probe.ReachOK, fmt.Sprintf("stg %d/%d API domains reachable", apiOK, apiTotal)
+	case apiOK > 0:
+		return probe.ReachDegraded, fmt.Sprintf("stg %d/%d API domains reachable", apiOK, apiTotal)
+	case len(targets) > 0 && targets[0].Reachability == probe.ReachFail:
+		return probe.ReachFail, "stg smoke unreachable"
+	default:
+		return probe.ReachDegraded, "stg smoke partial"
+	}
+}
+
+// aggregateFailCountSmoke rolls up targets by counting ReachFail (prod/dev smoke).
+func aggregateFailCountSmoke(targets []StgSmokeTargetView, label string) (probe.Reachability, string) {
+	fail := 0
+	for _, t := range targets {
+		if t.Reachability == probe.ReachFail {
+			fail++
+		}
+	}
+	if fail == 0 {
+		return probe.ReachOK, fmt.Sprintf("%d %s smoke target(s) OK", len(targets), label)
+	}
+	return probe.ReachFail, fmt.Sprintf("%d failing %s smoke target(s)", fail, label)
 }
 
 func (s *Service) probeStgHTTP(ctx context.Context, id, url string) StgSmokeTargetView {
@@ -596,21 +628,9 @@ func (s *Service) probeStgHTTP(ctx context.Context, id, url string) StgSmokeTarg
 			Detail: err.Error(),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-
-	reach := probe.ReachOK
-	detail := fmt.Sprintf("HTTP %d", resp.StatusCode)
-	switch {
-	case resp.StatusCode == 200:
-		reach = probe.ReachOK
-	case resp.StatusCode == 503:
-		reach = probe.ReachDegraded
-	case resp.StatusCode >= 400:
-		reach = probe.ReachFail
-	default:
-		reach = probe.ReachUnknown
-	}
+	reach, detail := smokeHTTPStatus(resp.StatusCode)
 	return StgSmokeTargetView{ID: id, URL: url, Reachability: reach, Detail: detail}
 }
 
@@ -636,21 +656,9 @@ func (s *Service) probeDevHTTP(ctx context.Context, id, url string) StgSmokeTarg
 			Detail: err.Error(),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-
-	reach := probe.ReachOK
-	detail := fmt.Sprintf("HTTP %d", resp.StatusCode)
-	switch {
-	case resp.StatusCode == 200:
-		reach = probe.ReachOK
-	case resp.StatusCode == 503:
-		reach = probe.ReachDegraded
-	case resp.StatusCode >= 400:
-		reach = probe.ReachFail
-	default:
-		reach = probe.ReachUnknown
-	}
+	reach, detail := smokeHTTPStatus(resp.StatusCode)
 	return StgSmokeTargetView{ID: id, URL: url, Reachability: reach, Detail: detail}
 }
 
@@ -676,21 +684,9 @@ func (s *Service) probeProdHTTP(ctx context.Context, id, url string) StgSmokeTar
 			Detail: err.Error(),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-
-	reach := probe.ReachOK
-	detail := fmt.Sprintf("HTTP %d", resp.StatusCode)
-	switch {
-	case resp.StatusCode == 200:
-		reach = probe.ReachOK
-	case resp.StatusCode == 503:
-		reach = probe.ReachDegraded
-	case resp.StatusCode >= 400:
-		reach = probe.ReachFail
-	default:
-		reach = probe.ReachUnknown
-	}
+	reach, detail := smokeHTTPStatus(resp.StatusCode)
 	return StgSmokeTargetView{ID: id, URL: url, Reachability: reach, Detail: detail}
 }
 
@@ -750,19 +746,7 @@ func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 		return out
 	}
 
-	fail := 0
-	for _, t := range out.Targets {
-		if t.Reachability == probe.ReachFail {
-			fail++
-		}
-	}
-	if fail == 0 {
-		out.Reachability = probe.ReachOK
-		out.Detail = fmt.Sprintf("%d prod smoke target(s) OK", len(out.Targets))
-	} else {
-		out.Reachability = probe.ReachFail
-		out.Detail = fmt.Sprintf("%d failing prod smoke target(s)", fail)
-	}
+	out.Reachability, out.Detail = aggregateFailCountSmoke(out.Targets, "prod")
 	return out
 }
 
@@ -1134,7 +1118,7 @@ func (s *Service) fetchGiteaTags(ctx context.Context, repo, user, pass string) (
 	if err != nil {
 		return nil, fmt.Errorf("http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
@@ -1181,7 +1165,7 @@ func (s *Service) fetchGiteaBranches(ctx context.Context, repo, user, pass strin
 	if err != nil {
 		return nil, fmt.Errorf("http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))

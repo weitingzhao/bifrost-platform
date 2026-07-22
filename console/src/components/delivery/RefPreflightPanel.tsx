@@ -2,8 +2,8 @@ import { cn } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { fetchRefPreflight } from '@/api/platform'
-import type { RefPreflightResponse } from '@/api/types'
+import { fetchRefPreflight } from '@/api/delivery'
+import type { RefPreflightResponse } from '@/api/deliveryTypes'
 import { validateGitRevision } from '@/lib/delivery/revisionValidation'
 
 /** Debounces a fast-changing value (e.g. a text input) by `delayMs`. */

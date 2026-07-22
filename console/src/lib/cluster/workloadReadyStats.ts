@@ -1,4 +1,4 @@
-import type { ClusterWorkload } from '@/api/types'
+import type { ClusterWorkload } from '@/api/clusterTypes'
 import { allowedNamespaceNames, type NsFilterType } from '@/lib/cluster/namespaceCatalog'
 import { groupWorkloadsByDeployment } from '@/lib/cluster/workloadTree'
 

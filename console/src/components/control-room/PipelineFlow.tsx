@@ -10,7 +10,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { DenseTag } from '@bifrost/ui'
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { milestoneStatusVariant } from '@/components/FocusStrip'
 import {
   buildPipelineGraph,

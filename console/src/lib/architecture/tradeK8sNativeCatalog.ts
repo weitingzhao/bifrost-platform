@@ -8,7 +8,7 @@
  * (Ingress, Lease HA, IB Edge Gateway, Ops kubernetes executor).
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { projectWaveStatus } from '@/lib/briefing/waveProjection'
 import { GENERATED_TRADE_K8S_NATIVE_WAVES } from './migrateWaves.generated'
 

@@ -249,7 +249,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, opts req
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	c.mu.Lock()
 	if opts.login {

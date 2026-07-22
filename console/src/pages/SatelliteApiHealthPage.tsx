@@ -25,8 +25,8 @@ import {
   SheetTitle,
   StatusLamp,
 } from '@bifrost/ui'
-import { fetchMatrix, isAllMatrices } from '@/api/platform'
-import type { MatrixResponse, Target } from '@/api/types'
+import { fetchMatrix, isAllMatrices } from '@/api/core'
+import type { MatrixResponse, Target } from '@/api/matrixTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { consumeSatelliteApiEnv } from '@/lib/task-mode/readinessChipActions'
 

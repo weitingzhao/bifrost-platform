@@ -1,4 +1,5 @@
-import type { MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
+import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
 import { formatGapForLlm, type GapOverview } from '@/lib/runtime-map/gapAnalysis'
 import {

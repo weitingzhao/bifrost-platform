@@ -126,8 +126,8 @@ metadata:
 	}
 
 	const existingAt = "2026-07-06T10:00:00Z"
-	if err := h.RecordPhaseSignoff("vision", "V1", "programs-owner", existingAt, "already signed"); err != nil {
-		t.Fatalf("pre-sign V1: %v", err)
+	if signoffErr := h.RecordPhaseSignoff("vision", "V1", "programs-owner", existingAt, "already signed"); signoffErr != nil {
+		t.Fatalf("pre-sign V1: %v", signoffErr)
 	}
 
 	gateAt := time.Date(2026, 7, 7, 15, 0, 0, 0, time.UTC)

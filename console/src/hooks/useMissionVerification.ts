@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchRemediationJobs, fetchVerifyMissionSnapshot } from '@/api/platform'
-import type { RemediationJob, VerifyMissionSnapshotResponse } from '@/api/types'
+import { fetchRemediationJobs } from '@/api/remediation'
+import { fetchVerifyMissionSnapshot } from '@/api/core'
+import type { RemediationJob } from '@/api/remediationTypes'
+import type { VerifyMissionSnapshotResponse } from '@/api/matrixTypes'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { buildMissionVerifyMessage } from '@/lib/control-room/controlRoomOperatePack'
 

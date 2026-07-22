@@ -86,12 +86,12 @@ func TestUpdateLastGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	tmp := filepath.Join(t.TempDir(), "ops-context.yaml")
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(tmp, data, 0o644); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 
-	if err := UpdateLastGate(tmp, "2026-06-25T12:00:00Z", "pass"); err != nil {
-		t.Fatal(err)
+	if gateErr := UpdateLastGate(tmp, "2026-06-25T12:00:00Z", "pass"); gateErr != nil {
+		t.Fatal(gateErr)
 	}
 
 	f, err := Load(tmp)

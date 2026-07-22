@@ -13,8 +13,8 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { fetchEscapeHatch, recordEscapeHatchDrill } from '@/api/platform'
-import type { EscapeRouteStatus } from '@/api/types'
+import { fetchEscapeHatch, recordEscapeHatchDrill } from '@/api/core'
+import type { EscapeRouteStatus } from '@/api/matrixTypes'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import {

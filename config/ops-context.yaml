@@ -34,11 +34,11 @@ north_star:
         - "MCP Tools mirror UI capabilities with same auth and audit trail"
 deployment:
     phase: k3s_partial # compose | k3s_partial | k3s_ha
-    active_track: ops_ui_actuation
+    active_track: trade_ib_client_migration_rollout
 # clusters: see config/clusters.yaml — bifrost-bootstrap @ 192.168.10.73
 focus:
     # Derived from active spine streams (deriveFocusHeadline) — do not hand-edit; must contain active wave id (D-D).
-    headline: "Trade K8s-native CLOSED — (W0–W11 signed)"
+    headline: "TIBM W3 signed — STG read-path complete (D10 BLOCKED)"
     flywheel_primary: B # A = trade FE, B = runtime/ops
     blocker: null
 milestones:
@@ -132,10 +132,16 @@ milestones:
       authority: console/src/lib/architecture/convergenceLoopCatalog.ts
     - id: ops-ui-actuation
       label: Ops UI single-pane actuation (north star)
-      status: IN_PROGRESS
+      status: CLOSED
+      signed_at: "2026-07-22"
       pipeline_lane: parallel
       pipeline_after: k3s-phase1
       authority: console/src/lib/architecture/blueprintCatalog.ts
+      note: >
+        Owner CLOSED 2026-07-22. Sign-off checklist done items + Network L1 POLICY_NOMINAL.
+        runtime-observe-act-loop Owner-waived (trade-k8s Matrix probe expansion remains follow-up,
+        not blocking north-star single-pane actuation). D10 remains BLOCKED.
+      # next_task: none for this milestone — residual Runtime probe expansion tracked on trade-k8s-migration
     - id: workload-placement-governance
       label: K8s workload placement governance (G1–G5)
       status: IN_PROGRESS
@@ -331,6 +337,14 @@ tracks:
             - id: p6-escape-hatch
               label: "L0 escape hatch runbook + Console recovery visibility"
               status: done
+            - id: wave-a-a3-agent-prep
+              label: "Wave A Phase A3 — agent closure prep"
+              status: done
+              note: "Audit JSON export; uiProgressOverrides alignment; opsUiActuationSignoffChecklist.ts; D6 network L2/AP defer documented"
+            - id: network-l2-ap-lifecycle
+              label: "Network L2 zone/SSID + P2 AP lifecycle actuation"
+              status: deferred
+              note: "Owner-deferred — blueprintCatalog D6 appendix + networkApiContractCatalog NETWORK_API_OWNER_DEFERRED; not Wave A agent scope"
     migrate:
         label: "Legacy retirement & deployment migration"
         streams:
@@ -367,10 +381,15 @@ tracks:
             - id: trade-ib-client-migration-rollout
               label: "TIBM rollout — observe + data path (no live trading)"
               total: 3
-              done: 1
-              status: in_progress
-              next_task: "Owner sign-off W1 @ Architecture → Trade IB Migration → Rollout W1 panel"
-              note: "W0 ✓ · W1 STG observability rolled out (api-monitor/ops/frontend amd64) · verify-trade-ib-w1-stg OK · ACL trade-prod + bifrost:health fix · daemon replicas=0 (D10). Owner: #rollout-w1-signoff"
+              done: 3
+              status: closed
+              next_task: "CLOSED — W1–W3 signed (optional 24h STG soak; D10 remains BLOCKED)"
+              note: >
+                W0 ✓ · W1 ✓ Owner signed 2026-07-22 · W2 ✓ Owner signed 2026-07-22 ·
+                W3 ✓ Owner signed 2026-07-22 (make verify-trade-ib-w3-stg PASS —
+                6 read-only APIs health 200; bifrost-core 0.3.3; GET /api/market/quotes NVDA OK;
+                redis_ib tick E2E OK; daemon replicas=0). Core fix: RedisQuotesReader retry +
+                redis_ib fallback. No daemon scale / no live trading (D10).
               prerequisites:
                 - "IB Gateway Plugin program complete"
                 - "trade-ib-client-migration program COMPLETE (TIBM-PC signed)"
@@ -548,7 +567,8 @@ tracks:
               total: 6
               done: 5
               status: in_progress
-              note: "Elevate Agent from on-demand Dispatch (Cursor Runner) to LLM-powered autonomous engineer (Nous Research Hermes Agent v0.17.0). Mental model: Runner = on-call engineer you page; Hermes = full-time AI engineer with 72 bundled skills, MCP tool access, persistent memory, cron scheduling, and a web dashboard. ① Nous Hermes Agent installed on Mac Mini primary (.50) ✓ — v0.17.0 with uv+Python 3.11+Playwright, ~/.hermes/ config directory, gateway as launchd ai.hermes.gateway, dashboard on :9119 with basic auth ② bifrost-platform MCP server synced to Mac Mini ✓ — mcp-server-platform (35 ops tools) via stdio, config in ~/.hermes/config.yaml mcp_servers.bifrost-platform, hermes mcp test passed all 35 tools ③ platform-api agent bridge probeNousHermes ✓ — NOUS_HERMES_URL/NOUS_HERMES_USER/NOUS_HERMES_PASS env vars, bridge.nous_hermes status block in /api/v1/agent/bridge ④ Console Operator Plane shows Hermes Agent status ✓ — version/gateway-state/dashboard-link, legacy scheduler dimmed (opacity-60) ⑤ Self-built bifrost-hermes-gateway retired ✓ — com.bifrost.hermes-gateway launchd bootout, plist removed, deploy_mac_mini.sh updated to sync MCP server instead ⑥ LLM API key provisioning + first autonomous task — configure Anthropic/OpenRouter key, run first Hermes Agent session with bifrost-platform MCP tools, verify end-to-end AI-driven ops"
+              next_task: "Owner: LLM key on Mac Mini .50 → GET /api/v1/agent/hermes/readiness ready:true → Hermes L0 first-task (⑥)"
+              note: "Elevate Agent from on-demand Dispatch (Cursor Runner) to LLM-powered autonomous engineer (Nous Research Hermes Agent v0.17.0). Mental model: Runner = on-call engineer you page; Hermes = full-time AI engineer with 72 bundled skills, MCP tool access, persistent memory, cron scheduling, and a web dashboard. ① Nous Hermes Agent installed on Mac Mini primary (.50) ✓ — v0.17.0 with uv+Python 3.11+Playwright, ~/.hermes/ config directory, gateway as launchd ai.hermes.gateway, dashboard on :9119 with basic auth ② bifrost-platform MCP server synced to Mac Mini ✓ — mcp-server-platform (35 ops tools) via stdio, config in ~/.hermes/config.yaml mcp_servers.bifrost-platform, hermes mcp test passed all 35 tools ③ platform-api agent bridge probeNousHermes ✓ — NOUS_HERMES_URL/NOUS_HERMES_USER/NOUS_HERMES_PASS env vars, bridge.nous_hermes status block in /api/v1/agent/bridge ④ Console Operator Plane shows Hermes Agent status ✓ — version/gateway-state/dashboard-link, legacy scheduler dimmed (opacity-60) ⑤ Self-built bifrost-hermes-gateway retired ✓ — com.bifrost.hermes-gateway launchd bootout, plist removed, deploy_mac_mini.sh updated to sync MCP server instead ⑥ LLM API key + first autonomous task — BLOCKED 2026-07-22: readiness ready=false (LLM_KEY_MISSING); gateway OK; Agent L0 dry-run evidence in hermesL0FirstTaskEvidence.ts (mission NOMINAL; post_fix false due to intentional DATA_LAYER on dev-local). Owner configures key then Hermes session (not Cursor) for stream ⑥ close."
               prerequisites:
                 - "agent-release-discipline stream closed"
                 - "mutual-watchdog stream closed"
@@ -567,9 +587,9 @@ tracks:
             - id: network-upgrade-core
               label: "Network upgrade — server LAN (UCG Max + USW-Pro-Max-24)"
               total: 6
-              done: 5
-              status: in_progress
-              note: "① Hardware selection & purchase ✓ ② UCG Max setup (VLAN 10/20/30/50, IDS/IPS, Controller) ✓ ③ USW-Pro-Max-24 swap + wired VLAN 10 migration ✓ ④ K3s + TWS + kube-vip validation ✓ — 2026-07-12 Owner verified VIP DNS + HTTPS for trader/ops Hostnames (Work Mac, Family Win11, Mac Pro) · ⑤ Firewall permanent ZBF ✓ — 2026-07-11: TEMP removed; Work→Server; Family→NAS .20; Family→Trade VIP .100:80/443; IoT→Plex; Default→Server deny; audit via scripts/unifi_firewall_setup.py ⑥ UniFi API → MCP Server read integration — pending (also stream unifi-mcp-server)"
+              done: 6
+              status: closed
+              note: "① Hardware selection & purchase ✓ ② UCG Max setup (VLAN 10/20/30/50, IDS/IPS, Controller) ✓ ③ USW-Pro-Max-24 swap + wired VLAN 10 migration ✓ ④ K3s + TWS + kube-vip validation ✓ — 2026-07-12 Owner verified VIP DNS + HTTPS for trader/ops Hostnames (Work Mac, Family Win11, Mac Pro) · ⑤ Firewall permanent ZBF ✓ — 2026-07-11: TEMP removed; Work→Server; Family→NAS .20; Family→Trade VIP .100:80/443; IoT→Plex; Default→Server deny; audit via scripts/unifi_firewall_setup.py ⑥ UniFi API → MCP Server ✓ — closed via stream unifi-mcp-server 4/4 (2026-07-22 Post-QA F1; was stale pending note)"
               prerequisites:
                 - "Hardware delivered (UCG Max + USW-Pro-Max-24)"
             - id: network-upgrade-wifi
@@ -583,9 +603,9 @@ tracks:
             - id: unifi-mcp-server
               label: "UniFi MCP Server — AI network management"
               total: 4
-              done: 0
-              status: not_started
-              note: "① UniFi REST API client library ② MCP Server read tools (device status, port stats, DPI, firewall rules) ③ Ops Console Network Health panel ④ MCP Server write tools (port restart, client isolate, firewall CRUD)"
+              done: 4
+              status: closed
+              note: "① UniFi REST API client ✓ ② MCP read tools (mcp/unifi) ✓ ③ Ops Console Network live probe ✓ ④ L1 write (firewall apply + MCP) ✓ — aligned with unifiMcpServerCatalog.ts 4/4 (2026-07-22). Projection: console/src/lib/architecture/unifiMcpServerCatalog.ts"
               prerequisites:
                 - "network-upgrade-core stream ② UCG Max setup complete"
                 - "agent-mcp-integration stream closed"

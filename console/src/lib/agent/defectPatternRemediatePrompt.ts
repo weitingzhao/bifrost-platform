@@ -1,4 +1,4 @@
-import type { RetrospectivePatternCluster } from '@/api/types'
+import type { RetrospectivePatternCluster } from '@/api/agentTypes'
 import { DEFECT_PATTERN_REMEDIATE_SCOPE } from '@/lib/agent/agentScopes'
 
 function inferTrack(p: RetrospectivePatternCluster): string {

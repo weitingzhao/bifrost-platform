@@ -106,7 +106,7 @@ func (h *Handler) HandleTriggerNightly(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
 		writeJSON(w, resp.StatusCode, NightlyTriggerResponse{
@@ -132,7 +132,7 @@ func (h *Handler) fetchFromRunner(ctx context.Context) (string, string, string, 
 	if err != nil {
 		return "", "", "", false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", "", "", false
 	}

@@ -61,11 +61,11 @@ func (s *Service) SetMode(ctx context.Context, mode string) (ControlResponse, er
 	if gy := cm.Data["gateway.yaml"]; gy != "" {
 		cm.Data["gateway.yaml"] = patchGatewayYamlMode(gy, mode)
 	}
-	if _, err := clientset.CoreV1().ConfigMaps(dataNamespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
+	if _, updateErr := clientset.CoreV1().ConfigMaps(dataNamespace).Update(ctx, cm, metav1.UpdateOptions{}); updateErr != nil {
 		return ControlResponse{
 			OK: false, Action: "ib-gateway.mode", Target: target,
-			Autonomy: "L1", Message: err.Error(), GeneratedAt: now,
-		}, err
+			Autonomy: "L1", Message: updateErr.Error(), GeneratedAt: now,
+		}, updateErr
 	}
 	restart, err := s.cluster.RolloutRestart(ctx, cluster.RolloutRestartRequest{
 		Namespace: dataNamespace,

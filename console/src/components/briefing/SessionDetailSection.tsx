@@ -20,7 +20,8 @@ import {
 } from '@/lib/briefing/agentDialogueLanguage'
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 import type { QueueItem, WorkLane } from '@/lib/briefing/workLanes'
-import type { AuditRecord, OpsContextResponse } from '@/api/types'
+import type { AuditRecord } from '@/api/auditTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { ReconcileBriefingOptions } from '@/lib/briefing/reconcileBriefing'
 
 export interface SessionDetailSectionProps {

@@ -1,8 +1,4 @@
-import type {
-  DeliveryPipelineRunView,
-  ReleaseGateResponse,
-  ReleaseStateResponse,
-} from '@/api/types'
+import type { DeliveryPipelineRunView, ReleaseGateResponse, ReleaseStateResponse } from '@/api/deliveryTypes'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 
 export const PLATFORM_RELEASE_SCOPE = 'release'

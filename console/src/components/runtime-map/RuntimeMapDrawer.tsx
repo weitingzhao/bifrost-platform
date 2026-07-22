@@ -1,4 +1,5 @@
-import type { MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
+import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { MatrixTable } from '@/components/MatrixTable'
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import {

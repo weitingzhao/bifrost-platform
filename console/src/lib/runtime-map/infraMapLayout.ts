@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { TopologyEdge, TopologyNode, TopologyResponse } from '@/api/types'
+import type { TopologyEdge, TopologyNode, TopologyResponse } from '@/api/matrixTypes'
 
 export const INFRA_MAP_CELL_W = 200
 export const INFRA_MAP_CELL_H = 172

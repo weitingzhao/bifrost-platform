@@ -1,17 +1,13 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import {
-  fetchCluster,
-  fetchSupplyChain,
-  fetchStgSmoke,
-  fetchSelfHealth,
-  fetchRemediationHealth,
-  fetchAgentBridge,
-  fetchMatrix,
-  fetchIbGatewayStatus,
-  isAllMatrices,
-} from '@/api/platform'
-import type { MatrixResponse } from '@/api/types'
+import { fetchCluster } from '@/api/cluster'
+import { fetchSupplyChain } from '@/api/delivery'
+import { fetchStgSmoke } from '@/api/promote'
+import { fetchSelfHealth, fetchMatrix, isAllMatrices } from '@/api/core'
+import { fetchRemediationHealth } from '@/api/remediation'
+import { fetchAgentBridge } from '@/api/agentOps'
+import { fetchIbGatewayStatus } from '@/api/network'
+import type { MatrixResponse } from '@/api/matrixTypes'
 import { buildFleetSnapshot } from '@/lib/control-room/buildFleetSnapshot'
 import {
   normalizeViewerEnv,

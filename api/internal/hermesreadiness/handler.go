@@ -43,34 +43,79 @@ func Build(ctx context.Context, client *http.Client) ReadinessResponse {
 	}
 
 	blockers := make([]string, 0, 4)
+	details := make([]BlockerDetail, 0, 4)
 	ready := true
+
+	addBlocker := func(code, message, remediation string, ownerAction bool) {
+		blockers = append(blockers, message)
+		details = append(details, BlockerDetail{
+			Code:        code,
+			Message:     message,
+			Remediation: remediation,
+			OwnerAction: ownerAction,
+		})
+	}
 
 	if nous.Status != "ok" {
 		ready = false
 		if nous.Status == "not_configured" {
-			blockers = append(blockers, "NOUS_HERMES_URL not configured on platform-api")
+			addBlocker(
+				"NOUS_HERMES_URL_MISSING",
+				"NOUS_HERMES_URL not configured on platform-api",
+				"Set NOUS_HERMES_URL (and NOUS_HERMES_USER/PASS if required) on platform-api, then re-probe GET /api/v1/agent/hermes/readiness",
+				false,
+			)
 		} else {
-			blockers = append(blockers, "Nous Hermes Agent unreachable: "+nous.Status)
+			msg := "Nous Hermes Agent unreachable: " + nous.Status
+			if nous.Error != "" {
+				msg += " (" + nous.Error + ")"
+			}
+			addBlocker(
+				"NOUS_HERMES_UNREACHABLE",
+				msg,
+				"Confirm Nous Hermes dashboard on Mac Mini primary is running and reachable from platform-api; check NOUS_HERMES_URL and auth",
+				false,
+			)
 		}
 	} else if !nous.GatewayRunning {
 		ready = false
-		blockers = append(blockers, "Hermes gateway not running")
+		addBlocker(
+			"HERMES_GATEWAY_DOWN",
+			"Hermes gateway not running",
+			"Start Nous Hermes gateway on the agent host (Mac Mini primary); confirm gateway_running=true in /api/status",
+			false,
+		)
 	}
 
 	if !llm.Configured {
 		ready = false
-		blockers = append(blockers, "LLM API key not detected — configure in ~/.hermes/ or set ANTHROPIC_API_KEY/OPENROUTER_API_KEY on agent host")
+		hostHint := strings.TrimSpace(nous.URL)
+		if hostHint == "" {
+			hostHint = "Mac Mini primary (Nous Hermes host)"
+		}
+		addBlocker(
+			"LLM_KEY_MISSING",
+			"LLM API key not configured on Nous Hermes host ("+hostHint+")",
+			"Owner: add provider key to ~/.hermes/.env on the Nous Hermes host (not platform-api). Do not commit keys. Re-probe GET /api/v1/agent/hermes/readiness after config.",
+			true,
+		)
 	}
 
 	if agentTools < 4 {
 		ready = false
-		blockers = append(blockers, "platform MCP agent tools incomplete")
+		addBlocker(
+			"PLATFORM_MCP_INCOMPLETE",
+			"platform MCP agent tools incomplete",
+			"Ensure platform MCP catalog exposes Agent-phase tools (get_hermes_readiness, verify_mission_snapshot, get_connectivity_matrix, verify_payload); rebuild platform-api if catalog changed",
+			false,
+		)
 	}
 
 	return ReadinessResponse{
 		GeneratedAt:      now,
 		Ready:            ready,
 		Blockers:         blockers,
+		BlockerDetails:   details,
 		LlmKey:           llm,
 		NousHermes:       nous,
 		PlatformMcpTools: len(tools),
@@ -114,7 +159,7 @@ func probeLlmKey(nous NousHermesProbe) LlmKeyStatus {
 	return LlmKeyStatus{
 		Configured: false,
 		Source:     "unknown",
-		Note:       "Configure LLM provider in Nous Hermes (~/.hermes/) on Mac Mini primary; re-probe via GET /api/v1/agent/hermes/readiness",
+		Note:       "Owner configures LLM provider in ~/.hermes/.env on Nous Hermes host (Mac Mini primary); Agent must not set keys. Re-probe GET /api/v1/agent/hermes/readiness",
 	}
 }
 
@@ -137,7 +182,7 @@ func probeNousHermes(ctx context.Context, client *http.Client) NousHermesProbe {
 	if err != nil {
 		return NousHermesProbe{URL: url, Status: "unavailable", Error: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return NousHermesProbe{URL: url, Status: "auth_required", Error: "dashboard requires authentication"}
 	}

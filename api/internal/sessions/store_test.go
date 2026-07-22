@@ -8,11 +8,10 @@ import (
 func TestCreateGetValidate(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	store := NewStore(configDir)
 	// Override via PLATFORM_DATA_DIR already used by NewStore — configDir/../data/sessions
 	// NewStore joins configDir/../data — ensure path exists by using explicit env
 	t.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	store = NewStore(configDir)
+	store := NewStore(configDir)
 
 	rec, err := store.Create(CreateRequest{
 		ProgramID: "prog-1",

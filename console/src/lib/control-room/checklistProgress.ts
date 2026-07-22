@@ -6,8 +6,8 @@
  * - Fleet cell Fix → per-cell remediation (unchanged)
  * - Operator Plane Fix → operator-plane-remediate (do NOT conflate with Checklist Check)
  */
-import type { ChecklistDispatchActionDto } from '@/api/platform'
-import type { RemediationJob, RemediationPhase } from '@/api/types'
+import { ChecklistDispatchActionDto } from '@/api/checklist'
+import type { RemediationJob, RemediationPhase } from '@/api/remediationTypes'
 import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
 import type { ChecklistDispatchGate } from '@/lib/control-room/checklistDispatch'
 

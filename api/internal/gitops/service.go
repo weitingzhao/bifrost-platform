@@ -414,8 +414,8 @@ func (s *Service) SyncApplication(ctx context.Context, name string) (cluster.Act
 		return resp, err
 	}
 
-	if _, err := dyn.Resource(applicationGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err != nil {
-		resp.Message = fmt.Sprintf("application %s not found in %s: %v", name, ns, err)
+	if _, getErr := dyn.Resource(applicationGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); getErr != nil {
+		resp.Message = fmt.Sprintf("application %s not found in %s: %v", name, ns, getErr)
 		return resp, fmt.Errorf("%s", resp.Message)
 	}
 

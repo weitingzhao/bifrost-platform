@@ -1,4 +1,4 @@
-import type { DeliveryPipelineRunView, ReleaseGateResponse } from '@/api/types'
+import type { DeliveryPipelineRunView, ReleaseGateResponse } from '@/api/deliveryTypes'
 import {
   isPipelineRunFailed,
   isPipelineRunRunning,

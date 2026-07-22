@@ -212,7 +212,8 @@ func (h *Handler) HandleStream(w http.ResponseWriter, r *http.Request) {
 		if envelope.Type == "job" && envelope.Job != nil {
 			prev, _ := h.store.Get(envelope.Job.ID)
 			h.store.Put(*envelope.Job)
-			if envelope.Job.Status == JobDone {
+			switch envelope.Job.Status {
+			case JobDone:
 				h.audit.RecordDirect(
 					envelope.Job.Actor,
 					actuation.RoleOperator,
@@ -221,7 +222,7 @@ func (h *Handler) HandleStream(w http.ResponseWriter, r *http.Request) {
 					"done",
 					envelope.Job.Summary,
 				)
-			} else if envelope.Job.Status == JobFailed {
+			case JobFailed:
 				h.audit.RecordDirect(
 					envelope.Job.Actor,
 					actuation.RoleOperator,

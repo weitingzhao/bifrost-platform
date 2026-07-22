@@ -8,8 +8,9 @@ import {
   BriefingStatusBadge,
   BriefingStatusLamp,
 } from '@/components/briefing/BriefingStatusChrome'
-import { deliverMigrateWave, signoffMigrateWave } from '@/api/platform'
-import type { AuditRecord, OpsContextResponse } from '@/api/types'
+import { deliverMigrateWave, signoffMigrateWave } from '@/api/buildPhase'
+import type { AuditRecord } from '@/api/auditTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   buildReconcileBriefingOptions,
   MIGRATE_LANE_STREAM_IDS,

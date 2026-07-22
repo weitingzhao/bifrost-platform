@@ -1,7 +1,7 @@
 import { Button, DenseTag } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import type { GitOpsApplicationView } from '@/api/types'
-import { fetchAudit } from '@/api/platform'
+import type { GitOpsApplicationView } from '@/api/deliveryTypes'
+import { fetchAudit } from '@/api/cluster'
 import { AuditRecordsPanel } from '@/components/AuditRecordsPanel'
 import {
   auditTargetForApp,

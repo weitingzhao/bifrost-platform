@@ -9,8 +9,9 @@ import {
   Button,
 } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
-import { fetchVerifyPayload } from '@/api/platform'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { fetchVerifyPayload } from '@/api/core'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   buildControlRoomDispatchPack,

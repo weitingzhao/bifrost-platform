@@ -17,7 +17,7 @@ import {
   siTraefikproxy,
 } from 'simple-icons'
 
-import type { Reachability, TopologyMatrixService, TopologyNode, TopologyResponse } from '@/api/types'
+import type { Reachability, TopologyMatrixService, TopologyNode, TopologyResponse } from '@/api/matrixTypes'
 import type { ScopeTag } from '@/lib/runtime-map/runtimeMapRegistry'
 
 export type RoleView = 'compose' | 'k3s'

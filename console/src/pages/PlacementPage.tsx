@@ -11,7 +11,8 @@ import {
   DenseTableRow,
   DenseTag,
 } from '@bifrost/ui'
-import { fetchClusterPlacement, fetchDeliveryPipelines } from '@/api/platform'
+import { fetchClusterPlacement } from '@/api/cluster'
+import { fetchDeliveryPipelines } from '@/api/delivery'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { StatusLamp } from '@/components/StatusLamp'

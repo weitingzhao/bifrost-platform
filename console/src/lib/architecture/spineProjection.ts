@@ -3,7 +3,7 @@
  * Constitution catalogs hold structure only; live progress comes from spine milestones.
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type {
   DeliveryPhaseStatus,
   DeliveryReleasePhase,

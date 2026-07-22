@@ -10,7 +10,7 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import {

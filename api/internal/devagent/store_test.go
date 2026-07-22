@@ -103,8 +103,8 @@ metadata:
 	rt.phases[0].Status = PhaseDone
 	rt.phases[0].CompletedAt = "2026-07-04T12:00:00Z"
 	rt.history = []Job{{ID: "j1", PhaseID: "P0", Status: JobDone}}
-	if err := h1.persistRuntimeLocked("persist-test"); err != nil {
-		t.Fatalf("persist: %v", err)
+	if persistErr := h1.persistRuntimeLocked("persist-test"); persistErr != nil {
+		t.Fatalf("persist: %v", persistErr)
 	}
 	h1.mu.Unlock()
 

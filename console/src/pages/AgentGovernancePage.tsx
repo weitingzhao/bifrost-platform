@@ -13,13 +13,9 @@ import {
   Button,
 } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
-import {
-  fetchAgentPerformance,
-  fetchCapabilityMap,
-  fetchTrustMatrix,
-  putTrustOverride,
-} from '@/api/platform'
-import type { AgentPerformanceWindow, HermesActuationLevel } from '@/api/types'
+import { fetchAgentPerformance } from '@/api/agentOps'
+import { fetchCapabilityMap, fetchTrustMatrix, putTrustOverride } from '@/api/agentGovernance'
+import type { AgentPerformanceWindow, HermesActuationLevel } from '@/api/agentTypes'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 const LEVEL_OPTIONS: { value: HermesActuationLevel; label: string }[] = [

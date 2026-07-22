@@ -128,6 +128,18 @@ server.tool(
 )
 
 server.tool(
+  'delete_pipeline_run',
+  'Delete terminal Tekton PipelineRun CR + pods (operator)',
+  { id: z.string(), namespace: z.string().optional() },
+  async ({ id, namespace }) => {
+    const qs = namespace != null && namespace !== '' ? `?ns=${encodeURIComponent(namespace)}` : ''
+    return jsonResult(
+      await platformDelete(`/api/v1/delivery/runs/${encodeURIComponent(id)}${qs}`),
+    )
+  },
+)
+
+server.tool(
   'stack_install_addon',
   'Install CI/CD stack add-on (admin)',
   { name: z.string() },
@@ -218,6 +230,42 @@ server.tool(
 )
 
 server.tool(
+  'wake_compute_node',
+  'Wake-on-LAN compute node (operator)',
+  { name: z.string() },
+  async ({ name }) =>
+    jsonResult(await platformPost(`/api/v1/cluster/nodes/${encodeURIComponent(name)}/wake`)),
+)
+
+server.tool(
+  'join_cluster_node',
+  'K3s agent join job (admin)',
+  { profile: z.string() },
+  async ({ profile }) =>
+    jsonResult(await platformPost('/api/v1/cluster/nodes/join', { profile })),
+)
+
+server.tool(
+  'poweroff_compute_node',
+  'Drain + power off compute node (admin)',
+  { name: z.string() },
+  async ({ name }) =>
+    jsonResult(await platformPost(`/api/v1/cluster/nodes/${encodeURIComponent(name)}/poweroff`)),
+)
+
+server.tool('ensure_metrics_server', 'Install metrics-server add-on (admin)', {}, async () =>
+  jsonResult(await platformPost('/api/v1/cluster/addons/metrics-server/ensure')),
+)
+
+server.tool(
+  'ensure_kube_prometheus_stack',
+  'Install kube-prometheus-stack add-on (admin)',
+  {},
+  async () =>
+    jsonResult(await platformPost('/api/v1/cluster/addons/kube-prometheus-stack/ensure')),
+)
+
+server.tool(
   'get_session_briefing',
   'Session briefing pack for Agent self-service (compact default). Params mirror Briefing URL state.',
   {
@@ -258,6 +306,20 @@ server.tool(
     request_spine_update: z.boolean().optional(),
   },
   async body => jsonResult(await platformPost('/api/v1/briefing/session-results', body)),
+)
+
+server.tool(
+  'prepare_briefing',
+  'Write briefing pack to data/briefing/active-pack.md for Cursor IDE /briefing (operator)',
+  {
+    session_pack: z.string(),
+    session_id: z.string().optional(),
+    program_id: z.string().optional(),
+    phase_id: z.string().optional(),
+    lane: z.string().optional(),
+    intent: z.string().optional(),
+  },
+  async body => jsonResult(await platformPost('/api/v1/briefing/prepare', body)),
 )
 
 server.tool(
@@ -593,6 +655,89 @@ server.tool(
         reason: reason ?? 'stale',
       }),
     ),
+)
+
+server.tool(
+  'get_checklist_signals',
+  'Latest Daily Ops Checklist per-item signals + KPIs',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/checklist/signals')),
+)
+
+server.tool(
+  'get_checklist_kpis',
+  'Checklist quiet-success streak + last-run summary',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/checklist/kpis')),
+)
+
+server.tool(
+  'get_telemetry_overview',
+  'Prometheus telemetry overview snapshot (preset metrics)',
+  { namespace: z.string().optional().describe('Optional K8s namespace filter') },
+  async ({ namespace }) => {
+    const qs = namespace != null && namespace !== '' ? `?ns=${encodeURIComponent(namespace)}` : ''
+    return jsonResult(await platformGet(`/api/v1/telemetry/overview${qs}`))
+  },
+)
+
+server.tool(
+  'get_telemetry_alerts',
+  'Prometheus firing and pending alerts',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/telemetry/alerts')),
+)
+
+server.tool(
+  'get_telemetry_targets',
+  'Prometheus scrape target health',
+  {
+    state: z
+      .enum(['any', 'active', 'dropped'])
+      .optional()
+      .describe('Target state filter (default: any)'),
+  },
+  async ({ state }) => {
+    const qs = state != null && state !== 'any' ? `?state=${encodeURIComponent(state)}` : ''
+    return jsonResult(await platformGet(`/api/v1/telemetry/targets${qs}`))
+  },
+)
+
+server.tool(
+  'report_checklist_signals',
+  'Merge Daily Ops Checklist probe signals (runner daily-ops-checklist-run)',
+  {
+    run_id: z.string().optional(),
+    source: z.string().optional(),
+    signals: z
+      .array(
+        z.object({
+          item_id: z.string(),
+          signal: z.enum(['ok', 'degraded', 'fail', 'unknown']),
+          detail: z.string().optional(),
+          env: z.string().optional(),
+        }),
+      )
+      .min(1),
+    auto_dispatch: z.boolean().optional(),
+  },
+  async ({ run_id, source, signals, auto_dispatch }) =>
+    jsonResult(
+      await platformPost('/api/v1/checklist/signals', {
+        run_id: run_id ?? '',
+        source: source ?? 'mcp',
+        signals,
+        auto_dispatch: auto_dispatch ?? false,
+      }),
+    ),
+)
+
+server.tool(
+  'sign_tier_b',
+  'Record Tier B Owner sign-off (admin)',
+  { notes: z.string().optional() },
+  async ({ notes }) =>
+    jsonResult(await platformPost('/api/v1/promote/tier-b/signoff', { notes: notes ?? '' })),
 )
 
 } // end platform tools (non-prometheus focus)

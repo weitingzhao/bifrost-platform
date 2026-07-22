@@ -2,14 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, DenseTag, SegmentControl, StatusLamp } from '@bifrost/ui'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronRight, Square } from 'lucide-react'
-import type { AgentBridgeResponse, AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse, RemediationJob } from '@/api/types'
-import {
-  cancelRemediationJob,
-  fetchAgentBridge,
-  fetchRemediationHealth,
-  fetchRemediationJobs,
-  startRemediation,
-} from '@/api/platform'
+import type { AgentBridgeResponse } from '@/api/agentTypes'
+import type { AuditRecord } from '@/api/auditTypes'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import type { RemediationJob } from '@/api/remediationTypes'
+import { cancelRemediationJob, fetchRemediationHealth, fetchRemediationJobs, startRemediation } from '@/api/remediation'
+import { fetchAgentBridge } from '@/api/agentOps'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { CloseBriefingSessionDialog } from '@/components/briefing/CloseBriefingSessionDialog'
 import { FlightDirectorBriefingPanel } from '@/components/briefing/FlightDirectorBriefingPanel'

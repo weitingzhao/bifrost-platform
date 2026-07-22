@@ -13,7 +13,8 @@
  * neutral, healthy-compatible state. It is never a failure and never produces
  * a "start the daemon" style remediation suggestion.
  */
-import type { Reachability, SatelliteBusDeepResponse } from '@/api/types'
+import type { Reachability } from '@/api/matrixTypes'
+import type { SatelliteBusDeepResponse } from '@/api/satelliteBusTypes'
 import {
   buildSocketHealthRows,
   resolveSharedRocketRow,

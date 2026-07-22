@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { TopologyResponse } from '@/api/types'
+import type { TopologyResponse } from '@/api/matrixTypes'
 import { InfraMapCanvas } from '@/components/runtime-map/InfraMapCanvas'
 import type { LayoutMode } from '@/lib/runtime-map/infraMapLayout'
 import type { RoleView, StackChipModel } from '@/lib/runtime-map/roleComponentRegistry'

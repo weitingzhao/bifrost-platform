@@ -1,8 +1,8 @@
 import { cn } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, XCircle } from 'lucide-react'
-import { fetchPipelineRunSteps } from '@/api/platform'
-import type { DeliveryPipelineRunView, ReleaseGateResponse } from '@/api/types'
+import { fetchPipelineRunSteps } from '@/api/delivery'
+import type { DeliveryPipelineRunView, ReleaseGateResponse } from '@/api/deliveryTypes'
 import {
   formatPipelineRunStatus,
   isPipelineRunFailed,

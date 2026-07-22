@@ -5,7 +5,7 @@
  * and Agent Briefing vision milestone appendix.
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { VISION_MILESTONES } from '@/lib/architecture/dualFlywheelVisionCatalog'
 
 export const VISION_SPINE_MAP_VERSION = '2026-06-19'

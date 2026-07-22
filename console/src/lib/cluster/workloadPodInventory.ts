@@ -1,4 +1,4 @@
-import type { ClusterNamespace, ClusterWorkload } from '@/api/types'
+import type { ClusterNamespace, ClusterWorkload } from '@/api/clusterTypes'
 import { groupWorkloadsByDeployment } from '@/lib/cluster/workloadTree'
 
 export type PodPhaseCounts = {

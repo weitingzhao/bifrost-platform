@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-import { fetchAuthCapabilities } from '@/api/platform'
-import type { AuthCapabilities } from '@/api/types'
+import { fetchAuthCapabilities } from '@/api/cluster'
+import type { AuthCapabilities } from '@/api/matrixTypes'
 import { getPlatformOperatorToken, setPlatformOperatorToken } from '@/lib/platformAuth'
 
 export interface PlatformAuthContextValue {

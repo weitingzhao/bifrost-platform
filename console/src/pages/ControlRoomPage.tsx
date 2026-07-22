@@ -1,4 +1,5 @@
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { AuditPageLink } from '@/components/AuditPageLink'
 import { ActiveAgentJobsStrip } from '@/components/control-room/ActiveAgentJobsStrip'
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
@@ -44,14 +45,16 @@ import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
 import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
-import { fetchSupplyChain } from '@/api/platform'
-import { startRemediation } from '@/api/platform'
+import { fetchSupplyChain } from '@/api/delivery'
+import { startRemediation } from '@/api/remediation'
 import {
   buildTradeDeployPrompt,
   TRADE_DEPLOY_SCOPE,
 } from '@/lib/agent/tradeDeployAgentPrompt'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 type ControlRoomPageProps = {
   context: OpsContextResponse | undefined
   contextLoading: boolean
@@ -59,13 +62,13 @@ type ControlRoomPageProps = {
   matrixLoading: boolean
   matrixError: Error | null
   platformHealthy: boolean
-  clusterSummary?: import('@/api/types').ClusterSummary
+  clusterSummary?: ClusterSummary
   clusterLoading?: boolean
-  stgSmoke?: import('@/api/types').StgSmokeResponse
+  stgSmoke?: StgSmokeResponse
   stgSmokeLoading?: boolean
-  stgGate?: import('@/api/types').ReleaseGateResponse
+  stgGate?: ReleaseGateResponse
   lastDeliverSucceeded?: boolean
-  tierB?: import('@/api/types').TierBStatusResponse
+  tierB?: TierBStatusResponse
   onOpenRuntimeMap: OpenRuntimeMapFn
   onOpenDelivery: () => void
   onOpenCluster: () => void

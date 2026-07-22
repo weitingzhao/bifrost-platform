@@ -1,5 +1,5 @@
 import { Button } from '@bifrost/ui'
-import type { ClusterEvent, ClusterWorkload } from '@/api/types'
+import type { ClusterEvent, ClusterWorkload } from '@/api/clusterTypes'
 import { StaticLogConsole } from '@/components/log/StaticLogConsole'
 import { StatusLamp } from '@/components/StatusLamp'
 import { podReachability } from '@/lib/cluster/clusterHealth'

@@ -1,4 +1,4 @@
-import type { RemediationJob } from '@/api/types'
+import type { RemediationJob } from '@/api/remediationTypes'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 
 export function remediationJobStatusLabel(job: RemediationJob): string {

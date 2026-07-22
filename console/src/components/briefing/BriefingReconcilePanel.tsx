@@ -1,5 +1,5 @@
 import { DenseTag } from '@bifrost/ui'
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   hasBlockingFindings,
   reconcileBriefing,

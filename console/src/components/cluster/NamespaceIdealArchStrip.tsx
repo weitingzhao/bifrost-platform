@@ -1,5 +1,5 @@
 import { DenseTag, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
-import type { ClusterPlacementRule } from '@/api/types'
+import type { ClusterPlacementRule } from '@/api/clusterTypes'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
 import { StatusLamp } from '@/components/StatusLamp'
 import { getNamespacePlacementSummary } from '@/lib/cluster/namespacePlacement'

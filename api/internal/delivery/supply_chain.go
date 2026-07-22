@@ -337,7 +337,7 @@ func dockerfileCMFrom(cm *corev1.ConfigMap) DockerfileConfigMapView {
 		size += len(cm.Data[k])
 	}
 	updated := cm.CreationTimestamp.UTC().Format(time.RFC3339)
-	if cm.ManagedFields != nil && len(cm.ManagedFields) > 0 {
+	if len(cm.ManagedFields) > 0 {
 		// resourceVersion changes on update; use it as a change indicator
 		_ = cm.ResourceVersion
 	}

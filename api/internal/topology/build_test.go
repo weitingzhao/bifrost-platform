@@ -11,8 +11,8 @@ func TestBuild_ProdEdgeStatuses(t *testing.T) {
 	topo := &config.TopologyFile{
 		DeploymentPhase: "compose",
 		Nodes: []config.TopologyNode{
-			{ID: "mini-pc-a", Label: "a", Host: "192.168.10.70", Group: "linux", Grid: config.GridPos{1, 0}},
-			{ID: "mini-pc-b", Label: "b", Host: "192.168.10.80", Group: "linux", Grid: config.GridPos{1, 2}},
+			{ID: "mini-pc-a", Label: "a", Host: "192.168.10.70", Group: "linux", Grid: config.GridPos{Row: 1, Col: 0}},
+			{ID: "mini-pc-b", Label: "b", Host: "192.168.10.80", Group: "linux", Grid: config.GridPos{Row: 1, Col: 2}},
 		},
 		Edges: []config.TopologyEdge{
 			{

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchIbGatewayStatus } from '@/api/platform'
-import type { IbGatewayStatusResponse } from '@/api/types'
+import { fetchIbGatewayStatus } from '@/api/network'
+import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 
 export type IbGatewayLiveProbeState = {
   status: IbGatewayStatusResponse | undefined

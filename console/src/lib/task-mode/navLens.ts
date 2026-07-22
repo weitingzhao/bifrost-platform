@@ -1,12 +1,8 @@
 import { LayoutGrid, ListTodo } from 'lucide-react'
 import type { ShellNavGroup, ShellNavItem } from '@bifrost/ui'
 import { getAllNavItems } from '@bifrost/ui'
-import type {
-  DeliveryPipelineRunView,
-  OpsContextResponse,
-  ReleaseGateResponse,
-  SupplyChainResponse,
-} from '@/api/types'
+import type { DeliveryPipelineRunView, ReleaseGateResponse, SupplyChainResponse } from '@/api/deliveryTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { ProgramDetailResponse } from '@/api/programsTypes'
 import type { DeliveryReleasePhase } from '@/lib/architecture/deliveryMainlineCatalog'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'

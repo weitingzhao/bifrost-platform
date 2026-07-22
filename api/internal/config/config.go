@@ -58,8 +58,8 @@ func Load() (*Config, error) {
 	}
 
 	var file File
-	if err := yaml.Unmarshal(data, &file); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+	if unmarshalErr := yaml.Unmarshal(data, &file); unmarshalErr != nil {
+		return nil, fmt.Errorf("parse config: %w", unmarshalErr)
 	}
 	if len(file.Environments) == 0 {
 		return nil, fmt.Errorf("no environments in %s", configPath)

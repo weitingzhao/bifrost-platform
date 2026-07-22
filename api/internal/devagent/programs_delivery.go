@@ -104,10 +104,6 @@ func (h *Handler) countSignedPhases(rt *programRuntime) int {
 	return n
 }
 
-func (h *Handler) isPhaseSigned(rt *programRuntime, phaseID string) bool {
-	return h.phaseSignoffRecordLocked(rt, phaseID) != nil
-}
-
 func (h *Handler) phaseSignoffRecord(rt *programRuntime, phaseID string) *PhaseSignOffRecord {
 	return h.phaseSignoffRecordLocked(rt, phaseID)
 }

@@ -59,11 +59,7 @@ func InitMigrateWaveCatalog(configDir string) error {
 		}
 		waves := make([]Wave, 0, len(file.Waves))
 		for _, w := range file.Waves {
-			waves = append(waves, Wave{
-				ID: w.ID, Code: w.Code, SpineIndex: w.SpineIndex, Label: w.Label,
-				Repo: w.Repo, Verify: w.Verify, BlockedBy: w.BlockedBy,
-				Delivered: w.Delivered, Goal: w.Goal,
-			})
+			waves = append(waves, Wave(w))
 		}
 		m[file.StreamID] = waves
 	}
@@ -115,11 +111,7 @@ func ListStreams() []streamFile {
 	for id, waves := range streamWaves {
 		sf := streamFile{StreamID: id, Waves: make([]waveYAML, 0, len(waves))}
 		for _, w := range waves {
-			sf.Waves = append(sf.Waves, waveYAML{
-				ID: w.ID, Code: w.Code, SpineIndex: w.SpineIndex, Label: w.Label,
-				Repo: w.Repo, Verify: w.Verify, BlockedBy: w.BlockedBy,
-				Delivered: w.Delivered, Goal: w.Goal,
-			})
+			sf.Waves = append(sf.Waves, waveYAML(w))
 		}
 		out = append(out, sf)
 	}

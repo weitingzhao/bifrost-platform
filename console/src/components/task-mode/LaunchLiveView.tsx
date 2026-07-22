@@ -2,13 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, DenseTag, cn } from '@bifrost/ui'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import type {
-  DeliveryPipelineRunView,
-  ReleaseGateResponse,
-  StgSmokeResponse,
-  TierBStatusResponse,
-} from '@/api/types'
-import { respondRemediationJob } from '@/api/platform'
+import type { DeliveryPipelineRunView, ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
+import { respondRemediationJob } from '@/api/remediation'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { DeliveryPipelineStepProgress } from '@/components/delivery/DeliveryPipelineStepProgress'

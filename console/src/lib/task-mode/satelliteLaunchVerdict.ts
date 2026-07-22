@@ -1,4 +1,4 @@
-import type { DeliveryPipelineRunView } from '@/api/types'
+import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 import { isPipelineRunRunning } from '@/lib/delivery/pipelineRunAskPack'
 import type { Signal } from '@/lib/control-room/missionSignals'
 

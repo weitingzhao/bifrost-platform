@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Bot, ChevronRight, History } from 'lucide-react'
-import { fetchRemediationJobs } from '@/api/platform'
-import type { RemediationJob } from '@/api/types'
+import { fetchRemediationJobs } from '@/api/remediation'
+import type { RemediationJob } from '@/api/remediationTypes'
 import {
   findActiveRemediationJobs,
   findRecentCompletedRemediationJobs,

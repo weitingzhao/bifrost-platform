@@ -3,11 +3,8 @@
  * Governance → Agent System stays design-only; Engineer → Agent Capability uses this overlay.
  */
 
-import type {
-  AgentBridgeResponse,
-  RemediationHealthResponse,
-  RemediationJob,
-} from '@/api/types'
+import type { AgentBridgeResponse } from '@/api/agentTypes'
+import type { RemediationHealthResponse, RemediationJob } from '@/api/remediationTypes'
 import type { AgentTaskEntry } from '@/lib/agent/agentTaskCatalog'
 import { AGENT_TASK_RELATIONS } from '@/lib/agent/agentTaskCatalog'
 

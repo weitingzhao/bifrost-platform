@@ -1,4 +1,5 @@
-import type { AuditRecord, GitOpsApplicationView } from '@/api/types'
+import type { AuditRecord } from '@/api/auditTypes'
+import type { GitOpsApplicationView } from '@/api/deliveryTypes'
 
 export type GitOpsHintLevel = 'recommend' | 'optional' | 'noop' | 'blocked' | 'unavailable'
 

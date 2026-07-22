@@ -10,7 +10,7 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import type { ClusterServiceReadinessResponse, ServiceDomain, ServiceDomainStatus } from '@/api/types'
+import type { ClusterServiceReadinessResponse, ServiceDomain, ServiceDomainStatus } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'

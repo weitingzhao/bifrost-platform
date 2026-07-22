@@ -1,4 +1,4 @@
-import type { AgentBridgeResponse, GitDirtyRepoDetail } from '@/api/types'
+import type { AgentBridgeResponse, GitDirtyRepoDetail } from '@/api/agentTypes'
 
 /** Engineer git dirty — propose commit / optional stash (approval required). Not Operator Plane Fix. */
 export const GIT_DIRTY_FIX_SCOPE = 'git-dirty-remediate'

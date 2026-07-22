@@ -9,7 +9,7 @@ import {
   DenseTableRow,
   DenseTag,
 } from '@bifrost/ui'
-import { fetchBriefingSessionResults } from '@/api/platform'
+import { fetchBriefingSessionResults } from '@/api/briefingSession'
 
 function outcomeVariant(
   outcome: string,

@@ -176,8 +176,7 @@ func (s *Service) tasksForPhase(phase string) []opscontext.TrackTask {
 func (s *Service) buildChecks(tasks []opscontext.TrackTask) []GateCheck {
 	checks := make([]GateCheck, 0, len(tasks))
 	for _, t := range tasks {
-		status := "pending"
-		detail := ""
+		var status, detail string
 		switch t.Status {
 		case "done":
 			status = "pass"

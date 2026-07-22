@@ -160,8 +160,8 @@ func NewHandler(configDir string) (*Handler, error) {
 			phases:    phasesFromBlueprint(bp),
 			history:   []Job{},
 		}
-		if saved, err := store.LoadProgram(bp.ID); err != nil {
-			return nil, err
+		if saved, loadErr := store.LoadProgram(bp.ID); loadErr != nil {
+			return nil, loadErr
 		} else if saved != nil {
 			rt.phases = mergePhasesFromState(bp, saved.Phases)
 			rt.activeJob = saved.ActiveJob

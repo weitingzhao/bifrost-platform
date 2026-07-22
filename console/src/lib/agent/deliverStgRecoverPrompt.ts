@@ -1,4 +1,4 @@
-import type { StgSmokeResponse, SupplyChainResponse } from '@/api/types'
+import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import {
   formatPipelineRunStatus,
   isPipelineRunFailed,

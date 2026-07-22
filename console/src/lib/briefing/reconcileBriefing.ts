@@ -8,7 +8,7 @@
  *     mismatches HARD-BLOCK the briefing pack, warnings stamp BRIEFING_STALE.
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { CATALOG_VERSION } from '@/lib/environments-catalog'
 import { reconcileCatalogSpineParity } from '@/lib/architecture/catalogSpineParity'
 import {

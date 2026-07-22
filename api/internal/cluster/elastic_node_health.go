@@ -120,10 +120,6 @@ func (s *Service) computeWorkloadsUnsatisfied(ctx context.Context, clientset kub
 	return false, ""
 }
 
-func probeHostReachable(ctx context.Context, sshHost string) bool {
-	return probeHostReachableWithTimeout(ctx, sshHost, 15)
-}
-
 func probeHostReachableFast(ctx context.Context, sshHost string) bool {
 	return probeHostReachableWithTimeout(ctx, sshHost, 3)
 }

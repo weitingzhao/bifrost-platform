@@ -3,7 +3,8 @@
  * Doctrine: briefingReconciliationCatalog.ts BRIEFING_SYNC_LOOP_STEPS
  */
 
-import type { AgentNightlyReportResponse, DriftProposal, RemediationJob } from '@/api/types'
+import type { AgentNightlyReportResponse } from '@/api/agentTypes'
+import type { DriftProposal, RemediationJob } from '@/api/remediationTypes'
 import { BRIEFING_SYNC_LOOP_STEPS } from '@/lib/architecture/briefingReconciliationCatalog'
 import { catalogTaskById } from '@/lib/agent/agentTaskCatalog'
 import {

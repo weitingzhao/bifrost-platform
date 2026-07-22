@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import type { ReactNode } from 'react'
-import { fetchFlightDirectorSnapshot } from '@/api/platform'
+import { fetchFlightDirectorSnapshot } from '@/api/agentGovernance'
 
 interface FlightDirectorBriefingPanelProps {
   onOpenTrustAutonomy?: () => void

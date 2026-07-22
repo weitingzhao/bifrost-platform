@@ -17,13 +17,13 @@ func TestPatchMigrateStream(t *testing.T) {
 		t.Fatal(err)
 	}
 	tmp := filepath.Join(t.TempDir(), "ops-context.yaml")
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(tmp, data, 0o644); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 
 	headline := "Trade K8s-native W3 NEXT — test headline"
 	nextTask := "W3 NEXT — test task. (W0–W2 signed)"
-	if err := PatchMigrateStream(tmp, MigrateStreamPatch{
+	if patchErr := PatchMigrateStream(tmp, MigrateStreamPatch{
 		StreamID:        "trade-k8s-native",
 		Done:            3,
 		ReadyForSignoff: 1,
@@ -31,8 +31,8 @@ func TestPatchMigrateStream(t *testing.T) {
 		NextTask:        nextTask,
 		Note:            "test note",
 		Headline:        headline,
-	}); err != nil {
-		t.Fatal(err)
+	}); patchErr != nil {
+		t.Fatal(patchErr)
 	}
 
 	loaded, err := Load(tmp)

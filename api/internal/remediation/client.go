@@ -173,7 +173,7 @@ func (c *RunnerClient) HealthAll(ctx context.Context) []RunnerHealth {
 			continue
 		}
 		func() {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode >= 300 {
 				h.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
 				return
@@ -234,7 +234,7 @@ func (c *RunnerClient) Health(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("runner health: HTTP %d %s", resp.StatusCode, strings.TrimSpace(string(body)))
@@ -255,7 +255,7 @@ func (c *RunnerClient) Start(ctx context.Context, body StartRunnerRequest) (*Job
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("runner start: HTTP %d %s", resp.StatusCode, trimRunnerErrorBody(raw, resp.StatusCode))
@@ -272,7 +272,7 @@ func (c *RunnerClient) Get(ctx context.Context, id string) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
@@ -292,7 +292,7 @@ func (c *RunnerClient) Cancel(ctx context.Context, id string) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("runner cancel: HTTP %d %s", resp.StatusCode, strings.TrimSpace(string(raw)))
@@ -319,7 +319,7 @@ func (c *RunnerClient) Stream(ctx context.Context, id string, onLine func([]byte
 			continue
 		}
 		c.markActive(ep.url)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode >= 300 {
 			body, _ := io.ReadAll(resp.Body)
 			return fmt.Errorf("runner stream: HTTP %d %s", resp.StatusCode, strings.TrimSpace(string(body)))
@@ -356,7 +356,7 @@ func (c *RunnerClient) Respond(ctx context.Context, id string, body RespondReque
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("runner respond: HTTP %d %s", resp.StatusCode, strings.TrimSpace(string(raw)))
@@ -369,7 +369,7 @@ func (c *RunnerClient) List(ctx context.Context) ([]Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("runner list: HTTP %d %s", resp.StatusCode, strings.TrimSpace(string(raw)))
@@ -397,7 +397,7 @@ func (c *RunnerClient) TriggerNightly(ctx context.Context) (*NightlyRunResponse,
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("runner nightly: HTTP %d %s", resp.StatusCode, trimRunnerErrorBody(raw, resp.StatusCode))

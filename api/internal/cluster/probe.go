@@ -409,32 +409,6 @@ func clientErrFields(err error) (probe.Reachability, string) {
 	return probe.ReachFail, err.Error()
 }
 
-func countReadyNodes(nodes []corev1.Node) (ready, total int) {
-	total = len(nodes)
-	for _, n := range nodes {
-		for _, c := range n.Status.Conditions {
-			if c.Type == corev1.NodeReady && c.Status == corev1.ConditionTrue {
-				ready++
-				break
-			}
-		}
-	}
-	return ready, total
-}
-
-func nodeReach(ready, total int) (probe.Reachability, string) {
-	if total == 0 {
-		return probe.ReachFail, "no nodes"
-	}
-	if ready == total {
-		return probe.ReachOK, fmt.Sprintf("%d/%d nodes ready", ready, total)
-	}
-	if ready == 0 {
-		return probe.ReachFail, "no nodes ready"
-	}
-	return probe.ReachDegraded, fmt.Sprintf("%d/%d nodes ready", ready, total)
-}
-
 func nodeView(n corev1.Node) NodeView {
 	status := "NotReady"
 	for _, c := range n.Status.Conditions {

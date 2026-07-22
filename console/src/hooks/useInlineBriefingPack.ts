@@ -1,12 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type {
-  ClusterObservabilityResponse,
-  ClusterSummary,
-  MatrixResponse,
-  OpsContextResponse,
-} from '@/api/types'
-import { fetchClusterObservability } from '@/api/platform'
+import type { ClusterObservabilityResponse, ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { fetchClusterObservability } from '@/api/cluster'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
 import { ensureSessionForPack } from '@/lib/briefing/ensureSessionForPack'
 import {

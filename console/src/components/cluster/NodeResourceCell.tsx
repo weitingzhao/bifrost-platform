@@ -1,4 +1,4 @@
-import type { Reachability } from '@/api/types'
+import type { Reachability } from '@/api/matrixTypes'
 import { StatusLamp } from '@/components/StatusLamp'
 
 /** Allocatable capacity + optional usage % (metrics-server) in one dense cell. */

@@ -1,5 +1,5 @@
 import { DenseTag } from '@bifrost/ui'
-import type { DockerfileConfigMapView } from '@/api/types'
+import type { DockerfileConfigMapView } from '@/api/deliveryTypes'
 import { EXPECTED_DOCKERFILE_CONFIGMAPS } from '@/lib/delivery/deliverStgPhases'
 
 interface DockerfileCmSummaryProps {

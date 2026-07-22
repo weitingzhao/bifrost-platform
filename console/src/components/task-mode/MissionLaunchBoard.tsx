@@ -12,7 +12,7 @@ import {
   SatelliteReadinessStrip,
   useSatelliteProdReadiness,
 } from '@/components/task-mode/TaskModeReadinessStrip'
-import type { DeliveryPipelineRunView } from '@/api/types'
+import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
 import { launchVerdictToSignal, readinessAnchorDomId } from '@/lib/task-mode/satelliteLaunchVerdict'
 import { missionStatus } from '@/lib/control-room/missionSignals'

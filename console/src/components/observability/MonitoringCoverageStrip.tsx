@@ -4,7 +4,7 @@
  */
 
 import { DenseTag, StatusLamp } from '@bifrost/ui'
-import type { LayerBStatus } from '@/api/types'
+import type { LayerBStatus } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 function layerBLamp(status: LayerBStatus | undefined) {

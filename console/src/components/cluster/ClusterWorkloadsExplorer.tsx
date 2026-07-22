@@ -29,8 +29,8 @@ import {
   Server,
   Trash2,
 } from 'lucide-react'
-import type { ClusterNamespace, ClusterWorkload } from '@/api/types'
-import { fetchClusterWorkloads } from '@/api/platform'
+import type { ClusterNamespace, ClusterWorkload } from '@/api/clusterTypes'
+import { fetchClusterWorkloads } from '@/api/cluster'
 import { groupNeedsAttention, groupWorkloadsByDeployment } from '@/lib/cluster/workloadTree'
 import { buildNamespacePodInventory } from '@/lib/cluster/workloadPodInventory'
 import {

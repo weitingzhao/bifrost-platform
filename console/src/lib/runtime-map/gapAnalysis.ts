@@ -5,7 +5,7 @@
  * "Planned" = defined in topology roles but no live probe (reachability === 'unknown').
  */
 
-import type { MatrixResponse, TopologyNode, TopologyResponse } from '@/api/types'
+import type { MatrixResponse, TopologyNode, TopologyResponse } from '@/api/matrixTypes'
 import {
   chipsForNode,
   type RoleView,

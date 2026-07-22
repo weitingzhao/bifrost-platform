@@ -9,12 +9,8 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import type {
-  ClusterCapabilityCoverage,
-  ClusterCapabilityProbe,
-  ClusterGovernanceResponse,
-  Reachability,
-} from '@/api/types'
+import type { ClusterCapabilityCoverage, ClusterCapabilityProbe, ClusterGovernanceResponse } from '@/api/clusterTypes'
+import type { Reachability } from '@/api/matrixTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'

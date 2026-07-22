@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@bifrost/ui'
-import type { OpsContextResponse } from '@/api/types'
-import { fetchNetworkClients, fetchNetworkDevices } from '@/api/platform'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { fetchNetworkClients, fetchNetworkDevices } from '@/api/network'
 import { NetworkHealthPanel } from '@/components/control-room/NetworkHealthPanel'
 import { NetworkClientsPanel } from '@/components/network/NetworkClientsPanel'
 import { NetworkDevicesPanel } from '@/components/network/NetworkDevicesPanel'
+import { NetworkFirewallPanel } from '@/components/network/NetworkFirewallPanel'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 
 export function NetworkPage({
@@ -38,6 +39,8 @@ export function NetworkPage({
       />
 
       <NetworkHealthPanel context={context} onOpenAgentProtocol={onOpenAgentProtocol} />
+
+      <NetworkFirewallPanel />
 
       <NetworkDevicesPanel data={devicesQuery.data} isLoading={devicesQuery.isLoading} />
 

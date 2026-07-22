@@ -64,6 +64,7 @@ export const MISSION_SIGNAL_PHASES: MissionSignalPhaseDef[] = [
     dependsOn: ['P3'],
     acceptance: [
       'Hermes readiness gate (ready=true, blockers empty)',
+      'Known blockers when not ready: NOUS_HERMES_URL_MISSING · NOUS_HERMES_UNREACHABLE · HERMES_GATEWAY_DOWN · LLM_KEY_MISSING (Owner ~/.hermes/.env) · PLATFORM_MCP_INCOMPLETE',
       'First task prompt references verify_mission_snapshot + matrix',
       'L0 report only — no actuation on first task',
     ],

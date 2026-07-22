@@ -14,7 +14,7 @@ import {
   cn,
   type DenseTagVariant,
 } from '@bifrost/ui'
-import type { AuditRecord } from '@/api/types'
+import type { AuditRecord } from '@/api/auditTypes'
 import {
   ACTUATION_CATEGORY_OPTIONS,
   ACTUATION_CATEGORY_VARIANT,

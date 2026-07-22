@@ -1,11 +1,8 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import {
-  fetchFlightDirectorSnapshot,
-  fetchHermesReadiness,
-  fetchVerifyMissionSnapshot,
-  fetchVerifyPayload,
-} from '@/api/platform'
+import { fetchFlightDirectorSnapshot } from '@/api/agentGovernance'
+import { fetchHermesReadiness } from '@/api/hermes'
+import { fetchVerifyMissionSnapshot, fetchVerifyPayload } from '@/api/core'
 import { fetchProgramDetail } from '@/api/programs'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import {

@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { StatusLamp } from '@bifrost/ui'
 import { Bot, ChevronDown, ChevronRight, Clock, History, RotateCcw } from 'lucide-react'
-import { fetchAgentNightlyReport, fetchAudit, fetchRemediationJobs } from '@/api/platform'
+import { fetchAgentNightlyReport } from '@/api/agentOps'
+import { fetchAudit } from '@/api/cluster'
+import { fetchRemediationJobs } from '@/api/remediation'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
 import {
   buildMissionTimelineModel,

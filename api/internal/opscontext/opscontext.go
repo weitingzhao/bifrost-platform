@@ -203,8 +203,8 @@ func UpdateLastGate(path string, at string, result string) error {
 	}
 
 	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return fmt.Errorf("parse spine yaml node: %w", err)
+	if unmarshalErr := yaml.Unmarshal(data, &doc); unmarshalErr != nil {
+		return fmt.Errorf("parse spine yaml node: %w", unmarshalErr)
 	}
 	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
 		return fmt.Errorf("spine yaml: unexpected document structure")

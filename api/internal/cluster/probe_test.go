@@ -90,7 +90,7 @@ func TestEnsureBifrostNamespacesCreatesMissing(t *testing.T) {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
 	for _, ns := range entry.BifrostNamespaces {
-		if _, err := clientset.CoreV1().Namespaces().Get(t.Context(), ns, metav1.GetOptions{}); err != nil {
+		if _, getErr := clientset.CoreV1().Namespaces().Get(t.Context(), ns, metav1.GetOptions{}); getErr != nil {
 			t.Fatalf("namespace %s not created: %v", ns, err)
 		}
 	}

@@ -4,7 +4,7 @@
  * single copyable text.
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { buildEnvironmentsLlmContext } from '@/lib/environments-catalog'
 import { buildDesignSystemLlmPack } from '@/lib/standards/designSystemCatalog'
 import { buildMcpContractLlmPack } from '@/lib/standards/mcpContractCatalog'

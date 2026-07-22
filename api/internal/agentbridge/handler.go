@@ -220,7 +220,7 @@ func (h *Handler) HandleSmoke(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
@@ -241,7 +241,7 @@ func probeGitBridge(ctx context.Context, client *http.Client) GitBridgeStatus {
 	if err != nil {
 		return GitBridgeStatus{URL: url, Status: "unavailable", Error: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		return GitBridgeStatus{URL: url, Status: "unavailable", Error: "HTTP " + resp.Status}
 	}
@@ -306,7 +306,7 @@ func probeSatelliteProbeBridge(ctx context.Context, client *http.Client) Satelli
 	if err != nil {
 		return SatelliteProbeBridgeStatus{URL: url, Status: "unavailable", Error: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		return SatelliteProbeBridgeStatus{URL: url, Status: "unavailable", Error: "HTTP " + resp.Status}
 	}
@@ -344,7 +344,7 @@ func probeHermesMcp(ctx context.Context, client *http.Client) OptionalEndpoint {
 	if err != nil {
 		return OptionalEndpoint{URL: url, Status: "unavailable", Error: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		return OptionalEndpoint{
 			URL:    url,
@@ -380,7 +380,7 @@ func probeNousHermes(ctx context.Context, client *http.Client) NousHermesStatus 
 	if err != nil {
 		return NousHermesStatus{URL: url, Status: "unavailable", Error: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return NousHermesStatus{URL: url, Status: "auth_required", Error: "dashboard requires authentication"}
 	}
@@ -426,7 +426,7 @@ func probeNightlyReport(ctx context.Context, client *http.Client, runnerURL stri
 	if err != nil {
 		return NightlyHint{Available: false, Hint: "Runner report unreachable"}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return NightlyHint{Available: false, Hint: "No nightly report on runner yet"}
 	}

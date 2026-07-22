@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@bifrost/ui'
 import { useMemo, useState } from 'react'
 import { fetchConsoleHosts } from '@/api/console'
-import { fetchClusterNodes } from '@/api/platform'
+import { fetchClusterNodes } from '@/api/cluster'
 import { ServerTerminal } from '@/components/ServerTerminal'
 
 export function ServerConsolePage() {

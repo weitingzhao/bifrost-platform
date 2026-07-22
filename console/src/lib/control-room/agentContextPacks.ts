@@ -1,4 +1,5 @@
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   buildEnvironmentsLlmContext,
   formatSpineContextSection,

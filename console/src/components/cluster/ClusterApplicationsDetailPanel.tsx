@@ -9,12 +9,8 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import { useQueryClient } from '@tanstack/react-query'
-import type {
-  ClusterServiceReadinessResponse,
-  Reachability,
-  ServiceDependency,
-  ServiceDomain,
-} from '@/api/types'
+import type { ClusterServiceReadinessResponse, ServiceDependency, ServiceDomain } from '@/api/clusterTypes'
+import type { Reachability } from '@/api/matrixTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'

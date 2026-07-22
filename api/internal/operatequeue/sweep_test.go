@@ -13,8 +13,8 @@ func TestSweepAutoDismissesStale(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
 	dataDir := filepath.Join(dir, "data")
-	os.Setenv("PLATFORM_DATA_DIR", dataDir)
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", dataDir)
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	h := NewHandler(configDir, actuation.NewAuditLog(""))
 	h.BindEvidenceSource(EvidenceFunc(func() (EvidenceBundle, error) {
@@ -49,8 +49,8 @@ func TestSweepAutoDismissesStale(t *testing.T) {
 func TestSweepCreatesBriefForNeedsDecision(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	h := NewHandler(configDir, actuation.NewAuditLog(""))
 	h.BindEvidenceSource(EvidenceFunc(func() (EvidenceBundle, error) {
@@ -84,8 +84,8 @@ func TestSweepCreatesBriefForNeedsDecision(t *testing.T) {
 func TestBriefDecideHoldSkipsSweep(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	h := NewHandler(configDir, actuation.NewAuditLog(""))
 	h.BindEvidenceSource(EvidenceFunc(func() (EvidenceBundle, error) {
@@ -108,8 +108,8 @@ func TestBriefDecideHoldSkipsSweep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.briefs.ApplyDecision(brief.ID, DecisionHold); err != nil {
-		t.Fatal(err)
+	if _, applyErr := h.briefs.ApplyDecision(brief.ID, DecisionHold); applyErr != nil {
+		t.Fatal(applyErr)
 	}
 
 	resp, err := h.Sweep(SweepRequest{})

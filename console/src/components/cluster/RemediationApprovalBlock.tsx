@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@bifrost/ui'
-import type { RemediationApprovalOption, RemediationEvent } from '@/api/types'
+import type { RemediationApprovalOption, RemediationEvent } from '@/api/remediationTypes'
 
 export type RemediationApprovalRespond = (
   optionId: string,

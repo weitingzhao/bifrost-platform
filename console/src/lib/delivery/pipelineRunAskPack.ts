@@ -1,4 +1,4 @@
-import type { DeliveryPipelineRunView } from '@/api/types'
+import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 
 const LOG_TAIL_MAX = 12_000
 

@@ -7,7 +7,7 @@ import {
 } from '@bifrost/ui'
 import { ChevronDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import type { RevisionsResponse } from '@/api/types'
+import type { RevisionsResponse } from '@/api/deliveryTypes'
 import { validateGitRevision } from '@/lib/delivery/revisionValidation'
 
 function buildRevisionOptions(data: RevisionsResponse | undefined): string[] {

@@ -19,6 +19,7 @@ import {
   resolveCellGate,
 } from '@/lib/control-room/fleetSnapshot'
 import { cellAllowsAgentFix } from '@/lib/control-room/fleetCellFix'
+import { useDailyOpsContext } from '@/components/task-mode/daily-ops/DailyOpsContext'
 import {
   describeCoverageEntry,
   formatChecklistTouchAge,
@@ -405,10 +406,6 @@ function findCell(
 }
 
 export function DailyOpsFleetBoard({
-  fleet,
-  isLoading,
-  canOperate,
-  agentFixPending,
   selectedCellKey,
   coverage,
   flashKeys,
@@ -418,10 +415,6 @@ export function DailyOpsFleetBoard({
   onSelectCell,
   onNavigate,
 }: {
-  fleet: FleetSnapshot
-  isLoading?: boolean
-  canOperate?: boolean
-  agentFixPending?: boolean
   selectedCellKey?: string | null
   /** Dry-run checklist coverage + last touch times */
   coverage?: ChecklistCoverageIndex | null
@@ -434,6 +427,8 @@ export function DailyOpsFleetBoard({
   onSelectCell: (cell: FleetCell | null) => void
   onNavigate: (tabId: string) => void
 }) {
+  const { fleet, isLoading = false, canOperate = false, agentFixPending = false } =
+    useDailyOpsContext()
   const nowMs = useNowMs()
   const worstKey = fleet.verdict.worstCell?.key
   const remediatingPhase = workflowPhase === 'remediate'

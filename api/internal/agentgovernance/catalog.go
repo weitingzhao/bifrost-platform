@@ -49,13 +49,3 @@ func normalizeScope(scope string) string {
 	}
 	return scope
 }
-
-func taskByScope(scope string) (TaskDef, bool) {
-	n := normalizeScope(scope)
-	for _, t := range TaskCatalog() {
-		if t.Scope == n {
-			return t, true
-		}
-	}
-	return TaskDef{}, false
-}

@@ -1,4 +1,4 @@
-import type { OpsContextDeployment } from '@/api/types'
+import type { OpsContextDeployment } from '@/api/opsContextTypes'
 
 export type CiModeLabel = 'Mac runner (near-term)' | 'GitOps (Gitea/Tekton/ArgoCD)'
 

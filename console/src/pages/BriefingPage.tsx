@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { AuditRecord, ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
-import { fetchClusterObservability, fetchRemediationJobs, fetchSessionSnapshotLatest } from '@/api/platform'
+import type { AuditRecord } from '@/api/auditTypes'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { fetchClusterObservability } from '@/api/cluster'
+import { fetchRemediationJobs } from '@/api/remediation'
+import { fetchSessionSnapshotLatest } from '@/api/sessionSnapshots'
 import { prepareBriefingForIde } from '@/api/briefing'
 import {
   isLikelyCursorIdeBrowser,

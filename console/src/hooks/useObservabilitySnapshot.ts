@@ -5,22 +5,13 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import {
-  fetchAgentBridge,
-  fetchClusterMetrics,
-  fetchClusterObservability,
-  fetchIbGatewayStatus,
-  fetchMatrix,
-  fetchRemediationHealth,
-  fetchSatelliteBusDeep,
-  fetchSelfHealth,
-  fetchTelemetryAlerts,
-  fetchTelemetryOverview,
-  fetchTelemetryTargets,
-  isAllMatrices,
-  isAllSatelliteBusDeep,
-} from '@/api/platform'
-import type { MatrixResponse } from '@/api/types'
+import { fetchAgentBridge } from '@/api/agentOps'
+import { fetchClusterMetrics, fetchClusterObservability } from '@/api/cluster'
+import { fetchIbGatewayStatus } from '@/api/network'
+import { fetchMatrix, fetchSatelliteBusDeep, fetchSelfHealth, isAllMatrices, isAllSatelliteBusDeep } from '@/api/core'
+import { fetchRemediationHealth } from '@/api/remediation'
+import { fetchTelemetryAlerts, fetchTelemetryOverview, fetchTelemetryTargets } from '@/api/telemetry'
+import type { MatrixResponse } from '@/api/matrixTypes'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 import {
   buildObservabilityViewModel,

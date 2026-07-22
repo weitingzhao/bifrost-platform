@@ -12,13 +12,8 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import type { SupplyChainResponse } from '@/api/types'
-import {
-  fetchSupplyChain,
-  refreshDockerfileConfigMaps,
-  startPipelineRun,
-  triggerMirrorSync,
-} from '@/api/platform'
+import type { SupplyChainResponse } from '@/api/deliveryTypes'
+import { fetchSupplyChain, refreshDockerfileConfigMaps, startPipelineRun, triggerMirrorSync } from '@/api/delivery'
 import { DockerfileCmSummary } from '@/components/delivery/DockerfileCmSummary'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'

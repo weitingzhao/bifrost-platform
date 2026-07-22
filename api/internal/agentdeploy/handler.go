@@ -133,7 +133,7 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !matched {
-			selected = DeployTarget{ID: "custom", Role: "primary", Remote: rmt}
+			selected = DeployTarget{Role: "primary", Remote: rmt}
 		}
 	}
 

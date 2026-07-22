@@ -1,5 +1,5 @@
 import { Button, DenseTag } from '@bifrost/ui'
-import type { AuditRecord } from '@/api/types'
+import type { AuditRecord } from '@/api/auditTypes'
 import {
   formatMigrateWaveAuditLabel,
   migrateWaveAuditForStream,

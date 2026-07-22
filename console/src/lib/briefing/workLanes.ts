@@ -1,10 +1,6 @@
-import type {
-  BuildTrack,
-  ClusterSummary,
-  MatrixResponse,
-  MigrateStream,
-  OpsContextResponse,
-} from '@/api/types'
+import type { BuildTrack, MigrateStream, OpsContextResponse } from '@/api/opsContextTypes'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
 import {
   hasProdFailures,
   prodFailingTargetIds,

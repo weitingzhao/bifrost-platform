@@ -199,13 +199,31 @@ export function setSatelliteBusFocus(focus: ReadinessChipAction['busFocus'] | un
   sessionStorage.setItem(SATELLITE_BUS_FOCUS_KEY, focus)
 }
 
-export function consumeSatelliteBusFocus(): ReadinessChipAction['busFocus'] | null {
+export function peekSatelliteBusFocus(): ReadinessChipAction['busFocus'] | null {
   const raw = sessionStorage.getItem(SATELLITE_BUS_FOCUS_KEY)
-  sessionStorage.removeItem(SATELLITE_BUS_FOCUS_KEY)
-  if (raw === 'rocket' || raw === 'socket' || raw === 'ingest' || raw === 'monitor' || raw === 'trade-apis' || raw === 'workers' || raw === 'cluster') {
+  if (
+    raw === 'rocket' ||
+    raw === 'socket' ||
+    raw === 'ingest' ||
+    raw === 'monitor' ||
+    raw === 'trade-apis' ||
+    raw === 'workers' ||
+    raw === 'cluster'
+  ) {
     return raw
   }
   return null
+}
+
+export function clearSatelliteBusFocus(): void {
+  sessionStorage.removeItem(SATELLITE_BUS_FOCUS_KEY)
+}
+
+/** Read and clear focus. Prefer peek + clear after successful scroll (avoids lost deep-links). */
+export function consumeSatelliteBusFocus(): ReadinessChipAction['busFocus'] | null {
+  const focus = peekSatelliteBusFocus()
+  clearSatelliteBusFocus()
+  return focus
 }
 
 export function setSatelliteApiEnv(env: ReadinessChipAction['apiEnv'] | undefined): void {

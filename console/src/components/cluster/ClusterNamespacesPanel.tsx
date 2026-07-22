@@ -1,5 +1,5 @@
 import { DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell, SegmentControl } from '@bifrost/ui'
-import type { ClusterNamespace } from '@/api/types'
+import type { ClusterNamespace } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 type NsFilter = 'all' | 'bifrost'

@@ -1,4 +1,5 @@
-import type { MatrixResponse, OpsContextResponse, Reachability, Target } from '@/api/types'
+import type { MatrixResponse, Reachability, Target } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { getBay, type BayDefinition } from '@/lib/control-room/bayRegistry'
 
 export type BayLamp = Reachability | 'unknown'

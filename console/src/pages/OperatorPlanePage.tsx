@@ -1,11 +1,8 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, PageHeader, StatusLamp } from '@bifrost/ui'
-import type { RunnerSmokeResponse, RunnerStatus } from '@/api/types'
-import {
-  fetchAgentBridge,
-  fetchHermesGatewayHealth,
-  fetchRunnerSmoke,
-} from '@/api/platform'
+import type { RunnerSmokeResponse, RunnerStatus } from '@/api/agentTypes'
+import { fetchAgentBridge, fetchRunnerSmoke } from '@/api/agentOps'
+import { fetchHermesGatewayHealth } from '@/api/hermes'
 import { AgentMcpPanel } from '@/components/agent/AgentMcpPanel'
 import { AgentHostDeployPanel } from '@/components/agent/AgentHostDeployPanel'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'

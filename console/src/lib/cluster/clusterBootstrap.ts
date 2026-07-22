@@ -1,4 +1,4 @@
-import type { ClusterNamespace } from '@/api/types'
+import type { ClusterNamespace } from '@/api/clusterTypes'
 
 /** Core Bifrost namespaces from clusters.yaml — used to detect bootstrap completion. */
 export const CORE_BIFROST_NAMESPACES = ['cicd', 'bifrost-stg', 'bifrost-platform-stg', 'monitoring'] as const

@@ -7,7 +7,7 @@
  */
 
 import { NAMESPACE_ALLOCATION, type NamespaceRow } from '@/lib/architecture/k3sArchitectureCatalog'
-import type { ClusterPlacementPool, ClusterPlacementRule } from '@/api/types'
+import type { ClusterPlacementPool, ClusterPlacementRule } from '@/api/clusterTypes'
 
 export const PLACEMENT_CATALOG_VERSION = '2026-07-21-sync-go-evaluator'
 export const PLACEMENT_CATALOG_SOURCE = 'console/src/lib/architecture/workloadPlacementCatalog.ts'

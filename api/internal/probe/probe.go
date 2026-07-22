@@ -128,7 +128,7 @@ func (p *Prober) probeHTTP(ctx context.Context, id, category, url, bearer string
 			Detail: err.Error(), URL: url,
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	reach, detail := classifyHTTP(resp.StatusCode)
@@ -190,11 +190,11 @@ func (p *Prober) probeCapabilities(ctx context.Context, url, token string, env c
 			AuthorizationLevel: "L0", Detail: err.Error(), URL: url,
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 
 	if resp.StatusCode != 200 {
-		auth := AuthInvalid
+		var auth AuthStatus
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			auth = AuthInvalid
 		} else {

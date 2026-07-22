@@ -1,5 +1,6 @@
 import { DenseTag } from '@bifrost/ui'
-import type { ClusterSummary, MatrixResponse } from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
 

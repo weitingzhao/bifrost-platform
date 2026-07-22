@@ -5,12 +5,14 @@
  * Single source of truth — do not duplicate elsewhere.
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   SPINE_MILESTONE_STATUS_DEFINITIONS,
   SPINE_STATUS_SEMANTICS_NOTE,
 } from '@/lib/architecture/spineSemantics'
 import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog'
+import { buildOpsUiActuationSignoffMarkdown } from '@/lib/architecture/opsUiActuationSignoffChecklist'
+import { buildPostQaOwnerGateMarkdown } from '@/lib/architecture/postQaOwnerGatePack'
 
 export const BLUEPRINT_VERSION = '2026-07-20'
 export const BLUEPRINT_SOURCE = 'console/src/lib/architecture/blueprintCatalog.ts'
@@ -413,7 +415,8 @@ export const ACTUATION_PHASES: ActuationPhaseRow[] = [
   },
   {
     phase: 'P2',
-    deliverables: 'Node lifecycle job + Cluster UI wizard + AP lifecycle (adopt / restart / firmware)',
+    deliverables:
+      'Node lifecycle job + Cluster UI wizard + AP lifecycle (adopt / restart / firmware) — AP slice Owner-deferred (D6 appendix)',
     eliminates: 'install-server.sh, join, drain',
   },
   { phase: 'P3', deliverables: 'GitOps + CI execution (Argo/Tekton API)', eliminates: 'Argo UI, tkn CLI' },
@@ -422,6 +425,33 @@ export const ACTUATION_PHASES: ActuationPhaseRow[] = [
     phase: 'P5',
     deliverables: 'MCP actuation Tools + UniFi MCP tools (network-read / network-write)',
     eliminates: 'Agent direct shell',
+  },
+]
+
+/** D6 appendix — Owner-deferred actuation (Wave A Phase A3). Do not implement without Owner program unlock. */
+export type D6DeferredActuation = {
+  id: string
+  scope: string
+  deferred: string
+  ownerReason: string
+  nextUnlock: string
+}
+
+export const D6_APPENDIX_OWNER_DEFERRED: D6DeferredActuation[] = [
+  {
+    id: 'network-l2-zones-wlan',
+    scope: 'Network L2 (Constitution authorization L2)',
+    deferred: 'POST /api/v1/network/zones/restructure · POST /api/v1/network/wlan — zone restructure + SSID CRUD',
+    ownerReason:
+      'Physical UniFi substrate; bulk zone/SSID changes require Owner confirmation. L1 firewall apply (D9 Session v2) is the only routine network write today.',
+    nextUnlock: 'Owner program after Default VLAN baseline + sustained POLICY_NOMINAL audit',
+  },
+  {
+    id: 'network-p2-ap-lifecycle',
+    scope: 'Actuation P2 / Network AP lifecycle',
+    deferred: 'AP adopt · restart · firmware — ACTUATION_PHASES P2 deliverable (partial)',
+    ownerReason: 'Owner-deferred in Wave A Phase A3; AP operations remain UniFi UI or future scoped L1 restart API.',
+    nextUnlock: 'Owner sign-off checklist item network-ap-p2-deferred + dedicated network program',
   },
 ]
 
@@ -466,6 +496,22 @@ export function buildBlueprintConstitutionPack(): string {
     '',
     '## Success criteria (Constitution — North Star completion)',
     ...SUCCESS_CRITERIA.map(s => `- [${s.area}] ${s.criterion}`),
+    '',
+    '## Wave A Phase A3 — ops-ui-actuation progress (Projection snapshot)',
+    '- Cluster / Launch Rocket / Deploy Satellite / MCP Contract UI: agent-completable slices marked done in uiProgressOverrides.ts',
+    '- Audit: GET /api/v1/audit + Console Download JSON export (no P4 retention/replay yet)',
+    '- Owner-deferred: Network L2 zone/SSID + P2 AP lifecycle — see D6 appendix below',
+    '- Owner CLOSED gate: opsUiActuationSignoffChecklist.ts — CLOSED 2026-07-22 (Owner waived runtime-observe-act-loop residual)',
+    '',
+    '## D6 appendix — Owner-deferred actuation',
+    ...D6_APPENDIX_OWNER_DEFERRED.map(
+      d =>
+        `- **${d.id}** (${d.scope}): ${d.deferred} — ${d.ownerReason} · Unlock: ${d.nextUnlock}`,
+    ),
+    '',
+    buildOpsUiActuationSignoffMarkdown(),
+    '',
+    buildPostQaOwnerGateMarkdown(),
     '',
     '## Actuation phases (Constitution definitions P0–P5)',
     ...ACTUATION_PHASES.map(p => `- **${p.phase}**: ${p.deliverables} → eliminates: ${p.eliminates}`),

@@ -44,7 +44,7 @@ func (s *Service) V3Gate(ctx context.Context) V1GateResponse {
 		Blockers:     blockers,
 		Checks:       checks,
 		Reachability: reach,
-		Detail:       fmt.Sprintf("Vision V3 Ops Agent L1/L2 gate %s (%d checks)", result, len(checks)),
+		Detail:       fmt.Sprintf("vision V3 Ops Agent L1/L2 gate %s (%d checks)", result, len(checks)),
 		GeneratedAt:  now,
 	}
 	if rec != nil {
@@ -78,13 +78,13 @@ func (s *Service) RunV3Gate(ctx context.Context, triggeredBy string) (RunGateRes
 		Result:      result,
 		Checks:      checks,
 		TriggeredBy: triggeredBy,
-		Summary:     fmt.Sprintf("Vision V3 gate %s (%d checks)", result, len(checks)),
+		Summary:     fmt.Sprintf("vision V3 gate %s (%d checks)", result, len(checks)),
 	}
 	if err := s.v3store.SaveGate(rec); err != nil {
 		return RunGateResponse{}, err
 	}
 	gate := s.V3Gate(ctx)
-	msg := fmt.Sprintf("Vision V3 gate %s", result)
+	msg := fmt.Sprintf("vision V3 gate %s", result)
 	if !gate.Ready {
 		msg += fmt.Sprintf(" (blocked: %s)", strings.Join(gate.Blockers, "; "))
 	}
@@ -103,7 +103,7 @@ func (s *Service) SignV3(ctx context.Context, notes, signedBy string) (SignoffRe
 	now := time.Now().UTC()
 	gate := s.V3Gate(ctx)
 	if !gate.Ready {
-		return SignoffResponse{}, fmt.Errorf("Vision V3 gate not ready — run gate first and fix blockers")
+		return SignoffResponse{}, fmt.Errorf("vision V3 gate not ready — run gate first and fix blockers")
 	}
 	rec := V1SignoffRecord{
 		At:       now,
@@ -124,7 +124,7 @@ func (s *Service) SignV3(ctx context.Context, notes, signedBy string) (SignoffRe
 		Action:      "vision.v3-signoff",
 		Target:      "vision-v3-ops-agent",
 		Changed:     true,
-		Message:     "Vision V3 Ops Agent L1/L2 SIGNED",
+		Message:     "vision V3 Ops Agent L1/L2 SIGNED",
 		Gate:        gate,
 		GeneratedAt: now,
 	}, nil
@@ -178,7 +178,7 @@ func (s *Service) collectV3Checks(ctx context.Context) []GateCheck {
 
 func (s *Service) checkV2Prerequisite() GateCheck {
 	check := GateCheck{
-		ID: "v2-prerequisite", Label: "Vision V2 signed (prerequisite)", Required: true,
+		ID: "v2-prerequisite", Label: "vision V2 signed (prerequisite)", Required: true,
 		Reachability: probe.ReachFail, Detail: "V2 signoff not recorded",
 	}
 	signoff, err := s.v2store.LoadSignoff()

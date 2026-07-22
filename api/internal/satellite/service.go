@@ -268,7 +268,7 @@ func (s *Service) fetchJSONPlain(ctx context.Context, url string, out any) error
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxJSONBodyBytes))
 	if err != nil {
 		return err
@@ -542,7 +542,7 @@ func (s *Service) fetchJSON(ctx context.Context, env config.Environment, url str
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxJSONBodyBytes))
 	if err != nil {
 		return err

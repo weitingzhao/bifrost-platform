@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import { DenseTag } from '@bifrost/ui'
-import type { TopologyEdge, TopologyNode } from '@/api/types'
+import type { TopologyEdge, TopologyNode } from '@/api/matrixTypes'
 import { ComponentIcon } from '@/components/runtime-map/ComponentIcon'
 import { GapProgressBar } from '@/components/runtime-map/GapProgressBar'
 import { StatusLamp } from '@/components/StatusLamp'

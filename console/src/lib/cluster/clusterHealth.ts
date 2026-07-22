@@ -1,4 +1,5 @@
-import type { ClusterSummary, Reachability } from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { Reachability } from '@/api/matrixTypes'
 
 export function podReachability(phase: string): Reachability {
   switch (phase) {

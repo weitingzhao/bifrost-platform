@@ -12,8 +12,8 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import { runReleaseGate, type ReleaseGateTier } from '@/api/platform'
-import type { ReleaseGateCheckView, ReleaseGateResponse } from '@/api/types'
+import { runReleaseGate, type ReleaseGateTier } from '@/api/promote'
+import type { ReleaseGateCheckView, ReleaseGateResponse } from '@/api/deliveryTypes'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 

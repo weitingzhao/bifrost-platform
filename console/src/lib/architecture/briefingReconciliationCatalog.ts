@@ -10,7 +10,7 @@
  * Progress spine: config/ops-context.yaml (GET /api/v1/context)
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 
 export const BRIEFING_RECONCILIATION_VERSION = '2026-07-01'
 export const BRIEFING_RECONCILIATION_SOURCE =

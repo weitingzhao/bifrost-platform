@@ -1,11 +1,5 @@
-import type {
-  DeliveryPipelineRunView,
-  DeliveryPipelineRunsResponse,
-  PipelineRunStepsResponse,
-  ReleaseStateResponse,
-  SelfHealthResponse,
-  SupplyChainResponse,
-} from '@/api/types'
+import type { DeliveryPipelineRunView, DeliveryPipelineRunsResponse, PipelineRunStepsResponse, ReleaseStateResponse, SupplyChainResponse } from '@/api/deliveryTypes'
+import type { SelfHealthResponse } from '@/api/matrixTypes'
 
 export interface DeployDebugBundleInput {
   target: string

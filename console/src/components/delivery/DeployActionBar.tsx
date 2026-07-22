@@ -1,15 +1,9 @@
 import { Button } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import {
-  fetchPipelineRuns,
-  fetchPipelineRunSteps,
-  fetchReleaseState,
-  fetchRevisions,
-  fetchSelfHealth,
-  fetchSupplyChain,
-  startPipelineRun,
-} from '@/api/platform'
+import { fetchPipelineRuns, fetchPipelineRunSteps, fetchRevisions, fetchSupplyChain, startPipelineRun } from '@/api/delivery'
+import { fetchReleaseState } from '@/api/promote'
+import { fetchSelfHealth } from '@/api/core'
 import { isRevisionDeployReady, RevisionPicker } from '@/components/delivery/RevisionPicker'
 import { isRefDeployBlocked, RefPreflightStatus, useRefPreflight } from '@/components/delivery/RefPreflightPanel'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'

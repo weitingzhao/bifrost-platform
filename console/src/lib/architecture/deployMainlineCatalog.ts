@@ -5,7 +5,7 @@
  * UI: historical phases on Delivery Board; live spine: Control Room / Briefing Reconciliation.
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   PROD_CUTOVER_MILESTONE_ID,
   STG_DELIVER_MILESTONE_ID,

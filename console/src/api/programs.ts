@@ -7,18 +7,7 @@ import type {
   CreateProgramFromTemplateRequest,
   PostCompletionDraftItem,
 } from './programsTypes'
-import { getPlatformOperatorToken } from '@/lib/platformAuth'
-
-async function parseError(prefix: string, r: Response): Promise<Error> {
-  let detail = `HTTP ${r.status}`
-  try {
-    const body = (await r.json()) as { error?: string; message?: string }
-    detail = body.error ?? body.message ?? detail
-  } catch {
-    // keep status detail
-  }
-  return new Error(`${prefix}: ${detail}`)
-}
+import { authedFetch, parseError } from './client'
 
 export async function submitProgramPostCompletion(
   programId: string,
@@ -40,13 +29,7 @@ export async function submitProgramPostCompletion(
 }
 
 async function programsFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const token = getPlatformOperatorToken()
-  const headers = new Headers(init.headers)
-  headers.set('Content-Type', 'application/json')
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(path, { ...init, headers })
-  if (!r.ok) throw await parseError('programs', r)
-  return r
+  return authedFetch('programs', path, init)
 }
 
 export const PROGRAMS_BOARD_QUERY_KEY = ['programs', 'board'] as const

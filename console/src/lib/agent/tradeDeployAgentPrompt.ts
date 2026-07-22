@@ -1,11 +1,5 @@
-import type {
-  DeliveryPipelineRunView,
-  MatrixResponse,
-  ReleaseGateResponse,
-  StgSmokeResponse,
-  SupplyChainResponse,
-  TierBStatusResponse,
-} from '@/api/types'
+import type { DeliveryPipelineRunView, ReleaseGateResponse, StgSmokeResponse, SupplyChainResponse, TierBStatusResponse } from '@/api/deliveryTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 

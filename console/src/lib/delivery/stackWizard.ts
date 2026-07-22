@@ -1,4 +1,4 @@
-import type { StackAddonView } from '@/api/types'
+import type { StackAddonView } from '@/api/deliveryTypes'
 import type { WizardStepStatus } from '@/lib/cluster/nodeWizard'
 
 export const STACK_INSTALL_ORDER = ['registry', 'gitea', 'tekton'] as const

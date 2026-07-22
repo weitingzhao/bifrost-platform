@@ -1,4 +1,5 @@
-import type { ClusterMetricsResponse, ClusterSummary, Reachability } from '@/api/types'
+import type { ClusterMetricsResponse, ClusterSummary } from '@/api/clusterTypes'
+import type { Reachability } from '@/api/matrixTypes'
 import { apiReachability, clusterHealthHint } from '@/lib/cluster/clusterHealthHint'
 import {
   ClusterRadialGauge,

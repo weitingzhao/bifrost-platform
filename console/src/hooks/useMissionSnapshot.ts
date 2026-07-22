@@ -1,16 +1,12 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import {
-  fetchCluster,
-  fetchSupplyChain,
-  fetchStgSmoke,
-  fetchSelfHealth,
-  fetchRemediationHealth,
-  fetchAgentBridge,
-  fetchMatrix,
-  isAllMatrices,
-} from '@/api/platform'
-import type { MatrixResponse } from '@/api/types'
+import { fetchCluster } from '@/api/cluster'
+import { fetchSupplyChain } from '@/api/delivery'
+import { fetchStgSmoke } from '@/api/promote'
+import { fetchSelfHealth, fetchMatrix, isAllMatrices } from '@/api/core'
+import { fetchRemediationHealth } from '@/api/remediation'
+import { fetchAgentBridge } from '@/api/agentOps'
+import type { MatrixResponse } from '@/api/matrixTypes'
 import { buildMissionSnapshot, type MissionSnapshot } from '@/lib/control-room/missionSignals'
 
 const REFETCH = 20_000

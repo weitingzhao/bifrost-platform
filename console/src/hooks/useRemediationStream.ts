@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RemediationEvent, RemediationJob, RemediationPhase } from '@/api/types'
-import { remediationStreamUrl } from '@/api/platform'
+import type { RemediationEvent, RemediationJob, RemediationPhase } from '@/api/remediationTypes'
+import { remediationStreamUrl } from '@/api/remediation'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 
 const KNOWN_PHASES = new Set<string>([

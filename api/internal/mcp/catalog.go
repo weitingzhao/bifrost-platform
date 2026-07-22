@@ -230,7 +230,7 @@ func Catalog() []ToolView {
 		tool("get_stg_smoke", "STG environment HTTP smoke probes", "read", "GET", "/api/v1/delivery/stg/smoke", "viewer", "P4", true),
 		tool("get_delivery_revisions", "Available Gitea tags for deploy revision selection", "read", "GET", "/api/v1/delivery/revisions", "viewer", "P4", true),
 		tool("run_release_gate", "Run STG or Prod release gate", "confirm", "POST", "/api/v1/promote/release-gate", "admin", "P4", true),
-		tool("sign_tier_b", "Record Tier B Owner sign-off", "confirm", "POST", "/api/v1/promote/tier-b/signoff", "admin", "P4", false),
+		tool("sign_tier_b", "Record Tier B Owner sign-off", "confirm", "POST", "/api/v1/promote/tier-b/signoff", "admin", "P4", true),
 		tool("get_program_context", "Program blueprint + phase sign-off state", "read", "GET", "/api/v1/programs/{id}", "viewer", "Agent", true),
 		tool("create_session", "Create Session Job archive before phase progress (operator)", "routine", "POST", "/api/v1/sessions", "operator", "Agent", true),
 		tool("report_phase_progress", "Report agent phase progress to Delivery Board (session_id required — create_session or Console Copy first; done+verify_cmd requires verify_passed)", "routine", "POST", "/api/v1/programs/{id}/phases/{pid}/progress", "operator", "Agent", true),
@@ -245,6 +245,9 @@ func Catalog() []ToolView {
 		tool("get_checklist_signals", "Latest Daily Ops Checklist per-item signals + KPIs", "read", "GET", "/api/v1/checklist/signals", "viewer", "Agent", true),
 		tool("report_checklist_signals", "Merge Daily Ops Checklist probe signals (runner daily-ops-checklist-run)", "routine", "POST", "/api/v1/checklist/signals", "operator", "Agent", true),
 		tool("get_checklist_kpis", "Checklist quiet-success streak + last-run summary", "read", "GET", "/api/v1/checklist/kpis", "viewer", "Agent", true),
+		tool("get_telemetry_overview", "Prometheus telemetry overview snapshot (preset metrics)", "read", "GET", "/api/v1/telemetry/overview", "viewer", "P4", true),
+		tool("get_telemetry_alerts", "Prometheus firing and pending alerts", "read", "GET", "/api/v1/telemetry/alerts", "viewer", "P4", true),
+		tool("get_telemetry_targets", "Prometheus scrape target health", "read", "GET", "/api/v1/telemetry/targets", "viewer", "P4", true),
 	}
 }
 

@@ -2,8 +2,10 @@ import { useMemo, useState } from 'react'
 import { ChevronDown, ExternalLink, Satellite, Wrench } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, cn } from '@bifrost/ui'
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
-import { fetchStgSmoke, fetchSupplyChain } from '@/api/platform'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { fetchStgSmoke } from '@/api/promote'
+import { fetchSupplyChain } from '@/api/delivery'
 import {
   useRocketLaunchOverall,
   useSatelliteDeployOverall,

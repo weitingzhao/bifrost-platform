@@ -9,7 +9,7 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
-import type { StackAddonView, StackAddonsResponse } from '@/api/types'
+import type { StackAddonView, StackAddonsResponse } from '@/api/deliveryTypes'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { DeliveryBrandLabel } from '@/components/delivery/DeliveryBrandLabel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'

@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@bifrost/ui'
-import { fetchRemediationJobs } from '@/api/platform'
-import type { RemediationJob } from '@/api/types'
+import { fetchRemediationJobs } from '@/api/remediation'
+import type { RemediationJob } from '@/api/remediationTypes'
 import {
   formatRemediationJobWhen,
   remediationJobStatusLabel,

@@ -8,7 +8,7 @@ import {
   DenseTableRow,
   DenseTag,
 } from '@bifrost/ui'
-import type { NetworkClientsResponse } from '@/api/types'
+import type { NetworkClientsResponse } from '@/api/networkTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 interface NetworkClientsPanelProps {

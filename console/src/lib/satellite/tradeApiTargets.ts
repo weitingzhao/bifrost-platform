@@ -4,7 +4,7 @@
  * buildSatelliteBusViewModel with the same tradeApi counts (verdict SSOT).
  */
 
-import type { MatrixResponse, Target } from '@/api/types'
+import type { MatrixResponse, Target } from '@/api/matrixTypes'
 
 export function filterTradeApiTargets(matrix: MatrixResponse): Target[] {
   return matrix.targets.filter(

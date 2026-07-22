@@ -1,5 +1,5 @@
 import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
-import type { ClusterWorkload } from '@/api/types'
+import type { ClusterWorkload } from '@/api/clusterTypes'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
 

@@ -4,7 +4,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { fetchClusterObservability } from '@/api/platform'
+import { fetchClusterObservability } from '@/api/cluster'
 import { MonitoringCoverageStrip } from '@/components/observability/MonitoringCoverageStrip'
 
 interface SatelliteObservabilityStripProps {

@@ -9,7 +9,7 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import type { ClusterNode } from '@/api/types'
+import type { ClusterNode } from '@/api/clusterTypes'
 import { ConsoleHostIpLabel } from '@/components/ConsoleHostIpLabel'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
 import { NodeCapabilitiesCell } from '@/components/cluster/NodeCapabilitiesCell'

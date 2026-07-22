@@ -1,14 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
 import { useMemo, useState } from 'react'
-import type { DriftProposal, RemediationJob } from '@/api/types'
-import {
-  approveDriftProposal,
-  fetchAgentNightlyReport,
-  fetchDriftProposals,
-  fetchRemediationJobs,
-  rejectDriftProposal,
-} from '@/api/platform'
+import type { DriftProposal, RemediationJob } from '@/api/remediationTypes'
+import { approveDriftProposal, fetchAgentNightlyReport, fetchDriftProposals, rejectDriftProposal } from '@/api/agentOps'
+import { fetchRemediationJobs } from '@/api/remediation'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 

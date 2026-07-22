@@ -1,5 +1,5 @@
 import { SegmentControl } from '@bifrost/ui'
-import type { EnvironmentSummary } from '@/api/types'
+import type { EnvironmentSummary } from '@/api/matrixTypes'
 
 export type EnvFilter = 'all' | string
 

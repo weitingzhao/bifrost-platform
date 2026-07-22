@@ -1,9 +1,6 @@
-import type {
-  ClusterObservabilityResponse,
-  ClusterSummary,
-  MatrixResponse,
-  OpsContextResponse,
-} from '@/api/types'
+import type { ClusterObservabilityResponse, ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 import { CATALOG_VERSION, PLATFORM_PORTS } from '@/lib/environments-catalog'

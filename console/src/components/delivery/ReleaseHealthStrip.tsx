@@ -1,7 +1,7 @@
 import { cn, StatusLamp } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import { fetchSelfHealth } from '@/api/platform'
-import type { SelfHealthProbe, SelfHealthProbeStatus } from '@/api/types'
+import { fetchSelfHealth } from '@/api/core'
+import type { SelfHealthProbe, SelfHealthProbeStatus } from '@/api/matrixTypes'
 
 const LAMP: Record<SelfHealthProbeStatus, 'ok' | 'degraded' | 'fail' | 'unknown'> = {
   ok: 'ok',

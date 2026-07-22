@@ -1,4 +1,4 @@
-import type { MatrixResponse, Target, TopologyNode, TopologyResponse } from '@/api/types'
+import type { MatrixResponse, Target, TopologyNode, TopologyResponse } from '@/api/matrixTypes'
 import { HARDWARE_ROWS, SCOPE_ROWS, type ScopeRow } from '@/lib/environments-catalog'
 
 export type ScopeTag = ScopeRow['tag']

@@ -81,7 +81,7 @@ func (s *Service) V1Gate(ctx context.Context) V1GateResponse {
 		Blockers:     blockers,
 		Checks:       checks,
 		Reachability: reach,
-		Detail:       fmt.Sprintf("Vision V1 dev inner-loop gate %s (%d checks)", result, len(checks)),
+		Detail:       fmt.Sprintf("vision V1 dev inner-loop gate %s (%d checks)", result, len(checks)),
 		GeneratedAt:  now,
 	}
 	if rec != nil {
@@ -115,13 +115,13 @@ func (s *Service) RunV1Gate(ctx context.Context, triggeredBy string) (RunGateRes
 		Result:      result,
 		Checks:      checks,
 		TriggeredBy: triggeredBy,
-		Summary:     fmt.Sprintf("Vision V1 gate %s (%d checks)", result, len(checks)),
+		Summary:     fmt.Sprintf("vision V1 gate %s (%d checks)", result, len(checks)),
 	}
 	if err := s.store.SaveGate(rec); err != nil {
 		return RunGateResponse{}, err
 	}
 	gate := s.V1Gate(ctx)
-	msg := fmt.Sprintf("Vision V1 gate %s", result)
+	msg := fmt.Sprintf("vision V1 gate %s", result)
 	if !gate.Ready {
 		msg += fmt.Sprintf(" (blocked: %s)", strings.Join(gate.Blockers, "; "))
 	}
@@ -140,7 +140,7 @@ func (s *Service) SignV1(ctx context.Context, notes, signedBy string) (SignoffRe
 	now := time.Now().UTC()
 	gate := s.V1Gate(ctx)
 	if !gate.Ready {
-		return SignoffResponse{}, fmt.Errorf("Vision V1 gate not ready — run gate first and fix blockers")
+		return SignoffResponse{}, fmt.Errorf("vision V1 gate not ready — run gate first and fix blockers")
 	}
 	rec := V1SignoffRecord{
 		At:       now,
@@ -161,7 +161,7 @@ func (s *Service) SignV1(ctx context.Context, notes, signedBy string) (SignoffRe
 		Action:      "vision.v1-signoff",
 		Target:      "vision-v1-dev-topology",
 		Changed:     true,
-		Message:     "Vision V1 dev inner-loop SIGNED",
+		Message:     "vision V1 dev inner-loop SIGNED",
 		Gate:        gate,
 		GeneratedAt: now,
 	}, nil
@@ -309,7 +309,7 @@ func (s *Service) checkFrontendK3sEnv() GateCheck {
 			return check
 		}
 	}
-	check.Detail = "create bifrost-trade-frontend/.env.development.k3s (see Vision V1 deliverables)"
+	check.Detail = "create bifrost-trade-frontend/.env.development.k3s (see vision V1 deliverables)"
 	return check
 }
 

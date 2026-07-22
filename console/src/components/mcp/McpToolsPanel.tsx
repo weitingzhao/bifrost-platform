@@ -12,13 +12,8 @@ import {
   DenseTagButton,
 } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import type {
-  McpToolFunction,
-  McpToolLevel,
-  McpToolOwnerRole,
-  McpToolView,
-} from '@/api/types'
-import { fetchMcpStatus, fetchMcpTools } from '@/api/platform'
+import type { McpToolFunction, McpToolLevel, McpToolOwnerRole, McpToolView } from '@/api/agentTypes'
+import { fetchMcpStatus, fetchMcpTools } from '@/api/mcp'
 import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {

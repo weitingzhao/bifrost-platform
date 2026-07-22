@@ -1,8 +1,8 @@
 import { cn } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, Circle, XCircle } from 'lucide-react'
-import { fetchReleaseState } from '@/api/platform'
-import type { ReleaseStageState } from '@/api/types'
+import { fetchReleaseState } from '@/api/promote'
+import type { ReleaseStageState } from '@/api/deliveryTypes'
 
 const STAGE_LABELS: Record<string, string> = {
   stg_deploy: 'STG Deploy',

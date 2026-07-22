@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
-import { fetchPipelineRuns, fetchReleaseGate, fetchReleaseState } from '@/api/platform'
+import { fetchPipelineRuns } from '@/api/delivery'
+import { fetchStackAddons } from '@/api/stack'
+import { fetchReleaseGate, fetchReleaseState } from '@/api/promote'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
 import { DeployActionBar } from '@/components/delivery/DeployActionBar'
@@ -25,6 +27,7 @@ import {
   type FlowStep,
 } from '@/components/delivery/ReleaseStepCommandCenter'
 import { ReleaseStateBanner } from '@/components/delivery/ReleaseStateBanner'
+import { StackInstallWizardPanel } from '@/components/delivery/StackInstallWizardPanel'
 import {
   PlatformGateHistorySection,
   PlatformStageGatePanel,
@@ -41,6 +44,7 @@ import {
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import { deriveReleaseIdentity } from '@/lib/delivery/releaseStepTypes'
+import { stackNeedsOperatePanel } from '@/lib/delivery/stackWizard'
 
 const AI_RELEASE_LABEL = 'AI Release'
 const AI_RELEASE_TASK_LABEL = scopeToLabel(PLATFORM_RELEASE_SCOPE)
@@ -98,6 +102,11 @@ export function PlatformReleasePage({
   const prodGate = useQuery({
     queryKey: ['promote', 'release-gate', 'platform-prod'],
     queryFn: () => fetchReleaseGate('platform-prod'),
+    refetchInterval: 30_000,
+  })
+  const stackQuery = useQuery({
+    queryKey: ['stack', 'addons'],
+    queryFn: fetchStackAddons,
     refetchInterval: 30_000,
   })
 
@@ -247,6 +256,19 @@ export function PlatformReleasePage({
 
       <LaneDetailCollapse title="Audit · gate run history">
         <PlatformGateHistorySection />
+      </LaneDetailCollapse>
+
+      <LaneDetailCollapse
+        title="CI/CD stack · install wizard"
+        defaultOpen={stackNeedsOperatePanel(stackQuery.data?.addons ?? [])}
+        bodyClassName="p-3"
+      >
+        <StackInstallWizardPanel
+          data={stackQuery.data}
+          isLoading={stackQuery.isLoading}
+          errorMessage={stackQuery.error instanceof Error ? stackQuery.error.message : null}
+          layout="operate"
+        />
       </LaneDetailCollapse>
     </div>
   )

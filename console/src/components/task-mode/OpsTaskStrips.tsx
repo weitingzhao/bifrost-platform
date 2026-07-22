@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Collapsible,
@@ -6,21 +6,23 @@ import {
   CollapsibleTrigger,
   DenseTag,
 } from '@bifrost/ui'
-import { ChevronRight, Rocket, Satellite } from 'lucide-react'
-import {
-  fetchPipelineRuns,
-  fetchReleaseGate,
-  fetchSupplyChain,
-  fetchStgSmoke,
-} from '@/api/platform'
+import { ChevronRight } from 'lucide-react'
 import { LaunchPad } from '@/components/control-room/LaunchPad'
-import { gateStepStatus, runStepStatus, pickDeployPipelineRun, deployRunRetryFailed } from '@/components/delivery/ReleaseStepCommandCenter'
 import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  PlatformStgReleaseStrip,
+  SupplyChainStrip,
+  StgReleaseStrip,
+} from '@/components/task-mode/ReleaseStrips'
 import { DailyOpsFleetBoard } from '@/components/task-mode/DailyOpsFleetBoard'
 import { DailyOpsFleetCellDetail } from '@/components/task-mode/DailyOpsFleetCellDetail'
 import { DailyOpsProcessStrip } from '@/components/task-mode/DailyOpsProcessStrip'
 import { DailyOpsExecutionPanel } from '@/components/task-mode/DailyOpsExecutionPanel'
 import { DailyOpsOperatorPlanPanel } from '@/components/task-mode/DailyOpsOperatorPlanPanel'
+import {
+  DailyOpsProvider,
+  type DailyOpsContextValue,
+} from '@/components/task-mode/daily-ops/DailyOpsContext'
 import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
 import type { DailyOpsWorkflowResult } from '@/lib/control-room/dailyOpsWorkflow'
 import { TaskModeReadinessStrip } from '@/components/task-mode/TaskModeReadinessStrip'
@@ -32,7 +34,6 @@ import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { useOperateSweep } from '@/hooks/useOperateSweep'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import { type FleetCell } from '@/lib/control-room/fleetSnapshot'
-import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import { DELIVER_PLATFORM_PIPELINE } from '@/lib/delivery/deliverPlatformPhases'
 import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
@@ -40,18 +41,25 @@ import { TRADE_DEPLOY_SCOPE } from '@/lib/agent/tradeDeployAgentPrompt'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
-import type { DeliveryPipelineRunView, MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { TaskModeDef } from '@/lib/task-mode/types'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
+
+import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
+import type { RemediationJob } from '@/api/remediationTypes'
+/** Re-exported for compatibility — release strips now live in ReleaseStrips.tsx. */
+export { PlatformStgReleaseStrip }
 
 export type OpsTaskStripsProps = {
   mode: TaskModeDef
   context?: OpsContextResponse
   matrices?: MatrixResponse[]
-  stgSmoke?: import('@/api/types').StgSmokeResponse
-  stgGate?: import('@/api/types').ReleaseGateResponse
+  stgSmoke?: StgSmokeResponse
+  stgGate?: ReleaseGateResponse
   lastDeliverSucceeded?: boolean
-  tierB?: import('@/api/types').TierBStatusResponse
+  tierB?: TierBStatusResponse
   onNavigate: (tabId: string) => void
   onOpenPromote?: () => void
   onOpenDelivery?: () => void
@@ -102,6 +110,7 @@ export type OpsTaskStripsProps = {
   proposeCommitPending?: boolean
   proposeCommitDisabled?: boolean
   proposeCommitTitle?: string
+  proposeCommitError?: string | null
   /** Checklist AI Check — scope daily-ops-checklist-run (prober + dispatch gates). */
   onChecklistCheck?: () => void
   checklistCheckPending?: boolean
@@ -125,7 +134,7 @@ export type OpsTaskStripsProps = {
   /** Wave 4.1 — open Operate Queue for checklist_dispatch Action rows. */
   onOpenOperateQueue?: (queueId?: string) => void
   /** Recent PipelineRuns for the side history column. */
-  recentRuns?: import('@/api/types').DeliveryPipelineRunView[]
+  recentRuns?: DeliveryPipelineRunView[]
   recentRunsLoading?: boolean
   /** Live Go/No-Go for LaunchGateBar (Task CC). */
   launchVerdict?: LaunchVerdict
@@ -143,16 +152,16 @@ export type OpsTaskStripsProps = {
   /** Adopt existing remediation job as ambient (Queue → Now). */
   onStartAgentJob?: (job: { id: string; scope: string; label: string }) => void
   /** Checklist auto-dispatch / related remediation jobs for Action column. */
-  activeDispatchJobs?: import('@/api/types').RemediationJob[]
+  activeDispatchJobs?: RemediationJob[]
   /** Namespace for the mode's deliver pipeline runs (trade STG or platform). */
   pipelineRunsNamespace?: string
   /** Rocket Launch Live View post-deploy chips. */
-  platformStgGate?: import('@/api/types').ReleaseGateResponse
-  platformProdGate?: import('@/api/types').ReleaseGateResponse
+  platformStgGate?: ReleaseGateResponse
+  platformProdGate?: ReleaseGateResponse
   supplyCmsPresent?: number
   supplyCmsTotal?: number
   /** Mission Launch — trade pipeline alongside platform recentRuns. */
-  tradeRecentRuns?: import('@/api/types').DeliveryPipelineRunView[]
+  tradeRecentRuns?: DeliveryPipelineRunView[]
   tradeRecentRunsLoading?: boolean
   tradePipelineRunsNamespace?: string
   satelliteLaunchVerdict?: LaunchVerdict
@@ -162,242 +171,6 @@ export type OpsTaskStripsProps = {
   satelliteLaunchAgentFixActive?: boolean
   satelliteLaunchAgentFixDisabled?: boolean
   satelliteLaunchAgentFixTitle?: string
-}
-
-export function PlatformStgReleaseStrip({
-  onNavigate,
-  compact = false,
-}: {
-  onNavigate: (tab: string) => void
-  compact?: boolean
-}) {
-  const platformRunsQ = useQuery({
-    queryKey: ['task-cc', 'platform-runs-summary'],
-    queryFn: () => fetchPipelineRuns(DELIVER_PLATFORM_PIPELINE),
-    refetchInterval: 20_000,
-  })
-  const platformStgGateQ = useQuery({
-    queryKey: ['task-cc', 'platform-stg-gate-summary'],
-    queryFn: () => fetchReleaseGate('platform-stg'),
-    refetchInterval: 20_000,
-  })
-  const supplyQ = useQuery({
-    queryKey: ['task-cc', 'supply-chain-summary'],
-    queryFn: fetchSupplyChain,
-    refetchInterval: 20_000,
-  })
-
-  const gate = gateStepStatus(platformStgGateQ.data)
-  const runs = platformRunsQ.data?.runs
-  const run = pickDeployPipelineRun(runs, {
-    gatePassed: platformStgGateQ.data?.result === 'pass',
-  })
-  const deploy = runStepStatus(run)
-  const retryFailed = deployRunRetryFailed(runs, run)
-  const cms = supplyQ.data?.dockerfile_configmaps ?? []
-  const cmsPresent = cms.filter(c => c.present).length
-
-  if (compact) {
-    return (
-      <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
-        <span className="text-[var(--text-dense-micro)] font-medium uppercase tracking-wide text-muted-foreground">
-          Last STG deliver
-        </span>
-        <div className="flex flex-wrap gap-1">
-          <DenseTag variant="neutral" className="text-[8px]">
-            {deploy.label}
-          </DenseTag>
-          <DenseTag variant="neutral" className="text-[8px]">
-            Gate {gate.label}
-          </DenseTag>
-          <DenseTag variant="neutral" className="text-[8px]">
-            CM {cmsPresent}/{cms.length}
-          </DenseTag>
-          {retryFailed && (
-            <DenseTag variant="neutral" className="text-[8px]">
-              retry fail
-            </DenseTag>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Rocket size={16} />
-        <span className="text-[var(--text-dense-label)] font-semibold">Platform STG mainline</span>
-        <DenseTag variant="neutral" className="text-[9px]">
-          Last run
-        </DenseTag>
-        <DenseTag variant={cmsPresent === cms.length && cms.length > 0 ? 'success' : 'warning'}>
-          CMs {cmsPresent}/{cms.length}
-        </DenseTag>
-      </div>
-      <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-muted-foreground">
-        {run?.revision != null ? `Revision ${run.revision}` : 'bifrost-deliver-platform pipeline'}
-      </p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <DenseTag variant={deploy.status === 'done' ? 'success' : deploy.status === 'error' ? 'warning' : 'warning'}>
-          Deploy · {deploy.label}
-        </DenseTag>
-        {retryFailed && (
-          <DenseTag variant="neutral" className="text-[9px]">
-            Latest retry failed
-          </DenseTag>
-        )}
-        <DenseTag variant={gate.status === 'done' ? 'success' : 'warning'}>Gate · {gate.label}</DenseTag>
-      </div>
-      <button
-        type="button"
-        className="mt-2 text-[var(--text-dense-meta)] text-primary hover:underline"
-        onClick={() => onNavigate('platform-release')}
-      >
-        Launch Rocket →
-      </button>
-    </div>
-  )
-}
-
-function SupplyChainStrip({ onNavigate }: { onNavigate: (tab: string) => void }) {
-  const supplyQ = useQuery({
-    queryKey: ['task-cc', 'supply-chain'],
-    queryFn: fetchSupplyChain,
-    refetchInterval: 20_000,
-  })
-  const cms = supplyQ.data?.dockerfile_configmaps ?? []
-  const present = cms.filter(c => c.present).length
-
-  return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-      <div className="flex items-center gap-2">
-        <Rocket size={16} />
-        <span className="text-[var(--text-dense-label)] font-semibold">Platform supply chain</span>
-        <DenseTag variant={present === cms.length && cms.length > 0 ? 'success' : 'warning'}>
-          CMs {present}/{cms.length}
-        </DenseTag>
-      </div>
-      <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-muted-foreground">
-        Mirrors {supplyQ.data?.mirror_credentials_configured ? 'configured' : 'check credentials'}
-      </p>
-      <button
-        type="button"
-        className="mt-2 text-[var(--text-dense-meta)] text-primary hover:underline"
-        onClick={() => onNavigate('platform-release')}
-      >
-        Launch Rocket →
-      </button>
-    </div>
-  )
-}
-
-function StgReleaseStrip({
-  context,
-  onNavigate,
-  compact = false,
-}: {
-  context?: OpsContextResponse
-  onNavigate: (tab: string) => void
-  compact?: boolean
-}) {
-  const phases = buildStgReleasePhases(context)
-  const active = phases.find(p => p.status === 'active') ?? phases.find(p => p.status === 'blocked')
-  const done = phases.filter(p => p.status === 'done').length
-
-  const tradeRunsQ = useQuery({
-    queryKey: ['task-cc', 'trade-runs'],
-    queryFn: () => fetchPipelineRuns(DELIVER_STG_PIPELINE),
-    refetchInterval: 20_000,
-  })
-  const tradeGateQ = useQuery({
-    queryKey: ['task-cc', 'trade-gate'],
-    queryFn: () => fetchReleaseGate('stg'),
-    refetchInterval: 20_000,
-  })
-  const smokeQ = useQuery({
-    queryKey: ['task-cc', 'stg-smoke'],
-    queryFn: fetchStgSmoke,
-    refetchInterval: 20_000,
-  })
-
-  const gate = gateStepStatus(tradeGateQ.data)
-  const smokeOk = smokeQ.data?.reachability === 'ok'
-  const runs = tradeRunsQ.data?.runs
-  const run = pickDeployPipelineRun(runs, {
-    gatePassed: tradeGateQ.data?.result === 'pass',
-    smokeOk,
-  })
-  const deploy = runStepStatus(run)
-  const retryFailed = deployRunRetryFailed(runs, run)
-
-  if (compact) {
-    return (
-      <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
-        <span className="text-[var(--text-dense-micro)] font-medium uppercase tracking-wide text-muted-foreground">
-          Last STG deliver
-        </span>
-        <div className="flex flex-wrap gap-1">
-          <DenseTag variant="neutral" className="text-[8px]">
-            {deploy.label}
-          </DenseTag>
-          <DenseTag variant="neutral" className="text-[8px]">
-            Gate {gate.label}
-          </DenseTag>
-          <DenseTag variant="neutral" className="text-[8px]">
-            Smoke {smokeOk ? 'ok' : smokeQ.isLoading ? '…' : 'fail'}
-          </DenseTag>
-          {retryFailed && (
-            <DenseTag variant="neutral" className="text-[8px]">
-              retry fail
-            </DenseTag>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Satellite size={16} />
-        <span className="text-[var(--text-dense-label)] font-semibold">Trade STG deliver</span>
-        <DenseTag variant="neutral" className="text-[9px]">
-          Last run
-        </DenseTag>
-        <DenseTag variant="neutral">
-          {done}/{phases.length} phases
-        </DenseTag>
-      </div>
-      <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-muted-foreground">
-        bifrost-deliver-stg · smoke + gate (pre-prod checkpoint)
-      </p>
-      <p className="m-0 mt-0.5 text-[var(--text-dense-meta)]">
-        {active != null ? `${active.title} · ${active.status}` : 'All phases complete or planned'}
-      </p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <DenseTag variant={deploy.status === 'done' ? 'success' : deploy.status === 'error' ? 'warning' : 'warning'}>
-          Deploy · {deploy.label}
-        </DenseTag>
-        {retryFailed && (
-          <DenseTag variant="neutral" className="text-[9px]">
-            Latest retry failed
-          </DenseTag>
-        )}
-        <DenseTag variant={gate.status === 'done' ? 'success' : 'warning'}>Gate · {gate.label}</DenseTag>
-        <DenseTag variant={smokeOk ? 'success' : 'warning'}>
-          Smoke · {smokeOk ? 'pass' : smokeQ.isLoading ? '…' : 'fail'}
-        </DenseTag>
-      </div>
-      <button
-        type="button"
-        className="mt-2 text-[var(--text-dense-meta)] text-primary hover:underline"
-        onClick={() => onNavigate('trade-release')}
-      >
-        Deploy Satellite →
-      </button>
-    </div>
-  )
 }
 
 type SummaryRowProps = Omit<OpsTaskStripsProps, 'promoteOnly'>
@@ -627,6 +400,7 @@ function DailyOpsFleetDesk({
     proposeCommitPending,
     proposeCommitDisabled,
     proposeCommitTitle,
+    proposeCommitError,
     onChecklistCheck,
     checklistCheckPending,
     checklistCheckDisabled,
@@ -700,7 +474,9 @@ function DailyOpsFleetDesk({
   const stripError =
     fleetWorkflow?.primaryAction.kind === 'operator-plan'
       ? (operatorPlanFixError ?? fleetAgentFixError)
-      : fleetAgentFixError
+      : fleetWorkflow?.primaryAction.kind === 'propose-commit'
+        ? (proposeCommitError ?? fleetAgentFixError)
+        : fleetAgentFixError
 
   const hasAmbientJob = ambientJobId != null && ambientJobId !== ''
   const itemFixStarting = checklistItemFixPending || checklistItemFixActiveId != null
@@ -729,197 +505,191 @@ function DailyOpsFleetDesk({
     void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
   }, [qc])
 
-  return (
-    <div className="flex min-w-0 max-w-full flex-col gap-3">
-      {fleetWorkflow != null && (
-        <DailyOpsProcessStrip
-          fleet={fleet}
-          workflow={fleetWorkflow}
-          isLoading={isLoading}
-          canOperate={readinessCanOperate}
-          agentFixPending={fleetAgentFixPending}
-          agentFixError={stripError}
-          showReadyHint
-          ambientJobId={ambientJobId}
-          onPrimaryAction={() => {
-            if (fleetWorkflow.primaryAction.kind === 'propose-commit') {
-              onProposeCommit?.()
-              return
-            }
-            if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
-              onOperatorPlanFix?.()
-              return
-            }
-            onFleetWorkflowAction?.()
-          }}
-          onSecondaryAction={
-            fleetWorkflow.primaryAction.secondary?.kind === 'propose-commit'
-              ? () => {
-                  const label = fleetWorkflow.primaryAction.secondary?.label ?? ''
-                  if (/stash/i.test(label)) onProposeStash?.()
-                  else onProposeCommit?.()
-                }
-              : fleetWorkflow.primaryAction.secondary?.kind === 'operator-plan'
-                ? () => onOperatorPlanFix?.()
-                : fleetWorkflow.primaryAction.secondary?.kind === 'agent-fix'
-                  ? () => onFleetWorkflowAction?.()
-                  : undefined
-          }
-          onOpenAgentDesk={onOpenAgentDesk}
-          onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
-          onNavigate={onNavigate}
-          operatorPlanFixPending={
-            Boolean(operatorPlanFixPending) || Boolean(proposeCommitPending)
-          }
-          operatorPlanFixDisabled={
-            Boolean(operatorPlanFixDisabled) || Boolean(proposeCommitDisabled)
-          }
-          operatorPlanFixTitle={
-            fleetWorkflow.primaryAction.kind === 'propose-commit'
-              ? (proposeCommitTitle ??
-                'Start git-dirty-remediate — approval required before commit/stash')
-              : operatorPlanFixTitle
-          }
-          checklistCheckPending={checklistCheckPending}
-          checklistCheckDisabled={checklistCheckDisabled}
-          checklistCheckTitle={checklistCheckTitle}
-          checklistCheckActive={checklistCheckActive || isChecklistAmbient}
-          checklistCheckStatusHint={checklistCheckStatusHint}
-          queueOpen={queueOpen}
-          sweepQueuePending={sweepMutation.isPending}
-          onSweepQueue={() => {
-            sweepMutation.mutate({ auto_drain: false })
-            requestAnimationFrame(() => {
-              document
-                .querySelector('[data-daily-ops-execution]')
-                ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-            })
-          }}
-        />
-      )}
+  const dailyOpsContextValue: DailyOpsContextValue = {
+    fleet,
+    fleetWorkflow,
+    isLoading,
+    canOperate: readinessCanOperate,
+    agentFixPending: fleetAgentFixPending,
+    ambientJobId,
+    ambientJobScope,
+    onOpenAgentDesk,
+    onStartAgentJob,
+    onProposeCommit,
+    onProposeStash,
+    proposeCommitPending,
+    proposeCommitDisabled,
+    proposeCommitTitle,
+    proposeCommitError,
+    onChecklistCheck,
+    checklistCheckPending,
+    checklistCheckDisabled,
+    checklistCheckTitle,
+    checklistCheckError,
+    checklistCheckActive: checklistCheckActive || isChecklistAmbient,
+    checklistCheckStatusHint,
+    onChecklistItemFix,
+    checklistItemFixPending,
+    checklistItemFixDisabled,
+    checklistItemFixTitle,
+    checklistItemFixError,
+    checklistItemFixActiveId,
+    onVerifyReprobe: handleVerifyReprobe,
+  }
 
-      {/* Checklist | Fleet Board + in-column Cell Detail */}
-      <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] xl:items-start">
-        {!isLoading && (
-          <div className="min-w-0 rounded-lg border border-border bg-secondary px-3 py-2">
-            <DailyOpsOperatorPlanPanel
-              engineerCell={engineerCell}
-              fleet={fleet}
-              coverage={checklistCoverage}
-              activeFlashStepId={activeFlashStepId}
-              workflowPhase={fleetWorkflow?.activePhase}
-              onFlashStep={handleFlashChecklistStep}
-              onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
-              activeDispatchJobs={activeDispatchJobs}
-              onChecklistCheck={onChecklistCheck}
-              checklistCheckPending={checklistCheckPending}
-              checklistCheckDisabled={checklistCheckDisabled}
-              checklistCheckTitle={checklistCheckTitle}
-              checklistCheckError={checklistCheckError}
-              checklistCheckActive={checklistCheckActive || isChecklistAmbient}
-              checklistCheckStatusHint={checklistCheckStatusHint}
-              onChecklistItemFix={onChecklistItemFix}
-              checklistItemFixPending={checklistItemFixPending}
-              checklistItemFixDisabled={checklistItemFixDisabled}
-              checklistItemFixTitle={checklistItemFixTitle}
-              checklistItemFixError={checklistItemFixError}
-              checklistItemFixActiveId={checklistItemFixActiveId}
-              ambientJobId={ambientJobId}
-              ambientJobScope={ambientJobScope}
-              onOpenDispatchJob={jobId => onOpenAgentDesk?.(jobId)}
-              onOpenOperateQueue={
-                onOpenOperateQueue ??
-                ((queueId?: string) => {
-                  if (queueId != null && onOpenAgentDesk != null) {
-                    onOpenAgentDesk({ focusHandoffId: queueId })
-                  } else if (onOpenAgentDesk != null) {
-                    onOpenAgentDesk()
-                  } else {
-                    onNavigate('agent-desk')
-                  }
-                })
+  return (
+    <DailyOpsProvider value={dailyOpsContextValue}>
+      <div className="flex min-w-0 max-w-full flex-col gap-3">
+        {fleetWorkflow != null && (
+          <DailyOpsProcessStrip
+            workflow={fleetWorkflow}
+            agentFixError={stripError}
+            showReadyHint
+            onPrimaryAction={() => {
+              if (fleetWorkflow.primaryAction.kind === 'propose-commit') {
+                onProposeCommit?.()
+                return
               }
-              compactColumns
-            />
-          </div>
-        )}
-        <div className="flex min-w-0 flex-col gap-2">
-          <DailyOpsFleetBoard
-            fleet={fleet}
-            isLoading={isLoading}
-            canOperate={readinessCanOperate}
-            agentFixPending={fleetAgentFixPending}
-            selectedCellKey={selectedCellKey}
-            coverage={checklistCoverage}
-            flashKeys={flashKeys}
-            flashNonce={flashNonce}
-            workflowPhase={fleetWorkflow?.activePhase}
-            onAgentFix={onFleetCellFix}
-            onSelectCell={cell => setSelectedCellKey(cell?.key ?? null)}
+              if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
+                onOperatorPlanFix?.()
+                return
+              }
+              onFleetWorkflowAction?.()
+            }}
+            onSecondaryAction={
+              fleetWorkflow.primaryAction.secondary?.kind === 'propose-commit'
+                ? () => {
+                    const label = fleetWorkflow.primaryAction.secondary?.label ?? ''
+                    if (/stash/i.test(label)) onProposeStash?.()
+                    else onProposeCommit?.()
+                  }
+                : fleetWorkflow.primaryAction.secondary?.kind === 'operator-plan'
+                  ? () => onOperatorPlanFix?.()
+                  : fleetWorkflow.primaryAction.secondary?.kind === 'agent-fix'
+                    ? () => onFleetWorkflowAction?.()
+                    : undefined
+            }
+            onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
             onNavigate={onNavigate}
+            operatorPlanFixPending={
+              Boolean(operatorPlanFixPending) || Boolean(proposeCommitPending)
+            }
+            operatorPlanFixDisabled={
+              Boolean(operatorPlanFixDisabled) || Boolean(proposeCommitDisabled)
+            }
+            operatorPlanFixTitle={
+              fleetWorkflow.primaryAction.kind === 'propose-commit'
+                ? (proposeCommitTitle ??
+                  'Start git-dirty-remediate — approval required before commit/stash')
+                : operatorPlanFixTitle
+            }
+            queueOpen={queueOpen}
+            sweepQueuePending={sweepMutation.isPending}
+            onSweepQueue={() => {
+              sweepMutation.mutate({ auto_drain: false })
+              requestAnimationFrame(() => {
+                document
+                  .querySelector('[data-daily-ops-execution]')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+              })
+            }}
           />
-          {selectedCell != null && (
-            <DailyOpsFleetCellDetail
-              cell={selectedCell}
-              canOperate={readinessCanOperate}
-              agentFixPending={fleetAgentFixPending}
-              coverage={checklistCoverage}
-              dataUpdatedAt={dataUpdatedAt}
-              primaryBlocker={fleetWorkflow?.primaryBlocker}
-              primaryActionLabel={fleetWorkflow?.primaryAction.label}
-              suppressSuggestedNext={fleetWorkflow?.activePhase === 'remediate'}
-              onAgentFix={onFleetCellFix}
-              onNavigate={onNavigate}
-              onReprobe={handleVerifyReprobe}
-              onClose={() => setSelectedCellKey(null)}
-              onProposeCommit={onProposeCommit}
-              onProposeStash={onProposeStash}
-              proposeCommitPending={proposeCommitPending}
-              proposeCommitDisabled={proposeCommitDisabled}
-              proposeCommitTitle={proposeCommitTitle}
-            />
+        )}
+
+        <DailyOpsExecutionPanel
+          fleetClear={fleet.fleetClear}
+          remediating={
+            fleetWorkflow?.activePhase === 'remediate' ||
+            fleetWorkflow?.activePhase === 'verify'
+          }
+          showStartingHint={showStartingHint}
+          primaryBlocker={fleetWorkflow?.primaryBlocker}
+          primaryActionLabel={fleetWorkflow?.primaryAction.label}
+          onOpsLoopAction={
+            fleetWorkflow != null
+              ? () => {
+                  if (fleetWorkflow.primaryAction.kind === 'propose-commit') {
+                    onProposeCommit?.()
+                    return
+                  }
+                  if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
+                    onOperatorPlanFix?.()
+                    return
+                  }
+                  onFleetWorkflowAction?.()
+                }
+              : undefined
+          }
+          opsLoopActionLabel={
+            fleetWorkflow != null ? `${fleetWorkflow.primaryAction.label} →` : 'Ops loop →'
+          }
+        />
+
+        {/* Checklist | Fleet Board + in-column Cell Detail */}
+        <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] xl:items-start">
+          {!isLoading && (
+            <div className="min-w-0 rounded-lg border border-border bg-secondary px-3 py-2">
+              <DailyOpsOperatorPlanPanel
+                engineerCell={engineerCell}
+                coverage={checklistCoverage}
+                activeFlashStepId={activeFlashStepId}
+                workflowPhase={fleetWorkflow?.activePhase}
+                onFlashStep={handleFlashChecklistStep}
+                onOpenFullOperatorPlane={() => onNavigate('operator-plane')}
+                activeDispatchJobs={activeDispatchJobs}
+                onOpenDispatchJob={jobId => onOpenAgentDesk?.(jobId)}
+                onOpenOperateQueue={
+                  onOpenOperateQueue ??
+                  ((queueId?: string) => {
+                    if (queueId != null && onOpenAgentDesk != null) {
+                      onOpenAgentDesk({ focusHandoffId: queueId })
+                    } else if (onOpenAgentDesk != null) {
+                      onOpenAgentDesk()
+                    } else {
+                      onNavigate('agent-desk')
+                    }
+                  })
+                }
+                compactColumns
+              />
+            </div>
           )}
+          <div className="flex min-w-0 flex-col gap-2">
+            <DailyOpsFleetBoard
+              selectedCellKey={selectedCellKey}
+              coverage={checklistCoverage}
+              flashKeys={flashKeys}
+              flashNonce={flashNonce}
+              workflowPhase={fleetWorkflow?.activePhase}
+              onAgentFix={onFleetCellFix}
+              onSelectCell={cell => setSelectedCellKey(cell?.key ?? null)}
+              onNavigate={onNavigate}
+            />
+            {selectedCell != null && (
+              <DailyOpsFleetCellDetail
+                cell={selectedCell}
+                canOperate={readinessCanOperate}
+                agentFixPending={fleetAgentFixPending}
+                coverage={checklistCoverage}
+                dataUpdatedAt={dataUpdatedAt}
+                primaryBlocker={fleetWorkflow?.primaryBlocker}
+                primaryActionLabel={fleetWorkflow?.primaryAction.label}
+                suppressSuggestedNext={fleetWorkflow?.activePhase === 'remediate'}
+                onAgentFix={onFleetCellFix}
+                onNavigate={onNavigate}
+                onReprobe={handleVerifyReprobe}
+                onClose={() => setSelectedCellKey(null)}
+                onProposeCommit={onProposeCommit}
+                onProposeStash={onProposeStash}
+                proposeCommitPending={proposeCommitPending}
+                proposeCommitDisabled={proposeCommitDisabled}
+                proposeCommitTitle={proposeCommitTitle}
+              />
+            )}
+          </div>
         </div>
       </div>
-
-      <DailyOpsExecutionPanel
-        fleetClear={fleet.fleetClear}
-        remediating={
-          fleetWorkflow?.activePhase === 'remediate' ||
-          fleetWorkflow?.activePhase === 'verify'
-        }
-        ambientJobId={ambientJobId}
-        ambientJobScope={ambientJobScope}
-        onOpenAgentDesk={onOpenAgentDesk}
-        showStartingHint={showStartingHint}
-        primaryBlocker={fleetWorkflow?.primaryBlocker}
-        primaryActionLabel={fleetWorkflow?.primaryAction.label}
-        checklistItemFixActiveId={checklistItemFixActiveId}
-        onVerifyReprobe={handleVerifyReprobe}
-        onAdoptJob={onStartAgentJob}
-        onOpsLoopAction={
-          fleetWorkflow != null
-            ? () => {
-                if (fleetWorkflow.primaryAction.kind === 'propose-commit') {
-                  onProposeCommit?.()
-                  return
-                }
-                if (fleetWorkflow.primaryAction.kind === 'operator-plan') {
-                  onOperatorPlanFix?.()
-                  return
-                }
-                onFleetWorkflowAction?.()
-              }
-            : undefined
-        }
-        opsLoopActionLabel={
-          fleetWorkflow != null ? `${fleetWorkflow.primaryAction.label} →` : 'Ops loop →'
-        }
-        onProposeCommit={onProposeCommit}
-        onProposeStash={onProposeStash}
-        proposeCommitPending={proposeCommitPending}
-      />
-    </div>
+    </DailyOpsProvider>
   )
 }
 
@@ -999,15 +769,29 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
     (onDispatchRelease != null || onDispatchTradeDeploy != null) ? (
       <OpsSection title="Mission launch">
         <LaunchPad
-          variant="both"
+          variant={
+            onDispatchRelease != null && onDispatchTradeDeploy != null
+              ? 'both'
+              : onDispatchRelease != null
+                ? 'rocket-launch'
+                : 'satellite-deploy'
+          }
           onDispatchRelease={onDispatchRelease ?? (() => {})}
           onDispatchTradeDeploy={onDispatchTradeDeploy ?? (() => {})}
           releasePending={releasePending}
           tradeDeployPending={tradeDeployPending}
-          canDispatchRelease={canDispatchRelease}
-          canDispatchTradeDeploy={canDispatchTradeDeploy}
-          releaseDisabledReason={releaseDisabledReason}
-          tradeDeployDisabledReason={tradeDeployDisabledReason}
+          canDispatchRelease={canDispatchRelease && onDispatchRelease != null}
+          canDispatchTradeDeploy={canDispatchTradeDeploy && onDispatchTradeDeploy != null}
+          releaseDisabledReason={
+            onDispatchRelease == null
+              ? 'Release dispatch not wired in this view'
+              : releaseDisabledReason
+          }
+          tradeDeployDisabledReason={
+            onDispatchTradeDeploy == null
+              ? 'Trade deploy dispatch not wired in this view'
+              : tradeDeployDisabledReason
+          }
           onOpenPlatformRelease={() => onNavigate('platform-release')}
           onOpenTradeDeploy={() => onNavigate('trade-release')}
         />

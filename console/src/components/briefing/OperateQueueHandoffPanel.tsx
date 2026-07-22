@@ -7,7 +7,7 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { effectiveOperateLane } from '@/lib/operate/handoff'
 import { catalogTaskById } from '@/lib/agent/agentTaskCatalog'
-import { fetchVerifyMissionSnapshot } from '@/api/platform'
+import { fetchVerifyMissionSnapshot } from '@/api/core'
 
 interface OperateQueueHandoffPanelProps {
   items: OperateQueueItem[]

@@ -12,7 +12,7 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
-import { postIbGatewayControl } from '@/api/platform'
+import { postIbGatewayControl } from '@/api/network'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { OpsSection } from '@/components/layout/OpsSection'

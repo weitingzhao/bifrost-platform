@@ -2,17 +2,13 @@ import { Button, DenseTag } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
-import {
-  fetchDeliveryPipelines,
-  fetchPipelineRuns,
-  fetchReleaseGate,
-  fetchStgSmoke,
-  fetchSupplyChain,
-  fetchTierBStatus,
-} from '@/api/platform'
-import type { OpsContextResponse } from '@/api/types'
+import { fetchDeliveryPipelines, fetchPipelineRuns, fetchSupplyChain } from '@/api/delivery'
+import { fetchGitOpsApps } from '@/api/gitOps'
+import { fetchReleaseGate, fetchStgSmoke, fetchTierBStatus } from '@/api/promote'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
+import { GitOpsQuickActionsPanel } from '@/components/delivery/GitOpsQuickActionsPanel'
 import { DeliveryReleaseWorkflowPanel } from '@/components/delivery/DeliveryReleaseWorkflowPanel'
 import { DeployActionBar } from '@/components/delivery/DeployActionBar'
 import { GateActionBar } from '@/components/delivery/GateActionBar'
@@ -153,6 +149,11 @@ export function TradeReleasePage({
   const pipelines = useQuery({
     queryKey: ['delivery', 'pipelines'],
     queryFn: fetchDeliveryPipelines,
+    refetchInterval: 30_000,
+  })
+  const gitops = useQuery({
+    queryKey: ['gitops', 'apps'],
+    queryFn: fetchGitOpsApps,
     refetchInterval: 30_000,
   })
 
@@ -323,12 +324,20 @@ export function TradeReleasePage({
         />
       </LaneDetailCollapse>
 
+      <LaneDetailCollapse title="GitOps · sync and rollback" bodyClassName="p-3">
+        <GitOpsQuickActionsPanel
+          data={gitops.data}
+          isLoading={gitops.isLoading}
+          errorMessage={gitops.error instanceof Error ? gitops.error.message : null}
+        />
+      </LaneDetailCollapse>
+
       <LaneDetailCollapse
         title="CI/CD pipeline topology and release workflow"
         bodyClassName="flex flex-col gap-4 px-4 py-3"
       >
         <DeliveryReleaseWorkflowPanel context={context} stgSmoke={stgSmoke.data} />
-        <DeliveryFlow context={context} />
+        <DeliveryFlow context={context} gitops={gitops.data} />
       </LaneDetailCollapse>
     </div>
   )

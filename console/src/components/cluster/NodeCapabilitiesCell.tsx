@@ -1,5 +1,5 @@
 import { DenseTag } from '@bifrost/ui'
-import type { ClusterNodeCapability } from '@/api/types'
+import type { ClusterNodeCapability } from '@/api/clusterTypes'
 import { capabilityTagVariant } from '@/lib/cluster/nodeCapabilitiesCatalog'
 
 interface NodeCapabilitiesCellProps {

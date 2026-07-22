@@ -1,14 +1,4 @@
-import type {
-  ClusterGovernanceResponse,
-  ClusterServiceReadinessResponse,
-  ClusterMetricsResponse,
-  ClusterNamespace,
-  ClusterNode,
-  ClusterObservabilityResponse,
-  ClusterPlacementResponse,
-  ClusterSummary,
-  ClusterWorkload,
-} from '@/api/types'
+import type { ClusterGovernanceResponse, ClusterServiceReadinessResponse, ClusterMetricsResponse, ClusterNamespace, ClusterNode, ClusterObservabilityResponse, ClusterPlacementResponse, ClusterSummary, ClusterWorkload } from '@/api/clusterTypes'
 import { clusterHealthHint } from '@/lib/cluster/clusterHealthHint'
 
 export interface ClusterLlmContextInput {

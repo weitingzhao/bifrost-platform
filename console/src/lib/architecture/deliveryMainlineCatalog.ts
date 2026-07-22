@@ -4,7 +4,7 @@
  * Infra detail: bifrost-trade-infra/docs/DELIVER_STG.md
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { resolveStgReleasePhases } from './spineProjection'
 
 export const DELIVERY_MAINLINE_VERSION = '2026-07-01'

@@ -3,7 +3,7 @@
  * Mirrors GET /api/v1/mission/verify-payload (probe.VerifyPayload).
  */
 
-import type { VerifyPayloadResponse } from '@/api/types'
+import type { VerifyPayloadResponse } from '@/api/matrixTypes'
 
 export type PayloadClassification = 'NOMINAL' | 'PROBE_DRIFT' | 'DATA_LAYER' | 'HTTP_FAIL' | 'UNKNOWN'
 

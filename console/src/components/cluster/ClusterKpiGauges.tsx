@@ -1,4 +1,4 @@
-import type { Reachability } from '@/api/types'
+import type { Reachability } from '@/api/matrixTypes'
 import { StatusLamp } from '@/components/StatusLamp'
 
 const GAUGE_CX = 50

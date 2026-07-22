@@ -1,5 +1,5 @@
 import { Button } from '@bifrost/ui'
-import type { ClusterNode, ComputeWorkloadStatus, NodePowerResponse } from '@/api/types'
+import type { ClusterNode, ComputeWorkloadStatus, NodePowerResponse } from '@/api/clusterTypes'
 import { NodeCapabilitiesCell } from '@/components/cluster/NodeCapabilitiesCell'
 import { NodeObservedStatePanel } from '@/components/cluster/NodeObservedStatePanel'
 import { WizardProcedureSteps } from '@/components/cluster/WizardProcedureSteps'

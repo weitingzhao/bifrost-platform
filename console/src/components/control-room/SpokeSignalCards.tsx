@@ -1,18 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { Bot, Building2, ChevronRight, Satellite, type LucideIcon } from 'lucide-react'
 import { StatusLamp } from '@/components/StatusLamp'
-import {
-  fetchClusterNodes,
-  fetchMatrix,
-  fetchNetworkAudit,
-  fetchNetworkStatus,
-  fetchRemediationJobs,
-  fetchRetrospectiveReport,
-  fetchSatelliteBusDeep,
-  isAllMatrices,
-  isAllSatelliteBusDeep,
-} from '@/api/platform'
-import type { MatrixResponse, Reachability } from '@/api/types'
+import { fetchClusterNodes } from '@/api/cluster'
+import { fetchMatrix, fetchSatelliteBusDeep, isAllMatrices, isAllSatelliteBusDeep } from '@/api/core'
+import { fetchNetworkAudit, fetchNetworkStatus } from '@/api/network'
+import { fetchRemediationJobs } from '@/api/remediation'
+import { fetchRetrospectiveReport } from '@/api/agentOps'
+import type { MatrixResponse, Reachability } from '@/api/matrixTypes'
 import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 import { signalColor, worst, type Signal } from '@/lib/control-room/missionSignals'
 

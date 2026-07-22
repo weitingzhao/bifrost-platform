@@ -1,5 +1,5 @@
 import { Button, SegmentControl } from '@bifrost/ui'
-import type { ClusterNode, JoinProfilesResponse, NodePowerResponse } from '@/api/types'
+import type { ClusterNode, JoinProfilesResponse, NodePowerResponse } from '@/api/clusterTypes'
 import { NodeObservedStatePanel } from '@/components/cluster/NodeObservedStatePanel'
 import { WizardProcedureSteps } from '@/components/cluster/WizardProcedureSteps'
 import { OpsSection } from '@/components/layout/OpsSection'

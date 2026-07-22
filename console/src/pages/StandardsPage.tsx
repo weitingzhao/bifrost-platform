@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react'
 import {
-  Button,
   DenseDataTable,
   DenseTableHeader,
   DenseTableBody,
@@ -9,10 +8,13 @@ import {
   DenseTableHead,
   DenseTableCell,
   DenseTag,
-  DenseTagButton,
 } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
-import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  GovernanceCatalogShell,
+  type GovernanceCatalogSection,
+  type GovernanceCatalogShortcut,
+} from '@/components/architecture/GovernanceCatalogShell'
 import {
   ACTUATION_API_ROUTES,
   ACTUATION_PHASE_MATRIX,
@@ -27,34 +29,41 @@ import {
 } from '@/lib/architecture/standardsCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
-type StandardsLens = 'all' | 'probes' | 'actuation' | 'observability'
+type StandardsSection = 'probes' | 'actuation' | 'observability'
 
-const STANDARDS_LENSES: Array<{
-  id: Exclude<StandardsLens, 'all'>
-  label: string
-  sectionCount: number
-}> = [
-  { id: 'probes', label: 'Probes', sectionCount: 4 },
-  { id: 'actuation', label: 'Actuation', sectionCount: 2 },
-  { id: 'observability', label: 'Observability', sectionCount: 1 },
+const STANDARDS_SECTIONS: Array<GovernanceCatalogSection<StandardsSection>> = [
+  {
+    id: 'probes',
+    label: 'Probes',
+    badge: 'READ',
+    summary: 'HTTP, auth, TCP probe contracts and policy-blocked rows.',
+    hint: 'HTTP · Auth · TCP · Policy-blocked',
+  },
+  {
+    id: 'actuation',
+    label: 'Actuation',
+    badge: 'ACT',
+    summary: 'What platform-api may change by phase — matrix and API routes.',
+    hint: 'Phase matrix · API routes',
+  },
+  {
+    id: 'observability',
+    label: 'Observability',
+    badge: 'LAYER',
+    summary: 'Layer A vs B data ownership — platform probes vs workload telemetry.',
+    hint: 'Layer A · Layer B',
+  },
 ]
 
-const TOTAL_STANDARDS_SECTIONS = STANDARDS_LENSES.reduce((n, l) => n + l.sectionCount, 0)
-
-function standardsLensChipClass(selected: boolean): string {
-  return selected
-    ? 'ring-1 ring-current/40 brightness-110'
-    : 'opacity-55 hover:opacity-90'
-}
+const STANDARDS_SHORTCUTS: Array<GovernanceCatalogShortcut<StandardsSection>> = [
+  { label: 'What do we check? → Probes', sectionId: 'probes' },
+  { label: 'What may platform-api change? → Actuation', sectionId: 'actuation' },
+  { label: 'Who owns which signals? → Observability', sectionId: 'observability' },
+]
 
 export function StandardsPage() {
   const [copyState, setCopyState] = useState<CopyState>('idle')
-  // Default to Probes — the read contract operators hit most often.
-  const [standardsLens, setStandardsLens] = useState<StandardsLens>('probes')
-
-  const showProbes = standardsLens === 'all' || standardsLens === 'probes'
-  const showActuation = standardsLens === 'all' || standardsLens === 'actuation'
-  const showObservability = standardsLens === 'all' || standardsLens === 'observability'
+  const [section, setSection] = useState<StandardsSection>('probes')
 
   const handleCopyForLlm = useCallback(async () => {
     const text = buildStandardsLlmPack()
@@ -69,52 +78,25 @@ export function StandardsPage() {
   }, [])
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-3">
-      <OpsSection
-        title="Overview"
-        description={
-          <>
-            Platform contracts for reading the Trade stack and actuating the cluster — not live health
-            (see Mission Control → Observability / Satellite → API &amp; Auth Probes). Source:{' '}
-            <code className="font-mono-tabular text-[var(--primary)]">{STANDARDS_SOURCE}</code>
-            {' '}(v{STANDARDS_VERSION}). Probes = what we check · Actuation = what platform-api may
-            change · Observability = Layer A vs B data ownership.
-          </>
-        }
-        actions={
-          <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
-            {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </Button>
-        }
-        bodyPadding="none"
-        overflow="visible"
-      >
-        <div className="flex flex-wrap gap-2 px-3 py-2">
-          <DenseTagButton
-            variant={standardsLens === 'all' ? 'info' : 'neutral'}
-            aria-pressed={standardsLens === 'all'}
-            className={standardsLensChipClass(standardsLens === 'all')}
-            onClick={() => setStandardsLens('all')}
-          >
-            All · {TOTAL_STANDARDS_SECTIONS}
-          </DenseTagButton>
-          {STANDARDS_LENSES.map(lens => (
-            <DenseTagButton
-              key={lens.id}
-              variant={standardsLens === lens.id ? 'info' : 'neutral'}
-              aria-pressed={standardsLens === lens.id}
-              className={standardsLensChipClass(standardsLens === lens.id)}
-              onClick={() =>
-                setStandardsLens(prev => (prev === lens.id ? 'all' : lens.id))
-              }
-            >
-              {lens.label} · {lens.sectionCount}
-            </DenseTagButton>
-          ))}
-        </div>
-      </OpsSection>
-
-      {showProbes ? (
+    <GovernanceCatalogShell
+      description={
+        <>
+          Platform contracts for reading the Trade stack and actuating the cluster — not live health
+          (see Mission Control → Observability / Satellite → API &amp; Auth Probes). Source:{' '}
+          <code className="font-mono-tabular text-[var(--primary)]">{STANDARDS_SOURCE}</code>
+          {' '}(v{STANDARDS_VERSION}). Probes = what we check · Actuation = what platform-api may
+          change · Observability = Layer A vs B data ownership.
+        </>
+      }
+      sections={STANDARDS_SECTIONS}
+      value={section}
+      onChange={setSection}
+      shortcuts={STANDARDS_SHORTCUTS}
+      tabAriaLabel="Standards section"
+      onCopyForLlm={handleCopyForLlm}
+      copyState={copyState}
+    >
+      {section === 'probes' ? (
         <>
           <CatalogSection
             title="HTTP probes (via nginx)"
@@ -206,7 +188,7 @@ export function StandardsPage() {
         </>
       ) : null}
 
-      {showActuation ? (
+      {section === 'actuation' ? (
         <>
           <CatalogSection
             title="Cluster actuation phase matrix"
@@ -273,7 +255,7 @@ export function StandardsPage() {
         </>
       ) : null}
 
-      {showObservability ? (
+      {section === 'observability' ? (
         <CatalogSection
           title="Observability layers (A vs B)"
           description="Which signals belong to platform probes vs workload telemetry — complements Mission Control → Observability."
@@ -300,6 +282,6 @@ export function StandardsPage() {
           </DenseDataTable>
         </CatalogSection>
       ) : null}
-    </div>
+    </GovernanceCatalogShell>
   )
 }

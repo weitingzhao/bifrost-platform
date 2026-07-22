@@ -3,15 +3,11 @@
  * Single source of truth for overall / domain verdicts.
  */
 
-import type {
-  AgentBridgeResponse,
-  ClusterMetricsResponse,
-  ClusterObservabilityResponse,
-  IbGatewayStatusResponse,
-  RemediationHealthResponse,
-  SelfHealthResponse,
-  TelemetryMetricResult,
-} from '@/api/types'
+import type { AgentBridgeResponse } from '@/api/agentTypes'
+import type { ClusterMetricsResponse, ClusterObservabilityResponse, TelemetryMetricResult } from '@/api/clusterTypes'
+import type { SelfHealthResponse } from '@/api/matrixTypes'
+import type { RemediationHealthResponse } from '@/api/remediationTypes'
+import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 import { mapAlerts, type RawAlertInput } from './alertMapping'
 import { GRAFANA_DASHBOARD_CATALOG } from './dashboardCatalog'

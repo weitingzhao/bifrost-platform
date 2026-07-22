@@ -1,4 +1,4 @@
-import type { ClusterSummary } from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
 
 /** Why cluster health (reachability) is not ok — for KPI hints. */
 export function clusterHealthHint(summary: ClusterSummary): string | undefined {

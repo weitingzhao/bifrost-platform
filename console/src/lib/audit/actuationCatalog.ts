@@ -1,4 +1,4 @@
-import type { AuditRecord } from '@/api/types'
+import type { AuditRecord } from '@/api/auditTypes'
 import type { DenseTagVariant } from '@bifrost/ui'
 
 /** Filter chips for AuditRecordsPanel — same taxonomy as WRITE_PATHS actors. */

@@ -1,4 +1,4 @@
-import { getPlatformOperatorToken } from '@/lib/platformAuth'
+import { authHeaders, parseError } from './client'
 import type { WorkLane } from '@/lib/briefing/workLanes'
 
 export interface LaneApiRecord {
@@ -41,17 +41,6 @@ export interface PatchLaneRequest {
   work_intent?: string
 }
 
-async function parseError(prefix: string, r: Response): Promise<Error> {
-  let detail = `HTTP ${r.status}`
-  try {
-    const body = (await r.json()) as { error?: string; message?: string }
-    detail = body.error ?? body.message ?? detail
-  } catch {
-    // keep status detail
-  }
-  return new Error(`${prefix}: ${detail}`)
-}
-
 export function mapLaneApiToWorkLane(r: LaneApiRecord): WorkLane {
   return {
     id: r.id,
@@ -73,9 +62,7 @@ export async function fetchLanes(): Promise<LanesListResponse> {
 }
 
 export async function createLane(body: CreateLaneRequest): Promise<LaneApiRecord> {
-  const token = getPlatformOperatorToken()
-  const headers = new Headers({ 'Content-Type': 'application/json' })
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
+  const headers = authHeaders(true)
   const r = await fetch('/api/v1/lanes', {
     method: 'POST',
     headers,
@@ -89,9 +76,7 @@ export async function patchLane(
   id: string,
   body: PatchLaneRequest,
 ): Promise<LaneApiRecord> {
-  const token = getPlatformOperatorToken()
-  const headers = new Headers({ 'Content-Type': 'application/json' })
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
+  const headers = authHeaders(true)
   const r = await fetch(`/api/v1/lanes/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers,

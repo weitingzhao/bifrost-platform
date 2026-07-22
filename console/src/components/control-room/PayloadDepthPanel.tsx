@@ -10,7 +10,8 @@ import {
   DenseTableRow,
   StatusLamp,
 } from '@bifrost/ui'
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import {
   buildPayloadCouplingSummary,

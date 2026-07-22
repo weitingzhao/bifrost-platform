@@ -1,14 +1,5 @@
-import type {
-  AutomateTrack,
-  BuildTrack,
-  InfraTrack,
-  MatrixResponse,
-  MigrateTrack,
-  OpsContextResponse,
-  OpsContextTracks,
-  Reachability,
-  TrackTask,
-} from '@/api/types'
+import type { AutomateTrack, BuildTrack, InfraTrack, MigrateTrack, OpsContextResponse, OpsContextTracks, TrackTask } from '@/api/opsContextTypes'
+import type { MatrixResponse, Reachability } from '@/api/matrixTypes'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import { hasProdFailures, prodFailingTargetIds } from '@/lib/control-room/matrixSummary'
 

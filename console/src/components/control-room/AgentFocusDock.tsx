@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@bifrost/ui'
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { ControlRoomSelection } from '@/components/control-room/DualFlywheelPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {

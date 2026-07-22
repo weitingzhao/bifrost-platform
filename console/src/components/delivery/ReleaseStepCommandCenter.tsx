@@ -9,7 +9,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import type { DeliveryPipelineRunView, ReleaseGateResponse } from '@/api/types'
+import type { DeliveryPipelineRunView, ReleaseGateResponse } from '@/api/deliveryTypes'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { DeployStepSummary, GateStepSummary } from '@/components/delivery/ReleaseStepSummaries'
 import {

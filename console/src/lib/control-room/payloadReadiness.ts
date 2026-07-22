@@ -3,7 +3,8 @@
  * (same truth as TCC Fleet Desk). No independent matrix/L0-blocked path.
  */
 
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { evaluatePromoteStatus, type PromoteStatus } from '@/lib/control-room/matrixSummary'
 import { type Signal } from '@/lib/control-room/missionSignals'
 import type {

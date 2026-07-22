@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ConfirmDialog } from '@bifrost/ui'
-import type { RemediationJob } from '@/api/types'
-import { closeBriefingSession } from '@/api/platform'
+import type { RemediationJob } from '@/api/remediationTypes'
+import { closeBriefingSession } from '@/api/briefingSession'
 import {
   clearBriefingActiveSession,
   loadBriefingActiveSession,

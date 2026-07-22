@@ -1,5 +1,6 @@
 import { Button, StatusLamp } from '@bifrost/ui'
-import type { MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { flywheelLabel } from '@/components/FocusStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'

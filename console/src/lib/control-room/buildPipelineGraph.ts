@@ -1,4 +1,4 @@
-import type { OpsContextMilestone, OpsContextResponse } from '@/api/types'
+import type { OpsContextMilestone, OpsContextResponse } from '@/api/opsContextTypes'
 import type { Edge, Node } from '@xyflow/react'
 
 export type MilestoneNodeData = {

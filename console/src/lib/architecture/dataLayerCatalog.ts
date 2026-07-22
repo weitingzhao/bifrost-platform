@@ -9,7 +9,7 @@
  * - Migrate progress: Engineer → Briefing · lane data-layer-k3s + spine projection
  */
 
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { projectWaveStatus } from '@/lib/briefing/waveProjection'
 import type { DataLayerMigrationPhase } from './dataLayerCatalogTypes'
 import { GENERATED_DATA_LAYER_PHASES } from './migrateWaves.generated'

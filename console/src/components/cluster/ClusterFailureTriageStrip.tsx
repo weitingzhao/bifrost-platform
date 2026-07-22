@@ -2,17 +2,12 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag, StatusLamp } from '@bifrost/ui'
 import { Wrench } from 'lucide-react'
-import {
-  fetchCluster,
-  fetchClusterPostgresStatus,
-  fetchClusterServiceReadiness,
-  fetchMatrix,
-  fetchRetrospectiveReport,
-  fetchStgSmoke,
-  fetchSupplyChain,
-  isAllMatrices,
-} from '@/api/platform'
-import type { ClusterPostgresStatusResponse, ClusterServiceReadinessResponse, ClusterSummary } from '@/api/types'
+import { fetchCluster, fetchClusterPostgresStatus, fetchClusterServiceReadiness } from '@/api/cluster'
+import { fetchMatrix, isAllMatrices } from '@/api/core'
+import { fetchRetrospectiveReport } from '@/api/agentOps'
+import { fetchStgSmoke } from '@/api/promote'
+import { fetchSupplyChain } from '@/api/delivery'
+import type { ClusterPostgresStatusResponse, ClusterServiceReadinessResponse, ClusterSummary } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
 import { buildPlaybookAgentPrompt, scopeForPlaybookId } from '@/lib/agent/playbookAgentPrompts'
@@ -24,6 +19,7 @@ import {
 import { buildMissionSnapshot } from '@/lib/control-room/missionSignals'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 
+import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 const REFETCH_MS = 25_000
 
 function trackVariant(track: RemediationTrack): 'category' | 'warning' | 'danger' | 'success' {
@@ -50,8 +46,8 @@ function TriageRowActions({
   canOperate,
 }: {
   row: FailureTriageRow
-  supply?: import('@/api/types').SupplyChainResponse
-  stgSmoke?: import('@/api/types').StgSmokeResponse
+  supply?: SupplyChainResponse
+  stgSmoke?: StgSmokeResponse
   onOpenAgentDesk?: (opts: { prefill: string }) => void
   onOpenDefects?: () => void
   onPlaybookFix?: (opts: { scope: string; prompt: string }) => void

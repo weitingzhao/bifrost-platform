@@ -42,8 +42,8 @@ export function deriveConsoleUiProgress(): UiProgressItem[] {
     {
       area: 'Platform API',
       item: 'L1 cluster actuation',
-      status: 'partial',
-      notes: 'ensure namespaces, rollout restart, scale, cordon/drain/join',
+      status: 'done',
+      notes: 'ensure namespaces, rollout restart, scale, cordon/drain/join — audited via GET /api/v1/audit',
     },
     {
       area: 'Platform API',

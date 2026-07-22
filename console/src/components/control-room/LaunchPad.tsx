@@ -2,17 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Button, DenseTag } from '@bifrost/ui'
 import { ChevronRight, Rocket, Satellite } from 'lucide-react'
-import {
-  fetchMatrix,
-  fetchPipelineRuns,
-  fetchReleaseGate,
-  fetchReleaseState,
-  fetchStgSmoke,
-  fetchSupplyChain,
-  fetchTierBStatus,
-  isAllMatrices,
-} from '@/api/platform'
-import type { MatrixResponse } from '@/api/types'
+import { fetchMatrix, isAllMatrices } from '@/api/core'
+import { fetchPipelineRuns, fetchSupplyChain } from '@/api/delivery'
+import { fetchReleaseGate, fetchReleaseState, fetchStgSmoke, fetchTierBStatus } from '@/api/promote'
+import type { MatrixResponse } from '@/api/matrixTypes'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { gateStepStatus, runStepStatus, pickDeployPipelineRun } from '@/components/delivery/ReleaseStepCommandCenter'

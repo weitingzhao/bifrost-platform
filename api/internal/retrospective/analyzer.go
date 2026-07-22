@@ -579,7 +579,7 @@ func classifyRootCauseMultiSignal(ca *clusterAccum) (RootCause, float64, []Class
 	}
 	if restartTools > 0 && len(ca.errors) > 0 {
 		emit(RootCausePlatformDefect, 1.5, "restart_tools_with_errors",
-			fmt.Sprintf("restart tools used but errors present → may indicate deeper issue"))
+			"restart tools used but errors present → may indicate deeper issue")
 	}
 	if gitTools > 0 {
 		emit(RootCauseConfigDrift, 2.0, "git_tools_used",

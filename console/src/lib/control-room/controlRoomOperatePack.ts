@@ -2,7 +2,8 @@
  * Control Room Operate Loop — dispatch packs for Agent Desk / remediation runner.
  */
 
-import type { MatrixResponse, OpsContextResponse, VerifyMissionSnapshotResponse, VerifyPayloadResponse } from '@/api/types'
+import type { MatrixResponse, VerifyMissionSnapshotResponse, VerifyPayloadResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { buildOpsPack } from '@/lib/control-room/agentContextPacks'
 import {
   buildDiagnosticPrompt,

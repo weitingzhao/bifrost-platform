@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react'
 import {
-  Button,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -9,10 +8,13 @@ import {
   DenseTableHeader,
   DenseTableRow,
   DenseTag,
-  DenseTagButton,
 } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
-import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  GovernanceCatalogShell,
+  type GovernanceCatalogSection,
+  type GovernanceCatalogShortcut,
+} from '@/components/architecture/GovernanceCatalogShell'
 import {
   AGENT_GOVERNANCE_ASSETS,
   CSS_EXCEPTIONS,
@@ -31,36 +33,44 @@ import {
 } from '@/lib/standards/designSystemCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
-type DesignLens = 'all' | 'foundations' | 'rules' | 'inventory'
+type DesignSection = 'foundations' | 'rules' | 'inventory'
 
-const DESIGN_LENSES: Array<{
-  id: Exclude<DesignLens, 'all'>
-  label: string
-  sectionCount: number
-}> = [
-  { id: 'foundations', label: 'Foundations', sectionCount: 4 },
-  { id: 'rules', label: 'Rules', sectionCount: 3 },
-  { id: 'inventory', label: 'Inventory', sectionCount: 2 },
+const DESIGN_SECTIONS: Array<GovernanceCatalogSection<DesignSection>> = [
+  {
+    id: 'foundations',
+    label: 'Foundations',
+    badge: 'TOKENS',
+    summary: 'Layer stack, page surfaces, semantic colors, and ops outcome text.',
+    hint: 'Layers · Surfaces · Colors · Semantics',
+  },
+  {
+    id: 'rules',
+    label: 'Rules',
+    badge: 'MUST',
+    summary: 'Mandatory interaction mapping, forbidden patterns, and CSS exceptions.',
+    hint: 'Mapping · Forbidden · Exceptions',
+  },
+  {
+    id: 'inventory',
+    label: 'Inventory',
+    badge: 'REF',
+    summary: 'Primitives catalog and cross-repo agent governance assets.',
+    hint: 'Primitives · Governance assets',
+  },
 ]
 
-const TOTAL_DESIGN_SECTIONS = DESIGN_LENSES.reduce((n, l) => n + l.sectionCount, 0)
-
-function designLensChipClass(selected: boolean): string {
-  return selected
-    ? 'ring-1 ring-current/40 brightness-110'
-    : 'opacity-55 hover:opacity-90'
-}
+const DESIGN_SHORTCUTS: Array<GovernanceCatalogShortcut<DesignSection>> = [
+  { label: 'Tokens & surfaces? → Foundations', sectionId: 'foundations' },
+  { label: 'What must I use? → Rules', sectionId: 'rules' },
+  { label: 'Where are components? → Inventory', sectionId: 'inventory' },
+]
 
 const tradeFrontendUrl =
   import.meta.env.VITE_TRADE_FRONTEND_URL ?? TRADE_FRONTEND_URL_DEFAULT
 
 export function DesignSystemPage() {
   const [copyState, setCopyState] = useState<CopyState>('idle')
-  const [designLens, setDesignLens] = useState<DesignLens>('all')
-
-  const showFoundations = designLens === 'all' || designLens === 'foundations'
-  const showRules = designLens === 'all' || designLens === 'rules'
-  const showInventory = designLens === 'all' || designLens === 'inventory'
+  const [section, setSection] = useState<DesignSection>('foundations')
 
   const handleCopyForLlm = useCallback(async () => {
     const text = buildDesignSystemLlmPack()
@@ -77,59 +87,34 @@ export function DesignSystemPage() {
   const taxonomies = [...new Set(SEMANTIC_COLORS.map(c => c.taxonomy))]
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-3">
-      <OpsSection
-        title="Overview"
-        description={
-          <>
-            Same business interaction → same shared UI primitive. Change tokens/components once → all adopters upgrade together.
-            Source:{' '}
-            <code className="font-mono-tabular text-[var(--primary)]">{DESIGN_SYSTEM_SOURCE}</code>
-            {' '}(v{DESIGN_SYSTEM_VERSION}) · Living visual contract:{' '}
-            <a
-              href={`${tradeFrontendUrl}${LIVING_CONTRACT_PATH}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[var(--primary)] underline"
-            >
-              Settings → UI Design System
-            </a>
-            {' '}(bifrost-trade-frontend). Foundations = tokens &amp; surfaces · Rules = mapping &amp; forbidden ·
-            Inventory = primitives &amp; assets.
-          </>
-        }
-        actions={
-          <Button size="sm" className="shrink-0" onClick={() => void handleCopyForLlm()}>
-            {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Prompt for LLM'}
-          </Button>
-        }
-        bodyPadding="none"
-        overflow="visible"
-      >
-        <div className="flex flex-wrap gap-2 px-3 py-2">
-          <DenseTagButton
-            variant={designLens === 'all' ? 'info' : 'neutral'}
-            aria-pressed={designLens === 'all'}
-            className={designLensChipClass(designLens === 'all')}
-            onClick={() => setDesignLens('all')}
+    <GovernanceCatalogShell
+      description={
+        <>
+          Same business interaction → same shared UI primitive. Change tokens/components once → all adopters upgrade together.
+          Source:{' '}
+          <code className="font-mono-tabular text-[var(--primary)]">{DESIGN_SYSTEM_SOURCE}</code>
+          {' '}(v{DESIGN_SYSTEM_VERSION}) · Living visual contract:{' '}
+          <a
+            href={`${tradeFrontendUrl}${LIVING_CONTRACT_PATH}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--primary)] underline"
           >
-            All · {TOTAL_DESIGN_SECTIONS}
-          </DenseTagButton>
-          {DESIGN_LENSES.map(lens => (
-            <DenseTagButton
-              key={lens.id}
-              variant={designLens === lens.id ? 'info' : 'neutral'}
-              aria-pressed={designLens === lens.id}
-              className={designLensChipClass(designLens === lens.id)}
-              onClick={() => setDesignLens(prev => (prev === lens.id ? 'all' : lens.id))}
-            >
-              {lens.label} · {lens.sectionCount}
-            </DenseTagButton>
-          ))}
-        </div>
-      </OpsSection>
-
-      {showFoundations ? (
+            Settings → UI Design System
+          </a>
+          {' '}(bifrost-trade-frontend). Foundations = tokens &amp; surfaces · Rules = mapping &amp; forbidden ·
+          Inventory = primitives &amp; assets.
+        </>
+      }
+      sections={DESIGN_SECTIONS}
+      value={section}
+      onChange={setSection}
+      shortcuts={DESIGN_SHORTCUTS}
+      tabAriaLabel="Design System section"
+      onCopyForLlm={handleCopyForLlm}
+      copyState={copyState}
+    >
+      {section === 'foundations' ? (
         <>
           <div className="grid gap-3 md:grid-cols-2">
             <CatalogSection title="Layer stack (do not skip layers)">
@@ -240,7 +225,7 @@ export function DesignSystemPage() {
         </>
       ) : null}
 
-      {showRules ? (
+      {section === 'rules' ? (
         <>
           <CatalogSection title="Mandatory interaction → primitive mapping">
             <DenseDataTable>
@@ -289,7 +274,7 @@ export function DesignSystemPage() {
         </>
       ) : null}
 
-      {showInventory ? (
+      {section === 'inventory' ? (
         <>
           <CatalogSection title="Primitives inventory (src/components/data-display/)">
             <DenseDataTable>
@@ -336,6 +321,6 @@ export function DesignSystemPage() {
           </CatalogSection>
         </>
       ) : null}
-    </div>
+    </GovernanceCatalogShell>
   )
 }

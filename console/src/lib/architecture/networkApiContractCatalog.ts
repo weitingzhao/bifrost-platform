@@ -137,6 +137,22 @@ export const NETWORK_API_FORBIDDEN = [
   'Manual UniFi UI changes — Owner physical hardware only; routine changes via platform-api + scripts',
 ] as const
 
+/** Owner-deferred routes — documented contract only; Wave A Phase A3 explicitly out of agent scope. */
+export const NETWORK_API_OWNER_DEFERRED = [
+  {
+    id: 'network-l2-zones-wlan',
+    routes: 'POST /api/v1/network/zones/restructure · POST /api/v1/network/wlan',
+    autonomy: 'L2',
+    reason: 'Owner-confirmed physical UniFi changes — see blueprintCatalog.ts D6_APPENDIX_OWNER_DEFERRED',
+  },
+  {
+    id: 'network-p2-ap-lifecycle',
+    routes: 'AP adopt / restart / firmware (no platform-api route yet)',
+    autonomy: 'P2',
+    reason: 'Owner-deferred actuation phase slice — not implemented in Wave A',
+  },
+] as const
+
 export const NETWORK_API_EXECUTOR_MODEL = {
   primary: 'scripts/unifi_firewall_setup.py audit | apply',
   sessionPath: 'bifrost-agent Super Admin local account — UniFi v2 API + CSRF (spine decision D9)',
@@ -219,6 +235,11 @@ export function buildNetworkApiContractLlmPack(): string {
     '',
     '## Forbidden (never exposed)',
     ...NETWORK_API_FORBIDDEN.map(f => `- ${f}`),
+    '',
+    '## Owner-deferred (Wave A Phase A3 — do not implement without Owner unlock)',
+    ...NETWORK_API_OWNER_DEFERRED.map(
+      d => `- **${d.id}** [${d.autonomy}] ${d.routes} — ${d.reason}`,
+    ),
     '',
     '## Related authorities',
     ...NETWORK_API_RELATED_AUTHORITIES.map(a => `- ${a}`),

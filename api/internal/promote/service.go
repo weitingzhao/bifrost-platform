@@ -425,7 +425,7 @@ func (s *Service) probePlatformHTTP(ctx context.Context, id, url string) []GateC
 			Detail:       fmt.Sprintf("HTTP probe failed: %v", err),
 		}}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	reach := probe.ReachOK
 	if resp.StatusCode >= 400 {
 		reach = probe.ReachFail

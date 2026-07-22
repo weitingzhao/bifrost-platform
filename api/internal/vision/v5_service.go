@@ -49,7 +49,7 @@ func (s *Service) V5Gate(ctx context.Context) V1GateResponse {
 		Blockers:     blockers,
 		Checks:       checks,
 		Reachability: reach,
-		Detail:       fmt.Sprintf("Vision V5 full convergence gate %s (%d checks)", result, len(checks)),
+		Detail:       fmt.Sprintf("vision V5 full convergence gate %s (%d checks)", result, len(checks)),
 		GeneratedAt:  now,
 	}
 	if rec != nil {
@@ -83,13 +83,13 @@ func (s *Service) RunV5Gate(ctx context.Context, triggeredBy string) (RunGateRes
 		Result:      result,
 		Checks:      checks,
 		TriggeredBy: triggeredBy,
-		Summary:     fmt.Sprintf("Vision V5 gate %s (%d checks)", result, len(checks)),
+		Summary:     fmt.Sprintf("vision V5 gate %s (%d checks)", result, len(checks)),
 	}
 	if err := s.v5store.SaveGate(rec); err != nil {
 		return RunGateResponse{}, err
 	}
 	gate := s.V5Gate(ctx)
-	msg := fmt.Sprintf("Vision V5 gate %s", result)
+	msg := fmt.Sprintf("vision V5 gate %s", result)
 	if !gate.Ready {
 		msg += fmt.Sprintf(" (blocked: %s)", strings.Join(gate.Blockers, "; "))
 	}
@@ -108,7 +108,7 @@ func (s *Service) SignV5(ctx context.Context, notes, signedBy string) (SignoffRe
 	now := time.Now().UTC()
 	gate := s.V5Gate(ctx)
 	if !gate.Ready {
-		return SignoffResponse{}, fmt.Errorf("Vision V5 gate not ready — run gate first and fix blockers")
+		return SignoffResponse{}, fmt.Errorf("vision V5 gate not ready — run gate first and fix blockers")
 	}
 	rec := V1SignoffRecord{
 		At:       now,
@@ -129,7 +129,7 @@ func (s *Service) SignV5(ctx context.Context, notes, signedBy string) (SignoffRe
 		Action:      "vision.v5-signoff",
 		Target:      "vision-v5-convergence",
 		Changed:     true,
-		Message:     "Vision V5 full convergence SIGNED — Dual Flywheel complete",
+		Message:     "vision V5 full convergence SIGNED — Dual Flywheel complete",
 		Gate:        gate,
 		GeneratedAt: now,
 	}, nil
@@ -188,7 +188,7 @@ func (s *Service) collectV5Checks(ctx context.Context) []GateCheck {
 
 func (s *Service) checkV4Prerequisite() GateCheck {
 	check := GateCheck{
-		ID: "v4-prerequisite", Label: "Vision V4 signed (prerequisite)", Required: true,
+		ID: "v4-prerequisite", Label: "vision V4 signed (prerequisite)", Required: true,
 		Reachability: probe.ReachFail, Detail: "V4 signoff not recorded",
 	}
 	signoff, err := s.v4store.LoadSignoff()

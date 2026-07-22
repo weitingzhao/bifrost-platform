@@ -18,11 +18,9 @@ import {
   PageHeader,
   SegmentControl,
 } from '@bifrost/ui'
-import {
-  fetchClusterObservability,
-  fetchTelemetryOverview,
-} from '@/api/platform'
-import type { TelemetryMetricResult } from '@/api/types'
+import { fetchClusterObservability } from '@/api/cluster'
+import { fetchTelemetryOverview } from '@/api/telemetry'
+import type { TelemetryMetricResult } from '@/api/clusterTypes'
 import { MonitoringCoverageStrip } from '@/components/observability/MonitoringCoverageStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'

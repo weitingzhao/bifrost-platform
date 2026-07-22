@@ -196,8 +196,8 @@ func (d *DrainWorker) runOne(item Item) error {
 	d.currentJobID = job.ID
 	d.mu.Unlock()
 
-	if _, err := d.h.store.RecordExecution(item.ID, job.ID); err != nil {
-		return d.demote(item, "record execution failed: "+err.Error())
+	if _, recordErr := d.h.store.RecordExecution(item.ID, job.ID); recordErr != nil {
+		return d.demote(item, "record execution failed: "+recordErr.Error())
 	}
 	if d.h.observer != nil {
 		if updated, ok := d.h.store.FindByID(item.ID); ok {

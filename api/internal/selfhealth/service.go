@@ -167,7 +167,7 @@ func (s *Service) probeHTTP(ctx context.Context, id, category, env, url string) 
 			Status: StatusFail, Detail: err.Error(), LatencyMs: latency,
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	status := StatusOK
 	detail := fmt.Sprintf("HTTP %d", resp.StatusCode)

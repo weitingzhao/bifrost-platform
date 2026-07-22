@@ -10,7 +10,7 @@
  * Doctrine: briefingReconciliationCatalog.ts (gate rules + L1–L4 layers)
  */
 
-import type { AgentNightlyReportResponse } from '@/api/types'
+import type { AgentNightlyReportResponse } from '@/api/agentTypes'
 import type { BriefingSyncLoopStepView } from '@/lib/briefing/briefingSyncLoop'
 import { parseNightlyLayerResults } from '@/lib/briefing/briefingSyncLoop'
 import type { ReconcileFinding } from '@/lib/briefing/reconcileBriefing'

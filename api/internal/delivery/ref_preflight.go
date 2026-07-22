@@ -72,7 +72,7 @@ func (s *Service) giteaCommitExists(ctx context.Context, repo, sha, user, pass s
 	if err != nil {
 		return "", false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusOK {
 		return sha, true
 	}

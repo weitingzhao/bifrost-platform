@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { startRemediation } from '@/api/platform'
-import type { StartRemediationRequest } from '@/api/types'
+import { startRemediation } from '@/api/remediation'
+import type { StartRemediationRequest } from '@/api/remediationTypes'
 import {
   ambientAgentBlockedReason,
   isAmbientAgentActive,

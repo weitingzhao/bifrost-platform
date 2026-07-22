@@ -1,7 +1,7 @@
 import { cn, DenseTag } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import { fetchPipelineRunSteps } from '@/api/platform'
-import type { PipelinePhaseView } from '@/api/types'
+import { fetchPipelineRunSteps } from '@/api/delivery'
+import type { PipelinePhaseView } from '@/api/deliveryTypes'
 import { phaseStatusVariant } from '@/lib/delivery/deliverStgPhases'
 
 function phasesTerminal(phases: PipelinePhaseView[]): boolean {

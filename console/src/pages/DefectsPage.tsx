@@ -1,3 +1,8 @@
+/**
+ * Defects / retrospective patterns — live operational page (not a static Governance catalog).
+ * DenseTagButton filter chips are intentional for multi-select live data filtering;
+ * do not migrate to GovernanceCatalogShell (exclusive tabs suit static catalogs only).
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   DenseDataTable,
@@ -21,7 +26,8 @@ import {
 } from '@bifrost/ui'
 import { AlertCircle, RefreshCw, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Wrench } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
-import { fetchRetrospectiveReport, startRemediation } from '@/api/platform'
+import { fetchRetrospectiveReport } from '@/api/agentOps'
+import { startRemediation } from '@/api/remediation'
 import { buildDefectPatternRemediatePrompt } from '@/lib/agent/defectPatternRemediatePrompt'
 import { DEFECT_PATTERN_REMEDIATE_SCOPE } from '@/lib/agent/agentScopes'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
@@ -44,16 +50,7 @@ import {
   FLEET_ROLE_ICON,
   FLEET_ROLE_LABEL,
 } from '@/lib/control-room/fleetRoleVisuals'
-import type {
-  RetrospectiveReport,
-  RetrospectivePatternCluster,
-  RetrospectiveRootCauseDistribution,
-  RetrospectiveScopeStats,
-  RetrospectiveToolUsage,
-  RetrospectiveNamespaceActivity,
-  RetrospectiveSeverity,
-  RetrospectiveRootCause,
-} from '@/api/types'
+import type { RetrospectiveReport, RetrospectivePatternCluster, RetrospectiveRootCauseDistribution, RetrospectiveScopeStats, RetrospectiveToolUsage, RetrospectiveNamespaceActivity, RetrospectiveSeverity, RetrospectiveRootCause } from '@/api/agentTypes'
 
 function DomainTag({ id }: { id: SystemDomainId }) {
   const Icon = SYSTEM_DOMAIN_ICON[id]

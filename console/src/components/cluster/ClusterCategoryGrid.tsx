@@ -1,12 +1,5 @@
-import type {
-  ClusterGovernanceResponse,
-  ClusterMetricsResponse,
-  ClusterObservabilityResponse,
-  ClusterServiceReadinessResponse,
-  ClusterSummary,
-  Reachability,
-  ServiceDomain,
-} from '@/api/types'
+import type { ClusterGovernanceResponse, ClusterMetricsResponse, ClusterObservabilityResponse, ClusterServiceReadinessResponse, ClusterSummary, ServiceDomain } from '@/api/clusterTypes'
+import type { Reachability } from '@/api/matrixTypes'
 import type { LucideIcon } from 'lucide-react'
 import { ClusterCategoryCard } from '@/components/cluster/ClusterCategoryCard'
 import type { ClusterCategory } from '@/lib/cluster/clusterCategories'

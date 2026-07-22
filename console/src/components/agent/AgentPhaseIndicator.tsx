@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import type { RemediationPhase } from '@/api/types'
+import type { RemediationPhase } from '@/api/remediationTypes'
 
 export const PHASE_STEPS: { key: RemediationPhase; label: string }[] = [
   { key: 'starting', label: 'Start' },

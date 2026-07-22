@@ -10,8 +10,8 @@ import {
   StatusLamp,
 } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import { fetchSelfHealth } from '@/api/platform'
-import type { SelfHealthProbeStatus } from '@/api/types'
+import { fetchSelfHealth } from '@/api/core'
+import type { SelfHealthProbeStatus } from '@/api/matrixTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 const STATUS_TAG: Record<SelfHealthProbeStatus, { variant: 'success' | 'warning' | 'danger' | 'category'; label: string }> = {

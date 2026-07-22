@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import type { MatrixResponse, RemediationJob } from '@/api/types'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { RemediationJob } from '@/api/remediationTypes'
 import { AgentJobBanner } from '@/components/agent/AgentJobBanner'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useLaneCatalog } from '@/hooks/useLaneCatalog'
@@ -13,20 +14,10 @@ import {
   isOpenAgentDeskPrefill,
   type OpenAgentDeskArg,
 } from '@/lib/agent/openAgentDesk'
-import {
-  fetchAudit,
-  fetchCluster,
-  fetchContext,
-  fetchEnvironments,
-  fetchMatrix,
-  fetchPlatformHealth,
-  fetchStgSmoke,
-  fetchReleaseGate,
-  fetchSupplyChain,
-  fetchTierBStatus,
-  fetchTopology,
-  isAllMatrices,
-} from '@/api/platform'
+import { fetchAudit, fetchCluster } from '@/api/cluster'
+import { fetchContext, fetchEnvironments, fetchMatrix, fetchPlatformHealth, fetchTopology, isAllMatrices } from '@/api/core'
+import { fetchStgSmoke, fetchReleaseGate, fetchTierBStatus } from '@/api/promote'
+import { fetchSupplyChain } from '@/api/delivery'
 import { consoleNavPlane } from '@/lib/consoleNavConfig'
 import { BackToMissionLaunchButton } from '@/components/delivery/LaneDetailShell'
 import { LANE_DETAIL_SUBTITLE } from '@/lib/delivery/laneDetailContext'

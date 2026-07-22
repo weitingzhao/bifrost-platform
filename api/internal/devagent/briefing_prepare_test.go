@@ -37,8 +37,8 @@ func TestHandleBriefingPrepare(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var resp BriefingPrepareResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
+	if decodeErr := json.Unmarshal(rec.Body.Bytes(), &resp); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
 	if resp.Status != "ready" {
 		t.Fatalf("status=%q", resp.Status)

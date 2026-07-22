@@ -2,7 +2,8 @@
  * Signal-level Agent Fix dispatch — maps failing ProdFixSignal.fixScope
  * to the correct remediation prompt / request body.
  */
-import type { ClusterServiceReadinessResponse, ClusterSummary, StgSmokeResponse, SupplyChainResponse } from '@/api/types'
+import type { ClusterServiceReadinessResponse, ClusterSummary } from '@/api/clusterTypes'
+import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
 import {
   DELIVER_STG_RECOVER_SCOPE,

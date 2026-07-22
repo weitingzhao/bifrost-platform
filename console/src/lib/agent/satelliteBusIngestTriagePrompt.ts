@@ -1,5 +1,6 @@
 import type { Signal } from '@/lib/control-room/missionSignals'
-import type { Reachability, SatelliteBusIngestService } from '@/api/types'
+import type { Reachability } from '@/api/matrixTypes'
+import type { SatelliteBusIngestService } from '@/api/satelliteBusTypes'
 
 export const SATELLITE_BUS_INGEST_TRIAGE_SCOPE = 'satellite-bus-ingest-triage'
 

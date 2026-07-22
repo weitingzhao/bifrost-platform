@@ -1,0 +1,36 @@
+# golangci-lint v2 config for bifrost-platform API
+# https://golangci-lint.run/docs/configuration/file/
+# Note: gosimple is merged into staticcheck in v2.
+
+version: "2"
+run:
+  tests: true
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck # includes gosimple checks
+    - unused
+  settings:
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 10
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

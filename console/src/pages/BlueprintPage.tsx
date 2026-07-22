@@ -11,8 +11,9 @@ import {
   SegmentControl,
 } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import type { OpsContextResponse } from '@/api/types'
-import { fetchContext, fetchMcpTools } from '@/api/platform'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { fetchContext } from '@/api/core'
+import { fetchMcpTools } from '@/api/mcp'
 import { CatalogSection } from '@/components/CatalogSection'
 import {
   GovernanceCatalogShell,
@@ -53,9 +54,11 @@ import {
 
 import {
   PROJECTION_AUTHORITY,
+  UI_MCP_PARITY_MATRIX,
   actuationPhaseProgress,
   buildBlueprintProjectionPack,
   constitutionActuationWithProgress,
+  parityTagVariant,
 } from '@/lib/architecture/blueprintProjection'
 
 type CopyState = 'idle' | 'copied' | 'error'
@@ -559,6 +562,55 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
               </DenseDataTable>
             </CatalogSection>
           )}
+
+          <CatalogSection title="Projection — UI ↔ MCP parity">
+            <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Key Console surfaces mapped to platform-api routes and MCP tools. Network L0/L1 actuation
+              tools live on the independent{' '}
+              <code className="font-mono-tabular">mcp/unifi</code> server (
+              <code className="font-mono-tabular">mcp-server-unifi</code>), not{' '}
+              <code className="font-mono-tabular">mcp-server-platform</code>.
+            </p>
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>UI route</DenseTableHead>
+                  <DenseTableHead>Surface</DenseTableHead>
+                  <DenseTableHead>API</DenseTableHead>
+                  <DenseTableHead>MCP tool</DenseTableHead>
+                  <DenseTableHead>Server</DenseTableHead>
+                  <DenseTableHead>Parity</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {UI_MCP_PARITY_MATRIX.map(row => (
+                  <DenseTableRow key={`${row.uiRoute}-${row.uiSurface}-${row.apiRoute}`}>
+                    <DenseTableCell className="whitespace-nowrap text-[var(--text-dense-meta)]">
+                      {row.uiRoute}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-medium">{row.uiSurface}</DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)]">
+                      {row.apiRoute}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)]">
+                      {row.mcpTool}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)]">
+                      {row.mcpServer}
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag variant={parityTagVariant(row.parity)}>{row.parity}</DenseTag>
+                      {row.notes != null && row.notes !== '' && (
+                        <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                          {row.notes}
+                        </p>
+                      )}
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          </CatalogSection>
         </section>
       ) : null}
     </GovernanceCatalogShell>

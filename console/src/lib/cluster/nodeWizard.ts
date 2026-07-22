@@ -1,4 +1,4 @@
-import type { ClusterNode, JoinProfile, NodePowerResponse } from '@/api/types'
+import type { ClusterNode, JoinProfile, NodePowerResponse } from '@/api/clusterTypes'
 
 export type NodeWizardFlow = 'join' | 'maintenance' | 'compute_shutdown'
 

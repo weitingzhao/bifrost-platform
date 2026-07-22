@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchNetworkAudit, fetchNetworkStatus } from '@/api/platform'
-import type { NetworkAuditResponse, NetworkStatusResponse } from '@/api/types'
+import { fetchNetworkAudit, fetchNetworkStatus } from '@/api/network'
+import type { NetworkAuditResponse, NetworkStatusResponse } from '@/api/networkTypes'
 
 export type NetworkLiveProbeState = {
   status: NetworkStatusResponse | undefined

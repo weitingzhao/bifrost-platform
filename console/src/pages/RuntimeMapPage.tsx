@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ClusterSummary, MatrixResponse, OpsContextResponse, TopologyResponse } from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { RuntimeAgentStrip } from '@/components/runtime-map/RuntimeAgentStrip'
 import { RuntimeHardwarePanel } from '@/components/runtime-map/RuntimeHardwarePanel'
 import { RuntimeHealthStrip } from '@/components/runtime-map/RuntimeHealthStrip'

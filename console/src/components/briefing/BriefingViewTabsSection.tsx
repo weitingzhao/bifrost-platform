@@ -29,7 +29,9 @@ import {
 } from '@/lib/briefing/briefingViewTabs'
 import { allWorkLanes, buildQueueForLane } from '@/lib/briefing/workLanes'
 import type { TaskModeId } from '@/lib/task-mode/types'
-import type { ClusterSummary, MatrixResponse, OpsContextResponse } from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 
 /** Active-work counts for Briefing scope tags — Done omitted (Session sign-off / Board catalog). */
 export type ScopeActiveCounts = {

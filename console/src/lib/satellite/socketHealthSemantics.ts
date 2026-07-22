@@ -1,10 +1,5 @@
-import type {
-  Reachability,
-  SatelliteBusDeepResponse,
-  SatelliteBusIngestService,
-  SatelliteBusMonitorDaemon,
-  SatelliteBusSocketComponent,
-} from '@/api/types'
+import type { Reachability } from '@/api/matrixTypes'
+import type { SatelliteBusDeepResponse, SatelliteBusIngestService, SatelliteBusMonitorDaemon, SatelliteBusSocketComponent } from '@/api/satelliteBusTypes'
 import type { Signal } from '@/lib/control-room/missionSignals'
 import { worst } from '@/lib/control-room/missionSignals'
 

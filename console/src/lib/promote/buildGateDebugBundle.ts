@@ -1,8 +1,5 @@
-import type {
-  DeliveryPipelineRunsResponse,
-  ReleaseGateResponse,
-  SelfHealthResponse,
-} from '@/api/types'
+import type { DeliveryPipelineRunsResponse, ReleaseGateResponse } from '@/api/deliveryTypes'
+import type { SelfHealthResponse } from '@/api/matrixTypes'
 
 export interface GateDebugBundleInput {
   tier: string

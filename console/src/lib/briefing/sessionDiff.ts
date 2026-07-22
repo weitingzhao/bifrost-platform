@@ -1,4 +1,6 @@
-import type { AuditRecord, Reachability, RemediationJob } from '@/api/types'
+import type { AuditRecord } from '@/api/auditTypes'
+import type { Reachability } from '@/api/matrixTypes'
+import type { RemediationJob } from '@/api/remediationTypes'
 import type { BriefingSnapshotInput } from '@/lib/briefing/briefingSnapshot'
 import type { SessionSnapshot } from '@/lib/briefing/sessionSnapshot'
 

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@bifrost/ui'
-import { fetchAgentNightlyReport } from '@/api/platform'
+import { fetchAgentNightlyReport } from '@/api/agentOps'
 import { DriftProposalPanel } from '@/components/briefing/DriftProposalPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 

@@ -1,5 +1,5 @@
 import { Button } from '@bifrost/ui'
-import type { MatrixResponse, TopologyResponse } from '@/api/types'
+import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
 import { StatusLamp } from '@/components/StatusLamp'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
 import type { GapOverview } from '@/lib/runtime-map/gapAnalysis'

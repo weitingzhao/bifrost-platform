@@ -20,11 +20,20 @@ type FirstTaskDefinition struct {
 	SuccessCriteria  []string `json:"success_criteria"`
 }
 
+// BlockerDetail is a structured readiness blocker (parallel to human-readable blockers[]).
+type BlockerDetail struct {
+	Code         string `json:"code"`
+	Message      string `json:"message"`
+	Remediation  string `json:"remediation,omitempty"`
+	OwnerAction  bool   `json:"owner_action,omitempty"`
+}
+
 // ReadinessResponse is returned by GET /api/v1/agent/hermes/readiness.
 type ReadinessResponse struct {
 	GeneratedAt      time.Time           `json:"generated_at"`
 	Ready            bool                `json:"ready"`
 	Blockers         []string            `json:"blockers"`
+	BlockerDetails   []BlockerDetail     `json:"blocker_details,omitempty"`
 	LlmKey           LlmKeyStatus        `json:"llm_key"`
 	NousHermes       NousHermesProbe     `json:"nous_hermes"`
 	PlatformMcpTools int                 `json:"platform_mcp_tools"`

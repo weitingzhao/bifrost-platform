@@ -2,7 +2,8 @@
  * Control Room Phase 3 — mission-scoped command intents for the Commander diagnosis zone.
  */
 
-import type { MatrixResponse, OpsContextResponse, VerifyPayloadResponse } from '@/api/types'
+import type { MatrixResponse, VerifyPayloadResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   buildSessionPack,
   packForMode,

@@ -373,7 +373,7 @@ export const HERMES_FIRST_TASK_STEPS: HermesFirstTaskStep[] = [
     step: '0. Readiness gate',
     tool: 'get_hermes_readiness',
     required: true,
-    detail: 'Confirm ready=true (Hermes gateway, LLM key, platform MCP agent tools). If blockers present, fix config before running task.',
+    detail: 'Confirm ready=true (Hermes gateway, LLM key, platform MCP agent tools). blockers[] + blocker_details[] cite codes (LLM_KEY_MISSING is Owner-only on Nous Hermes host). Agent must not configure LLM keys.',
   },
   {
     step: '1. Bridge check',
@@ -456,7 +456,7 @@ export const DAILY_OPS_FLEET_DESK = {
   verdict: 'GO | NO-GO',
   workflow: ['discover', 'remediate', 'verify', 'clear'] as const,
   rules: [
-    'Ops loop above Fleet board: viewer env + GO/NO-GO + circle Discover→Remediate→Verify→Clear + one primary CTA.',
+    'Ops loop → Execution Agent panel → Fleet board: viewer env + GO/NO-GO + circle Discover→Remediate→Verify→Clear + one primary CTA; fix progress sits directly under Ops loop.',
     'Fleet board is health ground truth; Help · reference is a muted collapsed entry inside Ops loop (deep links only — not a footer row or phase strip).',
     'At most one primary CTA — no dual VerdictBar + WorkflowBar buttons.',
     'Stage-driven single primary CTA: Discover → AI Check (daily-ops-checklist-run); Remediate → blocker-typed CTA (see below); Verify → Re-probe; Clear → Clear queue / Run daily check.',

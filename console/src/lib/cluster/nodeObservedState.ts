@@ -1,4 +1,4 @@
-import type { ClusterNode, NodePowerResponse } from '@/api/types'
+import type { ClusterNode, NodePowerResponse } from '@/api/clusterTypes'
 
 export type ObservedStateLamp = 'ok' | 'degraded' | 'fail' | 'unknown'
 

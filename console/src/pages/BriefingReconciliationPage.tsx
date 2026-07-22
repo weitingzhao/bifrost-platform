@@ -14,7 +14,7 @@ import { CatalogSection } from '@/components/CatalogSection'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { BriefingSyncLoopPanel } from '@/components/briefing/BriefingSyncLoopPanel'
 import { CatalogSpineDriftPanel } from '@/components/architecture/CatalogSpineDriftPanel'
-import type { OpsContextResponse } from '@/api/types'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   ANTI_PATTERNS,
   BRIEFING_RECONCILIATION_SOURCE,

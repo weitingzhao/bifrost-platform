@@ -1,4 +1,4 @@
-import { getPlatformOperatorToken } from '@/lib/platformAuth'
+import { authHeaders, parseError } from './client'
 
 export type BriefDecision = 'approved_run' | 'dismissed' | 'hold'
 export type BriefSuggestion = 'RUN' | 'DISMISS' | 'HOLD'
@@ -65,25 +65,6 @@ export type DecideBriefResponse = {
   brief: DecisionBrief
   item?: unknown
   drain?: OperateDrainStatus
-}
-
-async function parseError(prefix: string, r: Response): Promise<Error> {
-  let detail = `HTTP ${r.status}`
-  try {
-    const body = (await r.json()) as { error?: string; message?: string }
-    detail = body.error ?? body.message ?? detail
-  } catch {
-    // keep status detail
-  }
-  return new Error(`${prefix}: ${detail}`)
-}
-
-function authHeaders(json = false): Headers {
-  const headers = new Headers()
-  if (json) headers.set('Content-Type', 'application/json')
-  const token = getPlatformOperatorToken()
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  return headers
 }
 
 export const OPERATE_BRIEFS_QUERY_KEY = ['operate', 'briefs'] as const

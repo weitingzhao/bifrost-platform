@@ -5,13 +5,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@bifrost/ui'
-import type {
-  ClusterSummary,
-  EnvironmentSummary,
-  MatrixResponse,
-  OpsContextResponse,
-  TopologyResponse,
-} from '@/api/types'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { EnvironmentSummary, MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { EnvironmentStrip, type EnvFilter } from '@/components/EnvironmentStrip'
 import type { RuntimeMapNavigateOptions } from '@/lib/runtime-map/runtimeMapNavigation'
 import { RuntimeMapPage } from '@/pages/RuntimeMapPage'

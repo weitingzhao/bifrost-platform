@@ -47,11 +47,7 @@ func InitAgentTaskCatalog(configDir string) error {
 	}
 	out := make([]TaskDef, 0, len(file.Tasks))
 	for _, t := range file.Tasks {
-		out = append(out, TaskDef{
-			ID: t.ID, Scope: t.Scope, Label: t.Label, Tier: t.Tier, DefaultLevel: t.DefaultLevel,
-			Domain: t.Domain, Action: t.Action,
-			McpTools: t.McpTools, MissionSignals: t.MissionSignals,
-		})
+		out = append(out, TaskDef(t))
 	}
 	tasksMu.Lock()
 	tasksCached = out

@@ -50,8 +50,8 @@ func TestHandleCreateFromTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestTemplates(t, programsDir)
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	base := &ProgramBlueprint{
 		ID:          "control-room-ui",
@@ -71,8 +71,8 @@ func TestHandleCreateFromTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(programsDir, "control-room-ui.yaml"), data, 0o644); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(filepath.Join(programsDir, "control-room-ui.yaml"), data, 0o644); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 
 	h, err := NewHandler(configDir)
@@ -132,8 +132,8 @@ func TestHandleCreateFromTemplateUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestTemplates(t, programsDir)
-	os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { os.Unsetenv("PLATFORM_DATA_DIR") })
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	baseYAML := `id: control-room-ui
 title: Control Room UI

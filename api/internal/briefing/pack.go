@@ -50,11 +50,11 @@ func BuildSessionPack(
 
 	var b strings.Builder
 	b.WriteString("# Bifrost Ops — Session briefing (MCP/API)\n\n")
-	b.WriteString(fmt.Sprintf("Generated: %s UTC\n", time.Now().UTC().Format(time.RFC3339)))
-	b.WriteString(fmt.Sprintf("session_id: %s\n", orDash(req.SessionID)))
-	b.WriteString(fmt.Sprintf("program_id: %s\n", orDash(req.ProgramID)))
-	b.WriteString(fmt.Sprintf("phase_id: %s\n", orDash(req.PhaseID)))
-  b.WriteString(fmt.Sprintf("Pack size: **%s** · Track: **%s** · Lane: **%s** · Intent: **%s**\n", packSize, orDash(req.Track), orDash(req.Lane), intent))
+	fmt.Fprintf(&b, "Generated: %s UTC\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, "session_id: %s\n", orDash(req.SessionID))
+	fmt.Fprintf(&b, "program_id: %s\n", orDash(req.ProgramID))
+	fmt.Fprintf(&b, "phase_id: %s\n", orDash(req.PhaseID))
+  fmt.Fprintf(&b, "Pack size: **%s** · Track: **%s** · Lane: **%s** · Intent: **%s**\n", packSize, orDash(req.Track), orDash(req.Lane), intent)
 	b.WriteString("Queue stage: see Console Task Queue for active/completed lane items.\n\n")
 	b.WriteString("## Session binding\n\n")
 	b.WriteString("Progress reports must use this session_id with matching program_id + phase_id.\n")
@@ -63,16 +63,16 @@ func BuildSessionPack(
 
 	if ctx != nil {
 		b.WriteString("## Spine focus\n\n")
-		b.WriteString(fmt.Sprintf("- Headline: %s\n", ctx.Focus.Headline))
+		fmt.Fprintf(&b, "- Headline: %s\n", ctx.Focus.Headline)
 		if ctx.Focus.Blocker != "" {
-			b.WriteString(fmt.Sprintf("- Blocker: %s\n", ctx.Focus.Blocker))
+			fmt.Fprintf(&b, "- Blocker: %s\n", ctx.Focus.Blocker)
 		}
-		b.WriteString(fmt.Sprintf("- Active track: %s · Deployment phase: %s\n\n", ctx.Deployment.ActiveTrack, ctx.Deployment.Phase))
+		fmt.Fprintf(&b, "- Active track: %s · Deployment phase: %s\n\n", ctx.Deployment.ActiveTrack, ctx.Deployment.Phase)
 
 		if packSize == "full" {
 			b.WriteString("## Milestones (snapshot)\n\n")
 			for _, m := range ctx.Milestones {
-				b.WriteString(fmt.Sprintf("- [%s] %s — %s\n", m.Status, m.ID, m.Label))
+				fmt.Fprintf(&b, "- [%s] %s — %s\n", m.Status, m.ID, m.Label)
 			}
 			b.WriteString("\n")
 		}
@@ -91,18 +91,18 @@ func BuildSessionPack(
 				deg++
 			}
 		}
-		b.WriteString(fmt.Sprintf("- **%s**: ok %d · fail %d · degraded %d\n", m.Environment, ok, fail, deg))
+		fmt.Fprintf(&b, "- **%s**: ok %d · fail %d · degraded %d\n", m.Environment, ok, fail, deg)
 	}
 	b.WriteString("\n")
 
 	if clusterDetail != "" {
 		b.WriteString("## Cluster\n\n")
-		b.WriteString(fmt.Sprintf("- Reachability: %s — %s\n\n", clusterReach, clusterDetail))
+		fmt.Fprintf(&b, "- Reachability: %s — %s\n\n", clusterReach, clusterDetail)
 	}
 
 	if baselineAt != "" {
 		b.WriteString("## Session baseline\n\n")
-		b.WriteString(fmt.Sprintf("- Previous snapshot: %s\n\n", baselineAt))
+		fmt.Fprintf(&b, "- Previous snapshot: %s\n\n", baselineAt)
 	}
 
 	b.WriteString("## Agent protocol (required first reply)\n\n")

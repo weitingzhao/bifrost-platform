@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bot, ChevronRight, History, Loader2, Target } from 'lucide-react'
 import { Button, ConfirmDialog, DenseTag, SegmentControl, cn } from '@bifrost/ui'
-import { fetchRemediationJobs } from '@/api/platform'
+import { fetchRemediationJobs } from '@/api/remediation'
 import {
   formatSweepSummary,
   OPERATE_SWEEP_LAST_KEY,
   type SweepResponse,
 } from '@/api/operateBriefs'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
-import type { RemediationJob } from '@/api/types'
+import type { RemediationJob } from '@/api/remediationTypes'
 import { DailyOpsAgentLivePanel } from '@/components/task-mode/DailyOpsProcessStrip'
 import { GitDirtyDetailsPanel } from '@/components/task-mode/GitDirtyDetailsPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
@@ -43,6 +43,7 @@ import {
   remediationJobStatusLabel,
   remediationScopeShortLabel,
 } from '@/lib/remediation/remediationJobDisplay'
+import { useDailyOpsContext } from '@/components/task-mode/daily-ops/DailyOpsContext'
 
 export type DailyOpsExecutionTab = 'now' | 'queue-history'
 
@@ -50,9 +51,6 @@ export type DailyOpsExecutionPanelProps = {
   fleetClear: boolean
   /** When remediating with active job or open queue, strip uses warning tone. */
   remediating?: boolean
-  ambientJobId?: string | null
-  ambientJobScope?: string | null
-  onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   /** Pending start before ambient job id is assigned. */
   showStartingHint?: boolean
   /** Empty Now → Ops loop primary CTA (Discover / Remediate / …). */
@@ -65,16 +63,6 @@ export type DailyOpsExecutionPanelProps = {
   primaryBlocker?: DailyOpsBlocker | null
   /** Ops loop primary CTA label (same string as strip / empty-state button). */
   primaryActionLabel?: string | null
-  /** Checklist row Fix active id — correlates ambient job with item when present. */
-  checklistItemFixActiveId?: string | null
-  /** Verify / Re-probe — same as Ops loop verify CTA (invalidate cockpit). */
-  onVerifyReprobe?: () => void
-  /** Adopt an existing remediation job as ambient (Queue → Now). */
-  onAdoptJob?: (job: { id: string; scope: string; label: string }) => void
-  /** Start git-dirty propose-commit / stash agent (approval required). */
-  onProposeCommit?: () => void
-  onProposeStash?: () => void
-  proposeCommitPending?: boolean
 }
 
 function originTagProps(kind: QueueOriginKind): {
@@ -290,21 +278,23 @@ function QueueItemRow({
 export function DailyOpsExecutionPanel({
   fleetClear,
   remediating = false,
-  ambientJobId,
-  ambientJobScope,
-  onOpenAgentDesk,
   showStartingHint = false,
   onOpsLoopAction,
   opsLoopActionLabel = 'Ops loop →',
   primaryBlocker = null,
   primaryActionLabel = null,
-  checklistItemFixActiveId = null,
-  onVerifyReprobe,
-  onAdoptJob,
-  onProposeCommit,
-  onProposeStash,
-  proposeCommitPending = false,
 }: DailyOpsExecutionPanelProps) {
+  const {
+    ambientJobId,
+    ambientJobScope,
+    onOpenAgentDesk,
+    checklistItemFixActiveId = null,
+    onVerifyReprobe,
+    onStartAgentJob: onAdoptJob,
+    onProposeCommit,
+    onProposeStash,
+    proposeCommitPending = false,
+  } = useDailyOpsContext()
   const hasAmbientJob = ambientJobId != null && ambientJobId !== ''
   const preferNow =
     hasAmbientJob || showStartingHint || checklistItemFixActiveId != null
@@ -610,8 +600,8 @@ export function DailyOpsExecutionPanel({
           )}
         </div>
       ) : (
-        <div className="mt-2 flex flex-col gap-2.5">
-          <section aria-label="Operate queue">
+        <div className="mt-2 grid gap-2.5 md:grid-cols-2">
+          <section aria-label="Operate queue" className="min-w-0">
             <div className="mb-1 flex flex-wrap items-center gap-1.5">
               <span className="text-[var(--text-dense-caption)] font-medium text-foreground">
                 Queue
@@ -743,7 +733,7 @@ export function DailyOpsExecutionPanel({
                   : `No ${queueFilter === 'all' ? '' : `${queueFilter} `}items in this lane`}
               </p>
             ) : (
-              <ul className="m-0 list-none space-y-1 p-0">
+              <ul className="m-0 max-h-48 list-none space-y-1 overflow-y-auto p-0">
                 {visibleQueue.slice(0, 8).map(item => (
                   <QueueItemRow
                     key={item.id}
@@ -775,7 +765,7 @@ export function DailyOpsExecutionPanel({
             )}
           </section>
 
-          <section aria-label="Execution history">
+          <section aria-label="Execution history" className="min-w-0">
             <div className="mb-1 flex items-center gap-1.5">
               <History size={12} className="text-muted-foreground" aria-hidden />
               <span className="text-[var(--text-dense-caption)] font-medium text-foreground">
@@ -823,7 +813,7 @@ export function DailyOpsExecutionPanel({
                 </div>
               </div>
             ) : (
-              <ul className="m-0 max-h-40 list-none space-y-1 overflow-y-auto p-0">
+              <ul className="m-0 max-h-48 list-none space-y-1 overflow-y-auto p-0">
                 {historyRows.map(row => {
                   const tag = originTagProps(row.origin)
                   return (

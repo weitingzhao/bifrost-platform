@@ -1,4 +1,4 @@
-import type { ClusterNode, NodePowerResponse } from '@/api/types'
+import type { ClusterNode, NodePowerResponse } from '@/api/clusterTypes'
 import { buildNodeObservedStateRows, type ObservedStateLamp } from '@/lib/cluster/nodeObservedState'
 
 export type NodeObservedStateLayout = 'row' | 'column'
