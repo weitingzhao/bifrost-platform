@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Button, DenseTag, SidebarTrigger, SHELL_TOP_BAR_HEIGHT_CLASS, StatusLamp, cn } from '@bifrost/ui'
-import { Bot } from 'lucide-react'
+import { Bot, ChevronRight } from 'lucide-react'
 import type { ConsoleNavPlane } from '@/lib/consoleNavConfig'
 import {
   viewerEnvBadgeLabel,
@@ -43,6 +43,8 @@ function ViewerEnvChip({
 
 export function ConsoleHeader({
   plane,
+  pageTitle,
+  pageDescription,
   healthy,
   onRefresh,
   ambientAgent,
@@ -51,8 +53,12 @@ export function ConsoleHeader({
   onSelectTab,
   children,
 }: {
-  /** Sidebar plane — system domain label shown in header chrome. */
+  /** Sidebar plane — system domain (breadcrumb parent). */
   plane?: ConsoleNavPlane
+  /** Current page name (breadcrumb leaf; doubles as document h1 when PageHeader omitted). */
+  pageTitle?: string
+  /** Optional subtitle — shown as title tooltip on the page crumb. */
+  pageDescription?: string
   healthy: boolean | undefined
   onRefresh: () => void
   /** Global Agent Task → Execution Dock (always available). */
@@ -65,6 +71,8 @@ export function ConsoleHeader({
   /** Optional extra right-side slot (rarely used). */
   children?: ReactNode
 }) {
+  const showBreadcrumb = plane != null || (pageTitle != null && pageTitle !== '')
+
   return (
     <header
       className={cn(
@@ -74,10 +82,32 @@ export function ConsoleHeader({
     >
       <SidebarTrigger />
 
-      {plane != null && (
-        <span className="hidden shrink-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-muted-foreground lg:inline">
-          {plane}
-        </span>
+      {showBreadcrumb && (
+        <nav
+          aria-label="Breadcrumb"
+          className="flex min-w-0 max-w-[min(28rem,45vw)] items-center gap-1"
+        >
+          {plane != null && (
+            <span className="hidden shrink-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+              {plane}
+            </span>
+          )}
+          {plane != null && pageTitle != null && pageTitle !== '' && (
+            <ChevronRight
+              size={12}
+              className="hidden shrink-0 text-muted-foreground/70 sm:inline"
+              aria-hidden
+            />
+          )}
+          {pageTitle != null && pageTitle !== '' && (
+            <h1
+              className="m-0 truncate text-[var(--text-dense-label)] font-semibold tracking-tight text-foreground"
+              title={pageDescription}
+            >
+              {pageTitle}
+            </h1>
+          )}
+        </nav>
       )}
 
       <div className="min-w-0 flex-1" />
@@ -119,7 +149,7 @@ export function ConsoleHeader({
 
       {children != null ? <div className="shrink-0">{children}</div> : null}
 
-      {/* Slot 3 — User (Session · Governance · Shell) */}
+      {/* Slot 3 — User (Session · Guides · Shell) */}
       <UserMenu
         onSelectTab={onSelectTab}
         opsApiHealthy={healthy}

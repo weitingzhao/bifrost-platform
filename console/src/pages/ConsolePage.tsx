@@ -125,6 +125,7 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Live capability readiness — which agent scopes are ready, running, awaiting approval, or failed.',
 }
 
+
 const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'agent-desk',
   'autonomous-skills',
@@ -524,6 +525,8 @@ function ConsolePageInner() {
         <div className="console-shell-chrome sticky top-0 z-20 shrink-0 bg-card">
           <ConsoleHeader
             plane={consoleNavPlane(viewTab)}
+            pageTitle={VIEW_TITLES[viewTab]}
+            pageDescription={VIEW_DESCRIPTIONS[viewTab]}
             healthy={healthQuery.data}
             onRefresh={refreshAll}
             viewerEnv={viewerEnv}
@@ -723,15 +726,7 @@ function ConsolePageInner() {
           </>
         )}
 
-        {viewTab === 'delivery-board' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES['delivery-board']}
-              description={VIEW_DESCRIPTIONS['delivery-board']}
-            />
-            <DeliveryBoardPage />
-          </>
-        )}
+        {viewTab === 'delivery-board' && <DeliveryBoardPage />}
 
         {viewTab === 'trade-release' && (
           <>
