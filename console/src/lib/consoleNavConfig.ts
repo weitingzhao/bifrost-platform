@@ -164,8 +164,8 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
 ]
 
 /**
- * Governance reference library — shell User menu (not sidebar rail).
- * Keep in sync with CONSOLE_NAV_PLANE_BY_TAB Governance tabs.
+ * Governance / Guides reference library — browsed via Settings-style Guides shell
+ * (User menu → Guides). Keep in sync with CONSOLE_NAV_PLANE_BY_TAB Governance tabs.
  */
 export const GOVERNANCE_MENU_GROUPS: ReadonlyArray<{
   label: string
@@ -197,6 +197,9 @@ export const GOVERNANCE_MENU_GROUPS: ReadonlyArray<{
     ],
   },
 ]
+
+/** Default landing tab when opening Guides from the User menu. */
+export const GUIDES_DEFAULT_TAB = 'flywheel-vision' as const
 
 export type ConsoleNavPlane =
   | 'Mission Control'

@@ -11,14 +11,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { GOVERNANCE_MENU_GROUPS } from '@/lib/consoleNavConfig'
+import { GUIDES_DEFAULT_TAB } from '@/lib/consoleNavConfig'
 import {
   platformAuthAuthenticatedBadgeClass,
   platformAuthRoleBadgeClass,
 } from '@/lib/platformAuthUi'
 
 export type UserMenuProps = {
-  /** Navigate to a console tab (Governance items, etc.). */
+  /** Navigate to a console tab (Guides landing, etc.). */
   onSelectTab: (tabId: string) => void
   /** Ops platform-api health. */
   opsApiHealthy: boolean | undefined
@@ -28,8 +28,8 @@ export type UserMenuProps = {
 }
 
 /**
- * Shell User menu — Session (auth) · Governance (reference lib) · Shell (API / refresh).
- * Replaces sidebar Governance rail + header PlatformAuthBar / Ops API / Refresh.
+ * Shell User menu — Session · Guides (single entry) · Shell.
+ * Governance doc detail lives in Guides settings nav, not this dropdown.
  */
 export function UserMenu({
   onSelectTab,
@@ -90,14 +90,14 @@ export function UserMenu({
               : 'border-border',
             className,
           )}
-          title="User menu — session, governance, shell"
+          title="User menu — session, guides, shell"
           aria-label="User menu"
         >
           <User size={14} aria-hidden />
           <span className="text-[var(--text-dense-caption)] font-semibold">User</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-64" align="end" sideOffset={6}>
+      <DropdownMenuContent className="w-56" align="end" sideOffset={6}>
         <DropdownMenuLabel>Session</DropdownMenuLabel>
         <DropdownMenuGroup>
           <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
@@ -171,29 +171,13 @@ export function UserMenu({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuLabel className="flex items-center gap-1.5">
-          <BookOpen size={12} aria-hidden />
-          Governance
-        </DropdownMenuLabel>
-        {GOVERNANCE_MENU_GROUPS.map(group => (
-          <DropdownMenuGroup key={group.label}>
-            <DropdownMenuLabel className="py-0.5 text-[10px] uppercase tracking-wide opacity-70">
-              {group.label}
-            </DropdownMenuLabel>
-            {group.items.map(item => {
-              const Icon = item.icon
-              return (
-                <DropdownMenuItem
-                  key={item.id}
-                  onSelect={() => handleSelectTab(item.id)}
-                >
-                  <Icon aria-hidden />
-                  {item.label}
-                </DropdownMenuItem>
-              )
-            })}
-          </DropdownMenuGroup>
-        ))}
+        <DropdownMenuItem onSelect={() => handleSelectTab(GUIDES_DEFAULT_TAB)}>
+          <BookOpen aria-hidden />
+          Guides
+          <span className="ml-auto text-[var(--text-dense-meta)] text-muted-foreground">
+            Docs
+          </span>
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 

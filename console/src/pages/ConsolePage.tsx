@@ -27,6 +27,7 @@ import { type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
 import { ConsoleHeader, OpsContextBar } from '@/components/ConsoleHeader'
 import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar'
+import { GuidesSettingsNav } from '@/components/GuidesSettingsNav'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
@@ -807,66 +808,67 @@ function ConsolePageInner() {
         {viewTab === 'plugin-gallery' && <PluginGalleryPage />}
 
         {isGovernanceTab && (
-          <div className="flex items-center justify-between gap-3">
-            <PageHeader
-              title={VIEW_TITLES[viewTab]}
-              description={
-                viewTab === 'flywheel-vision' ? 'WHERE — Ultimate destination: Trade + Ops converge into unified AI-native experience via three-layer Agents.'
-                  : viewTab === 'blueprint' ? 'HOW — Architectural principles, control-plane strategy, authorization model, and design rules toward the Vision.'
-                  : viewTab === 'roadmap' ? 'WHEN — Phased execution plan: hardware roles, K3s stages, GitOps migration, AI ops timeline.'
-                  : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
-                  : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
-                  : viewTab === 'agent-system'
-                    ? 'Single runtime, capability domains, task chains, and registry — the map before Agent Protocol and MCP Contract.'
-                  : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
-                  : viewTab === 'briefing-reconciliation'
-                    ? 'Spine projection discipline — source of truth layers, reconcile gate (BRIEFING_STALE), Sync vs Health, drift layer map.'
-                  : viewTab === 'mcp-contract'
-                    ? 'MCP tool catalog, Cursor setup, and governance contract (permissions, deny-list).'
-                  : 'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.'
-              }
+          <div className="flex min-w-0 gap-4">
+            <GuidesSettingsNav
+              activeTab={viewTab}
+              onSelect={tabId => {
+                if (isConsoleViewTab(tabId)) setViewTab(tabId)
+              }}
             />
-            <Button
-              variant="ghost"
-              size="xs"
-              className="shrink-0"
-              onClick={() => void handleCopyAllGovernance()}
-            >
-              {govCopyState === 'copied' ? 'All copied!' : govCopyState === 'error' ? 'Copy failed' : 'Copy All for LLM'}
-            </Button>
+            <div className="flex min-w-0 flex-1 flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <PageHeader
+                  title={VIEW_TITLES[viewTab]}
+                  description={
+                    viewTab === 'flywheel-vision' ? 'WHERE — Ultimate destination: Trade + Ops converge into unified AI-native experience via three-layer Agents.'
+                      : viewTab === 'blueprint' ? 'HOW — Architectural principles, control-plane strategy, authorization model, and design rules toward the Vision.'
+                      : viewTab === 'roadmap' ? 'WHEN — Phased execution plan: hardware roles, K3s stages, GitOps migration, AI ops timeline.'
+                      : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
+                      : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
+                      : viewTab === 'agent-system'
+                        ? 'Single runtime, capability domains, task chains, and registry — the map before Agent Protocol and MCP Contract.'
+                      : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
+                      : viewTab === 'briefing-reconciliation'
+                        ? 'Spine projection discipline — source of truth layers, reconcile gate (BRIEFING_STALE), Sync vs Health, drift layer map.'
+                      : viewTab === 'mcp-contract'
+                        ? 'MCP tool catalog, Cursor setup, and governance contract (permissions, deny-list).'
+                      : 'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.'
+                  }
+                />
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="shrink-0"
+                  onClick={() => void handleCopyAllGovernance()}
+                >
+                  {govCopyState === 'copied' ? 'All copied!' : govCopyState === 'error' ? 'Copy failed' : 'Copy All for LLM'}
+                </Button>
+              </div>
+
+              {viewTab === 'blueprint' && <BlueprintPage context={contextQuery.data} />}
+              {viewTab === 'flywheel-vision' && <DualFlywheelVisionPage />}
+              {viewTab === 'roadmap' && <RoadmapPage />}
+              {viewTab === 'ai-compute' && <AiComputeStrategyPage />}
+              {viewTab === 'platform-standards' && <StandardsPage />}
+              {viewTab === 'agent-system' && (
+                <AgentSystemPage
+                  onOpenDoctrine={tab => setViewTab(tab === 'mcp-contract' ? 'mcp-contract' : 'agent-protocol')}
+                />
+              )}
+              {viewTab === 'agent-protocol' && (
+                <AgentProtocolPage
+                  onOpenDeliveryBoard={() => setViewTab('delivery-board')}
+                  onOpenAgentSystem={() => setViewTab('agent-system')}
+                />
+              )}
+              {viewTab === 'briefing-reconciliation' && (
+                <BriefingReconciliationPage context={contextQuery.data} onOpenAgentDesk={openAgentDesk} />
+              )}
+              {viewTab === 'mcp-contract' && <McpContractPage />}
+              {viewTab === 'design-system' && <DesignSystemPage />}
+            </div>
           </div>
         )}
-
-        {viewTab === 'blueprint' && <BlueprintPage context={contextQuery.data} />}
-
-        {viewTab === 'flywheel-vision' && <DualFlywheelVisionPage />}
-
-        {viewTab === 'roadmap' && <RoadmapPage />}
-
-        {viewTab === 'ai-compute' && <AiComputeStrategyPage />}
-
-        {viewTab === 'platform-standards' && <StandardsPage />}
-
-        {viewTab === 'agent-system' && (
-          <AgentSystemPage
-            onOpenDoctrine={tab => setViewTab(tab === 'mcp-contract' ? 'mcp-contract' : 'agent-protocol')}
-          />
-        )}
-
-        {viewTab === 'agent-protocol' && (
-          <AgentProtocolPage
-            onOpenDeliveryBoard={() => setViewTab('delivery-board')}
-            onOpenAgentSystem={() => setViewTab('agent-system')}
-          />
-        )}
-
-        {viewTab === 'briefing-reconciliation' && (
-          <BriefingReconciliationPage context={contextQuery.data} onOpenAgentDesk={openAgentDesk} />
-        )}
-
-        {viewTab === 'mcp-contract' && <McpContractPage />}
-
-        {viewTab === 'design-system' && <DesignSystemPage />}
 
         <ControlRoomRuntimeMapSheet
           open={runtimeMapSheetOpen}
