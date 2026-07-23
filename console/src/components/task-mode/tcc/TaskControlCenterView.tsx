@@ -65,6 +65,7 @@ export type TaskControlCenterViewProps = {
   onOpenPromote?: () => void
   onOpenDelivery?: () => void
   onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
+  onExpandAgentDock?: () => void
   ambientJobId?: string | null
   ambientJobScope?: string | null
   onStartAgentJob?: (job: { id: string; scope: string; label: string }) => void
@@ -393,6 +394,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
           onOpenAgentDesk={arg =>
             props.onOpenAgentDesk?.(arg ?? props.ambientJobId ?? undefined)
           }
+          onExpandAgentDock={props.onExpandAgentDock}
           ambientJobId={props.ambientJobId}
           ambientJobScope={props.ambientJobScope}
           onStartAgentJob={isDailyOps ? props.onStartAgentJob : undefined}

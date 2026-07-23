@@ -28,6 +28,8 @@ export type DailyOpsContextValue = {
   ambientJobId?: string | null
   ambientJobScope?: string | null
   onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
+  /** Expand shell Agent Execution Dock — stay on Daily Ops board. */
+  onExpandAgentDock?: () => void
   /** Adopt an existing remediation job as ambient (Queue → Now). */
   onStartAgentJob?: (job: { id: string; scope: string; label: string }) => void
 

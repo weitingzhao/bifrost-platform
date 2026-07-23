@@ -117,6 +117,11 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
     action: 'UniFi Integration API Key write path on UCG 10.4.57 (site UUID blocked — use Session v2 per spine D9)',
     scope: 'Ops mode',
   },
+  {
+    action:
+      'Forced Agent Desk tab switch on Agent Fix start/running — use shell Agent Execution Dock (ambientJob + Expand dock); Agent Desk is archive only (explicit Open in Agent Desk)',
+    scope: 'Ops Console shell',
+  },
 ]
 
 /** Wave 3 P0 — Owner-locked before implementation (spine D11, D12). */
@@ -463,7 +468,7 @@ export const DAILY_OPS_FLEET_DESK = {
     'Remediate primary CTA follows highest-priority Checklist×Fleet blocker (fail>degraded; manual/observe before AI-fixable at same severity): git-bridge dirty → Propose commit (git-dirty-remediate, approval required); other full_auto/semi_auto+scope → Agent Fix / AI Fix · Operator Plan; manual/observe/null-scope → Manual next step (no sparkles AI Fix); mixed → primary manual + outline Also: Propose commit (git dirty) / Also: AI Fix (sibling).',
     'Engineer CRITICAL: fleet cell Agent Fix stays disabled; git dirty uses Propose commit / Stash (not magic AI Fix that clears dirty); other AI-fixable → Operator Plan; else Manual next (e.g. Mac seat). Full Operator Plane page is escape hatch only.',
     'Full Operator Plane page is secondary escape (MCP / host deploy / self-smoke) — not the default primary CTA.',
-    'Agent Fix running: CTA becomes View agent; compact Agent progress panel (phases + elapsed) links to Agent Desk.',
+    'Agent Fix running: CTA becomes Expand dock; shell Agent Execution Dock is SSOT for live feed/approvals; in-page panel is one-line summary only; Agent Desk is archive (explicit Open in Agent Desk).',
     'Verify = re-probe fleet after Agent Fix; Clear = fleetClear + operate queue open===0.',
     'W3 Auto-remediate default OFF — Assisted “Ready to Agent Fix” hint only; never auto-trigger.',
     'Checklist AI Check (scope daily-ops-checklist-run): Ops loop owns the green primary; Checklist header keeps muted Re-check + Ask for AI secondary — never two magic-wand primaries.',
@@ -493,7 +498,7 @@ export const DAILY_OPS_FLEET_DESK = {
     'Q6: Compact group rollups on board; Detail below board lists standards by group; no GET API strings.',
     'Q7: Single Ops loop strip (no dual Verdict+Workflow cards); circle stepper shows done/active/blocked; at most one primary CTA.',
     'Q8: Engineer CRITICAL → blocker-typed CTA (manual-next for seat/manual/observe; Propose commit for git dirty; AI Fix · Operator Plan when other AI-fixable); Full page → secondary; canOperate gates; D10 copy on remediate.',
-    'Q9: Discover strip primary is AI Check; Clear idle offers Run daily check (same Checklist probe); Agent Fix in flight shows progress panel + View agent (not spinner-only).',
+    'Q9: Discover strip primary is AI Check; Clear idle offers Run daily check (same Checklist probe); Agent Fix in flight expands Execution Dock (not forced Agent Desk tab); in-page summary + Expand dock.',
     'Q10: Strip AI Check / Checklist Re-check start daily-ops-checklist-run; git dirty handoff uses git-dirty-remediate; Operator Plane Fix stays separate; no dual green AI Check+AI Fix.',
     'Q11: Notes show fleet≠agent on polarity mismatch; Action opens job/queue; Queued (busy) when auto demoted by concurrency; Queue Dismiss available with evidence for stale/resolved.',
     'Q12: Non-ok row shows Fix (Ops Agent when fixScope) and/or Ask for AI (Cursor failover copy); header Ask for AI packs all non-ok items.',

@@ -48,12 +48,12 @@ export function ConsoleHeader({
           size="sm"
           className="h-7 shrink-0 gap-1.5 border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_45%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_10%,var(--card))] px-2 text-[var(--text-dense-caption)]"
           onClick={ambientAgent.onOpen}
-          title="Open Agent Desk for the running ambient task"
+          title="Expand Agent Execution Dock for the running ambient task"
         >
           <StatusLamp value="degraded" kind="reach" />
           <Bot size={12} aria-hidden />
           <span className="hidden max-w-[9rem] truncate sm:inline">{ambientAgent.label}</span>
-          <span className="font-medium text-foreground">View agent →</span>
+          <span className="font-medium text-foreground">Expand dock</span>
         </Button>
       )}
 

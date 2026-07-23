@@ -27,6 +27,7 @@ export function useChecklistItemFix({
   onStartAgentJob,
   onNavigate,
   onOpenAgentDesk,
+  onExpandAgentDock,
   fleet,
   setFleetFixCell,
   fleetFixCellRef,
@@ -172,6 +173,10 @@ export function useChecklistItemFix({
       return
     }
     if (action.kind === 'view-agent') {
+      if (onExpandAgentDock != null) {
+        onExpandAgentDock()
+        return
+      }
       onOpenAgentDesk?.(ambientJobId ?? undefined)
       return
     }

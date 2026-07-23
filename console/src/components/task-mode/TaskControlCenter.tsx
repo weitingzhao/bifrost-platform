@@ -64,6 +64,7 @@ export function TaskControlCenter({
   onOpenPromote,
   onOpenDelivery,
   onOpenAgentDesk,
+  onExpandAgentDock,
   ambientJobId,
   ambientJobScope,
   onStartAgentJob,
@@ -134,6 +135,7 @@ export function TaskControlCenter({
 
   const fix = useChecklistItemFix({
     isDailyOps, canOperate, ambientJobId, ambientJobScope, onStartAgentJob, onNavigate, onOpenAgentDesk,
+    onExpandAgentDock,
     fleet, setFleetFixCell, fleetFixCellRef, dailyOpsTargetCell, dailyOpsFixScope,
     clusterForFixQ: q.clusterForFixQ, serviceReadinessForFixQ: q.serviceReadinessForFixQ,
     runnerHealthy: q.runnerHealthy, checklistCheckAmbient: q.checklistCheckAmbient,
@@ -244,6 +246,7 @@ export function TaskControlCenter({
       onOpenPromote={onOpenPromote}
       onOpenDelivery={onOpenDelivery}
       onOpenAgentDesk={onOpenAgentDesk}
+      onExpandAgentDock={onExpandAgentDock}
       ambientJobId={ambientJobId}
       ambientJobScope={ambientJobScope}
       onStartAgentJob={onStartAgentJob}

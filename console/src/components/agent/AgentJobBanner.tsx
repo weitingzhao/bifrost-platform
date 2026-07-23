@@ -1,20 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Button, StatusLamp, cn } from '@bifrost/ui'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { RemediationJob } from '@/api/remediationTypes'
-import { respondRemediationJob } from '@/api/remediation'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
-import { useRemediationStream } from '@/hooks/useRemediationStream'
+import { useAgentJobLiveSession } from '@/hooks/useAgentJobLiveSession'
 import {
-  bannerStatusLabel,
-  deriveAgentFeedStats,
-  deriveAgentLiveFeed,
   feedKindLabel,
-  formatAgentElapsed,
   formatFeedEventLine,
-  recentAgentFeedEvents,
 } from '@/lib/agent/agentLiveFeed'
 
 interface AgentJobBannerProps {
@@ -27,80 +20,26 @@ interface AgentJobBannerProps {
   onComplete?: (job: RemediationJob) => void
 }
 
-function reachFromPhase(job: RemediationJob | null): 'ok' | 'degraded' | 'fail' | 'unknown' {
-  if (job == null) return 'unknown'
-  if (job.status === 'done') return 'ok'
-  if (job.status === 'failed') return 'fail'
-  if (job.status === 'cancelled') return 'degraded'
-  return 'degraded'
-}
-
+/** @deprecated Prefer AgentExecutionDock for shell chrome. Kept for inline/legacy embeds. */
 export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, onComplete }: AgentJobBannerProps) {
-  const qc = useQueryClient()
-  const completedRef = useRef<string | null>(null)
-  const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [expanded, setExpanded] = useState(false)
-  const [nowMs, setNowMs] = useState(() => Date.now())
+  const {
+    job,
+    connected,
+    error,
+    isTerminal,
+    pendingApproval,
+    liveFeed,
+    feedStats,
+    recentEvents,
+    elapsed,
+    bannerVariant,
+    statusLabel,
+    respondPending,
+    respond,
+    reach,
+  } = useAgentJobLiveSession(jobId, { onComplete, onDismiss })
 
-  const { job, events, connected, error } = useRemediationStream(jobId)
-
-  const isTerminal = job?.status === 'done' || job?.status === 'failed' || job?.status === 'cancelled'
-  const isApproval = job?.phase === 'awaiting_approval' && !isTerminal
-
-  const pendingApproval = useMemo(() => {
-    if (!isApproval) return null
-    for (let i = events.length - 1; i >= 0; i--) {
-      const ev = events[i]
-      if (ev.type === 'approval_request') return ev
-      if (ev.type === 'status' && ev.text.startsWith('Operator selected:')) return null
-    }
-    return null
-  }, [events, isApproval])
-
-  const liveFeed = useMemo(() => deriveAgentLiveFeed(events), [events])
-  const feedStats = useMemo(() => deriveAgentFeedStats(events), [events])
-  const recentEvents = useMemo(() => recentAgentFeedEvents(events), [events])
-  const elapsed = formatAgentElapsed(job?.created_at, nowMs)
-
-  const respondMutation = useMutation({
-    mutationFn: ({ optionId, note, commitMessage }: { optionId: string; note?: string; commitMessage?: string }) =>
-      respondRemediationJob(jobId, optionId, note, commitMessage),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-    },
-  })
-
-  useEffect(() => {
-    if (isTerminal) return
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
-    return () => window.clearInterval(id)
-  }, [isTerminal])
-
-  useEffect(() => {
-    if (job == null || !isTerminal || completedRef.current === job.id) return
-    completedRef.current = job.id
-    onComplete?.(job)
-    void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-  }, [job, isTerminal, onComplete, qc])
-
-  useEffect(() => {
-    if (job?.status === 'done') {
-      autoDismissRef.current = setTimeout(() => onDismiss(), 5000)
-    }
-    return () => {
-      if (autoDismissRef.current != null) clearTimeout(autoDismissRef.current)
-    }
-  }, [job?.status, onDismiss])
-
-  const bannerVariant = isTerminal
-    ? job?.status === 'done'
-      ? 'done'
-      : 'failed'
-    : isApproval
-      ? 'approval'
-      : 'running'
-
-  const statusLabel = bannerStatusLabel(bannerVariant, job)
   const showInlineFeed = !isTerminal && liveFeed != null
   const showFeedPlaceholder = !isTerminal && liveFeed == null && connected
   const showStats = !isTerminal && (feedStats.toolCalls > 0 || feedStats.eventCount > 0)
@@ -108,13 +47,13 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
   return (
     <div className={cn('agent-job-banner', `agent-job-banner--${bannerVariant}`, expanded && 'agent-job-banner--expanded')}>
       <div className="agent-job-banner__head">
-        <StatusLamp value={reachFromPhase(job)} kind="reach" />
+        <StatusLamp value={reach} kind="reach" />
         <span className="agent-job-banner__chrome-kicker">Agent task</span>
         {taskLabel != null && taskLabel !== '' && (
           <span className="agent-job-banner__task-label">{taskLabel}</span>
         )}
         <span className="agent-job-banner__label">{statusLabel}</span>
-        {showInlineFeed && (
+        {showInlineFeed && liveFeed != null && (
           <div className="agent-job-banner__feed">
             <span className={cn('agent-job-banner__feed-kind', `agent-job-banner__feed-kind--${liveFeed.kind}`)}>
               {feedKindLabel(liveFeed.kind)}
@@ -215,9 +154,9 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
           <RemediationApprovalBlock
             event={pendingApproval}
             compact
-            submitting={respondMutation.isPending}
+            submitting={respondPending}
             onRespond={(optionId, note, commitMessage) =>
-              respondMutation.mutate({ optionId, note, commitMessage })
+              respond(optionId, note, commitMessage)
             }
           />
         </div>

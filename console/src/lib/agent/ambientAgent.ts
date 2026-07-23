@@ -11,6 +11,8 @@ export type AmbientAgentShellProps = {
   /** Scope of the ambient job (e.g. trade-deploy) — used to open Launch Live View. */
   ambientJobScope?: string | null
   onStartAgentJob?: (job: AmbientAgentJob) => void
+  /** Expand the shell Agent Execution Dock (in-place Fix) — do not force Agent Desk tab. */
+  onExpandAgentDock?: () => void
 }
 
 export function ambientAgentBlockedReason(
@@ -19,7 +21,7 @@ export function ambientAgentBlockedReason(
   onStartAgentJob?: unknown,
 ): string | undefined {
   if (!canOperate) return 'Operator token required'
-  if (ambientJobId != null) return 'Agent task already running — see banner above'
+  if (ambientJobId != null) return 'Agent task already running — expand the execution dock'
   if (onStartAgentJob == null) return 'Ambient agent shell not available'
   return undefined
 }

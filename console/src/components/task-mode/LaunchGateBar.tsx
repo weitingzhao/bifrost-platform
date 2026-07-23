@@ -20,6 +20,9 @@ export type LaunchGateBarProps = {
   agentFixDisabled?: boolean
   agentFixTitle?: string
   agentFixActiveLabel?: string
+  /** When Fix is already running — expand Execution Dock (preferred over Desk). */
+  onExpandAgentDock?: () => void
+  /** Explicit archive escape — do not use for Fix-running CTA. */
   onOpenAgentDesk?: () => void
   /** Primary launch CTA when GO; when NO_GO shows blocked outline control. */
   onLaunch?: () => void
@@ -57,7 +60,8 @@ export function LaunchGateBar({
   agentFixActive = false,
   agentFixDisabled,
   agentFixTitle,
-  agentFixActiveLabel = 'View agent →',
+  agentFixActiveLabel = 'Expand dock',
+  onExpandAgentDock,
   onOpenAgentDesk,
   onLaunch,
   launchLabel = 'Agent Deploy',
@@ -84,13 +88,13 @@ export function LaunchGateBar({
     verdict.kind === 'NO_GO' && (agentFixActive || agentFixPending)
       ? agentFixPending
         ? 'Starting Agent Fix…'
-        : 'Agent Fix running — follow chrome banner'
+        : 'Agent Fix running — expand execution dock'
       : verdict.title
 
   const canLaunch = verdict.kind === 'GO' && !launchDisabled
   const showFix =
     verdict.kind === 'NO_GO' && verdict.blockKind !== 'auth' && onAgentFix != null
-  /** When Fix is already running, local CTA is a shortcut to Desk; primary surface is chrome banner. */
+  /** When Fix is already running, CTA expands the shell Execution Dock. */
   const fixRunning = agentFixActive && !agentFixPending
 
   const fixButton = showFix ? (
@@ -103,12 +107,16 @@ export function LaunchGateBar({
       disabled={agentFixDisabled && !agentFixActive}
       title={
         fixRunning
-          ? 'Open Agent Desk — live progress is also in the chrome banner above'
+          ? 'Expand Agent Execution Dock — live progress stays on this board'
           : (agentFixTitle ?? 'Start Cluster · Remediate')
       }
       onClick={() => {
-        if (fixRunning && onOpenAgentDesk != null) {
-          onOpenAgentDesk()
+        if (fixRunning) {
+          if (onExpandAgentDock != null) {
+            onExpandAgentDock()
+            return
+          }
+          onOpenAgentDesk?.()
           return
         }
         onAgentFix()

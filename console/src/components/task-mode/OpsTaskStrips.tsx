@@ -146,6 +146,8 @@ export type OpsTaskStripsProps = {
   launchAgentFixDisabled?: boolean
   launchAgentFixTitle?: string
   onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
+  /** Expand shell Agent Execution Dock (Fix running — stay on board). */
+  onExpandAgentDock?: () => void
   /** Ambient agent job — opens Launch Live View for trade-deploy / release scope. */
   ambientJobId?: string | null
   ambientJobScope?: string | null
@@ -218,6 +220,7 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     satelliteLaunchAgentFixDisabled,
     satelliteLaunchAgentFixTitle,
     onOpenAgentDesk,
+    onExpandAgentDock,
     ambientJobId,
     ambientJobScope,
     pipelineRunsNamespace,
@@ -344,6 +347,7 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
         satelliteLaunchAgentFixDisabled={satelliteLaunchAgentFixDisabled}
         satelliteLaunchAgentFixTitle={satelliteLaunchAgentFixTitle}
         onOpenAgentDesk={onOpenAgentDesk}
+        onExpandAgentDock={onExpandAgentDock}
         readinessCanOperate={readinessCanOperate}
         onAgentFixStg={onAgentFixStg}
         onAgentFixProd={onAgentFixProd}
@@ -416,6 +420,7 @@ function DailyOpsFleetDesk({
     checklistItemFixActiveId,
     onOpenOperateQueue,
     onOpenAgentDesk,
+    onExpandAgentDock,
     ambientJobId,
     ambientJobScope,
     onStartAgentJob,
@@ -514,6 +519,7 @@ function DailyOpsFleetDesk({
     ambientJobId,
     ambientJobScope,
     onOpenAgentDesk,
+    onExpandAgentDock,
     onStartAgentJob,
     onProposeCommit,
     onProposeStash,

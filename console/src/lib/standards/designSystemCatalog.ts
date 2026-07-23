@@ -207,6 +207,12 @@ export const AGENT_GOVERNANCE_ASSETS: AgentAssetRow[] = [
   { asset: 'docs/DENSE_UI.md', repo: 'bifrost-trade-frontend', purpose: 'Full implementation reference (665 lines)' },
   { asset: 'docs/TECH_STACK.md', repo: 'bifrost-trade-frontend', purpose: 'Locked stack + governance (authoritative)' },
   { asset: 'UiDesignSystemPage.tsx', repo: 'bifrost-trade-frontend', purpose: 'Living visual contract with Copy Prompt per section' },
+  {
+    asset: 'console/src/components/agent/AgentExecutionDock.tsx',
+    repo: 'bifrost-platform',
+    purpose:
+      'Shell SSOT for live Agent Fix (Collapsed/Working/Maximized). Agent Desk = archive only; Fix defaults to in-place Dock — forbid forced agent-desk tab switch.',
+  },
 ]
 
 /* ── LLM pack builder ── */

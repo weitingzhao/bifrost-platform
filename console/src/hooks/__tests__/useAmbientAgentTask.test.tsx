@@ -17,7 +17,7 @@ describe('ambientAgentBlockedReason', () => {
 
   it('blocks when an ambient job is already running', () => {
     expect(ambientAgentBlockedReason(true, 'job-1', () => {})).toBe(
-      'Agent task already running — see banner above',
+      'Agent task already running — expand the execution dock',
     )
   })
 

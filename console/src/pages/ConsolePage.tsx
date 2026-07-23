@@ -3,7 +3,7 @@ import { Button, PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipPr
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { RemediationJob } from '@/api/remediationTypes'
-import { AgentJobBanner } from '@/components/agent/AgentJobBanner'
+import { AgentExecutionDock } from '@/components/agent/AgentExecutionDock'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useLaneCatalog } from '@/hooks/useLaneCatalog'
 import { useAgentTaskCatalog } from '@/hooks/useAgentTaskCatalog'
@@ -193,6 +193,8 @@ function ConsolePageInner() {
   const [agentDeskFocusDecisionBriefs, setAgentDeskFocusDecisionBriefs] = useState(false)
   /** Shell-level ambient agent job — survives tab switches. */
   const [ambientJob, setAmbientJob] = useState<AmbientAgentJob | null>(null)
+  /** Agent Execution Dock expanded (working/maximized); collapsed when false. */
+  const [dockExpanded, setDockExpanded] = useState(false)
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
   const [runtimeMapSheetOpen, setRuntimeMapSheetOpen] = useState(false)
   const qc = useQueryClient()
@@ -428,8 +430,13 @@ function ConsolePageInner() {
     setViewTab('agent-desk')
   }, [setViewTab])
 
+  const expandAgentDock = useCallback(() => {
+    setDockExpanded(true)
+  }, [])
+
   const startAmbientAgentJob = useCallback((job: AmbientAgentJob) => {
     setAmbientJob(job)
+    setDockExpanded(true)
   }, [])
 
   const handleAmbientJobComplete = useCallback(
@@ -512,7 +519,7 @@ function ConsolePageInner() {
               ambientJob != null
                 ? {
                     label: ambientJob.label,
-                    onOpen: () => openAgentDesk(ambientJob.id),
+                    onOpen: expandAgentDock,
                   }
                 : null
             }
@@ -528,17 +535,6 @@ function ConsolePageInner() {
                 onOpenRuntimeMap={openRuntimeMap}
               />
             </OpsContextBar>
-          )}
-          {ambientJob != null && (
-            <div className="console-shell-chrome__ambient-agent" role="region" aria-label="Active agent task">
-              <AgentJobBanner
-                jobId={ambientJob.id}
-                taskLabel={ambientJob.label}
-                onDismiss={() => setAmbientJob(null)}
-                onOpenAgentDesk={id => openAgentDesk(id)}
-                onComplete={handleAmbientJobComplete}
-              />
-            </div>
           )}
         </div>
       <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
@@ -670,6 +666,7 @@ function ConsolePageInner() {
             ambientJobScope={ambientJob?.scope ?? null}
             onStartAgentJob={startAmbientAgentJob}
             onOpenAgentDesk={openAgentDesk}
+            onExpandAgentDock={expandAgentDock}
           />
         )}
 
@@ -877,6 +874,21 @@ function ConsolePageInner() {
           onOpenCluster={openCluster}
         />
       </PageShell>
+      {ambientJob != null && (
+        <AgentExecutionDock
+          jobId={ambientJob.id}
+          label={ambientJob.label}
+          scope={ambientJob.scope}
+          expanded={dockExpanded}
+          onExpandedChange={setDockExpanded}
+          onDismiss={() => {
+            setAmbientJob(null)
+            setDockExpanded(false)
+          }}
+          onOpenAgentDesk={id => openAgentDesk(id)}
+          onComplete={handleAmbientJobComplete}
+        />
+      )}
       </SidebarInset>
     </SidebarProvider>
     </div>

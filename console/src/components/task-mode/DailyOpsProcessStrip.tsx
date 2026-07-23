@@ -1,18 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { DenseTag, cn } from '@bifrost/ui'
 import { Check, Hand } from 'lucide-react'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
-import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
-import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { ViewerEnvBadge } from '@/components/task-mode/ViewerEnvBadge'
-import { respondRemediationJob } from '@/api/remediation'
 import { useRemediationStream } from '@/hooks/useRemediationStream'
 import {
   deriveAgentLiveFeed,
   formatAgentElapsed,
-  formatFeedEventLine,
-  recentAgentFeedEvents,
 } from '@/lib/agent/agentLiveFeed'
 import {
   DAILY_OPS_WORKFLOW_PHASES,
@@ -105,6 +100,7 @@ export function DailyOpsProcessStrip({
     agentFixPending = false,
     ambientJobId = null,
     onOpenAgentDesk,
+    onExpandAgentDock,
     checklistCheckPending = false,
     checklistCheckDisabled = false,
     checklistCheckTitle,
@@ -418,11 +414,12 @@ export function DailyOpsProcessStrip({
               pending={fixPending && (ambientJobId == null || ambientJobId === '')}
               pendingLabel="Starting…"
               active={ambientJobId != null && ambientJobId !== ''}
-              activeLabel="View agent →"
+              activeLabel="Expand dock"
               disabled={false}
-              title="Open Agent Desk — live progress pinned at top of Daily Ops"
+              title="Expand Agent Execution Dock — live progress stays on Daily Ops"
               onClick={() => {
-                if (onOpenAgentDesk != null) onOpenAgentDesk()
+                if (onExpandAgentDock != null) onExpandAgentDock()
+                else if (onOpenAgentDesk != null) onOpenAgentDesk()
                 else onPrimaryAction()
               }}
             />
@@ -510,11 +507,13 @@ export function DailyOpsAgentLivePanel({
   jobId,
   jobScope,
   onOpenAgentDesk,
+  onExpandAgentDock,
   onVerifyReprobe,
 }: {
   jobId: string
   jobScope?: string | null
   onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
+  onExpandAgentDock?: () => void
   /** Same as Ops loop Verify → Re-probe fleet (invalidate cockpit / checklist). */
   onVerifyReprobe?: () => void
 }) {
@@ -538,190 +537,97 @@ export function DailyOpsAgentLivePanel({
         ? job.summary.trim().slice(0, 160)
         : null
 
-  const pendingApproval = useMemo(() => {
-    if (!isApproval) return null
-    for (let i = events.length - 1; i >= 0; i--) {
-      const ev = events[i]
-      if (ev.type === 'approval_request') return ev
-      if (ev.type === 'status' && ev.text.startsWith('Operator selected:')) return null
-    }
-    return null
-  }, [events, isApproval])
-
-  const respondMutation = useMutation({
-    mutationFn: ({
-      optionId,
-      note,
-      commitMessage,
-    }: {
-      optionId: string
-      note?: string
-      commitMessage?: string
-    }) => respondRemediationJob(jobId, optionId, note, commitMessage),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-    },
-  })
-
   const feed = deriveAgentLiveFeed(events)
-  const recent = recentAgentFeedEvents(events, isApproval ? 6 : 10)
   const elapsed = formatAgentElapsed(job?.created_at, nowMs)
   const scopeLabel = jobScope != null && jobScope !== '' ? jobScope : job?.scope
+  const statusHint = isApproval
+    ? 'Needs your decision'
+    : succeeded
+      ? 'Done — confirm surface'
+      : failed
+        ? job?.status === 'cancelled'
+          ? 'Cancelled'
+          : 'Failed'
+        : feed?.text ?? (connected ? 'Working…' : error != null ? error : 'Connecting…')
 
   return (
     <div
       className={cn(
-        'mt-1.5 rounded-md border bg-background/80 px-2.5 py-2',
-        isApproval ? 'border-warning/50' : 'border-sky-500/35',
+        'mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-1.5',
+        isApproval
+          ? 'border-warning/50 bg-warning/5'
+          : succeeded
+            ? 'border-emerald-500/35 bg-emerald-500/5'
+            : failed
+              ? 'border-destructive/35 bg-destructive/5'
+              : 'border-sky-500/35 bg-background/80',
       )}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[var(--text-dense-caption)] font-semibold text-foreground">
-          Agent progress
+      <span className="text-[var(--text-dense-caption)] font-semibold text-foreground">
+        Agent progress
+      </span>
+      {scopeLabel != null && scopeLabel !== '' && (
+        <DenseTag
+          variant="neutral"
+          className="max-w-[10rem] truncate text-[8px] border-sky-500/40 text-sky-700 dark:text-sky-300"
+          title={scopeLabel}
+        >
+          {scopeLabel}
+        </DenseTag>
+      )}
+      {isApproval && (
+        <DenseTag variant="warning" className="text-[8px]">
+          Needs your decision
+        </DenseTag>
+      )}
+      {elapsed != null && (
+        <span className="font-mono text-[var(--text-dense-caption)] text-muted-foreground">
+          {elapsed}
         </span>
-        {scopeLabel != null && scopeLabel !== '' && (
-          <DenseTag
-            variant="neutral"
-            className="max-w-[14rem] truncate text-[8px] border-sky-500/40 text-sky-700 dark:text-sky-300"
-            title={scopeLabel}
+      )}
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate text-[var(--text-dense-caption)]',
+          failed ? 'text-destructive' : 'text-muted-foreground',
+        )}
+        title={failReason ?? statusHint}
+      >
+        {failReason != null && failed ? failReason : statusHint}
+      </span>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        {onExpandAgentDock != null && (
+          <button
+            type="button"
+            className="text-[var(--text-dense-meta)] font-medium text-primary hover:underline"
+            onClick={onExpandAgentDock}
+            title="Expand Agent Execution Dock for live feed and approvals"
           >
-            {scopeLabel}
-          </DenseTag>
-        )}
-        {isApproval && (
-          <DenseTag variant="warning" className="text-[8px]">
-            Needs your decision
-          </DenseTag>
-        )}
-        {elapsed != null && (
-          <span className="font-mono text-[var(--text-dense-caption)] text-muted-foreground">
-            {elapsed}
-          </span>
-        )}
-        {!connected && error == null && (
-          <span className="text-[var(--text-dense-caption)] text-muted-foreground">Connecting…</span>
-        )}
-        {error != null && error !== '' && (
-          <span className="text-[var(--text-dense-caption)] text-destructive">{error}</span>
+            Expand dock
+          </button>
         )}
         {onOpenAgentDesk != null && (
           <button
             type="button"
-            className="ml-auto text-[var(--text-dense-meta)] text-primary hover:underline"
+            className="text-[var(--text-dense-caption)] text-muted-foreground hover:text-primary hover:underline"
             onClick={() => onOpenAgentDesk(jobId)}
           >
-            Agent Desk →
+            Open in Agent Desk
+          </button>
+        )}
+        {succeeded && onVerifyReprobe != null && (
+          <button
+            type="button"
+            className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-meta)] font-medium text-primary hover:bg-muted"
+            onClick={() => {
+              onVerifyReprobe()
+              void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
+              void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+            }}
+          >
+            Re-probe fleet
           </button>
         )}
       </div>
-      <div className="mt-1.5">
-        <AgentPhaseIndicator currentPhase={job?.phase} failed={failed} compact />
-      </div>
-
-      {/* Operator decision — stay on Daily Ops; do not require Agent Desk */}
-      {pendingApproval != null && (
-        <div className="mt-2 rounded-md border border-warning/40 bg-card px-2.5 py-2">
-          <RemediationApprovalBlock
-            event={pendingApproval}
-            submitting={respondMutation.isPending}
-            onRespond={(optionId, note, commitMessage) =>
-              respondMutation.mutate({ optionId, note, commitMessage })
-            }
-          />
-          {respondMutation.isError && (
-            <p className="m-0 mt-1.5 text-[var(--text-dense-caption)] text-destructive">
-              {(respondMutation.error as Error)?.message ?? 'Failed to submit decision'}
-            </p>
-          )}
-        </div>
-      )}
-      {isApproval && pendingApproval == null && (
-        <p className="m-0 mt-2 rounded-md border border-warning/30 bg-card px-2.5 py-2 text-[var(--text-dense-caption)] text-warning">
-          Waiting for approval options from the agent stream…
-          {onOpenAgentDesk != null && (
-            <>
-              {' '}
-              <button
-                type="button"
-                className="text-primary hover:underline"
-                onClick={() => onOpenAgentDesk(jobId)}
-              >
-                Open Agent Desk →
-              </button>
-            </>
-          )}
-        </p>
-      )}
-
-      {!isApproval && feed != null && (
-        <p className="m-0 mt-1.5 truncate text-[var(--text-dense-caption)] font-medium text-foreground/90">
-          {feed.text}
-        </p>
-      )}
-      {recent.length > 0 && !isApproval && (
-        <ul className="mt-1.5 max-h-28 list-none space-y-0.5 overflow-y-auto rounded border border-border/50 bg-muted/20 px-2 py-1.5 font-mono text-[10px] leading-snug text-muted-foreground">
-          {recent.map((ev, i) => (
-            <li key={ev.id !== '' ? ev.id : `${ev.at}-${ev.type}-${i}`} className="truncate">
-              <span className="text-muted-foreground/60">{ev.type}</span>
-              {' · '}
-              {formatFeedEventLine(ev)}
-            </li>
-          ))}
-        </ul>
-      )}
-      {isApproval && recent.length > 0 && (
-        <details className="mt-2">
-          <summary className="cursor-pointer text-[var(--text-dense-caption)] text-muted-foreground hover:text-foreground">
-            Recent agent log
-          </summary>
-          <ul className="mt-1 max-h-20 list-none space-y-0.5 overflow-y-auto rounded border border-border/50 bg-muted/20 px-2 py-1.5 font-mono text-[10px] leading-snug text-muted-foreground">
-            {recent.map((ev, i) => (
-              <li key={ev.id !== '' ? ev.id : `${ev.at}-${ev.type}-${i}`} className="truncate">
-                <span className="text-muted-foreground/60">{ev.type}</span>
-                {' · '}
-                {formatFeedEventLine(ev)}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-
-      {/* P5 — terminal → verify surface (same Re-probe as Ops loop Verify CTA) */}
-      {succeeded && (
-        <div className="mt-2 rounded-md border border-emerald-500/35 bg-emerald-500/8 px-2.5 py-2">
-          <p className="m-0 text-[var(--text-dense-caption)] font-medium text-emerald-800 dark:text-emerald-200">
-            Agent done — confirm the problem surface turned green
-          </p>
-          <p className="m-0 mt-0.5 text-[var(--text-dense-micro)] text-muted-foreground">
-            Next: Re-probe fleet (same as Ops loop Verify)
-          </p>
-          {onVerifyReprobe != null && (
-            <button
-              type="button"
-              className="mt-1.5 rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-meta)] font-medium text-primary hover:bg-muted"
-              onClick={() => {
-                onVerifyReprobe()
-                void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
-                void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-              }}
-            >
-              Re-probe fleet
-            </button>
-          )}
-        </div>
-      )}
-      {failed && (
-        <div className="mt-2 rounded-md border border-destructive/35 bg-destructive/5 px-2.5 py-2">
-          <p className="m-0 text-[var(--text-dense-caption)] font-medium text-destructive">
-            Agent {job?.status === 'cancelled' ? 'cancelled' : 'failed'} — stay on Remediate
-          </p>
-          {failReason != null && (
-            <p className="m-0 mt-0.5 truncate text-[var(--text-dense-caption)] text-muted-foreground" title={failReason}>
-              {failReason}
-            </p>
-          )}
-        </div>
-      )}
     </div>
   )
 }

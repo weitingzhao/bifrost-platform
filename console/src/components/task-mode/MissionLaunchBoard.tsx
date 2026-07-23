@@ -43,6 +43,7 @@ export type MissionLaunchBoardProps = {
   satelliteLaunchAgentFixDisabled?: boolean
   satelliteLaunchAgentFixTitle?: string
   onOpenAgentDesk?: () => void
+  onExpandAgentDock?: () => void
   readinessCanOperate?: boolean
   onAgentFixStg?: () => void
   onAgentFixProd?: () => void
@@ -128,6 +129,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
     satelliteLaunchAgentFixDisabled,
     satelliteLaunchAgentFixTitle,
     onOpenAgentDesk,
+    onExpandAgentDock,
     readinessCanOperate,
     onAgentFixStg,
     onAgentFixProd,
@@ -245,6 +247,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                 agentFixActive={launchAgentFixActive}
                 agentFixDisabled={launchAgentFixDisabled}
                 agentFixTitle={launchAgentFixTitle}
+                onExpandAgentDock={onExpandAgentDock}
                 onOpenAgentDesk={onOpenAgentDesk}
                 onLaunch={onDispatchRelease}
                 launchLabel="Agent Launch"
@@ -315,6 +318,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                 agentFixActive={satelliteLaunchAgentFixActive}
                 agentFixDisabled={satelliteLaunchAgentFixDisabled}
                 agentFixTitle={satelliteLaunchAgentFixTitle}
+                onExpandAgentDock={onExpandAgentDock}
                 onOpenAgentDesk={onOpenAgentDesk}
                 onLaunch={onDispatchTradeDeploy}
                 launchLabel="Agent Deploy"

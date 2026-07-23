@@ -288,6 +288,7 @@ export function DailyOpsExecutionPanel({
     ambientJobId,
     ambientJobScope,
     onOpenAgentDesk,
+    onExpandAgentDock,
     checklistItemFixActiveId = null,
     onVerifyReprobe,
     onStartAgentJob: onAdoptJob,
@@ -553,6 +554,7 @@ export function DailyOpsExecutionPanel({
               jobId={ambientJobId}
               jobScope={ambientJobScope}
               onOpenAgentDesk={onOpenAgentDesk}
+              onExpandAgentDock={onExpandAgentDock}
               onVerifyReprobe={onVerifyReprobe}
             />
           ) : showStartingHint ? (
