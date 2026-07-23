@@ -90,11 +90,27 @@ export function UserMenu({
               : 'border-border',
             className,
           )}
-          title="User menu — session, guides, shell"
+          title={
+            isAuthenticated
+              ? `User menu — ${role} · authenticated`
+              : isInvalidToken
+                ? 'User menu — invalid token'
+                : 'User menu — session, guides, shell'
+          }
           aria-label="User menu"
         >
           <User size={14} aria-hidden />
           <span className="text-[var(--text-dense-caption)] font-semibold">User</span>
+          <span
+            className={cn(
+              'badge-ui max-w-[4.5rem] truncate text-[9px] uppercase leading-none',
+              isAuthenticated
+                ? platformAuthRoleBadgeClass(role)
+                : 'platform-auth-badge--warn',
+            )}
+          >
+            {capsLoading ? '…' : isAuthenticated ? role : isInvalidToken ? 'Invalid' : 'Guest'}
+          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" sideOffset={6}>
