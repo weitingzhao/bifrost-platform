@@ -520,15 +520,30 @@ export function DailyOpsExecutionPanel({
           >
             {clearLabel}
           </DenseTag>
+          {(hasAmbientJob || showStartingHint) && onExpandAgentDock != null ? (
+            <button
+              type="button"
+              className={cn(
+                'rounded border px-2 py-0.5 text-[var(--text-dense-caption)] font-semibold hover:underline',
+                activeTone
+                  ? 'border-amber-600/50 bg-amber-500/15 text-amber-950 dark:text-amber-50'
+                  : 'border-primary/40 bg-primary/10 text-primary',
+              )}
+              onClick={onExpandAgentDock}
+              title="Expand Agent Execution Dock — live feed and approvals"
+            >
+              Expand dock
+            </button>
+          ) : null}
           <button
             type="button"
             className={cn(
-              'text-[var(--text-dense-caption)] font-medium hover:underline',
-              activeTone ? 'text-amber-900 dark:text-amber-100' : 'text-primary',
+              'text-[var(--text-dense-caption)] hover:underline',
+              activeTone ? 'text-amber-900/80 dark:text-amber-100/80' : 'text-muted-foreground',
             )}
             onClick={() => onOpenAgentDesk?.()}
           >
-            Open Agent Desk
+            Agent Desk
           </button>
         </span>
       </div>
@@ -541,14 +556,7 @@ export function DailyOpsExecutionPanel({
             jobTarget={hasAmbientJob || showStartingHint ? jobFixTarget : null}
             hasAmbientJob={hasAmbientJob || showStartingHint}
           />
-          {showDirtyPanel && (
-            <GitDirtyDetailsPanel
-              className="mb-2 rounded-md border border-amber-500/35 bg-amber-500/5 px-2.5 py-2"
-              onProposeCommit={onProposeCommit}
-              onProposeStash={onProposeStash}
-              proposeDisabled={!canOperate || proposeCommitPending}
-            />
-          )}
+          {/* When Agent Fix is live: one-line progress only — approvals/feed live in shell Dock. */}
           {hasAmbientJob && ambientJobId != null ? (
             <DailyOpsAgentLivePanel
               jobId={ambientJobId}
@@ -563,7 +571,16 @@ export function DailyOpsExecutionPanel({
               Starting Agent…
             </div>
           ) : (
-            <div className="rounded-md border border-border/50 bg-background/60 px-2.5 py-3 text-center">
+            <>
+              {showDirtyPanel && (
+                <GitDirtyDetailsPanel
+                  className="mb-2 rounded-md border border-amber-500/35 bg-amber-500/5 px-2.5 py-2"
+                  onProposeCommit={onProposeCommit}
+                  onProposeStash={onProposeStash}
+                  proposeDisabled={!canOperate || proposeCommitPending}
+                />
+              )}
+              <div className="rounded-md border border-border/50 bg-background/60 px-2.5 py-3 text-center">
               {primaryBlocker != null ? (
                 <>
                   <p className="m-0 text-[var(--text-dense-meta)] font-medium text-muted-foreground">
@@ -598,7 +615,8 @@ export function DailyOpsExecutionPanel({
                     : `Start from Ops loop · ${opsLoopActionLabel}`}
                 </button>
               )}
-            </div>
+              </div>
+            </>
           )}
         </div>
       ) : (

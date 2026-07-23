@@ -6,6 +6,8 @@ import type { ConsoleNavPlane } from '@/lib/consoleNavConfig'
 export type ConsoleHeaderAmbientAgent = {
   label: string
   onOpen: () => void
+  /** Dock already expanded — button focuses / still expands. */
+  expanded?: boolean
 }
 
 export function ConsoleHeader({
@@ -46,14 +48,19 @@ export function ConsoleHeader({
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 shrink-0 gap-1.5 border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_45%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_10%,var(--card))] px-2 text-[var(--text-dense-caption)]"
+          className="h-7 shrink-0 gap-1.5 border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_55%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_14%,var(--card))] px-2.5 text-[var(--text-dense-caption)] shadow-sm"
           onClick={ambientAgent.onOpen}
-          title="Expand Agent Execution Dock for the running ambient task"
+          title="Open Agent Execution Dock — live feed and approvals (shell bottom)"
         >
           <StatusLamp value="degraded" kind="reach" />
           <Bot size={12} aria-hidden />
-          <span className="hidden max-w-[9rem] truncate sm:inline">{ambientAgent.label}</span>
-          <span className="font-medium text-foreground">Expand dock</span>
+          <span className="font-semibold text-foreground">Agent Fix</span>
+          <span className="hidden max-w-[8rem] truncate text-muted-foreground sm:inline">
+            {ambientAgent.label}
+          </span>
+          <span className="font-medium text-primary">
+            {ambientAgent.expanded ? 'Focus dock' : 'Expand dock'}
+          </span>
         </Button>
       )}
 

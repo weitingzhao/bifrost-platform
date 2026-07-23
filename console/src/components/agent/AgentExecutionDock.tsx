@@ -71,6 +71,11 @@ export function AgentExecutionDock({
   )
   const [heightPx, setHeightPx] = useState(() => readStoredHeight() ?? defaultWorkingHeightPx())
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
+  const heightPxRef = useRef(heightPx)
+
+  useEffect(() => {
+    heightPxRef.current = heightPx
+  }, [heightPx])
 
   const session = useAgentJobLiveSession(jobId, {
     onComplete,
@@ -112,7 +117,7 @@ export function AgentExecutionDock({
   const onResizePointerDown = (e: ReactPointerEvent) => {
     if (mode !== 'working') return
     e.preventDefault()
-    dragRef.current = { startY: e.clientY, startH: heightPx }
+    dragRef.current = { startY: e.clientY, startH: heightPxRef.current }
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
   }
 
@@ -121,6 +126,7 @@ export function AgentExecutionDock({
     const delta = dragRef.current.startY - e.clientY
     const maxH = Math.round((window.innerHeight * MAX_WORKING_VH) / 100)
     const next = Math.min(maxH, Math.max(MIN_WORKING_PX, dragRef.current.startH + delta))
+    heightPxRef.current = next
     setHeightPx(next)
   }
 
@@ -133,7 +139,7 @@ export function AgentExecutionDock({
       /* ignore */
     }
     try {
-      localStorage.setItem(DOCK_HEIGHT_KEY, String(heightPx))
+      localStorage.setItem(DOCK_HEIGHT_KEY, String(heightPxRef.current))
     } catch {
       /* ignore */
     }

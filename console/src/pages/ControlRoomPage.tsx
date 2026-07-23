@@ -5,6 +5,14 @@ import { ActiveAgentJobsStrip } from '@/components/control-room/ActiveAgentJobsS
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
 import { BayDetailDrawer } from '@/components/control-room/BayDetailDrawer'
 import { CommandIntentStrip } from '@/components/control-room/CommandIntentStrip'
+import { ControlRoomBay } from '@/components/control-room/ControlRoomBay'
+import { ControlRoomBayCards } from '@/components/control-room/ControlRoomBayCards'
+import { ControlRoomAttentionStrip } from '@/components/control-room/ControlRoomAttentionStrip'
+import {
+  ControlRoomSectionNav,
+  scrollToControlRoomBay,
+} from '@/components/control-room/ControlRoomSectionNav'
+import { ControlRoomVerdictStrip } from '@/components/control-room/ControlRoomVerdictStrip'
 import { MissionTimelinePanel } from '@/components/control-room/MissionTimelinePanel'
 import { NetworkHealthPanel } from '@/components/control-room/NetworkHealthPanel'
 import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
@@ -27,18 +35,38 @@ import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { useMissionVerification } from '@/hooks/useMissionVerification'
+import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { computeAllTracks } from '@/lib/briefing/workTracks'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
+import {
+  buildControlRoomAttentionItems,
+  buildControlRoomBaySignals,
+  collapseOpenBayIdsForSingleMode,
+  loadControlRoomExpandMode,
+  loadOpenControlRoomBayIds,
+  nextOpenBayIds,
+  parseControlRoomBayHash,
+  persistOpenControlRoomBayIds,
+  resolveInitialOpenBayIds,
+  saveControlRoomExpandMode,
+  type ControlRoomBayId,
+  type ControlRoomExpandMode,
+} from '@/lib/control-room/controlRoomBays'
+import {
+  collectMissionDegradationItems,
+  missionDegradationSummary,
+} from '@/lib/control-room/missionSignals'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 import {
   buildPromoteCutoverModel,
   stashPromotePreflightPack,
 } from '@/lib/control-room/promoteCutover'
-import { useCallback, useMemo, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
@@ -46,15 +74,17 @@ import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
 import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
 import { fetchSupplyChain } from '@/api/delivery'
-import { startRemediation } from '@/api/remediation'
+import { fetchRemediationJobs, startRemediation } from '@/api/remediation'
 import {
   buildTradeDeployPrompt,
   TRADE_DEPLOY_SCOPE,
 } from '@/lib/agent/tradeDeployAgentPrompt'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
+import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
+
 type ControlRoomPageProps = {
   context: OpsContextResponse | undefined
   contextLoading: boolean
@@ -89,6 +119,13 @@ type ControlRoomPageProps = {
   onOpenFleetVendor?: () => void
 } & AmbientAgentShellProps
 
+function bayById(
+  bays: ReturnType<typeof buildControlRoomBaySignals>,
+  id: ControlRoomBayId,
+) {
+  return bays.find(b => b.id === id)
+}
+
 export function ControlRoomPage({
   context,
   contextLoading,
@@ -121,11 +158,35 @@ export function ControlRoomPage({
   onStartAgentJob,
 }: ControlRoomPageProps) {
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
+  const [activeBay, setActiveBay] = useState<ControlRoomBayId | null>(() =>
+    parseControlRoomBayHash(typeof window !== 'undefined' ? window.location.hash : ''),
+  )
+  const [expandMode, setExpandMode] = useState<ControlRoomExpandMode>(() => loadControlRoomExpandMode())
+  const [openBayIds, setOpenBayIds] = useState<Set<ControlRoomBayId>>(() => {
+    const preferred = parseControlRoomBayHash(
+      typeof window !== 'undefined' ? window.location.hash : '',
+    )
+    const ids = resolveInitialOpenBayIds({
+      mode: loadControlRoomExpandMode(),
+      preferredId: preferred,
+      storedOpen: loadOpenControlRoomBayIds(),
+    })
+    return new Set(ids)
+  })
   const { snapshot, matrices: liveMatrices, dataUpdatedAt, isLoading: missionLoading } = useMissionSnapshot()
   const { banner, dismissBanner, pendingVerify } = useMissionVerification()
   const { canOperate } = usePlatformAuth()
   const operateQueueQuery = useOperateQueue()
+  const briefsQuery = usePendingDecisionBriefs()
+  const networkProbe = useNetworkLiveProbe()
   const matrixList = liveMatrices.length > 0 ? liveMatrices : matrices
+
+  const jobsQuery = useQuery({
+    queryKey: ['remediation', 'jobs'],
+    queryFn: fetchRemediationJobs,
+    refetchInterval: 10_000,
+  })
+  const activeAgentJobCount = findActiveRemediationJobs(jobsQuery.data?.jobs ?? []).length
 
   const aiRelease = useAmbientAgentTask({
     canOperate,
@@ -222,6 +283,102 @@ export function ControlRoomPage({
     onOpenPromote?.()
   }, [context, matrixList, stgSmoke, lastDeliverSucceeded, tierB, onOpenPromote])
 
+  const showHealth = onOpenAgentProtocol != null
+  const promoteLamp = useMemo(() => {
+    if (context == null) return undefined
+    return buildPromoteCutoverModel({
+      context,
+      matrices: matrixList,
+      stgSmoke,
+      stgGate,
+      lastDeliverSucceeded,
+      tierB,
+    }).prodLamp
+  }, [context, matrixList, stgSmoke, stgGate, lastDeliverSucceeded, tierB])
+
+  const baySignals = useMemo(
+    () =>
+      buildControlRoomBaySignals({
+        snapshot,
+        operateOpenCount: operateQueueQuery.data?.open.length ?? 0,
+        pendingBriefCount: briefsQuery.pendingCount,
+        activeAgentJobCount,
+        networkProbe: showHealth ? networkProbe.probeReach : undefined,
+        promoteLamp,
+        showHealth,
+      }),
+    [
+      snapshot,
+      operateQueueQuery.data?.open.length,
+      briefsQuery.pendingCount,
+      activeAgentJobCount,
+      showHealth,
+      networkProbe.probeReach,
+      promoteLamp,
+    ],
+  )
+
+  const attentionItems = useMemo(
+    () => buildControlRoomAttentionItems(baySignals),
+    [baySignals],
+  )
+
+  const missionPrimaryCause = useMemo(() => {
+    if (snapshot.missionOverall === 'ok') return 'Mission probes nominal'
+    return missionDegradationSummary(collectMissionDegradationItems(snapshot))
+  }, [snapshot])
+
+  const jumpToBay = useCallback(
+    (id: ControlRoomBayId) => {
+      setActiveBay(id)
+      setOpenBayIds(prev => {
+        const next =
+          expandMode === 'single' ? new Set<ControlRoomBayId>([id]) : new Set(prev).add(id)
+        persistOpenControlRoomBayIds(next)
+        return next
+      })
+      requestAnimationFrame(() => {
+        scrollToControlRoomBay(id)
+      })
+    },
+    [expandMode],
+  )
+
+  const setBayOpen = useCallback(
+    (id: ControlRoomBayId, open: boolean) => {
+      if (open) setActiveBay(id)
+      setOpenBayIds(prev => {
+        const next = nextOpenBayIds(expandMode, prev, id, open)
+        persistOpenControlRoomBayIds(next)
+        return next
+      })
+    },
+    [expandMode],
+  )
+
+  const handleExpandModeChange = useCallback(
+    (mode: ControlRoomExpandMode) => {
+      setExpandMode(mode)
+      saveControlRoomExpandMode(mode)
+      if (mode === 'single') {
+        setOpenBayIds(prev => {
+          const next = collapseOpenBayIdsForSingleMode(prev, activeBay)
+          persistOpenControlRoomBayIds(next)
+          return next
+        })
+      }
+    },
+    [activeBay],
+  )
+
+  useEffect(() => {
+    const fromHash = parseControlRoomBayHash(window.location.hash)
+    if (fromHash == null) return
+    requestAnimationFrame(() => {
+      scrollToControlRoomBay(fromHash, { updateHash: false })
+    })
+  }, [])
+
   if (contextLoading || matrixLoading || missionLoading) {
     return <p className="text-[var(--muted-foreground)]">Loading mission control…</p>
   }
@@ -234,207 +391,310 @@ export function ControlRoomPage({
     )
   }
 
+  const missionBay = bayById(baySignals, 'mission')
+  const launchBay = bayById(baySignals, 'launch')
+  const operateBay = bayById(baySignals, 'operate')
+  const releaseBay = bayById(baySignals, 'release')
+  const healthBay = bayById(baySignals, 'health')
+  const governanceBay = bayById(baySignals, 'governance')
+
   return (
-    <div className="control-room-layout flex w-full min-w-0 flex-col gap-4">
+    <div className="control-room-layout flex w-full min-w-0 flex-col gap-3">
       <ConsolePageHeader
         title="Control Room"
         help="Mission diagnosis — payload reachability, rocket/satellite launches, agent loop, and command intent. Topology opens as a drill-down sheet."
       />
-      <section className="control-room-diagnosis flex flex-col gap-4" aria-label="Mission diagnosis">
-        {banner != null && (
-          <MissionVerifyBanner
-            state={banner}
-            onDismiss={dismissBanner}
-            onOpenJob={jobId => onOpenAgentDesk?.(jobId)}
-          />
-        )}
 
-        {pendingVerify && banner == null && (
-          <p className="control-room-verify-pending m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Agent run finished — refreshing mission probes and verify_mission_snapshot…
+      <ControlRoomSectionNav
+        bays={baySignals}
+        activeBay={activeBay}
+        onSelectBay={jumpToBay}
+        expandMode={expandMode}
+        onExpandModeChange={handleExpandModeChange}
+      />
+
+      <ControlRoomVerdictStrip
+        missionSignal={snapshot.missionOverall}
+        primaryCause={missionPrimaryCause}
+        dataUpdatedAt={dataUpdatedAt}
+        bays={baySignals}
+        isLoading={missionLoading}
+      />
+
+      <ControlRoomAttentionStrip items={attentionItems} onSelectBay={jumpToBay} />
+
+      <ControlRoomBayCards
+        bays={baySignals}
+        activeBay={activeBay}
+        openBayIds={openBayIds}
+        onSelectBay={jumpToBay}
+      />
+
+      <div className="control-room-diagnosis flex flex-col gap-3" aria-label="Mission diagnosis">
+        {openBayIds.size === 0 && (
+          <p className="m-0 rounded-md border border-dashed border-border px-3 py-4 text-center text-[var(--text-dense-meta)] text-muted-foreground">
+            Select a bay above to open mission detail.
           </p>
         )}
 
-        <MissionControlHeader
-          snapshot={snapshot}
-          matrices={matrixList}
-          context={context}
-          dataUpdatedAt={dataUpdatedAt}
-          showRocketSubsystems={false}
-          onOpenRuntimeMap={onOpenRuntimeMap}
-          onOpenCluster={onOpenCluster}
-          onOpenDelivery={onOpenDelivery}
-          onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
-          onOpenAgentDesk={openAgentDeskPrefill}
-          onOpenLaunchView={mode => onOpenLaunchView?.(mode)}
-          onOpenFleetVendor={onOpenFleetVendor}
-          onOpenPromote={handleOpenPromotePreflight}
-          onPlaybookFix={handlePlaybookFix}
-          playbookFixPending={playbookFixMutation.isPending}
-          canOperate={canOperate}
-        />
-
-        <LaunchPad
-          onDispatchRelease={dispatchReleaseAgent}
-          onDispatchTradeDeploy={dispatchTradeDeployAgent}
-          releasePending={aiRelease.isPending}
-          tradeDeployPending={aiTradeDeploy.isPending}
-          canDispatchRelease={!aiRelease.disabled}
-          canDispatchTradeDeploy={!aiTradeDeploy.disabled}
-          releaseDisabledReason={aiRelease.disabledReason}
-          tradeDeployDisabledReason={aiTradeDeploy.disabledReason}
-          onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
-          onOpenTradeDeploy={onOpenTradeDeploy ?? onOpenDelivery}
-        />
-
-        {!canOperate && (snapshot.release.signal !== 'ok' || snapshot.payloadOverall !== 'ok') && (
-          <OpsFeedback variant="warning" title="Authenticate as operator to run Launch Pad agents">
-            Use the header auth control before starting release or trade-deploy Agent tasks.
-          </OpsFeedback>
-        )}
-
-        {aiRelease.error != null && (
-          <OpsFeedback variant="error" title="Failed to start AI Release">
-            {aiRelease.error.message}
-          </OpsFeedback>
-        )}
-
-        {aiTradeDeploy.error != null && (
-          <OpsFeedback variant="error" title="Failed to start Deploy Satellite agent">
-            {aiTradeDeploy.error.message}
-          </OpsFeedback>
-        )}
-
-        <ActiveAgentJobsStrip
-          onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId)}
-          onOpenAudit={onOpenAudit}
-        />
-
-        <CommandIntentStrip
-          snapshot={snapshot}
-          matrices={matrixList}
-          context={context}
-          onOpenAgentDesk={openAgentDeskPrefill}
-          onDispatchReleaseAgent={dispatchReleaseAgent}
-          onOpenBriefing={onOpenBriefing}
-          onOpenDelivery={onOpenDelivery}
-          onOpenPromote={handleOpenPromotePreflight}
-        />
-
-        <MissionTimelinePanel
-          snapshot={snapshot}
-          probeObservedAt={dataUpdatedAt}
-          onOpenAudit={onOpenAudit}
-          onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId)}
-        />
-
-        <PromoteCutoverStrip
-          context={context}
-          matrices={matrixList}
-          stgSmoke={stgSmoke}
-          stgGate={stgGate}
-          lastDeliverSucceeded={lastDeliverSucceeded}
-          tierB={tierB}
-          onOpenPromote={handleOpenPromotePreflight}
-          onOpenDelivery={onOpenDelivery}
-        />
-
-        <OperateQueueStrip onOpenAgentDesk={onOpenAgentDesk} />
-
-        <MissionSignalProgramStrip onOpenDelivery={onOpenDelivery} />
-
-        {onOpenAgentProtocol != null && (
-          <NetworkHealthPanel
-            context={context}
-            onOpenAgentProtocol={onOpenAgentProtocol}
-            onOpenNetwork={onOpenNetwork}
-          />
-        )}
-      </section>
-
-      <ProgramContextSection>
-        <div className="flex flex-col gap-4">
-          <OpsSection
-            title="Rocket — Ops Platform subsystems"
-            description="Launch vehicle health — drill into Infra, Release, Control, or Agent."
-            bodyPadding="compact"
-            overflow="visible"
+        {missionBay != null && openBayIds.has('mission') && (
+          <ControlRoomBay
+            bayId="mission"
+            title="Mission"
+            signal={missionBay.signal}
+            reason={missionBay.reason}
+            open
+            onOpenChange={open => setBayOpen('mission', open)}
           >
-            <RocketSubsystemsGrid
+            {banner != null && (
+              <MissionVerifyBanner
+                state={banner}
+                onDismiss={dismissBanner}
+                onOpenJob={jobId => onOpenAgentDesk?.(jobId)}
+              />
+            )}
+
+            {pendingVerify && banner == null && (
+              <p className="control-room-verify-pending m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                Agent run finished — refreshing mission probes and verify_mission_snapshot…
+              </p>
+            )}
+
+            <MissionControlHeader
               snapshot={snapshot}
+              matrices={matrixList}
+              context={context}
+              dataUpdatedAt={dataUpdatedAt}
+              showRocketSubsystems={false}
+              onOpenRuntimeMap={onOpenRuntimeMap}
               onOpenCluster={onOpenCluster}
               onOpenDelivery={onOpenDelivery}
               onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
-              onOpenAgentDesk={() => onOpenAgentDesk?.()}
-              onDispatchReleaseAgent={dispatchReleaseAgent}
-              releaseDispatchPending={aiRelease.isPending}
+              onOpenAgentDesk={openAgentDeskPrefill}
+              onOpenLaunchView={mode => onOpenLaunchView?.(mode)}
+              onOpenFleetVendor={onOpenFleetVendor}
+              onOpenPromote={handleOpenPromotePreflight}
+              onPlaybookFix={handlePlaybookFix}
+              playbookFixPending={playbookFixMutation.isPending}
+              canOperate={canOperate}
+            />
+          </ControlRoomBay>
+        )}
+
+        {launchBay != null && openBayIds.has('launch') && (
+          <ControlRoomBay
+            bayId="launch"
+            title="Launch"
+            signal={launchBay.signal}
+            reason={launchBay.reason}
+            open
+            onOpenChange={open => setBayOpen('launch', open)}
+          >
+            <LaunchPad
+              onDispatchRelease={dispatchReleaseAgent}
+              onDispatchTradeDeploy={dispatchTradeDeployAgent}
+              releasePending={aiRelease.isPending}
+              tradeDeployPending={aiTradeDeploy.isPending}
               canDispatchRelease={!aiRelease.disabled}
+              canDispatchTradeDeploy={!aiTradeDeploy.disabled}
+              releaseDisabledReason={aiRelease.disabledReason}
+              tradeDeployDisabledReason={aiTradeDeploy.disabledReason}
+              onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
+              onOpenTradeDeploy={onOpenTradeDeploy ?? onOpenDelivery}
             />
-          </OpsSection>
 
-          {onOpenSatelliteBus != null &&
-            onOpenNetwork != null &&
-            onOpenCompute != null &&
-            onOpenDefects != null &&
-            onOpenAgentDeskTab != null && (
-            <OpsSection
-              title="Spokes — Satellite · Ground Systems · Engineer"
-              description="Hub drill-down into payload bus, infrastructure, and Agent loop health."
-              bodyPadding="compact"
-              overflow="visible"
-            >
-              <SpokeSignalCards
-                onOpenSatelliteBus={onOpenSatelliteBus}
-                onOpenNetwork={onOpenNetwork}
-                onOpenCompute={onOpenCompute}
-                onOpenAgentDesk={onOpenAgentDeskTab}
-                onOpenDefects={onOpenDefects}
-              />
-            </OpsSection>
-          )}
+            {!canOperate && (snapshot.release.signal !== 'ok' || snapshot.payloadOverall !== 'ok') && (
+              <OpsFeedback variant="warning" title="Authenticate as operator to run Launch Pad agents">
+                Use the header auth control before starting release or trade-deploy Agent tasks.
+              </OpsFeedback>
+            )}
 
-          <WorkTracksStrip tracks={trackSummaries} onOpenBriefing={onOpenBriefing} />
+            {aiRelease.error != null && (
+              <OpsFeedback variant="error" title="Failed to start AI Release">
+                {aiRelease.error.message}
+              </OpsFeedback>
+            )}
 
-          <OpsSection
-            title="Dual flywheel governance"
-            description={
-              <>
-                Flywheel A (product iteration) ↔ Coupling (release gate) ↔ Flywheel B (runtime stability).
-                Ops Platform is the rocket; Trade is the payload. CI/CD path diagram lives on{' '}
-                <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
-                  Delivery
-                </button>
-                .
-              </>
-            }
-            headerExtra={<AuditPageLink onOpenAudit={onOpenAudit} className="mt-2" />}
-            overflow="visible"
-          />
+            {aiTradeDeploy.error != null && (
+              <OpsFeedback variant="error" title="Failed to start Deploy Satellite agent">
+                {aiTradeDeploy.error.message}
+              </OpsFeedback>
+            )}
+          </ControlRoomBay>
+        )}
 
-          <DualFlywheelPanel
-            context={context}
-            matrices={matrices}
-            selection={selection}
-            onSelectBay={id => setSelection({ kind: 'bay', id })}
-            onOpenDelivery={onOpenDelivery}
-          />
+        {operateBay != null && openBayIds.has('operate') && (
+          <ControlRoomBay
+            bayId="operate"
+            title="Operate"
+            signal={operateBay.signal}
+            reason={operateBay.reason}
+            open
+            onOpenChange={open => setBayOpen('operate', open)}
+          >
+            <ActiveAgentJobsStrip
+              onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId)}
+              onOpenAudit={onOpenAudit}
+            />
 
-          {context != null && (
-            <PipelineFlow
+            <CommandIntentStrip
+              snapshot={snapshot}
+              matrices={matrixList}
               context={context}
-              selectionId={selection?.kind === 'milestone' ? selection.id : null}
-              onSelectMilestone={id => setSelection({ kind: 'milestone', id })}
+              onOpenAgentDesk={openAgentDeskPrefill}
+              onDispatchReleaseAgent={dispatchReleaseAgent}
+              onOpenBriefing={onOpenBriefing}
+              onOpenDelivery={onOpenDelivery}
+              onOpenPromote={handleOpenPromotePreflight}
             />
-          )}
 
-          <AgentFocusDock
-            context={context}
-            matrices={matrices}
-            selection={selection}
-            onOpenAgentDesk={() => onOpenAgentDesk?.()}
-          />
-        </div>
-      </ProgramContextSection>
+            <OperateQueueStrip onOpenAgentDesk={onOpenAgentDesk} />
+          </ControlRoomBay>
+        )}
+
+        {releaseBay != null && openBayIds.has('release') && (
+          <ControlRoomBay
+            bayId="release"
+            title="Release"
+            signal={releaseBay.signal}
+            reason={releaseBay.reason}
+            open
+            onOpenChange={open => setBayOpen('release', open)}
+          >
+            <MissionTimelinePanel
+              snapshot={snapshot}
+              probeObservedAt={dataUpdatedAt}
+              onOpenAudit={onOpenAudit}
+              onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId)}
+            />
+
+            <PromoteCutoverStrip
+              context={context}
+              matrices={matrixList}
+              stgSmoke={stgSmoke}
+              stgGate={stgGate}
+              lastDeliverSucceeded={lastDeliverSucceeded}
+              tierB={tierB}
+              onOpenPromote={handleOpenPromotePreflight}
+              onOpenDelivery={onOpenDelivery}
+            />
+
+            <MissionSignalProgramStrip onOpenDelivery={onOpenDelivery} />
+          </ControlRoomBay>
+        )}
+
+        {showHealth && healthBay != null && openBayIds.has('health') && (
+          <ControlRoomBay
+            bayId="health"
+            title="Health"
+            signal={healthBay.signal}
+            reason={healthBay.reason}
+            open
+            onOpenChange={open => setBayOpen('health', open)}
+          >
+            <NetworkHealthPanel
+              context={context}
+              onOpenAgentProtocol={onOpenAgentProtocol!}
+              onOpenNetwork={onOpenNetwork}
+            />
+          </ControlRoomBay>
+        )}
+
+        {governanceBay != null && openBayIds.has('governance') && (
+          <ControlRoomBay
+            bayId="governance"
+            title="Governance"
+            signal={governanceBay.signal}
+            reason={governanceBay.reason}
+            open
+            onOpenChange={open => setBayOpen('governance', open)}
+          >
+            <ProgramContextSection embedded>
+              <div className="flex flex-col gap-4">
+                <OpsSection
+                  title="Rocket — Ops Platform subsystems"
+                  description="Launch vehicle health — drill into Infra, Release, Control, or Agent."
+                  bodyPadding="compact"
+                  overflow="visible"
+                >
+                  <RocketSubsystemsGrid
+                    snapshot={snapshot}
+                    onOpenCluster={onOpenCluster}
+                    onOpenDelivery={onOpenDelivery}
+                    onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
+                    onOpenAgentDesk={() => onOpenAgentDesk?.()}
+                    onDispatchReleaseAgent={dispatchReleaseAgent}
+                    releaseDispatchPending={aiRelease.isPending}
+                    canDispatchRelease={!aiRelease.disabled}
+                  />
+                </OpsSection>
+
+                {onOpenSatelliteBus != null &&
+                  onOpenNetwork != null &&
+                  onOpenCompute != null &&
+                  onOpenDefects != null &&
+                  onOpenAgentDeskTab != null && (
+                  <OpsSection
+                    title="Spokes — Satellite · Ground Systems · Engineer"
+                    description="Hub drill-down into payload bus, infrastructure, and Agent loop health."
+                    bodyPadding="compact"
+                    overflow="visible"
+                  >
+                    <SpokeSignalCards
+                      onOpenSatelliteBus={onOpenSatelliteBus}
+                      onOpenNetwork={onOpenNetwork}
+                      onOpenCompute={onOpenCompute}
+                      onOpenAgentDesk={onOpenAgentDeskTab}
+                      onOpenDefects={onOpenDefects}
+                    />
+                  </OpsSection>
+                )}
+
+                <WorkTracksStrip tracks={trackSummaries} onOpenBriefing={onOpenBriefing} />
+
+                <OpsSection
+                  title="Dual flywheel governance"
+                  description={
+                    <>
+                      Flywheel A (product iteration) ↔ Coupling (release gate) ↔ Flywheel B (runtime stability).
+                      Ops Platform is the rocket; Trade is the payload. CI/CD path diagram lives on{' '}
+                      <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
+                        Delivery
+                      </button>
+                      .
+                    </>
+                  }
+                  headerExtra={<AuditPageLink onOpenAudit={onOpenAudit} className="mt-2" />}
+                  overflow="visible"
+                />
+
+                <DualFlywheelPanel
+                  context={context}
+                  matrices={matrices}
+                  selection={selection}
+                  onSelectBay={id => setSelection({ kind: 'bay', id })}
+                  onOpenDelivery={onOpenDelivery}
+                />
+
+                {context != null && (
+                  <PipelineFlow
+                    context={context}
+                    selectionId={selection?.kind === 'milestone' ? selection.id : null}
+                    onSelectMilestone={id => setSelection({ kind: 'milestone', id })}
+                  />
+                )}
+
+                <AgentFocusDock
+                  context={context}
+                  matrices={matrices}
+                  selection={selection}
+                  onOpenAgentDesk={() => onOpenAgentDesk?.()}
+                />
+              </div>
+            </ProgramContextSection>
+          </ControlRoomBay>
+        )}
+      </div>
 
       <BayDetailDrawer
         selection={selection}

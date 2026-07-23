@@ -11,16 +11,23 @@ function loadDefaultOpen(): boolean {
   } catch {
     // ignore
   }
-  return true
+  // P0: Governance / program context defaults collapsed.
+  return false
 }
 
 interface ProgramContextSectionProps {
   summary?: string
+  /** When true, render children only (bay chrome owns expand). */
+  embedded?: boolean
   children: ReactNode
 }
 
-export function ProgramContextSection({ summary, children }: ProgramContextSectionProps) {
+export function ProgramContextSection({ summary, embedded = false, children }: ProgramContextSectionProps) {
   const [open, setOpen] = useState(loadDefaultOpen)
+
+  if (embedded) {
+    return <div className="control-room-program-context control-room-program-context--embedded">{children}</div>
+  }
 
   function toggle() {
     setOpen(v => {

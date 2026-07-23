@@ -2331,6 +2331,23 @@ html {
   border-top: 1px solid var(--border);
 }
 
+.control-room-program-context--embedded {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.control-room-bay__toggle {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  min-width: 0;
+}
+
 .cockpit-mission-inline {
   gap: 0.35rem;
 }
@@ -5791,16 +5808,29 @@ button.infra-stack-chip:hover {
 
 /* ── Agent Execution Dock (shell SSOT for live Fix) ── */
 .console-agent-execution-dock {
-  position: sticky;
+  position: fixed;
   bottom: 0;
-  z-index: 30;
+  right: 0;
+  left: var(--sidebar-width, 16rem);
+  z-index: 40;
   display: flex;
   flex-direction: column;
-  width: 100%;
   min-width: 0;
   border-top: 1px solid color-mix(in oklab, var(--task-mode-accent, #f59e0b) 40%, var(--border));
   background: color-mix(in oklab, var(--task-mode-accent, #f59e0b) 8%, var(--card));
   box-shadow: 0 -4px 16px color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+/* Collapsed sidebar icon rail — peer state on wrapper when inset variant */
+.group\/sidebar-wrapper:has([data-slot='sidebar'][data-state='collapsed']) .console-agent-execution-dock,
+.group\/sidebar-wrapper:has([data-collapsible='icon'][data-state='collapsed']) .console-agent-execution-dock {
+  left: var(--sidebar-width-icon, 3rem);
+}
+
+@media (max-width: 767px) {
+  .console-agent-execution-dock {
+    left: 0;
+  }
 }
 
 .console-agent-execution-dock--collapsed {
@@ -5826,15 +5856,33 @@ button.infra-stack-chip:hover {
 }
 
 .console-agent-execution-dock__resize {
-  flex: 0 0 0.35rem;
+  flex: 0 0 0.5rem;
   cursor: ns-resize;
   touch-action: none;
-  background: transparent;
+  position: relative;
+  background: color-mix(in oklab, var(--task-mode-accent, #f59e0b) 18%, transparent);
+}
+
+.console-agent-execution-dock__resize::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2.5rem;
+  height: 0.2rem;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--task-mode-accent, #f59e0b) 55%, var(--border));
 }
 
 .console-agent-execution-dock__resize:hover,
 .console-agent-execution-dock__resize:active {
-  background: color-mix(in oklab, var(--task-mode-accent, #f59e0b) 35%, transparent);
+  background: color-mix(in oklab, var(--task-mode-accent, #f59e0b) 40%, transparent);
+}
+
+.console-agent-execution-dock__resize:hover::after,
+.console-agent-execution-dock__resize:active::after {
+  background: var(--task-mode-accent, #f59e0b);
 }
 
 .console-agent-execution-dock__head {

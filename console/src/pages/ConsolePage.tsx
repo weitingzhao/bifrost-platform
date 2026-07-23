@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { AgentExecutionDock } from '@/components/agent/AgentExecutionDock'
@@ -508,8 +508,28 @@ function ConsolePageInner() {
         activeTab={viewTab}
         onSelect={(id) => setViewTab(id as ConsoleViewTab)}
         onModeChange={handleTaskModeChange}
+        ambientAgent={
+          ambientJob != null
+            ? { label: ambientJob.label, onExpandDock: expandAgentDock }
+            : null
+        }
       />
-      <SidebarInset className="min-w-0 overflow-x-hidden">
+      <SidebarInset
+        className={
+          ambientJob != null
+            ? 'min-w-0 overflow-x-hidden pb-[var(--agent-dock-reserve,2.75rem)]'
+            : 'min-w-0 overflow-x-hidden'
+        }
+        style={
+          ambientJob != null
+            ? ({
+                ['--agent-dock-reserve' as string]: dockExpanded
+                  ? 'min(42vh, 28rem)'
+                  : '2.75rem',
+              } as CSSProperties)
+            : undefined
+        }
+      >
         <div className="console-shell-chrome sticky top-0 z-20 bg-card">
           <ConsoleHeader
             plane={consoleNavPlane(viewTab)}
@@ -520,6 +540,7 @@ function ConsolePageInner() {
                 ? {
                     label: ambientJob.label,
                     onOpen: expandAgentDock,
+                    expanded: dockExpanded,
                   }
                 : null
             }
@@ -874,6 +895,7 @@ function ConsolePageInner() {
           onOpenCluster={openCluster}
         />
       </PageShell>
+      </SidebarInset>
       {ambientJob != null && (
         <AgentExecutionDock
           jobId={ambientJob.id}
@@ -889,7 +911,6 @@ function ConsolePageInner() {
           onComplete={handleAmbientJobComplete}
         />
       )}
-      </SidebarInset>
     </SidebarProvider>
     </div>
     </TooltipProvider>
