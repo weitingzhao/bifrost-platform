@@ -5789,7 +5789,10 @@ button.infra-stack-chip:hover {
 .console-shell-chrome {
   width: 100%;
   min-width: 0;
-  overflow-x: hidden;
+  /* Must not shrink in SidebarInset flex column — otherwise height collapses to 0
+     and overflow-x:hidden promotes overflow-y:auto, clipping Agent Task / User. */
+  flex-shrink: 0;
+  overflow: visible;
 }
 
 /* Legacy top ambient banner host — prefer Agent Execution Dock (bottom). */

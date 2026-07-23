@@ -42,8 +42,9 @@ export type SystemDomainRow = {
 }
 
 /**
- * Apollo seven domains — keep label strings identical to CONSOLE_NAV_GROUPS /
- * ConsoleNavPlane in consoleNavConfig.ts.
+ * Apollo seven domains — keep label strings identical to ConsoleNavPlane
+ * in consoleNavConfig.ts. Six domains appear in the sidebar rail; Governance
+ * is reached via the shell User menu (still a first-class plane for catalogs).
  */
 export const SYSTEM_DOMAINS: SystemDomainRow[] = [
   {

@@ -25,9 +25,9 @@ import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 import type { OpenRuntimeMapFn, RuntimeMapNavigateOptions } from '@/lib/runtime-map/runtimeMapNavigation'
 import { type EnvFilter } from '@/components/EnvironmentStrip'
 import { FocusStrip } from '@/components/FocusStrip'
-import { PlatformAuthBar } from '@/components/PlatformAuthBar'
 import { ConsoleHeader, OpsContextBar } from '@/components/ConsoleHeader'
 import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar'
+import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
 import { AgentCapabilityPage } from '@/pages/AgentCapabilityPage'
@@ -199,6 +199,7 @@ function ConsolePageInner() {
   const [runtimeMapSheetOpen, setRuntimeMapSheetOpen] = useState(false)
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
+  const { viewerEnv, viewerEnvLoading } = useFleetSnapshot()
 
   const envForRuntime = envFilter === 'all' ? 'prod' : envFilter
 
@@ -508,10 +509,6 @@ function ConsolePageInner() {
         activeTab={viewTab}
         onSelect={(id) => setViewTab(id as ConsoleViewTab)}
         onModeChange={handleTaskModeChange}
-        agentTask={{
-          runningLabel: ambientJob?.label ?? null,
-          onExpandDock: expandAgentDock,
-        }}
       />
       <SidebarInset
         className="min-w-0 overflow-x-hidden pb-[var(--agent-dock-reserve,2.75rem)]"
@@ -523,20 +520,23 @@ function ConsolePageInner() {
           } as CSSProperties
         }
       >
-        <div className="console-shell-chrome sticky top-0 z-20 bg-card">
+        <div className="console-shell-chrome sticky top-0 z-20 shrink-0 bg-card">
           <ConsoleHeader
             plane={consoleNavPlane(viewTab)}
             healthy={healthQuery.data}
             onRefresh={refreshAll}
+            viewerEnv={viewerEnv}
+            viewerEnvLoading={viewerEnvLoading}
+            onSelectTab={tabId => {
+              if (isConsoleViewTab(tabId)) setViewTab(tabId)
+            }}
             ambientAgent={{
               label: ambientJob?.label ?? 'Agent Task',
               onOpen: expandAgentDock,
               expanded: dockExpanded,
               running: ambientJob != null,
             }}
-          >
-            <PlatformAuthBar compact hideRefresh />
-          </ConsoleHeader>
+          />
           <TaskModeActiveBanner onModeChange={handleTaskModeChange} />
           {OPS_CONTEXT_TABS.includes(viewTab) && (
             <OpsContextBar>
