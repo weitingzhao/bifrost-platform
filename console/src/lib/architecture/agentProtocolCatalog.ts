@@ -122,6 +122,11 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
       'Forced Agent Desk tab switch on Agent Fix start/running — use shell Agent Execution Dock (ambientJob + Expand dock); Agent Desk is archive only (explicit Open in Agent Desk)',
     scope: 'Ops Console shell',
   },
+  {
+    action:
+      'In-page Commit & push / Skip / Cancel on Launch Live — approvals are Dock SSOT; Launch Live is telemetry (Agent one-line + Pipeline + Post-deploy) with Expand dock',
+    scope: 'Mission Launch · Launch Live',
+  },
 ]
 
 /** Wave 3 P0 — Owner-locked before implementation (spine D11, D12). */
@@ -469,6 +474,7 @@ export const DAILY_OPS_FLEET_DESK = {
     'Engineer CRITICAL: fleet cell Agent Fix stays disabled; git dirty uses Propose commit / Stash (not magic AI Fix that clears dirty); other AI-fixable → Operator Plan; else Manual next (e.g. Mac seat). Full Operator Plane page is escape hatch only.',
     'Full Operator Plane page is secondary escape (MCP / host deploy / self-smoke) — not the default primary CTA.',
     'Agent Fix running: CTA becomes Expand dock; shell Agent Execution Dock is SSOT for live feed/approvals; in-page panel is one-line summary only; Agent Desk is archive (explicit Open in Agent Desk).',
+    'Mission Launch · Launch Live: telemetry-only for Agent (one-line + Expand dock); Pipeline + Post-deploy stay in-page; Commit & push / approvals only in Agent Execution Dock (same Daily Ops protocol).',
     'Verify = re-probe fleet after Agent Fix; Clear = fleetClear + operate queue open===0.',
     'W3 Auto-remediate default OFF — Assisted “Ready to Agent Fix” hint only; never auto-trigger.',
     'Checklist AI Check (scope daily-ops-checklist-run): Ops loop owns the green primary; Checklist header keeps muted Re-check + Ask for AI secondary — never two magic-wand primaries.',

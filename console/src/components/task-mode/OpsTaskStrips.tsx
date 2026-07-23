@@ -290,8 +290,9 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
         tierB={tierB}
         onOpenDetail={() => onNavigate('trade-release')}
         detailLabel="Deploy Satellite →"
+        onExpandAgentDock={onExpandAgentDock}
         onOpenAgentDesk={
-          onOpenAgentDesk != null ? () => onOpenAgentDesk() : undefined
+          onOpenAgentDesk != null ? (id: string) => onOpenAgentDesk(id) : undefined
         }
         onBackToGate={() => setLiveViewDismissed(true)}
       />
@@ -312,8 +313,9 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
         supplyCmsTotal={supplyCmsTotal}
         onOpenDetail={() => onNavigate('platform-release')}
         detailLabel="Launch Rocket →"
+        onExpandAgentDock={onExpandAgentDock}
         onOpenAgentDesk={
-          onOpenAgentDesk != null ? () => onOpenAgentDesk() : undefined
+          onOpenAgentDesk != null ? (id: string) => onOpenAgentDesk(id) : undefined
         }
         onBackToGate={() => setLiveViewDismissed(true)}
       />

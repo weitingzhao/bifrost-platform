@@ -213,6 +213,12 @@ export const AGENT_GOVERNANCE_ASSETS: AgentAssetRow[] = [
     purpose:
       'Shell SSOT for live Agent Fix (Collapsed/Working/Maximized). Agent Desk = archive only; Fix defaults to in-place Dock — forbid forced agent-desk tab switch.',
   },
+  {
+    asset: 'console/src/components/task-mode/LaunchLiveView.tsx',
+    repo: 'bifrost-platform',
+    purpose:
+      'Mission Launch live monitor — Agent one-line + Expand dock; Pipeline/Post-deploy in-page; approvals stay in AgentExecutionDock (no duplicate Commit & push).',
+  },
 ]
 
 /* ── LLM pack builder ── */

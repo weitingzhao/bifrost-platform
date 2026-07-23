@@ -230,11 +230,22 @@ export function RocketReadinessStrip({
   summaryColumn = false,
   suppressProdBlockedBanner = false,
   onNavigate,
+  canOperate = false,
+  onAgentFix,
+  agentFixPending = false,
+  agentFixDisabled = false,
+  agentFixTitle,
 }: {
   compact?: boolean
   summaryColumn?: boolean
   suppressProdBlockedBanner?: boolean
   onNavigate: (tabId: string) => void
+  canOperate?: boolean
+  /** Platform Prod / STG readiness Agent Fix (same ambient task as LaunchGateBar). */
+  onAgentFix?: () => void
+  agentFixPending?: boolean
+  agentFixDisabled?: boolean
+  agentFixTitle?: string
 }) {
   const { snapshot, isLoading: missionLoading } = useMissionSnapshot()
   const { prodOverall, isLoading: prodLoading } = useRocketProdReadiness()
@@ -393,6 +404,11 @@ export function RocketReadinessStrip({
           onLink={() => onNavigate('platform-release')}
           onNavigate={onNavigate}
           fixCtx={{ modeId: 'mission-launch', env: 'platform-stg' }}
+          canOperate={canOperate}
+          onAgentFix={onAgentFix}
+          agentFixPending={agentFixPending}
+          agentFixDisabled={agentFixDisabled}
+          agentFixTitle={agentFixTitle}
         />
         <EnvironmentReadinessPanel
           title={summaryColumn ? 'Platform Prod' : 'PROD environment readiness'}
@@ -407,6 +423,11 @@ export function RocketReadinessStrip({
           onLink={() => onNavigate('platform-release')}
           onNavigate={onNavigate}
           fixCtx={{ modeId: 'mission-launch', env: 'platform-prod' }}
+          canOperate={canOperate}
+          onAgentFix={onAgentFix}
+          agentFixPending={agentFixPending}
+          agentFixDisabled={agentFixDisabled}
+          agentFixTitle={agentFixTitle}
         />
       </div>
     </div>

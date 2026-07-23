@@ -272,6 +272,11 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                   compact
                   summaryColumn
                   suppressProdBlockedBanner
+                  canOperate={readinessCanOperate}
+                  onAgentFix={onLaunchAgentFix}
+                  agentFixPending={launchAgentFixPending}
+                  agentFixDisabled={launchAgentFixDisabled}
+                  agentFixTitle={launchAgentFixTitle}
                 />
               </OpsSection>
               <OpsSection
