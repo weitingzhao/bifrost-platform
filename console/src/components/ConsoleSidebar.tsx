@@ -49,6 +49,15 @@ export type ConsoleViewTab =
   | 'plugin-gallery'
   | 'defects'
 
+/** Permanent sidebar Agent Task entry — always opens shell Execution Dock. */
+export type ConsoleSidebarAgentTask = {
+  /** Live ambient job label when a Fix is running. */
+  runningLabel?: string | null
+  /** Open / expand the shell Agent Execution Dock (idle or live). */
+  onExpandDock: () => void
+}
+
+/** @deprecated Use ConsoleSidebarAgentTask */
 export type ConsoleSidebarAmbientAgent = {
   label: string
   onExpandDock: () => void
@@ -58,13 +67,13 @@ export function ConsoleSidebar({
   activeTab,
   onSelect,
   onModeChange,
-  ambientAgent,
+  agentTask,
 }: {
   activeTab: string
   onSelect: (id: string) => void
   onModeChange?: (landingTab: string, modeId: TaskModeId) => void
-  /** Shell Agent Execution Dock entry — same surface as header Expand dock. */
-  ambientAgent?: ConsoleSidebarAmbientAgent | null
+  /** Always-on Agent Task control in the sidebar footer. */
+  agentTask: ConsoleSidebarAgentTask
 }) {
   const { modeId, mode, isTaskLens } = useTaskMode()
   const { viewerEnv, viewerEnvLoading } = useFleetSnapshot()
@@ -78,42 +87,46 @@ export function ConsoleSidebar({
     viewerEnvLoading ? 'Probing…' : viewerEnvBadgeLabel(viewerEnv)
   }`
 
-  let footer: ReactNode
-  if (ambientAgent != null || isTaskLens) {
-    footer = (
-      <>
-        {ambientAgent != null && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mb-1.5 h-auto w-full justify-start gap-1.5 border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_50%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_12%,transparent)] px-2 py-1.5 text-left text-[var(--text-dense-caption)]"
-            onClick={ambientAgent.onExpandDock}
-            title="Expand Agent Execution Dock"
-          >
-            <StatusLamp value="degraded" kind="reach" />
-            <Bot size={12} className="shrink-0" aria-hidden />
-            <span className="min-w-0 flex-1 truncate">
-              <span className="font-semibold text-foreground">Agent Fix</span>
-              <span className="mt-0.5 block truncate text-muted-foreground">
-                {ambientAgent.label}
-              </span>
-            </span>
-            <span className="shrink-0 font-medium text-primary">Dock</span>
-          </Button>
-        )}
-        {isTaskLens ? (
-          <p className="m-0 px-1 text-[var(--text-dense-caption)] text-muted-foreground">
-            <span className="font-medium text-foreground">{mode.label}</span>
-            {' · '}
-            focused lens
-          </p>
-        ) : null}
-      </>
-    )
-  } else {
-    footer = undefined
-  }
+  const running =
+    agentTask.runningLabel != null && agentTask.runningLabel !== ''
+
+  const agentTaskButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className={
+        running
+          ? 'mb-1.5 h-auto w-full justify-start gap-1.5 border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_50%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_12%,transparent)] px-2 py-1.5 text-left text-[var(--text-dense-caption)]'
+          : 'mb-1.5 h-auto w-full justify-start gap-1.5 border-border/80 bg-sidebar-accent/40 px-2 py-1.5 text-left text-[var(--text-dense-caption)]'
+      }
+      onClick={agentTask.onExpandDock}
+      title="Open Agent Execution Dock — live status (Desk is archive inside dock)"
+    >
+      <StatusLamp value={running ? 'degraded' : 'unknown'} kind="reach" />
+      <Bot size={12} className="shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1 truncate">
+        <span className="font-semibold text-foreground">Agent Task</span>
+        <span className="mt-0.5 block truncate text-muted-foreground">
+          {running ? agentTask.runningLabel : 'Idle · open dock'}
+        </span>
+      </span>
+      <span className="shrink-0 font-medium text-primary">Dock</span>
+    </Button>
+  )
+
+  const footer: ReactNode = (
+    <>
+      {agentTaskButton}
+      {isTaskLens ? (
+        <p className="m-0 px-1 text-[var(--text-dense-caption)] text-muted-foreground">
+          <span className="font-medium text-foreground">{mode.label}</span>
+          {' · '}
+          focused lens
+        </p>
+      ) : null}
+    </>
+  )
 
   return (
     <ShellNavSidebar

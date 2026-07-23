@@ -19,11 +19,12 @@ const MAX_WORKING_VH = 70
 export type AgentExecutionDockMode = 'collapsed' | 'working' | 'maximized'
 
 export type AgentExecutionDockProps = {
-  jobId: string
+  /** Ambient job id; null = idle shell (no live stream). */
+  jobId: string | null
   label?: string
   scope?: string
   onDismiss: () => void
-  onOpenAgentDesk?: (jobId: string) => void
+  onOpenAgentDesk?: (jobId?: string) => void
   onComplete?: (job: RemediationJob) => void
   /** Uncontrolled initial mode when expanded defaults to working. */
   defaultExpanded?: boolean
@@ -50,9 +51,9 @@ function defaultWorkingHeightPx(): number {
 }
 
 /**
- * Global bottom Execution Dock for ambient Agent Fix.
- * Collapsed / Working / Maximized — main decision boards stay mounted.
- * Agent Desk is archive only (explicit Open in Agent Desk).
+ * Global bottom Execution Dock for Agent Task (always mounted).
+ * Idle: empty shell + Open Agent Desk. Running: live feed / approvals.
+ * Agent Desk is archive only (explicit link).
  */
 export function AgentExecutionDock({
   jobId,
@@ -61,10 +62,11 @@ export function AgentExecutionDock({
   onDismiss,
   onOpenAgentDesk,
   onComplete,
-  defaultExpanded = true,
+  defaultExpanded = false,
   expanded: expandedProp,
   onExpandedChange,
 }: AgentExecutionDockProps) {
+  const idle = jobId == null || jobId === ''
   const controlled = expandedProp != null
   const [mode, setMode] = useState<AgentExecutionDockMode>(() =>
     defaultExpanded ? 'working' : 'collapsed',
@@ -79,8 +81,8 @@ export function AgentExecutionDock({
 
   const session = useAgentJobLiveSession(jobId, {
     onComplete,
-    onDismiss,
-    autoDismissMs: 5000,
+    onDismiss: idle ? undefined : onDismiss,
+    autoDismissMs: idle ? 0 : 5000,
   })
 
   useEffect(() => {
@@ -162,9 +164,12 @@ export function AgentExecutionDock({
     reach,
   } = session
 
-  const showInlineFeed = !isTerminal && liveFeed != null
-  const showFeedPlaceholder = !isTerminal && liveFeed == null && connected
-  const showStats = !isTerminal && (feedStats.toolCalls > 0 || feedStats.eventCount > 0)
+  const showInlineFeed = !idle && !isTerminal && liveFeed != null
+  const showFeedPlaceholder = !idle && !isTerminal && liveFeed == null && connected
+  const showStats = !idle && !isTerminal && (feedStats.toolCalls > 0 || feedStats.eventCount > 0)
+  const headStatus = idle ? 'Idle' : statusLabel
+  const headReach = idle ? 'unknown' : reach
+  const variantClass = idle ? 'idle' : bannerVariant
 
   const bodyStyle =
     mode === 'working'
@@ -178,7 +183,7 @@ export function AgentExecutionDock({
       className={cn(
         'console-agent-execution-dock',
         `console-agent-execution-dock--${mode}`,
-        `console-agent-execution-dock--${bannerVariant}`,
+        `console-agent-execution-dock--${variantClass}`,
       )}
       role="region"
       aria-label="Agent execution dock"
@@ -197,19 +202,19 @@ export function AgentExecutionDock({
       )}
 
       <div className="console-agent-execution-dock__head">
-        <StatusLamp value={reach} kind="reach" />
-        <span className="console-agent-execution-dock__kicker">Agent Fix</span>
-        {label != null && label !== '' && (
+        <StatusLamp value={headReach} kind="reach" />
+        <span className="console-agent-execution-dock__kicker">Agent Task</span>
+        {!idle && label != null && label !== '' && (
           <span className="console-agent-execution-dock__label" title={label}>
             {label}
           </span>
         )}
-        {scope != null && scope !== '' && (
+        {!idle && scope != null && scope !== '' && (
           <span className="console-agent-execution-dock__scope" title={scope}>
             {scope}
           </span>
         )}
-        <span className="console-agent-execution-dock__status">{statusLabel}</span>
+        <span className="console-agent-execution-dock__status">{headStatus}</span>
         {mode !== 'collapsed' && showInlineFeed && liveFeed != null && (
           <div className="console-agent-execution-dock__feed">
             <span
@@ -230,6 +235,11 @@ export function AgentExecutionDock({
             {liveFeed.text}
           </span>
         )}
+        {mode === 'collapsed' && idle && (
+          <span className="console-agent-execution-dock__feed-text console-agent-execution-dock__feed-text--placeholder">
+            No ambient Fix — expand for status
+          </span>
+        )}
         {showFeedPlaceholder && mode !== 'collapsed' && (
           <span className="console-agent-execution-dock__feed-text console-agent-execution-dock__feed-text--placeholder">
             Waiting for agent activity…
@@ -242,13 +252,13 @@ export function AgentExecutionDock({
             {feedStats.eventCount > feedStats.toolCalls && `${feedStats.eventCount} events`}
           </span>
         )}
-        {mode !== 'collapsed' && (
+        {mode !== 'collapsed' && !idle && (
           <AgentPhaseIndicator currentPhase={job?.phase} failed={job?.status === 'failed'} compact />
         )}
-        {elapsed != null && !isTerminal && (
+        {elapsed != null && !idle && !isTerminal && (
           <span className="console-agent-execution-dock__elapsed">{elapsed}</span>
         )}
-        {!connected && !isTerminal && error == null && (
+        {!idle && !connected && !isTerminal && error == null && (
           <span className="console-agent-execution-dock__connecting">connecting…</span>
         )}
 
@@ -280,11 +290,15 @@ export function AgentExecutionDock({
             </>
           )}
           {onOpenAgentDesk != null && (
-            <Button variant="ghost" size="xs" onClick={() => onOpenAgentDesk(jobId)}>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => onOpenAgentDesk(jobId ?? undefined)}
+            >
               Open in Agent Desk
             </Button>
           )}
-          {isTerminal && (
+          {!idle && isTerminal && (
             <Button variant="outline" size="xs" onClick={onDismiss}>
               <X className="console-agent-execution-dock__action-icon" aria-hidden />
               Dismiss
@@ -295,58 +309,75 @@ export function AgentExecutionDock({
 
       {mode !== 'collapsed' && (
         <div className="console-agent-execution-dock__body">
-          {bannerVariant === 'done' && job?.summary != null && job.summary !== '' && (
-            <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--done">
-              {job.summary}
-            </p>
-          )}
-          {bannerVariant === 'failed' && (
-            <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
-              {job?.error ?? job?.summary ?? 'Unknown error'}
-            </p>
-          )}
-          {error != null && !isTerminal && (
-            <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
-              Connection: {error}
-            </p>
-          )}
-
-          {pendingApproval != null && (
-            <div className="console-agent-execution-dock__approval">
-              <RemediationApprovalBlock
-                event={pendingApproval}
-                compact
-                submitting={respondPending}
-                onRespond={(optionId, note, commitMessage) =>
-                  respond(optionId, note, commitMessage)
-                }
-              />
-            </div>
-          )}
-
-          {!isTerminal && (
-            <div className="console-agent-execution-dock__log dense-scroll-y">
-              {recentEvents.length === 0 ? (
-                <p className="console-agent-execution-dock__log-empty">Waiting for agent activity…</p>
-              ) : (
-                <ul className="console-agent-execution-dock__log-list">
-                  {recentEvents.map(ev => (
-                    <li
-                      key={ev.id}
-                      className={cn(
-                        'console-agent-execution-dock__log-item',
-                        `console-agent-execution-dock__log-item--${ev.type}`,
-                      )}
-                    >
-                      <span className="console-agent-execution-dock__log-type">{ev.type}</span>
-                      <span className="console-agent-execution-dock__log-text">
-                        {formatFeedEventLine(ev)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+          {idle ? (
+            <div className="console-agent-execution-dock__idle">
+              <p className="console-agent-execution-dock__idle-title">No ambient Agent Fix running</p>
+              <p className="console-agent-execution-dock__idle-copy">
+                Start Fix from Daily Ops or Mission Launch — live feed and approvals appear here.
+                Agent Desk is the archive for history and manual tasks.
+              </p>
+              {onOpenAgentDesk != null && (
+                <Button variant="outline" size="sm" onClick={() => onOpenAgentDesk()}>
+                  Open Agent Desk
+                </Button>
               )}
             </div>
+          ) : (
+            <>
+              {bannerVariant === 'done' && job?.summary != null && job.summary !== '' && (
+                <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--done">
+                  {job.summary}
+                </p>
+              )}
+              {bannerVariant === 'failed' && (
+                <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
+                  {job?.error ?? job?.summary ?? 'Unknown error'}
+                </p>
+              )}
+              {error != null && !isTerminal && (
+                <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
+                  Connection: {error}
+                </p>
+              )}
+
+              {pendingApproval != null && (
+                <div className="console-agent-execution-dock__approval">
+                  <RemediationApprovalBlock
+                    event={pendingApproval}
+                    compact
+                    submitting={respondPending}
+                    onRespond={(optionId, note, commitMessage) =>
+                      respond(optionId, note, commitMessage)
+                    }
+                  />
+                </div>
+              )}
+
+              {!isTerminal && (
+                <div className="console-agent-execution-dock__log dense-scroll-y">
+                  {recentEvents.length === 0 ? (
+                    <p className="console-agent-execution-dock__log-empty">Waiting for agent activity…</p>
+                  ) : (
+                    <ul className="console-agent-execution-dock__log-list">
+                      {recentEvents.map(ev => (
+                        <li
+                          key={ev.id}
+                          className={cn(
+                            'console-agent-execution-dock__log-item',
+                            `console-agent-execution-dock__log-item--${ev.type}`,
+                          )}
+                        >
+                          <span className="console-agent-execution-dock__log-type">{ev.type}</span>
+                          <span className="console-agent-execution-dock__log-text">
+                            {formatFeedEventLine(ev)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

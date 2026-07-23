@@ -48,7 +48,7 @@ function reachFromPhase(job: RemediationJob | null): 'ok' | 'degraded' | 'fail' 
  * Single stream consumer + approval respond path — avoid a third feed parser.
  */
 export function useAgentJobLiveSession(
-  jobId: string,
+  jobId: string | null,
   opts?: {
     onComplete?: (job: RemediationJob) => void
     onDismiss?: () => void
@@ -97,17 +97,22 @@ export function useAgentJobLiveSession(
       optionId: string
       note?: string
       commitMessage?: string
-    }) => respondRemediationJob(jobId, optionId, note, commitMessage),
+    }) => {
+      if (jobId == null || jobId === '') {
+        return Promise.reject(new Error('No ambient agent job'))
+      }
+      return respondRemediationJob(jobId, optionId, note, commitMessage)
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
     },
   })
 
   useEffect(() => {
-    if (isTerminal) return
+    if (jobId == null || jobId === '' || isTerminal) return
     const id = window.setInterval(() => setNowMs(Date.now()), 1000)
     return () => window.clearInterval(id)
-  }, [isTerminal])
+  }, [jobId, isTerminal])
 
   useEffect(() => {
     if (job == null || !isTerminal || completedRef.current === job.id) return

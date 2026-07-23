@@ -5851,8 +5851,31 @@ button.infra-stack-chip:hover {
   border-top-color: color-mix(in oklab, var(--success) 45%, var(--border));
 }
 
-.console-agent-execution-dock--failed {
-  border-top-color: color-mix(in oklab, var(--destructive) 45%, var(--border));
+.console-agent-execution-dock--idle {
+  border-top-color: color-mix(in oklab, var(--border) 80%, var(--muted-foreground));
+  background: color-mix(in oklab, var(--card) 92%, var(--muted));
+}
+
+.console-agent-execution-dock__idle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.25rem 0.15rem 0.5rem;
+}
+
+.console-agent-execution-dock__idle-title {
+  margin: 0;
+  font-size: var(--text-dense-meta);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.console-agent-execution-dock__idle-copy {
+  margin: 0;
+  max-width: 36rem;
+  font-size: var(--text-dense-caption);
+  color: var(--muted-foreground);
 }
 
 .console-agent-execution-dock__resize {

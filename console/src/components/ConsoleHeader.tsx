@@ -8,6 +8,8 @@ export type ConsoleHeaderAmbientAgent = {
   onOpen: () => void
   /** Dock already expanded — button focuses / still expands. */
   expanded?: boolean
+  /** True when an ambient Fix job is live. */
+  running?: boolean
 }
 
 export function ConsoleHeader({
@@ -21,7 +23,7 @@ export function ConsoleHeader({
   plane?: ConsoleNavPlane
   healthy: boolean | undefined
   onRefresh: () => void
-  /** Global entry when an ambient Agent Task is running. */
+  /** Global Agent Task → Execution Dock (always available). */
   ambientAgent?: ConsoleHeaderAmbientAgent | null
   /** Right-side slot — e.g. compact PlatformAuthBar */
   children?: ReactNode
@@ -48,18 +50,25 @@ export function ConsoleHeader({
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 shrink-0 gap-1.5 border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_55%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_14%,var(--card))] px-2.5 text-[var(--text-dense-caption)] shadow-sm"
+          className={cn(
+            'h-7 shrink-0 gap-1.5 px-2.5 text-[var(--text-dense-caption)] shadow-sm',
+            ambientAgent.running
+              ? 'border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_55%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_14%,var(--card))]'
+              : 'border-border bg-secondary/50',
+          )}
           onClick={ambientAgent.onOpen}
-          title="Open Agent Execution Dock — live feed and approvals (shell bottom)"
+          title="Open Agent Execution Dock — live status (shell bottom)"
         >
-          <StatusLamp value="degraded" kind="reach" />
+          <StatusLamp value={ambientAgent.running ? 'degraded' : 'unknown'} kind="reach" />
           <Bot size={12} aria-hidden />
-          <span className="font-semibold text-foreground">Agent Fix</span>
-          <span className="hidden max-w-[8rem] truncate text-muted-foreground sm:inline">
-            {ambientAgent.label}
-          </span>
+          <span className="font-semibold text-foreground">Agent Task</span>
+          {ambientAgent.running && (
+            <span className="hidden max-w-[8rem] truncate text-muted-foreground sm:inline">
+              {ambientAgent.label}
+            </span>
+          )}
           <span className="font-medium text-primary">
-            {ambientAgent.expanded ? 'Focus dock' : 'Expand dock'}
+            {ambientAgent.expanded ? 'Focus dock' : 'Open dock'}
           </span>
         </Button>
       )}

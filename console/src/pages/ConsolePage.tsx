@@ -508,26 +508,19 @@ function ConsolePageInner() {
         activeTab={viewTab}
         onSelect={(id) => setViewTab(id as ConsoleViewTab)}
         onModeChange={handleTaskModeChange}
-        ambientAgent={
-          ambientJob != null
-            ? { label: ambientJob.label, onExpandDock: expandAgentDock }
-            : null
-        }
+        agentTask={{
+          runningLabel: ambientJob?.label ?? null,
+          onExpandDock: expandAgentDock,
+        }}
       />
       <SidebarInset
-        className={
-          ambientJob != null
-            ? 'min-w-0 overflow-x-hidden pb-[var(--agent-dock-reserve,2.75rem)]'
-            : 'min-w-0 overflow-x-hidden'
-        }
+        className="min-w-0 overflow-x-hidden pb-[var(--agent-dock-reserve,2.75rem)]"
         style={
-          ambientJob != null
-            ? ({
-                ['--agent-dock-reserve' as string]: dockExpanded
-                  ? 'min(42vh, 28rem)'
-                  : '2.75rem',
-              } as CSSProperties)
-            : undefined
+          {
+            ['--agent-dock-reserve' as string]: dockExpanded
+              ? 'min(42vh, 28rem)'
+              : '2.75rem',
+          } as CSSProperties
         }
       >
         <div className="console-shell-chrome sticky top-0 z-20 bg-card">
@@ -535,15 +528,12 @@ function ConsolePageInner() {
             plane={consoleNavPlane(viewTab)}
             healthy={healthQuery.data}
             onRefresh={refreshAll}
-            ambientAgent={
-              ambientJob != null
-                ? {
-                    label: ambientJob.label,
-                    onOpen: expandAgentDock,
-                    expanded: dockExpanded,
-                  }
-                : null
-            }
+            ambientAgent={{
+              label: ambientJob?.label ?? 'Agent Task',
+              onOpen: expandAgentDock,
+              expanded: dockExpanded,
+              running: ambientJob != null,
+            }}
           >
             <PlatformAuthBar compact hideRefresh />
           </ConsoleHeader>
@@ -896,21 +886,22 @@ function ConsolePageInner() {
         />
       </PageShell>
       </SidebarInset>
-      {ambientJob != null && (
-        <AgentExecutionDock
-          jobId={ambientJob.id}
-          label={ambientJob.label}
-          scope={ambientJob.scope}
-          expanded={dockExpanded}
-          onExpandedChange={setDockExpanded}
-          onDismiss={() => {
-            setAmbientJob(null)
-            setDockExpanded(false)
-          }}
-          onOpenAgentDesk={id => openAgentDesk(id)}
-          onComplete={handleAmbientJobComplete}
-        />
-      )}
+      <AgentExecutionDock
+        jobId={ambientJob?.id ?? null}
+        label={ambientJob?.label}
+        scope={ambientJob?.scope}
+        expanded={dockExpanded}
+        onExpandedChange={setDockExpanded}
+        onDismiss={() => {
+          setAmbientJob(null)
+          setDockExpanded(true)
+        }}
+        onOpenAgentDesk={id => {
+          if (id != null && id !== '') openAgentDesk(id)
+          else openAgentDeskTab()
+        }}
+        onComplete={handleAmbientJobComplete}
+      />
     </SidebarProvider>
     </div>
     </TooltipProvider>
