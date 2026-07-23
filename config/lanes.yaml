@@ -245,7 +245,7 @@ lanes:
       work_intent: feature
     - id: trade-system-celery
       track: build
-      component_line: rocket
+      component_line: satellite
       track_type: build
       label: 分析目前Trade System使用的Celery 相关的后台作业调度方案
       short_label: 分析目前Trade System使用的Celer
