@@ -28,7 +28,6 @@ import {
   Server,
   Shield,
   ShieldCheck,
-  Terminal,
   Workflow,
 } from 'lucide-react'
 
@@ -45,7 +44,7 @@ import {
  * |------------------|-----------------------|--------------------------------------------------|
  * | Mission Control  | Cross-domain ops hub  | Control Room, Observability, defects, audit, delivery |
  * | Rocket           | Ops Platform itself   | K8s cluster, Launch Rocket, placement             |
- * | Ground Systems   | Infrastructure        | Server console, network, compute                  |
+ * | Ground Systems   | Infrastructure        | Network, compute (SSH via shell Operator Dock)    |
  * | Satellite        | Payload satellite(s)  | Bus, runtime, API & Auth Probes, Deploy Satellite |
  * | Subcontractors   | External plugins      | Plugin Gallery, future plugins                    |
  * | Engineer         | AI Agent              | Workspace, autonomous, trust, L-1 plane           |
@@ -142,7 +141,6 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
       {
         label: '',
         items: [
-          { id: 'console', label: 'Server Console', icon: Terminal },
           { id: 'network', label: 'Network', icon: Network },
           { id: 'compute', label: 'Compute', icon: Cpu },
         ],
@@ -222,6 +220,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   cluster: 'Rocket',
   'platform-release': 'Rocket',
   placement: 'Rocket',
+  /** Legacy `#console` redirects to Operator Dock — plane kept for hash/breadcrumb flash. */
   console: 'Ground Systems',
   network: 'Ground Systems',
   compute: 'Ground Systems',

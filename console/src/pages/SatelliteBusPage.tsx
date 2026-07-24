@@ -1,9 +1,10 @@
 import type { RefObject } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DenseTag, PageHeader, SegmentControl } from '@bifrost/ui'
+import { DenseTag, SegmentControl } from '@bifrost/ui'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
-import { StatusLamp } from '@/components/StatusLamp'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
+import { PageToolbar } from '@/components/layout/PageToolbar'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { busHealthToReach } from '@/lib/satellite-bus/satelliteBusViewModel'
 import {
@@ -69,6 +70,7 @@ export function SatelliteBusPage({
   const [evidenceOpen, setEvidenceOpen] = useState(false)
   const pageRootRef = useRef<HTMLDivElement | null>(null)
   const detailScrollRef = useRef<HTMLDivElement | null>(null)
+  const issuesSectionRef = useRef<HTMLElement | null>(null)
   const selectedSectionRef = useRef<HTMLDivElement | null>(null)
   const sharedSectionRef = useRef<HTMLDetailsElement | null>(null)
   const otherEnvsSectionRef = useRef<HTMLDetailsElement | null>(null)
@@ -130,23 +132,37 @@ export function SatelliteBusPage({
     setInspect(target)
   }, [])
 
+  const selectedIssueCount = q.viewModel.attention.length
+  const verdictTagLabel =
+    q.busProbeError != null ? 'PROBE FAIL' : q.busLoading ? 'PROBING' : q.viewModel.healthLabel
+  const verdictLamp =
+    q.busProbeError != null
+      ? 'fail'
+      : q.busLoading
+        ? 'unknown'
+        : busHealthToReach(q.viewModel.health)
+  const verdictTagVariant =
+    q.busProbeError != null
+      ? 'danger'
+      : q.busLoading
+        ? 'neutral'
+        : busHealthTagVariant(q.viewModel.health)
+  const verdictSummary =
+    q.busProbeError != null
+      ? q.busProbeError
+      : q.busLoading
+        ? 'Probing bus-deep endpoints…'
+        : q.viewModel.topReason
+
   return (
     <div
       ref={pageRootRef}
       className="satellite-bus-page flex w-full min-w-0 flex-col overflow-hidden"
     >
       <div className="flex shrink-0 flex-col gap-2">
-        <PageHeader
-          title="Satellite Bus"
-          titleSize="default"
-          description="Bus health for the selected Trade namespace — shared dependencies (Platform IB Gateway → redis-ib) feed every environment."
-        />
-
-        <section className="page-section panel-elevated px-2.5 py-1.5">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground shrink-0">
-              Trade NS
-            </span>
+        <PageToolbar align="between">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground shrink-0">Trade NS:</span>
             <SegmentControl
               value={q.tradeEnv}
               options={[...TRADE_ENV_OPTIONS]}
@@ -157,7 +173,33 @@ export function SatelliteBusPage({
               Cross-env attention only
             </span>
             <DenseTag variant="neutral">Probe {q.probeTime}</DenseTag>
-            <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          </div>
+        </PageToolbar>
+
+        {q.busProbeError != null && (
+          <OpsFeedback variant="error" title="Bus probe request failed">
+            {q.busProbeError}
+          </OpsFeedback>
+        )}
+        {q.aiIngestTriage.error != null && (
+          <OpsFeedback variant="error" title="Failed to start Agent Triage">
+            {q.aiIngestTriage.error.message}
+          </OpsFeedback>
+        )}
+
+        <OpsVerdictStrip
+          ariaLabel="Bus health verdict"
+          title={`BUS HEALTH · ${q.tradeEnv.toUpperCase()}`}
+          lamp={verdictLamp}
+          tagLabel={verdictTagLabel}
+          tagVariant={verdictTagVariant}
+          summary={
+            <span className="truncate" title={verdictSummary}>
+              {verdictSummary}
+            </span>
+          }
+          actions={
+            <>
               <AgentTriggerButton
                 label="Agent Triage"
                 size="xs"
@@ -187,59 +229,36 @@ export function SatelliteBusPage({
                   IB Gateway
                 </button>
               )}
-            </span>
-          </div>
-        </section>
-
-        {q.busProbeError != null && (
-          <OpsFeedback variant="error" title="Bus probe request failed">
-            {q.busProbeError}
-          </OpsFeedback>
-        )}
-        {q.aiIngestTriage.error != null && (
-          <OpsFeedback variant="error" title="Failed to start Agent Triage">
-            {q.aiIngestTriage.error.message}
-          </OpsFeedback>
-        )}
-
-        <section className="page-section panel-elevated px-2.5 py-2">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <StatusLamp value={busHealthToReach(q.viewModel.health)} kind="reach" />
-            <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">
-              BUS HEALTH · {q.tradeEnv.toUpperCase()}
-            </span>
-            <DenseTag variant={busHealthTagVariant(q.viewModel.health)} className="text-[10px] font-semibold">
-              {q.busProbeError != null
-                ? 'PROBE FAIL'
-                : q.busLoading
-                  ? 'PROBING'
-                  : q.viewModel.healthLabel}
-            </DenseTag>
-            <span
-              className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)] text-foreground/90"
-              title={q.busProbeError ?? q.viewModel.topReason}
-            >
-              {q.busProbeError != null
-                ? q.busProbeError
-                : q.busLoading
-                  ? 'Probing bus-deep endpoints…'
-                  : q.viewModel.topReason}
-            </span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
-            <span className="font-mono-tabular">
-              required {q.viewModel.metrics.requiredOk}/{q.viewModel.metrics.requiredTotal}
-            </span>
-            <span className="font-mono-tabular">expected off {q.viewModel.metrics.expectedOff}</span>
-            <span className="font-mono-tabular">
-              APIs {q.viewModel.metrics.apiOk}/{q.viewModel.metrics.apiTotal}
-            </span>
-            <span className="font-mono-tabular">
-              monitor consumers {q.viewModel.metrics.runtimeOk}/{q.viewModel.metrics.runtimeTotal}
-            </span>
-            <span className="ml-auto">Bus health only — not Launch/Fleet GO&#8201;/&#8201;NO-GO</span>
-          </div>
-        </section>
+            </>
+          }
+          meta={
+            <>
+              <span className="font-mono-tabular">
+                required {q.viewModel.metrics.requiredOk}/{q.viewModel.metrics.requiredTotal}
+              </span>
+              <span className="font-mono-tabular">expected off {q.viewModel.metrics.expectedOff}</span>
+              <span className="font-mono-tabular">
+                APIs {q.viewModel.metrics.apiOk}/{q.viewModel.metrics.apiTotal}
+              </span>
+              <span className="font-mono-tabular">
+                monitor consumers {q.viewModel.metrics.runtimeOk}/{q.viewModel.metrics.runtimeTotal}
+              </span>
+              {selectedIssueCount > 0 ? (
+                <button
+                  type="button"
+                  className="font-mono-tabular text-warning hover:underline"
+                  title="Scroll to Issues requiring attention"
+                  onClick={() =>
+                    scrollToBusSection(issuesSectionRef, detailScrollRef, setHighlightSection, 'issues')
+                  }
+                >
+                  {selectedIssueCount} issue{selectedIssueCount === 1 ? '' : 's'}
+                </button>
+              ) : null}
+              <span className="ml-auto">Bus health only — not Launch/Fleet GO&#8201;/&#8201;NO-GO</span>
+            </>
+          }
+        />
       </div>
 
       <div ref={detailScrollRef} className="min-h-0 flex-1 overflow-y-auto">
@@ -249,6 +268,7 @@ export function SatelliteBusPage({
           viewModel={q.viewModel}
           busLoading={q.busLoading}
           highlightSection={highlightSection}
+          issuesSectionRef={issuesSectionRef}
           selectedSectionRef={selectedSectionRef}
           sharedSectionRef={sharedSectionRef}
           otherEnvsSectionRef={otherEnvsSectionRef}

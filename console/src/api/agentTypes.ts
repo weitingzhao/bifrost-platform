@@ -325,8 +325,9 @@ export interface CapabilityMapEntry {
   task_scope: string
   task_label: string
   autonomy: string
-  mcp_tools: string[]
-  mission_signals: string[]
+  /** API may emit null for unset Go nil slices — treat as []. */
+  mcp_tools: string[] | null
+  mission_signals: string[] | null
   has_gap: boolean
   gap_detail?: string
 }

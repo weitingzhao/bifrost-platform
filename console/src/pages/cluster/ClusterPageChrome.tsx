@@ -1,6 +1,11 @@
 import { Button } from '@bifrost/ui'
+import type { ClusterSummary } from '@/api/clusterTypes'
 import type { AuthCapabilities } from '@/api/matrixTypes'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import { OpsSection } from '@/components/layout/OpsSection'
+import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
+import { deriveClusterVerdict } from '@/lib/cluster/clusterHealth'
+import { scrollToSection } from '@/lib/dom/scrollToSection'
 import type { CopyState } from './useClusterPageQueries'
 
 export function ClusterPageChrome({
@@ -32,6 +37,9 @@ export function ClusterPageChrome({
   onEnsureMetricsServer,
   onEnsureNamespaces,
   unreachable,
+  clusterSummary,
+  summaryFailed,
+  isProbing,
 }: {
   clusterStatusLabel: string
   clusterFetching: boolean
@@ -61,6 +69,9 @@ export function ClusterPageChrome({
   onEnsureMetricsServer: () => void
   onEnsureNamespaces: () => void
   unreachable: boolean
+  clusterSummary: ClusterSummary | undefined
+  summaryFailed: boolean
+  isProbing: boolean
 }) {
   const actionErrorDisplay =
     actionError != null &&
@@ -68,48 +79,30 @@ export function ClusterPageChrome({
       ? 'Operator token required. Set PLATFORM_OPERATOR_TOKEN for the API and VITE_PLATFORM_OPERATOR_TOKEN for the console, then restart platform.'
       : actionError)
 
+  const verdict = deriveClusterVerdict({
+    summary: clusterSummary,
+    unreachable,
+    showBootstrapActions,
+    summaryFailed,
+    isProbing,
+  })
+
+  const failingPods = clusterSummary?.failing_pods ?? 0
+  const nodesReady = clusterSummary?.nodes_ready
+  const nodesTotal = clusterSummary?.nodes_total
+  const showTriageLink = verdict.tagLabel === 'DEGRADED'
+
   return (
     <>
-      <section className="page-section panel-elevated px-4 py-2">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <p className="m-0 min-w-0 flex-1 truncate text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            <span>{clusterStatusLabel}</span>
-            <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
-            <span>
-              {clusterFetching
-                ? 'Refreshing…'
-                : clusterUpdatedAt != null
-                  ? `Updated ${clusterUpdatedAt}`
-                  : '30s refresh'}
-            </span>
-            {clusterAuthLabel != null && (
-              <>
-                <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
-                <span>{clusterAuthLabel}</span>
-              </>
-            )}
-            {onOpenAudit != null && (
-              <>
-                <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
-                <button type="button" className="focus-strip-link shrink-0" onClick={onOpenAudit}>
-                  Audit
-                </button>
-              </>
-            )}
-            {ambientJobId != null && ambientJobId !== '' && onOpenAgentDesk != null && (
-              <>
-                <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
-                <button
-                  type="button"
-                  className="focus-strip-link shrink-0"
-                  onClick={() => onOpenAgentDesk(ambientJobId)}
-                >
-                  View agent
-                </button>
-              </>
-            )}
-          </p>
-          <div className="flex shrink-0 items-center gap-2">
+      <OpsVerdictStrip
+        ariaLabel="Cluster verdict"
+        title="CLUSTER VERDICT"
+        lamp={verdict.lamp}
+        tagLabel={verdict.tagLabel}
+        tagVariant={verdict.tagVariant}
+        summary={verdict.summaryLine}
+        actions={
+          <>
             <Button size="sm" onClick={() => void onCopyForLlm()}>
               {copyState === 'copied'
                 ? 'Copied!'
@@ -123,44 +116,91 @@ export function ClusterPageChrome({
             <Button size="sm" disabled={syncPending} onClick={onSyncKubeconfig}>
               {syncPending ? 'Syncing…' : 'Sync kubeconfig'}
             </Button>
-          </div>
+          </>
+        }
+        meta={
+          <>
+            <span>{clusterStatusLabel}</span>
+            {nodesTotal != null && nodesTotal > 0 ? (
+              <span>
+                {nodesReady}/{nodesTotal} nodes
+              </span>
+            ) : null}
+            {failingPods > 0 ? (
+              <button
+                type="button"
+                className="font-mono-tabular text-warning hover:underline"
+                title="Scroll to Cluster issues"
+                onClick={() => scrollToSection('cluster-issues')}
+              >
+                {failingPods} failing pod{failingPods === 1 ? '' : 's'}
+              </button>
+            ) : null}
+            {showTriageLink ? (
+              <button
+                type="button"
+                className="font-mono-tabular text-warning hover:underline"
+                title="Scroll to Failure triage"
+                onClick={() => scrollToSection('cluster-failure-triage')}
+              >
+                View triage
+              </button>
+            ) : null}
+            <span>
+              {clusterFetching
+                ? 'Refreshing…'
+                : clusterUpdatedAt != null
+                  ? `Updated ${clusterUpdatedAt}`
+                  : '30s refresh'}
+            </span>
+            {clusterAuthLabel != null ? <span>{clusterAuthLabel}</span> : null}
+            {onOpenAudit != null ? (
+              <button type="button" className="focus-strip-link shrink-0" onClick={onOpenAudit}>
+                Audit
+              </button>
+            ) : null}
+            {ambientJobId != null && ambientJobId !== '' && onOpenAgentDesk != null ? (
+              <button
+                type="button"
+                className="focus-strip-link shrink-0"
+                onClick={() => onOpenAgentDesk(ambientJobId)}
+              >
+                View agent
+              </button>
+            ) : null}
+          </>
+        }
+      />
+
+      {(syncError != null ||
+        syncOkMessage != null ||
+        actionErrorDisplay != null ||
+        summaryError != null) && (
+        <div className="space-y-1">
+          {summaryError != null && (
+            <OpsFeedback variant="error" title="Cluster summary failed">
+              {summaryError}
+            </OpsFeedback>
+          )}
+          {syncError != null && (
+            <OpsFeedback variant="error" title="Kubeconfig sync failed">
+              {syncError}
+            </OpsFeedback>
+          )}
+          {syncOkMessage != null && <OpsFeedback variant="success">{syncOkMessage}</OpsFeedback>}
+          {actionErrorDisplay != null && (
+            <OpsFeedback variant="warning" title="Actuation">
+              {actionErrorDisplay}
+            </OpsFeedback>
+          )}
         </div>
-        {(syncError != null ||
-          syncOkMessage != null ||
-          actionErrorDisplay != null ||
-          summaryError != null) && (
-          <div className="mt-1.5 space-y-1">
-            {summaryError != null && (
-              <OpsFeedback variant="error" title="Cluster summary failed">
-                {summaryError}
-              </OpsFeedback>
-            )}
-            {syncError != null && (
-              <OpsFeedback variant="error" title="Kubeconfig sync failed">
-                {syncError}
-              </OpsFeedback>
-            )}
-            {syncOkMessage != null && (
-              <OpsFeedback variant="success">{syncOkMessage}</OpsFeedback>
-            )}
-            {actionErrorDisplay != null && (
-              <OpsFeedback variant="warning" title="Actuation">
-                {actionErrorDisplay}
-              </OpsFeedback>
-            )}
-          </div>
-        )}
-      </section>
+      )}
 
       {showBootstrapActions && (
-        <section className="page-section panel-elevated px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="m-0 text-sm font-semibold">Bootstrap shortcuts</h2>
-              <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                One-time cluster setup — hidden once metrics-server and core Bifrost namespaces exist.
-              </p>
-            </div>
+        <OpsSection
+          title="Bootstrap"
+          description="One-time cluster setup — hidden once metrics-server and core Bifrost namespaces exist."
+          actions={
             <div className="flex flex-wrap items-center gap-2">
               {!metricsOk && (
                 <Button
@@ -197,18 +237,23 @@ export function ClusterPageChrome({
                 </Button>
               )}
             </div>
-          </div>
-          {unreachable && (
-            <OpsFeedback variant="warning" title="Cluster API unreachable" className="mt-2">
-              Sync kubeconfig or check platform-api cluster access before bootstrap actions.
-            </OpsFeedback>
-          )}
-          {caps != null && !canOperate && !capsLoading && (
-            <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              Authenticate (operator token) to run bootstrap actuations.
-            </p>
-          )}
-        </section>
+          }
+          overflow="visible"
+          headerExtra={
+            <>
+              {unreachable && (
+                <OpsFeedback variant="warning" title="Cluster API unreachable" className="mt-2">
+                  Sync kubeconfig or check platform-api cluster access before bootstrap actions.
+                </OpsFeedback>
+              )}
+              {caps != null && !canOperate && !capsLoading && (
+                <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                  Authenticate (operator token) to run bootstrap actuations.
+                </p>
+              )}
+            </>
+          }
+        />
       )}
     </>
   )

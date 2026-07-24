@@ -15,7 +15,6 @@ import {
   DenseTableHeader,
   DenseTableRow,
   DenseTag,
-  PageHeader,
   SegmentControl,
   Sheet,
   SheetContent,
@@ -25,6 +24,8 @@ import {
   cn,
 } from '@bifrost/ui'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
+import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
+import { PageToolbar } from '@/components/layout/PageToolbar'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
 import { useObservabilitySnapshot, type TradeEnv } from '@/hooks/useObservabilitySnapshot'
@@ -154,7 +155,7 @@ export function ObservabilityPage({
 
   const domainCountsLabel = useMemo(() => {
     const c = system.domainCounts
-    return [
+    const parts = [
       c.critical > 0 ? `${c.critical} critical` : null,
       c.degraded > 0 ? `${c.degraded} degraded` : null,
       c.unknown > 0 ? `${c.unknown} unknown` : null,
@@ -163,14 +164,75 @@ export function ObservabilityPage({
     ]
       .filter(Boolean)
       .join(' · ')
+    return parts
   }, [system.domainCounts])
+
+  const primaryGrafana = useMemo(
+    () => viewModel.dashboards.find(d => d.available && d.url != null) ?? null,
+    [viewModel.dashboards],
+  )
+  const systemHealthy = !isLoading && system.overall === 'healthy'
+  const attentionQuiet =
+    !isLoading && viewModel.attention.length === 0 && system.firingAlerts === 0
+
+  const scrollToAttention = () => {
+    document.getElementById('obs-attention')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
     <div className="flex flex-col gap-3">
-      <PageHeader
-        title="Observability"
-        description="Apollo-domain system health hub — Grafana is deep evidence, not a second control plane."
-        actions={
+      <OpsVerdictStrip
+        ariaLabel="System verdict"
+        title={`SYSTEM VERDICT · ${tradeEnv.toUpperCase()}`}
+        lamp={verdictLamp(system.overall)}
+        tagLabel={isLoading ? 'PROBING' : system.label}
+        tagVariant={verdictTag(system.overall)}
+        summary={
+          <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+            {system.stale && (
+              <DenseTag variant="warning" className="shrink-0 text-[9px]">
+                STALE
+              </DenseTag>
+            )}
+            <span className="truncate" title={system.primaryCause}>
+              {isLoading ? 'Aggregating probes…' : system.primaryCause}
+            </span>
+          </span>
+        }
+        meta={
+          <>
+            <span>{domainCountsLabel || '—'}</span>
+            {attentionQuiet ? (
+              <span className="font-mono-tabular">
+                alerts {system.firingAlerts} firing · {system.mappedFiringAlerts} mapped
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="font-mono-tabular text-warning hover:underline"
+                title="Scroll to Attention"
+                onClick={scrollToAttention}
+              >
+                alerts {system.firingAlerts} firing · {system.mappedFiringAlerts} mapped
+              </button>
+            )}
+            <span className="font-mono-tabular">freshness {formatFreshness(system.freshnessMs)}</span>
+            <span className="font-mono-tabular">{namespace}</span>
+            <span className="ml-auto">
+              Layer B {viewModel.layerBStatus}
+              {!viewModel.prometheusConfigured ? ' · Prometheus not configured' : ''}
+            </span>
+            {!viewModel.prometheusConfigured && !isLoading ? (
+              <p className="m-0 w-full text-[var(--text-dense-caption)] text-muted-foreground">
+                Missing scrape data is shown as UNKNOWN / NOT OBSERVED — never as HEALTHY. Install Layer B
+                via Rocket → Cluster, then return here for system verdict.
+              </p>
+            ) : null}
+          </>
+        }
+      />
+
+      <PageToolbar align="between">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground shrink-0">Trade NS:</span>
             <SegmentControl
@@ -180,50 +242,14 @@ export function ObservabilityPage({
             />
             <SectionRefreshButton isFetching={isFetching} onClick={refetchAll} />
           </div>
-        }
-      />
-
-      {/* System Verdict */}
-      <section className="page-section panel-elevated px-3 py-2.5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <StatusLamp value={verdictLamp(system.overall)} kind="reach" />
-          <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">
-            SYSTEM VERDICT · {tradeEnv.toUpperCase()}
-          </span>
-          <DenseTag variant={verdictTag(system.overall)} className="text-[10px] font-semibold">
-            {isLoading ? 'PROBING' : system.label}
-          </DenseTag>
-          {system.stale && (
-            <DenseTag variant="warning" className="text-[9px]">
-              STALE
-            </DenseTag>
+          {primaryGrafana?.url != null && (
+            <Button size="sm" variant="outline" asChild>
+              <a href={primaryGrafana.url} target="_blank" rel="noreferrer">
+                Open Grafana
+              </a>
+            </Button>
           )}
-          <span
-            className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)]"
-            title={system.primaryCause}
-          >
-            {isLoading ? 'Aggregating probes…' : system.primaryCause}
-          </span>
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
-          <span>{domainCountsLabel || '—'}</span>
-          <span className="font-mono-tabular">
-            alerts {system.firingAlerts} firing · {system.mappedFiringAlerts} mapped
-          </span>
-          <span className="font-mono-tabular">freshness {formatFreshness(system.freshnessMs)}</span>
-          <span className="font-mono-tabular">{namespace}</span>
-          <span className="ml-auto">
-            Layer B {viewModel.layerBStatus}
-            {!viewModel.prometheusConfigured ? ' · Prometheus not configured' : ''}
-          </span>
-        </div>
-        {!viewModel.prometheusConfigured && !isLoading && (
-          <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-muted-foreground">
-            Missing scrape data is shown as UNKNOWN / NOT OBSERVED — never as HEALTHY. Install Layer B via
-            Rocket → Cluster, then return here for system verdict.
-          </p>
-        )}
-      </section>
+      </PageToolbar>
 
       {/* Apollo Domain Health */}
       <OpsSection
@@ -231,6 +257,8 @@ export function ObservabilityPage({
         description="Seven fixed domains — click to inspect selected domain detail"
         bodyPadding="compact"
         overflow="visible"
+        collapsible={systemHealthy}
+        defaultCollapsed={systemHealthy}
       >
         <div className="flex flex-wrap gap-1.5">
           {viewModel.domains.map(d => (
@@ -246,10 +274,13 @@ export function ObservabilityPage({
 
       {/* Attention */}
       <OpsSection
+        id="obs-attention"
         title="Attention"
         description="Severity · Domain · Environment · Signal · Since · Owner · Action"
         bodyPadding="none"
         overflow="hidden"
+        collapsible={attentionQuiet}
+        defaultCollapsed={attentionQuiet}
       >
         <DenseDataTable>
           <DenseTableHeader>
@@ -481,7 +512,64 @@ export function ObservabilityPage({
         </div>
       </OpsSection>
 
-      {/* Grafana catalog */}
+      {/* Grafana catalog — collapsed by default when system is healthy */}
+      {systemHealthy ? (
+        <details className="page-section panel-elevated overflow-hidden">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+            <span className="ops-section-title">Grafana dashboards</span>
+            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+              Deep evidence · {viewModel.dashboards.length} catalogued · expand when needed
+            </span>
+          </summary>
+          <div className="border-t border-border">
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Domain</DenseTableHead>
+                  <DenseTableHead>Dashboard</DenseTableHead>
+                  <DenseTableHead>Environment</DenseTableHead>
+                  <DenseTableHead>Purpose</DenseTableHead>
+                  <DenseTableHead>Availability</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {viewModel.dashboards.map(d => (
+                  <DenseTableRow key={d.id}>
+                    <DenseTableCell>
+                      <DenseTag variant={SYSTEM_DOMAIN_VARIANT[d.domain as SystemDomainId]} className="text-[9px]">
+                        {d.domain}
+                      </DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">{d.title}</DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)]">
+                      {d.env}
+                    </DenseTableCell>
+                    <DenseTableCell className="text-[var(--text-dense-caption)] text-muted-foreground">
+                      {d.purpose}
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      {d.available && d.url != null ? (
+                        <a
+                          href={d.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[var(--text-dense-caption)] text-primary underline-offset-2 hover:underline"
+                        >
+                          Open
+                        </a>
+                      ) : (
+                        <DenseTag variant="neutral" className="text-[9px]">
+                          unavailable
+                        </DenseTag>
+                      )}
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          </div>
+        </details>
+      ) : (
       <OpsSection
         title="Grafana dashboards"
         description="Domain · Dashboard · Environment · Purpose · Availability — complex charts stay in Grafana"
@@ -534,6 +622,7 @@ export function ObservabilityPage({
           </DenseTableBody>
         </DenseDataTable>
       </OpsSection>
+      )}
 
       <Sheet open={attentionDetail != null} onOpenChange={open => !open && setAttentionDetail(null)}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">

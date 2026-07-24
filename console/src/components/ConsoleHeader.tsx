@@ -1,19 +1,29 @@
 import type { ReactNode } from 'react'
-import { Button, DenseTag, SidebarTrigger, SHELL_TOP_BAR_HEIGHT_CLASS, StatusLamp, cn } from '@bifrost/ui'
-import { Bot, ChevronRight } from 'lucide-react'
+import {
+  Button,
+  DenseTag,
+  SidebarTrigger,
+  SHELL_TOP_BAR_HEIGHT_CLASS,
+  StatusLamp,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  cn,
+} from '@bifrost/ui'
+import { Bot, ChevronRight, CircleHelp } from 'lucide-react'
 import type { ConsoleNavPlane } from '@/lib/consoleNavConfig'
 import {
   viewerEnvBadgeLabel,
   type FleetViewerEnv,
 } from '@/lib/control-room/fleetSnapshot'
 import { UserMenu } from '@/components/UserMenu'
+import { TaskModeCapsule } from '@/components/task-mode/TaskModeCapsule'
+import type { TaskModeId } from '@/lib/task-mode/types'
 
 export type ConsoleHeaderAmbientAgent = {
   label: string
   onOpen: () => void
-  /** Dock already expanded — button focuses / still expands. */
   expanded?: boolean
-  /** True when an ambient Fix job is live. */
   running?: boolean
 }
 
@@ -41,34 +51,38 @@ function ViewerEnvChip({
   )
 }
 
+/**
+ * Shell top bar — breadcrumb is the system-wide page identity (plane › page).
+ * Do not render a second PageHeader / ConsolePageHeader title on pages.
+ */
 export function ConsoleHeader({
   plane,
   pageTitle,
   pageDescription,
+  pageActions,
   healthy,
   onRefresh,
   ambientAgent,
   viewerEnv,
   viewerEnvLoading,
+  onModeChange,
   onSelectTab,
   children,
 }: {
-  /** Sidebar plane — system domain (breadcrumb parent). */
   plane?: ConsoleNavPlane
-  /** Current page name (breadcrumb leaf; doubles as document h1 when PageHeader omitted). */
   pageTitle?: string
-  /** Optional subtitle — shown as title tooltip on the page crumb. */
+  /** Shown via ? help on the page crumb (replaces in-page subtitle). */
   pageDescription?: string
+  /** Page-level actions that used to live in PageHeader (Copy All, Back, …). */
+  pageActions?: ReactNode
   healthy: boolean | undefined
   onRefresh: () => void
-  /** Global Agent Task → Execution Dock (always available). */
   ambientAgent?: ConsoleHeaderAmbientAgent | null
-  /** Fleet Viewer seat — chrome chip (slot 1). */
   viewerEnv: FleetViewerEnv
   viewerEnvLoading?: boolean
-  /** User menu Governance / shell navigation. */
+  /** Task-mode identity capsule (replaces full-width TaskModeActiveBanner). */
+  onModeChange?: (landingTab: string, modeId: TaskModeId) => void
   onSelectTab: (tabId: string) => void
-  /** Optional extra right-side slot (rarely used). */
   children?: ReactNode
 }) {
   const showBreadcrumb = plane != null || (pageTitle != null && pageTitle !== '')
@@ -85,7 +99,7 @@ export function ConsoleHeader({
       {showBreadcrumb && (
         <nav
           aria-label="Breadcrumb"
-          className="flex min-w-0 max-w-[min(28rem,45vw)] items-center gap-1"
+          className="flex min-w-0 max-w-[min(32rem,50vw)] items-center gap-1"
         >
           {plane != null && (
             <span className="hidden shrink-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
@@ -100,22 +114,41 @@ export function ConsoleHeader({
             />
           )}
           {pageTitle != null && pageTitle !== '' && (
-            <h1
-              className="m-0 truncate text-[var(--text-dense-label)] font-semibold tracking-tight text-foreground"
-              title={pageDescription}
-            >
-              {pageTitle}
-            </h1>
+            <span className="inline-flex min-w-0 items-center gap-1">
+              <h1 className="m-0 truncate text-[var(--text-dense-label)] font-semibold tracking-tight text-foreground">
+                {pageTitle}
+              </h1>
+              {pageDescription != null && pageDescription !== '' && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label={`About ${pageTitle}`}
+                    >
+                      <CircleHelp className="size-3.5" aria-hidden />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-sm text-left">
+                    {pageDescription}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </span>
           )}
         </nav>
       )}
 
+      {pageActions != null ? (
+        <div className="flex shrink-0 items-center gap-1.5">{pageActions}</div>
+      ) : null}
+
       <div className="min-w-0 flex-1" />
 
-      {/* Slot 1 — Viewer Env (header SSOT; sidebar logo no longer repeats env) */}
       <ViewerEnvChip viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />
 
-      {/* Slot 2 — Agent Task (compact on narrow widths so User stays visible) */}
+      <TaskModeCapsule onModeChange={onModeChange} />
+
       {ambientAgent != null && (
         <Button
           type="button"
@@ -149,19 +182,11 @@ export function ConsoleHeader({
 
       {children != null ? <div className="shrink-0">{children}</div> : null}
 
-      {/* Slot 3 — User (Session · Guides · Shell) */}
       <UserMenu
         onSelectTab={onSelectTab}
         opsApiHealthy={healthy}
         onRefresh={onRefresh}
       />
     </header>
-  )
-}
-
-/** Second chrome row — spine / matrix context (below title bar). Compact single-line by default. */
-export function OpsContextBar({ children }: { children: ReactNode }) {
-  return (
-    <div className="border-b border-border bg-secondary/40 px-3 py-1.5">{children}</div>
   )
 }

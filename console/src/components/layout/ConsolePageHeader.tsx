@@ -9,8 +9,8 @@ import {
 import { CircleHelp } from 'lucide-react'
 
 /**
- * Standard Ops Console page title: menu-aligned H1, optional explanation in ?.
- * Prefer this over bare PageHeader description under the title.
+ * @deprecated Prefer ConsoleHeader breadcrumb + PageToolbar for page actions.
+ * Kept for rare one-off surfaces that are not ConsolePage tabs.
  */
 export function ConsolePageHeader({
   title,

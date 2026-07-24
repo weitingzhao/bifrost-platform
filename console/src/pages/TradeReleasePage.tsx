@@ -1,3 +1,4 @@
+import type { SupplyChainResponse } from '@/api/deliveryTypes'
 import { Button, DenseTag } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
@@ -6,6 +7,7 @@ import { fetchDeliveryPipelines, fetchPipelineRuns, fetchSupplyChain } from '@/a
 import { fetchGitOpsApps } from '@/api/gitOps'
 import { fetchReleaseGate, fetchStgSmoke, fetchTierBStatus } from '@/api/promote'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { GitOpsQuickActionsPanel } from '@/components/delivery/GitOpsQuickActionsPanel'
@@ -34,10 +36,21 @@ import { SupplyChainPanel } from '@/components/delivery/SupplyChainPanel'
 import { TradeEnvAccessBar } from '@/components/delivery/TradeEnvAccessBar'
 import { PlatformGateHistorySection } from '@/components/promote/PlatformReleaseGateSection'
 import { ReleaseGateCompareSection } from '@/components/promote/ReleaseGateCompareSection'
+import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { useLaneStepFocus } from '@/hooks/useLaneStepFocus'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
+import {
+  buildTradeDeployPrompt,
+  TRADE_DEPLOY_SCOPE,
+} from '@/lib/agent/tradeDeployAgentPrompt'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import { isPipelineRunFailed, isPipelineRunRunning } from '@/lib/delivery/pipelineRunAskPack'
+
+const AI_DEPLOY_LABEL = 'AI Deploy'
+const AI_DEPLOY_TASK_LABEL = scopeToLabel(TRADE_DEPLOY_SCOPE)
 
 const TRADE_STG_TARGET = deliveryTargetById('trade-stg')
 const TRADE_PROD_TARGET = deliveryTargetById('trade-prod')
@@ -71,12 +84,13 @@ function renderTradeStepActions(activeIndex: number) {
   }
 }
 
-function SupplyChainSummaryLine() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['delivery', 'supply-chain'],
-    queryFn: fetchSupplyChain,
-    refetchInterval: 15_000,
-  })
+function SupplyChainSummaryLine({
+  data,
+  isLoading,
+}: {
+  data: SupplyChainResponse | undefined
+  isLoading: boolean
+}) {
   if (isLoading) return <span className="text-dense-meta text-muted-foreground">Supply chain…</span>
   const repos = data?.tracked_repos ?? []
   const cms = data?.dockerfile_configmaps?.filter(cm => cm.present).length ?? 0
@@ -96,7 +110,7 @@ function SupplyChainSummaryLine() {
   )
 }
 
-interface TradeReleasePageProps {
+type TradeReleasePageProps = {
   context: OpsContextResponse | undefined
   isLoading?: boolean
   onOpenPlacement?: () => void
@@ -104,7 +118,7 @@ interface TradeReleasePageProps {
   onOpenSatelliteBus?: () => void
   onOpenObservability?: () => void
   onOpenApiHealth?: () => void
-}
+} & AmbientAgentShellProps
 
 export function TradeReleasePage({
   context,
@@ -113,7 +127,10 @@ export function TradeReleasePage({
   onOpenSatelliteBus,
   onOpenObservability,
   onOpenApiHealth,
+  ambientJobId,
+  onStartAgentJob,
 }: TradeReleasePageProps) {
+  const { canOperate } = usePlatformAuth()
   const [detailReason] = useState(readLaneDetailReasonFromLocation)
 
   const stgRuns = useQuery({
@@ -156,6 +173,11 @@ export function TradeReleasePage({
     queryFn: fetchGitOpsApps,
     refetchInterval: 30_000,
   })
+  const supplyChain = useQuery({
+    queryKey: ['delivery', 'supply-chain'],
+    queryFn: fetchSupplyChain,
+    refetchInterval: 30_000,
+  })
 
   const stgDeploy = runStepStatus(stgRuns.data?.runs?.[0])
   const prodDeploy = runStepStatus(prodRuns.data?.runs?.[0])
@@ -167,6 +189,26 @@ export function TradeReleasePage({
     ready:
       !stgRuns.isLoading && !prodRuns.isLoading && !stgGate.isLoading && !prodGate.isLoading,
     reason: detailReason,
+  })
+
+  const aiDeploy = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: TRADE_DEPLOY_SCOPE,
+    label: AI_DEPLOY_TASK_LABEL,
+    buildRequest: () => ({
+      prompt: buildTradeDeployPrompt({
+        stgRun: stgRuns.data?.runs?.[0],
+        prodRun: prodRuns.data?.runs?.[0],
+        stgGate: stgGate.data,
+        prodGate: prodGate.data,
+        stgSmoke: stgSmoke.data,
+        tierB: tierB.data,
+        supplyChain: supplyChain.data,
+        operatorSurface: 'Deploy Satellite page',
+      }),
+    }),
   })
 
   if (isLoading || !context) {
@@ -199,7 +241,12 @@ export function TradeReleasePage({
           {showStgActiveRun && <DeliveryActiveRunPanel target={TRADE_STG_TARGET} />}
           <LaneDetailCollapse
             title="Artifact evidence · supply chain"
-            summaryExtra={<SupplyChainSummaryLine />}
+            summaryExtra={
+              <SupplyChainSummaryLine
+                data={supplyChain.data}
+                isLoading={supplyChain.isLoading}
+              />
+            }
             defaultOpen={false}
             bodyClassName="p-3"
           >
@@ -271,7 +318,7 @@ export function TradeReleasePage({
 
   const evidenceLinks =
     onOpenSatelliteBus != null || onOpenObservability != null || onOpenApiHealth != null ? (
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
           Evidence
         </span>
@@ -291,13 +338,32 @@ export function TradeReleasePage({
           </Button>
         )}
       </div>
-    ) : undefined
+    ) : null
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
+      {aiDeploy.error != null && (
+        <p className="m-0 text-dense-meta text-destructive">{aiDeploy.error.message}</p>
+      )}
+
       <LaneDetailContextStrip reason={detailReason} />
 
-      <LaneStateStrip laneLabel="Satellite" actions={evidenceLinks}>
+      <LaneStateStrip
+        laneLabel="Satellite"
+        actions={
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
+            <AgentTriggerButton
+              className="shrink-0"
+              label={AI_DEPLOY_LABEL}
+              pending={aiDeploy.isPending}
+              disabled={aiDeploy.disabled}
+              title={aiDeploy.disabledReason ?? AI_DEPLOY_LABEL}
+              onClick={() => aiDeploy.trigger()}
+            />
+            {evidenceLinks}
+          </div>
+        }
+      >
         <TradeEnvAccessBar />
         <ReleaseStateBanner tier="trade" />
       </LaneStateStrip>

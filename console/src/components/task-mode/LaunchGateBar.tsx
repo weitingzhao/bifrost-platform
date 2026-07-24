@@ -35,6 +35,11 @@ export type LaunchGateBarProps = {
   detailLabel?: string
   onOpenActiveRun?: () => void
   openActiveRunLabel?: string
+  /**
+   * When true, omit the primary Agent Launch button (already surfaced in Task CC Verdict).
+   * Keeps Agent Fix, checkpoints, detail / in-flight links.
+   */
+  hidePrimaryLaunch?: boolean
 }
 
 function scrollToReadinessAnchor(anchor: NonNullable<LaunchCheckpoint['readinessAnchor']>) {
@@ -73,6 +78,7 @@ export function LaunchGateBar({
   detailLabel = 'Detail →',
   onOpenActiveRun,
   openActiveRunLabel = 'Open active run →',
+  hidePrimaryLaunch = false,
 }: LaunchGateBarProps) {
   const column = layout === 'column'
   const tone =
@@ -134,7 +140,7 @@ export function LaunchGateBar({
       >
         {openActiveRunLabel}
       </button>
-    ) : onLaunch != null ? (
+    ) : !hidePrimaryLaunch && onLaunch != null ? (
       <AgentTriggerButton
         label={canLaunch ? launchLabel : blockedLabel}
         size="xs"

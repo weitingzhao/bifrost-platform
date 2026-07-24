@@ -18,6 +18,7 @@ import { AgentDeskSessionOpsPanels } from '@/components/agent/AgentDeskSessionOp
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { AgentTaskCatalogPanel } from '@/components/agent/AgentTaskCatalogPanel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import { PageToolbar } from '@/components/layout/PageToolbar'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
@@ -365,23 +366,20 @@ export function AgentDeskPage({
     <div className={`agent-desk-shell${panelOpen ? ' agent-desk-shell--panel-open' : ''}`}>
       <div className="agent-desk-main flex min-w-0 flex-col gap-3">
 
-        {/* ── Hero: Title + Status bar ── */}
+        {/* Status + view chrome — page identity lives in ConsoleHeader breadcrumb */}
         <section className="agent-desk-hero">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="m-0 text-base font-semibold">Agent Desk</h2>
-              <div className="agent-desk-status-bar">
-                <StatusLamp value={runnerReachability(runnerStatus)} kind="reach" />
-                <DenseTag variant={statusVariant(runnerStatus)}>
-                  Runner
-                </DenseTag>
-                <DenseTag variant={statusVariant(gitBridgeStatus)}>
-                  Git Bridge
-                  {gitBridgeStatus === 'ok' && bridge?.git_bridge?.dirty_repos != null && bridge.git_bridge.dirty_repos > 0
-                    ? ` · ${bridge.git_bridge.dirty_repos} dirty ${bridge.git_bridge.dirty_repos === 1 ? 'repo' : 'repos'}`
-                    : ''}
-                </DenseTag>
-              </div>
+          <PageToolbar align="between">
+            <div className="agent-desk-status-bar">
+              <StatusLamp value={runnerReachability(runnerStatus)} kind="reach" />
+              <DenseTag variant={statusVariant(runnerStatus)}>Runner</DenseTag>
+              <DenseTag variant={statusVariant(gitBridgeStatus)}>
+                Git Bridge
+                {gitBridgeStatus === 'ok' &&
+                bridge?.git_bridge?.dirty_repos != null &&
+                bridge.git_bridge.dirty_repos > 0
+                  ? ` · ${bridge.git_bridge.dirty_repos} dirty ${bridge.git_bridge.dirty_repos === 1 ? 'repo' : 'repos'}`
+                  : ''}
+              </DenseTag>
             </div>
             <div className="flex items-center gap-1.5">
               {onOpenBriefing != null && (
@@ -395,12 +393,9 @@ export function AgentDeskPage({
                 </Button>
               )}
             </div>
-          </div>
-          <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-muted-foreground">
-            Choose next work, observe live tasks, and review outcomes.
-          </p>
+          </PageToolbar>
           {context?.focus?.headline != null && (
-            <p className="agent-desk-spine-hint">
+            <p className="agent-desk-spine-hint mt-1">
               {context.focus.headline}
             </p>
           )}

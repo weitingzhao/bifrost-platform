@@ -243,7 +243,12 @@ export function ClusterFailureTriageStrip({
 
   if (isLoading && rows.length === 0) {
     return (
-      <OpsSection title="Failure triage (Top N)" description="Ranking cluster, release, and retrospective patterns…">
+      <OpsSection
+        id="cluster-failure-triage"
+        className="scroll-mt-16"
+        title="Failure triage (Top N)"
+        description="Ranking cluster, release, and retrospective patterns…"
+      >
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-muted-foreground">Loading triage…</p>
       </OpsSection>
     )
@@ -252,6 +257,8 @@ export function ClusterFailureTriageStrip({
   if (rows.length === 0) {
     return (
       <OpsSection
+        id="cluster-failure-triage"
+        className="scroll-mt-16"
         title="Failure triage (Top N)"
         leading={<StatusLamp value="ok" kind="reach" />}
         description="No ranked failures — nodes ready, no blocking release or domain gaps in triage scope."
@@ -267,6 +274,8 @@ export function ClusterFailureTriageStrip({
 
   return (
     <OpsSection
+      id="cluster-failure-triage"
+      className="scroll-mt-16"
       title="Failure triage (Top N)"
       leading={<StatusLamp value={hasCritical ? 'fail' : 'degraded'} kind="reach" />}
       description="ROI-ranked issues — playbook vs product vs infra. Release failures are distinct from K8s node health."

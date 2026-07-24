@@ -326,10 +326,10 @@ export function AgentGovernancePage() {
               <DenseTableCell className="font-medium">{row.task_label}</DenseTableCell>
               <DenseTableCell className="font-mono tabular-nums">{row.autonomy}</DenseTableCell>
               <DenseTableCell className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                {row.mcp_tools.join(', ')}
+                {(row.mcp_tools ?? []).join(', ') || '—'}
               </DenseTableCell>
               <DenseTableCell className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                {row.mission_signals.join(', ')}
+                {(row.mission_signals ?? []).join(', ') || '—'}
               </DenseTableCell>
               <DenseTableCell>
                 {row.has_gap ? (

@@ -21,6 +21,7 @@ interface RuntimeHealthStripProps {
   gapOverview?: GapOverview
   onSelectTarget: (targetId: string) => void
   onSelectNode: (nodeId: string) => void
+  onOpenCluster?: () => void
 }
 
 export function RuntimeHealthStrip({
@@ -29,6 +30,7 @@ export function RuntimeHealthStrip({
   gapOverview,
   onSelectTarget,
   onSelectNode,
+  onOpenCluster,
 }: RuntimeHealthStripProps) {
   if (!topology || !matrix) return null
 
@@ -36,11 +38,15 @@ export function RuntimeHealthStrip({
   const primary = getPrimaryFailure(matrix)
 
   return (
-    <section className="runtime-health-strip page-section panel-elevated px-4 py-2.5">
+    <section
+      className="runtime-health-strip page-section panel-elevated px-4 py-2.5"
+      aria-label="Runtime map verdict"
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0">
         <div className="flex items-center gap-2 shrink-0">
           <StatusLamp value={summary.worstReach} kind="reach" />
-          <strong className="text-sm">{matrix.label}</strong>
+          <strong className="text-sm tracking-wide">RUNTIME VERDICT</strong>
+          <span className="text-[var(--text-dense-meta)] text-muted-foreground">{matrix.label}</span>
         </div>
 
         <span className="runtime-health-strip__stat text-[var(--text-dense-meta)]">
@@ -69,7 +75,7 @@ export function RuntimeHealthStrip({
         </span>
 
         {primary != null && (
-          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          <span className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             worst:{' '}
             <Button
               variant="ghost"
@@ -104,6 +110,18 @@ export function RuntimeHealthStrip({
             })}
           </span>
         )}
+
+        {onOpenCluster != null && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="ml-auto shrink-0"
+            onClick={onOpenCluster}
+          >
+            Open Cluster
+          </Button>
+        )}
       </div>
 
       {gapOverview != null && gapOverview.totalComponents > 0 && (
@@ -133,16 +151,6 @@ export function RuntimeHealthStrip({
           </span>
         </div>
       )}
-
-      <details className="runtime-health-strip__help mt-2">
-        <summary className="text-dense-caption text-[var(--muted-foreground)] cursor-pointer">
-          About Runtime Map
-        </summary>
-        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Hardware topology, SCOPE stack, and live matrix probes. Progress bars show live vs planned
-          gap per server. Select a node, edge, or chip to sync both panels.
-        </p>
-      </details>
     </section>
   )
 }

@@ -15,7 +15,6 @@ import {
   DenseTableHeadRow,
   DenseTableHeader,
   DenseTableRow,
-  PageHeader,
   SegmentControl,
 } from '@bifrost/ui'
 import { fetchClusterObservability } from '@/api/cluster'
@@ -23,6 +22,12 @@ import { fetchTelemetryOverview } from '@/api/telemetry'
 import type { TelemetryMetricResult } from '@/api/clusterTypes'
 import { MonitoringCoverageStrip } from '@/components/observability/MonitoringCoverageStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  OpsVerdictStrip,
+  type OpsVerdictLamp,
+  type OpsVerdictTagVariant,
+} from '@/components/layout/OpsVerdictStrip'
+import { PageToolbar } from '@/components/layout/PageToolbar'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { buildGrafanaDashboardUrl } from '@/lib/observability'
 
@@ -147,12 +152,63 @@ export function SatelliteTelemetryPage({
       return metric == null || metric.status === 'empty'
     })
 
+  const dataLayerEmpty = dataMetrics.every(m => m.points.length === 0)
+  const telemetryError = telemetryQuery.isError && !telemetryUnavailable
+
+  let verdictLamp: OpsVerdictLamp = 'ok'
+  let verdictTag: string = 'METRICS OK'
+  let verdictTagVariant: OpsVerdictTagVariant = 'success'
+  let verdictSummary: string
+  if (telemetryQuery.isLoading) {
+    verdictLamp = 'unknown'
+    verdictTag = 'LOADING'
+    verdictTagVariant = 'neutral'
+    verdictSummary = `Loading telemetry for ${ns}…`
+  } else if (telemetryUnavailable || telemetryError) {
+    verdictLamp = 'fail'
+    verdictTag = 'ERROR'
+    verdictTagVariant = 'danger'
+    verdictSummary = telemetryUnavailable
+      ? 'Prometheus unavailable — configure observability_urls.prometheus or PLATFORM_PROMETHEUS_URL.'
+      : telemetryQuery.error instanceof Error
+        ? telemetryQuery.error.message
+        : 'Telemetry request failed.'
+  } else if (apiMetricsEmpty || (apiRows.length === 0 && dataLayerEmpty)) {
+    verdictLamp = 'degraded'
+    verdictTag = 'NO DATA'
+    verdictTagVariant = 'warning'
+    verdictSummary = `No scrape data yet for ${ns} · wait for Prometheus targets after Track 4A/4B.`
+  } else {
+    const dataLayerLabel = dataLayerEmpty ? 'data layer empty' : 'data layer reporting'
+    verdictSummary = `${apiRows.length} API service${apiRows.length === 1 ? '' : 's'} reporting · ${dataLayerLabel}`
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Satellite Runtime"
-        description="Trade-namespace golden signals via platform-api preset PromQL proxy. System-wide health → Mission Control → Observability."
+      <OpsVerdictStrip
+        ariaLabel="Satellite runtime freshness"
+        title={`SATELLITE RUNTIME · ${tradeEnv.toUpperCase()}`}
+        lamp={verdictLamp}
+        tagLabel={verdictTag}
+        tagVariant={verdictTagVariant}
+        summary={verdictSummary}
         actions={
+          tradeDashUrl != null && layerB === 'ready' ? (
+            <Button variant="outline" size="sm" asChild>
+              <a href={tradeDashUrl} target="_blank" rel="noreferrer">
+                Open Trade Dashboard
+              </a>
+            </Button>
+          ) : undefined
+        }
+        meta={
+          <span>
+            Prometheus {prometheusConfigured ? 'configured' : 'not configured'} · {ns}
+          </span>
+        }
+      />
+
+      <PageToolbar align="between">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground shrink-0">Trade NS:</span>
             <SegmentControl
@@ -168,8 +224,7 @@ export function SatelliteTelemetryPage({
               }}
             />
           </div>
-        }
-      />
+      </PageToolbar>
 
       <MonitoringCoverageStrip
         layerB={layerB}
@@ -178,30 +233,6 @@ export function SatelliteTelemetryPage({
         onOpenCluster={onOpenCluster}
         onOpenObservability={onOpenObservability}
       />
-
-      {tradeDashUrl != null && layerB === 'ready' && (
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href={tradeDashUrl} target="_blank" rel="noreferrer">
-              Open Trade Dashboard
-            </a>
-          </Button>
-        </div>
-      )}
-
-      {telemetryUnavailable && (
-        <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
-          Configure{' '}
-          <code className="font-mono text-[var(--text-dense-caption)]">observability_urls.prometheus</code>{' '}
-          or PLATFORM_PROMETHEUS_URL on platform-api. Missing data is not treated as healthy.
-        </p>
-      )}
-      {apiMetricsEmpty && !telemetryUnavailable && (
-        <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
-          No scrape data yet for {ns}. Deploy Track 4A/4B, sync Argo, then wait ~2 minutes for Prometheus
-          targets to become UP.
-        </p>
-      )}
 
       <OpsSection title="API Performance" bodyPadding="none" overflow="hidden">
         <DenseDataTable>

@@ -1,17 +1,17 @@
 import { useState } from 'react'
 import { ChevronRight, LayoutDashboard, Satellite, Wrench } from 'lucide-react'
-import { cn } from '@bifrost/ui'
+import { cn, type DenseTagVariant } from '@bifrost/ui'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import {
   buildDiagnosticPrompt,
   missionStatus,
   missionStatusColor,
   signalColor,
+  type MissionStatus,
 } from '@/lib/control-room/missionSignals'
+import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 
 /* ─────────── re-exported helpers (used by other components) ─────────── */
-
-import type { DenseTagVariant } from '@bifrost/ui'
 
 const STATUS_VARIANT: Record<string, DenseTagVariant> = {
   CLOSED: 'neutral',
@@ -60,7 +60,15 @@ function formatAge(epoch: number): string {
   return `${Math.floor(min / 60)}h ago`
 }
 
-import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
+function missionNeedsAttention(mission: MissionStatus): boolean {
+  return mission === 'CAUTION' || mission === 'CRITICAL'
+}
+
+function compactMissionLabel(mission: MissionStatus): string {
+  if (mission === 'NOMINAL') return 'OK'
+  if (mission === 'PROBING') return 'Probing'
+  return mission
+}
 
 interface FocusStripProps {
   onNavigate?: (tab: string) => void
@@ -73,7 +81,8 @@ export function FocusStrip({
   onOpenAgentDeskWithPrefill,
   onOpenRuntimeMap,
 }: FocusStripProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [forceExpanded, setForceExpanded] = useState(false)
+  const [detailExpanded, setDetailExpanded] = useState(false)
   const { snapshot, dataUpdatedAt } = useMissionSnapshot()
   const nav = (tab: string) => () => onNavigate?.(tab)
   const openMap = (env: string) => () => {
@@ -82,41 +91,99 @@ export function FocusStrip({
   }
 
   const mission = missionStatus(snapshot.missionOverall)
+  const needsAttention = missionNeedsAttention(mission)
+  const showFull = needsAttention || forceExpanded
   const diagnosticPrompt = buildDiagnosticPrompt(snapshot)
+
+  const tradeLamps = (
+    <div className="cockpit-group cockpit-payload">
+      <Satellite
+        size={13}
+        style={{ color: signalColor(snapshot.payloadOverall) }}
+        className="cockpit-mod-icon"
+      />
+      <span className="cockpit-mod-name">Trade</span>
+      <button
+        type="button"
+        className="cockpit-env"
+        onClick={openMap('dev')}
+        title={`Trade dev — ${snapshot.tradeDev.detail}`}
+      >
+        <span className="cockpit-env-dot" style={{ color: signalColor(snapshot.tradeDev.signal) }}>
+          ●
+        </span>
+        dev
+      </button>
+      <button
+        type="button"
+        className="cockpit-env"
+        onClick={openMap('prod')}
+        title={`Trade prod — ${snapshot.tradeProd.detail}`}
+      >
+        <span className="cockpit-env-dot" style={{ color: signalColor(snapshot.tradeProd.signal) }}>
+          ●
+        </span>
+        prod
+      </button>
+    </div>
+  )
+
+  const controlRoomBtn = (
+    <button
+      type="button"
+      className="cockpit-room-entry"
+      onClick={nav('control-room')}
+      title={`Mission Control — ${mission}. Full rocket + payload telemetry.`}
+    >
+      <LayoutDashboard size={13} style={{ color: missionStatusColor(mission) }} />
+      <span className="cockpit-room-entry-label">Control Room</span>
+    </button>
+  )
+
+  if (!showFull) {
+    return (
+      <div className="cockpit-strip cockpit-strip--compact">
+        <div className="cockpit-strip-row">
+          {tradeLamps}
+          <span className="cockpit-divider" aria-hidden />
+          <div className="cockpit-group cockpit-mission-inline">
+            <span className="cockpit-mission-label">Mission</span>
+            <span className="cockpit-mission-value" style={{ color: missionStatusColor(mission) }}>
+              {compactMissionLabel(mission)}
+            </span>
+          </div>
+          <div className="cockpit-spacer" />
+          {controlRoomBtn}
+          <button
+            type="button"
+            className="cockpit-strip-toggle"
+            onClick={() => setForceExpanded(true)}
+            aria-label="Expand mission context"
+            title="Show full Trade / Mission context"
+          >
+            <ChevronRight size={12} className="cockpit-strip-chevron" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const onToggleFull = () => {
+    if (detailExpanded) {
+      setDetailExpanded(false)
+      return
+    }
+    if (!needsAttention) {
+      setForceExpanded(false)
+      return
+    }
+    setDetailExpanded(true)
+  }
 
   return (
     <div className="cockpit-strip">
       <div className="cockpit-strip-row">
-        <div className="cockpit-group cockpit-payload">
-          <Satellite
-            size={13}
-            style={{ color: signalColor(snapshot.payloadOverall) }}
-            className="cockpit-mod-icon"
-          />
-          <span className="cockpit-mod-name">Trade</span>
-          <button
-            type="button"
-            className="cockpit-env"
-            onClick={openMap('dev')}
-            title={`Trade dev — ${snapshot.tradeDev.detail}`}
-          >
-            <span className="cockpit-env-dot" style={{ color: signalColor(snapshot.tradeDev.signal) }}>
-              ●
-            </span>
-            dev
-          </button>
-          <button
-            type="button"
-            className="cockpit-env"
-            onClick={openMap('prod')}
-            title={`Trade prod — ${snapshot.tradeProd.detail}`}
-          >
-            <span className="cockpit-env-dot" style={{ color: signalColor(snapshot.tradeProd.signal) }}>
-              ●
-            </span>
-            prod
-          </button>
-        </div>
+        {tradeLamps}
 
         <span className="cockpit-divider" aria-hidden />
 
@@ -141,30 +208,28 @@ export function FocusStrip({
           </button>
         )}
 
-        <button
-          type="button"
-          className="cockpit-room-entry"
-          onClick={nav('control-room')}
-          title={`Mission Control — ${mission}. Full rocket + payload telemetry.`}
-        >
-          <LayoutDashboard size={13} style={{ color: missionStatusColor(mission) }} />
-          <span className="cockpit-room-entry-label">Control Room</span>
-        </button>
+        {controlRoomBtn}
 
         <button
           type="button"
           className="cockpit-strip-toggle"
-          onClick={() => setExpanded(v => !v)}
-          aria-label={expanded ? 'Collapse detail' : 'Expand detail'}
+          onClick={onToggleFull}
+          aria-label={
+            detailExpanded
+              ? 'Collapse detail'
+              : needsAttention
+                ? 'Expand detail'
+                : 'Collapse mission context'
+          }
         >
           <ChevronRight
             size={12}
-            className={cn('cockpit-strip-chevron', expanded && 'cockpit-strip-chevron--open')}
+            className={cn('cockpit-strip-chevron', detailExpanded && 'cockpit-strip-chevron--open')}
           />
         </button>
       </div>
 
-      {expanded && (
+      {detailExpanded && (
         <div className="cockpit-strip-detail">
           <div className="cockpit-detail-group-label">Payload — Trade satellite</div>
           <DetailRow signal={snapshot.tradeDev.signal} id="Trade · dev" text={snapshot.tradeDev.detail} />

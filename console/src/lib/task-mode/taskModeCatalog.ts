@@ -537,7 +537,6 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
         'dev-agent',
         'delivery-board',
         'agent-desk',
-        'console',
         'network',
         'compute',
         'cluster',

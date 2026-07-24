@@ -61,7 +61,7 @@ export const SYSTEM_DOMAINS: SystemDomainRow[] = [
   {
     id: 'ground-systems',
     label: 'Ground Systems',
-    purpose: 'Infrastructure — server console, network (UniFi), compute',
+    purpose: 'Infrastructure — network (UniFi), compute; SSH via shell Operator Dock Console slot',
   },
   {
     id: 'satellite',

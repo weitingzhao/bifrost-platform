@@ -23,6 +23,7 @@ export type SatelliteBusDetailSectionsProps = {
   viewModel: SatelliteBusViewModel
   busLoading: boolean
   highlightSection: string | null
+  issuesSectionRef: Ref<HTMLElement>
   selectedSectionRef: Ref<HTMLDivElement>
   sharedSectionRef: Ref<HTMLDetailsElement>
   otherEnvsSectionRef: Ref<HTMLDetailsElement>
@@ -59,6 +60,7 @@ export function SatelliteBusDetailSections({
   viewModel,
   busLoading,
   highlightSection,
+  issuesSectionRef,
   selectedSectionRef,
   sharedSectionRef,
   otherEnvsSectionRef,
@@ -113,7 +115,15 @@ export function SatelliteBusDetailSections({
         </div>
       </section>
 
-      <section className="page-section panel-elevated overflow-hidden">
+      <section
+        id="satellite-bus-issues"
+        ref={issuesSectionRef}
+        className={
+          highlightSection === 'issues'
+            ? 'page-section panel-elevated overflow-hidden ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]'
+            : 'page-section panel-elevated overflow-hidden'
+        }
+      >
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-2.5 pt-1.5">
           <OpsSubsectionTitle className="m-0">Issues requiring attention</OpsSubsectionTitle>
           <span className="text-[var(--text-dense-caption)] text-muted-foreground">

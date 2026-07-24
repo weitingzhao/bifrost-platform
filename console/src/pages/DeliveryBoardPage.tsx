@@ -1,4 +1,5 @@
 import {
+  Button,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -19,6 +20,7 @@ import { DeliveryBoardFilterChrome } from '@/components/delivery/DeliveryBoardFi
 import { DeliveryBoardHistoricalArchive } from '@/components/delivery/DeliveryBoardHistoricalArchive'
 import { DeliveryBoardProgramPanels } from '@/components/delivery/DeliveryBoardProgramPanels'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import {
   isBriefingScopeId,
   isWorkTrackType,
@@ -27,6 +29,7 @@ import {
   type BriefingScopeId,
   type WorkTrackType,
 } from '@/lib/briefing/briefingViewTabs'
+import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { laneById, type LaneId } from '@/lib/briefing/workLanes'
 
 function programStatusVariant(signed: number, complete: boolean): DenseTagVariant {
@@ -141,7 +144,11 @@ function ProgramBandTable({
   )
 }
 
-export function DeliveryBoardPage() {
+export function DeliveryBoardPage({
+  onOpenBriefing,
+}: {
+  onOpenBriefing?: (opts?: BriefingUrlState) => void
+} = {}) {
   const initial = filtersFromHash()
   const [scope, setScope] = useState<BriefingScopeId>(initial.scope)
   const [trackType, setTrackType] = useState<WorkTrackType | null>(initial.trackType)
@@ -212,12 +219,68 @@ export function DeliveryBoardPage() {
     setSelectedProgramId(prev => (prev === id ? null : id))
   }
 
+  const isLoading = programsQuery.isLoading
+  const isError = programsQuery.isError
+  const verdictLamp =
+    isLoading || isError
+      ? ('unknown' as const)
+      : bands.inProgress.length > 0
+        ? ('degraded' as const)
+        : programs.length === 0
+          ? ('unknown' as const)
+          : bands.notStarted.length === programs.length
+            ? ('unknown' as const)
+            : ('ok' as const)
+  const verdictTag: DenseTagVariant =
+    isLoading || isError
+      ? 'neutral'
+      : bands.inProgress.length > 0
+        ? 'warning'
+        : programs.length > 0 && bands.complete.length === programs.length
+          ? 'success'
+          : 'neutral'
+  const verdictLabel = isLoading
+    ? 'PROBING'
+    : isError
+      ? 'ERROR'
+      : programs.length === 0
+        ? 'EMPTY'
+        : bands.inProgress.length > 0
+          ? 'IN PROGRESS'
+          : bands.complete.length === programs.length
+            ? 'COMPLETE'
+            : 'IDLE'
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <OpsSection
-        title="Program overview"
-        description="Read-only catalog from platform-api GET /api/v1/programs?board=1. Program sign-off and post-completion Approve live in Agent Briefing → Session."
-        overflow="visible"
+      <OpsVerdictStrip
+        ariaLabel="Delivery board verdict"
+        title="DELIVERY VERDICT"
+        lamp={verdictLamp}
+        tagLabel={verdictLabel}
+        tagVariant={verdictTag}
+        summary={
+          isLoading
+            ? 'Loading delivery programs…'
+            : isError
+              ? 'Failed to load delivery programs from API.'
+              : programs.length === 0
+                ? 'No programs match this Scope → Lane filter.'
+                : `${programs.length} program${programs.length === 1 ? '' : 's'} · ${bands.inProgress.length} in progress · ${bands.complete.length} complete · ${bands.notStarted.length} not started`
+        }
+        actions={
+          onOpenBriefing != null ? (
+            <Button size="sm" variant="outline" className="shrink-0" onClick={() => onOpenBriefing()}>
+              Open Briefing Session
+            </Button>
+          ) : undefined
+        }
+        meta={
+          <span>
+            Read-only catalog — program sign-off and post-completion Approve live in Agent Briefing →
+            Session.
+          </span>
+        }
       />
 
       <DeliveryBoardFilterChrome

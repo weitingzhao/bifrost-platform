@@ -1,37 +1,57 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Button, StatusLamp, cn } from '@bifrost/ui'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { Button, SegmentControl, StatusLamp, cn } from '@bifrost/ui'
 import { ChevronDown, ChevronUp, Maximize2, Minimize2, X } from 'lucide-react'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
+import { ServerConsolePanel } from '@/components/ServerConsolePanel'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { useAgentJobLiveSession } from '@/hooks/useAgentJobLiveSession'
+import { useAgentHostPulse } from '@/hooks/useAgentHostPulse'
 import {
   feedKindLabel,
   formatFeedEventLine,
 } from '@/lib/agent/agentLiveFeed'
 
 const DOCK_HEIGHT_KEY = 'bifrost.console.agentExecutionDockHeight'
+const TOOL_KEY = 'bifrost.console.operatorDockTool'
 const DEFAULT_WORKING_VH = 42
 const DEFAULT_WORKING_REM = 28
 const MIN_WORKING_PX = 160
 const MAX_WORKING_VH = 70
 
-export type AgentExecutionDockMode = 'collapsed' | 'working' | 'maximized'
+export type OperatorDockMode = 'collapsed' | 'working' | 'maximized'
+export type OperatorToolId = 'agent' | 'console'
 
-export type AgentExecutionDockProps = {
+/** @deprecated Use OperatorDockMode */
+export type AgentExecutionDockMode = OperatorDockMode
+
+export type OperatorDockProps = {
   /** Ambient job id; null = idle shell (no live stream). */
   jobId: string | null
   label?: string
   scope?: string
   onDismiss: () => void
   onOpenAgentDesk?: (jobId?: string) => void
+  /** Deep-link to Engineer → Operator Plane (L-1 Update / smoke SSOT). */
+  onOpenOperatorPlane?: () => void
   onComplete?: (job: RemediationJob) => void
   /** Uncontrolled initial mode when expanded defaults to working. */
   defaultExpanded?: boolean
   /** Controlled expanded (working/maximized). When false → collapsed. */
   expanded?: boolean
   onExpandedChange?: (expanded: boolean) => void
+  /** Controlled tool slot. Ambient job forces Agent. */
+  toolId?: OperatorToolId
+  onToolIdChange?: (toolId: OperatorToolId) => void
 }
+
+/** @deprecated Use OperatorDockProps */
+export type AgentExecutionDockProps = OperatorDockProps
+
+const TOOL_OPTIONS = [
+  { value: 'agent', label: 'Agent' },
+  { value: 'console', label: 'Console' },
+] as const
 
 function readStoredHeight(): number | null {
   try {
@@ -44,40 +64,126 @@ function readStoredHeight(): number | null {
   }
 }
 
+/** Read last Operator Dock tool slot (Agent | Console). Safe for SSR / private mode. */
+export function readStoredTool(): OperatorToolId {
+  try {
+    const raw = localStorage.getItem(TOOL_KEY)
+    if (raw === 'console' || raw === 'agent') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'agent'
+}
+
+/** Persist Operator Dock tool slot — used in both controlled and uncontrolled modes. */
+export function persistOperatorTool(tool: OperatorToolId): void {
+  try {
+    localStorage.setItem(TOOL_KEY, tool)
+  } catch {
+    /* ignore */
+  }
+}
+
 function defaultWorkingHeightPx(): number {
   const fromVh = Math.round((window.innerHeight * DEFAULT_WORKING_VH) / 100)
   const fromRem = DEFAULT_WORKING_REM * 16
   return Math.min(fromVh, fromRem)
 }
 
+/** Colored P✓ / S✗ marks — green ok, red down (not muted gray). */
+function HostMetaMarks({
+  pulse,
+}: {
+  pulse: ReturnType<typeof useAgentHostPulse>
+}) {
+  if (!pulse.bridgeReady || (pulse.primary == null && pulse.standby == null)) {
+    return <>{pulse.hostMetaShort}</>
+  }
+  const bits: ReactNode[] = []
+  if (pulse.primary != null) {
+    bits.push(
+      <span key="p">
+        P
+        <span className={pulse.primaryOk ? 'lamp-ok' : 'lamp-fail'}>
+          {pulse.primaryOk ? '✓' : '✗'}
+        </span>
+      </span>,
+    )
+  }
+  if (pulse.standby != null) {
+    bits.push(
+      <span key="s">
+        S
+        <span className={pulse.standbyOk ? 'lamp-ok' : 'lamp-fail'}>
+          {pulse.standbyOk ? '✓' : '✗'}
+        </span>
+      </span>,
+    )
+  }
+  if (bits.length === 0) return <>{pulse.hostMetaShort}</>
+  return (
+    <>
+      Host ·{' '}
+      {bits.map((b, i) => (
+        <span key={i}>
+          {i > 0 ? ' ' : null}
+          {b}
+        </span>
+      ))}
+    </>
+  )
+}
+
 /**
- * Global bottom Execution Dock for Agent Task (always mounted).
- * Idle: empty shell + Open Agent Desk. Running: live feed / approvals.
- * Agent Desk is archive only (explicit link).
+ * Shell-level Operator Dock — Agent (ambient Fix) + Console (SSH) tool slots.
+ * Agent Desk remains archive only (explicit Open in Agent Desk on Agent slot).
+ * Collapse keeps Console mounted so SSH sessions survive.
  */
-export function AgentExecutionDock({
+export function OperatorDock({
   jobId,
   label,
   scope,
   onDismiss,
   onOpenAgentDesk,
+  onOpenOperatorPlane,
   onComplete,
   defaultExpanded = false,
   expanded: expandedProp,
   onExpandedChange,
-}: AgentExecutionDockProps) {
+  toolId: toolIdProp,
+  onToolIdChange,
+}: OperatorDockProps) {
   const idle = jobId == null || jobId === ''
   const controlled = expandedProp != null
-  const [mode, setMode] = useState<AgentExecutionDockMode>(() =>
+  const toolControlled = toolIdProp != null
+  const [mode, setMode] = useState<OperatorDockMode>(() =>
     defaultExpanded ? 'working' : 'collapsed',
   )
   const [heightPx, setHeightPx] = useState(() => readStoredHeight() ?? defaultWorkingHeightPx())
+  const [internalToolId, setInternalToolId] = useState<OperatorToolId>(readStoredTool)
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
   const heightPxRef = useRef(heightPx)
+
+  const toolId = toolControlled ? toolIdProp : internalToolId
+  const hostPulse = useAgentHostPulse()
+
+  const setToolId = useCallback(
+    (next: OperatorToolId) => {
+      persistOperatorTool(next)
+      if (!toolControlled) setInternalToolId(next)
+      onToolIdChange?.(next)
+    },
+    [toolControlled, onToolIdChange],
+  )
 
   useEffect(() => {
     heightPxRef.current = heightPx
   }, [heightPx])
+
+  /** Ambient Fix forces Agent slot. */
+  useEffect(() => {
+    if (!idle) setToolId('agent')
+  }, [idle, jobId, setToolId])
 
   const session = useAgentJobLiveSession(jobId, {
     onComplete,
@@ -164,12 +270,31 @@ export function AgentExecutionDock({
     reach,
   } = session
 
-  const showInlineFeed = !idle && !isTerminal && liveFeed != null
-  const showFeedPlaceholder = !idle && !isTerminal && liveFeed == null && connected
-  const showStats = !idle && !isTerminal && (feedStats.toolCalls > 0 || feedStats.eventCount > 0)
-  const headStatus = idle ? 'Idle' : statusLabel
-  const headReach = idle ? 'unknown' : reach
-  const variantClass = idle ? 'idle' : bannerVariant
+  const showInlineFeed = toolId === 'agent' && !idle && !isTerminal && liveFeed != null
+  const showFeedPlaceholder =
+    toolId === 'agent' && !idle && !isTerminal && liveFeed == null && connected
+  const showStats =
+    toolId === 'agent' && !idle && !isTerminal && (feedStats.toolCalls > 0 || feedStats.eventCount > 0)
+  const headStatus =
+    toolId === 'console'
+      ? mode === 'collapsed'
+        ? 'SSH'
+        : 'Console'
+      : idle
+        ? 'Idle'
+        : statusLabel
+  /** Idle Agent: lamp follows L-1 Host pulse (not gray unknown). Active Fix: session reach. */
+  const headReach =
+    toolId === 'console'
+      ? hostPulse.hostReach === 'unknown'
+        ? 'ok'
+        : hostPulse.hostReach
+      : idle
+        ? hostPulse.hostReach
+        : reach
+  const variantClass = toolId === 'console' ? 'idle' : idle ? 'idle' : bannerVariant
+  const collapsed = mode === 'collapsed'
+  const bodyVisible = !collapsed
 
   const bodyStyle =
     mode === 'working'
@@ -181,12 +306,12 @@ export function AgentExecutionDock({
   return (
     <div
       className={cn(
-        'console-agent-execution-dock',
+        'console-agent-execution-dock console-operator-dock',
         `console-agent-execution-dock--${mode}`,
         `console-agent-execution-dock--${variantClass}`,
       )}
       role="region"
-      aria-label="Agent execution dock"
+      aria-label="Operator dock"
       style={bodyStyle}
     >
       {mode === 'working' && (
@@ -197,25 +322,67 @@ export function AgentExecutionDock({
           onPointerUp={onResizePointerUp}
           role="separator"
           aria-orientation="horizontal"
-          aria-label="Resize agent dock"
+          aria-label="Resize operator dock"
         />
       )}
 
       <div className="console-agent-execution-dock__head">
         <StatusLamp value={headReach} kind="reach" />
-        <span className="console-agent-execution-dock__kicker">Agent Task</span>
-        {!idle && label != null && label !== '' && (
+        <span className="console-agent-execution-dock__kicker">OPERATOR</span>
+        <SegmentControl
+          ariaLabel="Operator dock tool"
+          size="sm"
+          value={toolId}
+          options={[...TOOL_OPTIONS]}
+          onChange={v => setToolId(v as OperatorToolId)}
+        />
+        {toolId === 'agent' && !idle && label != null && label !== '' && (
           <span className="console-agent-execution-dock__label" title={label}>
             {label}
           </span>
         )}
-        {!idle && scope != null && scope !== '' && (
+        {toolId === 'agent' && !idle && scope != null && scope !== '' && (
           <span className="console-agent-execution-dock__scope" title={scope}>
             {scope}
           </span>
         )}
         <span className="console-agent-execution-dock__status">{headStatus}</span>
-        {mode !== 'collapsed' && showInlineFeed && liveFeed != null && (
+        {onOpenOperatorPlane != null ? (
+          <button
+            type="button"
+            className={cn(
+              'console-agent-execution-dock__host-meta',
+              'console-agent-execution-dock__host-meta--link',
+              hostPulse.anyRunnerDown && 'console-agent-execution-dock__host-meta--warn',
+            )}
+            title={`${hostPulse.hostMetaTitle}\nOpen Operator Plane · Agent hosts`}
+            onClick={onOpenOperatorPlane}
+          >
+            <HostMetaMarks pulse={hostPulse} />
+          </button>
+        ) : (
+          <span
+            className={cn(
+              'console-agent-execution-dock__host-meta',
+              hostPulse.anyRunnerDown && 'console-agent-execution-dock__host-meta--warn',
+            )}
+            title={hostPulse.hostMetaTitle}
+          >
+            <HostMetaMarks pulse={hostPulse} />
+          </span>
+        )}
+        {hostPulse.deployMetaShort != null && (
+          <button
+            type="button"
+            className="console-agent-execution-dock__deploy-meta"
+            title="Host update in progress — open Operator Plane for log / Update"
+            onClick={() => onOpenOperatorPlane?.()}
+            disabled={onOpenOperatorPlane == null}
+          >
+            {hostPulse.deployMetaShort}
+          </button>
+        )}
+        {toolId === 'agent' && mode !== 'collapsed' && showInlineFeed && liveFeed != null && (
           <div className="console-agent-execution-dock__feed">
             <span
               className={cn(
@@ -230,14 +397,23 @@ export function AgentExecutionDock({
             </span>
           </div>
         )}
-        {mode === 'collapsed' && showInlineFeed && liveFeed != null && (
+        {toolId === 'agent' && mode === 'collapsed' && showInlineFeed && liveFeed != null && (
           <span className="console-agent-execution-dock__feed-text" title={liveFeed.text}>
             {liveFeed.text}
           </span>
         )}
-        {mode === 'collapsed' && idle && (
+        {mode === 'collapsed' && toolId === 'agent' && idle && (
           <span className="console-agent-execution-dock__feed-text console-agent-execution-dock__feed-text--placeholder">
-            No ambient Fix — expand for status
+            {hostPulse.deployRunning
+              ? 'Host update in progress'
+              : hostPulse.allRunnersDown
+                ? 'Runners unreachable'
+                : 'No ambient Fix — expand for status'}
+          </span>
+        )}
+        {mode === 'collapsed' && toolId === 'console' && (
+          <span className="console-agent-execution-dock__feed-text console-agent-execution-dock__feed-text--placeholder">
+            SSH console — expand to connect
           </span>
         )}
         {showFeedPlaceholder && mode !== 'collapsed' && (
@@ -252,17 +428,27 @@ export function AgentExecutionDock({
             {feedStats.eventCount > feedStats.toolCalls && `${feedStats.eventCount} events`}
           </span>
         )}
-        {mode !== 'collapsed' && !idle && (
+        {toolId === 'agent' && mode !== 'collapsed' && !idle && (
           <AgentPhaseIndicator currentPhase={job?.phase} failed={job?.status === 'failed'} compact />
         )}
-        {elapsed != null && !idle && !isTerminal && (
+        {toolId === 'agent' && elapsed != null && !idle && !isTerminal && (
           <span className="console-agent-execution-dock__elapsed">{elapsed}</span>
         )}
-        {!idle && !connected && !isTerminal && error == null && (
+        {toolId === 'agent' && !idle && !connected && !isTerminal && error == null && (
           <span className="console-agent-execution-dock__connecting">connecting…</span>
         )}
 
         <div className="console-agent-execution-dock__actions">
+          {onOpenOperatorPlane != null && (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={onOpenOperatorPlane}
+              title="Open Operator Plane (L-1) — Update / smoke / MCP"
+            >
+              Operator Plane
+            </Button>
+          )}
           {mode === 'collapsed' ? (
             <Button variant="outline" size="xs" onClick={expandWorking}>
               <ChevronUp className="console-agent-execution-dock__action-icon" aria-hidden />
@@ -289,7 +475,7 @@ export function AgentExecutionDock({
               </Button>
             </>
           )}
-          {onOpenAgentDesk != null && (
+          {toolId === 'agent' && onOpenAgentDesk != null && (
             <Button
               variant="ghost"
               size="xs"
@@ -298,7 +484,7 @@ export function AgentExecutionDock({
               Open in Agent Desk
             </Button>
           )}
-          {!idle && isTerminal && (
+          {toolId === 'agent' && !idle && isTerminal && (
             <Button variant="outline" size="xs" onClick={onDismiss}>
               <X className="console-agent-execution-dock__action-icon" aria-hidden />
               Dismiss
@@ -307,15 +493,65 @@ export function AgentExecutionDock({
         </div>
       </div>
 
-      {mode !== 'collapsed' && (
-        <div className="console-agent-execution-dock__body">
+      {/* Always mounted so Console SSH survives collapse; visibility toggled. */}
+      <div
+        className={cn(
+          'console-agent-execution-dock__body',
+          !bodyVisible && 'console-operator-dock__body--collapsed',
+        )}
+        aria-hidden={!bodyVisible}
+        hidden={!bodyVisible ? undefined : undefined}
+        style={!bodyVisible ? { display: 'none' } : undefined}
+      >
+        <div
+          className={cn(
+            'console-operator-dock__tool',
+            'min-h-0 flex-1 flex flex-col',
+            toolId !== 'agent' && 'console-operator-dock__tool--inactive',
+          )}
+          style={toolId !== 'agent' ? { display: 'none' } : undefined}
+        >
           {idle ? (
             <div className="console-agent-execution-dock__idle">
               <p className="console-agent-execution-dock__idle-title">No ambient Agent Fix running</p>
               <p className="console-agent-execution-dock__idle-copy">
                 Start Fix from Daily Ops or Mission Launch — live feed and approvals appear here.
-                Agent Desk is the archive for history and manual tasks.
+                Switch to Console for SSH. Agent Desk is the archive for history and manual tasks.
               </p>
+              {hostPulse.deployRunning && (
+                <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
+                  Host update in progress — Fix may be flaky until deploy finishes.
+                  {onOpenOperatorPlane != null && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="console-agent-execution-dock__inline-link"
+                        onClick={onOpenOperatorPlane}
+                      >
+                        Open Operator Plane
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
+              {!hostPulse.deployRunning && hostPulse.allRunnersDown && (
+                <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
+                  L-1 runners unreachable — recover hosts on Operator Plane.
+                  {onOpenOperatorPlane != null && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="console-agent-execution-dock__inline-link"
+                        onClick={onOpenOperatorPlane}
+                      >
+                        Open Operator Plane
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
               {onOpenAgentDesk != null && (
                 <Button variant="outline" size="sm" onClick={() => onOpenAgentDesk()}>
                   Open Agent Desk
@@ -324,6 +560,23 @@ export function AgentExecutionDock({
             </div>
           ) : (
             <>
+              {hostPulse.deployRunning && (
+                <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--warn">
+                  Host update in progress — Fix may be flaky
+                  {onOpenOperatorPlane != null && (
+                    <>
+                      {' · '}
+                      <button
+                        type="button"
+                        className="console-agent-execution-dock__inline-link"
+                        onClick={onOpenOperatorPlane}
+                      >
+                        Operator Plane
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
               {bannerVariant === 'done' && job?.summary != null && job.summary !== '' && (
                 <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--done">
                   {job.summary}
@@ -380,7 +633,21 @@ export function AgentExecutionDock({
             </>
           )}
         </div>
-      )}
+
+        <div
+          className={cn(
+            'console-operator-dock__tool',
+            'console-operator-dock__tool--console',
+            'min-h-0 flex-1 flex flex-col',
+          )}
+          style={toolId !== 'console' ? { display: 'none' } : undefined}
+        >
+          <ServerConsolePanel density="dock" showVerdict={false} />
+        </div>
+      </div>
     </div>
   )
 }
+
+/** @deprecated Prefer OperatorDock — same component. */
+export const AgentExecutionDock = OperatorDock

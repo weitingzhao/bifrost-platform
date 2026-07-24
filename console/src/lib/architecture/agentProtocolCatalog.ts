@@ -119,8 +119,13 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   },
   {
     action:
-      'Forced Agent Desk tab switch on Agent Fix start/running — use shell Agent Execution Dock (ambientJob + Expand dock); Agent Desk is archive only (explicit Open in Agent Desk)',
+      'Forced Agent Desk tab switch on Agent Fix start/running — use shell Operator Dock Agent slot (ambientJob + Expand dock); Agent Desk is archive only (explicit Open in Agent Desk)',
     scope: 'Ops Console shell',
+  },
+  {
+    action:
+      'Operator Dock embedded Agent host Update / Confirm / deploy log / smoke — Dock is L-1 pulse + deep-link only; Update SSOT remains Operator Plane (AgentHostDeployPanel)',
+    scope: 'Ops Console shell · Operator Dock',
   },
   {
     action:
@@ -473,8 +478,9 @@ export const DAILY_OPS_FLEET_DESK = {
     'Remediate primary CTA follows highest-priority Checklist×Fleet blocker (fail>degraded; manual/observe before AI-fixable at same severity): git-bridge dirty → Propose commit (git-dirty-remediate, approval required); other full_auto/semi_auto+scope → Agent Fix / AI Fix · Operator Plan; manual/observe/null-scope → Manual next step (no sparkles AI Fix); mixed → primary manual + outline Also: Propose commit (git dirty) / Also: AI Fix (sibling).',
     'Engineer CRITICAL: fleet cell Agent Fix stays disabled; git dirty uses Propose commit / Stash (not magic AI Fix that clears dirty); other AI-fixable → Operator Plan; else Manual next (e.g. Mac seat). Full Operator Plane page is escape hatch only.',
     'Full Operator Plane page is secondary escape (MCP / host deploy / self-smoke) — not the default primary CTA.',
-    'Agent Fix running: CTA becomes Expand dock; shell Agent Execution Dock is SSOT for live feed/approvals; in-page panel is one-line summary only; Agent Desk is archive (explicit Open in Agent Desk).',
-    'Mission Launch · Launch Live: telemetry-only for Agent (one-line + Expand dock); Pipeline + Post-deploy stay in-page; Commit & push / approvals only in Agent Execution Dock (same Daily Ops protocol).',
+    'Operator Dock × L-1 Host: head shows dual heartbeat (Host · P✓ S✓) + optional Deploy · role… read-only; CTA deep-links to Operator Plane. Console Mac chips tag Primary/Standby from bridge runners only. No Dock Update button / Confirm / deploy log / Hosts tool slot — Update SSOT = Operator Plane AgentHostDeployPanel.',
+    'Agent Fix running: CTA becomes Expand dock; shell Operator Dock (Agent slot) is SSOT for live feed/approvals; in-page panel is one-line summary only; Agent Desk is archive (explicit Open in Agent Desk).',
+    'Mission Launch · Launch Live: telemetry-only for Agent (one-line + Expand dock); Pipeline + Post-deploy stay in-page; Commit & push / approvals only in Operator Dock Agent slot (same Daily Ops protocol).',
     'Verify = re-probe fleet after Agent Fix; Clear = fleetClear + operate queue open===0.',
     'W3 Auto-remediate default OFF — Assisted “Ready to Agent Fix” hint only; never auto-trigger.',
     'Checklist AI Check (scope daily-ops-checklist-run): Ops loop owns the green primary; Checklist header keeps muted Re-check + Ask for AI secondary — never two magic-wand primaries.',
@@ -504,7 +510,7 @@ export const DAILY_OPS_FLEET_DESK = {
     'Q6: Compact group rollups on board; Detail below board lists standards by group; no GET API strings.',
     'Q7: Single Ops loop strip (no dual Verdict+Workflow cards); circle stepper shows done/active/blocked; at most one primary CTA.',
     'Q8: Engineer CRITICAL → blocker-typed CTA (manual-next for seat/manual/observe; Propose commit for git dirty; AI Fix · Operator Plan when other AI-fixable); Full page → secondary; canOperate gates; D10 copy on remediate.',
-    'Q9: Discover strip primary is AI Check; Clear idle offers Run daily check (same Checklist probe); Agent Fix in flight expands Execution Dock (not forced Agent Desk tab); in-page summary + Expand dock.',
+    'Q9: Discover strip primary is AI Check; Clear idle offers Run daily check (same Checklist probe); Agent Fix in flight expands Operator Dock (not forced Agent Desk tab); in-page summary + Expand dock.',
     'Q10: Strip AI Check / Checklist Re-check start daily-ops-checklist-run; git dirty handoff uses git-dirty-remediate; Operator Plane Fix stays separate; no dual green AI Check+AI Fix.',
     'Q11: Notes show fleet≠agent on polarity mismatch; Action opens job/queue; Queued (busy) when auto demoted by concurrency; Queue Dismiss available with evidence for stale/resolved.',
     'Q12: Non-ok row shows Fix (Ops Agent when fixScope) and/or Ask for AI (Cursor failover copy); header Ask for AI packs all non-ok items.',

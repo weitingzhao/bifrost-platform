@@ -60,6 +60,8 @@ export type MissionLaunchBoardProps = {
   tradeRecentRunsLoading?: boolean
   onOpenPlatformRun: (run: DeliveryPipelineRunView) => void
   onOpenTradeRun: (run: DeliveryPipelineRunView) => void
+  /** Primary Launch/Deploy already in Task CC Verdict — hide duplicate Agent Launch in gate bars. */
+  hidePrimaryLaunch?: boolean
 }
 
 type ReleaseLane = 'vehicle' | 'payload'
@@ -146,6 +148,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
     tradeRecentRunsLoading,
     onOpenPlatformRun,
     onOpenTradeRun,
+    hidePrimaryLaunch = false,
   } = props
 
   const [lane, setLane] = useState<ReleaseLane>('vehicle')
@@ -160,7 +163,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
     !canDispatchTradeDeploy || satelliteLaunchVerdict?.kind !== 'GO' || sharedBlocked
 
   return (
-    <div className="flex flex-col gap-2">
+    <div id="task-cc-launch-board" className="flex scroll-mt-2 flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-[var(--text-dense-label)] font-semibold shrink-0">Release lane</span>
@@ -259,6 +262,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                 detailLabel="Platform →"
                 onOpenActiveRun={() => onNavigate('platform-release')}
                 openActiveRunLabel="Launch Rocket →"
+                hidePrimaryLaunch={hidePrimaryLaunch}
               />
             )}
             <div className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
@@ -339,6 +343,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                 detailLabel="Satellite →"
                 onOpenActiveRun={() => onNavigate('trade-release')}
                 openActiveRunLabel="Deploy Satellite →"
+                hidePrimaryLaunch={hidePrimaryLaunch}
               />
             )}
             <div className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">

@@ -139,6 +139,8 @@ export function ClusterIssuesPanel({
 
   return (
     <OpsSection
+      id="cluster-issues"
+      className="scroll-mt-16"
       title="Cluster issues"
       leading={<StatusLamp value={healthy ? 'ok' : issueReach} kind="reach" />}
       description={

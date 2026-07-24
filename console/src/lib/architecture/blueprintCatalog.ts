@@ -210,7 +210,11 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Promote', plane: 'Rocket', purpose: 'Release readiness (flywheels A + B)' },
   { view: 'Flywheel Vision', plane: 'Governance', purpose: 'Three-layer Agent convergence vision' },
   { view: 'Governance catalogs', plane: 'Governance', purpose: 'Governance catalogs and Copy Prompt' },
-  { view: 'Server Console', plane: 'Ground Systems', purpose: 'Remote server console (Tools)' },
+  {
+    view: 'Operator Dock · Console',
+    plane: 'Shell',
+    purpose: 'SSH to K3s / Mac Agent hosts — shell Operator Dock Console slot (not a Ground nav page)',
+  },
 ]
 
 /** Task mode lenses — focused Console navigation for ops vs dev loops (Constitution). */

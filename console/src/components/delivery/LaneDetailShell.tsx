@@ -14,7 +14,7 @@ import {
  * mission cockpit and verdict SSOT stay in Mission Launch TCC.
  */
 
-/** Back to Mission Launch — rendered in the PageHeader actions slot (ConsolePage). */
+/** Back to Mission Launch — shown in ConsoleHeader pageActions on lane detail tabs. */
 export function BackToMissionLaunchButton({ onClick }: { onClick: () => void }) {
   return (
     <Button size="sm" variant="outline" onClick={onClick}>

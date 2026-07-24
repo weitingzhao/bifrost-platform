@@ -77,7 +77,8 @@ interface AuditRecordsPanelProps {
   records: AuditRecord[]
   isLoading: boolean
   limit?: number
-  title?: string
+  /** Omit when a page-level Verdict already carries the section identity. */
+  title?: string | null
   onViewAll?: () => void
   /** When false, hide the header refresh control (e.g. embedded preview). */
   showRefresh?: boolean
@@ -91,7 +92,7 @@ export function AuditRecordsPanel({
   records,
   isLoading,
   limit = 20,
-  title = 'Audit',
+  title,
   onViewAll,
   showRefresh = true,
   initialCategory = 'all',
@@ -115,17 +116,22 @@ export function AuditRecordsPanel({
   const visible = filtered.slice(0, limit)
   const qc = useQueryClient()
   const auditFetching = useIsFetching({ queryKey: ['platform', 'audit'] }) > 0
+  const hasTitle = title != null && title !== ''
 
   return (
     <OpsSection
-      title={title}
+      title={hasTitle ? title : undefined}
       actions={
         <div className="flex items-center gap-3">
-          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {isLoading
-              ? '...'
-              : `${filtered.length}${filtersActive ? ` / ${records.length}` : ''} records`}
-          </span>
+          {(hasTitle || filtersActive) && (
+            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              {isLoading
+                ? '...'
+                : filtersActive
+                  ? `${filtered.length} / ${records.length} matching`
+                  : `${filtered.length} records`}
+            </span>
+          )}
           {showRefresh ? (
             <SectionRefreshButton
               isFetching={auditFetching || isLoading}

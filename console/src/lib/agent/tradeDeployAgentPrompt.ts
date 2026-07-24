@@ -21,6 +21,8 @@ export interface TradeDeployPromptContext {
   tierB?: TierBStatusResponse
   supplyChain?: SupplyChainResponse
   matrices?: MatrixResponse[]
+  /** Where the operator clicked AI Deploy (defaults to Control Room Launch Pad). */
+  operatorSurface?: string
 }
 
 function summarizeRun(run: DeliveryPipelineRunView | undefined) {
@@ -63,6 +65,7 @@ function tradeEnvSummary(matrices: MatrixResponse[] | undefined) {
 export function buildTradeDeployPrompt(ctx: TradeDeployPromptContext): string {
   const stgTarget = deliveryTargetById('trade-stg')
   const prodTarget = deliveryTargetById('trade-prod')
+  const surface = ctx.operatorSurface ?? 'Control Room Launch Pad'
   const snapshot = {
     stg_pipeline: DELIVER_STG_PIPELINE,
     prod_pipeline: prodTarget.pipeline,
@@ -86,8 +89,10 @@ export function buildTradeDeployPrompt(ctx: TradeDeployPromptContext): string {
   return [
     TRADE_DEPLOY_AGENT_PROMPT,
     '',
-    '## Operator context (Control Room Launch Pad · Satellite Deploy at task start)',
-    'The operator clicked **Agent Deploy** on the Control Room Launch Pad. Use the snapshot below plus live MCP tools.',
+    `## Operator context (${surface} at task start)`,
+    surface === 'Deploy Satellite page'
+      ? 'The operator clicked **AI Deploy** on the Deploy Satellite page. Use the snapshot below plus live MCP tools.'
+      : 'The operator clicked **Agent Deploy** on the Control Room Launch Pad. Use the snapshot below plus live MCP tools.',
     '',
     '```json',
     JSON.stringify(snapshot, null, 2),

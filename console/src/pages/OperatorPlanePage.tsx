@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Button, DenseTag, PageHeader, StatusLamp } from '@bifrost/ui'
+import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import type { RunnerSmokeResponse, RunnerStatus } from '@/api/agentTypes'
 import { fetchAgentBridge, fetchRunnerSmoke } from '@/api/agentOps'
 import { fetchHermesGatewayHealth } from '@/api/hermes'
 import { AgentMcpPanel } from '@/components/agent/AgentMcpPanel'
 import { AgentHostDeployPanel } from '@/components/agent/AgentHostDeployPanel'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
+import { PageToolbar } from '@/components/layout/PageToolbar'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
@@ -81,10 +82,7 @@ export function OperatorPlanePage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <PageHeader
-        title="Operator Plane (L-1)"
-        description="Out-of-band recovery layer — AI Remediation Runners outside K8s on dual Mac Minis (fate isolation D7 / L-1)."
-        actions={
+      <PageToolbar>
           <AgentTriggerButton
             label="AI Fix"
             pending={aiFix.isPending}
@@ -92,8 +90,7 @@ export function OperatorPlanePage({
             title={aiFix.disabledReason ?? 'Start Operator · Remediate with current bridge probe'}
             onClick={() => aiFix.trigger()}
           />
-        }
-      />
+      </PageToolbar>
 
       {aiFix.error != null && (
         <p className="m-0 text-[var(--text-dense-meta)] text-destructive">{aiFix.error.message}</p>

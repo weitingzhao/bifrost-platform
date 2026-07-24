@@ -15,12 +15,18 @@ import { fetchClusterPlacement } from '@/api/cluster'
 import { fetchDeliveryPipelines } from '@/api/delivery'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
 import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  OpsVerdictStrip,
+  type OpsVerdictLamp,
+  type OpsVerdictTagVariant,
+} from '@/components/layout/OpsVerdictStrip'
 import { StatusLamp } from '@/components/StatusLamp'
 import {
   buildPlacementLlmPack,
   KANIKO_PIPELINE_NAMES,
   PLACEMENT_CATALOG_VERSION,
 } from '@/lib/architecture/workloadPlacementCatalog'
+import { scrollToSection } from '@/lib/dom/scrollToSection'
 
 interface PlacementPageProps {
   onOpenDelivery?: () => void
@@ -44,6 +50,7 @@ export function PlacementPage({ onOpenDelivery, onOpenCluster }: PlacementPagePr
 
   const placement = placementQuery.data
   const amd64CiPool = placement?.pools.find(p => p.id === 'amd64_ci')
+  const amd64CiReady = amd64CiPool?.nodes_ready ?? 0
   const criticalCount = placement?.violations.filter(v => v.severity === 'critical').length ?? 0
 
   const deliverPreflight = useMemo(() => {
@@ -81,35 +88,106 @@ export function PlacementPage({ onOpenDelivery, onOpenCluster }: PlacementPagePr
     }
   }, [llmPack])
 
+  const verdict = useMemo(() => {
+    if (placementQuery.isLoading) {
+      return {
+        lamp: 'unknown' as OpsVerdictLamp,
+        tagLabel: 'PROBING',
+        tagVariant: 'neutral' as OpsVerdictTagVariant,
+        summary: 'Loading placement snapshot…',
+      }
+    }
+    if (placement == null) {
+      return {
+        lamp: 'unknown' as OpsVerdictLamp,
+        tagLabel: 'NO DATA',
+        tagVariant: 'neutral' as OpsVerdictTagVariant,
+        summary: 'Placement snapshot unavailable.',
+      }
+    }
+    const blocked = criticalCount > 0 || amd64CiReady === 0
+    if (blocked || placement.reachability === 'fail') {
+      return {
+        lamp: 'fail' as OpsVerdictLamp,
+        tagLabel: criticalCount > 0 ? `${criticalCount} CRITICAL` : 'BLOCKED',
+        tagVariant: 'danger' as OpsVerdictTagVariant,
+        summary: placement.detail,
+      }
+    }
+    if (placement.reachability === 'degraded') {
+      return {
+        lamp: 'degraded' as OpsVerdictLamp,
+        tagLabel: 'DEGRADED',
+        tagVariant: 'warning' as OpsVerdictTagVariant,
+        summary: placement.detail,
+      }
+    }
+    return {
+      lamp: 'ok' as OpsVerdictLamp,
+      tagLabel: 'HEALTHY',
+      tagVariant: 'success' as OpsVerdictTagVariant,
+      summary: placement.detail,
+    }
+  }, [placement, placementQuery.isLoading, criticalCount, amd64CiReady])
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
-      <OpsSection
-        title="Summary"
-        description={`Fleet facility constraints (catalog v${PLACEMENT_CATALOG_VERSION}) — live vs planned node pools for Rocket CI, Satellite runtime, and shared infra. Hosted under Rocket; not a satellite-only plan.`}
+      <OpsVerdictStrip
+        ariaLabel="Placement verdict"
+        title="PLACEMENT VERDICT"
+        lamp={verdict.lamp}
+        tagLabel={verdict.tagLabel}
+        tagVariant={verdict.tagVariant}
+        summary={verdict.summary}
         actions={
-          <Button size="sm" onClick={() => void handleCopy()}>
-            {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy LLM pack'}
-          </Button>
+          <>
+            <Button size="sm" onClick={() => void handleCopy()}>
+              {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy LLM pack'}
+            </Button>
+            {onOpenDelivery != null ? (
+              <Button size="sm" variant="outline" onClick={onOpenDelivery}>
+                Open Delivery
+              </Button>
+            ) : null}
+            {onOpenCluster != null ? (
+              <Button size="sm" variant="outline" onClick={onOpenCluster}>
+                Open Cluster
+              </Button>
+            ) : null}
+          </>
         }
-        headerExtra={
-          placementQuery.isLoading ? (
-            <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">Loading…</p>
-          ) : placement != null ? (
-            <div className="m-0 mt-2 flex flex-wrap items-center gap-3 text-[var(--text-dense-meta)]">
-              <span className="inline-flex items-center gap-1.5">
-                <StatusLamp value={placement.reachability} kind="reach" />
-                {placement.detail}
-              </span>
-              <DenseTag variant={amd64CiPool != null && amd64CiPool.nodes_ready > 0 ? 'success' : 'danger'}>
-                amd64_ci Ready: {amd64CiPool?.nodes_ready ?? 0}
-              </DenseTag>
-              <DenseTag variant={criticalCount === 0 ? 'success' : 'danger'}>
-                Violations: {criticalCount} critical
-              </DenseTag>
-            </div>
-          ) : null
+        meta={
+          <>
+            <span>
+              Fleet facility constraints (catalog v{PLACEMENT_CATALOG_VERSION}) — Rocket CI, Satellite
+              runtime, shared infra
+            </span>
+            {amd64CiReady === 0 ? (
+              <button
+                type="button"
+                className="inline-flex items-center hover:underline"
+                title="Scroll to CI readiness"
+                onClick={() => scrollToSection('placement-ci-readiness')}
+              >
+                <DenseTag variant="danger">amd64_ci Ready: {amd64CiReady}</DenseTag>
+              </button>
+            ) : (
+              <DenseTag variant="success">amd64_ci Ready: {amd64CiReady}</DenseTag>
+            )}
+            {criticalCount > 0 ? (
+              <button
+                type="button"
+                className="inline-flex items-center hover:underline"
+                title="Scroll to Violations"
+                onClick={() => scrollToSection('placement-violations')}
+              >
+                <DenseTag variant="danger">Violations: {criticalCount} critical</DenseTag>
+              </button>
+            ) : (
+              <DenseTag variant="success">Violations: {criticalCount} critical</DenseTag>
+            )}
+          </>
         }
-        overflow="visible"
       />
 
       <OpsSection title="Node pools" bodyPadding="none" overflow="hidden">
@@ -203,16 +281,11 @@ export function PlacementPage({ onOpenDelivery, onOpenCluster }: PlacementPagePr
       </OpsSection>
 
       <OpsSection
+        id="placement-ci-readiness"
+        className="scroll-mt-16"
         title="CI readiness"
         description="Kaniko pipelines require amd64_ci pool ≥1 Ready node."
         overflow="visible"
-        actions={
-          onOpenDelivery != null ? (
-            <Button size="sm" variant="outline" onClick={onOpenDelivery}>
-              Open Delivery
-            </Button>
-          ) : undefined
-        }
         headerExtra={
           <div className="m-0 mt-2 flex flex-col gap-2 text-[var(--text-dense-meta)]">
             <p className="m-0 inline-flex items-center gap-2">
@@ -233,17 +306,12 @@ export function PlacementPage({ onOpenDelivery, onOpenCluster }: PlacementPagePr
 
       {placement != null && placement.violations.length > 0 && (
         <OpsSection
+          id="placement-violations"
+          className="scroll-mt-16"
           title="Violations"
           bodyPadding="none"
           overflow="hidden"
           bodyClassName="ops-section-body--table"
-          actions={
-            onOpenCluster != null ? (
-              <Button size="sm" variant="outline" onClick={onOpenCluster}>
-                Open Cluster
-              </Button>
-            ) : undefined
-          }
         >
           <DenseDataTable>
             <DenseTableHeader>
