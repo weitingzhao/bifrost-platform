@@ -6,6 +6,15 @@ export type ReadinessActuation =
   | { kind: 'rollout-restart'; namespace: string; deployment: string }
   | { kind: 'ib-gateway-reconnect' }
 
+/**
+ * Probe chip to watch after an L1 actuation (FixBar settle beat).
+ * STG/PROD: tradeNs is bifrost-stg / bifrost-prod — never scale daemon up (D10).
+ */
+export type SettleWatchTarget = {
+  /** Case-insensitive substring match against readiness chip label. */
+  chipLabelIncludes: string
+}
+
 export type ReadinessChipAction = {
   kind: ReadinessChipActionKind
   label: string
@@ -16,11 +25,18 @@ export type ReadinessChipAction = {
   apiEnv?: 'dev' | 'stg' | 'prod'
   actuation?: ReadinessActuation
   requiresOperate?: boolean
+  /** Optional settle-watch hint for FixBar four-beat (defaults to primary chip label). */
+  settleWatchTarget?: SettleWatchTarget
 }
 
 export type ReadinessChipContext = {
   modeId: 'mission-launch' | 'daily-ops' | string
   env: 'stg' | 'prod' | 'platform-stg' | 'platform-prod'
+  /**
+   * Activity Feed / signal correlate scope. Defaults to `env`.
+   * Use `shared` for Shared · IB bus so it does not collide with Trade Prod chips.
+   */
+  activityEnvScope?: string
 }
 
 const TRADE_NS: Record<'stg' | 'prod', string> = {
@@ -125,12 +141,14 @@ export function readinessChipFixActions(
       label: 'Restart api-monitor',
       requiresOperate: true,
       actuation: { kind: 'rollout-restart', namespace: tradeNs, deployment: 'api-monitor' },
+      settleWatchTarget: { chipLabelIncludes: chipLabel },
     })
     actions.push({
       kind: 'actuate',
       label: 'Gateway reconnect',
       requiresOperate: true,
       actuation: { kind: 'ib-gateway-reconnect' },
+      settleWatchTarget: { chipLabelIncludes: chipLabel },
     })
     return actions
   }
@@ -159,12 +177,13 @@ export function readinessChipFixActions(
         label: 'Restart account-sync',
         requiresOperate: true,
         actuation: { kind: 'rollout-restart', namespace: tradeNs, deployment: 'account-sync' },
+        settleWatchTarget: { chipLabelIncludes: 'Account sync' },
       })
     }
     return actions
   }
 
-  // Trading daemon chip — navigate only; never scale-up (D10).
+  // Trading daemon chip — navigate only; never scale-up (D10 BLOCKED).
   if (label.includes('trading daemon') || label.includes('daemon heartbeat')) {
     pushNavigate('satellite-bus', 'Trade daemon operate', 'monitor')
     return actions
@@ -188,6 +207,7 @@ export function readinessChipFixActions(
         label: 'Restart api-monitor',
         requiresOperate: true,
         actuation: { kind: 'rollout-restart', namespace: tradeNs, deployment: 'api-monitor' },
+        settleWatchTarget: { chipLabelIncludes: chipLabel },
       })
     }
     return actions

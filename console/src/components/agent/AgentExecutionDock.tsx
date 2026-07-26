@@ -11,6 +11,7 @@ import {
   feedKindLabel,
   formatFeedEventLine,
 } from '@/lib/agent/agentLiveFeed'
+import { updateActivityPhase } from '@/lib/activity/activityStore'
 
 const DOCK_HEIGHT_KEY = 'bifrost.console.agentExecutionDockHeight'
 const TOOL_KEY = 'bifrost.console.operatorDockTool'
@@ -269,6 +270,21 @@ export function OperatorDock({
     respond,
     reach,
   } = session
+
+  // P2-C: mid-flight remediation phases → Activity Feed detail
+  const lastActivityPhaseRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (jobId == null || jobId === '') {
+      lastActivityPhaseRef.current = null
+      return
+    }
+    if (job == null || isTerminal) return
+    const phase = job.phase
+    if (phase == null || phase === 'done' || phase === 'failed' || phase === 'cancelled') return
+    if (phase === lastActivityPhaseRef.current) return
+    lastActivityPhaseRef.current = phase
+    updateActivityPhase(`agent:${jobId}`, 'applying', { detail: phase })
+  }, [jobId, job, job?.phase, isTerminal])
 
   const showInlineFeed = toolId === 'agent' && !idle && !isTerminal && liveFeed != null
   const showFeedPlaceholder =

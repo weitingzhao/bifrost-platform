@@ -5,6 +5,7 @@ import { AlertTriangle, ChevronRight, Rocket, type LucideIcon } from 'lucide-rea
 import { fetchCluster, fetchClusterServiceReadiness } from '@/api/cluster'
 import { fetchReleaseGate } from '@/api/promote'
 import { fetchSelfHealth } from '@/api/core'
+import { SignalActivityObserver } from '@/components/activity/SignalActivityObserver'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { ReadinessFixBar } from '@/components/task-mode/ReadinessFixBar'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
@@ -142,6 +143,10 @@ export function EnvironmentReadinessPanel({
         summaryColumn && 'flex h-full min-h-0 flex-col',
       )}
     >
+      <SignalActivityObserver
+        chips={chips}
+        envScope={fixCtx?.activityEnvScope ?? fixCtx?.env ?? readinessAnchor ?? 'unknown'}
+      />
       <div className="flex flex-wrap items-center gap-1.5">
         <Icon size={dense ? 14 : 16} style={{ color }} />
         <span className={cn('font-semibold', dense ? 'text-[var(--text-dense-meta)]' : 'text-[var(--text-dense-label)]')}>
@@ -487,6 +492,7 @@ export function SharedRocketStrip({
           COUPLING
         </DenseTag>
       </div>
+      <SignalActivityObserver chips={chips} envScope="shared" />
       <div className="mt-1.5 grid gap-1.5 grid-cols-1">
         <ReadinessChip
           label="Rocket · IB socket"
@@ -497,7 +503,7 @@ export function SharedRocketStrip({
       </div>
       <ReadinessFixBar
         chips={chips}
-        ctx={{ modeId: 'mission-launch', env: 'prod' }}
+        ctx={{ modeId: 'mission-launch', env: 'prod', activityEnvScope: 'shared' }}
         canOperate={canOperate}
         onNavigate={onNavigate}
         dense={compact}

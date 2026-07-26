@@ -17,6 +17,7 @@ import {
   type FleetViewerEnv,
 } from '@/lib/control-room/fleetSnapshot'
 import { UserMenu } from '@/components/UserMenu'
+import { ActivityIndicator } from '@/components/activity/ActivityIndicator'
 import { TaskModeCapsule } from '@/components/task-mode/TaskModeCapsule'
 import type { TaskModeId } from '@/lib/task-mode/types'
 
@@ -179,6 +180,12 @@ export function ConsoleHeader({
           </span>
         </Button>
       )}
+
+      {/* Activity — shell chrome between Agent Task and User; idle = invisible */}
+      <ActivityIndicator
+        onOpenAudit={() => onSelectTab('audit')}
+        onNavigate={onSelectTab}
+      />
 
       {children != null ? <div className="shrink-0">{children}</div> : null}
 

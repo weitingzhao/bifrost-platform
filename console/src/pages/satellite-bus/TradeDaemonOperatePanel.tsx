@@ -5,6 +5,8 @@ import { rolloutRestartDeployment, scaleDeployment } from '@/api/clusterActuatio
 import type { ClusterWorkload } from '@/api/clusterTypes'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { upsertActivity, updateActivityPhase } from '@/lib/activity/activityStore'
+import { startRestartActuationSettle } from '@/lib/activity/restartActuationSettle'
 import type { TradeEnv } from '@/pages/satellite-bus/useSatelliteBusQueries'
 
 type ConfirmTarget = {
@@ -50,12 +52,31 @@ export function TradeDaemonOperatePanel({
 
   const scaleMutation = useMutation({
     mutationFn: scaleDeployment,
-    onSuccess: data => {
+    onMutate: vars => {
+      upsertActivity({
+        id: `actuation:daemon-scale:${vars.namespace}/${vars.name}`,
+        kind: 'actuation',
+        phase: 'requested',
+        title: `Scale ${vars.name} → ${vars.replicas}`,
+        target: `${vars.namespace}/${vars.name}`,
+        linkTo: 'satellite-bus',
+        bumpTs: true,
+      })
+    },
+    onSuccess: (data, vars) => {
+      updateActivityPhase(`actuation:daemon-scale:${vars.namespace}/${vars.name}`, 'settled', {
+        settledOutcome: 'resolved',
+        detail: data.message,
+      })
       setFeedback({ kind: 'ok', text: data.message })
       setConfirm(null)
       invalidate()
     },
-    onError: (err: Error) => {
+    onError: (err: Error, vars) => {
+      updateActivityPhase(`actuation:daemon-scale:${vars.namespace}/${vars.name}`, 'failed', {
+        settledOutcome: 'error',
+        detail: err.message,
+      })
       setFeedback({ kind: 'err', text: err.message })
       setConfirm(null)
     },
@@ -63,12 +84,37 @@ export function TradeDaemonOperatePanel({
 
   const restartMutation = useMutation({
     mutationFn: rolloutRestartDeployment,
-    onSuccess: data => {
+    onMutate: vars => {
+      upsertActivity({
+        id: `actuation:daemon-restart:${vars.namespace}/${vars.name}`,
+        kind: 'actuation',
+        phase: 'requested',
+        title: `Restart ${vars.name}`,
+        target: `${vars.namespace}/${vars.name}`,
+        linkTo: 'satellite-bus',
+        bumpTs: true,
+      })
+    },
+    onSuccess: (data, vars) => {
+      const activityId = `actuation:daemon-restart:${vars.namespace}/${vars.name}`
+      const wl = findWorkload(workloads, vars.name)
+      startRestartActuationSettle({
+        activityId,
+        queryClient: qc,
+        namespace: vars.namespace,
+        name: vars.name,
+        baselineReady: wl?.ready ?? null,
+        apiMessage: data.message,
+      })
       setFeedback({ kind: 'ok', text: data.message })
       setConfirm(null)
       invalidate()
     },
-    onError: (err: Error) => {
+    onError: (err: Error, vars) => {
+      updateActivityPhase(`actuation:daemon-restart:${vars.namespace}/${vars.name}`, 'failed', {
+        settledOutcome: 'error',
+        detail: err.message,
+      })
       setFeedback({ kind: 'err', text: err.message })
       setConfirm(null)
     },

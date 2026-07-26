@@ -256,6 +256,11 @@ export const MANDATORY_MAPPING: MandatoryMappingRow[] = [
     never: 'Sticky OpsContextBar / second nav bar under ConsoleHeader shell chrome',
   },
   {
+    interaction: 'Shell Activity Feed (recent ops glance)',
+    use: 'ActivityIndicator + ActivityDropdown in ConsoleHeader (between Agent Task and User); idle = invisible; Audit remains SSOT',
+    never: 'Page Verdict / Operate Queue inflation / toast spam / unread badges / browser Notification',
+  },
+  {
     interaction: 'Page filters / primary actions',
     use: 'PageToolbar (no title)',
     never: 'PageHeader actions slot or ad-hoc title+actions hero rows',

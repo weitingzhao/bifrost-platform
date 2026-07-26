@@ -35,6 +35,9 @@ import { OpsContextStrip } from '@/components/OpsContextStrip'
 import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar'
 import { GuidesSettingsNav } from '@/components/GuidesSettingsNav'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
+import { useOperateQueueActivityBridge } from '@/hooks/useOperateQueueActivityBridge'
+import { usePipelineActivityBridge } from '@/hooks/usePipelineActivityBridge'
+import { upsertActivity, updateActivityPhase } from '@/lib/activity/activityStore'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
 import { AgentCapabilityPage } from '@/pages/AgentCapabilityPage'
@@ -525,10 +528,25 @@ function ConsolePageInner() {
     setAmbientJob(job)
     setOperatorToolId('agent')
     setDockExpanded(true)
+    upsertActivity({
+      id: `agent:${job.id}`,
+      kind: 'agent',
+      phase: 'applying',
+      title: job.label,
+      target: job.scope,
+      detail: 'Ambient agent running',
+      linkTo: 'agent-desk',
+      bumpTs: true,
+    })
   }, [setOperatorToolId])
 
   const handleAmbientJobComplete = useCallback(
-    (_job: RemediationJob) => {
+    (job: RemediationJob) => {
+      const ok = job.status === 'done'
+      updateActivityPhase(`agent:${job.id}`, ok ? 'completed' : 'failed', {
+        settledOutcome: ok ? 'resolved' : 'error',
+        detail: job.summary?.trim() || job.status,
+      })
       void qc.invalidateQueries({ queryKey: ['agent', 'bridge'] })
       void qc.invalidateQueries({ queryKey: ['promote', 'release-state'] })
       void qc.invalidateQueries({ queryKey: ['delivery', 'runs'] })
@@ -537,6 +555,10 @@ function ConsolePageInner() {
     },
     [qc],
   )
+
+  // W2: Pipeline + Operate Queue → Activity Feed (shell-wide)
+  usePipelineActivityBridge()
+  useOperateQueueActivityBridge()
   const openStandards = () => setViewTab('platform-standards')
   const openDefects = () => setViewTab('defects')
   const openSatelliteBus = () => setViewTab('satellite-bus')
