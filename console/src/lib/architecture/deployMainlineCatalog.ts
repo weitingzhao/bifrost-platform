@@ -140,7 +140,7 @@ export type L1Check = {
 
 export const L1_CHECKS: L1Check[] = [
   { check: 'make prod-health (PG + Redis + nginx + 9 API)', pass: true, agentDate: '2026-06-08', remarks: 'postgres .80, redis .70, 12/12 OK' },
-  { check: 'make verify-2c-a1', pass: true, agentDate: '2026-06-08', remarks: 'docker executor; destructive SKIP acceptable' },
+  { check: 'make verify-2c-a1', pass: true, agentDate: '2026-06-08', remarks: 'Historical docker executor check; script now asserts kubernetes-only (C4)' },
   { check: 'SPA http://localhost/ HTTP 200', pass: true, agentDate: '2026-06-08', remarks: 'local_prod_final_gate.sh' },
   { check: 'bifrost-platform API /health (optional)', pass: true, agentDate: '2026-06-08', remarks: ':8780' },
   { check: 'GET /api/v1/topology?env=prod (optional)', pass: true, agentDate: '2026-06-08', remarks: 'Topology API OK' },

@@ -88,7 +88,7 @@ export type MilestoneBaselineRow = {
 export const SOFTWARE_BASELINE: MilestoneBaselineRow[] = [
   { milestone: 'Phase 2B', status: 'CLOSED', meaning: 'New frontend + new API (Dev 8765–8773)' },
   { milestone: '2C-A', status: 'CLOSED', meaning: 'Mac localhost compose + Session 0–9' },
-  { milestone: '2C-A.1', status: 'Owner verified', meaning: 'Ops docker executor · Socket/Celery control plane' },
+  { milestone: '2C-A.1', status: 'Owner verified', meaning: 'Historical: Ops docker executor (superseded by C4 K8s-only api-ops)' },
   { milestone: '2C-B', status: 'SIGNED', meaning: 'Prod stable test + cutover; superseded by K3s prod runtime' },
   { milestone: 'K3s', status: 'Prod runtime', meaning: 'dev/stg/prod on K3s; CNPG data layer; bootstrap @ .73 CLOSED' },
   { milestone: 'Phase 3 Legacy retirement', status: 'SIGNED', meaning: 'Decision D8 (2026-06-29) — Legacy runtime stopped, engine NAS-archived' },
