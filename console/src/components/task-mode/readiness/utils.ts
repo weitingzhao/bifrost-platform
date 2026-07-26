@@ -1,15 +1,19 @@
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { ReleaseGateResponse } from '@/api/deliveryTypes'
-import type { SatelliteBusSocketComponent } from '@/api/satelliteBusTypes'
+import type {
+  SatelliteBusDeepResponse,
+  SatelliteBusSocketComponent,
+} from '@/api/satelliteBusTypes'
 import type { SelfHealthProbe } from '@/api/matrixTypes'
 import type { MatrixResponse, Reachability } from '@/api/matrixTypes'
+import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
 import {
   missionStatus,
   worst,
   type ModuleState,
   type Signal,
 } from '@/lib/control-room/missionSignals'
-import { classifyPlatformIbGateway } from '@/lib/satellite/socketHealthSemantics'
+import { classifyPlatformIbGateway, classifyTradingDaemon } from '@/lib/satellite/socketHealthSemantics'
 
 export const REFETCH_MS = 20_000
 export const STG_NS = 'bifrost-stg'
@@ -116,6 +120,89 @@ export function sharedRocketFromSocket(socket: {
   return { signal, detail: `${ok}/4 socket OK${gwHint}` }
 }
 
+/**
+ * Account sync readiness chip — aligns with Satellite Bus PAIR ASYMMETRIC.
+ * Label must stay "Account sync" so readinessChipFixActions can actuate restart.
+ */
+export function accountSyncChipFromBus(
+  bus: SatelliteBusDeepResponse | undefined,
+  env: 'stg' | 'prod' | 'dev',
+): EnvChip {
+  const base = {
+    label: 'Account sync',
+    fixScope: PROD_ENV_FIX_SCOPE,
+  } as const
+
+  if (bus == null) {
+    return { ...base, signal: 'unknown', detail: 'probing' }
+  }
+
+  const ingest = bus.ingest?.services?.find(s => s.id === 'trading_engine')
+  const daemonRow = classifyTradingDaemon(env, ingest, bus.monitor.daemon, bus.monitor.socket)
+  const daemonExpectedOff = daemonRow?.required === 'policy-off'
+  const daemonTradingSideUp =
+    daemonRow != null &&
+    daemonRow.required !== 'policy-off' &&
+    (daemonRow.reach === 'ok' || daemonRow.reach === 'degraded')
+
+  const sync = bus.monitor.account_sync
+
+  if (daemonExpectedOff && (sync == null || sync.daemon_alive !== true)) {
+    return {
+      ...base,
+      signal: 'ok',
+      detail: 'expected off (daemon scale 0) — not a fault',
+    }
+  }
+
+  if (sync == null) {
+    if (daemonTradingSideUp) {
+      return {
+        ...base,
+        signal: 'degraded',
+        detail: 'pair asymmetric · daemon up · account-sync down (co-scale pair)',
+      }
+    }
+    return { ...base, signal: 'unknown', detail: 'no account-sync probe' }
+  }
+
+  if (
+    daemonTradingSideUp &&
+    (sync.daemon_alive !== true ||
+      sync.reachability === 'fail' ||
+      sync.reachability === 'degraded' ||
+      sync.reachability === 'unknown')
+  ) {
+    return {
+      ...base,
+      signal: 'degraded',
+      detail: 'pair asymmetric · daemon up · account-sync down (co-scale pair)',
+    }
+  }
+
+  if (sync.reachability === 'ok') {
+    return {
+      ...base,
+      signal: 'ok',
+      detail: `daemon_alive=${String(sync.daemon_alive)}`,
+    }
+  }
+
+  if (sync.reachability === 'fail') {
+    return {
+      ...base,
+      signal: 'fail',
+      detail: `account sync unreachable (daemon_alive=${String(sync.daemon_alive)})`,
+    }
+  }
+
+  return {
+    ...base,
+    signal: sync.reachability === 'degraded' ? 'degraded' : 'unknown',
+    detail: `reachability=${sync.reachability}`,
+  }
+}
+
 export function releaseGateSignal(gate: ReleaseGateResponse | undefined): { signal: Signal; detail: string } {
   if (gate == null) return { signal: 'unknown', detail: 'probing' }
   if (gate.result === 'pass') return { signal: 'ok', detail: 'Gate passed' }
@@ -136,4 +223,18 @@ export function selfHealthEnvSignal(
 
 export function isProdReleaseBlocked(signal: Signal): boolean {
   return signal === 'fail' || signal === 'degraded'
+}
+
+/** Prefer Account sync when selecting FixBar primary chip so pair-asymmetric gets restart action. */
+export function pickPrimaryFailingChip<T extends { label: string; signal: Signal }>(
+  chips: T[],
+): T | undefined {
+  const failing = chips.filter(c => c.signal !== 'ok')
+  if (failing.length === 0) return undefined
+  return (
+    failing.find(c => {
+      const label = c.label.toLowerCase()
+      return label.includes('account sync') || label.includes('pair asymmetric')
+    }) ?? failing[0]
+  )
 }

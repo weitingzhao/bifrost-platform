@@ -14,6 +14,7 @@ import {
   type ReadinessChipAction,
   type ReadinessChipContext,
 } from '@/lib/task-mode/readinessChipActions'
+import { pickPrimaryFailingChip } from '@/components/task-mode/readiness/utils'
 
 type ReadinessFixBarProps = {
   chips: Array<{ label: string; signal: Signal; detail: string }>
@@ -83,7 +84,8 @@ export function ReadinessFixBar({
 
   if (failing.length === 0) return null
 
-  const primaryFailing = failing[0]
+  const primaryFailing = pickPrimaryFailingChip(chips)
+  if (primaryFailing == null) return null
   const fixActions = readinessChipFixActions(primaryFailing.label, primaryFailing.signal, ctx)
 
   return (

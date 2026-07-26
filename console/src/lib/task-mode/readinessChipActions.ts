@@ -58,6 +58,9 @@ export function primaryChipNavigation(
   if (label.includes('ib socket') || label.includes('rocket · ib') || label.includes('shared rocket')) {
     return { tabId: 'satellite-bus', busFocus: 'rocket' }
   }
+  if (label.includes('account sync') || label.includes('pair asymmetric')) {
+    return { tabId: 'satellite-bus', busFocus: 'monitor' }
+  }
   if (label.includes('pg / redis')) {
     return { tabId: 'satellite-bus', busFocus: 'cluster' }
   }

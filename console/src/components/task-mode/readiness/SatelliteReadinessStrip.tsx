@@ -17,6 +17,7 @@ import {
   datastoreEnvSignal,
   isProdReleaseBlocked,
   namespacePods,
+  accountSyncChipFromBus,
   PROD_NS,
   REFETCH_MS,
   releaseGateSignal,
@@ -184,6 +185,15 @@ export function SatelliteReadinessStrip({
     return { signal: rocketSignal, detail: rocketDetail }
   }, [prodBusReach, stgBusReach, rocketSignal, rocketDetail])
 
+  const stgAccountSync = useMemo(
+    () => accountSyncChipFromBus(stgBusReach, 'stg'),
+    [stgBusReach],
+  )
+  const prodAccountSync = useMemo(
+    () => accountSyncChipFromBus(prodBusReach, 'prod'),
+    [prodBusReach],
+  )
+
   const stgTradeApis = useMemo(() => tradeApiSummary(stgMatrix), [stgMatrix])
   const prodTradeApis = useMemo(() => tradeApiSummary(prodMatrix), [prodMatrix])
   const prodGate = useMemo(() => releaseGateSignal(prodGateQ.data), [prodGateQ.data])
@@ -193,20 +203,26 @@ export function SatelliteReadinessStrip({
     stgK8s.signal,
     stgDatastore.signal,
     stgTradeApis.signal,
+    stgAccountSync.signal,
     promoteVerify.stgReleaseSignal,
   )
   const prodOverallLocal = worst(
     prodK8s.signal,
     prodDatastore.signal,
     prodTradeApis.signal,
+    prodAccountSync.signal,
     snapshot.tradeProd.signal,
     prodGate.signal,
     promoteVerify.promoteSignal,
   )
 
-  const stgLoading = missionLoading || clusterDetailQ.isLoading || promoteVerify.isLoading
+  const stgLoading = missionLoading || clusterDetailQ.isLoading || promoteVerify.isLoading || stgBusQ.isLoading
   const prodLoading =
-    missionLoading || clusterDetailQ.isLoading || prodGateQ.isLoading || promoteVerify.isLoading
+    missionLoading ||
+    clusterDetailQ.isLoading ||
+    prodGateQ.isLoading ||
+    promoteVerify.isLoading ||
+    prodBusQ.isLoading
   const rocketLoading = stgBusQ.isLoading || prodBusQ.isLoading
 
   const showProdBanner =
@@ -215,6 +231,7 @@ export function SatelliteReadinessStrip({
 
   const prodChips: EnvChip[] = [
     { label: 'Trade · K8s PROD', signal: prodK8s.signal, detail: prodK8s.detail, fixScope: PROD_ENV_FIX_SCOPE },
+    prodAccountSync,
     {
       label: 'Ground · PG / Redis',
       signal: prodDatastore.signal,
@@ -275,6 +292,7 @@ export function SatelliteReadinessStrip({
           readinessAnchor="stg"
           chips={[
             { label: 'Trade · K8s STG', signal: stgK8s.signal, detail: stgK8s.detail, fixScope: PROD_ENV_FIX_SCOPE },
+            stgAccountSync,
             {
               label: 'Ground · PG / Redis',
               signal: stgDatastore.signal,
