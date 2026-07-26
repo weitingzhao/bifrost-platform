@@ -145,6 +145,29 @@ export function readinessChipFixActions(
   }
 
   if (
+    label.includes('account sync') ||
+    label.includes('pair asymmetric') ||
+    (label.includes('sync') && (label.includes('pair') || label.includes('asymmetric') || label.includes('offline')))
+  ) {
+    pushNavigate('satellite-bus', 'Runtime monitor', 'monitor')
+    if (tradeNs != null) {
+      actions.push({
+        kind: 'actuate',
+        label: 'Restart account-sync',
+        requiresOperate: true,
+        actuation: { kind: 'rollout-restart', namespace: tradeNs, deployment: 'account-sync' },
+      })
+    }
+    return actions
+  }
+
+  // Trading daemon chip — navigate only; never scale-up (D10).
+  if (label.includes('trading daemon') || label.includes('daemon heartbeat')) {
+    pushNavigate('satellite-bus', 'Trade daemon operate', 'monitor')
+    return actions
+  }
+
+  if (
     label.includes('prod matrix') ||
     label.includes('stg matrix') ||
     (label.includes('matrix') && (label.includes('trade') || label.includes('prod') || label.includes('stg')))

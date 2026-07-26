@@ -363,6 +363,7 @@ export function useSatelliteBusQueries({
     tradeApiTargetRows,
     criticalProcesses,
     aiIngestTriage,
+    canOperate,
     daemonRows,
     celeryRows,
     accountSyncRows,

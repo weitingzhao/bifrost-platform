@@ -1,5 +1,6 @@
 import type { Ref } from 'react'
 import { DenseTag, cn } from '@bifrost/ui'
+import type { ClusterWorkload } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   busScopeGroupClass,
@@ -9,22 +10,31 @@ import {
 import type { SatelliteBusViewModel } from '@/lib/satellite-bus/satelliteBusViewModel'
 import type { InspectTarget } from '@/pages/satellite-bus/inspectTypes'
 import { ConsumerTable } from '@/pages/satellite-bus/satelliteBusTableParts'
+import { TradeDaemonOperatePanel } from '@/pages/satellite-bus/TradeDaemonOperatePanel'
 import type { TradeEnv } from '@/pages/satellite-bus/useSatelliteBusQueries'
 
 export function SatelliteBusSelectedEnvSection({
   tradeEnv,
+  ns,
   viewModel,
   busLoading,
   highlightSection,
   selectedSectionRef,
   openInspect,
+  canOperate,
+  workloads,
+  workloadsLoading,
 }: {
   tradeEnv: TradeEnv
+  ns: string
   viewModel: SatelliteBusViewModel
   busLoading: boolean
   highlightSection: string | null
   selectedSectionRef: Ref<HTMLDivElement>
   openInspect: (target: InspectTarget) => void
+  canOperate: boolean
+  workloads: ClusterWorkload[]
+  workloadsLoading: boolean
 }) {
   const singleEnvScope = tradeSingleEnvScope(tradeEnv)
 
@@ -63,6 +73,13 @@ export function SatelliteBusSelectedEnvSection({
             onInspect={row => openInspect({ kind: 'consumer', row })}
           />
         </OpsSection>
+        <TradeDaemonOperatePanel
+          tradeEnv={tradeEnv}
+          namespace={ns}
+          canOperate={canOperate}
+          workloads={workloads}
+          workloadsLoading={workloadsLoading}
+        />
         <OpsSection
           variant="flat"
           title="Runtime consumers"

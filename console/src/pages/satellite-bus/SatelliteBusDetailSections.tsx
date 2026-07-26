@@ -42,6 +42,7 @@ export type SatelliteBusDetailSectionsProps = {
   observabilityQuery: BusQueries['observabilityQuery']
   matrixQuery: BusQueries['matrixQuery']
   workloadsQuery: BusQueries['workloadsQuery']
+  canOperate: boolean
   tradeApiTargetRows: Target[]
   criticalProcesses: CriticalProcessRow[]
   daemonRows: MonitorKvRow[]
@@ -79,6 +80,7 @@ export function SatelliteBusDetailSections({
   observabilityQuery,
   matrixQuery,
   workloadsQuery,
+  canOperate,
   tradeApiTargetRows,
   criticalProcesses,
   daemonRows,
@@ -172,11 +174,15 @@ export function SatelliteBusDetailSections({
 
       <SatelliteBusSelectedEnvSection
         tradeEnv={tradeEnv}
+        ns={ns}
         viewModel={viewModel}
         busLoading={busLoading}
         highlightSection={highlightSection}
         selectedSectionRef={selectedSectionRef}
         openInspect={openInspect}
+        canOperate={canOperate}
+        workloads={workloadsQuery.data?.workloads ?? []}
+        workloadsLoading={workloadsQuery.isLoading}
       />
 
       <SatelliteBusSharedRocketSection

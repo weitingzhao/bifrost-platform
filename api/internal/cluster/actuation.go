@@ -141,7 +141,16 @@ func (s *Service) Scale(ctx context.Context, req ScaleRequest) (ActuationRespons
 	if err != nil {
 		return ActuationResponse{OK: false, Action: "scale", Target: req.Target(), Message: err.Error(), GeneratedAt: now}, err
 	}
-	changed := deploy.Spec.Replicas == nil || *deploy.Spec.Replicas != req.Replicas
+	current := int32(0)
+	if deploy.Spec.Replicas != nil {
+		current = *deploy.Spec.Replicas
+	}
+	// D10 freeze: block Trade daemon scale-up from zero (MCP / Console bypass of GitOps overlays).
+	if req.Name == "daemon" && current == 0 && req.Replicas > 0 {
+		err := fmt.Errorf("Trading execution is BLOCKED (D10). Daemon scale-up requires Owner unlock.")
+		return ActuationResponse{OK: false, Action: "scale", Target: req.Target(), Message: err.Error(), GeneratedAt: now}, err
+	}
+	changed := current != req.Replicas
 	deploy.Spec.Replicas = &req.Replicas
 	_, err = clientset.AppsV1().Deployments(req.Namespace).Update(ctx, deploy, metav1.UpdateOptions{})
 	if err != nil {

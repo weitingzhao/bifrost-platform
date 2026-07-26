@@ -265,6 +265,29 @@ describe('buildSatelliteBusViewModel', () => {
     expect(vm.attention.some(i => i.id === 'dev:runtime:trading_engine')).toBe(true)
   })
 
+  it('pair asymmetric: daemon up + account-sync down => DEGRADED with PAIR ASYMMETRIC', () => {
+    const vm = buildSatelliteBusViewModel(
+      input('prod', { prod: bus('prod', { daemonAlive: true, accountSyncOk: false }) }),
+    )
+    expect(vm.health).toBe('degraded')
+    expect(vm.topReason).toMatch(/account sync|Account sync/i)
+    const syncRow = vm.runtimeConsumers.find(r => r.id === 'account-sync')
+    expect(syncRow).toBeTruthy()
+    expect(syncRow!.stateLabel).toBe('PAIR ASYMMETRIC')
+    expect(syncRow!.health).toBe('degraded')
+    expect(syncRow!.detail).toMatch(/daemon up · account-sync down \(co-scale pair\)/)
+  })
+
+  it('STG policy-off + sync idle stays EXPECTED OFF (not pair asymmetric)', () => {
+    const vm = buildSatelliteBusViewModel(
+      input('stg', { stg: bus('stg', { daemonPolicyOff: true, accountSyncOk: false }) }),
+    )
+    expect(vm.health).toBe('healthy')
+    const syncRow = vm.runtimeConsumers.find(r => r.id === 'account-sync')
+    expect(syncRow!.stateLabel).toBe('EXPECTED OFF')
+    expect(syncRow!.health).toBe('expected-off')
+  })
+
   it('data path node order: gateway → redis-ib → consumers → selected namespace', () => {
     const vm = buildSatelliteBusViewModel(input('prod', { prod: bus('prod') }))
     expect(vm.path.map(n => n.id)).toEqual(['gateway', 'redis-ib', 'consumers', 'namespace'])
