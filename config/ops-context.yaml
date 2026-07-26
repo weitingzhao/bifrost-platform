@@ -138,9 +138,8 @@ milestones:
       pipeline_after: k3s-phase1
       authority: console/src/lib/architecture/blueprintCatalog.ts
       note: >
-        Owner CLOSED 2026-07-22. Sign-off checklist done items + Network L1 POLICY_NOMINAL.
-        runtime-observe-act-loop Owner-waived (trade-k8s Matrix probe expansion remains follow-up,
-        not blocking north-star single-pane actuation). D10 remains BLOCKED.
+        Owner CLOSED 2026-07-22. Sign-off checklist done items + Network L1 POLICY_NOMINAL. runtime-observe-act-loop Owner-waived (trade-k8s Matrix probe expansion remains follow-up, not blocking north-star single-pane actuation). D10 remains BLOCKED.
+
       # next_task: none for this milestone — residual Runtime probe expansion tracked on trade-k8s-migration
     - id: workload-placement-governance
       label: K8s workload placement governance (G1–G5)
@@ -267,7 +266,7 @@ coupling_surfaces:
     - unifi_session_v2
 promotion:
     last_gate:
-        at: "2026-07-01T02:54:49Z"
+        at: "2026-07-26T18:29:12Z"
         result: pass
         log_path: bifrost-trade-infra/scripts/release_gate.log
 environments_extended:
@@ -385,11 +384,8 @@ tracks:
               status: closed
               next_task: "CLOSED — W1–W3 signed (optional 24h STG soak; D10 remains BLOCKED)"
               note: >
-                W0 ✓ · W1 ✓ Owner signed 2026-07-22 · W2 ✓ Owner signed 2026-07-22 ·
-                W3 ✓ Owner signed 2026-07-22 (make verify-trade-ib-w3-stg PASS —
-                6 read-only APIs health 200; bifrost-core 0.3.3; GET /api/market/quotes NVDA OK;
-                redis_ib tick E2E OK; daemon replicas=0). Core fix: RedisQuotesReader retry +
-                redis_ib fallback. No daemon scale / no live trading (D10).
+                W0 ✓ · W1 ✓ Owner signed 2026-07-22 · W2 ✓ Owner signed 2026-07-22 · W3 ✓ Owner signed 2026-07-22 (make verify-trade-ib-w3-stg PASS — 6 read-only APIs health 200; bifrost-core 0.3.3; GET /api/market/quotes NVDA OK; redis_ib tick E2E OK; daemon replicas=0). Core fix: RedisQuotesReader retry + redis_ib fallback. No daemon scale / no live trading (D10).
+
               prerequisites:
                 - "IB Gateway Plugin program complete"
                 - "trade-ib-client-migration program COMPLETE (TIBM-PC signed)"
