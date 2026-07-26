@@ -1,19 +1,21 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { DenseTag } from '@bifrost/ui'
-import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Button, DenseTag } from '@bifrost/ui'
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
 import { DevModeStrips } from '@/components/task-mode/DevModeController'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { ViewerEnvBadge } from '@/components/task-mode/ViewerEnvBadge'
+import { TaskCCVerdict } from '@/components/task-mode/tcc/TaskCCVerdict'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import type { FleetViewerEnv } from '@/lib/control-room/fleetSnapshot'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { pickFailingFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { fixScopeAgentTitle } from '@/lib/agent/readinessFixDispatch'
+import { launchVerdictToSignal } from '@/lib/task-mode/satelliteLaunchVerdict'
 import type { TaskPhaseFixAction, TaskPhaseHint } from '@/lib/task-mode/taskPhaseDiagnostics'
 import type { TaskModeDef, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
@@ -28,6 +30,19 @@ import type {
   useRocketProdReadiness,
   useSatelliteProdReadiness,
 } from '@/components/task-mode/TaskModeReadinessStrip'
+
+type VerdictLamp = 'ok' | 'degraded' | 'fail' | 'unknown'
+
+const LAMP_RANK: Record<VerdictLamp, number> = {
+  ok: 0,
+  unknown: 1,
+  degraded: 2,
+  fail: 3,
+}
+
+function worseLamp(a: VerdictLamp, b: VerdictLamp): VerdictLamp {
+  return LAMP_RANK[a] >= LAMP_RANK[b] ? a : b
+}
 
 export type TaskControlCenterViewProps = {
   mode: TaskModeDef
@@ -93,7 +108,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     isDevLoop,
     canOperate,
     loopLabel,
-    headerDescription,
+    headerDescription: _headerDescription,
     viewerEnv,
     viewerEnvLoading,
     showLaunchPad,
@@ -128,6 +143,122 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   const phaseProgressCaption = isDevLoop
     ? 'Playbook phase status — Briefing → implement → deliver → sign-off'
     : 'Historical phase checklist — not live environment health'
+
+  const verdictLamp = useMemo((): VerdictLamp => {
+    if (isDevLoop) {
+      if (doneCount === phases.length && phases.length > 0) return 'ok'
+      if (doneCount > 0) return 'degraded'
+      return 'unknown'
+    }
+    if (isDailyOps) {
+      if (!q.runnerHealthy) return 'fail'
+      if (q.fleetClear) return 'ok'
+      return 'degraded'
+    }
+    if (isMissionLaunch) {
+      const rocket = launchVerdictToSignal(q.rocketVerdict.kind)
+      const satellite = launchVerdictToSignal(q.satelliteVerdict.kind)
+      return worseLamp(rocket, satellite)
+    }
+    return 'unknown'
+  }, [
+    isDevLoop,
+    isDailyOps,
+    isMissionLaunch,
+    doneCount,
+    phases.length,
+    q.runnerHealthy,
+    q.fleetClear,
+    q.rocketVerdict.kind,
+    q.satelliteVerdict.kind,
+  ])
+
+  const verdictActions = useMemo(() => {
+    const nodes: ReactNode[] = []
+    if (isDailyOps && !q.fleetClear) {
+      nodes.push(
+        <Button
+          key="daily-ops-fix"
+          type="button"
+          size="sm"
+          variant="outline"
+          className="shrink-0"
+          disabled={!canOperate || fix.dailyOpsAgentPending}
+          title={
+            !canOperate
+              ? 'Authenticate as operator to run Fleet Fix'
+              : (fix.dailyOpsWorkflow?.primaryAction.label ?? 'Fix top signal')
+          }
+          onClick={() => fix.handleFleetPrimaryCta()}
+        >
+          {fix.dailyOpsWorkflow?.primaryAction.label ?? 'Fix top signal'}
+        </Button>,
+      )
+    }
+    if (isMissionLaunch && showLaunchPad) {
+      nodes.push(
+        <AgentTriggerButton
+          key="launch-rocket"
+          label="Launch Rocket"
+          pending={agents.aiRelease.isPending}
+          disabled={!props.releaseDispatchAllowed}
+          title={props.releaseDisabledReason ?? 'Launch platform release agent'}
+          onClick={props.dispatchReleaseAgent}
+        />,
+        <AgentTriggerButton
+          key="deploy-satellite"
+          label="Deploy Satellite"
+          pending={agents.aiTradeDeploy.isPending}
+          disabled={!props.tradeDeployDispatchAllowed}
+          title={props.tradeDeployDisabledReason ?? 'Deploy Trade satellite agent'}
+          onClick={props.dispatchTradeDeployAgent}
+        />,
+      )
+      if (verdictLamp !== 'ok') {
+        nodes.push(
+          <button
+            key="open-launch-board"
+            type="button"
+            className="shrink-0 text-[var(--text-dense-caption)] text-primary hover:underline"
+            title="Scroll to launch lanes"
+            onClick={() =>
+              document
+                .getElementById('task-cc-launch-board')
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
+          >
+            Open launch board →
+          </button>,
+        )
+      }
+    }
+    if (isDailyOps || mode.loopArchetype === 'ops') {
+      nodes.push(
+        <ViewerEnvBadge key="viewer-env" viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />,
+      )
+    }
+    return nodes.length > 0 ? <>{nodes}</> : undefined
+  }, [
+    isDailyOps,
+    isMissionLaunch,
+    showLaunchPad,
+    canOperate,
+    mode.loopArchetype,
+    q.fleetClear,
+    fix,
+    agents.aiRelease.isPending,
+    agents.aiTradeDeploy.isPending,
+    props.releaseDispatchAllowed,
+    props.tradeDeployDispatchAllowed,
+    props.releaseDisabledReason,
+    props.tradeDeployDisabledReason,
+    props.dispatchReleaseAgent,
+    props.dispatchTradeDeployAgent,
+    fix.dailyOpsWorkflow?.primaryAction.label,
+    verdictLamp,
+    viewerEnv,
+    viewerEnvLoading,
+  ])
 
   const phaseProgressBlock: ReactNode = isDailyOps ? null : phases.length > 0 ? (
     <details
@@ -185,19 +316,18 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <ConsolePageHeader
-        title="Task Control Center"
-        help={headerDescription}
-        actions={
-          mode.loopArchetype === 'system' ? undefined : (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {(isDailyOps || mode.loopArchetype === 'ops') && (
-                <ViewerEnvBadge viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />
-              )}
-              <DenseTag variant={mode.loopArchetype === 'dev' ? 'info' : 'warning'}>{loopLabel}</DenseTag>
-            </div>
-          )
+      <TaskCCVerdict
+        mode={mode}
+        lamp={verdictLamp}
+        tagLabel={loopLabel}
+        tagVariant={mode.loopArchetype === 'dev' ? 'info' : mode.loopArchetype === 'ops' ? 'warning' : 'neutral'}
+        summary={props.headerDescription}
+        phaseCaption={
+          !isDailyOps && phases.length > 0
+            ? `${doneCount}/${phases.length} phases complete`
+            : null
         }
+        actions={verdictActions}
       />
 
       {isDailyOps && fix.aiDailyOpsFix.error != null && (

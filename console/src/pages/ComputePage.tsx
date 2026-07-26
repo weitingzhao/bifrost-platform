@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import { Button, PageHeader } from '@bifrost/ui'
+import { Button } from '@bifrost/ui'
 import { cordonNode, drainNode, joinClusterNode, powerOffComputeNode, scaleDeployment, uncordonNode, wakeComputeNode } from '@/api/clusterActuation'
 import { fetchClusterMetrics, fetchClusterNodes, fetchJoinProfiles, fetchNodePower } from '@/api/cluster'
 import type { ClusterNode, ComputeWorkloadStatus } from '@/api/clusterTypes'
@@ -8,6 +8,12 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
 import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
+import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import {
+  OpsVerdictStrip,
+  type OpsVerdictLamp,
+  type OpsVerdictTagVariant,
+} from '@/components/layout/OpsVerdictStrip'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { NodeWizardFlow, WizardAction } from '@/lib/cluster/nodeWizard'
 
@@ -272,42 +278,61 @@ export function ComputePage({
       ? null
       : 'Authenticate to actuate'
 
-  return (
-    <div
-      className={`flex w-full min-w-0 flex-col gap-4${nodeDrawerOpen ? ' compute-page--drawer' : ''}`}
-    >
-      <PageHeader
-        title="Compute"
-        description="Physical ground systems — K3s nodes, Wake-on-LAN, join profiles, cordon/drain. K8s workload detail lives on Rocket → Cluster."
-      />
+  const notReadyNodes = clusterNodes.filter(
+    n => n.status !== 'Ready' || n.elastic_mode === 'degraded' || n.reachability === 'fail',
+  )
+  const notReadyCount = notReadyNodes.length
+  const readyCount = clusterNodes.filter(n => n.status === 'Ready').length
 
-      <section className="page-section panel-elevated px-4 py-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {nodesQuery.data?.detail ?? 'Loading nodes…'}
-            {authLabel != null && (
-              <>
-                <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
-                <span>{authLabel}</span>
-              </>
-            )}
-            {onOpenAudit != null && (
-              <>
-                <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
-                <button type="button" className="focus-strip-link" onClick={onOpenAudit}>
-                  Audit
-                </button>
-              </>
-            )}
-            {onOpenCluster != null && (
-              <>
-                <span className="mx-1.5 text-[var(--muted-foreground)]/50">·</span>
-                <button type="button" className="focus-strip-link" onClick={onOpenCluster}>
-                  Rocket → Cluster
-                </button>
-              </>
-            )}
-          </p>
+  let verdictLamp: OpsVerdictLamp = 'unknown'
+  let verdictTagLabel = 'LOADING'
+  let verdictTagVariant: OpsVerdictTagVariant = 'neutral'
+  if (nodesQuery.isError) {
+    verdictLamp = 'fail'
+    verdictTagLabel = 'ERROR'
+    verdictTagVariant = 'danger'
+  } else if (nodesQuery.isLoading && nodesQuery.data == null) {
+    verdictLamp = 'unknown'
+    verdictTagLabel = 'LOADING'
+    verdictTagVariant = 'neutral'
+  } else if (clusterNodes.length === 0) {
+    verdictLamp = 'unknown'
+    verdictTagLabel = 'NO NODES'
+    verdictTagVariant = 'neutral'
+  } else if (notReadyCount === 0) {
+    verdictLamp = 'ok'
+    verdictTagLabel = 'READY'
+    verdictTagVariant = 'success'
+  } else if (notReadyCount === clusterNodes.length) {
+    verdictLamp = 'fail'
+    verdictTagLabel = `${notReadyCount} NOT READY`
+    verdictTagVariant = 'danger'
+  } else {
+    verdictLamp = 'degraded'
+    verdictTagLabel = `${notReadyCount} NOT READY`
+    verdictTagVariant = 'warning'
+  }
+
+  const verdictSummary =
+    nodesQuery.isError && nodesQuery.error instanceof Error
+      ? nodesQuery.error.message
+      : (nodesQuery.data?.detail ??
+        (nodesQuery.isLoading
+          ? 'Loading nodes…'
+          : clusterNodes.length === 0
+            ? 'No cluster nodes reported'
+            : `${readyCount}/${clusterNodes.length} nodes Ready`))
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-4">
+      <OpsVerdictStrip
+        ariaLabel="Compute nodes verdict"
+        title="COMPUTE · NODES"
+        lamp={verdictLamp}
+        tagLabel={verdictTagLabel}
+        tagVariant={verdictTagVariant}
+        summary={verdictSummary}
+        actions={
           <Button
             variant="outline"
             size="sm"
@@ -316,11 +341,29 @@ export function ComputePage({
           >
             {nodesQuery.isFetching ? 'Refreshing…' : 'Refresh'}
           </Button>
-        </div>
-        {actionError != null && (
-          <p className="m-0 mt-1 text-[var(--text-dense-meta)] lamp-warn">{actionError}</p>
-        )}
-      </section>
+        }
+        meta={
+          <>
+            {authLabel != null ? <span>{authLabel}</span> : null}
+            {onOpenAudit != null ? (
+              <button type="button" className="focus-strip-link shrink-0" onClick={onOpenAudit}>
+                Audit
+              </button>
+            ) : null}
+            {onOpenCluster != null ? (
+              <button type="button" className="focus-strip-link shrink-0" onClick={onOpenCluster}>
+                Rocket → Cluster
+              </button>
+            ) : null}
+          </>
+        }
+      />
+
+      {actionError != null && (
+        <OpsFeedback variant="warning" title="Actuation">
+          {actionError}
+        </OpsFeedback>
+      )}
 
       <div className="cluster-view-panels flex flex-col gap-2">
         <ClusterNodeWizardPanel

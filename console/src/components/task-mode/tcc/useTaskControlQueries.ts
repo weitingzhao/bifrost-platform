@@ -345,6 +345,7 @@ export function useTaskControlQueries({
     activeDispatchJobs,
     activeChecklistRunJob,
     runnerHealthy,
+    fleetClear,
     stgReadinessSignals,
     prodReadinessSignals,
     clusterForFixQ,

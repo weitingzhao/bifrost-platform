@@ -199,7 +199,7 @@ export function RemediationApprovalBlock({
                   </Button>
                   {onOpenServerConsole != null && (
                     <Button variant="outline" size={btnSize} onClick={onOpenServerConsole}>
-                      Open Server Console
+                      Open Console
                     </Button>
                   )}
                 </div>
@@ -210,7 +210,7 @@ export function RemediationApprovalBlock({
 
         {onOpenServerConsole != null && commands.length === 0 && kind === 'manual_steps' && (
           <Button variant="outline" size={btnSize} className="mb-2" onClick={onOpenServerConsole}>
-            Open Server Console
+            Open Console
           </Button>
         )}
       </div>

@@ -37,6 +37,8 @@
 - **R-DV3**：平台 Agent 不得触发自动交易 Engine 写路径
 - **聚合不复制**：探测 `bifrost-trade` 已有 `/health`、`/auth/capabilities`，不 import Python 业务包
 - **Agent 模式**：见 Governance → **Agent Protocol** · `agentProtocolCatalog.ts`
+- **Page chrome（全站）**：页身份只在 `ConsoleHeader` breadcrumb（`plane › page` + `?` help + optional `pageActions`）；Task Mode 用顶栏 `TaskModeCapsule`（禁止独立 Mode banner 行）；Trade/Mission 用 `OpsContextStrip`（PageShell 内 elevated 页顶条，非 sticky chrome；Mission OK 时紧凑一行）；页内禁止 `PageHeader` / `ConsolePageHeader`；filters/actions 用 `PageToolbar` — 见 Governance → Design System · `designSystemCatalog.ts`
+- **Page composition（三幕结构）**：每个 Mission Control 页面遵循 **Verdict → Body → Actions**。Verdict 用 `OpsVerdictStrip`（永远可见：一句话裁决 + StatusLamp/DenseTag + 可选 actions/meta）；Body 用 OpsSection 折叠单元（异常展开、正常收起）；核心操作永远可发现（不藏在折叠详情里）。详见 `designSystemCatalog.ts` → `PAGE_COMPOSITION`
 
 ## 端口
 

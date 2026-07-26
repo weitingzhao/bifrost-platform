@@ -211,7 +211,18 @@ export function PlatformReleasePage({
 
       <LaneDetailContextStrip reason={detailReason} />
 
-      <LaneStateStrip laneLabel="Rocket">
+      <LaneStateStrip
+        laneLabel="Rocket"
+        actions={
+          <AgentTriggerButton
+            label={AI_RELEASE_LABEL}
+            pending={aiRelease.isPending}
+            disabled={aiRelease.disabled}
+            title={aiRelease.disabledReason ?? AI_RELEASE_LABEL}
+            onClick={() => aiRelease.trigger()}
+          />
+        }
+      >
         <ReleaseEnvAccessBar />
         <ReleaseStateBanner tier="platform" />
       </LaneStateStrip>
@@ -239,18 +250,10 @@ export function PlatformReleasePage({
       </LaneDetailCollapse>
 
       <LaneDetailCollapse title="Advanced recovery" bodyClassName="flex flex-col gap-3 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/50 bg-secondary/20 px-3 py-2">
-          <span className="text-dense-meta text-muted-foreground">
-            Delegate this lane's release to an agent. Primary Agent Launch lives in Mission Launch TCC.
-          </span>
-          <AgentTriggerButton
-            label={AI_RELEASE_LABEL}
-            pending={aiRelease.isPending}
-            disabled={aiRelease.disabled}
-            title={aiRelease.disabledReason ?? AI_RELEASE_LABEL}
-            onClick={() => aiRelease.trigger()}
-          />
-        </div>
+        <p className="m-0 text-dense-meta text-muted-foreground">
+          Escape hatches for this lane. Primary Agent Launch lives in Mission Launch TCC; AI Release
+          is on the lane state strip above.
+        </p>
         <EscapeHatchPanel />
       </LaneDetailCollapse>
 

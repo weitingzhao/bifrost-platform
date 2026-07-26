@@ -249,12 +249,20 @@ func ComputeCapabilityMap() CapabilityMapResponse {
 		if hasGap {
 			gaps++
 		}
+		mcpTools := task.McpTools
+		if mcpTools == nil {
+			mcpTools = []string{}
+		}
+		missionSignals := task.MissionSignals
+		if missionSignals == nil {
+			missionSignals = []string{}
+		}
 		e := CapabilityMapEntry{
 			TaskScope:      task.Scope,
 			TaskLabel:      task.Label,
 			Autonomy:       task.DefaultLevel,
-			McpTools:       task.McpTools,
-			MissionSignals: task.MissionSignals,
+			McpTools:       mcpTools,
+			MissionSignals: missionSignals,
 			HasGap:         hasGap,
 		}
 		if hasGap {

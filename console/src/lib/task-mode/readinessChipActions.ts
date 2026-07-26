@@ -58,6 +58,9 @@ export function primaryChipNavigation(
   if (label.includes('ib socket') || label.includes('rocket · ib') || label.includes('shared rocket')) {
     return { tabId: 'satellite-bus', busFocus: 'rocket' }
   }
+  if (label.includes('account sync') || label.includes('pair asymmetric')) {
+    return { tabId: 'satellite-bus', busFocus: 'monitor' }
+  }
   if (label.includes('pg / redis')) {
     return { tabId: 'satellite-bus', busFocus: 'cluster' }
   }
@@ -141,6 +144,29 @@ export function readinessChipFixActions(
   if (chipMatchesTradeApis(label)) {
     pushNavigate('satellite-api', 'API & Auth Probes', undefined, tradeApiEnv(ctx))
     pushNavigate('satellite-bus', 'API reachability', 'trade-apis')
+    return actions
+  }
+
+  if (
+    label.includes('account sync') ||
+    label.includes('pair asymmetric') ||
+    (label.includes('sync') && (label.includes('pair') || label.includes('asymmetric') || label.includes('offline')))
+  ) {
+    pushNavigate('satellite-bus', 'Runtime monitor', 'monitor')
+    if (tradeNs != null) {
+      actions.push({
+        kind: 'actuate',
+        label: 'Restart account-sync',
+        requiresOperate: true,
+        actuation: { kind: 'rollout-restart', namespace: tradeNs, deployment: 'account-sync' },
+      })
+    }
+    return actions
+  }
+
+  // Trading daemon chip — navigate only; never scale-up (D10).
+  if (label.includes('trading daemon') || label.includes('daemon heartbeat')) {
+    pushNavigate('satellite-bus', 'Trade daemon operate', 'monitor')
     return actions
   }
 

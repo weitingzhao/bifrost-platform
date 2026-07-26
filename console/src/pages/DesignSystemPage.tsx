@@ -17,6 +17,7 @@ import {
 } from '@/components/architecture/GovernanceCatalogShell'
 import {
   AGENT_GOVERNANCE_ASSETS,
+  COLLAPSE_STRATEGY,
   CSS_EXCEPTIONS,
   DESIGN_SYSTEM_SOURCE,
   DESIGN_SYSTEM_VERSION,
@@ -25,6 +26,7 @@ import {
   LIVING_CONTRACT_PATH,
   MANDATORY_MAPPING,
   OPS_OUTCOME_SEMANTICS,
+  PAGE_COMPOSITION,
   PAGE_SURFACES,
   PRIMITIVES,
   SEMANTIC_COLORS,
@@ -33,7 +35,7 @@ import {
 } from '@/lib/standards/designSystemCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
-type DesignSection = 'foundations' | 'rules' | 'inventory'
+type DesignSection = 'foundations' | 'composition' | 'rules' | 'inventory'
 
 const DESIGN_SECTIONS: Array<GovernanceCatalogSection<DesignSection>> = [
   {
@@ -42,6 +44,13 @@ const DESIGN_SECTIONS: Array<GovernanceCatalogSection<DesignSection>> = [
     badge: 'TOKENS',
     summary: 'Layer stack, page surfaces, semantic colors, and ops outcome text.',
     hint: 'Layers · Surfaces · Colors · Semantics',
+  },
+  {
+    id: 'composition',
+    label: 'Composition',
+    badge: 'STRUCTURE',
+    summary: 'Three-act page structure: Verdict → Body → Actions. Collapse strategy and continuity rules.',
+    hint: 'Verdict · Body · Actions · Collapse',
   },
   {
     id: 'rules',
@@ -221,6 +230,40 @@ export function DesignSystemPage() {
                 ))}
               </DenseTableBody>
             </DenseDataTable>
+          </CatalogSection>
+        </>
+      ) : null}
+
+      {section === 'composition' ? (
+        <>
+          {PAGE_COMPOSITION.map(act => (
+            <CatalogSection key={act.act} title={act.act}>
+              <p className="m-0 mb-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                {act.role}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">Rules</span>
+                  <ul className="m-0 mt-1 list-inside list-disc space-y-0.5 pl-0 text-[var(--text-dense-meta)]">
+                    {act.rules.map((r, i) => <li key={i}>{r}</li>)}
+                  </ul>
+                </div>
+                <div>
+                  <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">Examples</span>
+                  <ul className="m-0 mt-1 list-inside list-disc space-y-0.5 pl-0 text-[var(--text-dense-meta)]">
+                    {act.examples.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              </div>
+            </CatalogSection>
+          ))}
+          <CatalogSection title="Collapse strategy">
+            <p className="m-0 text-[var(--text-dense-meta)]">
+              <strong>{COLLAPSE_STRATEGY.rule}</strong> — {COLLAPSE_STRATEGY.rationale}
+            </p>
+            <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-muted-foreground">
+              Override: {COLLAPSE_STRATEGY.override}
+            </p>
           </CatalogSection>
         </>
       ) : null}

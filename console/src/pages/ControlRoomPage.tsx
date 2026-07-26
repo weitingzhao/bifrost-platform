@@ -25,14 +25,13 @@ import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystems
 import { OperateQueueStrip } from '@/components/control-room/OperateQueueStrip'
 import { MissionSignalProgramStrip } from '@/components/control-room/MissionSignalProgramStrip'
 import { WorkTracksStrip } from '@/components/control-room/WorkTracksStrip'
-import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader'
 import {
   DualFlywheelPanel,
   type ControlRoomSelection,
 } from '@/components/control-room/DualFlywheelPanel'
 import { PipelineFlow } from '@/components/control-room/PipelineFlow'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
-import { OpsSection } from '@/components/layout/OpsSection'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { useMissionVerification } from '@/hooks/useMissionVerification'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
@@ -65,7 +64,7 @@ import {
   buildPromoteCutoverModel,
   stashPromotePreflightPack,
 } from '@/lib/control-room/promoteCutover'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
@@ -173,6 +172,10 @@ export function ControlRoomPage({
     })
     return new Set(ids)
   })
+  const didAutoOpenUnhealthy = useRef(
+    (typeof window !== 'undefined' && parseControlRoomBayHash(window.location.hash) != null) ||
+      loadOpenControlRoomBayIds().length > 0,
+  )
   const { snapshot, matrices: liveMatrices, dataUpdatedAt, isLoading: missionLoading } = useMissionSnapshot()
   const { banner, dismissBanner, pendingVerify } = useMissionVerification()
   const { canOperate } = usePlatformAuth()
@@ -323,6 +326,21 @@ export function ControlRoomPage({
     [baySignals],
   )
 
+  useEffect(() => {
+    if (didAutoOpenUnhealthy.current) return
+    if (missionLoading || baySignals.length === 0) return
+    const unhealthy = baySignals
+      .filter(b => b.signal === 'degraded' || b.signal === 'fail')
+      .map(b => b.id)
+    didAutoOpenUnhealthy.current = true
+    if (unhealthy.length === 0) return
+    const nextIds =
+      expandMode === 'single' ? unhealthy.slice(0, 1) : unhealthy
+    setOpenBayIds(new Set(nextIds))
+    persistOpenControlRoomBayIds(new Set(nextIds))
+    if (nextIds[0] != null) setActiveBay(nextIds[0])
+  }, [baySignals, expandMode, missionLoading])
+
   const missionPrimaryCause = useMemo(() => {
     if (snapshot.missionOverall === 'ok') return 'Mission probes nominal'
     return missionDegradationSummary(collectMissionDegradationItems(snapshot))
@@ -400,10 +418,34 @@ export function ControlRoomPage({
 
   return (
     <div className="control-room-layout flex w-full min-w-0 flex-col gap-3">
-      <ConsolePageHeader
-        title="Control Room"
-        help="Mission diagnosis — payload reachability, rocket/satellite launches, agent loop, and command intent. Topology opens as a drill-down sheet."
+      <ControlRoomVerdictStrip
+        missionSignal={snapshot.missionOverall}
+        primaryCause={missionPrimaryCause}
+        dataUpdatedAt={dataUpdatedAt}
+        bays={baySignals}
+        isLoading={missionLoading}
+        onSelectBay={jumpToBay}
+        actions={
+          <>
+            <AgentTriggerButton
+              label="Launch Release"
+              pending={aiRelease.isPending}
+              disabled={aiRelease.disabled}
+              title={aiRelease.disabledReason ?? 'Launch platform release agent'}
+              onClick={dispatchReleaseAgent}
+            />
+            <AgentTriggerButton
+              label="Deploy Satellite"
+              pending={aiTradeDeploy.isPending}
+              disabled={aiTradeDeploy.disabled}
+              title={aiTradeDeploy.disabledReason ?? 'Deploy Trade satellite agent'}
+              onClick={dispatchTradeDeployAgent}
+            />
+          </>
+        }
       />
+
+      <ControlRoomAttentionStrip items={attentionItems} onSelectBay={jumpToBay} />
 
       <ControlRoomSectionNav
         bays={baySignals}
@@ -412,16 +454,6 @@ export function ControlRoomPage({
         expandMode={expandMode}
         onExpandModeChange={handleExpandModeChange}
       />
-
-      <ControlRoomVerdictStrip
-        missionSignal={snapshot.missionOverall}
-        primaryCause={missionPrimaryCause}
-        dataUpdatedAt={dataUpdatedAt}
-        bays={baySignals}
-        isLoading={missionLoading}
-      />
-
-      <ControlRoomAttentionStrip items={attentionItems} onSelectBay={jumpToBay} />
 
       <ControlRoomBayCards
         bays={baySignals}
@@ -610,13 +642,11 @@ export function ControlRoomPage({
             onOpenChange={open => setBayOpen('governance', open)}
           >
             <ProgramContextSection embedded>
-              <div className="flex flex-col gap-4">
-                <OpsSection
-                  title="Rocket — Ops Platform subsystems"
-                  description="Launch vehicle health — drill into Infra, Release, Control, or Agent."
-                  bodyPadding="compact"
-                  overflow="visible"
-                >
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Rocket — Ops Platform subsystems
+                  </span>
                   <RocketSubsystemsGrid
                     snapshot={snapshot}
                     onOpenCluster={onOpenCluster}
@@ -627,19 +657,17 @@ export function ControlRoomPage({
                     releaseDispatchPending={aiRelease.isPending}
                     canDispatchRelease={!aiRelease.disabled}
                   />
-                </OpsSection>
+                </div>
 
                 {onOpenSatelliteBus != null &&
                   onOpenNetwork != null &&
                   onOpenCompute != null &&
                   onOpenDefects != null &&
                   onOpenAgentDeskTab != null && (
-                  <OpsSection
-                    title="Spokes — Satellite · Ground Systems · Engineer"
-                    description="Hub drill-down into payload bus, infrastructure, and Agent loop health."
-                    bodyPadding="compact"
-                    overflow="visible"
-                  >
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Spokes — Satellite · Ground Systems · Engineer
+                    </span>
                     <SpokeSignalCards
                       onOpenSatelliteBus={onOpenSatelliteBus}
                       onOpenNetwork={onOpenNetwork}
@@ -647,42 +675,40 @@ export function ControlRoomPage({
                       onOpenAgentDesk={onOpenAgentDeskTab}
                       onOpenDefects={onOpenDefects}
                     />
-                  </OpsSection>
+                  </div>
                 )}
 
                 <WorkTracksStrip tracks={trackSummaries} onOpenBriefing={onOpenBriefing} />
 
-                <OpsSection
-                  title="Dual flywheel governance"
-                  description={
-                    <>
-                      Flywheel A (product iteration) ↔ Coupling (release gate) ↔ Flywheel B (runtime stability).
-                      Ops Platform is the rocket; Trade is the payload. CI/CD path diagram lives on{' '}
-                      <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
-                        Delivery
-                      </button>
-                      .
-                    </>
-                  }
-                  headerExtra={<AuditPageLink onOpenAudit={onOpenAudit} className="mt-2" />}
-                  overflow="visible"
-                />
-
-                <DualFlywheelPanel
-                  context={context}
-                  matrices={matrices}
-                  selection={selection}
-                  onSelectBay={id => setSelection({ kind: 'bay', id })}
-                  onOpenDelivery={onOpenDelivery}
-                />
-
-                {context != null && (
-                  <PipelineFlow
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Dual flywheel · Pipeline
+                    </span>
+                    <AuditPageLink onOpenAudit={onOpenAudit} />
+                  </div>
+                  <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
+                    Flywheel A ↔ Coupling ↔ Flywheel B. CI/CD path on{' '}
+                    <button type="button" className="focus-strip-link" onClick={onOpenDelivery}>
+                      Delivery
+                    </button>
+                    .
+                  </p>
+                  <DualFlywheelPanel
                     context={context}
-                    selectionId={selection?.kind === 'milestone' ? selection.id : null}
-                    onSelectMilestone={id => setSelection({ kind: 'milestone', id })}
+                    matrices={matrices}
+                    selection={selection}
+                    onSelectBay={id => setSelection({ kind: 'bay', id })}
+                    onOpenDelivery={onOpenDelivery}
                   />
-                )}
+                  {context != null && (
+                    <PipelineFlow
+                      context={context}
+                      selectionId={selection?.kind === 'milestone' ? selection.id : null}
+                      onSelectMilestone={id => setSelection({ kind: 'milestone', id })}
+                    />
+                  )}
+                </div>
 
                 <AgentFocusDock
                   context={context}

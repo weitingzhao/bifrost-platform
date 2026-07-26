@@ -33,6 +33,7 @@ import {
   datastoreEnvSignal,
   isProdReleaseBlocked,
   namespacePods,
+  accountSyncChipFromBus,
   PLATFORM_PROD,
   PLATFORM_STG,
   PROD_NS,
@@ -185,6 +186,8 @@ export function useSatelliteProdReadiness(enabled = true) {
     [busReach],
   )
 
+  const accountSync = useMemo(() => accountSyncChipFromBus(busReach, 'prod'), [busReach])
+
   const tradeApis = useMemo(() => tradeApiSummary(prodMatrix), [prodMatrix])
   const tradeSnapshot = snapshot.tradeProd
   const gate = useMemo(() => releaseGateSignal(prodGateQ.data), [prodGateQ.data])
@@ -194,6 +197,7 @@ export function useSatelliteProdReadiness(enabled = true) {
     k8s.signal,
     datastore.signal,
     tradeApis.signal,
+    accountSync.signal,
     tradeSnapshot.signal,
     gate.signal,
   )
@@ -236,6 +240,7 @@ export function useSatelliteProdReadiness(enabled = true) {
     prodDisabledReason,
     fixSignals: [
       { label: 'Trade · K8s PROD', signal: k8s.signal, detail: k8s.detail, fixScope: PROD_ENV_FIX_SCOPE },
+      accountSync,
       {
         label: 'Ground · PG / Redis',
         signal: datastore.signal,

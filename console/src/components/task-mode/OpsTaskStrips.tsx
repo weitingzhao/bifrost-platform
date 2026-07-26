@@ -366,6 +366,7 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
         tradeRecentRunsLoading={tradeRecentRunsLoading}
         onOpenPlatformRun={openPlatformRun}
         onOpenTradeRun={openTradeRun}
+        hidePrimaryLaunch
       />
     )
   }

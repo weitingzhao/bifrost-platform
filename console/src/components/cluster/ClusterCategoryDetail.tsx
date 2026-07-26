@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Button } from '@bifrost/ui'
+import { OpsSection } from '@/components/layout/OpsSection'
 import {
   categoryDimension,
   INFRASTRUCTURE_CATEGORY_LABELS,
@@ -80,19 +81,20 @@ export function ClusterCategoryDetail({
   const resolvedTitle = detailTitle(category, title)
 
   return (
-    <section className="cluster-category-detail page-section panel-elevated overflow-visible">
-      <header className="cluster-category-detail__header">
-        <div className="cluster-category-detail__heading">
-          <span className="cluster-category-detail__label">Detail</span>
-          <h3 className="cluster-category-detail__title">{resolvedTitle}</h3>
-        </div>
-        {onCopyForLlm != null && (
+    <OpsSection
+      className="cluster-category-detail"
+      title={resolvedTitle}
+      actions={
+        onCopyForLlm != null ? (
           <Button variant="outline" size="sm" onClick={() => onCopyForLlm()}>
             {copyLabel(copyState)}
           </Button>
-        )}
-      </header>
-      <div className="cluster-category-detail__body">{body}</div>
-    </section>
+        ) : undefined
+      }
+      bodyPadding="compact"
+      overflow="visible"
+    >
+      {body}
+    </OpsSection>
   )
 }

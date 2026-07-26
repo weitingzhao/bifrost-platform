@@ -58,6 +58,12 @@ func TestComputeCapabilityMap_NoMissingCoreTools(t *testing.T) {
 		t.Fatalf("mcp tools %d", resp.McpToolCount)
 	}
 	for _, e := range resp.Entries {
+		if e.McpTools == nil {
+			t.Fatalf("%s: mcp_tools must be non-nil empty slice for JSON []", e.TaskScope)
+		}
+		if e.MissionSignals == nil {
+			t.Fatalf("%s: mission_signals must be non-nil empty slice for JSON []", e.TaskScope)
+		}
 		if e.TaskScope == "post-fix-verification" && e.HasGap {
 			t.Fatalf("post-fix gap: %s", e.GapDetail)
 		}

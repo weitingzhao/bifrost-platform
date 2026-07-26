@@ -4,6 +4,7 @@
  * Probe-detail page for Trade satellite matrix targets — HTTP reachability,
  * ops auth, and D10 blocked write paths. System health verdict lives in
  * Mission Control → Observability; this page must not surface a readiness badge.
+ * OpsVerdictStrip here is page-freshness / probe counts only.
  */
 
 import { useQuery } from '@tanstack/react-query'
@@ -17,7 +18,6 @@ import {
   DenseTableHeader,
   DenseTableRow,
   DenseTag,
-  PageHeader,
   SegmentControl,
   Sheet,
   SheetContent,
@@ -28,6 +28,12 @@ import {
 import { fetchMatrix, isAllMatrices } from '@/api/core'
 import type { MatrixResponse, Target } from '@/api/matrixTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  OpsVerdictStrip,
+  type OpsVerdictLamp,
+  type OpsVerdictTagVariant,
+} from '@/components/layout/OpsVerdictStrip'
+import { PageToolbar } from '@/components/layout/PageToolbar'
 import { consumeSatelliteApiEnv } from '@/lib/task-mode/readinessChipActions'
 
 const ENV_OPTIONS = [
@@ -74,6 +80,10 @@ function sortProbeTargets(targets: Target[]): Target[] {
     if (aOrder !== bOrder) return aOrder - bOrder
     return a.id.localeCompare(b.id)
   })
+}
+
+function isAuthFail(auth: Target['auth']): boolean {
+  return auth === 'missing' || auth === 'invalid'
 }
 
 function AuthCell({ target }: { target: Target }) {
@@ -127,15 +137,83 @@ export function SatelliteApiHealthPage({
   )
   const apiTargets = probeTargets.filter(t => t.category === 'trade_api')
 
+  const probeStats = useMemo(() => {
+    const total = probeTargets.length
+    let reachable = 0
+    let fail = 0
+    let degraded = 0
+    let authOk = 0
+    let authFail = 0
+    let authSkipped = 0
+    for (const t of probeTargets) {
+      if (t.reachability === 'ok') reachable += 1
+      if (t.reachability === 'fail' || isAuthFail(t.auth)) fail += 1
+      else if (t.reachability === 'degraded') degraded += 1
+      if (t.auth === 'ok') authOk += 1
+      else if (isAuthFail(t.auth)) authFail += 1
+      else if (t.auth === 'skipped') authSkipped += 1
+    }
+    return { total, reachable, fail, degraded, authOk, authFail, authSkipped }
+  }, [probeTargets])
+
+  let verdictLamp: OpsVerdictLamp = 'ok'
+  let verdictTag = 'ALL OK'
+  let verdictTagVariant: OpsVerdictTagVariant = 'success'
+  let verdictSummary: string
+  if (matrixQuery.isLoading) {
+    verdictLamp = 'unknown'
+    verdictTag = 'LOADING'
+    verdictTagVariant = 'neutral'
+    verdictSummary = 'Loading probe matrix…'
+  } else if (matrixQuery.isError) {
+    verdictLamp = 'fail'
+    verdictTag = 'ERROR'
+    verdictTagVariant = 'danger'
+    verdictSummary =
+      matrixQuery.error instanceof Error
+        ? matrixQuery.error.message
+        : 'Matrix probe request failed.'
+  } else if (probeStats.total === 0) {
+    verdictLamp = 'degraded'
+    verdictTag = 'NO DATA'
+    verdictTagVariant = 'warning'
+    verdictSummary = `No probe targets for ${env}`
+  } else if (probeStats.fail > 0) {
+    verdictLamp = 'fail'
+    verdictTag = `${probeStats.fail} ISSUE${probeStats.fail === 1 ? '' : 'S'}`
+    verdictTagVariant = 'danger'
+    verdictSummary = `${probeStats.reachable}/${probeStats.total} targets reachable · auth ${probeStats.authOk} ok / ${probeStats.authFail} fail / ${probeStats.authSkipped} skipped`
+  } else if (probeStats.degraded > 0) {
+    verdictLamp = 'degraded'
+    verdictTag = `${probeStats.degraded} ISSUE${probeStats.degraded === 1 ? '' : 'S'}`
+    verdictTagVariant = 'warning'
+    verdictSummary = `${probeStats.reachable}/${probeStats.total} targets reachable · auth ${probeStats.authOk} ok / ${probeStats.authFail} fail / ${probeStats.authSkipped} skipped`
+  } else {
+    verdictSummary = `${probeStats.reachable}/${probeStats.total} targets reachable · auth ${probeStats.authOk} ok / ${probeStats.authSkipped} skipped`
+  }
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <PageHeader
-        title="API & Auth Probes"
-        description="Per-environment matrix probes for Trade satellite endpoints — HTTP reachability, ops auth, and D10 blocked write paths. Health verdict → Mission Control → Observability."
+      <OpsVerdictStrip
+        ariaLabel="Probe results freshness"
+        title={`PROBE RESULTS · ${env.toUpperCase()}`}
+        lamp={verdictLamp}
+        tagLabel={verdictTag}
+        tagVariant={verdictTagVariant}
+        summary={verdictSummary}
+        meta={
+          matrix?.generated_at != null ? (
+            <span>Probed {new Date(matrix.generated_at).toLocaleString()}</span>
+          ) : matrixQuery.isLoading ? (
+            <span>Probe timestamp pending…</span>
+          ) : (
+            <span>No probe timestamp</span>
+          )
+        }
       />
 
-      <OpsSection title="Endpoint probes" bodyPadding="default" overflow="visible">
-        <div className="mb-3 flex flex-wrap items-center gap-3">
+      <PageToolbar align="between">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Environment:</span>
           <SegmentControl value={env} options={[...ENV_OPTIONS]} onChange={v => setEnv(v as MatrixEnv)} />
           {matrix?.generated_at != null && (
@@ -143,17 +221,19 @@ export function SatelliteApiHealthPage({
               Probed {new Date(matrix.generated_at).toLocaleString()}
             </span>
           )}
-          {onOpenObservability != null && (
-            <button
-              type="button"
-              className="focus-strip-link text-[var(--text-dense-caption)] ml-auto"
-              onClick={onOpenObservability}
-            >
-              View Observability
-            </button>
-          )}
         </div>
+        {onOpenObservability != null && (
+          <button
+            type="button"
+            className="focus-strip-link text-[var(--text-dense-caption)]"
+            onClick={onOpenObservability}
+          >
+            View Observability
+          </button>
+        )}
+      </PageToolbar>
 
+      <OpsSection title="Endpoint probes" bodyPadding="default" overflow="visible">
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>

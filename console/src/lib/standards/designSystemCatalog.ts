@@ -26,7 +26,10 @@ export type LayerRow = {
 
 export const LAYER_STACK: LayerRow[] = [
   { layer: 'Tokens', location: 'src/index.css', role: 'Typography (--text-dense), cell spacing (--table-cell-*), business semantics (--color-profit/loss/unrealized, --color-entity-*)' },
-  { layer: 'Layout', location: 'console/src/components/layout/OpsSection.tsx', role: 'OpsSection + OpsSubsectionTitle — unified page-section panel-elevated chrome; PageHeader (page title) from @bifrost/ui' },
+  { layer: 'Layout', location: 'console/src/components/ConsoleHeader.tsx', role: 'Shell chrome only — breadcrumb (plane › page) + ? help + pageActions + Viewer env + TaskModeCapsule + Agent Task + User; PageToolbar for page filters/actions only' },
+  { layer: 'Layout', location: 'console/src/components/OpsContextStrip.tsx', role: 'Page-top Trade/Mission context strip inside PageShell (elevated, not sticky chrome); compact when Mission OK, full when CAUTION+' },
+  { layer: 'Layout', location: 'console/src/components/layout/OpsSection.tsx', role: 'OpsSection + OpsSubsectionTitle — unified page-section panel-elevated chrome' },
+  { layer: 'Layout', location: 'console/src/components/layout/OpsVerdictStrip.tsx', role: 'OpsVerdictStrip — page verdict for Mission Control + Rocket Placement/Cluster (lamp + title + tag + summary + actions/meta)' },
   { layer: 'Data display', location: 'src/components/data-display/', role: 'Tables, PnL, segments, icon actions, collapsible groups — 14 primitives' },
   { layer: 'Domain', location: 'src/pages/*, src/components/*/', role: 'Business columns, hooks, API wiring only — minimal styling' },
 ]
@@ -116,6 +119,104 @@ export const OPS_OUTCOME_SEMANTICS: OpsOutcomeSemanticRow[] = [
   },
 ]
 
+/* ── Page composition (three-act structure) ── */
+
+export type PageCompositionAct = {
+  act: string
+  role: string
+  rules: string[]
+  examples: string[]
+}
+
+/**
+ * Every Mission Control page follows Verdict → Body → Actions.
+ * Progressive disclosure + action prominence — same skeleton across all pages.
+ */
+export const PAGE_COMPOSITION: PageCompositionAct[] = [
+  {
+    act: 'Verdict',
+    role: 'One-line qualitative answer ("Is it OK?") + quantified evidence. Always visible, never collapsed.',
+    rules: [
+      'Must exist on every page — even info-only pages show record counts or freshness',
+      'Use OpsVerdictStrip (panel-elevated) — StatusLamp + title + DenseTag + summary + optional actions/meta',
+      'Keep to 1–2 lines; secondary metrics on meta (second compact line)',
+      'If the verdict drives action, include the primary action button in actions',
+      'Domain extensions (PatternDebt metrics grid, RuntimeHealth gap chips, ClusterOverviewKpi) may sit below OpsVerdictStrip — do not hand-roll a new strip',
+      'Rocket lane operate pages (Launch Rocket / Deploy Satellite): LaneStateStrip is the Verdict equivalent — do not replace with OpsVerdictStrip',
+    ],
+    examples: [
+      'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — alerts meta → Attention',
+      'Control Room: OpsVerdictStrip MISSION VERDICT + Launch/Deploy actions; bay chips → jumpToBay',
+      'Audit: OpsVerdictStrip ACTUATION HISTORY · Download JSON in actions',
+      'Placement: OpsVerdictStrip PLACEMENT VERDICT · Copy LLM pack / Open Delivery / Open Cluster in actions',
+      'Cluster: OpsVerdictStrip CLUSTER VERDICT · failing pods / reachability drive lamp · Copy / Refresh / Sync in actions; KPI strip below',
+      'Satellite Bus: OpsVerdictStrip BUS HEALTH · {ENV} — Agent Triage in actions; issues count scrolls to body',
+      'Satellite Runtime: OpsVerdictStrip SATELLITE RUNTIME · {ENV} — record-count freshness, not system verdict',
+      'API & Auth Probes: OpsVerdictStrip PROBE RESULTS · {ENV} — probe summary, not readiness badge',
+      'Compute: OpsVerdictStrip COMPUTE · NODES — Refresh in actions; Audit / Cluster in meta',
+      'Network: OpsVerdictStrip NETWORK · GROUND — live probe lamp; Health panel is Body evidence',
+      'Operator Dock · Console: ServerConsolePanel in shell dock (no page Verdict); host freshness on dock toolbar; Mac chips Primary/Standby from bridge runners',
+      'Plugin Gallery: OpsVerdictStrip PLUGIN BUS · IB GATEWAY — Reconnect / Refresh in actions; Live/Cutover are Body',
+      'Launch Rocket: LaneStateStrip (lane verdict) + AI Release actions — not OpsVerdictStrip',
+      'Deploy Satellite: LaneStateStrip + AI Deploy (+ Evidence links) — not OpsVerdictStrip',
+    ],
+  },
+  {
+    act: 'Body',
+    role: 'Domain-grouped detail sections. Progressive disclosure — expand to inspect, collapse when healthy.',
+    rules: [
+      'Use OpsSection as the universal collapsible unit (title + description + optional actions)',
+      'Default expand strategy: sections with CAUTION+ signals open; healthy sections collapsed',
+      'Maximum 2 nesting levels below Body (Section → inline detail OR Section → sub-table). Never 3+',
+      'Summary-to-detail continuity: clicking a verdict signal scrolls/expands its owning section',
+      'Each section is self-contained — no cross-section state leakage',
+      'Rocket / Satellite lane operate pages: LaneDetailCollapse is the Body unit — not OpsSection',
+    ],
+    examples: [
+      'Observability: Domain cards (clickable) → detail table for selected domain',
+      'Control Room: Bay cards (Operate / Release / Health / Governance) — expand reveals strips',
+      'Satellite Bus: PageToolbar Trade NS → SecondaryGroup scope sections (flat OpsSections inside)',
+      'Launch Rocket: LaneDetailCollapse for gate evidence / Advanced recovery / gate history',
+      'Deploy Satellite: LaneDetailCollapse for supply chain / gate compare / GitOps',
+      'Placement / Cluster: Verdict meta chips scroll to Body anchors (#placement-violations, #cluster-issues, …)',
+      'Compute: OpsSection wizard + nodes table',
+      'Network: Health / Firewall / Devices / Clients OpsSections',
+      'Operator Dock · Console: flat toolbar (no panel-elevated); Linux|Mac chips + SSH meta one row; terminal fills body',
+      'Plugin Gallery: Registry OpsSection → IB Live OpsSection → Cutover OpsSection',
+    ],
+  },
+  {
+    act: 'Actions',
+    role: 'Core operational capabilities — always discoverable, never buried in collapsed detail.',
+    rules: [
+      'High-frequency actions: surface in Verdict strip or PageToolbar (always visible)',
+      'Context actions (e.g. per-row Fix, per-section Agent dispatch): inline with the relevant data',
+      'Never require expanding a collapsed section to discover a page-level action',
+      'Destructive actions: ConfirmDialog, not window.confirm',
+      'Agent dispatch actions: inline button → launches via ambient Agent system (dock stays bottom)',
+      'Rocket / Satellite lane operate pages: LaneStateStrip is the Verdict equivalent — page-level Agent CTA must stay on the strip (AI Release / AI Deploy), not inside Advanced recovery',
+      'Shell Operator Dock (bottom): multi-tool framework — Agent (ambient Fix) | Console (SSH); Collapse keeps Console sessions mounted; L-1 host pulse + Operator Plane deep-link in head (no Update in Dock)',
+    ],
+    examples: [
+      'Control Room: VerdictStrip actions = Launch Release / Deploy Satellite; bay chips → jumpToBay',
+      'Observability: Verdict first; PageToolbar = Trade NS + Open Grafana; alerts meta → Attention',
+      'Defects: PatternDebt Verdict + Fix top pattern; PageToolbar Refresh below',
+      'Launch Rocket: AI Release on LaneStateStrip; Deploy/Gate in ReleaseStepCommandCenter',
+      'Deploy Satellite: AI Deploy on LaneStateStrip (+ Evidence links); Deploy/Gate in ReleaseStepCommandCenter',
+      'Operator Dock: Segment Agent | Console — Fix live feed on Agent; SSH ServerConsolePanel on Console; head Host · P✓ S✓ + Operator Plane CTA; Deploy running is read-only deep-link',
+    ],
+  },
+]
+
+/**
+ * Collapse default strategy — sections with problems open; everything else saves space.
+ */
+export const COLLAPSE_STRATEGY = {
+  rule: 'Sections with signal ≠ OK default open; healthy sections default collapsed',
+  rationale: 'User attention goes to problems first; healthy detail is one click away',
+  override: 'Pages with ≤3 sections may keep all open (e.g. Audit, single-section pages)',
+} as const
+
 /* ── Mandatory interaction → primitive mapping ── */
 
 export type MandatoryMappingRow = {
@@ -144,6 +245,31 @@ export const MANDATORY_MAPPING: MandatoryMappingRow[] = [
     use: 'opsSemanticText.ts — lamp-ok / lamp-degraded / lamp-fail / muted',
     never: 'text-destructive for success or neutral operation messages',
   },
+  {
+    interaction: 'Page identity (title / help)',
+    use: 'ConsoleHeader breadcrumb (plane › page) + ? tooltip via VIEW_DESCRIPTIONS; pageActions for Copy/Back',
+    never: 'In-page PageHeader / ConsolePageHeader / duplicate page H1 + subtitle',
+  },
+  {
+    interaction: 'Trade / Mission context',
+    use: 'OpsContextStrip inside PageShell (elevated page content); compact one-liner when Mission OK, full strip + Fix when CAUTION+',
+    never: 'Sticky OpsContextBar / second nav bar under ConsoleHeader shell chrome',
+  },
+  {
+    interaction: 'Page filters / primary actions',
+    use: 'PageToolbar (no title)',
+    never: 'PageHeader actions slot or ad-hoc title+actions hero rows',
+  },
+  {
+    interaction: 'Page verdict (Mission Control / Rocket Placement & Cluster / Ground Systems / Subcontractors)',
+    use: 'OpsVerdictStrip (lamp + title + tag + summary + actions + optional meta)',
+    never: 'Hand-rolled page-section panel-elevated verdict strips',
+  },
+  {
+    interaction: 'Page verdict (Rocket lane operate — Launch Rocket / Deploy Satellite)',
+    use: 'LaneStateStrip as Verdict equivalent + page-level actions on the strip',
+    never: 'OpsVerdictStrip on lane pages; burying page-level Agent CTA inside Advanced recovery',
+  },
 ]
 
 /* ── Primitives inventory ── */
@@ -169,6 +295,10 @@ export const PRIMITIVES: PrimitiveRow[] = [
   { name: 'SegmentControl / IncludeExcludeToggle', file: 'SegmentControl.tsx', category: 'Controls' },
   { name: 'CollapsibleGroup / CollapsibleGroupHeader / CollapsibleGroupBody', file: 'CollapsibleGroup.tsx', category: 'Layout' },
   { name: 'ExecSourceBadge', file: 'ExecSourceBadge.tsx', category: 'Labels' },
+  { name: 'PageToolbar', file: 'console/src/components/layout/PageToolbar.tsx', category: 'Layout' },
+  { name: 'OpsVerdictStrip', file: 'console/src/components/layout/OpsVerdictStrip.tsx', category: 'Layout' },
+  { name: 'ConsoleHeader breadcrumb + TaskModeCapsule', file: 'console/src/components/ConsoleHeader.tsx', category: 'Layout' },
+  { name: 'OpsContextStrip (Trade / Mission)', file: 'console/src/components/OpsContextStrip.tsx', category: 'Layout' },
 ]
 
 /* ── Forbidden patterns ── */
@@ -181,6 +311,10 @@ export const FORBIDDEN_PATTERNS: string[] = [
   'Reimplementing shadcn Button / Select in module CSS (.btnFetch, etc.)',
   'Raw palette classes (text-emerald-*, text-red-*, text-sky-*) or inline hex for business colors',
   'window.confirm / window.alert for destructive actions',
+  'In-page PageHeader / ConsolePageHeader for ConsolePage tabs — use ConsoleHeader breadcrumb + PageToolbar',
+  'Sticky OpsContextBar / FocusStrip under shell chrome — use OpsContextStrip inside PageShell instead',
+  'Hand-rolled Mission Control / Rocket Placement / Cluster verdict strip — use OpsVerdictStrip',
+  'Cluster hand-rolled page-section panel-elevated chrome — use OpsVerdictStrip + OpsSection for Bootstrap',
 ]
 
 /* ── Allowed CSS exceptions ── */
@@ -208,16 +342,16 @@ export const AGENT_GOVERNANCE_ASSETS: AgentAssetRow[] = [
   { asset: 'docs/TECH_STACK.md', repo: 'bifrost-trade-frontend', purpose: 'Locked stack + governance (authoritative)' },
   { asset: 'UiDesignSystemPage.tsx', repo: 'bifrost-trade-frontend', purpose: 'Living visual contract with Copy Prompt per section' },
   {
-    asset: 'console/src/components/agent/AgentExecutionDock.tsx',
+    asset: 'console/src/components/agent/AgentExecutionDock.tsx (OperatorDock)',
     repo: 'bifrost-platform',
     purpose:
-      'Shell SSOT for live Agent Fix (Collapsed/Working/Maximized). Agent Desk = archive only; Fix defaults to in-place Dock — forbid forced agent-desk tab switch.',
+      'Shell Operator Dock — tool slots Agent | Console (Collapsed/Working/Maximized). Agent slot = ambient Fix SSOT; Console = SSH. Head = L-1 host pulse + Operator Plane deep-link (Update SSOT stays on Operator Plane). Agent Desk = archive only; forbid forced agent-desk tab switch.',
   },
   {
     asset: 'console/src/components/task-mode/LaunchLiveView.tsx',
     repo: 'bifrost-platform',
     purpose:
-      'Mission Launch live monitor — Agent one-line + Expand dock; Pipeline/Post-deploy in-page; approvals stay in AgentExecutionDock (no duplicate Commit & push).',
+      'Mission Launch live monitor — Agent one-line + Expand dock; Pipeline/Post-deploy in-page; approvals stay in Operator Dock Agent slot (no duplicate Commit & push).',
   },
 ]
 
@@ -242,6 +376,24 @@ export function buildDesignSystemLlmPack(): string {
     '## Page canvas (three surfaces)',
     '',
     ...PAGE_SURFACES.map(s => `- **${s.surface}** — \`${s.tailwind}\` — ${s.usage}`),
+    '',
+    '## Page composition (three-act structure)',
+    '',
+    'Every Mission Control page follows **Verdict → Body → Actions**.',
+    '',
+    ...PAGE_COMPOSITION.map(a => [
+      `### ${a.act}`,
+      '',
+      a.role,
+      '',
+      'Rules:',
+      ...a.rules.map(r => `- ${r}`),
+      '',
+      'Examples:',
+      ...a.examples.map(e => `- ${e}`),
+      '',
+    ]).flat(),
+    `Collapse strategy: ${COLLAPSE_STRATEGY.rule} — ${COLLAPSE_STRATEGY.rationale}`,
     '',
     '## Business semantic colors',
     '',

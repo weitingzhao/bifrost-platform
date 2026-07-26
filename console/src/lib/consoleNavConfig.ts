@@ -28,12 +28,11 @@ import {
   Server,
   Shield,
   ShieldCheck,
-  Terminal,
   Workflow,
 } from 'lucide-react'
 
 /**
- * Ops Console sidebar — seven system-domain groups (Apollo model).
+ * Ops Console sidebar — six system-domain groups (Apollo model).
  *
  * System Domain SSOT (ids + purpose + scope→domain): systemDomainCatalog.ts
  *
@@ -45,15 +44,15 @@ import {
  * |------------------|-----------------------|--------------------------------------------------|
  * | Mission Control  | Cross-domain ops hub  | Control Room, Observability, defects, audit, delivery |
  * | Rocket           | Ops Platform itself   | K8s cluster, Launch Rocket, placement             |
- * | Ground Systems   | Infrastructure        | Server console, network, compute                  |
+ * | Ground Systems   | Infrastructure        | Network, compute (SSH via shell Operator Dock)    |
  * | Satellite        | Payload satellite(s)  | Bus, runtime, API & Auth Probes, Deploy Satellite |
  * | Subcontractors   | External plugins      | Plugin Gallery, future plugins                    |
  * | Engineer         | AI Agent              | Workspace, autonomous, trust, L-1 plane           |
- * | Governance       | Cross-domain ref lib  | Strategic vision, standards, AI strategy           |
+ *
+ * Governance (Vision / Blueprint / Standards / …) lives in the shell User menu
+ * — cross-domain reference library, not a daily-ops rail group.
  *
  * Engineer is fate-isolated from the system it services (bootstrap paradox, D7).
- * Governance merges the former Architecture + Agent Doctrine pages into a
- * unified reference library.
  */
 export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
   {
@@ -109,7 +108,6 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
       {
         label: 'Workspace',
         items: [
-          { id: 'agent-desk', label: 'Agent Desk', icon: Bot },
           { id: 'agent-capability', label: 'Agent Capability', icon: Network },
           { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
           { id: 'dev-agent', label: 'Dev Agent', icon: Code2 },
@@ -143,7 +141,6 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
       {
         label: '',
         items: [
-          { id: 'console', label: 'Server Console', icon: Terminal },
           { id: 'network', label: 'Network', icon: Network },
           { id: 'compute', label: 'Compute', icon: Cpu },
         ],
@@ -162,38 +159,45 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
       },
     ],
   },
+]
+
+/**
+ * Governance / Guides reference library — browsed via Settings-style Guides shell
+ * (User menu → Guides). Keep in sync with CONSOLE_NAV_PLANE_BY_TAB Governance tabs.
+ */
+export const GOVERNANCE_MENU_GROUPS: ReadonlyArray<{
+  label: string
+  items: ReadonlyArray<{ id: string; label: string; icon: typeof BookOpen }>
+}> = [
   {
-    label: 'Governance',
-    icon: BookOpen,
-    subGroups: [
-      {
-        label: 'Strategic',
-        items: [
-          { id: 'flywheel-vision', label: 'Vision', icon: Orbit },
-          { id: 'blueprint', label: 'Blueprint', icon: Boxes },
-          { id: 'roadmap', label: 'Roadmap', icon: MapPinned },
-        ],
-      },
-      {
-        label: 'Standards',
-        items: [
-          { id: 'platform-standards', label: 'Platform', icon: Shield },
-          { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
-          { id: 'agent-system', label: 'Agent System', icon: Boxes },
-          { id: 'mcp-contract', label: 'MCP Contract', icon: Plug },
-          { id: 'design-system', label: 'Design System', icon: Ruler },
-          { id: 'briefing-reconciliation', label: 'Briefing Reconciliation', icon: Scale },
-        ],
-      },
-      {
-        label: 'AI Strategy',
-        items: [
-          { id: 'ai-compute', label: 'AI Compute Strategy', icon: Cpu },
-        ],
-      },
+    label: 'Strategic',
+    items: [
+      { id: 'flywheel-vision', label: 'Vision', icon: Orbit },
+      { id: 'blueprint', label: 'Blueprint', icon: Boxes },
+      { id: 'roadmap', label: 'Roadmap', icon: MapPinned },
+    ],
+  },
+  {
+    label: 'Standards',
+    items: [
+      { id: 'platform-standards', label: 'Platform', icon: Shield },
+      { id: 'agent-protocol', label: 'Agent Protocol', icon: FileCode2 },
+      { id: 'agent-system', label: 'Agent System', icon: Boxes },
+      { id: 'mcp-contract', label: 'MCP Contract', icon: Plug },
+      { id: 'design-system', label: 'Design System', icon: Ruler },
+      { id: 'briefing-reconciliation', label: 'Briefing Reconciliation', icon: Scale },
+    ],
+  },
+  {
+    label: 'AI Strategy',
+    items: [
+      { id: 'ai-compute', label: 'AI Compute Strategy', icon: Cpu },
     ],
   },
 ]
+
+/** Default landing tab when opening Guides from the User menu. */
+export const GUIDES_DEFAULT_TAB = 'flywheel-vision' as const
 
 export type ConsoleNavPlane =
   | 'Mission Control'
@@ -216,6 +220,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   cluster: 'Rocket',
   'platform-release': 'Rocket',
   placement: 'Rocket',
+  /** Legacy `#console` redirects to Operator Dock — plane kept for hash/breadcrumb flash. */
   console: 'Ground Systems',
   network: 'Ground Systems',
   compute: 'Ground Systems',

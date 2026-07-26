@@ -24,7 +24,12 @@ function reachTagVariant(reach: string): 'success' | 'warning' | 'danger' | 'neu
   return 'neutral'
 }
 
-export function IbGatewayLiveStatusPanel() {
+export function IbGatewayLiveStatusPanel({
+  showPrimaryActions = true,
+}: {
+  /** When false, hide Reconnect (page Verdict owns it). Mode switch stays here. Default true. */
+  showPrimaryActions?: boolean
+} = {}) {
   const liveProbe = useIbGatewayLiveProbe()
   const { canOperate } = usePlatformAuth()
   const [reconnectOpen, setReconnectOpen] = useState(false)
@@ -79,29 +84,40 @@ export function IbGatewayLiveStatusPanel() {
   const status = liveProbe.status
   const currentMode = status?.mode?.toLowerCase()
 
+  const modeButtons =
+    currentMode === 'mock' ? (
+      <Button variant="default" size="xs" disabled={acting} onClick={() => setModeConfirm('live')}>
+        Switch to live
+      </Button>
+    ) : currentMode === 'live' ? (
+      <Button variant="outline" size="xs" disabled={acting} onClick={() => setModeConfirm('mock')}>
+        Revert to mock
+      </Button>
+    ) : null
+
+  const reconnectButton = showPrimaryActions ? (
+    <Button variant="outline" size="xs" disabled={acting} onClick={() => setReconnectOpen(true)}>
+      Reconnect (rollout restart)
+    </Button>
+  ) : null
+
+  const sectionActions =
+    canOperate && (modeButtons != null || reconnectButton != null) ? (
+      <div className="flex flex-wrap gap-2">
+        {modeButtons}
+        {reconnectButton}
+      </div>
+    ) : undefined
+
   return (
     <OpsSection
       title="IB Gateway live status"
-      description="L0 probe via GET /api/v1/plugins/ib-gateway/status — redis-ib health + K8s deployment @ data NS."
-      actions={
-        canOperate ? (
-          <div className="flex flex-wrap gap-2">
-            {currentMode === 'mock' && (
-              <Button variant="default" size="xs" disabled={acting} onClick={() => setModeConfirm('live')}>
-                Switch to live
-              </Button>
-            )}
-            {currentMode === 'live' && (
-              <Button variant="outline" size="xs" disabled={acting} onClick={() => setModeConfirm('mock')}>
-                Revert to mock
-              </Button>
-            )}
-            <Button variant="outline" size="xs" disabled={acting} onClick={() => setReconnectOpen(true)}>
-              Reconnect (rollout restart)
-            </Button>
-          </div>
-        ) : undefined
+      description={
+        showPrimaryActions
+          ? 'L0 probe via GET /api/v1/plugins/ib-gateway/status — redis-ib health + K8s deployment @ data NS.'
+          : 'Mode switch here · Reconnect on page Verdict. L0 probe via GET /api/v1/plugins/ib-gateway/status.'
       }
+      actions={sectionActions}
       bodyPadding="default"
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -183,7 +199,7 @@ export function IbGatewayLiveStatusPanel() {
       </DenseDataTable>
 
       <ConfirmDialog
-        open={reconnectOpen}
+        open={showPrimaryActions && reconnectOpen}
         title="Reconnect IB Gateway"
         message="Rollout restart deployment/ib-gateway in data NS. Use when TWS sessions need a clean reconnect."
         confirmLabel="Confirm reconnect"

@@ -22,6 +22,11 @@ interface NetworkHealthPanelProps {
   context: OpsContextResponse | undefined
   onOpenAgentProtocol: () => void
   onOpenNetwork?: () => void
+  /** When false, hide header Agent Protocol (page Verdict already owns it). Default true for Control Room. */
+  showPrimaryAgentAction?: boolean
+  /** Section title — Control Room keeps Health; Ground Network page uses evidence wording. */
+  title?: string
+  description?: string
 }
 
 function streamReach(done: number, total: number): 'ok' | 'degraded' | 'unknown' {
@@ -44,28 +49,36 @@ export function NetworkHealthPanel({
   context,
   onOpenAgentProtocol,
   onOpenNetwork,
+  showPrimaryAgentAction = true,
+  title = 'Network Health — ground floor (LAN / UniFi)',
+  description = 'Catalog + spine projection plus live UniFi probe via GET /api/v1/network/status + audit (Session v2 per D9).',
 }: NetworkHealthPanelProps) {
   const streams = resolveNetworkStreamProjections(context)
   const spineLoaded = context?.tracks?.infra != null
   const { firewall } = NETWORK_HEALTH_PROJECTION
   const liveProbe = useNetworkLiveProbe()
 
-  return (
-    <OpsSection
-      title="Network Health — ground floor (LAN / UniFi)"
-      description="Catalog + spine projection plus live UniFi probe via GET /api/v1/network/status + audit (Session v2 per D9)."
-      actions={
-        <div className="flex flex-wrap gap-2">
-          {onOpenNetwork != null && (
-            <Button variant="ghost" size="xs" onClick={onOpenNetwork}>
-              Ground Systems → Network
-            </Button>
-          )}
+  const headerActions =
+    onOpenNetwork != null || showPrimaryAgentAction ? (
+      <div className="flex flex-wrap gap-2">
+        {onOpenNetwork != null && (
+          <Button variant="ghost" size="xs" onClick={onOpenNetwork}>
+            Ground Systems → Network
+          </Button>
+        )}
+        {showPrimaryAgentAction && (
           <Button variant="ghost" size="xs" onClick={onOpenAgentProtocol}>
             Agent Protocol
           </Button>
-        </div>
-      }
+        )}
+      </div>
+    ) : undefined
+
+  return (
+    <OpsSection
+      title={title}
+      description={description}
+      actions={headerActions}
       bodyPadding="default"
       overflow="visible"
     >

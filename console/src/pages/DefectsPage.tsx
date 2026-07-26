@@ -33,7 +33,7 @@ import { DEFECT_PATTERN_REMEDIATE_SCOPE } from '@/lib/agent/agentScopes'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader'
+import { PageToolbar } from '@/components/layout/PageToolbar'
 import {
   SYSTEM_DOMAINS,
   SYSTEM_DOMAIN_ICON,
@@ -193,14 +193,22 @@ const DEBT_LEVEL_VARIANT: Record<PatternDebtLevel, 'success' | 'warning' | 'dang
 function PatternDebtStrip({
   report,
   patterns,
+  onFixTopPattern,
+  fixPending,
+  canFix,
 }: {
   report: RetrospectiveReport
   patterns: RetrospectivePatternCluster[]
+  onFixTopPattern?: (pattern: RetrospectivePatternCluster) => void
+  fixPending?: boolean
+  canFix?: boolean
 }) {
   const score = report.health_score ?? 0
   const trendingCount = patterns.filter(isTrendingPattern).length
   const structuralCount = patterns.filter(isStructuralPattern).length
-  const attentionCount = attentionPatterns(patterns).length
+  const attention = attentionPatterns(patterns)
+  const attentionCount = attention.length
+  const topPattern = attention[0] ?? null
   const level = patternDebtLevel(score, trendingCount, structuralCount)
   const lampValue = level === 'CLEAR' ? 'ok' : level === 'ELEVATED' ? 'degraded' : 'fail'
 
@@ -259,22 +267,37 @@ function PatternDebtStrip({
   ]
 
   return (
-    <OpsSection
-      title="Pattern debt"
-      description="Remediation-job recurrence only — not live health and not Launch / Fleet GO|NO-GO."
-      bodyPadding="none"
+    <section
+      className="page-section panel-elevated overflow-hidden"
+      aria-label="Pattern debt verdict"
     >
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-3 py-2">
         <StatusLamp value={lampValue} />
+        <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">
+          PATTERN DEBT
+        </span>
         <DenseTag variant={DEBT_LEVEL_VARIANT[level]} size="pill">
           {level}
         </DenseTag>
         {report.analysis_window != null && report.analysis_window !== '' && (
           <span className="text-dense-caption text-muted-foreground">{report.analysis_window}</span>
         )}
-        <span className="font-mono tabular-nums text-dense-caption text-muted-foreground">
-          {report.namespaces?.length ?? 0} ns · {report.tool_usage?.length ?? 0} tools
+        <span className="min-w-0 flex-1 font-mono tabular-nums text-dense-caption text-muted-foreground">
+          {report.namespaces?.length ?? 0} ns · {report.tool_usage?.length ?? 0} tools · remediation
+          history only
         </span>
+        {canFix === true && topPattern != null && onFixTopPattern != null && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            disabled={fixPending === true}
+            onClick={() => onFixTopPattern(topPattern)}
+          >
+            Fix top pattern
+          </Button>
+        )}
       </div>
       <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
         {metrics.map(m => (
@@ -289,7 +312,7 @@ function PatternDebtStrip({
           </div>
         ))}
       </div>
-    </OpsSection>
+    </section>
   )
 }
 
@@ -760,11 +783,14 @@ function PatternsTable({
   onFixPattern,
   fixPending,
   canFix,
+  defaultCollapsed = false,
 }: {
   patterns: RetrospectivePatternCluster[]
   onFixPattern?: (pattern: RetrospectivePatternCluster) => void
   fixPending?: boolean
   canFix?: boolean
+  /** When true (e.g. debt CLEAR), collapse the patterns body by default. */
+  defaultCollapsed?: boolean
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey] = useState<PatternSortKey>('occurrences')
@@ -806,6 +832,8 @@ function PatternsTable({
       <OpsSection
         title="Patterns"
         description="Grouped by Apollo System Domain. Role = Fleet Desk identity for the target — Domain alone is not enough."
+        collapsible={defaultCollapsed}
+        defaultCollapsed={defaultCollapsed}
       >
         <p className="p-6 text-center text-muted-foreground text-dense-body">
           No recurring patterns match this filter.
@@ -817,6 +845,8 @@ function PatternsTable({
     <OpsSection
       title="Patterns"
       description="Grouped by Apollo System Domain. Role = Fleet Desk identity (Rocket / Satellite / …) for the target; Domain = plane that ran the check. Hover headers for full names; click to sort within each Domain."
+      collapsible={defaultCollapsed}
+      defaultCollapsed={defaultCollapsed}
     >
       <div className="overflow-x-auto">
       <DenseDataTable tableClassName="min-w-[1100px] !table-auto">
@@ -1193,11 +1223,7 @@ export function DefectsPage({
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <ConsolePageHeader
-          title="Defects"
-          help="Cross-job Agent remediation pattern analysis (history debt) — not live health or Launch GO|NO-GO. Filter by Apollo System Domain."
-          actions={refreshAction}
-        />
+        <PageToolbar>{refreshAction}</PageToolbar>
         <OpsSection title="Analysis">
           <p className="p-8 text-center text-muted-foreground text-dense-body">
             Analyzing remediation job history…
@@ -1211,11 +1237,7 @@ export function DefectsPage({
     const message = error instanceof Error ? error.message : 'Failed to load retrospective report'
     return (
       <div className="space-y-4">
-        <ConsolePageHeader
-          title="Defects"
-          help="Cross-job Agent remediation pattern analysis (history debt) — not live health or Launch GO|NO-GO. Filter by Apollo System Domain."
-          actions={refreshAction}
-        />
+        <PageToolbar>{refreshAction}</PageToolbar>
         <OpsSection title="Analysis">
           <div className="flex flex-col items-center gap-3 p-8 text-center">
             <AlertCircle className="h-8 w-8 text-destructive" />
@@ -1233,11 +1255,7 @@ export function DefectsPage({
   if (data == null || isReportEmpty(data)) {
     return (
       <div className="space-y-4">
-        <ConsolePageHeader
-          title="Defects"
-          help="Cross-job Agent remediation pattern analysis (history debt) — not live health or Launch GO|NO-GO. Filter by Apollo System Domain."
-          actions={refreshAction}
-        />
+        <PageToolbar>{refreshAction}</PageToolbar>
         <OpsSection title="Analysis">
           <p className="p-8 text-center text-muted-foreground text-dense-body">
             No remediation job history yet — patterns will appear after Agent runs complete.
@@ -1247,17 +1265,27 @@ export function DefectsPage({
     )
   }
 
+  const debtClear =
+    patternDebtLevel(
+      data.health_score ?? 0,
+      filteredPatterns.filter(isTrendingPattern).length,
+      filteredPatterns.filter(isStructuralPattern).length,
+    ) === 'CLEAR'
+
   return (
     <div className="space-y-4">
-      <ConsolePageHeader
-        title="Defects"
-        help="Cross-job Agent remediation pattern analysis (history debt) — not live health or Launch / Fleet GO|NO-GO. Apollo System Domains align with Blueprint / Agent Protocol / sidebar; scope names remain Agent routing ids."
-        actions={refreshAction}
+      <PatternDebtStrip
+        report={data}
+        patterns={filteredPatterns}
+        onFixTopPattern={handleFixPattern}
+        fixPending={patternFixMutation.isPending}
+        canFix={canOperate}
       />
+
+      <PageToolbar>{refreshAction}</PageToolbar>
 
       {domainFilterBar}
 
-      <PatternDebtStrip report={data} patterns={filteredPatterns} />
       <AttentionPanel
         patterns={filteredPatterns}
         onFixPattern={handleFixPattern}
@@ -1272,6 +1300,7 @@ export function DefectsPage({
           onFixPattern={handleFixPattern}
           fixPending={patternFixMutation.isPending}
           canFix={canOperate}
+          defaultCollapsed={debtClear}
         />
       </div>
 

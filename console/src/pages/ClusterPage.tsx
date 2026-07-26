@@ -12,6 +12,7 @@ import {
   DEFAULT_STORAGE_SERVICE,
   type StorageServiceId,
 } from '@/lib/cluster/storageServiceCatalog'
+import { OpsSection } from '@/components/layout/OpsSection'
 import { ClusterPageChrome } from '@/pages/cluster/ClusterPageChrome'
 import { ClusterPageMain } from '@/pages/cluster/ClusterPageMain'
 import { useClusterPageMutations } from '@/pages/cluster/useClusterPageMutations'
@@ -186,6 +187,9 @@ export function ClusterPage({
         onEnsureMetricsServer={m.handleEnsureMetricsServer}
         onEnsureNamespaces={m.handleEnsureNamespaces}
         unreachable={q.unreachable}
+        clusterSummary={q.clusterSummary}
+        summaryFailed={q.clusterSummaryError != null}
+        isProbing={q.summaryQuery.isPending && q.clusterSummary == null}
       />
 
       <ClusterOverviewKpi
@@ -194,14 +198,17 @@ export function ClusterPage({
         isLoading={q.summaryQuery.isLoading || q.metricsQuery.isLoading}
       />
 
-      <section
-        className="cluster-global-top-pods page-section"
-        aria-label="Cluster-wide pod resource usage"
-      >
+      <div className="cluster-global-top-pods">
         <ClusterTopPodsTable metrics={q.metricsQuery.data} isLoading={q.metricsQuery.isLoading} />
-      </section>
+      </div>
 
-      <section className="page-section panel-elevated cluster-home-summaries px-3 py-2">
+      <OpsSection
+        className="cluster-home-summaries"
+        title="Categories"
+        description="Infrastructure and application domains"
+        bodyPadding="compact"
+        overflow="visible"
+      >
         <ClusterCategoryGrid
           summary={q.clusterSummary}
           summaryLoading={q.summaryQuery.isLoading}
@@ -218,7 +225,7 @@ export function ClusterPage({
           categoryCopyState={q.categoryCopyState}
           onCopyCategory={q.handleCopyCategoryForLlm}
         />
-      </section>
+      </OpsSection>
 
       <ClusterPageMain
         q={q}

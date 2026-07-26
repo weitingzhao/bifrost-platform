@@ -357,18 +357,39 @@ function buildRuntimeConsumers(
   })
 
   const sync = bus?.monitor.account_sync
+  const daemonConsumerHealth = daemonRow != null ? consumerHealth(daemonRow) : 'unknown'
+  const daemonTradingSideUp =
+    !daemonExpectedOff && (daemonConsumerHealth === 'ok' || daemonConsumerHealth === 'degraded')
+
   let syncHealth: BusNodeHealth
   let syncState: string
   let syncDetail: string
   if (sync == null) {
-    syncHealth = 'unknown'
-    syncState = 'UNKNOWN'
-    syncDetail = 'No account-sync probe'
+    if (daemonTradingSideUp) {
+      syncHealth = 'degraded'
+      syncState = 'PAIR ASYMMETRIC'
+      syncDetail = 'daemon up · account-sync down (co-scale pair)'
+    } else {
+      syncHealth = 'unknown'
+      syncState = 'UNKNOWN'
+      syncDetail = 'No account-sync probe'
+    }
   } else if (daemonExpectedOff && sync.daemon_alive !== true) {
     // Daemon is intentionally scaled to zero — a quiet account sync is expected.
     syncHealth = 'expected-off'
     syncState = 'EXPECTED OFF'
     syncDetail = 'Account sync idle while daemon is scaled to 0 by env policy — not a fault'
+  } else if (
+    daemonTradingSideUp &&
+    (sync.daemon_alive !== true ||
+      sync.reachability === 'fail' ||
+      sync.reachability === 'degraded' ||
+      sync.reachability === 'unknown')
+  ) {
+    // Prod Sync Offline / co-scale pair break — trading side up, sync side down.
+    syncHealth = 'degraded'
+    syncState = 'PAIR ASYMMETRIC'
+    syncDetail = 'daemon up · account-sync down (co-scale pair)'
   } else if (sync.reachability === 'ok') {
     syncHealth = 'ok'
     syncState = 'OK'

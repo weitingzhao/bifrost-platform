@@ -92,13 +92,8 @@
   box-shadow: inset 0 -2px 0 0 var(--task-mode-accent-border);
 }
 
-/* Active mode banner */
-.task-mode-active-banner {
-  border-left: 3px solid var(--task-mode-accent);
-  background: var(--task-mode-accent-subtle);
-}
-
-.task-mode-active-banner__icon {
+/* Active mode capsule (in ConsoleHeader) — accent icon */
+.task-mode-capsule__icon {
   color: var(--task-mode-accent);
 }
 

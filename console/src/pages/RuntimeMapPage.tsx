@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { OpsSection } from '@/components/layout/OpsSection'
 import { RuntimeAgentStrip } from '@/components/runtime-map/RuntimeAgentStrip'
 import { RuntimeHardwarePanel } from '@/components/runtime-map/RuntimeHardwarePanel'
 import { RuntimeHealthStrip } from '@/components/runtime-map/RuntimeHealthStrip'
@@ -140,33 +141,41 @@ export function RuntimeMapPage({
         gapOverview={gapOverview}
         onSelectTarget={id => applySelection({ kind: 'target', id })}
         onSelectNode={id => applySelection({ kind: 'node', id })}
+        onOpenCluster={onOpenCluster}
       />
 
-      <div className="runtime-map-split grid gap-4 lg:grid-cols-[11fr_9fr] min-h-0">
-        <RuntimeHardwarePanel
-          data={topology}
-          clusterLive={clusterLive}
-          onOpenCluster={onOpenCluster}
-          selectedNodeId={selectedNodeId}
-          selectedEdgeId={selectedEdgeId}
-          highlightNodeIds={highlightNodeIds}
-          highlightEdgeIds={highlightEdgeIds}
-          highlightChipIds={highlightChipIds}
-          selectedChipId={selectedChipId}
-          onSelectNode={id => applySelection({ kind: 'node', id })}
-          onSelectEdge={id => applySelection({ kind: 'edge', id })}
-          onSelectChip={handleSelectChip}
-        />
-        <RuntimeSoftwarePanel
-          matrix={matrix}
-          context={context}
-          topology={topology}
-          selection={selection}
-          gapOverview={gapOverview}
-          onSelectTarget={id => applySelection({ kind: 'target', id })}
-          onSelectScope={tag => applySelection({ kind: 'scope', tag })}
-        />
-      </div>
+      <OpsSection
+        title="Hardware · Software"
+        description="Select a node, edge, or chip to sync both panels"
+        bodyPadding="compact"
+        overflow="visible"
+      >
+        <div className="runtime-map-split grid gap-4 lg:grid-cols-[11fr_9fr] min-h-0">
+          <RuntimeHardwarePanel
+            data={topology}
+            clusterLive={clusterLive}
+            onOpenCluster={onOpenCluster}
+            selectedNodeId={selectedNodeId}
+            selectedEdgeId={selectedEdgeId}
+            highlightNodeIds={highlightNodeIds}
+            highlightEdgeIds={highlightEdgeIds}
+            highlightChipIds={highlightChipIds}
+            selectedChipId={selectedChipId}
+            onSelectNode={id => applySelection({ kind: 'node', id })}
+            onSelectEdge={id => applySelection({ kind: 'edge', id })}
+            onSelectChip={handleSelectChip}
+          />
+          <RuntimeSoftwarePanel
+            matrix={matrix}
+            context={context}
+            topology={topology}
+            selection={selection}
+            gapOverview={gapOverview}
+            onSelectTarget={id => applySelection({ kind: 'target', id })}
+            onSelectScope={tag => applySelection({ kind: 'scope', tag })}
+          />
+        </div>
+      </OpsSection>
 
       <RuntimeAgentStrip
         topology={topology}

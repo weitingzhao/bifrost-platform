@@ -1,9 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, PageHeader, PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
+import { Button, PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { RemediationJob } from '@/api/remediationTypes'
-import { AgentExecutionDock } from '@/components/agent/AgentExecutionDock'
+import {
+  AgentExecutionDock,
+  persistOperatorTool,
+  readStoredTool,
+  type OperatorToolId,
+} from '@/components/agent/AgentExecutionDock'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useLaneCatalog } from '@/hooks/useLaneCatalog'
 import { useAgentTaskCatalog } from '@/hooks/useAgentTaskCatalog'
@@ -19,15 +24,17 @@ import { fetchContext, fetchEnvironments, fetchMatrix, fetchPlatformHealth, fetc
 import { fetchStgSmoke, fetchReleaseGate, fetchTierBStatus } from '@/api/promote'
 import { fetchSupplyChain } from '@/api/delivery'
 import { consoleNavPlane } from '@/lib/consoleNavConfig'
+import { scrollToSection } from '@/lib/dom/scrollToSection'
 import { BackToMissionLaunchButton } from '@/components/delivery/LaneDetailShell'
 import { LANE_DETAIL_SUBTITLE } from '@/lib/delivery/laneDetailContext'
 import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 import type { OpenRuntimeMapFn, RuntimeMapNavigateOptions } from '@/lib/runtime-map/runtimeMapNavigation'
 import { type EnvFilter } from '@/components/EnvironmentStrip'
-import { FocusStrip } from '@/components/FocusStrip'
-import { PlatformAuthBar } from '@/components/PlatformAuthBar'
-import { ConsoleHeader, OpsContextBar } from '@/components/ConsoleHeader'
+import { ConsoleHeader } from '@/components/ConsoleHeader'
+import { OpsContextStrip } from '@/components/OpsContextStrip'
 import { ConsoleSidebar, type ConsoleViewTab } from '@/components/ConsoleSidebar'
+import { GuidesSettingsNav } from '@/components/GuidesSettingsNav'
+import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
 import { AgentCapabilityPage } from '@/pages/AgentCapabilityPage'
@@ -53,7 +60,6 @@ import { PlacementPage } from '@/pages/PlacementPage'
 import { PlatformReleasePage } from '@/pages/PlatformReleasePage'
 import { TradeReleasePage } from '@/pages/TradeReleasePage'
 import { ControlRoomRuntimeMapSheet } from '@/components/control-room/ControlRoomRuntimeMapSheet'
-import { ServerConsolePage } from '@/pages/ServerConsolePage'
 import { DesignSystemPage } from '@/pages/DesignSystemPage'
 import { RoadmapPage } from '@/pages/RoadmapPage'
 import { DualFlywheelVisionPage } from '@/pages/DualFlywheelVisionPage'
@@ -67,7 +73,6 @@ import { DefectsPage } from '@/pages/DefectsPage'
 import { DevAgentPage } from '@/pages/DevAgentPage'
 import { StandardsPage } from '@/pages/StandardsPage'
 import { TaskControlCenterPage } from '@/pages/TaskControlCenterPage'
-import { TaskModeActiveBanner } from '@/components/task-mode/TaskModeActiveBanner'
 import { TaskModeProvider, useTaskMode } from '@/lib/task-mode/TaskModeContext'
 import { formatConsoleHash } from '@/lib/task-mode/taskModeUrl'
 import type { TaskModeId } from '@/lib/task-mode/types'
@@ -115,14 +120,71 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   defects: 'Defects',
 }
 
-/** Positioning copy for core Engineer / Mission Control work surfaces. */
+/** Page help — shown on breadcrumb ? tooltip (system-wide; no in-page PageHeader subtitle). */
 const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   briefing: 'Plan and start work — pick scope and lane, open Session.',
   'delivery-board': 'Phased sign-off checklists — verify and close delivery programs.',
   'agent-desk': 'Operate and observe — run agent tasks, review remediation, close sessions.',
   'agent-capability':
     'Live capability readiness — which agent scopes are ready, running, awaiting approval, or failed.',
+  'control-room':
+    'Mission diagnosis — payload reachability, rocket/satellite launches, agent loop, and command intent. Topology opens as a drill-down sheet.',
+  observability: 'Apollo-domain system health hub — Grafana is deep evidence, not a second control plane.',
+  'task-cc': 'Task-mode cockpit — checklist, fleet, and launch evidence for the active lens.',
+  audit:
+    'Canonical actuation history for platform-api — GitOps, cluster, remediation/Agent lifecycle, and other operator writes.',
+  defects:
+    'Cross-job Agent remediation pattern analysis (history debt) — not live health or Launch GO|NO-GO.',
+  cluster: 'K3s nodes, namespaces, workloads, and platform-api actuation (join, power, rollout).',
+  placement:
+    'Fleet facility constraints — node pools and scheduling policy for Rocket CI, Satellite STG, and shared infra.',
+  'trade-release': LANE_DETAIL_SUBTITLE,
+  'platform-release': LANE_DETAIL_SUBTITLE,
+  console:
+    'Legacy hash — opens shell Operator Dock Console slot (SSH). Prefer Operator Dock Agent | Console.',
+  network: 'Ground floor LAN / UniFi — live UCG probe, firewall drift audit, devices, and clients.',
+  compute:
+    'Physical ground systems — K3s nodes, Wake-on-LAN, join profiles, cordon/drain. Workload detail lives on Rocket → Cluster.',
+  'satellite-bus':
+    'Bus health for the selected Trade namespace — shared dependencies (Platform IB Gateway → redis-ib).',
+  'satellite-telemetry':
+    'Trade-namespace golden signals via platform-api preset PromQL proxy. System-wide health → Observability.',
+  'satellite-api':
+    'Per-environment matrix probes for Trade satellite endpoints — HTTP reachability, ops auth, and D10 blocked writes.',
+  'plugin-gallery':
+    'External subcontractor plugins — live L0 probes and L1 actuation for platform-managed integrations.',
+  'operator-plane':
+    'Out-of-band recovery layer — AI Remediation Runners outside K8s on dual Mac Minis (fate isolation D7 / L-1).',
+  'flywheel-vision':
+    'WHERE — Ultimate destination: Trade + Ops converge into unified AI-native experience via three-layer Agents.',
+  blueprint:
+    'HOW — Architectural principles, control-plane strategy, authorization model, and design rules toward the Vision.',
+  roadmap: 'WHEN — Phased execution plan: hardware roles, K3s stages, GitOps migration, AI ops timeline.',
+  'ai-compute':
+    'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.',
+  'platform-standards': 'Trade stack probe contract, cluster actuation phases, and API route inventory.',
+  'agent-system':
+    'Single runtime, capability domains, task chains, and registry — the map before Agent Protocol and MCP Contract.',
+  'agent-protocol':
+    'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.',
+  'briefing-reconciliation':
+    'Spine projection discipline — source of truth layers, reconcile gate (BRIEFING_STALE), Sync vs Health, drift layer map.',
+  'mcp-contract': 'MCP tool catalog, Cursor setup, and governance contract (permissions, deny-list).',
+  'design-system':
+    'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.',
+  'autonomous-skills':
+    'Hermes Skills and Schedules — trigger types, actuation levels, and cron/webhook inventory.',
+  'execution-log':
+    'Hermes autonomous execution history — every Skill run, trigger, duration, and outcome.',
+  'agent-governance':
+    'Trust matrix and autonomy policy — which skills may auto-act vs require confirmation.',
+  'runtime-map':
+    'Live topology of rocket, satellite, and agent paths — hardware, software stack, and gap analysis.',
+  'dev-agent':
+    'Guided multi-phase Dev Agent jobs — select program, run phases, approve or reject with feedback.',
 }
+
+
 
 const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'agent-desk',
@@ -193,12 +255,19 @@ function ConsolePageInner() {
   const [agentDeskFocusDecisionBriefs, setAgentDeskFocusDecisionBriefs] = useState(false)
   /** Shell-level ambient agent job — survives tab switches. */
   const [ambientJob, setAmbientJob] = useState<AmbientAgentJob | null>(null)
-  /** Agent Execution Dock expanded (working/maximized); collapsed when false. */
+  /** Operator Dock expanded (working/maximized); collapsed when false. */
   const [dockExpanded, setDockExpanded] = useState(false)
+  /** Operator Dock tool slot — Agent | Console; restore last slot across refresh. */
+  const [operatorToolId, setOperatorToolIdState] = useState<OperatorToolId>(readStoredTool)
+  const setOperatorToolId = useCallback((tool: OperatorToolId) => {
+    persistOperatorTool(tool)
+    setOperatorToolIdState(tool)
+  }, [])
   const [runtimeMapFocus, setRuntimeMapFocus] = useState<RuntimeMapNavigateOptions | null>(null)
   const [runtimeMapSheetOpen, setRuntimeMapSheetOpen] = useState(false)
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
+  const { viewerEnv, viewerEnvLoading } = useFleetSnapshot()
 
   const envForRuntime = envFilter === 'all' ? 'prod' : envFilter
 
@@ -402,7 +471,13 @@ function ConsolePageInner() {
     }
     setViewTab('briefing')
   }, [setViewTab])
-  const openOperatorPlane = () => setViewTab('operator-plane')
+  const openOperatorPlane = useCallback(() => {
+    setViewTab('operator-plane')
+    // Defer until Operator Plane mounts so #agent-host-deploy exists.
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => scrollToSection('agent-host-deploy'), 80)
+    })
+  }, [setViewTab])
   const openAgentDesk = useCallback((jobIdOrOpts?: OpenAgentDeskArg) => {
     if (typeof jobIdOrOpts === 'string') {
       setAgentDeskJobId(jobIdOrOpts)
@@ -434,10 +509,23 @@ function ConsolePageInner() {
     setDockExpanded(true)
   }, [])
 
+  const openOperatorDock = useCallback((tool: OperatorToolId = 'agent') => {
+    setOperatorToolId(tool)
+    setDockExpanded(true)
+  }, [setOperatorToolId])
+
+  /** Legacy hash / deep-link `#console` → Operator Dock Console + Network (nav page removed). */
+  useEffect(() => {
+    if (viewTab !== 'console') return
+    openOperatorDock('console')
+    setViewTab('network')
+  }, [viewTab, openOperatorDock, setViewTab])
+
   const startAmbientAgentJob = useCallback((job: AmbientAgentJob) => {
     setAmbientJob(job)
+    setOperatorToolId('agent')
     setDockExpanded(true)
-  }, [])
+  }, [setOperatorToolId])
 
   const handleAmbientJobComplete = useCallback(
     (_job: RemediationJob) => {
@@ -508,10 +596,6 @@ function ConsolePageInner() {
         activeTab={viewTab}
         onSelect={(id) => setViewTab(id as ConsoleViewTab)}
         onModeChange={handleTaskModeChange}
-        agentTask={{
-          runningLabel: ambientJob?.label ?? null,
-          onExpandDock: expandAgentDock,
-        }}
       />
       <SidebarInset
         className="min-w-0 overflow-x-hidden pb-[var(--agent-dock-reserve,2.75rem)]"
@@ -523,32 +607,53 @@ function ConsolePageInner() {
           } as CSSProperties
         }
       >
-        <div className="console-shell-chrome sticky top-0 z-20 bg-card">
+        <div className="console-shell-chrome sticky top-0 z-20 shrink-0 bg-card">
           <ConsoleHeader
             plane={consoleNavPlane(viewTab)}
+            pageTitle={VIEW_TITLES[viewTab]}
+            pageDescription={VIEW_DESCRIPTIONS[viewTab]}
+            pageActions={
+              isGovernanceTab ? (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="shrink-0"
+                  onClick={() => void handleCopyAllGovernance()}
+                >
+                  {govCopyState === 'copied'
+                    ? 'All copied!'
+                    : govCopyState === 'error'
+                      ? 'Copy failed'
+                      : 'Copy All for LLM'}
+                </Button>
+              ) : viewTab === 'trade-release' || viewTab === 'platform-release' ? (
+                <BackToMissionLaunchButton onClick={() => openLaunchView('mission-launch')} />
+              ) : undefined
+            }
             healthy={healthQuery.data}
             onRefresh={refreshAll}
+            viewerEnv={viewerEnv}
+            viewerEnvLoading={viewerEnvLoading}
+            onSelectTab={tabId => {
+              if (isConsoleViewTab(tabId)) setViewTab(tabId)
+            }}
             ambientAgent={{
               label: ambientJob?.label ?? 'Agent Task',
               onOpen: expandAgentDock,
               expanded: dockExpanded,
               running: ambientJob != null,
             }}
-          >
-            <PlatformAuthBar compact hideRefresh />
-          </ConsoleHeader>
-          <TaskModeActiveBanner onModeChange={handleTaskModeChange} />
-          {OPS_CONTEXT_TABS.includes(viewTab) && (
-            <OpsContextBar>
-              <FocusStrip
-                onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
-                onOpenAgentDeskWithPrefill={prefill => openAgentDesk({ prefill })}
-                onOpenRuntimeMap={openRuntimeMap}
-              />
-            </OpsContextBar>
-          )}
+            onModeChange={handleTaskModeChange}
+          />
         </div>
       <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
+        {OPS_CONTEXT_TABS.includes(viewTab) && (
+          <OpsContextStrip
+            onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
+            onOpenAgentDeskWithPrefill={prefill => openAgentDesk({ prefill })}
+            onOpenRuntimeMap={openRuntimeMap}
+          />
+        )}
         {viewTab === 'agent-desk' && (
           <AgentDeskPage
             context={contextQuery.data}
@@ -598,12 +703,7 @@ function ConsolePageInner() {
         {viewTab === 'agent-governance' && <AgentGovernancePage />}
 
         {viewTab === 'briefing' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES.briefing}
-              description={VIEW_DESCRIPTIONS.briefing}
-            />
-            <BriefingPage
+          <BriefingPage
               context={contextQuery.data}
               contextLoading={contextQuery.isLoading}
               matrices={pulseMatrices}
@@ -615,7 +715,6 @@ function ConsolePageInner() {
               auditLoading={auditQuery.isLoading}
               onOpenAudit={openAudit}
             />
-          </>
         )}
 
         {viewTab === 'control-room' && (
@@ -693,78 +792,44 @@ function ConsolePageInner() {
         )}
 
         {viewTab === 'cluster' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES.cluster}
-              description="K3s nodes, namespaces, workloads, and platform-api actuation (join, power, rollout)."
-            />
-            <ClusterPage
+          <ClusterPage
               onOpenStandards={openStandards}
               onOpenRuntimeMap={() => openRuntimeMap()}
               onOpenAudit={openAudit}
-              onOpenServerConsole={() => setViewTab('console')}
+              onOpenServerConsole={() => openOperatorDock('console')}
               onOpenAgentDesk={openAgentDesk}
               onOpenDefects={() => setViewTab('defects')}
               onOpenObservability={openObservability}
               ambientJobId={ambientJob?.id ?? null}
               onStartAgentJob={startAmbientAgentJob}
             />
-          </>
         )}
 
         {viewTab === 'placement' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES.placement}
-              description="Fleet facility constraints — node pools and scheduling policy for Rocket CI, Satellite STG, and shared infra. Not satellite-only planning."
-            />
-            <PlacementPage onOpenDelivery={openDelivery} onOpenCluster={openCluster} />
-          </>
+          <PlacementPage onOpenDelivery={openDelivery} onOpenCluster={openCluster} />
         )}
 
-        {viewTab === 'delivery-board' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES['delivery-board']}
-              description={VIEW_DESCRIPTIONS['delivery-board']}
-            />
-            <DeliveryBoardPage />
-          </>
-        )}
+        {viewTab === 'delivery-board' && <DeliveryBoardPage onOpenBriefing={openBriefing} />}
 
         {viewTab === 'trade-release' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES['trade-release']}
-              description={LANE_DETAIL_SUBTITLE}
-              actions={<BackToMissionLaunchButton onClick={() => openLaunchView('mission-launch')} />}
-            />
-            <TradeReleasePage
+          <TradeReleasePage
               context={contextQuery.data}
               isLoading={contextQuery.isLoading}
               onOpenPlacement={openPlacement}
               onOpenSatelliteBus={openSatelliteBus}
               onOpenObservability={openObservability}
               onOpenApiHealth={openSatelliteApi}
-            />
-          </>
-        )}
-
-        {viewTab === 'platform-release' && (
-          <>
-            <PageHeader
-              title={VIEW_TITLES['platform-release']}
-              description={LANE_DETAIL_SUBTITLE}
-              actions={<BackToMissionLaunchButton onClick={() => openLaunchView('mission-launch')} />}
-            />
-            <PlatformReleasePage
               ambientJobId={ambientJob?.id ?? null}
               onStartAgentJob={startAmbientAgentJob}
             />
-          </>
         )}
 
-        {viewTab === 'console' && <ServerConsolePage />}
+        {viewTab === 'platform-release' && (
+          <PlatformReleasePage
+              ambientJobId={ambientJob?.id ?? null}
+              onStartAgentJob={startAmbientAgentJob}
+            />
+        )}
 
         {viewTab === 'network' && (
           <NetworkPage
@@ -807,66 +872,38 @@ function ConsolePageInner() {
         {viewTab === 'plugin-gallery' && <PluginGalleryPage />}
 
         {isGovernanceTab && (
-          <div className="flex items-center justify-between gap-3">
-            <PageHeader
-              title={VIEW_TITLES[viewTab]}
-              description={
-                viewTab === 'flywheel-vision' ? 'WHERE — Ultimate destination: Trade + Ops converge into unified AI-native experience via three-layer Agents.'
-                  : viewTab === 'blueprint' ? 'HOW — Architectural principles, control-plane strategy, authorization model, and design rules toward the Vision.'
-                  : viewTab === 'roadmap' ? 'WHEN — Phased execution plan: hardware roles, K3s stages, GitOps migration, AI ops timeline.'
-                  : viewTab === 'ai-compute' ? 'AI compute layer — tiered model sourcing, inference hardware trade-offs, quantization sweet spots, and demand-driven purchase signals.'
-                  : viewTab === 'platform-standards' ? 'Trade stack probe contract, cluster actuation phases, and API route inventory.'
-                  : viewTab === 'agent-system'
-                    ? 'Single runtime, capability domains, task chains, and registry — the map before Agent Protocol and MCP Contract.'
-                  : viewTab === 'agent-protocol' ? 'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.'
-                  : viewTab === 'briefing-reconciliation'
-                    ? 'Spine projection discipline — source of truth layers, reconcile gate (BRIEFING_STALE), Sync vs Health, drift layer map.'
-                  : viewTab === 'mcp-contract'
-                    ? 'MCP tool catalog, Cursor setup, and governance contract (permissions, deny-list).'
-                  : 'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.'
-              }
+          <div className="flex min-w-0 gap-4">
+            <GuidesSettingsNav
+              activeTab={viewTab}
+              onSelect={tabId => {
+                if (isConsoleViewTab(tabId)) setViewTab(tabId)
+              }}
             />
-            <Button
-              variant="ghost"
-              size="xs"
-              className="shrink-0"
-              onClick={() => void handleCopyAllGovernance()}
-            >
-              {govCopyState === 'copied' ? 'All copied!' : govCopyState === 'error' ? 'Copy failed' : 'Copy All for LLM'}
-            </Button>
+            <div className="flex min-w-0 flex-1 flex-col gap-4">
+              {viewTab === 'blueprint' && <BlueprintPage context={contextQuery.data} />}
+              {viewTab === 'flywheel-vision' && <DualFlywheelVisionPage />}
+              {viewTab === 'roadmap' && <RoadmapPage />}
+              {viewTab === 'ai-compute' && <AiComputeStrategyPage />}
+              {viewTab === 'platform-standards' && <StandardsPage />}
+              {viewTab === 'agent-system' && (
+                <AgentSystemPage
+                  onOpenDoctrine={tab => setViewTab(tab === 'mcp-contract' ? 'mcp-contract' : 'agent-protocol')}
+                />
+              )}
+              {viewTab === 'agent-protocol' && (
+                <AgentProtocolPage
+                  onOpenDeliveryBoard={() => setViewTab('delivery-board')}
+                  onOpenAgentSystem={() => setViewTab('agent-system')}
+                />
+              )}
+              {viewTab === 'briefing-reconciliation' && (
+                <BriefingReconciliationPage context={contextQuery.data} onOpenAgentDesk={openAgentDesk} />
+              )}
+              {viewTab === 'mcp-contract' && <McpContractPage />}
+              {viewTab === 'design-system' && <DesignSystemPage />}
+            </div>
           </div>
         )}
-
-        {viewTab === 'blueprint' && <BlueprintPage context={contextQuery.data} />}
-
-        {viewTab === 'flywheel-vision' && <DualFlywheelVisionPage />}
-
-        {viewTab === 'roadmap' && <RoadmapPage />}
-
-        {viewTab === 'ai-compute' && <AiComputeStrategyPage />}
-
-        {viewTab === 'platform-standards' && <StandardsPage />}
-
-        {viewTab === 'agent-system' && (
-          <AgentSystemPage
-            onOpenDoctrine={tab => setViewTab(tab === 'mcp-contract' ? 'mcp-contract' : 'agent-protocol')}
-          />
-        )}
-
-        {viewTab === 'agent-protocol' && (
-          <AgentProtocolPage
-            onOpenDeliveryBoard={() => setViewTab('delivery-board')}
-            onOpenAgentSystem={() => setViewTab('agent-system')}
-          />
-        )}
-
-        {viewTab === 'briefing-reconciliation' && (
-          <BriefingReconciliationPage context={contextQuery.data} onOpenAgentDesk={openAgentDesk} />
-        )}
-
-        {viewTab === 'mcp-contract' && <McpContractPage />}
-
-        {viewTab === 'design-system' && <DesignSystemPage />}
 
         <ControlRoomRuntimeMapSheet
           open={runtimeMapSheetOpen}
@@ -892,6 +929,8 @@ function ConsolePageInner() {
         scope={ambientJob?.scope}
         expanded={dockExpanded}
         onExpandedChange={setDockExpanded}
+        toolId={operatorToolId}
+        onToolIdChange={setOperatorToolId}
         onDismiss={() => {
           setAmbientJob(null)
           setDockExpanded(true)
@@ -900,6 +939,7 @@ function ConsolePageInner() {
           if (id != null && id !== '') openAgentDesk(id)
           else openAgentDeskTab()
         }}
+        onOpenOperatorPlane={openOperatorPlane}
         onComplete={handleAmbientJobComplete}
       />
     </SidebarProvider>

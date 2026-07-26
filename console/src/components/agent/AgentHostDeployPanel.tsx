@@ -2,10 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Button, ConfirmDialog, DenseTag, StatusLamp } from '@bifrost/ui'
 import type { AgentDeployJob, AgentDeployStatusResponse, AgentDeployTarget } from '@/api/agentTypes'
-import { fetchAgentDeployStatus, startAgentDeploy } from '@/api/agentOps'
+import { fetchAgentBridge, fetchAgentDeployStatus, startAgentDeploy } from '@/api/agentOps'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import {
+  findRunnerForDeployTarget,
+  runnerStatusReach,
+} from '@/lib/agent/macHostRole'
 
 function jobReach(job: AgentDeployJob | undefined): 'ok' | 'degraded' | 'fail' | 'unknown' {
   if (job == null) return 'unknown'
@@ -13,6 +17,13 @@ function jobReach(job: AgentDeployJob | undefined): 'ok' | 'degraded' | 'fail' |
   if (job.status === 'failed') return 'fail'
   if (job.status === 'running') return 'degraded'
   return 'unknown'
+}
+
+function runnerHealthLabel(status: string | undefined): string {
+  if (status === 'ok') return 'ok'
+  if (status === 'unavailable') return 'down'
+  if (status == null || status === '' || status === 'not_configured') return 'unknown'
+  return status
 }
 
 export function AgentHostDeployPanel() {
@@ -29,6 +40,13 @@ export function AgentHostDeployPanel() {
       if (data?.current?.status === 'running') return 1000
       return false
     },
+  })
+
+  const bridgeQuery = useQuery({
+    queryKey: ['agent', 'bridge'],
+    queryFn: fetchAgentBridge,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   })
 
   const deployMutation = useMutation({
@@ -80,6 +98,7 @@ export function AgentHostDeployPanel() {
 
   return (
     <OpsSection
+      id="agent-host-deploy"
       title="Agent hosts (Mini — primary + standby)"
       leading={<StatusLamp value={jobReach(displayJob)} kind="reach" />}
       description={
@@ -120,12 +139,28 @@ export function AgentHostDeployPanel() {
         <div className="mt-2 flex flex-col gap-1.5">
           {targets.map(t => {
             const isThisRunning = isRunning && activeJobRemote === t.remote
+            const runner = findRunnerForDeployTarget(bridgeQuery.data, t)
+            const reach = runnerStatusReach(runner?.status)
+            const health = runnerHealthLabel(runner?.status)
             return (
               <div
                 key={t.id}
                 className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-2 py-1.5"
               >
+                <StatusLamp value={reach} kind="reach" />
                 <DenseTag variant={t.role === 'primary' ? 'success' : 'neutral'}>{t.role}</DenseTag>
+                <span
+                  className={
+                    reach === 'ok'
+                      ? 'text-[var(--text-dense-meta)] lamp-ok'
+                      : reach === 'fail'
+                        ? 'text-[var(--text-dense-meta)] lamp-fail'
+                        : 'text-[var(--text-dense-meta)] text-muted-foreground'
+                  }
+                  title={runner?.url != null ? `Runner ${runner.url}` : 'No bridge heartbeat for this host'}
+                >
+                  {health}
+                </span>
                 <code className="font-mono-tabular text-[var(--text-dense-caption)]">{t.remote}</code>
                 {t.peer_url != null && t.peer_url !== '' && (
                   <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
