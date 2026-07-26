@@ -16,6 +16,10 @@ import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import {
+  clearSatelliteBusTradeEnvFocus,
+  peekSatelliteBusTradeEnvFocus,
+} from '@/lib/activity/activityPageFocus'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   buildSatelliteBusIngestTriagePrompt,
@@ -85,7 +89,14 @@ export function useSatelliteBusQueries({
   onStartAgentJob,
 }: AmbientAgentShellProps = {}) {
   const { canOperate } = usePlatformAuth()
-  const [tradeEnv, setTradeEnv] = useState<TradeEnv>('stg')
+  const [tradeEnv, setTradeEnv] = useState<TradeEnv>(() => {
+    const env = peekSatelliteBusTradeEnvFocus()
+    if (env != null) {
+      clearSatelliteBusTradeEnvFocus()
+      return env
+    }
+    return 'stg'
+  })
   const ns = TRADE_NS[tradeEnv]
 
   const matrixQuery = useQuery({

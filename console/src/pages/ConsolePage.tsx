@@ -38,6 +38,8 @@ import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useOperateQueueActivityBridge } from '@/hooks/useOperateQueueActivityBridge'
 import { usePipelineActivityBridge } from '@/hooks/usePipelineActivityBridge'
 import { upsertActivity, updateActivityPhase } from '@/lib/activity/activityStore'
+import { prepareSatelliteBusActivityFocus } from '@/lib/activity/activityPageFocus'
+import type { ActivityEvent } from '@/lib/activity/activityTypes'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
 import { AgentCapabilityPage } from '@/pages/AgentCapabilityPage'
@@ -260,6 +262,8 @@ function ConsolePageInner() {
   const [ambientJob, setAmbientJob] = useState<AmbientAgentJob | null>(null)
   /** Operator Dock expanded (working/maximized); collapsed when false. */
   const [dockExpanded, setDockExpanded] = useState(false)
+  /** Bumps when Activity deep-links into Bus Status (re-consume focus if already on page). */
+  const [satelliteBusFocusTick, setSatelliteBusFocusTick] = useState(0)
   /** Operator Dock tool slot — Agent | Console; restore last slot across refresh. */
   const [operatorToolId, setOperatorToolIdState] = useState<OperatorToolId>(readStoredTool)
   const setOperatorToolId = useCallback((tool: OperatorToolId) => {
@@ -663,6 +667,25 @@ function ConsolePageInner() {
             onSelectTab={tabId => {
               if (isConsoleViewTab(tabId)) setViewTab(tabId)
             }}
+            onOpenAgentDesk={id => {
+              if (id != null && id !== '') openAgentDesk(id)
+              else openAgentDeskTab()
+            }}
+            onActivateActivity={(ev: ActivityEvent) => {
+              if (ev.kind === 'agent' && ev.target != null && ev.target !== '') {
+                openAgentDesk(ev.target)
+                return
+              }
+              if (ev.linkTo === 'satellite-bus') {
+                prepareSatelliteBusActivityFocus(ev)
+                setSatelliteBusFocusTick(t => t + 1)
+                setViewTab('satellite-bus')
+                return
+              }
+              if (ev.linkTo != null && isConsoleViewTab(ev.linkTo)) {
+                setViewTab(ev.linkTo)
+              }
+            }}
             ambientAgent={{
               label: ambientJob?.label ?? 'Agent Task',
               onToggle: toggleAgentDock,
@@ -870,6 +893,7 @@ function ConsolePageInner() {
 
         {viewTab === 'satellite-bus' && (
           <SatelliteBusPage
+            activityFocusTick={satelliteBusFocusTick}
             onOpenCluster={openCluster}
             onOpenTelemetry={openSatelliteTelemetry}
             onOpenObservability={openObservability}

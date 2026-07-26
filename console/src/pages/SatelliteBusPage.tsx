@@ -2,10 +2,21 @@ import type { RefObject } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DenseTag, SegmentControl } from '@bifrost/ui'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
+import {
+  BusActuationStrip,
+  useInFlightBusWorkload,
+} from '@/components/activity/BusActuationStrip'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { PageToolbar } from '@/components/layout/PageToolbar'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import {
+  clearSatelliteBusTradeEnvFocus,
+  clearSatelliteBusWorkloadFocus,
+  peekSatelliteBusTradeEnvFocus,
+  peekSatelliteBusWorkloadFocus,
+  workloadToRuntimeConsumerId,
+} from '@/lib/activity/activityPageFocus'
 import { busHealthToReach } from '@/lib/satellite-bus/satelliteBusViewModel'
 import {
   clearSatelliteBusFocus,
@@ -25,8 +36,9 @@ import {
 
 function updateSatelliteBusPageHeight(root: HTMLDivElement | null) {
   if (root == null) return
-  const top = root.getBoundingClientRect().top
-  root.style.height = `calc(100dvh - ${Math.ceil(top)}px)`
+  const top = Math.ceil(root.getBoundingClientRect().top)
+  // SidebarInset reserves Operator Dock via --agent-dock-reserve; do not paint under it.
+  root.style.height = `calc(100dvh - ${top}px - var(--agent-dock-reserve, 2.75rem))`
 }
 
 function scrollToBusSection(
@@ -48,6 +60,7 @@ function scrollToBusSection(
 
 /** Wiring shell — queries + section composition. */
 export function SatelliteBusPage({
+  activityFocusTick = 0,
   onOpenCluster,
   onOpenTelemetry,
   onOpenObservability,
@@ -56,6 +69,8 @@ export function SatelliteBusPage({
   ambientJobId,
   onStartAgentJob,
 }: {
+  /** Incremented when Activity deep-links here (re-consume focus if already mounted). */
+  activityFocusTick?: number
   onOpenCluster?: () => void
   onOpenTelemetry?: () => void
   onOpenObservability?: () => void
@@ -64,6 +79,7 @@ export function SatelliteBusPage({
 } & AmbientAgentShellProps) {
   const q = useSatelliteBusQueries({ ambientJobId, onStartAgentJob })
   const [highlightSection, setHighlightSection] = useState<string | null>(null)
+  const [highlightWorkload, setHighlightWorkload] = useState<string | null>(null)
   const [inspect, setInspect] = useState<InspectTarget | null>(null)
   const [sharedOpen, setSharedOpen] = useState(false)
   const [otherEnvsOpen, setOtherEnvsOpen] = useState(false)
@@ -72,9 +88,12 @@ export function SatelliteBusPage({
   const detailScrollRef = useRef<HTMLDivElement | null>(null)
   const issuesSectionRef = useRef<HTMLElement | null>(null)
   const selectedSectionRef = useRef<HTMLDivElement | null>(null)
+  const operateSectionRef = useRef<HTMLDivElement | null>(null)
   const sharedSectionRef = useRef<HTMLDetailsElement | null>(null)
   const otherEnvsSectionRef = useRef<HTMLDetailsElement | null>(null)
   const evidenceSectionRef = useRef<HTMLDetailsElement | null>(null)
+  const inFlightWorkload = useInFlightBusWorkload(q.ns)
+  const activeWorkload = highlightWorkload ?? inFlightWorkload
 
   useEffect(() => {
     const root = pageRootRef.current
@@ -96,6 +115,7 @@ export function SatelliteBusPage({
     () =>
       ({
         monitor: { ref: selectedSectionRef, open: null },
+        operate: { ref: operateSectionRef, open: null },
         rocket: { ref: sharedSectionRef, open: setSharedOpen },
         cluster: { ref: sharedSectionRef, open: setSharedOpen },
         socket: { ref: otherEnvsSectionRef, open: setOtherEnvsOpen },
@@ -109,7 +129,32 @@ export function SatelliteBusPage({
     [],
   )
 
+  const focusWorkloadOnPage = useCallback((workload: string) => {
+    setHighlightWorkload(workload)
+    setHighlightSection('operate')
+    requestAnimationFrame(() => {
+      scrollToBusSection(operateSectionRef, detailScrollRef, setHighlightSection, 'operate')
+    })
+    window.setTimeout(() => setHighlightWorkload(null), 8_000)
+  }, [])
+
   useEffect(() => {
+    const envFocus = peekSatelliteBusTradeEnvFocus()
+    if (envFocus != null && envFocus !== q.tradeEnv) {
+      clearSatelliteBusTradeEnvFocus()
+      q.setTradeEnv(envFocus)
+      // Keep section/workload focus in session until Trade NS remounts.
+      return
+    }
+    if (envFocus != null) clearSatelliteBusTradeEnvFocus()
+
+    const workloadFocus = peekSatelliteBusWorkloadFocus()
+    if (workloadFocus != null) {
+      clearSatelliteBusWorkloadFocus()
+      setHighlightWorkload(workloadFocus)
+      window.setTimeout(() => setHighlightWorkload(null), 8_000)
+    }
+
     const focus = peekSatelliteBusFocus()
     if (focus == null) return
     const target = focusTargets[focus]
@@ -126,7 +171,7 @@ export function SatelliteBusPage({
     requestAnimationFrame(() => {
       scrollToBusSection(target.ref, detailScrollRef, setHighlightSection, focus)
     })
-  }, [focusTargets, q.busLoading, q.viewModel.health])
+  }, [focusTargets, q.busLoading, q.viewModel.health, q.tradeEnv, q.setTradeEnv, activityFocusTick])
 
   const openInspect = useCallback((target: InspectTarget) => {
     setInspect(target)
@@ -186,6 +231,8 @@ export function SatelliteBusPage({
             {q.aiIngestTriage.error.message}
           </OpsFeedback>
         )}
+
+        <BusActuationStrip namespace={q.ns} onFocusWorkload={focusWorkloadOnPage} />
 
         <OpsVerdictStrip
           ariaLabel="Bus health verdict"
@@ -268,6 +315,9 @@ export function SatelliteBusPage({
           viewModel={q.viewModel}
           busLoading={q.busLoading}
           highlightSection={highlightSection}
+          highlightWorkload={activeWorkload}
+          highlightRuntimeRowId={workloadToRuntimeConsumerId(activeWorkload ?? undefined)}
+          operateSectionRef={operateSectionRef}
           issuesSectionRef={issuesSectionRef}
           selectedSectionRef={selectedSectionRef}
           sharedSectionRef={sharedSectionRef}

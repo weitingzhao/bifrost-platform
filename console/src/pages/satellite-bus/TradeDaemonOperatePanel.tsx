@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
+import { Button, ConfirmDialog, DenseTag, cn } from '@bifrost/ui'
 import { rolloutRestartDeployment, scaleDeployment } from '@/api/clusterActuation'
 import type { ClusterWorkload } from '@/api/clusterTypes'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
@@ -34,12 +34,15 @@ export function TradeDaemonOperatePanel({
   canOperate,
   workloads,
   workloadsLoading,
+  highlightWorkload = null,
 }: {
   tradeEnv: TradeEnv
   namespace: string
   canOperate: boolean
   workloads: ClusterWorkload[]
   workloadsLoading: boolean
+  /** Activity / in-flight actuation workload to emphasize (account-sync | daemon). */
+  highlightWorkload?: string | null
 }) {
   const qc = useQueryClient()
   const [confirm, setConfirm] = useState<ConfirmTarget | null>(null)
@@ -177,13 +180,24 @@ export function TradeDaemonOperatePanel({
           </p>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5',
+            highlightWorkload === 'account-sync' &&
+              'bg-[color-mix(in_oklab,var(--color-info,#38bdf8)_12%,transparent)] ring-1 ring-[color-mix(in_oklab,var(--color-info,#38bdf8)_50%,var(--border))]',
+          )}
+        >
           <DenseTag variant="neutral" className="shrink-0 text-[10px] uppercase tracking-wide">
             account-sync
           </DenseTag>
           <span className="font-mono text-[var(--text-dense-meta)] text-muted-foreground">
             {workloadsLoading ? '…' : (accountSync?.ready ?? '—')}
           </span>
+          {highlightWorkload === 'account-sync' && (
+            <DenseTag variant="info" className="text-[9px] uppercase tracking-wide">
+              Actuation target
+            </DenseTag>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -226,10 +240,21 @@ export function TradeDaemonOperatePanel({
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5',
+            highlightWorkload === 'daemon' &&
+              'bg-[color-mix(in_oklab,var(--color-info,#38bdf8)_12%,transparent)] ring-1 ring-[color-mix(in_oklab,var(--color-info,#38bdf8)_50%,var(--border))]',
+          )}
+        >
           <DenseTag variant="neutral" className="shrink-0 text-[10px] uppercase tracking-wide">
             daemon
           </DenseTag>
+          {highlightWorkload === 'daemon' && (
+            <DenseTag variant="info" className="text-[9px] uppercase tracking-wide">
+              Actuation target
+            </DenseTag>
+          )}
           <span className="font-mono text-[var(--text-dense-meta)] text-muted-foreground">
             {workloadsLoading ? '…' : (daemon?.ready ?? '—')}
           </span>

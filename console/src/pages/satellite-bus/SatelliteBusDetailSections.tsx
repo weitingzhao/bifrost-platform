@@ -23,6 +23,11 @@ export type SatelliteBusDetailSectionsProps = {
   viewModel: SatelliteBusViewModel
   busLoading: boolean
   highlightSection: string | null
+  /** K8s workload name from Activity (account-sync / daemon). */
+  highlightWorkload?: string | null
+  /** Runtime Consumers row id to ring (account-sync / trading_engine). */
+  highlightRuntimeRowId?: string | null
+  operateSectionRef?: Ref<HTMLDivElement>
   issuesSectionRef: Ref<HTMLElement>
   selectedSectionRef: Ref<HTMLDivElement>
   sharedSectionRef: Ref<HTMLDetailsElement>
@@ -61,6 +66,9 @@ export function SatelliteBusDetailSections({
   viewModel,
   busLoading,
   highlightSection,
+  highlightWorkload = null,
+  highlightRuntimeRowId = null,
+  operateSectionRef,
   issuesSectionRef,
   selectedSectionRef,
   sharedSectionRef,
@@ -95,7 +103,7 @@ export function SatelliteBusDetailSections({
   const crossEnvIssues = viewModel.crossEnvIssues
 
   return (
-    <div className="flex flex-col gap-2 pb-2">
+    <div className="flex flex-col gap-2 pb-[max(1.5rem,var(--agent-dock-reserve,2.75rem))]">
       <section className="page-section panel-elevated px-2.5 py-1.5">
         <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <OpsSubsectionTitle className="m-0">Data path</OpsSubsectionTitle>
@@ -178,6 +186,9 @@ export function SatelliteBusDetailSections({
         viewModel={viewModel}
         busLoading={busLoading}
         highlightSection={highlightSection}
+        highlightWorkload={highlightWorkload}
+        highlightRuntimeRowId={highlightRuntimeRowId}
+        operateSectionRef={operateSectionRef}
         selectedSectionRef={selectedSectionRef}
         openInspect={openInspect}
         canOperate={canOperate}

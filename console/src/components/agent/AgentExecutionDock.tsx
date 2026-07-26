@@ -3,6 +3,7 @@ import { Button, SegmentControl, StatusLamp, cn } from '@bifrost/ui'
 import { Bot, ChevronDown, ChevronUp, LifeBuoy, Maximize2, Minimize2, X } from 'lucide-react'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
+import { DockRecentAgentTasks } from '@/components/agent/DockRecentAgentTasks'
 import { ServerConsolePanel } from '@/components/ServerConsolePanel'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { useAgentJobLiveSession } from '@/hooks/useAgentJobLiveSession'
@@ -564,50 +565,56 @@ export function OperatorDock({
         >
           {idle ? (
             <div className="console-agent-execution-dock__idle">
-              <p className="console-agent-execution-dock__idle-title">No ambient Agent Fix running</p>
-              <p className="console-agent-execution-dock__idle-copy">
-                Start Fix from Daily Ops or Mission Launch — live feed and approvals appear here.
-                Switch to Console for SSH. Agent Desk is the archive for history and manual tasks.
-              </p>
-              {hostPulse.deployRunning && (
-                <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
-                  Host update in progress — Fix may be flaky until deploy finishes.
-                  {onOpenOperatorPlane != null && (
-                    <>
-                      {' '}
-                      <button
-                        type="button"
-                        className="console-agent-execution-dock__inline-link"
-                        onClick={onOpenOperatorPlane}
-                      >
-                        Open Operator Plane
-                      </button>
-                    </>
-                  )}
+              <div className="console-agent-execution-dock__idle-intro">
+                <p className="console-agent-execution-dock__idle-title">
+                  No ambient Agent Fix running
                 </p>
-              )}
-              {!hostPulse.deployRunning && hostPulse.allRunnersDown && (
-                <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
-                  L-1 runners unreachable — recover hosts on Operator Plane.
-                  {onOpenOperatorPlane != null && (
-                    <>
-                      {' '}
-                      <button
-                        type="button"
-                        className="console-agent-execution-dock__inline-link"
-                        onClick={onOpenOperatorPlane}
-                      >
-                        Open Operator Plane
-                      </button>
-                    </>
-                  )}
+                <p className="console-agent-execution-dock__idle-copy">
+                  Live feed and approvals appear here when Fix is running. Start from Daily Ops or
+                  Mission Launch.
                 </p>
-              )}
-              {onOpenAgentDesk != null && (
-                <Button variant="outline" size="sm" onClick={() => onOpenAgentDesk()}>
-                  Open Agent Desk
-                </Button>
-              )}
+                {hostPulse.deployRunning && (
+                  <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
+                    Host update in progress — Fix may be flaky until deploy finishes.
+                    {onOpenOperatorPlane != null && (
+                      <>
+                        {' '}
+                        <button
+                          type="button"
+                          className="console-agent-execution-dock__inline-link"
+                          onClick={onOpenOperatorPlane}
+                        >
+                          Operator Plane
+                        </button>
+                      </>
+                    )}
+                  </p>
+                )}
+                {!hostPulse.deployRunning && hostPulse.allRunnersDown && (
+                  <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
+                    L-1 runners unreachable — recover hosts on Operator Plane.
+                    {onOpenOperatorPlane != null && (
+                      <>
+                        {' '}
+                        <button
+                          type="button"
+                          className="console-agent-execution-dock__inline-link"
+                          onClick={onOpenOperatorPlane}
+                        >
+                          Operator Plane
+                        </button>
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+              <DockRecentAgentTasks
+                enabled={bodyVisible && toolId === 'agent'}
+                onOpenJob={
+                  onOpenAgentDesk != null ? id => onOpenAgentDesk(id) : undefined
+                }
+                onOpenDesk={onOpenAgentDesk != null ? () => onOpenAgentDesk() : undefined}
+              />
             </div>
           ) : (
             <>

@@ -342,20 +342,38 @@ export function ConsumerTable({
   rows,
   loading,
   onInspect,
+  highlightRowId = null,
+  actuationWorkload = null,
 }: {
   rows: BusConsumerRow[]
   loading: boolean
   onInspect: (row: BusConsumerRow) => void
+  /** Ring the matching runtime consumer while Activity actuation is focused. */
+  highlightRowId?: string | null
+  /** K8s workload name — shows "Actuation target" on the matched row. */
+  actuationWorkload?: string | null
 }) {
   return (
-    <DenseDataTable>
+    <DenseDataTable
+      wrapClassName="border-0 rounded-none"
+      tableClassName="satellite-bus-consumer-table"
+    >
+      <colgroup>
+        <col className="satellite-bus-consumer-col-name" />
+        <col className="satellite-bus-consumer-col-req" />
+        <col className="satellite-bus-consumer-col-state" />
+        <col className="satellite-bus-consumer-col-detail" />
+        <col className="satellite-bus-consumer-col-action" />
+      </colgroup>
       <DenseTableHeader>
         <DenseTableHeadRow>
           <DenseTableHead>Consumer</DenseTableHead>
           <DenseTableHead className="whitespace-nowrap">Requirement</DenseTableHead>
           <DenseTableHead>State</DenseTableHead>
           <DenseTableHead>Detail</DenseTableHead>
-          <DenseTableHead className="w-14" />
+          <DenseTableHead className="max-w-none overflow-visible">
+            <span className="sr-only">Actions</span>
+          </DenseTableHead>
         </DenseTableHeadRow>
       </DenseTableHeader>
       <DenseTableBody>
@@ -372,29 +390,53 @@ export function ConsumerTable({
             </DenseTableCell>
           </DenseTableRow>
         ) : (
-          rows.map(row => (
-            <DenseTableRow key={row.id}>
-              <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">{row.label}</DenseTableCell>
-              <DenseTableCell>
-                <ConsumerRequirementTag row={row} />
-              </DenseTableCell>
-              <DenseTableCell>
-                <ConsumerStateCell row={row} />
-              </DenseTableCell>
-              <DenseTableCell className="text-[var(--text-dense-caption)] text-muted-foreground">
-                {row.detail}
-              </DenseTableCell>
-              <DenseTableCell>
-                <button
-                  type="button"
-                  className="focus-strip-link text-[var(--text-dense-caption)]"
-                  onClick={() => onInspect(row)}
+          rows.map(row => {
+            const highlighted = highlightRowId != null && row.id === highlightRowId
+            return (
+              <DenseTableRow
+                key={row.id}
+                className={
+                  highlighted
+                    ? 'bg-[color-mix(in_oklab,var(--color-info,#38bdf8)_10%,transparent)]'
+                    : undefined
+                }
+              >
+                <DenseTableCell className="font-medium text-[var(--text-dense-meta)]">
+                  <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span className="truncate" title={row.label}>
+                      {row.label}
+                    </span>
+                    {highlighted && actuationWorkload != null && (
+                      <DenseTag variant="info" className="shrink-0 text-[9px] uppercase tracking-wide">
+                        Actuation target
+                      </DenseTag>
+                    )}
+                  </span>
+                </DenseTableCell>
+                <DenseTableCell className="whitespace-nowrap">
+                  <ConsumerRequirementTag row={row} />
+                </DenseTableCell>
+                <DenseTableCell className="whitespace-nowrap">
+                  <ConsumerStateCell row={row} />
+                </DenseTableCell>
+                <DenseTableCell
+                  className="min-w-0 text-[var(--text-dense-caption)] text-muted-foreground"
+                  title={row.detail}
                 >
-                  Inspect
-                </button>
-              </DenseTableCell>
-            </DenseTableRow>
-          ))
+                  <span className="block truncate">{row.detail}</span>
+                </DenseTableCell>
+                <DenseTableCell className="max-w-none overflow-visible whitespace-nowrap">
+                  <button
+                    type="button"
+                    className="focus-strip-link text-[var(--text-dense-caption)]"
+                    onClick={() => onInspect(row)}
+                  >
+                    Inspect
+                  </button>
+                </DenseTableCell>
+              </DenseTableRow>
+            )
+          })
         )}
       </DenseTableBody>
     </DenseDataTable>

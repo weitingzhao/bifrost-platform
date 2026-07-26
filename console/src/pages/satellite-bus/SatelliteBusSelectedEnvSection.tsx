@@ -19,6 +19,9 @@ export function SatelliteBusSelectedEnvSection({
   viewModel,
   busLoading,
   highlightSection,
+  highlightWorkload = null,
+  highlightRuntimeRowId = null,
+  operateSectionRef,
   selectedSectionRef,
   openInspect,
   canOperate,
@@ -30,6 +33,9 @@ export function SatelliteBusSelectedEnvSection({
   viewModel: SatelliteBusViewModel
   busLoading: boolean
   highlightSection: string | null
+  highlightWorkload?: string | null
+  highlightRuntimeRowId?: string | null
+  operateSectionRef?: Ref<HTMLDivElement>
   selectedSectionRef: Ref<HTMLDivElement>
   openInspect: (target: InspectTarget) => void
   canOperate: boolean
@@ -43,7 +49,8 @@ export function SatelliteBusSelectedEnvSection({
       ref={selectedSectionRef}
       data-scope="trade-single-env"
       className={cn(
-        'satellite-bus-group panel-elevated flex flex-col overflow-hidden rounded-md transition-shadow',
+        // overflow-x only — avoid clipping tall Runtime Consumers under a fixed card height
+        'satellite-bus-group panel-elevated flex flex-col overflow-x-hidden rounded-md transition-shadow',
         busScopeGroupClass('trade-single-env'),
         highlightSection === 'monitor' && 'ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
       )}
@@ -59,7 +66,7 @@ export function SatelliteBusSelectedEnvSection({
           </span>
         </div>
       </header>
-      <div className="satellite-bus-group-body flex flex-col">
+      <div className="satellite-bus-group-body flex min-h-0 flex-col">
         <OpsSection
           variant="flat"
           title="Data path consumers"
@@ -73,13 +80,22 @@ export function SatelliteBusSelectedEnvSection({
             onInspect={row => openInspect({ kind: 'consumer', row })}
           />
         </OpsSection>
-        <TradeDaemonOperatePanel
-          tradeEnv={tradeEnv}
-          namespace={ns}
-          canOperate={canOperate}
-          workloads={workloads}
-          workloadsLoading={workloadsLoading}
-        />
+        <div
+          ref={operateSectionRef}
+          className={cn(
+            highlightSection === 'operate' &&
+              'rounded-md ring-1 ring-[var(--ring)] ring-offset-1 ring-offset-[var(--background)]',
+          )}
+        >
+          <TradeDaemonOperatePanel
+            tradeEnv={tradeEnv}
+            namespace={ns}
+            canOperate={canOperate}
+            workloads={workloads}
+            workloadsLoading={workloadsLoading}
+            highlightWorkload={highlightWorkload}
+          />
+        </div>
         <OpsSection
           variant="flat"
           title="Runtime consumers"
@@ -90,6 +106,8 @@ export function SatelliteBusSelectedEnvSection({
           <ConsumerTable
             rows={viewModel.runtimeConsumers}
             loading={busLoading}
+            highlightRowId={highlightRuntimeRowId}
+            actuationWorkload={highlightWorkload}
             onInspect={row => openInspect({ kind: 'consumer', row })}
           />
         </OpsSection>

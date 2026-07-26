@@ -18,6 +18,7 @@ import {
 import { UserMenu } from '@/components/UserMenu'
 import { ActivityIndicator } from '@/components/activity/ActivityIndicator'
 import { TaskModeCapsule } from '@/components/task-mode/TaskModeCapsule'
+import type { ActivityEvent } from '@/lib/activity/activityTypes'
 import type { TaskModeId } from '@/lib/task-mode/types'
 
 export type ConsoleHeaderAmbientAgent = {
@@ -68,6 +69,8 @@ export function ConsoleHeader({
   viewerEnvLoading,
   onModeChange,
   onSelectTab,
+  onOpenAgentDesk,
+  onActivateActivity,
   children,
 }: {
   plane?: ConsoleNavPlane
@@ -84,6 +87,10 @@ export function ConsoleHeader({
   /** Task-mode identity capsule (replaces full-width TaskModeActiveBanner). */
   onModeChange?: (landingTab: string, modeId: TaskModeId) => void
   onSelectTab: (tabId: string) => void
+  /** Activity Agent row → Agent Desk observe for job id. */
+  onOpenAgentDesk?: (jobId?: string) => void
+  /** Activity row activation (deep-link focus + navigate). */
+  onActivateActivity?: (ev: ActivityEvent) => void
   children?: ReactNode
 }) {
   const showBreadcrumb = plane != null || (pageTitle != null && pageTitle !== '')
@@ -196,6 +203,10 @@ export function ConsoleHeader({
       <ActivityIndicator
         onOpenAudit={() => onSelectTab('audit')}
         onNavigate={onSelectTab}
+        onOpenAgentJob={
+          onOpenAgentDesk != null ? jobId => onOpenAgentDesk(jobId) : undefined
+        }
+        onActivateEvent={onActivateActivity}
       />
 
       {children != null ? <div className="shrink-0">{children}</div> : null}

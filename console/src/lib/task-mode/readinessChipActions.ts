@@ -20,7 +20,16 @@ export type ReadinessChipAction = {
   label: string
   tabId?: string
   /** Satellite Bus section scroll target */
-  busFocus?: 'rocket' | 'socket' | 'ingest' | 'monitor' | 'trade-apis' | 'workers' | 'cluster'
+  busFocus?:
+    | 'rocket'
+    | 'socket'
+    | 'ingest'
+    | 'monitor'
+    | 'trade-apis'
+    | 'workers'
+    | 'cluster'
+    /** Trade daemon operate panel (Activity actuation deep-link) */
+    | 'operate'
   /** Prefill Satellite API & Auth Probes env when navigating there */
   apiEnv?: 'dev' | 'stg' | 'prod'
   actuation?: ReadinessActuation
@@ -254,7 +263,8 @@ export function peekSatelliteBusFocus(): ReadinessChipAction['busFocus'] | null 
     raw === 'monitor' ||
     raw === 'trade-apis' ||
     raw === 'workers' ||
-    raw === 'cluster'
+    raw === 'cluster' ||
+    raw === 'operate'
   ) {
     return raw
   }

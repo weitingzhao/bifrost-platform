@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { DenseTag, cn } from '@bifrost/ui'
-import { Activity, Loader2 } from 'lucide-react'
+import { Activity, ChevronRight, Loader2 } from 'lucide-react'
 import type { ActivityEvent, ActivityPhase } from '@/lib/activity/activityTypes'
 import {
   DropdownMenu,
@@ -49,6 +49,21 @@ function kindLabel(kind: ActivityEvent['kind']): string {
   }
 }
 
+function canActivate(
+  ev: ActivityEvent,
+  onActivateEvent?: (ev: ActivityEvent) => void,
+  onNavigate?: (tabId: string) => void,
+  onOpenAgentJob?: (jobId: string) => void,
+): boolean {
+  if (onActivateEvent != null && (ev.linkTo != null || (ev.kind === 'agent' && ev.target))) {
+    return true
+  }
+  if (ev.kind === 'agent' && ev.target != null && ev.target !== '' && onOpenAgentJob != null) {
+    return true
+  }
+  return ev.linkTo != null && onNavigate != null
+}
+
 export function ActivityDropdown({
   events,
   inFlightCount,
@@ -56,6 +71,8 @@ export function ActivityDropdown({
   onOpenChange,
   onOpenAudit,
   onNavigate,
+  onOpenAgentJob,
+  onActivateEvent,
   trigger,
 }: {
   events: ActivityEvent[]
@@ -64,6 +81,10 @@ export function ActivityDropdown({
   onOpenChange: (open: boolean) => void
   onOpenAudit: () => void
   onNavigate?: (tabId: string) => void
+  /** Deep-link Agent events to Desk observe for the job id in `target`. */
+  onOpenAgentJob?: (jobId: string) => void
+  /** Preferred: full event activation (focus + navigate). */
+  onActivateEvent?: (ev: ActivityEvent) => void
   trigger: ReactNode
 }) {
   return (
@@ -89,49 +110,68 @@ export function ActivityDropdown({
               No recent activity
             </p>
           ) : (
-            events.map(ev => (
-              <button
-                key={ev.id}
-                type="button"
-                className={cn(
-                  'flex w-full flex-col gap-0.5 px-2.5 py-1.5 text-left',
-                  'hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none',
-                  ev.linkTo != null && onNavigate != null ? 'cursor-pointer' : 'cursor-default',
-                )}
-                onClick={() => {
-                  if (ev.linkTo != null && onNavigate != null) {
-                    onNavigate(ev.linkTo)
+            events.map(ev => {
+              const clickable = canActivate(ev, onActivateEvent, onNavigate, onOpenAgentJob)
+              return (
+                <DropdownMenuItem
+                  key={ev.id}
+                  disabled={!clickable}
+                  className={cn(
+                    'flex cursor-default flex-col items-stretch gap-0.5 rounded-none px-2.5 py-1.5',
+                    clickable && 'cursor-pointer',
+                  )}
+                  onSelect={() => {
+                    if (!clickable) return
+                    if (onActivateEvent != null) {
+                      onActivateEvent(ev)
+                    } else if (
+                      ev.kind === 'agent' &&
+                      ev.target != null &&
+                      ev.target !== '' &&
+                      onOpenAgentJob != null
+                    ) {
+                      onOpenAgentJob(ev.target)
+                    } else if (ev.linkTo != null && onNavigate != null) {
+                      onNavigate(ev.linkTo)
+                    }
                     onOpenChange(false)
-                  }
-                }}
-              >
-                <div className="flex items-center gap-1.5">
-                  <DenseTag
-                    variant={phaseTagVariant(ev.phase, ev.settledOutcome)}
-                    className="shrink-0 text-[9px] uppercase tracking-wide"
-                  >
-                    {phaseLabel(ev)}
-                  </DenseTag>
-                  <span className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)] font-medium text-foreground">
-                    {ev.title}
-                  </span>
-                  <span className="shrink-0 font-mono text-[var(--text-dense-caption)] text-muted-foreground">
-                    {formatAge(ev.ts)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 pl-0.5">
-                  <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-                    {kindLabel(ev.kind)}
-                    {ev.target != null && ev.target !== '' ? ` · ${ev.target}` : ''}
-                  </span>
-                </div>
-                {ev.detail != null && ev.detail !== '' && (
-                  <p className="m-0 truncate pl-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
-                    {ev.detail}
-                  </p>
-                )}
-              </button>
-            ))
+                  }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <DenseTag
+                      variant={phaseTagVariant(ev.phase, ev.settledOutcome)}
+                      className="shrink-0 text-[9px] uppercase tracking-wide"
+                    >
+                      {phaseLabel(ev)}
+                    </DenseTag>
+                    <span className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)] font-medium text-foreground">
+                      {ev.title}
+                    </span>
+                    <span className="shrink-0 font-mono text-[var(--text-dense-caption)] text-muted-foreground">
+                      {formatAge(ev.ts)}
+                    </span>
+                    {clickable && (
+                      <ChevronRight
+                        size={12}
+                        className="shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 pl-0.5">
+                    <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+                      {kindLabel(ev.kind)}
+                      {ev.target != null && ev.target !== '' ? ` · ${ev.target}` : ''}
+                    </span>
+                  </div>
+                  {ev.detail != null && ev.detail !== '' && (
+                    <p className="m-0 truncate pl-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
+                      {ev.detail}
+                    </p>
+                  )}
+                </DropdownMenuItem>
+              )
+            })
           )}
         </div>
         <DropdownMenuSeparator className="m-0" />
