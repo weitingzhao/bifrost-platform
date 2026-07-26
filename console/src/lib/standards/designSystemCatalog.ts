@@ -257,7 +257,7 @@ export const MANDATORY_MAPPING: MandatoryMappingRow[] = [
   },
   {
     interaction: 'Shell Activity Feed (recent ops glance)',
-    use: 'ActivityIndicator + ActivityDropdown in ConsoleHeader (between Agent Task and User); idle = invisible; Audit remains SSOT',
+    use: 'ActivityIndicator (always-visible Bell) + ActivityDropdown in ConsoleHeader (between Agent Task and User); Audit remains SSOT',
     never: 'Page Verdict / Operate Queue inflation / toast spam / unread badges / browser Notification',
   },
   {

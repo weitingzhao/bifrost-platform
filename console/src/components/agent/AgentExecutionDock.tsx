@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Button, SegmentControl, StatusLamp, cn } from '@bifrost/ui'
-import { ChevronDown, ChevronUp, Maximize2, Minimize2, X } from 'lucide-react'
+import { Bot, ChevronDown, ChevronUp, LifeBuoy, Maximize2, Minimize2, X } from 'lucide-react'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
 import { ServerConsolePanel } from '@/components/ServerConsolePanel'
@@ -35,6 +35,8 @@ export type OperatorDockProps = {
   onOpenAgentDesk?: (jobId?: string) => void
   /** Deep-link to Engineer → Operator Plane (L-1 Update / smoke SSOT). */
   onOpenOperatorPlane?: () => void
+  /** Current console view — highlights matching page link in dock head. */
+  activePage?: 'operator-plane' | 'agent-desk' | null
   onComplete?: (job: RemediationJob) => void
   /** Uncontrolled initial mode when expanded defaults to working. */
   defaultExpanded?: boolean
@@ -147,6 +149,7 @@ export function OperatorDock({
   onDismiss,
   onOpenAgentDesk,
   onOpenOperatorPlane,
+  activePage = null,
   onComplete,
   defaultExpanded = false,
   expanded: expandedProp,
@@ -455,49 +458,41 @@ export function OperatorDock({
         )}
 
         <div className="console-agent-execution-dock__actions">
+          {/* Page links first; window chrome (max/collapse) icon-only on the right */}
           {onOpenOperatorPlane != null && (
             <Button
               variant="ghost"
               size="xs"
+              className={cn(
+                'gap-1',
+                activePage === 'operator-plane'
+                  ? 'console-agent-execution-dock__page-link--active'
+                  : 'console-agent-execution-dock__page-link',
+              )}
               onClick={onOpenOperatorPlane}
-              title="Open Operator Plane (L-1) — Update / smoke / MCP"
+              title="Operator Plane (L-1) — Update / smoke / MCP"
+              aria-current={activePage === 'operator-plane' ? 'page' : undefined}
             >
+              <LifeBuoy className="console-agent-execution-dock__action-icon" aria-hidden />
               Operator Plane
             </Button>
-          )}
-          {mode === 'collapsed' ? (
-            <Button variant="outline" size="xs" onClick={expandWorking}>
-              <ChevronUp className="console-agent-execution-dock__action-icon" aria-hidden />
-              Expand
-            </Button>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={toggleMaximize}
-                title={mode === 'maximized' ? 'Restore dock height' : 'Maximize dock'}
-              >
-                {mode === 'maximized' ? (
-                  <Minimize2 className="console-agent-execution-dock__action-icon" aria-hidden />
-                ) : (
-                  <Maximize2 className="console-agent-execution-dock__action-icon" aria-hidden />
-                )}
-                {mode === 'maximized' ? 'Restore' : 'Maximize'}
-              </Button>
-              <Button variant="outline" size="xs" onClick={collapse} aria-expanded>
-                <ChevronDown className="console-agent-execution-dock__action-icon" aria-hidden />
-                Collapse
-              </Button>
-            </>
           )}
           {toolId === 'agent' && onOpenAgentDesk != null && (
             <Button
               variant="ghost"
               size="xs"
+              className={cn(
+                'gap-1',
+                activePage === 'agent-desk'
+                  ? 'console-agent-execution-dock__page-link--active'
+                  : 'console-agent-execution-dock__page-link',
+              )}
               onClick={() => onOpenAgentDesk(jobId ?? undefined)}
+              title="Agent Desk — archive / job detail"
+              aria-current={activePage === 'agent-desk' ? 'page' : undefined}
             >
-              Open in Agent Desk
+              <Bot className="console-agent-execution-dock__action-icon" aria-hidden />
+              Agent Desk
             </Button>
           )}
           {toolId === 'agent' && !idle && isTerminal && (
@@ -505,6 +500,46 @@ export function OperatorDock({
               <X className="console-agent-execution-dock__action-icon" aria-hidden />
               Dismiss
             </Button>
+          )}
+          {mode === 'collapsed' ? (
+            <Button
+              variant="outline"
+              size="xs"
+              className="console-agent-execution-dock__chrome-btn"
+              onClick={expandWorking}
+              title="Expand dock"
+              aria-label="Expand dock"
+            >
+              <ChevronUp className="console-agent-execution-dock__action-icon" aria-hidden />
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="xs"
+                className="console-agent-execution-dock__chrome-btn"
+                onClick={toggleMaximize}
+                title={mode === 'maximized' ? 'Restore dock height' : 'Maximize dock'}
+                aria-label={mode === 'maximized' ? 'Restore dock height' : 'Maximize dock'}
+              >
+                {mode === 'maximized' ? (
+                  <Minimize2 className="console-agent-execution-dock__action-icon" aria-hidden />
+                ) : (
+                  <Maximize2 className="console-agent-execution-dock__action-icon" aria-hidden />
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                className="console-agent-execution-dock__chrome-btn"
+                onClick={collapse}
+                title="Collapse dock"
+                aria-label="Collapse dock"
+                aria-expanded
+              >
+                <ChevronDown className="console-agent-execution-dock__action-icon" aria-hidden />
+              </Button>
+            </>
           )}
         </div>
       </div>

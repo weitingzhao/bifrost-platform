@@ -4,7 +4,6 @@ import {
   DenseTag,
   SidebarTrigger,
   SHELL_TOP_BAR_HEIGHT_CLASS,
-  StatusLamp,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -23,7 +22,8 @@ import type { TaskModeId } from '@/lib/task-mode/types'
 
 export type ConsoleHeaderAmbientAgent = {
   label: string
-  onOpen: () => void
+  /** Toggle Agent Execution Dock expanded ↔ collapsed. */
+  onToggle: () => void
   expanded?: boolean
   running?: boolean
 }
@@ -156,32 +156,43 @@ export function ConsoleHeader({
           variant="outline"
           size="sm"
           className={cn(
-            'h-7 shrink-0 gap-1.5 px-2 text-[var(--text-dense-caption)] shadow-sm',
-            ambientAgent.running
-              ? 'border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_55%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_14%,var(--card))]'
-              : 'border-border bg-secondary/50',
+            'relative h-7 w-7 shrink-0 px-0 shadow-sm',
+            ambientAgent.expanded
+              ? 'border-[color-mix(in_oklab,var(--color-primary)_55%,var(--border))] bg-[color-mix(in_oklab,var(--color-primary)_16%,var(--card))] text-primary'
+              : ambientAgent.running
+                ? 'border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_55%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_14%,var(--card))]'
+                : 'border-border bg-secondary/50 text-muted-foreground',
           )}
-          onClick={ambientAgent.onOpen}
-          title="Open Agent Execution Dock — live status (shell bottom)"
+          onClick={ambientAgent.onToggle}
+          aria-expanded={ambientAgent.expanded === true}
+          title={
+            ambientAgent.expanded
+              ? ambientAgent.running
+                ? `Collapse Agent Dock — ${ambientAgent.label}`
+                : 'Collapse Agent Execution Dock'
+              : ambientAgent.running
+                ? `Expand Agent Dock — ${ambientAgent.label}`
+                : 'Expand Agent Execution Dock — live status (shell bottom)'
+          }
+          aria-label={
+            ambientAgent.expanded
+              ? 'Collapse Agent Execution Dock'
+              : ambientAgent.running
+                ? `Expand Agent Dock — task running: ${ambientAgent.label}`
+                : 'Expand Agent Execution Dock'
+          }
         >
-          <StatusLamp value={ambientAgent.running ? 'degraded' : 'unknown'} kind="reach" />
-          <Bot size={12} aria-hidden />
-          <span className="font-semibold text-foreground">
-            <span className="sm:hidden">Agent</span>
-            <span className="hidden sm:inline">Agent Task</span>
-          </span>
-          {ambientAgent.running && (
-            <span className="hidden max-w-[6rem] truncate text-muted-foreground xl:inline">
-              {ambientAgent.label}
-            </span>
+          <Bot size={14} aria-hidden />
+          {ambientAgent.running && !ambientAgent.expanded && (
+            <span
+              className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-amber-500 shadow-[0_0_0_1.5px_var(--card)]"
+              aria-hidden
+            />
           )}
-          <span className="hidden font-medium text-primary md:inline">
-            {ambientAgent.expanded ? 'Focus' : 'Dock'}
-          </span>
         </Button>
       )}
 
-      {/* Activity — shell chrome between Agent Task and User; idle = invisible */}
+      {/* Activity bell — always visible; notification-style next to User */}
       <ActivityIndicator
         onOpenAudit={() => onSelectTab('audit')}
         onNavigate={onSelectTab}

@@ -6051,6 +6051,27 @@ button.infra-stack-chip:hover {
   height: 0.75rem;
 }
 
+/* Icon-only window chrome (maximize / collapse / expand) */
+.console-agent-execution-dock__chrome-btn {
+  width: 1.625rem;
+  min-width: 1.625rem;
+  padding-inline: 0;
+}
+
+/* Dock head page deep-links — muted until that view is open */
+.console-agent-execution-dock__page-link {
+  color: var(--muted-foreground);
+}
+
+.console-agent-execution-dock__page-link:hover {
+  color: var(--foreground);
+}
+
+.console-agent-execution-dock__page-link--active {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
 .console-agent-execution-dock__body {
   display: flex;
   flex: 1;

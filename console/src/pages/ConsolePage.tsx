@@ -512,6 +512,10 @@ function ConsolePageInner() {
     setDockExpanded(true)
   }, [])
 
+  const toggleAgentDock = useCallback(() => {
+    setDockExpanded(v => !v)
+  }, [])
+
   const openOperatorDock = useCallback((tool: OperatorToolId = 'agent') => {
     setOperatorToolId(tool)
     setDockExpanded(true)
@@ -661,7 +665,7 @@ function ConsolePageInner() {
             }}
             ambientAgent={{
               label: ambientJob?.label ?? 'Agent Task',
-              onOpen: expandAgentDock,
+              onToggle: toggleAgentDock,
               expanded: dockExpanded,
               running: ambientJob != null,
             }}
@@ -962,6 +966,9 @@ function ConsolePageInner() {
           else openAgentDeskTab()
         }}
         onOpenOperatorPlane={openOperatorPlane}
+        activePage={
+          viewTab === 'operator-plane' || viewTab === 'agent-desk' ? viewTab : null
+        }
         onComplete={handleAmbientJobComplete}
       />
     </SidebarProvider>

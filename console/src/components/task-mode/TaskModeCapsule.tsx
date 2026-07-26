@@ -11,7 +11,14 @@ const LOOP_VARIANT: Record<LoopArchetype, 'neutral' | 'warning' | 'info'> = {
   dev: 'info',
 }
 
+/** Compact chrome labels — full wording stays in title tooltip. */
 const LOOP_LABEL: Record<LoopArchetype, string> = {
+  system: 'System',
+  ops: 'Ops',
+  dev: 'Dev',
+}
+
+const LOOP_TITLE: Record<LoopArchetype, string> = {
   system: 'System',
   ops: 'Ops loop',
   dev: 'Dev loop',
@@ -42,8 +49,8 @@ export function TaskModeCapsule({ onModeChange }: TaskModeCapsuleProps) {
         <button
           type="button"
           className={cn(
-            'task-mode-capsule inline-flex h-7 max-w-[12rem] shrink-0 items-center gap-1.5 rounded-md border px-2',
-            'text-[var(--text-dense-caption)] font-medium text-foreground shadow-sm',
+            'task-mode-capsule inline-flex h-7 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-md border px-2',
+            'whitespace-nowrap text-[var(--text-dense-caption)] font-medium text-foreground shadow-sm',
             'hover:bg-secondary',
             focused
               ? 'task-mode-capsule--accent border-[color-mix(in_oklab,var(--task-mode-accent)_55%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent)_14%,var(--card))]'
@@ -52,7 +59,7 @@ export function TaskModeCapsule({ onModeChange }: TaskModeCapsuleProps) {
           aria-label={`Task mode: ${mode.label}. Change mode`}
           title={
             focused
-              ? `${mode.label} · ${LOOP_LABEL[mode.loopArchetype]} · Focused lens`
+              ? `${mode.label} · ${LOOP_TITLE[mode.loopArchetype]} · Focused lens`
               : `${mode.label} · Full navigation`
           }
         >
@@ -61,10 +68,10 @@ export function TaskModeCapsule({ onModeChange }: TaskModeCapsuleProps) {
             className={cn('shrink-0', focused ? 'task-mode-capsule__icon' : 'text-muted-foreground')}
             aria-hidden
           />
-          <span className="truncate font-semibold">{visual.shortLabel}</span>
+          <span className="min-w-0 truncate font-semibold">{visual.shortLabel}</span>
           <DenseTag
             variant={LOOP_VARIANT[mode.loopArchetype]}
-            className="hidden h-4 px-1 text-[9px] leading-none sm:inline-flex"
+            className="hidden h-4 shrink-0 whitespace-nowrap px-1 text-[9px] leading-none sm:inline-flex"
           >
             {LOOP_LABEL[mode.loopArchetype]}
           </DenseTag>
