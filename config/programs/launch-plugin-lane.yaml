@@ -1,0 +1,71 @@
+id: launch-plugin-lane
+title: Launch Plugin Lane
+description: >
+  Mission Launch third release lane — publish bifrost-platform-plugin (IB Gateway)
+  via Detect → Approve → Install → Verify → Live check. Gallery observes; this lane publishes.
+  Dogfood payload: on-demand STK (plugin main b2fb081). D10 quotes-only — no place_order.
+status: active
+delivery:
+  board_visible: true
+  former_location: Mission Launch · Plugin lane · Subcontractors → Plugin Gallery (observe only)
+  sign_off_mechanism: api
+phases:
+  - id: P0
+    title: Contract & navigation
+    status: pending
+    depends_on: []
+    verify_cmd: ""
+    acceptance:
+      - Catalogs document Launch Plugin lane, Gallery≠Publish, on-demand acceptance
+      - plugin-build deliver-stg primary entry is Mission Launch · Launch Plugin
+      - Mission Launch / Control Room / nav expose third lane · plugin-release
+    sign_off:
+      required: true
+      checklist:
+        - Owner reviewed catalog contract
+  - id: P1
+    title: TCC third lane UI
+    status: pending
+    depends_on: [P0]
+    verify_cmd: ""
+    acceptance:
+      - LaneStateStrip shows revision/mode/last verify (not Tekton)
+      - Full steps Detect → Approve → Install → Verify → Live check
+      - AI Launch Plugin ambient agent; approvals via Operator Dock
+      - Plugin Gallery Need publish? → Mission Launch · Plugin (plugin-release)
+    sign_off:
+      required: true
+      checklist:
+        - Owner walked Detect→Live check UI once
+  - id: P2
+    title: Dogfood on-demand STK
+    status: pending
+    depends_on: [P1]
+    verify_cmd: "cd ../bifrost-platform-plugin && make verify-ib-gateway-program"
+    acceptance:
+      - Install via make install-ib-gateway (no kubectl set image bypass)
+      - make verify-ib-gateway-program passes
+      - Live quotes/on-demand symbols > default 5; Live can dynamic-subscribe
+      - TCC shows recent Install/Verify evidence
+      - accounts_snapshot empty does NOT block acceptance
+    sign_off:
+      required: true
+      checklist:
+        - Owner confirmed on-demand STK dogfood on Live
+  - id: P3
+    title: Hardening
+    status: pending
+    depends_on: [P2]
+    verify_cmd: ""
+    acceptance:
+      - Delivery Board program launch-plugin-lane registered
+      - Readiness stale-image Fix routes to Launch Plugin
+      - Tekton plugin pipeline remains candidate/docs only (not implemented)
+    sign_off:
+      required: true
+metadata:
+  created_at: "2026-07-27"
+  owner: vision-mac-trader
+  lane_id: ib-vendor
+  prerequisite_programs: [ib-gateway-plugin]
+  tags: [delivery-board, plugin, launch-plugin, mission-launch]

@@ -12,11 +12,18 @@ import {
 import { useDevModeController } from '@/components/task-mode/DevModeController'
 import { useMissionLaunchFixAgents } from '@/components/task-mode/useMissionLaunchFixAgents'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
+import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
+import { PLUGIN_LAUNCH_SCOPE } from '@/lib/agent/pluginLaunchAgentPrompt'
+import {
+  buildPluginLaunchCheckpoints,
+  resolvePluginLaunchVerdict,
+} from '@/lib/task-mode/pluginLaunchVerdict'
+import { readPluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
 import {
   cellAllowsAgentFix,
   pickFleetFixCell,
@@ -85,6 +92,9 @@ export function TaskControlCenter({
   const satelliteProd = useSatelliteProdReadiness(isMissionLaunch)
   const promoteVerify = usePromoteVerifyReadiness(isMissionLaunch)
   const satelliteDeploy = useSatelliteDeployOverall(isMissionLaunch)
+  // This probe accepts only an interval; call it unconditionally to preserve hook order.
+  const liveProbe = useIbGatewayLiveProbe()
+  const pluginEvidence = readPluginLaunchEvidence()
 
   const dailyOpsTargetCell = useMemo(() => {
     if (fleetFixCell != null && cellAllowsAgentFix(fleetFixCell)) return fleetFixCell
@@ -132,6 +142,20 @@ export function TaskControlCenter({
     stgReadinessSignals: q.stgReadinessSignals, prodReadinessSignals: q.prodReadinessSignals,
     clusterForFixQ: q.clusterForFixQ, serviceReadinessForFixQ: q.serviceReadinessForFixQ,
   })
+  const pluginAgentInFlight =
+    agents.aiPluginLaunch.isPending || ambientJobScope === PLUGIN_LAUNCH_SCOPE
+  const pluginVerdict = resolvePluginLaunchVerdict({
+    canOperate,
+    status: liveProbe.status,
+    evidence: pluginEvidence,
+    agentInFlight: pluginAgentInFlight,
+  })
+  const pluginCheckpoints = buildPluginLaunchCheckpoints({
+    canOperate,
+    status: liveProbe.status,
+    evidence: pluginEvidence,
+    agentInFlight: pluginAgentInFlight,
+  })
 
   const fix = useChecklistItemFix({
     isDailyOps, canOperate, ambientJobId, ambientJobScope, onStartAgentJob, onNavigate, onOpenAgentDesk,
@@ -151,17 +175,27 @@ export function TaskControlCenter({
     if (!canOperate || agents.aiTradeDeploy.disabled || q.satelliteVerdict.kind !== 'GO') return
     agents.aiTradeDeploy.trigger()
   }
+  const dispatchPluginLaunchAgent = () => {
+    if (!canOperate || agents.aiPluginLaunch.disabled || pluginVerdict.kind !== 'GO') return
+    agents.aiPluginLaunch.trigger()
+  }
 
   const releaseDispatchAllowed =
     showLaunchPad && !agents.aiRelease.disabled && q.rocketVerdict.kind === 'GO'
   const tradeDeployDispatchAllowed =
     showLaunchPad && !agents.aiTradeDeploy.disabled && q.satelliteVerdict.kind === 'GO'
+  const pluginLaunchDispatchAllowed =
+    showLaunchPad && !agents.aiPluginLaunch.disabled && pluginVerdict.kind === 'GO'
   const releaseDisabledReason =
     q.rocketVerdict.kind !== 'GO' ? q.rocketVerdict.disabledReason : agents.aiRelease.disabledReason
   const tradeDeployDisabledReason =
     q.satelliteVerdict.kind !== 'GO'
       ? q.satelliteVerdict.disabledReason
       : agents.aiTradeDeploy.disabledReason
+  const pluginLaunchDisabledReason =
+    pluginVerdict.kind !== 'GO'
+      ? pluginVerdict.disabledReason
+      : agents.aiPluginLaunch.disabledReason
 
   const doneCount = q.phases.filter((p: TaskPhaseDef) => q.statuses[p.id] === 'done').length
   const loopLabel =
@@ -255,10 +289,16 @@ export function TaskControlCenter({
       fix={fix}
       dispatchReleaseAgent={dispatchReleaseAgent}
       dispatchTradeDeployAgent={dispatchTradeDeployAgent}
+      dispatchPluginLaunchAgent={dispatchPluginLaunchAgent}
       releaseDispatchAllowed={releaseDispatchAllowed}
       tradeDeployDispatchAllowed={tradeDeployDispatchAllowed}
+      pluginLaunchDispatchAllowed={pluginLaunchDispatchAllowed}
       releaseDisabledReason={releaseDisabledReason}
       tradeDeployDisabledReason={tradeDeployDisabledReason}
+      pluginLaunchDisabledReason={pluginLaunchDisabledReason}
+      pluginLaunchVerdict={pluginVerdict}
+      pluginLaunchCheckpoints={pluginCheckpoints}
+      pluginEvidence={pluginEvidence}
       phaseFixUnavailableHint={phaseFixUnavailableHint}
     />
   )

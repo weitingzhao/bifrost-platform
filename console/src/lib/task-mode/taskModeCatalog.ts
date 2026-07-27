@@ -3,7 +3,7 @@ import type { TaskModeDef, TaskModeId } from './types'
 export const TASK_MODE_STORAGE_KEY = 'bifrost-ops-task-mode'
 export const TASK_MODE_QUERY_PARAM = 'taskMode'
 
-export const TASK_MODE_CATALOG_VERSION = '2026-07-18'
+export const TASK_MODE_CATALOG_VERSION = '2026-07-27'
 /** UI task-mode definitions. templateId must match config/programs/_templates.yaml (GET /api/v1/programs/templates). */
 export const TASK_MODE_CATALOG_SOURCE = 'console/src/lib/task-mode/taskModeCatalog.ts · templates: config/programs/_templates.yaml'
 
@@ -63,23 +63,27 @@ const MISSION_LAUNCH_PHASES: TaskModeDef['phases'] = [
     id: 'supply-chain',
     seq: 1,
     title: 'Supply chain · all domains',
-    summary: 'Gitea mirrors + Dockerfile CMs ready for platform and trade deliver pipelines.',
+    summary:
+      'Gitea mirrors + Dockerfile CMs ready for platform/trade; plugin publish uses Launch Plugin (make install).',
     navigateTab: 'platform-release',
     actions: [
       { label: 'Launch Rocket', tabId: 'platform-release' },
       { label: 'Deploy Satellite', tabId: 'trade-release' },
+      { label: 'Launch Plugin', tabId: 'plugin-release' },
     ],
   },
   {
     id: 'deploy-stg',
     seq: 2,
     title: 'Deploy STG',
-    summary: 'Run platform + trade STG deliver pipelines (both must succeed).',
+    summary:
+      'Run platform + trade STG deliver; plugin lane uses Detect→Install on Launch Plugin (not Tekton).',
     dependsOn: ['supply-chain'],
     navigateTab: 'control-room',
     actions: [
       { label: 'Launch Rocket', tabId: 'platform-release' },
       { label: 'Deploy Satellite', tabId: 'trade-release' },
+      { label: 'Launch Plugin', tabId: 'plugin-release' },
       { label: 'Control Room', tabId: 'control-room' },
     ],
   },
@@ -87,37 +91,40 @@ const MISSION_LAUNCH_PHASES: TaskModeDef['phases'] = [
     id: 'stg-gate',
     seq: 3,
     title: 'STG gate · unified',
-    summary: 'Platform STG gate + trade STG gate both pass.',
+    summary: 'Platform STG gate + trade STG gate both pass; plugin verify via make verify-ib-gateway-program.',
     dependsOn: ['deploy-stg'],
     navigateTab: 'platform-release',
     actions: [
       { label: 'Launch Rocket', tabId: 'platform-release' },
       { label: 'Deploy Satellite', tabId: 'trade-release' },
+      { label: 'Launch Plugin', tabId: 'plugin-release' },
     ],
   },
   {
     id: 'deploy-prod',
     seq: 4,
     title: 'Deploy PROD',
-    summary: 'Promote platform + trade to PROD after unified STG gate.',
+    summary: 'Promote platform + trade to PROD; plugin live mode via Launch Plugin Live check.',
     dependsOn: ['stg-gate'],
     navigateTab: 'platform-release',
     actions: [
       { label: 'Launch Rocket', tabId: 'platform-release' },
       { label: 'Deploy Satellite', tabId: 'trade-release' },
+      { label: 'Launch Plugin', tabId: 'plugin-release' },
     ],
   },
   {
     id: 'prod-gate',
     seq: 5,
     title: 'PROD gate + mission verify',
-    summary: 'PROD gates pass and mission snapshot nominal.',
+    summary: 'PROD gates pass and mission snapshot nominal; plugin dogfood on-demand STK when publishing.',
     dependsOn: ['deploy-prod'],
     navigateTab: 'control-room',
     actions: [
       { label: 'Control Room', tabId: 'control-room' },
       { label: 'Launch Rocket', tabId: 'platform-release' },
       { label: 'Deploy Satellite', tabId: 'trade-release' },
+      { label: 'Launch Plugin', tabId: 'plugin-release' },
     ],
   },
 ]
@@ -333,14 +340,17 @@ const PLUGIN_BUILD_PHASES: TaskModeDef['phases'] = [
   {
     id: 'deliver-stg',
     seq: 4,
-    title: 'Satellite / board deliver',
-    summary: 'Satellite deliver STG when plugin ships with the payload stack, or Delivery Board.',
+    title: 'Launch Plugin · publish',
+    summary:
+      'Primary: Mission Launch · Launch Plugin (Detect→Install→Verify). Satellite deliver is secondary when payload ships with trade stack.',
     dependsOn: ['pre-push'],
-    navigateTab: 'trade-release',
+    navigateTab: 'plugin-release',
     actions: [
-      { label: 'Deploy Satellite', tabId: 'trade-release' },
+      { label: 'Launch Plugin', tabId: 'plugin-release' },
+      { label: 'Mission Launch', tabId: 'task-cc' },
       { label: 'Delivery Board', tabId: 'delivery-board' },
-      { label: 'Plugin Gallery', tabId: 'plugin-gallery' },
+      { label: 'Deploy Satellite (secondary)', tabId: 'trade-release' },
+      { label: 'Plugin Gallery (observe)', tabId: 'plugin-gallery' },
     ],
   },
   {
@@ -397,7 +407,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
     id: 'mission-launch',
     label: 'Mission Launch',
     description:
-      'Ops loop — unified platform + trade STG → gate → PROD mission. Task Control Center shows Launch board + Release posture (Promote / cutover · Tier A·B).',
+      'Ops loop — unified platform + trade + plugin publish lanes. Task Control Center shows Launch board (Rocket / Satellite / Plugin) + Release posture.',
     loopArchetype: 'ops',
     landingTab: 'task-cc',
     phases: MISSION_LAUNCH_PHASES,
@@ -409,6 +419,8 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
         'observability',
         'platform-release',
         'trade-release',
+        'plugin-release',
+        'plugin-gallery',
         'cluster',
         'placement',
         'satellite-bus',
@@ -558,7 +570,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
   {
     id: 'plugin-build',
     label: 'Plugin Build',
-    description: 'Dev loop — platform plugins (IB Gateway) with Briefing → Dev Agent → Delivery Board.',
+    description: 'Dev loop — platform plugins (IB Gateway) with Briefing → Dev Agent → Launch Plugin / Delivery Board.',
     loopArchetype: 'dev',
     landingTab: 'task-cc',
     phases: PLUGIN_BUILD_PHASES,
@@ -570,6 +582,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
         'dev-agent',
         'delivery-board',
         'agent-desk',
+        'plugin-release',
         'plugin-gallery',
         'satellite-bus',
         'trade-release',
@@ -579,7 +592,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
     },
     dev: {
       kind: 'dev',
-      programId: 'ib-gateway-plugin',
+      programId: 'launch-plugin-lane',
       templateId: 'plugin-build',
       briefingComponentLine: 'engineer',
       briefingTrackType: 'build',

@@ -4,6 +4,11 @@ export type AmbientAgentJob = {
   id: string
   scope: string
   label: string
+  /**
+   * Optional status from Recent / jobs list.
+   * Terminal statuses skip live SSE and load archive snapshot in the dock.
+   */
+  status?: 'running' | 'done' | 'failed' | 'cancelled'
 }
 
 export type AmbientAgentShellProps = {

@@ -6,6 +6,7 @@ import {
   buildDeliverStgRecoverRunnerPrompt,
   buildGitopsConfigRepairRunnerPrompt,
   buildMassiveFeedRecoverRunnerPrompt,
+  buildPluginLaunchRunnerPrompt,
   buildPlatformSelfHealthRecoverRunnerPrompt,
   buildRegistryPullRecoverRunnerPrompt,
   buildStalePipelineTriageRunnerPrompt,
@@ -30,7 +31,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'plugin-launch' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -264,14 +265,10 @@ function buildReleasePrompt(req: StartRunRequest): string {
     '    - Console theme smoke pass/fail',
     '    - Release status: RELEASED or FAILED (with stage)',
     '',
-    '### Phase G — IB Gateway Plugin (when bifrost-platform-plugin changed)',
-    'The Tekton bifrost-deliver-platform pipeline does NOT build ib-gateway. If Phase A committed bifrost-platform-plugin:',
-    '1. Call request_operator_approval: "Plugin repo changed — run make install-ib-gateway on dev Mac?"',
-    '2. On approval, call request_operator_manual_steps with checklist:',
-    '   - cd bifrost-platform-plugin && make install-ib-gateway (rebuild image + rollout data/ib-gateway)',
-    '   - If cluster was live before: POST /api/v1/plugins/ib-gateway/control/mode {"mode":"live"} with operator token',
-    '   - make verify-ib-gateway-program (must pass; quotes E2E may WARN until Trade images rebuild core≥0.2.8)',
-    '3. If bifrost-trade-infra was also in the commit set, Argo sync handles Trade overlays; no separate plugin k8s apply needed beyond install-ib-gateway.',
+    '### Phase G — IB Gateway Plugin fallback',
+    'Primary path: use Mission Launch · plugin-release → AI Launch Plugin. It owns Detect → Approve → Install → Verify → Live.',
+    'Phase G remains a fallback only when this Release Agent discovers a bifrost-platform-plugin repo change mid rocket-release.',
+    'If that occurs, request approval then invoke the same manual steps: `cd bifrost-platform-plugin && make install-ib-gateway`, followed by `make verify-ib-gateway-program`; never use Tekton or kubectl set image as a publish bypass.',
     '',
     '## Failure escalation — Release-Fix Agent',
     'When a phase fails (pipeline build error, gate failure, deploy error):',
@@ -410,6 +407,9 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
   if (req.scope === 'trade-deploy') {
     return buildTradeDeployRunnerPrompt(req)
+  }
+  if (req.scope === 'plugin-launch') {
+    return buildPluginLaunchRunnerPrompt(req)
   }
   if (req.scope === 'gitops-config-repair') {
     return buildGitopsConfigRepairRunnerPrompt(req)

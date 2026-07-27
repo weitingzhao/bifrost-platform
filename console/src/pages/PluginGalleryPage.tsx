@@ -102,7 +102,7 @@ function pluginBusVerdict(liveProbe: ReturnType<typeof useIbGatewayLiveProbe>): 
   }
 }
 
-export function PluginGalleryPage() {
+export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string) => void } = {}) {
   const liveProbe = useIbGatewayLiveProbe()
   const { canOperate } = usePlatformAuth()
   const [reconnectOpen, setReconnectOpen] = useState(false)
@@ -150,6 +150,9 @@ export function PluginGalleryPage() {
               onClick={() => liveProbe.refetch()}
             >
               Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => onNavigate?.('plugin-release')}>
+              Need publish?
             </Button>
             {canOperate ? (
               <Button

@@ -57,6 +57,7 @@ import { ComputePage } from '@/pages/ComputePage'
 import { DeliveryBoardPage } from '@/pages/DeliveryBoardPage'
 import { NetworkPage } from '@/pages/NetworkPage'
 import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
+import { PluginReleasePage } from '@/pages/PluginReleasePage'
 import { SatelliteApiHealthPage } from '@/pages/SatelliteApiHealthPage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
 import { ObservabilityPage } from '@/pages/ObservabilityPage'
@@ -108,6 +109,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'flywheel-vision': 'Vision',
   roadmap: 'Roadmap',
   'platform-release': 'Launch Rocket',
+  'plugin-release': 'Launch Plugin',
   'platform-standards': 'Platform',
   'agent-protocol': 'Agent Protocol',
   'briefing-reconciliation': 'Briefing Reconciliation',
@@ -157,7 +159,9 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   'satellite-api':
     'Per-environment matrix probes for Trade satellite endpoints — HTTP reachability, ops auth, and D10 blocked writes.',
   'plugin-gallery':
-    'External subcontractor plugins — live L0 probes and L1 actuation for platform-managed integrations.',
+    'External subcontractor plugins — live L0 probes and L1 actuation (observe). Publish via Launch Plugin.',
+  'plugin-release':
+    'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Gallery ≠ Publish.',
   'operator-plane':
     'Out-of-band recovery layer — AI Remediation Runners outside K8s on dual Mac Minis (fate isolation D7 / L-1).',
   'flywheel-vision':
@@ -206,6 +210,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'satellite-telemetry',
   'satellite-api',
   'plugin-gallery',
+  'plugin-release',
   'control-room',
   'observability',
   'task-cc',
@@ -663,7 +668,9 @@ function ConsolePageInner() {
                       ? 'Copy failed'
                       : 'Copy All for LLM'}
                 </Button>
-              ) : viewTab === 'trade-release' || viewTab === 'platform-release' ? (
+              ) : viewTab === 'trade-release' ||
+                viewTab === 'platform-release' ||
+                viewTab === 'plugin-release' ? (
                 <BackToMissionLaunchButton onClick={() => openLaunchView('mission-launch')} />
               ) : undefined
             }
@@ -801,6 +808,7 @@ function ConsolePageInner() {
                 onStartAgentJob={startAmbientAgentJob}
                 onOpenPlatformRelease={() => setViewTab('platform-release')}
                 onOpenTradeDeploy={() => setViewTab('trade-release')}
+                onOpenPluginRelease={() => setViewTab('plugin-release')}
                 onOpenPromote={openPromote}
                 onOpenAgentProtocol={() => setViewTab('agent-protocol')}
                 onOpenNetwork={openNetwork}
@@ -888,6 +896,14 @@ function ConsolePageInner() {
             />
         )}
 
+        {viewTab === 'plugin-release' && (
+          <PluginReleasePage
+            ambientJobId={ambientJob?.id ?? null}
+            onStartAgentJob={startAmbientAgentJob}
+            onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
+          />
+        )}
+
         {viewTab === 'network' && (
           <NetworkPage
             context={contextQuery.data}
@@ -928,7 +944,9 @@ function ConsolePageInner() {
           <ObservabilityPage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
         )}
 
-        {viewTab === 'plugin-gallery' && <PluginGalleryPage />}
+        {viewTab === 'plugin-gallery' && (
+          <PluginGalleryPage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
+        )}
 
         {isGovernanceTab && (
           <div className="flex min-w-0 gap-4">
@@ -986,6 +1004,7 @@ function ConsolePageInner() {
         jobId={ambientJob?.id ?? null}
         label={ambientJob?.label}
         scope={ambientJob?.scope}
+        jobStatus={ambientJob?.status}
         expanded={dockExpanded}
         onExpandedChange={setDockExpanded}
         toolId={operatorToolId}

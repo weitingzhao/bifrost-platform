@@ -1,5 +1,5 @@
 /**
- * Lane detail purpose contract — Launch Rocket / Deploy Satellite detail pages.
+ * Lane detail purpose contract — Launch Rocket / Deploy Satellite / Launch Plugin detail pages.
  *
  * Mission Launch TCC stays the mission cockpit and verdict SSOT. Detail pages
  * only serve single-lane operate & evidence work. This module defines the

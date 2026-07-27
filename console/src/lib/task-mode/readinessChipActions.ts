@@ -139,12 +139,24 @@ export function readinessChipFixActions(
   }
 
   if (
+    label.includes('plugin') &&
+    (label.includes('stale') ||
+      label.includes('image') ||
+      label.includes('outdated') ||
+      label.includes('publish'))
+  ) {
+    pushNavigate('plugin-release', 'Launch Plugin')
+    return actions
+  }
+
+  if (
     (label.includes('ib socket') || label.includes('rocket · ib') || label.includes('shared rocket')) &&
     tradeNs != null
   ) {
     pushNavigate('satellite-bus', 'Rocket IB bus', 'rocket')
     pushNavigate('satellite-bus', 'Socket matrix', 'socket')
     pushNavigate('plugin-gallery', 'IB Gateway plugin')
+    pushNavigate('plugin-release', 'Launch Plugin')
     actions.push({
       kind: 'actuate',
       label: 'Restart api-monitor',

@@ -106,6 +106,7 @@ type ControlRoomPageProps = {
   onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   onOpenPlatformRelease?: () => void
   onOpenTradeDeploy?: () => void
+  onOpenPluginRelease?: () => void
   onOpenPromote?: () => void
   onOpenAgentProtocol?: () => void
   onOpenNetwork?: () => void
@@ -144,6 +145,7 @@ export function ControlRoomPage({
   onOpenAgentDesk,
   onOpenPlatformRelease,
   onOpenTradeDeploy,
+  onOpenPluginRelease,
   onOpenPromote,
   onOpenAgentProtocol,
   onOpenNetwork,
@@ -533,6 +535,7 @@ export function ControlRoomPage({
               tradeDeployDisabledReason={aiTradeDeploy.disabledReason}
               onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
               onOpenTradeDeploy={onOpenTradeDeploy ?? onOpenDelivery}
+              onOpenPluginRelease={onOpenPluginRelease ?? onOpenLaunchView?.bind(null, 'mission-launch')}
             />
 
             {!canOperate && (snapshot.release.signal !== 'ok' || snapshot.payloadOverall !== 'ok') && (

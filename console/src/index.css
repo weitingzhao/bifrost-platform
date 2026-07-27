@@ -6367,6 +6367,10 @@ button.infra-stack-chip:hover {
   color: var(--destructive);
 }
 
+.console-agent-execution-dock__summary--archive {
+  color: var(--muted-foreground);
+}
+
 .console-agent-execution-dock__approval {
   flex-shrink: 0;
 }

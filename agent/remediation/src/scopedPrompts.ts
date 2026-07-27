@@ -82,6 +82,31 @@ export function buildTradeDeployRunnerPrompt(req: StartRunRequest): string {
   ].join('\n')
 }
 
+export function buildPluginLaunchRunnerPrompt(req: StartRunRequest): string {
+  return [
+    'You are the Bifrost Plugin Launch Agent.',
+    'Publish the IB Gateway plugin through Mission Launch · plugin-release, not a Tekton delivery pipeline.',
+    '',
+    '## Operator context',
+    userBlock(req),
+    '',
+    '## Workflow (strict)',
+    '1. Detect: inspect IB Gateway status and report mode, deployment readiness, and reachability.',
+    '2. Request operator approval before publishing.',
+    '3. After approval, request_operator_manual_steps with: cd bifrost-platform-plugin && make install-ib-gateway.',
+    '4. Request a second manual verification step: make verify-ib-gateway-program.',
+    '5. If the cluster was already live, direct the operator to restore mode=live using the authenticated plugin control endpoint.',
+    '6. Recheck status and report Detect → Approve → Install → Verify → Live evidence.',
+    '',
+    '## Must-not',
+    '- Do not start bifrost-deliver-platform or bifrost-deliver-stg for plugin image publishing.',
+    '- Do not use kubectl set image as a publish bypass.',
+    `- ${D10_MUST_NOT}`,
+    '',
+    'Begin with Detect, then wait for operator approval before Install.',
+  ].join('\n')
+}
+
 export function buildGitopsConfigRepairRunnerPrompt(req: StartRunRequest): string {
   return [
     'You are the Bifrost GitOps Config Repair Agent (L1).',

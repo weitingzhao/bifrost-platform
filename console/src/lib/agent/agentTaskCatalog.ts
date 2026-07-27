@@ -208,6 +208,12 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     description:
       'Deliver Trade stack: mirror sync + Dockerfile CMs → Kaniko build → rollout bifrost-stg/prod → STG smoke + release gates. Does NOT enable live trading (D10).',
   },
+  'plugin-launch': {
+    entryPoint: 'Mission Launch · Launch Plugin · AI Launch Plugin · Subcontractors → Launch Plugin',
+    trigger: 'Operator publishes bifrost-platform-plugin (IB Gateway) via Detect→Approve→Install→Verify→Live',
+    description:
+      'Plugin lane publish: make install-ib-gateway + verify-ib-gateway-program after Operator Dock approval. Not Tekton. Gallery ≠ Publish. D10 quotes-only.',
+  },
   'deliver-stg-recover': {
     entryPoint: 'Task CC Agent Fix (signal dispatch) · Control Room · Cluster Triage · Deliver-stg Fix',
     trigger: 'Last bifrost-deliver-stg failed (especially stale-fail: pipeline red + STG smoke green)',

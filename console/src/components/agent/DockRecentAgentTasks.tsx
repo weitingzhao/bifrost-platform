@@ -20,6 +20,7 @@ function jobToAmbient(job: RemediationJob): AmbientAgentJob {
     id: job.id,
     scope,
     label: scopeToLabel(scope),
+    status: job.status,
   }
 }
 

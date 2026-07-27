@@ -138,3 +138,49 @@ func TestReconcileOrphanedJobsKeepsActiveRunnerJobs(t *testing.T) {
 		t.Fatalf("expected active runner job to remain running, got %+v", merged)
 	}
 }
+
+func TestPutMergingEventsPreservesPriorHistory(t *testing.T) {
+	store := newTestJobStoreDir(t)
+	store.Put(Job{
+		ID:     "job-1",
+		Status: JobRunning,
+		Events: []Event{{ID: "e1", Type: EventStatus, Text: "started"}},
+	})
+
+	store.PutMergingEvents(Job{
+		ID:     "job-1",
+		Status: JobDone,
+		Events: []Event{{ID: "e2", Type: EventDone, Text: "finished"}},
+	})
+
+	got, ok := store.Get("job-1")
+	if !ok {
+		t.Fatal("Get(job-1) missing")
+	}
+	if got.Status != JobDone {
+		t.Fatalf("Status = %q, want done", got.Status)
+	}
+	if len(got.Events) != 2 {
+		t.Fatalf("Events len = %d, want 2: %+v", len(got.Events), got.Events)
+	}
+	ids := map[string]bool{}
+	for _, ev := range got.Events {
+		ids[ev.ID] = true
+	}
+	if !ids["e1"] || !ids["e2"] {
+		t.Fatalf("Events = %+v, want e1+e2", got.Events)
+	}
+}
+
+func TestAppendEventIdempotent(t *testing.T) {
+	store := newTestJobStoreDir(t)
+	store.Put(Job{ID: "job-1", Status: JobRunning})
+	store.AppendEvent("job-1", Event{ID: "e1", Type: EventThinking, Text: "plan"})
+	store.AppendEvent("job-1", Event{ID: "e1", Type: EventThinking, Text: "plan"})
+	store.AppendEvent("job-1", Event{ID: "e2", Type: EventToolCall, Text: "tool"})
+
+	got, _ := store.Get("job-1")
+	if len(got.Events) != 2 {
+		t.Fatalf("Events len = %d, want 2", len(got.Events))
+	}
+}

@@ -10,7 +10,7 @@
 
 import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog'
 
-export const AGENT_PROTOCOL_VERSION = '2026-07-21'
+export const AGENT_PROTOCOL_VERSION = '2026-07-27'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 /**
@@ -131,6 +131,11 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
     action:
       'In-page Commit & push / Skip / Cancel on Launch Live — approvals are Dock SSOT; Launch Live is telemetry (Agent one-line + Pipeline + Post-deploy) with Expand dock',
     scope: 'Mission Launch · Launch Live',
+  },
+  {
+    action:
+      'kubectl set image bypass for ib-gateway publish — use Launch Plugin lane + make install-ib-gateway only; Plugin Gallery reconnect is observe/repair not publish',
+    scope: 'Mission Launch · Launch Plugin',
   },
 ]
 
@@ -481,6 +486,8 @@ export const DAILY_OPS_FLEET_DESK = {
     'Operator Dock × L-1 Host: head shows dual heartbeat (Host · P✓ S✓) + optional Deploy · role… read-only; CTA deep-links to Operator Plane. Console Mac chips tag Primary/Standby from bridge runners only. No Dock Update button / Confirm / deploy log / Hosts tool slot — Update SSOT = Operator Plane AgentHostDeployPanel.',
     'Agent Fix running: CTA becomes Expand dock; shell Operator Dock (Agent slot) is SSOT for live feed/approvals; in-page panel is one-line summary only; Agent Desk is archive (explicit Open in Agent Desk).',
     'Mission Launch · Launch Live: telemetry-only for Agent (one-line + Expand dock); Pipeline + Post-deploy stay in-page; Commit & push / approvals only in Operator Dock Agent slot (same Daily Ops protocol).',
+    'Mission Launch · Launch Plugin (third lane): Detect → Approve → Install → Verify → Live check; executor make install-ib-gateway (not Tekton); Gallery ≠ Publish; AI Launch Plugin ambient agent; approvals + checklist in Operator Dock; D10 quotes-only.',
+    'Plugin repo changes: prefer Launch Plugin lane as primary publish path — do not treat Phase G as rocket-only side quest.',
     'Verify = re-probe fleet after Agent Fix; Clear = fleetClear + operate queue open===0.',
     'W3 Auto-remediate default OFF — Assisted “Ready to Agent Fix” hint only; never auto-trigger.',
     'Checklist AI Check (scope daily-ops-checklist-run): Ops loop owns the green primary; Checklist header keeps muted Re-check + Ask for AI secondary — never two magic-wand primaries.',

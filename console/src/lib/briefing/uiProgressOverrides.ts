@@ -36,6 +36,15 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
     status: 'done',
     notes: 'Deploy Satellite Tekton STG/PROD + release gates + GitOps sync/rollback quick actions',
   },
+  'plugin-release': {
+    status: 'done',
+    notes:
+      'Launch Plugin lane — Detect→Approve→Install→Verify→Live (make install-ib-gateway; Gallery ≠ Publish)',
+  },
+  'plugin-gallery': {
+    status: 'done',
+    notes: 'Plugin Gallery observe/reconnect — Need publish? → Launch Plugin',
+  },
   program: {
     status: 'done',
     notes: 'ops-context spine: milestones, decisions, north_star',

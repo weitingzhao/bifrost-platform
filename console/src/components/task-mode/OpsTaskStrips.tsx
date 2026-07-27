@@ -65,12 +65,16 @@ export type OpsTaskStripsProps = {
   onOpenDelivery?: () => void
   onDispatchRelease?: () => void
   onDispatchTradeDeploy?: () => void
+  onDispatchPluginLaunch?: () => void
   releasePending?: boolean
   tradeDeployPending?: boolean
+  pluginLaunchPending?: boolean
   canDispatchRelease?: boolean
   canDispatchTradeDeploy?: boolean
+  canDispatchPluginLaunch?: boolean
   releaseDisabledReason?: string
   tradeDeployDisabledReason?: string
+  pluginLaunchDisabledReason?: string
   /**
    * When true, only render Release posture (Mission Launch board / summary rendered separately).
    * Daily Ops must not pass this — Release posture lives on Mission Launch TCC only.
@@ -168,6 +172,9 @@ export type OpsTaskStripsProps = {
   tradePipelineRunsNamespace?: string
   satelliteLaunchVerdict?: LaunchVerdict
   satelliteLaunchCheckpoints?: LaunchCheckpoint[]
+  pluginLaunchVerdict?: LaunchVerdict
+  pluginLaunchCheckpoints?: LaunchCheckpoint[]
+  pluginEvidence?: import('@/lib/delivery/pluginLaunchEvidence').PluginLaunchEvidence
   onSatelliteLaunchAgentFix?: () => void
   satelliteLaunchAgentFixPending?: boolean
   satelliteLaunchAgentFixActive?: boolean
@@ -184,12 +191,16 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     onNavigate,
     onDispatchRelease,
     onDispatchTradeDeploy,
+    onDispatchPluginLaunch,
     releasePending,
     tradeDeployPending,
+    pluginLaunchPending,
     canDispatchRelease,
     canDispatchTradeDeploy,
+    canDispatchPluginLaunch,
     releaseDisabledReason,
     tradeDeployDisabledReason,
+    pluginLaunchDisabledReason,
     readinessCanOperate,
     onAgentFixStg,
     onAgentFixProd,
@@ -209,6 +220,9 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     launchCheckpoints,
     satelliteLaunchVerdict,
     satelliteLaunchCheckpoints,
+    pluginLaunchVerdict,
+    pluginLaunchCheckpoints,
+    pluginEvidence,
     onLaunchAgentFix,
     onSatelliteLaunchAgentFix,
     launchAgentFixPending,
@@ -257,7 +271,7 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
   const showLaunchPad =
     ops.showLaunchPad &&
     isMissionLaunch &&
-    (onDispatchRelease != null || onDispatchTradeDeploy != null)
+    (onDispatchRelease != null || onDispatchTradeDeploy != null || onDispatchPluginLaunch != null)
 
   const showSatelliteLiveView =
     isMissionLaunch &&
@@ -322,7 +336,11 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     )
   }
 
-  if (isMissionLaunch && showLaunchPad && (launchVerdict != null || satelliteLaunchVerdict != null)) {
+  if (
+    isMissionLaunch &&
+    showLaunchPad &&
+    (launchVerdict != null || satelliteLaunchVerdict != null || pluginLaunchVerdict != null)
+  ) {
     return (
       <MissionLaunchBoard
         onNavigate={onNavigate}
@@ -330,14 +348,21 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
         launchCheckpoints={launchCheckpoints}
         satelliteLaunchVerdict={satelliteLaunchVerdict}
         satelliteLaunchCheckpoints={satelliteLaunchCheckpoints}
+        pluginLaunchVerdict={pluginLaunchVerdict}
+        pluginLaunchCheckpoints={pluginLaunchCheckpoints}
+        pluginEvidence={pluginEvidence}
         onDispatchRelease={onDispatchRelease}
         onDispatchTradeDeploy={onDispatchTradeDeploy}
+        onDispatchPluginLaunch={onDispatchPluginLaunch}
         releasePending={releasePending}
         tradeDeployPending={tradeDeployPending}
+        pluginLaunchPending={pluginLaunchPending}
         canDispatchRelease={canDispatchRelease}
         canDispatchTradeDeploy={canDispatchTradeDeploy}
+        canDispatchPluginLaunch={canDispatchPluginLaunch}
         releaseDisabledReason={releaseDisabledReason}
         tradeDeployDisabledReason={tradeDeployDisabledReason}
+        pluginLaunchDisabledReason={pluginLaunchDisabledReason}
         onLaunchAgentFix={onLaunchAgentFix}
         onSatelliteLaunchAgentFix={onSatelliteLaunchAgentFix}
         launchAgentFixPending={launchAgentFixPending}
@@ -716,12 +741,16 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
     onOpenDelivery,
     onDispatchRelease,
     onDispatchTradeDeploy,
+    onDispatchPluginLaunch,
     releasePending,
     tradeDeployPending,
+    pluginLaunchPending,
     canDispatchRelease,
     canDispatchTradeDeploy,
+    canDispatchPluginLaunch,
     releaseDisabledReason,
     tradeDeployDisabledReason,
+    pluginLaunchDisabledReason,
     promoteOnly = false,
   } = props
   const ops = mode.ops
@@ -775,7 +804,7 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
   const launchPadSection =
     ops.showLaunchPad &&
     isPlaybookLaunch &&
-    (onDispatchRelease != null || onDispatchTradeDeploy != null) ? (
+    (onDispatchRelease != null || onDispatchTradeDeploy != null || onDispatchPluginLaunch != null) ? (
       <OpsSection title="Mission launch">
         <LaunchPad
           variant={
@@ -783,14 +812,19 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
               ? 'both'
               : onDispatchRelease != null
                 ? 'rocket-launch'
-                : 'satellite-deploy'
+                : onDispatchTradeDeploy != null
+                  ? 'satellite-deploy'
+                  : 'plugin-launch'
           }
           onDispatchRelease={onDispatchRelease ?? (() => {})}
           onDispatchTradeDeploy={onDispatchTradeDeploy ?? (() => {})}
+          onDispatchPluginLaunch={onDispatchPluginLaunch}
           releasePending={releasePending}
           tradeDeployPending={tradeDeployPending}
+          pluginLaunchPending={pluginLaunchPending}
           canDispatchRelease={canDispatchRelease && onDispatchRelease != null}
           canDispatchTradeDeploy={canDispatchTradeDeploy && onDispatchTradeDeploy != null}
+          canDispatchPluginLaunch={canDispatchPluginLaunch && onDispatchPluginLaunch != null}
           releaseDisabledReason={
             onDispatchRelease == null
               ? 'Release dispatch not wired in this view'
@@ -801,8 +835,14 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
               ? 'Trade deploy dispatch not wired in this view'
               : tradeDeployDisabledReason
           }
+          pluginLaunchDisabledReason={
+            onDispatchPluginLaunch == null
+              ? 'Plugin launch dispatch not wired in this view'
+              : pluginLaunchDisabledReason
+          }
           onOpenPlatformRelease={() => onNavigate('platform-release')}
           onOpenTradeDeploy={() => onNavigate('trade-release')}
+          onOpenPluginRelease={() => onNavigate('plugin-release')}
         />
       </OpsSection>
     ) : null

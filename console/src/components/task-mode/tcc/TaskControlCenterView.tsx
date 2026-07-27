@@ -16,6 +16,8 @@ import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { pickFailingFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { fixScopeAgentTitle } from '@/lib/agent/readinessFixDispatch'
 import { launchVerdictToSignal } from '@/lib/task-mode/satelliteLaunchVerdict'
+import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
+import type { PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
 import type { TaskPhaseFixAction, TaskPhaseHint } from '@/lib/task-mode/taskPhaseDiagnostics'
 import type { TaskModeDef, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
@@ -89,10 +91,16 @@ export type TaskControlCenterViewProps = {
   fix: ReturnType<typeof useChecklistItemFix>
   dispatchReleaseAgent: () => void
   dispatchTradeDeployAgent: () => void
+  dispatchPluginLaunchAgent: () => void
   releaseDispatchAllowed: boolean
   tradeDeployDispatchAllowed: boolean
+  pluginLaunchDispatchAllowed: boolean
   releaseDisabledReason?: string
   tradeDeployDisabledReason?: string
+  pluginLaunchDisabledReason?: string
+  pluginLaunchVerdict: LaunchVerdict
+  pluginLaunchCheckpoints: LaunchCheckpoint[]
+  pluginEvidence: PluginLaunchEvidence
   /** Shown when phase Agent Fix is not supported in the current mode. */
   phaseFixUnavailableHint?: string | null
 }
@@ -158,7 +166,8 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     if (isMissionLaunch) {
       const rocket = launchVerdictToSignal(q.rocketVerdict.kind)
       const satellite = launchVerdictToSignal(q.satelliteVerdict.kind)
-      return worseLamp(rocket, satellite)
+      const plugin = launchVerdictToSignal(props.pluginLaunchVerdict.kind)
+      return worseLamp(worseLamp(rocket, satellite), plugin)
     }
     return 'unknown'
   }, [
@@ -171,6 +180,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     q.fleetClear,
     q.rocketVerdict.kind,
     q.satelliteVerdict.kind,
+    props.pluginLaunchVerdict.kind,
   ])
 
   const verdictActions = useMemo(() => {
@@ -213,6 +223,14 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
           title={props.tradeDeployDisabledReason ?? 'Deploy Trade satellite agent'}
           onClick={props.dispatchTradeDeployAgent}
         />,
+        <AgentTriggerButton
+          key="launch-plugin"
+          label="Launch Plugin"
+          pending={agents.aiPluginLaunch.isPending}
+          disabled={!props.pluginLaunchDispatchAllowed}
+          title={props.pluginLaunchDisabledReason ?? 'Launch plugin publish agent'}
+          onClick={props.dispatchPluginLaunchAgent}
+        />,
       )
       if (verdictLamp !== 'ok') {
         nodes.push(
@@ -248,12 +266,16 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     fix,
     agents.aiRelease.isPending,
     agents.aiTradeDeploy.isPending,
+    agents.aiPluginLaunch.isPending,
     props.releaseDispatchAllowed,
     props.tradeDeployDispatchAllowed,
+    props.pluginLaunchDispatchAllowed,
     props.releaseDisabledReason,
     props.tradeDeployDisabledReason,
+    props.pluginLaunchDisabledReason,
     props.dispatchReleaseAgent,
     props.dispatchTradeDeployAgent,
+    props.dispatchPluginLaunchAgent,
     fix.dailyOpsWorkflow?.primaryAction.label,
     verdictLamp,
     viewerEnv,
@@ -363,6 +385,11 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
               {agents.aiTradeDeploy.error.message}
             </OpsFeedback>
           )}
+          {agents.aiPluginLaunch.error != null && (
+            <OpsFeedback variant="error" title="Failed to start Launch Plugin agent">
+              {agents.aiPluginLaunch.error.message}
+            </OpsFeedback>
+          )}
           {agents.aiPlatformProdFix.error != null && (
             <OpsFeedback variant="error" title="Failed to start Agent Fix">
               {agents.aiPlatformProdFix.error.message}
@@ -395,12 +422,16 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
           onOpenDelivery={props.onOpenDelivery}
           onDispatchRelease={showLaunchPad ? props.dispatchReleaseAgent : undefined}
           onDispatchTradeDeploy={showLaunchPad ? props.dispatchTradeDeployAgent : undefined}
+          onDispatchPluginLaunch={showLaunchPad ? props.dispatchPluginLaunchAgent : undefined}
           releasePending={agents.aiRelease.isPending}
           tradeDeployPending={agents.aiTradeDeploy.isPending}
+          pluginLaunchPending={agents.aiPluginLaunch.isPending}
           canDispatchRelease={props.releaseDispatchAllowed}
           canDispatchTradeDeploy={props.tradeDeployDispatchAllowed}
+          canDispatchPluginLaunch={props.pluginLaunchDispatchAllowed}
           releaseDisabledReason={props.releaseDisabledReason}
           tradeDeployDisabledReason={props.tradeDeployDisabledReason}
+          pluginLaunchDisabledReason={props.pluginLaunchDisabledReason}
           readinessCanOperate={canOperate}
           onAgentFixStg={() => agents.aiTradeStgEnvFix.trigger()}
           onAgentFixProd={() => agents.aiTradeProdEnvFix.trigger()}
@@ -491,6 +522,9 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
           launchCheckpoints={isMissionLaunch ? q.rocketCheckpoints : undefined}
           satelliteLaunchVerdict={isMissionLaunch ? q.satelliteVerdict : undefined}
           satelliteLaunchCheckpoints={isMissionLaunch ? q.satelliteCheckpoints : undefined}
+          pluginLaunchVerdict={isMissionLaunch ? props.pluginLaunchVerdict : undefined}
+          pluginLaunchCheckpoints={isMissionLaunch ? props.pluginLaunchCheckpoints : undefined}
+          pluginEvidence={isMissionLaunch ? props.pluginEvidence : undefined}
           onLaunchAgentFix={isMissionLaunch ? () => agents.aiPlatformProdFix.trigger() : undefined}
           onSatelliteLaunchAgentFix={
             isMissionLaunch ? () => agents.aiTradeProdFix.trigger() : undefined
@@ -559,12 +593,16 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
               onOpenDelivery={props.onOpenDelivery}
               onDispatchRelease={showLaunchPad ? props.dispatchReleaseAgent : undefined}
               onDispatchTradeDeploy={showLaunchPad ? props.dispatchTradeDeployAgent : undefined}
+              onDispatchPluginLaunch={showLaunchPad ? props.dispatchPluginLaunchAgent : undefined}
               releasePending={agents.aiRelease.isPending}
               tradeDeployPending={agents.aiTradeDeploy.isPending}
+              pluginLaunchPending={agents.aiPluginLaunch.isPending}
               canDispatchRelease={props.releaseDispatchAllowed}
               canDispatchTradeDeploy={props.tradeDeployDispatchAllowed}
+              canDispatchPluginLaunch={props.pluginLaunchDispatchAllowed}
               releaseDisabledReason={props.releaseDisabledReason}
               tradeDeployDisabledReason={props.tradeDeployDisabledReason}
+              pluginLaunchDisabledReason={props.pluginLaunchDisabledReason}
               promoteOnly
             />
           )}

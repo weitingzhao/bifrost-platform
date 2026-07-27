@@ -29,6 +29,10 @@ import { buildTradeEnvReadinessFixPrompt } from '@/lib/agent/tradeEnvReadinessFi
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import { buildTradeDeployPrompt, TRADE_DEPLOY_SCOPE } from '@/lib/agent/tradeDeployAgentPrompt'
+import {
+  buildPluginLaunchPrompt,
+  PLUGIN_LAUNCH_SCOPE,
+} from '@/lib/agent/pluginLaunchAgentPrompt'
 import type {
   useRocketProdReadiness,
   useSatelliteDeployOverall,
@@ -114,6 +118,17 @@ export function useMissionLaunchFixAgents({
         stgSmoke,
         tierB,
       }),
+    }),
+  })
+
+  const aiPluginLaunch = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: PLUGIN_LAUNCH_SCOPE,
+    label: scopeToLabel(PLUGIN_LAUNCH_SCOPE),
+    buildRequest: () => ({
+      prompt: buildPluginLaunchPrompt({ operatorSurface: 'Mission Launch TCC' }),
     }),
   })
 
@@ -330,6 +345,7 @@ export function useMissionLaunchFixAgents({
   return {
     aiRelease,
     aiTradeDeploy,
+    aiPluginLaunch,
     aiPlatformProdFix,
     aiTradeProdFix,
     aiTradeStgEnvFix,

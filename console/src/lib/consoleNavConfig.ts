@@ -155,6 +155,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'plugin-gallery', label: 'Plugin Gallery', icon: Plug },
+          { id: 'plugin-release', label: 'Launch Plugin', icon: Workflow },
         ],
       },
     ],
@@ -229,6 +230,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'satellite-api': 'Satellite',
   'trade-release': 'Satellite',
   'plugin-gallery': 'Subcontractors',
+  'plugin-release': 'Subcontractors',
   'agent-desk': 'Engineer',
   'agent-capability': 'Engineer',
   briefing: 'Engineer',

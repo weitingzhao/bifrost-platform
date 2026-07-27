@@ -36,7 +36,16 @@ func (s *JobStore) Put(job Job) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if job.CreatedAt.IsZero() {
-		job.CreatedAt = time.Now().UTC()
+		// Preserve CreatedAt from existing file when updating.
+		if raw, err := os.ReadFile(s.path(job.ID)); err == nil {
+			var prev Job
+			if json.Unmarshal(raw, &prev) == nil && !prev.CreatedAt.IsZero() {
+				job.CreatedAt = prev.CreatedAt
+			}
+		}
+		if job.CreatedAt.IsZero() {
+			job.CreatedAt = time.Now().UTC()
+		}
 	}
 	job.UpdatedAt = time.Now().UTC()
 	raw, err := json.MarshalIndent(job, "", "  ")
@@ -44,6 +53,89 @@ func (s *JobStore) Put(job Job) {
 		return
 	}
 	_ = os.WriteFile(s.path(job.ID), raw, 0o644)
+}
+
+// PutMergingEvents writes job state and unions Events by ID so a thin runner
+// snapshot cannot wipe interaction history already archived on disk.
+func (s *JobStore) PutMergingEvents(job Job) {
+	s.mu.Lock()
+	prevEvents := []Event(nil)
+	if raw, err := os.ReadFile(s.path(job.ID)); err == nil {
+		var prev Job
+		if json.Unmarshal(raw, &prev) == nil {
+			prevEvents = prev.Events
+			if job.CreatedAt.IsZero() && !prev.CreatedAt.IsZero() {
+				job.CreatedAt = prev.CreatedAt
+			}
+		}
+	}
+	s.mu.Unlock()
+
+	job.Events = mergeEventsByID(prevEvents, job.Events)
+	s.Put(job)
+}
+
+// AppendEvent adds a single stream event to the archived job (idempotent by ID).
+func (s *JobStore) AppendEvent(jobID string, ev Event) {
+	if jobID == "" || ev.ID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	raw, err := os.ReadFile(s.path(jobID))
+	if err != nil {
+		return
+	}
+	var job Job
+	if json.Unmarshal(raw, &job) != nil {
+		return
+	}
+	for _, existing := range job.Events {
+		if existing.ID == ev.ID {
+			return
+		}
+	}
+	job.Events = append(job.Events, ev)
+	job.UpdatedAt = time.Now().UTC()
+	out, err := json.MarshalIndent(job, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(s.path(jobID), out, 0o644)
+}
+
+func mergeEventsByID(a, b []Event) []Event {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	byID := make(map[string]Event, len(a)+len(b))
+	order := make([]string, 0, len(a)+len(b))
+	for _, ev := range a {
+		if ev.ID == "" {
+			continue
+		}
+		if _, ok := byID[ev.ID]; !ok {
+			order = append(order, ev.ID)
+		}
+		byID[ev.ID] = ev
+	}
+	for _, ev := range b {
+		if ev.ID == "" {
+			continue
+		}
+		if _, ok := byID[ev.ID]; !ok {
+			order = append(order, ev.ID)
+		}
+		byID[ev.ID] = ev
+	}
+	out := make([]Event, 0, len(order))
+	for _, id := range order {
+		out = append(out, byID[id])
+	}
+	return out
 }
 
 func (s *JobStore) Get(id string) (*Job, bool) {

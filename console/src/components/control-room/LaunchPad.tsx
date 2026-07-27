@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Button, DenseTag } from '@bifrost/ui'
-import { ChevronRight, Rocket, Satellite } from 'lucide-react'
+import { ChevronRight, Plug, Rocket, Satellite } from 'lucide-react'
 import { fetchMatrix, isAllMatrices } from '@/api/core'
 import { fetchPipelineRuns, fetchSupplyChain } from '@/api/delivery'
 import { fetchReleaseGate, fetchReleaseState, fetchStgSmoke, fetchTierBStatus } from '@/api/promote'
@@ -24,7 +24,7 @@ import { StatusLamp } from '@/components/StatusLamp'
 const REFETCH_MS = 20_000
 
 /** Control Room shows both; OpsTaskStrips playbook path may pass one variant. */
-export type LaunchPadVariant = 'both' | 'rocket-launch' | 'satellite-deploy'
+export type LaunchPadVariant = 'both' | 'rocket-launch' | 'satellite-deploy' | 'plugin-launch'
 
 function tradeEnvSignal(matrix: MatrixResponse | undefined): Signal {
   if (matrix == null) return 'unknown'
@@ -112,14 +112,19 @@ export interface LaunchPadProps {
   variant?: LaunchPadVariant
   onDispatchRelease: () => void
   onDispatchTradeDeploy: () => void
+  onDispatchPluginLaunch?: () => void
   releasePending?: boolean
   tradeDeployPending?: boolean
+  pluginLaunchPending?: boolean
   canDispatchRelease?: boolean
   canDispatchTradeDeploy?: boolean
+  canDispatchPluginLaunch?: boolean
   releaseDisabledReason?: string
   tradeDeployDisabledReason?: string
+  pluginLaunchDisabledReason?: string
   onOpenPlatformRelease: () => void
   onOpenTradeDeploy: () => void
+  onOpenPluginRelease?: () => void
   /** Full width, no max-w cap */
   embedded?: boolean
   /** Parent page already shows prod gate banner */
@@ -130,19 +135,25 @@ export function LaunchPad({
   variant = 'both',
   onDispatchRelease,
   onDispatchTradeDeploy,
+  onDispatchPluginLaunch,
   releasePending = false,
   tradeDeployPending = false,
+  pluginLaunchPending = false,
   canDispatchRelease = false,
   canDispatchTradeDeploy = false,
+  canDispatchPluginLaunch = false,
   releaseDisabledReason,
   tradeDeployDisabledReason,
+  pluginLaunchDisabledReason,
   onOpenPlatformRelease,
   onOpenTradeDeploy,
+  onOpenPluginRelease,
   embedded = false,
   suppressProdBlockedFeedback = false,
 }: LaunchPadProps) {
   const showRocket = variant === 'both' || variant === 'rocket-launch'
   const showSatellite = variant === 'both' || variant === 'satellite-deploy'
+  const showPlugin = variant === 'both' || variant === 'plugin-launch'
 
   const rocketProd = useRocketProdReadiness(showRocket)
   const satelliteProd = useSatelliteProdReadiness(showSatellite)
@@ -278,8 +289,10 @@ export function LaunchPad({
       className={`launch-pad grid gap-3 ${
         embedded
           ? 'w-full'
-          : showRocket && showSatellite
-            ? 'sm:grid-cols-2'
+          : showRocket && showSatellite && showPlugin
+            ? 'xl:grid-cols-3'
+            : showRocket && showSatellite
+              ? 'sm:grid-cols-2'
             : 'max-w-xl'
       }`}
       aria-label="Launch pad"
@@ -345,6 +358,26 @@ export function LaunchPad({
           canAgentLaunch={satelliteCanLaunch}
           agentDisabledReason={satelliteDisabledReason}
           onOpenDetail={onOpenTradeDeploy}
+        />
+      )}
+      {showPlugin && (
+        <LaunchPadCard
+          icon={Plug}
+          title="Launch Plugin"
+          signal="unknown"
+          summary="IB Gateway publish lane"
+          detail="Detect → Approve → Install → Verify → Live"
+          agentLabel="AI Launch Plugin"
+          onAgentLaunch={onDispatchPluginLaunch ?? (() => {})}
+          agentPending={pluginLaunchPending}
+          canAgentLaunch={canDispatchPluginLaunch && onDispatchPluginLaunch != null}
+          agentDisabledReason={
+            onDispatchPluginLaunch == null
+              ? 'Plugin launch dispatch not wired in this view'
+              : pluginLaunchDisabledReason
+          }
+          onOpenDetail={onOpenPluginRelease ?? (() => {})}
+          detailLabel="Launch Plugin →"
         />
       )}
     </section>

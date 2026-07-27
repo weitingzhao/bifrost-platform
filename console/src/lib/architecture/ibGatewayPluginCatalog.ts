@@ -4,13 +4,36 @@
  * Created 2026-07-04 for bifrost-platform-plugin (Platform TWS bus).
  *
  * Live state (not this catalog):
- * - IB Gateway health + mode: Subcontractors → Plugin Gallery (platform-api /api/v1/plugins/ib-gateway/*)
- * - Phase / program sign-off: Mission Control → Delivery Board · ib-gateway-plugin
+ * - IB Gateway health + mode: Subcontractors → Plugin Gallery (observe / reconnect)
+ * - Publish: Mission Launch · Launch Plugin (plugin-release) — Gallery ≠ Publish
+ * - Phase / program sign-off: Mission Control → Delivery Board · ib-gateway-plugin · launch-plugin-lane
  * - Migrate lane: Engineer → Briefing · spine stream ib-gateway-plugin
  */
 
 export const IB_GATEWAY_PLUGIN_SOURCE = 'bifrost-platform-plugin'
 export const IB_GATEWAY_PLUGIN_CATALOG_VERSION = '2026-07-27'
+
+/** Mission Launch third release lane — publish plugin via make install (not Tekton). */
+export const LAUNCH_PLUGIN_LANE = {
+  id: 'launch-plugin',
+  label: 'Launch Plugin',
+  tabId: 'plugin-release',
+  programId: 'launch-plugin-lane',
+  executor: 'cd bifrost-platform-plugin && make install-ib-gateway',
+  verify: 'make verify-ib-gateway-program',
+  steps: ['Detect', 'Approve', 'Install', 'Verify', 'Live check'] as const,
+  galleryIsNotPublish:
+    'Plugin Gallery = observe / reconnect / mode. Launch Plugin = publish image + verify.',
+  dogfood: {
+    revision: 'b2fb081',
+    feature: 'on-demand STK',
+    acceptance:
+      'Trade Live on-demand symbols > default 5; dynamic subscribe works. accounts_snapshot empty does not fail publish.',
+  },
+  d10: 'Market-data / on-demand quotes only — no place_order',
+  tektonNote:
+    'Candidate only — no bifrost-deliver-plugin Tekton in MVP; make install remains the executor.',
+} as const
 
 export type IbGatewayPluginPhaseId = 'IBGP0' | 'IBGP1' | 'IBGP2' | 'IBGP3' | 'IBGP4'
 
@@ -114,8 +137,9 @@ export const IB_GATEWAY_PLUGIN_PROGRESS = {
 } as const
 
 export const IB_GATEWAY_RELATED_AUTHORITIES = [
-  'Live IB Gateway health + mode: Subcontractors → Plugin Gallery (platform-api /api/v1/plugins/ib-gateway/*)',
-  'Program / phase sign-off: Mission Control → Delivery Board · ib-gateway-plugin',
+  'Live IB Gateway health + mode: Subcontractors → Plugin Gallery (observe — not publish)',
+  'Publish plugin: Mission Launch · Launch Plugin (plugin-release) — Detect→Approve→Install→Verify→Live',
+  'Program / phase sign-off: Delivery Board · ib-gateway-plugin · launch-plugin-lane',
   'Migrate lane + spine stream: Engineer → Briefing · ib-gateway-plugin',
   'Plugin implementation: bifrost-platform-plugin · k8s/data/redis-ib + k8s/data/ib-gateway',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
@@ -142,8 +166,20 @@ export function buildIbGatewayPluginLlmPack(): string {
     '# IB Gateway Plugin — implementation program',
     `Version: ${IB_GATEWAY_PLUGIN_CATALOG_VERSION}`,
     `Repo: ${IB_GATEWAY_PLUGIN_SOURCE}`,
-    'Live health + mode: Subcontractors → Plugin Gallery — not this catalog.',
-    'Sign-off state: Delivery Board · ib-gateway-plugin — not this catalog.',
+    'Live health + mode: Subcontractors → Plugin Gallery (observe) — not this catalog.',
+    'Publish: Mission Launch · Launch Plugin — Gallery ≠ Publish.',
+    'Sign-off state: Delivery Board · ib-gateway-plugin · launch-plugin-lane — not this catalog.',
+    '',
+    '## Launch Plugin lane',
+    `- Label: ${LAUNCH_PLUGIN_LANE.label} · tab \`${LAUNCH_PLUGIN_LANE.tabId}\``,
+    `- Steps: ${LAUNCH_PLUGIN_LANE.steps.join(' → ')}`,
+    `- Executor: ${LAUNCH_PLUGIN_LANE.executor}`,
+    `- Verify: ${LAUNCH_PLUGIN_LANE.verify}`,
+    `- ${LAUNCH_PLUGIN_LANE.galleryIsNotPublish}`,
+    `- Dogfood: ${LAUNCH_PLUGIN_LANE.dogfood.revision} ${LAUNCH_PLUGIN_LANE.dogfood.feature}`,
+    `- Acceptance: ${LAUNCH_PLUGIN_LANE.dogfood.acceptance}`,
+    `- D10: ${LAUNCH_PLUGIN_LANE.d10}`,
+    `- Tekton: ${LAUNCH_PLUGIN_LANE.tektonNote}`,
     '',
     '## Design principles',
     ...IB_GATEWAY_DESIGN_PRINCIPLES.map(p => `- ${p}`),
@@ -154,6 +190,7 @@ export function buildIbGatewayPluginLlmPack(): string {
     `- ACL users: ${REDIS_IB_CONTRACT.aclUsers.join(', ')}`,
     '- Keys:',
     ...REDIS_IB_CONTRACT.keyNamespaces.map(k => `  - ${k}`),
+    `- On-demand STK: writer=${REDIS_IB_CONTRACT.onDemandStk.writer}; consumer=${REDIS_IB_CONTRACT.onDemandStk.consumer}; ${REDIS_IB_CONTRACT.onDemandStk.note}`,
     '',
     '## Phases (definitions)',
     ...IB_GATEWAY_PLUGIN_PHASES.map(

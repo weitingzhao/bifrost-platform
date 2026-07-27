@@ -29,6 +29,7 @@ export type ConsoleViewTab =
   | 'placement'
   | 'trade-release'
   | 'platform-release'
+  | 'plugin-release'
   | 'blueprint'
   | 'roadmap'
   | 'platform-standards'

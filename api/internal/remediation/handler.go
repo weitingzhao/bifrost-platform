@@ -116,9 +116,13 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prev, _ := h.store.Get(id)
-	h.store.Put(*job)
+	h.store.PutMergingEvents(*job)
 	if prev == nil || prev.Status != job.Status {
 		h.notifyTerminal(job)
+	}
+	if stored, ok := h.store.Get(id); ok {
+		writeJSON(w, http.StatusOK, stored)
+		return
 	}
 	writeJSON(w, http.StatusOK, job)
 }
@@ -211,7 +215,7 @@ func (h *Handler) HandleStream(w http.ResponseWriter, r *http.Request) {
 		}
 		if envelope.Type == "job" && envelope.Job != nil {
 			prev, _ := h.store.Get(envelope.Job.ID)
-			h.store.Put(*envelope.Job)
+			h.store.PutMergingEvents(*envelope.Job)
 			switch envelope.Job.Status {
 			case JobDone:
 				h.audit.RecordDirect(
@@ -235,6 +239,8 @@ func (h *Handler) HandleStream(w http.ResponseWriter, r *http.Request) {
 			if prev == nil || prev.Status != envelope.Job.Status {
 				h.notifyTerminal(envelope.Job)
 			}
+		} else if envelope.Type == "event" && envelope.Event != nil {
+			h.store.AppendEvent(id, *envelope.Event)
 		}
 		_, writeErr := w.Write([]byte("data: " + string(payload) + "\n\n"))
 		if writeErr != nil {

@@ -33,6 +33,8 @@ export type OperatorDockProps = {
   jobId: string | null
   label?: string
   scope?: string
+  /** From Recent list / start payload — terminal skips live SSE. */
+  jobStatus?: AmbientAgentJob['status']
   onDismiss: () => void
   onOpenAgentDesk?: (jobId?: string) => void
   /**
@@ -153,6 +155,7 @@ export function OperatorDock({
   jobId,
   label,
   scope,
+  jobStatus,
   onDismiss,
   onOpenAgentDesk,
   onSelectJob,
@@ -166,6 +169,8 @@ export function OperatorDock({
   onToolIdChange,
 }: OperatorDockProps) {
   const idle = jobId == null || jobId === ''
+  const knownTerminal =
+    jobStatus === 'done' || jobStatus === 'failed' || jobStatus === 'cancelled'
   const controlled = expandedProp != null
   const toolControlled = toolIdProp != null
   const [mode, setMode] = useState<OperatorDockMode>(() =>
@@ -202,6 +207,7 @@ export function OperatorDock({
     onComplete,
     onDismiss: idle ? undefined : onDismiss,
     autoDismissMs: 0,
+    knownTerminal,
   })
 
   useEffect(() => {
@@ -271,6 +277,8 @@ export function OperatorDock({
     connected,
     error,
     isTerminal,
+    isArchive,
+    historyLoading,
     pendingApproval,
     liveFeed,
     feedStats,
@@ -644,10 +652,29 @@ export function OperatorDock({
                   )}
                   {bannerVariant === 'failed' && (
                     <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
-                      {job?.error ?? job?.summary ?? 'Unknown error'}
+                      {job?.error != null && job.error !== 'orphaned' && job.error !== ''
+                        ? job.error
+                        : (job?.summary ?? 'Unknown error')}
                     </p>
                   )}
-                  {error != null && !isTerminal && (
+                  {isArchive && (
+                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--archive">
+                      Archive view — runner no longer has this live session
+                      {onOpenAgentDesk != null && jobId != null && (
+                        <>
+                          {' · '}
+                          <button
+                            type="button"
+                            className="console-agent-execution-dock__inline-link"
+                            onClick={() => onOpenAgentDesk(jobId)}
+                          >
+                            Open in Agent Desk
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  )}
+                  {error != null && !isArchive && (
                     <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
                       Connection: {error}
                     </p>
@@ -667,9 +694,15 @@ export function OperatorDock({
                   )}
 
                   <div className="console-agent-execution-dock__log dense-scroll-y">
-                    {recentEvents.length === 0 ? (
+                    {historyLoading ? (
                       <p className="console-agent-execution-dock__log-empty">
-                        {isTerminal ? 'No event log for this task' : 'Waiting for agent activity…'}
+                        Loading interaction history…
+                      </p>
+                    ) : recentEvents.length === 0 ? (
+                      <p className="console-agent-execution-dock__log-empty">
+                        {isTerminal || isArchive
+                          ? 'No event log stored for this task'
+                          : 'Waiting for agent activity…'}
                       </p>
                     ) : (
                       <ul className="console-agent-execution-dock__log-list">

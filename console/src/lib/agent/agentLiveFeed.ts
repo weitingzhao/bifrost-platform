@@ -81,12 +81,25 @@ export function recentAgentFeedEvents(events: RemediationEvent[], limit = 12): R
       e.type === 'tool_result' ||
       e.type === 'thinking' ||
       e.type === 'error' ||
-      e.type === 'done',
+      e.type === 'done' ||
+      e.type === 'approval_request',
   )
   return visible.slice(-limit)
 }
 
+/** Full interaction history for Operator Dock detail pane (scrollable). */
+export function dockAgentFeedEvents(events: RemediationEvent[], limit = 200): RemediationEvent[] {
+  return recentAgentFeedEvents(events, limit)
+}
+
 export function formatFeedEventLine(ev: RemediationEvent): string {
+  if (ev.type === 'approval_request') {
+    const title =
+      typeof ev.meta?.title === 'string' && ev.meta.title.trim() !== ''
+        ? ev.meta.title.trim()
+        : 'Decision requested'
+    return `◎ ${title}`
+  }
   if (ev.type === 'tool_call') {
     const name = typeof ev.meta?.name === 'string' ? ev.meta.name : 'tool'
     return `→ ${name}`

@@ -33,6 +33,14 @@ tasks:
     domain: Trade
     action: "Release"
 
+  - id: plugin-launch
+    scope: "plugin-launch"
+    label: "Plugin · Launch"
+    tier: manual
+    default_level: L1
+    domain: Platform
+    action: "Release"
+
   - id: deliver-stg-recover
     scope: "deliver-stg-recover"
     label: "Trade · Deliver STG Recover"

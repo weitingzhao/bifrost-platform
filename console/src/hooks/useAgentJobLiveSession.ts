@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { RemediationEvent, RemediationJob } from '@/api/remediationTypes'
-import { respondRemediationJob } from '@/api/remediation'
+import { fetchRemediationJob, respondRemediationJob } from '@/api/remediation'
 import { useRemediationStream } from '@/hooks/useRemediationStream'
 import {
   bannerStatusLabel,
   deriveAgentFeedStats,
   deriveAgentLiveFeed,
+  dockAgentFeedEvents,
   formatAgentElapsed,
-  recentAgentFeedEvents,
   type AgentFeedStats,
   type AgentLiveFeed,
 } from '@/lib/agent/agentLiveFeed'
+import { isRemediationStreamOrphanError } from '@/lib/remediation/remediationJobDisplay'
 
 export type AgentJobBannerVariant = 'running' | 'approval' | 'done' | 'failed'
 
@@ -22,6 +23,10 @@ export type AgentJobLiveSession = {
   error: string | null
   isTerminal: boolean
   isApproval: boolean
+  /** True when live stream is gone and we are reading archive snapshot. */
+  isArchive: boolean
+  /** Snapshot GET in flight (history still loading). */
+  historyLoading: boolean
   pendingApproval: RemediationEvent | null
   liveFeed: AgentLiveFeed | null
   feedStats: AgentFeedStats
@@ -43,9 +48,35 @@ function reachFromPhase(job: RemediationJob | null): 'ok' | 'degraded' | 'fail' 
   return 'degraded'
 }
 
+function isTerminalStatus(job: RemediationJob | null | undefined): boolean {
+  return job?.status === 'done' || job?.status === 'failed' || job?.status === 'cancelled'
+}
+
+/** Union events by id, preserve chronological order (created order / at). */
+function mergeEventsById(...lists: Array<RemediationEvent[] | undefined>): RemediationEvent[] {
+  const byID = new Map<string, RemediationEvent>()
+  const order: string[] = []
+  for (const list of lists) {
+    if (list == null) continue
+    for (const ev of list) {
+      if (ev.id === '') continue
+      if (!byID.has(ev.id)) order.push(ev.id)
+      byID.set(ev.id, ev)
+    }
+  }
+  return order.map(id => byID.get(id)!).sort((a, b) => {
+    const ta = Date.parse(a.at)
+    const tb = Date.parse(b.at)
+    if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return ta - tb
+    return 0
+  })
+}
+
 /**
  * Shared live session for ambient Agent Fix UI (Execution Dock + legacy banner).
- * Single stream consumer + approval respond path — avoid a third feed parser.
+ *
+ * Always loads GET /remediation/:id snapshot so Recent tasks (running or historical)
+ * show interaction history. Live SSE is additive for in-flight jobs.
  */
 export function useAgentJobLiveSession(
   jobId: string | null,
@@ -54,6 +85,11 @@ export function useAgentJobLiveSession(
     onDismiss?: () => void
     /** Auto-dismiss after success (ms). Default 5000; set 0 to disable. */
     autoDismissMs?: number
+    /**
+     * Hint from Recent list — skip opening live stream for known terminal jobs.
+     * Still loads archive snapshot for detail / events.
+     */
+    knownTerminal?: boolean
   },
 ): AgentJobLiveSession {
   const qc = useQueryClient()
@@ -64,14 +100,97 @@ export function useAgentJobLiveSession(
   onCompleteRef.current = opts?.onComplete
   onDismissRef.current = opts?.onDismiss
   const autoDismissMs = opts?.autoDismissMs ?? 5000
+  const knownTerminal = opts?.knownTerminal === true
 
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const [streamOrphan, setStreamOrphan] = useState(false)
 
-  const { job, events, connected, error } = useRemediationStream(jobId)
+  useEffect(() => {
+    setStreamOrphan(false)
+    completedRef.current = null
+  }, [jobId])
 
-  const isTerminal =
-    job?.status === 'done' || job?.status === 'failed' || job?.status === 'cancelled'
+  const streamEnabled =
+    jobId != null && jobId !== '' && !streamOrphan && !knownTerminal
+
+  const { job: streamJob, events: liveEvents, connected, error: streamError } =
+    useRemediationStream(streamEnabled ? jobId : null)
+
+  useEffect(() => {
+    if (streamError == null) return
+    if (!isRemediationStreamOrphanError(streamError)) return
+    setStreamOrphan(true)
+  }, [streamError])
+
+  /** Always load snapshot — history must work for running and finished tasks. */
+  const snapshotQuery = useQuery({
+    queryKey: ['remediation', 'job', jobId],
+    queryFn: () => fetchRemediationJob(jobId!),
+    enabled: jobId != null && jobId !== '',
+    staleTime: 5_000,
+    refetchInterval: streamEnabled && connected ? 15_000 : false,
+  })
+
+  const listHint = useMemo(() => {
+    if (jobId == null || jobId === '') return null
+    const cached = qc.getQueryData<{ jobs: RemediationJob[] }>(['remediation', 'jobs'])
+    return cached?.jobs?.find(j => j.id === jobId) ?? null
+  }, [jobId, qc, snapshotQuery.dataUpdatedAt, streamJob?.updated_at])
+
+  const baseJob: RemediationJob | null =
+    streamJob ?? snapshotQuery.data ?? listHint ?? null
+
+  const isArchive =
+    knownTerminal ||
+    streamOrphan ||
+    (baseJob != null && isTerminalStatus(baseJob) && !connected)
+
+  const job: RemediationJob | null = useMemo(() => {
+    if (baseJob == null) return null
+    if (!streamOrphan && baseJob.error !== 'orphaned') return baseJob
+    if (isTerminalStatus(baseJob) && baseJob.error !== 'orphaned') return baseJob
+    return {
+      ...baseJob,
+      status: baseJob.status === 'running' ? 'cancelled' : baseJob.status,
+      phase: baseJob.status === 'running' ? 'cancelled' : baseJob.phase,
+      error: baseJob.error === 'orphaned' ? 'orphaned' : baseJob.error,
+      summary:
+        baseJob.summary ||
+        (baseJob.status === 'running'
+          ? 'Job lost contact with the remediation runner (stale "running" state).'
+          : baseJob.summary),
+    }
+  }, [baseJob, streamOrphan])
+
+  const events: RemediationEvent[] = useMemo(
+    () =>
+      mergeEventsById(
+        listHint?.events,
+        snapshotQuery.data?.events,
+        streamJob?.events,
+        liveEvents,
+      ),
+    [listHint?.events, snapshotQuery.data?.events, streamJob?.events, liveEvents],
+  )
+
+  const isTerminal = isTerminalStatus(job)
   const isApproval = job?.phase === 'awaiting_approval' && !isTerminal
+  const historyLoading =
+    jobId != null &&
+    jobId !== '' &&
+    snapshotQuery.isLoading &&
+    events.length === 0 &&
+    job == null
+
+  /** Hide stream 404 once archive/snapshot (or list hint) is available. */
+  const error =
+    isArchive && (snapshotQuery.data != null || listHint != null || isTerminalStatus(job))
+      ? null
+      : streamOrphan && snapshotQuery.isError
+        ? snapshotQuery.error instanceof Error
+          ? snapshotQuery.error.message
+          : 'Archive job unavailable'
+        : streamError
 
   const pendingApproval = useMemo(() => {
     if (!isApproval) return null
@@ -85,7 +204,7 @@ export function useAgentJobLiveSession(
 
   const liveFeed = useMemo(() => deriveAgentLiveFeed(events), [events])
   const feedStats = useMemo(() => deriveAgentFeedStats(events), [events])
-  const recentEvents = useMemo(() => recentAgentFeedEvents(events), [events])
+  const recentEvents = useMemo(() => dockAgentFeedEvents(events), [events])
   const elapsed = formatAgentElapsed(job?.created_at, nowMs)
 
   const respondMutation = useMutation({
@@ -105,6 +224,7 @@ export function useAgentJobLiveSession(
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+      void qc.invalidateQueries({ queryKey: ['remediation', 'job', jobId] })
     },
   })
 
@@ -116,19 +236,25 @@ export function useAgentJobLiveSession(
 
   useEffect(() => {
     if (job == null || !isTerminal || completedRef.current === job.id) return
+    // Archive browse of already-finished jobs should not re-fire complete handlers.
+    if (knownTerminal || (isArchive && listHint != null && isTerminalStatus(listHint))) {
+      completedRef.current = job.id
+      return
+    }
     completedRef.current = job.id
     onCompleteRef.current?.(job)
     void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-  }, [job, isTerminal, qc])
+  }, [job, isTerminal, qc, knownTerminal, isArchive, listHint])
 
   useEffect(() => {
     if (job?.status === 'done' && autoDismissMs > 0 && onDismissRef.current != null) {
+      if (knownTerminal || isArchive) return
       autoDismissRef.current = setTimeout(() => onDismissRef.current?.(), autoDismissMs)
     }
     return () => {
       if (autoDismissRef.current != null) clearTimeout(autoDismissRef.current)
     }
-  }, [job?.status, autoDismissMs])
+  }, [job?.status, autoDismissMs, knownTerminal, isArchive])
 
   const bannerVariant: AgentJobBannerVariant = isTerminal
     ? job?.status === 'done'
@@ -141,10 +267,12 @@ export function useAgentJobLiveSession(
   return {
     job,
     events,
-    connected,
+    connected: connected && !isArchive,
     error,
     isTerminal,
     isApproval,
+    isArchive,
+    historyLoading,
     pendingApproval,
     liveFeed,
     feedStats,

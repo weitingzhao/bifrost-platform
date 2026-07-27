@@ -56,7 +56,7 @@ export function buildPlatformReleasePrompt(ctx: PlatformReleasePromptContext): s
     '- Git Bridge runs on Mac Pro (not K8s). Verify git_workspace_status before commit.',
     '- **bifrost-ui is COPY-baked into platform-console image** — Tekton clones bifrost-platform + bifrost-ui from Gitea **main**. UI on a feature branch will NOT reach PROD until merged to main and redeployed.',
     '- If git_workspace_status shows bifrost-ui `needs_main_for_deploy`, stop and merge to main before Phase B.',
-    '- bifrost-platform-plugin changes need Phase G (install-ib-gateway) after main pipeline.',
+    '- bifrost-platform-plugin publishing belongs to Mission Launch · Launch Plugin as the primary path; Phase G is only the fallback when a plugin change is discovered mid-release.',
     '- Request operator approval before each gate and before PROD deploy.',
     '- Phase F: curl PROD console CSS and verify `scrollbar-thumb` / `--sidebar-border` tokens exist.',
   ].join('\n')
