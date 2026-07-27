@@ -548,6 +548,13 @@ function ConsolePageInner() {
     })
   }, [setOperatorToolId])
 
+  /** Observe / switch Recent task in Operator Dock — do not re-bump Activity as a new start. */
+  const selectAmbientAgentJob = useCallback((job: AmbientAgentJob) => {
+    setAmbientJob(job)
+    setOperatorToolId('agent')
+    setDockExpanded(true)
+  }, [setOperatorToolId])
+
   const handleAmbientJobComplete = useCallback(
     (job: RemediationJob) => {
       const ok = job.status === 'done'
@@ -987,6 +994,7 @@ function ConsolePageInner() {
           setAmbientJob(null)
           setDockExpanded(true)
         }}
+        onSelectJob={selectAmbientAgentJob}
         onOpenAgentDesk={id => {
           if (id != null && id !== '') openAgentDesk(id)
           else openAgentDeskTab()

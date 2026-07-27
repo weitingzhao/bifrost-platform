@@ -13,6 +13,7 @@ import {
   formatFeedEventLine,
 } from '@/lib/agent/agentLiveFeed'
 import { updateActivityPhase } from '@/lib/activity/activityStore'
+import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 
 const DOCK_HEIGHT_KEY = 'bifrost.console.agentExecutionDockHeight'
 const TOOL_KEY = 'bifrost.console.operatorDockTool'
@@ -34,6 +35,11 @@ export type OperatorDockProps = {
   scope?: string
   onDismiss: () => void
   onOpenAgentDesk?: (jobId?: string) => void
+  /**
+   * Adopt a Recent task into the left detail pane (in-dock observe).
+   * Must not force Agent Desk tab — Agent Desk stays archive-only.
+   */
+  onSelectJob?: (job: AmbientAgentJob) => void
   /** Deep-link to Engineer → Operator Plane (L-1 Update / smoke SSOT). */
   onOpenOperatorPlane?: () => void
   /** Current console view — highlights matching page link in dock head. */
@@ -149,6 +155,7 @@ export function OperatorDock({
   scope,
   onDismiss,
   onOpenAgentDesk,
+  onSelectJob,
   onOpenOperatorPlane,
   activePage = null,
   onComplete,
@@ -190,10 +197,11 @@ export function OperatorDock({
     if (!idle) setToolId('agent')
   }, [idle, jobId, setToolId])
 
+  /** Recent rail + Dismiss replace auto-dismiss — keep selected task visible until user switches or dismisses. */
   const session = useAgentJobLiveSession(jobId, {
     onComplete,
     onDismiss: idle ? undefined : onDismiss,
-    autoDismissMs: idle ? 0 : 5000,
+    autoDismissMs: 0,
   })
 
   useEffect(() => {
@@ -558,138 +566,141 @@ export function OperatorDock({
         <div
           className={cn(
             'console-operator-dock__tool',
+            'console-operator-dock__tool--agent',
             'min-h-0 flex-1 flex flex-col',
             toolId !== 'agent' && 'console-operator-dock__tool--inactive',
           )}
           style={toolId !== 'agent' ? { display: 'none' } : undefined}
         >
-          {idle ? (
-            <div className="console-agent-execution-dock__idle">
-              <div className="console-agent-execution-dock__idle-intro">
-                <p className="console-agent-execution-dock__idle-title">
-                  No ambient Agent Fix running
-                </p>
-                <p className="console-agent-execution-dock__idle-copy">
-                  Live feed and approvals appear here when Fix is running. Start from Daily Ops or
-                  Mission Launch.
-                </p>
-                {hostPulse.deployRunning && (
-                  <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
-                    Host update in progress — Fix may be flaky until deploy finishes.
-                    {onOpenOperatorPlane != null && (
-                      <>
-                        {' '}
-                        <button
-                          type="button"
-                          className="console-agent-execution-dock__inline-link"
-                          onClick={onOpenOperatorPlane}
-                        >
-                          Operator Plane
-                        </button>
-                      </>
-                    )}
+          <div className="console-agent-execution-dock__agent-split">
+            <div className="console-agent-execution-dock__detail">
+              {idle ? (
+                <div className="console-agent-execution-dock__idle-intro">
+                  <p className="console-agent-execution-dock__idle-title">
+                    No ambient Agent Fix running
                   </p>
-                )}
-                {!hostPulse.deployRunning && hostPulse.allRunnersDown && (
-                  <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
-                    L-1 runners unreachable — recover hosts on Operator Plane.
-                    {onOpenOperatorPlane != null && (
-                      <>
-                        {' '}
-                        <button
-                          type="button"
-                          className="console-agent-execution-dock__inline-link"
-                          onClick={onOpenOperatorPlane}
-                        >
-                          Operator Plane
-                        </button>
-                      </>
-                    )}
+                  <p className="console-agent-execution-dock__idle-copy">
+                    Select a Recent task to observe progress, or start Fix from Daily Ops / Mission
+                    Launch.
                   </p>
-                )}
-              </div>
-              <DockRecentAgentTasks
-                enabled={bodyVisible && toolId === 'agent'}
-                onOpenJob={
-                  onOpenAgentDesk != null ? id => onOpenAgentDesk(id) : undefined
-                }
-                onOpenDesk={onOpenAgentDesk != null ? () => onOpenAgentDesk() : undefined}
-              />
+                  {hostPulse.deployRunning && (
+                    <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
+                      Host update in progress — Fix may be flaky until deploy finishes.
+                      {onOpenOperatorPlane != null && (
+                        <>
+                          {' '}
+                          <button
+                            type="button"
+                            className="console-agent-execution-dock__inline-link"
+                            onClick={onOpenOperatorPlane}
+                          >
+                            Operator Plane
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  )}
+                  {!hostPulse.deployRunning && hostPulse.allRunnersDown && (
+                    <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
+                      L-1 runners unreachable — recover hosts on Operator Plane.
+                      {onOpenOperatorPlane != null && (
+                        <>
+                          {' '}
+                          <button
+                            type="button"
+                            className="console-agent-execution-dock__inline-link"
+                            onClick={onOpenOperatorPlane}
+                          >
+                            Operator Plane
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="console-agent-execution-dock__detail-live">
+                  {hostPulse.deployRunning && (
+                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--warn">
+                      Host update in progress — Fix may be flaky
+                      {onOpenOperatorPlane != null && (
+                        <>
+                          {' · '}
+                          <button
+                            type="button"
+                            className="console-agent-execution-dock__inline-link"
+                            onClick={onOpenOperatorPlane}
+                          >
+                            Operator Plane
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  )}
+                  {bannerVariant === 'done' && job?.summary != null && job.summary !== '' && (
+                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--done">
+                      {job.summary}
+                    </p>
+                  )}
+                  {bannerVariant === 'failed' && (
+                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
+                      {job?.error ?? job?.summary ?? 'Unknown error'}
+                    </p>
+                  )}
+                  {error != null && !isTerminal && (
+                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
+                      Connection: {error}
+                    </p>
+                  )}
+
+                  {pendingApproval != null && (
+                    <div className="console-agent-execution-dock__approval">
+                      <RemediationApprovalBlock
+                        event={pendingApproval}
+                        compact
+                        submitting={respondPending}
+                        onRespond={(optionId, note, commitMessage) =>
+                          respond(optionId, note, commitMessage)
+                        }
+                      />
+                    </div>
+                  )}
+
+                  <div className="console-agent-execution-dock__log dense-scroll-y">
+                    {recentEvents.length === 0 ? (
+                      <p className="console-agent-execution-dock__log-empty">
+                        {isTerminal ? 'No event log for this task' : 'Waiting for agent activity…'}
+                      </p>
+                    ) : (
+                      <ul className="console-agent-execution-dock__log-list">
+                        {recentEvents.map(ev => (
+                          <li
+                            key={ev.id}
+                            className={cn(
+                              'console-agent-execution-dock__log-item',
+                              `console-agent-execution-dock__log-item--${ev.type}`,
+                            )}
+                          >
+                            <span className="console-agent-execution-dock__log-type">{ev.type}</span>
+                            <span className="console-agent-execution-dock__log-text">
+                              {formatFeedEventLine(ev)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          ) : (
-            <>
-              {hostPulse.deployRunning && (
-                <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--warn">
-                  Host update in progress — Fix may be flaky
-                  {onOpenOperatorPlane != null && (
-                    <>
-                      {' · '}
-                      <button
-                        type="button"
-                        className="console-agent-execution-dock__inline-link"
-                        onClick={onOpenOperatorPlane}
-                      >
-                        Operator Plane
-                      </button>
-                    </>
-                  )}
-                </p>
-              )}
-              {bannerVariant === 'done' && job?.summary != null && job.summary !== '' && (
-                <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--done">
-                  {job.summary}
-                </p>
-              )}
-              {bannerVariant === 'failed' && (
-                <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
-                  {job?.error ?? job?.summary ?? 'Unknown error'}
-                </p>
-              )}
-              {error != null && !isTerminal && (
-                <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
-                  Connection: {error}
-                </p>
-              )}
 
-              {pendingApproval != null && (
-                <div className="console-agent-execution-dock__approval">
-                  <RemediationApprovalBlock
-                    event={pendingApproval}
-                    compact
-                    submitting={respondPending}
-                    onRespond={(optionId, note, commitMessage) =>
-                      respond(optionId, note, commitMessage)
-                    }
-                  />
-                </div>
-              )}
-
-              {!isTerminal && (
-                <div className="console-agent-execution-dock__log dense-scroll-y">
-                  {recentEvents.length === 0 ? (
-                    <p className="console-agent-execution-dock__log-empty">Waiting for agent activity…</p>
-                  ) : (
-                    <ul className="console-agent-execution-dock__log-list">
-                      {recentEvents.map(ev => (
-                        <li
-                          key={ev.id}
-                          className={cn(
-                            'console-agent-execution-dock__log-item',
-                            `console-agent-execution-dock__log-item--${ev.type}`,
-                          )}
-                        >
-                          <span className="console-agent-execution-dock__log-type">{ev.type}</span>
-                          <span className="console-agent-execution-dock__log-text">
-                            {formatFeedEventLine(ev)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+            <DockRecentAgentTasks
+              enabled={bodyVisible && toolId === 'agent'}
+              activeJobId={jobId}
+              onSelectJob={onSelectJob}
+              onOpenDesk={onOpenAgentDesk != null ? () => onOpenAgentDesk() : undefined}
+            />
+          </div>
         </div>
 
         <div

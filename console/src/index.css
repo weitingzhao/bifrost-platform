@@ -9,6 +9,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Semantic aliases used by Operator Dock / remediation (not only Tailwind --color-*) */
+:root,
+.dark {
+  --warning: var(--color-lamp-yellow);
+  --success: var(--color-lamp-green);
+}
+
 @theme inline {
   --font-sans: 'Geist Variable', 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -39,6 +46,9 @@
   --color-warning: var(--color-lamp-yellow);
   --color-success: var(--color-lamp-green);
   --color-danger: var(--color-lamp-red);
+  /* Bare --warning/--success used by dock + remediation; must resolve or color-mix backgrounds go transparent */
+  --warning: var(--color-lamp-yellow);
+  --success: var(--color-lamp-green);
   /* Environment tier labels — identity colors, NOT health status (avoid destructive/warning semantics) */
   --color-env-dev: #34d399;
   --color-env-stg: #38bdf8;
@@ -4493,7 +4503,10 @@ html {
   overflow-y: auto;
   padding: 0.75rem 0.875rem;
   border-bottom: 1px solid color-mix(in srgb, #f59e0b 22%, var(--border));
-  background: color-mix(in srgb, var(--background) 55%, transparent);
+  /* Frosted — keep glass feel without letting page text punch through Agent Task copy */
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
 }
 
 .remediation-approval-context__kicker {
@@ -5831,7 +5844,14 @@ button.infra-stack-chip:hover {
   flex-direction: column;
   min-width: 0;
   border-top: 1px solid color-mix(in oklab, var(--task-mode-accent, #f59e0b) 40%, var(--border));
-  background: color-mix(in oklab, var(--task-mode-accent, #f59e0b) 8%, var(--card));
+  /* Frosted glass: opaque enough for Agent Task readability over Daily Ops / Mission */
+  background: color-mix(
+    in oklab,
+    var(--task-mode-accent, #f59e0b) 10%,
+    color-mix(in srgb, var(--card) 94%, transparent)
+  );
+  backdrop-filter: blur(22px) saturate(155%);
+  -webkit-backdrop-filter: blur(22px) saturate(155%);
   box-shadow: 0 -4px 16px color-mix(in oklab, var(--foreground) 8%, transparent);
 }
 
@@ -5857,12 +5877,18 @@ button.infra-stack-chip:hover {
 }
 
 .console-agent-execution-dock--approval {
-  border-top-color: color-mix(in oklab, var(--warning) 55%, var(--border));
-  background: color-mix(in oklab, var(--warning) 8%, var(--card));
+  border-top-color: color-mix(in oklab, var(--warning, #ca8a04) 55%, var(--border));
+  background: color-mix(
+    in oklab,
+    var(--warning, #ca8a04) 12%,
+    color-mix(in srgb, var(--card) 94%, transparent)
+  );
+  backdrop-filter: blur(22px) saturate(155%);
+  -webkit-backdrop-filter: blur(22px) saturate(155%);
 }
 
 .console-agent-execution-dock--done {
-  border-top-color: color-mix(in oklab, var(--success) 45%, var(--border));
+  border-top-color: color-mix(in oklab, var(--success, #16a34a) 45%, var(--border));
 }
 
 .console-agent-execution-dock--idle {
@@ -5880,11 +5906,41 @@ button.infra-stack-chip:hover {
   padding: 0.25rem 0.15rem 0.35rem;
 }
 
+/* Agent slot: left detail (3/5) + right Recent tasks (2/5) */
+.console-agent-execution-dock__agent-split {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(11rem, 2fr);
+  gap: 0.65rem;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  padding: 0.15rem 0 0.1rem;
+}
+
+.console-agent-execution-dock__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.console-agent-execution-dock__detail-live {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .console-agent-execution-dock__idle-intro {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
   flex-shrink: 0;
+  padding: 0.15rem 0.1rem;
 }
 
 .console-agent-execution-dock__idle-title {
@@ -5906,9 +5962,10 @@ button.infra-stack-chip:hover {
   flex: 1;
   flex-direction: column;
   gap: 0.35rem;
+  min-width: 0;
   min-height: 0;
-  border-top: 1px solid var(--border);
-  padding-top: 0.45rem;
+  border-left: 1px solid var(--border);
+  padding-left: 0.55rem;
 }
 
 .console-agent-execution-dock__recent-head {
@@ -5923,7 +5980,9 @@ button.infra-stack-chip:hover {
   margin: 0;
   font-size: var(--text-dense-caption);
   font-weight: 600;
-  color: var(--foreground);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
 }
 
 .console-agent-execution-dock__recent-empty {
@@ -5938,31 +5997,39 @@ button.infra-stack-chip:hover {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
   min-height: 0;
   overflow-y: auto;
 }
 
 .console-agent-execution-dock__recent-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1.4fr) auto auto;
-  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
   gap: 0.4rem;
   width: 100%;
   margin: 0;
-  padding: 0.28rem 0.4rem;
+  padding: 0.35rem 0.4rem;
   border: 1px solid transparent;
-  border-radius: calc(var(--radius) - 2px);
-  background: color-mix(in srgb, var(--secondary) 55%, transparent);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--secondary) 40%, transparent);
   color: var(--foreground);
+  font: inherit;
   font-size: var(--text-dense-caption);
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .console-agent-execution-dock__recent-row:hover {
   border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
   background: color-mix(in srgb, var(--primary) 8%, var(--card));
+}
+
+.console-agent-execution-dock__recent-row--active {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 12%, var(--card));
+  box-shadow: inset 2px 0 0 0 var(--primary);
 }
 
 .console-agent-execution-dock__recent-row:disabled,
@@ -5976,12 +6043,28 @@ button.infra-stack-chip:hover {
   background: color-mix(in srgb, var(--secondary) 55%, transparent);
 }
 
+.console-agent-execution-dock__recent-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
 .console-agent-execution-dock__recent-scope {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: var(--text-dense-meta);
+}
+
+.console-agent-execution-dock__recent-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
 }
 
 .console-agent-execution-dock__recent-status {
@@ -5993,6 +6076,20 @@ button.infra-stack-chip:hover {
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+@media (max-width: 52rem) {
+  .console-agent-execution-dock__agent-split {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1.2fr) minmax(7.5rem, 0.8fr);
+  }
+
+  .console-agent-execution-dock__recent {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    padding-top: 0.45rem;
+  }
 }
 
 .console-agent-execution-dock__resize {
@@ -6236,6 +6333,13 @@ button.infra-stack-chip:hover {
   min-height: 0;
   padding: 0 0.65rem 0.65rem;
   overflow: hidden;
+}
+
+.console-operator-dock__tool--agent {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .console-operator-dock__tool--console {
@@ -6739,17 +6843,25 @@ button.infra-stack-chip:hover {
   background: var(--destructive);
 }
 
-/* Compact approval block adjustments */
+/* Compact approval block adjustments (Operator Dock Agent slot) */
 .remediation-block--approval-compact {
   font-size: var(--text-dense-meta);
-  border-left: none;
-  background: transparent;
+  border-left: 3px solid #f59e0b;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  padding: 0.5rem 0.65rem;
 }
 
 .remediation-block--approval-compact .remediation-approval-context {
   min-height: unset;
-  max-height: 10rem;
-  padding: 0.25rem 0;
+  max-height: 12rem;
+  padding: 0.15rem 0 0.35rem;
+  border-bottom: 1px solid color-mix(in srgb, #f59e0b 22%, var(--border));
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .remediation-block--approval-compact .remediation-approval-title {
@@ -6767,7 +6879,8 @@ button.infra-stack-chip:hover {
 }
 
 .remediation-block--approval-compact .remediation-approval-actions {
-  padding: 0.25rem 0 0;
+  padding: 0.35rem 0 0;
+  background: transparent;
 }
 
 .remediation-block--approval-compact .remediation-approval-note__input {

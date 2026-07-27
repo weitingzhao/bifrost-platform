@@ -119,7 +119,7 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   },
   {
     action:
-      'Forced Agent Desk tab switch on Agent Fix start/running — use shell Operator Dock Agent slot (ambientJob + Expand dock); Agent Desk is archive only (explicit Open in Agent Desk)',
+      'Forced Agent Desk tab switch on Agent Fix start/running — use shell Operator Dock Agent slot (ambientJob + Expand dock; Recent rail adopts jobs in-dock); Agent Desk is archive only (explicit Open in Agent Desk / Archive)',
     scope: 'Ops Console shell',
   },
   {
