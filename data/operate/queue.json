@@ -439,9 +439,42 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
-      "status": "open",
+      "execution_job_id": "53fa63dc-1715-4bd2-8425-b532d4b68dc5",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope operator-plane-remediate is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
       "created_at": "2026-07-27T02:29:19Z",
-      "updated_at": "2026-07-27T02:29:19Z",
+      "updated_at": "2026-07-27T03:04:11Z",
+      "closed_at": "2026-07-27T03:04:11Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "d15bac96-e9f3-422b-ac75-4d058b94e20d",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Git bridge healthy + clean",
+      "description": "semi_auto handoff for item git-bridge\n\nBridge ok; 1 dirty repo (bifrost-platform: staged ata/operate/queue.json)",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "git-dirty-remediate",
+      "acceptance_criteria": [
+        "Checklist item git-bridge returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "execution_job_id": "f46c7512-bb7e-48c1-bee7-a2e4c3660c2a",
+      "status": "open",
+      "created_at": "2026-07-27T02:58:40Z",
+      "updated_at": "2026-07-27T03:19:16Z",
       "source": "checklist_dispatch"
     }
   ]
