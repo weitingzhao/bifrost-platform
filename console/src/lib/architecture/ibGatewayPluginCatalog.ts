@@ -113,6 +113,10 @@ export const REDIS_IB_CONTRACT = {
     'ib:ingester:meta:subscriptions',
     'ib:ingester:control:on_demand_stk (SET — Market Live STK)',
     'ib:ingester:control:on_demand_stk_ts (HASH heartbeat)',
+    'ib:option:cache:{contract_key} (OPT one-shot quote JSON, TTL 300s)',
+    'ib:option:control:on_demand_opt (SET — Market Live OPT)',
+    'ib:option:control:on_demand_opt_ts (HASH heartbeat)',
+    'ib:option:cache:meta:last_refresh_ts',
     'ib:account:{account_id}:*',
     'ib:operator:cmd',
     'ib:operator:result:{request_id}',
@@ -126,6 +130,14 @@ export const REDIS_IB_CONTRACT = {
     maxStreamDefault: 40,
     maxAgeSecDefault: 120,
     note: 'D10-safe market-data only — no place_order',
+  },
+  onDemandOpt: {
+    writer: 'Trade Market API GET /quotes + POST /quotes/refresh-options (SADD + heartbeat)',
+    consumer: 'IB Gateway Host _opt_cache_loop (one-shot fetch_option_quote → cache)',
+    maxContractsDefault: 40,
+    maxAgeSecDefault: 180,
+    refreshSecDefault: 30,
+    note: 'D10-safe market-data only — NOT continuous stream; no place_order',
   },
 } as const
 
@@ -191,6 +203,7 @@ export function buildIbGatewayPluginLlmPack(): string {
     '- Keys:',
     ...REDIS_IB_CONTRACT.keyNamespaces.map(k => `  - ${k}`),
     `- On-demand STK: writer=${REDIS_IB_CONTRACT.onDemandStk.writer}; consumer=${REDIS_IB_CONTRACT.onDemandStk.consumer}; ${REDIS_IB_CONTRACT.onDemandStk.note}`,
+    `- On-demand OPT: writer=${REDIS_IB_CONTRACT.onDemandOpt.writer}; consumer=${REDIS_IB_CONTRACT.onDemandOpt.consumer}; ${REDIS_IB_CONTRACT.onDemandOpt.note}`,
     '',
     '## Phases (definitions)',
     ...IB_GATEWAY_PLUGIN_PHASES.map(
