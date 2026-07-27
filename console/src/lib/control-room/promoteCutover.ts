@@ -59,8 +59,12 @@ export const PROMOTE_TIER_B_CHECKS = [
   'Prod cutover gate (blocked until D1)',
 ] as const
 
+/**
+ * Prod cutover track lamp in PromoteCutoverStrip.
+ * Narrative-ready stays neutral (not live GO green). Control Room Release bay must not
+ * fold this `unknown` into PROBING — see release bay handling in controlRoomBays.ts.
+ */
 function prodLampFromPromote(promote: PromoteStatus): Signal {
-  // Narrative-only — never paint success green that competes with live readiness.
   if (promote.ready) return 'unknown'
   if (promote.blockedByDecision || promote.prodFails) return 'fail'
   return 'degraded'

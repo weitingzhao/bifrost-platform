@@ -106,13 +106,39 @@ export function buildControlRoomBaySignals(input: ControlRoomBaySignalInput): Co
       ? operateBits.join(' · ')
       : signalReason(snapshot.agent.signal, 'Agent loop idle', 'Agent caution', 'Agent fail')
 
-  const releaseSignal = promoteLamp != null ? worst(snapshot.release.signal, promoteLamp) : snapshot.release.signal
-  const releaseReason = signalReason(
-    releaseSignal,
-    'Release / promote clear',
-    'Release or promote caution',
-    'Release or promote blocked',
-  )
+  // promoteLamp 'unknown' = Prod cutover narrative-ready (non-live GO), not "still probing".
+  // Folding it into worst() would paint the Release bay as PROBING while STG/deliver are clear.
+  let releaseSignal: Signal
+  let releaseReason: string
+  if (promoteLamp == null) {
+    releaseSignal = snapshot.release.signal
+    releaseReason = signalReason(
+      releaseSignal,
+      'Release / promote clear',
+      'Release or promote caution',
+      'Release or promote blocked',
+    )
+  } else if (promoteLamp === 'unknown') {
+    releaseSignal = snapshot.release.signal
+    if (releaseSignal === 'ok') {
+      releaseReason = 'Narrative ready · awaiting live cutover'
+    } else {
+      releaseReason = signalReason(
+        releaseSignal,
+        'Narrative ready · awaiting live cutover',
+        'Release caution · cutover narrative ready',
+        'Release blocked · cutover narrative ready',
+      )
+    }
+  } else {
+    releaseSignal = worst(snapshot.release.signal, promoteLamp)
+    releaseReason = signalReason(
+      releaseSignal,
+      'Release / promote clear',
+      'Release or promote caution',
+      'Release or promote blocked',
+    )
+  }
 
   const bays: ControlRoomBaySignal[] = [
     { id: 'mission', label: 'Mission', signal: snapshot.missionOverall, reason: missionReason },

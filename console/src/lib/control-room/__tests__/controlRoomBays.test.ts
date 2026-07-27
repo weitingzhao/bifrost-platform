@@ -91,6 +91,34 @@ describe('controlRoomBays', () => {
     expect(bays.find(b => b.id === 'health')?.signal).toBe('ok')
   })
 
+  it('does not map narrative-ready promoteLamp (unknown) to Release PROBING', () => {
+    const bays = buildControlRoomBaySignals({
+      snapshot: snap({
+        release: { signal: 'ok', value: 'shipped', detail: 'Last deliver: Succeeded' },
+      }),
+      promoteLamp: 'unknown',
+      showHealth: false,
+    })
+    const release = bays.find(b => b.id === 'release')
+    expect(release?.signal).toBe('ok')
+    expect(release?.reason).toBe('Narrative ready · awaiting live cutover')
+    expect(controlRoomVerdictLabel(release!.signal)).toBe('NOMINAL')
+    expect(controlRoomBayCountsLabel(bays)).not.toMatch(/probing/)
+  })
+
+  it('keeps deliver caution when promote is narrative-ready', () => {
+    const bays = buildControlRoomBaySignals({
+      snapshot: snap({
+        release: { signal: 'degraded', value: 'shipping', detail: 'Deliver running' },
+      }),
+      promoteLamp: 'unknown',
+      showHealth: false,
+    })
+    const release = bays.find(b => b.id === 'release')
+    expect(release?.signal).toBe('degraded')
+    expect(release?.reason).toContain('narrative ready')
+  })
+
   it('omits Health bay when showHealth is false', () => {
     const bays = buildControlRoomBaySignals({ snapshot: snap(), showHealth: false })
     expect(bays.map(b => b.id)).toEqual([
