@@ -37,6 +37,7 @@ import type { BusBodyMode } from '@/pages/satellite-bus/SatelliteBusDetailSectio
 import type { InspectTarget } from '@/pages/satellite-bus/inspectTypes'
 import { SatelliteBusInspectSheet } from '@/pages/satellite-bus/SatelliteBusSheets'
 import {
+  SATELLITE_DOMAIN_IDS,
   TRADE_ENV_OPTIONS,
   type TradeEnv,
   useSatelliteBusQueries,
@@ -216,10 +217,19 @@ export function SatelliteBusPage({
     window.setTimeout(() => setHighlightWorkload(null), 8_000)
   }, [])
 
-  const sharedBandSignal = useMemo(
-    () => sharedContextSignal(q.socketHealthMatrix.rocket, q.payloadRows),
-    [q.payloadRows, q.socketHealthMatrix.rocket],
-  )
+  const sharedBandSignal = useMemo(() => {
+    const domainIds = new Set(SATELLITE_DOMAIN_IDS)
+    const domains = (q.serviceReadinessQuery.data?.domains ?? [])
+      .filter(d => domainIds.has(d.id as (typeof SATELLITE_DOMAIN_IDS)[number]))
+      .map(d => ({
+        id: d.id,
+        label: d.label,
+        status: d.status,
+        reachability: d.reachability,
+        summary: d.summary,
+      }))
+    return sharedContextSignal(q.socketHealthMatrix.rocket, q.payloadRows, domains)
+  }, [q.payloadRows, q.serviceReadinessQuery.data?.domains, q.socketHealthMatrix.rocket])
 
   const compareBandSignal = useMemo(
     () => socketMatrixContextSignal(q.socketHealthMatrix.tradeRows),

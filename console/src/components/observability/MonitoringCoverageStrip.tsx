@@ -38,6 +38,7 @@ export function MonitoringCoverageStrip({
   onOpenObservability,
   onOpenCluster,
   variant = 'flat',
+  title = 'Monitoring coverage',
 }: {
   layerB: LayerBStatus | undefined
   prometheusConfigured: boolean
@@ -45,11 +46,12 @@ export function MonitoringCoverageStrip({
   onOpenObservability?: () => void
   onOpenCluster?: () => void
   variant?: 'elevated' | 'flat'
+  title?: string
 }) {
   return (
     <OpsSection
       variant={variant}
-      title="Monitoring coverage"
+      title={title}
       bodyPadding="compact"
       overflow="visible"
       description="Layer A/B install stays on Rocket → Cluster · system health on Mission Control → Observability"

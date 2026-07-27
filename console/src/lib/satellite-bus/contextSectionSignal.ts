@@ -16,6 +16,15 @@ export type ContextSectionSignal = {
   detail?: string
 }
 
+/** Subset of service-readiness domains shown on Bus · Shared. */
+export type SharedServiceDomainInput = {
+  id: string
+  label: string
+  status: string
+  reachability: Reachability
+  summary?: string
+}
+
 export function contextSignalTagVariant(
   reach: Reachability,
 ): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -64,21 +73,29 @@ function cellSignalToReach(signal: string): Reachability | null {
   return null
 }
 
-/** Shared Rocket + Ground — View · Shared segment lamp (no Evidence / matrix diverge). */
+/** Shared Rocket + Ground — View · Shared segment lamp (Rocket + Payload + Service domains). */
 export function sharedContextSignal(
   rocket: SocketHealthRow,
   payloadRows: PayloadReadinessRow[],
+  serviceDomains: SharedServiceDomainInput[] = [],
 ): ContextSectionSignal {
   const reaches: Reachability[] = [rocket.reach]
   const notes: string[] = []
+  let observeOnly = false
+  let hardWarn = false
+  let hardFail = false
+
   if (rocket.reach !== 'ok' && rocket.reach !== 'unknown') {
     notes.push(`gateway ${rocket.reachLabel}`)
+    if (rocket.reach === 'fail') hardFail = true
+    else hardWarn = true
   }
   let divergeCount = 0
   for (const row of payloadRows) {
     if (row.envDiverges) {
       divergeCount += 1
       reaches.push('degraded')
+      hardWarn = true
     }
     for (const cell of [row.dev, row.stg, row.prod]) {
       const r = cellSignalToReach(cell.signal)
@@ -86,14 +103,54 @@ export function sharedContextSignal(
       reaches.push(r)
       if (r === 'fail' || r === 'degraded') {
         notes.push(`${row.label} ${cell.signal}`)
+        if (r === 'fail') hardFail = true
+        else hardWarn = true
+      }
+      if (r === 'unknown') {
+        // UNPROBED path — keep existing unknown→degraded via worst/finish
       }
     }
   }
   if (divergeCount > 0) {
     notes.push(`${divergeCount} payload env diverge`)
   }
+
+  for (const domain of serviceDomains) {
+    const status = domain.status.trim().toLowerCase()
+    if (status === 'ready') continue
+    if (status === '' && domain.reachability === 'ok') continue
+    if (status === 'standby') {
+      reaches.push('degraded')
+      notes.push(`${domain.label} standby`)
+      observeOnly = true
+      continue
+    }
+    if (status === 'unavailable' || domain.reachability === 'fail') {
+      reaches.push('fail')
+      notes.push(`${domain.label} unavailable`)
+      hardFail = true
+      continue
+    }
+    // partial / degraded gaps
+    reaches.push(domain.reachability === 'unknown' ? 'degraded' : domain.reachability)
+    notes.push(
+      domain.summary?.trim()
+        ? `${domain.label}: ${domain.summary.trim()}`
+        : `${domain.label} ${status || domain.reachability}`,
+    )
+    hardWarn = true
+  }
+
   const reach = worst(...reaches)
-  return finish(reach, notes[0])
+  // Prefer actionable gaps over D10 standby notes in the one-line detail.
+  const detail =
+    notes.find(n => !/\bstandby\b/i.test(n)) ?? notes[0]
+
+  if (reach === 'ok') return finish('ok')
+  if (hardFail || reach === 'fail') return finish(reach === 'fail' ? 'fail' : 'degraded', detail, 'FAIL')
+  if (hardWarn) return finish(reach === 'unknown' ? 'degraded' : reach, detail, 'WARN')
+  if (observeOnly) return finish('degraded', detail, 'OBSERVE')
+  return finish(reach, detail)
 }
 
 /**

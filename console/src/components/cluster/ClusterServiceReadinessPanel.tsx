@@ -23,6 +23,11 @@ interface ClusterServiceReadinessPanelProps {
   /** When set, show only this domain and auto-expand dependencies. */
   domainFilter?: string
   variant?: 'elevated' | 'flat'
+  /**
+   * Inset card without outer OpsSection — for Bus · Shared lane grids.
+   * Skips global aggregate chip / refresh (parent owns those).
+   */
+  embedded?: boolean
 }
 
 function statusVariant(status: ServiceDomainStatus | string): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -78,6 +83,7 @@ export function ClusterServiceReadinessPanel({
   compact = false,
   domainFilter,
   variant = 'elevated',
+  embedded = false,
 }: ClusterServiceReadinessPanelProps) {
   const qc = useQueryClient()
   const fetching = useIsFetching({ queryKey: ['cluster', 'service-readiness'] }) > 0
@@ -96,6 +102,45 @@ export function ClusterServiceReadinessPanel({
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['cluster', 'service-readiness'] })
+  }
+
+  if (embedded) {
+    const domain = filteredDomain
+    return (
+      <div className="satellite-bus-shared-domain-card flex min-w-0 flex-col overflow-hidden rounded-md border border-[var(--border)] bg-[var(--background)]/40">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-[var(--border)] px-2.5 py-1.5">
+          <span className="text-[var(--text-dense-meta)] font-medium">
+            {domain?.label ?? domainFilter ?? 'Domain'}
+          </span>
+          {domain != null ? (
+            <span className="inline-flex items-center gap-1">
+              <StatusLamp value={domain.reachability} kind="reach" />
+              <DenseTag variant={statusVariant(domain.status)} className="text-[9px]">
+                {statusLabel(domain.status)}
+              </DenseTag>
+            </span>
+          ) : (
+            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+              {isLoading ? 'Loading…' : '—'}
+            </span>
+          )}
+          {domain?.summary != null && domain.summary !== '' && (
+            <span className="min-w-0 flex-1 truncate text-[var(--text-dense-caption)] text-muted-foreground">
+              {domain.summary}
+            </span>
+          )}
+        </div>
+        <div className="px-2.5 py-1.5">
+          {domain == null ? (
+            <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
+              {isLoading ? 'Loading…' : 'Cluster unreachable'}
+            </p>
+          ) : (
+            <DependencyList domain={domain} />
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (

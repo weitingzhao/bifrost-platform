@@ -17,6 +17,8 @@ interface SatelliteObservabilityStripProps {
   onOpenTelemetry?: () => void
   onOpenObservability?: () => void
   variant?: 'elevated' | 'flat'
+  /** Override OpsSection title (e.g. Shared lane “4 · Monitoring coverage”). */
+  title?: string
 }
 
 export function SatelliteObservabilityStrip({
@@ -26,6 +28,7 @@ export function SatelliteObservabilityStrip({
   onOpenObservability,
   onOpenTelemetry,
   variant = 'elevated',
+  title = 'Monitoring coverage',
 }: SatelliteObservabilityStripProps) {
   const observabilityQuery = useQuery({
     queryKey: ['cluster', 'observability'],
@@ -49,6 +52,7 @@ export function SatelliteObservabilityStrip({
   return (
     <MonitoringCoverageStrip
       variant={variant}
+      title={title}
       layerB={layerB}
       prometheusConfigured={prometheusConfigured}
       loading={loading}

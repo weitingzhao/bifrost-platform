@@ -112,6 +112,42 @@ describe('sharedContextSignal', () => {
     expect(s.reach).toBe('ok')
     expect(s.label).toBe('OK')
   })
+
+  it('folds Service Domains partial into Shared WARN', () => {
+    const s = sharedContextSignal(rocket('ok'), [payloadRow({ id: 'daemon', label: 'Daemon' })], [
+      {
+        id: 'workers',
+        label: 'General workers',
+        status: 'standby',
+        reachability: 'degraded',
+        summary: 'Infrastructure ready · workloads scaled to zero',
+      },
+      {
+        id: 'applications',
+        label: 'General applications',
+        status: 'partial',
+        reachability: 'degraded',
+        summary: '3 dependency gap(s)',
+      },
+    ])
+    expect(s.reach).toBe('degraded')
+    expect(s.label).toBe('WARN')
+    expect(s.detail).toMatch(/applications|gap/i)
+  })
+
+  it('standby-only Service Domains → OBSERVE (D10 scale-zero)', () => {
+    const s = sharedContextSignal(rocket('ok'), [payloadRow({ id: 'daemon', label: 'Daemon' })], [
+      {
+        id: 'workers',
+        label: 'General workers',
+        status: 'standby',
+        reachability: 'degraded',
+      },
+    ])
+    expect(s.reach).toBe('degraded')
+    expect(s.label).toBe('OBSERVE')
+    expect(s.detail).toMatch(/standby/i)
+  })
 })
 
 describe('socketMatrixContextSignal', () => {

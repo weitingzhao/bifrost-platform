@@ -1143,8 +1143,20 @@ html {
 }
 
 .satellite-bus-page .ops-section--flat + .ops-section--flat,
-.satellite-bus-page .satellite-bus-group-body > * + * {
+.satellite-bus-page .satellite-bus-group-body > * + *,
+.satellite-bus-page .satellite-bus-shared-lanes > * + * {
   border-top: 1px solid var(--border);
+}
+
+/* Shared lanes — slightly stronger header weight + domain card inset */
+.satellite-bus-page .satellite-bus-shared-lanes > .ops-section--flat > .ops-section-header {
+  padding-top: 0.5rem;
+  padding-bottom: 0.35rem;
+  background: color-mix(in srgb, var(--secondary) 55%, transparent);
+}
+
+.satellite-bus-page .satellite-bus-shared-domain-grid {
+  min-width: 0;
 }
 
 .satellite-bus-page .ops-section-header {

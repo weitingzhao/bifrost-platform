@@ -530,6 +530,42 @@ function emptyCell(): SocketHealthEnvCell {
   return { reach: 'unknown', reachLabel: 'unknown', required: 'optional', detail: 'Not probed' }
 }
 
+/**
+ * Compare · DRIFT buckets — intentional observe / D10 scale-zero must not diverge
+ * from each other (STG expected-off vs DEV/PROD observe is policy, not drift).
+ */
+export function matrixDivergeBucket(cell: SocketHealthEnvCell): string | null {
+  if (cell.reach === 'unknown' && cell.required !== 'policy-off') return null
+  if (cell.required === 'policy-off') return 'healthy-intentional'
+  const label = cell.reachLabel.trim().toLowerCase()
+  if (
+    label === 'observe' ||
+    label === 'paused' ||
+    label === 'stopped' ||
+    label === 'policy-off' ||
+    label === 'expected off'
+  ) {
+    return 'healthy-intentional'
+  }
+  if (cell.reach === 'ok' && (label === 'ok' || label === 'partial')) {
+    return 'healthy-up'
+  }
+  return `${cell.reach}:${label || cell.reach}`
+}
+
+/** True when probed env cells disagree beyond intentional observe / policy-off modes. */
+export function computeEnvDiverges(
+  cells: Pick<SocketHealthMatrixRow, 'dev' | 'stg' | 'prod' | 'local'>,
+): boolean {
+  const buckets = new Set<string>()
+  for (const env of SOCKET_MATRIX_ENVS) {
+    const bucket = matrixDivergeBucket(cells[matrixCellKey(env)])
+    if (bucket == null) continue
+    buckets.add(bucket)
+  }
+  return buckets.size > 1
+}
+
 const TRADE_CONSUMER_DEFS: { id: string; label: string; includeDaemon?: boolean }[] = [
   { id: 'ib_ingestor', label: 'IB Ingestor' },
   { id: 'ib_account_agent', label: 'IB Account Agent' },
@@ -586,8 +622,7 @@ export function buildSocketHealthMatrix(
       }
     }
 
-    const labels = SOCKET_MATRIX_ENVS.map(e => cells[matrixCellKey(e)].reachLabel)
-    const envDiverges = new Set(labels).size > 1
+    const envDiverges = computeEnvDiverges(cells)
 
     return {
       id: def.id,
