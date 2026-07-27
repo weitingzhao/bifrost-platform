@@ -110,7 +110,13 @@ function findFleetCell(
   env: FleetEnvColumn,
 ): FleetCell | undefined {
   const key = cellKey(role, env)
-  return fleet.cells.find(c => c.key === key)
+  const exact = fleet.cells.find(c => c.key === key)
+  if (exact != null) return exact
+  // Platform IB Gateway / vendor feeds are shared across Trade NS (span cell only).
+  if (role === 'vendor') {
+    return fleet.cells.find(c => c.key === cellKey('vendor', 'span'))
+  }
+  return undefined
 }
 
 function matchDaemon(s: FleetStandard): boolean {

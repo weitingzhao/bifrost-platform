@@ -641,6 +641,7 @@ export function SatelliteBusPage({
           observabilityQuery={q.observabilityQuery}
           matrixQuery={q.matrixQuery}
           workloadsQuery={q.workloadsQuery}
+          pluginWorkloadsQuery={q.pluginWorkloadsQuery}
           canOperate={q.canOperate}
           busDeep={q.busDeep}
           tradeApiTargetRows={q.tradeApiTargetRows}

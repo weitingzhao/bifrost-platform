@@ -82,6 +82,36 @@ describe('sharedContextSignal', () => {
     expect(s.reach).toBe('degraded')
     expect(s.label).toBe('UNPROBED')
   })
+
+  it('unknown IB edge alone (shared vendor not projected) → UNPROBED', () => {
+    const probing = { signal: 'unknown' as const, detail: 'No Fleet cell vendor:dev' }
+    const s = sharedContextSignal(rocket('ok'), [
+      payloadRow({
+        id: 'ib',
+        label: 'IB edge',
+        fleetRole: 'vendor',
+        mapMode: 'fleet-vendor',
+        dev: probing,
+        stg: probing,
+        prod: probing,
+      }),
+    ])
+    expect(s.reach).toBe('degraded')
+    expect(s.label).toBe('UNPROBED')
+  })
+
+  it('OK gateway + OK IB edge → Shared OK', () => {
+    const s = sharedContextSignal(rocket('ok'), [
+      payloadRow({
+        id: 'ib',
+        label: 'IB edge',
+        fleetRole: 'vendor',
+        mapMode: 'fleet-vendor',
+      }),
+    ])
+    expect(s.reach).toBe('ok')
+    expect(s.label).toBe('OK')
+  })
 })
 
 describe('socketMatrixContextSignal', () => {
@@ -176,6 +206,79 @@ describe('evidenceContextSignal', () => {
     expect(s.reach).toBe('degraded')
     expect(s.label).toBe('OBSERVE')
     expect(s.detail).toBeTruthy()
+  })
+
+  it('OBSERVE (not FAIL) when daemon gracefully shut down under D10', () => {
+    const bus = {
+      monitor: {
+        daemon: {
+          reachability: 'fail',
+          self_check: 'blocked',
+          lamp: 'red',
+          block_reasons: ['heartbeat_stale'],
+          heartbeat: {
+            daemon_alive: false,
+            graceful_shutdown_at: 1785087512.175405,
+          },
+        },
+        celery: { reachability: 'ok' },
+        account_sync: { reachability: 'ok' },
+      },
+      ops: { reachability: 'ok' },
+    } as SatelliteBusDeepResponse
+    const s = evidenceContextSignal(bus, [], [])
+    expect(s.reach).toBe('degraded')
+    expect(s.label).toBe('OBSERVE')
+    expect(s.detail).toMatch(/D10|expected off|graceful/i)
+  })
+
+  it('FAIL when daemon is down without graceful shutdown', () => {
+    const bus = {
+      monitor: {
+        daemon: {
+          reachability: 'fail',
+          self_check: 'blocked',
+          lamp: 'red',
+          block_reasons: ['heartbeat_stale'],
+          heartbeat: {
+            daemon_alive: false,
+          },
+        },
+        celery: { reachability: 'ok' },
+        account_sync: { reachability: 'ok' },
+      },
+      ops: { reachability: 'ok' },
+    } as SatelliteBusDeepResponse
+    const s = evidenceContextSignal(bus, [], [])
+    expect(s.reach).toBe('fail')
+    expect(s.label).toBe('FAIL')
+  })
+
+  it('OBSERVE when critical process is scaled-to-zero standby', () => {
+    const bus = {
+      monitor: {
+        daemon: { reachability: 'ok' },
+        celery: { reachability: 'ok' },
+        account_sync: { reachability: 'ok' },
+      },
+      ops: { reachability: 'ok' },
+    } as SatelliteBusDeepResponse
+    const s = evidenceContextSignal(
+      bus,
+      [],
+      [
+        {
+          label: 'GsTrading daemon',
+          name: 'daemon',
+          namespace: 'bifrost-stg',
+          reachability: 'degraded',
+          ready: '0/0',
+          status: 'scaled to zero (standby)',
+        },
+      ],
+    )
+    expect(s.reach).toBe('degraded')
+    expect(s.label).toBe('OBSERVE')
   })
 
   it('UNPROBED (degraded) when bus-deep missing', () => {

@@ -36,9 +36,16 @@ import {
 } from '@/lib/satellite/socketHealthSemantics'
 import { filterTradeApiTargets, tradeApiTargetCounts } from '@/lib/satellite/tradeApiTargets'
 import {
+  IB_GATEWAY_PLUGIN_NS,
+  resolveCriticalProcesses,
+  type CriticalProcessRow,
+} from '@/lib/satellite-bus/criticalProcesses'
+import {
   buildSatelliteBusViewModel,
   type BusHealth,
 } from '@/lib/satellite-bus/satelliteBusViewModel'
+
+export type { CriticalProcessRow }
 
 /** Map 'unknown' → 'degraded' for UI rendering — no gray/? lamps on the bus page. */
 function busLampReach(r: Reachability | undefined): Reachability {
@@ -68,26 +75,7 @@ export const TRADE_NS: Record<TradeEnv, string> = {
 
 export const SATELLITE_DOMAIN_IDS = ['workers', 'applications', 'database', 'redis'] as const
 
-const CRITICAL_PROCESS_PATTERNS = [
-  { pattern: /daemon/i, label: 'GsTrading daemon' },
-  { pattern: /ingestor|ib-ingest/i, label: 'IB Ingestor' },
-  { pattern: /operator|ib-operator/i, label: 'IB Operator' },
-  { pattern: /account/i, label: 'IB Account Agent' },
-  { pattern: /massive/i, label: 'Massive WS' },
-  { pattern: /celery|worker/i, label: 'Celery worker' },
-  { pattern: /flower/i, label: 'Flower' },
-]
-
 export type MonitorKvRow = { label: string; value: ReactNode }
-
-export type CriticalProcessRow = {
-  label: string
-  name: string
-  namespace: string
-  reachability: Reachability
-  ready: string
-  status: string
-}
 
 function renderText(value: unknown): string {
   if (value == null) return '—'
@@ -133,6 +121,13 @@ export function useSatelliteBusQueries({
     queryFn: () => fetchClusterWorkloads(ns),
     // Faster poll while Operate / ACTUATION strip is watching a rollout.
     refetchInterval: inFlightWorkload != null ? 2_000 : 30_000,
+  })
+
+  /** IB Gateway plugin workloads (`data/ib-gateway`) — shared across Trade envs. */
+  const pluginWorkloadsQuery = useQuery({
+    queryKey: ['cluster', 'workloads', IB_GATEWAY_PLUGIN_NS, 'satellite-bus-ib-gateway'],
+    queryFn: () => fetchClusterWorkloads(IB_GATEWAY_PLUGIN_NS),
+    refetchInterval: 30_000,
   })
 
   const metricsQuery = useQuery({
@@ -234,19 +229,12 @@ export function useSatelliteBusQueries({
   ])
 
   const criticalProcesses = useMemo((): CriticalProcessRow[] => {
-    const workloads = workloadsQuery.data?.workloads ?? []
-    return CRITICAL_PROCESS_PATTERNS.map(({ pattern, label }) => {
-      const match = workloads.find(w => pattern.test(w.name))
-      return {
-        label,
-        name: match?.name ?? '—',
-        namespace: match?.namespace ?? ns,
-        reachability: match?.reachability ?? ('unknown' as Reachability),
-        ready: match?.ready ?? '—',
-        status: match?.status ?? 'not deployed',
-      }
-    })
-  }, [ns, workloadsQuery.data?.workloads])
+    return resolveCriticalProcesses(
+      ns,
+      workloadsQuery.data?.workloads ?? [],
+      pluginWorkloadsQuery.data?.workloads ?? [],
+    )
+  }, [ns, pluginWorkloadsQuery.data?.workloads, workloadsQuery.data?.workloads])
 
   const ingestSummary = useMemo(
     () => summarizeIngestServices(busDeep?.ingest.services ?? []),
@@ -407,6 +395,7 @@ export function useSatelliteBusQueries({
     matrixQuery,
     serviceReadinessQuery,
     workloadsQuery,
+    pluginWorkloadsQuery,
     metricsQuery,
     observabilityQuery,
     payloadRows,

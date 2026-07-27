@@ -149,6 +149,30 @@ function blockReasonText(daemon: SatelliteBusDeepResponse['monitor']['daemon']):
 }
 
 /**
+ * D10 / observe-safe: daemon intentionally stopped (graceful shutdown) must not
+ * paint Operate · Evidence as FAIL while Bus Health stays HEALTHY.
+ */
+export function isDaemonExpectedOff(
+  daemon: SatelliteBusDeepResponse['monitor']['daemon'] | undefined,
+): boolean {
+  if (daemon == null) return false
+  const hb = daemon.heartbeat
+  if (hb == null || typeof hb !== 'object') return false
+  const alive = (hb as { daemon_alive?: unknown }).daemon_alive
+  const graceful = (hb as { graceful_shutdown_at?: unknown }).graceful_shutdown_at
+  return alive === false && graceful != null && String(graceful).trim() !== ''
+}
+
+function isStandbyCriticalProcess(p: CriticalProcessRow): boolean {
+  const blob = `${p.status} ${p.ready} ${p.name} ${p.label}`.toLowerCase()
+  return (
+    blob.includes('scaled to zero') ||
+    blob.includes('standby') ||
+    p.status.trim().toLowerCase() === 'not deployed'
+  )
+}
+
+/**
  * Evidence · raw probes for selected NS (Operate fold).
  * Observe / D10 trading-arm yellow → OBSERVE (not WARN) when not hard-fail.
  * Does not feed View · Shared / Compare lamps.
@@ -171,28 +195,36 @@ export function evidenceContextSignal(
     if (r === 'fail') hardFail = true
   }
 
-  push(bus.monitor.daemon?.reachability, `daemon ${bus.monitor.daemon?.reachability}`)
-  const self = (bus.monitor.daemon?.self_check ?? '').toLowerCase()
-  if (self === 'degraded' || self === 'blocked' || self === 'fail') {
-    const r = self === 'blocked' || self === 'fail' ? 'fail' : 'degraded'
-    reaches.push(r)
-    notes.push(`self_check ${self}`)
-    if (r === 'fail') hardFail = true
-    else observeOnly = true
-  }
-  const lamp = (bus.monitor.daemon?.lamp ?? '').toLowerCase()
-  if (lamp === 'yellow' || lamp === 'red') {
-    const r = lamp === 'red' ? 'fail' : 'degraded'
-    reaches.push(r)
-    notes.push(`lamp ${lamp}`)
-    if (r === 'fail') hardFail = true
-    else observeOnly = true
-  }
-  const br = blockReasonText(bus.monitor.daemon)
-  if (br != null) {
+  const daemon = bus.monitor.daemon
+  const daemonExpectedOff = isDaemonExpectedOff(daemon)
+  if (daemonExpectedOff) {
     reaches.push('degraded')
-    notes.push(br)
+    notes.push('daemon expected off (D10 observe / graceful shutdown)')
     observeOnly = true
+  } else {
+    push(daemon?.reachability, `daemon ${daemon?.reachability}`)
+    const self = (daemon?.self_check ?? '').toLowerCase()
+    if (self === 'degraded' || self === 'blocked' || self === 'fail') {
+      const r = self === 'blocked' || self === 'fail' ? 'fail' : 'degraded'
+      reaches.push(r)
+      notes.push(`self_check ${self}`)
+      if (r === 'fail') hardFail = true
+      else observeOnly = true
+    }
+    const lamp = (daemon?.lamp ?? '').toLowerCase()
+    if (lamp === 'yellow' || lamp === 'red') {
+      const r = lamp === 'red' ? 'fail' : 'degraded'
+      reaches.push(r)
+      notes.push(`lamp ${lamp}`)
+      if (r === 'fail') hardFail = true
+      else observeOnly = true
+    }
+    const br = blockReasonText(daemon)
+    if (br != null) {
+      reaches.push('degraded')
+      notes.push(br)
+      observeOnly = true
+    }
   }
   push(bus.monitor.celery?.reachability, `celery ${bus.monitor.celery?.reachability}`)
   push(bus.monitor.account_sync?.reachability, `account_sync ${bus.monitor.account_sync?.reachability}`)
@@ -206,11 +238,16 @@ export function evidenceContextSignal(
     }
   }
   for (const p of criticalProcesses) {
-    if (p.reachability === 'fail' || p.reachability === 'degraded') {
-      reaches.push(p.reachability)
-      notes.push(`${p.label} ${p.reachability}`)
-      if (p.reachability === 'fail') hardFail = true
+    if (p.reachability !== 'fail' && p.reachability !== 'degraded') continue
+    if (isStandbyCriticalProcess(p)) {
+      reaches.push('degraded')
+      notes.push(`${p.label} standby (D10)`)
+      observeOnly = true
+      continue
     }
+    reaches.push(p.reachability)
+    notes.push(`${p.label} ${p.reachability}`)
+    if (p.reachability === 'fail') hardFail = true
   }
 
   const reach = reaches.length === 0 ? 'ok' : worst(...reaches)

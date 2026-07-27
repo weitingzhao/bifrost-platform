@@ -96,7 +96,7 @@ export function SatelliteBusEvidenceSection({
         title="Critical processes"
         bodyPadding="none"
         overflow="hidden"
-        description={`K8s workload readiness in ${ns} — evidence only, not part of the Bus Health verdict`}
+        description={`K8s workload readiness in ${ns} (+ data/ib-gateway for IB edge) — evidence only, not part of the Bus Health verdict`}
       >
         <CriticalProcessesTable rows={criticalProcesses} loading={workloadsLoading} />
       </OpsSection>

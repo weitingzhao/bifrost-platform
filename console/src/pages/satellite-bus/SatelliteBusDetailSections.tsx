@@ -53,6 +53,7 @@ export type SatelliteBusDetailSectionsProps = {
   observabilityQuery: BusQueries['observabilityQuery']
   matrixQuery: BusQueries['matrixQuery']
   workloadsQuery: BusQueries['workloadsQuery']
+  pluginWorkloadsQuery: BusQueries['pluginWorkloadsQuery']
   canOperate: boolean
   busDeep: SatelliteBusDeepResponse | undefined
   tradeApiTargetRows: Target[]
@@ -97,6 +98,7 @@ export function SatelliteBusDetailSections({
   observabilityQuery,
   matrixQuery,
   workloadsQuery,
+  pluginWorkloadsQuery,
   canOperate,
   busDeep,
   tradeApiTargetRows,
@@ -233,7 +235,7 @@ export function SatelliteBusDetailSections({
             tradeApiTargetRows={tradeApiTargetRows}
             matrixLoading={matrixQuery.isLoading}
             criticalProcesses={criticalProcesses}
-            workloadsLoading={workloadsQuery.isLoading}
+            workloadsLoading={workloadsQuery.isLoading || pluginWorkloadsQuery.isLoading}
           />
         </BusPageBand>
       )}
