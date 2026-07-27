@@ -128,9 +128,15 @@
       "risk_level": "medium",
       "owner": "ops",
       "execution_job_id": "58edb121-c76b-4cfc-b7b3-185cc9f3da03",
-      "status": "open",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: decision brief dismissed",
+        "brief:b212a110-905f-48c9-9140-a0af564d4037"
+      ],
+      "status": "closed",
       "created_at": "2026-07-19T06:12:39Z",
-      "updated_at": "2026-07-20T05:41:19Z",
+      "updated_at": "2026-07-27T02:28:26Z",
+      "closed_at": "2026-07-27T02:28:26Z",
       "source": "checklist_dispatch"
     },
     {
@@ -277,9 +283,17 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
-      "status": "open",
+      "execution_job_id": "0191a8e1-c807-45a7-940e-c9853e31aaf4",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope git-dirty-remediate is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
       "created_at": "2026-07-19T06:13:58Z",
-      "updated_at": "2026-07-19T06:13:58Z",
+      "updated_at": "2026-07-27T02:29:24Z",
+      "closed_at": "2026-07-27T02:29:24Z",
       "source": "checklist_dispatch"
     },
     {
@@ -363,9 +377,16 @@
       ],
       "risk_level": "medium",
       "owner": "ops",
-      "status": "open",
+      "completion_evidence": [
+        "dismiss:resolved",
+        "operator: queue drain sweep auto-dismiss",
+        "sweep: fleet cell for scope git-dirty-remediate is GO",
+        "fleet_signal:GO"
+      ],
+      "status": "closed",
       "created_at": "2026-07-20T05:21:27Z",
-      "updated_at": "2026-07-20T05:21:27Z",
+      "updated_at": "2026-07-27T02:29:24Z",
+      "closed_at": "2026-07-27T02:29:24Z",
       "source": "checklist_dispatch"
     },
     {
@@ -397,6 +418,30 @@
       "created_at": "2026-07-20T05:21:27Z",
       "updated_at": "2026-07-20T06:15:36Z",
       "closed_at": "2026-07-20T06:15:36Z",
+      "source": "checklist_dispatch"
+    },
+    {
+      "id": "7663190e-1473-40ea-add3-e6935bd1ee4b",
+      "program_id": "daily-ops-checklist",
+      "lane": "troubleshoot",
+      "operate_lane": "troubleshoot",
+      "title": "Checklist · Hermes AI tooling",
+      "description": "semi_auto handoff for item hermes-tooling\n\nHermes MCP 127.0.0.1:8782 connection refused; Nous gateway stopped (0 active agents); platform MCP stdio ok (73 tools)",
+      "handoff_kind": "one_off",
+      "reason": "checklist_dispatch",
+      "agent_task_id": "daily-ops-checklist-run",
+      "acceptance_criteria": [
+        "Checklist item hermes-tooling returns ok"
+      ],
+      "verification_steps": [
+        "verify_mission_snapshot",
+        "Re-check Daily Ops Checklist item signal"
+      ],
+      "risk_level": "medium",
+      "owner": "ops",
+      "status": "open",
+      "created_at": "2026-07-27T02:29:19Z",
+      "updated_at": "2026-07-27T02:29:19Z",
       "source": "checklist_dispatch"
     }
   ]
