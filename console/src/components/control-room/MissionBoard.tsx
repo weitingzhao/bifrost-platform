@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ExternalLink, Satellite, Wrench } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, cn } from '@bifrost/ui'
+import { Button, cn, DenseTag } from '@bifrost/ui'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { fetchStgSmoke } from '@/api/promote'
@@ -12,7 +12,6 @@ import {
 } from '@/components/task-mode/TaskModeReadinessStrip'
 import { buildDeliverStgRecoverPrompt, isDeliverStgStaleFailure } from '@/lib/agent/deliverStgRecoverPrompt'
 import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
-import { DenseTag } from '@bifrost/ui'
 import { listFailingMatrixTargets } from '@/lib/control-room/controlRoomOperatePack'
 import {
   collectMissionDegradationItems,
@@ -142,6 +141,18 @@ export function MissionBoard({
   const rocketDegraded = rocketSignal !== 'ok'
   const payloadDegraded = payloadSignal !== 'ok'
 
+  // Mission CAUTION causes are always in-section (not click-gated). Clear stale
+  // expand when Mission returns to NOMINAL.
+  useEffect(() => {
+    if (!missionDegraded) setDetailScope(null)
+  }, [missionDegraded])
+
+  const chipVsSnapshotMismatch =
+    missionDegraded &&
+    !rocketDegraded &&
+    !payloadDegraded &&
+    degradationItems.length > 0
+
   const supplyQ = useQuery({ queryKey: ['mission-board', 'supply'], queryFn: fetchSupplyChain, refetchInterval: 20_000 })
   const smokeQ = useQuery({ queryKey: ['mission-board', 'stg-smoke'], queryFn: fetchStgSmoke, refetchInterval: 20_000 })
 
@@ -157,6 +168,10 @@ export function MissionBoard({
       item.id.toLowerCase().includes('release') ||
       item.id.toLowerCase().includes('supply') ||
       item.detail.toLowerCase().includes('deliver')
+    const isAgent =
+      item.id.toLowerCase() === 'agent' ||
+      item.detail.toLowerCase().includes('dirty') ||
+      item.detail.toLowerCase().includes('git bridge')
     if (isRelease && item.signal !== 'ok') {
       if (onPlaybookFix != null && canOperate) {
         return {
@@ -171,6 +186,16 @@ export function MissionBoard({
       return {
         label: 'Deliver-stg Fix',
         onClick: () => onOpenAgentDesk({ prefill: releaseFixPrompt }),
+      }
+    }
+    if (isAgent) {
+      return {
+        label: 'Agent Desk →',
+        onClick: () =>
+          onOpenAgentDesk({
+            prefill:
+              'Mission CAUTION from Agent / Git bridge dirty repos. Use git-dirty-remediate (Propose commit or Stash; approval required). Never discard Owner WIP.',
+          }),
       }
     }
     if (item.segment === 'rocket') {
@@ -203,35 +228,40 @@ export function MissionBoard({
     return { rocketItems, payloadItems, all: [...rocketItems, ...payloadItems] }
   }, [rocketLaunch.fixSignals, satelliteDeploy.fixSignals])
 
-  const visibleItems =
-    detailScope == null || detailScope === 'mission'
-      ? launchFixItems.all.length > 0 ? launchFixItems.all : degradationItems
-      : detailScope === 'rocket'
-        ? launchFixItems.rocketItems
-        : launchFixItems.payloadItems
+  // Mission scope uses snapshot degradation (drives Mission CAUTION). Launch-view
+  // extras are appended so STG/PROD readiness gaps still appear when present.
+  const missionCauseItems = useMemo(() => {
+    const extras = launchFixItems.all.filter(
+      li =>
+        !degradationItems.some(
+          s => s.id === li.id || (s.detail !== '' && s.detail === li.detail),
+        ),
+    )
+    return [...degradationItems, ...extras]
+  }, [degradationItems, launchFixItems.all])
 
-  const visibleTargets =
-    detailScope == null || detailScope === 'mission' || detailScope === 'payload' ? failingTargets : []
+  const scopedItems =
+    detailScope === 'rocket'
+      ? launchFixItems.rocketItems
+      : detailScope === 'payload'
+        ? launchFixItems.payloadItems
+        : []
 
-  const showDetail = detailScope != null && (missionDegraded || rocketDegraded || payloadDegraded)
+  const scopedTargets = detailScope === 'payload' ? failingTargets : []
+
+  const showMissionCauses = missionDegraded && missionCauseItems.length > 0
+  const showScopedDetail = detailScope === 'rocket' || detailScope === 'payload'
 
   const launchViewLabel = (_mode: LaunchViewMode) => 'Mission Launch view'
 
   return (
     <div className="mission-board-wrap">
       <section className="mission-board">
-        <button
-          type="button"
-          className={cn(
-            'mission-board-status',
-            missionDegraded && 'mission-board-segment-btn',
-            detailScope === 'mission' && 'mission-board-segment-btn--open',
-          )}
-          disabled={!missionDegraded}
-          onClick={() => toggleScope('mission')}
+        <div
+          className="mission-board-status"
           title={
             missionDegraded
-              ? 'Show why mission is degraded'
+              ? 'Mission caution causes listed below'
               : 'All mission probes report NOMINAL'
           }
         >
@@ -240,15 +270,8 @@ export function MissionBoard({
             <span className="mission-board-value" style={{ color: missionStatusColor(mission) }}>
               {mission}
             </span>
-            {missionDegraded && (
-              <ChevronDown
-                size={14}
-                className={cn('mission-board-chevron', detailScope === 'mission' && 'mission-board-chevron--open')}
-                aria-hidden
-              />
-            )}
           </span>
-        </button>
+        </div>
 
         <div className="mission-board-divider" aria-hidden />
 
@@ -351,27 +374,21 @@ export function MissionBoard({
         </div>
       </section>
 
-      {showDetail && detailScope != null && (
-        <section className="mission-board-detail" aria-label="Mission degradation details">
+      {showMissionCauses && (
+        <section className="mission-board-detail" aria-label="Mission caution causes">
           <div className="mission-board-detail-header">
             <div>
               <h3 className="mission-board-detail-title">
-                {scopeTitle(detailScope, snapshot, rocketSignal, payloadSignal)}
+                Why Mission is {mission} — {missionDegradationSummary(missionCauseItems)}
               </h3>
-              <p className="mission-board-detail-summary">
-                {detailScope === 'rocket'
-                  ? missionDegradationSummary(launchFixItems.rocketItems)
-                  : detailScope === 'payload'
-                    ? missionDegradationSummary(launchFixItems.payloadItems)
-                    : missionDegradationSummary(
-                        launchFixItems.all.length > 0 ? launchFixItems.all : degradationItems,
-                      )}
-              </p>
+              {chipVsSnapshotMismatch && (
+                <p className="mission-board-detail-summary mission-board-detail-summary--hint">
+                  Rocket/Payload chips follow Launch readiness (still NOMINAL). Causes below are
+                  Agent / Infra / Release probes that still degrade Mission.
+                </p>
+              )}
             </div>
             <div className="mission-board-detail-actions">
-              <Button variant="ghost" size="xs" onClick={() => onOpenLaunchView('mission-launch')}>
-                Mission Launch →
-              </Button>
               {diagnosticPrompt != null && (
                 <Button variant="outline" size="xs" onClick={() => onOpenAgentDesk({ prefill: diagnosticPrompt })}>
                   <Wrench size={12} className="mr-1" aria-hidden />
@@ -380,30 +397,87 @@ export function MissionBoard({
               )}
             </div>
           </div>
-
-          {visibleItems.length === 0 && visibleTargets.length === 0 ? (
-            <p className="mission-board-detail-empty">
-              No failing signals in this scope — open the Launch view for full STG/PROD readiness panels.
-            </p>
-          ) : (
-            <div className="mission-board-detail-list">
-              {visibleItems.map(item => {
-                const isReleaseItem =
-                  item.id.toLowerCase().includes('release') ||
-                  item.id.toLowerCase().includes('supply') ||
-                  item.detail.toLowerCase().includes('deliver')
-                return (
+          <div className="mission-board-detail-list">
+            {missionCauseItems.map(item => {
+              const isReleaseItem =
+                item.id.toLowerCase().includes('release') ||
+                item.id.toLowerCase().includes('supply') ||
+                item.detail.toLowerCase().includes('deliver')
+              return (
                 <DetailRow
-                  key={`${item.segment}-${item.id}`}
+                  key={`mission-${item.segment}-${item.id}`}
                   signal={item.signal}
                   id={item.id}
                   detail={item.detail}
                   badge={isReleaseItem && stalePipelineFail ? 'Stale pipeline fail' : undefined}
                   action={itemFixAction(item)}
                 />
+              )
+            })}
+            {failingTargets.slice(0, 8).map(target => (
+              <DetailRow
+                key={`mission-${target.environment}-${target.id}`}
+                signal={target.reachability === 'fail' ? 'fail' : 'degraded'}
+                id={`${target.environment} · ${target.id}`}
+                detail={target.detail ?? 'Reachability probe failed'}
+                action={{
+                  label: 'Topology',
+                  onClick: () => onOpenRuntimeMap({ env: target.environment }),
+                }}
+              />
+            ))}
+          </div>
+          {context?.focus.blocker != null && context.focus.blocker !== '' && (
+            <p className="mission-board-detail-blocker">
+              <strong>Mission blocker:</strong> {context.focus.blocker}
+            </p>
+          )}
+        </section>
+      )}
+
+      {showScopedDetail && detailScope != null && (
+        <section className="mission-board-detail" aria-label="Launch-scope degradation details">
+          <div className="mission-board-detail-header">
+            <div>
+              <h3 className="mission-board-detail-title">
+                {scopeTitle(detailScope, snapshot, rocketSignal, payloadSignal)}
+              </h3>
+              <p className="mission-board-detail-summary">
+                {detailScope === 'rocket'
+                  ? missionDegradationSummary(launchFixItems.rocketItems)
+                  : missionDegradationSummary(launchFixItems.payloadItems)}
+              </p>
+            </div>
+            <div className="mission-board-detail-actions">
+              <Button variant="ghost" size="xs" onClick={() => onOpenLaunchView('mission-launch')}>
+                Mission Launch →
+              </Button>
+            </div>
+          </div>
+
+          {scopedItems.length === 0 && scopedTargets.length === 0 ? (
+            <p className="mission-board-detail-empty">
+              No failing signals in this scope — open the Launch view for full STG/PROD readiness panels.
+            </p>
+          ) : (
+            <div className="mission-board-detail-list">
+              {scopedItems.map(item => {
+                const isReleaseItem =
+                  item.id.toLowerCase().includes('release') ||
+                  item.id.toLowerCase().includes('supply') ||
+                  item.detail.toLowerCase().includes('deliver')
+                return (
+                  <DetailRow
+                    key={`${item.segment}-${item.id}`}
+                    signal={item.signal}
+                    id={item.id}
+                    detail={item.detail}
+                    badge={isReleaseItem && stalePipelineFail ? 'Stale pipeline fail' : undefined}
+                    action={itemFixAction(item)}
+                  />
                 )
               })}
-              {visibleTargets.slice(0, 12).map(target => (
+              {scopedTargets.slice(0, 12).map(target => (
                 <DetailRow
                   key={`${target.environment}-${target.id}`}
                   signal={target.reachability === 'fail' ? 'fail' : 'degraded'}
@@ -415,18 +489,7 @@ export function MissionBoard({
                   }}
                 />
               ))}
-              {visibleTargets.length > 12 && (
-                <p className="mission-board-detail-more">
-                  + {visibleTargets.length - 12} more failing targets — open topology for full list.
-                </p>
-              )}
             </div>
-          )}
-
-          {context?.focus.blocker != null && context.focus.blocker !== '' && (
-            <p className="mission-board-detail-blocker">
-              <strong>Mission blocker:</strong> {context.focus.blocker}
-            </p>
           )}
         </section>
       )}

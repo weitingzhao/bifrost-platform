@@ -349,6 +349,10 @@ html {
   font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
 }
+.mission-board-detail-summary--hint {
+  margin-top: 0.35rem;
+  color: var(--color-lamp-yellow, #ca8a04);
+}
 .mission-board-detail-list {
   display: flex;
   flex-direction: column;
