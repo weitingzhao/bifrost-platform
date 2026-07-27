@@ -10,7 +10,7 @@
  */
 
 export const IB_GATEWAY_PLUGIN_SOURCE = 'bifrost-platform-plugin'
-export const IB_GATEWAY_PLUGIN_CATALOG_VERSION = '2026-07-04'
+export const IB_GATEWAY_PLUGIN_CATALOG_VERSION = '2026-07-27'
 
 export type IbGatewayPluginPhaseId = 'IBGP0' | 'IBGP1' | 'IBGP2' | 'IBGP3' | 'IBGP4'
 
@@ -85,7 +85,11 @@ export const REDIS_IB_CONTRACT = {
   persistence: 'none (ephemeral — rebuild from TWS)',
   aclUsers: ['ib-gateway', 'trade-prod', 'trade-dev', 'platform'] as const,
   keyNamespaces: [
-    'ib:ingester:tick:{symbol}',
+    'ib:ingester:tick:{contract_key}',
+    'ib:ingester:channel',
+    'ib:ingester:meta:subscriptions',
+    'ib:ingester:control:on_demand_stk (SET — Market Live STK)',
+    'ib:ingester:control:on_demand_stk_ts (HASH heartbeat)',
     'ib:account:{account_id}:*',
     'ib:operator:cmd',
     'ib:operator:result:{request_id}',
@@ -93,6 +97,13 @@ export const REDIS_IB_CONTRACT = {
     'ib:events:{account_id}',
     'ib:control:{account_id}',
   ],
+  onDemandStk: {
+    writer: 'Trade Market API GET /quotes (SADD + heartbeat)',
+    consumer: 'IB Gateway Host reqMktData reconcile (watchlist ∪ fresh on-demand)',
+    maxStreamDefault: 40,
+    maxAgeSecDefault: 120,
+    note: 'D10-safe market-data only — no place_order',
+  },
 } as const
 
 export const IB_GATEWAY_PLUGIN_PROGRESS = {
