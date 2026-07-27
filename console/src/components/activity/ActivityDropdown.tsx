@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { DenseTag, cn } from '@bifrost/ui'
-import { Activity, ChevronRight, Loader2 } from 'lucide-react'
+import { Activity, ChevronRight, Loader2, X } from 'lucide-react'
 import type { ActivityEvent, ActivityPhase } from '@/lib/activity/activityTypes'
 import {
   DropdownMenu,
@@ -64,6 +64,10 @@ function canActivate(
   return ev.linkTo != null && onNavigate != null
 }
 
+function isInFlight(ev: ActivityEvent): boolean {
+  return ev.phase === 'requested' || ev.phase === 'applying'
+}
+
 export function ActivityDropdown({
   events,
   inFlightCount,
@@ -73,6 +77,8 @@ export function ActivityDropdown({
   onNavigate,
   onOpenAgentJob,
   onActivateEvent,
+  onDismiss,
+  onDismissAllInFlight,
   trigger,
 }: {
   events: ActivityEvent[]
@@ -85,6 +91,10 @@ export function ActivityDropdown({
   onOpenAgentJob?: (jobId: string) => void
   /** Preferred: full event activation (focus + navigate). */
   onActivateEvent?: (ev: ActivityEvent) => void
+  /** Remove a row from the feed (does not cancel underlying work). */
+  onDismiss?: (id: string) => void
+  /** Clear all requested/applying rows. */
+  onDismissAllInFlight?: () => void
   trigger: ReactNode
 }) {
   return (
@@ -115,13 +125,21 @@ export function ActivityDropdown({
               return (
                 <DropdownMenuItem
                   key={ev.id}
-                  disabled={!clickable}
+                  disabled={!clickable && onDismiss == null}
                   className={cn(
-                    'flex cursor-default flex-col items-stretch gap-0.5 rounded-none px-2.5 py-1.5',
+                    'group flex cursor-default flex-col items-stretch gap-0.5 rounded-none px-2.5 py-1.5',
                     clickable && 'cursor-pointer',
                   )}
-                  onSelect={() => {
-                    if (!clickable) return
+                  onSelect={e => {
+                    // Dismiss button handles its own click; avoid navigating.
+                    if ((e.target as HTMLElement).closest('[data-activity-dismiss]')) {
+                      e.preventDefault()
+                      return
+                    }
+                    if (!clickable) {
+                      e.preventDefault()
+                      return
+                    }
                     if (onActivateEvent != null) {
                       onActivateEvent(ev)
                     } else if (
@@ -150,6 +168,31 @@ export function ActivityDropdown({
                     <span className="shrink-0 font-mono text-[var(--text-dense-caption)] text-muted-foreground">
                       {formatAge(ev.ts)}
                     </span>
+                    {onDismiss != null && (
+                      <button
+                        type="button"
+                        data-activity-dismiss
+                        className={cn(
+                          'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm',
+                          'text-muted-foreground hover:bg-muted hover:text-foreground',
+                          'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                        )}
+                        title={
+                          isInFlight(ev)
+                            ? 'Dismiss from feed (does not cancel the rollout / job)'
+                            : 'Remove from feed'
+                        }
+                        aria-label={`Dismiss ${ev.title}`}
+                        onClick={e => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          onDismiss(ev.id)
+                        }}
+                        onPointerDown={e => e.stopPropagation()}
+                      >
+                        <X size={12} aria-hidden />
+                      </button>
+                    )}
                     {clickable && (
                       <ChevronRight
                         size={12}
@@ -175,15 +218,29 @@ export function ActivityDropdown({
           )}
         </div>
         <DropdownMenuSeparator className="m-0" />
-        <DropdownMenuItem
-          className="justify-end px-2.5 py-2 text-[var(--text-dense-caption)] text-primary"
-          onSelect={() => {
-            onOpenAudit()
-            onOpenChange(false)
-          }}
-        >
-          View all → Audit
-        </DropdownMenuItem>
+        <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
+          {inFlightCount > 0 && onDismissAllInFlight != null ? (
+            <button
+              type="button"
+              className="text-[var(--text-dense-caption)] text-muted-foreground hover:text-foreground"
+              title="Clear all applying/requested rows from the feed (does not cancel work)"
+              onClick={() => onDismissAllInFlight()}
+            >
+              Dismiss in-flight
+            </button>
+          ) : (
+            <span />
+          )}
+          <DropdownMenuItem
+            className="justify-end px-0 py-1 text-[var(--text-dense-caption)] text-primary"
+            onSelect={() => {
+              onOpenAudit()
+              onOpenChange(false)
+            }}
+          >
+            View all → Audit
+          </DropdownMenuItem>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   )

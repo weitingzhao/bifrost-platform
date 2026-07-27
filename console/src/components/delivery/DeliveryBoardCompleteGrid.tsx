@@ -3,6 +3,7 @@ import {
   BriefingStatusBadge,
   BriefingStatusLamp,
 } from '@/components/briefing/BriefingStatusChrome'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 import type { DeliveryBoardProgramOverview } from '@/api/programsTypes'
 import { laneById } from '@/lib/briefing/workLanes'
 
@@ -44,9 +45,7 @@ export function DeliveryBoardCompleteGrid({
         <span className="text-dense-caption text-muted-foreground">
           Catalog · Sign-off in Briefing Session
         </span>
-        <span className="ml-auto text-dense-caption text-muted-foreground">
-          {expanded ? '▾' : '▸'}
-        </span>
+        <CollapseExpandIcon open={expanded} className="ml-auto" />
       </button>
       {expanded && (
         <div className={`mt-2 ${PROGRAM_TAG_GRID}`}>

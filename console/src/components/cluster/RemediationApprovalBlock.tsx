@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@bifrost/ui'
 import type { RemediationApprovalOption, RemediationEvent } from '@/api/remediationTypes'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 
 export type RemediationApprovalRespond = (
   optionId: string,
@@ -182,7 +183,11 @@ export function RemediationApprovalBlock({
               className="remediation-approval-console-toggle"
               onClick={() => setCommandsOpen(!commandsOpen)}
             >
-              Commands {commandsOpen ? '▾' : '▸'} ({commands.length})
+              <span className="inline-flex items-center gap-1">
+                Commands
+                <CollapseExpandIcon open={commandsOpen} size={12} />
+                ({commands.length})
+              </span>
             </button>
             {commandsOpen && (
               <div className="remediation-approval-console-body">

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { RemediationJob } from '@/api/remediationTypes'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 import { remediationScopeShortLabel } from '@/lib/remediation/remediationJobDisplay'
 
 interface RemediationInitBriefProps {
@@ -39,7 +40,7 @@ export function RemediationInitBrief({ job, fallbackBrief }: RemediationInitBrie
         {job?.scope != null && job.scope !== '' && (
           <span className="remediation-init-brief__scope">{remediationScopeShortLabel(job.scope)}</span>
         )}
-        {long && <span className="remediation-init-brief__chevron">{expanded ? '▾' : '▸'}</span>}
+        {long && <CollapseExpandIcon open={expanded} className="remediation-init-brief__chevron" />}
       </button>
       {(expanded || !long) && (
         <pre className="remediation-init-brief__body remediation-block-code remediation-block-code--result dense-scroll-y">

@@ -102,7 +102,10 @@ export function BusActuationStrip({
       </span>
       {ev.detail != null && ev.detail !== '' && (
         <span
-          className="max-w-[18rem] truncate text-[var(--text-dense-caption)] text-muted-foreground"
+          className={cn(
+            'min-w-0 font-mono text-[var(--text-dense-caption)] text-muted-foreground',
+            flying ? 'max-w-[28rem]' : 'max-w-[18rem] truncate',
+          )}
           title={ev.detail}
         >
           {ev.detail}

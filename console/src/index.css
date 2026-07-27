@@ -1194,6 +1194,16 @@ html {
   margin-top: 0.5rem;
 }
 
+.satellite-bus-band + .satellite-bus-band {
+  margin-top: 0.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed color-mix(in oklab, var(--border) 85%, transparent);
+}
+
+.satellite-bus-band-header {
+  opacity: 0.95;
+}
+
 /* Consumer tables: reserve Inspect + State; Detail truncates instead of crushing actions */
 .satellite-bus-consumer-table {
   table-layout: fixed;

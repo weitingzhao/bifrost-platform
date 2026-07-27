@@ -33,3 +33,8 @@ export type ActivityEvent = {
 export const ACTIVITY_DROPDOWN_MAX = 25
 /** Settled / terminal events age out of the dropdown after this window; Audit keeps history. */
 export const ACTIVITY_SETTLED_TTL_MS = 30 * 60 * 1000
+/**
+ * In-flight (requested/applying) without settle is treated as stale after this window —
+ * auto-timeout so sessionStorage orphans (lost pollers) cannot pin the bell forever.
+ */
+export const ACTIVITY_INFLIGHT_STALE_MS = 15 * 60 * 1000

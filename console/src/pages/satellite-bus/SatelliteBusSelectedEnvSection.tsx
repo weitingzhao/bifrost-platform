@@ -58,9 +58,11 @@ export function SatelliteBusSelectedEnvSection({
       <header className="satellite-bus-group-header">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
           <DenseTag variant="neutral" className="shrink-0 text-[10px] uppercase tracking-wide">
-            Selected
+            Operate
           </DenseTag>
-          <h3 className="satellite-bus-group-title">Selected Environment · {tradeEnv.toUpperCase()}</h3>
+          <h3 className="satellite-bus-group-title">
+            Consumers & daemon · {tradeEnv.toUpperCase()}
+          </h3>
           <span className="text-[var(--text-dense-caption)] text-muted-foreground">
             {singleEnvScope} · {tradeSingleEnvProbeSource(tradeEnv)}
           </span>

@@ -208,25 +208,34 @@ func deploymentWorkload(d appsv1.Deployment) WorkloadView {
 	if d.Spec.Replicas != nil {
 		replicas = *d.Spec.Replicas
 	}
+	ready := d.Status.ReadyReplicas
+	updated := d.Status.UpdatedReplicas
+	available := d.Status.AvailableReplicas
 	reach := podReachability("Running")
 	status := "Ready"
-	if d.Status.ReadyReplicas < replicas {
+	if replicas > 0 && (ready < replicas || updated < replicas || available < replicas) {
 		reach = podReachability("Pending")
 		status = "Progressing"
 	}
-	if replicas > 0 && d.Status.AvailableReplicas == 0 {
+	if replicas > 0 && available == 0 {
 		reach = podReachability("Failed")
 		status = "Unavailable"
 	}
 	return WorkloadView{
-		Namespace:    d.Namespace,
-		Kind:         "Deployment",
-		Name:         d.Name,
-		Ready:        fmt.Sprintf("%d/%d", d.Status.ReadyReplicas, replicas),
-		Status:       status,
-		Restarts:     0,
-		Age:          formatAge(d.CreationTimestamp.Time),
-		Reachability: reach,
+		Namespace:          d.Namespace,
+		Kind:               "Deployment",
+		Name:               d.Name,
+		Ready:              fmt.Sprintf("%d/%d", ready, replicas),
+		Status:             status,
+		Restarts:           0,
+		Age:                formatAge(d.CreationTimestamp.Time),
+		Reachability:       reach,
+		DesiredReplicas:    replicas,
+		ReadyReplicas:      ready,
+		UpdatedReplicas:    updated,
+		AvailableReplicas:  available,
+		Generation:         d.Generation,
+		ObservedGeneration: d.Status.ObservedGeneration,
 	}
 }
 

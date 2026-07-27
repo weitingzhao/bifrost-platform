@@ -4,6 +4,7 @@ import { cn, type DenseTagVariant } from '@bifrost/ui'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import {
   buildDiagnosticPrompt,
+  collectMissionDegradationItems,
   missionStatus,
   missionStatusColor,
   signalColor,
@@ -70,16 +71,21 @@ function compactMissionLabel(mission: MissionStatus): string {
   return mission
 }
 
+/** default = Trade env lamps + Mission; seat = Mission only (no env twin selectors). */
+export type FocusStripDensity = 'default' | 'seat'
+
 interface FocusStripProps {
   onNavigate?: (tab: string) => void
   onOpenAgentDeskWithPrefill?: (prefill: string) => void
   onOpenRuntimeMap?: OpenRuntimeMapFn
+  density?: FocusStripDensity
 }
 
 export function FocusStrip({
   onNavigate,
   onOpenAgentDeskWithPrefill,
   onOpenRuntimeMap,
+  density = 'default',
 }: FocusStripProps) {
   const [forceExpanded, setForceExpanded] = useState(false)
   const [detailExpanded, setDetailExpanded] = useState(false)
@@ -92,10 +98,31 @@ export function FocusStrip({
 
   const mission = missionStatus(snapshot.missionOverall)
   const needsAttention = missionNeedsAttention(mission)
-  const showFull = needsAttention || forceExpanded
+  const seatOnly = density === 'seat'
+  /** Seat density stays one compact Mission line — never compete with page env selectors. */
+  const showFull = !seatOnly && (needsAttention || forceExpanded)
   const diagnosticPrompt = buildDiagnosticPrompt(snapshot)
+  const seatWhyLine = seatOnly && needsAttention
+    ? (() => {
+        const items = collectMissionDegradationItems(snapshot)
+        if (items.length === 0) return undefined
+        const top = items[0]!
+        return items.length === 1
+          ? `${top.id}: ${top.detail}`
+          : `${top.id}: ${top.detail} (+${items.length - 1} more)`
+      })()
+    : undefined
 
-  const tradeLamps = (
+  const tradeLamps = seatOnly ? (
+    <div className="cockpit-group cockpit-payload opacity-70" title="Fleet seat — not this page's Trade NS">
+      <Satellite
+        size={13}
+        style={{ color: signalColor(snapshot.payloadOverall) }}
+        className="cockpit-mod-icon"
+      />
+      <span className="cockpit-mod-name">Seat</span>
+    </div>
+  ) : (
     <div className="cockpit-group cockpit-payload">
       <Satellite
         size={13}
@@ -142,27 +169,53 @@ export function FocusStrip({
 
   if (!showFull) {
     return (
-      <div className="cockpit-strip cockpit-strip--compact">
+      <div
+        className={cn(
+          'cockpit-strip cockpit-strip--compact',
+          seatOnly && 'cockpit-strip--seat',
+        )}
+      >
         <div className="cockpit-strip-row">
           {tradeLamps}
           <span className="cockpit-divider" aria-hidden />
           <div className="cockpit-group cockpit-mission-inline">
             <span className="cockpit-mission-label">Mission</span>
             <span className="cockpit-mission-value" style={{ color: missionStatusColor(mission) }}>
-              {compactMissionLabel(mission)}
+              {seatOnly ? mission : compactMissionLabel(mission)}
             </span>
+            {seatWhyLine != null && (
+              <span
+                className="max-w-[20rem] truncate text-[var(--text-dense-caption)] text-muted-foreground"
+                title={seatWhyLine}
+              >
+                {seatWhyLine}
+              </span>
+            )}
           </div>
           <div className="cockpit-spacer" />
+          {seatOnly && diagnosticPrompt != null && onOpenAgentDeskWithPrefill != null && (
+            <button
+              type="button"
+              className="cockpit-fix-btn"
+              onClick={() => onOpenAgentDeskWithPrefill(diagnosticPrompt)}
+              title="Open Agent Desk to diagnose and fix current failures"
+            >
+              <Wrench size={12} className="cockpit-fix-icon" />
+              <span>Fix</span>
+            </button>
+          )}
           {controlRoomBtn}
-          <button
-            type="button"
-            className="cockpit-strip-toggle"
-            onClick={() => setForceExpanded(true)}
-            aria-label="Expand mission context"
-            title="Show full Trade / Mission context"
-          >
-            <ChevronRight size={12} className="cockpit-strip-chevron" />
-          </button>
+          {!seatOnly && (
+            <button
+              type="button"
+              className="cockpit-strip-toggle"
+              onClick={() => setForceExpanded(true)}
+              aria-label="Expand mission context"
+              title="Show full Trade / Mission context"
+            >
+              <ChevronRight size={12} className="cockpit-strip-chevron" />
+            </button>
+          )}
         </div>
       </div>
     )

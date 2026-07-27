@@ -1,7 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { Button, cn } from '@bifrost/ui'
 import { Bell, Loader2 } from 'lucide-react'
-import { useActivityFeed } from '@/lib/activity/activityStore'
+import {
+  dismissActivity,
+  dismissAllInFlight,
+  useActivityFeed,
+} from '@/lib/activity/activityStore'
 import type { ActivityEvent } from '@/lib/activity/activityTypes'
 import { ActivityDropdown } from '@/components/activity/ActivityDropdown'
 
@@ -81,6 +85,12 @@ export function ActivityIndicator({
       onNavigate={onNavigate}
       onOpenAgentJob={onOpenAgentJob}
       onActivateEvent={onActivateEvent}
+      onDismiss={id => {
+        dismissActivity(id)
+      }}
+      onDismissAllInFlight={() => {
+        dismissAllInFlight()
+      }}
       trigger={trigger}
     />
   )

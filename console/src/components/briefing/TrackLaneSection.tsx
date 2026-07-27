@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, ConfirmDialog, IconActionButton, SegmentControl } from '@bifrost/ui'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   BRIEFING_DPR_COLOR,
@@ -562,9 +563,7 @@ function CompletedLanesGroup({
         <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
           Archive · Program sign-off in Session · Board is catalog
         </span>
-        <span className="ml-auto text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          {expanded ? '▾' : '▸'}
-        </span>
+        <CollapseExpandIcon open={expanded} className="ml-auto" />
       </button>
       {expanded && viewMode === 'tag' && (
         <div className={`mt-2 ${LANE_TAG_GRID} opacity-70`}>

@@ -11,6 +11,7 @@ import {
 } from '@bifrost/ui'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import type { ClusterServiceReadinessResponse, ServiceDomain, ServiceDomainStatus } from '@/api/clusterTypes'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
@@ -162,8 +163,10 @@ export function ClusterServiceReadinessPanel({
                     {domain.summary}
                   </DenseTableCell>
                   <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
-                    {domain.dependencies.length}
-                    {!isFiltered && (expanded ? ' ▾' : ' ▸')}
+                    <span className="inline-flex items-center gap-1">
+                      {domain.dependencies.length}
+                      {!isFiltered && <CollapseExpandIcon open={expanded} size={12} />}
+                    </span>
                   </DenseTableCell>
                 </DenseTableRow>,
               ]

@@ -11,6 +11,10 @@ import {
   cn,
 } from '@bifrost/ui'
 import type { Target } from '@/api/matrixTypes'
+import {
+  CollapseExpandIcon,
+  collapseExpandAriaLabel,
+} from '@/components/layout/CollapseExpandIcon'
 import { StatusLamp } from '@/components/StatusLamp'
 import {
   SOCKET_MATRIX_LABELS,
@@ -28,6 +32,8 @@ import {
   type BusPathNode,
 } from '@/lib/satellite-bus/satelliteBusViewModel'
 import type { CriticalProcessRow, MonitorKvRow } from '@/pages/satellite-bus/useSatelliteBusQueries'
+import type { ContextSectionSignal } from '@/lib/satellite-bus/contextSectionSignal'
+import { contextSignalTagVariant } from '@/lib/satellite-bus/contextSectionSignal'
 import { displayReachLabel, healthTagVariant } from '@/pages/satellite-bus/satelliteBusTableUtils'
 
 export function TradeApiReachTable({
@@ -84,15 +90,22 @@ export function TradeApiReachTable({
   )
 }
 
-function BusScopeBadge({ scope }: { scope: BusStatusScope }) {
+function BusScopeBadge({
+  scope,
+  label: labelOverride,
+}: {
+  scope: BusStatusScope
+  label?: string
+}) {
   const label =
-    scope === 'rocket'
+    labelOverride ??
+    (scope === 'rocket'
       ? 'Shared · Rocket'
       : scope === 'trade-multi-env'
         ? 'All envs'
         : scope === 'trade-single-env'
           ? 'Selected NS'
-          : 'Shared · Ground'
+          : 'Shared · Ground')
   return (
     <DenseTag variant="neutral" className="shrink-0 text-[10px] uppercase tracking-wide">
       {label}
@@ -116,7 +129,7 @@ function SocketHealthEnvCellView({
   cell: SocketHealthEnvCell
   selected?: boolean
 }) {
-  const lampReach = cell.required === 'policy-off' ? 'unknown' : cell.reach
+  const lampReach = cell.required === 'policy-off' ? 'ok' : (cell.reach === 'unknown' ? 'degraded' : cell.reach)
   return (
     <div
       className={cn(
@@ -319,10 +332,9 @@ export function AttentionIssueRow({
 }
 
 function ConsumerStateCell({ row }: { row: BusConsumerRow }) {
-  const lamp = row.health === 'expected-off' ? 'unknown' : busNodeHealthToReach(row.health)
   return (
     <span className="flex items-center gap-1.5">
-      <StatusLamp value={lamp} kind="reach" />
+      <StatusLamp value={busNodeHealthToReach(row.health)} kind="reach" />
       <DenseTag variant={healthTagVariant(row.health)} className="text-[9px]">
         {row.stateLabel}
       </DenseTag>
@@ -474,7 +486,7 @@ export function CriticalProcessesTable({
               <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)]">{row.name}</DenseTableCell>
               <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)]">{row.ready}</DenseTableCell>
               <DenseTableCell>
-                <StatusLamp value={row.reachability} kind="reach" />{' '}
+                <StatusLamp value={row.reachability === 'unknown' ? 'degraded' : row.reachability} kind="reach" />{' '}
                 <span className="font-mono-tabular text-[var(--text-dense-caption)]">{row.status}</span>
               </DenseTableCell>
             </DenseTableRow>
@@ -489,6 +501,8 @@ export function SecondaryGroup({
   title,
   description,
   scope,
+  badgeLabel,
+  signal,
   open,
   onOpenChange,
   sectionRef,
@@ -498,6 +512,10 @@ export function SecondaryGroup({
   title: string
   description?: string
   scope: BusStatusScope
+  /** Override scope chip when the section job ≠ the scope color (e.g. Evidence). */
+  badgeLabel?: string
+  /** Collapsed-header health — Context sections must surface WARN/FAIL without expand. */
+  signal?: ContextSectionSignal
   open: boolean
   onOpenChange: (open: boolean) => void
   sectionRef?: Ref<HTMLDetailsElement>
@@ -517,23 +535,67 @@ export function SecondaryGroup({
     >
       <summary
         className="satellite-bus-group-header cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+        aria-label={collapseExpandAriaLabel(open, title)}
         onClick={(e: SyntheticEvent<HTMLElement>) => {
           e.preventDefault()
           onOpenChange(!open)
         }}
       >
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-          <BusScopeBadge scope={scope} />
+          <BusScopeBadge scope={scope} label={badgeLabel} />
           <h3 className="satellite-bus-group-title">{title}</h3>
+          {signal != null && (
+            <span
+              className="inline-flex items-center gap-1"
+              title={signal.detail ?? signal.label}
+              data-context-signal={signal.reach}
+            >
+              <StatusLamp value={signal.reach} kind="reach" />
+              <DenseTag variant={contextSignalTagVariant(signal.reach)} className="text-[9px]">
+                {signal.label}
+              </DenseTag>
+              {signal.detail != null && signal.detail !== '' && (
+                <span className="max-w-[14rem] truncate text-[var(--text-dense-caption)] text-muted-foreground">
+                  {signal.detail}
+                </span>
+              )}
+            </span>
+          )}
           {description != null && description !== '' && (
             <span className="text-[var(--text-dense-caption)] text-muted-foreground">{description}</span>
           )}
         </div>
-        <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-          {open ? 'Collapse' : 'Expand'}
-        </span>
+        <CollapseExpandIcon open={open} className="ml-1" />
       </summary>
       <div className="satellite-bus-group-body flex flex-col">{children}</div>
     </details>
+  )
+}
+
+/** Page-body band: groups sections that share one operator job (Operate vs Context). */
+export function BusPageBand({
+  step,
+  title,
+  description,
+  children,
+}: {
+  step: string
+  title: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <div className="satellite-bus-band flex flex-col gap-2">
+      <div className="satellite-bus-band-header flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-0.5">
+        <DenseTag variant="neutral" className="shrink-0 text-[9px] uppercase tracking-wide">
+          {step}
+        </DenseTag>
+        <h2 className="m-0 text-[var(--text-dense-label)] font-semibold tracking-wide text-foreground">
+          {title}
+        </h2>
+        <span className="text-[var(--text-dense-caption)] text-muted-foreground">{description}</span>
+      </div>
+      <div className="flex flex-col gap-2">{children}</div>
+    </div>
   )
 }

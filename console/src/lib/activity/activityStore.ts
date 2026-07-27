@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import {
   ACTIVITY_DROPDOWN_MAX,
+  ACTIVITY_INFLIGHT_STALE_MS,
   ACTIVITY_SETTLED_TTL_MS,
   type ActivityEvent,
   type ActivityPhase,
@@ -17,10 +18,38 @@ function isTerminalPhase(phase: ActivityPhase): boolean {
   return phase === 'settled' || phase === 'completed' || phase === 'failed'
 }
 
+/**
+ * Drop terminal rows past TTL and orphaned in-flight rows past stale window
+ * (e.g. page reload killed the settle poller but sessionStorage kept APPLYING).
+ */
 function pruneList(list: ActivityEvent[], now = Date.now()): ActivityEvent[] {
   return list
-    .filter(ev => !isTerminalPhase(ev.phase) || now - ev.ts <= ACTIVITY_SETTLED_TTL_MS)
+    .filter(ev => {
+      if (!isTerminalPhase(ev.phase)) {
+        return now - ev.ts <= ACTIVITY_INFLIGHT_STALE_MS
+      }
+      return now - ev.ts <= ACTIVITY_SETTLED_TTL_MS
+    })
     .slice(0, ACTIVITY_DROPDOWN_MAX)
+}
+
+function persistToSessionStorage(list: ActivityEvent[]): void {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(ACTIVITY_SESSION_KEY, JSON.stringify(list))
+  } catch {
+    /* quota / private mode — ignore */
+  }
+}
+
+function emit(): void {
+  for (const l of listeners) l()
+}
+
+function commit(next: ActivityEvent[]): void {
+  events = pruneList(next)
+  persistToSessionStorage(events)
+  emit()
 }
 
 function loadFromSessionStorage(): ActivityEvent[] {
@@ -45,21 +74,8 @@ function loadFromSessionStorage(): ActivityEvent[] {
   }
 }
 
-function persistToSessionStorage(list: ActivityEvent[]): void {
-  if (typeof sessionStorage === 'undefined') return
-  try {
-    sessionStorage.setItem(ACTIVITY_SESSION_KEY, JSON.stringify(list))
-  } catch {
-    /* quota / private mode — ignore */
-  }
-}
-
 let events: ActivityEvent[] = loadFromSessionStorage()
 const listeners = new Set<Listener>()
-
-function emit(): void {
-  for (const l of listeners) l()
-}
 
 function subscribe(listener: Listener): () => void {
   listeners.add(listener)
@@ -74,6 +90,18 @@ function getSnapshot(): ActivityEvent[] {
 
 export function getActivityEvents(): ActivityEvent[] {
   return events
+}
+
+/** Re-run TTL / stale-inflight prune (safe to call on an interval). */
+export function pruneActivityFeed(now = Date.now()): boolean {
+  const next = pruneList(events, now)
+  if (next.length === events.length && next.every((ev, i) => ev.id === events[i]?.id)) {
+    return false
+  }
+  events = next
+  persistToSessionStorage(events)
+  emit()
+  return true
 }
 
 export type UpsertActivityInput = {
@@ -114,9 +142,7 @@ export function upsertActivity(input: UpsertActivityInput): ActivityEvent {
   } else {
     nextList = [next, ...events]
   }
-  events = pruneList(nextList)
-  persistToSessionStorage(events)
-  emit()
+  commit(nextList)
   return next
 }
 
@@ -141,6 +167,24 @@ export function updateActivityPhase(
     correlateKey: prev.correlateKey,
     bumpTs: true,
   })
+}
+
+/** Remove one event from the feed (Ignore / Dismiss). Does not cancel K8s / Agent work. */
+export function dismissActivity(id: string): boolean {
+  const next = events.filter(e => e.id !== id)
+  if (next.length === events.length) return false
+  commit(next)
+  return true
+}
+
+/** Remove all non-terminal (requested/applying) rows. */
+export function dismissAllInFlight(): number {
+  const before = events.length
+  const next = events.filter(e => isTerminalPhase(e.phase))
+  const removed = before - next.length
+  if (removed === 0) return 0
+  commit(next)
+  return removed
 }
 
 /** Test / reset helper — not for production UI. */
@@ -169,10 +213,15 @@ export function useActivityFeed(): {
   const all = useActivityEvents()
   const [tick, setTick] = useState(0)
   useEffect(() => {
-    const id = window.setInterval(() => setTick(t => t + 1), ACTIVITY_FEED_PRUNE_TICK_MS)
+    pruneActivityFeed()
+    const id = window.setInterval(() => {
+      pruneActivityFeed()
+      setTick(t => t + 1)
+    }, ACTIVITY_FEED_PRUNE_TICK_MS)
     return () => window.clearInterval(id)
   }, [])
   return useMemo(() => {
+    void tick
     const now = Date.now()
     const visible = pruneList(all, now)
     const inFlightCount = visible.filter(ev => !isTerminalPhase(ev.phase)).length
@@ -196,5 +245,7 @@ export function useActivityActions() {
     ) => updateActivityPhase(id, phase, patch),
     [],
   )
-  return { upsert, updatePhase }
+  const dismiss = useCallback((id: string) => dismissActivity(id), [])
+  const dismissInFlight = useCallback(() => dismissAllInFlight(), [])
+  return { upsert, updatePhase, dismiss, dismissInFlight }
 }

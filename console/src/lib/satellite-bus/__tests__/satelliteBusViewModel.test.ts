@@ -193,9 +193,10 @@ describe('buildSatelliteBusViewModel', () => {
     expect(cross!.title).toMatch(/Prod/)
   })
 
-  it('e) stale/missing required probe => UNKNOWN', () => {
+  it('e) stale/missing required probe => UNKNOWN (health) with UNPROBED label', () => {
     const missing = buildSatelliteBusViewModel(input('stg', { dev: bus('dev') }))
     expect(missing.health).toBe('unknown')
+    expect(missing.healthLabel).toBe('UNPROBED')
     expect(missing.topReason).toMatch(/No bus probe/i)
 
     const stale = buildSatelliteBusViewModel(
@@ -204,6 +205,7 @@ describe('buildSatelliteBusViewModel', () => {
       }),
     )
     expect(stale.health).toBe('unknown')
+    expect(stale.healthLabel).toBe('UNPROBED')
     expect(stale.topReason).toMatch(/missing\/stale/i)
   })
 

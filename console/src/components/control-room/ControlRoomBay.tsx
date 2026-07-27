@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
-import { Button, StatusLamp, cn } from '@bifrost/ui'
+import { StatusLamp, cn } from '@bifrost/ui'
+import {
+  CollapseExpandIcon,
+  collapseExpandAriaLabel,
+} from '@/components/layout/CollapseExpandIcon'
 import type { Signal } from '@/lib/control-room/missionSignals'
 import {
   controlRoomBayDomId,
@@ -21,7 +24,7 @@ export type ControlRoomBayProps = {
 }
 
 /**
- * Dense Control Room bay — collapsed: lamp + title + one-line reason + Expand.
+ * Dense Control Room bay — collapsed: lamp + title + one-line reason + chevron.
  * Expanded: full section body. Open state is controlled by ControlRoomPage.
  */
 export function ControlRoomBay({
@@ -59,22 +62,16 @@ export function ControlRoomBay({
           onClick={toggle}
           aria-expanded={open}
           aria-controls={`${domId}-body`}
+          aria-label={collapseExpandAriaLabel(open, title)}
         >
-          {open ? (
-            <ChevronDown size={14} className="shrink-0 text-muted-foreground" aria-hidden />
-          ) : (
-            <ChevronRight size={14} className="shrink-0 text-muted-foreground" aria-hidden />
-          )}
+          <CollapseExpandIcon open={open} />
           <StatusLamp value={signal} kind="reach" />
           <span className="shrink-0 text-dense-label font-semibold text-foreground">{title}</span>
           <span className="min-w-0 truncate text-dense-meta text-muted-foreground">{reason}</span>
         </button>
-        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1.5">
-          {headerActions}
-          <Button type="button" variant="ghost" size="xs" onClick={toggle}>
-            {open ? 'Collapse' : 'Expand'}
-          </Button>
-        </div>
+        {headerActions != null && (
+          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1.5">{headerActions}</div>
+        )}
       </div>
       {open && (
         <div id={`${domId}-body`} className="control-room-bay__body flex flex-col gap-3 border-t border-border px-3 py-2.5">

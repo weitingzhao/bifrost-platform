@@ -13,8 +13,10 @@ export function healthTagVariant(health: BusNodeHealth): 'success' | 'warning' |
       return 'warning'
     case 'fail':
       return 'danger'
-    default:
+    case 'expected-off':
       return 'neutral'
+    default:
+      return 'warning'
   }
 }
 
@@ -27,6 +29,6 @@ export function busHealthTagVariant(health: BusHealth): 'success' | 'warning' | 
     case 'unavailable':
       return 'danger'
     default:
-      return 'neutral'
+      return 'warning'
   }
 }

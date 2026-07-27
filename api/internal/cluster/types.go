@@ -89,6 +89,13 @@ type WorkloadView struct {
 	Restarts     int32              `json:"restarts"`
 	Age          string             `json:"age"`
 	Reachability probe.Reachability `json:"reachability"`
+	// Deployment rollout counters (0 for Pods / non-Deployments).
+	DesiredReplicas   int32 `json:"desired_replicas,omitempty"`
+	ReadyReplicas     int32 `json:"ready_replicas,omitempty"`
+	UpdatedReplicas   int32 `json:"updated_replicas,omitempty"`
+	AvailableReplicas int32 `json:"available_replicas,omitempty"`
+	Generation         int64 `json:"generation,omitempty"`
+	ObservedGeneration int64 `json:"observed_generation,omitempty"`
 }
 
 type WorkloadsResponse struct {

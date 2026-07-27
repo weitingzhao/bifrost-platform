@@ -12,6 +12,10 @@ import {
   isLikelyCursorIdeBrowser,
   launchCursorBriefingAfterPrepare,
 } from '@/lib/briefing/briefingDeliveryChannels'
+import {
+  CollapseExpandIcon,
+  collapseExpandAriaLabel,
+} from '@/components/layout/CollapseExpandIcon'
 import { BriefingMasterDetail } from '@/components/briefing/BriefingMasterDetail'
 import { BriefingViewTabsSection } from '@/components/briefing/BriefingViewTabsSection'
 import { BriefingWorkDigestPanel } from '@/components/briefing/BriefingWorkDigestPanel'
@@ -726,10 +730,12 @@ function LlmPackPreview({
         {collapsible && (
           <button
             type="button"
-            className="text-[var(--text-dense-caption)] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            className="inline-flex items-center text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             onClick={onToggleExpanded}
+            aria-label={collapseExpandAriaLabel(expanded, 'preview')}
+            title={collapseExpandAriaLabel(expanded, 'preview')}
           >
-            {expanded ? 'Collapse preview' : 'Expand preview'}
+            <CollapseExpandIcon open={expanded} />
           </button>
         )}
       </div>

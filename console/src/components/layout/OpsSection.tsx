@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { cn } from '@bifrost/ui'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 
 export type OpsSectionBodyPadding = 'none' | 'compact' | 'default'
 export type OpsSectionVariant = 'elevated' | 'flat'
@@ -54,6 +55,7 @@ function OpsSectionHeader({
   leading,
   headerExtra,
   asSummary = false,
+  open = true,
 }: {
   title?: ReactNode
   description?: ReactNode
@@ -61,6 +63,7 @@ function OpsSectionHeader({
   leading?: ReactNode
   headerExtra?: ReactNode
   asSummary?: boolean
+  open?: boolean
 }) {
   const Tag = asSummary ? 'summary' : 'header'
   return (
@@ -72,6 +75,7 @@ function OpsSectionHeader({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
+          {asSummary && <CollapseExpandIcon open={open} />}
           {leading}
           {title != null && title !== '' && <OpsSectionTitle>{title}</OpsSectionTitle>}
         </div>
@@ -141,6 +145,7 @@ export function OpsSection({
             leading={leading}
             headerExtra={headerExtra}
             asSummary
+            open={open}
           />
         )}
         {body}

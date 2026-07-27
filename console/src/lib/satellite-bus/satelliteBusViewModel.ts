@@ -31,7 +31,7 @@ export const BUS_HEALTH_LABELS: Record<BusHealth, string> = {
   healthy: 'HEALTHY',
   degraded: 'DEGRADED',
   unavailable: 'UNAVAILABLE',
-  unknown: 'UNKNOWN',
+  unknown: 'UNPROBED',
 }
 
 /** Node/consumer health — status colors express health only (scope is text). */
@@ -46,7 +46,7 @@ export function busHealthToReach(health: BusHealth): Reachability {
     case 'unavailable':
       return 'fail'
     default:
-      return 'unknown'
+      return 'degraded'
   }
 }
 
@@ -59,10 +59,9 @@ export function busNodeHealthToReach(health: BusNodeHealth): Reachability {
     case 'fail':
       return 'fail'
     case 'expected-off':
-      // Neutral — rendered with a muted lamp, never red.
-      return 'unknown'
+      return 'ok'
     default:
-      return 'unknown'
+      return 'degraded'
   }
 }
 
@@ -175,7 +174,7 @@ function consumerStateLabel(row: SocketHealthRow): string {
   if (row.required === 'policy-off') return 'EXPECTED OFF'
   if (row.reach === 'fail') return row.required === 'required' ? 'UNEXPECTED DOWN' : 'DOWN'
   if (row.reach === 'degraded') return 'DEGRADED'
-  if (row.reach === 'unknown') return 'UNKNOWN'
+  if (row.reach === 'unknown') return 'UNPROBED'
   // ok — surface operator-intent labels (observe / paused / stopped) verbatim.
   return row.reachLabel === 'ok' ? 'OK' : row.reachLabel.toUpperCase()
 }
@@ -258,7 +257,7 @@ function nodeStateLabel(health: BusNodeHealth): string {
     case 'expected-off':
       return 'EXPECTED OFF'
     default:
-      return 'UNKNOWN'
+      return 'UNPROBED'
   }
 }
 
@@ -282,7 +281,7 @@ function buildRuntimeConsumers(
       kind: 'runtime',
       requirement: 'required',
       health: 'unknown',
-      stateLabel: 'UNKNOWN',
+      stateLabel: 'UNPROBED',
       detail: 'No daemon probe for this environment',
       probePath: `bus-deep[${env}].monitor.daemon`,
     })
@@ -303,7 +302,7 @@ function buildRuntimeConsumers(
     requirement: 'required',
     health: apiHealth,
     stateLabel:
-      apiHealth === 'ok' ? 'OK' : apiHealth === 'fail' ? 'DOWN' : apiHealth === 'degraded' ? 'PARTIAL' : 'UNKNOWN',
+      apiHealth === 'ok' ? 'OK' : apiHealth === 'fail' ? 'DOWN' : apiHealth === 'degraded' ? 'PARTIAL' : 'UNPROBED',
     detail: tradeApi.total === 0 ? 'No matrix probes yet' : `${tradeApi.ok}/${tradeApi.total} matrix targets reachable`,
     probePath: `matrix[${env}].targets(trade_api)`,
   })
@@ -324,7 +323,7 @@ function buildRuntimeConsumers(
     requirement: 'required',
     health: celeryHealth,
     stateLabel:
-      celeryHealth === 'ok' ? 'OK' : celeryHealth === 'fail' ? 'UNEXPECTED DOWN' : celeryHealth === 'degraded' ? 'DEGRADED' : 'UNKNOWN',
+      celeryHealth === 'ok' ? 'OK' : celeryHealth === 'fail' ? 'UNEXPECTED DOWN' : celeryHealth === 'degraded' ? 'DEGRADED' : 'UNPROBED',
     detail:
       celery == null
         ? 'No celery probe'
@@ -340,7 +339,7 @@ function buildRuntimeConsumers(
     kind: 'runtime',
     requirement: 'required',
     health: celery == null ? 'unknown' : celery.broker_connected ? 'ok' : 'degraded',
-    stateLabel: celery == null ? 'UNKNOWN' : celery.broker_connected ? 'EXPECTED' : 'DEGRADED',
+    stateLabel: celery == null ? 'UNPROBED' : celery.broker_connected ? 'EXPECTED' : 'DEGRADED',
     detail:
       'Deployment celery-beat (singleton). Schedules Massive jobs; confirm Ready via verify-trade-celery-massive-loop-stg.',
     probePath: `bus-deep[${env}].monitor.celery (+ deploy/celery-beat)`,
@@ -351,7 +350,7 @@ function buildRuntimeConsumers(
     kind: 'runtime',
     requirement: 'optional',
     health: celery == null ? 'unknown' : celery.broker_connected ? 'ok' : 'degraded',
-    stateLabel: celery == null ? 'UNKNOWN' : 'READY',
+    stateLabel: celery == null ? 'UNPROBED' : 'READY',
     detail: 'Deployment flower :5555 — Celery monitoring UI (ClusterIP).',
     probePath: `bus-deep[${env}].monitor.celery (+ deploy/flower)`,
   })
@@ -371,7 +370,7 @@ function buildRuntimeConsumers(
       syncDetail = 'daemon up · account-sync down (co-scale pair)'
     } else {
       syncHealth = 'unknown'
-      syncState = 'UNKNOWN'
+      syncState = 'UNPROBED'
       syncDetail = 'No account-sync probe'
     }
   } else if (daemonExpectedOff && sync.daemon_alive !== true) {
@@ -400,7 +399,7 @@ function buildRuntimeConsumers(
     syncDetail = `account sync unreachable (daemon_alive=${String(sync.daemon_alive)})`
   } else {
     syncHealth = sync.reachability === 'degraded' ? 'degraded' : 'unknown'
-    syncState = syncHealth === 'degraded' ? 'DEGRADED' : 'UNKNOWN'
+    syncState = syncHealth === 'degraded' ? 'DEGRADED' : 'UNPROBED'
     syncDetail = `reachability=${sync.reachability}`
   }
   rows.push({

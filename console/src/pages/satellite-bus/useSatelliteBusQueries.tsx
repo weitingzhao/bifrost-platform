@@ -20,6 +20,7 @@ import {
   clearSatelliteBusTradeEnvFocus,
   peekSatelliteBusTradeEnvFocus,
 } from '@/lib/activity/activityPageFocus'
+import { useInFlightBusWorkload } from '@/components/activity/BusActuationStrip'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   buildSatelliteBusIngestTriagePrompt,
@@ -34,7 +35,22 @@ import {
   type BusEnvId,
 } from '@/lib/satellite/socketHealthSemantics'
 import { filterTradeApiTargets, tradeApiTargetCounts } from '@/lib/satellite/tradeApiTargets'
-import { buildSatelliteBusViewModel } from '@/lib/satellite-bus/satelliteBusViewModel'
+import {
+  buildSatelliteBusViewModel,
+  type BusHealth,
+} from '@/lib/satellite-bus/satelliteBusViewModel'
+
+/** Map 'unknown' → 'degraded' for UI rendering — no gray/? lamps on the bus page. */
+function busLampReach(r: Reachability | undefined): Reachability {
+  if (r == null || r === 'unknown') return 'degraded'
+  return r
+}
+
+export type TradeEnvBusHealthSummary = {
+  health: BusHealth
+  healthLabel: string
+  topReason: string
+}
 
 export const TRADE_ENV_OPTIONS = [
   { value: 'dev', label: 'Dev' },
@@ -111,10 +127,12 @@ export function useSatelliteBusQueries({
     refetchInterval: 30_000,
   })
 
+  const inFlightWorkload = useInFlightBusWorkload(ns)
   const workloadsQuery = useQuery({
     queryKey: ['cluster', 'workloads', ns, 'satellite-bus'],
     queryFn: () => fetchClusterWorkloads(ns),
-    refetchInterval: 30_000,
+    // Faster poll while Operate / ACTUATION strip is watching a rollout.
+    refetchInterval: inFlightWorkload != null ? 2_000 : 30_000,
   })
 
   const metricsQuery = useQuery({
@@ -174,6 +192,26 @@ export function useSatelliteBusQueries({
       }),
     [busesByEnv, tradeApi, tradeEnv],
   )
+
+  /** Per-env bus verdict for Trade NS selector lamps (no need to click each env). */
+  const envHealthByEnv = useMemo((): Record<TradeEnv, TradeEnvBusHealthSummary> => {
+    const out = {} as Record<TradeEnv, TradeEnvBusHealthSummary>
+    for (const env of TRADE_ENV_OPTIONS) {
+      const m = matrices.find(x => x.environment === env.value)
+      const api = tradeApiTargetCounts(m)
+      const vm = buildSatelliteBusViewModel({
+        selectedEnv: env.value,
+        buses: busesByEnv,
+        tradeApi: api,
+      })
+      out[env.value] = {
+        health: vm.health,
+        healthLabel: vm.healthLabel,
+        topReason: vm.topReason,
+      }
+    }
+    return out
+  }, [busesByEnv, matrices])
 
   const busLoading = busDeepAllQuery.isLoading && !busDeepAllQuery.isError
   const busProbeError = useMemo(() => {
@@ -272,7 +310,7 @@ export function useSatelliteBusQueries({
         label: 'Reachability',
         value: (
           <>
-            <StatusLamp value={daemon?.reachability ?? 'unknown'} kind="reach" />{' '}
+            <StatusLamp value={busLampReach(daemon?.reachability)} kind="reach" />{' '}
             {renderText(daemon?.reachability)}
           </>
         ),
@@ -304,7 +342,7 @@ export function useSatelliteBusQueries({
         label: 'Reachability',
         value: (
           <>
-            <StatusLamp value={celery?.reachability ?? 'unknown'} kind="reach" />{' '}
+            <StatusLamp value={busLampReach(celery?.reachability)} kind="reach" />{' '}
             {renderText(celery?.reachability)}
           </>
         ),
@@ -323,7 +361,7 @@ export function useSatelliteBusQueries({
         label: 'Reachability',
         value: (
           <>
-            <StatusLamp value={sync?.reachability ?? 'unknown'} kind="reach" />{' '}
+            <StatusLamp value={busLampReach(sync?.reachability)} kind="reach" />{' '}
             {renderText(sync?.reachability)}
           </>
         ),
@@ -340,7 +378,7 @@ export function useSatelliteBusQueries({
         label: 'Reachability',
         value: (
           <>
-            <StatusLamp value={ops?.reachability ?? 'unknown'} kind="reach" /> {renderText(ops?.reachability)}
+            <StatusLamp value={busLampReach(ops?.reachability)} kind="reach" /> {renderText(ops?.reachability)}
           </>
         ),
       },
@@ -362,6 +400,8 @@ export function useSatelliteBusQueries({
     setTradeEnv,
     ns,
     viewModel,
+    envHealthByEnv,
+    busDeep,
     busLoading,
     busProbeError,
     matrixQuery,

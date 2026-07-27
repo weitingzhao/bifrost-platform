@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, StatusLamp } from '@bifrost/ui'
 import type { RemediationEvent, RemediationJob } from '@/api/remediationTypes'
 import { fetchRemediationJob, respondRemediationJob, cancelRemediationJob } from '@/api/remediation'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { RemediationHistoryBar } from '@/components/cluster/RemediationHistoryBar'
 import { RemediationInitBrief } from '@/components/cluster/RemediationInitBrief'
@@ -262,7 +263,7 @@ function ThinkingBlock({ events }: { events: RemediationEvent[] }) {
         <span className="remediation-block-meta">
           {events.length} fragment{events.length > 1 ? 's' : ''}
         </span>
-        <span className="remediation-block-chevron">{expanded ? '▾' : '▸'}</span>
+        <CollapseExpandIcon open={expanded} className="remediation-block-chevron" />
       </button>
       {expanded && <p className="remediation-block-body remediation-block-body--thinking">{text}</p>}
     </div>
@@ -290,7 +291,7 @@ function ToolBlock({ block }: { block: GroupedBlock }) {
             {resultLen > 0 ? `${resultLen} chars` : 'done'}
           </span>
         )}
-        <span className="remediation-block-chevron">{expanded ? '▾' : '▸'}</span>
+        <CollapseExpandIcon open={expanded} className="remediation-block-chevron" />
       </button>
       {expanded && (
         <>

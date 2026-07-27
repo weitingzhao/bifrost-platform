@@ -17,5 +17,6 @@ export {
 } from '@/pages/satellite-bus/satelliteBusTableParts'
 export {
   SatelliteBusDetailSections,
+  type BusBodyMode,
   type SatelliteBusDetailSectionsProps,
 } from '@/pages/satellite-bus/SatelliteBusDetailSections'

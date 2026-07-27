@@ -3,10 +3,16 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, ConfirmDialog, DenseTag, cn } from '@bifrost/ui'
 import { rolloutRestartDeployment, scaleDeployment } from '@/api/clusterActuation'
 import type { ClusterWorkload } from '@/api/clusterTypes'
+import { isActivityInFlight } from '@/lib/activity/activityPageFocus'
+import {
+  upsertActivity,
+  updateActivityPhase,
+  useActivityFeed,
+} from '@/lib/activity/activityStore'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { upsertActivity, updateActivityPhase } from '@/lib/activity/activityStore'
 import { startRestartActuationSettle } from '@/lib/activity/restartActuationSettle'
+import { formatWorkloadRollout } from '@/lib/cluster/workloadRollout'
 import type { TradeEnv } from '@/pages/satellite-bus/useSatelliteBusQueries'
 
 type ConfirmTarget = {
@@ -28,6 +34,41 @@ function findWorkload(workloads: ClusterWorkload[], name: string): ClusterWorklo
   return workloads.find(w => w.name === name && w.kind.toLowerCase().includes('deploy'))
 }
 
+function WorkloadRolloutMeta({
+  workload,
+  loading,
+}: {
+  workload: ClusterWorkload | undefined
+  loading: boolean
+}) {
+  if (loading) {
+    return <span className="font-mono text-[var(--text-dense-meta)] text-muted-foreground">…</span>
+  }
+  const ready = workload?.ready ?? '—'
+  const rollout = formatWorkloadRollout(workload)
+  const progressing = workload?.status === 'Progressing' || workload?.status === 'Unavailable'
+  return (
+    <>
+      <span className="font-mono text-[var(--text-dense-meta)] text-muted-foreground" title="Ready/desired replicas">
+        {ready}
+      </span>
+      {progressing && workload?.status != null && (
+        <DenseTag variant="warning" className="text-[9px] uppercase tracking-wide">
+          {workload.status}
+        </DenseTag>
+      )}
+      {rollout != null && (
+        <span
+          className="font-mono text-[var(--text-dense-caption)] text-muted-foreground"
+          title="K8s Deployment rollout (updated · ready · available)"
+        >
+          {rollout}
+        </span>
+      )}
+    </>
+  )
+}
+
 export function TradeDaemonOperatePanel({
   tradeEnv,
   namespace,
@@ -45,8 +86,14 @@ export function TradeDaemonOperatePanel({
   highlightWorkload?: string | null
 }) {
   const qc = useQueryClient()
+  const { events } = useActivityFeed()
   const [confirm, setConfirm] = useState<ConfirmTarget | null>(null)
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+
+  const applyingRestart = useMemo(() => {
+    const prefix = `actuation:daemon-restart:${namespace}/`
+    return events.find(e => e.id.startsWith(prefix) && isActivityInFlight(e)) ?? null
+  }, [events, namespace])
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['cluster'] })
@@ -107,6 +154,7 @@ export function TradeDaemonOperatePanel({
         namespace: vars.namespace,
         name: vars.name,
         baselineReady: wl?.ready ?? null,
+        baselineGeneration: wl?.generation ?? null,
         apiMessage: data.message,
       })
       setFeedback({ kind: 'ok', text: data.message })
@@ -190,9 +238,7 @@ export function TradeDaemonOperatePanel({
           <DenseTag variant="neutral" className="shrink-0 text-[10px] uppercase tracking-wide">
             account-sync
           </DenseTag>
-          <span className="font-mono text-[var(--text-dense-meta)] text-muted-foreground">
-            {workloadsLoading ? '…' : (accountSync?.ready ?? '—')}
-          </span>
+          <WorkloadRolloutMeta workload={accountSync} loading={workloadsLoading} />
           {highlightWorkload === 'account-sync' && (
             <DenseTag variant="info" className="text-[9px] uppercase tracking-wide">
               Actuation target
@@ -255,9 +301,7 @@ export function TradeDaemonOperatePanel({
               Actuation target
             </DenseTag>
           )}
-          <span className="font-mono text-[var(--text-dense-meta)] text-muted-foreground">
-            {workloadsLoading ? '…' : (daemon?.ready ?? '—')}
-          </span>
+          <WorkloadRolloutMeta workload={daemon} loading={workloadsLoading} />
           <Button
             size="sm"
             variant="outline"
@@ -300,7 +344,12 @@ export function TradeDaemonOperatePanel({
           </span>
         </div>
 
-        {feedback?.kind === 'ok' && (
+        {applyingRestart != null && (
+          <OpsFeedback variant="info" title="Rollout in progress">
+            {applyingRestart.detail ?? applyingRestart.title}
+          </OpsFeedback>
+        )}
+        {applyingRestart == null && feedback?.kind === 'ok' && (
           <OpsFeedback variant="success" title="Actuation ok">
             {feedback.text}
           </OpsFeedback>

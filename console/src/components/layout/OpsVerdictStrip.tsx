@@ -5,8 +5,8 @@ export type OpsVerdictLamp = 'ok' | 'degraded' | 'fail' | 'unknown'
 export type OpsVerdictTagVariant = 'success' | 'warning' | 'danger' | 'neutral' | 'info'
 
 export type OpsVerdictStripProps = {
-  /** Uppercase verdict title, e.g. "SYSTEM VERDICT · PROD" */
-  title: string
+  /** Uppercase verdict title, e.g. "SYSTEM VERDICT · PROD" — may include inline NS Segment. */
+  title: ReactNode
   lamp: OpsVerdictLamp
   tagLabel: string
   tagVariant: OpsVerdictTagVariant
@@ -47,7 +47,11 @@ export function OpsVerdictStrip({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <StatusLamp value={lamp} kind="reach" />
         {leading}
-        <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">{title}</span>
+        {typeof title === 'string' ? (
+          <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">{title}</span>
+        ) : (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">{title}</div>
+        )}
         <DenseTag variant={tagVariant} className="text-[10px] font-semibold">
           {tagLabel}
         </DenseTag>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 import { BriefingSyncBanner } from '@/components/briefing/BriefingSyncBanner'
 import { BriefingWaveAuditPanel } from '@/components/briefing/BriefingWaveAuditPanel'
 import { WaveVerifyGateCard } from '@/components/briefing/WaveVerifyGateCard'
@@ -136,11 +137,7 @@ function QueueItemRow({
               <DenseTag variant="warning">delivered</DenseTag>
             ) : null}
             <BriefingStatusBadge status={workStatus} />
-            {hasDetail && (
-              <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                {expanded ? '▾' : '▸'}
-              </span>
-            )}
+            {hasDetail && <CollapseExpandIcon open={expanded} />}
           </div>
         </button>
       </div>
@@ -293,9 +290,7 @@ function CompletedQueueGroup({
         <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
           {items.length} completed
         </span>
-        <span className="ml-auto text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          {expanded ? '▾' : '▸'}
-        </span>
+        <CollapseExpandIcon open={expanded} className="ml-auto" />
       </button>
       {expanded && (
         <ul className="m-0 flex list-none flex-col border-t border-[var(--border)] p-0 opacity-80">

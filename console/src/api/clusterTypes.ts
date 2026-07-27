@@ -379,6 +379,13 @@ export interface ClusterWorkload {
   restarts: number
   age: string
   reachability: Reachability
+  /** Deployment rollout counters (absent/0 for Pods). */
+  desired_replicas?: number
+  ready_replicas?: number
+  updated_replicas?: number
+  available_replicas?: number
+  generation?: number
+  observed_generation?: number
 }
 
 export interface ClusterWorkloadsResponse {

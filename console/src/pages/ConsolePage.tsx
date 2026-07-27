@@ -698,6 +698,7 @@ function ConsolePageInner() {
       <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
         {OPS_CONTEXT_TABS.includes(viewTab) && (
           <OpsContextStrip
+            density={viewTab === 'satellite-bus' ? 'seat' : 'default'}
             onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
             onOpenAgentDeskWithPrefill={prefill => openAgentDesk({ prefill })}
             onOpenRuntimeMap={openRuntimeMap}
@@ -899,6 +900,7 @@ function ConsolePageInner() {
             onOpenObservability={openObservability}
             onOpenPluginGallery={openPluginGallery}
             onOpenApiHealth={openSatelliteApi}
+            onOpenControlRoom={() => setViewTab('control-room')}
             ambientJobId={ambientJob?.id ?? null}
             onStartAgentJob={startAmbientAgentJob}
           />

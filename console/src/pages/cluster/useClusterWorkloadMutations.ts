@@ -49,12 +49,21 @@ export function useClusterWorkloadMutations(
     onSuccess: (data, vars) => {
       const activityId = activityIdFor('restart', vars.namespace, vars.name)
       const baselineReady = baselineReadyFromCache(qc, vars.namespace, vars.name)
+      const cached = qc.getQueryData<ClusterWorkloadsResponse>([
+        'cluster',
+        'workloads',
+        vars.namespace,
+      ])
+      const wl = cached?.workloads?.find(
+        x => x.name === vars.name && x.kind.toLowerCase().includes('deploy'),
+      )
       startRestartActuationSettle({
         activityId,
         queryClient: qc,
         namespace: vars.namespace,
         name: vars.name,
         baselineReady,
+        baselineGeneration: wl?.generation ?? null,
         apiMessage: data.message,
       })
       handleActuationSuccess(data.message)

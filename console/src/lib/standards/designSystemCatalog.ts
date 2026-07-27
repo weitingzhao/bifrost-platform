@@ -27,7 +27,7 @@ export type LayerRow = {
 export const LAYER_STACK: LayerRow[] = [
   { layer: 'Tokens', location: 'src/index.css', role: 'Typography (--text-dense), cell spacing (--table-cell-*), business semantics (--color-profit/loss/unrealized, --color-entity-*)' },
   { layer: 'Layout', location: 'console/src/components/ConsoleHeader.tsx', role: 'Shell chrome only — breadcrumb (plane › page) + ? help + pageActions + Viewer env + TaskModeCapsule + Agent Task + User; PageToolbar for page filters/actions only' },
-  { layer: 'Layout', location: 'console/src/components/OpsContextStrip.tsx', role: 'Page-top Trade/Mission context strip inside PageShell (elevated, not sticky chrome); compact when Mission OK, full when CAUTION+' },
+  { layer: 'Layout', location: 'console/src/components/OpsContextStrip.tsx', role: 'Page-top Trade/Mission context strip inside PageShell; density=seat on Satellite Bus (Mission only, no Trade env twins); default compact when Mission OK, full when CAUTION+' },
   { layer: 'Layout', location: 'console/src/components/layout/OpsSection.tsx', role: 'OpsSection + OpsSubsectionTitle — unified page-section panel-elevated chrome' },
   { layer: 'Layout', location: 'console/src/components/layout/OpsVerdictStrip.tsx', role: 'OpsVerdictStrip — page verdict for Mission Control + Rocket Placement/Cluster (lamp + title + tag + summary + actions/meta)' },
   { layer: 'Data display', location: 'src/components/data-display/', role: 'Tables, PnL, segments, icon actions, collapsible groups — 14 primitives' },
@@ -167,6 +167,9 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     rules: [
       'Use OpsSection as the universal collapsible unit (title + description + optional actions)',
       'Default expand strategy: sections with CAUTION+ signals open; healthy sections collapsed',
+      'Bus View Shared/Compare/Evidence SecondaryGroup headers show StatusLamp + OK/WARN/FAIL/DRIFT/OBSERVE/UNPROBED/EXPECTED when collapsed',
+      'Bus Status three-state semantics: OK (green) | DEGRADED/WARN/DRIFT/OBSERVE/UNPROBED (yellow) | FAIL/UNAVAILABLE (red) — no gray/unknown/? lamp on Bus pages; UNPROBED = probe missing/stale; EXPECTED = policy-off intentional; DRIFT = env diverge; OBSERVE = trading-arm degraded but bus healthy',
+      'Section expand/collapse affordance: CollapseExpandIcon (ChevronDown) — never Expand/Collapse text or Unicode ▾/▸',
       'Maximum 2 nesting levels below Body (Section → inline detail OR Section → sub-table). Never 3+',
       'Summary-to-detail continuity: clicking a verdict signal scrolls/expands its owning section',
       'Each section is self-contained — no cross-section state leakage',
@@ -175,7 +178,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     examples: [
       'Observability: Domain cards (clickable) → detail table for selected domain',
       'Control Room: Bay cards (Operate / Release / Health / Governance) — expand reveals strips',
-      'Satellite Bus: PageToolbar Trade NS → SecondaryGroup scope sections (flat OpsSections inside)',
+      'Satellite Bus: Verdict BUS HEALTH + inline Trade NS Segment → View Operate | Shared | Compare; Evidence folds under Operate (OBSERVE ≠ verdict); Compare lamp = DRIFT for env diverge + Inspect CTA; OpsContextStrip density=seat + CAUTION why-line + Fix; scope chips ≠ health; below-verdict summary line Bus·Mission·Shared·Compare clickable when non-green; Bus non-green → Operate default + issues auto-scroll; Shared non-OK → Cluster/Observability CTA',
       'Launch Rocket: LaneDetailCollapse for gate evidence / Advanced recovery / gate history',
       'Deploy Satellite: LaneDetailCollapse for supply chain / gate compare / GitOps',
       'Placement / Cluster: Verdict meta chips scroll to Body anchors (#placement-violations, #cluster-issues, …)',
@@ -191,6 +194,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     rules: [
       'High-frequency actions: surface in Verdict strip or PageToolbar (always visible)',
       'Context actions (e.g. per-row Fix, per-section Agent dispatch): inline with the relevant data',
+      'Remediation closed-loop: every non-green signal must have a discoverable fix path — Operate (issues + consumers), Shared (Open Cluster / Observability), Compare (Inspect IB Gateway), Mission (Control Room / Fix via Agent Desk)',
       'Never require expanding a collapsed section to discover a page-level action',
       'Destructive actions: ConfirmDialog, not window.confirm',
       'Agent dispatch actions: inline button → launches via ambient Agent system (dock stays bottom)',
@@ -252,8 +256,8 @@ export const MANDATORY_MAPPING: MandatoryMappingRow[] = [
   },
   {
     interaction: 'Trade / Mission context',
-    use: 'OpsContextStrip inside PageShell (elevated page content); compact one-liner when Mission OK, full strip + Fix when CAUTION+',
-    never: 'Sticky OpsContextBar / second nav bar under ConsoleHeader shell chrome',
+    use: 'OpsContextStrip inside PageShell (elevated page content); compact one-liner when Mission OK, full strip + Fix when CAUTION+; Satellite Bus uses density=seat so page Trade NS in verdict is the only env selector',
+    never: 'Sticky OpsContextBar / second nav bar under ConsoleHeader shell chrome; Trade env lamps next to an in-page Trade NS Segment (twin selectors)',
   },
   {
     interaction: 'Shell Activity Feed (recent ops glance)',

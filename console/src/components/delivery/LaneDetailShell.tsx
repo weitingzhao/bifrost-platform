@@ -1,8 +1,9 @@
 import { Button, cn, DenseTag } from '@bifrost/ui'
-import { ArrowLeft, ChevronDown } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import type { ReleaseGateResponse } from '@/api/deliveryTypes'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 import {
   LANE_DETAIL_REASON_COPY,
   type LaneDetailReason,
@@ -86,7 +87,7 @@ export function LaneDetailCollapse({
     <details open={initialOpen || undefined} className="group rounded-lg border border-border/50 bg-card">
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2 hover:bg-secondary/30">
         <span className="inline-flex items-center gap-1.5 text-dense-label font-medium text-foreground">
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          <CollapseExpandIcon open={false} size={14} className="group-open:rotate-180" />
           {title}
         </span>
         {summaryExtra}

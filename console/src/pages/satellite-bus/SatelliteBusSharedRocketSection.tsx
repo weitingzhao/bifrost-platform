@@ -1,9 +1,10 @@
-import type { Ref } from 'react'
+import { useMemo, type Ref } from 'react'
 import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SatelliteObservabilityStrip } from '@/components/satellite/SatelliteObservabilityStrip'
 import { PayloadReadinessTable } from '@/components/control-room/PayloadDepthPanel'
 import type { PayloadReadinessRow } from '@/lib/control-room/payloadReadiness'
+import { sharedContextSignal } from '@/lib/satellite-bus/contextSectionSignal'
 import type { SocketHealthRow } from '@/lib/satellite/socketHealthSemantics'
 import {
   RocketSocketBusRow,
@@ -43,11 +44,17 @@ export function SatelliteBusSharedRocketSection({
   onOpenTelemetry?: () => void
   onOpenObservability?: () => void
 }) {
+  const signal = useMemo(
+    () => sharedContextSignal(rocketRow, payloadRows),
+    [payloadRows, rocketRow],
+  )
   return (
     <SecondaryGroup
-      title="Shared dependencies"
-      description="Rocket IB socket bus + Ground cluster — shared by all trade namespaces"
+      title="Rocket + Ground"
+      description="Shared IB socket bus and cluster readiness — same for every Trade NS"
+      badgeLabel="Shared"
       scope="rocket"
+      signal={signal}
       open={sharedOpen}
       onOpenChange={setSharedOpen}
       sectionRef={sharedSectionRef}
@@ -89,6 +96,33 @@ export function SatelliteBusSharedRocketSection({
           onOpenObservability={onOpenObservability}
         />
       </div>
+      {signal.reach !== 'ok' && (
+        <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-t border-[var(--border)]">
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+            Shared {signal.label}{signal.detail != null ? ` — ${signal.detail}` : ''}
+          </span>
+          <div className="flex items-center gap-2 ml-auto">
+            {onOpenCluster != null && (
+              <button
+                type="button"
+                className="focus-strip-link text-[var(--text-dense-caption)]"
+                onClick={onOpenCluster}
+              >
+                Open Cluster
+              </button>
+            )}
+            {onOpenObservability != null && (
+              <button
+                type="button"
+                className="focus-strip-link text-[var(--text-dense-caption)]"
+                onClick={onOpenObservability}
+              >
+                Observability
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </SecondaryGroup>
   )
 }

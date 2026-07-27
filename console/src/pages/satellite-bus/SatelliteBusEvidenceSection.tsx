@@ -1,6 +1,8 @@
-import type { Ref } from 'react'
+import { useMemo, type Ref } from 'react'
 import type { Target } from '@/api/matrixTypes'
+import type { SatelliteBusDeepResponse } from '@/api/satelliteBusTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { evidenceContextSignal } from '@/lib/satellite-bus/contextSectionSignal'
 import {
   CriticalProcessesTable,
   MonitorKvTable,
@@ -12,6 +14,7 @@ import type { CriticalProcessRow, MonitorKvRow, TradeEnv } from '@/pages/satelli
 export function SatelliteBusEvidenceSection({
   tradeEnv,
   ns,
+  busDeep,
   busLoading,
   evidenceOpen,
   setEvidenceOpen,
@@ -28,6 +31,7 @@ export function SatelliteBusEvidenceSection({
 }: {
   tradeEnv: TradeEnv
   ns: string
+  busDeep: SatelliteBusDeepResponse | undefined
   busLoading: boolean
   evidenceOpen: boolean
   setEvidenceOpen: (open: boolean) => void
@@ -42,11 +46,17 @@ export function SatelliteBusEvidenceSection({
   criticalProcesses: CriticalProcessRow[]
   workloadsLoading: boolean
 }) {
+  const signal = useMemo(
+    () => evidenceContextSignal(busDeep, tradeApiTargetRows, criticalProcesses),
+    [busDeep, criticalProcesses, tradeApiTargetRows],
+  )
   return (
     <SecondaryGroup
-      title="Evidence"
-      description={`Raw monitor FSM · Trade API reachability · K8s workloads for ${ns}`}
+      title={`Raw evidence · ${ns}`}
+      description="Monitor FSM / Trade API / K8s inventory — OBSERVE may appear while BUS HEALTH is HEALTHY (observe / D10)"
+      badgeLabel="Operate · Evidence"
       scope="trade-single-env"
+      signal={signal}
       open={evidenceOpen}
       onOpenChange={setEvidenceOpen}
       sectionRef={evidenceSectionRef}
@@ -55,7 +65,7 @@ export function SatelliteBusEvidenceSection({
       <OpsSection
         variant="flat"
         title="Raw monitor FSM"
-        description="Strict trading-arm semantics — may differ from Bus health when observe / pause / expected-off is healthy"
+        description="Strict trading-arm semantics — does not change the BUS HEALTH verdict when observe / pause / expected-off is healthy"
         bodyPadding="none"
         overflow="hidden"
       >
