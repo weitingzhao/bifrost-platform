@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, cn, DenseTag } from '@bifrost/ui'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { fetchAgentBridge } from '@/api/agentOps'
 import { fetchStgSmoke } from '@/api/promote'
 import { fetchSupplyChain } from '@/api/delivery'
 import {
@@ -12,6 +13,10 @@ import {
 } from '@/components/task-mode/TaskModeReadinessStrip'
 import { buildDeliverStgRecoverPrompt, isDeliverStgStaleFailure } from '@/lib/agent/deliverStgRecoverPrompt'
 import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
+import {
+  buildGitDirtyRemediatePrompt,
+  GIT_DIRTY_FIX_SCOPE,
+} from '@/lib/agent/gitDirtyRemediatePrompt'
 import { listFailingMatrixTargets } from '@/lib/control-room/controlRoomOperatePack'
 import {
   collectMissionDegradationItems,
@@ -155,23 +160,51 @@ export function MissionBoard({
 
   const supplyQ = useQuery({ queryKey: ['mission-board', 'supply'], queryFn: fetchSupplyChain, refetchInterval: 20_000 })
   const smokeQ = useQuery({ queryKey: ['mission-board', 'stg-smoke'], queryFn: fetchStgSmoke, refetchInterval: 20_000 })
+  const bridgeQ = useQuery({
+    queryKey: ['cockpit', 'bridge'],
+    queryFn: fetchAgentBridge,
+    refetchInterval: 20_000,
+  })
 
   const releaseFixPrompt = useMemo(
     () => buildDeliverStgRecoverPrompt({ supply: supplyQ.data, stgSmoke: smokeQ.data }),
     [supplyQ.data, smokeQ.data],
   )
 
+  const gitDirtyPrompt = useMemo(() => {
+    const base = buildGitDirtyRemediatePrompt(bridgeQ.data)
+    return [
+      base,
+      '',
+      '## Operator intent: PROPOSE COMMIT',
+      'Draft commit_message → request_operator_approval → git_commit. Stash only if operator rejects commit and asks to stash.',
+      'Source: Control Room Mission Board Agent Fix.',
+    ].join('\n')
+  }, [bridgeQ.data])
+
   const stalePipelineFail = isDeliverStgStaleFailure(supplyQ.data, smokeQ.data)
+
+  const isAgentDirtyCause = (item: { id: string; detail: string }) =>
+    item.id.toLowerCase() === 'agent' ||
+    item.detail.toLowerCase().includes('dirty') ||
+    item.detail.toLowerCase().includes('git bridge')
+
+  const startGitDirtyRemediate = () => {
+    if (onPlaybookFix != null && canOperate) {
+      onPlaybookFix({ scope: GIT_DIRTY_FIX_SCOPE, prompt: gitDirtyPrompt })
+      return
+    }
+    onOpenAgentDesk({
+      prefill:
+        'Mission CAUTION from Agent / Git bridge dirty repos. Use git-dirty-remediate (Propose commit or Stash; approval required). Never discard Owner WIP.',
+    })
+  }
 
   const itemFixAction = (item: { id: string; segment: string; signal: Signal; detail: string }) => {
     const isRelease =
       item.id.toLowerCase().includes('release') ||
       item.id.toLowerCase().includes('supply') ||
       item.detail.toLowerCase().includes('deliver')
-    const isAgent =
-      item.id.toLowerCase() === 'agent' ||
-      item.detail.toLowerCase().includes('dirty') ||
-      item.detail.toLowerCase().includes('git bridge')
     if (isRelease && item.signal !== 'ok') {
       if (onPlaybookFix != null && canOperate) {
         return {
@@ -188,14 +221,15 @@ export function MissionBoard({
         onClick: () => onOpenAgentDesk({ prefill: releaseFixPrompt }),
       }
     }
-    if (isAgent) {
+    if (isAgentDirtyCause(item)) {
       return {
-        label: 'Agent Desk →',
-        onClick: () =>
-          onOpenAgentDesk({
-            prefill:
-              'Mission CAUTION from Agent / Git bridge dirty repos. Use git-dirty-remediate (Propose commit or Stash; approval required). Never discard Owner WIP.',
-          }),
+        label:
+          playbookFixPending && canOperate
+            ? 'Starting…'
+            : canOperate && onPlaybookFix != null
+              ? 'Propose commit'
+              : 'Agent Desk →',
+        onClick: startGitDirtyRemediate,
       }
     }
     if (item.segment === 'rocket') {
@@ -350,8 +384,18 @@ export function MissionBoard({
             <button
               type="button"
               className="mission-board-fix"
-              onClick={() => onOpenAgentDesk({ prefill: diagnosticPrompt })}
-              title="Open Agent Desk with a pre-filled diagnostic prompt based on current failures"
+              onClick={() => {
+                if (degradationItems.some(isAgentDirtyCause)) {
+                  startGitDirtyRemediate()
+                  return
+                }
+                onOpenAgentDesk({ prefill: diagnosticPrompt })
+              }}
+              title={
+                degradationItems.some(isAgentDirtyCause)
+                  ? 'Start git-dirty-remediate — approval required before commit/stash'
+                  : 'Open Agent Desk with a pre-filled diagnostic prompt based on current failures'
+              }
             >
               <Wrench size={14} />
               <span>Diagnose &amp; Fix</span>
@@ -389,10 +433,30 @@ export function MissionBoard({
               )}
             </div>
             <div className="mission-board-detail-actions">
-              {diagnosticPrompt != null && (
-                <Button variant="outline" size="xs" onClick={() => onOpenAgentDesk({ prefill: diagnosticPrompt })}>
+              {(diagnosticPrompt != null || missionCauseItems.some(isAgentDirtyCause)) && (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={playbookFixPending && canOperate}
+                  onClick={() => {
+                    if (missionCauseItems.some(isAgentDirtyCause)) {
+                      startGitDirtyRemediate()
+                      return
+                    }
+                    if (diagnosticPrompt != null) onOpenAgentDesk({ prefill: diagnosticPrompt })
+                  }}
+                  title={
+                    missionCauseItems.some(isAgentDirtyCause)
+                      ? 'Start git-dirty-remediate — approval required before commit/stash'
+                      : 'Open Agent Desk with diagnostic prefill'
+                  }
+                >
                   <Wrench size={12} className="mr-1" aria-hidden />
-                  Agent Fix
+                  {playbookFixPending && missionCauseItems.some(isAgentDirtyCause)
+                    ? 'Starting…'
+                    : missionCauseItems.some(isAgentDirtyCause)
+                      ? 'Propose commit'
+                      : 'Agent Fix'}
                 </Button>
               )}
             </div>

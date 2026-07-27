@@ -14,6 +14,7 @@ import {
   persistOpenControlRoomBayIds,
   resolveInitialOpenBayIds,
   saveControlRoomExpandMode,
+  worstBayScanSignal,
   type ControlRoomBayId,
 } from '@/lib/control-room/controlRoomBays'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
@@ -117,6 +118,27 @@ describe('controlRoomBays', () => {
     const release = bays.find(b => b.id === 'release')
     expect(release?.signal).toBe('degraded')
     expect(release?.reason).toContain('narrative ready')
+  })
+
+  it('worstBayScanSignal prefers fail then degraded', () => {
+    expect(
+      worstBayScanSignal([
+        { id: 'mission', label: 'Mission', signal: 'ok', reason: 'ok' },
+        { id: 'operate', label: 'Operate', signal: 'degraded', reason: 'caution' },
+      ]),
+    ).toBe('degraded')
+    expect(
+      worstBayScanSignal([
+        { id: 'mission', label: 'Mission', signal: 'degraded', reason: 'caution' },
+        { id: 'launch', label: 'Launch', signal: 'fail', reason: 'blocked' },
+      ]),
+    ).toBe('fail')
+    expect(
+      worstBayScanSignal([
+        { id: 'mission', label: 'Mission', signal: 'ok', reason: 'ok' },
+        { id: 'health', label: 'Health', signal: 'ok', reason: 'ok' },
+      ]),
+    ).toBe('ok')
   })
 
   it('omits Health bay when showHealth is false', () => {

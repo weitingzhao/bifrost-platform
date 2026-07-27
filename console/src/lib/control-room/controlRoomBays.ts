@@ -167,6 +167,12 @@ export function buildControlRoomBaySignals(input: ControlRoomBaySignalInput): Co
   return bays
 }
 
+/** Worst Bay Scan lamp — drives Control Room sidebar nav icon (fail > degraded > unknown > ok). */
+export function worstBayScanSignal(bays: readonly ControlRoomBaySignal[]): Signal {
+  if (bays.length === 0) return 'unknown'
+  return worst(...bays.map(b => b.signal))
+}
+
 /** localStorage key for bay expand preference (legacy per-bay; still written for Multi). */
 export function controlRoomBayStorageKey(id: ControlRoomBayId): string {
   return `bifrost_control_room_bay_${id}_open`
