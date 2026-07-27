@@ -80,7 +80,11 @@ export function OperateQueueHandoffPanel({
     : items.filter(item => effectiveOperateLane(item) === laneFilter)
 
   async function handleVerifiedClose() {
-    if (closeItem == null || evidence.trim() === '') return
+    if (closeItem == null) return
+    if (evidence.trim() === '') {
+      setCloseVerificationError('Completion evidence is required before closing this handoff.')
+      return
+    }
     setCloseVerificationError(null)
     if (closeItem.execution_job_id != null) {
       setCheckingVerification(true)
@@ -113,6 +117,7 @@ export function OperateQueueHandoffPanel({
       onSuccess: () => {
         setCloseItem(null)
         setEvidence('')
+        setCloseVerificationError(null)
       },
     })
   }
@@ -319,18 +324,6 @@ export function OperateQueueHandoffPanel({
           </li>
         ))}
       </ul>
-      <div className={closeItem == null ? 'hidden' : 'mt-2'}>
-        <label className="text-dense-caption font-medium text-[var(--muted-foreground)]" htmlFor="handoff-evidence">
-          Completion evidence
-        </label>
-        <textarea
-          id="handoff-evidence"
-          className="mt-1 min-h-16 w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-dense-meta"
-          placeholder={closeItem?.handoff_kind === 'recurring_setup' ? 'schedule: …, skill: …, or operator: setup verified…' : 'Describe verification evidence…'}
-          value={evidence}
-          onChange={event => setEvidence(event.target.value)}
-        />
-      </div>
       <div className={dismissItem == null ? 'hidden' : 'mt-2'}>
         <label className="text-dense-caption font-medium text-[var(--muted-foreground)]" htmlFor="dismiss-reason">
           Dismiss reason
@@ -364,9 +357,35 @@ export function OperateQueueHandoffPanel({
       <ConfirmDialog
         open={closeItem != null}
         title="Close verified handoff"
-        message="Close only after execution and every verification step is complete. The evidence is persisted with the queue item."
+        message="Close only after execution and every verification step is complete. Evidence is required and persisted with the queue item."
         confirmLabel="Close verified handoff"
         confirming={closeMutation.isPending || checkingVerification}
+        bodyExtra={
+          <div className="flex flex-col gap-1.5">
+            <label className="text-dense-caption font-medium text-[var(--muted-foreground)]" htmlFor="handoff-evidence-dialog">
+              Completion evidence (required)
+            </label>
+            <textarea
+              id="handoff-evidence-dialog"
+              className="min-h-20 w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-dense-meta"
+              placeholder="e.g. git-dirty commit 8c02686; dirty_repos=[]; verify_mission_snapshot passed"
+              value={evidence}
+              onChange={event => {
+                setEvidence(event.target.value)
+                if (closeVerificationError != null) setCloseVerificationError(null)
+              }}
+              autoFocus
+            />
+            {closeVerificationError != null && (
+              <p className="m-0 text-dense-caption text-destructive">{closeVerificationError}</p>
+            )}
+            {evidence.trim() === '' && (
+              <p className="m-0 text-dense-caption text-[var(--muted-foreground)]">
+                Confirm stays blocked until you enter evidence.
+              </p>
+            )}
+          </div>
+        }
         onConfirm={() => void handleVerifiedClose()}
         onCancel={() => {
           setCloseItem(null)

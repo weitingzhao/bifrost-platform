@@ -472,9 +472,14 @@
       "risk_level": "medium",
       "owner": "ops",
       "execution_job_id": "18900452-4929-4572-b81b-63f21300403e",
-      "status": "open",
+      "completion_evidence": [
+        "operator: git-dirty-remediate job 18900452 committed 8c02686; dirty_repos cleared",
+        "post_fix_verification:passed"
+      ],
+      "status": "closed",
       "created_at": "2026-07-27T02:58:40Z",
-      "updated_at": "2026-07-27T03:20:09Z",
+      "updated_at": "2026-07-27T03:35:23Z",
+      "closed_at": "2026-07-27T03:35:23Z",
       "source": "checklist_dispatch"
     }
   ]
