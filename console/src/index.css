@@ -6937,6 +6937,191 @@ button.infra-stack-chip:hover {
   min-height: 0;
 }
 
+/* Operator Dock · Console — host rail and one persistent visible terminal. */
+.server-console__split {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.server-console__rail {
+  min-width: 0;
+  overflow-x: hidden;
+  border-right: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 88%, var(--secondary));
+}
+
+.server-console__rail-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem 0.25rem;
+  font-size: var(--text-dense-meta);
+  font-weight: 600;
+}
+
+.server-console__rail-group {
+  padding: 0.15rem 0.25rem 0.35rem;
+}
+
+.server-console__rail-group-label {
+  padding: 0.2rem 0.3rem 0.15rem;
+  color: var(--muted-foreground);
+  font-size: var(--text-dense-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.server-console__host-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 0.25rem;
+  padding: 0.3rem;
+  color: var(--foreground);
+  font-size: var(--text-dense-caption);
+  line-height: 1.2;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.server-console__host-row:hover {
+  background: color-mix(in oklab, var(--muted) 58%, transparent);
+}
+
+.server-console__host-row:focus-visible {
+  outline: 1px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.server-console__host-row--active {
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+
+.server-console__reach {
+  display: block;
+  width: 0.4rem;
+  height: 0.4rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.server-console__reach--ok {
+  background: var(--success);
+  box-shadow: 0 0 0.25rem color-mix(in oklab, var(--success) 55%, transparent);
+}
+
+.server-console__reach--down {
+  background: var(--destructive);
+}
+
+.server-console__resize {
+  position: relative;
+  z-index: 1;
+  width: 0.35rem;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.server-console__resize::after {
+  position: absolute;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+  content: '';
+}
+
+.server-console__resize:hover::after,
+.server-console__resize:active::after {
+  width: 2px;
+  background: color-mix(in oklab, var(--primary) 55%, var(--border));
+}
+
+.server-console__terminal {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0a0c0f;
+}
+
+.server-console__terminal-head {
+  display: flex;
+  min-height: 1.9rem;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+  padding: 0.25rem 0.45rem;
+  background: var(--color-surface-elevated);
+  font-size: var(--text-dense-meta);
+}
+
+.server-console__terminal-body,
+.server-console__session {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.server-console__meta {
+  display: flex;
+  min-height: 1.4rem;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  padding: 0.1rem 0.5rem;
+  color: var(--muted-foreground);
+  font-size: var(--text-dense-meta);
+}
+
+@media (max-width: 52rem) {
+  .server-console__split {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows:
+      minmax(7rem, calc(var(--server-console-rail, 23) * 1fr))
+      0.35rem
+      minmax(12rem, calc(var(--server-console-terminal, 77) * 1fr));
+  }
+
+  .server-console__rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .server-console__resize {
+    width: auto;
+    height: 0.35rem;
+    cursor: row-resize;
+  }
+
+  .server-console__resize::after {
+    top: 50%;
+    right: 0.35rem;
+    bottom: auto;
+    left: 0.35rem;
+    width: auto;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+
+  .server-console__resize:hover::after,
+  .server-console__resize:active::after {
+    width: auto;
+    height: 2px;
+  }
+}
+
 .console-agent-execution-dock__summary {
   margin: 0;
   font-size: var(--text-dense-caption);

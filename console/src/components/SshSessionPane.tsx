@@ -9,19 +9,40 @@ export type SshConnState = 'connecting' | 'open' | 'closed' | 'error'
 
 export type SshSessionPaneProps = {
   host: ConsoleHost
+  /** Inactive sessions stay connected but must not fit/send a zero-sized terminal. */
+  active: boolean
   onConnectionChange: (state: SshConnState, error?: string | null) => void
 }
 
-export function SshSessionPane({ host, onConnectionChange }: SshSessionPaneProps) {
+export function SshSessionPane({ host, active, onConnectionChange }: SshSessionPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const activeRef = useRef(active)
+  const onConnectionChangeRef = useRef(onConnectionChange)
+
+  useEffect(() => {
+    activeRef.current = active
+  }, [active])
+
+  useEffect(() => {
+    onConnectionChangeRef.current = onConnectionChange
+  }, [onConnectionChange])
 
   const sendResize = useCallback(() => {
     const ws = wsRef.current
     const term = termRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN || !term) return
+    if (
+      !activeRef.current ||
+      !ws ||
+      ws.readyState !== WebSocket.OPEN ||
+      !term ||
+      term.cols <= 0 ||
+      term.rows <= 0
+    ) {
+      return
+    }
     ws.send(
       JSON.stringify({
         type: 'resize',
@@ -32,6 +53,15 @@ export function SshSessionPane({ host, onConnectionChange }: SshSessionPaneProps
   }, [])
 
   const fitTerminal = useCallback(() => {
+    const container = containerRef.current
+    if (
+      !activeRef.current ||
+      container == null ||
+      container.clientWidth <= 0 ||
+      container.clientHeight <= 0
+    ) {
+      return
+    }
     fitRef.current?.fit()
     sendResize()
   }, [sendResize])
@@ -56,14 +86,14 @@ export function SshSessionPane({ host, onConnectionChange }: SshSessionPaneProps
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(containerRef.current)
-    fit.fit()
     termRef.current = term
     fitRef.current = fit
+    fitTerminal()
 
     term.writeln(
       `\x1b[90mConnecting to ${host.user}@${host.host}:${host.port}${host.jump_label ? ` via ${host.jump_label}` : ''} …\x1b[0m`,
     )
-    onConnectionChange('connecting')
+    onConnectionChangeRef.current('connecting')
 
     const ws = new WebSocket(consoleWebSocketUrl(host))
     ws.binaryType = 'arraybuffer'
@@ -71,8 +101,8 @@ export function SshSessionPane({ host, onConnectionChange }: SshSessionPaneProps
 
     ws.onopen = () => {
       if (cancelled) return
-      onConnectionChange('open')
-      sendResize()
+      onConnectionChangeRef.current('open')
+      fitTerminal()
     }
     ws.onmessage = ev => {
       if (typeof ev.data === 'string') {
@@ -83,11 +113,11 @@ export function SshSessionPane({ host, onConnectionChange }: SshSessionPaneProps
     }
     ws.onerror = () => {
       if (cancelled) return
-      onConnectionChange('error', 'WebSocket error')
+      onConnectionChangeRef.current('error', 'WebSocket error')
     }
     ws.onclose = () => {
       if (cancelled) return
-      onConnectionChange('error', 'Connection failed')
+      onConnectionChangeRef.current('error', 'Connection failed')
       term.writeln('\r\n\x1b[90m— connection closed —\x1b[0m')
     }
 
@@ -112,8 +142,18 @@ export function SshSessionPane({ host, onConnectionChange }: SshSessionPaneProps
       fitRef.current = null
       wsRef.current = null
     }
+    // A session is keyed by tab id, so it should survive parent data refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (active) {
+      requestAnimationFrame(() => {
+        fitTerminal()
+        termRef.current?.focus()
+      })
+    }
+  }, [active, fitTerminal])
 
   return <div ref={containerRef} className="absolute inset-0 min-h-0 min-w-0" />
 }
