@@ -39,7 +39,7 @@ function ViewerEnvChip({
 }) {
   if (isLoading) {
     return (
-      <span title="Viewer environment: probing">
+      <span title="Viewer seat (observation env): probing">
         <DenseTag variant="neutral">…</DenseTag>
       </span>
     )
@@ -48,7 +48,7 @@ function ViewerEnvChip({
   const variant =
     viewerEnv === 'prod' ? 'danger' : viewerEnv === 'stg' ? 'warning' : 'info'
   return (
-    <span title={`Viewer environment: ${viewerEnv}`}>
+    <span title={`Viewer seat (observation env): ${viewerEnv}`}>
       <DenseTag variant={variant}>{label}</DenseTag>
     </span>
   )

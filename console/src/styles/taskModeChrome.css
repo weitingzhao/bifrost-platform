@@ -216,11 +216,22 @@
   height: 1.125rem;
 }
 
-/* Mission Launch — Release lane segment (Vehicle / Payload) */
+/* Mission Launch — release-lane segments (Rocket / Satellite / Plugin / Data) */
 .release-lane-opt {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+}
+
+.release-lane-opt__text,
+.release-lane-opt__verdict {
+  white-space: nowrap;
+}
+
+.release-lane-opt__verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
 }
 
 .release-lane-opt__icon {

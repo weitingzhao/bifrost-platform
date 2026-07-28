@@ -137,6 +137,15 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
       'kubectl set image bypass for ib-gateway publish — use Launch Plugin lane + make install-ib-gateway only; Plugin Gallery reconnect is observe/repair not publish',
     scope: 'Mission Launch · Launch Plugin',
   },
+  {
+    action:
+      'Direct kubectl / pg_dump against CNPG from Agent — use Platform API get_data_freshness / trigger_data_clone / get_data_clone_status instead',
+    scope: 'Ops mode',
+  },
+  {
+    action: 'Clone or restore into bifrost_prod (source-only; targets limited to bifrost_dev / bifrost_stg)',
+    scope: 'All modes',
+  },
 ]
 
 /** Wave 3 P0 — Owner-locked before implementation (spine D11, D12). */
@@ -223,6 +232,8 @@ export const MISSION_DIAGNOSTIC_MCP = {
   matrix: 'get_connectivity_matrix',
   clusterPostgres: 'get_cluster_postgres (Console cluster API)',
   clusterRedis: 'get_cluster_redis (Console cluster API)',
+  dataFreshness: 'get_data_freshness — CNPG logical DB lag vs bifrost_prod',
+  dataClone: 'trigger_data_clone + get_data_clone_status — refresh bifrost_dev/stg from prod',
   deliveryRunLogs: 'get_delivery_run_logs — Tekton PipelineRun task logs',
   startPipelineRun: 'start_pipeline_run — re-run bifrost-deliver-stg after fix',
   stgSmoke: 'get_stg_smoke — STG runtime probes (stale-fail vs outage)',
@@ -242,6 +253,17 @@ export type ClusterRemediationPlaybook = {
 }
 
 export const CLUSTER_REMEDIATION_PLAYBOOKS: ClusterRemediationPlaybook[] = [
+  {
+    id: 'data-freshness-clone',
+    title: 'Refresh non-prod CNPG databases from prod',
+    trigger:
+      'get_data_freshness shows bifrost_dev or bifrost_stg aging (≥3d) or stale (≥7d) lag vs bifrost_prod; local Trade/STG needs current schema/data',
+    agentAction:
+      'L1: If Briefing/session pack shows Data freshness STALE (≥7d), treat as evidence to run this playbook. get_data_freshness → Owner/admin confirm → trigger_data_clone (confirm:true + confirmation_token=CLONE-FROM-PROD; Console Full|Selective) → poll get_data_clone_status → optional rollout_restart consumers. If Cursor MCP lacks data tools, reload bifrost-platform MCP (Settings → MCP).',
+    autonomy: 'L1',
+    mustNot: 'Do not target bifrost_prod; do not kubectl exec; do not enable live trading (D10); do not enable weekly auto-clone unless Owner explicitly requests',
+    mcpTools: ['get_data_freshness', 'trigger_data_clone', 'get_data_clone_status'],
+  },
   {
     id: 'deliver-stg-recover',
     title: 'Deliver STG pipeline recovery',

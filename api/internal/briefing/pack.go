@@ -96,8 +96,13 @@ func BuildSessionPack(
 	b.WriteString("\n")
 
 	if clusterDetail != "" {
-		b.WriteString("## Cluster\n\n")
-		fmt.Fprintf(&b, "- Reachability: %s — %s\n\n", clusterReach, clusterDetail)
+		if clusterReach == "stale-data" {
+			b.WriteString("## Data freshness (evidence)\n\n")
+			fmt.Fprintf(&b, "- %s\n\n", clusterDetail)
+		} else {
+			b.WriteString("## Cluster\n\n")
+			fmt.Fprintf(&b, "- Reachability: %s — %s\n\n", clusterReach, clusterDetail)
+		}
 	}
 
 	if baselineAt != "" {

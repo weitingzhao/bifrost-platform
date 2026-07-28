@@ -114,7 +114,58 @@ export const PG_DEPLOY_PRINCIPLES: PgPrinciple[] = [
   { dimension: 'Databases', principle: 'bifrost_dev / bifrost_stg / bifrost_prod (R-DV1)', note: 'Same cluster, logical isolation; apps connect via db name' },
   { dimension: 'Connection', principle: 'bifrost-postgres-rw.data.svc.cluster.local:5432', note: 'Apps use RW service; Standby via -ro service' },
   { dimension: 'Parameters', principle: 'shared_buffers=8GB, max_connections=200', note: 'Tuned for 32GB RAM mini-pc-b' },
+  {
+    dimension: 'Data Services',
+    principle: 'Platform API freshness + clone (not a separate plugin repo)',
+    note:
+      'GET /api/v1/cluster/data-freshness (verdict = lag_vs_prod_days for non-prod; bifrost_prod = reference) · POST /api/v1/cluster/data-clone (admin + confirm:true + confirmation_token=CLONE-FROM-PROD; 409 if clone running) · schedule default disabled · Console: Rocket → Cluster → Postgres panel',
+  },
 ]
+
+// ---------------------------------------------------------------------------
+// Data Services — Agent orchestration (Wave 4)
+// ---------------------------------------------------------------------------
+
+export const DATA_SERVICES_AGENT_FLOW: string[] = [
+  '1. get_data_freshness — observe bifrost_dev / bifrost_stg lag_vs_prod_days vs bifrost_prod (verdict+badge: <3d fresh/green · 3–7d aging/yellow · ≥7d stale/red; prod=reference)',
+  '2. If aging or stale (lag ≥ 3d) and Owner/ops intent allows: trigger_data_clone with confirmation_token=CLONE-FROM-PROD and confirm=true (mode=full or selective+tables)',
+  '3. Poll get_data_clone_status until status=done|failed (steps: dumping → restoring → verifying); concurrent clone → HTTP 409',
+  '4. Optional: rollout_restart Trade API / worker in bifrost-dev if apps held stale connections (operator)',
+  '5. Never write bifrost_prod; never kubectl from Agent — Platform API is the executor',
+  '6. Cursor MCP: after adding tools, reload the bifrost-platform MCP server (Settings → MCP) so get_data_freshness / trigger_data_clone / get_data_clone_status appear',
+]
+
+export const DATA_SERVICES_MCP = {
+  getFreshness: 'get_data_freshness — GET /api/v1/cluster/data-freshness',
+  triggerClone: 'trigger_data_clone — POST /api/v1/cluster/data-clone (admin, confirm:true + confirmation_token)',
+  cloneStatus: 'get_data_clone_status — GET /api/v1/cluster/data-clone/{id}',
+  schedule: 'GET/PUT /api/v1/cluster/data-clone/schedule (default disabled; weekly optional)',
+} as const
+
+/** Briefing note — stale non-prod DBs surface in Console Postgres panel; Agent uses get_data_freshness. */
+export const DATA_FRESHNESS_BRIEFING_NOTE =
+  'Data freshness: Rocket → Cluster → Postgres → Data Freshness. Verdict uses lag_vs_prod_days (fresh|aging|stale; not wall-clock age). If bifrost_dev/stg lag ≥ 7d (stale), Sync from Prod (admin) or MCP trigger_data_clone (confirm:true). Aging (3–7d) is a soft warning.'
+
+/** Acceptance — Cursor MCP must list data tools after reload. */
+export const DATA_SERVICES_CURSOR_MCP_ACCEPTANCE: string[] = [
+  'mcp.json bifrost-platform → npx tsx …/mcp/platform/src/index.ts',
+  'Reload Cursor MCP after tool additions',
+  'Tools visible: get_data_freshness, trigger_data_clone, get_data_clone_status',
+]
+
+/**
+ * Controlled E2E checklist (Owner-run). Agent may assist observing job/logs but must not
+ * DROP/TRUNCATE without explicit Owner confirmation in the maintenance window.
+ */
+export const DATA_SERVICES_E2E_ACCEPTANCE: string[] = [
+  'Baseline: GET /api/v1/cluster/data-freshness — record lag_vs_prod_days + last_clone_at (may be null)',
+  'Owner window: admin Sync from Prod (prefer Full with targets=["bifrost_dev"] first to reduce risk; or Console Full dual-target after confirm)',
+  'Poll GET /api/v1/cluster/data-clone/{id} until done|failed; on failure confirm remote dump path cleaned (rm -f)',
+  'After done: freshness last_clone_at is non-null; lag still reasonable vs prod activity',
+  'Invalid selective table name → HTTP 400; concurrent clone → HTTP 409',
+  'Weekly auto-clone remains disabled by default — enable only on explicit Owner request',
+]
+
 
 // ---------------------------------------------------------------------------
 // MinIO / Object Storage (future)
@@ -224,6 +275,13 @@ export function formatDataLayerBriefingAppendix(ctx?: OpsContextResponse): strin
 
   lines.push('### Session constraints')
   for (const c of DATA_LAYER_SESSION_CONSTRAINTS) lines.push(`- ${c}`)
+  lines.push('')
+  lines.push('### Data Services (freshness / clone)')
+  lines.push(`- ${DATA_FRESHNESS_BRIEFING_NOTE}`)
+  for (const step of DATA_SERVICES_AGENT_FLOW) lines.push(`- ${step}`)
+  lines.push('')
+  lines.push('### Data Services E2E (Owner-controlled)')
+  for (const step of DATA_SERVICES_E2E_ACCEPTANCE) lines.push(`- ${step}`)
   return lines.join('\n')
 }
 
@@ -233,6 +291,8 @@ export function formatDataLayerBriefingAppendix(ctx?: OpsContextResponse): strin
 
 export const DATA_LAYER_RELATED_AUTHORITIES = [
   'Live PG/Redis/MinIO readiness: Rocket → Cluster (Postgres / Redis / Issues panels)',
+  'Data Freshness + Sync from Prod: Rocket → Cluster → Postgres → Data Freshness OpsSection',
+  'MCP: get_data_freshness · trigger_data_clone · get_data_clone_status',
   'Migrate lane + spine-projected queue: Engineer → Briefing · lane data-layer-k3s',
   'Target topology complement: k3sArchitectureCatalog.ts',
   'Spine: config/ops-context.yaml · GET /api/v1/context',

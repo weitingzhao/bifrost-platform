@@ -73,6 +73,45 @@ server.tool('get_cluster_nodes', 'Kubernetes node list', {}, async () =>
   jsonResult(await platformGet('/api/v1/cluster/nodes')),
 )
 
+server.tool(
+  'get_data_freshness',
+  'CNPG logical DB activity freshness (dev/stg vs prod)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/cluster/data-freshness')),
+)
+
+server.tool(
+  'trigger_data_clone',
+  'Clone bifrost_prod → bifrost_dev/stg (admin; confirmation_token + confirm:true required)',
+  {
+    source: z.string().optional(),
+    targets: z.array(z.string()).optional(),
+    mode: z.enum(['full', 'selective']).optional(),
+    tables: z.array(z.string()).optional(),
+    confirmation_token: z.string(),
+    confirm: z.literal(true),
+  },
+  async ({ source, targets, mode, tables, confirmation_token, confirm }) =>
+    jsonResult(
+      await platformPost('/api/v1/cluster/data-clone', {
+        source: source ?? 'bifrost_prod',
+        targets: targets ?? ['bifrost_dev', 'bifrost_stg'],
+        mode: mode ?? 'full',
+        tables,
+        confirmation_token,
+        confirm,
+      }),
+    ),
+)
+
+server.tool(
+  'get_data_clone_status',
+  'Poll data-clone job progress',
+  { id: z.string() },
+  async ({ id }) =>
+    jsonResult(await platformGet(`/api/v1/cluster/data-clone/${encodeURIComponent(id)}`)),
+)
+
 server.tool('get_gitops_apps', 'Argo CD applications', {}, async () =>
   jsonResult(await platformGet('/api/v1/gitops/apps')),
 )

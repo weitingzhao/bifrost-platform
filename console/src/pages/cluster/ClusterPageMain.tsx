@@ -131,6 +131,7 @@ export function ClusterPageMain({
               postgres={q.postgresStatusQuery.data}
               postgresLoading={q.postgresStatusQuery.isLoading}
               serviceReadiness={q.serviceReadinessQuery.data}
+              canAdmin={canAdmin}
             />
           ) : domainId === 'redis' ? (
             <ClusterRedisDetailPanel

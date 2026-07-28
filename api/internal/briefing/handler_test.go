@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
@@ -53,6 +55,31 @@ func TestHandleSessionPackForwardsQueryParams(t *testing.T) {
 	}
 	if resp.Track != "build" || resp.Lane != "governance" || resp.Intent != "review" || resp.PackSize != "full" {
 		t.Fatalf("resp = %+v", resp)
+	}
+}
+
+func TestStaleDataFreshnessDetail(t *testing.T) {
+	lag := func(days float64) *float64 { return &days }
+
+	reach, detail := staleDataFreshnessDetail(cluster.DataFreshnessResponse{
+		Databases: []cluster.DataFreshnessDB{
+			{Name: "bifrost_prod", LagVsProdDays: lag(99), Verdict: "reference"},
+			{Name: "bifrost_dev", LagVsProdDays: lag(7), Verdict: "stale"},
+			{Name: "bifrost_stg", LagVsProdDays: lag(2), Verdict: "fresh"},
+		},
+	})
+	if reach != "stale-data" || !strings.Contains(detail, "bifrost_dev lag_vs_prod=7.0d (stale)") {
+		t.Fatalf("stale freshness evidence = reach %q detail %q", reach, detail)
+	}
+	if strings.Contains(detail, "bifrost_prod") && strings.Contains(detail, "lag_vs_prod=99.0d") {
+		t.Fatalf("prod reference must not be evidence: %q", detail)
+	}
+
+	reach, detail = staleDataFreshnessDetail(cluster.DataFreshnessResponse{
+		Databases: []cluster.DataFreshnessDB{{Name: "bifrost_dev", LagVsProdDays: lag(6.9), Verdict: "aging"}},
+	})
+	if reach != "unknown" || detail != "" {
+		t.Fatalf("freshness below stale threshold = reach %q detail %q", reach, detail)
 	}
 }
 

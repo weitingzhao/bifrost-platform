@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { cn, DenseTag, SegmentControl, StatusLamp } from '@bifrost/ui'
-import { Plug, Rocket, Satellite, type LucideIcon } from 'lucide-react'
+import { Database, Plug, Rocket, Satellite, type LucideIcon } from 'lucide-react'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { LaunchGateBar } from '@/components/task-mode/LaunchGateBar'
@@ -18,6 +18,9 @@ import { launchVerdictToSignal, readinessAnchorDomId } from '@/lib/task-mode/sat
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import { setSatelliteBusFocus } from '@/lib/task-mode/readinessChipActions'
 import { evidenceSummaryLine, type PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
+import { writeCategoryToUrl } from '@/lib/cluster/clusterCategories'
+import { DataFreshnessPanel } from '@/components/cluster/DataFreshnessPanel'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 export type MissionLaunchBoardProps = {
   onNavigate: (tabId: string) => void
@@ -68,23 +71,27 @@ export type MissionLaunchBoardProps = {
   tradeRecentRunsLoading?: boolean
   onOpenPlatformRun: (run: DeliveryPipelineRunView) => void
   onOpenTradeRun: (run: DeliveryPipelineRunView) => void
-  /** Primary Launch/Deploy already in Task CC Verdict — hide duplicate Agent Launch in gate bars. */
+  /** Primary Launch/Deploy lives in the Command row — hide duplicate gate-bar CTA. */
   hidePrimaryLaunch?: boolean
 }
 
-type ReleaseLane = 'vehicle' | 'payload' | 'plugin'
+type CommandLane = 'vehicle' | 'payload' | 'plugin' | 'data-maintenance'
 
-function ReleaseLaneOptionLabel({
+function CommandLaneOptionLabel({
   active,
   icon: Icon,
   iconClass,
+  verdict,
   children,
 }: {
   active: boolean
   icon: LucideIcon
   iconClass: string
+  verdict?: LaunchVerdict
   children: ReactNode
 }) {
+  const tag = laneTag(verdict)
+
   return (
     <span className={cn('release-lane-opt', active && 'release-lane-opt--active')}>
       <Icon
@@ -93,6 +100,12 @@ function ReleaseLaneOptionLabel({
         aria-hidden
       />
       <span className="release-lane-opt__text">{children}</span>
+      <span className="release-lane-opt__verdict">
+        <StatusLamp value={launchVerdictToSignal(verdict?.kind ?? 'NO_GO')} kind="reach" />
+        <DenseTag variant={tag.variant} className="text-[9px]">
+          {tag.label}
+        </DenseTag>
+      </span>
     </span>
   )
 }
@@ -108,7 +121,7 @@ function laneTag(verdict: LaunchVerdict | undefined): {
 }
 
 /**
- * Mission Launch — three independent release lanes via tab.
+ * Mission Launch — platform, trade, plugin, and data-maintenance command lanes.
  * Vehicle (Rocket / platform), Payload (Satellite / trade), Plugin (IB Gateway publish).
  * Shared IB bus lives only on the Payload lane (coupling precondition for trade deploy).
  */
@@ -165,101 +178,163 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
     hidePrimaryLaunch = false,
   } = props
 
-  const [lane, setLane] = useState<ReleaseLane>('vehicle')
+  const [lane, setLane] = useState<CommandLane>('vehicle')
+  const { canAdmin } = usePlatformAuth()
   const { rocketSignal, rocketDetail } = useSatelliteProdReadiness()
   const sharedBlocked = isProdReleaseBlocked(rocketSignal)
-
-  const vehicleTag = laneTag(launchVerdict)
-  const payloadTag = laneTag(satelliteLaunchVerdict)
-  const pluginTag = laneTag(pluginLaunchVerdict)
+  const ibBusStatus = missionStatus(rocketSignal)
+  const ibBusStatusClass =
+    ibBusStatus === 'NOMINAL'
+      ? 'text-muted-foreground hover:text-primary'
+      : ibBusStatus === 'CRITICAL'
+        ? 'font-semibold text-danger hover:text-danger/80'
+        : 'font-semibold text-warning hover:text-warning/80'
+  const openRocketBus = () => {
+    setSatelliteBusFocus('rocket')
+    onNavigate('satellite-bus')
+  }
 
   const vehicleCtaDisabled = !canDispatchRelease || launchVerdict?.kind !== 'GO'
   const payloadCtaDisabled =
     !canDispatchTradeDeploy || satelliteLaunchVerdict?.kind !== 'GO' || sharedBlocked
   const pluginCtaDisabled = !canDispatchPluginLaunch || pluginLaunchVerdict?.kind !== 'GO'
+  const vehicleCtaTitle =
+    releaseDisabledReason ??
+    (vehicleCtaDisabled
+      ? (launchVerdict?.disabledReason ?? 'Vehicle launch unavailable')
+      : 'Launch platform release agent')
+  const payloadCtaTitle =
+    sharedBlocked && satelliteLaunchVerdict?.kind === 'GO'
+      ? `IB bus blocked — ${rocketDetail}`
+      : (tradeDeployDisabledReason ??
+        (payloadCtaDisabled
+          ? (satelliteLaunchVerdict?.disabledReason ?? 'Payload deploy unavailable')
+          : 'Deploy Trade satellite agent'))
+  const pluginCtaTitle =
+    pluginLaunchDisabledReason ??
+    (pluginCtaDisabled
+      ? (pluginLaunchVerdict?.disabledReason ?? 'Plugin launch unavailable')
+      : 'Launch plugin publish agent')
+  const commandAction =
+    lane === 'vehicle' ? (
+      <AgentTriggerButton
+        label="Launch"
+        size="xs"
+        pending={releasePending}
+        disabled={vehicleCtaDisabled}
+        title={vehicleCtaTitle}
+        onClick={() => onDispatchRelease?.()}
+      />
+    ) : lane === 'payload' ? (
+      <AgentTriggerButton
+        label="Deploy"
+        size="xs"
+        pending={tradeDeployPending}
+        disabled={payloadCtaDisabled}
+        title={payloadCtaTitle}
+        onClick={() => onDispatchTradeDeploy?.()}
+      />
+    ) : lane === 'plugin' ? (
+      <AgentTriggerButton
+        label="Launch"
+        size="xs"
+        pending={pluginLaunchPending}
+        disabled={pluginCtaDisabled}
+        title={pluginCtaTitle}
+        onClick={() => onDispatchPluginLaunch?.()}
+      />
+    ) : null
 
   return (
     <div id="task-cc-launch-board" className="flex scroll-mt-2 flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-[var(--text-dense-label)] font-semibold shrink-0">Release lane</span>
+          <span className="text-[var(--text-dense-label)] font-semibold shrink-0">Command</span>
           <SegmentControl
             size="sm"
-            ariaLabel="Release lane"
+            ariaLabel="Release lanes"
             value={lane}
-            onChange={v => setLane(v as ReleaseLane)}
+            onChange={v => setLane(v as CommandLane)}
             options={[
               {
                 value: 'vehicle',
                 label: (
-                  <ReleaseLaneOptionLabel
+                  <CommandLaneOptionLabel
                     active={lane === 'vehicle'}
                     icon={Rocket}
                     iconClass="release-lane-opt__icon--vehicle"
+                    verdict={launchVerdict}
                   >
                     Vehicle · Rocket
-                  </ReleaseLaneOptionLabel>
+                  </CommandLaneOptionLabel>
                 ),
               },
               {
                 value: 'payload',
                 label: (
-                  <ReleaseLaneOptionLabel
+                  <CommandLaneOptionLabel
                     active={lane === 'payload'}
                     icon={Satellite}
                     iconClass="release-lane-opt__icon--payload"
+                    verdict={satelliteLaunchVerdict}
                   >
                     Payload · Satellite
-                  </ReleaseLaneOptionLabel>
+                  </CommandLaneOptionLabel>
                 ),
               },
               {
                 value: 'plugin',
                 label: (
-                  <ReleaseLaneOptionLabel
+                  <CommandLaneOptionLabel
                     active={lane === 'plugin'}
                     icon={Plug}
                     iconClass="release-lane-opt__icon--plugin"
+                    verdict={pluginLaunchVerdict}
                   >
                     Plugin
-                  </ReleaseLaneOptionLabel>
+                  </CommandLaneOptionLabel>
+                ),
+              },
+            ]}
+          />
+          <span className="h-5 border-l border-border" aria-hidden />
+          <SegmentControl
+            size="sm"
+            ariaLabel="Data maintenance"
+            value={lane}
+            onChange={v => setLane(v as CommandLane)}
+            options={[
+              {
+                value: 'data-maintenance',
+                label: (
+                  <CommandLaneOptionLabel
+                    active={lane === 'data-maintenance'}
+                    icon={Database}
+                    iconClass="release-lane-opt__icon--data-maintenance"
+                  >
+                    Data · Maintenance
+                  </CommandLaneOptionLabel>
                 ),
               },
             ]}
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[var(--text-dense-caption)]">
-          <span className="inline-flex items-center gap-1">
-            <Rocket size={12} className="text-muted-foreground" />
-            <StatusLamp value={launchVerdictToSignal(launchVerdict?.kind ?? 'NO_GO')} kind="reach" />
-            <DenseTag variant={vehicleTag.variant} className="text-[9px]">
-              {vehicleTag.label}
-            </DenseTag>
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Satellite size={12} className="text-muted-foreground" />
-            <StatusLamp
-              value={launchVerdictToSignal(satelliteLaunchVerdict?.kind ?? 'NO_GO')}
-              kind="reach"
-            />
-            <DenseTag variant={payloadTag.variant} className="text-[9px]">
-              {payloadTag.label}
-            </DenseTag>
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Plug size={12} className="text-muted-foreground" />
-            <StatusLamp
-              value={launchVerdictToSignal(pluginLaunchVerdict?.kind ?? 'NO_GO')}
-              kind="reach"
-            />
-            <DenseTag variant={pluginTag.variant} className="text-[9px]">
-              {pluginTag.label}
-            </DenseTag>
-          </span>
-          <span className="inline-flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-2 text-[var(--text-dense-caption)]">
+          {commandAction}
+          {commandAction != null && <span className="h-5 border-l border-border" aria-hidden />}
+          <button
+            type="button"
+            className={cn(
+              'inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+              ibBusStatusClass,
+            )}
+            title={`${rocketDetail} — open Rocket IB bus diagnostics`}
+            onClick={openRocketBus}
+          >
             <StatusLamp value={rocketSignal} kind="reach" />
-            <span className="text-muted-foreground">IB bus · {missionStatus(rocketSignal)}</span>
-          </span>
+            <span>IB bus · {ibBusStatus}</span>
+            {ibBusStatus !== 'NOMINAL' && <span aria-hidden>Fix →</span>}
+          </button>
         </div>
       </div>
 
@@ -456,7 +531,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
             </div>
           </div>
         </OpsSection>
-      ) : (
+      ) : lane === 'plugin' ? (
         <OpsSection
           title="Plugin · IB Gateway"
           bodyPadding="compact"
@@ -514,7 +589,15 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
             </OpsSection>
           </div>
         </OpsSection>
-      )}
+      ) : lane === 'data-maintenance' ? (
+        <DataFreshnessPanel
+          canAdmin={canAdmin}
+          onOpenFullPostgres={() => {
+            writeCategoryToUrl('database')
+            onNavigate('cluster')
+          }}
+        />
+      ) : null}
     </div>
   )
 }

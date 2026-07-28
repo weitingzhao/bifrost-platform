@@ -36,6 +36,9 @@ var stdioMirroredTools = map[string]bool{
 	"get_audit_log":                       true,
 	"get_cluster_summary":                 true,
 	"get_cluster_nodes":                   true,
+	"get_data_freshness":                  true,
+	"trigger_data_clone":                  true,
+	"get_data_clone_status":               true,
 	"get_gitops_apps":                     true,
 	"get_stack_addons":                    true,
 	"get_delivery_pipelines":              true,
@@ -98,6 +101,9 @@ var stdioMirroredTools = map[string]bool{
 	"get_telemetry_targets":               true,
 	"report_checklist_signals":            true,
 	"sign_tier_b":                         true,
+	"list_dev_sessions":                   true,
+	"restart_dev_session":                 true,
+	"get_dev_session_logs":                true,
 }
 
 func TestParityCriticalToolsImplemented(t *testing.T) {
@@ -126,8 +132,8 @@ func TestCatalogImplementedAllHaveStdioMirror(t *testing.T) {
 			t.Errorf("%s: catalog Implemented=true but missing from stdioMirroredTools (wire mcp/platform or drop Implemented)", tool.Name)
 		}
 	}
-	if len(stdioMirroredTools) != 73 {
-		t.Errorf("stdioMirroredTools size=%d want 73 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
+	if len(stdioMirroredTools) != 79 {
+		t.Errorf("stdioMirroredTools size=%d want 79 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
 	}
 }
 

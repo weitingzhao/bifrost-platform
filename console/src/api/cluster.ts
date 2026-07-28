@@ -1,7 +1,25 @@
 import type { AuditResponse } from './auditTypes'
 import type { AuthCapabilities } from './matrixTypes'
-import type { ClusterEventsResponse, ClusterGovernanceResponse, ClusterMetricsResponse, ClusterNamespacesResponse, ClusterNodesResponse, ClusterObservabilityResponse, ClusterPlacementResponse, ClusterPostgresStatusResponse, ClusterRedisStatusResponse, ClusterServiceReadinessResponse, ClusterSummary, ClusterWorkloadsResponse, JoinProfilesResponse, NodePowerResponse } from './clusterTypes'
-import { operatorToken } from './client'
+import type {
+  ClusterEventsResponse,
+  ClusterGovernanceResponse,
+  ClusterMetricsResponse,
+  ClusterNamespacesResponse,
+  ClusterNodesResponse,
+  ClusterObservabilityResponse,
+  ClusterPlacementResponse,
+  ClusterPostgresStatusResponse,
+  ClusterRedisStatusResponse,
+  ClusterServiceReadinessResponse,
+  ClusterSummary,
+  ClusterWorkloadsResponse,
+  DataCloneJob,
+  DataCloneSchedule,
+  DataFreshnessResponse,
+  JoinProfilesResponse,
+  NodePowerResponse,
+} from './clusterTypes'
+import { authedFetch, operatorToken } from './client'
 
 export async function fetchCluster(): Promise<ClusterSummary> {
   const r = await fetch('/api/v1/cluster')
@@ -31,6 +49,54 @@ export async function fetchClusterPostgresStatus(): Promise<ClusterPostgresStatu
   const r = await fetch('/api/v1/cluster/postgres')
   if (!r.ok) throw new Error(`cluster postgres: HTTP ${r.status}`)
   return r.json() as Promise<ClusterPostgresStatusResponse>
+}
+
+export async function fetchDataFreshness(): Promise<DataFreshnessResponse> {
+  const r = await fetch('/api/v1/cluster/data-freshness')
+  if (!r.ok) throw new Error(`cluster data-freshness: HTTP ${r.status}`)
+  return r.json() as Promise<DataFreshnessResponse>
+}
+
+export async function triggerDataClone(body: {
+  source?: string
+  targets?: string[]
+  mode?: 'full' | 'selective'
+  tables?: string[]
+  confirmation_token: string
+  confirm: boolean
+}): Promise<DataCloneJob> {
+  const r = await authedFetch('data-clone', '/api/v1/cluster/data-clone', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<DataCloneJob>
+}
+
+export async function fetchDataCloneStatus(id: string): Promise<DataCloneJob> {
+  const r = await fetch(`/api/v1/cluster/data-clone/${encodeURIComponent(id)}`)
+  if (!r.ok) throw new Error(`data-clone status: HTTP ${r.status}`)
+  return r.json() as Promise<DataCloneJob>
+}
+
+export async function fetchDataCloneSchedule(): Promise<DataCloneSchedule> {
+  const r = await fetch('/api/v1/cluster/data-clone/schedule')
+  if (!r.ok) throw new Error(`data-clone schedule: HTTP ${r.status}`)
+  return r.json() as Promise<DataCloneSchedule>
+}
+
+export async function updateDataCloneSchedule(body: {
+  enabled?: boolean
+  interval?: string
+  source?: string
+  targets?: string[]
+  mode?: string
+  tables?: string[]
+}): Promise<DataCloneSchedule> {
+  const r = await authedFetch('data-clone-schedule', '/api/v1/cluster/data-clone/schedule', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<DataCloneSchedule>
 }
 
 export async function fetchClusterRedisStatus(): Promise<ClusterRedisStatusResponse> {

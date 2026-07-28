@@ -14,8 +14,13 @@ import (
 )
 
 type Service struct {
-	entry         *config.ClusterEntry
-	clientFactory func() (kubernetes.Interface, string, error)
+	entry           *config.ClusterEntry
+	clientFactory   func() (kubernetes.Interface, string, error)
+	execFunc        PodExecFunc
+	cloneJobs       *DataCloneJobStore
+	cloneSched      *DataCloneScheduleStore
+	cloneLast       *DataCloneLastStore
+	primaryOverride string // unit tests only
 }
 
 func NewService(entry *config.ClusterEntry) *Service {

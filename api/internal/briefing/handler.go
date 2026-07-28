@@ -2,8 +2,10 @@ package briefing
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,8 +69,31 @@ func (h *Handler) HandleSessionPack(w http.ResponseWriter, r *http.Request) {
 		baselineAt = env.SavedAt
 	}
 
-	resp := BuildSessionPack(ctx, matrices, "unknown", "", baselineAt, req)
+	clusterReach, clusterDetail := "unknown", ""
+	if h.cluster != nil {
+		fr := h.cluster.Service().DataFreshness(r.Context())
+		clusterReach, clusterDetail = staleDataFreshnessDetail(fr)
+	}
+
+	resp := BuildSessionPack(ctx, matrices, clusterReach, clusterDetail, baselineAt, req)
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func staleDataFreshnessDetail(fr cluster.DataFreshnessResponse) (reach, detail string) {
+	reach = "unknown"
+	var stale []string
+	for _, db := range fr.Databases {
+		if db.Name == "bifrost_prod" || db.LagVsProdDays == nil || *db.LagVsProdDays < 7 {
+			continue
+		}
+		stale = append(stale, fmt.Sprintf("%s lag_vs_prod=%.1fd (%s)", db.Name, *db.LagVsProdDays, db.Verdict))
+	}
+	if len(stale) == 0 {
+		return reach, ""
+	}
+	return "stale-data", "Data freshness STALE (≥7d vs bifrost_prod): " +
+		strings.Join(stale, "; ") +
+		" — Rocket → Cluster → Postgres → Data Freshness; MCP get_data_freshness; admin Sync / trigger_data_clone (confirm:true)"
 }
 
 func (h *Handler) HandleListSessionResults(w http.ResponseWriter, _ *http.Request) {

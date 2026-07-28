@@ -3,12 +3,10 @@ import { Button, DenseTag } from '@bifrost/ui'
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
 import { DevModeStrips } from '@/components/task-mode/DevModeController'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
-import { ViewerEnvBadge } from '@/components/task-mode/ViewerEnvBadge'
 import { TaskCCVerdict } from '@/components/task-mode/tcc/TaskCCVerdict'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import type { FleetViewerEnv } from '@/lib/control-room/fleetSnapshot'
@@ -117,8 +115,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     canOperate,
     loopLabel,
     headerDescription: _headerDescription,
-    viewerEnv,
-    viewerEnvLoading,
     showLaunchPad,
     phases,
     statuses,
@@ -205,54 +201,21 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         </Button>,
       )
     }
-    if (isMissionLaunch && showLaunchPad) {
+    if (isMissionLaunch && showLaunchPad && verdictLamp !== 'ok') {
       nodes.push(
-        <AgentTriggerButton
-          key="launch-rocket"
-          label="Launch Rocket"
-          pending={agents.aiRelease.isPending}
-          disabled={!props.releaseDispatchAllowed}
-          title={props.releaseDisabledReason ?? 'Launch platform release agent'}
-          onClick={props.dispatchReleaseAgent}
-        />,
-        <AgentTriggerButton
-          key="deploy-satellite"
-          label="Deploy Satellite"
-          pending={agents.aiTradeDeploy.isPending}
-          disabled={!props.tradeDeployDispatchAllowed}
-          title={props.tradeDeployDisabledReason ?? 'Deploy Trade satellite agent'}
-          onClick={props.dispatchTradeDeployAgent}
-        />,
-        <AgentTriggerButton
-          key="launch-plugin"
-          label="Launch Plugin"
-          pending={agents.aiPluginLaunch.isPending}
-          disabled={!props.pluginLaunchDispatchAllowed}
-          title={props.pluginLaunchDisabledReason ?? 'Launch plugin publish agent'}
-          onClick={props.dispatchPluginLaunchAgent}
-        />,
-      )
-      if (verdictLamp !== 'ok') {
-        nodes.push(
-          <button
-            key="open-launch-board"
-            type="button"
-            className="shrink-0 text-[var(--text-dense-caption)] text-primary hover:underline"
-            title="Scroll to launch lanes"
-            onClick={() =>
-              document
-                .getElementById('task-cc-launch-board')
-                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }
-          >
-            Open launch board →
-          </button>,
-        )
-      }
-    }
-    if (isDailyOps || mode.loopArchetype === 'ops') {
-      nodes.push(
-        <ViewerEnvBadge key="viewer-env" viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />,
+        <button
+          key="open-launch-board"
+          type="button"
+          className="shrink-0 text-[var(--text-dense-caption)] text-primary hover:underline"
+          title="Scroll to launch lanes"
+          onClick={() =>
+            document
+              .getElementById('task-cc-launch-board')
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        >
+          Open launch board →
+        </button>,
       )
     }
     return nodes.length > 0 ? <>{nodes}</> : undefined
@@ -261,25 +224,10 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     isMissionLaunch,
     showLaunchPad,
     canOperate,
-    mode.loopArchetype,
     q.fleetClear,
     fix,
-    agents.aiRelease.isPending,
-    agents.aiTradeDeploy.isPending,
-    agents.aiPluginLaunch.isPending,
-    props.releaseDispatchAllowed,
-    props.tradeDeployDispatchAllowed,
-    props.pluginLaunchDispatchAllowed,
-    props.releaseDisabledReason,
-    props.tradeDeployDisabledReason,
-    props.pluginLaunchDisabledReason,
-    props.dispatchReleaseAgent,
-    props.dispatchTradeDeployAgent,
-    props.dispatchPluginLaunchAgent,
     fix.dailyOpsWorkflow?.primaryAction.label,
     verdictLamp,
-    viewerEnv,
-    viewerEnvLoading,
   ])
 
   const phaseProgressBlock: ReactNode = isDailyOps ? null : phases.length > 0 ? (

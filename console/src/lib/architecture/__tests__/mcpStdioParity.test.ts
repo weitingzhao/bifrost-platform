@@ -31,6 +31,6 @@ describe('MCP stdio ↔ PLATFORM_STDIO_TOOL_NAMES parity (Post-QA F3)', () => {
 
     expect(missingInIndex, `in stdioToolNames but not server.tool: ${missingInIndex.join(', ')}`).toEqual([])
     expect(extraInIndex, `in server.tool but not stdioToolNames: ${extraInIndex.join(', ')}`).toEqual([])
-    expect(listed.size).toBe(76)
+    expect(listed.size).toBe(registered.size)
   })
 })

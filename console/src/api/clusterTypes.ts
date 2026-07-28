@@ -170,6 +170,79 @@ export interface ClusterPostgresStatusResponse {
   generated_at: string
 }
 
+export interface DataFreshnessDatabase {
+  name: string
+  environment: string
+  last_activity_ts?: string
+  /** Wall-clock age (now − last_activity). Informational only. */
+  age_days?: number
+  /** Lag vs bifrost_prod activity (days). Drives Sync verdict for non-prod. */
+  lag_vs_prod_days?: number
+  /**
+   * Sync signal for non-prod: mirrors lag_vs_prod_days.
+   * @deprecated Prefer lag_vs_prod_days; kept for backward compatibility.
+   */
+  stale_days?: number
+  /** fresh (<3d lag) | aging (3–7d) | stale (≥7d) | reference (prod) | unknown */
+  verdict: 'fresh' | 'aging' | 'stale' | 'reference' | 'unknown' | string
+  detail?: string
+  sources?: string[]
+  last_clone_at?: string
+}
+
+export interface DataFreshnessResponse {
+  cluster_id: string
+  primary_pod?: string
+  reference_db: string
+  databases: DataFreshnessDatabase[]
+  cache_hit: boolean
+  detail?: string
+  generated_at: string
+  fresh_threshold_days: number
+  stale_threshold_days: number
+  last_clone_at?: string
+}
+
+export interface DataCloneVerifyResult {
+  database: string
+  table_count: number
+  sample_rows: number
+  ok: boolean
+  detail?: string
+}
+
+export interface DataCloneJob {
+  id: string
+  action: string
+  status: string
+  step: string
+  source: string
+  targets: string[]
+  mode: string
+  tables?: string[]
+  progress: number
+  detail: string
+  verify?: DataCloneVerifyResult[]
+  actor?: string
+  trigger: string
+  created_at: string
+  updated_at: string
+  finished_at?: string
+}
+
+export interface DataCloneSchedule {
+  enabled: boolean
+  interval: string
+  source: string
+  targets: string[]
+  mode: string
+  tables?: string[]
+  last_auto_run_at?: string
+  last_auto_run_id?: string
+  last_status?: string
+  updated_at: string
+}
+
 export interface RedisTargetInstance {
   name: string
   environment: string
