@@ -193,7 +193,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   }
   const selectedCommand = {
     vehicle: {
-      label: 'Vehicle · Rocket',
+      label: 'Rocket',
       verdict:
         q.rocketVerdict.kind === 'GO'
           ? 'GO'
@@ -203,7 +203,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
       valueClass: launchVerdictTextClass(q.rocketVerdict.kind),
     },
     payload: {
-      label: 'Payload · Satellite',
+      label: 'Satellite',
       verdict:
         q.satelliteVerdict.kind === 'GO'
           ? 'GO'

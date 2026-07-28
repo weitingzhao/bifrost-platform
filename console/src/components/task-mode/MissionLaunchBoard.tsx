@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { cn, DenseTag, SegmentControl, StatusLamp } from '@bifrost/ui'
+import { useQuery } from '@tanstack/react-query'
 import { Database, Plug, Rocket, Satellite, type LucideIcon } from 'lucide-react'
+import { fetchDataFreshness } from '@/api/cluster'
+import type { DataFreshnessResponse } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { LaunchGateBar } from '@/components/task-mode/LaunchGateBar'
@@ -79,20 +82,28 @@ export type MissionLaunchBoardProps = {
 
 export type CommandLane = 'vehicle' | 'payload' | 'plugin' | 'data-maintenance'
 
+type LaneStatus = {
+  signal: 'ok' | 'degraded' | 'fail' | 'unknown'
+  tag: ReturnType<typeof laneTag>
+}
+
 function CommandLaneOptionLabel({
   active,
   icon: Icon,
   iconClass,
   verdict,
+  status,
   children,
 }: {
   active: boolean
   icon: LucideIcon
   iconClass: string
   verdict?: LaunchVerdict
+  status?: LaneStatus
   children: ReactNode
 }) {
-  const tag = laneTag(verdict)
+  const tag = status?.tag ?? laneTag(verdict)
+  const signal = status?.signal ?? (verdict == null ? 'unknown' : launchVerdictToSignal(verdict.kind))
 
   return (
     <span className={cn('release-lane-opt', active && 'release-lane-opt--active')}>
@@ -103,7 +114,7 @@ function CommandLaneOptionLabel({
       />
       <span className="release-lane-opt__text">{children}</span>
       <span className="release-lane-opt__verdict">
-        <StatusLamp value={launchVerdictToSignal(verdict?.kind ?? 'NO_GO')} kind="reach" />
+        <StatusLamp value={signal} kind="reach" />
         <DenseTag variant={tag.variant} className="text-[9px]">
           {tag.label}
         </DenseTag>
@@ -120,6 +131,23 @@ function laneTag(verdict: LaunchVerdict | undefined): {
   if (verdict.kind === 'GO') return { variant: 'success', label: 'GO' }
   if (verdict.kind === 'IN_FLIGHT') return { variant: 'info', label: 'IN FLIGHT' }
   return { variant: 'danger', label: 'NO-GO' }
+}
+
+function dataFreshnessLaneStatus(data: DataFreshnessResponse | undefined): LaneStatus {
+  const databases = data?.databases.filter(db => db.verdict !== 'reference') ?? []
+  if (databases.length === 0) {
+    return { signal: 'unknown', tag: { variant: 'neutral', label: '—' } }
+  }
+  if (databases.some(db => db.verdict === 'stale')) {
+    return { signal: 'fail', tag: { variant: 'danger', label: 'STALE' } }
+  }
+  if (databases.some(db => db.verdict === 'aging')) {
+    return { signal: 'degraded', tag: { variant: 'warning', label: 'AGING' } }
+  }
+  if (databases.every(db => db.verdict === 'fresh')) {
+    return { signal: 'ok', tag: { variant: 'success', label: 'FRESH' } }
+  }
+  return { signal: 'unknown', tag: { variant: 'neutral', label: '—' } }
 }
 
 /**
@@ -189,6 +217,12 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
     onSelectedCommandLaneChange?.(next)
   }
   const { canAdmin } = usePlatformAuth()
+  const dataFreshnessQuery = useQuery({
+    queryKey: ['cluster', 'data-freshness'],
+    queryFn: fetchDataFreshness,
+    refetchInterval: 60_000,
+  })
+  const dataFreshnessStatus = dataFreshnessLaneStatus(dataFreshnessQuery.data)
   const { rocketSignal, rocketDetail } = useSatelliteProdReadiness()
   const sharedBlocked = isProdReleaseBlocked(rocketSignal)
   const ibBusStatus = missionStatus(rocketSignal)
@@ -274,7 +308,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                     iconClass="release-lane-opt__icon--vehicle"
                     verdict={launchVerdict}
                   >
-                    Vehicle · Rocket
+                    Rocket
                   </CommandLaneOptionLabel>
                 ),
               },
@@ -287,7 +321,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                     iconClass="release-lane-opt__icon--payload"
                     verdict={satelliteLaunchVerdict}
                   >
-                    Payload · Satellite
+                    Satellite
                   </CommandLaneOptionLabel>
                 ),
               },
@@ -320,6 +354,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                     active={lane === 'data-maintenance'}
                     icon={Database}
                     iconClass="release-lane-opt__icon--data-maintenance"
+                    status={dataFreshnessStatus}
                   >
                     Data · Maintenance
                   </CommandLaneOptionLabel>
@@ -349,7 +384,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
 
       {lane === 'vehicle' ? (
         <OpsSection
-          title="Vehicle · Rocket"
+          title="Rocket"
           bodyPadding="compact"
           description="Rocket deliver STG → PROD. Independent of satellite deploy."
           actions={
@@ -422,7 +457,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
         </OpsSection>
       ) : lane === 'payload' ? (
         <OpsSection
-          title="Payload · Satellite"
+          title="Satellite"
           bodyPadding="compact"
           description="Satellite deliver STG → PROD. Requires shared IB bus when deploying live sockets."
           actions={
