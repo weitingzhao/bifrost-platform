@@ -14,6 +14,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
+	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
@@ -89,6 +90,7 @@ type Server struct {
 	telemetry       *telemetry.Handler
 	lanes           *lanes.Handler
 	sessions        *sessions.Handler
+	devSession      *devsession.Handler
 	auth            *actuation.AuthService
 	audit           *actuation.AuditLog
 	jobs            *actuation.JobStore
@@ -174,6 +176,7 @@ func New(cfg *config.Config) (*Server, error) {
 		telemetry:       telemetry.NewHandler(cfg),
 		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
 		sessions:        sessionsH,
+		devSession:      devsession.NewHandler(),
 		auth:            auth,
 		audit:           audit,
 		jobs:            jobs,
@@ -428,6 +431,14 @@ func (s *Server) Router() http.Handler {
 				r.Post("/nodes/join", s.cluster.HandleJoinNode)
 				r.Post("/nodes/{name}/drain", s.cluster.HandleDrainNode)
 				r.Post("/nodes/{name}/poweroff", s.cluster.HandlePowerOffNode)
+			})
+		})
+		r.Route("/dev-sessions", func(r chi.Router) {
+			r.Get("/", s.devSession.HandleList)
+			r.Get("/{name}/logs", s.devSession.HandleLogs)
+			r.Group(func(r chi.Router) {
+				r.Use(s.auth.Require(actuation.RoleOperator))
+				r.Post("/{name}/control", s.devSession.HandleControl)
 			})
 		})
 	})

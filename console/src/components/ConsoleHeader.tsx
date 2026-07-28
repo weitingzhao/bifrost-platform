@@ -17,6 +17,7 @@ import {
 } from '@/lib/control-room/fleetSnapshot'
 import { UserMenu } from '@/components/UserMenu'
 import { ActivityIndicator } from '@/components/activity/ActivityIndicator'
+import { DevSessionsIndicator } from '@/components/DevSessionsIndicator'
 import { TaskModeCapsule } from '@/components/task-mode/TaskModeCapsule'
 import type { ActivityEvent } from '@/lib/activity/activityTypes'
 import type { TaskModeId } from '@/lib/task-mode/types'
@@ -154,6 +155,8 @@ export function ConsoleHeader({
       <div className="min-w-0 flex-1" />
 
       <ViewerEnvChip viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />
+
+      <DevSessionsIndicator onOpen={() => onSelectTab('dev-sessions')} />
 
       <TaskModeCapsule onModeChange={onModeChange} />
 

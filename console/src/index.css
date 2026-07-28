@@ -4492,7 +4492,7 @@ html {
 
 .remediation-block--approval {
   border-left: 3px solid #f59e0b;
-  background: color-mix(in srgb, #f59e0b 10%, var(--card));
+  background: var(--card);
   padding: 0;
   overflow: hidden;
 }
@@ -4503,10 +4503,8 @@ html {
   overflow-y: auto;
   padding: 0.75rem 0.875rem;
   border-bottom: 1px solid color-mix(in srgb, #f59e0b 22%, var(--border));
-  /* Frosted — keep glass feel without letting page text punch through Agent Task copy */
-  background: color-mix(in srgb, var(--card) 88%, transparent);
-  backdrop-filter: blur(14px) saturate(150%);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  background: var(--background);
+  color: var(--foreground);
 }
 
 .remediation-approval-context__kicker {
@@ -4521,7 +4519,7 @@ html {
 .remediation-approval-actions {
   flex-shrink: 0;
   padding: 0.625rem 0.75rem 0.75rem;
-  background: color-mix(in srgb, #f59e0b 6%, var(--card));
+  background: color-mix(in srgb, #f59e0b 8%, var(--card));
 }
 
 .remediation-approval-actions__kicker {
@@ -4565,6 +4563,7 @@ html {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  color: var(--foreground);
 }
 
 .remediation-block--approval-manual {
@@ -5844,14 +5843,8 @@ button.infra-stack-chip:hover {
   flex-direction: column;
   min-width: 0;
   border-top: 1px solid color-mix(in oklab, var(--task-mode-accent, #f59e0b) 40%, var(--border));
-  /* Frosted glass: opaque enough for Agent Task readability over Daily Ops / Mission */
-  background: color-mix(
-    in oklab,
-    var(--task-mode-accent, #f59e0b) 10%,
-    color-mix(in srgb, var(--card) 94%, transparent)
-  );
-  backdrop-filter: blur(22px) saturate(155%);
-  -webkit-backdrop-filter: blur(22px) saturate(155%);
+  /* Solid surface — no frosted glass (blur made Task copy look hazy) */
+  background: var(--card);
   box-shadow: 0 -4px 16px color-mix(in oklab, var(--foreground) 8%, transparent);
 }
 
@@ -5878,13 +5871,7 @@ button.infra-stack-chip:hover {
 
 .console-agent-execution-dock--approval {
   border-top-color: color-mix(in oklab, var(--warning, #ca8a04) 55%, var(--border));
-  background: color-mix(
-    in oklab,
-    var(--warning, #ca8a04) 12%,
-    color-mix(in srgb, var(--card) 94%, transparent)
-  );
-  backdrop-filter: blur(22px) saturate(155%);
-  -webkit-backdrop-filter: blur(22px) saturate(155%);
+  background: var(--card);
 }
 
 .console-agent-execution-dock--done {
@@ -5893,7 +5880,7 @@ button.infra-stack-chip:hover {
 
 .console-agent-execution-dock--idle {
   border-top-color: color-mix(in oklab, var(--border) 80%, var(--muted-foreground));
-  background: color-mix(in oklab, var(--card) 92%, var(--muted));
+  background: var(--card);
 }
 
 .console-agent-execution-dock__idle {
@@ -5906,15 +5893,41 @@ button.infra-stack-chip:hover {
   padding: 0.25rem 0.15rem 0.35rem;
 }
 
-/* Agent slot: left detail (3/5) + right Recent tasks (2/5) */
+/* Agent slot: left detail + right Recent (resizable; default ~75/25) */
 .console-agent-execution-dock__agent-split {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(11rem, 2fr);
-  gap: 0.65rem;
+  gap: 0;
   flex: 1;
   min-height: 0;
   height: 100%;
   padding: 0.15rem 0 0.1rem;
+  align-items: stretch;
+}
+
+.console-agent-execution-dock__v-resize {
+  width: 0.35rem;
+  cursor: col-resize;
+  touch-action: none;
+  position: relative;
+  background: transparent;
+  align-self: stretch;
+}
+
+.console-agent-execution-dock__v-resize::after {
+  content: '';
+  position: absolute;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+}
+
+.console-agent-execution-dock__v-resize:hover::after,
+.console-agent-execution-dock__v-resize:active::after {
+  width: 2px;
+  background: color-mix(in oklab, var(--color-primary) 55%, var(--border));
 }
 
 .console-agent-execution-dock__detail {
@@ -5930,9 +5943,110 @@ button.infra-stack-chip:hover {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.35rem;
   min-height: 0;
   overflow: hidden;
+}
+
+.console-agent-execution-dock__meta-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.console-agent-execution-dock__detail-split {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  align-items: stretch;
+}
+
+.console-agent-execution-dock__detail-split--focus-result,
+.console-agent-execution-dock__detail-split--focus-process {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.console-agent-execution-dock__detail-split--focus-result
+  .console-agent-execution-dock__process,
+.console-agent-execution-dock__detail-split--focus-process
+  .console-agent-execution-dock__result {
+  display: none;
+}
+
+.console-agent-execution-dock__h-resize {
+  height: 0.35rem;
+  cursor: row-resize;
+  touch-action: none;
+  position: relative;
+  background: transparent;
+}
+
+.console-agent-execution-dock__h-resize::after {
+  content: '';
+  position: absolute;
+  left: 0.35rem;
+  right: 0.35rem;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  background: var(--border);
+}
+
+.console-agent-execution-dock__h-resize:hover::after,
+.console-agent-execution-dock__h-resize:active::after {
+  height: 2px;
+  background: color-mix(in oklab, var(--color-primary) 55%, var(--border));
+}
+
+.console-agent-execution-dock__result,
+.console-agent-execution-dock__process {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+}
+
+.console-agent-execution-dock__pane-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.2rem 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.console-agent-execution-dock__pane-title {
+  margin: 0;
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.console-agent-execution-dock__pane-focus {
+  margin-left: auto;
+  color: var(--muted-foreground);
+}
+
+.console-agent-execution-dock__result-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.4rem 0.5rem;
+}
+
+.console-agent-execution-dock__process .console-agent-execution-dock__log {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .console-agent-execution-dock__idle-intro {
@@ -5961,19 +6075,18 @@ button.infra-stack-chip:hover {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
   min-width: 0;
   min-height: 0;
-  border-left: 1px solid var(--border);
-  padding-left: 0.55rem;
+  padding-left: 0.35rem;
 }
 
 .console-agent-execution-dock__recent-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.35rem;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .console-agent-execution-dock__recent-title {
@@ -5985,110 +6098,539 @@ button.infra-stack-chip:hover {
   color: var(--muted-foreground);
 }
 
+.console-agent-execution-dock__recent-sort {
+  flex-shrink: 0;
+}
+
 .console-agent-execution-dock__recent-empty {
   margin: 0;
   font-size: var(--text-dense-caption);
   color: var(--muted-foreground);
 }
 
-.console-agent-execution-dock__recent-list {
+.console-agent-execution-dock__recent-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+  overflow: auto;
+  flex: 1;
+}
+
+.console-agent-execution-dock__recent-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.console-agent-execution-dock__recent-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0 0.1rem;
+}
+
+.console-agent-execution-dock__recent-group-label {
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+  color: var(--foreground);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-agent-execution-dock__recent-group-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  font-size: var(--text-dense-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-agent-execution-dock__recent-track {
+  gap: 0.2rem;
+}
+
+.console-agent-execution-dock__recent-track .agent-desk-timeline-cell {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.2rem;
+}
+
+.console-agent-execution-dock__recent-cell--static {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.console-agent-execution-dock__recent-chrono {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.05rem;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
+  flex: 1;
 }
 
-.console-agent-execution-dock__recent-row {
+.console-agent-execution-dock__recent-chrono-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.35rem;
   width: 100%;
   margin: 0;
-  padding: 0.35rem 0.4rem;
+  padding: 0.12rem 0.25rem;
   border: 1px solid transparent;
-  border-radius: 0.375rem;
-  background: color-mix(in srgb, var(--secondary) 40%, transparent);
+  border-radius: 0.2rem;
+  background: transparent;
   color: var(--foreground);
   font: inherit;
-  font-size: var(--text-dense-caption);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
-.console-agent-execution-dock__recent-row:hover {
-  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
-  background: color-mix(in srgb, var(--primary) 8%, var(--card));
+.console-agent-execution-dock__recent-chrono-row:hover {
+  background: color-mix(in srgb, var(--secondary) 55%, transparent);
 }
 
-.console-agent-execution-dock__recent-row--active {
+.console-agent-execution-dock__recent-chrono-row--active {
   border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
   background: color-mix(in srgb, var(--primary) 12%, var(--card));
   box-shadow: inset 2px 0 0 0 var(--primary);
 }
 
-.console-agent-execution-dock__recent-row:disabled,
-.console-agent-execution-dock__recent-row--static {
+.console-agent-execution-dock__recent-chrono-row--static {
   cursor: default;
 }
 
-.console-agent-execution-dock__recent-row:disabled:hover,
-.console-agent-execution-dock__recent-row--static:hover {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--secondary) 55%, transparent);
+.console-agent-execution-dock__recent-chrono-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 0.15rem;
+  pointer-events: none;
+  flex-shrink: 0;
 }
 
-.console-agent-execution-dock__recent-main {
+.console-agent-execution-dock__recent-chrono-main {
   display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
   min-width: 0;
-  flex-direction: column;
-  gap: 0.1rem;
 }
 
-.console-agent-execution-dock__recent-scope {
+.console-agent-execution-dock__recent-chrono-scope {
+  font-size: var(--text-dense-caption);
+  font-weight: 550;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
-  font-size: var(--text-dense-meta);
 }
 
-.console-agent-execution-dock__recent-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.5rem;
-  min-width: 0;
-}
-
-.console-agent-execution-dock__recent-status {
-  color: var(--muted-foreground);
-  white-space: nowrap;
-}
-
-.console-agent-execution-dock__recent-when {
+.console-agent-execution-dock__recent-chrono-when {
+  font-size: var(--text-dense-micro);
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  flex-shrink: 0;
 }
+
+
 
 @media (max-width: 52rem) {
   .console-agent-execution-dock__agent-split {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1.2fr) minmax(7.5rem, 0.8fr);
+    grid-template-columns: 1fr !important;
+    grid-template-rows:
+      minmax(0, calc(var(--dock-agent-left, 75) * 1fr))
+      0.35rem
+      minmax(7.5rem, calc(var(--dock-agent-right, 25) * 1fr));
+  }
+
+  .console-agent-execution-dock__v-resize {
+    width: auto;
+    height: 0.35rem;
+    cursor: row-resize;
+  }
+
+  .console-agent-execution-dock__v-resize::after {
+    top: 50%;
+    bottom: auto;
+    left: 0.35rem;
+    right: 0.35rem;
+    width: auto;
+    height: 1px;
+    transform: translateY(-50%);
   }
 
   .console-agent-execution-dock__recent {
-    border-left: none;
-    border-top: 1px solid var(--border);
     padding-left: 0;
-    padding-top: 0.45rem;
+    padding-top: 0.25rem;
+  }
+}
+
+/* Dense markdown (Agent Dock result) */
+.dense-md {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: var(--text-dense-caption);
+  line-height: 1.4;
+  color: var(--foreground);
+}
+
+.dense-md__h {
+  margin: 0;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--foreground);
+}
+
+.dense-md__h--2 {
+  font-size: var(--text-dense-meta);
+}
+
+.dense-md__h--3 {
+  font-size: var(--text-dense-caption);
+}
+
+.dense-md__p {
+  margin: 0;
+}
+
+.dense-md__ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.dense-md__code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.92em;
+  padding: 0.05em 0.25em;
+  border-radius: 0.2rem;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
+.dense-md__strong {
+  font-weight: 650;
+}
+
+.dense-md__pre {
+  margin: 0;
+  padding: 0.35rem 0.45rem;
+  overflow: auto;
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-dense-micro);
+  line-height: 1.35;
+  border-radius: 0.25rem;
+  background: var(--background);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+
+.dense-md__table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.dense-md__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-dense-caption);
+}
+
+.dense-md__table th,
+.dense-md__table td {
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.4rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.dense-md__table th {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+}
+
+.console-agent-execution-dock__summary-md--done .dense-md__h,
+.console-agent-execution-dock__summary-md--done .dense-md__strong {
+  color: var(--success);
+}
+
+.console-agent-execution-dock__summary-md--failed {
+  color: var(--destructive);
+}
+
+/* Operator Dock · Sessions tool (compact Dev Sessions) */
+.console-dock-sessions {
+  min-height: 0;
+  height: 100%;
+  padding: 0.1rem 0.15rem 0.25rem;
+}
+
+.console-dock-sessions__verdict {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  padding: 0 0.15rem;
+}
+
+.console-dock-sessions__split {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  height: 100%;
+  align-items: stretch;
+}
+
+.console-dock-sessions__v-resize {
+  flex: 0 0 0.35rem;
+  width: 0.35rem;
+  cursor: col-resize;
+  touch-action: none;
+  position: relative;
+  background: transparent;
+  align-self: stretch;
+}
+
+.console-dock-sessions__v-resize::after {
+  content: '';
+  position: absolute;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+}
+
+.console-dock-sessions__v-resize:hover::after,
+.console-dock-sessions__v-resize:active::after {
+  width: 2px;
+  background: color-mix(in oklab, var(--color-primary) 55%, var(--border));
+}
+
+.console-dock-sessions__panes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(6.5rem, 1fr);
+  gap: 0.4rem;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  align-content: stretch;
+  padding-right: 0.25rem;
+}
+
+.console-dock-sessions__panes--maximized {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.console-dock-sessions__status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border-left: none;
+  padding-left: 0.35rem;
+}
+
+.console-dock-sessions__pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--background);
+  color: inherit;
+  overflow: hidden;
+}
+
+.console-dock-sessions__pane--active {
+  border-color: color-mix(in oklab, var(--color-primary) 55%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-primary) 25%, transparent);
+}
+
+.console-dock-sessions__pane--maximized {
+  min-height: 100%;
+}
+
+.console-dock-sessions__pane-head {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-shrink: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0.1rem 0.15rem 0.1rem 0;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--secondary) 55%, var(--card));
+}
+
+.console-dock-sessions__pane-head-main {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.console-dock-sessions__pane-head-main:hover {
+  background: color-mix(in oklab, var(--secondary) 75%, var(--card));
+  border-radius: 0.2rem;
+}
+
+.console-dock-sessions__pane-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-dense-caption);
+  font-weight: 600;
+}
+
+.console-dock-sessions__pane-log {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0.3rem 0.4rem;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
+.console-dock-sessions__log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: color-mix(in oklab, var(--foreground) 72%, var(--muted-foreground));
+}
+
+.console-dock-sessions__log-line--ok {
+  color: color-mix(in oklab, var(--color-lamp-green, #22c55e) 75%, var(--foreground));
+}
+
+.console-dock-sessions__log-line--warn {
+  color: color-mix(in oklab, var(--color-warning, #eab308) 80%, var(--foreground));
+}
+
+.console-dock-sessions__log-line--error {
+  color: color-mix(in oklab, var(--color-danger, #ef4444) 85%, var(--foreground));
+}
+
+.console-dock-sessions__log-line--dim {
+  color: var(--muted-foreground);
+  opacity: 0.55;
+}
+
+.console-dock-sessions__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.35rem;
+}
+
+.console-dock-sessions__group-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  padding: 0.15rem 0.1rem 0.05rem;
+}
+
+.console-dock-sessions__status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.15rem;
+}
+
+.console-dock-sessions__status-row--active {
+  background: color-mix(in oklab, var(--color-primary) 12%, transparent);
+}
+
+.console-dock-sessions__status-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.2rem 0.15rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.console-dock-sessions__status-main:hover {
+  background: color-mix(in oklab, var(--muted) 40%, transparent);
+  border-radius: 0.25rem;
+}
+
+@media (max-width: 52rem) {
+  .console-dock-sessions__split {
+    grid-template-columns: 1fr !important;
+    grid-template-rows:
+      minmax(0, calc(var(--dock-sessions-left, 75) * 1fr))
+      0.35rem
+      minmax(7.5rem, calc(var(--dock-sessions-right, 25) * 1fr));
+  }
+
+  .console-dock-sessions__v-resize {
+    width: auto;
+    height: 0.35rem;
+    cursor: row-resize;
+  }
+
+  .console-dock-sessions__v-resize::after {
+    top: 50%;
+    bottom: auto;
+    left: 0.35rem;
+    right: 0.35rem;
+    width: auto;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+
+  .console-dock-sessions__panes {
+    grid-template-columns: 1fr;
+    padding-right: 0;
+  }
+
+  .console-dock-sessions__status {
+    padding-left: 0;
+    padding-top: 0.25rem;
+    border-top: 1px solid var(--border);
   }
 }
 
@@ -6416,6 +6958,13 @@ button.infra-stack-chip:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.console-agent-execution-dock__detail-split--focus-process
+  .console-agent-execution-dock__log-text {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .console-shell-chrome__ambient-agent:has(.agent-job-banner--approval) {
@@ -6852,9 +7401,7 @@ button.infra-stack-chip:hover {
   font-size: var(--text-dense-meta);
   border-left: 3px solid #f59e0b;
   border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--card) 92%, transparent);
-  backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  background: var(--background);
   padding: 0.5rem 0.65rem;
 }
 

@@ -162,7 +162,7 @@ export type DataLayerPhaseStatus = 'pending' | 'next' | 'in_progress' | 'done'
 export const DATA_LAYER_SESSION_CONSTRAINTS: string[] = [
   'PG hot storage: local-path on postgres node (ubt-k3s-02) — NOT nfs-hot for PGDATA',
   'NAS nfs-hot / nfs-cold: WAL/RDB backups and cold archive only (Retain reclaim)',
-  'R-DV1: bifrost_dev / bifrost_stg / bifrost_prod (or options_db alias) — separate Redis instances per env',
+  'R-DV1: bifrost_dev / bifrost_stg / bifrost_prod — separate Redis instances per env (legacy options_db retired)',
   'Single-variable: complete stg cutover before prod PG migration',
   'Prod PG cutover requires Owner maintenance window — no parallel compose→k3s changes',
   'Remove per-namespace postgres/redis Deployments from bifrost-{dev,stg,prod} after each env cutover',

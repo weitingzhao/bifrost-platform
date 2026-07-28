@@ -173,10 +173,10 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
       'Cross-check bus-deep ingest vs monitor.socket vs ib-gateway plugin; classify policy-off/managed-ok/false-alarm; safe L1 restart only (no daemon scale, D10).',
   },
   'operator-plane-remediate': {
-    entryPoint: 'Engineer → Operator Plane (L-1) · AI Fix',
+    entryPoint: 'Engineer → Operator Plane (L-1) · AI Fix · Mission Diagnose & Fix (when runners up)',
     trigger: 'Operator clicks AI Fix when bridge/deploy probes fail',
     description:
-      'Diagnose Git Bridge, agent deploy, and MCP bridge errors on L-1; guide operator through Mac Pro/Mini host fixes via manual steps.',
+      'Diagnose Git Bridge / probe-bridge / runner HA. Prefer list_dev_sessions + restart_dev_session (bdev); fall back to Mac Pro/Mini manual steps.',
   },
   'git-dirty-remediate': {
     entryPoint: 'Daily Ops · Engineer dirty · Propose commit / Stash',

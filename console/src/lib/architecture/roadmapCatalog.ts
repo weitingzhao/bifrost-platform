@@ -36,10 +36,10 @@ export const HARDWARE_MAPPING: RoadmapHardwareRow[] = [
     k3sTarget: 'K3s Server ① · API / Redis / Ingress / Gitea / ArgoCD',
   },
   {
-    device: 'Linux mini-pc-b',
-    current: 'Bare-metal PG .80 decommissioned (2026-06-29) → CNPG @ data NS',
+    device: 'Linux ubt-k3s-06 (ex mini-pc-b)',
+    current: 'Bare-metal PG .80 decommissioned (2026-06-29) → reinstalled as K3s agent @ .79; CNPG @ data NS',
     nearTerm: 'CloudNativePG bifrost-postgres-rw.data.svc (bifrost_dev/stg/prod)',
-    k3sTarget: 'K3s Server ② · CloudNativePG Primary',
+    k3sTarget: 'K3s agent · general pool (CNPG Primary affinity on labeled postgres nodes)',
   },
   {
     device: 'Linux mini-pc-c',
@@ -142,7 +142,7 @@ export const PHASE_B_PREREQ =
 
 export const PHASE_B_BOOTSTRAP = [
   'mini-pc-a: Ubuntu 24.04 + K3s Server (single-node validation)',
-  'mini-pc-b: join Server; label node-role=postgres',
+  'ubt-k3s-06 (.79, ex-.80 PG box): K3s agent · general pool (CNPG on labeled postgres nodes)',
   'gpu-server: Agent + workload=gpu',
   'Mac Mini: UTM Ubuntu VM → Agent (P5b Done — ops-vm-ubt-01/.54, ops-vm-ubt-02/.56)',
 ]

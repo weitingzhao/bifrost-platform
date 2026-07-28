@@ -74,7 +74,8 @@ func capabilityFor(name, route string) string {
 		strings.HasPrefix(route, "/api/v1/programs"),
 		strings.HasPrefix(route, "/api/v1/sessions"),
 		strings.HasPrefix(route, "/api/v1/operate"),
-		strings.HasPrefix(route, "/api/v1/checklist"):
+		strings.HasPrefix(route, "/api/v1/checklist"),
+		strings.HasPrefix(route, "/api/v1/dev-sessions"):
 		return "agent"
 	default:
 		if route == "" {
@@ -250,6 +251,11 @@ func Catalog() []ToolView {
 		tool("get_telemetry_overview", "Prometheus telemetry overview snapshot (preset metrics)", "read", "GET", "/api/v1/telemetry/overview", "viewer", "P4", true),
 		tool("get_telemetry_alerts", "Prometheus firing and pending alerts", "read", "GET", "/api/v1/telemetry/alerts", "viewer", "P4", true),
 		tool("get_telemetry_targets", "Prometheus scrape target health", "read", "GET", "/api/v1/telemetry/targets", "viewer", "P4", true),
+
+		// Dev Sessions tools
+		tool("list_dev_sessions", "List all local dev sessions (tmux-managed services) with status, PID, uptime, and health", "read", "GET", "/api/v1/dev-sessions/", "viewer", "Agent", true),
+		tool("restart_dev_session", "Restart a local dev session by name (platform, git-bridge, probe-bridge, trade-ui)", "routine", "POST", "/api/v1/dev-sessions/{name}/control", "operator", "Agent", true),
+		tool("get_dev_session_logs", "Get recent log lines from a local dev session", "read", "GET", "/api/v1/dev-sessions/{name}/logs", "viewer", "Agent", true),
 	}
 }
 

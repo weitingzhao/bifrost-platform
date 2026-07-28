@@ -748,6 +748,39 @@ server.tool(
     jsonResult(await platformPost('/api/v1/promote/tier-b/signoff', { notes: notes ?? '' })),
 )
 
+// --- Dev Sessions tools ---
+
+server.tool('list_dev_sessions', 'List all local dev sessions with status, PID, uptime, and health', {}, async () =>
+  jsonResult(await platformGet('/api/v1/dev-sessions/')),
+)
+
+server.tool(
+  'restart_dev_session',
+  'Restart a local dev session by name (platform, git-bridge, probe-bridge, trade-ui)',
+  { name: z.string().describe('Service name: platform, git-bridge, probe-bridge, trade-ui') },
+  async ({ name }) =>
+    jsonResult(
+      await platformPost(`/api/v1/dev-sessions/${encodeURIComponent(name)}/control`, {
+        action: 'restart',
+      }),
+    ),
+)
+
+server.tool(
+  'get_dev_session_logs',
+  'Get recent log lines from a local dev session',
+  {
+    name: z.string().describe('Service name: platform, git-bridge, probe-bridge, trade-ui'),
+    lines: z.number().optional().describe('Number of log lines to return (default 100)'),
+  },
+  async ({ name, lines }) => {
+    const n = lines ?? 100
+    return jsonResult(
+      await platformGet(`/api/v1/dev-sessions/${encodeURIComponent(name)}/logs?lines=${n}`),
+    )
+  },
+)
+
 } // end platform tools (non-prometheus focus)
 
 async function main() {

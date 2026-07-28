@@ -28,6 +28,7 @@ import {
   Server,
   Shield,
   ShieldCheck,
+  Terminal,
   Workflow,
 } from 'lucide-react'
 
@@ -111,6 +112,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
           { id: 'agent-capability', label: 'Agent Capability', icon: Network },
           { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
           { id: 'dev-agent', label: 'Dev Agent', icon: Code2 },
+          { id: 'dev-sessions', label: 'Dev Sessions', icon: Terminal },
         ],
       },
       {
@@ -235,6 +237,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'agent-capability': 'Engineer',
   briefing: 'Engineer',
   'dev-agent': 'Engineer',
+  'dev-sessions': 'Engineer',
   'autonomous-skills': 'Engineer',
   'execution-log': 'Engineer',
   'agent-governance': 'Engineer',

@@ -152,8 +152,9 @@ export const SCOPE_ROWS: ScopeRow[] = [
   {
     tag: 'PG',
     component: 'PostgreSQL',
-    technology: 'Bare metal mini-pc-b :5432 · bifrost_dev / bifrost_prod',
-    notes: 'Owner D2: keep .80 bare PG until CloudNativePG on K3s (mini-pc-b Primary + standby on mini-pc-a).',
+    technology: 'CloudNativePG bifrost-postgres @ data NS · bifrost_dev / bifrost_stg / bifrost_prod',
+    notes:
+      'D2-prime: CNPG is truth. Legacy bare .80 / options_db decommissioned 2026-06-29 (box → ubt-k3s-06 @ .79). LAN DBeaver: NodePort 30432.',
   },
   {
     tag: 'REDIS',
@@ -276,10 +277,10 @@ export const HARDWARE_ROWS: HardwareRow[] = [
     roleK3s: 'Server ① · API · Redis · Ingress · Gitea · ArgoCD',
   },
   {
-    id: 'mini-pc-b',
-    host: '192.168.10.80',
-    roleCompose: 'PostgreSQL dedicated',
-    roleK3s: 'Server ② · CNPG Primary · pgvector',
+    id: 'ubt-k3s-06',
+    host: '192.168.10.79',
+    roleCompose: '— (former bare PG .80 decommissioned 2026-06-29)',
+    roleK3s: 'K3s agent · general pool (reinstalled former PG box)',
   },
   {
     id: 'mini-pc-c',

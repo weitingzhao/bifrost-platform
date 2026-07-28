@@ -76,6 +76,9 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_telemetry_targets',
   'report_checklist_signals',
   'sign_tier_b',
+  'list_dev_sessions',
+  'restart_dev_session',
+  'get_dev_session_logs',
 ] as const
 
 export type PlatformStdioToolName = (typeof PLATFORM_STDIO_TOOL_NAMES)[number]

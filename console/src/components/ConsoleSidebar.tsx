@@ -48,6 +48,7 @@ export type ConsoleViewTab =
   | 'satellite-api'
   | 'plugin-gallery'
   | 'defects'
+  | 'dev-sessions'
 
 export function ConsoleSidebar({
   activeTab,

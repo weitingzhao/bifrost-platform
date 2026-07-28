@@ -1,18 +1,27 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, StatusLamp, cn } from '@bifrost/ui'
+import { Button, SegmentControl, cn } from '@bifrost/ui'
 import { fetchRemediationJobs } from '@/api/remediation'
 import type { RemediationJob } from '@/api/remediationTypes'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import {
   formatRemediationJobWhen,
-  remediationJobReachability,
+  groupRemediationJobsByScope,
   remediationJobStatusLabel,
-  remediationScopeShortLabel,
+  remediationTimelineCellStatus,
 } from '@/lib/remediation/remediationJobDisplay'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 
-const RECENT_LIMIT = 10
+const RECENT_LIMIT = 48
+const PER_GROUP = 16
+const SORT_KEY = 'bifrost.console.dockRecentTasksSort.v1'
+
+type RecentSort = 'type' | 'time'
+
+const SORT_OPTIONS = [
+  { value: 'type', label: 'Type' },
+  { value: 'time', label: 'Time' },
+] as const
 
 function jobToAmbient(job: RemediationJob): AmbientAgentJob {
   const scope = job.scope ?? 'agent'
@@ -24,10 +33,59 @@ function jobToAmbient(job: RemediationJob): AmbientAgentJob {
   }
 }
 
+function readStoredSort(): RecentSort {
+  try {
+    const raw = localStorage.getItem(SORT_KEY)
+    if (raw === 'time' || raw === 'type') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'type'
+}
+
+function persistSort(sort: RecentSort) {
+  try {
+    localStorage.setItem(SORT_KEY, sort)
+  } catch {
+    /* ignore */
+  }
+}
+
+function TimelineCell({
+  job,
+  active,
+  onSelect,
+}: {
+  job: RemediationJob
+  active: boolean
+  onSelect?: (job: AmbientAgentJob) => void
+}) {
+  const when = formatRemediationJobWhen(job.updated_at || job.created_at)
+  const status = remediationJobStatusLabel(job)
+  const cellStatus = remediationTimelineCellStatus(job)
+  const clickable = onSelect != null
+  return (
+    <button
+      type="button"
+      title={`${job.id.slice(0, 8)} · ${status} · ${when}`}
+      aria-label={`${scopeToLabel(job.scope)} ${status} ${when}`}
+      aria-current={active ? 'true' : undefined}
+      disabled={!clickable}
+      className={cn(
+        'agent-desk-timeline-cell',
+        `agent-desk-timeline-cell--${cellStatus}`,
+        job.phase === 'awaiting_approval' && 'agent-desk-timeline-cell--attn',
+        active && 'agent-desk-timeline-cell--active',
+        !clickable && 'console-agent-execution-dock__recent-cell--static',
+      )}
+      onClick={() => onSelect?.(jobToAmbient(job))}
+    />
+  )
+}
+
 /**
  * Compact Recent tasks for Operator Dock Agent slot (right rail).
- * Same jobs source as Agent Desk · Observe — not a second archive UI.
- * Click adopts the job into the dock detail pane (does not force Agent Desk tab).
+ * Type view = Agent Desk timeline cells by scope; Time view = newest-first dense list.
  */
 export function DockRecentAgentTasks({
   enabled,
@@ -35,13 +93,13 @@ export function DockRecentAgentTasks({
   onSelectJob,
   onOpenDesk,
 }: {
-  /** Only poll when Agent tool body is visible. */
   enabled: boolean
-  /** Currently shown job in the left detail pane. */
   activeJobId?: string | null
   onSelectJob?: (job: AmbientAgentJob) => void
   onOpenDesk?: () => void
 }) {
+  const [sort, setSort] = useState<RecentSort>(readStoredSort)
+
   const jobsQuery = useQuery({
     queryKey: ['remediation', 'jobs'],
     queryFn: fetchRemediationJobs,
@@ -50,9 +108,8 @@ export function DockRecentAgentTasks({
     staleTime: 10_000,
   })
 
-  const recent = useMemo(() => {
-    const jobs = jobsQuery.data?.jobs ?? []
-    return [...jobs]
+  const sortedJobs = useMemo(() => {
+    return [...(jobsQuery.data?.jobs ?? [])]
       .sort(
         (a, b) =>
           Date.parse(b.updated_at || b.created_at) - Date.parse(a.updated_at || a.created_at),
@@ -60,16 +117,37 @@ export function DockRecentAgentTasks({
       .slice(0, RECENT_LIMIT)
   }, [jobsQuery.data?.jobs])
 
+  const groups = useMemo(
+    () => groupRemediationJobsByScope(sortedJobs, PER_GROUP),
+    [sortedJobs],
+  )
+
+  const onSortChange = (next: string) => {
+    const value: RecentSort = next === 'time' ? 'time' : 'type'
+    setSort(value)
+    persistSort(value)
+  }
+
+  const empty = !jobsQuery.isLoading && !jobsQuery.isError && sortedJobs.length === 0
+
   return (
     <aside className="console-agent-execution-dock__recent" aria-label="Recent agent tasks">
       <div className="console-agent-execution-dock__recent-head">
-        <h3 className="console-agent-execution-dock__recent-title">Recent tasks</h3>
+        <h3 className="console-agent-execution-dock__recent-title">Recent</h3>
+        <SegmentControl
+          ariaLabel="Recent tasks sort"
+          options={[...SORT_OPTIONS]}
+          value={sort}
+          onChange={onSortChange}
+          size="xs"
+          className="console-agent-execution-dock__recent-sort"
+        />
         {onOpenDesk != null && (
           <Button
             type="button"
             variant="ghost"
             size="xs"
-            className="text-[var(--text-dense-caption)] text-muted-foreground"
+            className="ml-auto text-[var(--text-dense-caption)] text-muted-foreground"
             onClick={onOpenDesk}
             title="Open Agent Desk archive"
           >
@@ -82,22 +160,71 @@ export function DockRecentAgentTasks({
         <p className="console-agent-execution-dock__recent-empty">Loading…</p>
       )}
       {jobsQuery.isError && !jobsQuery.isLoading && (
-        <p className="console-agent-execution-dock__recent-empty">
-          Could not load recent tasks
-        </p>
+        <p className="console-agent-execution-dock__recent-empty">Could not load recent tasks</p>
       )}
-      {!jobsQuery.isLoading && !jobsQuery.isError && recent.length === 0 && (
+      {empty && (
         <p className="console-agent-execution-dock__recent-empty">
           No tasks yet — start Fix from Daily Ops or Mission Launch
         </p>
       )}
 
-      {recent.length > 0 && (
-        <ul className="console-agent-execution-dock__recent-list">
-          {recent.map(job => {
+      {!empty && sort === 'type' && (
+        <div className="console-agent-execution-dock__recent-groups dense-scroll-y">
+          {groups.map(group => (
+            <div key={group.scope} className="console-agent-execution-dock__recent-group">
+              <div className="console-agent-execution-dock__recent-group-head">
+                <span
+                  className="console-agent-execution-dock__recent-group-label"
+                  title={group.scope}
+                >
+                  {group.label}
+                </span>
+                <span className="console-agent-execution-dock__recent-group-counts">
+                  {group.runningCount > 0 && (
+                    <span className="agent-desk-timeline-count agent-desk-timeline-count--running">
+                      {group.runningCount}
+                    </span>
+                  )}
+                  {group.doneCount > 0 && (
+                    <span className="agent-desk-timeline-count agent-desk-timeline-count--done">
+                      {group.doneCount}
+                    </span>
+                  )}
+                  {group.failedCount > 0 && (
+                    <span className="agent-desk-timeline-count agent-desk-timeline-count--failed">
+                      {group.failedCount}
+                    </span>
+                  )}
+                  {group.cancelledCount > 0 && (
+                    <span className="agent-desk-timeline-count agent-desk-timeline-count--cancelled">
+                      {group.cancelledCount}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="agent-desk-timeline-track console-agent-execution-dock__recent-track">
+                <span className="agent-desk-timeline-track__now">now</span>
+                {group.jobs.map(job => (
+                  <TimelineCell
+                    key={job.id}
+                    job={job}
+                    active={activeJobId != null && activeJobId === job.id}
+                    onSelect={onSelectJob}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!empty && sort === 'time' && (
+        <ul className="console-agent-execution-dock__recent-chrono dense-scroll-y">
+          {sortedJobs.map(job => {
             const when = formatRemediationJobWhen(job.updated_at || job.created_at)
             const status = remediationJobStatusLabel(job)
-            const scope = remediationScopeShortLabel(job.scope)
+            const cellStatus = remediationTimelineCellStatus(job)
+            const scope = scopeToLabel(job.scope)
             const selected = activeJobId != null && activeJobId === job.id
             const clickable = onSelectJob != null
             return (
@@ -105,22 +232,27 @@ export function DockRecentAgentTasks({
                 <button
                   type="button"
                   className={cn(
-                    'console-agent-execution-dock__recent-row',
-                    selected && 'console-agent-execution-dock__recent-row--active',
-                    !clickable && 'console-agent-execution-dock__recent-row--static',
+                    'console-agent-execution-dock__recent-chrono-row',
+                    selected && 'console-agent-execution-dock__recent-chrono-row--active',
+                    !clickable && 'console-agent-execution-dock__recent-chrono-row--static',
                   )}
                   disabled={!clickable}
                   aria-current={selected ? 'true' : undefined}
-                  onClick={() => onSelectJob?.(jobToAmbient(job))}
                   title={`${job.id.slice(0, 8)} · ${status} · ${when}`}
+                  onClick={() => onSelectJob?.(jobToAmbient(job))}
                 >
-                  <StatusLamp value={remediationJobReachability(job)} kind="reach" />
-                  <span className="console-agent-execution-dock__recent-main">
-                    <span className="console-agent-execution-dock__recent-scope">{scope}</span>
-                    <span className="console-agent-execution-dock__recent-meta">
-                      <span className="console-agent-execution-dock__recent-status">{status}</span>
-                      <span className="console-agent-execution-dock__recent-when">{when}</span>
-                    </span>
+                  <span
+                    className={cn(
+                      'agent-desk-timeline-cell',
+                      `agent-desk-timeline-cell--${cellStatus}`,
+                      job.phase === 'awaiting_approval' && 'agent-desk-timeline-cell--attn',
+                      'console-agent-execution-dock__recent-chrono-swatch',
+                    )}
+                    aria-hidden
+                  />
+                  <span className="console-agent-execution-dock__recent-chrono-main">
+                    <span className="console-agent-execution-dock__recent-chrono-scope">{scope}</span>
+                    <span className="console-agent-execution-dock__recent-chrono-when">{when}</span>
                   </span>
                 </button>
               </li>

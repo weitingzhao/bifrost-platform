@@ -61,10 +61,10 @@ const ROUTE_TABLE: FleetFixRoute[] = [
   {
     role: 'engineer',
     env: 'span',
-    fixScope: null,
-    agentFixAllowed: false,
+    fixScope: 'operator-plane-remediate',
+    agentFixAllowed: true,
     navigateTabId: 'operator-plane',
-    disabledReason: 'Engineer CRITICAL / Mac seat → Operator Plane (Agent Fix disabled)',
+    disabledReason: 'Runners down — recover runners before Agent Fix',
   },
   {
     role: 'ground',
@@ -105,7 +105,6 @@ export function cellAllowsAgentFix(cell: FleetCell): boolean {
   if (cell.signal === 'ok' || cell.signal === 'unavailable' || cell.signal === 'unknown') {
     return false
   }
-  if (cell.role === 'engineer') return false
   const env = cell.span ? 'span' : (cell.env ?? 'span')
   const route = lookupFleetFixRoute(cell.role, env)
   if (route != null && !route.agentFixAllowed) return false

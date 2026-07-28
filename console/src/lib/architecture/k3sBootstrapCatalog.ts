@@ -163,18 +163,20 @@ export const NODE_JOIN_STEPS: NodeJoinStep[] = [
   },
   {
     id: 'P5c',
-    title: 'P5c — mini-pc-b Server join (HA)',
-    description: 'Second Server join (depends on D1 Prod path decision)',
+    title: 'P5c — ubt-k3s-06 agent join (former .80 PG box)',
+    description:
+      'Reinstalled former bare-metal PG host (.80 decommissioned 2026-06-29) joined as general-pool agent @ .79',
     command: [
       'sudo K3S_URL=https://192.168.10.73:6443 K3S_TOKEN=<token> \\',
-      '  K3S_NODE_IP=192.168.10.80 K3S_NODE_NAME=mini-pc-b bash install-server-join.sh',
+      '  K3S_NODE_IP=192.168.10.79 K3S_NODE_NAME=ubt-k3s-06 bash ~/install-agent.sh',
+      '# or: make k3s-join-ubt-k3s-06',
     ].join('\n'),
   },
 ]
 
 export const NEXT_STAGES = [
   '1. `cicd` namespace: Gitea · Registry · Tekton · ArgoCD',
-  '2. `data`: CloudNativePG (coexist with bare .80 PG, pending D2)',
+  '2. `data`: CloudNativePG bifrost-postgres (bare .80 PG decommissioned 2026-06-29)',
   '3. `monitoring` namespace: kube-prometheus-stack (Layer B — POST /cluster/addons/kube-prometheus-stack/ensure, not ad-hoc shell)',
   '4. gpu-server compute: make gpu-install-compute-stack (Ollama + MinIO scale-to-zero)',
   '5. gpu-server power: make gpu-install-power-manager on bootstrap (WOL + idle poweroff)',

@@ -808,6 +808,10 @@ export function buildEngineerCell(input: {
           ? 'drift'
           : state.value
 
+  // Agent Fix only when at least one runner can execute (bridge-down is auto-fixable via bdev).
+  const runnersCanAct = runnerSig === 'ok' || runnerSig === 'degraded'
+  const canAgentFix = runnersCanAct && signal !== 'ok' && signal !== 'unknown'
+
   return {
     key: cellKey('engineer', 'span'),
     role: 'engineer',
@@ -818,13 +822,15 @@ export function buildEngineerCell(input: {
     detail: standards.map(s => s.reason).join(' · '),
     probePath: '',
     standards,
-    fixScope: null,
-    agentFixEnabled: false,
-    agentFixDisabledReason: critical
-      ? 'Engineer CRITICAL — use Operator Plane / Ground (Agent Fix disabled)'
+    fixScope: canAgentFix ? 'operator-plane-remediate' : null,
+    agentFixEnabled: canAgentFix,
+    agentFixDisabledReason: !runnersCanAct
+      ? 'Runners down — recover remediation runners on Operator Plane before Agent Fix'
       : signal === 'ok'
         ? undefined
-        : 'Engineer plane uses Operator Plane remediation, not cell Agent Fix',
+        : signal === 'unknown'
+          ? 'Still probing'
+          : undefined,
     escalateTabId: critical || signal === 'degraded' ? 'operator-plane' : undefined,
     countsTowardVerdict: true,
   }

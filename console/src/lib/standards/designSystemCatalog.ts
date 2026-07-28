@@ -357,7 +357,7 @@ export const AGENT_GOVERNANCE_ASSETS: AgentAssetRow[] = [
     asset: 'console/src/components/agent/AgentExecutionDock.tsx (OperatorDock)',
     repo: 'bifrost-platform',
     purpose:
-      'Shell Operator Dock — tool slots Agent | Console (Collapsed/Working/Maximized). Agent slot = ambient Fix SSOT with left detail (3/5) + right Recent tasks rail (2/5); click Recent adopts job in-dock (no Agent Desk tab switch). Console = SSH. Head = L-1 host pulse + Operator Plane deep-link. Agent Desk = archive only.',
+      'Shell Operator Dock — tool slots Agent | Sessions | Console (Collapsed/Working/Maximized). Agent slot = ambient Fix SSOT with resizable left detail (Result/Process split + maximize) + right Recent tasks rail (grouped by scope); click Recent adopts job in-dock (no Agent Desk tab switch). Console = SSH. Head = L-1 host pulse + Operator Plane deep-link. Agent Desk = archive only.',
   },
   {
     asset: 'console/src/components/task-mode/LaunchLiveView.tsx',

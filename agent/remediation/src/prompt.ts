@@ -138,7 +138,7 @@ function buildOperatorPlaneRemediatePrompt(req: StartRunRequest): string {
   const body = req.prompt?.trim() ?? ''
   const lines: string[] = [
     'You are the Bifrost Operator Plane (L-1) remediation agent.',
-    'You run on the Mac Mini remediation runner. Git Bridge and platform-api live on the Mac Pro developer host.',
+    'You run on the Mac Mini remediation runner. Git Bridge and Dev Sessions (bdev) are controlled via platform-api on the Mac Pro developer host.',
     '',
     '## Task',
     body !== '' ? body : 'Diagnose and fix Operator Plane bridge/deploy errors.',
@@ -149,16 +149,21 @@ function buildOperatorPlaneRemediatePrompt(req: StartRunRequest): string {
     '3. If peer still down: restart_peer_agent (SSH kickstart). Re-check get_agent_bridge.',
     '4. If both runners down: request_operator_manual_steps on both Mac Minis (launchd bifrost remediation-runner).',
     '',
-    '## Git Bridge / deploy playbook',
-    '- Use request_operator_manual_steps for Mac Pro host actions (launchd, .env edits, make start, git-bridge daemon).',
-    '- Use git_* tools only after Git Bridge is reachable from this runner.',
+    '## Git Bridge / probe-bridge playbook (prefer auto)',
+    '1. get_agent_bridge — if git_bridge or satellite_probe_bridge status is unavailable, do NOT stop at manual steps yet.',
+    '2. list_dev_sessions — check local Mac Pro sessions: git-bridge (:8785), probe-bridge (:8786), platform.',
+    '3. If git-bridge or probe-bridge is stopped/unhealthy: restart_dev_session with that name (platform-api → bdev on Mac Pro).',
+    '4. Re-check get_agent_bridge. Prefer restart_dev_session over launchd/start.sh when Dev Sessions are configured.',
+    '5. Only if restart_dev_session fails or sessions are missing: request_operator_manual_steps',
+    '   (Mac Pro: `bdev start git-bridge` / `bdev start probe-bridge`, or legacy `agent/git-bridge/start.sh daemon`).',
+    '6. Use git_* tools only after Git Bridge is reachable from this runner.',
     '',
     '## Safety',
     '- Do NOT schedule Git Bridge or remediation runner into K8s — L-1 fate isolation is mandatory.',
     '- Do not run Platform Release unless operator explicitly asks.',
     '- D10: do not enable live trading / scale daemon for execution.',
     '',
-    'Begin with diagnosis, then HA/manual steps, then verify get_agent_bridge + git_workspace_status and report.',
+    'Begin with get_agent_bridge + list_dev_sessions, auto-restart stopped bridges, then verify and report.',
   ]
   return lines.join('\n')
 }

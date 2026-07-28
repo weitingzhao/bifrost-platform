@@ -239,7 +239,7 @@ export type NextPhaseItem = { label: string; detail: string }
 
 export const NEXT_K3S_STEPS: NextPhaseItem[] = [
   { label: 'mini-pc-a', detail: 'Ubuntu 24.04 + K3s Server (single-node validation)' },
-  { label: 'mini-pc-b', detail: 'Server join / verify CNPG Operator' },
+  { label: 'ubt-k3s-06', detail: 'Former .80 PG box → agent @ .79; CNPG Operator on data NS' },
   { label: 'gpu-server (4090)', detail: 'K3s Agent + workload=gpu' },
   { label: 'Mac Mini x2', detail: 'UTM Ubuntu Agent — P5b CLOSED (ops-vm-ubt-01/.54, ops-vm-ubt-02/.56)' },
   { label: 'Console', detail: 'Update deployment_phase: k3s then verify topology' },

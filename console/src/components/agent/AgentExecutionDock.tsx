@@ -3,6 +3,8 @@ import { Button, SegmentControl, StatusLamp, cn } from '@bifrost/ui'
 import { Bot, ChevronDown, ChevronUp, LifeBuoy, Maximize2, Minimize2, X } from 'lucide-react'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
+import { DenseMarkdown, looksLikeMarkdown } from '@/components/agent/DenseMarkdown'
+import { DockDevSessionsPanel } from '@/components/agent/DockDevSessionsPanel'
 import { DockRecentAgentTasks } from '@/components/agent/DockRecentAgentTasks'
 import { ServerConsolePanel } from '@/components/ServerConsolePanel'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
@@ -17,13 +19,81 @@ import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 
 const DOCK_HEIGHT_KEY = 'bifrost.console.agentExecutionDockHeight'
 const TOOL_KEY = 'bifrost.console.operatorDockTool'
+const AGENT_H_SPLIT_KEY = 'bifrost.console.dockAgentHSplitPct.v1'
+const AGENT_V_SPLIT_KEY = 'bifrost.console.dockAgentVSplitPct.v1'
 const DEFAULT_WORKING_VH = 42
 const DEFAULT_WORKING_REM = 28
 const MIN_WORKING_PX = 160
 const MAX_WORKING_VH = 70
+const DEFAULT_AGENT_LEFT_PCT = 75
+const MIN_AGENT_LEFT_PCT = 55
+const MAX_AGENT_LEFT_PCT = 88
+const DEFAULT_DETAIL_TOP_PCT = 55
+const MIN_DETAIL_TOP_PCT = 28
+const MAX_DETAIL_TOP_PCT = 78
+
+type AgentFocusPane = 'result' | 'process' | null
+
+function readStoredPct(
+  key: string,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw == null || raw === '') return fallback
+    const n = Number(raw)
+    if (!Number.isFinite(n)) return fallback
+    return Math.min(max, Math.max(min, n))
+  } catch {
+    return fallback
+  }
+}
+
+function persistPct(key: string, value: number) {
+  try {
+    localStorage.setItem(key, String(value))
+  } catch {
+    /* ignore */
+  }
+}
+
+function SummaryBody({
+  text,
+  tone,
+}: {
+  text: string
+  tone: 'done' | 'failed' | 'plain'
+}) {
+  const md = looksLikeMarkdown(text)
+  if (md) {
+    return (
+      <DenseMarkdown
+        source={text}
+        className={cn(
+          'console-agent-execution-dock__summary-md',
+          tone === 'done' && 'console-agent-execution-dock__summary-md--done',
+          tone === 'failed' && 'console-agent-execution-dock__summary-md--failed',
+        )}
+      />
+    )
+  }
+  return (
+    <p
+      className={cn(
+        'console-agent-execution-dock__summary',
+        tone === 'done' && 'console-agent-execution-dock__summary--done',
+        tone === 'failed' && 'console-agent-execution-dock__summary--failed',
+      )}
+    >
+      {text}
+    </p>
+  )
+}
 
 export type OperatorDockMode = 'collapsed' | 'working' | 'maximized'
-export type OperatorToolId = 'agent' | 'console'
+export type OperatorToolId = 'agent' | 'sessions' | 'console'
 
 /** @deprecated Use OperatorDockMode */
 export type AgentExecutionDockMode = OperatorDockMode
@@ -44,8 +114,10 @@ export type OperatorDockProps = {
   onSelectJob?: (job: AmbientAgentJob) => void
   /** Deep-link to Engineer → Operator Plane (L-1 Update / smoke SSOT). */
   onOpenOperatorPlane?: () => void
+  /** Deep-link to Engineer → Dev Sessions (local host runtime). */
+  onOpenDevSessions?: () => void
   /** Current console view — highlights matching page link in dock head. */
-  activePage?: 'operator-plane' | 'agent-desk' | null
+  activePage?: 'operator-plane' | 'agent-desk' | 'dev-sessions' | null
   onComplete?: (job: RemediationJob) => void
   /** Uncontrolled initial mode when expanded defaults to working. */
   defaultExpanded?: boolean
@@ -62,6 +134,7 @@ export type AgentExecutionDockProps = OperatorDockProps
 
 const TOOL_OPTIONS = [
   { value: 'agent', label: 'Agent' },
+  { value: 'sessions', label: 'Sessions' },
   { value: 'console', label: 'Console' },
 ] as const
 
@@ -80,7 +153,7 @@ function readStoredHeight(): number | null {
 export function readStoredTool(): OperatorToolId {
   try {
     const raw = localStorage.getItem(TOOL_KEY)
-    if (raw === 'console' || raw === 'agent') return raw
+    if (raw === 'console' || raw === 'agent' || raw === 'sessions') return raw
   } catch {
     /* ignore */
   }
@@ -160,6 +233,7 @@ export function OperatorDock({
   onOpenAgentDesk,
   onSelectJob,
   onOpenOperatorPlane,
+  onOpenDevSessions,
   activePage = null,
   onComplete,
   defaultExpanded = false,
@@ -178,11 +252,34 @@ export function OperatorDock({
   )
   const [heightPx, setHeightPx] = useState(() => readStoredHeight() ?? defaultWorkingHeightPx())
   const [internalToolId, setInternalToolId] = useState<OperatorToolId>(readStoredTool)
+  const [agentLeftPct, setAgentLeftPct] = useState(() =>
+    readStoredPct(AGENT_H_SPLIT_KEY, DEFAULT_AGENT_LEFT_PCT, MIN_AGENT_LEFT_PCT, MAX_AGENT_LEFT_PCT),
+  )
+  const [detailTopPct, setDetailTopPct] = useState(() =>
+    readStoredPct(AGENT_V_SPLIT_KEY, DEFAULT_DETAIL_TOP_PCT, MIN_DETAIL_TOP_PCT, MAX_DETAIL_TOP_PCT),
+  )
+  const [focusPane, setFocusPane] = useState<AgentFocusPane>(null)
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
   const heightPxRef = useRef(heightPx)
+  const agentLeftPctRef = useRef(agentLeftPct)
+  const detailTopPctRef = useRef(detailTopPct)
+  const agentSplitRef = useRef<HTMLDivElement>(null)
+  const detailSplitRef = useRef<HTMLDivElement>(null)
+  const hDragRef = useRef<{ startX: number; startPct: number } | null>(null)
+  const vDragRef = useRef<{ startY: number; startPct: number } | null>(null)
 
   const toolId = toolControlled ? toolIdProp : internalToolId
   const hostPulse = useAgentHostPulse()
+
+  useEffect(() => {
+    agentLeftPctRef.current = agentLeftPct
+  }, [agentLeftPct])
+  useEffect(() => {
+    detailTopPctRef.current = detailTopPct
+  }, [detailTopPct])
+  useEffect(() => {
+    setFocusPane(null)
+  }, [jobId])
 
   const setToolId = useCallback(
     (next: OperatorToolId) => {
@@ -272,6 +369,77 @@ export function OperatorDock({
     }
   }
 
+  const onAgentHPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const narrow =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 52rem)').matches
+    hDragRef.current = {
+      startX: narrow ? e.clientY : e.clientX,
+      startPct: agentLeftPctRef.current,
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onAgentHPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (hDragRef.current == null || agentSplitRef.current == null) return
+    const narrow =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 52rem)').matches
+    const rect = agentSplitRef.current.getBoundingClientRect()
+    const span = narrow ? rect.height : rect.width
+    if (span <= 0) return
+    const delta =
+      (((narrow ? e.clientY : e.clientX) - hDragRef.current.startX) / span) * 100
+    const next = Math.min(
+      MAX_AGENT_LEFT_PCT,
+      Math.max(MIN_AGENT_LEFT_PCT, hDragRef.current.startPct + delta),
+    )
+    agentLeftPctRef.current = next
+    setAgentLeftPct(next)
+  }
+  const onAgentHPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (hDragRef.current == null) return
+    hDragRef.current = null
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+    persistPct(AGENT_H_SPLIT_KEY, agentLeftPctRef.current)
+  }
+
+  const onDetailVPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    vDragRef.current = { startY: e.clientY, startPct: detailTopPctRef.current }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onDetailVPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (vDragRef.current == null || detailSplitRef.current == null) return
+    const span = detailSplitRef.current.getBoundingClientRect().height
+    if (span <= 0) return
+    const next = Math.min(
+      MAX_DETAIL_TOP_PCT,
+      Math.max(
+        MIN_DETAIL_TOP_PCT,
+        vDragRef.current.startPct + ((e.clientY - vDragRef.current.startY) / span) * 100,
+      ),
+    )
+    detailTopPctRef.current = next
+    setDetailTopPct(next)
+  }
+  const onDetailVPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (vDragRef.current == null) return
+    vDragRef.current = null
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+    persistPct(AGENT_V_SPLIT_KEY, detailTopPctRef.current)
+  }
+
+  const toggleFocusPane = (pane: Exclude<AgentFocusPane, null>) => {
+    setFocusPane(prev => (prev === pane ? null : pane))
+  }
+
   const {
     job,
     connected,
@@ -316,19 +484,26 @@ export function OperatorDock({
       ? mode === 'collapsed'
         ? 'SSH'
         : 'Console'
-      : idle
-        ? 'Idle'
-        : statusLabel
+      : toolId === 'sessions'
+        ? mode === 'collapsed'
+          ? 'Sessions'
+          : 'Host sessions'
+        : idle
+          ? 'Idle'
+          : statusLabel
   /** Idle Agent: lamp follows L-1 Host pulse (not gray unknown). Active Fix: session reach. */
   const headReach =
     toolId === 'console'
       ? hostPulse.hostReach === 'unknown'
         ? 'ok'
         : hostPulse.hostReach
-      : idle
-        ? hostPulse.hostReach
-        : reach
-  const variantClass = toolId === 'console' ? 'idle' : idle ? 'idle' : bannerVariant
+      : toolId === 'sessions'
+        ? 'ok'
+        : idle
+          ? hostPulse.hostReach
+          : reach
+  const variantClass =
+    toolId === 'console' || toolId === 'sessions' ? 'idle' : idle ? 'idle' : bannerVariant
   const collapsed = mode === 'collapsed'
   const bodyVisible = !collapsed
 
@@ -370,7 +545,11 @@ export function OperatorDock({
           size="sm"
           value={toolId}
           options={[...TOOL_OPTIONS]}
-          onChange={v => setToolId(v as OperatorToolId)}
+          onChange={v => {
+            const next = v as OperatorToolId
+            setToolId(next)
+            if (next === 'sessions' && mode === 'collapsed') expandWorking()
+          }}
         />
         {toolId === 'agent' && !idle && label != null && label !== '' && (
           <span className="console-agent-execution-dock__label" title={label}>
@@ -452,6 +631,11 @@ export function OperatorDock({
             SSH console — expand to connect
           </span>
         )}
+        {mode === 'collapsed' && toolId === 'sessions' && (
+          <span className="console-agent-execution-dock__feed-text console-agent-execution-dock__feed-text--placeholder">
+            Local host sessions — expand for status &amp; consoles
+          </span>
+        )}
         {showFeedPlaceholder && mode !== 'collapsed' && (
           <span className="console-agent-execution-dock__feed-text console-agent-execution-dock__feed-text--placeholder">
             Waiting for agent activity…
@@ -492,6 +676,23 @@ export function OperatorDock({
             >
               <LifeBuoy className="console-agent-execution-dock__action-icon" aria-hidden />
               Operator Plane
+            </Button>
+          )}
+          {toolId === 'sessions' && onOpenDevSessions != null && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className={cn(
+                'gap-1',
+                activePage === 'dev-sessions'
+                  ? 'console-agent-execution-dock__page-link--active'
+                  : 'console-agent-execution-dock__page-link',
+              )}
+              onClick={onOpenDevSessions}
+              title="Open Dev Sessions page"
+              aria-current={activePage === 'dev-sessions' ? 'page' : undefined}
+            >
+              Dev Sessions
             </Button>
           )}
           {toolId === 'agent' && onOpenAgentDesk != null && (
@@ -580,7 +781,15 @@ export function OperatorDock({
           )}
           style={toolId !== 'agent' ? { display: 'none' } : undefined}
         >
-          <div className="console-agent-execution-dock__agent-split">
+          <div
+            ref={agentSplitRef}
+            className="console-agent-execution-dock__agent-split"
+            style={{
+              gridTemplateColumns: `minmax(0, ${agentLeftPct}fr) 0.35rem minmax(8rem, ${100 - agentLeftPct}fr)`,
+              ['--dock-agent-left' as string]: String(agentLeftPct),
+              ['--dock-agent-right' as string]: String(100 - agentLeftPct),
+            }}
+          >
             <div className="console-agent-execution-dock__detail">
               {idle ? (
                 <div className="console-agent-execution-dock__idle-intro">
@@ -628,104 +837,242 @@ export function OperatorDock({
                 </div>
               ) : (
                 <div className="console-agent-execution-dock__detail-live">
-                  {hostPulse.deployRunning && (
-                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--warn">
-                      Host update in progress — Fix may be flaky
-                      {onOpenOperatorPlane != null && (
-                        <>
-                          {' · '}
-                          <button
-                            type="button"
-                            className="console-agent-execution-dock__inline-link"
-                            onClick={onOpenOperatorPlane}
-                          >
-                            Operator Plane
-                          </button>
-                        </>
+                  {(hostPulse.deployRunning ||
+                    isArchive ||
+                    error != null ||
+                    pendingApproval != null) && (
+                    <div className="console-agent-execution-dock__meta-strip">
+                      {hostPulse.deployRunning && (
+                        <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--warn">
+                          Host update in progress — Fix may be flaky
+                          {onOpenOperatorPlane != null && (
+                            <>
+                              {' · '}
+                              <button
+                                type="button"
+                                className="console-agent-execution-dock__inline-link"
+                                onClick={onOpenOperatorPlane}
+                              >
+                                Operator Plane
+                              </button>
+                            </>
+                          )}
+                        </p>
                       )}
-                    </p>
-                  )}
-                  {bannerVariant === 'done' && job?.summary != null && job.summary !== '' && (
-                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--done">
-                      {job.summary}
-                    </p>
-                  )}
-                  {bannerVariant === 'failed' && (
-                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
-                      {job?.error != null && job.error !== 'orphaned' && job.error !== ''
-                        ? job.error
-                        : (job?.summary ?? 'Unknown error')}
-                    </p>
-                  )}
-                  {isArchive && (
-                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--archive">
-                      Archive view — runner no longer has this live session
-                      {onOpenAgentDesk != null && jobId != null && (
-                        <>
-                          {' · '}
-                          <button
-                            type="button"
-                            className="console-agent-execution-dock__inline-link"
-                            onClick={() => onOpenAgentDesk(jobId)}
-                          >
-                            Open in Agent Desk
-                          </button>
-                        </>
+                      {isArchive && (
+                        <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--archive">
+                          Archive view — runner no longer has this live session
+                          {onOpenAgentDesk != null && jobId != null && (
+                            <>
+                              {' · '}
+                              <button
+                                type="button"
+                                className="console-agent-execution-dock__inline-link"
+                                onClick={() => onOpenAgentDesk(jobId)}
+                              >
+                                Open in Agent Desk
+                              </button>
+                            </>
+                          )}
+                        </p>
                       )}
-                    </p>
-                  )}
-                  {error != null && !isArchive && (
-                    <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
-                      Connection: {error}
-                    </p>
-                  )}
-
-                  {pendingApproval != null && (
-                    <div className="console-agent-execution-dock__approval">
-                      <RemediationApprovalBlock
-                        event={pendingApproval}
-                        compact
-                        submitting={respondPending}
-                        onRespond={(optionId, note, commitMessage) =>
-                          respond(optionId, note, commitMessage)
-                        }
-                      />
+                      {error != null && !isArchive && (
+                        <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
+                          Connection: {error}
+                        </p>
+                      )}
+                      {pendingApproval != null && (
+                        <div className="console-agent-execution-dock__approval">
+                          <RemediationApprovalBlock
+                            event={pendingApproval}
+                            compact
+                            submitting={respondPending}
+                            onRespond={(optionId, note, commitMessage) =>
+                              respond(optionId, note, commitMessage)
+                            }
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  <div className="console-agent-execution-dock__log dense-scroll-y">
-                    {historyLoading ? (
-                      <p className="console-agent-execution-dock__log-empty">
-                        Loading interaction history…
-                      </p>
-                    ) : recentEvents.length === 0 ? (
-                      <p className="console-agent-execution-dock__log-empty">
-                        {isTerminal || isArchive
-                          ? 'No event log stored for this task'
-                          : 'Waiting for agent activity…'}
-                      </p>
-                    ) : (
-                      <ul className="console-agent-execution-dock__log-list">
-                        {recentEvents.map(ev => (
-                          <li
-                            key={ev.id}
-                            className={cn(
-                              'console-agent-execution-dock__log-item',
-                              `console-agent-execution-dock__log-item--${ev.type}`,
-                            )}
-                          >
-                            <span className="console-agent-execution-dock__log-type">{ev.type}</span>
-                            <span className="console-agent-execution-dock__log-text">
-                              {formatFeedEventLine(ev)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                  <div
+                    ref={detailSplitRef}
+                    className={cn(
+                      'console-agent-execution-dock__detail-split',
+                      focusPane === 'result' &&
+                        'console-agent-execution-dock__detail-split--focus-result',
+                      focusPane === 'process' &&
+                        'console-agent-execution-dock__detail-split--focus-process',
                     )}
+                    style={
+                      focusPane == null
+                        ? {
+                            gridTemplateRows: `minmax(4rem, ${detailTopPct}fr) 0.35rem minmax(4rem, ${100 - detailTopPct}fr)`,
+                          }
+                        : undefined
+                    }
+                  >
+                    <section
+                      className="console-agent-execution-dock__result"
+                      aria-label="Task result"
+                    >
+                      <div className="console-agent-execution-dock__pane-head">
+                        <h3 className="console-agent-execution-dock__pane-title">Result</h3>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          className="console-agent-execution-dock__pane-focus"
+                          onClick={() => toggleFocusPane('result')}
+                          title={
+                            focusPane === 'result' ? 'Restore split view' : 'Maximize result'
+                          }
+                          aria-label={
+                            focusPane === 'result' ? 'Restore split view' : 'Maximize result'
+                          }
+                        >
+                          {focusPane === 'result' ? (
+                            <Minimize2
+                              className="console-agent-execution-dock__action-icon"
+                              aria-hidden
+                            />
+                          ) : (
+                            <Maximize2
+                              className="console-agent-execution-dock__action-icon"
+                              aria-hidden
+                            />
+                          )}
+                        </Button>
+                      </div>
+                      <div className="console-agent-execution-dock__result-body dense-scroll-y">
+                        {bannerVariant === 'done' &&
+                          job?.summary != null &&
+                          job.summary !== '' && (
+                            <SummaryBody text={job.summary} tone="done" />
+                          )}
+                        {bannerVariant === 'failed' && (
+                          <SummaryBody
+                            text={
+                              job?.error != null &&
+                              job.error !== 'orphaned' &&
+                              job.error !== ''
+                                ? job.error
+                                : (job?.summary ?? 'Unknown error')
+                            }
+                            tone="failed"
+                          />
+                        )}
+                        {bannerVariant !== 'done' &&
+                          bannerVariant !== 'failed' &&
+                          job?.summary != null &&
+                          job.summary !== '' && (
+                            <SummaryBody text={job.summary} tone="plain" />
+                          )}
+                        {(job?.summary == null || job.summary === '') &&
+                          bannerVariant !== 'failed' && (
+                            <p className="console-agent-execution-dock__log-empty">
+                              {isTerminal || isArchive
+                                ? 'No result summary stored for this task'
+                                : 'Waiting for result…'}
+                            </p>
+                          )}
+                      </div>
+                    </section>
+
+                    {focusPane == null && (
+                      <div
+                        className="console-agent-execution-dock__h-resize"
+                        role="separator"
+                        aria-orientation="horizontal"
+                        aria-label="Resize result and process"
+                        title="Drag to resize result / process"
+                        onPointerDown={onDetailVPointerDown}
+                        onPointerMove={onDetailVPointerMove}
+                        onPointerUp={onDetailVPointerUp}
+                      />
+                    )}
+
+                    <section
+                      className="console-agent-execution-dock__process"
+                      aria-label="Task process log"
+                    >
+                      <div className="console-agent-execution-dock__pane-head">
+                        <h3 className="console-agent-execution-dock__pane-title">Process</h3>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          className="console-agent-execution-dock__pane-focus"
+                          onClick={() => toggleFocusPane('process')}
+                          title={
+                            focusPane === 'process' ? 'Restore split view' : 'Maximize process'
+                          }
+                          aria-label={
+                            focusPane === 'process' ? 'Restore split view' : 'Maximize process'
+                          }
+                        >
+                          {focusPane === 'process' ? (
+                            <Minimize2
+                              className="console-agent-execution-dock__action-icon"
+                              aria-hidden
+                            />
+                          ) : (
+                            <Maximize2
+                              className="console-agent-execution-dock__action-icon"
+                              aria-hidden
+                            />
+                          )}
+                        </Button>
+                      </div>
+                      <div className="console-agent-execution-dock__log dense-scroll-y">
+                        {historyLoading ? (
+                          <p className="console-agent-execution-dock__log-empty">
+                            Loading interaction history…
+                          </p>
+                        ) : recentEvents.length === 0 ? (
+                          <p className="console-agent-execution-dock__log-empty">
+                            {isTerminal || isArchive
+                              ? 'No event log stored for this task'
+                              : 'Waiting for agent activity…'}
+                          </p>
+                        ) : (
+                          <ul className="console-agent-execution-dock__log-list">
+                            {recentEvents.map(ev => (
+                              <li
+                                key={ev.id}
+                                className={cn(
+                                  'console-agent-execution-dock__log-item',
+                                  `console-agent-execution-dock__log-item--${ev.type}`,
+                                )}
+                              >
+                                <span className="console-agent-execution-dock__log-type">
+                                  {ev.type}
+                                </span>
+                                <span className="console-agent-execution-dock__log-text">
+                                  {formatFeedEventLine(ev)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </section>
                   </div>
                 </div>
               )}
             </div>
+
+            <div
+              className="console-agent-execution-dock__v-resize"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize task detail and recent tasks"
+              title="Drag to resize detail / recent"
+              onPointerDown={onAgentHPointerDown}
+              onPointerMove={onAgentHPointerMove}
+              onPointerUp={onAgentHPointerUp}
+            />
 
             <DockRecentAgentTasks
               enabled={bodyVisible && toolId === 'agent'}
@@ -734,6 +1081,20 @@ export function OperatorDock({
               onOpenDesk={onOpenAgentDesk != null ? () => onOpenAgentDesk() : undefined}
             />
           </div>
+        </div>
+
+        <div
+          className={cn(
+            'console-operator-dock__tool',
+            'console-operator-dock__tool--sessions',
+            'min-h-0 flex-1 flex flex-col',
+          )}
+          style={toolId !== 'sessions' ? { display: 'none' } : undefined}
+        >
+          <DockDevSessionsPanel
+            enabled={bodyVisible && toolId === 'sessions'}
+            onOpenPage={onOpenDevSessions}
+          />
         </div>
 
         <div

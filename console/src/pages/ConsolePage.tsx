@@ -77,6 +77,7 @@ import { ExecutionLogPage } from '@/pages/ExecutionLogPage'
 import { AgentGovernancePage } from '@/pages/AgentGovernancePage'
 import { DefectsPage } from '@/pages/DefectsPage'
 import { DevAgentPage } from '@/pages/DevAgentPage'
+import { DevSessionsPage } from '@/pages/DevSessionsPage'
 import { StandardsPage } from '@/pages/StandardsPage'
 import { TaskControlCenterPage } from '@/pages/TaskControlCenterPage'
 import { TaskModeProvider, useTaskMode } from '@/lib/task-mode/TaskModeContext'
@@ -117,6 +118,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'design-system': 'Design System',
   'ai-compute': 'AI Compute Strategy',
   'dev-agent': 'Dev Agent',
+  'dev-sessions': 'Dev Sessions',
   console: 'Server console',
   network: 'Network',
   compute: 'Compute',
@@ -191,6 +193,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Live topology of rocket, satellite, and agent paths — hardware, software stack, and gap analysis.',
   'dev-agent':
     'Guided multi-phase Dev Agent jobs — select program, run phases, approve or reject with feedback.',
+  'dev-sessions':
+    'Local dev service orchestration — tmux-managed processes with status, logs, and restart controls.',
 }
 
 
@@ -219,6 +223,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'platform-release',
   'cluster',
   'placement',
+  'dev-sessions',
 ]
 
 const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
@@ -762,6 +767,8 @@ function ConsolePageInner() {
 
         {viewTab === 'dev-agent' && <DevAgentPage />}
 
+        {viewTab === 'dev-sessions' && <DevSessionsPage />}
+
         {viewTab === 'execution-log' && <ExecutionLogPage />}
 
         {viewTab === 'agent-governance' && <AgentGovernancePage />}
@@ -1019,8 +1026,13 @@ function ConsolePageInner() {
           else openAgentDeskTab()
         }}
         onOpenOperatorPlane={openOperatorPlane}
+        onOpenDevSessions={() => setViewTab('dev-sessions')}
         activePage={
-          viewTab === 'operator-plane' || viewTab === 'agent-desk' ? viewTab : null
+          viewTab === 'operator-plane' ||
+          viewTab === 'agent-desk' ||
+          viewTab === 'dev-sessions'
+            ? viewTab
+            : null
         }
         onComplete={handleAmbientJobComplete}
       />

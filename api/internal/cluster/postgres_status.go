@@ -146,7 +146,10 @@ func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
 	}
 	resp.Embedded = embeddedPostgresProbe(snap)
 	resp.Legacy = []PostgresLegacyView{
-		{Kind: "bare-metal", Host: "192.168.10.80", Reach: probe.ReachOK, Detail: "Prod authoritative until phase ⑤ cutover"},
+		{
+			Kind: "bare-metal", Host: "192.168.10.80", Reach: probe.ReachFail,
+			Detail: "Decommissioned 2026-06-29 — reinstalled as ubt-k3s-06 (.79); truth is CNPG bifrost_* @ data NS",
+		},
 	}
 
 	for i := range resp.Databases {

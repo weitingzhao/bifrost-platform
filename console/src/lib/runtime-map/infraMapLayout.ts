@@ -25,7 +25,7 @@ export type InfraMapViewBox = {
 /** Semantic grid overrides for data-path readability (yaml grid remains source of truth for fallback). */
 const SEMANTIC_GRID_OVERRIDES: Record<string, { row: number; col: number }> = {
   'mini-pc-a': { row: 1, col: 1 },
-  'mini-pc-b': { row: 1, col: 2 },
+  'ubt-k3s-06': { row: 1, col: 2 },
   'win11-host': { row: 0, col: 1 },
   'win11-secondary': { row: 0, col: 2 },
   'mac-mini-1': { row: 2, col: 0 },

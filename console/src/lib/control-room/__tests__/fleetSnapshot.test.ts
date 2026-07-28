@@ -714,9 +714,10 @@ describe('buildFleetSnapshot integration', () => {
 })
 
 describe('fleetCellFix routing', () => {
-  it('blocks Engineer agent fix and routes to Operator Plane', () => {
+  it('allows Engineer Agent Fix via operator-plane-remediate when runners can act', () => {
     const route = lookupFleetFixRoute('engineer', 'span')
-    expect(route?.agentFixAllowed).toBe(false)
+    expect(route?.agentFixAllowed).toBe(true)
+    expect(route?.fixScope).toBe('operator-plane-remediate')
     expect(route?.navigateTabId).toBe('operator-plane')
   })
 
