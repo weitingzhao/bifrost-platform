@@ -57,6 +57,8 @@ function defaultSelectedIndex(
 export type TaskPhaseProgressProps = {
   phases: TaskPhaseDef[]
   statuses: Record<string, TaskPhaseStatus>
+  /** Phase selected by an external task-level affordance, when present. */
+  selectedPhaseId?: string
   /** Per-step operator hints (block reason, root causes, fix actions). */
   hints?: Record<string, TaskPhaseHint>
   /** Secondary — open full Console tab for deep work on this phase. */
@@ -67,6 +69,7 @@ export type TaskPhaseProgressProps = {
 export function TaskPhaseProgress({
   phases,
   statuses,
+  selectedPhaseId,
   hints,
   onOpenFullPage,
   onFixAction,
@@ -84,6 +87,12 @@ export function TaskPhaseProgress({
   useEffect(() => {
     setSelectedIndex(defaultSelectedIndex(phases, statuses))
   }, [phaseKey, statusKey, phases, statuses])
+
+  useEffect(() => {
+    if (selectedPhaseId == null) return
+    const nextIndex = phases.findIndex(phase => phase.id === selectedPhaseId)
+    if (nextIndex >= 0) setSelectedIndex(nextIndex)
+  }, [phases, selectedPhaseId])
 
   if (phases.length === 0) return null
 

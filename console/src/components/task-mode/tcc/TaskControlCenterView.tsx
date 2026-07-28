@@ -160,6 +160,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   } = props
 
   const [phaseOpen, setPhaseOpen] = useState(phaseDefaultOpen)
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | undefined>()
   const [selectedCommandLane, setSelectedCommandLane] = useState<CommandLane>('vehicle')
   useEffect(() => {
     setPhaseOpen(phaseDefaultOpen)
@@ -180,6 +181,16 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   const firstIncompletePhase = isMissionLaunch
     ? phases.find(phase => statuses[phase.id] !== 'done')
     : undefined
+  const phaseProgressTarget = firstIncompletePhase ?? phases.at(-1)
+  const openPhaseProgress = () => {
+    setPhaseOpen(true)
+    if (phaseProgressTarget != null) setSelectedPhaseId(phaseProgressTarget.id)
+    requestAnimationFrame(() => {
+      document
+        .getElementById('task-cc-phase-progress')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
   const selectedCommand = {
     vehicle: {
       label: 'Vehicle · Rocket',
@@ -304,6 +315,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
 
   const phaseProgressBlock: ReactNode = isDailyOps ? null : phases.length > 0 ? (
     <details
+      id="task-cc-phase-progress"
       className="rounded-lg border border-border bg-card px-3 py-1.5"
       open={phaseOpen}
       onToggle={e => setPhaseOpen((e.currentTarget as HTMLDetailsElement).open)}
@@ -328,6 +340,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
       <TaskPhaseProgress
         phases={phases}
         statuses={statuses}
+        selectedPhaseId={selectedPhaseId}
         hints={phaseHints}
         onOpenFullPage={onOpenPhasePage}
         onFixAction={onPhaseFixAction}
@@ -384,7 +397,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
                 type="button"
                 className="text-left hover:text-foreground hover:underline"
                 title="Open Phase progress"
-                onClick={() => setPhaseOpen(true)}
+                onClick={openPhaseProgress}
               >
                 <strong className="font-semibold text-muted-foreground">Release checklist</strong>
                 {' — '}
