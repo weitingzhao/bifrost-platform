@@ -10,6 +10,8 @@ export type OpsVerdictStripProps = {
   lamp: OpsVerdictLamp
   tagLabel: string
   tagVariant: OpsVerdictTagVariant
+  /** Explains the tag when its color is intentionally non-alerting. */
+  tagTitle?: string
   /** One-line cause / metrics (may include inline tags). */
   summary: ReactNode
   /** Primary CTAs — always discoverable. */
@@ -32,6 +34,7 @@ export function OpsVerdictStrip({
   lamp,
   tagLabel,
   tagVariant,
+  tagTitle,
   summary,
   actions,
   meta,
@@ -52,7 +55,7 @@ export function OpsVerdictStrip({
         ) : (
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">{title}</div>
         )}
-        <DenseTag variant={tagVariant} className="text-[10px] font-semibold">
+        <DenseTag variant={tagVariant} title={tagTitle} className="text-[10px] font-semibold">
           {tagLabel}
         </DenseTag>
         <span className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)]">{summary}</span>

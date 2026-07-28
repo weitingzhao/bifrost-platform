@@ -6,6 +6,7 @@ import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
 import { DevModeStrips } from '@/components/task-mode/DevModeController'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
+import type { CommandLane } from '@/components/task-mode/MissionLaunchBoard'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { TaskCCVerdict } from '@/components/task-mode/tcc/TaskCCVerdict'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
@@ -15,6 +16,7 @@ import { pickFailingFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { fixScopeAgentTitle } from '@/lib/agent/readinessFixDispatch'
 import { launchVerdictToSignal } from '@/lib/task-mode/satelliteLaunchVerdict'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
+import { missionStatus } from '@/lib/control-room/missionSignals'
 import type { PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
 import type { TaskPhaseFixAction, TaskPhaseHint } from '@/lib/task-mode/taskPhaseDiagnostics'
 import type { TaskModeDef, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
@@ -32,6 +34,7 @@ import type {
 } from '@/components/task-mode/TaskModeReadinessStrip'
 
 type VerdictLamp = 'ok' | 'degraded' | 'fail' | 'unknown'
+type SemanticTextClass = 'text-success' | 'text-warning' | 'text-danger' | 'text-muted-foreground'
 
 const LAMP_RANK: Record<VerdictLamp, number> = {
   ok: 0,
@@ -42,6 +45,30 @@ const LAMP_RANK: Record<VerdictLamp, number> = {
 
 function worseLamp(a: VerdictLamp, b: VerdictLamp): VerdictLamp {
   return LAMP_RANK[a] >= LAMP_RANK[b] ? a : b
+}
+
+function signalTextClass(signal: VerdictLamp): SemanticTextClass {
+  if (signal === 'ok') return 'text-success'
+  if (signal === 'degraded') return 'text-warning'
+  if (signal === 'fail') return 'text-danger'
+  return 'text-muted-foreground'
+}
+
+function checklistTextClass(
+  phases: TaskPhaseDef[],
+  statuses: Record<string, TaskPhaseStatus>,
+  doneCount: number,
+): SemanticTextClass {
+  // `blocked` is the current task-playbook failure equivalent.
+  if (phases.some(phase => statuses[phase.id] === 'blocked')) return 'text-danger'
+  if (phases.length > 0 && doneCount === phases.length) return 'text-success'
+  return 'text-warning'
+}
+
+function launchVerdictTextClass(kind: LaunchVerdict['kind']): SemanticTextClass {
+  if (kind === 'GO') return 'text-success'
+  if (kind === 'IN_FLIGHT') return 'text-warning'
+  return 'text-danger'
 }
 
 export type TaskControlCenterViewProps = {
@@ -99,6 +126,7 @@ export type TaskControlCenterViewProps = {
   pluginLaunchVerdict: LaunchVerdict
   pluginLaunchCheckpoints: LaunchCheckpoint[]
   pluginEvidence: PluginLaunchEvidence
+  missionOverall: VerdictLamp
   /** Shown when phase Agent Fix is not supported in the current mode. */
   phaseFixUnavailableHint?: string | null
 }
@@ -132,6 +160,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   } = props
 
   const [phaseOpen, setPhaseOpen] = useState(phaseDefaultOpen)
+  const [selectedCommandLane, setSelectedCommandLane] = useState<CommandLane>('vehicle')
   useEffect(() => {
     setPhaseOpen(phaseDefaultOpen)
   }, [phaseDefaultOpen, mode.id])
@@ -147,6 +176,49 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   const phaseProgressCaption = isDevLoop
     ? 'Playbook phase status — Briefing → implement → deliver → sign-off'
     : 'Historical phase checklist — not live environment health'
+
+  const firstIncompletePhase = isMissionLaunch
+    ? phases.find(phase => statuses[phase.id] !== 'done')
+    : undefined
+  const selectedCommand = {
+    vehicle: {
+      label: 'Vehicle · Rocket',
+      verdict:
+        q.rocketVerdict.kind === 'GO'
+          ? 'GO'
+          : q.rocketVerdict.kind === 'IN_FLIGHT'
+            ? 'IN FLIGHT'
+            : 'NO-GO',
+      valueClass: launchVerdictTextClass(q.rocketVerdict.kind),
+    },
+    payload: {
+      label: 'Payload · Satellite',
+      verdict:
+        q.satelliteVerdict.kind === 'GO'
+          ? 'GO'
+          : q.satelliteVerdict.kind === 'IN_FLIGHT'
+            ? 'IN FLIGHT'
+            : 'NO-GO',
+      valueClass: launchVerdictTextClass(q.satelliteVerdict.kind),
+    },
+    plugin: {
+      label: 'Plugin · IB Gateway',
+      verdict:
+        props.pluginLaunchVerdict.kind === 'GO'
+          ? 'GO'
+          : props.pluginLaunchVerdict.kind === 'IN_FLIGHT'
+            ? 'IN FLIGHT'
+            : 'NO-GO',
+      valueClass: launchVerdictTextClass(props.pluginLaunchVerdict.kind),
+    },
+    'data-maintenance': {
+      label: 'Data · Maintenance',
+      verdict: 'Freshness unavailable',
+      valueClass: 'text-muted-foreground',
+    },
+  }[selectedCommandLane]
+  const globalHealthClass = signalTextClass(props.missionOverall)
+  const checklistClass = checklistTextClass(phases, statuses, doneCount)
 
   const verdictLamp = useMemo((): VerdictLamp => {
     if (isDevLoop) {
@@ -290,12 +362,51 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         mode={mode}
         lamp={verdictLamp}
         tagLabel={loopLabel}
-        tagVariant={mode.loopArchetype === 'dev' ? 'info' : mode.loopArchetype === 'ops' ? 'warning' : 'neutral'}
+        tagVariant={mode.loopArchetype === 'dev' ? 'info' : 'neutral'}
+        tagTitle={mode.loopArchetype === 'ops' ? 'Workflow identity — not an alert' : undefined}
         summary={props.headerDescription}
-        phaseCaption={
-          !isDailyOps && phases.length > 0
-            ? `${doneCount}/${phases.length} phases complete`
-            : null
+        meta={
+          isMissionLaunch ? (
+            <>
+              <button
+                type="button"
+                className="text-left hover:text-foreground hover:underline"
+                title="Open Control Room"
+                onClick={() => onNavigate('control-room')}
+              >
+                <strong className="font-semibold text-muted-foreground">Global health</strong>
+                {' — '}
+                <span className={`font-semibold ${globalHealthClass}`}>
+                  {missionStatus(props.missionOverall)}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="text-left hover:text-foreground hover:underline"
+                title="Open Phase progress"
+                onClick={() => setPhaseOpen(true)}
+              >
+                <strong className="font-semibold text-muted-foreground">Release checklist</strong>
+                {' — '}
+                <span className={`font-semibold ${checklistClass}`}>
+                  {doneCount}/{phases.length}
+                  {firstIncompletePhase != null
+                    ? ` · next: ${firstIncompletePhase.title}`
+                    : ' · complete'}
+                  {' · Platform + Trade (Plugin separate)'}
+                </span>
+              </button>
+              <span>
+                <strong className="font-semibold text-muted-foreground">Selected Command</strong>
+                {' — '}
+                <span className={`font-semibold ${selectedCommand.valueClass}`}>
+                  {selectedCommand.label} · {selectedCommand.verdict}
+                </span>
+              </span>
+            </>
+          ) : !isDailyOps && phases.length > 0 ? (
+            <span className="font-mono-tabular">{doneCount}/{phases.length} phases complete</span>
+          ) : undefined
         }
         actions={verdictActions}
       />
@@ -516,6 +627,8 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
           platformProdGate={q.platformProdGateQ.data}
           supplyCmsPresent={q.supplyQ.data?.dockerfile_configmaps?.filter(c => c.present).length}
           supplyCmsTotal={q.supplyQ.data?.dockerfile_configmaps?.length}
+          selectedCommandLane={selectedCommandLane}
+          onSelectedCommandLaneChange={setSelectedCommandLane}
         />
       )}
 
@@ -552,6 +665,8 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
               tradeDeployDisabledReason={props.tradeDeployDisabledReason}
               pluginLaunchDisabledReason={props.pluginLaunchDisabledReason}
               promoteOnly
+              selectedCommandLane={selectedCommandLane}
+              onSelectedCommandLaneChange={setSelectedCommandLane}
             />
           )}
         </>

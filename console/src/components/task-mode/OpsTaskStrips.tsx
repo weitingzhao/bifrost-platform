@@ -27,7 +27,10 @@ import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
 import type { DailyOpsWorkflowResult } from '@/lib/control-room/dailyOpsWorkflow'
 import { TaskModeReadinessStrip } from '@/components/task-mode/TaskModeReadinessStrip'
 import { LaunchLiveView } from '@/components/task-mode/LaunchLiveView'
-import { MissionLaunchBoard } from '@/components/task-mode/MissionLaunchBoard'
+import {
+  MissionLaunchBoard,
+  type CommandLane,
+} from '@/components/task-mode/MissionLaunchBoard'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useDailyOpsChecklistCoverage } from '@/hooks/useDailyOpsChecklistCoverage'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
@@ -143,6 +146,9 @@ export type OpsTaskStripsProps = {
   /** Live Go/No-Go for LaunchGateBar (Task CC). */
   launchVerdict?: LaunchVerdict
   launchCheckpoints?: LaunchCheckpoint[]
+  /** Controlled Command selection shared with the Task Verdict scope line. */
+  selectedCommandLane?: CommandLane
+  onSelectedCommandLaneChange?: (lane: CommandLane) => void
   /** Launch-bar Agent Fix (prod remediation) — distinct from readiness strip Fix. */
   onLaunchAgentFix?: () => void
   launchAgentFixPending?: boolean
@@ -392,6 +398,8 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
         onOpenPlatformRun={openPlatformRun}
         onOpenTradeRun={openTradeRun}
         hidePrimaryLaunch={true}
+        selectedCommandLane={props.selectedCommandLane}
+        onSelectedCommandLaneChange={props.onSelectedCommandLaneChange}
       />
     )
   }

@@ -5,7 +5,7 @@ import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 
 const LOOP_VARIANT: Record<LoopArchetype, 'neutral' | 'warning' | 'info'> = {
   system: 'neutral',
-  ops: 'warning',
+  ops: 'neutral',
   dev: 'info',
 }
 
@@ -24,6 +24,8 @@ export type TaskCCVerdictProps = {
   lamp?: 'ok' | 'degraded' | 'fail' | 'unknown'
   tagLabel?: string
   tagVariant?: 'success' | 'warning' | 'danger' | 'neutral' | 'info'
+  tagTitle?: string
+  meta?: ReactNode
   actions?: ReactNode
   className?: string
 }
@@ -38,6 +40,8 @@ export function TaskCCVerdict({
   lamp = 'unknown',
   tagLabel,
   tagVariant,
+  tagTitle,
+  meta,
   actions,
   className,
 }: TaskCCVerdictProps) {
@@ -54,6 +58,7 @@ export function TaskCCVerdict({
       lamp={lamp}
       tagLabel={resolvedTag}
       tagVariant={resolvedVariant}
+      tagTitle={tagTitle ?? (mode.loopArchetype === 'ops' ? 'Workflow identity — not an alert' : undefined)}
       leading={<Icon size={14} className="task-mode-capsule__icon shrink-0" aria-hidden />}
       summary={
         summary ??
@@ -63,9 +68,10 @@ export function TaskCCVerdict({
       }
       actions={actions}
       meta={
-        phaseCaption != null && phaseCaption !== '' ? (
+        meta ??
+        (phaseCaption != null && phaseCaption !== '' ? (
           <span className="font-mono-tabular">{phaseCaption}</span>
-        ) : undefined
+        ) : undefined)
       }
     />
   )

@@ -299,6 +299,7 @@ export function TaskControlCenter({
       pluginLaunchVerdict={pluginVerdict}
       pluginLaunchCheckpoints={pluginCheckpoints}
       pluginEvidence={pluginEvidence}
+      missionOverall={snapshot.missionOverall}
       phaseFixUnavailableHint={phaseFixUnavailableHint}
     />
   )

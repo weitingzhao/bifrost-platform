@@ -73,9 +73,11 @@ export type MissionLaunchBoardProps = {
   onOpenTradeRun: (run: DeliveryPipelineRunView) => void
   /** Primary Launch/Deploy lives in the Command row — hide duplicate gate-bar CTA. */
   hidePrimaryLaunch?: boolean
+  selectedCommandLane?: CommandLane
+  onSelectedCommandLaneChange?: (lane: CommandLane) => void
 }
 
-type CommandLane = 'vehicle' | 'payload' | 'plugin' | 'data-maintenance'
+export type CommandLane = 'vehicle' | 'payload' | 'plugin' | 'data-maintenance'
 
 function CommandLaneOptionLabel({
   active,
@@ -176,9 +178,16 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
     onOpenPlatformRun,
     onOpenTradeRun,
     hidePrimaryLaunch = false,
+    selectedCommandLane,
+    onSelectedCommandLaneChange,
   } = props
 
-  const [lane, setLane] = useState<CommandLane>('vehicle')
+  const [uncontrolledLane, setUncontrolledLane] = useState<CommandLane>('vehicle')
+  const lane = selectedCommandLane ?? uncontrolledLane
+  const setLane = (next: CommandLane) => {
+    if (selectedCommandLane == null) setUncontrolledLane(next)
+    onSelectedCommandLaneChange?.(next)
+  }
   const { canAdmin } = usePlatformAuth()
   const { rocketSignal, rocketDetail } = useSatelliteProdReadiness()
   const sharedBlocked = isProdReleaseBlocked(rocketSignal)
