@@ -259,6 +259,8 @@ export function OperatorDock({
     readStoredPct(AGENT_V_SPLIT_KEY, DEFAULT_DETAIL_TOP_PCT, MIN_DETAIL_TOP_PCT, MAX_DETAIL_TOP_PCT),
   )
   const [focusPane, setFocusPane] = useState<AgentFocusPane>(null)
+  /** When awaiting approval, Result/Process stay collapsed so decision controls fit. */
+  const [approvalLogsOpen, setApprovalLogsOpen] = useState(false)
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
   const heightPxRef = useRef(heightPx)
   const agentLeftPctRef = useRef(agentLeftPct)
@@ -458,6 +460,10 @@ export function OperatorDock({
     respond,
     reach,
   } = session
+
+  useEffect(() => {
+    if (pendingApproval != null) setApprovalLogsOpen(false)
+  }, [pendingApproval?.id])
 
   // P2-C: mid-flight remediation phases → Activity Feed detail
   const lastActivityPhaseRef = useRef<string | null>(null)
@@ -836,7 +842,13 @@ export function OperatorDock({
                   )}
                 </div>
               ) : (
-                <div className="console-agent-execution-dock__detail-live">
+                <div
+                  className={cn(
+                    'console-agent-execution-dock__detail-live',
+                    pendingApproval != null &&
+                      'console-agent-execution-dock__detail-live--awaiting-decision',
+                  )}
+                >
                   {(hostPulse.deployRunning ||
                     isArchive ||
                     error != null ||
@@ -896,6 +908,17 @@ export function OperatorDock({
                     </div>
                   )}
 
+                  {pendingApproval != null && !approvalLogsOpen && (
+                    <button
+                      type="button"
+                      className="console-agent-execution-dock__logs-collapsed"
+                      onClick={() => setApprovalLogsOpen(true)}
+                    >
+                      Show Result / Process
+                    </button>
+                  )}
+
+                  {(pendingApproval == null || approvalLogsOpen) && (
                   <div
                     ref={detailSplitRef}
                     className={cn(
@@ -904,6 +927,8 @@ export function OperatorDock({
                         'console-agent-execution-dock__detail-split--focus-result',
                       focusPane === 'process' &&
                         'console-agent-execution-dock__detail-split--focus-process',
+                      pendingApproval != null &&
+                        'console-agent-execution-dock__detail-split--under-approval',
                     )}
                     style={
                       focusPane == null
@@ -919,6 +944,18 @@ export function OperatorDock({
                     >
                       <div className="console-agent-execution-dock__pane-head">
                         <h3 className="console-agent-execution-dock__pane-title">Result</h3>
+                        {pendingApproval != null && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            className="text-muted-foreground"
+                            onClick={() => setApprovalLogsOpen(false)}
+                            title="Hide Result / Process — focus decision"
+                          >
+                            Hide
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="ghost"
@@ -1059,6 +1096,7 @@ export function OperatorDock({
                       </div>
                     </section>
                   </div>
+                  )}
                 </div>
               )}
             </div>

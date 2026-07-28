@@ -126,6 +126,8 @@ export function RemediationApprovalBlock({
   const checklist = parseChecklist(event.meta)
   const proposedCommitMsg = parseCommitMessage(event.meta)
   const [commandsOpen, setCommandsOpen] = useState(kind === 'manual_steps' && commands.length > 0)
+  /** Compact dock: briefing collapsed by default so decision controls stay on-screen. */
+  const [briefingOpen, setBriefingOpen] = useState(!compact)
   const [note, setNote] = useState('')
   const [commitMsg, setCommitMsg] = useState(proposedCommitMsg ?? '')
   const [checkedSteps, setCheckedSteps] = useState<Record<number, boolean>>({})
@@ -147,81 +149,118 @@ export function RemediationApprovalBlock({
     compact ? 'remediation-block--approval-compact' : '',
   ].filter(Boolean).join(' ')
 
+  const briefingBody = (
+    <>
+      <ApprovalContextMessage
+        text={event.text}
+        defaultExpanded={kind === 'manual_steps' && !compact}
+      />
+
+      {checklist.length > 0 && (
+        <div className="remediation-approval-checklist">
+          {!compact && <p className="remediation-approval-checklist__title">Checklist</p>}
+          <ul className="remediation-approval-checklist__list">
+            {checklist.map((item, index) => (
+              <li key={index} className="remediation-approval-checklist__item">
+                <label className="remediation-approval-checklist__label">
+                  <input
+                    type="checkbox"
+                    className="remediation-approval-checklist__checkbox"
+                    checked={checkedSteps[index] === true}
+                    disabled={submitting}
+                    onChange={() => toggleStep(index)}
+                  />
+                  <span>{item}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {commands.length > 0 && (
+        <div className="remediation-approval-console">
+          <button
+            type="button"
+            className="remediation-approval-console-toggle"
+            onClick={() => setCommandsOpen(!commandsOpen)}
+          >
+            <span className="inline-flex items-center gap-1">
+              Commands
+              <CollapseExpandIcon open={commandsOpen} size={12} />
+              ({commands.length})
+            </span>
+          </button>
+          {commandsOpen && (
+            <div className="remediation-approval-console-body">
+              <pre className="remediation-block-code remediation-block-code--result dense-scroll-y">
+                {commands.join('\n')}
+              </pre>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size={btnSize}
+                  onClick={() => void navigator.clipboard.writeText(commands.join('\n'))}
+                >
+                  Copy commands
+                </Button>
+                {onOpenServerConsole != null && (
+                  <Button variant="outline" size={btnSize} onClick={onOpenServerConsole}>
+                    Open Console
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {onOpenServerConsole != null && commands.length === 0 && kind === 'manual_steps' && (
+        <Button variant="outline" size={btnSize} className="mb-2" onClick={onOpenServerConsole}>
+          Open Console
+        </Button>
+      )}
+    </>
+  )
+
   return (
     <div className={rootClass}>
       <div className="remediation-approval-context dense-scroll-y">
         {!compact && <p className="remediation-approval-context__kicker">Agent context</p>}
-        <p className={compact ? 'remediation-approval-title remediation-approval-title--compact' : 'remediation-approval-title'}>{title}</p>
-        <ApprovalContextMessage text={event.text} defaultExpanded={kind === 'manual_steps' && !compact} />
-
-        {checklist.length > 0 && (
-          <div className="remediation-approval-checklist">
-            {!compact && <p className="remediation-approval-checklist__title">Checklist</p>}
-            <ul className="remediation-approval-checklist__list">
-              {checklist.map((item, index) => (
-                <li key={index} className="remediation-approval-checklist__item">
-                  <label className="remediation-approval-checklist__label">
-                    <input
-                      type="checkbox"
-                      className="remediation-approval-checklist__checkbox"
-                      checked={checkedSteps[index] === true}
-                      disabled={submitting}
-                      onChange={() => toggleStep(index)}
-                    />
-                    <span>{item}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {commands.length > 0 && (
-          <div className="remediation-approval-console">
+        <div className="remediation-approval-context__title-row">
+          <p
+            className={
+              compact
+                ? 'remediation-approval-title remediation-approval-title--compact'
+                : 'remediation-approval-title'
+            }
+          >
+            {title}
+          </p>
+          {compact && (
             <button
               type="button"
-              className="remediation-approval-console-toggle"
-              onClick={() => setCommandsOpen(!commandsOpen)}
+              className="remediation-approval-context-toggle remediation-approval-briefing-toggle"
+              onClick={() => setBriefingOpen(prev => !prev)}
+              aria-expanded={briefingOpen}
             >
               <span className="inline-flex items-center gap-1">
-                Commands
-                <CollapseExpandIcon open={commandsOpen} size={12} />
-                ({commands.length})
+                {briefingOpen ? 'Hide briefing' : 'Briefing'}
+                <CollapseExpandIcon open={briefingOpen} size={12} />
               </span>
             </button>
-            {commandsOpen && (
-              <div className="remediation-approval-console-body">
-                <pre className="remediation-block-code remediation-block-code--result dense-scroll-y">
-                  {commands.join('\n')}
-                </pre>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    size={btnSize}
-                    onClick={() => void navigator.clipboard.writeText(commands.join('\n'))}
-                  >
-                    Copy commands
-                  </Button>
-                  {onOpenServerConsole != null && (
-                    <Button variant="outline" size={btnSize} onClick={onOpenServerConsole}>
-                      Open Console
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {onOpenServerConsole != null && commands.length === 0 && kind === 'manual_steps' && (
-          <Button variant="outline" size={btnSize} className="mb-2" onClick={onOpenServerConsole}>
-            Open Console
-          </Button>
-        )}
+          )}
+        </div>
+        {(!compact || briefingOpen) && briefingBody}
       </div>
 
       <div className="remediation-approval-actions">
         {!compact && <p className="remediation-approval-actions__kicker">Your response</p>}
+        {compact && (
+          <p className="remediation-approval-actions__kicker remediation-approval-actions__kicker--compact">
+            Your decision
+          </p>
+        )}
 
         {proposedCommitMsg != null && (
           <div className="remediation-approval-commit-msg">
