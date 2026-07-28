@@ -223,9 +223,14 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
       valueClass: launchVerdictTextClass(props.pluginLaunchVerdict.kind),
     },
     'data-maintenance': {
-      label: 'Data · Maintenance',
+      label: 'PGSQL',
       verdict: 'Freshness unavailable',
       valueClass: 'text-muted-foreground',
+    },
+    'ib-bus': {
+      label: 'IB bus',
+      verdict: missionStatus(satelliteProd.rocketSignal),
+      valueClass: signalTextClass(satelliteProd.rocketSignal),
     },
   }[selectedCommandLane]
   const globalHealthClass = signalTextClass(props.missionOverall)

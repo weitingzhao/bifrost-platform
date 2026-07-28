@@ -80,9 +80,11 @@ function freshnessBadgeLabel(db: DataFreshnessDatabase): string {
 export function DataFreshnessPanel({
   canAdmin,
   onOpenFullPostgres,
+  title = 'Data Freshness',
 }: {
   canAdmin: boolean
   onOpenFullPostgres?: () => void
+  title?: string
 }) {
   const qc = useQueryClient()
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -179,7 +181,7 @@ export function DataFreshnessPanel({
   return (
     <>
       <OpsSection
-        title="Data Freshness"
+        title={title}
         description="Activity lag vs bifrost_prod · Sync clones prod → dev/stg on CNPG"
         bodyPadding="none"
         actions={

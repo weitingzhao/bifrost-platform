@@ -231,7 +231,6 @@
 .release-lane-opt__verdict {
   display: inline-flex;
   align-items: center;
-  gap: 0.1875rem;
 }
 
 .release-lane-opt__icon {

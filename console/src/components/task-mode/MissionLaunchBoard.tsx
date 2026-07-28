@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { cn, DenseTag, SegmentControl, StatusLamp } from '@bifrost/ui'
+import { cn, SegmentControl, StatusLamp } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
-import { Database, Plug, Rocket, Satellite, type LucideIcon } from 'lucide-react'
+import { Database, Network, Plug, Rocket, Satellite, type LucideIcon } from 'lucide-react'
 import { fetchDataFreshness } from '@/api/cluster'
 import type { DataFreshnessResponse } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -80,11 +80,11 @@ export type MissionLaunchBoardProps = {
   onSelectedCommandLaneChange?: (lane: CommandLane) => void
 }
 
-export type CommandLane = 'vehicle' | 'payload' | 'plugin' | 'data-maintenance'
+export type CommandLane = 'vehicle' | 'payload' | 'plugin' | 'data-maintenance' | 'ib-bus'
 
 type LaneStatus = {
   signal: 'ok' | 'degraded' | 'fail' | 'unknown'
-  tag: ReturnType<typeof laneTag>
+  label: string
 }
 
 function CommandLaneOptionLabel({
@@ -102,7 +102,7 @@ function CommandLaneOptionLabel({
   status?: LaneStatus
   children: ReactNode
 }) {
-  const tag = status?.tag ?? laneTag(verdict)
+  const label = status?.label ?? laneStatusLabel(verdict)
   const signal = status?.signal ?? (verdict == null ? 'unknown' : launchVerdictToSignal(verdict.kind))
 
   return (
@@ -113,47 +113,48 @@ function CommandLaneOptionLabel({
         aria-hidden
       />
       <span className="release-lane-opt__text">{children}</span>
-      <span className="release-lane-opt__verdict">
+      <span className="release-lane-opt__verdict" title={label} aria-label={label}>
         <StatusLamp value={signal} kind="reach" />
-        <DenseTag variant={tag.variant} className="text-[9px]">
-          {tag.label}
-        </DenseTag>
       </span>
     </span>
   )
 }
 
-function laneTag(verdict: LaunchVerdict | undefined): {
-  variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral'
-  label: string
-} {
-  if (verdict == null) return { variant: 'neutral', label: '—' }
-  if (verdict.kind === 'GO') return { variant: 'success', label: 'GO' }
-  if (verdict.kind === 'IN_FLIGHT') return { variant: 'info', label: 'IN FLIGHT' }
-  return { variant: 'danger', label: 'NO-GO' }
+function laneStatusLabel(verdict: LaunchVerdict | undefined): string {
+  if (verdict == null) return 'Unknown'
+  if (verdict.kind === 'GO') return 'GO'
+  if (verdict.kind === 'IN_FLIGHT') return 'IN FLIGHT'
+  return 'NO-GO'
 }
 
 function dataFreshnessLaneStatus(data: DataFreshnessResponse | undefined): LaneStatus {
   const databases = data?.databases.filter(db => db.verdict !== 'reference') ?? []
   if (databases.length === 0) {
-    return { signal: 'unknown', tag: { variant: 'neutral', label: '—' } }
+    return { signal: 'unknown', label: 'Unknown' }
   }
   if (databases.some(db => db.verdict === 'stale')) {
-    return { signal: 'fail', tag: { variant: 'danger', label: 'STALE' } }
+    return { signal: 'fail', label: 'STALE' }
   }
   if (databases.some(db => db.verdict === 'aging')) {
-    return { signal: 'degraded', tag: { variant: 'warning', label: 'AGING' } }
+    return { signal: 'degraded', label: 'AGING' }
   }
   if (databases.every(db => db.verdict === 'fresh')) {
-    return { signal: 'ok', tag: { variant: 'success', label: 'FRESH' } }
+    return { signal: 'ok', label: 'FRESH' }
   }
-  return { signal: 'unknown', tag: { variant: 'neutral', label: '—' } }
+  return { signal: 'unknown', label: 'Unknown' }
+}
+
+function ibBusLaneStatus(signal: LaneStatus['signal']): LaneStatus {
+  if (signal === 'ok') return { signal, label: 'NOMINAL' }
+  if (signal === 'degraded') return { signal, label: 'CAUTION' }
+  if (signal === 'fail') return { signal, label: 'CRITICAL' }
+  return { signal, label: 'PROBING' }
 }
 
 /**
- * Mission Launch — platform, trade, plugin, and data-maintenance command lanes.
+ * Mission Launch — platform, trade, plugin, and PostgreSQL refresh command lanes.
  * Vehicle (Rocket / platform), Payload (Satellite / trade), Plugin (IB Gateway publish).
- * Shared IB bus lives only on the Payload lane (coupling precondition for trade deploy).
+ * Shared IB bus is a dedicated in-board diagnostics lane and a coupling precondition for trade deploy.
  */
 export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
   const {
@@ -225,17 +226,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
   const dataFreshnessStatus = dataFreshnessLaneStatus(dataFreshnessQuery.data)
   const { rocketSignal, rocketDetail } = useSatelliteProdReadiness()
   const sharedBlocked = isProdReleaseBlocked(rocketSignal)
-  const ibBusStatus = missionStatus(rocketSignal)
-  const ibBusStatusClass =
-    ibBusStatus === 'NOMINAL'
-      ? 'text-muted-foreground hover:text-primary'
-      : ibBusStatus === 'CRITICAL'
-        ? 'font-semibold text-danger hover:text-danger/80'
-        : 'font-semibold text-warning hover:text-warning/80'
-  const openRocketBus = () => {
-    setSatelliteBusFocus('rocket')
-    onNavigate('satellite-bus')
-  }
+  const ibBusStatus = ibBusLaneStatus(rocketSignal)
 
   const vehicleCtaDisabled = !canDispatchRelease || launchVerdict?.kind !== 'GO'
   const payloadCtaDisabled =
@@ -290,7 +281,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
 
   return (
     <div id="task-cc-launch-board" className="flex scroll-mt-2 flex-col gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-[var(--text-dense-label)] font-semibold shrink-0">Command</span>
           <SegmentControl
@@ -340,10 +331,13 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
               },
             ]}
           />
-          <span className="h-5 border-l border-border" aria-hidden />
+          {commandAction != null && <span className="h-5 border-l border-border" aria-hidden />}
+          {commandAction}
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-2 border-l border-border pl-2 text-[var(--text-dense-caption)]">
           <SegmentControl
             size="sm"
-            ariaLabel="Data maintenance"
+            ariaLabel="Data service lanes"
             value={lane}
             onChange={v => setLane(v as CommandLane)}
             options={[
@@ -356,29 +350,25 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                     iconClass="release-lane-opt__icon--data-maintenance"
                     status={dataFreshnessStatus}
                   >
-                    Data · Maintenance
+                    PGSQL
+                  </CommandLaneOptionLabel>
+                ),
+              },
+              {
+                value: 'ib-bus',
+                label: (
+                  <CommandLaneOptionLabel
+                    active={lane === 'ib-bus'}
+                    icon={Network}
+                    iconClass="release-lane-opt__icon--payload"
+                    status={ibBusStatus}
+                  >
+                    IB bus
                   </CommandLaneOptionLabel>
                 ),
               },
             ]}
           />
-        </div>
-        <div className="flex shrink-0 items-center gap-2 text-[var(--text-dense-caption)]">
-          {commandAction}
-          {commandAction != null && <span className="h-5 border-l border-border" aria-hidden />}
-          <button
-            type="button"
-            className={cn(
-              'inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-              ibBusStatusClass,
-            )}
-            title={`${rocketDetail} — open Rocket IB bus diagnostics`}
-            onClick={openRocketBus}
-          >
-            <StatusLamp value={rocketSignal} kind="reach" />
-            <span>IB bus · {ibBusStatus}</span>
-            {ibBusStatus !== 'NOMINAL' && <span aria-hidden>Fix →</span>}
-          </button>
         </div>
       </div>
 
@@ -516,45 +506,6 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
                     agentFixTitle={agentFixTitle}
                   />
                 </OpsSection>
-                <OpsSection
-                  title="IB bus (coupling)"
-                  bodyPadding="compact"
-                  description="Precondition for trade sockets — not a separate launch product."
-                  className="border-border/80"
-                  actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className="text-[var(--text-dense-caption)] text-primary hover:underline"
-                        onClick={() => {
-                          setSatelliteBusFocus('rocket')
-                          onNavigate('satellite-bus')
-                        }}
-                      >
-                        Bus Status →
-                      </button>
-                      {onAgentTriage != null && (
-                        <AgentTriggerButton
-                          label="Agent Triage"
-                          size="xs"
-                          pending={agentTriagePending}
-                          disabled={agentTriageDisabled}
-                          title={
-                            agentTriageTitle ??
-                            'Cross-check Socket matrix vs Rocket IB gateway (D10 safe)'
-                          }
-                          onClick={onAgentTriage}
-                        />
-                      )}
-                    </div>
-                  }
-                >
-                  <MissionSharedBusPanel
-                    compact
-                    onNavigate={onNavigate}
-                    canOperate={readinessCanOperate}
-                  />
-                </OpsSection>
               </div>
               <OpsSection
                 id={readinessAnchorDomId('pipeline')}
@@ -636,11 +587,48 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
       ) : lane === 'data-maintenance' ? (
         <DataFreshnessPanel
           canAdmin={canAdmin}
+          title="PGSQL"
           onOpenFullPostgres={() => {
             writeCategoryToUrl('database')
             onNavigate('cluster')
           }}
         />
+      ) : lane === 'ib-bus' ? (
+        <OpsSection
+          title="IB bus"
+          bodyPadding="compact"
+          description={`Shared Rocket readiness: ${missionStatus(rocketSignal)} — ${rocketDetail}`}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="text-[var(--text-dense-caption)] text-primary hover:underline"
+                onClick={() => {
+                  setSatelliteBusFocus('rocket')
+                  onNavigate('satellite-bus')
+                }}
+              >
+                Open satellite-bus →
+              </button>
+              {onAgentTriage != null && (
+                <AgentTriggerButton
+                  label="Agent Triage"
+                  size="xs"
+                  pending={agentTriagePending}
+                  disabled={agentTriageDisabled}
+                  title={agentTriageTitle ?? 'Cross-check Socket matrix vs Rocket IB gateway (D10 safe)'}
+                  onClick={onAgentTriage}
+                />
+              )}
+            </div>
+          }
+        >
+          <MissionSharedBusPanel
+            compact
+            onNavigate={onNavigate}
+            canOperate={readinessCanOperate}
+          />
+        </OpsSection>
       ) : null}
     </div>
   )
