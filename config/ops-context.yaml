@@ -166,6 +166,12 @@ milestones:
       pipeline_lane: mainline
       pipeline_after: 2c-b-prod-cutover
       authority: console/src/lib/architecture/dataLayerCatalog.ts
+    - id: market-data-subcontractor
+      label: Market Data Subcontractor (Polygon → plugin-market-data NS)
+      status: IN_PROGRESS
+      pipeline_lane: parallel
+      pipeline_after: k3s-data-layer
+      authority: config/programs/market-data-subcontractor.yaml
 decisions:
     - id: D1
       status: SIGNED
@@ -266,7 +272,7 @@ coupling_surfaces:
     - unifi_session_v2
 promotion:
     last_gate:
-        at: "2026-07-29T16:07:49Z"
+        at: "2026-07-29T16:19:37Z"
         result: pass
         log_path: bifrost-trade-infra/scripts/release_gate.log
 environments_extended:

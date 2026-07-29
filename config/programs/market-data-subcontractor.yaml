@@ -1,0 +1,337 @@
+id: market-data-subcontractor
+title: "Market Data Subcontractor — Polygon Data Service"
+description: "Extract Polygon market data ingestion from Trade System into an independent Subcontractor (bifrost-platform-plugin-market-data). K8s-native workers, PG schema isolation (market.* + data_ops.*), no Celery, no IB. Replaces bifrost-trade-worker/data/massive/ entirely."
+status: active
+
+delivery:
+  board_visible: true
+  sign_off_mechanism: api
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+model: composer-2.5
+
+phases:
+  - id: P0
+    title: "Repo skeleton + build framework"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: bifrost-platform-plugin-market-data repo has pyproject.toml, src skeleton,
+      Dockerfile, K8s base manifests (namespace plugin-market-data), Makefile, CLAUDE.md.
+      Must pass: make install-dev && make lint && make test (empty tests OK).
+
+      Deliverables:
+      - pyproject.toml (bifrost-market-data package, deps: httpx, psycopg[binary], pyyaml, redis)
+      - src/bifrost_market_data/ with subpackage stubs (schema/, polygon/, worker/, scheduler/, ingest/)
+      - Dockerfile (Python 3.11 single-stage)
+      - k8s/base/ (Deployment + Service + ConfigMap + kustomization, namespace: plugin-market-data)
+      - Makefile (install-dev, test, lint, db-init)
+      - CLAUDE.md (scope, boundaries, Agent constraints)
+      - config/market-data.yaml.example
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make install-dev && make lint && make test"
+    acceptance:
+      - "pyproject.toml installable with pip install -e .[dev]"
+      - "ruff check passes"
+      - "pytest runs (0 or placeholder tests pass)"
+      - "Dockerfile builds without error"
+      - "K8s manifests valid YAML with namespace plugin-market-data"
+    sign_off:
+      required: false
+
+  - id: P1
+    title: "DDL design + schema creation"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Full DDL for market.* and data_ops.* schemas designed, implemented, documented.
+      This is an OWNER REVIEW GATE — Owner must confirm DDL before P2 proceeds.
+
+      Design principles:
+      - All timestamps: UTC timestamptz (no IB bar_time ambiguity)
+      - Symbol: uppercase TRIM
+      - option_ticker: Polygon native key (O:AAPL250620C00150000)
+      - Partitions: stock daily by year, option daily/snapshots by month
+      - No IB legacy fields, no source column (single Polygon source)
+      - job_ingest: supports SELECT FOR UPDATE SKIP LOCKED (PG-as-broker)
+      - Idempotent DDL (CREATE IF NOT EXISTS)
+
+      Deliverables:
+      - src/bifrost_market_data/schema/ddl.py (complete DDL)
+      - scripts/create_roles.sql (data_writer, market_reader roles)
+      - docs/SCHEMA.md (table purpose, field descriptions, partition strategy)
+      - make db-init connects to DEV PG and creates schemas + tables
+      - Unit test: DDL runs idempotently on empty database
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make db-init && make test"
+    acceptance:
+      - "market.* tables created in DEV PostgreSQL"
+      - "data_ops.* tables created in DEV PostgreSQL"
+      - "PG roles script executable"
+      - "docs/SCHEMA.md documents all tables with field descriptions"
+      - "DDL is idempotent (running twice produces no error)"
+    depends_on:
+      - P0
+    sign_off:
+      required: true
+      checklist:
+        - "Owner reviewed DDL field design"
+        - "Owner confirmed partition strategy"
+        - "Owner confirmed no missing tables for Research/AI future needs"
+
+  - id: P2
+    title: "Polygon HTTP client + rate limiter (rewrite)"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Async Polygon REST client (httpx) with token-bucket rate limiter.
+      Reference bifrost-trade-worker/data/massive/vendor/client.py for endpoint logic
+      but REWRITE from scratch with httpx async + modern error handling.
+
+      Deliverables:
+      - src/bifrost_market_data/polygon/client.py (async httpx, pagination, retry)
+      - src/bifrost_market_data/polygon/rate_limit.py (token bucket per plan tier)
+      - src/bifrost_market_data/polygon/endpoints.py (URL builders for all Polygon APIs used)
+      - Unit tests for client and rate limiter
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make test"
+    acceptance:
+      - "Client can fetch /v2/aggs/ticker/{}/range (stock daily)"
+      - "Client can fetch /v3/reference/options/contracts"
+      - "Client can fetch /v3/snapshot/options/{}"
+      - "Rate limiter respects Starter (5/min) and Developer (unlimited but throttled) tiers"
+      - "All tests pass"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  - id: P3
+    title: "Worker core loop (PG-as-broker)"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: asyncio worker that claims jobs from data_ops.job_ingest via
+      SELECT FOR UPDATE SKIP LOCKED, dispatches to ingest handlers, marks done/failed.
+
+      Deliverables:
+      - src/bifrost_market_data/worker/loop.py (main asyncio loop)
+      - src/bifrost_market_data/worker/claim.py (PG job claim logic)
+      - src/bifrost_market_data/worker/health.py (/health HTTP + heartbeat)
+      - scripts/run_worker.py (entry point: --pool stocks|options)
+      - Unit tests for claim/dispatch logic
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make test"
+    acceptance:
+      - "Worker claims pending jobs and routes by kind"
+      - "Failed jobs increment attempts; exceed max_attempts → status=failed"
+      - "Health endpoint returns 200 with last_claim_at"
+      - "Graceful shutdown on SIGTERM"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  - id: P4
+    title: "Ingest handlers (all data types)"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Implement all ingest handlers that call Polygon client and upsert into market.* tables.
+
+      Handlers:
+      - stock_daily: /v2/aggs → market.stock_daily
+      - option_daily: /v2/aggs → market.option_daily
+      - option_snapshot: /v3/snapshot/options → market.option_snapshot
+      - option_contract: /v3/reference/options/contracts → market.option_contract
+      - ticker_sync: /v3/reference/tickers → market.ticker + market.ticker_overview
+      - financials: /vX/reference/financials → market.stock_financials
+      - corporate_action: /vX/reference/splits + dividends → market.corporate_action
+      - eod_pipeline: orchestrates OI + max pain for watchlist
+
+      Deliverables:
+      - src/bifrost_market_data/ingest/*.py (one file per handler)
+      - Integration tests (mock HTTP, verify PG upsert)
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make test"
+    acceptance:
+      - "Each handler: Polygon response → parsed → upserted to correct market.* table"
+      - "Upserts are idempotent (re-run same data = no duplicates)"
+      - "Error handling: transient → retry, permanent → fail with message"
+    depends_on:
+      - P2
+      - P3
+    sign_off:
+      required: true
+      checklist:
+        - "All Polygon endpoint coverage verified"
+        - "Upsert idempotency confirmed"
+
+  - id: P5
+    title: "Scheduler + K8s CronJob"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: CronJob-driven scheduler that generates daily ingest jobs into data_ops.job_ingest.
+      Replaces Celery Beat entirely.
+
+      Schedule (UTC):
+      - 21:30 Stock daily EOD (watchlist)
+      - 22:00 EOD pipeline (OI + max pain) + SEPA universe grouped daily
+      - 22:45 Reconcile
+      - 23:00 Corporate actions
+      - */6h Option contracts refresh
+      - 02:15 Trim old jobs
+
+      Deliverables:
+      - src/bifrost_market_data/scheduler/daily.py
+      - config/schedule.yaml
+      - k8s/base/cronjob-daily.yaml (+ cronjob-maintenance.yaml)
+      - scripts/backfill.py (manual full backfill entry)
+      - Idempotent enqueue (payload_hash dedup)
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make test"
+    acceptance:
+      - "Scheduler generates correct jobs for a given date"
+      - "Duplicate scheduling same date = no new rows (dedup)"
+      - "CronJob YAML valid and targets namespace plugin-market-data"
+      - "Backfill script can enqueue N years of stock_daily jobs"
+    depends_on:
+      - P3
+    sign_off:
+      required: false
+
+  - id: P6
+    title: "K8s deployment + Platform integration"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Subcontractor running in K8s, visible in Ops Console, consuming watchlist.
+
+      Deliverables:
+      - Namespace plugin-market-data created
+      - Deployments: polygon-worker-stocks (replicas 1) + polygon-worker-options (replicas 1)
+      - CronJob deployed and triggering
+      - Health probes working (Platform can detect)
+      - Ops Console catalog: marketDataSubcontractorCatalog.ts (Subcontractors → Plugin Gallery)
+      - Watchlist read path: cross-schema SELECT from public.watchlist (or user_config.watchlist)
+      - NetworkPolicy: allow PG + Polygon REST egress
+    verify_cmd: "kubectl -n plugin-market-data get deploy && make -C bifrost-platform-plugin-market-data verify-market-data"
+    acceptance:
+      - "Worker pods Running in plugin-market-data namespace"
+      - "Health endpoint returns 200"
+      - "Platform matrix shows market-data service"
+      - "Jobs being claimed and executed"
+    depends_on:
+      - P4
+      - P5
+    sign_off:
+      required: true
+      checklist:
+        - "DEV K8s deployment verified"
+        - "Platform health probe green"
+
+  - id: P7
+    title: "Full backfill + data quality verification"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: market.* tables populated with full historical depth (per Polygon plan tier).
+      Data quality verified: continuity, completeness, freshness.
+
+      Deliverables:
+      - Full stock_daily backfill (plan-allowed history)
+      - Watchlist option chains backfilled
+      - Option snapshots accumulating daily
+      - Financials batch complete
+      - Data quality report (gap check, row counts, date coverage)
+      - Platform Freshness probe connected (data_ops.ingest_freshness)
+    verify_cmd: "cd bifrost-platform-plugin-market-data && python scripts/verify_data_quality.py"
+    acceptance:
+      - "stock_daily: >4000 symbols, no date gaps in last 30 trading days"
+      - "option_snapshot: watchlist symbols have daily snapshots"
+      - "Freshness: all dimensions < 24h stale"
+    depends_on:
+      - P6
+    sign_off:
+      required: true
+      checklist:
+        - "Data completeness report reviewed"
+        - "Freshness monitoring green"
+
+  - id: P8
+    title: "Trade System consumer switchover"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Trade API / Daemon readers point to market.* instead of public.* tables.
+      Old Celery massive workers stopped. Frontend verified.
+
+      Deliverables:
+      - bifrost-trade-core reader modules updated (market.stock_daily etc.)
+      - bifrost-trade-api Research/Market/Portfolio domains read market.*
+      - bifrost-trade-worker/data/massive/ Celery tasks disabled/stopped
+      - Trade Frontend market data pages verified correct
+      - Celery stocks_massive / options_massive queues drained and empty
+    verify_cmd: "cd bifrost-trade-api && make test && cd ../bifrost-trade-frontend && npm run build"
+    acceptance:
+      - "Trade Frontend option pages show data from market.* tables"
+      - "No Celery massive workers running"
+      - "Trade API tests pass with new schema paths"
+    depends_on:
+      - P7
+    sign_off:
+      required: true
+      checklist:
+        - "Frontend visual verification by Owner"
+        - "Old Celery workers confirmed stopped"
+
+  - id: P9
+    title: "Cleanup + permission lockdown"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Drop old public.* market tables, remove dead code, lock PG roles.
+
+      Deliverables:
+      - DROP TABLE public.stock_day, public.stock_min, public.option_day, etc.
+      - bifrost-trade-worker/data/massive/ code removed or deprecated
+      - PG Role lockdown: data_writer cannot write trade.*
+      - DDL ownership transferred: market/data_ops DDL lives in market-data repo only
+      - tradeCeleryK8sIdealCatalog.ts updated: Massive queues superseded
+      - Program sign-off
+    verify_cmd: "psql -c \"SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'stock_%'\" | grep 0"
+    acceptance:
+      - "No market data tables remain in public schema"
+      - "PG role isolation enforced"
+      - "Dead Celery code removed"
+    depends_on:
+      - P8
+    sign_off:
+      required: true
+      checklist:
+        - "Old tables dropped"
+        - "Role lockdown tested"
+        - "Program complete"
+
+metadata:
+  created_at: "2026-07-29"
+  owner: "vision-mac-trader"
+  lane_id: polygon-vendor
+  prerequisite_programs:
+    - trade-celery-k8s-ideal
+  tags:
+    - market-data
+    - polygon
+    - subcontractor
+    - plugin
+    - schema-isolation
+    - k8s-native
