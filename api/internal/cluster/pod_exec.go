@@ -34,6 +34,23 @@ func (s *Service) execOnPrimary(ctx context.Context, primary string, command ...
 	return s.podExec()(ctx, kubeconfig, cnpgNamespace, primary, "postgres", command...)
 }
 
+// ExecSQLOnPrimary runs `psql -tAc <sql>` on the CNPG primary against ``database``.
+// Used by plugin probes (e.g. market-data ingest_freshness).
+func (s *Service) ExecSQLOnPrimary(ctx context.Context, database, sql string) (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("cluster service unavailable")
+	}
+	db := strings.TrimSpace(database)
+	if db == "" {
+		return "", fmt.Errorf("database is required")
+	}
+	primary, err := s.resolveCNPGPrimary(ctx)
+	if err != nil {
+		return "", err
+	}
+	return s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", db, "-tAc", sql)
+}
+
 func defaultKubectlExec(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
 	args := []string{"exec", "-n", namespace, pod, "-c", container, "--"}
 	args = append(args, command...)

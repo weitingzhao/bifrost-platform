@@ -267,7 +267,8 @@ phases:
 
   - id: P8
     title: "Trade System consumer switchover"
-    status: pending
+    status: completed
+    completed_at: "2026-07-30"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 

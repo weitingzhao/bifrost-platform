@@ -10,12 +10,15 @@ const (
 	optionsHealthHost = "market-data-health-options.plugin-market-data.svc.cluster.local"
 	healthServicePort = "8080"
 	healthPath        = "/health"
+	defaultFreshnessDB = "bifrost_dev"
+	freshnessMaxAgeH   = 24.0
 )
 
-// Config holds optional overrides for health probing.
+// Config holds optional overrides for health / freshness probing.
 type Config struct {
 	StocksHealthURL  string
 	OptionsHealthURL string
+	FreshnessDB      string
 }
 
 func ConfigFromEnv() Config {
@@ -36,5 +39,9 @@ func ConfigFromEnv() Config {
 			options = "http://" + optionsHealthHost + ":" + healthServicePort + healthPath
 		}
 	}
-	return Config{StocksHealthURL: stocks, OptionsHealthURL: options}
+	db := os.Getenv("MARKET_DATA_FRESHNESS_DB")
+	if db == "" {
+		db = defaultFreshnessDB
+	}
+	return Config{StocksHealthURL: stocks, OptionsHealthURL: options, FreshnessDB: db}
 }

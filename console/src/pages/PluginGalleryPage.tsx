@@ -124,6 +124,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
 
   const deployments = marketProbe.status?.deployments ?? []
   const workers = marketProbe.status?.workers ?? []
+  const freshness = marketProbe.status?.freshness ?? []
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -272,6 +273,51 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
                   {w.uptime_sec != null ? ` · uptime ${Math.round(w.uptime_sec)}s` : ''}
                   {w.last_claim_at != null && w.last_claim_at !== ''
                     ? ` · last claim ${w.last_claim_at}`
+                    : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </OpsSection>
+
+      <OpsSection title="Market Data freshness" bodyPadding="default" overflow="visible">
+        {freshness.length === 0 ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            No ingest_freshness rows yet — run workers / daily CronJobs, then refresh.
+            {marketProbe.status?.freshness_reachability != null
+              ? ` · reach ${marketProbe.status.freshness_reachability}`
+              : ''}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {freshness.map(f => (
+              <div
+                key={f.dimension}
+                className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[var(--text-dense-label)] font-semibold font-mono">
+                    {f.dimension}
+                  </span>
+                  <DenseTag
+                    variant={
+                      f.verdict === 'ok'
+                        ? 'success'
+                        : f.verdict === 'stale'
+                          ? 'warning'
+                          : 'neutral'
+                    }
+                  >
+                    {f.verdict}
+                  </DenseTag>
+                  <DenseTag variant="info">{f.rows_written} rows</DenseTag>
+                </div>
+                <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  status {f.status ?? '—'}
+                  {Number.isFinite(f.age_hours) ? ` · age ${f.age_hours.toFixed(1)}h` : ''}
+                  {f.last_run_at != null && f.last_run_at !== ''
+                    ? ` · last run ${f.last_run_at}`
                     : ''}
                 </p>
               </div>

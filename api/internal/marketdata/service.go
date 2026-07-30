@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,10 @@ type Service struct {
 	cfg     Config
 	cluster *cluster.Service
 	client  *http.Client
+	// freshnessProbe overrides CNPG query in unit tests.
+	freshnessProbe func(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string)
+	// deploymentsOverride skips live K8s reads in unit tests.
+	deploymentsOverride []DeploymentInfo
 }
 
 func NewService(clusterSvc *cluster.Service) *Service {
@@ -32,17 +37,23 @@ func NewService(clusterSvc *cluster.Service) *Service {
 func (s *Service) Status(ctx context.Context) StatusResponse {
 	now := time.Now().UTC()
 	resp := StatusResponse{
-		Reachable:    false,
-		Reachability: probe.ReachUnknown,
-		HealthReach:  probe.ReachUnknown,
-		Autonomy:     "L0",
-		Deployments:  []DeploymentInfo{},
-		GeneratedAt:  now,
+		Reachable:      false,
+		Reachability:   probe.ReachUnknown,
+		HealthReach:    probe.ReachUnknown,
+		FreshnessReach: probe.ReachUnknown,
+		Autonomy:       "L0",
+		Deployments:    []DeploymentInfo{},
+		Freshness:      []FreshnessInfo{},
+		GeneratedAt:    now,
 	}
 
 	stocks := s.readDeployment(ctx, stocksDeployName)
 	options := s.readDeployment(ctx, optionsDeployName)
-	resp.Deployments = []DeploymentInfo{stocks, options}
+	if s.deploymentsOverride != nil {
+		resp.Deployments = append([]DeploymentInfo{}, s.deploymentsOverride...)
+	} else {
+		resp.Deployments = []DeploymentInfo{stocks, options}
+	}
 
 	workers := make([]WorkerInfo, 0, 2)
 	healthErrors := make([]string, 0, 2)
@@ -65,6 +76,16 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 		resp.Hint = "Ensure plugin-market-data NS is applied and per-pool health Services are reachable"
 	}
 
+	freshRows, freshReach, freshErr := s.probeFreshness(ctx)
+	resp.Freshness = freshRows
+	resp.FreshnessReach = freshReach
+	// Informational unknown (no rows yet) must not populate Error — Console treats
+	// non-empty error as fail even when reachability is ok.
+	if freshErr != "" && resp.Error == "" && freshReach != probe.ReachUnknown {
+		resp.Error = freshErr
+		resp.Hint = "Ensure data_ops.ingest_freshness is populated (worker jobs marking done)"
+	}
+
 	readyCount := 0
 	for _, d := range resp.Deployments {
 		if d.Reach == probe.ReachOK {
@@ -77,10 +98,12 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	case readyCount == 0:
 		resp.Reachability = probe.ReachFail
 		resp.Reachable = false
-	case readyCount < total || healthReach == probe.ReachFail:
+	case readyCount < total || healthReach == probe.ReachFail || freshReach == probe.ReachFail:
 		resp.Reachability = probe.ReachDegraded
 		resp.Reachable = readyCount > 0
-	case healthReach == probe.ReachDegraded || healthReach == probe.ReachUnknown:
+	case healthReach == probe.ReachDegraded || healthReach == probe.ReachUnknown ||
+		freshReach == probe.ReachDegraded:
+		// freshness unknown (no rows yet) must not degrade overall reachability
 		resp.Reachability = probe.ReachDegraded
 		resp.Reachable = true
 	default:
@@ -91,6 +114,17 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	parts := []string{fmt.Sprintf("%d/%d deployments ready", readyCount, total)}
 	for _, w := range resp.Workers {
 		parts = append(parts, fmt.Sprintf("%s %d done %d failed", w.Pool, w.JobsDone, w.JobsFailed))
+	}
+	if len(resp.Freshness) > 0 {
+		stale := 0
+		for _, f := range resp.Freshness {
+			if f.Verdict != "ok" {
+				stale++
+			}
+		}
+		parts = append(parts, fmt.Sprintf("freshness %d/%d ok", len(resp.Freshness)-stale, len(resp.Freshness)))
+	} else if freshReach != probe.ReachOK {
+		parts = append(parts, "freshness="+string(freshReach))
 	}
 	if healthReach != probe.ReachOK && len(healthErrors) > 0 {
 		parts = append(parts, "health="+string(healthReach))
@@ -193,4 +227,97 @@ func (s *Service) probeHealth(ctx context.Context, url string) (*WorkerInfo, pro
 		return worker, probe.ReachOK, ""
 	}
 	return worker, probe.ReachDegraded, "worker status=" + payload.Status
+}
+
+func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string) {
+	if s.freshnessProbe != nil {
+		return s.freshnessProbe(ctx)
+	}
+	if s.cluster == nil {
+		return nil, probe.ReachUnknown, "cluster service unavailable"
+	}
+	db := s.cfg.FreshnessDB
+	if db == "" {
+		db = defaultFreshnessDB
+	}
+	sql := "SELECT dimension, COALESCE(last_run_at::text,''), COALESCE(rows_written,0), COALESCE(status,'unknown') FROM data_ops.ingest_freshness ORDER BY dimension"
+	out, err := s.cluster.ExecSQLOnPrimary(ctx, db, sql)
+	if err != nil {
+		return nil, probe.ReachFail, err.Error()
+	}
+	rows := parseFreshnessOutput(out, time.Now().UTC())
+	if len(rows) == 0 {
+		return rows, probe.ReachUnknown, "no ingest_freshness rows"
+	}
+	reach := probe.ReachOK
+	for _, r := range rows {
+		switch r.Verdict {
+		case "stale":
+			reach = worseReach(reach, probe.ReachDegraded)
+		case "unknown":
+			reach = worseReach(reach, probe.ReachUnknown)
+		}
+	}
+	return rows, reach, ""
+}
+
+func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {
+	var rows []FreshnessInfo
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) < 4 {
+			continue
+		}
+		dim := strings.TrimSpace(parts[0])
+		lastRaw := strings.TrimSpace(parts[1])
+		rowsWritten, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+		status := strings.TrimSpace(parts[3])
+		info := FreshnessInfo{
+			Dimension:   dim,
+			RowsWritten: rowsWritten,
+			Status:      status,
+			Verdict:     "unknown",
+		}
+		if lastRaw != "" && !strings.EqualFold(lastRaw, "null") {
+			if ts, err := parseFreshnessTimestamp(lastRaw); err == nil {
+				info.LastRunAt = ts.UTC().Format(time.RFC3339)
+				age := now.Sub(ts.UTC()).Hours()
+				if age < 0 {
+					age = 0
+				}
+				info.AgeHours = age
+				if strings.EqualFold(status, "ok") && age < freshnessMaxAgeH {
+					info.Verdict = "ok"
+				} else {
+					info.Verdict = "stale"
+				}
+			}
+		}
+		rows = append(rows, info)
+	}
+	return rows
+}
+
+func parseFreshnessTimestamp(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999-07",
+		"2006-01-02 15:04:05.999999+00",
+		"2006-01-02 15:04:05-07",
+		"2006-01-02 15:04:05+00",
+		"2006-01-02 15:04:05.999999",
+		"2006-01-02 15:04:05",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unrecognized timestamp")
 }

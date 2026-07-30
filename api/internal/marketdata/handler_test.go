@@ -75,6 +75,11 @@ func TestStatusProbesBothPools(t *testing.T) {
 			OptionsHealthURL: optionsSrv.URL + "/health",
 		},
 		client: http.DefaultClient,
+		freshnessProbe: func(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string) {
+			return []FreshnessInfo{{
+				Dimension: "stock_daily", Status: "ok", AgeHours: 1, Verdict: "ok", RowsWritten: 10,
+			}}, probe.ReachOK, ""
+		},
 	}
 	resp := svc.Status(context.Background())
 	if len(resp.Workers) != 2 {
@@ -89,6 +94,72 @@ func TestStatusProbesBothPools(t *testing.T) {
 	}
 	if resp.HealthReach != probe.ReachOK {
 		t.Fatalf("health_reach=%s", resp.HealthReach)
+	}
+	if resp.FreshnessReach != probe.ReachOK || len(resp.Freshness) != 1 {
+		t.Fatalf("freshness_reach=%s rows=%+v", resp.FreshnessReach, resp.Freshness)
+	}
+}
+
+func TestParseFreshnessOutput(t *testing.T) {
+	now := time.Date(2024, 6, 20, 18, 0, 0, 0, time.UTC)
+	out := "stock_daily|2024-06-20 17:00:00+00|42|ok\noption_snapshot|2024-06-18 17:00:00+00|5|ok\n"
+	rows := parseFreshnessOutput(out, now)
+	if len(rows) != 2 {
+		t.Fatalf("rows=%d", len(rows))
+	}
+	if rows[0].Dimension != "stock_daily" || rows[0].Verdict != "ok" || rows[0].RowsWritten != 42 {
+		t.Fatalf("row0=%+v", rows[0])
+	}
+	if rows[1].Verdict != "stale" {
+		t.Fatalf("expected stale for old snapshot, got %+v", rows[1])
+	}
+}
+
+func TestStatusFreshnessUnknownDoesNotDegrade(t *testing.T) {
+	stocksMux := http.NewServeMux()
+	stocksMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "ok", "pool": "stocks", "jobs_done": 1, "jobs_failed": 0, "uptime_sec": 1,
+		})
+	})
+	stocksSrv := httptest.NewServer(stocksMux)
+	defer stocksSrv.Close()
+
+	optionsMux := http.NewServeMux()
+	optionsMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "ok", "pool": "options", "jobs_done": 1, "jobs_failed": 0, "uptime_sec": 1,
+		})
+	})
+	optionsSrv := httptest.NewServer(optionsMux)
+	defer optionsSrv.Close()
+
+	svc := &Service{
+		cfg: Config{
+			StocksHealthURL:  stocksSrv.URL + "/health",
+			OptionsHealthURL: optionsSrv.URL + "/health",
+		},
+		client: http.DefaultClient,
+		deploymentsOverride: []DeploymentInfo{
+			{Namespace: pluginNamespace, Name: stocksDeployName, Ready: "1/1", Reach: probe.ReachOK},
+			{Namespace: pluginNamespace, Name: optionsDeployName, Ready: "1/1", Reach: probe.ReachOK},
+		},
+		freshnessProbe: func(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string) {
+			return nil, probe.ReachUnknown, "no ingest_freshness rows"
+		},
+	}
+	resp := svc.Status(context.Background())
+	if resp.FreshnessReach != probe.ReachUnknown {
+		t.Fatalf("freshness_reach=%s want unknown", resp.FreshnessReach)
+	}
+	if resp.HealthReach != probe.ReachOK {
+		t.Fatalf("health_reach=%s", resp.HealthReach)
+	}
+	if resp.Reachability != probe.ReachOK {
+		t.Fatalf("overall reachability=%s want ok (freshness unknown must not degrade)", resp.Reachability)
+	}
+	if resp.Error != "" {
+		t.Fatalf("error=%q want empty (informational freshness unknown must not set Error)", resp.Error)
 	}
 }
 
@@ -109,5 +180,8 @@ func TestHandleStatusWithoutCluster(t *testing.T) {
 	}
 	if len(body.Deployments) != 2 {
 		t.Fatalf("deployments=%d", len(body.Deployments))
+	}
+	if body.FreshnessReach != probe.ReachUnknown {
+		t.Fatalf("freshness_reach=%s want unknown", body.FreshnessReach)
 	}
 }

@@ -188,6 +188,15 @@ export interface MarketDataWorkerInfo {
   last_claim_at?: string
 }
 
+export interface MarketDataFreshnessInfo {
+  dimension: string
+  last_run_at?: string
+  rows_written: number
+  status?: string
+  age_hours: number
+  verdict: 'ok' | 'stale' | 'unknown' | string
+}
+
 export interface MarketDataStatusResponse {
   reachable?: boolean
   reachability?: MarketDataReachability
@@ -195,6 +204,8 @@ export interface MarketDataStatusResponse {
   deployments?: MarketDataDeploymentInfo[]
   workers?: MarketDataWorkerInfo[]
   health_reachability?: MarketDataReachability
+  freshness?: MarketDataFreshnessInfo[]
+  freshness_reachability?: MarketDataReachability
   autonomy?: string
   error?: string
   hint?: string
