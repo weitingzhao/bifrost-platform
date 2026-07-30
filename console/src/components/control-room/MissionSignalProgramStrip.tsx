@@ -37,7 +37,11 @@ export function MissionSignalProgramStrip({ onOpenDelivery }: MissionSignalProgr
     boardEntry?.phases_signed ??
     boardEntry?.signed ??
     0
-  const totalPhases = programQ.data?.phases.length ?? boardEntry?.phase_count ?? MISSION_SIGNAL_PHASES.length
+  const totalPhases =
+    programQ.data?.phases.filter(p => p.sign_off?.required !== false).length ??
+    boardEntry?.sign_off_required_count ??
+    boardEntry?.phase_count ??
+    MISSION_SIGNAL_PHASES.length
 
   const nextPhase = MISSION_SIGNAL_PHASES.find(p => {
     const detail = programQ.data?.phases.find(ph => ph.id === p.id)
@@ -87,7 +91,7 @@ export function MissionSignalProgramStrip({ onOpenDelivery }: MissionSignalProgr
       <div className="flex flex-wrap items-center gap-2">
         <StatusLamp value={missionLamp} kind="reach" />
         <DenseTag variant={signedCount === totalPhases && totalPhases > 0 ? 'success' : 'warning'}>
-          {signedCount}/{totalPhases} signed
+          {signedCount}/{totalPhases} gates
         </DenseTag>
         <span className="text-dense-meta text-muted-foreground">
           Mission {snapshotLoading ? '…' : missionStatus(snapshot.missionOverall)}

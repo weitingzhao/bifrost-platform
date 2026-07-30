@@ -144,6 +144,8 @@ export const SCOPE_TO_SYSTEM_DOMAIN: Record<string, SystemDomainId> = {
   'ib-gateway-reconnect': 'subcontractors',
   'plugin-launch': 'subcontractors',
   'plugin-release': 'subcontractors',
+  'market-data': 'subcontractors',
+  'market-data-subcontractor': 'subcontractors',
 
   // Ground
   network: 'ground-systems',

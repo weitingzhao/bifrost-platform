@@ -1,4 +1,8 @@
-import type { IbGatewayControlResponse, IbGatewayStatusResponse } from './satelliteBusTypes'
+import type {
+  IbGatewayControlResponse,
+  IbGatewayStatusResponse,
+  MarketDataStatusResponse,
+} from './satelliteBusTypes'
 import type { NetworkAuditResponse, NetworkClientsResponse, NetworkDevicesResponse, NetworkFirewallApplyResponse, NetworkPoliciesResponse, NetworkStatusResponse, NetworkZonesResponse } from './networkTypes'
 import { authedFetch } from './client'
 
@@ -58,6 +62,19 @@ export async function fetchNetworkPolicies(): Promise<NetworkPoliciesResponse> {
 export async function fetchIbGatewayStatus(): Promise<IbGatewayStatusResponse> {
   const r = await fetch('/api/v1/plugins/ib-gateway/status')
   const body = (await r.json()) as IbGatewayStatusResponse
+  if (!r.ok) {
+    return {
+      ...body,
+      reachable: false,
+      error: body.error ?? `HTTP ${r.status}`,
+    }
+  }
+  return body
+}
+
+export async function fetchMarketDataStatus(): Promise<MarketDataStatusResponse> {
+  const r = await fetch('/api/v1/plugins/market-data/status')
+  const body = (await r.json()) as MarketDataStatusResponse
   if (!r.ok) {
     return {
       ...body,

@@ -15,6 +15,8 @@ export interface ProgramSummary {
   phases_done: number
   phases_signed?: number
   signed?: number
+  /** Phases that require Owner sign-off (gates). Falls back to phase_count when absent. */
+  sign_off_required_count?: number
   complete?: boolean
   all_phases_done: boolean
   active: boolean
@@ -166,6 +168,8 @@ export type DeliveryBoardProgramOverview = {
   description: string
   formerLocation: string
   phaseCount: number
+  phasesDone: number
+  gateCount: number
   signed: number
   complete: boolean
   signOffMechanism?: string
@@ -174,12 +178,15 @@ export type DeliveryBoardProgramOverview = {
 
 export function mapProgramSummaryToOverview(p: ProgramSummary): DeliveryBoardProgramOverview {
   const signed = p.signed ?? p.phases_signed ?? 0
+  const gateCount = p.sign_off_required_count ?? p.phase_count
   return {
     id: p.id,
     label: p.label ?? p.title,
     description: p.description,
     formerLocation: p.former_location ?? p.delivery?.former_location ?? '',
     phaseCount: p.phase_count,
+    phasesDone: p.phases_done,
+    gateCount,
     signed,
     complete: p.complete ?? (p.phase_count > 0 && signed === p.phase_count),
     signOffMechanism: p.sign_off_mechanism ?? p.delivery?.sign_off_mechanism,

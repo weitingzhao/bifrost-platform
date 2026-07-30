@@ -104,6 +104,21 @@ func (h *Handler) countSignedPhases(rt *programRuntime) int {
 	return n
 }
 
+// countSignOffRequiredPhases returns how many phases need Owner sign-off (gates).
+// A phase is a gate when SignOff is nil (legacy default) or SignOff.Required is true.
+func countSignOffRequiredPhases(bp *ProgramBlueprint) int {
+	if bp == nil {
+		return 0
+	}
+	n := 0
+	for _, p := range bp.Phases {
+		if p.SignOff == nil || p.SignOff.Required {
+			n++
+		}
+	}
+	return n
+}
+
 func (h *Handler) phaseSignoffRecord(rt *programRuntime, phaseID string) *PhaseSignOffRecord {
 	return h.phaseSignoffRecordLocked(rt, phaseID)
 }

@@ -170,7 +170,12 @@ export function ProgramDetailView({
     () => detail?.phases.filter(p => p.signed_off).length ?? 0,
     [detail?.phases],
   )
+  const gateCount = useMemo(
+    () => detail?.phases.filter(p => p.sign_off?.required !== false).length ?? 0,
+    [detail?.phases],
+  )
   const totalPhases = detail?.phases.length ?? 0
+  const phasesDone = detail?.program.phases_done ?? 0
   const isVisionProgram = programId === 'vision'
   const isMissionSignalProgram = programId === 'mission-signal'
   const panelSignOffOnly = isVisionProgram || isMissionSignalProgram
@@ -189,9 +194,12 @@ export function ProgramDetailView({
         title={detail.program.title}
         description={detail.program.description}
         actions={
-          <div className="flex items-center gap-2">
-            <DenseTag variant={signedCount === totalPhases && totalPhases > 0 ? 'success' : 'warning'}>
-              {signedCount}/{totalPhases} signed
+          <div className="flex flex-wrap items-center gap-2">
+            <DenseTag variant={signedCount === gateCount && gateCount > 0 ? 'success' : 'warning'}>
+              {signedCount}/{gateCount} gates signed
+            </DenseTag>
+            <DenseTag variant={phasesDone === totalPhases && totalPhases > 0 ? 'success' : 'neutral'}>
+              {phasesDone}/{totalPhases} phases done
             </DenseTag>
           </div>
         }

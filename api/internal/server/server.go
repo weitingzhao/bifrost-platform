@@ -33,6 +33,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/lanes"
+	"github.com/weitingzhao/bifrost-platform/api/internal/marketdata"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
@@ -87,6 +88,7 @@ type Server struct {
 	briefing        *briefing.Handler
 	network         *network.Handler
 	ibgateway       *ibgateway.Handler
+	marketdata      *marketdata.Handler
 	telemetry       *telemetry.Handler
 	lanes           *lanes.Handler
 	sessions        *sessions.Handler
@@ -174,6 +176,7 @@ func New(cfg *config.Config) (*Server, error) {
 		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store(), clusterH),
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
+		marketdata:      marketdata.NewHandler(clusterH.Service()),
 		telemetry:       telemetry.NewHandler(cfg),
 		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
 		sessions:        sessionsH,
@@ -230,6 +233,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/network/devices", s.network.HandleDevices)
 		r.Get("/network/clients", s.network.HandleClients)
 		r.Get("/plugins/ib-gateway/status", s.ibgateway.HandleStatus)
+		r.Get("/plugins/market-data/status", s.marketdata.HandleStatus)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
 		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)

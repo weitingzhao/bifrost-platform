@@ -100,7 +100,7 @@ function ProgramBandTable({
         <DenseTableHeadRow>
           <DenseTableHead>Program</DenseTableHead>
           <DenseTableHead>Lane</DenseTableHead>
-          <DenseTableHead>Phases</DenseTableHead>
+          <DenseTableHead>Done</DenseTableHead>
           <DenseTableHead>Signed</DenseTableHead>
           <DenseTableHead>Status</DenseTableHead>
           <DenseTableHead>Former location</DenseTableHead>
@@ -124,9 +124,11 @@ function ProgramBandTable({
               <DenseTableCell className="font-mono text-dense-meta">
                 {program.laneId ?? '—'}
               </DenseTableCell>
-              <DenseTableCell className="font-mono-tabular">{program.phaseCount}</DenseTableCell>
               <DenseTableCell className="font-mono-tabular">
-                {program.signed}/{program.phaseCount}
+                {program.phasesDone}/{program.phaseCount}
+              </DenseTableCell>
+              <DenseTableCell className="font-mono-tabular">
+                {program.signed}/{program.gateCount} gates
               </DenseTableCell>
               <DenseTableCell>
                 <DenseTag variant={programStatusVariant(program.signed, program.complete)}>
@@ -349,7 +351,7 @@ export function DeliveryBoardPage({
       {selectedProgramId != null && selectedProgram != null && (
         <OpsSection
           title={selectedProgram.label}
-          description={`${selectedProgram.signed}/${selectedProgram.phaseCount} phases signed · read-only on Delivery Board · sign-off in Briefing Session`}
+          description={`${selectedProgram.signed}/${selectedProgram.gateCount} gates · ${selectedProgram.phasesDone}/${selectedProgram.phaseCount} done · read-only on Delivery Board · sign-off in Briefing Session`}
           overflow="visible"
         >
           <DeliveryBoardProgramPanels programId={selectedProgramId} allowSignOff={false} />

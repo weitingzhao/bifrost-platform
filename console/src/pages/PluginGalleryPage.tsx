@@ -11,6 +11,7 @@ import {
   type OpsVerdictTagVariant,
 } from '@/components/layout/OpsVerdictStrip'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
+import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 const PLUGIN_REGISTRY = [
@@ -22,18 +23,11 @@ const PLUGIN_REGISTRY = [
     status: 'live',
   },
   {
-    id: 'massive-stock',
-    name: 'Massive Stock feed',
+    id: 'market-data',
+    name: 'Market Data (Polygon)',
     vendor: 'Polygon.io',
-    role: 'Planned subcontractor plugin',
-    status: 'planned',
-  },
-  {
-    id: 'massive-option',
-    name: 'Massive Option feed',
-    vendor: 'Polygon.io',
-    role: 'Planned subcontractor plugin',
-    status: 'planned',
+    role: 'REST ingest · stock/option bars + snapshots · PG-as-broker @ plugin-market-data NS',
+    status: 'live',
   },
   {
     id: 'flex-query',
@@ -50,60 +44,40 @@ function statusVariant(status: string): 'success' | 'neutral' | 'info' {
   return 'info'
 }
 
-function pluginBusVerdict(liveProbe: ReturnType<typeof useIbGatewayLiveProbe>): {
+function reachVerdict(
+  isLoading: boolean,
+  probeReach: 'ok' | 'degraded' | 'fail' | 'unknown',
+  summary: string,
+  loadingSummary: string,
+): {
   lamp: OpsVerdictLamp
   tagLabel: string
   tagVariant: OpsVerdictTagVariant
   summary: string
 } {
-  if (liveProbe.isLoading) {
+  if (isLoading) {
     return {
       lamp: 'unknown',
       tagLabel: 'PROBING',
       tagVariant: 'neutral',
-      summary: 'Probing ib-gateway via platform-api…',
+      summary: loadingSummary,
     }
   }
-
-  const mode = liveProbe.status?.mode
-  const modeNote = mode != null && mode !== '' ? ` · mode ${mode}` : ''
-  const deploy = liveProbe.status?.deployment?.ready
-  const deployNote = deploy != null && deploy !== '' ? ` · deployment ${deploy}` : ''
-
-  switch (liveProbe.probeReach) {
+  switch (probeReach) {
     case 'ok':
-      return {
-        lamp: 'ok',
-        tagLabel: 'OK',
-        tagVariant: 'success',
-        summary: `${liveProbe.summary}${modeNote}${deployNote}`,
-      }
+      return { lamp: 'ok', tagLabel: 'OK', tagVariant: 'success', summary }
     case 'degraded':
-      return {
-        lamp: 'degraded',
-        tagLabel: 'DEGRADED',
-        tagVariant: 'warning',
-        summary: `${liveProbe.summary}${modeNote}${deployNote}`,
-      }
+      return { lamp: 'degraded', tagLabel: 'DEGRADED', tagVariant: 'warning', summary }
     case 'fail':
-      return {
-        lamp: 'fail',
-        tagLabel: 'FAIL',
-        tagVariant: 'danger',
-        summary: `${liveProbe.summary}${modeNote}${deployNote}`,
-      }
+      return { lamp: 'fail', tagLabel: 'FAIL', tagVariant: 'danger', summary }
     default:
-      return {
-        lamp: 'unknown',
-        tagLabel: 'UNKNOWN',
-        tagVariant: 'neutral',
-        summary: `${liveProbe.summary}${modeNote}${deployNote}`,
-      }
+      return { lamp: 'unknown', tagLabel: 'UNKNOWN', tagVariant: 'neutral', summary }
   }
 }
 
 export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string) => void } = {}) {
   const liveProbe = useIbGatewayLiveProbe()
+  const marketProbe = useMarketDataLiveProbe()
   const { canOperate } = usePlatformAuth()
   const [reconnectOpen, setReconnectOpen] = useState(false)
   const [acting, setActing] = useState(false)
@@ -112,7 +86,23 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
 
   const liveCount = PLUGIN_REGISTRY.filter(p => p.status === 'live').length
   const plannedCount = PLUGIN_REGISTRY.filter(p => p.status === 'planned').length
-  const verdict = pluginBusVerdict(liveProbe)
+
+  const mode = liveProbe.status?.mode
+  const modeNote = mode != null && mode !== '' ? ` · mode ${mode}` : ''
+  const deploy = liveProbe.status?.deployment?.ready
+  const deployNote = deploy != null && deploy !== '' ? ` · deployment ${deploy}` : ''
+  const verdict = reachVerdict(
+    liveProbe.isLoading,
+    liveProbe.probeReach,
+    `${liveProbe.summary}${modeNote}${deployNote}`,
+    'Probing ib-gateway via platform-api…',
+  )
+  const marketVerdict = reachVerdict(
+    marketProbe.isLoading,
+    marketProbe.probeReach,
+    marketProbe.summary,
+    'Probing market-data via platform-api…',
+  )
 
   const runReconnect = useCallback(async () => {
     setActing(true)
@@ -131,6 +121,9 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
       setReconnectOpen(false)
     }
   }, [liveProbe])
+
+  const deployments = marketProbe.status?.deployments ?? []
+  const workers = marketProbe.status?.workers ?? []
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -176,6 +169,31 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
         }
       />
 
+      <OpsVerdictStrip
+        ariaLabel="Market data plugin verdict"
+        title="MARKET DATA · POLYGON"
+        lamp={marketVerdict.lamp}
+        tagLabel={marketVerdict.tagLabel}
+        tagVariant={marketVerdict.tagVariant}
+        summary={marketVerdict.summary}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={marketProbe.isLoading}
+            onClick={() => marketProbe.refetch()}
+          >
+            Refresh
+          </Button>
+        }
+        meta={
+          <span>
+            NS plugin-market-data · L0 observe
+            {marketProbe.status?.autonomy != null ? ` · ${marketProbe.status.autonomy}` : ''}
+          </span>
+        }
+      />
+
       {actionMsg != null ? (
         <OpsFeedback variant={actionFailed ? 'error' : 'success'} title="Reconnect">
           {actionMsg}
@@ -199,6 +217,67 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
             </div>
           ))}
         </div>
+      </OpsSection>
+
+      <OpsSection title="Market Data workers" bodyPadding="default" overflow="visible">
+        {deployments.length === 0 && workers.length === 0 ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            No deployment / worker snapshot yet — apply k8s/base or check platform-api probe.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {deployments.map(d => (
+              <div
+                key={d.name}
+                className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[var(--text-dense-label)] font-semibold">{d.name}</span>
+                  <DenseTag
+                    variant={
+                      d.reachability === 'ok'
+                        ? 'success'
+                        : d.reachability === 'degraded'
+                          ? 'warning'
+                          : d.reachability === 'fail'
+                            ? 'danger'
+                            : 'neutral'
+                    }
+                  >
+                    {d.ready}
+                  </DenseTag>
+                </div>
+                {d.detail != null && d.detail !== '' ? (
+                  <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                    {d.detail}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+            {workers.map(w => (
+              <div
+                key={w.pool}
+                className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[var(--text-dense-label)] font-semibold">
+                    pool {w.pool}
+                  </span>
+                  <DenseTag variant="info">
+                    {w.jobs_done} done · {w.jobs_failed} failed
+                  </DenseTag>
+                </div>
+                <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  status {w.status ?? '—'}
+                  {w.uptime_sec != null ? ` · uptime ${Math.round(w.uptime_sec)}s` : ''}
+                  {w.last_claim_at != null && w.last_claim_at !== ''
+                    ? ` · last claim ${w.last_claim_at}`
+                    : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </OpsSection>
 
       <IbGatewayLiveStatusPanel showPrimaryActions={false} />

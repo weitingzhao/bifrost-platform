@@ -168,3 +168,35 @@ export interface IbGatewayControlResponse {
   message: string
   generated_at?: string
 }
+
+export type MarketDataReachability = 'ok' | 'degraded' | 'fail' | 'unknown'
+
+export interface MarketDataDeploymentInfo {
+  namespace: string
+  name: string
+  ready: string
+  reachability: MarketDataReachability
+  detail?: string
+}
+
+export interface MarketDataWorkerInfo {
+  pool: string
+  status?: string
+  jobs_done: number
+  jobs_failed: number
+  uptime_sec?: number
+  last_claim_at?: string
+}
+
+export interface MarketDataStatusResponse {
+  reachable?: boolean
+  reachability?: MarketDataReachability
+  summary?: string
+  deployments?: MarketDataDeploymentInfo[]
+  workers?: MarketDataWorkerInfo[]
+  health_reachability?: MarketDataReachability
+  autonomy?: string
+  error?: string
+  hint?: string
+  generated_at?: string
+}

@@ -75,22 +75,23 @@ type PhaseBlueprint struct {
 }
 
 type ProgramSummary struct {
-	ID               string          `json:"id"`
-	Title            string          `json:"title"`
-	Label            string          `json:"label,omitempty"`
-	Description      string          `json:"description"`
-	Status           string          `json:"status"`
-	LaneID           string          `json:"lane_id,omitempty"`
-	PhaseCount       int             `json:"phase_count"`
-	PhasesDone       int             `json:"phases_done"`
-	PhasesSigned     int             `json:"phases_signed,omitempty"`
-	Signed           int             `json:"signed,omitempty"`
-	Complete         bool            `json:"complete,omitempty"`
-	AllPhasesDone    bool            `json:"all_phases_done"`
-	Active           bool            `json:"active"`
-	FormerLocation   string          `json:"former_location,omitempty"`
-	SignOffMechanism string          `json:"sign_off_mechanism,omitempty"`
-	Delivery         *DeliveryConfig `json:"delivery,omitempty"`
+	ID                    string          `json:"id"`
+	Title                 string          `json:"title"`
+	Label                 string          `json:"label,omitempty"`
+	Description           string          `json:"description"`
+	Status                string          `json:"status"`
+	LaneID                string          `json:"lane_id,omitempty"`
+	PhaseCount            int             `json:"phase_count"`
+	PhasesDone            int             `json:"phases_done"`
+	PhasesSigned          int             `json:"phases_signed,omitempty"`
+	Signed                int             `json:"signed,omitempty"`
+	SignOffRequiredCount  int             `json:"sign_off_required_count"`
+	Complete              bool            `json:"complete,omitempty"`
+	AllPhasesDone         bool            `json:"all_phases_done"`
+	Active                bool            `json:"active"`
+	FormerLocation        string          `json:"former_location,omitempty"`
+	SignOffMechanism      string          `json:"sign_off_mechanism,omitempty"`
+	Delivery              *DeliveryConfig `json:"delivery,omitempty"`
 }
 
 type ProgramInfo struct {

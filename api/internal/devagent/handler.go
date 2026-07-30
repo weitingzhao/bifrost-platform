@@ -3,6 +3,7 @@ package devagent
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -142,6 +143,11 @@ func NewHandler(configDir string) (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	for _, bp := range blueprints {
+		for _, warning := range validateGateRules(bp) {
+			slog.Warn("program gate validation", "program_id", bp.ID, "warning", warning)
+		}
+	}
 
 	store := NewFileStore(configDir)
 	repoRoot := filepath.Dir(configDir)
@@ -262,29 +268,38 @@ func (h *Handler) HandlePrograms(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) ProgramSummary {
-	phasesDone := 0
+	doneFromPhases := make(map[string]bool, len(rt.phases))
 	for _, p := range rt.phases {
 		if p.Status == PhaseDone {
-			phasesDone++
+			doneFromPhases[p.ID] = true
 		}
 	}
+	if rt.state != nil {
+		for _, pr := range rt.state.PhaseProgress {
+			if pr.Status == "done" {
+				doneFromPhases[pr.PhaseID] = true
+			}
+		}
+	}
+	phasesDone := len(doneFromPhases)
 	signed := h.countSignedPhases(rt)
 	phaseCount := len(rt.blueprint.Phases)
 	complete := phaseCount > 0 && signed == phaseCount
 	summary := ProgramSummary{
-		ID:            programID,
-		Title:         rt.blueprint.Title,
-		Label:         rt.blueprint.Title,
-		Description:   rt.blueprint.Description,
-		Status:        rt.blueprint.Status,
-		PhaseCount:    phaseCount,
-		PhasesDone:    phasesDone,
-		PhasesSigned:  signed,
-		Signed:        signed,
-		Complete:      complete,
-		AllPhasesDone: phaseCount > 0 && phasesDone == phaseCount,
-		Active:        programID == h.activeProgramID,
-		Delivery:      rt.blueprint.Delivery,
+		ID:                   programID,
+		Title:                rt.blueprint.Title,
+		Label:                rt.blueprint.Title,
+		Description:          rt.blueprint.Description,
+		Status:               rt.blueprint.Status,
+		PhaseCount:           phaseCount,
+		PhasesDone:           phasesDone,
+		PhasesSigned:         signed,
+		Signed:               signed,
+		SignOffRequiredCount: countSignOffRequiredPhases(rt.blueprint),
+		Complete:             complete,
+		AllPhasesDone:        phaseCount > 0 && phasesDone == phaseCount,
+		Active:               programID == h.activeProgramID,
+		Delivery:             rt.blueprint.Delivery,
 	}
 	if rt.state != nil && rt.state.LaneID != "" {
 		summary.LaneID = rt.state.LaneID

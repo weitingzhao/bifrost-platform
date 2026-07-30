@@ -75,7 +75,11 @@ export function DeliveryBoardCompleteGrid({
                 </p>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-dense-caption text-muted-foreground">
                   <span className="font-mono">
-                    {program.signed}/{program.phaseCount}
+                    {program.signed}/{program.gateCount} gates
+                  </span>
+                  <span>·</span>
+                  <span className="font-mono">
+                    {program.phasesDone}/{program.phaseCount} done
                   </span>
                   <span>·</span>
                   <span>{laneLabel}</span>

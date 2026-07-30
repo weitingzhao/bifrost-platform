@@ -11,7 +11,7 @@ import type { LaneId } from '@/lib/briefing/workLanes'
 function ProgramDeliveryFold({ program, focused }: { program: ProgramSummary; focused?: boolean }) {
   const [open, setOpen] = useState(() => focused === true || !program.complete)
   const signed = program.signed ?? program.phases_signed ?? 0
-  const total = program.phase_count
+  const gateTotal = program.sign_off_required_count ?? program.phase_count
 
   return (
     <div className="min-w-0 max-w-full rounded-md border border-[var(--border)]/60 bg-[var(--secondary)]/15">
@@ -33,7 +33,7 @@ function ProgramDeliveryFold({ program, focused }: { program: ProgramSummary; fo
           {program.label ?? program.title}
         </span>
         <DenseTag variant={program.complete ? 'success' : signed > 0 ? 'warning' : 'neutral'}>
-          {signed}/{total} signed
+          {signed}/{gateTotal} gates
         </DenseTag>
       </button>
       {open && (
