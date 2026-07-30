@@ -168,10 +168,11 @@ milestones:
       authority: console/src/lib/architecture/dataLayerCatalog.ts
     - id: market-data-subcontractor
       label: Market Data Subcontractor (Polygon → plugin-market-data NS)
-      status: IN_PROGRESS
+      status: DONE
       pipeline_lane: parallel
       pipeline_after: k3s-data-layer
       authority: config/programs/market-data-subcontractor.yaml
+      note: "Program signed off 2026-07-30 (P0–P9). Post-P9 follow-on: STG/PROD promote + compat cleanup."
 decisions:
     - id: D1
       status: SIGNED

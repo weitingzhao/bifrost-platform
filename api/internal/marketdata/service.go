@@ -59,8 +59,14 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	healthErrors := make([]string, 0, 2)
 	healthReach := probe.ReachOK
 
-	for _, url := range []string{s.cfg.StocksHealthURL, s.cfg.OptionsHealthURL} {
-		worker, reach, errMsg := s.probeHealth(ctx, url)
+	for _, item := range []struct {
+		url string
+		svc string
+	}{
+		{s.cfg.StocksHealthURL, "market-data-health-stocks"},
+		{s.cfg.OptionsHealthURL, "market-data-health-options"},
+	} {
+		worker, reach, errMsg := s.probePoolHealth(ctx, item.url, item.svc)
 		if worker != nil {
 			workers = append(workers, *worker)
 		}
@@ -197,6 +203,39 @@ type healthPayload struct {
 	UptimeSec   float64 `json:"uptime_sec"`
 }
 
+// probePoolHealth prefers K8s API service proxy for in-cluster DNS URLs so local
+// Mac platform-api (with kubeconfig) can reach plugin-market-data health without
+// port-forward. Explicit MARKET_DATA_*_HEALTH_URL overrides use plain HTTP.
+func (s *Service) probePoolHealth(ctx context.Context, url, serviceName string) (*WorkerInfo, probe.Reachability, string) {
+	useKubeProxy := strings.Contains(url, ".svc.cluster.local") && s.cluster != nil
+	if useKubeProxy {
+		worker, reach, errMsg := s.probeHealthViaKube(ctx, serviceName)
+		if reach != probe.ReachFail {
+			return worker, reach, errMsg
+		}
+		// Fall through to direct HTTP (works when platform-api runs in-cluster).
+	}
+	return s.probeHealth(ctx, url)
+}
+
+func (s *Service) probeHealthViaKube(ctx context.Context, serviceName string) (*WorkerInfo, probe.Reachability, string) {
+	if s.cluster == nil {
+		return nil, probe.ReachFail, "cluster service unavailable"
+	}
+	clientset, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		return nil, probe.ReachFail, err.Error()
+	}
+	path := strings.TrimPrefix(healthPath, "/")
+	raw, err := clientset.CoreV1().Services(pluginNamespace).ProxyGet(
+		"http", serviceName, healthServicePort, path, nil,
+	).DoRaw(ctx)
+	if err != nil {
+		return nil, probe.ReachFail, err.Error()
+	}
+	return parseHealthBody(raw)
+}
+
 func (s *Service) probeHealth(ctx context.Context, url string) (*WorkerInfo, probe.Reachability, string) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -211,6 +250,10 @@ func (s *Service) probeHealth(ctx context.Context, url string) (*WorkerInfo, pro
 	if res.StatusCode != http.StatusOK {
 		return nil, probe.ReachFail, fmt.Sprintf("HTTP %d", res.StatusCode)
 	}
+	return parseHealthBody(body)
+}
+
+func parseHealthBody(body []byte) (*WorkerInfo, probe.Reachability, string) {
 	var payload healthPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, probe.ReachDegraded, "health JSON unparseable"

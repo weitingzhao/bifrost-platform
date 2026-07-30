@@ -1,7 +1,7 @@
 id: market-data-subcontractor
 title: "Market Data Subcontractor — Polygon Data Service"
 description: "Extract Polygon market data ingestion from Trade System into an independent Subcontractor (bifrost-platform-plugin-market-data). K8s-native workers, PG schema isolation (market.* + data_ops.*), no Celery, no IB. Replaces bifrost-trade-worker/data/massive/ entirely."
-status: active
+status: completed
 
 delivery:
   board_visible: true
@@ -13,7 +13,8 @@ model: composer-2.5
 phases:
   - id: P0
     title: "Repo skeleton + build framework"
-    status: pending
+    status: completed
+    completed_at: "2026-07-29"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 
@@ -43,7 +44,8 @@ phases:
 
   - id: P1
     title: "DDL design + schema creation"
-    status: pending
+    status: completed
+    completed_at: "2026-07-29"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 
@@ -85,7 +87,8 @@ phases:
 
   - id: P2
     title: "Polygon HTTP client + rate limiter (rewrite)"
-    status: pending
+    status: completed
+    completed_at: "2026-07-29"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 
@@ -112,7 +115,8 @@ phases:
 
   - id: P3
     title: "Worker core loop (PG-as-broker)"
-    status: pending
+    status: completed
+    completed_at: "2026-07-29"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 
@@ -138,7 +142,8 @@ phases:
 
   - id: P4
     title: "Ingest handlers (all data types)"
-    status: pending
+    status: completed
+    completed_at: "2026-07-29"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 
@@ -173,7 +178,8 @@ phases:
 
   - id: P5
     title: "Scheduler + K8s CronJob"
-    status: pending
+    status: completed
+    completed_at: "2026-07-29"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 
@@ -207,7 +213,8 @@ phases:
 
   - id: P6
     title: "K8s deployment + Platform integration"
-    status: pending
+    status: completed
+    completed_at: "2026-07-30"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 
@@ -238,7 +245,8 @@ phases:
 
   - id: P7
     title: "Full backfill + data quality verification"
-    status: pending
+    status: completed
+    completed_at: "2026-07-30"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 
@@ -296,7 +304,8 @@ phases:
 
   - id: P9
     title: "Cleanup + permission lockdown"
-    status: pending
+    status: completed
+    completed_at: "2026-07-30"
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
 
@@ -309,7 +318,7 @@ phases:
       - DDL ownership transferred: market/data_ops DDL lives in market-data repo only
       - tradeCeleryK8sIdealCatalog.ts updated: Massive queues superseded
       - Program sign-off
-    verify_cmd: "psql -c \"SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'stock_%'\" | grep 0"
+    verify_cmd: "psql -c \"SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('stock_day','stock_min','option_day','option_min','option_snapshots','option_expiration_cache','option_open_interest_daily','tickers','ticker_overview','job_massive_backfill')\" | grep -E '^[[:space:]]*0[[:space:]]*$'"
     acceptance:
       - "No market data tables remain in public schema"
       - "PG role isolation enforced"

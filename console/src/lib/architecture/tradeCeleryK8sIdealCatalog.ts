@@ -5,6 +5,11 @@
  * Authority: this catalog + config/programs/trade-celery-k8s-ideal.yaml
  *
  * D10 remains BLOCKED — never scale daemon for live trade.
+ *
+ * P9 (market-data-subcontractor): Massive Celery queues
+ * (`stocks_massive*`, `options_massive*`) and `job_massive_backfill` are
+ * **superseded by market-data-subcontractor** (plugin-market-data /
+ * `data_ops.job_ingest`). Keep `stocks_ib` for IB bars backfill.
  */
 
 export const TRADE_CELERY_K8S_IDEAL_PROGRAM_ID = 'trade-celery-k8s-ideal' as const
@@ -31,7 +36,8 @@ export const TCKI_W0_STG_EVIDENCE = {
     {
       step: 'queue llen',
       status: 'pass' as const,
-      detail: 'stocks_ib/stocks_massive(_high)/options_massive(_high) llen=0 at capture',
+      detail:
+        'stocks_ib/stocks_massive(_high)/options_massive(_high) llen=0 at capture — Massive queues later superseded by market-data-subcontractor',
     },
     {
       step: 'celery-beat',
@@ -46,7 +52,8 @@ export const TCKI_W0_STG_EVIDENCE = {
     {
       step: 'job_massive_backfill',
       status: 'warn' as const,
-      detail: 'last rows ~2026-06-16 (feed_option_snapshots); status done=115 failed=1 — stale without beat',
+      detail:
+        'last rows ~2026-06-16 (feed_option_snapshots); status done=115 failed=1 — stale without beat; superseded by data_ops.job_ingest (market-data-subcontractor)',
     },
     {
       step: 'executor_mode',
@@ -84,7 +91,8 @@ export const TCKI_W1_W3_STG_EVIDENCE = {
     {
       step: 'active_queues',
       status: 'pass' as const,
-      detail: '3 nodes: stocks_ib + stocks_massive + options_massive',
+      detail:
+        '3 nodes: stocks_ib + stocks_massive + options_massive — Massive nodes superseded by market-data-subcontractor (keep stocks_ib)',
     },
     {
       step: 'celery-beat',
@@ -138,8 +146,8 @@ export const TCKI_WAVES: TckiWave[] = [
     dependsOn: ['W0'],
     verify: 'make -C bifrost-platform-plugin verify-trade-celery-massive-loop-stg',
     acceptance: [
-      'Worker consumes all canonical Massive + stocks_ib queues',
-      'celery-beat replicas=1 Running',
+      'Worker consumes all canonical Massive + stocks_ib queues (historical; Massive superseded by market-data-subcontractor)',
+      'celery-beat replicas=1 Running (historical Massive beat; plugin CronJobs supersede)',
       'stocks_ib still works',
       'daemon replicas stay 0',
     ],
@@ -165,7 +173,7 @@ export const TCKI_WAVES: TckiWave[] = [
     dependsOn: ['W1'],
     verify: 'make -C bifrost-platform-plugin verify-trade-celery-massive-loop-stg',
     acceptance: [
-      '5 profile Deployments with correct -Q and solo',
+      '5 profile Deployments with correct -Q and solo (Massive profiles superseded — scale-zero / retire)',
       'Scale maps to named Deployments + max_worker_instances',
       'Conservative default replicas',
     ],
@@ -199,11 +207,11 @@ export const TCKI_WAVES: TckiWave[] = [
 
 /** Owner sign-off checklist (W5). */
 export const TCKI_OWNER_SIGNOFF_CHECKLIST = [
-  'STG: Massive queues consumed (active_queues includes options_massive / stocks_massive)',
-  'STG: celery-beat Running; recent job_massive_backfill activity after beat',
-  'STG: stocks_ib bars path still healthy',
+  'SUPERSEDED: Massive queues (options_massive / stocks_massive) → market-data-subcontractor (plugin-market-data / data_ops.job_ingest)',
+  'SUPERSEDED: celery-beat Massive schedules + job_massive_backfill → plugin CronJobs',
+  'STG: stocks_ib bars path still healthy (writes market.stock_daily / stock_minute)',
   'STG/PROD: daemon replicas=0 (D10 BLOCKED — no live trade unlock)',
-  'FE Celery page honest under executor_mode=kubernetes',
+  'FE Celery page honest under executor_mode=kubernetes; Massive enqueue refused with plugin message',
   'PROD manifests reviewed (promote only after STG verify PASS)',
 ]
 

@@ -10,7 +10,7 @@
  */
 
 export const MARKET_DATA_SUBCONTRACTOR_SOURCE = 'bifrost-platform-plugin-market-data'
-export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-07-30'
+export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-07-30-p9'
 
 /** Mission Launch lane — publish market-data plugin via make apply (not Tekton). */
 export const MARKET_DATA_LAUNCH_LANE = {
@@ -103,7 +103,7 @@ export const MARKET_DATA_PHASES: MarketDataPhase[] = [
     title: 'K8s deployment + Platform integration',
     summary: 'Workers Running; Platform status probe; Console Gallery live.',
     deliverable: 'verify-market-data + /api/v1/plugins/market-data/status',
-    status: 'in_progress',
+    status: 'done',
   },
   {
     id: 'P7',
@@ -111,7 +111,7 @@ export const MARKET_DATA_PHASES: MarketDataPhase[] = [
     title: 'Full backfill + data quality verification',
     summary: 'Historical depth + freshness probe via data_ops.ingest_freshness.',
     deliverable: 'verify_data_quality.py + freshness green',
-    status: 'pending',
+    status: 'done',
   },
   {
     id: 'P8',
@@ -119,7 +119,7 @@ export const MARKET_DATA_PHASES: MarketDataPhase[] = [
     title: 'Trade System consumer switchover',
     summary: 'Trade readers → market.*; Celery massive queues retired.',
     deliverable: 'Trade API/Frontend on market.* schema',
-    status: 'pending',
+    status: 'done',
   },
   {
     id: 'P9',
@@ -127,7 +127,7 @@ export const MARKET_DATA_PHASES: MarketDataPhase[] = [
     title: 'Cleanup + permission lockdown',
     summary: 'Drop public.* market tables; lock PG roles; remove dead Celery code.',
     deliverable: 'Role isolation + program complete',
-    status: 'pending',
+    status: 'done',
   },
 ]
 
