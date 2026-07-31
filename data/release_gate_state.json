@@ -1,6 +1,6 @@
 {
   "tier": "prod",
-  "at": "2026-07-29T16:19:37.025265Z",
+  "at": "2026-07-31T16:15:41.654145Z",
   "result": "pass",
   "revision": "main",
   "log_path": "bifrost-trade-infra/scripts/release_gate.log",
@@ -24,7 +24,7 @@
       "label": "bifrost-deliver-prod pipeline",
       "required": true,
       "reachability": "ok",
-      "detail": "bifrost-deliver-prod-1785341449 (True)"
+      "detail": "bifrost-deliver-prod-1785513989 (True)"
     },
     {
       "id": "stg-frontend",

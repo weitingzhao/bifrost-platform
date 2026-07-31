@@ -1,6 +1,6 @@
 {
   "tier": "stg",
-  "at": "2026-07-29T16:07:49.420595Z",
+  "at": "2026-07-31T16:05:34.787195Z",
   "result": "pass",
   "revision": "main",
   "log_path": "bifrost-trade-infra/scripts/release_gate.log",
@@ -10,7 +10,7 @@
       "label": "Last bifrost-deliver-stg success",
       "required": true,
       "reachability": "ok",
-      "detail": "bifrost-deliver-stg-1785340774 (True)"
+      "detail": "bifrost-deliver-stg-1785513502 (True)"
     },
     {
       "id": "stg-frontend",

@@ -273,7 +273,7 @@ coupling_surfaces:
     - unifi_session_v2
 promotion:
     last_gate:
-        at: "2026-07-29T16:19:37Z"
+        at: "2026-07-31T16:15:41Z"
         result: pass
         log_path: bifrost-trade-infra/scripts/release_gate.log
 environments_extended:

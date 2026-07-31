@@ -45,3 +45,5 @@
 [2026-07-31T15:40:10Z] platform-stg pass by admin — platform-stg release gate pass (3 checks)
 [2026-07-31T15:46:35Z] platform-prod pass by admin — platform-prod release gate pass (4 checks)
 [2026-07-31T15:48:29Z] platform-prod pass by admin — platform-prod release gate pass (4 checks)
+[2026-07-31T16:05:34Z] stg pass by admin — stg release gate pass (11 checks)
+[2026-07-31T16:15:42Z] prod pass by admin — prod release gate pass (13 checks)
