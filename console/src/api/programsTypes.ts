@@ -179,6 +179,11 @@ export type DeliveryBoardProgramOverview = {
 export function mapProgramSummaryToOverview(p: ProgramSummary): DeliveryBoardProgramOverview {
   const signed = p.signed ?? p.phases_signed ?? 0
   const gateCount = p.sign_off_required_count ?? p.phase_count
+  // Prefer API complete; fallback matches gate-based Complete (not phase_count).
+  const completeFallback =
+    gateCount > 0
+      ? signed === gateCount
+      : p.phase_count > 0 && p.phases_done === p.phase_count
   return {
     id: p.id,
     label: p.label ?? p.title,
@@ -188,7 +193,7 @@ export function mapProgramSummaryToOverview(p: ProgramSummary): DeliveryBoardPro
     phasesDone: p.phases_done,
     gateCount,
     signed,
-    complete: p.complete ?? (p.phase_count > 0 && signed === p.phase_count),
+    complete: p.complete ?? completeFallback,
     signOffMechanism: p.sign_off_mechanism ?? p.delivery?.sign_off_mechanism,
     laneId: p.lane_id,
   }

@@ -16,17 +16,22 @@ import { fetchDeliveryBoardPrograms, PROGRAMS_BOARD_QUERY_KEY } from '@/api/prog
 import { mapProgramSummaryToOverview } from '@/api/programsTypes'
 import { BriefingStatusBadge, BriefingStatusLamp } from '@/components/briefing/BriefingStatusChrome'
 import { DeliveryBoardCompleteGrid } from '@/components/delivery/DeliveryBoardCompleteGrid'
-import { DeliveryBoardFilterChrome } from '@/components/delivery/DeliveryBoardFilterChrome'
+import {
+  DeliveryBoardFilterChrome,
+  type DeliveryScopeBandCounts,
+} from '@/components/delivery/DeliveryBoardFilterChrome'
 import { DeliveryBoardHistoricalArchive } from '@/components/delivery/DeliveryBoardHistoricalArchive'
 import { DeliveryBoardProgramPanels } from '@/components/delivery/DeliveryBoardProgramPanels'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import {
+  COMPONENT_LINE_DEFS,
   isBriefingScopeId,
   isWorkTrackType,
   lanesForScope,
   lanesForScopeTrack,
   type BriefingScopeId,
+  type ComponentLineId,
   type WorkTrackType,
 } from '@/lib/briefing/briefingViewTabs'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
@@ -177,6 +182,29 @@ export function DeliveryBoardPage({
     return set
   }, [allPrograms])
 
+  const scopeBandCounts = useMemo(() => {
+    const bandOf = (p: (typeof allPrograms)[number]): keyof DeliveryScopeBandCounts => {
+      if (p.complete) return 'complete'
+      if (p.signed > 0) return 'inProgress'
+      return 'notStarted'
+    }
+    const tally = (list: typeof allPrograms): DeliveryScopeBandCounts => {
+      const c: DeliveryScopeBandCounts = { notStarted: 0, inProgress: 0, complete: 0 }
+      for (const p of list) c[bandOf(p)] += 1
+      return c
+    }
+    const byLine = Object.fromEntries(
+      COMPONENT_LINE_DEFS.map(line => {
+        const laneIds = new Set(lanesForScope(line.id).map(l => l.id))
+        return [
+          line.id,
+          tally(allPrograms.filter(p => p.laneId != null && laneIds.has(p.laneId))),
+        ]
+      }),
+    ) as Record<ComponentLineId, DeliveryScopeBandCounts>
+    return { all: tally(allPrograms), byLine }
+  }, [allPrograms])
+
   const programs = useMemo(() => {
     const laneIds = new Set(
       (trackType != null ? lanesForScopeTrack(scope, trackType) : lanesForScope(scope)).map(
@@ -293,6 +321,7 @@ export function DeliveryBoardPage({
         onTrackTypeChange={handleTrackTypeChange}
         onLaneChange={handleLaneChange}
         lanesWithPrograms={lanesWithPrograms}
+        scopeBandCounts={scopeBandCounts}
       />
 
       {programsQuery.isLoading && (

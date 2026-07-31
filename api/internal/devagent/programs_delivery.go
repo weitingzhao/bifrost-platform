@@ -94,9 +94,19 @@ type SessionStopRequest struct {
 	DurationMs    int64  `json:"duration_ms,omitempty"`
 }
 
+// phaseRequiresSignOff reports whether a phase is a Delivery Board gate.
+// Legacy: SignOff nil ⇒ required. Explicit required:false ⇒ work phase (not a gate).
+func phaseRequiresSignOff(p PhaseBlueprint) bool {
+	return p.SignOff == nil || p.SignOff.Required
+}
+
+// countSignedPhases counts Owner sign-offs on gate phases only (matches Signed/N gates UI).
 func (h *Handler) countSignedPhases(rt *programRuntime) int {
 	n := 0
 	for _, bp := range rt.blueprint.Phases {
+		if !phaseRequiresSignOff(bp) {
+			continue
+		}
 		if h.phaseSignoffRecordLocked(rt, bp.ID) != nil {
 			n++
 		}
@@ -112,11 +122,20 @@ func countSignOffRequiredPhases(bp *ProgramBlueprint) int {
 	}
 	n := 0
 	for _, p := range bp.Phases {
-		if p.SignOff == nil || p.SignOff.Required {
+		if phaseRequiresSignOff(p) {
 			n++
 		}
 	}
 	return n
+}
+
+// programCompleteFromGates is true when every required gate is signed.
+// If a program has no gates (all sign_off.required:false), fall back to all phases done.
+func programCompleteFromGates(gatesRequired, gatesSigned, phaseCount, phasesDone int) bool {
+	if gatesRequired > 0 {
+		return gatesSigned == gatesRequired
+	}
+	return phaseCount > 0 && phasesDone == phaseCount
 }
 
 func (h *Handler) phaseSignoffRecord(rt *programRuntime, phaseID string) *PhaseSignOffRecord {

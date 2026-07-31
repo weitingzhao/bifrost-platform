@@ -148,3 +148,51 @@ func TestCountSignOffRequiredPhases(t *testing.T) {
 		t.Fatalf("nil blueprint count = %d, want 0", n)
 	}
 }
+
+func TestProgramCompleteFromGates(t *testing.T) {
+	// Market Data shape: 10 phases, 6 gates all signed → Complete
+	if !programCompleteFromGates(6, 6, 10, 10) {
+		t.Fatal("want complete when all required gates signed")
+	}
+	if programCompleteFromGates(6, 5, 10, 10) {
+		t.Fatal("want incomplete when a gate is unsigned")
+	}
+	// Must not require signed == phaseCount (old bug)
+	if programCompleteFromGates(6, 6, 10, 10) != true {
+		t.Fatal("gates signed must not need phaseCount equality")
+	}
+	// No gates: fall back to all phases done
+	if !programCompleteFromGates(0, 0, 4, 4) {
+		t.Fatal("want complete when no gates and all phases done")
+	}
+	if programCompleteFromGates(0, 0, 4, 3) {
+		t.Fatal("want incomplete when no gates and phases unfinished")
+	}
+}
+
+func TestCountSignedPhasesIgnoresWorkPhases(t *testing.T) {
+	h := &Handler{}
+	rt := &programRuntime{
+		blueprint: &ProgramBlueprint{
+			Phases: []PhaseBlueprint{
+				workPhase("w1"),
+				gatePhase("g1"),
+				gatePhase("g2"),
+			},
+		},
+		state: &ProgramStateRecord{
+			PhaseSignOffs: []PhaseSignOffRecord{
+				{PhaseID: "w1", SignedOffAt: "2026-07-30T00:00:00Z", SignedOffBy: "owner"},
+				{PhaseID: "g1", SignedOffAt: "2026-07-30T00:00:00Z", SignedOffBy: "owner"},
+				{PhaseID: "g2", SignedOffAt: "2026-07-30T00:00:00Z", SignedOffBy: "owner"},
+			},
+		},
+	}
+	if n := h.countSignedPhases(rt); n != 2 {
+		t.Fatalf("countSignedPhases = %d, want 2 (gates only)", n)
+	}
+	sum := h.buildProgramSummary("p", rt)
+	if !sum.Complete || sum.Signed != 2 || sum.SignOffRequiredCount != 2 {
+		t.Fatalf("summary = %+v", sum)
+	}
+}

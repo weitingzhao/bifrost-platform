@@ -284,7 +284,8 @@ func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) Prog
 	phasesDone := len(doneFromPhases)
 	signed := h.countSignedPhases(rt)
 	phaseCount := len(rt.blueprint.Phases)
-	complete := phaseCount > 0 && signed == phaseCount
+	gatesRequired := countSignOffRequiredPhases(rt.blueprint)
+	complete := programCompleteFromGates(gatesRequired, signed, phaseCount, phasesDone)
 	summary := ProgramSummary{
 		ID:                   programID,
 		Title:                rt.blueprint.Title,
@@ -295,7 +296,7 @@ func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) Prog
 		PhasesDone:           phasesDone,
 		PhasesSigned:         signed,
 		Signed:               signed,
-		SignOffRequiredCount: countSignOffRequiredPhases(rt.blueprint),
+		SignOffRequiredCount: gatesRequired,
 		Complete:             complete,
 		AllPhasesDone:        phaseCount > 0 && phasesDone == phaseCount,
 		Active:               programID == h.activeProgramID,

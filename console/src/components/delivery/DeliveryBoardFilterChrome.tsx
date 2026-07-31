@@ -1,6 +1,7 @@
 import { Button } from '@bifrost/ui'
-import { LayoutGrid } from 'lucide-react'
+import { LayoutGrid, type LucideIcon } from 'lucide-react'
 import {
+  BRIEFING_DPR_COLOR,
   briefingScopeGridCellClass,
   briefingTrackTypeCardClass,
 } from '@/components/briefing/BriefingStatusChrome'
@@ -12,9 +13,17 @@ import {
   trackTypeById,
   trackTypeDefsForScope,
   type BriefingScopeId,
+  type ComponentLineId,
   type WorkTrackType,
 } from '@/lib/briefing/briefingViewTabs'
 import { type LaneId } from '@/lib/briefing/workLanes'
+
+/** Per-scope Delivery Board bands — not started / in progress / done. */
+export type DeliveryScopeBandCounts = {
+  notStarted: number
+  inProgress: number
+  complete: number
+}
 
 export type DeliveryBoardFilterChromeProps = {
   scope: BriefingScopeId
@@ -25,6 +34,97 @@ export type DeliveryBoardFilterChromeProps = {
   onLaneChange: (laneId: LaneId | null) => void
   /** Lane ids that have at least one board-visible program (optional highlight). */
   lanesWithPrograms?: ReadonlySet<string>
+  /** Band counts per scope (All + each component line). */
+  scopeBandCounts?: {
+    all: DeliveryScopeBandCounts
+    byLine: Record<ComponentLineId, DeliveryScopeBandCounts>
+  }
+}
+
+const EMPTY_BANDS: DeliveryScopeBandCounts = {
+  notStarted: 0,
+  inProgress: 0,
+  complete: 0,
+}
+
+function bandTotal(c: DeliveryScopeBandCounts): number {
+  return c.notStarted + c.inProgress + c.complete
+}
+
+function formatBandCounts(c: DeliveryScopeBandCounts): string {
+  return `${c.notStarted}/${c.inProgress}/${c.complete}`
+}
+
+/** Compact ns/prog/done digits — zero muted; non-zero uses band colors. */
+function ScopeBandCounts({ counts }: { counts: DeliveryScopeBandCounts }) {
+  const sep = 'text-muted-foreground/40'
+  const digit = (n: number, tone: 'notStarted' | 'inProgress' | 'complete') => {
+    if (n <= 0) return 'text-muted-foreground/45'
+    if (tone === 'notStarted') return 'text-muted-foreground'
+    if (tone === 'inProgress') return BRIEFING_DPR_COLOR.doing
+    return 'text-success'
+  }
+  return (
+    <span className="font-mono text-dense-micro leading-none tabular-nums tracking-tight">
+      <span className={digit(counts.notStarted, 'notStarted')}>{counts.notStarted}</span>
+      <span className={sep}>/</span>
+      <span className={digit(counts.inProgress, 'inProgress')}>{counts.inProgress}</span>
+      <span className={sep}>/</span>
+      <span className={digit(counts.complete, 'complete')}>{counts.complete}</span>
+    </span>
+  )
+}
+
+function ScopeGridCell({
+  label,
+  icon: Icon,
+  selected,
+  counts,
+  onSelect,
+  span2,
+  description,
+}: {
+  label: string
+  icon: LucideIcon
+  selected: boolean
+  counts: DeliveryScopeBandCounts
+  onSelect: () => void
+  span2?: boolean
+  description?: string
+}) {
+  const quiet = !selected && bandTotal(counts) === 0
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      title={`${description ?? label}: ${formatBandCounts(counts)} · not started / in progress / done`}
+      className={[
+        briefingScopeGridCellClass(selected, span2),
+        selected ? 'text-foreground' : 'text-muted-foreground',
+        quiet ? 'opacity-55' : '',
+      ].join(' ')}
+      onClick={onSelect}
+    >
+      <Icon
+        className={[
+          'h-3.5 w-3.5 shrink-0 transition-colors',
+          selected ? 'text-[var(--task-mode-accent)]' : '',
+        ].join(' ')}
+        aria-hidden
+      />
+      <span
+        className={[
+          'min-w-0 truncate text-dense-label transition-colors',
+          selected ? 'font-semibold' : 'font-medium',
+        ].join(' ')}
+      >
+        {label}
+      </span>
+      <span className="ml-auto shrink-0">
+        <ScopeBandCounts counts={counts} />
+      </span>
+    </button>
+  )
 }
 
 /**
@@ -39,12 +139,14 @@ export function DeliveryBoardFilterChrome({
   onTrackTypeChange,
   onLaneChange,
   lanesWithPrograms,
+  scopeBandCounts,
 }: DeliveryBoardFilterChromeProps) {
   const scopeDef = briefingScopeById(scope)
   const trackDefs = trackTypeDefsForScope(scope)
   const lanes =
     trackType != null ? lanesForScopeTrack(scope, trackType) : lanesForScope(scope)
   const hasFilter = scope !== 'all' || trackType != null || laneId != null
+  const allCounts = scopeBandCounts?.all ?? EMPTY_BANDS
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-secondary/20 px-2.5 py-2">
@@ -68,43 +170,55 @@ export function DeliveryBoardFilterChrome({
         )}
       </div>
 
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-dense-caption font-medium uppercase tracking-wider text-muted-foreground">
+          Scope
+        </span>
+        <p
+          className="m-0 flex items-center gap-0.5 font-mono text-dense-micro leading-none"
+          title="not started / in progress / done — programs in each scope"
+        >
+          <span className="text-muted-foreground">ns</span>
+          <span className="text-muted-foreground/40">/</span>
+          <span className={BRIEFING_DPR_COLOR.doing}>prog</span>
+          <span className="text-muted-foreground/40">/</span>
+          <span className="text-success">done</span>
+        </p>
+      </div>
+
       <div
         className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border"
         role="group"
         aria-label="Delivery Board scope"
       >
-        <button
-          type="button"
-          className={briefingScopeGridCellClass(scope === 'all', true)}
-          onClick={() => {
+        <ScopeGridCell
+          label="All"
+          icon={LayoutGrid}
+          selected={scope === 'all'}
+          counts={allCounts}
+          span2
+          description="All component lines"
+          onSelect={() => {
             onScopeChange('all')
             onTrackTypeChange(null)
             onLaneChange(null)
           }}
-        >
-          <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="text-dense-label font-medium">All</span>
-        </button>
-        {COMPONENT_LINE_DEFS.map(line => {
-          const Icon = line.icon
-          const active = scope === line.id
-          return (
-            <button
-              key={line.id}
-              type="button"
-              className={briefingScopeGridCellClass(active)}
-              onClick={() => {
-                onScopeChange(line.id)
-                onTrackTypeChange(null)
-                onLaneChange(null)
-              }}
-              title={line.description}
-            >
-              <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="truncate text-dense-label font-medium">{line.shortLabel}</span>
-            </button>
-          )
-        })}
+        />
+        {COMPONENT_LINE_DEFS.map(line => (
+          <ScopeGridCell
+            key={line.id}
+            label={line.shortLabel}
+            icon={line.icon}
+            selected={scope === line.id}
+            counts={scopeBandCounts?.byLine[line.id] ?? EMPTY_BANDS}
+            description={line.description}
+            onSelect={() => {
+              onScopeChange(line.id)
+              onTrackTypeChange(null)
+              onLaneChange(null)
+            }}
+          />
+        ))}
       </div>
 
       {trackDefs.length > 0 && (
