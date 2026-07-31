@@ -137,9 +137,11 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   'agent-capability':
     'Live capability readiness — which agent scopes are ready, running, awaiting approval, or failed.',
   'control-room':
-    'Mission diagnosis — payload reachability, rocket/satellite launches, agent loop, and command intent. Topology opens as a drill-down sheet.',
-  observability: 'Apollo-domain system health hub — Grafana is deep evidence, not a second control plane.',
-  'task-cc': 'Task-mode cockpit — checklist, fleet, and launch evidence for the active lens.',
+    'Situation / bay posture deep-dive — Bay Scan, topology sheet, Operate/Release context. Not the Mission launch home; primary execution is on Task Control Center.',
+  observability:
+    'Apollo-domain read-only system health hub — domain signals and Attention; Grafana is deep evidence, not a second control plane.',
+  'task-cc':
+    'Sole Task Mode / Mission execution entry — checklist, Fleet Desk, Launch board, and primary Agent CTAs for the active lens.',
   audit:
     'Canonical actuation history for platform-api — GitOps, cluster, remediation/Agent lifecycle, and other operator writes.',
   defects:

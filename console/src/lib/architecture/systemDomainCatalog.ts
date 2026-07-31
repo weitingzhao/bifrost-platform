@@ -51,7 +51,7 @@ export const SYSTEM_DOMAINS: SystemDomainRow[] = [
     id: 'mission-control',
     label: 'Mission Control',
     purpose:
-      'Cross-domain ops hub — Control Room, Observability, Task CC, Defects, Audit, Delivery Board; topology drill-down sheet',
+      'Cross-domain ops hub — Task CC (execute) → Control Room (posture) → Observability (health); Defects, Audit, Delivery Board; topology drill-down sheet',
   },
   {
     id: 'rocket',

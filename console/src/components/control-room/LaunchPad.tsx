@@ -26,6 +26,12 @@ const REFETCH_MS = 20_000
 /** Control Room shows both; OpsTaskStrips playbook path may pass one variant. */
 export type LaunchPadVariant = 'both' | 'rocket-launch' | 'satellite-deploy' | 'plugin-launch'
 
+/**
+ * `execute` — Task Control Center: Agent Launch/Deploy CTAs.
+ * `posture` — Control Room: evidence + Open TCC handoff (no Agent dispatch).
+ */
+export type LaunchPadRole = 'execute' | 'posture'
+
 function tradeEnvSignal(matrix: MatrixResponse | undefined): Signal {
   if (matrix == null) return 'unknown'
   const scored = matrix.targets.filter(countsTowardTradeReadiness)
@@ -52,6 +58,7 @@ interface LaunchPadCardProps {
   summary: string
   detail: string
   tags?: ReactNode
+  role: LaunchPadRole
   agentLabel: string
   onAgentLaunch: () => void
   agentPending?: boolean
@@ -68,6 +75,7 @@ function LaunchPadCard({
   summary,
   detail,
   tags,
+  role,
   agentLabel,
   onAgentLaunch,
   agentPending = false,
@@ -91,13 +99,15 @@ function LaunchPadCard({
         </div>
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        <AgentTriggerButton
-          label={agentLabel}
-          pending={agentPending}
-          disabled={!canAgentLaunch}
-          title={agentDisabledReason ?? agentLabel}
-          onClick={onAgentLaunch}
-        />
+        {role === 'execute' && (
+          <AgentTriggerButton
+            label={agentLabel}
+            pending={agentPending}
+            disabled={!canAgentLaunch}
+            title={agentDisabledReason ?? agentLabel}
+            onClick={onAgentLaunch}
+          />
+        )}
         <Button variant="ghost" size="xs" className="text-[var(--text-dense-meta)]" onClick={onOpenDetail}>
           {detailLabel}
           <ChevronRight size={12} />
@@ -110,8 +120,15 @@ function LaunchPadCard({
 export interface LaunchPadProps {
   /** Default `both` — Control Room. Task CC playbook strips may pass one side. */
   variant?: LaunchPadVariant
-  onDispatchRelease: () => void
-  onDispatchTradeDeploy: () => void
+  /**
+   * `execute` (default): Agent CTAs for TCC.
+   * `posture`: Control Room evidence + Open Task Control Center handoff.
+   */
+  role?: LaunchPadRole
+  /** Required when `role="posture"` — open Mission Launch on TCC. */
+  onOpenTaskControlCenter?: () => void
+  onDispatchRelease?: () => void
+  onDispatchTradeDeploy?: () => void
   onDispatchPluginLaunch?: () => void
   releasePending?: boolean
   tradeDeployPending?: boolean
@@ -133,6 +150,8 @@ export interface LaunchPadProps {
 
 export function LaunchPad({
   variant = 'both',
+  role = 'execute',
+  onOpenTaskControlCenter,
   onDispatchRelease,
   onDispatchTradeDeploy,
   onDispatchPluginLaunch,
@@ -154,6 +173,7 @@ export function LaunchPad({
   const showRocket = variant === 'both' || variant === 'rocket-launch'
   const showSatellite = variant === 'both' || variant === 'satellite-deploy'
   const showPlugin = variant === 'both' || variant === 'plugin-launch'
+  const isPosture = role === 'posture'
 
   const rocketProd = useRocketProdReadiness(showRocket)
   const satelliteProd = useSatelliteProdReadiness(showSatellite)
@@ -270,8 +290,8 @@ export function LaunchPad({
 
   const rocketAgentBlocked = rocketProd.prodBlocked
   const satelliteAgentBlocked = satelliteProd.prodBlocked
-  const rocketCanLaunch = canDispatchRelease && !rocketAgentBlocked
-  const satelliteCanLaunch = canDispatchTradeDeploy && !satelliteAgentBlocked
+  const rocketCanLaunch = canDispatchRelease && !rocketAgentBlocked && onDispatchRelease != null
+  const satelliteCanLaunch = canDispatchTradeDeploy && !satelliteAgentBlocked && onDispatchTradeDeploy != null
   const rocketDisabledReason = rocketAgentBlocked
     ? rocketProd.prodDisabledReason
     : releaseDisabledReason
@@ -295,15 +315,34 @@ export function LaunchPad({
               ? 'sm:grid-cols-2'
             : 'max-w-xl'
       }`}
-      aria-label="Launch pad"
+      aria-label={isPosture ? 'Launch posture' : 'Launch pad'}
     >
-      {showRocket && rocketAgentBlocked && !suppressProdBlockedFeedback && (
+      {isPosture && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 sm:col-span-full">
+          <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
+            Launch execution lives on Task Control Center (Mission Launch). This bay is readiness evidence only.
+          </p>
+          <Button
+            size="sm"
+            disabled={onOpenTaskControlCenter == null}
+            title={
+              onOpenTaskControlCenter == null
+                ? 'Task Control Center navigation not wired'
+                : 'Open Mission Launch on Task Control Center'
+            }
+            onClick={() => onOpenTaskControlCenter?.()}
+          >
+            Open Task Control Center
+          </Button>
+        </div>
+      )}
+      {!isPosture && showRocket && rocketAgentBlocked && !suppressProdBlockedFeedback && (
         <OpsFeedback variant="warning" title="Prod readiness blocked" className="sm:col-span-2">
           Fix Platform Prod environment before release — resolve failing namespaces, self-health probes, or release
           gate checks first.
         </OpsFeedback>
       )}
-      {showSatellite && satelliteAgentBlocked && !suppressProdBlockedFeedback && (
+      {!isPosture && showSatellite && satelliteAgentBlocked && !suppressProdBlockedFeedback && (
         <OpsFeedback variant="warning" title="Prod readiness blocked" className="sm:col-span-2">
           Fix Trade Prod environment before deploy — resolve failing pods, datastore, IB socket, or API reachability
           first.
@@ -316,6 +355,7 @@ export function LaunchPad({
           signal={releaseSignal}
           summary={rocketSummary}
           detail={rocketDetail}
+          role={role}
           tags={
             <>
               <DenseTag variant={platformGate.status === 'done' ? 'success' : 'warning'}>
@@ -327,7 +367,7 @@ export function LaunchPad({
             </>
           }
           agentLabel="Agent Launch"
-          onAgentLaunch={onDispatchRelease}
+          onAgentLaunch={onDispatchRelease ?? (() => {})}
           agentPending={releasePending}
           canAgentLaunch={rocketCanLaunch}
           agentDisabledReason={rocketDisabledReason}
@@ -342,6 +382,7 @@ export function LaunchPad({
           signal={tradeSignal}
           summary={satelliteSummary}
           detail={satelliteDetail}
+          role={role}
           tags={
             <>
               <EnvDot label="Dev" signal={tradeEnvSignal(devMatrix)} />
@@ -353,7 +394,7 @@ export function LaunchPad({
             </>
           }
           agentLabel="Agent Deploy"
-          onAgentLaunch={onDispatchTradeDeploy}
+          onAgentLaunch={onDispatchTradeDeploy ?? (() => {})}
           agentPending={tradeDeployPending}
           canAgentLaunch={satelliteCanLaunch}
           agentDisabledReason={satelliteDisabledReason}
@@ -367,6 +408,7 @@ export function LaunchPad({
           signal="unknown"
           summary="IB Gateway publish lane"
           detail="Detect → Approve → Install → Verify → Live"
+          role={role}
           agentLabel="AI Launch Plugin"
           onAgentLaunch={onDispatchPluginLaunch ?? (() => {})}
           agentPending={pluginLaunchPending}

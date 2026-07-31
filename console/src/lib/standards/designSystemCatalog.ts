@@ -145,8 +145,9 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Rocket lane operate pages (Launch Rocket / Deploy Satellite / Launch Plugin): LaneStateStrip is the Verdict equivalent — do not replace with OpsVerdictStrip',
     ],
     examples: [
-      'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — alerts meta → Attention',
-      'Control Room: OpsVerdictStrip MISSION VERDICT + Launch/Deploy/Plugin actions; bay chips → jumpToBay',
+      'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — alerts meta → Attention (read-only health)',
+      'Control Room: OpsVerdictStrip ROOM POSTURE + bay chips → jumpToBay — no page-level Launch/Deploy (execution on TCC)',
+      'Task Control Center: OpsVerdictStrip TASK VERDICT · {MODE} — sole Mission/Launch/Fleet primary CTAs',
       'Audit: OpsVerdictStrip ACTUATION HISTORY · Download JSON in actions',
       'Placement: OpsVerdictStrip PLACEMENT VERDICT · Copy LLM pack / Open Delivery / Open Cluster in actions',
       'Cluster: OpsVerdictStrip CLUSTER VERDICT · failing pods / reachability drive lamp · Copy / Refresh / Sync in actions; KPI strip below',
@@ -196,7 +197,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     rules: [
       'High-frequency actions: surface in Verdict strip or PageToolbar (always visible)',
       'Context actions (e.g. per-row Fix, per-section Agent dispatch): inline with the relevant data',
-      'Remediation closed-loop: every non-green signal must have a discoverable fix path — Operate (issues + consumers), Shared (Open Cluster / Observability), Compare (Inspect IB Gateway), Mission (Control Room / Fix via Agent Desk)',
+      'Remediation closed-loop: every non-green signal must have a discoverable fix path — Operate (issues + consumers), Shared (Open Cluster / Observability), Compare (Inspect IB Gateway), Mission (Task Control Center / Fix via Agent Desk); Control Room posture deep-links back to TCC',
       'Never require expanding a collapsed section to discover a page-level action',
       'Destructive actions: ConfirmDialog, not window.confirm',
       'Agent dispatch actions: inline button → launches via ambient Agent system (dock stays bottom)',
@@ -204,8 +205,9 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Shell Operator Dock (bottom): multi-tool framework — Agent (ambient Fix) | Console (SSH); Collapse keeps Console sessions mounted; L-1 host pulse + Operator Plane deep-link in head (no Update in Dock)',
     ],
     examples: [
-      'Control Room: VerdictStrip actions = Launch Rocket / Deploy Satellite / Launch Plugin; bay chips → jumpToBay',
-      'Observability: Verdict first; PageToolbar = Trade NS + Open Grafana; alerts meta → Attention',
+      'Task Control Center: primary Launch / Fleet Fix / phase CTA on Verdict or Ops loop strip',
+      'Control Room: VerdictStrip has no Launch/Deploy actions — bay chips → jumpToBay; Launch bay Open TCC + detail deep-links',
+      'Observability: Verdict first; PageToolbar = Trade NS + Open Grafana; alerts meta → Attention (no Mission launch)',
       'Defects: PatternDebt Verdict + Fix top pattern; PageToolbar Refresh below',
       'Launch Rocket: AI Release on LaneStateStrip; Deploy/Gate in ReleaseStepCommandCenter',
       'Deploy Satellite: AI Deploy on LaneStateStrip (+ Evidence links); Deploy/Gate in ReleaseStepCommandCenter',

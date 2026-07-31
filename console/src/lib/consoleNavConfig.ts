@@ -43,7 +43,7 @@ import {
  *
  * | Group            | Domain                | Intent                                           |
  * |------------------|-----------------------|--------------------------------------------------|
- * | Mission Control  | Cross-domain ops hub  | Control Room, Observability, defects, audit, delivery |
+ * | Mission Control  | Cross-domain ops hub  | Execute (TCC) → Posture (Control Room) → Health (Observability); defects, audit, delivery |
  * | Rocket           | Ops Platform itself   | K8s cluster, Launch Rocket, placement             |
  * | Ground Systems   | Infrastructure        | Network, compute (SSH via shell Operator Dock)    |
  * | Satellite        | Payload satellite(s)  | Bus, runtime, API & Auth Probes, Deploy Satellite |
@@ -63,6 +63,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
     subGroups: [
       {
         label: '',
+        // Order: execute → posture → health (TCC injected first by navLens in Ops/Dev modes).
         items: [
           { id: 'control-room', label: 'Control Room', icon: Gauge },
           { id: 'observability', label: 'Observability', icon: LineChart },

@@ -17,14 +17,14 @@ export type ControlRoomVerdictStripProps = {
   dataUpdatedAt: number
   bays: ControlRoomBaySignal[]
   isLoading?: boolean
-  /** Page-level actions (Launch Release / Deploy Satellite) — always discoverable. */
+  /** Optional secondary actions — never page-level Launch/Deploy (those live on TCC). */
   actions?: ReactNode
   /** Click a non-ok bay chip → open/scroll that bay (Summary→Detail continuity). */
   onSelectBay?: (id: ControlRoomBayId) => void
 }
 
 /**
- * Observability-style mission verdict strip — scan layer for Control Room.
+ * Room posture strip — situation scan for Control Room (not Mission launch home).
  */
 export function ControlRoomVerdictStrip({
   missionSignal,
@@ -42,14 +42,14 @@ export function ControlRoomVerdictStrip({
   return (
     <OpsVerdictStrip
       className="control-room-verdict"
-      ariaLabel="Mission verdict"
-      title="MISSION VERDICT"
+      ariaLabel="Room posture"
+      title="ROOM POSTURE"
       lamp={isLoading ? 'unknown' : missionSignal}
       tagLabel={label}
       tagVariant={controlRoomVerdictTagVariant(label)}
       summary={
         <span title={primaryCause}>
-          {isLoading ? 'Aggregating mission probes…' : primaryCause}
+          {isLoading ? 'Aggregating room probes…' : primaryCause}
         </span>
       }
       actions={actions}

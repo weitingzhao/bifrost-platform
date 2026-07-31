@@ -24,6 +24,8 @@ export const OBSERVABILITY_OWNERSHIP = {
   grafanaRole: 'Deep evidence / diagnostics — Console does not duplicate full dashboards',
   verdictSource: 'console/src/lib/observability/observabilityViewModel.ts',
   d10Note: 'Live trading remains BLOCKED (D10). Observability is read-only monitoring.',
+  iaBoundary:
+    'Health hub only — not Mission launch (TCC) and not bay posture cockpit (Control Room).',
 } as const
 
 export const OBSERVABILITY_VERDICT_RULES = [
@@ -49,6 +51,7 @@ export function buildObservabilityLlmPack(): string {
     `Grafana: ${OBSERVABILITY_OWNERSHIP.grafanaRole}`,
     `Verdict SSOT: \`${OBSERVABILITY_OWNERSHIP.verdictSource}\``,
     OBSERVABILITY_OWNERSHIP.d10Note,
+    `IA: ${OBSERVABILITY_OWNERSHIP.iaBoundary}`,
     '',
     '### Verdict rules',
     ...OBSERVABILITY_VERDICT_RULES.map(r => `- ${r}`),

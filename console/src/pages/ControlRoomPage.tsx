@@ -30,8 +30,6 @@ import {
   type ControlRoomSelection,
 } from '@/components/control-room/DualFlywheelPanel'
 import { PipelineFlow } from '@/components/control-room/PipelineFlow'
-import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
-import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { useMissionVerification } from '@/hooks/useMissionVerification'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
@@ -74,10 +72,6 @@ import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
 import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
 import { fetchSupplyChain } from '@/api/delivery'
 import { fetchRemediationJobs, startRemediation } from '@/api/remediation'
-import {
-  buildTradeDeployPrompt,
-  TRADE_DEPLOY_SCOPE,
-} from '@/lib/agent/tradeDeployAgentPrompt'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 
@@ -206,29 +200,9 @@ export function ControlRoomPage({
     },
   })
 
-  const aiTradeDeploy = useAmbientAgentTask({
-    canOperate,
-    ambientJobId,
-    onStartAgentJob,
-    scope: TRADE_DEPLOY_SCOPE,
-    label: scopeToLabel(TRADE_DEPLOY_SCOPE),
-    buildRequest: () => ({
-      prompt: buildTradeDeployPrompt({
-        matrices: matrixList,
-        stgSmoke,
-        tierB,
-      }),
-    }),
-  })
-
   const dispatchReleaseAgent = () => {
     if (!canOperate) return
     aiRelease.trigger()
-  }
-
-  const dispatchTradeDeployAgent = () => {
-    if (!canOperate) return
-    aiTradeDeploy.trigger()
   }
 
   const qc = useQueryClient()
@@ -427,24 +401,6 @@ export function ControlRoomPage({
         bays={baySignals}
         isLoading={missionLoading}
         onSelectBay={jumpToBay}
-        actions={
-          <>
-            <AgentTriggerButton
-              label="Launch Release"
-              pending={aiRelease.isPending}
-              disabled={aiRelease.disabled}
-              title={aiRelease.disabledReason ?? 'Launch platform release agent'}
-              onClick={dispatchReleaseAgent}
-            />
-            <AgentTriggerButton
-              label="Deploy Satellite"
-              pending={aiTradeDeploy.isPending}
-              disabled={aiTradeDeploy.disabled}
-              title={aiTradeDeploy.disabledReason ?? 'Deploy Trade satellite agent'}
-              onClick={dispatchTradeDeployAgent}
-            />
-          </>
-        }
       />
 
       <ControlRoomAttentionStrip items={attentionItems} onSelectBay={jumpToBay} />
@@ -464,10 +420,10 @@ export function ControlRoomPage({
         onSelectBay={jumpToBay}
       />
 
-      <div className="control-room-diagnosis flex flex-col gap-3" aria-label="Mission diagnosis">
+      <div className="control-room-diagnosis flex flex-col gap-3" aria-label="Room posture detail">
         {openBayIds.size === 0 && (
           <p className="m-0 rounded-md border border-dashed border-border px-3 py-4 text-center text-[var(--text-dense-meta)] text-muted-foreground">
-            Select a bay above to open mission detail.
+            Select a bay above to open posture detail.
           </p>
         )}
 
@@ -525,36 +481,12 @@ export function ControlRoomPage({
             onOpenChange={open => setBayOpen('launch', open)}
           >
             <LaunchPad
-              onDispatchRelease={dispatchReleaseAgent}
-              onDispatchTradeDeploy={dispatchTradeDeployAgent}
-              releasePending={aiRelease.isPending}
-              tradeDeployPending={aiTradeDeploy.isPending}
-              canDispatchRelease={!aiRelease.disabled}
-              canDispatchTradeDeploy={!aiTradeDeploy.disabled}
-              releaseDisabledReason={aiRelease.disabledReason}
-              tradeDeployDisabledReason={aiTradeDeploy.disabledReason}
+              role="posture"
+              onOpenTaskControlCenter={() => onOpenLaunchView?.('mission-launch')}
               onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
               onOpenTradeDeploy={onOpenTradeDeploy ?? onOpenDelivery}
               onOpenPluginRelease={onOpenPluginRelease ?? onOpenLaunchView?.bind(null, 'mission-launch')}
             />
-
-            {!canOperate && (snapshot.release.signal !== 'ok' || snapshot.payloadOverall !== 'ok') && (
-              <OpsFeedback variant="warning" title="Authenticate as operator to run Launch Pad agents">
-                Use the header auth control before starting release or trade-deploy Agent tasks.
-              </OpsFeedback>
-            )}
-
-            {aiRelease.error != null && (
-              <OpsFeedback variant="error" title="Failed to start AI Release">
-                {aiRelease.error.message}
-              </OpsFeedback>
-            )}
-
-            {aiTradeDeploy.error != null && (
-              <OpsFeedback variant="error" title="Failed to start Deploy Satellite agent">
-                {aiTradeDeploy.error.message}
-              </OpsFeedback>
-            )}
           </ControlRoomBay>
         )}
 

@@ -188,8 +188,24 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Execution Log', plane: 'Engineer', purpose: 'Autonomous execution history' },
   { view: 'Trust & Autonomy', plane: 'Engineer', purpose: 'Earned autonomy KPIs and trust matrix' },
   { view: 'Operator Plane (L-1)', plane: 'Engineer', purpose: 'Out-of-band runner infrastructure (fate-isolated)' },
-  { view: 'Control Room', plane: 'Mission Control', purpose: 'Mission diagnosis — KPIs, matrix, flywheels, commander cockpit' },
-  { view: 'Task Control Center', plane: 'Mission Control', purpose: 'Task mode phased playbook — ops/dev loop lens with nav filter' },
+  {
+    view: 'Task Control Center',
+    plane: 'Mission Control',
+    purpose:
+      'Sole Mission / Task Mode execution entry — phased playbook, Fleet Desk, Launch board, Agent CTAs (ops/dev loop lens)',
+  },
+  {
+    view: 'Control Room',
+    plane: 'Mission Control',
+    purpose:
+      'Situation / bay posture cockpit (not Mission launch home) — Bay Scan, topology sheet, Operate/Release context; hand off execution to TCC',
+  },
+  {
+    view: 'Observability',
+    plane: 'Mission Control',
+    purpose:
+      'Apollo-domain read-only system health hub — domain signals, Attention, Grafana deep evidence (not a control plane)',
+  },
   {
     view: 'Defects',
     plane: 'Mission Control',
@@ -219,14 +235,16 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
 
 /** Task mode lenses — focused Console navigation for ops vs dev loops (Constitution). */
 export const TASK_MODE_BLUEPRINT = {
-  version: '2026-07-18',
+  version: '2026-07-31',
   source: 'console/src/lib/task-mode/taskModeCatalog.ts',
   statement:
     'Task modes filter sidebar navigation and land on Task Control Center for phased playbooks. ' +
+    'Ops / Dev Mode: Launch and primary Mission actions live only on TCC — Control Room is posture deep-dive (ROOM POSTURE + bays), not a second Mission home. ' +
     'Daily Ops uses Fleet Desk (Ops loop: viewer env · GO|HOLD|NO-GO · circle Discover→Clear · single CTA · Agent live panel · role×env board with probePath / per-cell Agent Fix); ' +
     'unavailable cells are display-only (Excluded from GO); Prod pins clusters.yaml viewer_env=prod (OPS_VIEWER_ENV overrides). ' +
-    'Mission Launch keeps readiness + LaunchPad + Release posture (Promote / cutover · Tier A·B); Daily Ops does not. Ops loops — no Briefing/DevAgent. ' +
-    'Dev loops (rocket-build, satellite-build, engineer-build, ground-build, plugin-build) chain Briefing → Dev Agent → Delivery Board.',
+    'Mission Launch keeps readiness + LaunchPad + Release posture on TCC (Promote / cutover · Tier A·B); Daily Ops does not. Ops loops — no Briefing/DevAgent. ' +
+    'Dev loops (rocket-build, satellite-build, engineer-build, ground-build, plugin-build) chain Briefing → Dev Agent → Delivery Board. ' +
+    'System Mode may land Control Room for panoramic posture; Observability remains read-only health.',
   modes: [
     'system',
     'daily-ops',
