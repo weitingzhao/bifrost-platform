@@ -38,6 +38,24 @@ export function parseControlRoomBayHash(hash: string): ControlRoomBayId | null {
     : null
 }
 
+/** Smooth-scroll to bay detail; optional hash update (`#cr-mission`). */
+export function scrollToControlRoomBay(id: ControlRoomBayId, opts?: { updateHash?: boolean }) {
+  if (typeof document === 'undefined') return
+  const el = document.getElementById(controlRoomBayDomId(id))
+  if (el == null) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  el.classList.add('ring-1', 'ring-primary/40')
+  window.setTimeout(() => {
+    el.classList.remove('ring-1', 'ring-primary/40')
+  }, 1200)
+  if (opts?.updateHash !== false && typeof window !== 'undefined') {
+    const next = controlRoomBayHash(id)
+    if (window.location.hash !== next) {
+      window.history.replaceState(null, '', next)
+    }
+  }
+}
+
 export type ControlRoomBaySignal = {
   id: ControlRoomBayId
   label: string

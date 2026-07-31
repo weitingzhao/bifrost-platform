@@ -66,7 +66,7 @@ function BayCard({
 }
 
 /**
- * Observability-style bay scan cards — click opens bay (Single accordion / Multi add).
+ * Observability-style bay scan cards — sole bay picker; click opens one bay (accordion).
  */
 export function ControlRoomBayCards({
   bays,

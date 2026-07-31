@@ -8,10 +8,6 @@ import { CommandIntentStrip } from '@/components/control-room/CommandIntentStrip
 import { ControlRoomBay } from '@/components/control-room/ControlRoomBay'
 import { ControlRoomBayCards } from '@/components/control-room/ControlRoomBayCards'
 import { ControlRoomAttentionStrip } from '@/components/control-room/ControlRoomAttentionStrip'
-import {
-  ControlRoomSectionNav,
-  scrollToControlRoomBay,
-} from '@/components/control-room/ControlRoomSectionNav'
 import { ControlRoomVerdictStrip } from '@/components/control-room/ControlRoomVerdictStrip'
 import { MissionTimelinePanel } from '@/components/control-room/MissionTimelinePanel'
 import { NetworkHealthPanel } from '@/components/control-room/NetworkHealthPanel'
@@ -42,16 +38,13 @@ import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOpe
 import {
   buildControlRoomAttentionItems,
   buildControlRoomBaySignals,
-  collapseOpenBayIdsForSingleMode,
-  loadControlRoomExpandMode,
   loadOpenControlRoomBayIds,
   nextOpenBayIds,
   parseControlRoomBayHash,
   persistOpenControlRoomBayIds,
   resolveInitialOpenBayIds,
-  saveControlRoomExpandMode,
+  scrollToControlRoomBay,
   type ControlRoomBayId,
-  type ControlRoomExpandMode,
 } from '@/lib/control-room/controlRoomBays'
 import {
   collectMissionDegradationItems,
@@ -156,13 +149,13 @@ export function ControlRoomPage({
   const [activeBay, setActiveBay] = useState<ControlRoomBayId | null>(() =>
     parseControlRoomBayHash(typeof window !== 'undefined' ? window.location.hash : ''),
   )
-  const [expandMode, setExpandMode] = useState<ControlRoomExpandMode>(() => loadControlRoomExpandMode())
+  /** Accordion only — Bay Scan is the sole bay picker (no Multi / chip nav). */
   const [openBayIds, setOpenBayIds] = useState<Set<ControlRoomBayId>>(() => {
     const preferred = parseControlRoomBayHash(
       typeof window !== 'undefined' ? window.location.hash : '',
     )
     const ids = resolveInitialOpenBayIds({
-      mode: loadControlRoomExpandMode(),
+      mode: 'single',
       preferredId: preferred,
       storedOpen: loadOpenControlRoomBayIds(),
     })
@@ -310,60 +303,37 @@ export function ControlRoomPage({
       .map(b => b.id)
     didAutoOpenUnhealthy.current = true
     if (unhealthy.length === 0) return
-    const nextIds =
-      expandMode === 'single' ? unhealthy.slice(0, 1) : unhealthy
+    const nextIds = unhealthy.slice(0, 1)
     setOpenBayIds(new Set(nextIds))
     persistOpenControlRoomBayIds(new Set(nextIds))
     if (nextIds[0] != null) setActiveBay(nextIds[0])
-  }, [baySignals, expandMode, missionLoading])
+  }, [baySignals, missionLoading])
 
   const missionPrimaryCause = useMemo(() => {
     if (snapshot.missionOverall === 'ok') return 'Mission probes nominal'
     return missionDegradationSummary(collectMissionDegradationItems(snapshot))
   }, [snapshot])
 
-  const jumpToBay = useCallback(
-    (id: ControlRoomBayId) => {
-      setActiveBay(id)
-      setOpenBayIds(prev => {
-        const next =
-          expandMode === 'single' ? new Set<ControlRoomBayId>([id]) : new Set(prev).add(id)
-        persistOpenControlRoomBayIds(next)
-        return next
-      })
-      requestAnimationFrame(() => {
-        scrollToControlRoomBay(id)
-      })
-    },
-    [expandMode],
-  )
+  const jumpToBay = useCallback((id: ControlRoomBayId) => {
+    setActiveBay(id)
+    setOpenBayIds(() => {
+      const next = new Set<ControlRoomBayId>([id])
+      persistOpenControlRoomBayIds(next)
+      return next
+    })
+    requestAnimationFrame(() => {
+      scrollToControlRoomBay(id)
+    })
+  }, [])
 
-  const setBayOpen = useCallback(
-    (id: ControlRoomBayId, open: boolean) => {
-      if (open) setActiveBay(id)
-      setOpenBayIds(prev => {
-        const next = nextOpenBayIds(expandMode, prev, id, open)
-        persistOpenControlRoomBayIds(next)
-        return next
-      })
-    },
-    [expandMode],
-  )
-
-  const handleExpandModeChange = useCallback(
-    (mode: ControlRoomExpandMode) => {
-      setExpandMode(mode)
-      saveControlRoomExpandMode(mode)
-      if (mode === 'single') {
-        setOpenBayIds(prev => {
-          const next = collapseOpenBayIdsForSingleMode(prev, activeBay)
-          persistOpenControlRoomBayIds(next)
-          return next
-        })
-      }
-    },
-    [activeBay],
-  )
+  const setBayOpen = useCallback((id: ControlRoomBayId, open: boolean) => {
+    if (open) setActiveBay(id)
+    setOpenBayIds(prev => {
+      const next = nextOpenBayIds('single', prev, id, open)
+      persistOpenControlRoomBayIds(next)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     const fromHash = parseControlRoomBayHash(window.location.hash)
@@ -404,14 +374,6 @@ export function ControlRoomPage({
       />
 
       <ControlRoomAttentionStrip items={attentionItems} onSelectBay={jumpToBay} />
-
-      <ControlRoomSectionNav
-        bays={baySignals}
-        activeBay={activeBay}
-        onSelectBay={jumpToBay}
-        expandMode={expandMode}
-        onExpandModeChange={handleExpandModeChange}
-      />
 
       <ControlRoomBayCards
         bays={baySignals}

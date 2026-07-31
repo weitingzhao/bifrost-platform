@@ -146,7 +146,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     ],
     examples: [
       'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — alerts meta → Attention (read-only health)',
-      'Control Room: OpsVerdictStrip ROOM POSTURE + bay chips → jumpToBay — no page-level Launch/Deploy (execution on TCC)',
+      'Control Room: OpsVerdictStrip ROOM POSTURE + Bay Scan cards → open bay detail (accordion Single) — no page-level Launch/Deploy',
       'Task Control Center: OpsVerdictStrip TASK VERDICT · {MODE} — sole Mission/Launch/Fleet primary CTAs',
       'Audit: OpsVerdictStrip ACTUATION HISTORY · Download JSON in actions',
       'Placement: OpsVerdictStrip PLACEMENT VERDICT · Copy LLM pack / Open Delivery / Open Cluster in actions',
@@ -206,7 +206,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     ],
     examples: [
       'Task Control Center: primary Launch / Fleet Fix / phase CTA on Verdict or Ops loop strip',
-      'Control Room: VerdictStrip has no Launch/Deploy actions — bay chips → jumpToBay; Launch bay Open TCC + detail deep-links',
+      'Control Room: VerdictStrip has no Launch/Deploy actions — Bay Scan opens one bay; Launch bay Open TCC + detail deep-links',
       'Observability: Verdict first; PageToolbar = Trade NS + Open Grafana; alerts meta → Attention (no Mission launch)',
       'Defects: PatternDebt Verdict + Fix top pattern; PageToolbar Refresh below',
       'Launch Rocket: AI Release on LaneStateStrip; Deploy/Gate in ReleaseStepCommandCenter',
