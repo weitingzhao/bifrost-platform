@@ -248,6 +248,11 @@ export type GrafanaDashboardEntry = {
    * that are cluster-scoped and do not accept a namespace template var).
    */
   suppressNamespace?: boolean
+  /**
+   * When true, deep links omit `var-env` (cluster-scoped stock boards that
+   * have no Trade env template variable).
+   */
+  suppressEnv?: boolean
 }
 
 export type ObservabilityViewModel = {

@@ -1100,8 +1100,7 @@ describe('grafana URL builder', () => {
         env: 'dev',
       })
       expect(rocketUrl).not.toMatch(/var-namespace=/)
-      // Rocket env is 'all' — seat env still becomes var-env for filtering if present
-      expect(rocketUrl).toMatch(/var-env=dev/)
+      expect(rocketUrl).not.toMatch(/var-env=/)
     }
   })
 })

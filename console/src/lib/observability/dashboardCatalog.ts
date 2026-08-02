@@ -25,6 +25,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     uid: 'efa86fd1d0c121a26444b636a3f509a8',
     slug: 'kubernetes-compute-resources-cluster',
     suppressNamespace: true,
+    suppressEnv: true,
   },
   {
     id: 'cluster-nodes',
@@ -35,6 +36,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     uid: '7d57716318ee0dddbac5a7f451fb7753',
     slug: 'node-exporter-nodes',
     suppressNamespace: true,
+    suppressEnv: true,
   },
   {
     id: 'platform-overview',
@@ -45,6 +47,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     uid: '9fa0d141-d019-4ad7-8bc5-42196ee308bd',
     slug: 'prometheus-overview',
     suppressNamespace: true,
+    suppressEnv: true,
   },
   {
     id: 'data-layer',

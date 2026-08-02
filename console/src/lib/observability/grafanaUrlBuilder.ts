@@ -87,8 +87,9 @@ export function buildGrafanaDashboardUrl(ctx: GrafanaLinkContext): string | null
       params.set('var-namespace', ns)
     }
   }
-  // Shared boards (Ground/IB) ignore seat env — never inject Trade var-env.
+  // Shared boards (Ground/IB) and Rocket stock (suppressEnv) ignore seat env.
   if (
+    !dash.suppressEnv &&
     ctx.env != null &&
     ctx.env !== 'all' &&
     ctx.env !== 'shared' &&
