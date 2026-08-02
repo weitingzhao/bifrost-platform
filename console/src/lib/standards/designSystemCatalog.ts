@@ -145,7 +145,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Rocket lane operate pages (Launch Rocket / Deploy Satellite / Launch Plugin): LaneStateStrip is the Verdict equivalent — do not replace with OpsVerdictStrip',
     ],
     examples: [
-      'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — alerts meta → Attention (read-only health)',
+      'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — alerts meta → Attention (triage + assisted Agent Fix / Diagnose)',
       'Control Room: OpsVerdictStrip ROOM POSTURE + Bay Scan cards → open bay detail (accordion Single) — no page-level Launch/Deploy',
       'Task Control Center: OpsVerdictStrip TASK VERDICT · {MODE} — sole Mission/Launch/Fleet primary CTAs',
       'Audit: OpsVerdictStrip ACTUATION HISTORY · Download JSON in actions',
@@ -208,7 +208,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     examples: [
       'Task Control Center: primary Launch / Fleet Fix / phase CTA on Verdict or Ops loop strip',
       'Control Room: VerdictStrip has no Launch/Deploy actions — Bay Scan opens one bay; Launch bay Open TCC + detail deep-links',
-      'Observability: Verdict first; PageToolbar = Trade NS (env-colored Segment via TradeNsSegmentControl / envVisual SSOT) + Open Grafana; alerts meta → Attention (no Mission launch)',
+      'Observability: Verdict Trade env+Shared; Domain Health split; Attention All|Trade env|Shared; Agent Fix|Diagnose|Manual → Dock; Mute 2h (audit/AM, not a fix); batch Fix N× shared playbook',
       'Defects: PatternDebt Verdict + Fix top pattern; PageToolbar Refresh below',
       'Launch Rocket: AI Release on LaneStateStrip; Deploy/Gate in ReleaseStepCommandCenter',
       'Deploy Satellite: AI Deploy on LaneStateStrip (+ Evidence links); Deploy/Gate in ReleaseStepCommandCenter',

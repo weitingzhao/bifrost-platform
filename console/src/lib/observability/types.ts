@@ -6,6 +6,7 @@
  */
 
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
+import type { RemediationTrack } from '@/lib/cluster/clusterFailureTriage'
 
 /** System-level health verdict (display labels are uppercase). */
 export type ObservabilityVerdict =
@@ -119,6 +120,9 @@ export type DomainHealth = {
   sharedDependencyIds: string[]
 }
 
+/** Attention Inspect CTA — assisted remediation entry (not a second execution engine). */
+export type AttentionRemediationCta = 'agent_fix' | 'diagnose' | 'manual'
+
 export type AttentionItem = {
   id: string
   severity: AlertSeverity
@@ -130,7 +134,7 @@ export type AttentionItem = {
   owner: string
   action: string
   summary: string
-  /** Structured triage for Wave 4 attention detail. */
+  /** Structured triage + assisted remediation classification. */
   triage: {
     whatHappened: string
     whyVerdictChanged: string
@@ -139,6 +143,12 @@ export type AttentionItem = {
     recommendedDestination: string
     detailRoute?: string
     grafanaUrl?: string | null
+    /** Remediation track — aligned with Cluster Failure Triage. */
+    track: RemediationTrack
+    playbookId?: string
+    cta: AttentionRemediationCta
+    trackReason: string
+    suggestedAction: string
   }
 }
 

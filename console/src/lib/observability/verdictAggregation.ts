@@ -14,6 +14,12 @@
 
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 import { systemDomainLabel } from '@/lib/architecture/systemDomainCatalog'
+import {
+  applyRemediationToTriage,
+  attentionCtaActionLabel,
+  classifyAttentionAlert,
+  classifyAttentionSignal,
+} from './attentionRemediationCatalog'
 import { verdictAffectingAlerts } from './alertMapping'
 import { OBSERVABILITY_DOMAIN_ORDER, SIGNAL_STALE_MS } from './signalRegistry'
 import type {
@@ -405,6 +411,33 @@ export function buildAttentionItems(
       const severity: AttentionItem['severity'] =
         s.state === 'critical' ? 'critical' : s.state === 'degraded' ? 'warning' : 'info'
       const affected = s.def.affectsDomains ?? [s.def.domain]
+      const remediation = classifyAttentionSignal({
+        signalId: s.def.id,
+        signalLabel: s.def.label,
+        domain: s.def.domain,
+        env: s.env,
+        summary: s.summary,
+        detailRoute: s.def.detailRoute,
+      })
+      const baseTriage = {
+        whatHappened: s.summary,
+        whyVerdictChanged: `${d.label} verdict is ${VERDICT_LABELS[d.verdict]} because required signal "${s.def.label}" is ${s.state.replace('_', ' ').toUpperCase()}`,
+        affectedDomains: affected,
+        evidence: s.evidence ?? s.summary,
+        recommendedDestination: s.def.detailRoute ?? 'observability',
+        detailRoute: s.def.detailRoute,
+        grafanaUrl:
+          opts.grafanaUrlFor?.({
+            domain: s.def.domain,
+            signalId: s.def.id,
+            env: s.env,
+          }) ?? null,
+        track: remediation.track,
+        playbookId: remediation.playbookId,
+        cta: remediation.cta,
+        trackReason: remediation.trackReason,
+        suggestedAction: remediation.suggestedAction,
+      }
       items.push({
         id: `signal:${s.def.id}:${s.env}`,
         severity,
@@ -413,22 +446,9 @@ export function buildAttentionItems(
         signalId: s.def.id,
         signalLabel: s.def.label,
         owner: ownerByDomain[s.def.domain] ?? s.def.domain,
-        action: s.def.detailRoute != null ? `Open ${s.def.detailRoute}` : 'Inspect signal',
+        action: attentionCtaActionLabel(remediation.cta),
         summary: s.summary,
-        triage: {
-          whatHappened: s.summary,
-          whyVerdictChanged: `${d.label} verdict is ${VERDICT_LABELS[d.verdict]} because required signal "${s.def.label}" is ${s.state.replace('_', ' ').toUpperCase()}`,
-          affectedDomains: affected,
-          evidence: s.evidence ?? s.summary,
-          recommendedDestination: s.def.detailRoute ?? 'observability',
-          detailRoute: s.def.detailRoute,
-          grafanaUrl:
-            opts.grafanaUrlFor?.({
-              domain: s.def.domain,
-              signalId: s.def.id,
-              env: s.env,
-            }) ?? null,
-        },
+        triage: applyRemediationToTriage(baseTriage, remediation),
       })
     }
   }
@@ -436,6 +456,27 @@ export function buildAttentionItems(
   for (const a of verdictAffectingAlerts(alerts)) {
     if (a.domain == null) continue
     const domainHealth = domains.find(d => d.domain === a.domain)
+    const remediation = classifyAttentionAlert(a)
+    const baseTriage = {
+      whatHappened: a.summary,
+      whyVerdictChanged: `${systemDomainLabel(a.domain)} includes mapped ${a.severity} alert "${a.name}"`,
+      affectedDomains: [a.domain],
+      evidence: `state=${a.state}; labels=${JSON.stringify(a.labels)}`,
+      recommendedDestination: 'observability',
+      detailRoute: domainHealth?.signals[0]?.def.detailRoute,
+      grafanaUrl:
+        opts.grafanaUrlFor?.({
+          domain: a.domain,
+          signalId: `alert.${a.name}`,
+          env: a.env,
+          activeAt: a.activeAt,
+        }) ?? null,
+      track: remediation.track,
+      playbookId: remediation.playbookId,
+      cta: remediation.cta,
+      trackReason: remediation.trackReason,
+      suggestedAction: remediation.suggestedAction,
+    }
     items.push({
       id: `alert:${a.id}`,
       severity: a.severity,
@@ -445,23 +486,9 @@ export function buildAttentionItems(
       signalLabel: a.name,
       since: a.activeAt,
       owner: ownerByDomain[a.domain] ?? a.domain,
-      action: 'Open Grafana alert context',
+      action: attentionCtaActionLabel(remediation.cta),
       summary: a.summary,
-      triage: {
-        whatHappened: a.summary,
-        whyVerdictChanged: `${systemDomainLabel(a.domain)} includes mapped ${a.severity} alert "${a.name}"`,
-        affectedDomains: [a.domain],
-        evidence: `state=${a.state}; labels=${JSON.stringify(a.labels)}`,
-        recommendedDestination: 'observability',
-        detailRoute: domainHealth?.signals[0]?.def.detailRoute,
-        grafanaUrl:
-          opts.grafanaUrlFor?.({
-            domain: a.domain,
-            signalId: `alert.${a.name}`,
-            env: a.env,
-            activeAt: a.activeAt,
-          }) ?? null,
-      },
+      triage: applyRemediationToTriage(baseTriage, remediation),
     })
   }
 

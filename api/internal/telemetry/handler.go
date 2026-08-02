@@ -3,20 +3,25 @@ package telemetry
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
 type Handler struct {
-	cfg *config.Config
-	svc *Service
+	cfg   *config.Config
+	svc   *Service
+	audit *actuation.AuditLog
 }
 
-func NewHandler(cfg *config.Config) *Handler {
+func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 	return &Handler{
-		cfg: cfg,
-		svc: NewService(cfg),
+		cfg:   cfg,
+		svc:   NewService(cfg),
+		audit: audit,
 	}
 }
 
@@ -72,6 +77,34 @@ func (h *Handler) HandleTargets(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.writeError(w, err)
 		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// HandleAttentionMute — L2 mute for Observability Attention (operator).
+// Audits always; best-effort Alertmanager silence when configured.
+// Explicitly NOT a health fix — UI suppress + optional AM silence only.
+func (h *Handler) HandleAttentionMute(w http.ResponseWriter, r *http.Request) {
+	var req AttentionMuteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if req.AttentionID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "attention_id required"})
+		return
+	}
+	resp := h.svc.CreateAttentionMute(r.Context(), req)
+	status := "ok"
+	if resp.Alertmanager == "error" {
+		status = "partial"
+	}
+	detail := fmt.Sprintf(
+		"signal=%s domain=%s env=%s am=%s silence=%s expires=%s",
+		req.SignalLabel, req.Domain, req.Env, resp.Alertmanager, resp.SilenceID, resp.ExpiresAt.Format(time.RFC3339),
+	)
+	if h.audit != nil {
+		h.audit.Record(r, "telemetry.attention_mute", req.AttentionID, status, detail)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

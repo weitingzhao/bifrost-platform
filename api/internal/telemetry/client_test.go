@@ -92,7 +92,7 @@ func TestResolveNamespace(t *testing.T) {
 }
 
 func TestHandlerOverviewPrometheusMissing(t *testing.T) {
-	h := NewHandler(nil)
+	h := NewHandler(nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/telemetry/overview?ns=bifrost-stg", nil)
 	rec := httptest.NewRecorder()
 	h.HandleOverview(rec, req)
@@ -109,7 +109,7 @@ func TestHandlerOverviewPrometheusMissing(t *testing.T) {
 }
 
 func TestHandlerQueryMissingParam(t *testing.T) {
-	h := NewHandler(nil)
+	h := NewHandler(nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/telemetry/query?ns=bifrost-stg", nil)
 	rec := httptest.NewRecorder()
 	h.HandleQuery(rec, req)

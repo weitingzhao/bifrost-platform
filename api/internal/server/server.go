@@ -177,7 +177,7 @@ func New(cfg *config.Config) (*Server, error) {
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
 		marketdata:      marketdata.NewHandler(clusterH.Service()),
-		telemetry:       telemetry.NewHandler(cfg),
+		telemetry:       telemetry.NewHandler(cfg, audit),
 		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
 		sessions:        sessionsH,
 		devSession:      devsession.NewHandler(devsession.NewService(cfg, clusterH.Service())),
@@ -212,6 +212,10 @@ func (s *Server) Router() http.Handler {
 		r.Get("/telemetry/promql", s.telemetry.HandlePromQL)
 		r.Get("/telemetry/alerts", s.telemetry.HandleAlerts)
 		r.Get("/telemetry/targets", s.telemetry.HandleTargets)
+		r.Group(func(r chi.Router) {
+			r.Use(s.auth.Require(actuation.RoleOperator))
+			r.Post("/telemetry/attention-mute", s.telemetry.HandleAttentionMute)
+		})
 		r.Get("/mission/verify-payload", s.handleVerifyPayload)
 		r.Get("/mission/verify-snapshot", s.handleVerifyMissionSnapshot)
 		r.Get("/self-health", s.selfhealth.HandleSelfHealth)

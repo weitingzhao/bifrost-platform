@@ -950,7 +950,11 @@ function ConsolePageInner() {
         )}
 
         {viewTab === 'observability' && (
-          <ObservabilityPage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
+          <ObservabilityPage
+            onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
+            ambientJobId={ambientJob?.id ?? null}
+            onStartAgentJob={startAmbientAgentJob}
+          />
         )}
 
         {viewTab === 'plugin-gallery' && (

@@ -2,11 +2,16 @@
  * Mission Control → Observability
  * One-screen answer: “Is the whole system healthy right now?”
  * Grafana is deep evidence — not a duplicated dashboard gallery.
+ *
+ * Attention remediation: triage entry only — Agent Fix / Diagnose reuse
+ * startRemediation + ambient Operator Dock (no second execution engine).
  */
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
+  ConfirmDialog,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -15,6 +20,7 @@ import {
   DenseTableHeader,
   DenseTableRow,
   DenseTag,
+  SegmentControl,
   Sheet,
   SheetContent,
   SheetDescription,
@@ -22,6 +28,9 @@ import {
   SheetTitle,
   cn,
 } from '@bifrost/ui'
+import { Wrench } from 'lucide-react'
+import { startRemediation } from '@/api/remediation'
+import { postAttentionMute } from '@/api/telemetry'
 import { TradeNsSegmentControl } from '@/components/TradeNsSegmentControl'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
@@ -29,6 +38,12 @@ import { PageToolbar } from '@/components/layout/PageToolbar'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
 import { useObservabilitySnapshot } from '@/hooks/useObservabilitySnapshot'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import {
+  ambientAgentBlockedReason,
+  type AmbientAgentJob,
+} from '@/lib/agent/ambientAgent'
+import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   SYSTEM_DOMAIN_ICON,
   SYSTEM_DOMAIN_VARIANT,
@@ -44,6 +59,16 @@ import type {
   SignalState,
 } from '@/lib/observability'
 import {
+  ATTENTION_MUTE_DEFAULT_HOURS,
+  attentionCtaActionLabel,
+  buildAttentionBatchRemediationPrompt,
+  buildAttentionRemediationPrompt,
+  filterMutedAttention,
+  largestAttentionBatchGroup,
+  listActiveAttentionMutes,
+  maxVerdict,
+  muteAttentionIds,
+  scopeForAttentionRemediation,
   signalStateToVerdict,
   signalToGap,
   sumGapSummaries,
@@ -52,6 +77,46 @@ import {
 
 const GAP_LEGEND =
   'ok = matched · fail = unhealthy · blind = probe missing · by-design = optional contract · reference = plane not probed'
+
+type AttentionScopeFilter = 'all' | 'trade_env' | 'shared'
+
+const ATTENTION_SCOPE_OPTIONS: { value: AttentionScopeFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'trade_env', label: 'Trade env' },
+  { value: 'shared', label: 'Shared' },
+]
+
+/** Worst verdict among participating runtime domains (ignores pure not_observed). */
+function rollupDomainVerdict(domains: DomainHealth[]): {
+  verdict: ObservabilityVerdict
+  cause: string
+} {
+  const participating = domains.filter(d => d.verdict !== 'not_observed')
+  if (domains.length === 0) {
+    return { verdict: 'not_observed', cause: 'No domains in this plane' }
+  }
+  if (participating.length === 0) {
+    return { verdict: 'not_observed', cause: 'No observed domains' }
+  }
+  let verdict: ObservabilityVerdict = 'healthy'
+  for (const d of participating) {
+    verdict = maxVerdict(verdict, d.verdict)
+  }
+  if (verdict === 'healthy') {
+    return { verdict, cause: 'Healthy' }
+  }
+  const worst = participating.find(d => d.verdict === verdict)
+  return {
+    verdict,
+    cause: worst != null ? `${worst.label}: ${worst.reason}` : VERDICT_LABELS[verdict],
+  }
+}
+
+function attentionMatchesScope(item: AttentionItem, filter: AttentionScopeFilter): boolean {
+  if (filter === 'all') return true
+  if (filter === 'shared') return item.env === 'shared'
+  return item.env !== 'shared'
+}
 
 function verdictLamp(v: ObservabilityVerdict) {
   switch (v) {
@@ -216,8 +281,9 @@ function DomainCard({
       </span>
       <span className="text-[var(--text-dense-caption)]">
         <GapSummaryText summary={domain.gapSummary} />
-        {domain.envScope !== 'none' ? (
-          <span className="text-muted-foreground"> · {domain.envScope}</span>
+        {/* Section headers own shared vs Trade env; only call out mixed. */}
+        {domain.envScope === 'mixed' ? (
+          <span className="text-muted-foreground"> · mixed</span>
         ) : null}
       </span>
     </button>
@@ -288,8 +354,12 @@ function SystemGapMeta({ summary }: { summary: GapSummary }) {
 
 export function ObservabilityPage({
   onNavigate,
+  ambientJobId,
+  onStartAgentJob,
 }: {
   onNavigate?: (tab: string) => void
+  ambientJobId?: string | null
+  onStartAgentJob?: (job: AmbientAgentJob) => void
 }) {
   const {
     viewModel,
@@ -302,19 +372,154 @@ export function ObservabilityPage({
     refetchAll,
     namespace,
   } = useObservabilitySnapshot()
+  const { canOperate } = usePlatformAuth()
+  const qc = useQueryClient()
 
   const [attentionDetail, setAttentionDetail] = useState<AttentionItem | null>(null)
+  const [attentionScope, setAttentionScope] = useState<AttentionScopeFilter>('all')
+  const [lastRemediationJobId, setLastRemediationJobId] = useState<string | null>(null)
+  const [remediationError, setRemediationError] = useState<string | null>(null)
+  const [muteRevision, setMuteRevision] = useState(0)
+  const [muteConfirmItem, setMuteConfirmItem] = useState<AttentionItem | null>(null)
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
+  const [muteMessage, setMuteMessage] = useState<string | null>(null)
   const system = viewModel.system
   const selected = viewModel.selected
+
+  const agentBlockedReason = ambientAgentBlockedReason(
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+  )
+
+  const invalidateObservability = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: ['telemetry', 'alerts'] })
+    void qc.invalidateQueries({ queryKey: ['telemetry', 'targets'] })
+    void qc.invalidateQueries({ queryKey: ['telemetry', 'overview'] })
+    void qc.invalidateQueries({ queryKey: ['cluster', 'observability'] })
+    void qc.invalidateQueries({ queryKey: ['cluster'] })
+    void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+  }, [qc])
+
+  const remediationMutation = useMutation({
+    mutationFn: ({
+      item,
+      batchPrompt,
+      batchPlaybookId,
+    }: {
+      item?: AttentionItem
+      batchPrompt?: string
+      batchPlaybookId?: string
+    }) => {
+      if (batchPrompt != null && batchPlaybookId != null) {
+        const scope = scopeForAttentionRemediation(batchPlaybookId)
+        return startRemediation({ scope, prompt: batchPrompt })
+      }
+      if (item == null) throw new Error('missing attention item')
+      const scope = scopeForAttentionRemediation(item.triage.playbookId)
+      const prompt = buildAttentionRemediationPrompt(item)
+      return startRemediation({ scope, prompt })
+    },
+    onSuccess: (job, vars) => {
+      setRemediationError(null)
+      setLastRemediationJobId(job.id)
+      const playbookId = vars.batchPlaybookId ?? vars.item?.triage.playbookId
+      const scope = scopeForAttentionRemediation(playbookId)
+      onStartAgentJob?.({ id: job.id, scope, label: scopeToLabel(scope) })
+      invalidateObservability()
+      setAttentionDetail(null)
+      setBatchConfirmOpen(false)
+    },
+    onError: (err: Error) => {
+      setRemediationError(err.message)
+    },
+  })
+
+  const muteMutation = useMutation({
+    mutationFn: async (item: AttentionItem) => {
+      muteAttentionIds(
+        [{ attentionId: item.id, signalLabel: item.signalLabel }],
+        ATTENTION_MUTE_DEFAULT_HOURS,
+      )
+      setMuteRevision(n => n + 1)
+      if (!canOperate) {
+        return {
+          ok: true,
+          message: 'Muted in this browser only (no operator token — not audited / no Alertmanager)',
+        }
+      }
+      return postAttentionMute({
+        attention_id: item.id,
+        signal_label: item.signalLabel,
+        domain: item.domain,
+        env: item.env,
+        alertname: item.signalLabel,
+        duration_hours: ATTENTION_MUTE_DEFAULT_HOURS,
+        comment: `Observability Attention mute ${ATTENTION_MUTE_DEFAULT_HOURS}h · ${item.id}`,
+      })
+    },
+    onSuccess: data => {
+      setMuteMessage(data.message)
+      setMuteConfirmItem(null)
+      setAttentionDetail(null)
+    },
+    onError: (err: Error) => {
+      // Local mute already applied — surface server/AM failure.
+      setMuteMessage(`Muted in UI; server: ${err.message}`)
+      setMuteConfirmItem(null)
+    },
+  })
+
+  const runAttentionRemediation = useCallback(
+    (item: AttentionItem) => {
+      if (agentBlockedReason != null) return
+      if (item.triage.cta === 'manual') {
+        if (item.triage.detailRoute != null) onNavigate?.(item.triage.detailRoute)
+        return
+      }
+      remediationMutation.mutate({ item })
+    },
+    [agentBlockedReason, onNavigate, remediationMutation],
+  )
 
   const runtimeDomains = useMemo(
     () => viewModel.domains.filter(d => d.probeability === 'runtime'),
     [viewModel.domains],
   )
+  /** Satellite (and any pure env-scoped domain) — follows Trade env selector. */
+  const tradeEnvDomains = useMemo(
+    () => runtimeDomains.filter(d => d.envScope === 'env'),
+    [runtimeDomains],
+  )
+  /** Rocket / Ground / Subcontractors / Engineer — cluster fabric, not Trade-NS-scoped. */
+  const sharedPlatformDomains = useMemo(
+    () => runtimeDomains.filter(d => d.envScope !== 'env'),
+    [runtimeDomains],
+  )
   const referenceDomains = useMemo(
     () => viewModel.domains.filter(d => d.probeability === 'reference'),
     [viewModel.domains],
   )
+  const tradeEnvRollup = useMemo(() => rollupDomainVerdict(tradeEnvDomains), [tradeEnvDomains])
+  const sharedRollup = useMemo(
+    () => rollupDomainVerdict(sharedPlatformDomains),
+    [sharedPlatformDomains],
+  )
+  const filteredAttention = useMemo(() => {
+    void muteRevision
+    const scoped = viewModel.attention.filter(item => attentionMatchesScope(item, attentionScope))
+    return filterMutedAttention(scoped)
+  }, [viewModel.attention, attentionScope, muteRevision])
+
+  const batchGroup = useMemo(
+    () => largestAttentionBatchGroup(filteredAttention),
+    [filteredAttention],
+  )
+
+  const activeMuteCount = useMemo(() => {
+    void muteRevision
+    return listActiveAttentionMutes().length
+  }, [muteRevision])
 
   const domainCountsLabel = useMemo(() => {
     const c = system.domainCounts
@@ -375,6 +580,28 @@ export function ObservabilityPage({
         }
         meta={
           <>
+            <span
+              className="inline-flex min-w-0 max-w-full items-center gap-1"
+              title={tradeEnvRollup.cause}
+            >
+              <span className="text-muted-foreground shrink-0">Trade env</span>
+              <StatusLamp value={verdictLamp(tradeEnvRollup.verdict)} kind="reach" />
+              <DenseTag variant={verdictTag(tradeEnvRollup.verdict)} className="text-[9px] shrink-0">
+                {VERDICT_LABELS[tradeEnvRollup.verdict]}
+              </DenseTag>
+              <span className="truncate text-muted-foreground">{tradeEnvRollup.cause}</span>
+            </span>
+            <span
+              className="inline-flex min-w-0 max-w-full items-center gap-1"
+              title={sharedRollup.cause}
+            >
+              <span className="text-muted-foreground shrink-0">Shared</span>
+              <StatusLamp value={verdictLamp(sharedRollup.verdict)} kind="reach" />
+              <DenseTag variant={verdictTag(sharedRollup.verdict)} className="text-[9px] shrink-0">
+                {VERDICT_LABELS[sharedRollup.verdict]}
+              </DenseTag>
+              <span className="truncate text-muted-foreground">{sharedRollup.cause}</span>
+            </span>
             <SystemGapMeta summary={systemGapSummary} />
             <span className="text-muted-foreground">{domainCountsLabel || '—'}</span>
             {system.referenceDomainCount > 0 ? (
@@ -397,7 +624,9 @@ export function ObservabilityPage({
               </button>
             )}
             <span className="font-mono-tabular">freshness {formatFreshness(system.freshnessMs)}</span>
-            <span className="font-mono-tabular">{namespace}</span>
+            <span className="font-mono-tabular" title="Trade namespace for env-scoped probes">
+              {namespace}
+            </span>
             <span className="ml-auto">
               Layer B {viewModel.layerBStatus}
               {!viewModel.prometheusConfigured ? ' · Prometheus not configured' : ''}
@@ -414,8 +643,17 @@ export function ObservabilityPage({
 
       <PageToolbar align="between">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground shrink-0">Trade NS:</span>
-            <TradeNsSegmentControl value={tradeEnv} onChange={setTradeEnv} />
+            <span
+              className="text-xs font-medium text-muted-foreground shrink-0"
+              title="Scopes Satellite (Trade) probes only — Shared platform domains ignore this selector"
+            >
+              Trade env:
+            </span>
+            <TradeNsSegmentControl
+              value={tradeEnv}
+              onChange={setTradeEnv}
+              ariaLabel="Trade environment"
+            />
             <SectionRefreshButton isFetching={isFetching} onClick={refetchAll} />
           </div>
           {primaryGrafana?.url != null && (
@@ -427,10 +665,10 @@ export function ObservabilityPage({
           )}
       </PageToolbar>
 
-      {/* Apollo Domain Health — runtime grid + demoted reference planes */}
+      {/* Apollo Domain Health — Trade env vs Shared platform vs reference */}
       <OpsSection
         title="Apollo Domain Health"
-        description="Runtime domains — reference planes listed below"
+        description="Trade env domains follow the selector · Shared platform is cluster-wide · Reference not probed"
         bodyPadding="compact"
         overflow="visible"
         collapsible={systemHealthy}
@@ -441,17 +679,54 @@ export function ObservabilityPage({
           </p>
         }
       >
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            {runtimeDomains.map(d => (
-              <DomainCard
-                key={d.domain}
-                domain={d}
-                selected={selectedDomain === d.domain}
-                onSelect={() => setSelectedDomain(d.domain)}
-              />
-            ))}
-          </div>
+        <div className="flex flex-col gap-2.5">
+          {tradeEnvDomains.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              <OpsSubsectionTitle>
+                Trade env · {tradeEnv.toUpperCase()}
+                <span className="ml-1.5 font-normal text-muted-foreground">
+                  ({namespace} · follows selector)
+                </span>
+              </OpsSubsectionTitle>
+              <div className="flex flex-wrap gap-1.5">
+                {tradeEnvDomains.map(d => (
+                  <DomainCard
+                    key={d.domain}
+                    domain={d}
+                    selected={selectedDomain === d.domain}
+                    onSelect={() => setSelectedDomain(d.domain)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {sharedPlatformDomains.length > 0 ? (
+            <div
+              className={cn(
+                'flex flex-col gap-1',
+                tradeEnvDomains.length > 0 ? 'border-t border-[var(--border)] pt-2' : null,
+              )}
+            >
+              <OpsSubsectionTitle>
+                Shared platform
+                <span className="ml-1.5 font-normal text-muted-foreground">
+                  (not scoped by Trade env)
+                </span>
+              </OpsSubsectionTitle>
+              <div className="flex flex-wrap gap-1.5">
+                {sharedPlatformDomains.map(d => (
+                  <DomainCard
+                    key={d.domain}
+                    domain={d}
+                    selected={selectedDomain === d.domain}
+                    onSelect={() => setSelectedDomain(d.domain)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {referenceDomains.length > 0 ? (
             <div className="flex flex-col gap-1 border-t border-[var(--border)] pt-2">
               <OpsSubsectionTitle>Reference domains (not probed)</OpsSubsectionTitle>
@@ -474,11 +749,71 @@ export function ObservabilityPage({
       <OpsSection
         id="obs-attention"
         title="Attention"
-        description="Severity · Domain · Environment · Signal · Since · Owner · Action"
+        description="Severity · Domain · Environment · Signal · Since · Owner · Action — Inspect / Agent Fix / Mute 2h (not a fix)"
         bodyPadding="none"
         overflow="hidden"
         collapsible={attentionQuiet}
         defaultCollapsed={attentionQuiet}
+        actions={
+          viewModel.attention.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {batchGroup != null && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={agentBlockedReason != null || remediationMutation.isPending}
+                  title={
+                    agentBlockedReason ??
+                    `Batch Agent Fix for ${batchGroup.items.length}× ${batchGroup.playbookId} (Operator Dock)`
+                  }
+                  onClick={() => setBatchConfirmOpen(true)}
+                >
+                  <Wrench size={14} className="mr-1" aria-hidden />
+                  Fix {batchGroup.items.length}× shared
+                </Button>
+              )}
+              <SegmentControl
+                size="sm"
+                value={attentionScope}
+                options={ATTENTION_SCOPE_OPTIONS}
+                onChange={v => setAttentionScope(v as AttentionScopeFilter)}
+                ariaLabel="Attention scope"
+              />
+            </div>
+          ) : null
+        }
+        headerExtra={
+          remediationError != null ||
+          lastRemediationJobId != null ||
+          muteMessage != null ||
+          activeMuteCount > 0 ? (
+            <p className="m-0 text-[var(--text-dense-caption)]">
+              {remediationError != null ? (
+                <span className="text-danger">{remediationError}</span>
+              ) : null}
+              {remediationError == null && lastRemediationJobId != null ? (
+                <span className="text-muted-foreground">
+                  Agent task started · Expand Operator Dock · job {lastRemediationJobId}
+                </span>
+              ) : null}
+              {muteMessage != null ? (
+                <span className="text-muted-foreground">
+                  {remediationError != null || lastRemediationJobId != null ? ' · ' : null}
+                  {muteMessage}
+                </span>
+              ) : null}
+              {activeMuteCount > 0 ? (
+                <span className="text-muted-foreground">
+                  {(remediationError != null ||
+                    lastRemediationJobId != null ||
+                    muteMessage != null) &&
+                    ' · '}
+                  {activeMuteCount} muted (UI{canOperate ? ' ± AM' : ''} · not fixed)
+                </span>
+              ) : null}
+            </p>
+          ) : null
+        }
       >
         <DenseDataTable>
           <DenseTableHeader>
@@ -508,8 +843,14 @@ export function ObservabilityPage({
                   </span>
                 </DenseTableCell>
               </DenseTableRow>
+            ) : filteredAttention.length === 0 ? (
+              <DenseTableRow>
+                <DenseTableCell colSpan={7} className="text-muted-foreground">
+                  No attention items in this scope — try All or another filter.
+                </DenseTableCell>
+              </DenseTableRow>
             ) : (
-              viewModel.attention.map(item => (
+              filteredAttention.map(item => (
                 <DenseTableRow key={item.id}>
                   <DenseTableCell>
                     <span className="inline-flex items-center gap-1">
@@ -533,13 +874,57 @@ export function ObservabilityPage({
                   </DenseTableCell>
                   <DenseTableCell className="text-[var(--text-dense-caption)]">{item.owner}</DenseTableCell>
                   <DenseTableCell>
-                    <button
-                      type="button"
-                      className="focus-strip-link text-[var(--text-dense-caption)]"
-                      onClick={() => setAttentionDetail(item)}
-                    >
-                      Inspect
-                    </button>
+                    <span className="inline-flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        className="focus-strip-link text-[var(--text-dense-caption)]"
+                        onClick={() => setAttentionDetail(item)}
+                      >
+                        Inspect
+                      </button>
+                      <button
+                        type="button"
+                        className="focus-strip-link text-[var(--text-dense-caption)] text-muted-foreground"
+                        title="Mute 2h in Observability (optional Alertmanager silence) — not a root-cause fix"
+                        onClick={() => setMuteConfirmItem(item)}
+                      >
+                        Mute
+                      </button>
+                      {item.triage.cta === 'manual' ? (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          className="h-6 px-1.5"
+                          onClick={() => {
+                            if (item.triage.detailRoute != null) {
+                              onNavigate?.(item.triage.detailRoute)
+                            } else {
+                              setAttentionDetail(item)
+                            }
+                          }}
+                          title={item.triage.suggestedAction}
+                        >
+                          Manual
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          className="h-6 px-1.5"
+                          disabled={
+                            agentBlockedReason != null || remediationMutation.isPending
+                          }
+                          title={
+                            agentBlockedReason ??
+                            `${attentionCtaActionLabel(item.triage.cta)} · ${item.triage.trackReason}`
+                          }
+                          onClick={() => runAttentionRemediation(item)}
+                        >
+                          <Wrench size={12} className="mr-1" aria-hidden />
+                          {attentionCtaActionLabel(item.triage.cta)}
+                        </Button>
+                      )}
+                    </span>
                   </DenseTableCell>
                 </DenseTableRow>
               ))
@@ -896,6 +1281,15 @@ export function ObservabilityPage({
                     ['Affected domains', attentionDetail.triage.affectedDomains.join(', ')],
                     ['Evidence', attentionDetail.triage.evidence],
                     ['Recommended destination', attentionDetail.triage.recommendedDestination],
+                    [
+                      'Remediation track',
+                      `${attentionDetail.triage.track}${
+                        attentionDetail.triage.playbookId != null
+                          ? ` · ${attentionDetail.triage.playbookId}`
+                          : ''
+                      } — ${attentionDetail.triage.trackReason}`,
+                    ],
+                    ['Suggested action', attentionDetail.triage.suggestedAction],
                   ] as const
                 ).map(([label, value]) => (
                   <div key={label}>
@@ -905,7 +1299,51 @@ export function ObservabilityPage({
                     <p className="m-0 text-[var(--text-dense-meta)]">{value}</p>
                   </div>
                 ))}
+                {agentBlockedReason != null && attentionDetail.triage.cta !== 'manual' && (
+                  <p className="m-0 text-[var(--text-dense-caption)] text-warning">
+                    {agentBlockedReason}
+                  </p>
+                )}
+                {remediationError != null && (
+                  <p className="m-0 text-[var(--text-dense-caption)] text-danger">{remediationError}</p>
+                )}
                 <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-2">
+                  {attentionDetail.triage.cta === 'agent_fix' && (
+                    <Button
+                      size="sm"
+                      disabled={agentBlockedReason != null || remediationMutation.isPending}
+                      title={agentBlockedReason ?? 'Start assisted Agent Fix in Operator Dock'}
+                      onClick={() => runAttentionRemediation(attentionDetail)}
+                    >
+                      <Wrench size={14} className="mr-1" aria-hidden />
+                      Agent Fix
+                    </Button>
+                  )}
+                  {attentionDetail.triage.cta === 'diagnose' && (
+                    <Button
+                      size="sm"
+                      disabled={agentBlockedReason != null || remediationMutation.isPending}
+                      title={agentBlockedReason ?? 'Start assisted diagnose in Operator Dock'}
+                      onClick={() => runAttentionRemediation(attentionDetail)}
+                    >
+                      <Wrench size={14} className="mr-1" aria-hidden />
+                      Diagnose
+                    </Button>
+                  )}
+                  {attentionDetail.triage.cta === 'manual' && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => {
+                        if (attentionDetail.triage.detailRoute != null) {
+                          onNavigate?.(attentionDetail.triage.detailRoute)
+                        }
+                        setAttentionDetail(null)
+                      }}
+                    >
+                      Manual next
+                    </Button>
+                  )}
                   {attentionDetail.triage.detailRoute != null && (
                     <Button
                       size="sm"
@@ -919,18 +1357,59 @@ export function ObservabilityPage({
                     </Button>
                   )}
                   {attentionDetail.triage.grafanaUrl != null && (
-                    <Button size="sm" asChild>
+                    <Button size="sm" variant="outline" asChild>
                       <a href={attentionDetail.triage.grafanaUrl} target="_blank" rel="noreferrer">
                         Open Grafana
                       </a>
                     </Button>
                   )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={muteMutation.isPending}
+                    title="Mute 2h — UI suppress + audit; optional Alertmanager silence. Not a fix."
+                    onClick={() => setMuteConfirmItem(attentionDetail)}
+                  >
+                    Mute 2h
+                  </Button>
                 </div>
               </div>
             </>
           )}
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={muteConfirmItem != null}
+        title="Mute Attention item for 2 hours?"
+        message="This hides the row in Observability and may create an Alertmanager silence when configured. Mute is not a root-cause fix — alerts can return when the mute expires."
+        confirmLabel="Mute 2h"
+        confirming={muteMutation.isPending}
+        onConfirm={() => {
+          if (muteConfirmItem != null) muteMutation.mutate(muteConfirmItem)
+        }}
+        onCancel={() => setMuteConfirmItem(null)}
+      />
+
+      <ConfirmDialog
+        open={batchConfirmOpen && batchGroup != null}
+        title={
+          batchGroup != null
+            ? `Batch Agent Fix (${batchGroup.items.length}× ${batchGroup.playbookId})?`
+            : 'Batch Agent Fix?'
+        }
+        message="Starts one assisted remediation job in Operator Dock covering all matching Attention rows. Approve actuations in the dock — no auto-remediate."
+        confirmLabel="Start batch Fix"
+        confirming={remediationMutation.isPending}
+        onConfirm={() => {
+          if (batchGroup == null || agentBlockedReason != null) return
+          remediationMutation.mutate({
+            batchPlaybookId: batchGroup.playbookId,
+            batchPrompt: buildAttentionBatchRemediationPrompt(batchGroup),
+          })
+        }}
+        onCancel={() => setBatchConfirmOpen(false)}
+      />
     </div>
   )
 }
