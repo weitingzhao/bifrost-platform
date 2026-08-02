@@ -30,9 +30,18 @@ export function ControlRoomAttentionStrip({
         )}
         aria-label="Attention"
       >
-        <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
-          No attention items — bays clear or probing.
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusLamp value="ok" kind="reach" />
+          <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
+            Attention
+          </span>
+          <DenseTag variant="success" className="text-[9px]">
+            CLEAR
+          </DenseTag>
+          <span className="text-[var(--text-dense-meta)] text-muted-foreground">
+            No items — bays clear or probing.
+          </span>
+        </div>
       </section>
     )
   }
