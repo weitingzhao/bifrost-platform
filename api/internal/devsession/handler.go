@@ -13,8 +13,8 @@ type Handler struct {
 	svc *Service
 }
 
-func NewHandler() *Handler {
-	return &Handler{svc: NewService()}
+func NewHandler(svc *Service) *Handler {
+	return &Handler{svc: svc}
 }
 
 // HandleList returns all dev sessions with their current status.
@@ -27,7 +27,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sessions)
 }
 
-// HandleLogs returns the last N lines from a service's log file.
+// HandleLogs returns the last N lines from a service's log file or pod logs.
 func (h *Handler) HandleLogs(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if name == "" {
@@ -51,6 +51,7 @@ func (h *Handler) HandleLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleControl executes a start/stop/restart action on a named session.
+// Operator auth is enforced by the server route group (Require RoleOperator).
 func (h *Handler) HandleControl(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if name == "" {

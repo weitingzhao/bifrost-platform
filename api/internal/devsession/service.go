@@ -1,134 +1,77 @@
 package devsession
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
 )
 
-// Service manages dev sessions via the bdev CLI.
+// Service routes List/Logs/Control to the env-appropriate SessionProvider.
 type Service struct {
-	logDir string
+	provider SessionProvider
+	mode     string
+	env      string
 }
 
-func NewService() *Service {
-	home, _ := os.UserHomeDir()
-	return &Service{
-		logDir: filepath.Join(home, ".bifrost-dev", "logs"),
-	}
-}
-
-// List runs `bdev status --json` and returns parsed sessions.
-func (s *Service) List(ctx context.Context) ([]DevSession, error) {
-	cmd := exec.CommandContext(ctx, "bdev", "status", "--json")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
+// NewService chooses BdevProvider for local/dev seats and K8sProvider for stg/prod.
+// Local make start stays on bdev even when clusters.yaml pins viewer_env: prod
+// (ResolveViewerEnv already ignores that pin outside the cluster).
+func NewService(cfg *config.Config, clusterSvc *cluster.Service) *Service {
+	env := selfhealth.ResolveViewerEnv(cfg)
+	switch env {
+	case "stg", "prod":
+		configDir := ""
+		if cfg != nil {
+			configDir = cfg.ConfigDir()
 		}
-		return nil, fmt.Errorf("bdev status: %s", msg)
+		catalog, err := LoadSessionsCatalog(configDir)
+		if err != nil {
+			// Fall back to empty catalog; List returns [] rather than failing startup.
+			catalog = &SessionsCatalog{Envs: map[string][]CatalogEntry{}}
+		}
+		return &Service{
+			provider: NewK8sProvider(clusterSvc, catalog, env),
+			mode:     ModeK8s,
+			env:      env,
+		}
+	default:
+		return &Service{
+			provider: NewBdevProvider(env),
+			mode:     ModeBdev,
+			env:      env,
+		}
 	}
+}
 
-	var sessions []DevSession
-	if err := json.Unmarshal(stdout.Bytes(), &sessions); err != nil {
-		return nil, fmt.Errorf("parse bdev output: %w", err)
+// Mode returns "bdev" or "k8s".
+func (s *Service) Mode() string { return s.mode }
+
+// Env returns the resolved viewer seat.
+func (s *Service) Env() string { return s.env }
+
+func (s *Service) List(ctx context.Context) ([]DevSession, error) {
+	sessions, err := s.provider.List(ctx)
+	if err != nil {
+		return nil, err
 	}
-	s.enrichLastOutput(sessions)
+	for i := range sessions {
+		if sessions[i].Mode == "" {
+			sessions[i].Mode = s.mode
+		}
+		if sessions[i].Env == "" {
+			sessions[i].Env = s.env
+		}
+	}
 	return sessions, nil
 }
 
-// Control runs `bdev <action> <name>` and captures the result.
+func (s *Service) Logs(ctx context.Context, name string, lines int) (*LogResponse, error) {
+	return s.provider.Logs(ctx, strings.TrimSpace(name), lines)
+}
+
 func (s *Service) Control(ctx context.Context, name, action string) (*ControlResponse, error) {
-	switch action {
-	case "start", "stop", "restart":
-	case "clear-logs":
-		return s.clearLogs(name)
-	default:
-		return &ControlResponse{
-			Name: name, Action: action, Success: false,
-			Message: "unknown action: " + action,
-		}, fmt.Errorf("unknown action: %s", action)
-	}
-
-	cmd := exec.CommandContext(ctx, "bdev", action, name)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = strings.TrimSpace(stdout.String())
-		}
-		if msg == "" {
-			msg = err.Error()
-		}
-		return &ControlResponse{
-			Name: name, Action: action, Success: false, Message: msg,
-		}, nil
-	}
-
-	msg := strings.TrimSpace(stdout.String())
-	if msg == "" {
-		msg = action + " completed"
-	}
-	return &ControlResponse{
-		Name: name, Action: action, Success: true, Message: msg,
-	}, nil
-}
-
-// clearLogs truncates the log file to zero bytes.
-func (s *Service) clearLogs(name string) (*ControlResponse, error) {
-	logPath := filepath.Join(s.logDir, name+".log")
-	if err := os.Truncate(logPath, 0); err != nil {
-		if os.IsNotExist(err) {
-			return &ControlResponse{Name: name, Action: "clear-logs", Success: true, Message: "no log file"}, nil
-		}
-		return &ControlResponse{
-			Name: name, Action: "clear-logs", Success: false, Message: err.Error(),
-		}, nil
-	}
-	return &ControlResponse{Name: name, Action: "clear-logs", Success: true, Message: "log cleared"}, nil
-}
-
-// enrichLastOutput populates LastOutputAt from the log file mtime.
-func (s *Service) enrichLastOutput(sessions []DevSession) {
-	for i := range sessions {
-		logPath := filepath.Join(s.logDir, sessions[i].Name+".log")
-		info, err := os.Stat(logPath)
-		if err == nil && info.Size() > 0 {
-			t := info.ModTime().Unix()
-			sessions[i].LastOutputAt = &t
-		}
-	}
-}
-
-// Logs reads the last N lines from ~/.bifrost-dev/logs/<name>.log
-// using a tail seek (does not load the whole file when large).
-func (s *Service) Logs(_ context.Context, name string, lines int) (*LogResponse, error) {
-	if lines <= 0 {
-		lines = 200
-	}
-	if lines > 2000 {
-		lines = 2000
-	}
-
-	logPath := filepath.Join(s.logDir, name+".log")
-	out, err := TailFileLines(logPath, lines)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &LogResponse{Name: name, Lines: []string{}}, nil
-		}
-		return nil, fmt.Errorf("read log %s: %w", name, err)
-	}
-	return &LogResponse{Name: name, Lines: out}, nil
+	return s.provider.Control(ctx, strings.TrimSpace(name), strings.TrimSpace(action))
 }

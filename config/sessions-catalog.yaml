@@ -1,0 +1,176 @@
+# Static allowlist for Ops Console Sessions (K8s mode — STG/PROD viewer seats).
+# Local / DEV continues to use bdev; this file is ignored in bdev mode.
+#
+# name: session id used by /api/v1/dev-sessions/{name}/...
+# deployment: K8s Deployment name (may differ from name; platform → platform-api)
+
+version: "1"
+
+envs:
+  stg:
+    - name: platform
+      label: Platform API
+      group: platform
+      namespace: bifrost-platform-stg
+      deployment: platform-api
+      ports: [8780]
+    - name: platform-console
+      label: Platform Console
+      group: platform
+      namespace: bifrost-platform-stg
+      deployment: platform-console
+      ports: [5180]
+
+    - name: api-monitor
+      label: Monitor API
+      group: api
+      namespace: bifrost-stg
+      deployment: api-monitor
+      ports: [8765]
+    - name: api-ops
+      label: Ops API
+      group: api
+      namespace: bifrost-stg
+      deployment: api-ops
+      ports: [8768]
+    - name: api-trading
+      label: Trading API
+      group: api
+      namespace: bifrost-stg
+      deployment: api-trading
+      ports: [8769]
+    - name: api-market
+      label: Market API
+      group: api
+      namespace: bifrost-stg
+      deployment: api-market
+      ports: [8772]
+    - name: api-research
+      label: Research API
+      group: api
+      namespace: bifrost-stg
+      deployment: api-research
+      ports: [8773]
+    - name: frontend
+      label: Trade Frontend
+      group: ui
+      namespace: bifrost-stg
+      deployment: frontend
+      ports: [80]
+
+    - name: celery-worker
+      label: Celery Worker
+      group: worker
+      namespace: bifrost-stg
+      deployment: celery-worker
+    - name: celery-beat
+      label: Celery Beat
+      group: worker
+      namespace: bifrost-stg
+      deployment: celery-beat
+    - name: daemon
+      label: Daemon
+      group: worker
+      namespace: bifrost-stg
+      deployment: daemon
+
+    - name: polygon-worker-stocks
+      label: Market Data Stocks
+      group: market-data
+      namespace: plugin-market-data-stg
+      deployment: polygon-worker-stocks
+    - name: polygon-worker-options
+      label: Market Data Options
+      group: market-data
+      namespace: plugin-market-data-stg
+      deployment: polygon-worker-options
+
+    - name: ib-gateway
+      label: IB Gateway
+      group: plugins
+      namespace: data
+      deployment: ib-gateway
+
+  prod:
+    - name: platform
+      label: Platform API
+      group: platform
+      namespace: bifrost-platform-prod
+      deployment: platform-api
+      ports: [8780]
+    - name: platform-console
+      label: Platform Console
+      group: platform
+      namespace: bifrost-platform-prod
+      deployment: platform-console
+      ports: [5180]
+
+    - name: api-monitor
+      label: Monitor API
+      group: api
+      namespace: bifrost-prod
+      deployment: api-monitor
+      ports: [8765]
+    - name: api-ops
+      label: Ops API
+      group: api
+      namespace: bifrost-prod
+      deployment: api-ops
+      ports: [8768]
+    - name: api-trading
+      label: Trading API
+      group: api
+      namespace: bifrost-prod
+      deployment: api-trading
+      ports: [8769]
+    - name: api-market
+      label: Market API
+      group: api
+      namespace: bifrost-prod
+      deployment: api-market
+      ports: [8772]
+    - name: api-research
+      label: Research API
+      group: api
+      namespace: bifrost-prod
+      deployment: api-research
+      ports: [8773]
+    - name: frontend
+      label: Trade Frontend
+      group: ui
+      namespace: bifrost-prod
+      deployment: frontend
+      ports: [80]
+
+    - name: celery-worker
+      label: Celery Worker
+      group: worker
+      namespace: bifrost-prod
+      deployment: celery-worker
+    - name: celery-beat
+      label: Celery Beat
+      group: worker
+      namespace: bifrost-prod
+      deployment: celery-beat
+    - name: daemon
+      label: Daemon
+      group: worker
+      namespace: bifrost-prod
+      deployment: daemon
+
+    - name: polygon-worker-stocks
+      label: Market Data Stocks
+      group: market-data
+      namespace: plugin-market-data
+      deployment: polygon-worker-stocks
+    - name: polygon-worker-options
+      label: Market Data Options
+      group: market-data
+      namespace: plugin-market-data
+      deployment: polygon-worker-options
+
+    - name: ib-gateway
+      label: IB Gateway
+      group: plugins
+      namespace: data
+      deployment: ib-gateway

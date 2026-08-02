@@ -256,9 +256,9 @@ func Catalog() []ToolView {
 		tool("get_telemetry_targets", "Prometheus scrape target health", "read", "GET", "/api/v1/telemetry/targets", "viewer", "P4", true),
 
 		// Dev Sessions tools
-		tool("list_dev_sessions", "List all local dev sessions (tmux-managed services) with status, PID, uptime, and health", "read", "GET", "/api/v1/dev-sessions/", "viewer", "Agent", true),
-		tool("restart_dev_session", "Restart a local dev session by name (platform, git-bridge, probe-bridge, trade-ui)", "routine", "POST", "/api/v1/dev-sessions/{name}/control", "operator", "Agent", true),
-		tool("get_dev_session_logs", "Get recent log lines from a local dev session", "read", "GET", "/api/v1/dev-sessions/{name}/logs", "viewer", "Agent", true),
+		tool("list_dev_sessions", "List sessions for the viewer seat (local bdev in DEV; catalog Deployments in STG/PROD)", "read", "GET", "/api/v1/dev-sessions/", "viewer", "Agent", true),
+		tool("restart_dev_session", "Control a session by name: start/stop/restart/clear-logs (bdev locally; K8s scale/rollout in STG/PROD; D10 blocks daemon scale-up)", "routine", "POST", "/api/v1/dev-sessions/{name}/control", "operator", "Agent", true),
+		tool("get_dev_session_logs", "Get recent log lines from a session (bdev log file or K8s pod logs)", "read", "GET", "/api/v1/dev-sessions/{name}/logs", "viewer", "Agent", true),
 	}
 }
 

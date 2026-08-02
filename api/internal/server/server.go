@@ -180,7 +180,7 @@ func New(cfg *config.Config) (*Server, error) {
 		telemetry:       telemetry.NewHandler(cfg),
 		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
 		sessions:        sessionsH,
-		devSession:      devsession.NewHandler(),
+		devSession:      devsession.NewHandler(devsession.NewService(cfg, clusterH.Service())),
 		auth:            auth,
 		audit:           audit,
 		jobs:            jobs,

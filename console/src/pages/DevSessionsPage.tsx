@@ -60,6 +60,14 @@ function SessionCard({
           {session.ports != null && session.ports.length > 0 && (
             <span>:{session.ports.join(', :')}</span>
           )}
+          {session.mode === 'k8s' && session.desired_replicas != null && (
+            <span>
+              {session.ready_replicas ?? 0}/{session.desired_replicas} ready
+            </span>
+          )}
+          {session.image_tag != null && session.image_tag !== '' && (
+            <span className="font-mono">{session.image_tag}</span>
+          )}
           {running && <span>{formatUptime(session.uptime_sec)}</span>}
           {session.restarts != null && session.restarts > 0 && (
             <span>restarts: {session.restarts}</span>
@@ -196,30 +204,38 @@ export function DevSessionsPage() {
   })
 
   const handleRestart = useCallback((name: string) => {
+    const target = (sessions ?? []).find(s => s.name === name)
+    const cluster = target?.mode === 'k8s'
     setConfirmState({
       open: true,
-      title: 'Restart service',
-      message: `This will stop and restart "${name}". The service may be briefly unavailable.`,
+      title: cluster ? 'Rollout restart Deployment' : 'Restart service',
+      message: cluster
+        ? `This will rollout-restart Deployment for "${name}". Pods will be recreated; the service may be briefly unavailable.`
+        : `This will stop and restart "${name}". The service may be briefly unavailable.`,
       confirmLabel: 'Restart',
       action: () => {
         setActingOn(name)
         controlMutation.mutate({ name, action: 'restart' })
       },
     })
-  }, [controlMutation])
+  }, [controlMutation, sessions])
 
   const handleStop = useCallback((name: string) => {
+    const target = (sessions ?? []).find(s => s.name === name)
+    const cluster = target?.mode === 'k8s'
     setConfirmState({
       open: true,
-      title: 'Stop service',
-      message: `This will stop "${name}". The service will not restart automatically.`,
+      title: cluster ? 'Scale Deployment to zero' : 'Stop service',
+      message: cluster
+        ? `This will scale "${name}" to 0 replicas. Start will restore the previous replica count (D10 blocks daemon scale-up).`
+        : `This will stop "${name}". The service will not restart automatically.`,
       confirmLabel: 'Stop',
       action: () => {
         setActingOn(name)
         controlMutation.mutate({ name, action: 'stop' })
       },
     })
-  }, [controlMutation])
+  }, [controlMutation, sessions])
 
   const handleStart = useCallback((name: string) => {
     setActingOn(name)
@@ -246,6 +262,12 @@ export function DevSessionsPage() {
   const allSessions = sessions ?? []
   const running = allSessions.filter(s => s.status === 'running').length
   const total = allSessions.length
+  const envLabel = (() => {
+    const env = allSessions.find(s => s.env != null && s.env !== '')?.env
+    if (env == null) return null
+    const upper = env.toUpperCase()
+    return upper === 'STG' || upper === 'PROD' ? upper : null
+  })()
   const grouped = useMemo(() => {
     const groups: Record<string, DevSession[]> = {}
     for (const s of allSessions) {
@@ -265,11 +287,17 @@ export function DevSessionsPage() {
   return (
     <>
       <OpsVerdictStrip
-        title="DEV SESSIONS"
+        title={envLabel != null ? `SESSIONS · ${envLabel}` : 'DEV SESSIONS'}
         lamp={verdictLamp}
         tagLabel={verdictLabel}
         tagVariant={verdictTag}
-        summary={isLoading ? 'Loading…' : `${running}/${total} sessions running`}
+        summary={
+          isLoading
+            ? 'Loading…'
+            : `${running}/${total} sessions running${
+                allSessions.some(s => s.mode === 'k8s') ? ' (cluster)' : ''
+              }`
+        }
         actions={
           canOperate && running < total ? (
             <Button variant="outline" size="xs" onClick={handleStartAll}>

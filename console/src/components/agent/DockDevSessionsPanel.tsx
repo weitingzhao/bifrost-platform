@@ -74,9 +74,27 @@ function logNearCap(s: DevSession): boolean {
   return bytes > max * 0.8
 }
 
-const PLATFORM_SESSION_NAME = 'platform'
+/** Catalog maps session name `platform` → Deployment `platform-api` (K8s). */
+const PLATFORM_SESSION_NAMES = new Set(['platform', 'platform-api'])
 const RECONNECT_POLL_MS = 2000
 const RECONNECT_MAX_WAIT_MS = 60_000
+
+function isPlatformSession(name: string): boolean {
+  return PLATFORM_SESSION_NAMES.has(name)
+}
+
+function isClusterMode(sessions: DevSession[]): boolean {
+  return sessions.some(s => s.mode === 'k8s')
+}
+
+function sessionEnvBadge(sessions: DevSession[]): string | null {
+  const env = sessions.find(s => s.env != null && s.env !== '')?.env
+  if (env == null || env === '') return null
+  const upper = env.toUpperCase()
+  if (upper === 'STG' || upper === 'PROD') return upper
+  if (upper === 'DEV' || upper === 'DEV-LOCAL') return null
+  return upper
+}
 
 function ReconnectingOverlay({ onCancel }: { onCancel: () => void }) {
   const [elapsed, setElapsed] = useState(0)
@@ -161,6 +179,7 @@ function SessionConsolePane({
   logsEnabled,
   canOperate,
   isActing,
+  showClearLogs,
   onSelect,
   onToggleMaximize,
   onClearLogs,
@@ -173,6 +192,7 @@ function SessionConsolePane({
   logsEnabled: boolean
   canOperate: boolean
   isActing: boolean
+  showClearLogs: boolean
   onSelect: () => void
   onToggleMaximize: () => void
   onClearLogs: () => void
@@ -243,21 +263,23 @@ function SessionConsolePane({
             </span>
           )}
         </button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className="h-6 w-6 shrink-0 px-0"
-          disabled={!canOperate || isActing}
-          onClick={e => {
-            e.stopPropagation()
-            onClearLogs()
-          }}
-          title="Clear logs"
-          aria-label={`Clear logs for ${session.label}`}
-        >
-          <Eraser className="h-3 w-3" aria-hidden />
-        </Button>
+        {showClearLogs && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="h-6 w-6 shrink-0 px-0"
+            disabled={!canOperate || isActing}
+            onClick={e => {
+              e.stopPropagation()
+              onClearLogs()
+            }}
+            title="Clear logs"
+            aria-label={`Clear logs for ${session.label}`}
+          >
+            <Eraser className="h-3 w-3" aria-hidden />
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -268,7 +290,7 @@ function SessionConsolePane({
             e.stopPropagation()
             onReload()
           }}
-          title="Restart session"
+          title={session.mode === 'k8s' ? 'Rollout restart Deployment' : 'Restart session'}
           aria-label={`Restart ${session.label}`}
         >
           <RefreshCw className="h-3 w-3" aria-hidden />
@@ -308,6 +330,7 @@ function SessionStatusRow({
   active,
   canOperate,
   isActing,
+  showClearLogs,
   onSelect,
   onStart,
   onRestart,
@@ -318,6 +341,7 @@ function SessionStatusRow({
   active: boolean
   canOperate: boolean
   isActing: boolean
+  showClearLogs: boolean
   onSelect: () => void
   onStart: () => void
   onRestart: () => void
@@ -325,6 +349,10 @@ function SessionStatusRow({
   onClearLogs: () => void
 }) {
   const running = session.status === 'running'
+  const readyLine =
+    session.mode === 'k8s' && session.desired_replicas != null
+      ? `${session.ready_replicas ?? 0}/${session.desired_replicas}`
+      : null
   return (
     <div
       className={cn(
@@ -356,6 +384,8 @@ function SessionStatusRow({
             {session.ports != null && session.ports.length > 0
               ? `:${session.ports.join(', :')}`
               : session.name}
+            {readyLine != null ? ` · ${readyLine}` : ''}
+            {session.image_tag ? ` · ${session.image_tag}` : ''}
             {running ? ` · ${formatUptime(session.uptime_sec)}` : ''}
             {session.pid != null && session.pid > 0 ? ` · ${session.pid}` : ''}
             {session.log_bytes != null && session.log_bytes > 0 ? (
@@ -383,17 +413,19 @@ function SessionStatusRow({
         </div>
       </button>
       <div className="flex shrink-0 items-center gap-0.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className="h-6 w-6 px-0"
-          disabled={!canOperate || isActing}
-          onClick={onClearLogs}
-          title="Clear logs"
-        >
-          <Eraser className="h-3 w-3" />
-        </Button>
+        {showClearLogs && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="h-6 w-6 px-0"
+            disabled={!canOperate || isActing}
+            onClick={onClearLogs}
+            title="Clear logs"
+          >
+            <Eraser className="h-3 w-3" />
+          </Button>
+        )}
         {!running ? (
           <Button
             type="button"
@@ -478,6 +510,11 @@ export function DockDevSessionsPanel({
   const list = sessions ?? []
   const running = list.filter(s => s.status === 'running').length
   const total = list.length
+  const clusterMode = isClusterMode(list)
+  const envBadge = sessionEnvBadge(list)
+  const showClearLogs = !clusterMode
+  const platformSessionName =
+    list.find(s => isPlatformSession(s.name))?.name ?? 'platform'
 
   useEffect(() => {
     if (list.length === 0) return
@@ -495,7 +532,7 @@ export function DockDevSessionsPanel({
       controlDevSession(name, action),
     onSuccess: (_data, { name, action }) => {
       setActingOn(null)
-      if (name === PLATFORM_SESSION_NAME && (action === 'restart' || action === 'stop')) {
+      if (isPlatformSession(name) && (action === 'restart' || action === 'stop')) {
         setReconnecting(true)
       } else {
         void qc.invalidateQueries({ queryKey: ['dev-sessions'] })
@@ -506,7 +543,7 @@ export function DockDevSessionsPanel({
 
   const doControl = useCallback(
     (name: string, action: string) => {
-      if (name === PLATFORM_SESSION_NAME && (action === 'restart' || action === 'stop')) {
+      if (isPlatformSession(name) && (action === 'restart' || action === 'stop')) {
         setConfirmSelfRestart({ open: true, action })
         return
       }
@@ -526,10 +563,10 @@ export function DockDevSessionsPanel({
         controlMutation.mutate({ name: s.name, action })
       }
     } else {
-      setActingOn(PLATFORM_SESSION_NAME)
-      controlMutation.mutate({ name: PLATFORM_SESSION_NAME, action })
+      setActingOn(platformSessionName)
+      controlMutation.mutate({ name: platformSessionName, action })
     }
-  }, [confirmSelfRestart, controlMutation, list])
+  }, [confirmSelfRestart, controlMutation, list, platformSessionName])
 
   const grouped = useMemo(() => {
     const groups: Record<string, DevSession[]> = {}
@@ -622,6 +659,12 @@ export function DockDevSessionsPanel({
               ? 'Sessions unreachable'
               : `${running}/${total} running`}
         </span>
+        {envBadge != null && (
+          <DenseTag variant={envBadge === 'PROD' ? 'danger' : 'warning'}>{envBadge}</DenseTag>
+        )}
+        {clusterMode && (
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">cluster</span>
+        )}
         {logPressure.length > 0 && (
           <span
             className={cn(
@@ -680,7 +723,10 @@ export function DockDevSessionsPanel({
           )}
           {isError && !isLoading && (
             <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn px-1">
-              Cannot reach /api/v1/dev-sessions — start platform with bdev.
+              Cannot reach /api/v1/dev-sessions
+              {clusterMode
+                ? ' — check platform-api kube access.'
+                : ' — start platform with bdev.'}
             </p>
           )}
           {!isLoading &&
@@ -697,6 +743,7 @@ export function DockDevSessionsPanel({
                 }
                 canOperate={canOperate}
                 isActing={actingOn === s.name || controlMutation.isPending}
+                showClearLogs={showClearLogs}
                 onSelect={() => selectSession(s.name)}
                 onToggleMaximize={() => toggleMaximize(s.name)}
                 onClearLogs={() => doControl(s.name, 'clear-logs')}
@@ -720,20 +767,22 @@ export function DockDevSessionsPanel({
           <div className="console-agent-execution-dock__recent-head">
             <h3 className="console-agent-execution-dock__recent-title">Status</h3>
             <div className="flex items-center gap-0.5 ml-auto">
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className="h-5 px-1.5 text-[10px] text-muted-foreground"
-                disabled={!canOperate || controlMutation.isPending || list.length === 0}
-                onClick={() => {
-                  for (const s of list) doControl(s.name, 'clear-logs')
-                }}
-                title="Clear all session logs"
-              >
-                <Eraser className="mr-0.5 h-3 w-3" />
-                Clear all
-              </Button>
+              {showClearLogs && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="h-5 px-1.5 text-[10px] text-muted-foreground"
+                  disabled={!canOperate || controlMutation.isPending || list.length === 0}
+                  onClick={() => {
+                    for (const s of list) doControl(s.name, 'clear-logs')
+                  }}
+                  title="Clear all session logs"
+                >
+                  <Eraser className="mr-0.5 h-3 w-3" />
+                  Clear all
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -743,7 +792,7 @@ export function DockDevSessionsPanel({
                 onClick={() => {
                   setConfirmSelfRestart({ open: true, action: 'restart', batch: true })
                 }}
-                title="Restart all sessions"
+                title={clusterMode ? 'Rollout restart all Deployments' : 'Restart all sessions'}
               >
                 <RotateCw className="mr-0.5 h-3 w-3" />
                 Restart all
@@ -763,6 +812,7 @@ export function DockDevSessionsPanel({
                   active={activeName === s.name}
                   canOperate={canOperate}
                   isActing={actingOn === s.name || controlMutation.isPending}
+                  showClearLogs={showClearLogs}
                   onSelect={() => selectSession(s.name)}
                   onStart={() => doControl(s.name, 'start')}
                   onRestart={() => doControl(s.name, 'restart')}
@@ -776,11 +826,21 @@ export function DockDevSessionsPanel({
       </div>
       <ConfirmDialog
         open={confirmSelfRestart?.open ?? false}
-        title={confirmSelfRestart?.batch ? 'Restart all sessions' : 'Restart Platform'}
+        title={
+          confirmSelfRestart?.batch
+            ? clusterMode
+              ? 'Restart all Deployments'
+              : 'Restart all sessions'
+            : 'Restart Platform'
+        }
         message={
           confirmSelfRestart?.batch
-            ? 'This will restart all sessions including Platform (hosting this Console). The UI will auto-reconnect when ready.'
-            : 'This will restart the service hosting this Console. The UI will auto-reconnect when ready.'
+            ? clusterMode
+              ? 'This will rollout-restart all catalog Deployments, including Platform API (hosting this Console). The UI will auto-reconnect when ready.'
+              : 'This will restart all sessions including Platform (hosting this Console). The UI will auto-reconnect when ready.'
+            : clusterMode
+              ? 'This will rollout-restart the Platform API Deployment hosting this Console. The UI will auto-reconnect when ready.'
+              : 'This will restart the service hosting this Console. The UI will auto-reconnect when ready.'
         }
         confirmLabel={confirmSelfRestart?.batch ? 'Restart all' : 'Restart'}
         confirming={controlMutation.isPending}

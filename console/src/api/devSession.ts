@@ -16,6 +16,16 @@ export interface DevSession {
   log_max_bytes?: number
   /** Unix epoch seconds of the log file's last modification (API-enriched). */
   last_output_at?: number
+  /** Provider mode: "bdev" (local) or "k8s" (STG/PROD cluster). */
+  mode?: 'bdev' | 'k8s' | string
+  /** Viewer seat that produced this session (dev / stg / prod). */
+  env?: string
+  /** K8s namespace (cluster mode). */
+  namespace?: string
+  /** First container image tag (cluster mode). */
+  image_tag?: string
+  ready_replicas?: number
+  desired_replicas?: number
 }
 
 export interface ControlResponse {

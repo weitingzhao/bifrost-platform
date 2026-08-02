@@ -789,14 +789,14 @@ server.tool(
 
 // --- Dev Sessions tools ---
 
-server.tool('list_dev_sessions', 'List all local dev sessions with status, PID, uptime, and health', {}, async () =>
+server.tool('list_dev_sessions', 'List sessions for the viewer seat (local bdev in DEV; catalog Deployments in STG/PROD)', {}, async () =>
   jsonResult(await platformGet('/api/v1/dev-sessions/')),
 )
 
 server.tool(
   'restart_dev_session',
-  'Restart a local dev session by name (platform, git-bridge, probe-bridge, trade-ui)',
-  { name: z.string().describe('Service name: platform, git-bridge, probe-bridge, trade-ui') },
+  'Restart a session by name (bdev locally; K8s rollout restart in STG/PROD)',
+  { name: z.string().describe('Session name from list_dev_sessions (e.g. platform, api-monitor)') },
   async ({ name }) =>
     jsonResult(
       await platformPost(`/api/v1/dev-sessions/${encodeURIComponent(name)}/control`, {
@@ -807,9 +807,9 @@ server.tool(
 
 server.tool(
   'get_dev_session_logs',
-  'Get recent log lines from a local dev session',
+  'Get recent log lines from a session (bdev log file or K8s pod logs)',
   {
-    name: z.string().describe('Service name: platform, git-bridge, probe-bridge, trade-ui'),
+    name: z.string().describe('Session name from list_dev_sessions'),
     lines: z.number().optional().describe('Number of log lines to return (default 100)'),
   },
   async ({ name, lines }) => {
