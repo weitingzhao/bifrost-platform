@@ -287,7 +287,18 @@ export function DevSessionsPage() {
   return (
     <>
       <OpsVerdictStrip
-        title={envLabel != null ? `SESSIONS · ${envLabel}` : 'DEV SESSIONS'}
+        title={
+          envLabel != null ? (
+            <>
+              <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">
+                SESSIONS
+              </span>
+              <DenseTag variant={envLabel === 'PROD' ? 'info' : 'neutral'}>{envLabel}</DenseTag>
+            </>
+          ) : (
+            'SESSIONS'
+          )
+        }
         lamp={verdictLamp}
         tagLabel={verdictLabel}
         tagVariant={verdictTag}

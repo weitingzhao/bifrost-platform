@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, ConfirmDialog, DenseTag, StatusLamp, cn } from '@bifrost/ui'
+import { Button, ConfirmDialog, DenseTag, SegmentControl, StatusLamp, cn } from '@bifrost/ui'
 import { Eraser, Loader2, Maximize2, Minimize2, Play, RefreshCw, RotateCw, Square } from 'lucide-react'
 import {
   controlDevSession,
@@ -94,6 +94,22 @@ function sessionEnvBadge(sessions: DevSession[]): string | null {
   if (upper === 'STG' || upper === 'PROD') return upper
   if (upper === 'DEV' || upper === 'DEV-LOCAL') return null
   return upper
+}
+
+/** Env identity only — never danger/warning (those are for health). */
+function envBadgeVariant(env: string): 'info' | 'neutral' {
+  return env === 'PROD' ? 'info' : 'neutral'
+}
+
+function isSessionIssue(status: string): boolean {
+  return status !== 'running'
+}
+
+/** Anomaly-first within a group: error → stopped/other → running. */
+function statusSortKey(status: string): number {
+  if (status === 'error') return 0
+  if (status === 'running') return 2
+  return 1
 }
 
 function ReconnectingOverlay({ onCancel }: { onCancel: () => void }) {
@@ -484,6 +500,8 @@ export function DockDevSessionsPanel({
   const { canOperate } = usePlatformAuth()
   const [activeName, setActiveName] = useState<string>('')
   const [maximizedName, setMaximizedName] = useState<string | null>(null)
+  const [groupFilter, setGroupFilter] = useState<string>('all')
+  const [issuesOnly, setIssuesOnly] = useState(false)
   const [actingOn, setActingOn] = useState<string | null>(null)
   const [reconnecting, setReconnecting] = useState(false)
   const [confirmSelfRestart, setConfirmSelfRestart] = useState<{
@@ -510,22 +528,64 @@ export function DockDevSessionsPanel({
   const list = sessions ?? []
   const running = list.filter(s => s.status === 'running').length
   const total = list.length
+  const issueCount = list.filter(s => isSessionIssue(s.status)).length
   const clusterMode = isClusterMode(list)
   const envBadge = sessionEnvBadge(list)
   const showClearLogs = !clusterMode
   const platformSessionName =
     list.find(s => isPlatformSession(s.name))?.name ?? 'platform'
 
+  const groupNames = useMemo(() => {
+    const seen = new Set<string>()
+    const order: string[] = []
+    for (const s of list) {
+      const g = s.group || 'other'
+      if (!seen.has(g)) {
+        seen.add(g)
+        order.push(g)
+      }
+    }
+    return order
+  }, [list])
+
+  const groupOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All' },
+      ...groupNames.map(g => ({ value: g, label: g })),
+    ],
+    [groupNames],
+  )
+
   useEffect(() => {
-    if (list.length === 0) return
-    if (activeName !== '' && list.some(s => s.name === activeName)) return
-    setActiveName(list[0].name)
-  }, [list, activeName])
+    if (groupFilter === 'all') return
+    if (!groupNames.includes(groupFilter)) setGroupFilter('all')
+  }, [groupNames, groupFilter])
+
+  useEffect(() => {
+    if (issuesOnly && issueCount === 0) setIssuesOnly(false)
+  }, [issuesOnly, issueCount])
+
+  const filteredList = useMemo(() => {
+    let rows = list
+    if (groupFilter !== 'all') {
+      rows = rows.filter(s => (s.group || 'other') === groupFilter)
+    }
+    if (issuesOnly) {
+      rows = rows.filter(s => isSessionIssue(s.status))
+    }
+    return rows
+  }, [list, groupFilter, issuesOnly])
+
+  useEffect(() => {
+    if (filteredList.length === 0) return
+    if (activeName !== '' && filteredList.some(s => s.name === activeName)) return
+    setActiveName(filteredList[0].name)
+  }, [filteredList, activeName])
 
   useEffect(() => {
     if (maximizedName == null) return
-    if (!list.some(s => s.name === maximizedName)) setMaximizedName(null)
-  }, [list, maximizedName])
+    if (!filteredList.some(s => s.name === maximizedName)) setMaximizedName(null)
+  }, [filteredList, maximizedName])
 
   const controlMutation = useMutation({
     mutationFn: ({ name, action }: { name: string; action: string }) =>
@@ -570,13 +630,32 @@ export function DockDevSessionsPanel({
 
   const grouped = useMemo(() => {
     const groups: Record<string, DevSession[]> = {}
-    for (const s of list) {
+    for (const s of filteredList) {
       const g = s.group || 'other'
       if (groups[g] == null) groups[g] = []
       groups[g].push(s)
     }
-    return groups
-  }, [list])
+    for (const g of Object.keys(groups)) {
+      groups[g].sort(
+        (a, b) =>
+          statusSortKey(a.status) - statusSortKey(b.status) ||
+          a.label.localeCompare(b.label),
+      )
+    }
+    // Preserve catalog group order from full list, then filtered-only leftovers.
+    const ordered: [string, DevSession[]][] = []
+    const seen = new Set<string>()
+    for (const g of groupNames) {
+      if (groups[g] != null) {
+        ordered.push([g, groups[g]])
+        seen.add(g)
+      }
+    }
+    for (const [g, rows] of Object.entries(groups)) {
+      if (!seen.has(g)) ordered.push([g, rows])
+    }
+    return ordered
+  }, [filteredList, groupNames])
 
   const selectSession = useCallback((name: string) => {
     setActiveName(name)
@@ -645,12 +724,23 @@ export function DockDevSessionsPanel({
             ? 'fail'
             : 'degraded'
 
-  const visiblePanes =
-    maximizedName != null ? list.filter(s => s.name === maximizedName) : list
+  // Cluster (k8s): single active console. Local bdev: tiled multi-pane (maximize still singles).
+  const visiblePanes = useMemo(() => {
+    if (maximizedName != null) {
+      const max = filteredList.find(s => s.name === maximizedName)
+        ?? list.find(s => s.name === maximizedName)
+      return max != null ? [max] : []
+    }
+    if (clusterMode) {
+      const active = filteredList.find(s => s.name === activeName)
+      return active != null ? [active] : filteredList.slice(0, 1)
+    }
+    return filteredList
+  }, [maximizedName, clusterMode, filteredList, list, activeName])
 
   return (
     <div className="console-dock-sessions min-h-0 flex-1 flex flex-col gap-1.5">
-      <div className="console-dock-sessions__verdict">
+      <div className="console-dock-sessions__verdict flex-wrap gap-y-1">
         <StatusLamp value={verdictLamp} kind="reach" />
         <span className="font-medium text-[var(--text-dense-caption)]">
           {isLoading
@@ -660,10 +750,33 @@ export function DockDevSessionsPanel({
               : `${running}/${total} running`}
         </span>
         {envBadge != null && (
-          <DenseTag variant={envBadge === 'PROD' ? 'danger' : 'warning'}>{envBadge}</DenseTag>
+          <DenseTag variant={envBadgeVariant(envBadge)}>{envBadge}</DenseTag>
         )}
         {clusterMode && (
           <span className="text-[var(--text-dense-caption)] text-muted-foreground">cluster</span>
+        )}
+        {issueCount > 0 && !isLoading && !isError && (
+          <button
+            type="button"
+            className={cn(
+              'text-[var(--text-dense-caption)] underline-offset-2 hover:underline',
+              issuesOnly ? 'font-medium text-warning' : 'text-muted-foreground',
+            )}
+            onClick={() => setIssuesOnly(v => !v)}
+            title={issuesOnly ? 'Show all sessions' : 'Show non-running sessions only'}
+            aria-pressed={issuesOnly}
+          >
+            {issueCount} stopped
+          </button>
+        )}
+        {groupNames.length > 1 && (
+          <SegmentControl
+            ariaLabel="Session group filter"
+            size="sm"
+            value={groupFilter}
+            options={groupOptions}
+            onChange={setGroupFilter}
+          />
         )}
         {logPressure.length > 0 && (
           <span
@@ -684,9 +797,9 @@ export function DockDevSessionsPanel({
             size="xs"
             className="text-[var(--text-dense-caption)] text-muted-foreground"
             onClick={() => setMaximizedName(null)}
-            title="Restore tiled console layout"
+            title={clusterMode ? 'Exit maximized console' : 'Restore tiled console layout'}
           >
-            Restore tiles
+            {clusterMode ? 'Restore' : 'Restore tiles'}
           </Button>
         )}
         {onOpenPage != null && (
@@ -731,6 +844,15 @@ export function DockDevSessionsPanel({
           )}
           {!isLoading &&
             !isError &&
+            visiblePanes.length === 0 && (
+              <p className="console-agent-execution-dock__idle-copy px-1">
+                {issuesOnly || groupFilter !== 'all'
+                  ? 'No sessions match filters'
+                  : 'No sessions'}
+              </p>
+            )}
+          {!isLoading &&
+            !isError &&
             visiblePanes.map(s => (
               <SessionConsolePane
                 key={s.name}
@@ -739,7 +861,10 @@ export function DockDevSessionsPanel({
                 maximized={maximizedName === s.name}
                 logsEnabled={
                   enabled &&
-                  (maximizedName == null || maximizedName === s.name)
+                  // Cluster: only the single visible pane. Bdev: all tiles, or maximized only.
+                  (clusterMode
+                    ? s.name === activeName
+                    : maximizedName == null || maximizedName === s.name)
                 }
                 canOperate={canOperate}
                 isActing={actingOn === s.name || controlMutation.isPending}
@@ -802,7 +927,10 @@ export function DockDevSessionsPanel({
           {list.length === 0 && !isLoading && (
             <p className="console-agent-execution-dock__recent-empty">No sessions</p>
           )}
-          {Object.entries(grouped).map(([group, rows]) => (
+          {list.length > 0 && filteredList.length === 0 && !isLoading && (
+            <p className="console-agent-execution-dock__recent-empty">No sessions match filters</p>
+          )}
+          {grouped.map(([group, rows]) => (
             <div key={group} className="console-dock-sessions__group">
               <div className="console-dock-sessions__group-label">{group.toUpperCase()}</div>
               {rows.map(s => (
