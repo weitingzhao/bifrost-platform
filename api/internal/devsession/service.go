@@ -42,6 +42,7 @@ func (s *Service) List(ctx context.Context) ([]DevSession, error) {
 	if err := json.Unmarshal(stdout.Bytes(), &sessions); err != nil {
 		return nil, fmt.Errorf("parse bdev output: %w", err)
 	}
+	s.enrichLastOutput(sessions)
 	return sessions, nil
 }
 
@@ -49,6 +50,8 @@ func (s *Service) List(ctx context.Context) ([]DevSession, error) {
 func (s *Service) Control(ctx context.Context, name, action string) (*ControlResponse, error) {
 	switch action {
 	case "start", "stop", "restart":
+	case "clear-logs":
+		return s.clearLogs(name)
 	default:
 		return &ControlResponse{
 			Name: name, Action: action, Success: false,
@@ -81,6 +84,32 @@ func (s *Service) Control(ctx context.Context, name, action string) (*ControlRes
 	return &ControlResponse{
 		Name: name, Action: action, Success: true, Message: msg,
 	}, nil
+}
+
+// clearLogs truncates the log file to zero bytes.
+func (s *Service) clearLogs(name string) (*ControlResponse, error) {
+	logPath := filepath.Join(s.logDir, name+".log")
+	if err := os.Truncate(logPath, 0); err != nil {
+		if os.IsNotExist(err) {
+			return &ControlResponse{Name: name, Action: "clear-logs", Success: true, Message: "no log file"}, nil
+		}
+		return &ControlResponse{
+			Name: name, Action: "clear-logs", Success: false, Message: err.Error(),
+		}, nil
+	}
+	return &ControlResponse{Name: name, Action: "clear-logs", Success: true, Message: "log cleared"}, nil
+}
+
+// enrichLastOutput populates LastOutputAt from the log file mtime.
+func (s *Service) enrichLastOutput(sessions []DevSession) {
+	for i := range sessions {
+		logPath := filepath.Join(s.logDir, sessions[i].Name+".log")
+		info, err := os.Stat(logPath)
+		if err == nil && info.Size() > 0 {
+			t := info.ModTime().Unix()
+			sessions[i].LastOutputAt = &t
+		}
+	}
 }
 
 // Logs reads the last N lines from ~/.bifrost-dev/logs/<name>.log

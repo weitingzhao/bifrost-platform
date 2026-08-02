@@ -14,6 +14,8 @@ export interface DevSession {
   log_bytes?: number
   /** Soft cap used by bdev-log-tee (default 5 MiB). */
   log_max_bytes?: number
+  /** Unix epoch seconds of the log file's last modification (API-enriched). */
+  last_output_at?: number
 }
 
 export interface ControlResponse {

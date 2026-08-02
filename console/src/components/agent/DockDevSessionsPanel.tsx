@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, DenseTag, StatusLamp, cn } from '@bifrost/ui'
-import { Maximize2, Minimize2, Play, RotateCw, Square } from 'lucide-react'
+import { Button, ConfirmDialog, DenseTag, StatusLamp, cn } from '@bifrost/ui'
+import { Eraser, Loader2, Maximize2, Minimize2, Play, RefreshCw, RotateCw, Square } from 'lucide-react'
 import {
   controlDevSession,
   fetchDevSessionLogs,
@@ -44,6 +45,24 @@ function formatLogBytes(n?: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)}MiB`
 }
 
+function formatLastOutputAgo(epochSec?: number): string | null {
+  if (epochSec == null || epochSec <= 0) return null
+  const deltaSec = Math.max(0, Math.floor(Date.now() / 1000) - epochSec)
+  if (deltaSec < 10) return 'just now'
+  if (deltaSec < 60) return `${deltaSec}s ago`
+  const m = Math.floor(deltaSec / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ${m % 60}m ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
+function isStale(epochSec?: number): boolean {
+  if (epochSec == null || epochSec <= 0) return false
+  const deltaSec = Math.floor(Date.now() / 1000) - epochSec
+  return deltaSec > 120
+}
+
 function logOverCap(s: DevSession): boolean {
   const max = s.log_max_bytes ?? 5 * 1024 * 1024
   return (s.log_bytes ?? 0) > max
@@ -53,6 +72,74 @@ function logNearCap(s: DevSession): boolean {
   const max = s.log_max_bytes ?? 5 * 1024 * 1024
   const bytes = s.log_bytes ?? 0
   return bytes > max * 0.8
+}
+
+const PLATFORM_SESSION_NAME = 'platform'
+const RECONNECT_POLL_MS = 2000
+const RECONNECT_MAX_WAIT_MS = 60_000
+
+function ReconnectingOverlay({ onCancel }: { onCancel: () => void }) {
+  const [elapsed, setElapsed] = useState(0)
+  const [status, setStatus] = useState<'waiting' | 'recovered' | 'timeout'>('waiting')
+
+  useEffect(() => {
+    const t0 = Date.now()
+    const interval = setInterval(async () => {
+      const dt = Date.now() - t0
+      setElapsed(Math.floor(dt / 1000))
+      if (dt > RECONNECT_MAX_WAIT_MS) {
+        setStatus('timeout')
+        clearInterval(interval)
+        return
+      }
+      try {
+        const res = await fetch('/api/v1/dev-sessions', { signal: AbortSignal.timeout(2000) })
+        if (res.ok) {
+          setStatus('recovered')
+          clearInterval(interval)
+          setTimeout(() => window.location.reload(), 500)
+        }
+      } catch {
+        // still down
+      }
+    }, RECONNECT_POLL_MS)
+    return () => clearInterval(interval)
+  }, [])
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-4 bg-background/95 backdrop-blur-sm">
+      {status === 'waiting' && (
+        <>
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm font-medium text-foreground">
+            Platform restarting — reconnecting…
+          </p>
+          <p className="text-xs text-muted-foreground">{elapsed}s elapsed</p>
+          <Button variant="ghost" size="sm" className="mt-2" onClick={onCancel}>
+            Cancel (force reload)
+          </Button>
+        </>
+      )}
+      {status === 'recovered' && (
+        <>
+          <StatusLamp value="ok" kind="reach" />
+          <p className="text-sm font-medium text-foreground">Connected — reloading…</p>
+        </>
+      )}
+      {status === 'timeout' && (
+        <>
+          <StatusLamp value="fail" kind="reach" />
+          <p className="text-sm font-medium text-foreground">
+            Platform did not come back within {RECONNECT_MAX_WAIT_MS / 1000}s
+          </p>
+          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+            Retry now
+          </Button>
+        </>
+      )}
+    </div>,
+    document.body,
+  )
 }
 
 function readStoredSplitPct(): number {
@@ -72,16 +159,24 @@ function SessionConsolePane({
   active,
   maximized,
   logsEnabled,
+  canOperate,
+  isActing,
   onSelect,
   onToggleMaximize,
+  onClearLogs,
+  onReload,
 }: {
   session: DevSession
   active: boolean
   maximized: boolean
   /** False when dock collapsed or Sessions tool hidden — stops log polling. */
   logsEnabled: boolean
+  canOperate: boolean
+  isActing: boolean
   onSelect: () => void
   onToggleMaximize: () => void
+  onClearLogs: () => void
+  onReload: () => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lineLimit = maximized
@@ -134,7 +229,50 @@ function SessionConsolePane({
           >
             {session.status}
           </DenseTag>
+          {session.last_output_at != null && (
+            <span
+              className={cn(
+                'ml-1 font-mono text-[10px]',
+                isStale(session.last_output_at)
+                  ? 'text-warning'
+                  : 'text-muted-foreground',
+              )}
+              title={`Last log output: ${new Date(session.last_output_at * 1000).toLocaleTimeString()}`}
+            >
+              {formatLastOutputAgo(session.last_output_at)}
+            </span>
+          )}
         </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="h-6 w-6 shrink-0 px-0"
+          disabled={!canOperate || isActing}
+          onClick={e => {
+            e.stopPropagation()
+            onClearLogs()
+          }}
+          title="Clear logs"
+          aria-label={`Clear logs for ${session.label}`}
+        >
+          <Eraser className="h-3 w-3" aria-hidden />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="h-6 w-6 shrink-0 px-0"
+          disabled={!canOperate || isActing || session.status !== 'running'}
+          onClick={e => {
+            e.stopPropagation()
+            onReload()
+          }}
+          title="Restart session"
+          aria-label={`Restart ${session.label}`}
+        >
+          <RefreshCw className="h-3 w-3" aria-hidden />
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -174,6 +312,7 @@ function SessionStatusRow({
   onStart,
   onRestart,
   onStop,
+  onClearLogs,
 }: {
   session: DevSession
   active: boolean
@@ -183,6 +322,7 @@ function SessionStatusRow({
   onStart: () => void
   onRestart: () => void
   onStop: () => void
+  onClearLogs: () => void
 }) {
   const running = session.status === 'running'
   return (
@@ -229,10 +369,31 @@ function SessionStatusRow({
                 {logOverCap(session) ? '⚠' : ''}
               </span>
             ) : null}
+            {session.last_output_at != null && (
+              <span
+                className={cn(
+                  isStale(session.last_output_at) ? 'text-warning' : 'text-muted-foreground',
+                )}
+                title={`Last output: ${new Date(session.last_output_at * 1000).toLocaleTimeString()}`}
+              >
+                {` · ${formatLastOutputAgo(session.last_output_at)}`}
+              </span>
+            )}
           </div>
         </div>
       </button>
       <div className="flex shrink-0 items-center gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="h-6 w-6 px-0"
+          disabled={!canOperate || isActing}
+          onClick={onClearLogs}
+          title="Clear logs"
+        >
+          <Eraser className="h-3 w-3" />
+        </Button>
         {!running ? (
           <Button
             type="button"
@@ -292,6 +453,12 @@ export function DockDevSessionsPanel({
   const [activeName, setActiveName] = useState<string>('')
   const [maximizedName, setMaximizedName] = useState<string | null>(null)
   const [actingOn, setActingOn] = useState<string | null>(null)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [confirmSelfRestart, setConfirmSelfRestart] = useState<{
+    open: boolean
+    action: string
+    batch?: boolean
+  } | null>(null)
   const [leftPct, setLeftPct] = useState(readStoredSplitPct)
   const splitRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ startX: number; startPct: number } | null>(null)
@@ -326,12 +493,43 @@ export function DockDevSessionsPanel({
   const controlMutation = useMutation({
     mutationFn: ({ name, action }: { name: string; action: string }) =>
       controlDevSession(name, action),
-    onSuccess: () => {
+    onSuccess: (_data, { name, action }) => {
       setActingOn(null)
-      void qc.invalidateQueries({ queryKey: ['dev-sessions'] })
+      if (name === PLATFORM_SESSION_NAME && (action === 'restart' || action === 'stop')) {
+        setReconnecting(true)
+      } else {
+        void qc.invalidateQueries({ queryKey: ['dev-sessions'] })
+      }
     },
     onError: () => setActingOn(null),
   })
+
+  const doControl = useCallback(
+    (name: string, action: string) => {
+      if (name === PLATFORM_SESSION_NAME && (action === 'restart' || action === 'stop')) {
+        setConfirmSelfRestart({ open: true, action })
+        return
+      }
+      setActingOn(name)
+      controlMutation.mutate({ name, action })
+    },
+    [controlMutation],
+  )
+
+  const executeSelfRestart = useCallback(() => {
+    if (confirmSelfRestart == null) return
+    const { action, batch } = confirmSelfRestart
+    setConfirmSelfRestart(null)
+    if (batch) {
+      for (const s of list) {
+        setActingOn(s.name)
+        controlMutation.mutate({ name: s.name, action })
+      }
+    } else {
+      setActingOn(PLATFORM_SESSION_NAME)
+      controlMutation.mutate({ name: PLATFORM_SESSION_NAME, action })
+    }
+  }, [confirmSelfRestart, controlMutation, list])
 
   const grouped = useMemo(() => {
     const groups: Record<string, DevSession[]> = {}
@@ -497,8 +695,12 @@ export function DockDevSessionsPanel({
                   enabled &&
                   (maximizedName == null || maximizedName === s.name)
                 }
+                canOperate={canOperate}
+                isActing={actingOn === s.name || controlMutation.isPending}
                 onSelect={() => selectSession(s.name)}
                 onToggleMaximize={() => toggleMaximize(s.name)}
+                onClearLogs={() => doControl(s.name, 'clear-logs')}
+                onReload={() => doControl(s.name, 'restart')}
               />
             ))}
         </div>
@@ -517,6 +719,36 @@ export function DockDevSessionsPanel({
         <aside className="console-dock-sessions__status" aria-label="Session status">
           <div className="console-agent-execution-dock__recent-head">
             <h3 className="console-agent-execution-dock__recent-title">Status</h3>
+            <div className="flex items-center gap-0.5 ml-auto">
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="h-5 px-1.5 text-[10px] text-muted-foreground"
+                disabled={!canOperate || controlMutation.isPending || list.length === 0}
+                onClick={() => {
+                  for (const s of list) doControl(s.name, 'clear-logs')
+                }}
+                title="Clear all session logs"
+              >
+                <Eraser className="mr-0.5 h-3 w-3" />
+                Clear all
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="h-5 px-1.5 text-[10px] text-muted-foreground"
+                disabled={!canOperate || controlMutation.isPending || list.length === 0}
+                onClick={() => {
+                  setConfirmSelfRestart({ open: true, action: 'restart', batch: true })
+                }}
+                title="Restart all sessions"
+              >
+                <RotateCw className="mr-0.5 h-3 w-3" />
+                Restart all
+              </Button>
+            </div>
           </div>
           {list.length === 0 && !isLoading && (
             <p className="console-agent-execution-dock__recent-empty">No sessions</p>
@@ -532,24 +764,32 @@ export function DockDevSessionsPanel({
                   canOperate={canOperate}
                   isActing={actingOn === s.name || controlMutation.isPending}
                   onSelect={() => selectSession(s.name)}
-                  onStart={() => {
-                    setActingOn(s.name)
-                    controlMutation.mutate({ name: s.name, action: 'start' })
-                  }}
-                  onRestart={() => {
-                    setActingOn(s.name)
-                    controlMutation.mutate({ name: s.name, action: 'restart' })
-                  }}
-                  onStop={() => {
-                    setActingOn(s.name)
-                    controlMutation.mutate({ name: s.name, action: 'stop' })
-                  }}
+                  onStart={() => doControl(s.name, 'start')}
+                  onRestart={() => doControl(s.name, 'restart')}
+                  onStop={() => doControl(s.name, 'stop')}
+                  onClearLogs={() => doControl(s.name, 'clear-logs')}
                 />
               ))}
             </div>
           ))}
         </aside>
       </div>
+      <ConfirmDialog
+        open={confirmSelfRestart?.open ?? false}
+        title={confirmSelfRestart?.batch ? 'Restart all sessions' : 'Restart Platform'}
+        message={
+          confirmSelfRestart?.batch
+            ? 'This will restart all sessions including Platform (hosting this Console). The UI will auto-reconnect when ready.'
+            : 'This will restart the service hosting this Console. The UI will auto-reconnect when ready.'
+        }
+        confirmLabel={confirmSelfRestart?.batch ? 'Restart all' : 'Restart'}
+        confirming={controlMutation.isPending}
+        onConfirm={executeSelfRestart}
+        onCancel={() => setConfirmSelfRestart(null)}
+      />
+      {reconnecting && (
+        <ReconnectingOverlay onCancel={() => window.location.reload()} />
+      )}
     </div>
   )
 }
