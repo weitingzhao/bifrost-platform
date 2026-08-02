@@ -1,6 +1,6 @@
 {
   "tier": "platform-stg",
-  "at": "2026-08-02T16:36:35.064246Z",
+  "at": "2026-08-02T16:44:47.080593Z",
   "result": "pass",
   "revision": "main",
   "log_path": "bifrost-trade-infra/scripts/release_gate.log",
