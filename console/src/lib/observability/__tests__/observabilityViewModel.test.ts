@@ -375,7 +375,7 @@ describe('alert mapping', () => {
   })
 
   it('elastic standby NotReady is standbyNeutral and excluded from verdict/attention', () => {
-    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.74' }]
+    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.60' }]
     const standbyAlert = mapAlert(
       {
         labels: {
@@ -401,7 +401,7 @@ describe('alert mapping', () => {
   })
 
   it('non-standby NotReady still affects verdict', () => {
-    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.74' }]
+    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.60' }]
     const coreAlert = mapAlert(
       {
         labels: {
@@ -421,20 +421,79 @@ describe('alert mapping', () => {
   })
 
   it('standby node-exporter TargetDown is neutralized', () => {
-    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.74' }]
+    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.60' }]
     const td = mapAlert(
       {
         labels: {
           alertname: 'TargetDown',
           severity: 'critical',
           job: 'node-exporter',
-          instance: '192.168.10.74:9100',
+          instance: '192.168.10.60:9100',
         },
         state: 'firing',
       },
       0,
     )
     expect(isElasticStandbyAlert(td, standby)).toBe(true)
+  })
+
+  it('aggregate TargetDown (no instance) neutralized when down scrapes are standby-only', () => {
+    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.60' }]
+    const td = mapAlert(
+      {
+        labels: {
+          alertname: 'TargetDown',
+          severity: 'warning',
+          job: 'node-exporter',
+          namespace: 'monitoring',
+          service: 'kube-prometheus-stack-prometheus-node-exporter',
+        },
+        annotations: {
+          description: '16.67% of the node-exporter targets in monitoring namespace are down.',
+        },
+        state: 'firing',
+      },
+      0,
+    )
+    expect(
+      isElasticStandbyAlert(td, standby, [
+        { job: 'node-exporter', instance: '192.168.10.60:9100', health: 'down' },
+      ]),
+    ).toBe(true)
+    // Without targets, job match + standby presence still neutralizes aggregate.
+    expect(isElasticStandbyAlert(td, standby)).toBe(true)
+  })
+
+  it('standby DaemonSet/Pod alerts without node label are neutralized', () => {
+    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.60' }]
+    const ds = mapAlert(
+      {
+        labels: {
+          alertname: 'KubeDaemonSetRolloutStuck',
+          severity: 'warning',
+          namespace: 'monitoring',
+          daemonset: 'promtail',
+        },
+        state: 'firing',
+      },
+      0,
+    )
+    const pod = mapAlert(
+      {
+        labels: {
+          alertname: 'KubePodNotReady',
+          severity: 'warning',
+          namespace: 'monitoring',
+          pod: 'kube-prometheus-stack-prometheus-node-exporter-762jz',
+        },
+        state: 'firing',
+      },
+      0,
+    )
+    expect(isElasticStandbyAlert(ds, standby)).toBe(true)
+    expect(isElasticStandbyAlert(pod, standby)).toBe(true)
+    const annotated = annotateStandbyAlerts([ds, pod], standby)
+    expect(verdictAffectingAlerts(annotated)).toHaveLength(0)
   })
 
   /**
@@ -478,7 +537,7 @@ describe('alert mapping', () => {
       standbyNodes: [],
       targets: [
         {
-          labels: { job: 'node-exporter', instance: '192.168.10.74:9100' },
+          labels: { job: 'node-exporter', instance: '192.168.10.60:9100' },
           health: 'down',
           last_error: 'connection refused',
         },
@@ -522,14 +581,14 @@ describe('buildObservabilityViewModel', () => {
       selectedEnv: 'stg',
       selectedDomain: 'rocket',
       nowMs: Date.parse('2026-07-21T12:00:00Z'),
-      standbyNodes: [{ name: 'gpu-server', internalIp: '192.168.10.74' }],
+      standbyNodes: [{ name: 'gpu-server', internalIp: '192.168.10.60' }],
       targets: [
         {
           labels: { job: 'node-exporter', instance: '192.168.10.73:9100' },
           health: 'up',
         },
         {
-          labels: { job: 'node-exporter', instance: '192.168.10.74:9100' },
+          labels: { job: 'node-exporter', instance: '192.168.10.60:9100' },
           health: 'down',
           last_error: 'connection refused',
         },

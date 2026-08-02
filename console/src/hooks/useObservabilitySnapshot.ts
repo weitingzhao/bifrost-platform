@@ -175,7 +175,11 @@ export function useObservabilitySnapshot(): {
       ibQ.data?.reachability === 'ok' ||
       ibQ.data?.reachable === true ||
       String(ibQ.data?.summary ?? '').toLowerCase().includes('redis-ib ok')
-    if (probeTimeout && pluginOk && (vm.health === 'unavailable' || vm.health === 'unknown')) {
+    if (
+      probeTimeout &&
+      pluginOk &&
+      (vm.health === 'unavailable' || vm.health === 'unknown' || vm.health === 'degraded')
+    ) {
       return {
         health: 'healthy',
         topReason: `Monitor probe timed out; Platform IB Gateway plugin ok — ${ibQ.data?.summary ?? 'reachable'}`,

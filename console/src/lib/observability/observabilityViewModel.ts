@@ -654,7 +654,18 @@ export function buildObservabilityViewModel(
       : null
 
   const standbyNodes = input.standbyNodes ?? []
-  const mappedAlerts = annotateStandbyAlerts(mapAlerts(input.alerts ?? []), standbyNodes)
+  const downScrapeTargets = (input.targets ?? [])
+    .filter(t => (t.health ?? '').toLowerCase() === 'down')
+    .map(t => ({
+      job: t.labels?.job,
+      instance: t.labels?.instance,
+      health: t.health,
+    }))
+  const mappedAlerts = annotateStandbyAlerts(
+    mapAlerts(input.alerts ?? []),
+    standbyNodes,
+    downScrapeTargets,
+  )
   const targets = mapTargets(input.targets)
 
   const signals: EvaluatedSignal[] = []

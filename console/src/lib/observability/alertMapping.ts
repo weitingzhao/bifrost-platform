@@ -142,6 +142,22 @@ export function mapAlerts(raws: RawAlertInput[]): MappedAlert[] {
 const ELASTIC_STANDBY_ALERT_NAMES =
   /^(KubeNodeNotReady|KubeNodeUnreachable|KubeletInstanceUnreachable|KubeDaemonSetRolloutStuck|KubeDaemonSetMisScheduled|KubePodNotReady)$/i
 
+/**
+ * All-node DaemonSets that schedule on every worker — when one elastic standby
+ * is off, kube-state-metrics emits Pod/DS alerts without a `node` label.
+ */
+const STANDBY_NOISE_DAEMONSETS =
+  /^(kube-prometheus-stack-prometheus-node-exporter|promtail|loki-canary|svclb-traefik(?:-.+)?)$/i
+
+const STANDBY_NOISE_POD_PREFIX =
+  /^(kube-prometheus-stack-prometheus-node-exporter-|promtail-|loki-canary-|svclb-traefik-)/i
+
+export type StandbyDownTarget = {
+  job?: string
+  instance?: string
+  health?: string
+}
+
 function alertNodeHints(alert: MappedAlert): string[] {
   const labels = alert.labels
   const hints: string[] = []
@@ -171,6 +187,58 @@ export function hostMatchesStandbyNode(host: string, standbyNodes: StandbyNodeRe
   return false
 }
 
+function isNodeScrapeJob(job: string): boolean {
+  return /node-exporter|node_exporter|kubelet/i.test(job)
+}
+
+/**
+ * Aggregate TargetDown (no per-target instance) — neutralize when every DOWN
+ * node-exporter/kubelet scrape target maps to a standby host. Without targets,
+ * fall back to job match + presence of standby (1 elastic node ≈ 1/N down).
+ */
+function isAggregateStandbyTargetDown(
+  alert: MappedAlert,
+  standbyNodes: StandbyNodeRef[],
+  downTargets: StandbyDownTarget[] | undefined,
+): boolean {
+  const job = (alert.labels.job ?? alert.labels.scrape_job ?? '').toLowerCase()
+  const blob = `${job} ${alert.labels.instance ?? ''} ${alert.summary}`
+  if (!isNodeScrapeJob(blob)) return false
+
+  const hints = alertNodeHints(alert)
+  // Per-instance TargetDown still uses host match in the caller.
+  if (hints.length > 0) return false
+
+  if (downTargets != null && downTargets.length > 0) {
+    const downNodeScrapes = downTargets.filter(t => {
+      const health = (t.health ?? '').toLowerCase()
+      if (health !== '' && health !== 'down') return false
+      return isNodeScrapeJob(t.job ?? '')
+    })
+    if (downNodeScrapes.length === 0) return false
+    return downNodeScrapes.every(
+      t => t.instance != null && t.instance !== '' && hostMatchesStandbyNode(t.instance, standbyNodes),
+    )
+  }
+
+  // No target inventory — neutralize aggregate node scrape TargetDown while
+  // at least one elastic standby is registered (typical 1/N scrape loss).
+  return isNodeScrapeJob(job)
+}
+
+function isStandbyDaemonSetNoise(alert: MappedAlert): boolean {
+  const name = alert.name
+  if (/^KubeDaemonSet(RolloutStuck|MisScheduled)$/i.test(name)) {
+    const ds = alert.labels.daemonset ?? alert.labels.daemon_set ?? ''
+    return STANDBY_NOISE_DAEMONSETS.test(ds)
+  }
+  if (/^KubePodNotReady$/i.test(name)) {
+    const pod = alert.labels.pod ?? ''
+    return STANDBY_NOISE_POD_PREFIX.test(pod)
+  }
+  return false
+}
+
 /**
  * Whether this alert is expected elastic-standby noise for the given standby node set.
  * Callers should pass only `elastic_mode === 'standby'` nodes (not degraded/demand).
@@ -178,33 +246,45 @@ export function hostMatchesStandbyNode(host: string, standbyNodes: StandbyNodeRe
 export function isElasticStandbyAlert(
   alert: MappedAlert,
   standbyNodes: StandbyNodeRef[],
+  downTargets?: StandbyDownTarget[],
 ): boolean {
   if (standbyNodes.length === 0) return false
   const name = alert.name
   const isTargetDown = /^TargetDown$/i.test(name)
   if (!ELASTIC_STANDBY_ALERT_NAMES.test(name) && !isTargetDown) return false
 
-  if (isTargetDown) {
-    // Only neutralize node-exporter / kubelet host scrapes — not app targets.
-    const job = (alert.labels.job ?? alert.labels.scrape_job ?? '').toLowerCase()
-    const blob = `${job} ${alert.labels.instance ?? ''} ${alert.summary}`
-    const looksLikeNodeScrape =
-      /node-exporter|node_exporter|kubelet/i.test(blob) ||
-      /:\d{2,5}$/.test(alert.labels.instance ?? '')
-    if (!looksLikeNodeScrape) return false
+  // Direct host match (node= / instance=IP:port).
+  if (alertNodeHints(alert).some(h => hostMatchesStandbyNode(h, standbyNodes))) {
+    if (isTargetDown) {
+      const job = (alert.labels.job ?? alert.labels.scrape_job ?? '').toLowerCase()
+      const blob = `${job} ${alert.labels.instance ?? ''} ${alert.summary}`
+      if (
+        !isNodeScrapeJob(blob) &&
+        !/:\d{2,5}$/.test(alert.labels.instance ?? '')
+      ) {
+        return false
+      }
+    }
+    return true
   }
 
-  return alertNodeHints(alert).some(h => hostMatchesStandbyNode(h, standbyNodes))
+  if (isTargetDown) {
+    return isAggregateStandbyTargetDown(alert, standbyNodes, downTargets)
+  }
+
+  // Pod / DaemonSet alerts often omit `node` — match known all-node DS names.
+  return isStandbyDaemonSetNoise(alert)
 }
 
 /** Annotate mapped alerts with standbyNeutral when they hit elastic standby hosts. */
 export function annotateStandbyAlerts(
   alerts: MappedAlert[],
   standbyNodes: StandbyNodeRef[],
+  downTargets?: StandbyDownTarget[],
 ): MappedAlert[] {
   if (standbyNodes.length === 0) return alerts
   return alerts.map(a => {
-    if (!isElasticStandbyAlert(a, standbyNodes)) return a
+    if (!isElasticStandbyAlert(a, standbyNodes, downTargets)) return a
     return { ...a, standbyNeutral: true }
   })
 }
