@@ -86,42 +86,29 @@ function GrafanaSoloEmbed({
   url,
   title,
   height,
-  openUrl,
 }: {
   url: string
   title: string
   height: number
-  openUrl: string | null
 }): ReactNode {
   const [failed, setFailed] = useState(false)
+  if (failed) {
+    return (
+      <p className="m-0 rounded-md border border-[var(--border)] px-2 py-3 text-center text-[var(--text-dense-caption)] text-muted-foreground">
+        Grafana panel unavailable
+      </p>
+    )
+  }
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-2">
-        <OpsSubsectionTitle className="mb-0">{title}</OpsSubsectionTitle>
-        {openUrl != null ? (
-          <Button size="sm" variant="outline" asChild>
-            <a href={openUrl} target="_blank" rel="noreferrer">
-              Open in Grafana
-            </a>
-          </Button>
-        ) : null}
-      </div>
-      {failed ? (
-        <p className="m-0 rounded-md border border-[var(--border)] px-2 py-3 text-center text-[var(--text-dense-caption)] text-muted-foreground">
-          Grafana panel unavailable
-        </p>
-      ) : (
-        <iframe
-          title={title}
-          src={url}
-          loading="lazy"
-          sandbox={SOLO_EMBED_SANDBOX}
-          className="w-full rounded-md border border-[var(--border)] bg-[var(--background)]"
-          style={{ height }}
-          onError={() => setFailed(true)}
-        />
-      )}
-    </div>
+    <iframe
+      title={title}
+      src={url}
+      loading="lazy"
+      sandbox={SOLO_EMBED_SANDBOX}
+      className="w-full rounded-md border border-[var(--border)] bg-[var(--background)]"
+      style={{ height }}
+      onError={() => setFailed(true)}
+    />
   )
 }
 
@@ -202,6 +189,17 @@ function formatFreshness(ms: number | null): string {
   if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`
   return `${Math.round(ms / 60_000)}m ago`
 }
+
+/** Compact scrape age for dense target rows; full ISO stays in title. */
+function formatScrapeAge(iso?: string): string {
+  if (iso == null || iso === '') return '—'
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return iso
+  return formatFreshness(Date.now() - t)
+}
+
+const scrapeCell =
+  '!py-0.5 px-1.5 text-[var(--text-dense-caption)] leading-tight align-middle'
 
 const SIGNAL_STATE_LABELS: Record<SignalState, string> = {
   healthy: 'HEALTHY',
@@ -674,6 +672,32 @@ export function ObservabilityPage({
     return (domain?.signals ?? []).filter(s => s.def.role === 'required')
   }, [viewModel.domains, selectedDomain])
 
+  const selectedDomainHealthy = useMemo(() => {
+    const d = viewModel.domains.find(x => x.domain === selectedDomain)
+    return d?.verdict === 'healthy'
+  }, [viewModel.domains, selectedDomain])
+
+  const checkpointsQuiet =
+    selectedRequiredSignals.length > 0 &&
+    selectedRequiredSignals.every(s => {
+      const gap = signalToGap(s)
+      return gap === 'ok' || gap === 'by_design'
+    })
+
+  const dependencyQuiet =
+    selected.dependencyPath.length > 0 &&
+    selected.dependencyPath.every(
+      hop => hop.state === 'healthy' || hop.state === 'expected_off',
+    )
+
+  const goldenQuiet =
+    selected.goldenSignals.length > 0 &&
+    selected.goldenSignals.every(g => g.status === 'ok')
+
+  const scrapeQuiet =
+    selected.scrapeTargets.length > 0 &&
+    selected.scrapeTargets.every(t => t.health === 'up')
+
   const systemHealthy = !isLoading && system.overall === 'healthy'
   const selectedPrimaryGrafana = useMemo(() => {
     const hit = selected.grafanaLinks.find(g => g.available && g.url != null)
@@ -1008,10 +1032,10 @@ export function ObservabilityPage({
         </DenseDataTable>
       </OpsSection>
 
-      {/* Selected Domain — primary place for domain Grafana (all catalogued dashboards) */}
+      {/* Selected Domain — nested flat OpsSections: CAUTION+ open, healthy collapsed */}
       <OpsSection
         title={`Selected Domain · ${selected.domain}`}
-        description="Checkpoints · dependency path · golden signals · scrape targets · domain Grafana"
+        description="Expand a section to inspect · healthy sections stay collapsed"
         bodyPadding="compact"
         overflow="visible"
         actions={
@@ -1028,18 +1052,61 @@ export function ObservabilityPage({
           )
         }
       >
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           {selected.soloEmbed != null ? (
-            <GrafanaSoloEmbed
-              url={selected.soloEmbed.url}
+            <OpsSection
+              key={`${selected.domain}-grafana`}
               title={selected.soloEmbed.title}
-              height={selected.soloEmbed.height}
-              openUrl={selectedPrimaryGrafana?.url ?? null}
-            />
+              description="Deep evidence · Grafana solo panel"
+              variant="flat"
+              className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+              collapsible
+              defaultCollapsed={selectedDomainHealthy}
+              bodyPadding="compact"
+              overflow="hidden"
+              actions={
+                selectedPrimaryGrafana != null ? (
+                  <Button size="sm" variant="outline" asChild>
+                    <a
+                      href={selectedPrimaryGrafana.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      Open in Grafana
+                    </a>
+                  </Button>
+                ) : null
+              }
+            >
+              <GrafanaSoloEmbed
+                url={selected.soloEmbed.url}
+                title={selected.soloEmbed.title}
+                height={selected.soloEmbed.height}
+              />
+            </OpsSection>
           ) : null}
 
-          <div>
-            <OpsSubsectionTitle className="mb-1">Checkpoints</OpsSubsectionTitle>
+          <OpsSection
+            key={`${selected.domain}-checkpoints`}
+            title="Checkpoints"
+            description={
+              selectedRequiredSignals.length === 0
+                ? 'No required signals'
+                : `${selectedRequiredSignals.length} required · ${
+                    checkpointsQuiet ? 'all matched' : 'inspect gaps'
+                  }`
+            }
+            leading={
+              <StatusLamp value={checkpointsQuiet ? 'ok' : 'degraded'} kind="reach" />
+            }
+            variant="flat"
+            className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+            collapsible
+            defaultCollapsed={checkpointsQuiet}
+            bodyPadding="compact"
+            overflow="hidden"
+          >
             <DenseDataTable>
               <DenseTableHeader>
                 <DenseTableHeadRow>
@@ -1089,10 +1156,28 @@ export function ObservabilityPage({
                 )}
               </DenseTableBody>
             </DenseDataTable>
-          </div>
+          </OpsSection>
 
-          <div>
-            <OpsSubsectionTitle className="mb-1">Dependency path</OpsSubsectionTitle>
+          <OpsSection
+            key={`${selected.domain}-dependency`}
+            title="Dependency path"
+            description={
+              selected.dependencyPath.length === 0
+                ? 'No hops'
+                : `${selected.dependencyPath.length} hops · ${
+                    dependencyQuiet ? 'healthy' : 'issues in path'
+                  }`
+            }
+            leading={
+              <StatusLamp value={dependencyQuiet ? 'ok' : 'degraded'} kind="reach" />
+            }
+            variant="flat"
+            className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+            collapsible
+            defaultCollapsed={dependencyQuiet}
+            bodyPadding="compact"
+            overflow="hidden"
+          >
             {selected.dependencyPath.length === 0 ? (
               <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
                 No required signals for this domain.
@@ -1129,11 +1214,25 @@ export function ObservabilityPage({
                 ))}
               </div>
             )}
-          </div>
+          </OpsSection>
 
           {(selected.domain === 'satellite' || selected.domain === 'ground-systems') && (
-            <div>
-              <OpsSubsectionTitle className="mb-1">Golden signals</OpsSubsectionTitle>
+            <OpsSection
+              key={`${selected.domain}-golden`}
+              title="Golden signals"
+              description={
+                selected.goldenSignals.length === 0
+                  ? 'None for this domain'
+                  : `${selected.goldenSignals.length} signals · ${goldenQuiet ? 'ok' : 'review'}`
+              }
+              leading={<StatusLamp value={goldenQuiet ? 'ok' : 'degraded'} kind="reach" />}
+              variant="flat"
+              className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+              collapsible
+              defaultCollapsed={goldenQuiet}
+              bodyPadding="compact"
+              overflow="hidden"
+            >
               <DenseDataTable>
                 <DenseTableHeader>
                   <DenseTableHeadRow>
@@ -1162,62 +1261,117 @@ export function ObservabilityPage({
                   )}
                 </DenseTableBody>
               </DenseDataTable>
-            </div>
+            </OpsSection>
           )}
 
-          <div>
-            <OpsSubsectionTitle className="mb-1">Scrape targets</OpsSubsectionTitle>
-            <DenseDataTable>
+          <OpsSection
+            key={`${selected.domain}-scrape`}
+            title="Scrape targets"
+            description={
+              selected.scrapeTargets.length === 0
+                ? 'None mapped / Prometheus unavailable'
+                : `${selected.scrapeTargets.length} targets · ${scrapeQuiet ? 'all up' : 'has down/unknown'}`
+            }
+            leading={<StatusLamp value={scrapeQuiet ? 'ok' : 'degraded'} kind="reach" />}
+            variant="flat"
+            className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+            collapsible
+            defaultCollapsed={scrapeQuiet}
+            bodyPadding="compact"
+            overflow="hidden"
+          >
+            <DenseDataTable
+              scrollX={false}
+              wrapClassName="max-h-[14.5rem] overflow-y-auto"
+              tableClassName="text-[var(--text-dense-caption)]"
+            >
+              <colgroup>
+                <col className="w-[22%]" />
+                <col className="w-[28%]" />
+                <col className="w-[12%]" />
+                <col className="w-[12%]" />
+                <col className="w-[26%]" />
+              </colgroup>
               <DenseTableHeader>
                 <DenseTableHeadRow>
-                  <DenseTableHead>Job</DenseTableHead>
-                  <DenseTableHead>Instance</DenseTableHead>
-                  <DenseTableHead>Health</DenseTableHead>
-                  <DenseTableHead>Role</DenseTableHead>
-                  <DenseTableHead>Last scrape / error</DenseTableHead>
+                  <DenseTableHead className="!py-1 px-1.5 text-[var(--text-dense-micro)]">
+                    Job
+                  </DenseTableHead>
+                  <DenseTableHead className="!py-1 px-1.5 text-[var(--text-dense-micro)]">
+                    Instance
+                  </DenseTableHead>
+                  <DenseTableHead className="!py-1 px-1.5 text-[var(--text-dense-micro)]">
+                    Health
+                  </DenseTableHead>
+                  <DenseTableHead className="!py-1 px-1.5 text-[var(--text-dense-micro)]">
+                    Role
+                  </DenseTableHead>
+                  <DenseTableHead className="!py-1 px-1.5 text-[var(--text-dense-micro)]">
+                    Last
+                  </DenseTableHead>
                 </DenseTableHeadRow>
               </DenseTableHeader>
               <DenseTableBody>
                 {selected.scrapeTargets.length === 0 ? (
                   <DenseTableRow>
-                    <DenseTableCell colSpan={5} className="text-muted-foreground">
+                    <DenseTableCell colSpan={5} className={cn(scrapeCell, 'text-muted-foreground')}>
                       No targets mapped to this domain (or Prometheus unavailable)
                     </DenseTableCell>
                   </DenseTableRow>
                 ) : (
-                  selected.scrapeTargets.slice(0, 24).map(t => (
-                    <DenseTableRow key={t.id}>
-                      <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)]">
-                        {t.job}
-                      </DenseTableCell>
-                      <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)]">
-                        {t.instance}
-                      </DenseTableCell>
-                      <DenseTableCell>
-                        <StatusLamp
-                          value={t.health === 'up' ? 'ok' : t.health === 'down' ? 'fail' : 'unknown'}
-                          kind="reach"
-                        />{' '}
-                        <span className="text-[var(--text-dense-caption)] uppercase">{t.health}</span>
-                      </DenseTableCell>
-                      <DenseTableCell>
-                        <DenseTag variant="neutral" className="text-[9px] uppercase">
+                  selected.scrapeTargets.slice(0, 24).map(t => {
+                    const err = t.lastError != null && t.lastError !== '' ? t.lastError : null
+                    const scrapeTitle = err ?? t.lastScrape ?? undefined
+                    return (
+                      <DenseTableRow key={t.id}>
+                        <DenseTableCell
+                          className={cn(scrapeCell, 'font-mono-tabular truncate')}
+                          title={t.job}
+                        >
+                          {t.job}
+                        </DenseTableCell>
+                        <DenseTableCell
+                          className={cn(scrapeCell, 'font-mono-tabular truncate')}
+                          title={t.instance}
+                        >
+                          {t.instance}
+                        </DenseTableCell>
+                        <DenseTableCell className={scrapeCell}>
+                          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                            <StatusLamp
+                              value={
+                                t.health === 'up' ? 'ok' : t.health === 'down' ? 'fail' : 'unknown'
+                              }
+                              kind="reach"
+                            />
+                            <span className="uppercase text-muted-foreground">{t.health}</span>
+                          </span>
+                        </DenseTableCell>
+                        <DenseTableCell
+                          className={cn(scrapeCell, 'uppercase text-muted-foreground truncate')}
+                          title={t.role}
+                        >
                           {t.role}
-                        </DenseTag>
-                      </DenseTableCell>
-                      <DenseTableCell className="text-[var(--text-dense-caption)] text-muted-foreground">
-                        {t.lastError != null && t.lastError !== ''
-                          ? t.lastError
-                          : (t.lastScrape ?? '—')}
-                      </DenseTableCell>
-                    </DenseTableRow>
-                  ))
+                        </DenseTableCell>
+                        <DenseTableCell
+                          className={cn(
+                            scrapeCell,
+                            'font-mono-tabular truncate',
+                            err != null ? 'text-danger' : 'text-muted-foreground',
+                          )}
+                          title={scrapeTitle}
+                        >
+                          {err != null ? err : formatScrapeAge(t.lastScrape)}
+                        </DenseTableCell>
+                      </DenseTableRow>
+                    )
+                  })
                 )}
               </DenseTableBody>
             </DenseDataTable>
-          </div>
+          </OpsSection>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 pt-1">
             {selected.detailLinks.map(link => (
               <Button
                 key={link.route}
