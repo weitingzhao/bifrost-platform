@@ -126,8 +126,22 @@ export function ClusterNodesTable({
                 </DenseTableCell>
                 <DenseTableCell className="!whitespace-normal">
                   <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5">
-                    <StatusLamp value={node.reachability} kind="reach" />
-                    <span className="font-mono-tabular">{node.status}</span>
+                    {/* Elastic standby + NotReady is expected off — force neutral lamp. */}
+                    <StatusLamp
+                      value={node.elastic_mode === 'standby' ? 'unknown' : node.reachability}
+                      kind="reach"
+                    />
+                    <span
+                      className={
+                        node.elastic_mode === 'standby'
+                          ? 'font-mono-tabular text-[var(--muted-foreground)]'
+                          : 'font-mono-tabular'
+                      }
+                    >
+                      {node.elastic_mode === 'standby' && node.status !== 'Ready'
+                        ? 'NotReady'
+                        : node.status}
+                    </span>
                     {node.unschedulable ? (
                       <span className="text-dense-caption text-[var(--muted-foreground)]">cordoned</span>
                     ) : null}

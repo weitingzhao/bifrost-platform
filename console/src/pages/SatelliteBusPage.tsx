@@ -2,6 +2,7 @@ import type { RefObject } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DenseTag, SegmentControl, StatusLamp } from '@bifrost/ui'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
+import { TradeNsSegmentControl } from '@/components/TradeNsSegmentControl'
 import {
   BusActuationStrip,
   useInFlightBusWorkload,
@@ -448,11 +449,11 @@ export function SatelliteBusPage({
               <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">
                 BUS HEALTH
               </span>
-              <SegmentControl
+              <TradeNsSegmentControl
                 size="xs"
                 value={q.tradeEnv}
                 options={tradeNsOptions}
-                onChange={v => q.setTradeEnv(v as TradeEnv)}
+                onChange={q.setTradeEnv}
                 ariaLabel="Trade namespace — selects the bus verdict subject"
               />
               <span className="font-mono text-[var(--text-dense-caption)] text-muted-foreground">

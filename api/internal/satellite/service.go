@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	defaultHTTPTimeout = 8 * time.Second
+	defaultHTTPTimeout = 12 * time.Second
 	maxJSONBodyBytes   = 256 * 1024
 )
 

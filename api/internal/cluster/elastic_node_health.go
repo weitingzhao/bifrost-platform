@@ -136,6 +136,7 @@ func probeHostReachableWithTimeout(ctx context.Context, sshHost string, timeoutS
 func applyElasticReachability(view NodeView, mode elasticNodeMode) NodeView {
 	switch mode {
 	case elasticModeStandby:
+		// Expected off (powered down / NotReady, no demand) — unknown, never fail.
 		view.Reachability = probe.ReachUnknown
 		view.ElasticMode = string(elasticModeStandby)
 	case elasticModeDegraded:

@@ -3,6 +3,10 @@
  *
  * Unmapped alerts never affect system/domain verdicts (Owner rule).
  * Only alerts with both domain and severity mapped can degrade/critical.
+ *
+ * Elastic standby formula (Owner):
+ *   WARNING = demand(replicas > 0) AND node offline
+ *   Standby + no demand → NEUTRAL (standbyNeutral); never Attention WARNING.
  */
 
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
@@ -14,6 +18,12 @@ export type RawAlertInput = {
   state?: string
   active_at?: string
   value?: string
+}
+
+/** Host identity for elastic standby matching (node name and/or InternalIP). */
+export type StandbyNodeRef = {
+  name: string
+  internalIp?: string
 }
 
 type AlertRule = {
@@ -125,11 +135,86 @@ export function mapAlerts(raws: RawAlertInput[]): MappedAlert[] {
   return raws.map((r, i) => mapAlert(r, i))
 }
 
+/**
+ * Alertnames that are expected noise when the target node is elastic standby
+ * (powered off / NotReady with no compute demand).
+ */
+const ELASTIC_STANDBY_ALERT_NAMES =
+  /^(KubeNodeNotReady|KubeNodeUnreachable|KubeletInstanceUnreachable|KubeDaemonSetRolloutStuck|KubeDaemonSetMisScheduled|KubePodNotReady)$/i
+
+function alertNodeHints(alert: MappedAlert): string[] {
+  const labels = alert.labels
+  const hints: string[] = []
+  for (const key of ['node', 'nodename', 'kubernetes_node', 'instance', 'exported_instance'] as const) {
+    const v = labels[key]
+    if (v != null && v !== '') hints.push(v)
+  }
+  return hints
+}
+
+/** True when a scrape/alert host string refers to a standby node name or IP. */
+export function hostMatchesStandbyNode(host: string, standbyNodes: StandbyNodeRef[]): boolean {
+  const raw = host.trim().toLowerCase()
+  if (raw === '') return false
+  // Strip scrape port (node-exporter :9100, kubelet :10250, …).
+  const hostOnly = raw.replace(/:\d+$/, '')
+  for (const n of standbyNodes) {
+    const name = n.name.trim().toLowerCase()
+    const ip = (n.internalIp ?? '').trim().toLowerCase()
+    if (name !== '' && (raw === name || hostOnly === name || raw.startsWith(`${name}.`))) {
+      return true
+    }
+    if (ip !== '' && (raw === ip || hostOnly === ip || raw.startsWith(`${ip}:`))) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether this alert is expected elastic-standby noise for the given standby node set.
+ * Callers should pass only `elastic_mode === 'standby'` nodes (not degraded/demand).
+ */
+export function isElasticStandbyAlert(
+  alert: MappedAlert,
+  standbyNodes: StandbyNodeRef[],
+): boolean {
+  if (standbyNodes.length === 0) return false
+  const name = alert.name
+  const isTargetDown = /^TargetDown$/i.test(name)
+  if (!ELASTIC_STANDBY_ALERT_NAMES.test(name) && !isTargetDown) return false
+
+  if (isTargetDown) {
+    // Only neutralize node-exporter / kubelet host scrapes — not app targets.
+    const job = (alert.labels.job ?? alert.labels.scrape_job ?? '').toLowerCase()
+    const blob = `${job} ${alert.labels.instance ?? ''} ${alert.summary}`
+    const looksLikeNodeScrape =
+      /node-exporter|node_exporter|kubelet/i.test(blob) ||
+      /:\d{2,5}$/.test(alert.labels.instance ?? '')
+    if (!looksLikeNodeScrape) return false
+  }
+
+  return alertNodeHints(alert).some(h => hostMatchesStandbyNode(h, standbyNodes))
+}
+
+/** Annotate mapped alerts with standbyNeutral when they hit elastic standby hosts. */
+export function annotateStandbyAlerts(
+  alerts: MappedAlert[],
+  standbyNodes: StandbyNodeRef[],
+): MappedAlert[] {
+  if (standbyNodes.length === 0) return alerts
+  return alerts.map(a => {
+    if (!isElasticStandbyAlert(a, standbyNodes)) return a
+    return { ...a, standbyNeutral: true }
+  })
+}
+
 /** Firing alerts that are allowed to influence verdict. */
 export function verdictAffectingAlerts(alerts: MappedAlert[]): MappedAlert[] {
   return alerts.filter(
     a =>
       a.mapped &&
+      !a.standbyNeutral &&
       a.domain != null &&
       (a.state === 'firing' || a.state === 'pending') &&
       (a.severity === 'critical' || a.severity === 'warning'),

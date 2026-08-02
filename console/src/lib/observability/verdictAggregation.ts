@@ -19,14 +19,57 @@ import { OBSERVABILITY_DOMAIN_ORDER, SIGNAL_STALE_MS } from './signalRegistry'
 import type {
   AttentionItem,
   DomainHealth,
+  DomainProbeability,
   EvaluatedSignal,
+  GapSummary,
   MappedAlert,
   ObservabilityEnvId,
   ObservabilityVerdict,
+  SignalDef,
+  SignalGap,
   SignalState,
   SystemVerdict,
 } from './types'
 import { VERDICT_LABELS } from './types'
+
+/**
+ * Owner decision (product direction 1, 2026-08): Mission Control / Governance
+ * keep Apollo seven-domain taxonomy membership but have no inventable runtime
+ * probe — demote from Observability health-grid / gap primary narrative.
+ * Allowlist is a safety fallback if registry rows drift.
+ */
+const REFERENCE_DOMAIN_ALLOWLIST: ReadonlySet<SystemDomainId> = new Set([
+  'mission-control',
+  'governance',
+])
+
+/**
+ * Probeability SSOT: data-driven when every required signal is
+ * `optionalContract` + `source: 'none'`; else Owner allowlist fallback.
+ */
+export function domainProbeability(
+  domain: SystemDomainId,
+  signals: Array<EvaluatedSignal | SignalDef>,
+): DomainProbeability {
+  const required: SignalDef[] = signals.map(s => ('def' in s ? s.def : s)).filter(d => d.role === 'required')
+  if (
+    required.length > 0 &&
+    required.every(d => d.optionalContract === true && d.source === 'none')
+  ) {
+    return 'reference'
+  }
+  if (
+    REFERENCE_DOMAIN_ALLOWLIST.has(domain) &&
+    (required.length === 0 || required.every(d => d.optionalContract === true))
+  ) {
+    return 'reference'
+  }
+  return 'runtime'
+}
+
+export function isReferenceDomain(domain: DomainHealth): boolean {
+  return domain.probeability === 'reference'
+}
 
 const VERDICT_RANK: Record<ObservabilityVerdict, number> = {
   critical: 5,
@@ -54,6 +97,70 @@ export function signalStateToVerdict(state: SignalState): ObservabilityVerdict {
     default:
       return 'unknown'
   }
+}
+
+/**
+ * Map an evaluated signal to Expected vs Actual gap.
+ * - healthy / expected_off → ok
+ * - critical / degraded → fail
+ * - unknown → blind
+ * - not_observed + optionalContract → by_design
+ * - not_observed + !optionalContract → blind
+ */
+export function signalToGap(s: EvaluatedSignal): SignalGap {
+  switch (s.state) {
+    case 'healthy':
+    case 'expected_off':
+      return 'ok'
+    case 'critical':
+    case 'degraded':
+      return 'fail'
+    case 'not_observed':
+      return s.def.optionalContract === true ? 'by_design' : 'blind'
+    default:
+      return 'blind'
+  }
+}
+
+export function emptyGapSummary(): GapSummary {
+  return { ok: 0, fail: 0, blind: 0, byDesign: 0, total: 0 }
+}
+
+/** Aggregate gap counts for required signals only. */
+export function gapSummaryFromSignals(signals: EvaluatedSignal[]): GapSummary {
+  const summary = emptyGapSummary()
+  for (const s of signals) {
+    if (s.def.role !== 'required') continue
+    summary.total += 1
+    const gap = signalToGap(s)
+    if (gap === 'ok') summary.ok += 1
+    else if (gap === 'fail') summary.fail += 1
+    else if (gap === 'blind') summary.blind += 1
+    else summary.byDesign += 1
+  }
+  return summary
+}
+
+/**
+ * Sum gapSummary across domains (system-level rollup).
+ * Default excludes pure reference domains so MC/Governance by-design rows
+ * do not inflate fail/blind/ok primary meta. Pass `includeReference: true`
+ * to include them (e.g. catalog diagnostics).
+ */
+export function sumGapSummaries(
+  domains: DomainHealth[],
+  opts?: { includeReference?: boolean },
+): GapSummary {
+  const summary = emptyGapSummary()
+  for (const d of domains) {
+    if (!opts?.includeReference && d.probeability === 'reference') continue
+    summary.ok += d.gapSummary.ok
+    summary.fail += d.gapSummary.fail
+    summary.blind += d.gapSummary.blind
+    summary.byDesign += d.gapSummary.byDesign
+    summary.total += d.gapSummary.total
+  }
+  return summary
 }
 
 /**
@@ -178,6 +285,8 @@ export function buildDomainHealth(
       required: required.length,
       evidence: evidence.length,
     },
+    gapSummary: gapSummaryFromSignals(signals),
+    probeability: domainProbeability(domain, signals),
     alertCount: domainAlerts.filter(a => a.state === 'firing' || a.state === 'pending').length,
     envScope,
     signals,
@@ -194,6 +303,10 @@ export function buildSystemVerdict(
     freshnessMs: number | null
   },
 ): SystemVerdict {
+  const runtimeDomains = domains.filter(d => d.probeability === 'runtime')
+  const referenceDomainCount = domains.filter(d => d.probeability === 'reference').length
+
+  // domainCounts = runtime only — reference NOT OBSERVED must not dilute the grid narrative.
   const domainCounts: Record<ObservabilityVerdict, number> = {
     healthy: 0,
     degraded: 0,
@@ -201,17 +314,19 @@ export function buildSystemVerdict(
     unknown: 0,
     not_observed: 0,
   }
-  for (const d of domains) {
+  for (const d of runtimeDomains) {
     domainCounts[d.verdict] += 1
   }
 
-  // Overall ignores pure NOT OBSERVED domains (Mission Control / Governance)
-  // unless every domain is not_observed.
-  const participating = domains.filter(d => d.verdict !== 'not_observed')
+  // Overall ignores pure NOT OBSERVED runtime domains unless every runtime domain is not_observed.
+  const participating = runtimeDomains.filter(d => d.verdict !== 'not_observed')
   let overall: ObservabilityVerdict = 'healthy'
   let primaryCause = 'All observed domains healthy'
 
-  if (participating.length === 0) {
+  if (runtimeDomains.length === 0) {
+    overall = 'not_observed'
+    primaryCause = 'No domains with reliable runtime contracts'
+  } else if (participating.length === 0) {
     overall = 'not_observed'
     primaryCause = 'No domains with reliable runtime contracts'
   } else {
@@ -236,6 +351,7 @@ export function buildSystemVerdict(
     overall,
     label: VERDICT_LABELS[overall],
     domainCounts,
+    referenceDomainCount,
     firingAlerts: firing.length,
     mappedFiringAlerts: affecting.length,
     primaryCause,

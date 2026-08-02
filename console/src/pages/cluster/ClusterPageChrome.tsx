@@ -73,11 +73,14 @@ export function ClusterPageChrome({
   summaryFailed: boolean
   isProbing: boolean
 }) {
-  const actionErrorDisplay =
-    actionError != null &&
-    (actionError.includes('401') || actionError.includes('operator token required')
-      ? 'Operator token required. Set PLATFORM_OPERATOR_TOKEN for the API and VITE_PLATFORM_OPERATOR_TOKEN for the console, then restart platform.'
-      : actionError)
+  // Must be string | null — never boolean. (`x && msg` yields `false` when x is null,
+  // and `false != null` is true → empty "Actuation" OpsFeedback banner.)
+  const actionErrorDisplay: string | null =
+    actionError == null
+      ? null
+      : actionError.includes('401') || actionError.includes('operator token required')
+        ? 'Operator token required. Set PLATFORM_OPERATOR_TOKEN for the API and VITE_PLATFORM_OPERATOR_TOKEN for the console, then restart platform.'
+        : actionError
 
   const verdict = deriveClusterVerdict({
     summary: clusterSummary,

@@ -30,7 +30,9 @@ interface ClusterCategoryGridProps {
 
 function domainReach(status: string, reachability: Reachability): Reachability {
   if (status === 'unavailable') return 'fail'
-  if (status === 'partial' || status === 'standby') return 'degraded'
+  // Standby (elastic powered-off / scaled-to-zero, no demand) is NEUTRAL — not degraded.
+  if (status === 'standby') return 'unknown'
+  if (status === 'partial') return 'degraded'
   if (status === 'ready') return reachability === 'ok' ? 'ok' : reachability
   return reachability
 }
@@ -51,13 +53,33 @@ function degradedHeadline(domain: ServiceDomain): string {
   return `${first} +${failing.length - 1} gap${failing.length - 1 === 1 ? '' : 's'}`
 }
 
+function standbyDomainHeadline(domain: ServiceDomain): { headline: string; detail?: string } {
+  const summary = domain.summary.trim()
+  if (summary !== '' && /demand|needed|offline|unavailable/i.test(summary)) {
+    return { headline: summary }
+  }
+  if (domain.id === 'gpu' || domain.id === 'warehouse') {
+    return {
+      headline: 'Standby — no demand',
+      detail: summary !== '' && !/standby/i.test(summary) ? summary : undefined,
+    }
+  }
+  return {
+    headline: summary !== '' ? summary : 'Standby — no demand',
+  }
+}
+
 function appDomainCard(domain: ServiceDomain) {
   const reach = domainReach(domain.status, domain.reachability)
   const isHealthy = reach === 'ok'
 
   let headline: string
   let detail: string | undefined
-  if (!isHealthy) {
+  if (domain.status === 'standby') {
+    const result = standbyDomainHeadline(domain)
+    headline = result.headline
+    detail = result.detail
+  } else if (!isHealthy) {
     headline = degradedHeadline(domain)
     detail = domain.summary !== '' ? domain.summary : undefined
   } else {

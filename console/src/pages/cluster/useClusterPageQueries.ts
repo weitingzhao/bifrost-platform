@@ -231,15 +231,17 @@ export function useClusterPageQueries(input: ClusterPageQueriesInput) {
     return serviceReadinessQuery.data?.domains.find(d => d.id === selectedCategory)?.label
   }, [selectedCategory, serviceReadinessQuery.data?.domains])
 
-  const bifrostNamespaces =
-    namespacesQuery.data?.namespaces.filter(ns => ns.name.startsWith('bifrost')) ?? []
+  // bifrost* filter is for UI lists only — bootstrap completion must use the full inventory
+  // (CORE includes cicd + monitoring, which do not start with "bifrost").
+  const allNamespaces = namespacesQuery.data?.namespaces
+  const bifrostNamespaces = allNamespaces?.filter(ns => ns.name.startsWith('bifrost')) ?? []
   const visibleNamespaces = useMemo(
     () => (namespacesQuery.data?.namespaces ?? []).filter(ns => !DEPRECATED_NAMESPACES.has(ns.name)),
     [namespacesQuery.data?.namespaces],
   )
 
-  const showBootstrapActions = clusterBootstrapNeedsActions(metricsOk, bifrostNamespaces)
-  const bifrostNsReady = bifrostNamespacesReady(bifrostNamespaces)
+  const showBootstrapActions = clusterBootstrapNeedsActions(metricsOk, allNamespaces)
+  const bifrostNsReady = bifrostNamespacesReady(allNamespaces)
   const clusterSummaryError =
     summaryQuery.isError && summaryQuery.error instanceof Error
       ? summaryQuery.error.message

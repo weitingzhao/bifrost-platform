@@ -7,11 +7,21 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
+
+// Traefik IngressRoute — Trade edge is trade-gateway CR, not a per-NS nginx Deployment.
+var traefikIngressRouteGVR = schema.GroupVersionResource{
+	Group: "traefik.io", Version: "v1alpha1", Resource: "ingressroutes",
+}
+
+const tradeGatewayIngressRoute = "trade-gateway"
 
 type ServiceDependencyView struct {
 	ID           string             `json:"id"`
@@ -38,11 +48,12 @@ type ServiceReadinessResponse struct {
 }
 
 type readinessSnapshot struct {
-	nodes        []NodeView
-	clusterCaps  map[string]ClusterCapabilityView
-	nodeCoverage map[string]CapabilityCoverageView
-	pools        map[string]placement.PoolView
-	deployments  map[string]appsv1.Deployment
+	nodes         []NodeView
+	clusterCaps   map[string]ClusterCapabilityView
+	nodeCoverage  map[string]CapabilityCoverageView
+	pools         map[string]placement.PoolView
+	deployments   map[string]appsv1.Deployment
+	ingressRoutes map[string]bool // "namespace/name" → present
 }
 
 func (s *Service) ServiceReadiness(ctx context.Context) ServiceReadinessResponse {
@@ -87,15 +98,20 @@ func (s *Service) buildReadinessSnapshot(ctx context.Context) (readinessSnapshot
 	}
 
 	deployments, depErr := s.loadReadinessDeployments(ctx)
+	ingressRoutes, irErr := s.loadTradeGatewayIngressRoutes(ctx)
 	snap := readinessSnapshot{
-		nodes:        nodesResp.Nodes,
-		clusterCaps:  capMap,
-		nodeCoverage: covMap,
-		pools:        poolMap,
-		deployments:  deployments,
+		nodes:         nodesResp.Nodes,
+		clusterCaps:   capMap,
+		nodeCoverage:  covMap,
+		pools:         poolMap,
+		deployments:   deployments,
+		ingressRoutes: ingressRoutes,
 	}
 	if depErr != nil {
 		return snap, depErr
+	}
+	if irErr != nil {
+		return snap, irErr
 	}
 	return snap, nil
 }
@@ -108,6 +124,7 @@ func (s *Service) loadReadinessDeployments(ctx context.Context) (map[string]apps
 	namespaces := []string{
 		"bifrost-stg", "bifrost-dev", "bifrost-prod",
 		"cicd", "cnpg-system", "data", "data-warehouse", "ai", "tekton-pipelines",
+		"kube-system", // Traefik ingress controller
 	}
 	out := make(map[string]appsv1.Deployment)
 	var firstErr error
@@ -121,6 +138,34 @@ func (s *Service) loadReadinessDeployments(ctx context.Context) (map[string]apps
 		}
 		for _, d := range list.Items {
 			out[ns+"/"+d.Name] = d
+		}
+	}
+	return out, firstErr
+}
+
+func (s *Service) loadTradeGatewayIngressRoutes(ctx context.Context) (map[string]bool, error) {
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return nil, err
+	}
+	return listTradeGatewayIngressRoutes(ctx, dyn)
+}
+
+func listTradeGatewayIngressRoutes(ctx context.Context, dyn dynamic.Interface) (map[string]bool, error) {
+	out := make(map[string]bool)
+	namespaces := []string{"bifrost-stg", "bifrost-dev", "bifrost-prod"}
+	var firstErr error
+	for _, ns := range namespaces {
+		obj, getErr := dyn.Resource(traefikIngressRouteGVR).Namespace(ns).Get(ctx, tradeGatewayIngressRoute, metav1.GetOptions{})
+		if getErr != nil {
+			// NotFound → domain dep gap; other errors → snapshot-level degraded.
+			if !apierrors.IsNotFound(getErr) && firstErr == nil {
+				firstErr = fmt.Errorf("ingressroute %s/%s: %w", ns, tradeGatewayIngressRoute, getErr)
+			}
+			continue
+		}
+		if obj != nil {
+			out[ns+"/"+tradeGatewayIngressRoute] = true
 		}
 	}
 	return out, firstErr
@@ -248,8 +293,9 @@ func evalGPUDomain(snap readinessSnapshot) ServiceDomainView {
 	gpuNodes := filterNodes(snap.nodes, func(n NodeView) bool {
 		return hasCapabilityID(n, "gpu-pool")
 	})
+	demand := deploymentDesiredReplicas(snap, "ai", "ollama") > 0
 	deps := []ServiceDependencyView{
-		poolDep(snap, "gpu", "GPU node pool"),
+		elasticPoolDep(snap, "gpu", "GPU node pool", gpuNodes, demand),
 	}
 	if len(gpuNodes) == 0 {
 		deps = append(deps, ServiceDependencyView{
@@ -257,33 +303,33 @@ func evalGPUDomain(snap readinessSnapshot) ServiceDomainView {
 			Reachability: probe.ReachDegraded, Detail: "no workload=gpu node registered",
 		})
 	} else {
-		deps = append(deps, gpuNodesDep(gpuNodes))
+		deps = append(deps, gpuNodesDep(gpuNodes, demand))
 	}
 	wl := deploymentDep(snap, "ai", "ollama", "Ollama (ai)")
 	if wl.Reachability == probe.ReachDegraded && strings.Contains(wl.Detail, "not deployed") {
 		wl.Detail = "scaled to zero or not deployed (make gpu-ollama-up)"
 	}
 	deps = append(deps, wl)
-	return finalizeDomain("gpu", "GPU / AI", deps, "Elastic compute on gpu-server")
+	domain := finalizeDomain("gpu", "GPU / AI", deps, "Elastic compute on gpu-server")
+	return applyElasticDomainVerdict(domain, gpuNodes, demand, "Standby — no demand", "Compute needed but GPU node offline")
 }
 
 func evalWarehouseDomain(snap readinessSnapshot) ServiceDomainView {
+	whNodes := filterNodes(snap.nodes, func(n NodeView) bool {
+		return hasCapabilityID(n, "warehouse") || hasCapabilityID(n, "gpu-pool")
+	})
+	demand := deploymentDesiredReplicas(snap, "data-warehouse", "minio") > 0
 	deps := []ServiceDependencyView{
-		nodeCovDep(snap, "warehouse", "Warehouse nodes"),
-		poolDep(snap, "gpu", "GPU / warehouse host"),
+		elasticNodeCovDep(snap, "warehouse", "Warehouse nodes", demand),
+		elasticPoolDep(snap, "gpu", "GPU / warehouse host", whNodes, demand),
 	}
 	wl := deploymentDep(snap, "data-warehouse", "minio", "MinIO (data-warehouse)")
-	if wl.Reachability == probe.ReachDegraded && strings.Contains(wl.Detail, "standby") {
+	if wl.Reachability == probe.ReachDegraded && (strings.Contains(wl.Detail, "standby") || strings.Contains(wl.Detail, "scaled to zero")) {
 		wl.Detail = "scaled to zero — make gpu-warehouse-up to start"
 	}
 	deps = append(deps, wl)
 	domain := finalizeDomain("warehouse", "Data warehouse", deps, "MinIO object store on gpu-server")
-	if domain.Status == "ready" && wl.Reachability == probe.ReachDegraded {
-		domain.Status = "standby"
-		domain.Reachability = probe.ReachDegraded
-		domain.Summary = "Host ready · MinIO standby (scale up when needed)"
-	}
-	return domain
+	return applyElasticDomainVerdict(domain, whNodes, demand, "Standby — no demand", "Compute needed but warehouse node offline")
 }
 
 func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
@@ -318,7 +364,7 @@ func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
 		}
 		if onlyStandby {
 			domain.Status = "standby"
-			domain.Reachability = probe.ReachDegraded
+			domain.Reachability = probe.ReachOK
 			domain.Summary = "Worker pool ready · trading daemon scaled to zero (observe mode / D10)"
 		}
 	}
@@ -329,18 +375,41 @@ func evalApplicationsDomain(snap readinessSnapshot) ServiceDomainView {
 	deps := []ServiceDependencyView{
 		schedulableAnyDep(snap, "Schedulable nodes"),
 		optionalPoolDep(snap, "arm64_edge", "arm64 edge pool (optional)"),
+		deploymentDep(snap, "kube-system", "traefik", "Traefik ingress controller"),
 	}
-	deps = append(deps, deploymentDep(snap, "bifrost-stg", "nginx", "Ingress nginx (stg)"))
-	deps = append(deps, deploymentDep(snap, "bifrost-stg", "frontend", "Trade frontend (stg)"))
-	apiReady, apiDetail := countReadyDeployments(snap, "bifrost-stg", "api-")
-	deps = append(deps, ServiceDependencyView{
-		ID: "apis", Label: "FastAPI services (stg)",
-		Reachability: apiReadyReach(apiReady),
-		Detail:       apiDetail,
-	})
-	deps = append(deps, deploymentDep(snap, "bifrost-dev", "nginx", "Ingress nginx (dev)"))
-	deps = append(deps, deploymentDep(snap, "bifrost-prod", "nginx", "Ingress nginx (prod)"))
-	return finalizeDomain("applications", "General applications", deps, "amd64 Trade stack · nginx · frontend · 9 API domains")
+	// Edge is Traefik IngressRoute trade-gateway per Trade NS (not per-NS nginx).
+	for _, env := range []struct{ ns, label string }{
+		{"bifrost-stg", "stg"},
+		{"bifrost-dev", "dev"},
+		{"bifrost-prod", "prod"},
+	} {
+		deps = append(deps, ingressRouteDep(snap, env.ns, tradeGatewayIngressRoute, "Trade gateway ("+env.label+")"))
+		deps = append(deps, deploymentDep(snap, env.ns, "frontend", "Trade frontend ("+env.label+")"))
+		apiReady, apiDetail := countReadyDeployments(snap, env.ns, "api-")
+		deps = append(deps, ServiceDependencyView{
+			ID: "apis-" + env.label, Label: "FastAPI services (" + env.label + ")",
+			Reachability: apiReadyReach(apiReady),
+			Detail:       apiDetail,
+		})
+	}
+	return finalizeDomain("applications", "General applications", deps, "amd64 Trade stack · Traefik trade-gateway · frontend · 9 API domains")
+}
+
+func ingressRouteDep(snap readinessSnapshot, ns, name, label string) ServiceDependencyView {
+	key := ns + "/" + name
+	id := "ingressroute-" + ns + "-" + name
+	if snap.ingressRoutes != nil && snap.ingressRoutes[key] {
+		return ServiceDependencyView{
+			ID: id, Label: label,
+			Reachability: probe.ReachOK,
+			Detail:       "IngressRoute " + name + " present",
+		}
+	}
+	return ServiceDependencyView{
+		ID: id, Label: label,
+		Reachability: probe.ReachDegraded,
+		Detail:       "IngressRoute " + name + " missing in " + ns,
+	}
 }
 
 func evalCICDDomain(snap readinessSnapshot) ServiceDomainView {
@@ -385,37 +454,41 @@ func finalizeDomain(id, label string, deps []ServiceDependencyView, purpose stri
 }
 
 func dependencyIsStandby(d ServiceDependencyView) bool {
-	if d.Reachability != probe.ReachDegraded {
+	lower := strings.ToLower(d.Detail)
+	standbyText := strings.Contains(lower, "standby") || strings.Contains(lower, "scaled to zero")
+	if !standbyText {
 		return false
 	}
-	lower := strings.ToLower(d.Detail)
-	return strings.Contains(lower, "standby") || strings.Contains(lower, "scaled to zero")
+	// Standby deps may be ReachOK (expected off) or ReachDegraded (legacy scaled-to-zero).
+	return d.Reachability == probe.ReachOK || d.Reachability == probe.ReachDegraded || d.Reachability == probe.ReachUnknown
 }
 
 func domainStatusFromDeps(deps []ServiceDependencyView) (status string, reach probe.Reachability, summary string) {
 	fail := 0
-	degraded := 0
+	realDegraded := 0
 	standby := 0
 	var gaps []string
 	for _, d := range deps {
+		if dependencyIsStandby(d) {
+			standby++
+			continue
+		}
 		switch d.Reachability {
 		case probe.ReachFail:
 			fail++
 			gaps = append(gaps, d.Label)
 		case probe.ReachDegraded:
-			degraded++
-			if dependencyIsStandby(d) {
-				standby++
-			}
+			realDegraded++
 		}
 	}
 	switch {
 	case fail > 0:
 		return "unavailable", probe.ReachFail, fmt.Sprintf("Blocked: %s", strings.Join(gaps, ", "))
-	case standby > 0 && fail == 0 && degraded == standby:
-		return "standby", probe.ReachDegraded, "Infrastructure ready · workloads scaled to zero"
-	case degraded > 0:
-		return "partial", probe.ReachDegraded, fmt.Sprintf("%d dependency gap(s)", degraded)
+	case realDegraded > 0:
+		return "partial", probe.ReachDegraded, fmt.Sprintf("%d dependency gap(s)", realDegraded)
+	case standby > 0:
+		// Product formula: standby + no demand → status standby + reachability ok.
+		return "standby", probe.ReachOK, "Standby — no demand"
 	default:
 		return "ready", probe.ReachOK, "All dependencies satisfied"
 	}
@@ -560,13 +633,13 @@ func schedulableAny(nodes []NodeView) (ready, total int) {
 	return ready, total
 }
 
-func gpuNodesDep(nodes []NodeView) ServiceDependencyView {
+func gpuNodesDep(nodes []NodeView, demand bool) ServiceDependencyView {
 	ready := 0
 	names := make([]string, 0, len(nodes))
 	standby := 0
 	for _, n := range nodes {
 		names = append(names, n.Name)
-		if n.ElasticMode == "standby" || n.Unschedulable {
+		if n.ElasticMode == "standby" || (n.Unschedulable && n.Status != "Ready") {
 			standby++
 			continue
 		}
@@ -577,13 +650,143 @@ func gpuNodesDep(nodes []NodeView) ServiceDependencyView {
 	reach := probe.ReachOK
 	detail := fmt.Sprintf("%d/%d active", ready, len(nodes))
 	if ready == 0 && standby > 0 {
-		reach = probe.ReachDegraded
-		detail = fmt.Sprintf("standby/cordoned (%s)", strings.Join(names, ", "))
+		if demand {
+			reach = probe.ReachFail
+			detail = fmt.Sprintf("Compute needed but node offline (%s)", strings.Join(names, ", "))
+		} else {
+			// Expected off — neutral reachability.
+			reach = probe.ReachOK
+			detail = fmt.Sprintf("standby — no demand (%s)", strings.Join(names, ", "))
+		}
 	} else if ready == 0 {
 		reach = probe.ReachFail
 		detail = "GPU nodes not ready"
 	}
 	return ServiceDependencyView{ID: "gpu-nodes", Label: "GPU nodes", Reachability: reach, Detail: detail}
+}
+
+func deploymentDesiredReplicas(snap readinessSnapshot, ns, name string) int32 {
+	d, ok := snap.deployments[ns+"/"+name]
+	if !ok {
+		return 0
+	}
+	if d.Spec.Replicas != nil {
+		return *d.Spec.Replicas
+	}
+	return d.Status.Replicas
+}
+
+func nodesAllElasticStandby(nodes []NodeView) bool {
+	if len(nodes) == 0 {
+		return false
+	}
+	for _, n := range nodes {
+		if n.ElasticMode == "standby" {
+			continue
+		}
+		// Any Ready/active node breaks the all-standby rollup.
+		if n.Status == "Ready" && n.Reachability == probe.ReachOK {
+			return false
+		}
+		if n.ElasticMode == "active" {
+			return false
+		}
+		// Non-elastic NotReady is not "elastic standby".
+		if n.ElasticMode == "" {
+			return false
+		}
+	}
+	return countElasticStandby(nodes) == len(nodes)
+}
+
+// elasticPoolDep — GPU/warehouse pools may be powered off with no demand (expected).
+func elasticPoolDep(snap readinessSnapshot, id, label string, nodes []NodeView, demand bool) ServiceDependencyView {
+	if nodesAllElasticStandby(nodes) || (len(nodes) > 0 && countElasticStandby(nodes) == len(nodes)) {
+		if demand {
+			return ServiceDependencyView{
+				ID: "pool-" + id, Label: label,
+				Reachability: probe.ReachFail,
+				Detail:       "Compute needed but node offline",
+			}
+		}
+		return ServiceDependencyView{
+			ID: "pool-" + id, Label: label,
+			Reachability: probe.ReachOK,
+			Detail:       "standby — no demand",
+		}
+	}
+	return poolDep(snap, id, label)
+}
+
+func countElasticStandby(nodes []NodeView) int {
+	n := 0
+	for _, node := range nodes {
+		if node.ElasticMode == "standby" {
+			n++
+		}
+	}
+	return n
+}
+
+// elasticNodeCovDep — warehouse/gpu coverage when the only matching nodes are elastic standby.
+func elasticNodeCovDep(snap readinessSnapshot, id, label string, demand bool) ServiceDependencyView {
+	base := nodeCovDep(snap, id, label)
+	if base.Reachability == probe.ReachOK {
+		return base
+	}
+	c, ok := snap.nodeCoverage[id]
+	if !ok || c.NodesTotal == 0 {
+		return base
+	}
+	// All labeled nodes present but none Ready — treat as standby when no demand.
+	if c.NodesReady == 0 && !demand {
+		return ServiceDependencyView{
+			ID: id, Label: label,
+			Reachability: probe.ReachOK,
+			Detail:       fmt.Sprintf("standby — no demand (%s)", strings.Join(c.NodeNames, ", ")),
+		}
+	}
+	if c.NodesReady == 0 && demand {
+		return ServiceDependencyView{
+			ID: id, Label: label,
+			Reachability: probe.ReachFail,
+			Detail:       fmt.Sprintf("Compute needed but node offline (%s)", strings.Join(c.NodeNames, ", ")),
+		}
+	}
+	return base
+}
+
+// applyElasticDomainVerdict — product formula for GPU/Warehouse elastic domains.
+func applyElasticDomainVerdict(
+	domain ServiceDomainView,
+	nodes []NodeView,
+	demand bool,
+	standbySummary, demandSummary string,
+) ServiceDomainView {
+	standbyNodes := countElasticStandby(nodes) > 0 || nodesAllElasticStandby(nodes)
+	if !standbyNodes && !demand {
+		// Workload scaled to zero on a ready host still counts as standby.
+		if domain.Status == "standby" {
+			domain.Reachability = probe.ReachOK
+			if domain.Summary == "" || strings.Contains(domain.Summary, "scaled to zero") {
+				domain.Summary = standbySummary
+			}
+		}
+		return domain
+	}
+	if standbyNodes && !demand {
+		domain.Status = "standby"
+		domain.Reachability = probe.ReachOK
+		domain.Summary = standbySummary
+		return domain
+	}
+	if standbyNodes && demand {
+		domain.Status = "unavailable"
+		domain.Reachability = probe.ReachFail
+		domain.Summary = demandSummary
+		return domain
+	}
+	return domain
 }
 
 func deploymentDep(snap readinessSnapshot, ns, name, label string) ServiceDependencyView {

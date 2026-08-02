@@ -7,7 +7,7 @@
  * - Alerts affect verdict only after domain + severity mapping.
  * - Historical Defects never participate.
  * - Shared dependencies counted once; mark affected domains.
- * - Mission Control / Governance without reliable runtime → NOT OBSERVED / UNKNOWN.
+ * - Mission Control / Governance without reliable runtime → NOT OBSERVED (reference / by design).
  */
 
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'

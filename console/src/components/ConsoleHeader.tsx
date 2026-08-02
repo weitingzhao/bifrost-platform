@@ -15,6 +15,7 @@ import {
   viewerEnvBadgeLabel,
   type FleetViewerEnv,
 } from '@/lib/control-room/fleetSnapshot'
+import { viewerSeatTagVariant } from '@/lib/envVisual'
 import { UserMenu } from '@/components/UserMenu'
 import { ActivityIndicator } from '@/components/activity/ActivityIndicator'
 import { DevSessionsIndicator } from '@/components/DevSessionsIndicator'
@@ -45,11 +46,9 @@ function ViewerEnvChip({
     )
   }
   const label = viewerEnvBadgeLabel(viewerEnv)
-  const variant =
-    viewerEnv === 'prod' ? 'danger' : viewerEnv === 'stg' ? 'warning' : 'info'
   return (
     <span title={`Viewer seat (observation env): ${viewerEnv}`}>
-      <DenseTag variant={variant}>{label}</DenseTag>
+      <DenseTag variant={viewerSeatTagVariant(viewerEnv)}>{label}</DenseTag>
     </span>
   )
 }

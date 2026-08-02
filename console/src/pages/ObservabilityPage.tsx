@@ -15,7 +15,6 @@ import {
   DenseTableHeader,
   DenseTableRow,
   DenseTag,
-  SegmentControl,
   Sheet,
   SheetContent,
   SheetDescription,
@@ -23,12 +22,13 @@ import {
   SheetTitle,
   cn,
 } from '@bifrost/ui'
+import { TradeNsSegmentControl } from '@/components/TradeNsSegmentControl'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { PageToolbar } from '@/components/layout/PageToolbar'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
-import { useObservabilitySnapshot, type TradeEnv } from '@/hooks/useObservabilitySnapshot'
+import { useObservabilitySnapshot } from '@/hooks/useObservabilitySnapshot'
 import {
   SYSTEM_DOMAIN_ICON,
   SYSTEM_DOMAIN_VARIANT,
@@ -37,15 +37,21 @@ import {
 import type {
   AttentionItem,
   DomainHealth,
+  EvaluatedSignal,
+  GapSummary,
   ObservabilityVerdict,
+  SignalGap,
+  SignalState,
 } from '@/lib/observability'
-import { VERDICT_LABELS } from '@/lib/observability'
+import {
+  signalStateToVerdict,
+  signalToGap,
+  sumGapSummaries,
+  VERDICT_LABELS,
+} from '@/lib/observability'
 
-const TRADE_ENV_OPTIONS = [
-  { value: 'dev', label: 'Dev' },
-  { value: 'stg', label: 'Stg' },
-  { value: 'prod', label: 'Prod' },
-] as const
+const GAP_LEGEND =
+  'ok = matched · fail = unhealthy · blind = probe missing · by-design = optional contract · reference = plane not probed'
 
 function verdictLamp(v: ObservabilityVerdict) {
   switch (v) {
@@ -83,6 +89,90 @@ function formatFreshness(ms: number | null): string {
   if (ms == null) return 'unknown'
   if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`
   return `${Math.round(ms / 60_000)}m ago`
+}
+
+const SIGNAL_STATE_LABELS: Record<SignalState, string> = {
+  healthy: 'HEALTHY',
+  degraded: 'DEGRADED',
+  critical: 'CRITICAL',
+  unknown: 'UNKNOWN',
+  not_observed: 'NOT OBSERVED',
+  expected_off: 'EXPECTED OFF',
+}
+
+const GAP_TAG_VARIANT: Record<SignalGap, 'success' | 'danger' | 'warning' | 'neutral'> = {
+  ok: 'success',
+  fail: 'danger',
+  blind: 'warning',
+  by_design: 'neutral',
+}
+
+const GAP_LABEL: Record<SignalGap, string> = {
+  ok: 'ok',
+  fail: 'fail',
+  blind: 'blind',
+  by_design: 'by-design',
+}
+
+function gapPartClass(gap: SignalGap): string {
+  switch (gap) {
+    case 'ok':
+      return 'text-success'
+    case 'fail':
+      return 'text-danger'
+    case 'blind':
+      return 'text-warning'
+    default:
+      return 'text-muted-foreground'
+  }
+}
+
+/** Domain card line: "4/4 ok" when all ok; else "1 ok · 1 fail · 2 blind" (by_design in tooltip). */
+function formatGapSummaryLine(g: GapSummary): { line: string; title: string } {
+  const title = `${g.ok} ok · ${g.fail} fail · ${g.blind} blind · ${g.byDesign} by-design · ${g.total} required`
+  if (g.total === 0) return { line: '0 required', title }
+  if (g.ok === g.total) return { line: `${g.ok}/${g.total} ok`, title }
+  const parts: string[] = []
+  if (g.ok > 0) parts.push(`${g.ok} ok`)
+  if (g.fail > 0) parts.push(`${g.fail} fail`)
+  if (g.blind > 0) parts.push(`${g.blind} blind`)
+  // by_design omitted from primary line — surface via title tooltip
+  return { line: parts.length > 0 ? parts.join(' · ') : `${g.byDesign} by-design`, title }
+}
+
+function GapSummaryText({
+  summary,
+  className,
+}: {
+  summary: GapSummary
+  className?: string
+}) {
+  const { line, title } = formatGapSummaryLine(summary)
+  const allOk = summary.total > 0 && summary.ok === summary.total
+  return (
+    <span className={cn('font-mono-tabular', className)} title={title}>
+      {allOk ? (
+        <span className={gapPartClass('ok')}>{line}</span>
+      ) : (
+        line.split(' · ').map((part, i) => {
+          const gap: SignalGap =
+            part.includes('fail')
+              ? 'fail'
+              : part.includes('blind')
+                ? 'blind'
+                : part.includes('by-design')
+                  ? 'by_design'
+                  : 'ok'
+          return (
+            <span key={part}>
+              {i > 0 ? ' · ' : null}
+              <span className={gapPartClass(gap)}>{part}</span>
+            </span>
+          )
+        })
+      )}
+    </span>
+  )
 }
 
 function DomainCard({
@@ -124,11 +214,75 @@ function DomainCard({
       <span className="line-clamp-2 text-[var(--text-dense-caption)] text-muted-foreground" title={domain.reason}>
         {domain.reason}
       </span>
-      <span className="text-[var(--text-dense-caption)] text-muted-foreground font-mono-tabular">
-        coverage {domain.coverage.observed}/{domain.coverage.required}
-        {domain.envScope !== 'none' ? ` · ${domain.envScope}` : ''}
+      <span className="text-[var(--text-dense-caption)]">
+        <GapSummaryText summary={domain.gapSummary} />
+        {domain.envScope !== 'none' ? (
+          <span className="text-muted-foreground"> · {domain.envScope}</span>
+        ) : null}
       </span>
     </button>
+  )
+}
+
+/** Compact selectable chip for Apollo reference planes (no runtime probe contract). */
+function ReferenceDomainChip({
+  domain,
+  selected,
+  onSelect,
+}: {
+  domain: DomainHealth
+  selected: boolean
+  onSelect: () => void
+}) {
+  const Icon = SYSTEM_DOMAIN_ICON[domain.domain]
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      title={`${domain.label} — by design · no runtime contract`}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-left transition-colors',
+        selected
+          ? 'border-[var(--ring)] bg-[var(--accent)]'
+          : 'border-[var(--border)] bg-[var(--secondary)]/70 hover:bg-[var(--accent)]/50',
+      )}
+    >
+      <Icon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="text-[var(--text-dense-caption)] font-medium">{domain.label}</span>
+      <DenseTag variant="neutral" className="text-[9px]">
+        reference
+      </DenseTag>
+      <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+        by design · no runtime contract
+      </span>
+    </button>
+  )
+}
+
+function checkpointExpect(s: EvaluatedSignal): string {
+  return s.def.optionalContract === true ? 'NOT OBSERVED (by design)' : 'HEALTHY'
+}
+
+/** Colored system-level gap meta: fail · blind · by-design · ok */
+function SystemGapMeta({ summary }: { summary: GapSummary }) {
+  const parts: { gap: SignalGap; text: string }[] = []
+  if (summary.fail > 0) parts.push({ gap: 'fail', text: `${summary.fail} fail` })
+  if (summary.blind > 0) parts.push({ gap: 'blind', text: `${summary.blind} blind` })
+  if (summary.byDesign > 0) parts.push({ gap: 'by_design', text: `${summary.byDesign} by-design` })
+  if (summary.ok > 0) parts.push({ gap: 'ok', text: `${summary.ok} ok` })
+  if (parts.length === 0) return <span>—</span>
+  return (
+    <span
+      className="font-mono-tabular"
+      title={`${summary.ok} ok · ${summary.fail} fail · ${summary.blind} blind · ${summary.byDesign} by-design · ${summary.total} required`}
+    >
+      {parts.map((p, i) => (
+        <span key={p.text}>
+          {i > 0 ? ' · ' : null}
+          <span className={gapPartClass(p.gap)}>{p.text}</span>
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -153,6 +307,15 @@ export function ObservabilityPage({
   const system = viewModel.system
   const selected = viewModel.selected
 
+  const runtimeDomains = useMemo(
+    () => viewModel.domains.filter(d => d.probeability === 'runtime'),
+    [viewModel.domains],
+  )
+  const referenceDomains = useMemo(
+    () => viewModel.domains.filter(d => d.probeability === 'reference'),
+    [viewModel.domains],
+  )
+
   const domainCountsLabel = useMemo(() => {
     const c = system.domainCounts
     const parts = [
@@ -166,6 +329,17 @@ export function ObservabilityPage({
       .join(' · ')
     return parts
   }, [system.domainCounts])
+
+  /** Runtime domains only — reference planes excluded from primary gap meta. */
+  const systemGapSummary = useMemo(
+    () => sumGapSummaries(viewModel.domains),
+    [viewModel.domains],
+  )
+
+  const selectedRequiredSignals = useMemo(() => {
+    const domain = viewModel.domains.find(d => d.domain === selectedDomain)
+    return (domain?.signals ?? []).filter(s => s.def.role === 'required')
+  }, [viewModel.domains, selectedDomain])
 
   const primaryGrafana = useMemo(
     () => viewModel.dashboards.find(d => d.available && d.url != null) ?? null,
@@ -201,7 +375,13 @@ export function ObservabilityPage({
         }
         meta={
           <>
-            <span>{domainCountsLabel || '—'}</span>
+            <SystemGapMeta summary={systemGapSummary} />
+            <span className="text-muted-foreground">{domainCountsLabel || '—'}</span>
+            {system.referenceDomainCount > 0 ? (
+              <span className="text-muted-foreground" title="Apollo planes with no runtime probe contract">
+                {system.referenceDomainCount} reference
+              </span>
+            ) : null}
             {attentionQuiet ? (
               <span className="font-mono-tabular">
                 alerts {system.firingAlerts} firing · {system.mappedFiringAlerts} mapped
@@ -235,11 +415,7 @@ export function ObservabilityPage({
       <PageToolbar align="between">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground shrink-0">Trade NS:</span>
-            <SegmentControl
-              value={tradeEnv}
-              onChange={v => setTradeEnv(v as TradeEnv)}
-              options={[...TRADE_ENV_OPTIONS]}
-            />
+            <TradeNsSegmentControl value={tradeEnv} onChange={setTradeEnv} />
             <SectionRefreshButton isFetching={isFetching} onClick={refetchAll} />
           </div>
           {primaryGrafana?.url != null && (
@@ -251,24 +427,46 @@ export function ObservabilityPage({
           )}
       </PageToolbar>
 
-      {/* Apollo Domain Health */}
+      {/* Apollo Domain Health — runtime grid + demoted reference planes */}
       <OpsSection
         title="Apollo Domain Health"
-        description="Seven fixed domains — click to inspect selected domain detail"
+        description="Runtime domains — reference planes listed below"
         bodyPadding="compact"
         overflow="visible"
         collapsible={systemHealthy}
         defaultCollapsed={systemHealthy}
+        headerExtra={
+          <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground" title={GAP_LEGEND}>
+            {GAP_LEGEND}
+          </p>
+        }
       >
-        <div className="flex flex-wrap gap-1.5">
-          {viewModel.domains.map(d => (
-            <DomainCard
-              key={d.domain}
-              domain={d}
-              selected={selectedDomain === d.domain}
-              onSelect={() => setSelectedDomain(d.domain)}
-            />
-          ))}
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {runtimeDomains.map(d => (
+              <DomainCard
+                key={d.domain}
+                domain={d}
+                selected={selectedDomain === d.domain}
+                onSelect={() => setSelectedDomain(d.domain)}
+              />
+            ))}
+          </div>
+          {referenceDomains.length > 0 ? (
+            <div className="flex flex-col gap-1 border-t border-[var(--border)] pt-2">
+              <OpsSubsectionTitle>Reference domains (not probed)</OpsSubsectionTitle>
+              <div className="flex flex-wrap gap-1.5">
+                {referenceDomains.map(d => (
+                  <ReferenceDomainChip
+                    key={d.domain}
+                    domain={d}
+                    selected={selectedDomain === d.domain}
+                    onSelect={() => setSelectedDomain(d.domain)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </OpsSection>
 
@@ -353,11 +551,64 @@ export function ObservabilityPage({
       {/* Selected Domain */}
       <OpsSection
         title={`Selected Domain · ${selected.domain}`}
-        description="Dependency path · golden signals · alerts · scrape coverage · detail / Grafana links"
+        description="Checkpoints · dependency path · golden signals · scrape targets · detail / Grafana links"
         bodyPadding="compact"
         overflow="visible"
       >
         <div className="flex flex-col gap-3">
+          <div>
+            <OpsSubsectionTitle className="mb-1">Checkpoints</OpsSubsectionTitle>
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Checkpoint</DenseTableHead>
+                  <DenseTableHead>Scope</DenseTableHead>
+                  <DenseTableHead>Expect</DenseTableHead>
+                  <DenseTableHead>Actual</DenseTableHead>
+                  <DenseTableHead>Gap</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {selectedRequiredSignals.length === 0 ? (
+                  <DenseTableRow>
+                    <DenseTableCell colSpan={5} className="text-muted-foreground">
+                      No required signals for this domain.
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ) : (
+                  selectedRequiredSignals.map(s => {
+                    const gap = signalToGap(s)
+                    return (
+                      <DenseTableRow key={s.def.id}>
+                        <DenseTableCell className="text-[var(--text-dense-meta)]" title={s.summary}>
+                          {s.def.label}
+                        </DenseTableCell>
+                        <DenseTableCell>
+                          <DenseTag variant="neutral" className="text-[9px] uppercase">
+                            {s.def.scope}
+                          </DenseTag>
+                        </DenseTableCell>
+                        <DenseTableCell className="text-[var(--text-dense-caption)] text-muted-foreground">
+                          {checkpointExpect(s)}
+                        </DenseTableCell>
+                        <DenseTableCell>
+                          <DenseTag variant={verdictTag(signalStateToVerdict(s.state))} className="text-[9px]">
+                            {SIGNAL_STATE_LABELS[s.state]}
+                          </DenseTag>
+                        </DenseTableCell>
+                        <DenseTableCell>
+                          <DenseTag variant={GAP_TAG_VARIANT[gap]} className="text-[9px]">
+                            {GAP_LABEL[gap]}
+                          </DenseTag>
+                        </DenseTableCell>
+                      </DenseTableRow>
+                    )
+                  })
+                )}
+              </DenseTableBody>
+            </DenseDataTable>
+          </div>
+
           <div>
             <OpsSubsectionTitle className="mb-1">Dependency path</OpsSubsectionTitle>
             {selected.dependencyPath.length === 0 ? (

@@ -168,6 +168,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     role: 'Domain-grouped detail sections. Progressive disclosure — expand to inspect, collapse when healthy.',
     rules: [
       'Use OpsSection as the universal collapsible unit (title + description + optional actions)',
+      'Observability reference demotion: keep Apollo seven-domain taxonomy; domains with no runtime contract (probeability=reference, e.g. Mission Control / Governance) stay out of the health-grid primary narrative and system gap fail/blind/ok rollup — list them under Reference domains (not probed)',
       'Default expand strategy: sections with CAUTION+ signals open; healthy sections collapsed',
       'Bus View Shared/Compare/Evidence SecondaryGroup headers show StatusLamp + OK/WARN/FAIL/DRIFT/OBSERVE/UNPROBED/EXPECTED when collapsed',
       'Bus Status three-state semantics: OK (green) | DEGRADED/WARN/DRIFT/OBSERVE/UNPROBED (yellow) | FAIL/UNAVAILABLE (red) — no gray/unknown/? lamp on Bus pages; UNPROBED = probe missing/stale; EXPECTED = policy-off intentional; DRIFT = env diverge; OBSERVE = trading-arm degraded but bus healthy',
@@ -178,7 +179,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Rocket / Satellite / Plugin lane operate pages: LaneDetailCollapse is the Body unit — not OpsSection',
     ],
     examples: [
-      'Observability: Domain cards (clickable) → detail table for selected domain',
+      'Observability: Runtime domain cards (clickable) → detail table; Mission Control / Governance demoted to Reference domains (not probed) chips — by design · no runtime contract; do not invent probes for reference planes',
       'Control Room: Bay cards (Operate / Release / Health / Governance) — expand reveals strips',
       'Satellite Bus: Verdict BUS HEALTH + inline Trade NS Segment → View Operate | Shared | Compare; Evidence folds under Operate (OBSERVE ≠ verdict); Compare lamp = DRIFT for env diverge + Inspect CTA; OpsContextStrip density=seat + CAUTION why-line + Fix; scope chips ≠ health; below-verdict summary line Bus·Mission·Shared·Compare clickable when non-green; Bus non-green → Operate default + issues auto-scroll; Shared non-OK → Cluster/Observability CTA',
       'Launch Rocket: LaneDetailCollapse for gate evidence / Advanced recovery / gate history',
@@ -207,7 +208,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     examples: [
       'Task Control Center: primary Launch / Fleet Fix / phase CTA on Verdict or Ops loop strip',
       'Control Room: VerdictStrip has no Launch/Deploy actions — Bay Scan opens one bay; Launch bay Open TCC + detail deep-links',
-      'Observability: Verdict first; PageToolbar = Trade NS + Open Grafana; alerts meta → Attention (no Mission launch)',
+      'Observability: Verdict first; PageToolbar = Trade NS (env-colored Segment via TradeNsSegmentControl / envVisual SSOT) + Open Grafana; alerts meta → Attention (no Mission launch)',
       'Defects: PatternDebt Verdict + Fix top pattern; PageToolbar Refresh below',
       'Launch Rocket: AI Release on LaneStateStrip; Deploy/Gate in ReleaseStepCommandCenter',
       'Deploy Satellite: AI Deploy on LaneStateStrip (+ Evidence links); Deploy/Gate in ReleaseStepCommandCenter',

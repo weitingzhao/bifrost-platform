@@ -3,16 +3,17 @@
  * Verdict derivation lives solely in buildObservabilityViewModel (do not re-derive in pages).
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAgentBridge } from '@/api/agentOps'
-import { fetchClusterMetrics, fetchClusterObservability } from '@/api/cluster'
+import { fetchClusterMetrics, fetchClusterNodes, fetchClusterObservability } from '@/api/cluster'
 import { fetchIbGatewayStatus } from '@/api/network'
 import { fetchMatrix, fetchSatelliteBusDeep, fetchSelfHealth, isAllMatrices, isAllSatelliteBusDeep } from '@/api/core'
 import { fetchRemediationHealth } from '@/api/remediation'
 import { fetchTelemetryAlerts, fetchTelemetryOverview, fetchTelemetryTargets } from '@/api/telemetry'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
+import { normalizeViewerEnv } from '@/lib/control-room/fleetSnapshot'
 import {
   buildObservabilityViewModel,
   TRADE_NS,
@@ -26,6 +27,14 @@ import { tradeApiTargetCounts } from '@/lib/satellite/tradeApiTargets'
 const REFETCH = 30_000
 
 export type TradeEnv = 'dev' | 'stg' | 'prod'
+
+/** Map Fleet viewer seat → Trade NS (dev-local / unknown → dev). */
+export function tradeEnvFromViewer(raw: string | undefined | null): TradeEnv {
+  const v = normalizeViewerEnv(raw)
+  if (v === 'prod') return 'prod'
+  if (v === 'stg') return 'stg'
+  return 'dev'
+}
 
 function errMessage(err: unknown): string | null {
   if (err == null) return null
@@ -44,7 +53,16 @@ export function useObservabilitySnapshot(): {
   refetchAll: () => void
   namespace: string
 } {
-  const [tradeEnv, setTradeEnv] = useState<TradeEnv>('stg')
+  // Seed from VITE_OPS_VIEWER_ENV; hydrate from selfHealth.viewer_env once (unless user overrides).
+  const [tradeEnv, setTradeEnvState] = useState<TradeEnv>(() =>
+    tradeEnvFromViewer(import.meta.env.VITE_OPS_VIEWER_ENV),
+  )
+  const tradeEnvTouchedRef = useRef(false)
+  const setTradeEnv = (env: TradeEnv) => {
+    tradeEnvTouchedRef.current = true
+    setTradeEnvState(env)
+  }
+
   const [selectedDomain, setSelectedDomain] = useState<SystemDomainId>('satellite')
   const ns = TRADE_NS[tradeEnv]
 
@@ -57,6 +75,13 @@ export function useObservabilitySnapshot(): {
   const metricsQ = useQuery({
     queryKey: ['cluster', 'metrics'],
     queryFn: () => fetchClusterMetrics(8),
+    refetchInterval: REFETCH,
+    retry: false,
+  })
+  // Elastic standby hosts — suppress Expected-Off node alert / scrape noise.
+  const nodesQ = useQuery({
+    queryKey: ['cluster', 'nodes'],
+    queryFn: fetchClusterNodes,
     refetchInterval: REFETCH,
     retry: false,
   })
@@ -78,9 +103,11 @@ export function useObservabilitySnapshot(): {
     refetchInterval: REFETCH,
     retry: false,
   })
+  // Scope to selected Trade NS — all-env bus-deep storms Traefik NodePorts and
+  // falsely marks IB consumers down (context deadline exceeded).
   const busQ = useQuery({
-    queryKey: ['satellite', 'bus-deep', 'all'],
-    queryFn: () => fetchSatelliteBusDeep(),
+    queryKey: ['satellite', 'bus-deep', tradeEnv],
+    queryFn: () => fetchSatelliteBusDeep(tradeEnv),
     refetchInterval: REFETCH,
     retry: false,
   })
@@ -116,6 +143,14 @@ export function useObservabilitySnapshot(): {
     retry: false,
   })
 
+  // First hydrate from self-health viewer_env; never overwrite after manual Trade NS change.
+  useEffect(() => {
+    if (tradeEnvTouchedRef.current) return
+    const viewer = selfQ.data?.viewer_env
+    if (viewer == null || viewer === '') return
+    setTradeEnvState(tradeEnvFromViewer(viewer))
+  }, [selfQ.data?.viewer_env])
+
   const busHealth: BusHealthInput | null = useMemo(() => {
     const data = busQ.data
     if (data == null) return null
@@ -133,8 +168,29 @@ export function useObservabilitySnapshot(): {
       buses,
       tradeApi: tradeApiTargetCounts(envMatrix),
     })
+    // Traefik NodePort flaps → bus-deep timeout looks like "IB consumer down".
+    // Prefer Platform IB Gateway plugin when the failure is clearly a probe timeout.
+    const probeTimeout = /context deadline|Timeout exceeded|Client\.Timeout/i.test(vm.topReason)
+    const pluginOk =
+      ibQ.data?.reachability === 'ok' ||
+      ibQ.data?.reachable === true ||
+      String(ibQ.data?.summary ?? '').toLowerCase().includes('redis-ib ok')
+    if (probeTimeout && pluginOk && (vm.health === 'unavailable' || vm.health === 'unknown')) {
+      return {
+        health: 'healthy',
+        topReason: `Monitor probe timed out; Platform IB Gateway plugin ok — ${ibQ.data?.summary ?? 'reachable'}`,
+      }
+    }
     return { health: vm.health, topReason: vm.topReason }
-  }, [busQ.data, matrixQ.data, tradeEnv])
+  }, [busQ.data, matrixQ.data, tradeEnv, ibQ.data])
+
+  const standbyNodes = useMemo(
+    () =>
+      (nodesQ.data?.nodes ?? [])
+        .filter(n => n.elastic_mode === 'standby')
+        .map(n => ({ name: n.name, internalIp: n.internal_ip || undefined })),
+    [nodesQ.data?.nodes],
+  )
 
   const viewModel = useMemo(
     () =>
@@ -154,6 +210,7 @@ export function useObservabilitySnapshot(): {
         remediation: remediationQ.data,
         agentBridge: bridgeQ.data,
         selfHealth: selfQ.data,
+        standbyNodes,
       }),
     [
       tradeEnv,
@@ -171,6 +228,7 @@ export function useObservabilitySnapshot(): {
       remediationQ.data,
       bridgeQ.data,
       selfQ.data,
+      standbyNodes,
     ],
   )
 
@@ -196,6 +254,7 @@ export function useObservabilitySnapshot(): {
   const refetchAll = () => {
     void observabilityQ.refetch()
     void metricsQ.refetch()
+    void nodesQ.refetch()
     void telemetryQ.refetch()
     void alertsQ.refetch()
     void targetsQ.refetch()

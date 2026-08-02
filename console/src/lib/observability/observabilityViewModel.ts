@@ -9,7 +9,13 @@ import type { SelfHealthResponse } from '@/api/matrixTypes'
 import type { RemediationHealthResponse } from '@/api/remediationTypes'
 import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
-import { mapAlerts, type RawAlertInput } from './alertMapping'
+import {
+  annotateStandbyAlerts,
+  hostMatchesStandbyNode,
+  mapAlerts,
+  type RawAlertInput,
+  type StandbyNodeRef,
+} from './alertMapping'
 import { GRAFANA_DASHBOARD_CATALOG } from './dashboardCatalog'
 import { buildGrafanaDashboardUrl, isDashboardCatalogAvailable } from './grafanaUrlBuilder'
 import {
@@ -69,6 +75,11 @@ export type ObservabilityViewModelInput = {
   remediation?: RemediationHealthResponse | null
   agentBridge?: AgentBridgeResponse | null
   selfHealth?: SelfHealthResponse | null
+  /**
+   * Elastic standby hosts (`elastic_mode === 'standby'` only — not degraded).
+   * Used to neutralize Expected-Off node alerts and TargetDown scrapes.
+   */
+  standbyNodes?: StandbyNodeRef[]
   /** Declared Grafana UIDs known to exist; omit to trust catalog uid presence. */
   availableGrafanaUids?: string[]
 }
@@ -279,9 +290,19 @@ function mapTargets(targets: TelemetryTargetLike[] | null | undefined): ScrapeTa
   })
 }
 
+function isStandbyScrapeTarget(t: ScrapeTargetView, standbyNodes: StandbyNodeRef[]): boolean {
+  if (standbyNodes.length === 0) return false
+  const job = t.job.toLowerCase()
+  const looksLikeNode =
+    /node-exporter|node_exporter|kubelet/i.test(job) || /:\d{2,5}$/.test(t.instance)
+  if (!looksLikeNode) return false
+  return hostMatchesStandbyNode(t.instance, standbyNodes)
+}
+
 function evaluateScrapeTargets(
   targets: ScrapeTargetView[],
   targetsError: string | null | undefined,
+  standbyNodes: StandbyNodeRef[] = [],
 ): EvaluatedSignal {
   const def = getSignalDef('rocket.scrape-targets')!
   if (targetsError != null && /503|not configured/i.test(targetsError)) {
@@ -301,23 +322,39 @@ function evaluateScrapeTargets(
   if (pool.length === 0) {
     return { def, state: 'unknown', summary: 'No active scrape targets returned', env: 'shared' }
   }
-  const down = pool.filter(t => t.health === 'down')
+  // Elastic standby node scrapes are EXPECTED OFF — exclude from DOWN rollup.
+  const scored = pool.filter(t => !(t.health === 'down' && isStandbyScrapeTarget(t, standbyNodes)))
+  const standbyDown = pool.length - scored.length
+  const down = scored.filter(t => t.health === 'down')
   if (down.length > 0) {
     return {
       def,
-      state: down.length === pool.length ? 'critical' : 'degraded',
-      summary: `${down.length}/${pool.length} targets DOWN`,
+      state: down.length === scored.length ? 'critical' : 'degraded',
+      summary: `${down.length}/${scored.length} targets DOWN`,
       env: 'shared',
       linkedIds: down.map(t => t.id),
     }
   }
-  if (pool.every(t => t.health === 'unknown')) {
+  if (scored.length === 0) {
+    return {
+      def,
+      state: 'expected_off',
+      summary:
+        standbyDown > 0
+          ? `${standbyDown} standby node scrape(s) expected off`
+          : 'No scored scrape targets',
+      env: 'shared',
+    }
+  }
+  if (scored.every(t => t.health === 'unknown')) {
     return { def, state: 'unknown', summary: 'Target health unknown', env: 'shared' }
   }
+  const up = scored.filter(t => t.health === 'up').length
+  const standbyNote = standbyDown > 0 ? ` · ${standbyDown} standby expected off` : ''
   return {
     def,
     state: 'healthy',
-    summary: `${pool.filter(t => t.health === 'up').length}/${pool.length} targets UP`,
+    summary: `${up}/${scored.length} targets UP${standbyNote}`,
     env: 'shared',
   }
 }
@@ -600,14 +637,15 @@ export function buildObservabilityViewModel(
       ? input.observability.grafana_url
       : null
 
-  const mappedAlerts = mapAlerts(input.alerts ?? [])
+  const standbyNodes = input.standbyNodes ?? []
+  const mappedAlerts = annotateStandbyAlerts(mapAlerts(input.alerts ?? []), standbyNodes)
   const targets = mapTargets(input.targets)
 
   const signals: EvaluatedSignal[] = []
 
   // Rocket
   signals.push(...evaluateLayerB(input.observability, 'shared'))
-  signals.push(evaluateScrapeTargets(targets, input.targetsError))
+  signals.push(evaluateScrapeTargets(targets, input.targetsError, standbyNodes))
   signals.push(...evaluateClusterEvidence(input.metrics))
 
   // Ground

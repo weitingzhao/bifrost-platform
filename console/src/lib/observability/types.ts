@@ -82,12 +82,37 @@ export type EvaluatedSignal = {
   linkedIds?: string[]
 }
 
+/** Expected vs Actual gap for a required signal. */
+export type SignalGap = 'ok' | 'fail' | 'blind' | 'by_design'
+
+/**
+ * Domain probeability for Observability hub layout / gap rollups.
+ * - runtime: participates in the health grid + system gap meta
+ * - reference: Apollo taxonomy plane with no runtime contract (by design)
+ */
+export type DomainProbeability = 'runtime' | 'reference'
+
+export type GapSummary = {
+  ok: number
+  fail: number
+  blind: number
+  byDesign: number
+  total: number
+}
+
 export type DomainHealth = {
   domain: SystemDomainId
   label: string
   verdict: ObservabilityVerdict
   reason: string
   coverage: { observed: number; required: number; evidence: number }
+  /** Required-signal Expected vs Actual rollup (ok / fail / blind / by_design). */
+  gapSummary: GapSummary
+  /**
+   * Whether this domain has a reliable runtime probe contract.
+   * Reference domains stay in taxonomy but are demoted from the main health grid.
+   */
+  probeability: DomainProbeability
   alertCount: number
   envScope: 'env' | 'shared' | 'mixed' | 'none'
   signals: EvaluatedSignal[]
@@ -143,12 +168,20 @@ export type MappedAlert = {
   activeAt?: string
   labels: Record<string, string>
   annotations: Record<string, string>
+  /**
+   * Elastic / WOL standby node alert — expected when no GPU/warehouse demand.
+   * Neutral: never Attention WARNING and never degrades Rocket verdict.
+   */
+  standbyNeutral?: boolean
 }
 
 export type SystemVerdict = {
   overall: ObservabilityVerdict
   label: string
+  /** Runtime-domain verdict counts only (reference planes excluded). */
   domainCounts: Record<ObservabilityVerdict, number>
+  /** Apollo reference domains demoted from the health grid (MC / Governance). */
+  referenceDomainCount: number
   firingAlerts: number
   mappedFiringAlerts: number
   primaryCause: string

@@ -35,8 +35,10 @@ function statusVariant(status: ServiceDomainStatus | string): 'success' | 'warni
     case 'ready':
       return 'success'
     case 'partial':
-    case 'standby':
       return 'warning'
+    case 'standby':
+      // Elastic / scaled-to-zero with no demand — expected, not a warning.
+      return 'neutral'
     case 'unavailable':
       return 'danger'
     default:

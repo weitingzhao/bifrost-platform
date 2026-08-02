@@ -4,7 +4,13 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AgentBridgeResponse } from '@/api/agentTypes'
-import { mapAlert, mapAlerts, verdictAffectingAlerts } from '@/lib/observability/alertMapping'
+import {
+  annotateStandbyAlerts,
+  isElasticStandbyAlert,
+  mapAlert,
+  mapAlerts,
+  verdictAffectingAlerts,
+} from '@/lib/observability/alertMapping'
 import {
   buildGrafanaDashboardUrl,
   isDashboardCatalogAvailable,
@@ -14,9 +20,15 @@ import { buildObservabilityViewModel } from '@/lib/observability/observabilityVi
 import { getSignalDef, SIGNAL_REGISTRY } from '@/lib/observability/signalRegistry'
 import type { EvaluatedSignal } from '@/lib/observability/types'
 import {
+  buildAttentionItems,
   buildDomainHealth,
+  buildSystemVerdict,
+  domainProbeability,
   domainVerdictFromSignals,
+  gapSummaryFromSignals,
   maxVerdict,
+  signalToGap,
+  sumGapSummaries,
 } from '@/lib/observability/verdictAggregation'
 
 function sig(id: string, state: EvaluatedSignal['state'], summary = state): EvaluatedSignal {
@@ -95,6 +107,91 @@ describe('observability signal registry + verdict aggregation', () => {
     const signals = [sig('mission-control.hub', 'not_observed'), sig('governance.catalog', 'not_observed')]
     const mc = buildDomainHealth('mission-control', [signals[0]!], [])
     expect(mc.verdict).toBe('not_observed')
+    expect(mc.probeability).toBe('reference')
+  })
+
+  it('marks Mission Control / Governance as reference; runtime domains stay runtime', () => {
+    expect(domainProbeability('mission-control', [sig('mission-control.hub', 'not_observed')])).toBe(
+      'reference',
+    )
+    expect(domainProbeability('governance', [sig('governance.catalog', 'not_observed')])).toBe(
+      'reference',
+    )
+    expect(buildDomainHealth('mission-control', [sig('mission-control.hub', 'not_observed')], []).probeability).toBe(
+      'reference',
+    )
+    expect(buildDomainHealth('governance', [sig('governance.catalog', 'not_observed')], []).probeability).toBe(
+      'reference',
+    )
+    // Ground Systems has optional network but also runtime redis/postgres → runtime
+    const ground = buildDomainHealth(
+      'ground-systems',
+      [
+        sig('ground.redis-ib', 'healthy'),
+        sig('ground.postgres', 'healthy'),
+        sig('ground.network', 'not_observed'),
+      ],
+      [],
+    )
+    expect(ground.probeability).toBe('runtime')
+    expect(
+      buildDomainHealth(
+        'satellite',
+        [
+          sig('satellite.api-request-rate', 'unknown'),
+          sig('satellite.api-latency-p99', 'healthy'),
+          sig('satellite.api-error-rate', 'healthy'),
+          sig('satellite.bus-health', 'healthy'),
+        ],
+        [],
+      ).probeability,
+    ).toBe('runtime')
+  })
+
+  it('reference domains do not inflate runtime gap rollup or domainCounts', () => {
+    const satelliteBlind = buildDomainHealth(
+      'satellite',
+      [
+        sig('satellite.api-request-rate', 'not_observed'), // non-optional → blind
+        sig('satellite.api-latency-p99', 'healthy'),
+        sig('satellite.api-error-rate', 'healthy'),
+        sig('satellite.bus-health', 'healthy'),
+      ],
+      [],
+    )
+    const mc = buildDomainHealth('mission-control', [sig('mission-control.hub', 'not_observed')], [])
+    const gov = buildDomainHealth('governance', [sig('governance.catalog', 'not_observed')], [])
+    const rocketOk = buildDomainHealth(
+      'rocket',
+      [
+        sig('rocket.layer-b', 'healthy'),
+        sig('rocket.prometheus-reachable', 'healthy'),
+        sig('rocket.scrape-targets', 'healthy'),
+      ],
+      [],
+    )
+
+    const rolled = sumGapSummaries([satelliteBlind, mc, gov, rocketOk])
+    // MC/Gov by-design excluded from default rollup; satellite blind still counts
+    expect(rolled.blind).toBe(1)
+    expect(rolled.fail).toBe(0)
+    expect(rolled.byDesign).toBe(0)
+    expect(rolled.ok).toBe(6) // 3 satellite healthy scored + 3 rocket
+    expect(rolled.total).toBe(7)
+
+    const withRef = sumGapSummaries([satelliteBlind, mc, gov, rocketOk], { includeReference: true })
+    expect(withRef.byDesign).toBe(2)
+    expect(withRef.total).toBe(9)
+
+    const system = buildSystemVerdict([satelliteBlind, mc, gov, rocketOk], [], {
+      env: 'stg',
+      generatedAt: '2026-08-02T00:00:00Z',
+      freshnessMs: 1_000,
+    })
+    expect(system.referenceDomainCount).toBe(2)
+    expect(system.domainCounts.not_observed).toBe(0) // reference excluded
+    expect(system.domainCounts.unknown).toBe(1) // satellite partial observation
+    expect(system.domainCounts.healthy).toBe(1) // rocket
   })
 
   it('expected off is neutral', () => {
@@ -153,6 +250,51 @@ describe('observability signal registry + verdict aggregation', () => {
     expect(maxVerdict('unknown', 'critical')).toBe('critical')
     // NOT OBSERVED ranks above HEALTHY — never mask missing observation as healthy.
     expect(maxVerdict('not_observed', 'healthy')).toBe('not_observed')
+  })
+
+  it('signalToGap — Expected vs Actual mapping', () => {
+    expect(signalToGap(sig('satellite.bus-health', 'healthy'))).toBe('ok')
+    expect(signalToGap(sig('satellite.api-request-rate', 'expected_off'))).toBe('ok')
+    expect(signalToGap(sig('satellite.bus-health', 'critical'))).toBe('fail')
+    expect(signalToGap(sig('satellite.bus-health', 'degraded'))).toBe('fail')
+    expect(signalToGap(sig('satellite.api-request-rate', 'unknown'))).toBe('blind')
+    // Non-optional not_observed → blind (probe missing)
+    expect(signalToGap(sig('satellite.api-request-rate', 'not_observed'))).toBe('blind')
+    // Optional contract not_observed → by_design
+    expect(signalToGap(sig('ground.network', 'not_observed'))).toBe('by_design')
+    expect(signalToGap(sig('mission-control.hub', 'not_observed'))).toBe('by_design')
+  })
+
+  it('gapSummary counts required signals only', () => {
+    const signals = [
+      sig('rocket.layer-b', 'healthy'),
+      sig('rocket.prometheus-reachable', 'healthy'),
+      sig('rocket.scrape-targets', 'degraded'),
+      sig('rocket.cluster-cpu', 'critical'), // evidence — ignored
+      sig('rocket.cluster-memory', 'unknown'), // evidence — ignored
+    ]
+    const summary = gapSummaryFromSignals(signals)
+    expect(summary).toEqual({ ok: 2, fail: 1, blind: 0, byDesign: 0, total: 3 })
+
+    const mixed = [
+      sig('ground.redis-ib', 'healthy'),
+      sig('ground.postgres', 'unknown'),
+      sig('ground.network', 'not_observed'), // optionalContract
+    ]
+    const ground = buildDomainHealth('ground-systems', mixed, [])
+    expect(ground.gapSummary).toEqual({ ok: 1, fail: 0, blind: 1, byDesign: 1, total: 3 })
+
+    const mc = buildDomainHealth('mission-control', [sig('mission-control.hub', 'not_observed')], [])
+    // Default rollup excludes reference domains (MC by-design does not inflate system meta)
+    const rolled = sumGapSummaries([ground, mc])
+    expect(rolled).toEqual({ ok: 1, fail: 0, blind: 1, byDesign: 1, total: 3 })
+    expect(sumGapSummaries([ground, mc], { includeReference: true })).toEqual({
+      ok: 1,
+      fail: 0,
+      blind: 1,
+      byDesign: 2,
+      total: 4,
+    })
   })
 })
 
@@ -231,9 +373,208 @@ describe('alert mapping', () => {
     expect(a.env).toBe('stg')
     expect(a.severity).toBe('critical')
   })
+
+  it('elastic standby NotReady is standbyNeutral and excluded from verdict/attention', () => {
+    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.74' }]
+    const standbyAlert = mapAlert(
+      {
+        labels: {
+          alertname: 'KubeNodeNotReady',
+          severity: 'warning',
+          node: 'gpu-server',
+        },
+        annotations: { summary: 'gpu-server NotReady' },
+        state: 'firing',
+      },
+      0,
+    )
+    expect(isElasticStandbyAlert(standbyAlert, standby)).toBe(true)
+    const annotated = annotateStandbyAlerts([standbyAlert], standby)
+    expect(annotated[0].standbyNeutral).toBe(true)
+    expect(verdictAffectingAlerts(annotated)).toHaveLength(0)
+
+    const domains = [
+      buildDomainHealth('rocket', [sig('rocket.scrape-targets', 'healthy')], annotated),
+    ]
+    const attention = buildAttentionItems(domains, annotated)
+    expect(attention.some(a => a.signalLabel === 'KubeNodeNotReady')).toBe(false)
+  })
+
+  it('non-standby NotReady still affects verdict', () => {
+    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.74' }]
+    const coreAlert = mapAlert(
+      {
+        labels: {
+          alertname: 'KubeNodeNotReady',
+          severity: 'warning',
+          node: 'ubt-k3s-01',
+        },
+        annotations: { summary: 'core NotReady' },
+        state: 'firing',
+      },
+      0,
+    )
+    expect(isElasticStandbyAlert(coreAlert, standby)).toBe(false)
+    const annotated = annotateStandbyAlerts([coreAlert], standby)
+    expect(annotated[0].standbyNeutral).toBeFalsy()
+    expect(verdictAffectingAlerts(annotated)).toHaveLength(1)
+  })
+
+  it('standby node-exporter TargetDown is neutralized', () => {
+    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.74' }]
+    const td = mapAlert(
+      {
+        labels: {
+          alertname: 'TargetDown',
+          severity: 'critical',
+          job: 'node-exporter',
+          instance: '192.168.10.74:9100',
+        },
+        state: 'firing',
+      },
+      0,
+    )
+    expect(isElasticStandbyAlert(td, standby)).toBe(true)
+  })
+
+  /**
+   * Demand path: when ollama/minio want replicas, platform-api classifies the
+   * node as elastic_mode=degraded (not standby). Observability only passes
+   * elastic_mode===standby into standbyNodes — so the list is empty and
+   * KubeNodeNotReady must remain Attention WARNING.
+   */
+  it('demand (empty standbyNodes / degraded node) does not neutralize gpu-server alerts', () => {
+    const demandAlert = mapAlert(
+      {
+        labels: {
+          alertname: 'KubeNodeNotReady',
+          severity: 'warning',
+          node: 'gpu-server',
+        },
+        annotations: { summary: 'gpu-server NotReady — compute needed' },
+        state: 'firing',
+      },
+      0,
+    )
+    // No standby refs → FE must not suppress (mirrors elastic_mode=degraded).
+    expect(isElasticStandbyAlert(demandAlert, [])).toBe(false)
+    const annotated = annotateStandbyAlerts([demandAlert], [])
+    expect(annotated[0].standbyNeutral).toBeFalsy()
+    expect(verdictAffectingAlerts(annotated)).toHaveLength(1)
+
+    const domains = [
+      buildDomainHealth('rocket', [sig('rocket.scrape-targets', 'healthy')], annotated),
+    ]
+    const attention = buildAttentionItems(domains, annotated)
+    expect(attention.some(a => a.signalLabel === 'KubeNodeNotReady')).toBe(true)
+  })
+
+  it('demand TargetDown on gpu-server still affects rocket when not in standby list', () => {
+    const vm = buildObservabilityViewModel({
+      selectedEnv: 'stg',
+      selectedDomain: 'rocket',
+      nowMs: Date.parse('2026-07-21T12:00:00Z'),
+      // Demand → API omits node from standbyNodes
+      standbyNodes: [],
+      targets: [
+        {
+          labels: { job: 'node-exporter', instance: '192.168.10.74:9100' },
+          health: 'down',
+          last_error: 'connection refused',
+        },
+      ],
+      alerts: [
+        {
+          labels: {
+            alertname: 'KubeNodeNotReady',
+            severity: 'warning',
+            node: 'gpu-server',
+          },
+          annotations: { summary: 'Compute needed but node offline' },
+          state: 'firing',
+        },
+      ],
+      observability: {
+        cluster_id: 'c',
+        namespace: 'monitoring',
+        layer_b_status: 'ready',
+        layer_b_install_enabled: true,
+        reachability: 'ok',
+        detail: 'ok',
+        components: [],
+        grafana_url: 'http://grafana.example:30883',
+        prometheus_url: 'http://prom.example',
+        generated_at: '2026-07-21T11:59:00Z',
+      },
+    })
+    const scrape = vm.domains
+      .find(d => d.id === 'rocket')
+      ?.signals.find(s => s.def.id === 'rocket.scrape-targets')
+    // Sole target down + not standby → scrape must not stay healthy-by-standby-filter
+    expect(scrape?.state === 'healthy').toBe(false)
+    expect(vm.attention.some(a => a.signalLabel === 'KubeNodeNotReady')).toBe(true)
+  })
 })
 
 describe('buildObservabilityViewModel', () => {
+  it('standby node-exporter TargetDown does not degrade rocket scrape signal', () => {
+    const vm = buildObservabilityViewModel({
+      selectedEnv: 'stg',
+      selectedDomain: 'rocket',
+      nowMs: Date.parse('2026-07-21T12:00:00Z'),
+      standbyNodes: [{ name: 'gpu-server', internalIp: '192.168.10.74' }],
+      targets: [
+        {
+          labels: { job: 'node-exporter', instance: '192.168.10.73:9100' },
+          health: 'up',
+        },
+        {
+          labels: { job: 'node-exporter', instance: '192.168.10.74:9100' },
+          health: 'down',
+          last_error: 'connection refused',
+        },
+      ],
+      alerts: [
+        {
+          labels: {
+            alertname: 'KubeNodeNotReady',
+            severity: 'warning',
+            node: 'gpu-server',
+          },
+          annotations: { summary: 'standby NotReady' },
+          state: 'firing',
+        },
+      ],
+      observability: {
+        cluster_id: 'c',
+        namespace: 'monitoring',
+        layer_b_status: 'ready',
+        layer_b_install_enabled: true,
+        reachability: 'ok',
+        detail: 'ok',
+        components: [],
+        grafana_url: 'http://grafana.example:30883',
+        prometheus_url: 'http://prom.example',
+        generated_at: '2026-07-21T11:59:00Z',
+      },
+      metrics: {
+        cluster_id: 'c',
+        reachability: 'ok',
+        detail: 'ok',
+        metrics_server_available: true,
+        cpu_usage_percent: 20,
+        memory_usage_percent: 30,
+        top_pods: [],
+        generated_at: '2026-07-21T11:59:00Z',
+      },
+    })
+    const scrape = vm.domains
+      .find(d => d.domain === 'rocket')!
+      .signals.find(s => s.def.id === 'rocket.scrape-targets')!
+    expect(scrape.state).toBe('healthy')
+    expect(vm.attention.some(a => a.signalLabel === 'KubeNodeNotReady')).toBe(false)
+  })
+
   it('target down degrades rocket scrape signal', () => {
     const vm = buildObservabilityViewModel({
       selectedEnv: 'stg',
