@@ -11,6 +11,14 @@ import (
 
 const sessionsCatalogFile = "sessions-catalog.yaml"
 
+// Annotation keys for opt-in Deployment discovery (complements the static catalog).
+const (
+	AnnotationSession      = "bifrost.dev/session"
+	AnnotationSessionName  = "bifrost.dev/session-name"
+	AnnotationSessionLabel = "bifrost.dev/session-label"
+	AnnotationSessionGroup = "bifrost.dev/session-group"
+)
+
 // CatalogEntry describes one allowlisted session for a viewer env.
 type CatalogEntry struct {
 	Name       string `yaml:"name" json:"name"`
@@ -21,10 +29,17 @@ type CatalogEntry struct {
 	Ports      []int  `yaml:"ports,omitempty" json:"ports,omitempty"`
 }
 
+// DiscoveryConfig controls annotation-based session discovery.
+type DiscoveryConfig struct {
+	Enabled    bool                `yaml:"enabled"`
+	Namespaces map[string][]string `yaml:"namespaces"`
+}
+
 // SessionsCatalog is the static allowlist for K8s-mode sessions.
 type SessionsCatalog struct {
-	Version string                    `yaml:"version"`
-	Envs    map[string][]CatalogEntry `yaml:"envs"`
+	Version   string                    `yaml:"version"`
+	Discovery DiscoveryConfig           `yaml:"discovery"`
+	Envs      map[string][]CatalogEntry `yaml:"envs"`
 }
 
 // LoadSessionsCatalog reads config/sessions-catalog.yaml from configDir.
@@ -44,6 +59,9 @@ func LoadSessionsCatalog(configDir string) (*SessionsCatalog, error) {
 	}
 	if cat.Envs == nil {
 		cat.Envs = map[string][]CatalogEntry{}
+	}
+	if cat.Discovery.Namespaces == nil {
+		cat.Discovery.Namespaces = map[string][]string{}
 	}
 	for env, entries := range cat.Envs {
 		normalized := make([]CatalogEntry, 0, len(entries))
@@ -68,6 +86,22 @@ func LoadSessionsCatalog(configDir string) (*SessionsCatalog, error) {
 			normalized = append(normalized, e)
 		}
 		cat.Envs[env] = normalized
+	}
+	for env, nss := range cat.Discovery.Namespaces {
+		out := make([]string, 0, len(nss))
+		seen := map[string]struct{}{}
+		for _, ns := range nss {
+			ns = strings.TrimSpace(ns)
+			if ns == "" {
+				continue
+			}
+			if _, ok := seen[ns]; ok {
+				continue
+			}
+			seen[ns] = struct{}{}
+			out = append(out, ns)
+		}
+		cat.Discovery.Namespaces[strings.ToLower(strings.TrimSpace(env))] = out
 	}
 	return &cat, nil
 }
@@ -94,4 +128,65 @@ func (c *SessionsCatalog) Lookup(env, name string) *CatalogEntry {
 		}
 	}
 	return nil
+}
+
+// DiscoveryNamespacesForEnv returns namespaces to scan for annotated Deployments.
+// When discovery is enabled but no explicit list is set, falls back to namespaces
+// referenced by catalog entries for that env.
+func (c *SessionsCatalog) DiscoveryNamespacesForEnv(env string) []string {
+	if c == nil || !c.Discovery.Enabled {
+		return nil
+	}
+	env = strings.ToLower(strings.TrimSpace(env))
+	if nss, ok := c.Discovery.Namespaces[env]; ok && len(nss) > 0 {
+		return nss
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	for _, e := range c.EntriesForEnv(env) {
+		if e.Namespace == "" {
+			continue
+		}
+		if _, ok := seen[e.Namespace]; ok {
+			continue
+		}
+		seen[e.Namespace] = struct{}{}
+		out = append(out, e.Namespace)
+	}
+	return out
+}
+
+func sessionAnnotationEnabled(annotations map[string]string) bool {
+	if annotations == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(annotations[AnnotationSession])) {
+	case "true", "1", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+func entryFromAnnotatedDeployment(namespace string, deployName string, annotations map[string]string, containerPorts []int) CatalogEntry {
+	name := strings.TrimSpace(annotations[AnnotationSessionName])
+	if name == "" {
+		name = deployName
+	}
+	label := strings.TrimSpace(annotations[AnnotationSessionLabel])
+	if label == "" {
+		label = name
+	}
+	group := strings.TrimSpace(annotations[AnnotationSessionGroup])
+	if group == "" {
+		group = "discovered"
+	}
+	return CatalogEntry{
+		Name:       name,
+		Label:      label,
+		Group:      group,
+		Namespace:  namespace,
+		Deployment: deployName,
+		Ports:      containerPorts,
+	}
 }

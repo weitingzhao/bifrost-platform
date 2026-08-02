@@ -19,8 +19,8 @@ func TestLoadSessionsCatalog_RepoFile(t *testing.T) {
 	}
 	stg := cat.EntriesForEnv("stg")
 	prod := cat.EntriesForEnv("prod")
-	if len(stg) < 5 || len(prod) < 5 {
-		t.Fatalf("expected focused catalogs, got stg=%d prod=%d", len(stg), len(prod))
+	if len(stg) < 20 || len(prod) < 20 {
+		t.Fatalf("expected expanded catalogs, got stg=%d prod=%d", len(stg), len(prod))
 	}
 	platform := cat.Lookup("stg", "platform")
 	if platform == nil || platform.Deployment != "platform-api" {
@@ -32,5 +32,15 @@ func TestLoadSessionsCatalog_RepoFile(t *testing.T) {
 	prodPlatform := cat.Lookup("prod", "platform")
 	if prodPlatform == nil || prodPlatform.Namespace != "bifrost-platform-prod" {
 		t.Fatalf("prod platform: %+v", prodPlatform)
+	}
+	if !cat.Discovery.Enabled {
+		t.Fatal("expected discovery.enabled=true in repo catalog")
+	}
+	nss := cat.DiscoveryNamespacesForEnv("stg")
+	if len(nss) < 3 {
+		t.Fatalf("discovery namespaces=%v", nss)
+	}
+	if cat.Lookup("stg", "api-massive") == nil || cat.Lookup("stg", "flower") == nil {
+		t.Fatal("expanded API/worker entries missing")
 	}
 }

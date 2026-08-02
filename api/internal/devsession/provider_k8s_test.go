@@ -144,6 +144,117 @@ func TestK8sProvider_ListGracefulWhenKubeUnavailable(t *testing.T) {
 	}
 }
 
+func TestK8sProvider_ListMergesAnnotatedDiscovery(t *testing.T) {
+	catalogDeploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api-monitor", Namespace: "bifrost-stg"},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(1),
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api-monitor"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api-monitor"}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "c", Image: "x:1"}}},
+			},
+		},
+		Status: appsv1.DeploymentStatus{ReadyReplicas: 1, AvailableReplicas: 1},
+	}
+	// Same deploy also annotated — must not duplicate (catalog wins).
+	catalogDeploy.Annotations = map[string]string{AnnotationSession: "true"}
+
+	extra := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "extra-tool",
+			Namespace: "bifrost-stg",
+			Annotations: map[string]string{
+				AnnotationSession:      "true",
+				AnnotationSessionName:  "extra",
+				AnnotationSessionLabel: "Extra Tool",
+				AnnotationSessionGroup: "plugins",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(1),
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "extra-tool"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "extra-tool"}},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Name:  "c",
+					Image: "x:2",
+					Ports: []corev1.ContainerPort{{ContainerPort: 9090}},
+				}}},
+			},
+		},
+		Status: appsv1.DeploymentStatus{ReadyReplicas: 1, AvailableReplicas: 1},
+	}
+	cat := &SessionsCatalog{
+		Discovery: DiscoveryConfig{
+			Enabled:    true,
+			Namespaces: map[string][]string{"stg": {"bifrost-stg"}},
+		},
+		Envs: map[string][]CatalogEntry{
+			"stg": {{
+				Name: "api-monitor", Label: "Monitor", Group: "api",
+				Namespace: "bifrost-stg", Deployment: "api-monitor",
+			}},
+		},
+	}
+	p := testK8sProvider(t, fake.NewSimpleClientset(catalogDeploy, extra), cat)
+	sessions, err := p.List(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("len=%d want 2: %+v", len(sessions), sessions)
+	}
+	byName := map[string]DevSession{}
+	for _, s := range sessions {
+		byName[s.Name] = s
+	}
+	if byName["api-monitor"].Group != "api" {
+		t.Fatalf("catalog should win: %+v", byName["api-monitor"])
+	}
+	extraSess := byName["extra"]
+	if extraSess.Label != "Extra Tool" || extraSess.Group != "plugins" {
+		t.Fatalf("discovered=%+v", extraSess)
+	}
+	if len(extraSess.Ports) != 1 || extraSess.Ports[0] != 9090 {
+		t.Fatalf("ports=%v", extraSess.Ports)
+	}
+}
+
+func TestK8sProvider_ControlDiscoveredSession(t *testing.T) {
+	extra := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "extra-tool",
+			Namespace: "bifrost-stg",
+			Annotations: map[string]string{
+				AnnotationSession:     "true",
+				AnnotationSessionName: "extra",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(1),
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{}},
+			},
+		},
+	}
+	cat := &SessionsCatalog{
+		Discovery: DiscoveryConfig{
+			Enabled:    true,
+			Namespaces: map[string][]string{"stg": {"bifrost-stg"}},
+		},
+		Envs: map[string][]CatalogEntry{},
+	}
+	p := testK8sProvider(t, fake.NewSimpleClientset(extra), cat)
+	resp, err := p.Control(t.Context(), "extra", "restart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.Success {
+		t.Fatalf("resp=%+v", resp)
+	}
+}
+
 func TestFirstImageTag(t *testing.T) {
 	deploy := &appsv1.Deployment{
 		Spec: appsv1.DeploymentSpec{

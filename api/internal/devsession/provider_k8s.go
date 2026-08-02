@@ -33,13 +33,16 @@ func NewK8sProvider(clusterSvc *cluster.Service, catalog *SessionsCatalog, env s
 }
 
 func (p *K8sProvider) List(ctx context.Context) ([]DevSession, error) {
-	entries := p.catalog.EntriesForEnv(p.env)
-	if len(entries) == 0 {
-		return []DevSession{}, nil
-	}
 	clientset, err := p.client()
 	if err != nil {
 		return nil, fmt.Errorf("kubernetes unavailable: %w", err)
+	}
+	entries, err := p.resolveEntries(ctx, clientset)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return []DevSession{}, nil
 	}
 
 	out := make([]DevSession, 0, len(entries))
@@ -61,19 +64,19 @@ func (p *K8sProvider) List(ctx context.Context) ([]DevSession, error) {
 }
 
 func (p *K8sProvider) Logs(ctx context.Context, name string, lines int) (*LogResponse, error) {
-	entry := p.catalog.Lookup(p.env, name)
-	if entry == nil {
-		return nil, fmt.Errorf("unknown session: %s", name)
+	clientset, err := p.client()
+	if err != nil {
+		return nil, fmt.Errorf("kubernetes unavailable: %w", err)
+	}
+	entry, err := p.resolveEntry(ctx, clientset, name)
+	if err != nil {
+		return nil, err
 	}
 	if lines <= 0 {
 		lines = 200
 	}
 	if lines > 2000 {
 		lines = 2000
-	}
-	clientset, err := p.client()
-	if err != nil {
-		return nil, fmt.Errorf("kubernetes unavailable: %w", err)
 	}
 	podName, err := p.pickPod(ctx, clientset, entry.Namespace, entry.Deployment)
 	if err != nil {
@@ -99,11 +102,17 @@ func (p *K8sProvider) Logs(ctx context.Context, name string, lines int) (*LogRes
 }
 
 func (p *K8sProvider) Control(ctx context.Context, name, action string) (*ControlResponse, error) {
-	entry := p.catalog.Lookup(p.env, name)
-	if entry == nil {
+	clientset, err := p.client()
+	if err != nil {
 		return &ControlResponse{
-			Name: name, Action: action, Success: false, Message: "unknown session: " + name,
-		}, fmt.Errorf("unknown session: %s", name)
+			Name: name, Action: action, Success: false, Message: err.Error(),
+		}, fmt.Errorf("kubernetes unavailable: %w", err)
+	}
+	entry, err := p.resolveEntry(ctx, clientset, name)
+	if err != nil {
+		return &ControlResponse{
+			Name: name, Action: action, Success: false, Message: err.Error(),
+		}, err
 	}
 
 	switch action {
@@ -197,6 +206,114 @@ func (p *K8sProvider) client() (kubernetes.Interface, error) {
 	}
 	clientset, _, err := p.cluster.KubernetesClient()
 	return clientset, err
+}
+
+// resolveEntries returns catalog entries merged with annotation-discovered Deployments.
+// Catalog wins on session name or namespace/deployment collisions.
+func (p *K8sProvider) resolveEntries(ctx context.Context, clientset kubernetes.Interface) ([]CatalogEntry, error) {
+	catalog := p.catalog.EntriesForEnv(p.env)
+	byName := make(map[string]struct{}, len(catalog))
+	byDeploy := make(map[string]struct{}, len(catalog))
+	out := make([]CatalogEntry, 0, len(catalog)+8)
+	for _, e := range catalog {
+		byName[e.Name] = struct{}{}
+		byDeploy[e.Namespace+"/"+e.Deployment] = struct{}{}
+		out = append(out, e)
+	}
+	discovered, err := p.discoverAnnotatedEntries(ctx, clientset)
+	if err != nil {
+		// Soft-fail discovery: keep catalog rows even if one namespace list fails.
+		return out, nil
+	}
+	for _, e := range discovered {
+		if _, ok := byName[e.Name]; ok {
+			continue
+		}
+		if _, ok := byDeploy[e.Namespace+"/"+e.Deployment]; ok {
+			continue
+		}
+		byName[e.Name] = struct{}{}
+		byDeploy[e.Namespace+"/"+e.Deployment] = struct{}{}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+func (p *K8sProvider) resolveEntry(ctx context.Context, clientset kubernetes.Interface, name string) (*CatalogEntry, error) {
+	if e := p.catalog.Lookup(p.env, name); e != nil {
+		return e, nil
+	}
+	entries, err := p.resolveEntries(ctx, clientset)
+	if err != nil {
+		return nil, err
+	}
+	for i := range entries {
+		if entries[i].Name == name {
+			e := entries[i]
+			return &e, nil
+		}
+	}
+	return nil, fmt.Errorf("unknown session: %s", name)
+}
+
+func (p *K8sProvider) discoverAnnotatedEntries(ctx context.Context, clientset kubernetes.Interface) ([]CatalogEntry, error) {
+	nss := p.catalog.DiscoveryNamespacesForEnv(p.env)
+	if len(nss) == 0 {
+		return nil, nil
+	}
+	var out []CatalogEntry
+	var firstErr error
+	for _, ns := range nss {
+		list, err := clientset.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		for i := range list.Items {
+			d := &list.Items[i]
+			anns := d.Annotations
+			if anns == nil {
+				anns = d.Spec.Template.Annotations
+			}
+			// Prefer Deployment-level annotation; fall back to pod template.
+			if !sessionAnnotationEnabled(anns) {
+				if !sessionAnnotationEnabled(d.Spec.Template.Annotations) {
+					continue
+				}
+				anns = d.Spec.Template.Annotations
+			}
+			ports := containerPortsFromDeploy(d)
+			out = append(out, entryFromAnnotatedDeployment(d.Namespace, d.Name, anns, ports))
+		}
+	}
+	if len(out) == 0 && firstErr != nil {
+		return nil, firstErr
+	}
+	return out, nil
+}
+
+func containerPortsFromDeploy(deploy *appsv1.Deployment) []int {
+	if deploy == nil {
+		return nil
+	}
+	var ports []int
+	seen := map[int]struct{}{}
+	for _, c := range deploy.Spec.Template.Spec.Containers {
+		for _, p := range c.Ports {
+			port := int(p.ContainerPort)
+			if port <= 0 {
+				continue
+			}
+			if _, ok := seen[port]; ok {
+				continue
+			}
+			seen[port] = struct{}{}
+			ports = append(ports, port)
+		}
+	}
+	return ports
 }
 
 func (p *K8sProvider) mapDeployment(ctx context.Context, clientset kubernetes.Interface, e CatalogEntry) (DevSession, error) {

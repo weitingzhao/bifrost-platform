@@ -54,3 +54,47 @@ func TestLoadSessionsCatalog_MissingFile(t *testing.T) {
 		t.Fatalf("expected empty catalog")
 	}
 }
+
+func TestDiscoveryNamespacesForEnv(t *testing.T) {
+	dir := t.TempDir()
+	raw := `
+version: "1"
+discovery:
+  enabled: true
+  namespaces:
+    stg:
+      - bifrost-stg
+      - data
+envs:
+  stg:
+    - name: api-monitor
+      namespace: bifrost-stg
+`
+	if err := os.WriteFile(filepath.Join(dir, sessionsCatalogFile), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cat, err := LoadSessionsCatalog(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nss := cat.DiscoveryNamespacesForEnv("stg")
+	if len(nss) != 2 || nss[0] != "bifrost-stg" || nss[1] != "data" {
+		t.Fatalf("nss=%v", nss)
+	}
+	cat.Discovery.Enabled = false
+	if len(cat.DiscoveryNamespacesForEnv("stg")) != 0 {
+		t.Fatal("disabled discovery should return nil")
+	}
+}
+
+func TestEntryFromAnnotatedDeployment(t *testing.T) {
+	e := entryFromAnnotatedDeployment("ns", "my-deploy", map[string]string{
+		AnnotationSession:      "true",
+		AnnotationSessionName:  "custom",
+		AnnotationSessionLabel: "Custom Label",
+		AnnotationSessionGroup: "plugins",
+	}, []int{8080})
+	if e.Name != "custom" || e.Label != "Custom Label" || e.Group != "plugins" || e.Deployment != "my-deploy" {
+		t.Fatalf("%+v", e)
+	}
+}

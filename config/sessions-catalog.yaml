@@ -3,8 +3,29 @@
 #
 # name: session id used by /api/v1/dev-sessions/{name}/...
 # deployment: K8s Deployment name (may differ from name; platform → platform-api)
+#
+# Annotation discovery (optional complement):
+#   bifrost.dev/session: "true"
+#   bifrost.dev/session-name: <optional id; default = Deployment name>
+#   bifrost.dev/session-label: <optional>
+#   bifrost.dev/session-group: <optional>
+# Catalog entries win on name (or namespace/deployment) collision.
 
 version: "1"
+
+discovery:
+  enabled: true
+  namespaces:
+    stg:
+      - bifrost-stg
+      - bifrost-platform-stg
+      - plugin-market-data-stg
+      - data
+    prod:
+      - bifrost-prod
+      - bifrost-platform-prod
+      - plugin-market-data
+      - data
 
 envs:
   stg:
@@ -27,6 +48,18 @@ envs:
       namespace: bifrost-stg
       deployment: api-monitor
       ports: [8765]
+    - name: api-massive
+      label: Massive API
+      group: api
+      namespace: bifrost-stg
+      deployment: api-massive
+      ports: [8766]
+    - name: api-docs
+      label: Docs API
+      group: api
+      namespace: bifrost-stg
+      deployment: api-docs
+      ports: [8767]
     - name: api-ops
       label: Ops API
       group: api
@@ -39,6 +72,18 @@ envs:
       namespace: bifrost-stg
       deployment: api-trading
       ports: [8769]
+    - name: api-strategy
+      label: Strategy API
+      group: api
+      namespace: bifrost-stg
+      deployment: api-strategy
+      ports: [8770]
+    - name: api-portfolio
+      label: Portfolio API
+      group: api
+      namespace: bifrost-stg
+      deployment: api-portfolio
+      ports: [8771]
     - name: api-market
       label: Market API
       group: api
@@ -63,16 +108,57 @@ envs:
       group: worker
       namespace: bifrost-stg
       deployment: celery-worker
+    - name: celery-worker-stocks-ib
+      label: Celery Stocks IB
+      group: worker
+      namespace: bifrost-stg
+      deployment: celery-worker-stocks-ib
+    - name: celery-worker-stocks-massive
+      label: Celery Stocks Massive
+      group: worker
+      namespace: bifrost-stg
+      deployment: celery-worker-stocks-massive
+    - name: celery-worker-stocks-massive-high
+      label: Celery Stocks Massive High
+      group: worker
+      namespace: bifrost-stg
+      deployment: celery-worker-stocks-massive-high
+    - name: celery-worker-options-massive
+      label: Celery Options Massive
+      group: worker
+      namespace: bifrost-stg
+      deployment: celery-worker-options-massive
+    - name: celery-worker-options-massive-high
+      label: Celery Options Massive High
+      group: worker
+      namespace: bifrost-stg
+      deployment: celery-worker-options-massive-high
     - name: celery-beat
       label: Celery Beat
       group: worker
       namespace: bifrost-stg
       deployment: celery-beat
+    - name: flower
+      label: Flower
+      group: worker
+      namespace: bifrost-stg
+      deployment: flower
+      ports: [5555]
     - name: daemon
       label: Daemon
       group: worker
       namespace: bifrost-stg
       deployment: daemon
+    - name: account-sync
+      label: Account Sync
+      group: worker
+      namespace: bifrost-stg
+      deployment: account-sync
+    - name: massive-ws
+      label: Massive WS
+      group: socket
+      namespace: bifrost-stg
+      deployment: massive-ws
 
     - name: polygon-worker-stocks
       label: Market Data Stocks
@@ -111,6 +197,18 @@ envs:
       namespace: bifrost-prod
       deployment: api-monitor
       ports: [8765]
+    - name: api-massive
+      label: Massive API
+      group: api
+      namespace: bifrost-prod
+      deployment: api-massive
+      ports: [8766]
+    - name: api-docs
+      label: Docs API
+      group: api
+      namespace: bifrost-prod
+      deployment: api-docs
+      ports: [8767]
     - name: api-ops
       label: Ops API
       group: api
@@ -123,6 +221,18 @@ envs:
       namespace: bifrost-prod
       deployment: api-trading
       ports: [8769]
+    - name: api-strategy
+      label: Strategy API
+      group: api
+      namespace: bifrost-prod
+      deployment: api-strategy
+      ports: [8770]
+    - name: api-portfolio
+      label: Portfolio API
+      group: api
+      namespace: bifrost-prod
+      deployment: api-portfolio
+      ports: [8771]
     - name: api-market
       label: Market API
       group: api
@@ -147,16 +257,57 @@ envs:
       group: worker
       namespace: bifrost-prod
       deployment: celery-worker
+    - name: celery-worker-stocks-ib
+      label: Celery Stocks IB
+      group: worker
+      namespace: bifrost-prod
+      deployment: celery-worker-stocks-ib
+    - name: celery-worker-stocks-massive
+      label: Celery Stocks Massive
+      group: worker
+      namespace: bifrost-prod
+      deployment: celery-worker-stocks-massive
+    - name: celery-worker-stocks-massive-high
+      label: Celery Stocks Massive High
+      group: worker
+      namespace: bifrost-prod
+      deployment: celery-worker-stocks-massive-high
+    - name: celery-worker-options-massive
+      label: Celery Options Massive
+      group: worker
+      namespace: bifrost-prod
+      deployment: celery-worker-options-massive
+    - name: celery-worker-options-massive-high
+      label: Celery Options Massive High
+      group: worker
+      namespace: bifrost-prod
+      deployment: celery-worker-options-massive-high
     - name: celery-beat
       label: Celery Beat
       group: worker
       namespace: bifrost-prod
       deployment: celery-beat
+    - name: flower
+      label: Flower
+      group: worker
+      namespace: bifrost-prod
+      deployment: flower
+      ports: [5555]
     - name: daemon
       label: Daemon
       group: worker
       namespace: bifrost-prod
       deployment: daemon
+    - name: account-sync
+      label: Account Sync
+      group: worker
+      namespace: bifrost-prod
+      deployment: account-sync
+    - name: massive-ws
+      label: Massive WS
+      group: socket
+      namespace: bifrost-prod
+      deployment: massive-ws
 
     - name: polygon-worker-stocks
       label: Market Data Stocks
