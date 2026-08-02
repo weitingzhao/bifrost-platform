@@ -19,12 +19,18 @@ function reachTagVariant(reach: string): 'success' | 'warning' | 'danger' | 'neu
   return 'neutral'
 }
 
-export function IbGatewayCutoverStatusPanel() {
+export function IbGatewayCutoverStatusPanel({
+  embedded = false,
+}: {
+  /** Flat inner block when nested under Plugin Gallery IB Gateway OpsSection. */
+  embedded?: boolean
+} = {}) {
   const liveProbe = useIbGatewayLiveProbe()
   const cutover = liveProbe.status?.cutover
 
   return (
     <OpsSection
+      variant={embedded ? 'flat' : 'elevated'}
       title="Trade cutover status"
       description="L0 probe — legacy IB StatefulSets retired + redis-ib ExternalName per Trade namespace (IBGP3)."
       bodyPadding="default"

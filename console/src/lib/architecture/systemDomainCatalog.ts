@@ -71,7 +71,8 @@ export const SYSTEM_DOMAINS: SystemDomainRow[] = [
   {
     id: 'subcontractors',
     label: 'Subcontractors',
-    purpose: 'External plugins — IB Gateway Plugin Gallery and future vendors',
+    purpose:
+      'External plugins — Plugin Gallery observes IB Gateway + Market Data (pipeline + optional readiness_rollup); publish via Launch Plugin',
   },
   {
     id: 'engineer',

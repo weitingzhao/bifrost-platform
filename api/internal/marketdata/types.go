@@ -33,17 +33,27 @@ type FreshnessInfo struct {
 	Verdict     string  `json:"verdict"` // ok | stale | unknown
 }
 
+// ReadinessRollup is a read-only snapshot from public.stock_readiness_daily
+// (Trade-owned table). Null/omitted when the probe fails — Console ignores it.
+type ReadinessRollup struct {
+	Universe   int    `json:"universe"`
+	PriceReady int    `json:"price_ready"`
+	FundValid  int    `json:"fund_cache_valid"`
+	AsOf       string `json:"as_of"`
+}
+
 type StatusResponse struct {
-	Reachable      bool               `json:"reachable"`
-	Reachability   probe.Reachability `json:"reachability"`
-	Summary        string             `json:"summary"`
-	Deployments    []DeploymentInfo   `json:"deployments"`
-	Workers        []WorkerInfo       `json:"workers,omitempty"`
-	HealthReach    probe.Reachability `json:"health_reachability"`
-	Freshness      []FreshnessInfo    `json:"freshness,omitempty"`
-	FreshnessReach probe.Reachability `json:"freshness_reachability"`
-	Autonomy       string             `json:"autonomy"`
-	Error          string             `json:"error,omitempty"`
-	Hint           string             `json:"hint,omitempty"`
-	GeneratedAt    time.Time          `json:"generated_at"`
+	Reachable        bool               `json:"reachable"`
+	Reachability     probe.Reachability `json:"reachability"`
+	Summary          string             `json:"summary"`
+	Deployments      []DeploymentInfo   `json:"deployments"`
+	Workers          []WorkerInfo       `json:"workers,omitempty"`
+	HealthReach      probe.Reachability `json:"health_reachability"`
+	Freshness        []FreshnessInfo    `json:"freshness,omitempty"`
+	FreshnessReach   probe.Reachability `json:"freshness_reachability"`
+	ReadinessRollup  *ReadinessRollup   `json:"readiness_rollup,omitempty"`
+	Autonomy         string             `json:"autonomy"`
+	Error            string             `json:"error,omitempty"`
+	Hint             string             `json:"hint,omitempty"`
+	GeneratedAt      time.Time          `json:"generated_at"`
 }

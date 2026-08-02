@@ -26,9 +26,12 @@ function reachTagVariant(reach: string): 'success' | 'warning' | 'danger' | 'neu
 
 export function IbGatewayLiveStatusPanel({
   showPrimaryActions = true,
+  embedded = false,
 }: {
   /** When false, hide Reconnect (page Verdict owns it). Mode switch stays here. Default true. */
   showPrimaryActions?: boolean
+  /** Flat inner block when nested under Plugin Gallery IB Gateway OpsSection. */
+  embedded?: boolean
 } = {}) {
   const liveProbe = useIbGatewayLiveProbe()
   const { canOperate } = usePlatformAuth()
@@ -111,11 +114,14 @@ export function IbGatewayLiveStatusPanel({
 
   return (
     <OpsSection
+      variant={embedded ? 'flat' : 'elevated'}
       title="IB Gateway live status"
       description={
         showPrimaryActions
           ? 'L0 probe via GET /api/v1/plugins/ib-gateway/status — redis-ib health + K8s deployment @ data NS.'
-          : 'Mode switch here · Reconnect on page Verdict. L0 probe via GET /api/v1/plugins/ib-gateway/status.'
+          : embedded
+            ? 'Mode switch here · Reconnect on parent IB Gateway section header.'
+            : 'Mode switch here · Reconnect on page Verdict. L0 probe via GET /api/v1/plugins/ib-gateway/status.'
       }
       actions={sectionActions}
       bodyPadding="default"

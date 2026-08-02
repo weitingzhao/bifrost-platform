@@ -197,6 +197,14 @@ export interface MarketDataFreshnessInfo {
   verdict: 'ok' | 'stale' | 'unknown' | string
 }
 
+/** Read-only rollup from Trade public.stock_readiness_daily (optional). */
+export interface MarketDataReadinessRollup {
+  universe: number
+  price_ready: number
+  fund_cache_valid: number
+  as_of: string
+}
+
 export interface MarketDataStatusResponse {
   reachable?: boolean
   reachability?: MarketDataReachability
@@ -206,6 +214,7 @@ export interface MarketDataStatusResponse {
   health_reachability?: MarketDataReachability
   freshness?: MarketDataFreshnessInfo[]
   freshness_reachability?: MarketDataReachability
+  readiness_rollup?: MarketDataReadinessRollup | null
   autonomy?: string
   error?: string
   hint?: string

@@ -22,6 +22,8 @@ type Service struct {
 	client  *http.Client
 	// freshnessProbe overrides CNPG query in unit tests.
 	freshnessProbe func(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string)
+	// readinessProbe overrides stock_readiness_daily rollup in unit tests.
+	readinessProbe func(ctx context.Context) *ReadinessRollup
 	// deploymentsOverride skips live K8s reads in unit tests.
 	deploymentsOverride []DeploymentInfo
 }
@@ -91,6 +93,9 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 		resp.Error = freshErr
 		resp.Hint = "Ensure data_ops.ingest_freshness is populated (worker jobs marking done)"
 	}
+
+	// Read-only Trade readiness snapshot — failure leaves field nil (does not affect reachability).
+	resp.ReadinessRollup = s.probeReadinessRollup(ctx)
 
 	readyCount := 0
 	for _, d := range resp.Deployments {
@@ -302,6 +307,57 @@ func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Re
 		}
 	}
 	return rows, reach, ""
+}
+
+// probeReadinessRollup reads Trade-owned public.stock_readiness_daily.
+// Schema notes: as_of_date (not as_of); fund_cache_valid is derived from
+// fund_cache_expire_at + fundamental_eval (no fund_cache_valid column).
+// Failures return nil — Console hides the KPI strip.
+func (s *Service) probeReadinessRollup(ctx context.Context) *ReadinessRollup {
+	if s.readinessProbe != nil {
+		return s.readinessProbe(ctx)
+	}
+	if s.cluster == nil {
+		return nil
+	}
+	db := s.cfg.FreshnessDB
+	if db == "" {
+		db = defaultFreshnessDB
+	}
+	sql := "SELECT count(*) FILTER (WHERE included_in_universe), count(*) FILTER (WHERE included_in_universe AND price_ready), count(*) FILTER (WHERE included_in_universe AND fundamental_eval IS NOT NULL AND fund_cache_expire_at IS NOT NULL AND fund_cache_expire_at > now()), COALESCE(max(as_of_date)::text,'') FROM public.stock_readiness_daily WHERE as_of_date = (SELECT max(as_of_date) FROM public.stock_readiness_daily) AND universe_rule_version = 'v1' AND price_source = 'massive'"
+	out, err := s.cluster.ExecSQLOnPrimary(ctx, db, sql)
+	if err != nil {
+		return nil
+	}
+	return parseReadinessRollupOutput(out)
+}
+
+func parseReadinessRollupOutput(out string) *ReadinessRollup {
+	line := strings.TrimSpace(out)
+	if line == "" {
+		return nil
+	}
+	// psql -tAc may return one pipe-delimited row.
+	parts := strings.Split(line, "|")
+	if len(parts) < 4 {
+		return nil
+	}
+	universe, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	priceReady, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	fundValid, err3 := strconv.Atoi(strings.TrimSpace(parts[2]))
+	asOf := strings.TrimSpace(parts[3])
+	if err1 != nil || err2 != nil || err3 != nil {
+		return nil
+	}
+	if asOf == "" || strings.EqualFold(asOf, "null") {
+		return nil
+	}
+	return &ReadinessRollup{
+		Universe:   universe,
+		PriceReady: priceReady,
+		FundValid:  fundValid,
+		AsOf:       asOf,
+	}
 }
 
 func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {

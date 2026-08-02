@@ -184,4 +184,70 @@ func TestHandleStatusWithoutCluster(t *testing.T) {
 	if body.FreshnessReach != probe.ReachUnknown {
 		t.Fatalf("freshness_reach=%s want unknown", body.FreshnessReach)
 	}
+	if body.ReadinessRollup != nil {
+		t.Fatalf("readiness_rollup=%+v want nil without cluster", body.ReadinessRollup)
+	}
+}
+
+func TestParseReadinessRollupOutput(t *testing.T) {
+	r := parseReadinessRollupOutput("1200|980|400|2026-08-01\n")
+	if r == nil {
+		t.Fatal("expected rollup")
+	}
+	if r.Universe != 1200 || r.PriceReady != 980 || r.FundValid != 400 || r.AsOf != "2026-08-01" {
+		t.Fatalf("unexpected rollup: %+v", r)
+	}
+	if parseReadinessRollupOutput("") != nil {
+		t.Fatal("empty should be nil")
+	}
+	if parseReadinessRollupOutput("bad|row") != nil {
+		t.Fatal("short row should be nil")
+	}
+}
+
+func TestStatusIncludesReadinessRollup(t *testing.T) {
+	stocksMux := http.NewServeMux()
+	stocksMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "ok", "pool": "stocks", "jobs_done": 1, "jobs_failed": 0, "uptime_sec": 1,
+		})
+	})
+	stocksSrv := httptest.NewServer(stocksMux)
+	defer stocksSrv.Close()
+
+	optionsMux := http.NewServeMux()
+	optionsMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "ok", "pool": "options", "jobs_done": 1, "jobs_failed": 0, "uptime_sec": 1,
+		})
+	})
+	optionsSrv := httptest.NewServer(optionsMux)
+	defer optionsSrv.Close()
+
+	svc := &Service{
+		cfg: Config{
+			StocksHealthURL:  stocksSrv.URL + "/health",
+			OptionsHealthURL: optionsSrv.URL + "/health",
+		},
+		client: http.DefaultClient,
+		deploymentsOverride: []DeploymentInfo{
+			{Namespace: pluginNamespace, Name: stocksDeployName, Ready: "1/1", Reach: probe.ReachOK},
+			{Namespace: pluginNamespace, Name: optionsDeployName, Ready: "1/1", Reach: probe.ReachOK},
+		},
+		freshnessProbe: func(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string) {
+			return []FreshnessInfo{{
+				Dimension: "stock_daily", Status: "ok", AgeHours: 1, Verdict: "ok", RowsWritten: 10,
+			}}, probe.ReachOK, ""
+		},
+		readinessProbe: func(ctx context.Context) *ReadinessRollup {
+			return &ReadinessRollup{Universe: 10, PriceReady: 8, FundValid: 5, AsOf: "2026-08-01"}
+		},
+	}
+	resp := svc.Status(context.Background())
+	if resp.ReadinessRollup == nil || resp.ReadinessRollup.Universe != 10 || resp.ReadinessRollup.PriceReady != 8 {
+		t.Fatalf("readiness_rollup=%+v", resp.ReadinessRollup)
+	}
+	if resp.Reachability != probe.ReachOK {
+		t.Fatalf("reachability=%s (rollup must not affect reach)", resp.Reachability)
+	}
 }

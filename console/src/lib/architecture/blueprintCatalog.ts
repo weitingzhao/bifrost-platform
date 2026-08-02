@@ -231,6 +231,12 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
     plane: 'Shell',
     purpose: 'SSH to K3s / Mac Agent hosts — shell Operator Dock Console slot (not a Ground nav page)',
   },
+  {
+    view: 'Plugin Gallery',
+    plane: 'Subcontractors',
+    purpose:
+      'Observe IB Gateway + Market Data pipeline health (workers / freshness); optional read-only readiness_rollup KPI + deep-link to Trade Stock Data Readiness (not runbook / per-symbol gaps; Gallery ≠ Publish)',
+  },
 ]
 
 /** Task mode lenses — focused Console navigation for ops vs dev loops (Constitution). */

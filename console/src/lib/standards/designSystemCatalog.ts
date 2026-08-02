@@ -157,7 +157,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Compute: OpsVerdictStrip COMPUTE · NODES — Refresh in actions; Audit / Cluster in meta',
       'Network: OpsVerdictStrip NETWORK · GROUND — live probe lamp; Health panel is Body evidence',
       'Operator Dock · Console: ServerConsolePanel in shell dock (no page Verdict); host freshness on dock toolbar; Mac chips Primary/Standby from bridge runners',
-      'Plugin Gallery: OpsVerdictStrip PLUGIN BUS · IB GATEWAY — Reconnect / Refresh + Need publish?; Live/Cutover are Body (Gallery ≠ Publish)',
+      'Plugin Gallery: OpsVerdictStrip PLUGIN BUS — worst(IB, Market Data) lamp; Refresh both + Need publish?; Reconnect on IB Gateway OpsSection (Gallery ≠ Publish)',
       'Launch Rocket: LaneStateStrip (lane verdict) + AI Release actions — not OpsVerdictStrip',
       'Deploy Satellite: LaneStateStrip + AI Deploy (+ Evidence links) — not OpsVerdictStrip',
       'Launch Plugin: LaneStateStrip (revision/mode/last verify — not Tekton) + AI Launch Plugin — Detect→Approve→Install→Verify→Live',
@@ -188,7 +188,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Compute: OpsSection wizard + nodes table',
       'Network: Health / Firewall / Devices / Clients OpsSections',
       'Operator Dock · Console: flat toolbar (no panel-elevated); Linux|Mac chips + SSH meta one row; terminal fills body',
-      'Plugin Gallery: Registry OpsSection → IB Live OpsSection → Cutover OpsSection (Need publish? → Launch Plugin)',
+      'Plugin Gallery: IB Gateway OpsSection (Live+Cutover nested flat) → Market Data OpsSection (Attention → Freshness/Workers DenseDataTable → optional readiness_rollup deep-link) → compact Plugin registry (lifecycle tags only; Need publish? → Launch Plugin)',
     ],
   },
   {

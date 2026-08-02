@@ -4,7 +4,8 @@
  * Created 2026-07-30 for bifrost-platform-plugin-market-data (Polygon REST ingest).
  *
  * Live state (not this catalog):
- * - Worker health + deployments: Subcontractors → Plugin Gallery (observe)
+ * - Worker health + deployments + freshness tables: Subcontractors → Plugin Gallery (observe)
+ * - Optional readiness_rollup on GET /api/v1/plugins/market-data/status (read-only stock_readiness_daily snapshot; Trade owns runbook / gaps)
  * - Phase / program sign-off: Mission Control → Delivery Board · market-data-subcontractor
  * - Implementation: bifrost-platform-plugin-market-data
  */
@@ -22,7 +23,7 @@ export const MARKET_DATA_LAUNCH_LANE = {
   verify: 'make verify-market-data',
   steps: ['Detect', 'Apply', 'Verify', 'Live check'] as const,
   galleryIsNotPublish:
-    'Plugin Gallery = observe health / deployments. Apply kustomize = publish workers + CronJobs.',
+    'Plugin Gallery = observe health / deployments / freshness (+ optional readiness_rollup KPI). Apply kustomize = publish workers + CronJobs.',
   d10: 'Market-data REST ingest only — no place_order / no IB socket',
 } as const
 
@@ -94,7 +95,8 @@ export const MARKET_DATA_PHASES: MarketDataPhase[] = [
     spineStep: '⑤',
     title: 'Scheduler + K8s CronJob',
     summary: 'CronJob-driven enqueue into data_ops.job_ingest; payload_hash dedup.',
-    deliverable: 'scheduler/daily.py + 7 CronJobs + schedule.yaml',
+    deliverable:
+      'scheduler/daily.py + CronJobs (incl. reference / fundamentals-rotate) + schedule.yaml',
     status: 'done',
   },
   {
@@ -137,7 +139,10 @@ export const MARKET_DATA_DESIGN_PRINCIPLES = [
   'K8s-native workers — stocks + options pools; CronJobs enqueue; NetworkPolicy egress to data NS + HTTPS.',
   'Watchlist cross-schema — SELECT from public.watchlist (Trade); data_writer needs GRANT SELECT.',
   'Deterministic option-refresh rotation — sha256(date) offset covers full watchlist over days.',
-  'Trading-calendar guard — stock-eod / eod-pipeline / universe-daily / corporate skip non-trading days.',
+  'Reference slot — daily ticker_sync (universe); weekends/holidays allowed (calendar-like).',
+  'Fundamentals-rotate — daily financials batch (batch_size=40) over watchlist; skip non-trading days.',
+  'Library SLA (dev) — ticker_sync age <24h; financials age <24h; watchlist financials coverage ≤7 trading days.',
+  'Trading-calendar guard — stock-eod / eod-pipeline / universe-daily / corporate / fundamentals-rotate skip non-trading days.',
   'D10-safe — REST market data only; no place_order / no IB socket path.',
 ] as const
 
@@ -178,8 +183,10 @@ export const MARKET_DATA_PROGRESS = {
 } as const
 
 export const MARKET_DATA_RELATED_AUTHORITIES = [
-  'Live health + deployments: Subcontractors → Plugin Gallery (observe — not publish)',
+  'Live health + deployments + freshness: Subcontractors → Plugin Gallery (observe — not publish)',
+  'Readiness rollup KPI: GET /api/v1/plugins/market-data/status → readiness_rollup (read-only; Trade Stock Data Readiness owns runbook / per-symbol gaps)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
+  'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; requires image rebuild to activate scheduler slots)',
   'Program / phase sign-off: Delivery Board · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',
   'Spine: config/ops-context.yaml · GET /api/v1/context · milestone market-data-subcontractor',
