@@ -243,6 +243,11 @@ export type GrafanaDashboardEntry = {
    * Omit to fall back to TRADE_NS[env] (Satellite) or no namespace.
    */
   defaultNamespace?: string
+  /**
+   * When true, deep links omit `var-namespace` entirely (Rocket stock boards
+   * that are cluster-scoped and do not accept a namespace template var).
+   */
+  suppressNamespace?: boolean
 }
 
 export type ObservabilityViewModel = {

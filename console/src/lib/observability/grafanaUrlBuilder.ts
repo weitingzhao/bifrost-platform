@@ -81,11 +81,19 @@ export function buildGrafanaDashboardUrl(ctx: GrafanaLinkContext): string | null
   params.set('from', from)
   params.set('to', to)
 
-  const ns = resolveNamespace(ctx.env, ctx.namespace, dash.defaultNamespace)
-  if (ns != null) {
-    params.set('var-namespace', ns)
+  if (!dash.suppressNamespace) {
+    const ns = resolveNamespace(ctx.env, ctx.namespace, dash.defaultNamespace)
+    if (ns != null) {
+      params.set('var-namespace', ns)
+    }
   }
-  if (ctx.env != null && ctx.env !== 'all' && ctx.env !== 'shared') {
+  // Shared boards (Ground/IB) ignore seat env — never inject Trade var-env.
+  if (
+    ctx.env != null &&
+    ctx.env !== 'all' &&
+    ctx.env !== 'shared' &&
+    dash.env !== 'shared'
+  ) {
     params.set('var-env', ctx.env)
   }
   if (ctx.service != null && ctx.service.trim() !== '') {

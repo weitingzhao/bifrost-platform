@@ -24,6 +24,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     purpose: 'Cluster pod/node compute (kube-prometheus-stack stock)',
     uid: 'efa86fd1d0c121a26444b636a3f509a8',
     slug: 'kubernetes-compute-resources-cluster',
+    suppressNamespace: true,
   },
   {
     id: 'cluster-nodes',
@@ -33,6 +34,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     purpose: 'Node CPU/memory evidence (kube-prometheus-stack stock)',
     uid: '7d57716318ee0dddbac5a7f451fb7753',
     slug: 'node-exporter-nodes',
+    suppressNamespace: true,
   },
   {
     id: 'platform-overview',
@@ -42,6 +44,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     purpose: 'Layer B Prometheus stack (kube-prometheus-stack stock)',
     uid: '9fa0d141-d019-4ad7-8bc5-42196ee308bd',
     slug: 'prometheus-overview',
+    suppressNamespace: true,
   },
   {
     id: 'data-layer',

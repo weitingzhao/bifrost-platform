@@ -580,13 +580,14 @@ function buildSelectedDetail(
     })),
     grafanaLinks: dashIds.map(id => {
       const available = isDashboardCatalogAvailable(id)
-      // Namespace comes from catalog defaultNamespace (Ground/IB/Agent) or
-      // TRADE_NS[env] fallback inside the builder — never force Trade NS here.
+      // Namespace: Agent seat override; else catalog defaultNamespace /
+      // TRADE_NS[env] inside the builder — never force Trade NS here.
       const url = available
         ? buildGrafanaDashboardUrl({
             grafanaBaseUrl: grafanaBase,
             dashboardId: id,
             env: input.selectedEnv,
+            namespace: resolveDashboardNamespaceOverride(id, input.selectedEnv),
             availableUids: input.availableGrafanaUids,
           })
         : null
@@ -623,6 +624,20 @@ function routeLabel(route: string): string {
     default:
       return route
   }
+}
+
+/**
+ * Agent Control Plane NS follows seat: prod → bifrost-platform-prod,
+ * otherwise catalog default (bifrost-platform-stg). Other boards leave
+ * namespace unset so the builder uses catalog defaultNamespace / TRADE_NS.
+ */
+function resolveDashboardNamespaceOverride(
+  dashboardId: string,
+  selectedEnv: 'dev' | 'stg' | 'prod',
+): string | undefined {
+  if (dashboardId !== 'agent-operations') return undefined
+  if (selectedEnv === 'prod') return 'bifrost-platform-prod'
+  return undefined
 }
 
 /**
@@ -732,10 +747,12 @@ export function buildObservabilityViewModel(
       const dash =
         GRAFANA_DASHBOARD_CATALOG.find(d => d.domain === domain)?.id ?? 'platform-overview'
       const alertStart = activeAt != null ? Date.parse(activeAt) : undefined
+      const seatEnv = e === 'dev' || e === 'stg' || e === 'prod' ? e : input.selectedEnv
       return buildGrafanaDashboardUrl({
         grafanaBaseUrl: grafanaBase,
         dashboardId: dash,
         env: e,
+        namespace: resolveDashboardNamespaceOverride(dash, seatEnv),
         alertStartMs: alertStart != null && !Number.isNaN(alertStart) ? alertStart : undefined,
         availableUids: input.availableGrafanaUids,
       })
@@ -753,12 +770,14 @@ export function buildObservabilityViewModel(
 
   const dashboards = GRAFANA_DASHBOARD_CATALOG.map(d => {
     const catalogOk = d.uid != null
-    // Builder resolves var-namespace via catalog defaultNamespace → TRADE_NS.
+    // Builder resolves var-namespace via catalog defaultNamespace → TRADE_NS;
+    // Agent gets an explicit prod seat override.
     const url = catalogOk
       ? buildGrafanaDashboardUrl({
           grafanaBaseUrl: grafanaBase,
           dashboardId: d.id,
           env: input.selectedEnv,
+          namespace: resolveDashboardNamespaceOverride(d.id, input.selectedEnv),
           availableUids: input.availableGrafanaUids,
         })
       : null

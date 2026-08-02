@@ -960,6 +960,7 @@ describe('buildObservabilityViewModel', () => {
     expect(trade.available).toBe(true)
     expect(trade.url).not.toBeNull()
     expect(trade.url).toMatch(/var-namespace=bifrost-stg/)
+    expect(trade.url).toMatch(/var-env=stg/)
     const agent = vm.dashboards.find(d => d.id === 'agent-operations')!
     expect(agent.available).toBe(true)
     expect(agent.url).not.toBeNull()
@@ -969,10 +970,67 @@ describe('buildObservabilityViewModel', () => {
     expect(dataLayer.available).toBe(true)
     expect(dataLayer.url).toMatch(/\/d\/bifrost-data-layer\//)
     expect(dataLayer.url).toMatch(/var-namespace=data/)
+    expect(dataLayer.url).not.toMatch(/var-env=/)
     const ib = vm.dashboards.find(d => d.id === 'ib-gateway')!
     expect(ib.available).toBe(true)
     expect(ib.url).toMatch(/\/d\/bifrost-ib-gateway\//)
     expect(ib.url).toMatch(/var-namespace=data/)
+    expect(ib.url).not.toMatch(/var-env=/)
+    for (const rocketId of ['cluster-compute', 'cluster-nodes', 'platform-overview'] as const) {
+      const rocket = vm.dashboards.find(d => d.id === rocketId)!
+      expect(rocket.available).toBe(true)
+      expect(rocket.url).not.toMatch(/var-namespace=/)
+    }
+  })
+
+  it('agent-operations namespace follows seat (prod → bifrost-platform-prod)', () => {
+    const baseObs = {
+      cluster_id: 'c',
+      namespace: 'monitoring',
+      layer_b_status: 'ready' as const,
+      layer_b_install_enabled: true,
+      reachability: 'ok' as const,
+      detail: 'ok',
+      components: [] as never[],
+      grafana_url: 'http://grafana.example',
+      generated_at: '2026-07-21T12:00:00Z',
+    }
+    const nowMs = Date.parse('2026-07-21T12:00:30Z')
+
+    const prodVm = buildObservabilityViewModel({
+      selectedEnv: 'prod',
+      selectedDomain: 'engineer',
+      observability: baseObs,
+      nowMs,
+    })
+    const prodAgent = prodVm.dashboards.find(d => d.id === 'agent-operations')!
+    expect(prodAgent.url).toMatch(/var-namespace=bifrost-platform-prod/)
+    expect(prodAgent.url).not.toMatch(/var-namespace=bifrost-platform-stg/)
+
+    const stgVm = buildObservabilityViewModel({
+      selectedEnv: 'stg',
+      selectedDomain: 'engineer',
+      observability: baseObs,
+      nowMs,
+    })
+    expect(stgVm.dashboards.find(d => d.id === 'agent-operations')!.url).toMatch(
+      /var-namespace=bifrost-platform-stg/,
+    )
+
+    const devVm = buildObservabilityViewModel({
+      selectedEnv: 'dev',
+      selectedDomain: 'engineer',
+      observability: baseObs,
+      nowMs,
+    })
+    expect(devVm.dashboards.find(d => d.id === 'agent-operations')!.url).toMatch(
+      /var-namespace=bifrost-platform-stg/,
+    )
+
+    // Satellite still gets Trade NS + var-env under prod seat.
+    const sat = prodVm.dashboards.find(d => d.id === 'satellite-trade-overview')!
+    expect(sat.url).toMatch(/var-namespace=bifrost-prod/)
+    expect(sat.url).toMatch(/var-env=prod/)
   })
 })
 
@@ -1006,6 +1064,15 @@ describe('grafana URL builder', () => {
     expect(agentUrl).toMatch(/\/d\/bifrost-agent-operations\//)
     expect(agentUrl).toMatch(/var-namespace=bifrost-platform-stg/)
 
+    const agentProdUrl = buildGrafanaDashboardUrl({
+      grafanaBaseUrl: 'http://grafana.example',
+      dashboardId: 'agent-operations',
+      env: 'prod',
+      namespace: 'bifrost-platform-prod',
+    })
+    expect(agentProdUrl).toMatch(/var-namespace=bifrost-platform-prod/)
+    expect(agentProdUrl).toMatch(/var-env=prod/)
+
     const dataUrl = buildGrafanaDashboardUrl({
       grafanaBaseUrl: 'http://grafana.example',
       dashboardId: 'data-layer',
@@ -1014,6 +1081,8 @@ describe('grafana URL builder', () => {
     expect(dataUrl).toMatch(/var-namespace=data/)
     // Must NOT inject Trade NS when catalog defaultNamespace is set
     expect(dataUrl).not.toMatch(/var-namespace=bifrost-dev/)
+    // Shared catalog env → no var-env even when seat env is passed
+    expect(dataUrl).not.toMatch(/var-env=/)
 
     const ibUrl = buildGrafanaDashboardUrl({
       grafanaBaseUrl: 'http://grafana.example',
@@ -1022,5 +1091,17 @@ describe('grafana URL builder', () => {
     })
     expect(ibUrl).toMatch(/var-namespace=data/)
     expect(ibUrl).not.toMatch(/var-namespace=bifrost-prod/)
+    expect(ibUrl).not.toMatch(/var-env=/)
+
+    for (const rocketId of ['cluster-compute', 'cluster-nodes', 'platform-overview'] as const) {
+      const rocketUrl = buildGrafanaDashboardUrl({
+        grafanaBaseUrl: 'http://grafana.example',
+        dashboardId: rocketId,
+        env: 'dev',
+      })
+      expect(rocketUrl).not.toMatch(/var-namespace=/)
+      // Rocket env is 'all' — seat env still becomes var-env for filtering if present
+      expect(rocketUrl).toMatch(/var-env=dev/)
+    }
   })
 })
