@@ -66,7 +66,7 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     role: 'required',
     source: 'telemetry_target',
     detailRoute: 'observability',
-    grafanaDashboardId: 'cluster-nodes',
+    grafanaDashboardId: 'cluster-compute',
   },
   {
     id: 'rocket.cluster-cpu',
@@ -76,7 +76,7 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     role: 'evidence',
     source: 'cluster_metrics',
     detailRoute: 'cluster',
-    grafanaDashboardId: 'cluster-nodes',
+    grafanaDashboardId: 'cluster-compute',
     description: 'metrics-server CPU — evidence only, not verdict',
   },
   {

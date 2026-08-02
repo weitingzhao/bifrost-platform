@@ -237,6 +237,12 @@ export type GrafanaDashboardEntry = {
   /** Grafana uid path segment — null means unavailable (no bad link). */
   uid: string | null
   slug: string
+  /**
+   * Preferred `var-namespace` for deep links. When set, URL builder uses this
+   * instead of Trade NS (e.g. Ground/IB → `data`, Agent → platform NS).
+   * Omit to fall back to TRADE_NS[env] (Satellite) or no namespace.
+   */
+  defaultNamespace?: string
 }
 
 export type ObservabilityViewModel = {

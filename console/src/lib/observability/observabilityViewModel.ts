@@ -580,12 +580,13 @@ function buildSelectedDetail(
     })),
     grafanaLinks: dashIds.map(id => {
       const available = isDashboardCatalogAvailable(id)
+      // Namespace comes from catalog defaultNamespace (Ground/IB/Agent) or
+      // TRADE_NS[env] fallback inside the builder — never force Trade NS here.
       const url = available
         ? buildGrafanaDashboardUrl({
             grafanaBaseUrl: grafanaBase,
             dashboardId: id,
             env: input.selectedEnv,
-            namespace: TRADE_NS[input.selectedEnv],
             availableUids: input.availableGrafanaUids,
           })
         : null
@@ -735,7 +736,6 @@ export function buildObservabilityViewModel(
         grafanaBaseUrl: grafanaBase,
         dashboardId: dash,
         env: e,
-        namespace: e === 'dev' || e === 'stg' || e === 'prod' ? TRADE_NS[e] : TRADE_NS[env],
         alertStartMs: alertStart != null && !Number.isNaN(alertStart) ? alertStart : undefined,
         availableUids: input.availableGrafanaUids,
       })
@@ -753,12 +753,12 @@ export function buildObservabilityViewModel(
 
   const dashboards = GRAFANA_DASHBOARD_CATALOG.map(d => {
     const catalogOk = d.uid != null
+    // Builder resolves var-namespace via catalog defaultNamespace → TRADE_NS.
     const url = catalogOk
       ? buildGrafanaDashboardUrl({
           grafanaBaseUrl: grafanaBase,
           dashboardId: d.id,
           env: input.selectedEnv,
-          namespace: TRADE_NS[input.selectedEnv],
           availableUids: input.availableGrafanaUids,
         })
       : null

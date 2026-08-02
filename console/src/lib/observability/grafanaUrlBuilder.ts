@@ -34,8 +34,19 @@ export function normalizeGrafanaBase(raw: string | null | undefined): string | n
   return trimmed.replace(/\/+$/, '')
 }
 
-function resolveNamespace(env?: ObservabilityEnvId | 'all', namespace?: string): string | undefined {
+/**
+ * Namespace priority for `var-namespace`:
+ * 1. Explicit ctx.namespace (caller override)
+ * 2. Catalog defaultNamespace (Ground/IB → data, Agent → platform NS)
+ * 3. TRADE_NS[env] when env is a Trade env (Satellite)
+ */
+function resolveNamespace(
+  env: ObservabilityEnvId | 'all' | undefined,
+  namespace: string | undefined,
+  catalogDefault: string | undefined,
+): string | undefined {
   if (namespace != null && namespace.trim() !== '') return namespace.trim()
+  if (catalogDefault != null && catalogDefault.trim() !== '') return catalogDefault.trim()
   if (env === 'dev' || env === 'stg' || env === 'prod') return TRADE_NS[env]
   return undefined
 }
@@ -70,7 +81,7 @@ export function buildGrafanaDashboardUrl(ctx: GrafanaLinkContext): string | null
   params.set('from', from)
   params.set('to', to)
 
-  const ns = resolveNamespace(ctx.env, ctx.namespace)
+  const ns = resolveNamespace(ctx.env, ctx.namespace, dash.defaultNamespace)
   if (ns != null) {
     params.set('var-namespace', ns)
   }

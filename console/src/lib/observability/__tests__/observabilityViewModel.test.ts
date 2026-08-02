@@ -959,9 +959,20 @@ describe('buildObservabilityViewModel', () => {
     const trade = vm.dashboards.find(d => d.id === 'satellite-trade-overview')!
     expect(trade.available).toBe(true)
     expect(trade.url).not.toBeNull()
+    expect(trade.url).toMatch(/var-namespace=bifrost-stg/)
     const agent = vm.dashboards.find(d => d.id === 'agent-operations')!
-    expect(agent.available).toBe(false)
-    expect(agent.url).toBeNull()
+    expect(agent.available).toBe(true)
+    expect(agent.url).not.toBeNull()
+    expect(agent.url).toMatch(/var-namespace=bifrost-platform-stg/)
+    expect(agent.title).toBe('Platform Control Plane')
+    const dataLayer = vm.dashboards.find(d => d.id === 'data-layer')!
+    expect(dataLayer.available).toBe(true)
+    expect(dataLayer.url).toMatch(/\/d\/bifrost-data-layer\//)
+    expect(dataLayer.url).toMatch(/var-namespace=data/)
+    const ib = vm.dashboards.find(d => d.id === 'ib-gateway')!
+    expect(ib.available).toBe(true)
+    expect(ib.url).toMatch(/\/d\/bifrost-ib-gateway\//)
+    expect(ib.url).toMatch(/var-namespace=data/)
   })
 })
 
@@ -969,7 +980,9 @@ describe('grafana URL builder', () => {
   it('safe + contextual', () => {
     expect(normalizeGrafanaBase('javascript:alert(1)')).toBeNull()
     expect(normalizeGrafanaBase('http://g.example/')).toBe('http://g.example')
-    expect(isDashboardCatalogAvailable('agent-operations')).toBe(false)
+    expect(isDashboardCatalogAvailable('agent-operations')).toBe(true)
+    expect(isDashboardCatalogAvailable('data-layer')).toBe(true)
+    expect(isDashboardCatalogAvailable('ib-gateway')).toBe(true)
     expect(isDashboardCatalogAvailable('satellite-trade-overview')).toBe(true)
 
     const url = buildGrafanaDashboardUrl({
@@ -986,10 +999,28 @@ describe('grafana URL builder', () => {
     expect(url!).toMatch(/var-service=api-monitor/)
     expect(url!).toMatch(/from=1700000000000/)
 
-    const unavailable = buildGrafanaDashboardUrl({
+    const agentUrl = buildGrafanaDashboardUrl({
       grafanaBaseUrl: 'http://grafana.example',
       dashboardId: 'agent-operations',
     })
-    expect(unavailable).toBeNull()
+    expect(agentUrl).toMatch(/\/d\/bifrost-agent-operations\//)
+    expect(agentUrl).toMatch(/var-namespace=bifrost-platform-stg/)
+
+    const dataUrl = buildGrafanaDashboardUrl({
+      grafanaBaseUrl: 'http://grafana.example',
+      dashboardId: 'data-layer',
+      env: 'dev',
+    })
+    expect(dataUrl).toMatch(/var-namespace=data/)
+    // Must NOT inject Trade NS when catalog defaultNamespace is set
+    expect(dataUrl).not.toMatch(/var-namespace=bifrost-dev/)
+
+    const ibUrl = buildGrafanaDashboardUrl({
+      grafanaBaseUrl: 'http://grafana.example',
+      dashboardId: 'ib-gateway',
+      env: 'prod',
+    })
+    expect(ibUrl).toMatch(/var-namespace=data/)
+    expect(ibUrl).not.toMatch(/var-namespace=bifrost-prod/)
   })
 })

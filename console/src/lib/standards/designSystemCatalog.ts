@@ -208,7 +208,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     examples: [
       'Task Control Center: primary Launch / Fleet Fix / phase CTA on Verdict or Ops loop strip',
       'Control Room: VerdictStrip has no Launch/Deploy actions — Bay Scan opens one bay; Launch bay Open TCC + detail deep-links',
-      'Observability: Verdict Trade env+Shared; Domain Health split; Attention All|Trade env|Shared; Agent Fix|Diagnose|Manual → Dock; Mute 2h (audit/AM, not a fix); batch Fix N× shared playbook',
+      'Observability: Domain Health one runtime row — Trade env on Satellite only; Grafana links for deployed UIDs (Satellite/Ground/IB/Agent Bifrost + Rocket kube-prometheus stock; unset uid → “not deployed”); Attention Mute/Agent Fix/batch → Dock',
       'Defects: PatternDebt Verdict + Fix top pattern; PageToolbar Refresh below',
       'Launch Rocket: AI Release on LaneStateStrip; Deploy/Gate in ReleaseStepCommandCenter',
       'Deploy Satellite: AI Deploy on LaneStateStrip (+ Evidence links); Deploy/Gate in ReleaseStepCommandCenter',

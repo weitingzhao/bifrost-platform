@@ -34,7 +34,6 @@ import { postAttentionMute } from '@/api/telemetry'
 import { TradeNsSegmentControl } from '@/components/TradeNsSegmentControl'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
-import { PageToolbar } from '@/components/layout/PageToolbar'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
 import { useObservabilitySnapshot } from '@/hooks/useObservabilitySnapshot'
@@ -49,11 +48,13 @@ import {
   SYSTEM_DOMAIN_VARIANT,
   type SystemDomainId,
 } from '@/lib/architecture/systemDomainCatalog'
+import type { TradeEnvId } from '@/lib/envVisual'
 import type {
   AttentionItem,
   DomainHealth,
   EvaluatedSignal,
   GapSummary,
+  GrafanaDashboardEntry,
   ObservabilityVerdict,
   SignalGap,
   SignalState,
@@ -240,53 +241,129 @@ function GapSummaryText({
   )
 }
 
+type DomainGrafanaLink = { label: string; url: string }
+
+/** Primary catalog dashboard for a domain (card shortcut). */
+function primaryGrafanaForDomain(
+  domain: SystemDomainId,
+  dashboards: Array<GrafanaDashboardEntry & { available: boolean; url: string | null }>,
+): DomainGrafanaLink | null {
+  const hit = dashboards.find(d => d.domain === domain && d.available && d.url != null)
+  if (hit?.url == null) return null
+  return { label: hit.title, url: hit.url }
+}
+
 function DomainCard({
   domain,
   selected,
   onSelect,
+  tradeEnv,
+  onTradeEnvChange,
+  namespace,
+  grafana,
 }: {
   domain: DomainHealth
   selected: boolean
   onSelect: () => void
+  /** Satellite only — Trade NS lives on the card, not a page toolbar. */
+  tradeEnv?: TradeEnvId
+  onTradeEnvChange?: (env: TradeEnvId) => void
+  namespace?: string
+  /** Domain-primary Grafana deep link (catalog). */
+  grafana?: DomainGrafanaLink | null
 }) {
   const Icon = SYSTEM_DOMAIN_ICON[domain.domain]
+  const tradeScoped =
+    domain.envScope === 'env' && tradeEnv != null && onTradeEnvChange != null
   return (
-    <button
-      type="button"
-      onClick={onSelect}
+    <div
       className={cn(
-        'flex min-w-[9.5rem] flex-1 flex-col gap-1 rounded-md border px-2.5 py-2 text-left transition-colors',
+        'flex min-w-[10.5rem] flex-1 flex-col gap-1 rounded-md border px-2.5 py-2 transition-colors',
         selected
           ? 'border-[var(--ring)] bg-[var(--accent)]'
           : 'border-[var(--border)] bg-[var(--secondary)] hover:bg-[var(--accent)]/60',
       )}
     >
-      <span className="flex items-center gap-1.5">
-        <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="text-[var(--text-dense-caption)] font-medium">{domain.label}</span>
-      </span>
-      <span className="flex items-center gap-1.5">
-        <StatusLamp value={verdictLamp(domain.verdict)} kind="reach" />
-        <DenseTag variant={verdictTag(domain.verdict)} className="text-[9px]">
-          {VERDICT_LABELS[domain.verdict]}
-        </DenseTag>
-        {domain.alertCount > 0 && (
-          <DenseTag variant="warning" className="text-[9px]">
-            {domain.alertCount} alert{domain.alertCount === 1 ? '' : 's'}
+      <button
+        type="button"
+        onClick={onSelect}
+        title={
+          tradeScoped
+            ? `${domain.label} · Trade env scopes this domain (${namespace ?? tradeEnv})`
+            : domain.envScope === 'mixed'
+              ? `${domain.label} · mixed env scope`
+              : `${domain.label} · shared platform (not scoped by Trade env)`
+        }
+        className="flex flex-col gap-1 text-left"
+      >
+        <span className="flex items-center gap-1.5">
+          <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="text-[var(--text-dense-caption)] font-medium">{domain.label}</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <StatusLamp value={verdictLamp(domain.verdict)} kind="reach" />
+          <DenseTag variant={verdictTag(domain.verdict)} className="text-[9px]">
+            {VERDICT_LABELS[domain.verdict]}
           </DenseTag>
+          {domain.alertCount > 0 && (
+            <DenseTag variant="warning" className="text-[9px]">
+              {domain.alertCount} alert{domain.alertCount === 1 ? '' : 's'}
+            </DenseTag>
+          )}
+        </span>
+        <span
+          className="line-clamp-2 text-[var(--text-dense-caption)] text-muted-foreground"
+          title={domain.reason}
+        >
+          {domain.reason}
+        </span>
+        <span className="text-[var(--text-dense-caption)]">
+          <GapSummaryText summary={domain.gapSummary} />
+          {domain.envScope === 'mixed' ? (
+            <span className="text-muted-foreground"> · mixed</span>
+          ) : null}
+        </span>
+      </button>
+
+      {tradeScoped ? (
+        <div className="flex flex-col gap-1 border-t border-[var(--border)]/70 pt-1.5">
+          <span
+            className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground"
+            title="Scopes Satellite probes / bus-deep only"
+          >
+            Trade env · {namespace}
+          </span>
+          <TradeNsSegmentControl
+            value={tradeEnv}
+            onChange={onTradeEnvChange}
+            size="xs"
+            ariaLabel="Satellite Trade environment"
+          />
+        </div>
+      ) : null}
+
+      <div className="mt-auto flex items-center border-t border-[var(--border)]/70 pt-1.5">
+        {grafana != null ? (
+          <a
+            href={grafana.url}
+            target="_blank"
+            rel="noreferrer"
+            title={`Open Grafana · ${grafana.label}`}
+            className="text-[var(--text-dense-caption)] text-primary underline-offset-2 hover:underline"
+            onClick={e => e.stopPropagation()}
+          >
+            Grafana
+          </a>
+        ) : (
+          <span
+            className="text-[var(--text-dense-caption)] text-muted-foreground"
+            title="No deployed Grafana dashboard for this domain yet (catalog uid unset)"
+          >
+            Grafana · not deployed
+          </span>
         )}
-      </span>
-      <span className="line-clamp-2 text-[var(--text-dense-caption)] text-muted-foreground" title={domain.reason}>
-        {domain.reason}
-      </span>
-      <span className="text-[var(--text-dense-caption)]">
-        <GapSummaryText summary={domain.gapSummary} />
-        {/* Section headers own shared vs Trade env; only call out mixed. */}
-        {domain.envScope === 'mixed' ? (
-          <span className="text-muted-foreground"> · mixed</span>
-        ) : null}
-      </span>
-    </button>
+      </div>
+    </div>
   )
 }
 
@@ -496,6 +573,11 @@ export function ObservabilityPage({
     () => runtimeDomains.filter(d => d.envScope !== 'env'),
     [runtimeDomains],
   )
+  /** Unified Domain Health row — Trade-scoped first, then shared (no separate section). */
+  const runtimeDomainCards = useMemo(
+    () => [...tradeEnvDomains, ...sharedPlatformDomains],
+    [tradeEnvDomains, sharedPlatformDomains],
+  )
   const referenceDomains = useMemo(
     () => viewModel.domains.filter(d => d.probeability === 'reference'),
     [viewModel.domains],
@@ -546,11 +628,11 @@ export function ObservabilityPage({
     return (domain?.signals ?? []).filter(s => s.def.role === 'required')
   }, [viewModel.domains, selectedDomain])
 
-  const primaryGrafana = useMemo(
-    () => viewModel.dashboards.find(d => d.available && d.url != null) ?? null,
-    [viewModel.dashboards],
-  )
   const systemHealthy = !isLoading && system.overall === 'healthy'
+  const selectedPrimaryGrafana = useMemo(() => {
+    const hit = selected.grafanaLinks.find(g => g.available && g.url != null)
+    return hit?.url != null ? { label: hit.label, url: hit.url } : null
+  }, [selected.grafanaLinks])
   const attentionQuiet =
     !isLoading && viewModel.attention.length === 0 && system.firingAlerts === 0
 
@@ -641,38 +723,15 @@ export function ObservabilityPage({
         }
       />
 
-      <PageToolbar align="between">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className="text-xs font-medium text-muted-foreground shrink-0"
-              title="Scopes Satellite (Trade) probes only — Shared platform domains ignore this selector"
-            >
-              Trade env:
-            </span>
-            <TradeNsSegmentControl
-              value={tradeEnv}
-              onChange={setTradeEnv}
-              ariaLabel="Trade environment"
-            />
-            <SectionRefreshButton isFetching={isFetching} onClick={refetchAll} />
-          </div>
-          {primaryGrafana?.url != null && (
-            <Button size="sm" variant="outline" asChild>
-              <a href={primaryGrafana.url} target="_blank" rel="noreferrer">
-                Open Grafana
-              </a>
-            </Button>
-          )}
-      </PageToolbar>
-
-      {/* Apollo Domain Health — Trade env vs Shared platform vs reference */}
+      {/* Apollo Domain Health — Trade env lives on Satellite card; Grafana is per-domain */}
       <OpsSection
         title="Apollo Domain Health"
-        description="Trade env domains follow the selector · Shared platform is cluster-wide · Reference not probed"
+        description="Runtime domains in one row · Trade env on Satellite only · Grafana opens that domain’s catalog dashboard · Reference not probed"
         bodyPadding="compact"
         overflow="visible"
         collapsible={systemHealthy}
         defaultCollapsed={systemHealthy}
+        actions={<SectionRefreshButton isFetching={isFetching} onClick={refetchAll} />}
         headerExtra={
           <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground" title={GAP_LEGEND}>
             {GAP_LEGEND}
@@ -680,50 +739,20 @@ export function ObservabilityPage({
         }
       >
         <div className="flex flex-col gap-2.5">
-          {tradeEnvDomains.length > 0 ? (
-            <div className="flex flex-col gap-1">
-              <OpsSubsectionTitle>
-                Trade env · {tradeEnv.toUpperCase()}
-                <span className="ml-1.5 font-normal text-muted-foreground">
-                  ({namespace} · follows selector)
-                </span>
-              </OpsSubsectionTitle>
-              <div className="flex flex-wrap gap-1.5">
-                {tradeEnvDomains.map(d => (
-                  <DomainCard
-                    key={d.domain}
-                    domain={d}
-                    selected={selectedDomain === d.domain}
-                    onSelect={() => setSelectedDomain(d.domain)}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {sharedPlatformDomains.length > 0 ? (
-            <div
-              className={cn(
-                'flex flex-col gap-1',
-                tradeEnvDomains.length > 0 ? 'border-t border-[var(--border)] pt-2' : null,
-              )}
-            >
-              <OpsSubsectionTitle>
-                Shared platform
-                <span className="ml-1.5 font-normal text-muted-foreground">
-                  (not scoped by Trade env)
-                </span>
-              </OpsSubsectionTitle>
-              <div className="flex flex-wrap gap-1.5">
-                {sharedPlatformDomains.map(d => (
-                  <DomainCard
-                    key={d.domain}
-                    domain={d}
-                    selected={selectedDomain === d.domain}
-                    onSelect={() => setSelectedDomain(d.domain)}
-                  />
-                ))}
-              </div>
+          {runtimeDomainCards.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {runtimeDomainCards.map(d => (
+                <DomainCard
+                  key={d.domain}
+                  domain={d}
+                  selected={selectedDomain === d.domain}
+                  onSelect={() => setSelectedDomain(d.domain)}
+                  tradeEnv={d.envScope === 'env' ? tradeEnv : undefined}
+                  onTradeEnvChange={d.envScope === 'env' ? setTradeEnv : undefined}
+                  namespace={d.envScope === 'env' ? namespace : undefined}
+                  grafana={primaryGrafanaForDomain(d.domain, viewModel.dashboards)}
+                />
+              ))}
             </div>
           ) : null}
 
@@ -933,12 +962,25 @@ export function ObservabilityPage({
         </DenseDataTable>
       </OpsSection>
 
-      {/* Selected Domain */}
+      {/* Selected Domain — primary place for domain Grafana (all catalogued dashboards) */}
       <OpsSection
         title={`Selected Domain · ${selected.domain}`}
-        description="Checkpoints · dependency path · golden signals · scrape targets · detail / Grafana links"
+        description="Checkpoints · dependency path · golden signals · scrape targets · domain Grafana"
         bodyPadding="compact"
         overflow="visible"
+        actions={
+          selectedPrimaryGrafana != null ? (
+            <Button size="sm" variant="outline" asChild>
+              <a href={selectedPrimaryGrafana.url} target="_blank" rel="noreferrer">
+                Grafana · {selectedPrimaryGrafana.label}
+              </a>
+            </Button>
+          ) : (
+            <DenseTag variant="neutral" className="text-[9px]">
+              Grafana unavailable
+            </DenseTag>
+          )
+        }
       >
         <div className="flex flex-col gap-3">
           <div>
