@@ -26,6 +26,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     slug: 'kubernetes-compute-resources-cluster',
     suppressNamespace: true,
     suppressEnv: true,
+    // Rocket stock panelId not pinned — no Selected Domain embed
   },
   {
     id: 'cluster-nodes',
@@ -58,6 +59,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     uid: 'bifrost-data-layer',
     slug: 'bifrost-data-layer',
     defaultNamespace: 'data',
+    soloPanel: { panelId: 3, title: 'Redis memory (sum)', height: 180 },
   },
   {
     id: 'satellite-trade-overview',
@@ -69,6 +71,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     uid: 'bifrost-trade-overview',
     slug: 'bifrost-trade-overview',
     // no defaultNamespace — builder falls back to TRADE_NS[env]
+    soloPanel: { panelId: 1, title: 'Trade API request rate', height: 180 },
   },
   {
     id: 'ib-gateway',
@@ -79,6 +82,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     uid: 'bifrost-ib-gateway',
     slug: 'bifrost-ib-gateway',
     defaultNamespace: 'data',
+    soloPanel: { panelId: 1, title: 'Ready replicas', height: 180 },
   },
   {
     id: 'agent-operations',
@@ -90,6 +94,7 @@ export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
     uid: 'bifrost-agent-operations',
     slug: 'bifrost-agent-operations',
     defaultNamespace: 'bifrost-platform-stg',
+    soloPanel: { panelId: 1, title: 'platform-api ready (sum)', height: 180 },
   },
 ]
 

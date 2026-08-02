@@ -17,7 +17,11 @@ import {
   type StandbyNodeRef,
 } from './alertMapping'
 import { GRAFANA_DASHBOARD_CATALOG } from './dashboardCatalog'
-import { buildGrafanaDashboardUrl, isDashboardCatalogAvailable } from './grafanaUrlBuilder'
+import {
+  buildGrafanaDashboardUrl,
+  buildGrafanaSoloPanelUrl,
+  isDashboardCatalogAvailable,
+} from './grafanaUrlBuilder'
 import {
   METRIC_TO_SIGNAL,
   OBSERVABILITY_DOMAIN_ORDER,
@@ -562,6 +566,46 @@ function buildSelectedDetail(
     ),
   ]
 
+  const grafanaLinks = dashIds.map(id => {
+    const available = isDashboardCatalogAvailable(id)
+    // Namespace: Agent seat override; else catalog defaultNamespace /
+    // TRADE_NS[env] inside the builder — never force Trade NS here.
+    const url = available
+      ? buildGrafanaDashboardUrl({
+          grafanaBaseUrl: grafanaBase,
+          dashboardId: id,
+          env: input.selectedEnv,
+          namespace: resolveDashboardNamespaceOverride(id, input.selectedEnv),
+          availableUids: input.availableGrafanaUids,
+        })
+      : null
+    const title = GRAFANA_DASHBOARD_CATALOG.find(d => d.id === id)?.title ?? id
+    return { label: title, url, available: available && url != null }
+  })
+
+  // Primary board for the domain that declares soloPanel (Bifrost boards first).
+  const primarySoloDash =
+    GRAFANA_DASHBOARD_CATALOG.find(d => d.domain === domain && d.soloPanel != null && d.uid != null) ??
+    null
+  let soloEmbed: SelectedDomainDetail['soloEmbed'] = null
+  if (primarySoloDash != null && primarySoloDash.soloPanel != null) {
+    const soloUrl = buildGrafanaSoloPanelUrl({
+      grafanaBaseUrl: grafanaBase,
+      dashboardId: primarySoloDash.id,
+      env: input.selectedEnv,
+      namespace: resolveDashboardNamespaceOverride(primarySoloDash.id, input.selectedEnv),
+      availableUids: input.availableGrafanaUids,
+      theme: 'dark',
+    })
+    if (soloUrl != null) {
+      soloEmbed = {
+        url: soloUrl,
+        title: primarySoloDash.soloPanel.title,
+        height: primarySoloDash.soloPanel.height ?? 180,
+      }
+    }
+  }
+
   return {
     domain,
     dependencyPath,
@@ -578,22 +622,8 @@ function buildSelectedDetail(
       label: routeLabel(route),
       route,
     })),
-    grafanaLinks: dashIds.map(id => {
-      const available = isDashboardCatalogAvailable(id)
-      // Namespace: Agent seat override; else catalog defaultNamespace /
-      // TRADE_NS[env] inside the builder — never force Trade NS here.
-      const url = available
-        ? buildGrafanaDashboardUrl({
-            grafanaBaseUrl: grafanaBase,
-            dashboardId: id,
-            env: input.selectedEnv,
-            namespace: resolveDashboardNamespaceOverride(id, input.selectedEnv),
-            availableUids: input.availableGrafanaUids,
-          })
-        : null
-      const title = GRAFANA_DASHBOARD_CATALOG.find(d => d.id === id)?.title ?? id
-      return { label: title, url, available: available && url != null }
-    }),
+    grafanaLinks,
+    soloEmbed,
   }
 }
 

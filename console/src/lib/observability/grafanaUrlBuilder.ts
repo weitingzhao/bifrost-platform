@@ -23,6 +23,13 @@ export type GrafanaLinkContext = {
   alertStartMs?: number
   /** Declared available UIDs from live probe (optional). Missing → use catalog uid presence. */
   availableUids?: Set<string> | string[]
+  /** Grafana theme for solo embeds; default dark. */
+  theme?: 'dark' | 'light'
+}
+
+export type GrafanaSoloPanelContext = GrafanaLinkContext & {
+  /** Override catalog soloPanel.panelId when needed. */
+  panelId?: number
 }
 
 const SAFE_BASE = /^https?:\/\//i
@@ -51,10 +58,7 @@ function resolveNamespace(
   return undefined
 }
 
-/**
- * Build a Grafana dashboard URL or null when unavailable / unsafe.
- */
-export function buildGrafanaDashboardUrl(ctx: GrafanaLinkContext): string | null {
+function resolveDashboardEntry(ctx: GrafanaLinkContext) {
   const base = normalizeGrafanaBase(ctx.grafanaBaseUrl)
   if (base == null) return null
 
@@ -66,8 +70,14 @@ export function buildGrafanaDashboardUrl(ctx: GrafanaLinkContext): string | null
     if (!set.has(dash.uid)) return null
   }
 
-  const path = `/d/${encodeURIComponent(dash.uid)}/${encodeURIComponent(dash.slug)}`
-  const params = new URLSearchParams()
+  return { base, dash }
+}
+
+function appendSharedGrafanaParams(
+  params: URLSearchParams,
+  ctx: GrafanaLinkContext,
+  dash: NonNullable<ReturnType<typeof getDashboard>>,
+): void {
   params.set('orgId', '1')
 
   const now = Date.now()
@@ -103,7 +113,40 @@ export function buildGrafanaDashboardUrl(ctx: GrafanaLinkContext): string | null
   if (ctx.instance != null && ctx.instance.trim() !== '') {
     params.set('var-instance', ctx.instance.trim())
   }
+}
 
+/**
+ * Build a Grafana dashboard URL or null when unavailable / unsafe.
+ */
+export function buildGrafanaDashboardUrl(ctx: GrafanaLinkContext): string | null {
+  const resolved = resolveDashboardEntry(ctx)
+  if (resolved == null) return null
+
+  const { base, dash } = resolved
+  const path = `/d/${encodeURIComponent(dash.uid!)}/${encodeURIComponent(dash.slug)}`
+  const params = new URLSearchParams()
+  appendSharedGrafanaParams(params, ctx, dash)
+  return `${base}${path}?${params.toString()}`
+}
+
+/**
+ * Build a Grafana solo-panel embed URL (`/d-solo/...`) or null when unavailable.
+ * Requires catalog `soloPanel` (or ctx.panelId) and a valid uid.
+ */
+export function buildGrafanaSoloPanelUrl(ctx: GrafanaSoloPanelContext): string | null {
+  const resolved = resolveDashboardEntry(ctx)
+  if (resolved == null) return null
+
+  const { base, dash } = resolved
+  const panelId = ctx.panelId ?? dash.soloPanel?.panelId
+  if (panelId == null || !Number.isFinite(panelId) || panelId <= 0) return null
+
+  const path = `/d-solo/${encodeURIComponent(dash.uid!)}/${encodeURIComponent(dash.slug)}`
+  const params = new URLSearchParams()
+  appendSharedGrafanaParams(params, ctx, dash)
+  params.set('panelId', String(panelId))
+  params.set('theme', ctx.theme === 'light' ? 'light' : 'dark')
+  params.set('refresh', '30s')
   return `${base}${path}?${params.toString()}`
 }
 

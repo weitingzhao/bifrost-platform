@@ -13,6 +13,7 @@ import {
 } from '@/lib/observability/alertMapping'
 import {
   buildGrafanaDashboardUrl,
+  buildGrafanaSoloPanelUrl,
   isDashboardCatalogAvailable,
   normalizeGrafanaBase,
 } from '@/lib/observability/grafanaUrlBuilder'
@@ -1161,5 +1162,120 @@ describe('grafana URL builder', () => {
       expect(rocketUrl).not.toMatch(/var-namespace=/)
       expect(rocketUrl).not.toMatch(/var-env=/)
     }
+  })
+
+  it('solo panel URL includes panelId, theme, namespace semantics', () => {
+    const sat = buildGrafanaSoloPanelUrl({
+      grafanaBaseUrl: 'http://grafana.example:30883/',
+      dashboardId: 'satellite-trade-overview',
+      env: 'stg',
+      theme: 'dark',
+    })
+    expect(sat).toBeTruthy()
+    expect(sat!).toMatch(/^http:\/\/grafana\.example:30883\/d-solo\/bifrost-trade-overview\//)
+    expect(sat!).toMatch(/panelId=1/)
+    expect(sat!).toMatch(/theme=dark/)
+    expect(sat!).toMatch(/refresh=30s/)
+    expect(sat!).toMatch(/var-namespace=bifrost-stg/)
+    expect(sat!).toMatch(/var-env=stg/)
+
+    const data = buildGrafanaSoloPanelUrl({
+      grafanaBaseUrl: 'http://grafana.example',
+      dashboardId: 'data-layer',
+      env: 'dev',
+    })
+    expect(data).toMatch(/\/d-solo\/bifrost-data-layer\//)
+    expect(data).toMatch(/panelId=3/)
+    expect(data).toMatch(/var-namespace=data/)
+    expect(data).not.toMatch(/var-env=/)
+
+    const ib = buildGrafanaSoloPanelUrl({
+      grafanaBaseUrl: 'http://grafana.example',
+      dashboardId: 'ib-gateway',
+      env: 'prod',
+    })
+    expect(ib).toMatch(/panelId=1/)
+    expect(ib).toMatch(/var-namespace=data/)
+    expect(ib).not.toMatch(/var-env=/)
+
+    const agent = buildGrafanaSoloPanelUrl({
+      grafanaBaseUrl: 'http://grafana.example',
+      dashboardId: 'agent-operations',
+      env: 'prod',
+      namespace: 'bifrost-platform-prod',
+    })
+    expect(agent).toMatch(/panelId=1/)
+    expect(agent).toMatch(/var-namespace=bifrost-platform-prod/)
+
+    // Rocket has no soloPanel → null
+    expect(
+      buildGrafanaSoloPanelUrl({
+        grafanaBaseUrl: 'http://grafana.example',
+        dashboardId: 'cluster-compute',
+      }),
+    ).toBeNull()
+
+    expect(
+      buildGrafanaSoloPanelUrl({
+        grafanaBaseUrl: null,
+        dashboardId: 'satellite-trade-overview',
+      }),
+    ).toBeNull()
+  })
+})
+
+describe('selected domain soloEmbed', () => {
+  it('embeds Bifrost solo panels; rocket stays null', () => {
+    const observability = {
+      cluster_id: 'c',
+      namespace: 'monitoring',
+      layer_b_status: 'ready',
+      layer_b_install_enabled: true,
+      reachability: 'ok' as const,
+      detail: 'ok',
+      components: [],
+      grafana_url: 'http://grafana.example:30883',
+      prometheus_url: 'http://prom.example',
+      generated_at: '2026-07-21T11:59:00Z',
+    }
+    const base = { selectedEnv: 'stg' as const, observability }
+
+    const sat = buildObservabilityViewModel({
+      ...base,
+      selectedDomain: 'satellite',
+    })
+    expect(sat.selected.soloEmbed).toBeTruthy()
+    expect(sat.selected.soloEmbed!.title).toBe('Trade API request rate')
+    expect(sat.selected.soloEmbed!.url).toMatch(/d-solo\/bifrost-trade-overview/)
+    expect(sat.selected.soloEmbed!.url).toMatch(/panelId=1/)
+    expect(sat.selected.soloEmbed!.height).toBe(180)
+
+    const ground = buildObservabilityViewModel({
+      ...base,
+      selectedDomain: 'ground-systems',
+    })
+    expect(ground.selected.soloEmbed!.title).toBe('Redis memory (sum)')
+    expect(ground.selected.soloEmbed!.url).toMatch(/panelId=3/)
+    expect(ground.selected.soloEmbed!.url).toMatch(/var-namespace=data/)
+
+    const ib = buildObservabilityViewModel({
+      ...base,
+      selectedDomain: 'subcontractors',
+    })
+    expect(ib.selected.soloEmbed!.title).toBe('Ready replicas')
+    expect(ib.selected.soloEmbed!.url).toMatch(/panelId=1/)
+
+    const eng = buildObservabilityViewModel({
+      ...base,
+      selectedDomain: 'engineer',
+    })
+    expect(eng.selected.soloEmbed!.title).toBe('platform-api ready (sum)')
+    expect(eng.selected.soloEmbed!.url).toMatch(/var-namespace=bifrost-platform-stg/)
+
+    const rocket = buildObservabilityViewModel({
+      ...base,
+      selectedDomain: 'rocket',
+    })
+    expect(rocket.selected.soloEmbed).toBeNull()
   })
 })

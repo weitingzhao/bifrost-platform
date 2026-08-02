@@ -218,6 +218,12 @@ export type GoldenSignalRow = {
   detail?: string
 }
 
+export type GrafanaSoloEmbed = {
+  url: string
+  title: string
+  height: number
+}
+
 export type SelectedDomainDetail = {
   domain: SystemDomainId
   dependencyPath: DependencyPathHop[]
@@ -226,6 +232,8 @@ export type SelectedDomainDetail = {
   scrapeTargets: ScrapeTargetView[]
   detailLinks: { label: string; route: string }[]
   grafanaLinks: { label: string; url: string | null; available: boolean }[]
+  /** Primary dashboard solo panel embed; null when catalog has no soloPanel or URL unavailable. */
+  soloEmbed: GrafanaSoloEmbed | null
 }
 
 export type GrafanaDashboardEntry = {
@@ -253,6 +261,11 @@ export type GrafanaDashboardEntry = {
    * have no Trade env template variable).
    */
   suppressEnv?: boolean
+  /**
+   * Optional single-panel embed for Selected Domain (Grafana /d-solo).
+   * Omit or leave unset → no iframe.
+   */
+  soloPanel?: { panelId: number; title: string; height?: number }
 }
 
 export type ObservabilityViewModel = {

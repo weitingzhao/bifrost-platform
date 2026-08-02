@@ -7,7 +7,7 @@
  * startRemediation + ambient Operator Dock (no second execution engine).
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -78,6 +78,52 @@ import {
 
 const GAP_LEGEND =
   'ok = matched · fail = unhealthy · blind = probe missing · by-design = optional contract · reference = plane not probed'
+
+const SOLO_EMBED_SANDBOX =
+  'allow-scripts allow-same-origin allow-popups allow-forms'
+
+function GrafanaSoloEmbed({
+  url,
+  title,
+  height,
+  openUrl,
+}: {
+  url: string
+  title: string
+  height: number
+  openUrl: string | null
+}): ReactNode {
+  const [failed, setFailed] = useState(false)
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-2">
+        <OpsSubsectionTitle className="mb-0">{title}</OpsSubsectionTitle>
+        {openUrl != null ? (
+          <Button size="sm" variant="outline" asChild>
+            <a href={openUrl} target="_blank" rel="noreferrer">
+              Open in Grafana
+            </a>
+          </Button>
+        ) : null}
+      </div>
+      {failed ? (
+        <p className="m-0 rounded-md border border-[var(--border)] px-2 py-3 text-center text-[var(--text-dense-caption)] text-muted-foreground">
+          Grafana panel unavailable
+        </p>
+      ) : (
+        <iframe
+          title={title}
+          src={url}
+          loading="lazy"
+          sandbox={SOLO_EMBED_SANDBOX}
+          className="w-full rounded-md border border-[var(--border)] bg-[var(--background)]"
+          style={{ height }}
+          onError={() => setFailed(true)}
+        />
+      )}
+    </div>
+  )
+}
 
 type AttentionScopeFilter = 'all' | 'trade_env' | 'shared'
 
@@ -983,6 +1029,15 @@ export function ObservabilityPage({
         }
       >
         <div className="flex flex-col gap-3">
+          {selected.soloEmbed != null ? (
+            <GrafanaSoloEmbed
+              url={selected.soloEmbed.url}
+              title={selected.soloEmbed.title}
+              height={selected.soloEmbed.height}
+              openUrl={selectedPrimaryGrafana?.url ?? null}
+            />
+          ) : null}
+
           <div>
             <OpsSubsectionTitle className="mb-1">Checkpoints</OpsSubsectionTitle>
             <DenseDataTable>
