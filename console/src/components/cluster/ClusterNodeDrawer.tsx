@@ -3,11 +3,13 @@ import type { ClusterNode, ComputeWorkloadStatus, NodePowerResponse } from '@/ap
 import { NodeCapabilitiesCell } from '@/components/cluster/NodeCapabilitiesCell'
 import { NodeObservedStatePanel } from '@/components/cluster/NodeObservedStatePanel'
 import { WizardProcedureSteps } from '@/components/cluster/WizardProcedureSteps'
+import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { StatusLamp } from '@/components/StatusLamp'
 import {
   computeShutdownWizardSteps,
   maintenanceWizardSteps,
 } from '@/lib/cluster/nodeWizard'
+import { useComputeOffCycleHint } from '@/lib/cluster/useComputeOffCycleHint'
 
 interface ClusterNodeDrawerProps {
   open: boolean
@@ -50,13 +52,20 @@ export function ClusterNodeDrawer({
   onPowerOff,
   onScaleWorkload,
 }: ClusterNodeDrawerProps) {
+  const computeOffCycleHint = useComputeOffCycleHint(
+    open ? node?.name : null,
+    power?.power_state,
+    node?.status,
+    node?.unschedulable === true,
+  )
+
   if (!open || node == null) return null
 
   const computeManaged = node.compute_managed === true
   const offline = power?.power_state === 'offline' || node.status !== 'Ready'
   const online = power?.power_state === 'online' || node.status === 'Ready'
   const wizardSteps = computeManaged
-    ? computeShutdownWizardSteps(node, power)
+    ? computeShutdownWizardSteps(node, power, computeOffCycleHint)
     : maintenanceWizardSteps(node, power)
   const procedureLabel = computeManaged ? 'Compute off' : 'Maintain'
 
@@ -193,6 +202,14 @@ export function ClusterNodeDrawer({
                 Power off
               </Button>
             </div>
+            {!canAdmin && (
+              <div className="mt-2">
+                <OpsFeedback variant="warning" title="Permission denied — admin required">
+                  Power off needs an admin token. Use Authenticate in the top bar and paste
+                  PLATFORM_ADMIN_TOKEN (operator is not enough).
+                </OpsFeedback>
+              </div>
+            )}
           </section>
         )}
 

@@ -2,6 +2,7 @@ import { Button, SegmentControl } from '@bifrost/ui'
 import type { ClusterNode, JoinProfilesResponse, NodePowerResponse } from '@/api/clusterTypes'
 import { NodeObservedStatePanel } from '@/components/cluster/NodeObservedStatePanel'
 import { WizardProcedureSteps } from '@/components/cluster/WizardProcedureSteps'
+import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   currentWizardStep,
@@ -9,6 +10,7 @@ import {
   type WizardAction,
   wizardStepsForFlow,
 } from '@/lib/cluster/nodeWizard'
+import { useComputeOffCycleHint } from '@/lib/cluster/useComputeOffCycleHint'
 
 export interface ClusterNodeWizardPanelProps {
   flow: NodeWizardFlow
@@ -59,12 +61,13 @@ function actionLabel(action: WizardAction): string {
   }
 }
 
+function actionRequiresAdmin(action: WizardAction): boolean {
+  return action === 'drain' || action === 'poweroff' || action === 'join'
+}
+
 function actionDisabled(action: WizardAction, canOperate: boolean, canAdmin: boolean): boolean {
+  if (actionRequiresAdmin(action)) return !canAdmin
   switch (action) {
-    case 'drain':
-    case 'poweroff':
-    case 'join':
-      return !canAdmin
     case 'cordon':
     case 'uncordon':
     case 'wake':
@@ -72,6 +75,51 @@ function actionDisabled(action: WizardAction, canOperate: boolean, canAdmin: boo
     default:
       return false
   }
+}
+
+function WizardNextActionBar({
+  action,
+  canOperate,
+  canAdmin,
+  actionPending,
+  profileId,
+  onWizardAction,
+}: {
+  action: WizardAction
+  canOperate: boolean
+  canAdmin: boolean
+  actionPending: boolean
+  profileId?: string
+  onWizardAction: (action: WizardAction, context?: { profileId?: string }) => void
+}) {
+  const blockedByAuth = actionDisabled(action, canOperate, canAdmin)
+  const needsAdmin = actionRequiresAdmin(action)
+
+  return (
+    <div className="flex min-w-0 flex-col gap-2 border-t border-[var(--border)] pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-dense-meta shrink-0 text-[var(--muted-foreground)]">Next action</span>
+        <Button
+          size="sm"
+          variant={blockedByAuth ? 'outline' : 'default'}
+          disabled={actionPending || blockedByAuth}
+          onClick={() => onWizardAction(action, { profileId })}
+        >
+          {actionPending ? 'Running…' : actionLabel(action)}
+        </Button>
+      </div>
+      {blockedByAuth && (
+        <OpsFeedback
+          variant="warning"
+          title={needsAdmin ? 'Permission denied — admin required' : 'Permission denied — operator required'}
+        >
+          {needsAdmin
+            ? 'Power off / Drain / Join need an admin token. Use Authenticate in the top bar and paste PLATFORM_ADMIN_TOKEN (operator is not enough).'
+            : 'This action needs an operator token. Use Authenticate in the top bar.'}
+        </OpsFeedback>
+      )}
+    </div>
+  )
 }
 
 export function ClusterNodeWizardPanel({
@@ -97,6 +145,12 @@ export function ClusterNodeWizardPanel({
     null
 
   const nodeNames = nodes.map(n => n.name)
+  const computeOffCycleHint = useComputeOffCycleHint(
+    selectedNode?.name,
+    power?.power_state,
+    selectedNode?.status,
+    selectedNode?.unschedulable === true,
+  )
   const steps = wizardStepsForFlow(
     flow,
     selectedNode,
@@ -104,6 +158,7 @@ export function ClusterNodeWizardPanel({
     flow === 'join' ? joinProfile : null,
     joinProfiles?.enabled === true,
     nodeNames,
+    computeOffCycleHint,
   )
   const current = currentWizardStep(steps)
 
@@ -166,8 +221,14 @@ export function ClusterNodeWizardPanel({
                 </option>
               ))}
             </select>
-            {!joinProfiles.enabled && (
+            {!joinProfiles.enabled &&
+              !(joinProfile?.expected_node && nodeNames.includes(joinProfile.expected_node)) && (
               <span className="text-dense-meta lamp-warn">{joinProfiles.detail ?? 'Join disabled'}</span>
+            )}
+            {joinProfile?.expected_node && nodeNames.includes(joinProfile.expected_node) && (
+              <span className="text-dense-meta text-[var(--muted-foreground)]">
+                Already joined — no action needed
+              </span>
             )}
           </div>
         )}
@@ -185,29 +246,14 @@ export function ClusterNodeWizardPanel({
               {current?.action != null &&
                 current.action !== 'select_node' &&
                 current.action !== 'select_profile' && (
-                  <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3">
-                    <span className="text-dense-meta shrink-0 text-[var(--muted-foreground)]">Next action</span>
-                    <Button
-                      size="sm"
-                      disabled={
-                        actionPending || actionDisabled(current.action, canOperate, canAdmin)
-                      }
-                      onClick={() =>
-                        onWizardAction(current.action!, {
-                          profileId: joinProfile?.id,
-                        })
-                      }
-                    >
-                      {actionPending ? 'Running…' : actionLabel(current.action)}
-                    </Button>
-                    {actionDisabled(current.action, canOperate, canAdmin) && (
-                      <span className="text-dense-meta text-[var(--muted-foreground)]">
-                        {current.action === 'drain' || current.action === 'join' || current.action === 'poweroff'
-                          ? 'Admin token required.'
-                          : 'Operator token required.'}
-                      </span>
-                    )}
-                  </div>
+                  <WizardNextActionBar
+                    action={current.action}
+                    canOperate={canOperate}
+                    canAdmin={canAdmin}
+                    actionPending={actionPending}
+                    profileId={joinProfile?.id}
+                    onWizardAction={onWizardAction}
+                  />
                 )}
               {(current?.action === 'select_node' || current?.action === 'select_profile') && (
                 <p className="m-0 border-t border-[var(--border)] pt-3 text-dense-meta text-[var(--muted-foreground)]">
@@ -222,29 +268,14 @@ export function ClusterNodeWizardPanel({
             {current?.action != null &&
               current.action !== 'select_node' &&
               current.action !== 'select_profile' && (
-                <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3">
-                  <span className="text-dense-meta shrink-0 text-[var(--muted-foreground)]">Next action</span>
-                  <Button
-                    size="sm"
-                    disabled={
-                      actionPending || actionDisabled(current.action, canOperate, canAdmin)
-                    }
-                    onClick={() =>
-                      onWizardAction(current.action!, {
-                        profileId: joinProfile?.id,
-                      })
-                    }
-                  >
-                    {actionPending ? 'Running…' : actionLabel(current.action)}
-                  </Button>
-                  {actionDisabled(current.action, canOperate, canAdmin) && (
-                    <span className="text-dense-meta text-[var(--muted-foreground)]">
-                      {current.action === 'drain' || current.action === 'join' || current.action === 'poweroff'
-                        ? 'Admin token required.'
-                        : 'Operator token required.'}
-                    </span>
-                  )}
-                </div>
+                <WizardNextActionBar
+                  action={current.action}
+                  canOperate={canOperate}
+                  canAdmin={canAdmin}
+                  actionPending={actionPending}
+                  profileId={joinProfile?.id}
+                  onWizardAction={onWizardAction}
+                />
               )}
             {(current?.action === 'select_node' || current?.action === 'select_profile') && (
               <p className="m-0 border-t border-[var(--border)] pt-3 text-dense-meta text-[var(--muted-foreground)]">

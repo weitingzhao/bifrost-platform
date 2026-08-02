@@ -2,7 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, ConfirmDialog, DenseTag, SegmentControl, StatusLamp, cn } from '@bifrost/ui'
-import { Eraser, Loader2, Maximize2, Minimize2, Play, RefreshCw, RotateCw, Square } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  Eraser,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  Play,
+  RefreshCw,
+  RotateCw,
+  Square,
+  X,
+} from 'lucide-react'
 import {
   controlDevSession,
   fetchDevSessionLogs,
@@ -19,9 +31,16 @@ import {
 type Lamp = 'ok' | 'fail' | 'degraded' | 'unknown'
 
 const SPLIT_KEY = 'bifrost.console.dockSessionsSplitPct.v2'
+const PANE_CAP_KEY = 'bifrost.console.dockSessionsPaneCap'
+const PINNED_KEY = 'bifrost.console.dockSessionsPinned.v1'
+const COLLAPSED_GROUPS_KEY = 'bifrost.console.dockSessionsCollapsedGroups.v1'
 const DEFAULT_LEFT_PCT = 75
 const MIN_LEFT_PCT = 55
 const MAX_LEFT_PCT = 88
+const PANE_CAP_OPTIONS = [2, 4, 6, 8, 10] as const
+type PaneCap = (typeof PANE_CAP_OPTIONS)[number]
+const DEFAULT_PANE_CAP: PaneCap = 4
+const MAX_PANE_CAP = 10
 
 function sessionLamp(status: string): Lamp {
   if (status === 'running') return 'ok'
@@ -188,6 +207,56 @@ function readStoredSplitPct(): number {
   }
 }
 
+function readStoredPaneCap(): PaneCap {
+  try {
+    const n = Number(localStorage.getItem(PANE_CAP_KEY))
+    if ((PANE_CAP_OPTIONS as readonly number[]).includes(n)) return n as PaneCap
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_PANE_CAP
+}
+
+function readStoredPinned(): string[] {
+  try {
+    const raw = localStorage.getItem(PINNED_KEY)
+    if (raw == null || raw === '') return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((x): x is string => typeof x === 'string' && x !== '')
+  } catch {
+    return []
+  }
+}
+
+function persistPinned(names: string[]) {
+  try {
+    localStorage.setItem(PINNED_KEY, JSON.stringify(names))
+  } catch {
+    /* ignore */
+  }
+}
+
+function readStoredCollapsedGroups(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_GROUPS_KEY)
+    if (raw == null || raw === '') return new Set()
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((x): x is string => typeof x === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+function persistCollapsedGroups(groups: Set<string>) {
+  try {
+    localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...groups]))
+  } catch {
+    /* ignore */
+  }
+}
+
 function SessionConsolePane({
   session,
   active,
@@ -196,10 +265,12 @@ function SessionConsolePane({
   canOperate,
   isActing,
   showClearLogs,
+  canUnpin,
   onSelect,
   onToggleMaximize,
   onClearLogs,
   onReload,
+  onUnpin,
 }: {
   session: DevSession
   active: boolean
@@ -209,10 +280,12 @@ function SessionConsolePane({
   canOperate: boolean
   isActing: boolean
   showClearLogs: boolean
+  canUnpin: boolean
   onSelect: () => void
   onToggleMaximize: () => void
   onClearLogs: () => void
   onReload: () => void
+  onUnpin: () => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lineLimit = maximized
@@ -329,6 +402,22 @@ function SessionConsolePane({
             <Maximize2 className="h-3 w-3" aria-hidden />
           )}
         </Button>
+        {canUnpin && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="h-6 w-6 shrink-0 px-0"
+            onClick={e => {
+              e.stopPropagation()
+              onUnpin()
+            }}
+            title="Remove from consoles"
+            aria-label={`Remove ${session.label} from consoles`}
+          >
+            <X className="h-3 w-3" aria-hidden />
+          </Button>
+        )}
       </div>
       <div ref={scrollRef} className="console-dock-sessions__pane-log dense-scroll-y">
         {lines != null && lines.length > 0 ? (
@@ -344,6 +433,7 @@ function SessionConsolePane({
 function SessionStatusRow({
   session,
   active,
+  pinned,
   canOperate,
   isActing,
   showClearLogs,
@@ -355,6 +445,7 @@ function SessionStatusRow({
 }: {
   session: DevSession
   active: boolean
+  pinned: boolean
   canOperate: boolean
   isActing: boolean
   showClearLogs: boolean
@@ -374,13 +465,18 @@ function SessionStatusRow({
       className={cn(
         'console-dock-sessions__status-row',
         active && 'console-dock-sessions__status-row--active',
+        pinned && !active && 'bg-secondary/50',
       )}
     >
       <button
         type="button"
         className="console-dock-sessions__status-main"
         onClick={onSelect}
-        title={`Show console: ${session.label}`}
+        title={
+          pinned
+            ? `Focus console: ${session.label}`
+            : `Show console: ${session.label}`
+        }
       >
         <StatusLamp value={sessionLamp(session.status)} kind="reach" />
         <div className="min-w-0 flex-1 text-left">
@@ -395,6 +491,11 @@ function SessionStatusRow({
             >
               {session.status}
             </DenseTag>
+            {pinned && (
+              <DenseTag variant="info" size="cell">
+                console
+              </DenseTag>
+            )}
           </div>
           <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
             {session.ports != null && session.ports.length > 0
@@ -500,6 +601,9 @@ export function DockDevSessionsPanel({
   const { canOperate } = usePlatformAuth()
   const [activeName, setActiveName] = useState<string>('')
   const [maximizedName, setMaximizedName] = useState<string | null>(null)
+  const [pinnedNames, setPinnedNames] = useState<string[]>(readStoredPinned)
+  const [paneCap, setPaneCap] = useState<PaneCap>(readStoredPaneCap)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(readStoredCollapsedGroups)
   const [groupFilter, setGroupFilter] = useState<string>('all')
   const [issuesOnly, setIssuesOnly] = useState(false)
   const [actingOn, setActingOn] = useState<string | null>(null)
@@ -510,9 +614,11 @@ export function DockDevSessionsPanel({
     batch?: boolean
   } | null>(null)
   const [leftPct, setLeftPct] = useState(readStoredSplitPct)
+  const [collapsedInitialized, setCollapsedInitialized] = useState(false)
   const splitRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ startX: number; startPct: number } | null>(null)
   const leftPctRef = useRef(leftPct)
+  const pinnedSeededRef = useRef(false)
 
   useEffect(() => {
     leftPctRef.current = leftPct
@@ -576,16 +682,57 @@ export function DockDevSessionsPanel({
     return rows
   }, [list, groupFilter, issuesOnly])
 
+  // Seed / prune pinned consoles against the live session list and pane cap.
   useEffect(() => {
-    if (filteredList.length === 0) return
-    if (activeName !== '' && filteredList.some(s => s.name === activeName)) return
-    setActiveName(filteredList[0].name)
-  }, [filteredList, activeName])
+    if (list.length === 0) return
+    const known = new Set(list.map(s => s.name))
+    setPinnedNames(prev => {
+      let next = prev.filter(n => known.has(n))
+      if (!pinnedSeededRef.current) {
+        pinnedSeededRef.current = true
+        if (next.length === 0) {
+          next = list.slice(0, Math.min(paneCap, list.length)).map(s => s.name)
+        }
+      }
+      if (next.length > paneCap) next = next.slice(0, paneCap)
+      if (next.join('\0') !== prev.join('\0')) persistPinned(next)
+      return next.join('\0') === prev.join('\0') ? prev : next
+    })
+  }, [list, paneCap])
+
+  // First visit in cluster mode: collapse all-healthy groups (issues stay open).
+  useEffect(() => {
+    if (collapsedInitialized || list.length === 0 || !clusterMode) return
+    try {
+      if (localStorage.getItem(COLLAPSED_GROUPS_KEY) != null) {
+        setCollapsedInitialized(true)
+        return
+      }
+    } catch {
+      /* ignore */
+    }
+    const next = new Set<string>()
+    for (const g of groupNames) {
+      const rows = list.filter(s => (s.group || 'other') === g)
+      if (rows.length > 0 && rows.every(s => s.status === 'running')) next.add(g)
+    }
+    setCollapsedGroups(next)
+    persistCollapsedGroups(next)
+    setCollapsedInitialized(true)
+  }, [list, groupNames, clusterMode, collapsedInitialized])
+
+  useEffect(() => {
+    if (pinnedNames.length === 0) return
+    if (activeName !== '' && pinnedNames.includes(activeName)) return
+    setActiveName(pinnedNames[0])
+  }, [pinnedNames, activeName])
 
   useEffect(() => {
     if (maximizedName == null) return
-    if (!filteredList.some(s => s.name === maximizedName)) setMaximizedName(null)
-  }, [filteredList, maximizedName])
+    if (!pinnedNames.includes(maximizedName) && !list.some(s => s.name === maximizedName)) {
+      setMaximizedName(null)
+    }
+  }, [pinnedNames, list, maximizedName])
 
   const controlMutation = useMutation({
     mutationFn: ({ name, action }: { name: string; action: string }) =>
@@ -657,9 +804,63 @@ export function DockDevSessionsPanel({
     return ordered
   }, [filteredList, groupNames])
 
-  const selectSession = useCallback((name: string) => {
-    setActiveName(name)
-    setMaximizedName(prev => (prev != null ? name : prev))
+  const selectSession = useCallback(
+    (name: string) => {
+      setActiveName(name)
+      setMaximizedName(prev => (prev != null ? name : prev))
+      setPinnedNames(prev => {
+        if (prev.includes(name)) return prev
+        let next: string[]
+        if (prev.length < paneCap) {
+          next = [...prev, name]
+        } else {
+          // At cap: replace the focused slot (or the last slot).
+          const idx = prev.indexOf(activeName)
+          next = [...prev]
+          next[idx >= 0 ? idx : next.length - 1] = name
+        }
+        persistPinned(next)
+        return next
+      })
+    },
+    [paneCap, activeName],
+  )
+
+  const unpinSession = useCallback((name: string) => {
+    setPinnedNames(prev => {
+      const next = prev.filter(n => n !== name)
+      persistPinned(next)
+      return next
+    })
+    setMaximizedName(prev => (prev === name ? null : prev))
+  }, [])
+
+  const changePaneCap = useCallback((raw: string) => {
+    const n = Number(raw)
+    if (!(PANE_CAP_OPTIONS as readonly number[]).includes(n)) return
+    const cap = n as PaneCap
+    setPaneCap(cap)
+    try {
+      localStorage.setItem(PANE_CAP_KEY, String(cap))
+    } catch {
+      /* ignore */
+    }
+    setPinnedNames(prev => {
+      if (prev.length <= cap) return prev
+      const next = prev.slice(0, cap)
+      persistPinned(next)
+      return next
+    })
+  }, [])
+
+  const toggleGroupCollapsed = useCallback((group: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(group)) next.delete(group)
+      else next.add(group)
+      persistCollapsedGroups(next)
+      return next
+    })
   }, [])
 
   const toggleMaximize = useCallback((name: string) => {
@@ -724,19 +925,17 @@ export function DockDevSessionsPanel({
             ? 'fail'
             : 'degraded'
 
-  // Cluster (k8s): single active console. Local bdev: tiled multi-pane (maximize still singles).
+  const pinnedSet = useMemo(() => new Set(pinnedNames), [pinnedNames])
+
+  // Left consoles = pinned sessions (order preserved); maximize shows one.
   const visiblePanes = useMemo(() => {
+    const byName = new Map(list.map(s => [s.name, s]))
     if (maximizedName != null) {
-      const max = filteredList.find(s => s.name === maximizedName)
-        ?? list.find(s => s.name === maximizedName)
+      const max = byName.get(maximizedName)
       return max != null ? [max] : []
     }
-    if (clusterMode) {
-      const active = filteredList.find(s => s.name === activeName)
-      return active != null ? [active] : filteredList.slice(0, 1)
-    }
-    return filteredList
-  }, [maximizedName, clusterMode, filteredList, list, activeName])
+    return pinnedNames.map(n => byName.get(n)).filter((s): s is DevSession => s != null)
+  }, [maximizedName, pinnedNames, list])
 
   return (
     <div className="console-dock-sessions min-h-0 flex-1 flex flex-col gap-1.5">
@@ -797,9 +996,9 @@ export function DockDevSessionsPanel({
             size="xs"
             className="text-[var(--text-dense-caption)] text-muted-foreground"
             onClick={() => setMaximizedName(null)}
-            title={clusterMode ? 'Exit maximized console' : 'Restore tiled console layout'}
+            title="Restore tiled console layout"
           >
-            {clusterMode ? 'Restore' : 'Restore tiles'}
+            Restore tiles
           </Button>
         )}
         {onOpenPage != null && (
@@ -846,9 +1045,9 @@ export function DockDevSessionsPanel({
             !isError &&
             visiblePanes.length === 0 && (
               <p className="console-agent-execution-dock__idle-copy px-1">
-                {issuesOnly || groupFilter !== 'all'
-                  ? 'No sessions match filters'
-                  : 'No sessions'}
+                {list.length === 0
+                  ? 'No sessions'
+                  : 'No consoles open — click a session in Status to show logs'}
               </p>
             )}
           {!isLoading &&
@@ -860,19 +1059,17 @@ export function DockDevSessionsPanel({
                 active={activeName === s.name}
                 maximized={maximizedName === s.name}
                 logsEnabled={
-                  enabled &&
-                  // Cluster: only the single visible pane. Bdev: all tiles, or maximized only.
-                  (clusterMode
-                    ? s.name === activeName
-                    : maximizedName == null || maximizedName === s.name)
+                  enabled && (maximizedName == null || maximizedName === s.name)
                 }
                 canOperate={canOperate}
                 isActing={actingOn === s.name || controlMutation.isPending}
                 showClearLogs={showClearLogs}
+                canUnpin={pinnedNames.length > 0}
                 onSelect={() => selectSession(s.name)}
                 onToggleMaximize={() => toggleMaximize(s.name)}
                 onClearLogs={() => doControl(s.name, 'clear-logs')}
                 onReload={() => doControl(s.name, 'restart')}
+                onUnpin={() => unpinSession(s.name)}
               />
             ))}
         </div>
@@ -891,7 +1088,25 @@ export function DockDevSessionsPanel({
         <aside className="console-dock-sessions__status" aria-label="Session status">
           <div className="console-agent-execution-dock__recent-head">
             <h3 className="console-agent-execution-dock__recent-title">Status</h3>
-            <div className="flex items-center gap-0.5 ml-auto">
+            <label
+              className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground"
+              title="Max consoles open on the left"
+            >
+              <span className="shrink-0">Slots</span>
+              <select
+                className="h-5 max-w-[3.25rem] rounded border border-border bg-background px-0.5 font-mono text-[10px] text-foreground"
+                value={paneCap}
+                onChange={e => changePaneCap(e.target.value)}
+                aria-label="Max console slots"
+              >
+                {PANE_CAP_OPTIONS.map(n => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-center gap-0.5">
               {showClearLogs && (
                 <Button
                   type="button"
@@ -924,32 +1139,58 @@ export function DockDevSessionsPanel({
               </Button>
             </div>
           </div>
+          <div className="px-1 pb-0.5 font-mono text-[10px] text-muted-foreground">
+            {pinnedNames.length}/{paneCap} consoles
+            {paneCap >= MAX_PANE_CAP ? ' · max' : ''}
+          </div>
           {list.length === 0 && !isLoading && (
             <p className="console-agent-execution-dock__recent-empty">No sessions</p>
           )}
           {list.length > 0 && filteredList.length === 0 && !isLoading && (
             <p className="console-agent-execution-dock__recent-empty">No sessions match filters</p>
           )}
-          {grouped.map(([group, rows]) => (
-            <div key={group} className="console-dock-sessions__group">
-              <div className="console-dock-sessions__group-label">{group.toUpperCase()}</div>
-              {rows.map(s => (
-                <SessionStatusRow
-                  key={s.name}
-                  session={s}
-                  active={activeName === s.name}
-                  canOperate={canOperate}
-                  isActing={actingOn === s.name || controlMutation.isPending}
-                  showClearLogs={showClearLogs}
-                  onSelect={() => selectSession(s.name)}
-                  onStart={() => doControl(s.name, 'start')}
-                  onRestart={() => doControl(s.name, 'restart')}
-                  onStop={() => doControl(s.name, 'stop')}
-                  onClearLogs={() => doControl(s.name, 'clear-logs')}
-                />
-              ))}
-            </div>
-          ))}
+          {grouped.map(([group, rows]) => {
+            const collapsed = collapsedGroups.has(group)
+            const groupIssues = rows.filter(s => isSessionIssue(s.status)).length
+            return (
+              <div key={group} className="console-dock-sessions__group">
+                <button
+                  type="button"
+                  className="console-dock-sessions__group-label flex w-full items-center gap-1 text-left"
+                  onClick={() => toggleGroupCollapsed(group)}
+                  aria-expanded={!collapsed}
+                  title={collapsed ? `Expand ${group}` : `Collapse ${group}`}
+                >
+                  {collapsed ? (
+                    <ChevronRight className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                  ) : (
+                    <ChevronDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{group.toUpperCase()}</span>
+                  <span className="shrink-0 font-mono text-[10px] font-normal text-muted-foreground">
+                    {groupIssues > 0 ? `${groupIssues}! · ${rows.length}` : rows.length}
+                  </span>
+                </button>
+                {!collapsed &&
+                  rows.map(s => (
+                    <SessionStatusRow
+                      key={s.name}
+                      session={s}
+                      active={activeName === s.name}
+                      pinned={pinnedSet.has(s.name)}
+                      canOperate={canOperate}
+                      isActing={actingOn === s.name || controlMutation.isPending}
+                      showClearLogs={showClearLogs}
+                      onSelect={() => selectSession(s.name)}
+                      onStart={() => doControl(s.name, 'start')}
+                      onRestart={() => doControl(s.name, 'restart')}
+                      onStop={() => doControl(s.name, 'stop')}
+                      onClearLogs={() => doControl(s.name, 'clear-logs')}
+                    />
+                  ))}
+              </div>
+            )
+          })}
         </aside>
       </div>
       <ConfirmDialog
