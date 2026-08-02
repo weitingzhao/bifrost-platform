@@ -42,3 +42,4 @@ data/briefing/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+.docker-build/
