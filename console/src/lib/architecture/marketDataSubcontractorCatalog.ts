@@ -11,7 +11,7 @@
  */
 
 export const MARKET_DATA_SUBCONTRACTOR_SOURCE = 'bifrost-platform-plugin-market-data'
-export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-07-30-p9'
+export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-02-library-sla'
 
 /** Mission Launch lane — publish market-data plugin via make apply (not Tekton). */
 export const MARKET_DATA_LAUNCH_LANE = {
@@ -186,7 +186,9 @@ export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Live health + deployments + freshness: Subcontractors → Plugin Gallery (observe — not publish)',
   'Readiness rollup KPI: GET /api/v1/plugins/market-data/status → readiness_rollup (read-only; Trade Stock Data Readiness owns runbook / per-symbol gaps)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
-  'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; requires image rebuild to activate scheduler slots)',
+  'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; image bifrost-market-data:0.1.2)',
+  'Image tag: bifrost-market-data:0.1.2 (k8s/base newTag; slots reference + fundamentals-rotate active)',
+  'Readiness rollup: optional KPI from public.stock_readiness_daily (Trade runbook). fund_cache_valid requires included_in_universe; public.v_us_equity_universe uses synthetic hashtext tickers_id after P9 (bifrost-core ≥0.5.2)',
   'Program / phase sign-off: Delivery Board · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',
   'Spine: config/ops-context.yaml · GET /api/v1/context · milestone market-data-subcontractor',

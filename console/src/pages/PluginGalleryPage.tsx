@@ -388,7 +388,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
           <div className="flex flex-wrap items-center gap-2">
             <DenseTag variant={ibVerdict.tagVariant}>{ibVerdict.tagLabel}</DenseTag>
             {liveProbe.status?.mode != null && liveProbe.status.mode !== '' ? (
-              <DenseTag variant={liveProbe.status.mode === 'live' ? 'warning' : 'neutral'}>
+              <DenseTag variant={liveProbe.status.mode === 'live' ? 'success' : 'neutral'}>
                 mode {liveProbe.status.mode}
               </DenseTag>
             ) : null}

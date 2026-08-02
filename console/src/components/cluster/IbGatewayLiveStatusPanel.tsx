@@ -133,7 +133,7 @@ export function IbGatewayLiveStatusPanel({
         </DenseTag>
         <DenseTag variant="info">L0 status</DenseTag>
         {status?.mode != null && (
-          <DenseTag variant={currentMode === 'live' ? 'warning' : 'neutral'}>
+          <DenseTag variant={currentMode === 'live' ? 'success' : 'neutral'}>
             mode: {status.mode}
           </DenseTag>
         )}
