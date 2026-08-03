@@ -1,4 +1,5 @@
 import type { RemediationEvent, RemediationJob } from '@/api/remediationTypes'
+import { normalizeMarkdownTables } from '@/components/agent/DenseMarkdown'
 
 export type AgentLiveFeed = {
   kind: 'status' | 'tool' | 'thinking' | 'error'
@@ -98,7 +99,8 @@ export type DockProcessBlock =
 
 /**
  * Join streamed thinking fragments without crushing newlines.
- * Inserts a newline between adjacent table-looking pieces when the stream omitted one.
+ * Inserts a newline between adjacent table-looking pieces when the stream omitted one,
+ * then normalizes any remaining smashed "||" table rows.
  */
 export function joinThinkingFragments(parts: string[]): string {
   let out = ''
@@ -115,7 +117,7 @@ export function joinThinkingFragments(parts: string[]): string {
       /^\s*\|/.test(part)
     out += needsBreak ? `\n${part}` : part
   }
-  return out
+  return normalizeMarkdownTables(out)
 }
 
 /** Collapse consecutive thinking fragments into one Process pane block. */
@@ -159,8 +161,8 @@ export function formatFeedEventLine(ev: RemediationEvent): string {
     return `◎ ${title}`
   }
   if (ev.type === 'tool_call') {
-    const name = typeof ev.meta?.name === 'string' ? ev.meta.name : 'tool'
-    return `→ ${name}`
+    const call = parseToolCallDisplay(ev)
+    return `→ ${call.toolName}`
   }
   if (ev.type === 'tool_result') {
     const name = typeof ev.meta?.name === 'string' ? ev.meta.name : 'tool'
@@ -171,6 +173,122 @@ export function formatFeedEventLine(ev: RemediationEvent): string {
   const t = ev.text.trim().replace(/\s+/g, ' ')
   if (t === '') return ev.type
   return t.length > 120 ? `${t.slice(0, 120)}…` : t
+}
+
+export type ParsedToolCall = {
+  /** Outer channel / SDK tool name (e.g. mcp, read, shell). */
+  channel: string | null
+  /** Concrete tool being invoked (MCP toolName or channel). */
+  toolName: string
+  provider: string | null
+  args: Record<string, unknown> | null
+}
+
+function tryParseJsonObject(raw: string): Record<string, unknown> | null {
+  const t = raw.trim()
+  if (!t.startsWith('{')) return null
+  try {
+    return asRecord(JSON.parse(t))
+  } catch {
+    return null
+  }
+}
+
+function argsFromUnknown(v: unknown): Record<string, unknown> | null {
+  const rec = asRecord(v)
+  if (rec != null) return rec
+  if (typeof v === 'string') return tryParseJsonObject(v)
+  return null
+}
+
+/**
+ * Turn tool_call event text/meta into a readable invocation:
+ * `mcp { "toolName": "get_cluster_summary", "args": {} }` → toolName get_cluster_summary.
+ */
+export function parseToolCallDisplay(ev: RemediationEvent): ParsedToolCall {
+  const metaName = typeof ev.meta?.name === 'string' ? ev.meta.name.trim() : ''
+  const metaArgs = argsFromUnknown(ev.meta?.args)
+
+  const text = ev.text.trim()
+  let channel: string | null = metaName !== '' ? metaName : null
+  let payload = tryParseJsonObject(text)
+
+  if (payload == null) {
+    const brace = text.indexOf('{')
+    if (brace > 0) {
+      const prefix = text.slice(0, brace).trim()
+      if (prefix !== '') channel = prefix
+      payload = tryParseJsonObject(text.slice(brace))
+    } else if (brace === 0) {
+      payload = tryParseJsonObject(text)
+    }
+  }
+
+  let toolName = channel ?? 'tool'
+  let provider: string | null = null
+  let args = metaArgs
+
+  if (payload != null) {
+    if (typeof payload.toolName === 'string' && payload.toolName.trim() !== '') {
+      toolName = payload.toolName.trim()
+    } else if (typeof payload.name === 'string' && payload.name.trim() !== '') {
+      toolName = payload.name.trim()
+    } else if (typeof payload.tool === 'string' && payload.tool.trim() !== '') {
+      toolName = payload.tool.trim()
+    }
+
+    if (typeof payload.providerIdentifier === 'string' && payload.providerIdentifier.trim() !== '') {
+      provider = payload.providerIdentifier.trim()
+    } else if (typeof payload.provider === 'string' && payload.provider.trim() !== '') {
+      provider = payload.provider.trim()
+    }
+
+    const payloadArgs = argsFromUnknown(payload.args ?? payload.arguments ?? payload.input)
+    if (payloadArgs != null) args = payloadArgs
+
+    // Plain tool args object (no toolName) — channel is the tool.
+    if (
+      toolName === (channel ?? 'tool') &&
+      payload.toolName == null &&
+      payload.name == null &&
+      payload.tool == null &&
+      channel != null &&
+      channel !== 'mcp'
+    ) {
+      args = args ?? payload
+    }
+  } else if (text !== '' && (channel == null || channel === text)) {
+    const first = text.split(/\s+/)[0]
+    if (first) {
+      channel = first
+      toolName = first
+    }
+  }
+
+  return { channel, toolName, provider, args }
+}
+
+export function formatToolArgsSummary(args: Record<string, unknown> | null): string | null {
+  if (args == null) return null
+  const keys = Object.keys(args)
+  if (keys.length === 0) return null
+  const parts = keys.slice(0, 6).map(k => {
+    const v = args[k]
+    if (v == null) return `${k}=null`
+    if (typeof v === 'string') {
+      const s = v.replace(/\s+/g, ' ')
+      return `${k}=${s.length > 40 ? `${s.slice(0, 40)}…` : s}`
+    }
+    if (typeof v === 'number' || typeof v === 'boolean') return `${k}=${String(v)}`
+    try {
+      const s = JSON.stringify(v)
+      return `${k}=${s.length > 40 ? `${s.slice(0, 40)}…` : s}`
+    } catch {
+      return `${k}=…`
+    }
+  })
+  const extra = keys.length > 6 ? ` +${keys.length - 6}` : ''
+  return `${parts.join(' · ')}${extra}`
 }
 
 export type UnwrappedToolResult =

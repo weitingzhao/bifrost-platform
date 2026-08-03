@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import {
+  looksLikeMarkdown,
+  normalizeMarkdownTables,
+} from '@/components/agent/DenseMarkdown'
 import type { RemediationEvent } from '@/api/remediationTypes'
 import {
+  formatToolArgsSummary,
   groupDockProcessBlocks,
   joinThinkingFragments,
+  parseToolCallDisplay,
   unwrapToolResultDisplay,
 } from '@/lib/agent/agentLiveFeed'
 
@@ -30,6 +36,24 @@ describe('joinThinkingFragments', () => {
   it('preserves existing newlines', () => {
     expect(joinThinkingFragments(['hello\n', 'world'])).toBe('hello\nworld')
   })
+
+  it('repairs smashed table rows glued with ||', () => {
+    const smashed =
+      '| 组件 | 状态 | 详情 |-------|-------|-------| | Primary runner | ok | 192.168.10.50 || Standby runner | ok | 192.168.10.52 || Git Bridge | ok | 192.168.10.40 |'
+    const joined = joinThinkingFragments([smashed])
+    expect(joined).toContain('\n|-------|-------|-------|\n')
+    expect(joined).toContain('\n| Primary runner |')
+    expect(joined).toContain('\n| Standby runner |')
+    expect(joined).toContain('\n| Git Bridge |')
+    expect(looksLikeMarkdown(joined)).toBe(true)
+  })
+})
+
+describe('normalizeMarkdownTables', () => {
+  it('does not split legitimate empty cells "| |"', () => {
+    const src = '| a | | b |\n|---|---|---|\n| 1 | | 3 |'
+    expect(normalizeMarkdownTables(src)).toBe(src)
+  })
 })
 
 describe('groupDockProcessBlocks', () => {
@@ -53,6 +77,36 @@ describe('groupDockProcessBlocks', () => {
       expect(blocks[0].events).toHaveLength(3)
     }
     expect(blocks[1].kind).toBe('event')
+  })
+})
+
+describe('parseToolCallDisplay', () => {
+  it('extracts MCP toolName from smashed call payload', () => {
+    const ev: RemediationEvent = {
+      id: '1',
+      type: 'tool_call',
+      at: '2026-08-03T00:00:00Z',
+      text: `mcp ${JSON.stringify(
+        {
+          providerIdentifier: 'custom-user-tools',
+          toolName: 'get_cluster_summary',
+          args: {},
+        },
+        null,
+        2,
+      )}`,
+      meta: { name: 'mcp' },
+    }
+    const call = parseToolCallDisplay(ev)
+    expect(call.channel).toBe('mcp')
+    expect(call.toolName).toBe('get_cluster_summary')
+    expect(call.provider).toBe('custom-user-tools')
+    expect(call.args).toEqual({})
+    expect(formatToolArgsSummary(call.args)).toBeNull()
+  })
+
+  it('summarizes non-empty args', () => {
+    expect(formatToolArgsSummary({ env: 'prod', limit: 5 })).toBe('env=prod · limit=5')
   })
 })
 

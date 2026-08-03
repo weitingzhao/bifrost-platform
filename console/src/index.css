@@ -7185,15 +7185,103 @@ button.infra-stack-chip:hover {
   border-bottom: none;
 }
 
+.console-agent-execution-dock__log-item--tone-ok.console-agent-execution-dock__log-item--block,
+.console-agent-execution-dock__log-item--done.console-agent-execution-dock__log-item--block {
+  border-left: 2px solid color-mix(in oklab, var(--success) 70%, transparent);
+  padding-left: 0.45rem;
+  background: color-mix(in oklab, var(--success) 5%, transparent);
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+.console-agent-execution-dock__log-item--tone-fail.console-agent-execution-dock__log-item--block,
+.console-agent-execution-dock__log-item--error.console-agent-execution-dock__log-item--block {
+  border-left: 2px solid color-mix(in oklab, var(--destructive) 70%, transparent);
+  padding-left: 0.45rem;
+  background: color-mix(in oklab, var(--destructive) 5%, transparent);
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+.console-agent-execution-dock__log-item--tone-warn.console-agent-execution-dock__log-item--block {
+  border-left: 2px solid color-mix(in oklab, var(--warning) 70%, transparent);
+  padding-left: 0.45rem;
+  background: color-mix(in oklab, var(--warning) 6%, transparent);
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
 .console-agent-execution-dock__log-item--thinking .console-agent-execution-dock__log-type {
-  color: color-mix(in oklab, var(--muted-foreground) 85%, #a78bfa);
+  color: color-mix(in oklab, var(--muted-foreground) 55%, #a78bfa);
   font-style: italic;
 }
 
 .console-agent-execution-dock__log-type {
   flex-shrink: 0;
-  opacity: 0.65;
-  min-width: 4.25rem;
+  min-width: 4.5rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.2rem;
+  font-weight: 650;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  text-align: center;
+  opacity: 1;
+  background: color-mix(in oklab, var(--muted-foreground) 12%, transparent);
+  color: var(--muted-foreground);
+}
+
+.console-agent-execution-dock__log-type--ok {
+  color: var(--success);
+  background: color-mix(in oklab, var(--success) 14%, transparent);
+}
+
+.console-agent-execution-dock__log-type--fail {
+  color: var(--destructive);
+  background: color-mix(in oklab, var(--destructive) 14%, transparent);
+}
+
+.console-agent-execution-dock__log-type--warn {
+  color: var(--warning);
+  background: color-mix(in oklab, var(--warning) 14%, transparent);
+}
+
+.console-agent-execution-dock__log-type--run {
+  color: #38bdf8;
+  background: color-mix(in oklab, #38bdf8 14%, transparent);
+}
+
+.console-agent-execution-dock__log-type--neutral {
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--muted-foreground) 12%, transparent);
+}
+
+.console-agent-execution-dock__log-item--status .console-agent-execution-dock__log-type--neutral {
+  color: #7dd3fc;
+  background: color-mix(in oklab, #7dd3fc 12%, transparent);
+}
+
+.console-agent-execution-dock__log-token {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.console-agent-execution-dock__log-token--ok {
+  color: var(--success);
+}
+
+.console-agent-execution-dock__log-token--fail {
+  color: var(--destructive);
+}
+
+.console-agent-execution-dock__log-token--warn {
+  color: var(--warning);
+}
+
+.console-agent-execution-dock__log-token--run {
+  color: #38bdf8;
+}
+
+.console-agent-execution-dock__log-token--neutral {
+  color: var(--foreground);
 }
 
 .console-agent-execution-dock__log-text {
@@ -7201,6 +7289,11 @@ button.infra-stack-chip:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--foreground);
+}
+
+.console-agent-execution-dock__log-item--status .console-agent-execution-dock__log-text {
+  color: var(--muted-foreground);
 }
 
 .console-agent-execution-dock__log-body {
@@ -7236,6 +7329,57 @@ button.infra-stack-chip:hover {
   font-family: ui-monospace, monospace;
   font-size: var(--text-dense-micro);
   color: var(--muted-foreground);
+}
+
+.console-agent-execution-dock__tool-call {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+}
+
+.console-agent-execution-dock__tool-call-name {
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-dense-caption);
+  font-weight: 650;
+  color: var(--foreground);
+}
+
+.console-agent-execution-dock__tool-call-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.console-agent-execution-dock__tool-call-chip {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.2rem;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #38bdf8;
+  background: color-mix(in oklab, #38bdf8 12%, transparent);
+}
+
+.console-agent-execution-dock__tool-call-chip--muted {
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--muted-foreground) 10%, transparent);
+  font-weight: 500;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-agent-execution-dock__tool-call-args {
+  margin: 0.15rem 0 0;
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-dense-micro);
+  line-height: 1.35;
+  color: var(--muted-foreground);
+  word-break: break-word;
 }
 
 .console-agent-execution-dock__result-status {
