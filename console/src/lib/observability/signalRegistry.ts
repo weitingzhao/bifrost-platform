@@ -290,6 +290,6 @@ export const TARGET_DOMAIN_HINTS: Array<{
   { match: /bifrost-prod|namespace="bifrost-prod"/i, domain: 'satellite', role: 'required', envHint: 'prod' },
   { match: /redis|cnpg|postgres|namespace="data"/i, domain: 'ground-systems', role: 'required', envHint: 'shared' },
   { match: /ib-gateway|ib_gateway/i, domain: 'subcontractors', role: 'required', envHint: 'shared' },
-  { match: /kube-state|node-exporter|cadvisor|apiserver/i, domain: 'rocket', role: 'evidence', envHint: 'shared' },
+  { match: /kubelet|kube-state|node-exporter|cadvisor|apiserver|coredns/i, domain: 'rocket', role: 'evidence', envHint: 'shared' },
   { match: /prometheus|alertmanager|grafana/i, domain: 'rocket', role: 'evidence', envHint: 'shared' },
 ]

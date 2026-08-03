@@ -72,6 +72,7 @@ import {
   scopeForAttentionRemediation,
   signalStateToVerdict,
   signalToGap,
+  shortMetricsPath,
   sumGapSummaries,
   VERDICT_LABELS,
 } from '@/lib/observability'
@@ -1270,7 +1271,9 @@ export function ObservabilityPage({
             description={
               selected.scrapeTargets.length === 0
                 ? 'None mapped / Prometheus unavailable'
-                : `${selected.scrapeTargets.length} targets · ${scrapeQuiet ? 'all up' : 'has down/unknown'}`
+                : `Prometheus endpoints (not logs) · ${selected.scrapeTargets.length} · ${
+                    scrapeQuiet ? 'all up' : 'has down/unknown'
+                  }`
             }
             leading={<StatusLamp value={scrapeQuiet ? 'ok' : 'degraded'} kind="reach" />}
             variant="flat"
@@ -1287,18 +1290,18 @@ export function ObservabilityPage({
             >
               <colgroup>
                 <col className="w-[22%]" />
-                <col className="w-[28%]" />
+                <col className="w-[30%]" />
                 <col className="w-[12%]" />
-                <col className="w-[12%]" />
+                <col className="w-[10%]" />
                 <col className="w-[26%]" />
               </colgroup>
               <DenseTableHeader>
                 <DenseTableHeadRow>
                   <DenseTableHead className="!py-1 px-1.5 text-[var(--text-dense-micro)]">
-                    Job
+                    Job / path
                   </DenseTableHead>
                   <DenseTableHead className="!py-1 px-1.5 text-[var(--text-dense-micro)]">
-                    Instance
+                    Node / instance
                   </DenseTableHead>
                   <DenseTableHead className="!py-1 px-1.5 text-[var(--text-dense-micro)]">
                     Health
@@ -1319,22 +1322,35 @@ export function ObservabilityPage({
                     </DenseTableCell>
                   </DenseTableRow>
                 ) : (
-                  selected.scrapeTargets.slice(0, 24).map(t => {
+                  selected.scrapeTargets.map(t => {
                     const err = t.lastError != null && t.lastError !== '' ? t.lastError : null
                     const scrapeTitle = err ?? t.lastScrape ?? undefined
+                    const pathLabel = shortMetricsPath(t.metricsPath)
+                    const primaryHost = t.node ?? t.pod ?? t.instance
+                    const hostTitle = [t.node, t.pod, t.instance].filter(Boolean).join(' · ')
                     return (
                       <DenseTableRow key={t.id}>
                         <DenseTableCell
-                          className={cn(scrapeCell, 'font-mono-tabular truncate')}
-                          title={t.job}
+                          className={cn(scrapeCell, 'font-mono-tabular')}
+                          title={pathLabel != null ? `${t.job} ${t.metricsPath}` : t.job}
                         >
-                          {t.job}
+                          <span className="block truncate">{t.job}</span>
+                          {pathLabel != null ? (
+                            <span className="block truncate text-muted-foreground text-[var(--text-dense-micro)]">
+                              {pathLabel}
+                            </span>
+                          ) : null}
                         </DenseTableCell>
                         <DenseTableCell
-                          className={cn(scrapeCell, 'font-mono-tabular truncate')}
-                          title={t.instance}
+                          className={cn(scrapeCell, 'font-mono-tabular')}
+                          title={hostTitle}
                         >
-                          {t.instance}
+                          <span className="block truncate">{primaryHost}</span>
+                          {t.node != null && t.node !== t.instance ? (
+                            <span className="block truncate text-muted-foreground text-[var(--text-dense-micro)]">
+                              {t.instance}
+                            </span>
+                          ) : null}
                         </DenseTableCell>
                         <DenseTableCell className={scrapeCell}>
                           <span className="inline-flex items-center gap-1 whitespace-nowrap">

@@ -9,6 +9,8 @@ export * from './grafanaUrlBuilder'
 export * from './verdictAggregation'
 export {
   buildObservabilityViewModel,
+  sortScrapeTargets,
+  shortMetricsPath,
   type ObservabilityViewModelInput,
   type BusHealthInput,
   type TelemetryTargetLike,

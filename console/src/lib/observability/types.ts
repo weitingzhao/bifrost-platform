@@ -156,6 +156,12 @@ export type ScrapeTargetView = {
   id: string
   job: string
   instance: string
+  /** Kubernetes node name when present (kubelet / node-exporter). */
+  node?: string
+  /** Pod name when present. */
+  pod?: string
+  /** Scrape metrics path (e.g. /metrics, /metrics/cadvisor). */
+  metricsPath?: string
   namespace?: string
   health: 'up' | 'down' | 'unknown'
   lastScrape?: string

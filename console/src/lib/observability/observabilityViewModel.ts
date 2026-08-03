@@ -264,7 +264,10 @@ function mapTargets(targets: TelemetryTargetLike[] | null | undefined): ScrapeTa
     const job = labels.job ?? t.scrape_pool ?? 'unknown'
     const instance = labels.instance ?? labels.pod ?? t.scrape_url ?? `target-${i}`
     const ns = labels.namespace ?? labels.exported_namespace
-    const blob = `${job} ${instance} ${ns ?? ''} ${t.scrape_pool ?? ''}`
+    const node = labels.node
+    const pod = labels.pod
+    const metricsPath = labels.metrics_path
+    const blob = `${job} ${instance} ${ns ?? ''} ${node ?? ''} ${metricsPath ?? ''} ${t.scrape_pool ?? ''}`
     const hint =
       TARGET_DOMAIN_HINTS.find(h => h.match.test(blob)) ??
       ({ domain: 'rocket' as SystemDomainId, role: 'evidence' as const, envHint: 'shared' as const })
@@ -277,10 +280,14 @@ function mapTargets(targets: TelemetryTargetLike[] | null | undefined): ScrapeTa
     const health: ScrapeTargetView['health'] =
       healthRaw === 'up' ? 'up' : healthRaw === 'down' ? 'down' : 'unknown'
 
+    const pathKey = metricsPath != null && metricsPath !== '' ? metricsPath : ''
     return {
-      id: `${job}:${instance}`,
+      id: `${job}:${instance}:${pathKey || i}`,
       job,
       instance,
+      node,
+      pod,
+      metricsPath,
       namespace: ns,
       health,
       lastScrape: t.last_scrape,
@@ -292,6 +299,36 @@ function mapTargets(targets: TelemetryTargetLike[] | null | undefined): ScrapeTa
       env,
     }
   })
+}
+
+function scrapeHealthRank(h: ScrapeTargetView['health']): number {
+  if (h === 'down') return 0
+  if (h === 'unknown') return 1
+  return 2
+}
+
+/** DOWN first, then job / node / path — makes Rocket kubelet rows scannable. */
+export function sortScrapeTargets(targets: ScrapeTargetView[]): ScrapeTargetView[] {
+  return [...targets].sort((a, b) => {
+    const hr = scrapeHealthRank(a.health) - scrapeHealthRank(b.health)
+    if (hr !== 0) return hr
+    const j = a.job.localeCompare(b.job)
+    if (j !== 0) return j
+    const na = a.node ?? a.pod ?? a.instance
+    const nb = b.node ?? b.pod ?? b.instance
+    const n = na.localeCompare(nb)
+    if (n !== 0) return n
+    return (a.metricsPath ?? '').localeCompare(b.metricsPath ?? '')
+  })
+}
+
+/** Short path label: /metrics → metrics, /metrics/cadvisor → cadvisor. */
+export function shortMetricsPath(path?: string): string | undefined {
+  if (path == null || path === '') return undefined
+  if (path === '/metrics') return 'metrics'
+  const nested = path.match(/\/metrics\/(.+)$/)
+  if (nested?.[1]) return nested[1]
+  return path.replace(/^\//, '')
 }
 
 function isStandbyScrapeTarget(t: ScrapeTargetView, standbyNodes: StandbyNodeRef[]): boolean {
@@ -617,7 +654,7 @@ function buildSelectedDetail(
         ? goldenFromMetrics(input.telemetryMetrics)
         : [],
     alerts: alerts.filter(a => a.domain === domain),
-    scrapeTargets: targets.filter(t => t.domain === domain),
+    scrapeTargets: sortScrapeTargets(targets.filter(t => t.domain === domain)),
     detailLinks: detailRoutes.map(route => ({
       label: routeLabel(route),
       route,
