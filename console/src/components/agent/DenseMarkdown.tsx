@@ -133,7 +133,7 @@ export function looksLikeMarkdown(text: string): boolean {
   if (t.length < 8) return false
   return (
     /^#{1,3}\s/m.test(t) ||
-    /\n\|.+\|\n\|[-:\s|]+\|/m.test(t) ||
+    /\|.+\|[\r\n]+\|[-:\s|]+\|/m.test(t) ||
     /\*\*[^*]+\*\*/.test(t) ||
     /^[-*]\s+/m.test(t) ||
     /```/.test(t)

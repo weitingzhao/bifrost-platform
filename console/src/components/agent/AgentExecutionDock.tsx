@@ -12,8 +12,8 @@ import { useAgentJobLiveSession } from '@/hooks/useAgentJobLiveSession'
 import { useAgentHostPulse } from '@/hooks/useAgentHostPulse'
 import {
   feedKindLabel,
-  formatFeedEventLine,
 } from '@/lib/agent/agentLiveFeed'
+import { DockProcessFeed } from '@/components/agent/DockProcessFeed'
 import { updateActivityPhase } from '@/lib/activity/activityStore'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 
@@ -1074,24 +1074,7 @@ export function OperatorDock({
                               : 'Waiting for agent activity…'}
                           </p>
                         ) : (
-                          <ul className="console-agent-execution-dock__log-list">
-                            {recentEvents.map(ev => (
-                              <li
-                                key={ev.id}
-                                className={cn(
-                                  'console-agent-execution-dock__log-item',
-                                  `console-agent-execution-dock__log-item--${ev.type}`,
-                                )}
-                              >
-                                <span className="console-agent-execution-dock__log-type">
-                                  {ev.type}
-                                </span>
-                                <span className="console-agent-execution-dock__log-text">
-                                  {formatFeedEventLine(ev)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
+                          <DockProcessFeed events={recentEvents} />
                         )}
                       </div>
                     </section>

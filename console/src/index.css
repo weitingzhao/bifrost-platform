@@ -7175,9 +7175,25 @@ button.infra-stack-chip:hover {
   color: var(--muted-foreground);
 }
 
+.console-agent-execution-dock__log-item--block {
+  align-items: flex-start;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+
+.console-agent-execution-dock__log-item--block:last-child {
+  border-bottom: none;
+}
+
+.console-agent-execution-dock__log-item--thinking .console-agent-execution-dock__log-type {
+  color: color-mix(in oklab, var(--muted-foreground) 85%, #a78bfa);
+  font-style: italic;
+}
+
 .console-agent-execution-dock__log-type {
   flex-shrink: 0;
   opacity: 0.65;
+  min-width: 4.25rem;
 }
 
 .console-agent-execution-dock__log-text {
@@ -7185,6 +7201,34 @@ button.infra-stack-chip:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.console-agent-execution-dock__log-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.console-agent-execution-dock__thinking-pre {
+  margin: 0;
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.45;
+  color: var(--foreground);
+}
+
+.console-agent-execution-dock__thinking-md {
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: var(--text-dense-caption);
+  color: var(--foreground);
+}
+
+.console-agent-execution-dock__thinking-md .dense-md__p,
+.console-agent-execution-dock__thinking-md .dense-md__ul {
+  color: var(--muted-foreground);
 }
 
 .console-agent-execution-dock__detail-split--focus-process

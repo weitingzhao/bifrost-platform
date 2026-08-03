@@ -92,6 +92,64 @@ export function dockAgentFeedEvents(events: RemediationEvent[], limit = 200): Re
   return recentAgentFeedEvents(events, limit)
 }
 
+export type DockProcessBlock =
+  | { kind: 'thinking'; id: string; events: RemediationEvent[]; text: string }
+  | { kind: 'event'; id: string; event: RemediationEvent }
+
+/**
+ * Join streamed thinking fragments without crushing newlines.
+ * Inserts a newline between adjacent table-looking pieces when the stream omitted one.
+ */
+export function joinThinkingFragments(parts: string[]): string {
+  let out = ''
+  for (const part of parts) {
+    if (part === '') continue
+    if (out === '') {
+      out = part
+      continue
+    }
+    const needsBreak =
+      !out.endsWith('\n') &&
+      !part.startsWith('\n') &&
+      (/\|\s*$/.test(out) || /\|[-:\s|]+\s*$/.test(out.trimEnd())) &&
+      /^\s*\|/.test(part)
+    out += needsBreak ? `\n${part}` : part
+  }
+  return out
+}
+
+/** Collapse consecutive thinking fragments into one Process pane block. */
+export function groupDockProcessBlocks(events: RemediationEvent[]): DockProcessBlock[] {
+  const blocks: DockProcessBlock[] = []
+  let thinkingBuf: RemediationEvent[] = []
+
+  const flushThinking = () => {
+    if (thinkingBuf.length === 0) return
+    const text = joinThinkingFragments(thinkingBuf.map(e => e.text))
+    if (text.trim() !== '') {
+      blocks.push({
+        kind: 'thinking',
+        id: `thinking:${thinkingBuf[0].id}:${thinkingBuf[thinkingBuf.length - 1].id}`,
+        events: thinkingBuf,
+        text,
+      })
+    }
+    thinkingBuf = []
+  }
+
+  for (const ev of events) {
+    if (ev.type === 'thinking') {
+      thinkingBuf.push(ev)
+      continue
+    }
+    flushThinking()
+    blocks.push({ kind: 'event', id: ev.id, event: ev })
+  }
+  flushThinking()
+  return blocks
+}
+
+/** Compact one-line preview for banners / collapsed feed (not Process pane). */
 export function formatFeedEventLine(ev: RemediationEvent): string {
   if (ev.type === 'approval_request') {
     const title =
