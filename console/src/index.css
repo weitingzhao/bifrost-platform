@@ -7220,6 +7220,35 @@ button.infra-stack-chip:hover {
   color: var(--foreground);
 }
 
+.console-agent-execution-dock__thinking-pre--json {
+  color: var(--muted-foreground);
+}
+
+.console-agent-execution-dock__result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.2rem;
+}
+
+.console-agent-execution-dock__result-tool {
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-dense-micro);
+  color: var(--muted-foreground);
+}
+
+.console-agent-execution-dock__result-status {
+  font-size: var(--text-dense-micro);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--success, #34d399);
+}
+
+.console-agent-execution-dock__result-status--error {
+  color: var(--destructive);
+}
+
 .console-agent-execution-dock__thinking-md {
   font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
   font-size: var(--text-dense-caption);

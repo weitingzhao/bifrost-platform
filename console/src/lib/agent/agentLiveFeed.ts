@@ -164,12 +164,110 @@ export function formatFeedEventLine(ev: RemediationEvent): string {
   }
   if (ev.type === 'tool_result') {
     const name = typeof ev.meta?.name === 'string' ? ev.meta.name : 'tool'
-    const snippet = ev.text.trim().replace(/\s+/g, ' ')
+    const unwrapped = unwrapToolResultDisplay(ev.text)
+    const snippet = (unwrapped.kind === 'text' ? unwrapped.text : ev.text).trim().replace(/\s+/g, ' ')
     return `← ${name}${snippet !== '' ? `: ${snippet.length > 80 ? `${snippet.slice(0, 80)}…` : snippet}` : ''}`
   }
   const t = ev.text.trim().replace(/\s+/g, ' ')
   if (t === '') return ev.type
   return t.length > 120 ? `${t.slice(0, 120)}…` : t
+}
+
+export type UnwrappedToolResult =
+  | { kind: 'text'; text: string; status?: string; isError?: boolean }
+  | { kind: 'raw'; text: string }
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  if (v != null && typeof v === 'object' && !Array.isArray(v)) {
+    return v as Record<string, unknown>
+  }
+  return null
+}
+
+function collectMcpContentTexts(content: unknown): string[] {
+  if (!Array.isArray(content)) return []
+  const parts: string[] = []
+  for (const item of content) {
+    const row = asRecord(item)
+    if (row == null) continue
+    if (typeof row.text === 'string' && row.text.trim() !== '') {
+      parts.push(row.text)
+      continue
+    }
+    const nested = asRecord(row.text)
+    if (nested != null && typeof nested.text === 'string' && nested.text.trim() !== '') {
+      parts.push(nested.text)
+      continue
+    }
+    if (typeof row.type === 'string' && row.type === 'text' && typeof row.text === 'string') {
+      parts.push(row.text)
+    }
+  }
+  return parts
+}
+
+/**
+ * Cursor/MCP tool_result payloads are often JSON:
+ * `{ status: "success", value: { content: [{ text: { text: "…" } }] } }`
+ * Unwrap the human-readable text for Process pane display.
+ */
+export function unwrapToolResultDisplay(raw: string): UnwrappedToolResult {
+  const trimmed = raw.trim()
+  if (trimmed === '') return { kind: 'raw', text: '' }
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+    return { kind: 'text', text: raw }
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    return { kind: 'raw', text: raw }
+  }
+
+  const root = asRecord(parsed)
+  if (root == null) return { kind: 'raw', text: raw }
+
+  const status = typeof root.status === 'string' ? root.status : undefined
+  const isError =
+    typeof root.isError === 'boolean'
+      ? root.isError
+      : status === 'error' || status === 'failed'
+
+  let value: unknown = root.value !== undefined ? root.value : root.result !== undefined ? root.result : root
+
+  // Nested success envelope: value itself may still wrap content.
+  const valueRec = asRecord(value)
+  if (valueRec != null && valueRec.content === undefined && valueRec.text === undefined) {
+    if (typeof valueRec.value === 'string' || asRecord(valueRec.value) != null) {
+      value = valueRec.value
+    }
+  }
+
+  if (typeof value === 'string') {
+    return { kind: 'text', text: value, status, isError }
+  }
+
+  const payload = asRecord(value) ?? root
+  if (typeof payload.text === 'string' && payload.text.trim() !== '') {
+    return { kind: 'text', text: payload.text, status, isError }
+  }
+  if (typeof payload.content === 'string' && payload.content.trim() !== '') {
+    return { kind: 'text', text: payload.content, status, isError }
+  }
+
+  const mcpParts = collectMcpContentTexts(payload.content)
+  if (mcpParts.length > 0) {
+    return {
+      kind: 'text',
+      text: mcpParts.join('\n\n'),
+      status,
+      isError: typeof payload.isError === 'boolean' ? payload.isError : isError,
+    }
+  }
+
+  // Pretty JSON fallback (already pretty from runner) — keep as raw.
+  return { kind: 'raw', text: raw }
 }
 
 export function bannerStatusLabel(

@@ -3,6 +3,7 @@ import type { RemediationEvent } from '@/api/remediationTypes'
 import {
   groupDockProcessBlocks,
   joinThinkingFragments,
+  unwrapToolResultDisplay,
 } from '@/lib/agent/agentLiveFeed'
 
 function thinking(id: string, text: string): RemediationEvent {
@@ -52,5 +53,40 @@ describe('groupDockProcessBlocks', () => {
       expect(blocks[0].events).toHaveLength(3)
     }
     expect(blocks[1].kind).toBe('event')
+  })
+})
+
+describe('unwrapToolResultDisplay', () => {
+  it('unwraps MCP success envelope content[].text.text', () => {
+    const raw = JSON.stringify(
+      {
+        status: 'success',
+        value: {
+          content: [{ text: { text: '## Summary\n\n- line one\n- line two' } }],
+          isError: false,
+        },
+      },
+      null,
+      2,
+    )
+    const out = unwrapToolResultDisplay(raw)
+    expect(out.kind).toBe('text')
+    if (out.kind === 'text') {
+      expect(out.status).toBe('success')
+      expect(out.text).toContain('## Summary')
+      expect(out.text).toContain('line two')
+    }
+  })
+
+  it('unwraps plain value.text string', () => {
+    const raw = JSON.stringify({ status: 'success', value: { text: 'hello\nworld' } }, null, 2)
+    const out = unwrapToolResultDisplay(raw)
+    expect(out).toEqual({ kind: 'text', text: 'hello\nworld', status: 'success', isError: false })
+  })
+
+  it('returns raw when JSON has no text payload', () => {
+    const raw = JSON.stringify({ status: 'success', value: { ok: true, count: 3 } }, null, 2)
+    const out = unwrapToolResultDisplay(raw)
+    expect(out.kind).toBe('raw')
   })
 })
