@@ -42,6 +42,7 @@ import type {
   ObservabilityEnvId,
   ObservabilityViewModel,
   ScrapeTargetView,
+  ScrapeTargetsRollup,
   SelectedDomainDetail,
   SignalState,
 } from './types'
@@ -301,16 +302,18 @@ function mapTargets(targets: TelemetryTargetLike[] | null | undefined): ScrapeTa
   })
 }
 
-function scrapeHealthRank(h: ScrapeTargetView['health']): number {
-  if (h === 'down') return 0
-  if (h === 'unknown') return 1
-  return 2
+function scrapeSortRank(t: ScrapeTargetView): number {
+  // Unexpected DOWN first, then unknown, then expected-off standby, then UP.
+  if (t.health === 'down' && t.expectedOff !== true) return 0
+  if (t.health === 'unknown') return 1
+  if (t.health === 'down' && t.expectedOff === true) return 2
+  return 3
 }
 
-/** DOWN first, then job / node / path — makes Rocket kubelet rows scannable. */
+/** Unexpected issues first; standby expected-off after real downs. */
 export function sortScrapeTargets(targets: ScrapeTargetView[]): ScrapeTargetView[] {
   return [...targets].sort((a, b) => {
-    const hr = scrapeHealthRank(a.health) - scrapeHealthRank(b.health)
+    const hr = scrapeSortRank(a) - scrapeSortRank(b)
     if (hr !== 0) return hr
     const j = a.job.localeCompare(b.job)
     if (j !== 0) return j
@@ -338,6 +341,44 @@ function isStandbyScrapeTarget(t: ScrapeTargetView, standbyNodes: StandbyNodeRef
     /node-exporter|node_exporter|kubelet/i.test(job) || /:\d{2,5}$/.test(t.instance)
   if (!looksLikeNode) return false
   return hostMatchesStandbyNode(t.instance, standbyNodes)
+}
+
+/** UI rollup for Selected Domain → Scrape targets (aligned with rocket.scrape-targets verdict). */
+export function buildScrapeTargetsRollup(targets: ScrapeTargetView[]): ScrapeTargetsRollup {
+  if (targets.length === 0) {
+    return { quiet: true, label: 'None mapped / Prometheus unavailable' }
+  }
+  const standbyDown = targets.filter(t => t.expectedOff === true).length
+  const unexpectedDown = targets.filter(
+    t => t.health === 'down' && t.expectedOff !== true,
+  ).length
+  const unknown = targets.filter(t => t.health === 'unknown').length
+  const up = targets.filter(t => t.health === 'up').length
+  const quiet = unexpectedDown === 0 && unknown === 0
+  const parts = [`Prometheus endpoints (not logs) · ${targets.length}`]
+  if (quiet) {
+    parts.push(standbyDown > 0 ? `${up} up · ${standbyDown} standby expected off` : 'all up')
+  } else {
+    const bad: string[] = []
+    if (unexpectedDown > 0) bad.push(`${unexpectedDown} down`)
+    if (unknown > 0) bad.push(`${unknown} unknown`)
+    parts.push(bad.join(' · '))
+    if (standbyDown > 0) parts.push(`${standbyDown} standby expected off`)
+  }
+  return { quiet, label: parts.join(' · ') }
+}
+
+function annotateScrapeExpectedOff(
+  targets: ScrapeTargetView[],
+  standbyNodes: StandbyNodeRef[],
+): ScrapeTargetView[] {
+  if (standbyNodes.length === 0) {
+    return targets.map(t => ({ ...t, expectedOff: false }))
+  }
+  return targets.map(t => ({
+    ...t,
+    expectedOff: t.health === 'down' && isStandbyScrapeTarget(t, standbyNodes),
+  }))
 }
 
 function evaluateScrapeTargets(
@@ -643,6 +684,12 @@ function buildSelectedDetail(
     }
   }
 
+  const domainTargets = sortScrapeTargets(
+    annotateScrapeExpectedOff(
+      targets.filter(t => t.domain === domain),
+      input.standbyNodes ?? [],
+    ),
+  )
   return {
     domain,
     dependencyPath,
@@ -654,7 +701,8 @@ function buildSelectedDetail(
         ? goldenFromMetrics(input.telemetryMetrics)
         : [],
     alerts: alerts.filter(a => a.domain === domain),
-    scrapeTargets: sortScrapeTargets(targets.filter(t => t.domain === domain)),
+    scrapeTargets: domainTargets,
+    scrapeRollup: buildScrapeTargetsRollup(domainTargets),
     detailLinks: detailRoutes.map(route => ({
       label: routeLabel(route),
       route,

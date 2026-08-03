@@ -695,9 +695,7 @@ export function ObservabilityPage({
     selected.goldenSignals.length > 0 &&
     selected.goldenSignals.every(g => g.status === 'ok')
 
-  const scrapeQuiet =
-    selected.scrapeTargets.length > 0 &&
-    selected.scrapeTargets.every(t => t.health === 'up')
+  const scrapeQuiet = selected.scrapeRollup.quiet
 
   const systemHealthy = !isLoading && system.overall === 'healthy'
   const selectedPrimaryGrafana = useMemo(() => {
@@ -1268,13 +1266,7 @@ export function ObservabilityPage({
           <OpsSection
             key={`${selected.domain}-scrape`}
             title="Scrape targets"
-            description={
-              selected.scrapeTargets.length === 0
-                ? 'None mapped / Prometheus unavailable'
-                : `Prometheus endpoints (not logs) · ${selected.scrapeTargets.length} · ${
-                    scrapeQuiet ? 'all up' : 'has down/unknown'
-                  }`
-            }
+            description={selected.scrapeRollup.label}
             leading={<StatusLamp value={scrapeQuiet ? 'ok' : 'degraded'} kind="reach" />}
             variant="flat"
             className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
@@ -1323,11 +1315,23 @@ export function ObservabilityPage({
                   </DenseTableRow>
                 ) : (
                   selected.scrapeTargets.map(t => {
+                    const expectedOff = t.expectedOff === true
                     const err = t.lastError != null && t.lastError !== '' ? t.lastError : null
                     const scrapeTitle = err ?? t.lastScrape ?? undefined
                     const pathLabel = shortMetricsPath(t.metricsPath)
                     const primaryHost = t.node ?? t.pod ?? t.instance
                     const hostTitle = [t.node, t.pod, t.instance].filter(Boolean).join(' · ')
+                    const healthLamp =
+                      t.health === 'up'
+                        ? ('ok' as const)
+                        : expectedOff
+                          ? ('unknown' as const)
+                          : t.health === 'down'
+                            ? ('fail' as const)
+                            : ('unknown' as const)
+                    const healthLabel = expectedOff
+                      ? 'EXPECTED OFF'
+                      : t.health.toUpperCase()
                     return (
                       <DenseTableRow key={t.id}>
                         <DenseTableCell
@@ -1354,13 +1358,19 @@ export function ObservabilityPage({
                         </DenseTableCell>
                         <DenseTableCell className={scrapeCell}>
                           <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                            <StatusLamp
-                              value={
-                                t.health === 'up' ? 'ok' : t.health === 'down' ? 'fail' : 'unknown'
-                              }
-                              kind="reach"
-                            />
-                            <span className="uppercase text-muted-foreground">{t.health}</span>
+                            <StatusLamp value={healthLamp} kind="reach" />
+                            <span
+                              className={cn(
+                                'uppercase',
+                                expectedOff
+                                  ? 'text-muted-foreground'
+                                  : t.health === 'down'
+                                    ? 'text-danger'
+                                    : 'text-muted-foreground',
+                              )}
+                            >
+                              {healthLabel}
+                            </span>
                           </span>
                         </DenseTableCell>
                         <DenseTableCell
@@ -1373,11 +1383,23 @@ export function ObservabilityPage({
                           className={cn(
                             scrapeCell,
                             'font-mono-tabular truncate',
-                            err != null ? 'text-danger' : 'text-muted-foreground',
+                            err != null && !expectedOff
+                              ? 'text-danger'
+                              : 'text-muted-foreground',
                           )}
-                          title={scrapeTitle}
+                          title={
+                            expectedOff
+                              ? err != null
+                                ? `Standby expected off · ${err}`
+                                : 'Standby expected off'
+                              : scrapeTitle
+                          }
                         >
-                          {err != null ? err : formatScrapeAge(t.lastScrape)}
+                          {expectedOff
+                            ? 'standby expected off'
+                            : err != null
+                              ? err
+                              : formatScrapeAge(t.lastScrape)}
                         </DenseTableCell>
                       </DenseTableRow>
                     )

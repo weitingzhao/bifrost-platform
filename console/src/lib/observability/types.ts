@@ -169,6 +169,11 @@ export type ScrapeTargetView = {
   role: SignalRole
   domain: SystemDomainId
   env: ObservabilityEnvId
+  /**
+   * DOWN on an elastic standby host — expected off, not a fail/red signal.
+   * UI must not use error/danger styling for these rows.
+   */
+  expectedOff?: boolean
 }
 
 export type MappedAlert = {
@@ -230,12 +235,20 @@ export type GrafanaSoloEmbed = {
   height: number
 }
 
+export type ScrapeTargetsRollup = {
+  /** True when no unexpected DOWN/unknown — standby expected-off does not fail this. */
+  quiet: boolean
+  /** Compact section description (English). */
+  label: string
+}
+
 export type SelectedDomainDetail = {
   domain: SystemDomainId
   dependencyPath: DependencyPathHop[]
   goldenSignals: GoldenSignalRow[]
   alerts: MappedAlert[]
   scrapeTargets: ScrapeTargetView[]
+  scrapeRollup: ScrapeTargetsRollup
   detailLinks: { label: string; route: string }[]
   grafanaLinks: { label: string; url: string | null; available: boolean }[]
   /** Primary dashboard solo panel embed; null when catalog has no soloPanel or URL unavailable. */

@@ -9,6 +9,7 @@ export * from './grafanaUrlBuilder'
 export * from './verdictAggregation'
 export {
   buildObservabilityViewModel,
+  buildScrapeTargetsRollup,
   sortScrapeTargets,
   shortMetricsPath,
   type ObservabilityViewModelInput,
