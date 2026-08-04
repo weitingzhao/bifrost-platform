@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -167,6 +168,33 @@ func TestHandleListMergesRunnerAndStore(t *testing.T) {
 	}
 	if !ids["job-1"] || !ids["archived-only"] {
 		t.Fatalf("expected merged jobs to include both runner and archive-only jobs, got %+v", payload.Jobs)
+	}
+}
+
+func TestCompactJobsForListStripsEventsAndLimits(t *testing.T) {
+	jobs := []Job{
+		{
+			ID:        "a",
+			Status:    JobDone,
+			Summary:   strings.Repeat("x", 500),
+			InitBrief: "brief",
+			Events:    []Event{{ID: "e1", Type: EventThinking, Text: "huge"}},
+		},
+		{ID: "b", Status: JobDone},
+		{ID: "c", Status: JobDone},
+	}
+	got := compactJobsForList(jobs, 2)
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0].Events != nil {
+		t.Fatalf("events should be stripped")
+	}
+	if got[0].InitBrief != "" {
+		t.Fatalf("init_brief should be stripped")
+	}
+	if len([]rune(got[0].Summary)) > listSummaryMaxRunes+1 {
+		t.Fatalf("summary not truncated: %d runes", len([]rune(got[0].Summary)))
 	}
 }
 

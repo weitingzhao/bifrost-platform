@@ -344,7 +344,14 @@ export function ControlRoomPage({
   }, [])
 
   if (contextLoading || matrixLoading || missionLoading) {
-    return <p className="text-[var(--muted-foreground)]">Loading mission control…</p>
+    return (
+      <div className="flex min-h-[12rem] flex-col justify-center gap-1.5 py-6">
+        <p className="text-[var(--text-dense-body)] text-foreground">Loading mission control…</p>
+        <p className="text-[var(--text-dense-meta)] text-muted-foreground">
+          Matrix and mission probes can take several seconds on first load.
+        </p>
+      </div>
+    )
   }
 
   if (matrixError != null) {

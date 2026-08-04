@@ -16,6 +16,7 @@ import {
   macAgentRoleLabel,
   type MacAgentHostRole,
 } from '@/lib/agent/macHostRole'
+import { randomId } from '@/lib/randomId'
 
 export type ServerTerminalProps = {
   hosts: ConsoleHost[]
@@ -106,7 +107,7 @@ export function ServerTerminal({
       return [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: randomId(),
           hostId,
           connState: 'connecting',
           error: null,

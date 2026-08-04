@@ -56,6 +56,8 @@ _PLATFORM_DOTENV_KEYS = frozenset({
     "PLATFORM_OPERATOR_TOKEN",
     "PLATFORM_ADMIN_TOKEN",
     "PLATFORM_LISTEN",
+    "PLATFORM_CONSOLE_HOST",
+    "PLATFORM_CONSOLE_PORT",
     "PLATFORM_CONFIG",
     "OPS_VIEWER_ENV",
     "REMEDIATION_RUNNER_URL",
@@ -137,6 +139,29 @@ def _parse_listen_port(listen: str, default: int) -> int:
     if ":" in listen:
         return int(listen.rsplit(":", 1)[-1])
     return int(listen)
+
+
+def _lan_urls(console_port: int) -> list[str]:
+    """Prefer Bifrost LAN (192.168.10.x) when listing remote console URLs."""
+    try:
+        out = subprocess.check_output(["ifconfig"], text=True, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    ips: list[str] = []
+    for line in out.splitlines():
+        line = line.strip()
+        if not line.startswith("inet "):
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        ip = parts[1]
+        if ip.startswith("127.") or ":" in ip:
+            continue
+        ips.append(ip)
+    preferred = [ip for ip in ips if ip.startswith("192.168.10.")]
+    others = [ip for ip in ips if ip not in preferred]
+    return [f"http://{ip}:{console_port}" for ip in preferred + others]
 
 
 def _pids_on_port(port: int) -> list[int]:
@@ -289,9 +314,12 @@ def main() -> int:
 
     api_port = _parse_listen_port(os.environ.get("PLATFORM_LISTEN", ":8780"), 8780)
     console_port = int(os.environ.get("PLATFORM_CONSOLE_PORT", "5180"))
+    # Default loopback-only. Set PLATFORM_CONSOLE_HOST=0.0.0.0 for Bifrost LAN access.
+    console_host = (os.environ.get("PLATFORM_CONSOLE_HOST") or "127.0.0.1").strip() or "127.0.0.1"
 
     os.environ.setdefault("PLATFORM_LISTEN", f":{api_port}")
     os.environ["PLATFORM_CONSOLE_PORT"] = str(console_port)
+    os.environ["PLATFORM_CONSOLE_HOST"] = console_host
 
     if _ensure_prereqs() != 0:
         return 1
@@ -330,8 +358,12 @@ def main() -> int:
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
+    lan_urls = _lan_urls(console_port) if console_host in ("0.0.0.0", "::", "*") else []
+
     if start_api:
-        print(f"Starting platform-api on http://127.0.0.1:{api_port}")
+        # PLATFORM_LISTEN=:8780 binds all interfaces (needed for remote /api via Vite proxy
+        # and direct API clients on the Bifrost LAN).
+        print(f"Starting platform-api on {os.environ['PLATFORM_LISTEN']}")
         children.append(
             subprocess.Popen(
                 ["go", "run", "./cmd/platform-api"],
@@ -341,15 +373,28 @@ def main() -> int:
         )
 
     if start_console:
-        print(f"Starting console on http://127.0.0.1:{console_port}")
+        print(f"Starting console on http://{console_host}:{console_port}")
         children.append(
             subprocess.Popen(
-                ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", str(console_port), "--strictPort"],
+                [
+                    "npm",
+                    "run",
+                    "dev",
+                    "--",
+                    "--host",
+                    console_host,
+                    "--port",
+                    str(console_port),
+                    "--strictPort",
+                ],
                 cwd=_CONSOLE_DIR,
                 env=env,
             )
         )
 
+    print(f"Local console: http://127.0.0.1:{console_port}")
+    for url in lan_urls:
+        print(f"LAN console:   {url}")
     print("Press Ctrl+C to stop.")
     while True:
         for proc in children:

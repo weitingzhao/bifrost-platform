@@ -1,4 +1,5 @@
 import { createSession } from '@/api/sessions'
+import { randomId } from '@/lib/randomId'
 
 export type EnsureSessionForPackInput = {
   programId?: string | null
@@ -30,7 +31,7 @@ export async function ensureSessionForPack(
     return { sessionId: undefined, pack, archived: false }
   }
 
-  const sessionId = crypto.randomUUID()
+  const sessionId = randomId()
   const pack = input.buildPack(sessionId)
   await createSession({
     session_id: sessionId,

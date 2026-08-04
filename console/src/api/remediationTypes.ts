@@ -53,6 +53,9 @@ export interface RemediationJob {
 
 export interface RemediationJobsResponse {
   jobs: RemediationJob[]
+  total?: number
+  limit?: number
+  source?: string
 }
 
 export interface StartRemediationRequest {

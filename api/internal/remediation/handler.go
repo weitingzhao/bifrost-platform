@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -128,6 +130,7 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
+	limit := listLimitFromQuery(r)
 	stored := h.store.List()
 	jobs, err := h.runner.List(r.Context())
 	if err != nil {
@@ -135,14 +138,72 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		for _, j := range reconciled {
 			h.store.Put(j)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"jobs": reconciled, "source": "archive"})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"jobs":   compactJobsForList(reconciled, limit),
+			"source": "archive",
+			"total":  len(reconciled),
+			"limit":  limit,
+		})
 		return
 	}
 	merged := ReconcileOrphanedJobs(jobs, stored)
 	for _, j := range merged {
 		h.store.Put(j)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"jobs": merged})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"jobs":  compactJobsForList(merged, limit),
+		"total": len(merged),
+		"limit": limit,
+	})
+}
+
+const defaultListLimit = 80
+const maxListLimit = 200
+const listSummaryMaxRunes = 280
+
+func listLimitFromQuery(r *http.Request) int {
+	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if raw == "" {
+		return defaultListLimit
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return defaultListLimit
+	}
+	if n > maxListLimit {
+		return maxListLimit
+	}
+	return n
+}
+
+// compactJobsForList drops event transcripts (can be tens of MB) so Console list
+// endpoints stay usable over LAN. Full job detail remains on GET /remediation/{id}.
+func compactJobsForList(jobs []Job, limit int) []Job {
+	if limit <= 0 {
+		limit = defaultListLimit
+	}
+	if len(jobs) > limit {
+		jobs = jobs[:limit]
+	}
+	out := make([]Job, len(jobs))
+	for i, j := range jobs {
+		j.Events = nil
+		j.InitBrief = ""
+		j.Summary = truncateRunes(j.Summary, listSummaryMaxRunes)
+		out[i] = j
+	}
+	return out
+}
+
+func truncateRunes(s string, max int) string {
+	if max <= 0 || s == "" {
+		return s
+	}
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
 }
 
 func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {

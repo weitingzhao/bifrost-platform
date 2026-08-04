@@ -14,8 +14,10 @@ export async function fetchRemediationJob(id: string): Promise<RemediationJob> {
   return r.json() as Promise<RemediationJob>
 }
 
-export async function fetchRemediationJobs(): Promise<RemediationJobsResponse> {
-  const r = await authedFetch('remediation jobs', '/api/v1/remediation/')
+export async function fetchRemediationJobs(opts?: { limit?: number }): Promise<RemediationJobsResponse> {
+  const limit = opts?.limit ?? 80
+  const q = new URLSearchParams({ limit: String(limit) })
+  const r = await authedFetch('remediation jobs', `/api/v1/remediation/?${q.toString()}`)
   return r.json() as Promise<RemediationJobsResponse>
 }
 

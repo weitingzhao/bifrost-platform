@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 const uiRoot = path.resolve(__dirname, '../../bifrost-ui')
+// Default loopback-only. run_platform.py sets PLATFORM_CONSOLE_HOST=0.0.0.0 for LAN.
+const consoleHost = (process.env.PLATFORM_CONSOLE_HOST || '127.0.0.1').trim() || '127.0.0.1'
+const consolePort = Number(process.env.PLATFORM_CONSOLE_PORT || 5180)
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -19,9 +22,9 @@ export default defineConfig({
     ],
   },
   server: {
-    // Bind IPv4 explicitly — default [::1] breaks http://127.0.0.1:5180 in browsers.
-    host: '127.0.0.1',
-    port: 5180,
+    // Bind IPv4 explicitly — bare host can prefer [::1] and break IPv4 clients.
+    host: consoleHost,
+    port: consolePort,
     strictPort: true,
     fs: {
       allow: [path.resolve(__dirname, '..'), uiRoot],
