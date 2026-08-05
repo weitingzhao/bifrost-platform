@@ -66,6 +66,34 @@ server.tool(
 )
 
 server.tool(
+  'get_network_health',
+  'UniFi site health + device online fraction (L0) — wraps Client.Health /stat/health',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/network/health')),
+)
+
+server.tool(
+  'get_network_bandwidth',
+  'Device/client rx/tx bytes and rates from UniFi stat/device + stat/sta (L0)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/network/bandwidth')),
+)
+
+server.tool(
+  'get_network_anomalies',
+  'Rule-based anomaly alerts — device down, probe fail streak, optional client drop (L0 read-first)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/network/anomalies')),
+)
+
+server.tool(
+  'get_network_sla',
+  'Thin SLA strip — probe success, device up fraction, predictive-lite tips (L0)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/network/sla')),
+)
+
+server.tool(
   'apply_network_firewall',
   'L1 idempotent re-sync missing Bifrost ZBF policies — operator token required',
   { include_default_deny: z.boolean().optional() },

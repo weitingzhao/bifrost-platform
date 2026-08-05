@@ -29,9 +29,11 @@ func mockUnifiServer(t *testing.T) (*httptest.Server, string) {
 		case "/proxy/network/v2/api/site/default/firewall-policies":
 			_, _ = w.Write([]byte(`[{"name":"Bifrost | ALLOW Work → Server","action":"ALLOW"}]`))
 		case "/proxy/network/api/s/default/stat/device":
-			_, _ = w.Write([]byte(`{"data":[{"name":"ucg","type":"ugw"}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"name":"ucg","type":"ugw","model":"UCG-Max","ip":"192.168.1.1","mac":"aa:bb:cc:dd:ee:ff","state":1,"adopted":true,"uptime":3600,"version":"4.1.0","rx_bytes":1000,"tx_bytes":2000,"rx_bytes-r":10,"tx_bytes-r":20}]}`))
 		case "/proxy/network/api/s/default/stat/sta":
-			_, _ = w.Write([]byte(`{"data":[{"hostname":"laptop"}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"hostname":"laptop","ip":"192.168.10.5","mac":"11:22:33:44:55:66","network":"Work","is_wired":true,"rx_bytes":100,"tx_bytes":50,"rx_rate":5,"tx_rate":2}]}`))
+		case "/proxy/network/api/s/default/stat/health":
+			_, _ = w.Write([]byte(`{"data":[{"subsystem":"wlan","status":"ok"},{"subsystem":"wan","status":"ok"}]}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -125,5 +127,106 @@ func TestHandleFirewallApply(t *testing.T) {
 	}
 	if payload["autonomy"] != "L1" {
 		t.Fatalf("autonomy: %v", payload["autonomy"])
+	}
+}
+
+func TestHandleHealth(t *testing.T) {
+	srv, host := mockUnifiServer(t)
+	h := network.NewHandler(nil, network.WithDial(func(ctx context.Context) (*unifi.Client, error) {
+		c := unifi.New(unifi.Config{Host: host, User: "agent", Pass: "secret", Site: "default"})
+		c.SetHTTPClient(srv.Client())
+		if err := c.Login(ctx); err != nil {
+			return nil, err
+		}
+		return c, nil
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/network/health", nil)
+	rec := httptest.NewRecorder()
+	h.HandleHealth(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["autonomy"] != "L0" {
+		t.Fatalf("autonomy: %v", payload["autonomy"])
+	}
+	if payload["devices_up"] != float64(1) {
+		t.Fatalf("devices_up: %v", payload["devices_up"])
+	}
+	devices, ok := payload["devices"].([]any)
+	if !ok || len(devices) != 1 {
+		t.Fatalf("devices: %v", payload["devices"])
+	}
+	dev := devices[0].(map[string]any)
+	if dev["state_label"] != "online" {
+		t.Fatalf("state_label: %v", dev["state_label"])
+	}
+}
+
+func TestHandleBandwidth(t *testing.T) {
+	srv, host := mockUnifiServer(t)
+	h := network.NewHandler(nil, network.WithDial(func(ctx context.Context) (*unifi.Client, error) {
+		c := unifi.New(unifi.Config{Host: host, User: "agent", Pass: "secret", Site: "default"})
+		c.SetHTTPClient(srv.Client())
+		if err := c.Login(ctx); err != nil {
+			return nil, err
+		}
+		return c, nil
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/network/bandwidth", nil)
+	rec := httptest.NewRecorder()
+	h.HandleBandwidth(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	totals := payload["totals"].(map[string]any)
+	if totals["rx_bytes"] != float64(1000) {
+		t.Fatalf("rx_bytes: %v", totals["rx_bytes"])
+	}
+}
+
+func TestHandleAnomaliesAndSLA(t *testing.T) {
+	srv, host := mockUnifiServer(t)
+	h := network.NewHandler(nil, network.WithDial(func(ctx context.Context) (*unifi.Client, error) {
+		c := unifi.New(unifi.Config{Host: host, User: "agent", Pass: "secret", Site: "default"})
+		c.SetHTTPClient(srv.Client())
+		if err := c.Login(ctx); err != nil {
+			return nil, err
+		}
+		return c, nil
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/network/anomalies", nil)
+	rec := httptest.NewRecorder()
+	h.HandleAnomalies(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("anomalies status %d body %s", rec.Code, rec.Body.String())
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/network/sla", nil)
+	rec2 := httptest.NewRecorder()
+	h.HandleSLA(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("sla status %d body %s", rec2.Code, rec2.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec2.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["probe_ok"] != true {
+		t.Fatalf("probe_ok: %v", payload["probe_ok"])
+	}
+	if payload["source"] != "network_probe" {
+		t.Fatalf("source: %v", payload["source"])
 	}
 }

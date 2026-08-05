@@ -6,6 +6,7 @@
 import type { AgentBridgeResponse } from '@/api/agentTypes'
 import type { ClusterMetricsResponse, ClusterObservabilityResponse, TelemetryMetricResult } from '@/api/clusterTypes'
 import type { SelfHealthResponse } from '@/api/matrixTypes'
+import type { NetworkSlaResponse } from '@/api/networkTypes'
 import type { RemediationHealthResponse } from '@/api/remediationTypes'
 import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
@@ -77,6 +78,7 @@ export type ObservabilityViewModelInput = {
   targetsError?: string | null
   bus?: BusHealthInput | null
   ibGateway?: IbGatewayStatusResponse | null
+  networkSla?: NetworkSlaResponse | null
   remediation?: RemediationHealthResponse | null
   agentBridge?: AgentBridgeResponse | null
   selfHealth?: SelfHealthResponse | null
@@ -451,6 +453,49 @@ function evaluateOptionalNone(signalId: string): EvaluatedSignal {
   }
 }
 
+function evaluateNetworkProbe(sla: NetworkSlaResponse | null | undefined): EvaluatedSignal {
+  const def = getSignalDef('ground.network')!
+  if (sla == null) {
+    return {
+      def,
+      state: 'not_observed',
+      summary: 'Network SLA probe not provided',
+      env: 'shared',
+    }
+  }
+  if (sla.error != null && sla.error !== '') {
+    return {
+      def,
+      state: 'critical',
+      summary: sla.summary ?? sla.error,
+      env: 'shared',
+    }
+  }
+  if (sla.probe_ok !== true) {
+    return {
+      def,
+      state: 'critical',
+      summary: sla.summary ?? 'UniFi probe failed',
+      env: 'shared',
+    }
+  }
+  const frac = sla.devices_up_fraction ?? 1
+  if (frac < 1) {
+    return {
+      def,
+      state: 'degraded',
+      summary: sla.summary ?? `${sla.devices_up ?? '?'}/${sla.devices_total ?? '?'} devices online`,
+      env: 'shared',
+    }
+  }
+  return {
+    def,
+    state: 'healthy',
+    summary: sla.summary ?? 'UniFi probe OK',
+    env: 'shared',
+  }
+}
+
 function evaluateBus(bus: BusHealthInput | null | undefined, env: ObservabilityEnvId): EvaluatedSignal {
   const def = getSignalDef('satellite.bus-health')!
   if (bus == null) {
@@ -795,7 +840,7 @@ export function buildObservabilityViewModel(
     const s = evaluateMetricSignal(id, input.telemetryMetrics, input.telemetryError, 'shared')
     if (s != null) signals.push(s)
   }
-  signals.push(evaluateOptionalNone('ground.network'))
+  signals.push(evaluateNetworkProbe(input.networkSla))
 
   // Satellite
   for (const id of [

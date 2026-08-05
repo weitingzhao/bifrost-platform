@@ -1,7 +1,7 @@
 id: ib-gateway-plugin
 title: IB Gateway Plugin
 description: redis-ib plugin phases, program closure, hardening.
-status: active
+status: completed
 delivery:
   board_visible: true
   former_location: Subcontractors → Plugin Gallery · Engineer → Briefing

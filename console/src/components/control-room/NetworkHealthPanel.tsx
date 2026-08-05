@@ -51,7 +51,7 @@ export function NetworkHealthPanel({
   onOpenNetwork,
   showPrimaryAgentAction = true,
   title = 'Network Health — ground floor (LAN / UniFi)',
-  description = 'Catalog + spine projection plus live UniFi probe via GET /api/v1/network/status + audit (Session v2 per D9).',
+  description = 'Catalog + spine projection plus live UniFi probe via GET /api/v1/network/status + audit + health (Session v2 per D9).',
 }: NetworkHealthPanelProps) {
   const streams = resolveNetworkStreamProjections(context)
   const spineLoaded = context?.tracks?.infra != null
@@ -100,6 +100,7 @@ export function NetworkHealthPanel({
           <DenseTag variant="info">L0</DenseTag>
           <code className="text-[var(--text-dense-caption)] font-mono">GET /api/v1/network/status</code>
           <code className="text-[var(--text-dense-caption)] font-mono">GET /api/v1/network/audit</code>
+          <code className="text-[var(--text-dense-caption)] font-mono">GET /api/v1/network/health</code>
         </div>
         <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           {liveProbe.isLoading ? 'Probing UCG via platform-api…' : liveProbe.summary}

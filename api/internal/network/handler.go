@@ -38,6 +38,22 @@ func (h *Handler) HandleClients(w http.ResponseWriter, r *http.Request) {
 	h.writeService(w, r, h.svc.Clients)
 }
 
+func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
+	h.writeService(w, r, h.svc.Health)
+}
+
+func (h *Handler) HandleBandwidth(w http.ResponseWriter, r *http.Request) {
+	h.writeService(w, r, h.svc.Bandwidth)
+}
+
+func (h *Handler) HandleAnomalies(w http.ResponseWriter, r *http.Request) {
+	h.writeService(w, r, h.svc.Anomalies)
+}
+
+func (h *Handler) HandleSLA(w http.ResponseWriter, r *http.Request) {
+	h.writeService(w, r, h.svc.SLA)
+}
+
 func (h *Handler) HandleAudit(w http.ResponseWriter, r *http.Request) {
 	h.writeService(w, r, h.svc.Audit)
 }

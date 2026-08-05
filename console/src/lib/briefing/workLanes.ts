@@ -619,6 +619,48 @@ function buildQueueFromInfraStreams(
     .map(streamToQueueItem)
 }
 
+/**
+ * Synthetic queue for Ground · Maintain lane network-monitoring.
+ * Tracks network-monitoring-ops P0–P4; update statuses as phases complete in YAML.
+ */
+function buildNetworkMonitoringQueue(): QueueItem[] {
+  // Program network-monitoring-ops completed — all phases closed (Done lifecycle).
+  const phases: Array<{ id: string; label: string; note: string }> = [
+    {
+      id: 'network-monitoring-ops-P0',
+      label: 'P0 Baseline contract',
+      note: 'DONE — program + lane contract',
+    },
+    {
+      id: 'network-monitoring-ops-P1',
+      label: 'P1 Device health',
+      note: 'DONE — Wave A health live',
+    },
+    {
+      id: 'network-monitoring-ops-P2',
+      label: 'P2 Bandwidth',
+      note: 'DONE — Wave B bandwidth live',
+    },
+    {
+      id: 'network-monitoring-ops-P3',
+      label: 'P3 Rule anomaly',
+      note: 'DONE — Wave C anomalies live',
+    },
+    {
+      id: 'network-monitoring-ops-P4',
+      label: 'P4 SLA + predictive-lite',
+      note: 'DONE — Wave D SLA + ground.network; program completed · no_handoff',
+    },
+  ]
+  return phases.map(p => ({
+    id: p.id,
+    label: p.label,
+    status: 'closed' as const,
+    note: p.note,
+    progress: { done: 1, total: 1 },
+  }))
+}
+
 export function buildQueueForLane(
   laneId: LaneId,
   context: OpsContextResponse | undefined,
@@ -630,8 +672,35 @@ export function buildQueueForLane(
 
   switch (lane.track) {
     case 'build':
+      // Delivery program trade-celery-k8s-ideal (complete) — no spine build.tasks mapping.
+      if (laneId === 'trade-system-celery') {
+        return [
+          {
+            id: 'trade-celery-k8s-ideal',
+            label: 'Trade Celery / Massive K8s Ideal',
+            status: 'closed',
+            note:
+              '6/6 phases done · 5/5 required gates signed · Massive superseded by market-data-subcontractor; stocks_ib Celery retained',
+            progress: { done: 6, total: 6 },
+          },
+        ]
+      }
       return buildQueueFromBuildTasks(tracks?.build, laneId as BuildLaneId)
     case 'migrate':
+      // Acceptance-test placeholder — migration already covered by trade-k8s-native +
+      // trade-celery-k8s-ideal + market-data-subcontractor; stocks_ib worker live on K8s.
+      if (laneId === 'qa-describe-first-4894') {
+        return [
+          {
+            id: 'qa-trade-bars-pipeline',
+            label: 'QA Trade bars pipeline',
+            status: 'closed',
+            note:
+              'DONE by evidence: celery-worker-stocks-ib 1/1 DEV/STG/PROD; market.stock_daily populated; Polygon daily via plugin-market-data; migrate spine 27/27 closed',
+            progress: { done: 1, total: 1 },
+          },
+        ]
+      }
       if (laneId === 'trade-k8s-native') {
         return buildTradeK8sNativeQueue(context)
       }
@@ -642,8 +711,25 @@ export function buildQueueForLane(
     case 'automate':
       return buildQueueFromAutomateStreams(tracks?.automate, laneId as AutomateLaneId)
     case 'infra':
+      // Network Monitoring Ops delivery complete — lane Done; ongoing ops via Network / Daily Ops.
+      if (laneId === 'network-monitoring') {
+        return buildNetworkMonitoringQueue()
+      }
       return buildQueueFromInfraStreams(tracks?.infra, laneId as InfraLaneId)
     case 'operate':
+      // Mission Signal delivery complete — lane archived; ongoing health is Daily Ops / Control Room.
+      if (laneId === 'platform-health') {
+        return [
+          {
+            id: 'mission-signal',
+            label: 'Mission Signal',
+            status: 'closed',
+            note:
+              'DONE — 7/7 gates signed · program completed · no_handoff. New signal work = patches, not this lane.',
+            progress: { done: 7, total: 7 },
+          },
+        ]
+      }
       switch (laneId as OperateLaneId) {
         case 'governance':
           return buildGovernanceQueue(context)

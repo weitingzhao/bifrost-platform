@@ -186,7 +186,11 @@ lanes:
       track_type: maintain
       label: Platform health & observability
       short_label: Health
-      description: Console uptime, API latency, cluster workload readiness, self-health probes, alert triage.
+      description: >
+        DONE — Mission Signal program completed (7/7 gates signed, no_handoff).
+        Ongoing uptime/latency/readiness/alert triage lives in Daily Ops / Control Room,
+        not this delivery lane. Original intent: Console uptime, API latency, cluster
+        workload readiness, self-health probes, alert triage.
       agent_mode: Ops
       work_intent: ops
     - id: trade-features
@@ -204,7 +208,10 @@ lanes:
       track_type: maintain
       label: Network monitoring & health
       short_label: Monitor
-      description: UniFi device health, bandwidth tracking, anomaly detection, predictive maintenance, SLA dashboards.
+      description: >
+        DONE — network-monitoring-ops program completed (P0–P4 signed, no_handoff).
+        Ongoing UniFi health/bandwidth/anomaly/SLA via Network page / Daily Ops;
+        reuses platform-api + mcp/unifi (Network Governance stack).
       agent_mode: Ops
       work_intent: ops
     - id: polygon-vendor
@@ -240,7 +247,12 @@ lanes:
       track_type: migrate
       label: QA Trade bars pipeline
       short_label: QA Trade bars
-      description: Migrate legacy trade daemon bars backfill to K8s-native worker — acceptance test lane
+      description: >
+        DONE — Acceptance covered by closed migrate spine (27/27) + trade-celery-k8s-ideal +
+        market-data-subcontractor. Evidence: celery-worker-stocks-ib 1/1 on DEV/STG/PROD;
+        market.stock_daily populated; Polygon daily via plugin-market-data; IB bars path
+        retained on stocks_ib Celery. Original intent: Migrate legacy trade daemon bars
+        backfill to K8s-native worker — acceptance test lane.
       agent_mode: Ops
       work_intent: feature
     - id: trade-system-celery
@@ -249,6 +261,13 @@ lanes:
       track_type: build
       label: 分析目前Trade System使用的Celery 相关的后台作业调度方案
       short_label: 分析目前Trade System使用的Celer
-      description: 基于目前Trade System使用的Python语言，之前Trade采用的后台Task方案是Celery，在基于k8s的运行环境下，和Trade 系统的业务需求，最Ideal的Worker 方式还是Celery吗？如果是的话，那目前Celery在目前环境下的运行方式也是Ideal的方式吗？
+      description: >
+        DONE — Trade Celery / Massive K8s Ideal (W0–W5) signed complete.
+        Verdict: keep Celery for IB bars (stocks_ib); Massive Polygon ingest moved off Celery to
+        plugin-market-data (market-data-subcontractor). K8s Ideal for remaining Celery =
+        per-queue Deployments + Beat + executor_mode=kubernetes (program trade-celery-k8s-ideal).
+        Original question: 基于目前Trade System使用的Python语言，之前Trade采用的后台Task方案是Celery，
+        在基于k8s的运行环境下，和Trade 系统的业务需求，最Ideal的Worker 方式还是Celery吗？
+        如果是的话，那目前Celery在目前环境下的运行方式也是Ideal的方式吗？
       agent_mode: Ops
       work_intent: feature

@@ -1,7 +1,7 @@
 id: trade-celery-k8s-ideal
 title: "Trade Celery / Massive K8s Ideal"
-description: "Hemostasis for Massive Celery on K8s — all-queues consumer + Beat, honest Ops control plane, per-queue Deployments, observability, PROD parity. D10 remains BLOCKED."
-status: active
+description: "Hemostasis for Massive Celery on K8s — all-queues consumer + Beat, honest Ops control plane, per-queue Deployments, observability, PROD parity. D10 remains BLOCKED. Massive Celery later superseded by market-data-subcontractor; stocks_ib retained."
+status: completed
 
 delivery:
   board_visible: true
@@ -100,7 +100,7 @@ phases:
 
   - id: W5
     title: "PROD + Owner sign-off"
-    status: pending
+    status: done
     prompt_template: |
       Apply same patterns to prod overlay. Update COMPOSE_ON_K8S_GAPS Ops control row.
       Owner sign-off checklist in tradeCeleryK8sIdealCatalog. D10 still BLOCKED.

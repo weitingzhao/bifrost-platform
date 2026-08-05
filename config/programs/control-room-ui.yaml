@@ -1,7 +1,7 @@
 id: control-room-ui
 title: Control Room UI
 description: Console commander layout, payload depth, promote cutover panels.
-status: active
+status: completed
 delivery:
   board_visible: true
   former_location: Mission Control → Control Room

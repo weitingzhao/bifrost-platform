@@ -1,7 +1,10 @@
 id: network-governance--ground-build
 title: Network Governance · Ground Build
-description: Network constitution, Agent Protocol, Network API program.
-status: active
+description: >
+  CLOSED — Empty Task Mode template instance. Real delivery completed on base program
+  network-governance (8/8 gates signed). Ongoing monitoring delivery is network-monitoring-ops
+  on lane network-monitoring. Original intent: network constitution, Agent Protocol, Network API.
+status: completed
 workspace: ""
 skill_path: ""
 model: composer-2.5
@@ -12,100 +15,118 @@ delivery:
 phases:
     - id: NG1
       title: NG1
-      status: pending
-      prompt_template: ""
+      status: done
+      prompt_template: "Superseded by network-governance NG1 (already signed)."
       verify_cmd: ""
-      acceptance: []
+      acceptance:
+        - "Base program network-governance NG1 signed"
       depends_on: []
       sign_off:
         required: true
-        checklist: []
+        checklist:
+          - "Superseded — no additional work"
       agent_session: null
     - id: NG2
       title: NG2
-      status: pending
-      prompt_template: ""
+      status: done
+      prompt_template: "Superseded by network-governance NG2 (already signed)."
       verify_cmd: ""
-      acceptance: []
+      acceptance:
+        - "Base program network-governance NG2 signed"
       depends_on: []
       sign_off:
         required: true
-        checklist: []
+        checklist:
+          - "Superseded — no additional work"
       agent_session: null
     - id: NG3
       title: NG3
-      status: pending
-      prompt_template: ""
+      status: done
+      prompt_template: "Superseded by network-governance NG3 (already signed)."
       verify_cmd: ""
-      acceptance: []
+      acceptance:
+        - "Base program network-governance NG3 signed"
       depends_on: []
       sign_off:
         required: true
-        checklist: []
+        checklist:
+          - "Superseded — no additional work"
       agent_session: null
     - id: NG4
       title: NG4
-      status: pending
-      prompt_template: ""
+      status: done
+      prompt_template: "Superseded by network-governance NG4 (already signed)."
       verify_cmd: ""
-      acceptance: []
+      acceptance:
+        - "Base program network-governance NG4 signed"
       depends_on: []
       sign_off:
         required: true
-        checklist: []
+        checklist:
+          - "Superseded — no additional work"
       agent_session: null
     - id: NG5
       title: NG5
-      status: pending
-      prompt_template: ""
+      status: done
+      prompt_template: "Superseded by network-governance NG5 (already signed)."
       verify_cmd: ""
-      acceptance: []
+      acceptance:
+        - "Base program network-governance NG5 signed"
       depends_on: []
       sign_off:
         required: true
-        checklist: []
+        checklist:
+          - "Superseded — no additional work"
       agent_session: null
     - id: NG6
       title: NG6
-      status: pending
-      prompt_template: ""
+      status: done
+      prompt_template: "Superseded by network-governance NG6 (already signed)."
       verify_cmd: ""
-      acceptance: []
+      acceptance:
+        - "Base program network-governance NG6 signed"
       depends_on: []
       sign_off:
         required: true
-        checklist: []
+        checklist:
+          - "Superseded — no additional work"
       agent_session: null
     - id: NG7
       title: NG7
-      status: pending
-      prompt_template: ""
+      status: done
+      prompt_template: "Superseded by network-governance NG7 (already signed)."
       verify_cmd: ""
-      acceptance: []
+      acceptance:
+        - "Base program network-governance NG7 signed"
       depends_on: []
       sign_off:
         required: true
-        checklist: []
+        checklist:
+          - "Superseded — no additional work"
       agent_session: null
     - id: NG8
       title: NG8
-      status: pending
-      prompt_template: ""
+      status: done
+      prompt_template: "Superseded by network-governance NG8 (already signed)."
       verify_cmd: ""
-      acceptance: []
+      acceptance:
+        - "Base program network-governance NG8 signed"
       depends_on: []
       sign_off:
         required: true
-        checklist: []
+        checklist:
+          - "Superseded — no additional work"
       agent_session: null
 post_completion: null
 metadata:
     base_blueprint_id: network-governance
     created_at: "2026-07-12T06:32:51Z"
+    completed_at: "2026-08-05T19:50:00Z"
     instance_label: Ground Build
     lane_id: network-server
     owner: vision-mac-trader
     tags:
         - delivery-board
         - governance
+        - closed-superseded
     template_id: ground-build

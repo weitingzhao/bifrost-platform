@@ -49,6 +49,7 @@ export type SignalSourceKind =
   | 'agent_bridge'
   | 'self_health'
   | 'remediation'
+  | 'network_probe'
   | 'none'
 
 export type ObservabilityEnvId = 'dev' | 'stg' | 'prod' | 'shared'

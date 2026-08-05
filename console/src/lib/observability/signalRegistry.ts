@@ -120,10 +120,10 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     domain: 'ground-systems',
     scope: 'shared',
     role: 'required',
-    source: 'none',
+    source: 'network_probe',
     optionalContract: true,
     detailRoute: 'network',
-    description: 'No reliable runtime PromQL contract yet',
+    description: 'Live UniFi probe via GET /api/v1/network/sla (network-monitoring-ops)',
   },
 
   /* ── Satellite (Trade payload) ── */

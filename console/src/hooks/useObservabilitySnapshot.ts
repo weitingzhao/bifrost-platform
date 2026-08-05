@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAgentBridge } from '@/api/agentOps'
 import { fetchClusterMetrics, fetchClusterNodes, fetchClusterObservability } from '@/api/cluster'
-import { fetchIbGatewayStatus } from '@/api/network'
+import { fetchIbGatewayStatus, fetchNetworkSla } from '@/api/network'
 import { fetchMatrix, fetchSatelliteBusDeep, fetchSelfHealth, isAllMatrices, isAllSatelliteBusDeep } from '@/api/core'
 import { fetchRemediationHealth } from '@/api/remediation'
 import { fetchTelemetryAlerts, fetchTelemetryOverview, fetchTelemetryTargets } from '@/api/telemetry'
@@ -124,6 +124,12 @@ export function useObservabilitySnapshot(): {
     refetchInterval: REFETCH,
     retry: false,
   })
+  const networkSlaQ = useQuery({
+    queryKey: ['network', 'sla', 'observability'],
+    queryFn: fetchNetworkSla,
+    refetchInterval: REFETCH,
+    retry: false,
+  })
   const remediationQ = useQuery({
     queryKey: ['remediation', 'health'],
     queryFn: fetchRemediationHealth,
@@ -211,6 +217,7 @@ export function useObservabilitySnapshot(): {
         targetsError: errMessage(targetsQ.error),
         bus: busHealth,
         ibGateway: ibQ.data,
+        networkSla: networkSlaQ.data,
         remediation: remediationQ.data,
         agentBridge: bridgeQ.data,
         selfHealth: selfQ.data,
@@ -229,6 +236,7 @@ export function useObservabilitySnapshot(): {
       targetsQ.error,
       busHealth,
       ibQ.data,
+      networkSlaQ.data,
       remediationQ.data,
       bridgeQ.data,
       selfQ.data,

@@ -1,7 +1,9 @@
 id: mission-signal
 title: Mission Signal
-description: Flight Director signal truth → autonomous loop → program closure.
-status: active
+description: >
+  COMPLETED — Flight Director signal truth → autonomous loop → program closure.
+  7/7 gates signed 2026-07-07. New signal work = patches, not new program phases.
+status: completed
 delivery:
   board_visible: true
   former_location: Mission Control → Control Room
@@ -9,7 +11,7 @@ delivery:
 phases:
   - id: P1
     title: Signal Truth
-    status: pending
+    status: done
     depends_on: []
     verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/matrix >/dev/null && echo 'P1 matrix probes reachable'"
     acceptance:
@@ -20,7 +22,7 @@ phases:
       required: true
   - id: P2
     title: Diagnostic playbooks
-    status: pending
+    status: done
     depends_on: [P1]
     verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/mission/verify-payload | jq -e '.summary'"
     acceptance:
@@ -31,7 +33,7 @@ phases:
       required: true
   - id: P3
     title: Post-fix validation
-    status: pending
+    status: done
     depends_on: [P2]
     verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/mission/verify-snapshot | jq -e '.post_fix_verification'"
     acceptance:
@@ -42,7 +44,7 @@ phases:
       required: true
   - id: P4
     title: Hermes first task
-    status: pending
+    status: done
     depends_on: [P3]
     verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/agent/hermes/readiness | jq -e '.first_task'"
     acceptance:
@@ -53,7 +55,7 @@ phases:
       required: true
   - id: P5
     title: Flight Director governance
-    status: pending
+    status: done
     depends_on: [P4]
     verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/agent/governance/snapshot | jq -e '.trust_matrix'"
     acceptance:
@@ -64,7 +66,7 @@ phases:
       required: true
   - id: P6
     title: Flight Director ops
-    status: pending
+    status: done
     depends_on: [P5]
     verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/agent/governance/trust-matrix | jq -e '.entries'"
     acceptance:
@@ -75,7 +77,7 @@ phases:
       required: true
   - id: P7
     title: Program closure
-    status: pending
+    status: done
     depends_on: [P1, P2, P3, P4, P5, P6]
     verify_cmd: "node console/scripts/verify-mission-signal-wave4b.mjs"
     acceptance:
@@ -86,6 +88,7 @@ phases:
       required: true
 metadata:
   created_at: "2026-07-07"
+  completed_at: "2026-08-05"
   owner: vision-mac-trader
   lane_id: platform-health
-  tags: [delivery-board, control-room, mission-signal]
+  tags: [delivery-board, control-room, mission-signal, closed]

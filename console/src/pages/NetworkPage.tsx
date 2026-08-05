@@ -1,13 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
-import { Button } from '@bifrost/ui'
+import { Button, DenseTag } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { fetchNetworkClients, fetchNetworkDevices } from '@/api/network'
+import {
+  fetchNetworkAnomalies,
+  fetchNetworkClients,
+  fetchNetworkDevices,
+  fetchNetworkSla,
+} from '@/api/network'
 import { NetworkHealthPanel } from '@/components/control-room/NetworkHealthPanel'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import type { OpsVerdictLamp, OpsVerdictTagVariant } from '@/components/layout/OpsVerdictStrip'
 import { NetworkClientsPanel } from '@/components/network/NetworkClientsPanel'
 import { NetworkDevicesPanel } from '@/components/network/NetworkDevicesPanel'
 import { NetworkFirewallPanel } from '@/components/network/NetworkFirewallPanel'
+import { NetworkSlaPanel } from '@/components/network/NetworkSlaPanel'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import { NETWORK_HEALTH_PROJECTION } from '@/lib/architecture/networkConsoleProjection'
 
@@ -17,6 +23,7 @@ function networkVerdict(
   clientsLoading: boolean,
   deviceCount: number | undefined,
   clientCount: number | undefined,
+  anomalyCount: number,
 ): {
   lamp: OpsVerdictLamp
   tagLabel: string
@@ -40,12 +47,14 @@ function networkVerdict(
         : `${deviceCount ?? 0} devices · ${clientCount ?? 0} clients`
       : 'Devices/clients paused until probe is reachable'
 
+  const anomalyNote = anomalyCount > 0 ? ` · ${anomalyCount} anomaly alert(s)` : ''
+
   if (liveProbe.probeReach === 'fail') {
     return {
       lamp: 'fail',
       tagLabel: 'FAIL',
       tagVariant: 'danger',
-      summary: `${liveProbe.summary} · ${inventoryCtx}`,
+      summary: `${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
     }
   }
 
@@ -54,16 +63,21 @@ function networkVerdict(
       lamp: 'unknown',
       tagLabel: 'UNKNOWN',
       tagVariant: 'neutral',
-      summary: `${liveProbe.summary} · ${inventoryCtx}`,
+      summary: `${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
     }
   }
 
-  if (classification === 'POLICY_DRIFT' || liveProbe.probeReach === 'degraded') {
+  if (classification === 'POLICY_DRIFT' || liveProbe.probeReach === 'degraded' || anomalyCount > 0) {
     return {
       lamp: 'degraded',
-      tagLabel: classification === 'POLICY_DRIFT' ? 'POLICY DRIFT' : 'DEGRADED',
+      tagLabel:
+        anomalyCount > 0
+          ? 'ANOMALY'
+          : classification === 'POLICY_DRIFT'
+            ? 'POLICY DRIFT'
+            : 'DEGRADED',
       tagVariant: 'warning',
-      summary: `${liveProbe.summary} · ${inventoryCtx}`,
+      summary: `${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
     }
   }
 
@@ -71,7 +85,7 @@ function networkVerdict(
     lamp: 'ok',
     tagLabel: 'OK',
     tagVariant: 'success',
-    summary: `${liveProbe.summary} · ${inventoryCtx}`,
+    summary: `${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
   }
 }
 
@@ -84,20 +98,35 @@ export function NetworkPage({
 }) {
   const liveProbe = useNetworkLiveProbe()
   const spineLoaded = context?.tracks?.infra != null
+  const probeLive = liveProbe.probeReach === 'ok' || liveProbe.probeReach === 'degraded'
 
   const devicesQuery = useQuery({
     queryKey: ['network', 'devices'],
     queryFn: fetchNetworkDevices,
     refetchInterval: 60_000,
-    enabled: liveProbe.probeReach === 'ok' || liveProbe.probeReach === 'degraded',
+    enabled: probeLive,
   })
 
   const clientsQuery = useQuery({
     queryKey: ['network', 'clients'],
     queryFn: fetchNetworkClients,
     refetchInterval: 60_000,
-    enabled: liveProbe.probeReach === 'ok' || liveProbe.probeReach === 'degraded',
+    enabled: probeLive,
   })
+
+  const anomaliesQuery = useQuery({
+    queryKey: ['network', 'anomalies'],
+    queryFn: fetchNetworkAnomalies,
+    refetchInterval: 60_000,
+  })
+
+  const slaQuery = useQuery({
+    queryKey: ['network', 'sla'],
+    queryFn: fetchNetworkSla,
+    refetchInterval: 60_000,
+  })
+
+  const anomalyCount = anomaliesQuery.data?.count ?? anomaliesQuery.data?.alerts?.length ?? 0
 
   const verdict = networkVerdict(
     liveProbe,
@@ -105,6 +134,7 @@ export function NetworkPage({
     clientsQuery.isLoading,
     devicesQuery.data?.count ?? devicesQuery.data?.devices?.length,
     clientsQuery.data?.count ?? clientsQuery.data?.clients?.length,
+    anomalyCount,
   )
 
   return (
@@ -127,7 +157,8 @@ export function NetworkPage({
               Catalog {NETWORK_HEALTH_PROJECTION.catalogVersion} ·{' '}
               {spineLoaded ? 'spine + catalog' : 'catalog fallback'}
             </span>
-            <span>Live probe every 30s · L0 status/audit</span>
+            <span>Live probe every 30s · L0 health/bandwidth/anomalies/SLA</span>
+            {anomalyCount > 0 && <DenseTag variant="warning">{anomalyCount} alerts</DenseTag>}
           </>
         }
       />
@@ -137,7 +168,13 @@ export function NetworkPage({
         onOpenAgentProtocol={onOpenAgentProtocol}
         showPrimaryAgentAction={false}
         title="Probe & stream evidence"
-        description="Catalog/spine stream projection and live UniFi probe detail (GET /api/v1/network/status + audit, Session v2 / D9)."
+        description="Catalog/spine stream projection and live UniFi probe detail (GET /api/v1/network/status + audit + health, Session v2 / D9)."
+      />
+
+      <NetworkSlaPanel
+        sla={slaQuery.data}
+        anomalies={anomaliesQuery.data}
+        isLoading={slaQuery.isLoading || anomaliesQuery.isLoading}
       />
 
       <NetworkFirewallPanel />

@@ -50,6 +50,7 @@ type Service struct {
 	// UniFi OS login rate limits (AUTHENTICATION_FAILED_LIMIT_REACHED / HTTP 429).
 	sessionMu sync.Mutex
 	client    *unifi.Client
+	tracker   *probeTracker
 }
 
 type ServiceOption func(*Service)
@@ -262,7 +263,22 @@ func (s *Service) Devices(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"count": len(devices), "devices": devices}, nil
+	projected := make([]map[string]any, 0, len(devices))
+	up := 0
+	for _, d := range devices {
+		p := projectDevice(d)
+		projected = append(projected, p)
+		if label, _ := p["state_label"].(string); label == "online" {
+			up++
+		}
+	}
+	return map[string]any{
+		"count":         len(projected),
+		"devices":       projected,
+		"devices_up":    up,
+		"devices_total": len(projected),
+		"autonomy":      "L0",
+	}, nil
 }
 
 func (s *Service) Clients(ctx context.Context) (map[string]any, error) {
@@ -278,7 +294,11 @@ func (s *Service) Clients(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"count": len(clients), "clients": clients}, nil
+	projected := make([]map[string]any, 0, len(clients))
+	for _, c := range clients {
+		projected = append(projected, projectClient(c))
+	}
+	return map[string]any{"count": len(projected), "clients": projected, "autonomy": "L0"}, nil
 }
 
 func (s *Service) Audit(ctx context.Context) (map[string]any, error) {

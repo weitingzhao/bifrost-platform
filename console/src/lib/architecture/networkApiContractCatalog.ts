@@ -7,16 +7,16 @@
 
 import { buildUnifiMcpServerLlmPack } from './unifiMcpServerCatalog'
 
-export const NETWORK_API_CONTRACT_VERSION = '2026-07-03'
+export const NETWORK_API_CONTRACT_VERSION = '2026-08-05'
 export const NETWORK_API_CONTRACT_SOURCE = 'console/src/lib/architecture/networkApiContractCatalog.ts'
 export const NETWORK_API_CONTRACT_STATUS =
-  'L0 LIVE + L1 APPLY — GET /api/v1/network/* + POST firewall/apply + MCP write (unifi-mcp-server 4/4)'
+  'L0 LIVE + L1 APPLY — GET /api/v1/network/* (health/bandwidth/anomalies/sla) + POST firewall/apply + MCP proxy'
 
 export const NETWORK_API_MCP_SERVER = {
   path: 'mcp/unifi/src/index.ts',
-  version: '2026-07-03',
+  version: '2026-08-05',
   status: 'implemented',
-  note: '7 read + 1 write tool proxy platform-api /api/v1/network/*',
+  note: '11 read + 1 write tool proxy platform-api /api/v1/network/* (incl. health/bandwidth/anomalies/sla)',
 } as const
 
 export const NETWORK_API_CLIENT_LIBRARY = {
@@ -99,6 +99,46 @@ export const NETWORK_API_ROUTES: NetworkApiRouteDef[] = [
     implemented: true,
     executor: 'UniFi stat/sta API',
     mcpTool: 'get_network_clients',
+  },
+  {
+    method: 'GET',
+    route: '/api/v1/network/health',
+    purpose: 'UniFi stat/health + device online fraction (network-monitoring-ops Wave A)',
+    authLevel: 'viewer',
+    autonomy: 'L0',
+    implemented: true,
+    executor: 'unifi.Client.Health + projected devices',
+    mcpTool: 'get_network_health',
+  },
+  {
+    method: 'GET',
+    route: '/api/v1/network/bandwidth',
+    purpose: 'Device/client rx/tx bytes and rates (Wave B)',
+    authLevel: 'viewer',
+    autonomy: 'L0',
+    implemented: true,
+    executor: 'UniFi stat/device + stat/sta projected rates',
+    mcpTool: 'get_network_bandwidth',
+  },
+  {
+    method: 'GET',
+    route: '/api/v1/network/anomalies',
+    purpose: 'Rule-based anomaly alerts — device down, probe streak, optional client drop (Wave C)',
+    authLevel: 'viewer',
+    autonomy: 'L0',
+    implemented: true,
+    executor: 'api/internal/network Anomalies (config via env)',
+    mcpTool: 'get_network_anomalies',
+  },
+  {
+    method: 'GET',
+    route: '/api/v1/network/sla',
+    purpose: 'Thin SLA strip — probe success, device up fraction, predictive-lite tips (Wave D)',
+    authLevel: 'viewer',
+    autonomy: 'L0',
+    implemented: true,
+    executor: 'Health + Anomalies aggregate',
+    mcpTool: 'get_network_sla',
   },
   {
     method: 'POST',
