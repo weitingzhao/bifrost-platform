@@ -21,14 +21,18 @@ import { projectWaveStatus } from '@/lib/briefing/waveProjection'
 /** Well-known lane ids (documented; catalog is YAML-authoritative). */
 export type BuildLaneId = 'console-api' | 'cluster-infra' | 'mcp-gitops' | 'cicd-delivery'
 export type MigrateLaneId = 'compose-k3s' | 'trade-k8s-native' | 'data-layer-k3s' | 'legacy-retire' | 'trade-stack'
-export type AutomateLaneId = 'platform-gitops' | 'agent-infra' | 'drift-remediation' | 'agent-services'
+export type AutomateLaneId =
+  | 'platform-gitops'
+  | 'agent-infra'
+  | 'drift-remediation'
+  | 'agent-services'
+  | 'polygon-vendor'
 export type InfraLaneId = 'network-server' | 'network-wifi' | 'ai-network'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
 export type FutureLaneId =
   | 'platform-health'
   | 'network-monitoring'
   | 'trade-features'
-  | 'polygon-vendor'
   | 'ib-vendor'
   | 'vendor-health'
 /** Lane id — open string; entities live in config/lanes.yaml via API. */
@@ -149,6 +153,7 @@ const AUTOMATE_STREAM_LANE: Record<string, AutomateLaneId> = {
   'agent-release-discipline': 'agent-services',
   'hermes-gateway-integration': 'agent-infra',
   'flight-director-governance': 'agent-services',
+  'polygon-data-pipeline': 'polygon-vendor',
 }
 
 const INFRA_STREAM_LANE: Record<string, InfraLaneId> = {

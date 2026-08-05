@@ -584,6 +584,13 @@ tracks:
               prerequisites:
                 - "hermes-gateway-integration stream ③ skills API done"
                 - "retrospective-agent stream closed"
+            - id: polygon-data-pipeline
+              label: "Polygon.io Market Data Subcontractor"
+              total: 10
+              done: 10
+              status: closed
+              next_task: ""
+              note: "10/10 phases done, 6/6 gates signed. Standalone K8s-native workers in plugin-market-data NS. Replaces bifrost-trade-worker/data/massive entirely."
     infra:
         label: "Infrastructure & network evolution"
         streams:

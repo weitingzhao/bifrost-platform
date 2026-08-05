@@ -177,7 +177,7 @@ export const PG_SCHEMA_CONTRACT = {
 
 export const MARKET_DATA_PROGRESS = {
   streamId: 'market-data-subcontractor',
-  done: 5,
+  done: 10,
   total: 10,
   label: 'Market Data Subcontractor — Polygon → plugin-market-data NS',
 } as const
