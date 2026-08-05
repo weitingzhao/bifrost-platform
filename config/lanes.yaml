@@ -127,7 +127,34 @@ lanes:
       track_type: build
       label: Agent services (MCP + Trade)
       short_label: Services
-      description: Agent Desk in Console, Hermes MCP bridge, Trade advisory notifications.
+      description: >
+        Agent Desk, MCP bridge, release agent, mission remediation loop.
+        trade-k8s-migration CLOSED (lift-and-shift done; ⑥ waived). Vision parked on
+        Ready lanes agent-trade-advisory-parked + flight-director-parked — not this queue.
+      agent_mode: Ops
+      work_intent: automate
+    - id: agent-trade-advisory-parked
+      track: automate
+      component_line: engineer
+      track_type: build
+      label: Trade advisory autonomous (parked)
+      short_label: Trade advisory
+      description: >
+        PARKED — aspirational (Ready / empty queue). Morning briefing, position risk alerts,
+        SEPA notifications. Spine stream agent-trade-advisory remains not_started until
+        Owner opens a program. Do not project onto agent-services Doing queue.
+      agent_mode: Ops
+      work_intent: automate
+    - id: flight-director-parked
+      track: automate
+      component_line: engineer
+      track_type: build
+      label: Flight Director governance (parked)
+      short_label: Flight Director
+      description: >
+        PARKED — aspirational (Ready / empty queue). Owner-as-Mission-Director governance
+        after Hermes L0. Spine stream flight-director-governance remains not_started until
+        Owner opens a program. Do not project onto agent-services Doing queue.
       agent_mode: Ops
       work_intent: automate
     - id: network-server

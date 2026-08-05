@@ -26,6 +26,8 @@ export type AutomateLaneId =
   | 'agent-infra'
   | 'drift-remediation'
   | 'agent-services'
+  | 'agent-trade-advisory-parked'
+  | 'flight-director-parked'
   | 'polygon-vendor'
 export type InfraLaneId = 'network-server' | 'network-wifi' | 'ai-network'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
@@ -146,13 +148,13 @@ const AUTOMATE_STREAM_LANE: Record<string, AutomateLaneId> = {
   'release-agent-task': 'agent-services',
   'retrospective-agent': 'drift-remediation',
   'agent-mcp-integration': 'agent-services',
-  'agent-trade-advisory': 'agent-services',
+  // PARKED vision — Ready lanes agent-trade-advisory-parked / flight-director-parked;
+  // do not project onto agent-services (avoids fake Planned/Doing mix).
   'mission-auto-remediation': 'agent-services',
   'trade-k8s-migration': 'agent-services',
   'mutual-watchdog': 'agent-infra',
   'agent-release-discipline': 'agent-services',
   'hermes-gateway-integration': 'agent-infra',
-  'flight-director-governance': 'agent-services',
   'polygon-data-pipeline': 'polygon-vendor',
 }
 
@@ -709,6 +711,10 @@ export function buildQueueForLane(
       }
       return buildQueueFromMigrateStreams(tracks?.migrate, laneId as MigrateLaneId)
     case 'automate':
+      // PARKED vision lanes — empty queue ⇒ Ready (streams stay in spine for history).
+      if (laneId === 'agent-trade-advisory-parked' || laneId === 'flight-director-parked') {
+        return []
+      }
       return buildQueueFromAutomateStreams(tracks?.automate, laneId as AutomateLaneId)
     case 'infra':
       // Network Monitoring Ops delivery complete — lane Done; ongoing ops via Network / Daily Ops.
