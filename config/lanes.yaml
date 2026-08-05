@@ -186,11 +186,8 @@ lanes:
       track_type: maintain
       label: Platform health & observability
       short_label: Health
-      description: >
-        DONE — Mission Signal program completed (7/7 gates signed, no_handoff).
-        Ongoing uptime/latency/readiness/alert triage lives in Daily Ops / Control Room,
-        not this delivery lane. Original intent: Console uptime, API latency, cluster
-        workload readiness, self-health probes, alert triage.
+      description: |
+        DONE — Mission Signal program completed (7/7 gates signed, no_handoff). Ongoing uptime/latency/readiness/alert triage lives in Daily Ops / Control Room, not this delivery lane. Original intent: Console uptime, API latency, cluster workload readiness, self-health probes, alert triage.
       agent_mode: Ops
       work_intent: ops
     - id: trade-features
@@ -208,10 +205,8 @@ lanes:
       track_type: maintain
       label: Network monitoring & health
       short_label: Monitor
-      description: >
-        DONE — network-monitoring-ops program completed (P0–P4 signed, no_handoff).
-        Ongoing UniFi health/bandwidth/anomaly/SLA via Network page / Daily Ops;
-        reuses platform-api + mcp/unifi (Network Governance stack).
+      description: |
+        DONE — network-monitoring-ops program completed (P0–P4 signed, no_handoff). Ongoing UniFi health/bandwidth/anomaly/SLA via Network page / Daily Ops; reuses platform-api + mcp/unifi (Network Governance stack).
       agent_mode: Ops
       work_intent: ops
     - id: polygon-vendor
@@ -247,12 +242,8 @@ lanes:
       track_type: migrate
       label: QA Trade bars pipeline
       short_label: QA Trade bars
-      description: >
-        DONE — Acceptance covered by closed migrate spine (27/27) + trade-celery-k8s-ideal +
-        market-data-subcontractor. Evidence: celery-worker-stocks-ib 1/1 on DEV/STG/PROD;
-        market.stock_daily populated; Polygon daily via plugin-market-data; IB bars path
-        retained on stocks_ib Celery. Original intent: Migrate legacy trade daemon bars
-        backfill to K8s-native worker — acceptance test lane.
+      description: |
+        DONE — Acceptance covered by closed migrate spine (27/27) + trade-celery-k8s-ideal + market-data-subcontractor. Evidence: celery-worker-stocks-ib 1/1 on DEV/STG/PROD; market.stock_daily populated; Polygon daily via plugin-market-data; IB bars path retained on stocks_ib Celery. Original intent: Migrate legacy trade daemon bars backfill to K8s-native worker — acceptance test lane.
       agent_mode: Ops
       work_intent: feature
     - id: trade-system-celery
@@ -261,13 +252,34 @@ lanes:
       track_type: build
       label: 分析目前Trade System使用的Celery 相关的后台作业调度方案
       short_label: 分析目前Trade System使用的Celer
-      description: >
-        DONE — Trade Celery / Massive K8s Ideal (W0–W5) signed complete.
-        Verdict: keep Celery for IB bars (stocks_ib); Massive Polygon ingest moved off Celery to
-        plugin-market-data (market-data-subcontractor). K8s Ideal for remaining Celery =
-        per-queue Deployments + Beat + executor_mode=kubernetes (program trade-celery-k8s-ideal).
-        Original question: 基于目前Trade System使用的Python语言，之前Trade采用的后台Task方案是Celery，
-        在基于k8s的运行环境下，和Trade 系统的业务需求，最Ideal的Worker 方式还是Celery吗？
-        如果是的话，那目前Celery在目前环境下的运行方式也是Ideal的方式吗？
+      description: |
+        DONE — Trade Celery / Massive K8s Ideal (W0–W5) signed complete. Verdict: keep Celery for IB bars (stocks_ib); Massive Polygon ingest moved off Celery to plugin-market-data (market-data-subcontractor). K8s Ideal for remaining Celery = per-queue Deployments + Beat + executor_mode=kubernetes (program trade-celery-k8s-ideal). Original question: 基于目前Trade System使用的Python语言，之前Trade采用的后台Task方案是Celery， 在基于k8s的运行环境下，和Trade 系统的业务需求，最Ideal的Worker 方式还是Celery吗？ 如果是的话，那目前Celery在目前环境下的运行方式也是Ideal的方式吗？
       agent_mode: Ops
       work_intent: feature
+    - id: network-clients-bandwidth-ui
+      track: infra
+      component_line: ground
+      track_type: maintain
+      label: Network clients bandwidth UI
+      short_label: Clients BW UI
+      description: PARKED residual after network-monitoring-ops (Done / no_handoff). Console table for UniFi client rx/tx rates — API GET /api/v1/network/bandwidth already returns client rates (~72/86). Do not reopen network-monitoring lane; ship as small Console patch when Owner wants top-talker triage on Network page.
+      agent_mode: Ops
+      work_intent: ops
+    - id: network-sla-promql
+      track: infra
+      component_line: ground
+      track_type: maintain
+      label: Network SLA via PromQL
+      short_label: SLA PromQL
+      description: PARKED residual after network-monitoring-ops. Upgrade probe-based GET /api/v1/network/sla to PromQL/historical SLA. Requires metrics pipeline + storage; current L0 probe SLA is enough for Daily Ops. Defer until observability maturity or ai-home-network needs history.
+      agent_mode: Ops
+      work_intent: ops
+    - id: network-anomaly-outbound-spike
+      track: infra
+      component_line: ground
+      track_type: maintain
+      label: Network anomaly outbound-spike rule
+      short_label: Outbound spike
+      description: PARKED residual after network-monitoring-ops. Add rule-based outbound traffic spike detection beyond device-down / probe-fail-streak. Needs stable time-series; without it, false positives are likely. Defer until metrics series exist.
+      agent_mode: Ops
+      work_intent: ops
