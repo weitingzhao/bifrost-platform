@@ -65,5 +65,8 @@ test: vet-api lint-api test-api test-console check-spine
 
 check: test
 
+# Precompile platform-api for faster bdev / run_platform restarts.
+# Output: api/bin/platform-api (gitignored). run_platform.py prefers this over `go run`.
 build-api:
 	cd api && go build -o bin/platform-api ./cmd/platform-api
+	@echo "Built api/bin/platform-api"

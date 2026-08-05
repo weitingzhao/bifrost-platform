@@ -504,6 +504,9 @@ function SessionStatusRow({
             {readyLine != null ? ` · ${readyLine}` : ''}
             {session.image_tag ? ` · ${session.image_tag}` : ''}
             {running ? ` · ${formatUptime(session.uptime_sec)}` : ''}
+            {session.restarts != null && session.restarts > 0
+              ? ` · restarts ${session.restarts}`
+              : ''}
             {session.pid != null && session.pid > 0 ? ` · ${session.pid}` : ''}
             {session.log_bytes != null && session.log_bytes > 0 ? (
               <span

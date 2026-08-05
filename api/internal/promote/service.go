@@ -782,6 +782,7 @@ func narrativeBlockers(tier GateTier, cfg *config.Config, rec ReleaseGateRecord)
 }
 
 // OverlayContext merges persisted gate state into spine context for GET /context.
+// Safe for concurrent callers: never mutates maps owned by base.
 func OverlayContext(base *opscontext.File, store *Store) *opscontext.File {
 	if base == nil || store == nil {
 		return base
@@ -798,9 +799,13 @@ func OverlayContext(base *opscontext.File, store *Store) *opscontext.File {
 	if rec.LogPath != "" {
 		out.Promotion.LastGate.LogPath = rec.LogPath
 	}
-	if out.EnvironmentsExtended == nil {
-		out.EnvironmentsExtended = map[string]opscontext.EnvironmentExtended{}
+	// Shallow-copy File would share EnvironmentsExtended with base — concurrent
+	// GET /context writes caused "fatal error: concurrent map writes".
+	ext := make(map[string]opscontext.EnvironmentExtended, len(base.EnvironmentsExtended)+1)
+	for k, v := range base.EnvironmentsExtended {
+		ext[k] = v
 	}
+	out.EnvironmentsExtended = ext
 	stg := out.EnvironmentsExtended["staging"]
 	stgSmokeOK := false
 	for _, c := range rec.Checks {

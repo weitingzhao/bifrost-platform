@@ -7,7 +7,17 @@ Frees listen ports if occupied, then starts:
 
 Usage (from repo root or anywhere):
   python scripts/run_platform.py
+  python scripts/run_platform.py --api-only
+  python scripts/run_platform.py --console-only
   ./scripts/run_platform.py
+
+Prefer prebuilt API binary when present:
+  make build-api   # → api/bin/platform-api
+  (falls back to `go run` if the binary is missing)
+
+For split bdev sessions (recommended):
+  bdev restart platform-api
+  bdev restart platform-console
 
 Install once:
   cd api && go mod tidy
@@ -26,6 +36,7 @@ from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _API_DIR = _PROJECT_ROOT / "api"
+_API_BIN = _API_DIR / "bin" / "platform-api"
 _CONSOLE_DIR = _PROJECT_ROOT / "console"
 
 
@@ -307,6 +318,11 @@ def main() -> int:
         action="store_true",
         help="Start console only",
     )
+    parser.add_argument(
+        "--no-runner",
+        action="store_true",
+        help="Do not autostart remediation runner (use a separate bdev session)",
+    )
     args = parser.parse_args()
 
     _load_dotenv()
@@ -336,9 +352,11 @@ def main() -> int:
     os.environ.setdefault("REMEDIATION_RUNNER_URL", "http://127.0.0.1:8781")
     children: list[subprocess.Popen[bytes]] = []
 
-    runner_proc = _spawn_remediation_runner(env)
-    if runner_proc is not None:
-        children.append(runner_proc)
+    runner_proc: subprocess.Popen[bytes] | None = None
+    if not args.no_runner:
+        runner_proc = _spawn_remediation_runner(env)
+        if runner_proc is not None:
+            children.append(runner_proc)
 
     def shutdown(signum: int | None = None, _frame: object | None = None) -> None:
         if signum is not None:
@@ -360,47 +378,101 @@ def main() -> int:
 
     lan_urls = _lan_urls(console_port) if console_host in ("0.0.0.0", "::", "*") else []
 
-    if start_api:
-        # PLATFORM_LISTEN=:8780 binds all interfaces (needed for remote /api via Vite proxy
-        # and direct API clients on the Bifrost LAN).
-        print(f"Starting platform-api on {os.environ['PLATFORM_LISTEN']}")
-        children.append(
-            subprocess.Popen(
-                ["go", "run", "./cmd/platform-api"],
+    api_proc: subprocess.Popen[bytes] | None = None
+    console_proc: subprocess.Popen[bytes] | None = None
+
+    def spawn_api() -> subprocess.Popen[bytes]:
+        listen = os.environ["PLATFORM_LISTEN"]
+        if _API_BIN.is_file() and os.access(_API_BIN, os.X_OK):
+            print(f"Starting platform-api (binary {_API_BIN}) on {listen}")
+            return subprocess.Popen(
+                [str(_API_BIN)],
                 cwd=_API_DIR,
                 env=env,
             )
+        print(f"Starting platform-api (go run) on {listen}")
+        print("  Tip: `make build-api` for faster restarts via api/bin/platform-api")
+        return subprocess.Popen(
+            ["go", "run", "./cmd/platform-api"],
+            cwd=_API_DIR,
+            env=env,
         )
 
-    if start_console:
+    def spawn_console() -> subprocess.Popen[bytes]:
         print(f"Starting console on http://{console_host}:{console_port}")
-        children.append(
-            subprocess.Popen(
-                [
-                    "npm",
-                    "run",
-                    "dev",
-                    "--",
-                    "--host",
-                    console_host,
-                    "--port",
-                    str(console_port),
-                    "--strictPort",
-                ],
-                cwd=_CONSOLE_DIR,
-                env=env,
-            )
+        return subprocess.Popen(
+            [
+                "npm",
+                "run",
+                "dev",
+                "--",
+                "--host",
+                console_host,
+                "--port",
+                str(console_port),
+                "--strictPort",
+            ],
+            cwd=_CONSOLE_DIR,
+            env=env,
         )
+
+    if start_api:
+        # PLATFORM_LISTEN=:8780 binds all interfaces (needed for remote /api via Vite proxy
+        # and direct API clients on the Bifrost LAN).
+        api_proc = spawn_api()
+        children.append(api_proc)
+
+    if start_console:
+        console_proc = spawn_console()
+        children.append(console_proc)
 
     print(f"Local console: http://127.0.0.1:{console_port}")
     for url in lan_urls:
         print(f"LAN console:   {url}")
     print("Press Ctrl+C to stop.")
+
+    api_backoff = 1.0
     while True:
-        for proc in children:
-            if proc.poll() is not None:
-                print(f"Process exited with code {proc.returncode}", file=sys.stderr)
+        # API crash used to tear down Vite too (run_platform treated any child exit
+        # as fatal). Restart API in-place so Console stays up over LAN / bdev.
+        if start_api and api_proc is not None and api_proc.poll() is not None:
+            code = api_proc.returncode
+            print(
+                f"[platform-api] exited with code {code}; restarting in {api_backoff:.0f}s…",
+                file=sys.stderr,
+            )
+            time.sleep(api_backoff)
+            api_backoff = min(api_backoff * 2, 30.0)
+            if not _free_port(api_port, "platform-api"):
+                print("[platform-api] could not free listen port; giving up", file=sys.stderr)
                 shutdown()
+            try:
+                children.remove(api_proc)
+            except ValueError:
+                pass
+            api_proc = spawn_api()
+            children.append(api_proc)
+            continue
+
+        if start_api and api_proc is not None and api_proc.poll() is None:
+            api_backoff = 1.0
+
+        if start_console and console_proc is not None and console_proc.poll() is not None:
+            print(f"[console] exited with code {console_proc.returncode}", file=sys.stderr)
+            shutdown()
+
+        if runner_proc is not None and runner_proc.poll() is not None:
+            # Remediation runner is optional; do not take down platform.
+            print(
+                f"[remediation-runner] exited with code {runner_proc.returncode} (ignored)",
+                file=sys.stderr,
+            )
+            try:
+                children.remove(runner_proc)
+            except ValueError:
+                pass
+            runner_proc = None
+
         time.sleep(0.5)
 
 

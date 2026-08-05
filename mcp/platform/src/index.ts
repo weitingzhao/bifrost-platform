@@ -796,7 +796,7 @@ server.tool('list_dev_sessions', 'List sessions for the viewer seat (local bdev 
 server.tool(
   'restart_dev_session',
   'Restart a session by name (bdev locally; K8s rollout restart in STG/PROD)',
-  { name: z.string().describe('Session name from list_dev_sessions (e.g. platform, api-monitor)') },
+  { name: z.string().describe('Session name from list_dev_sessions (e.g. platform-api, platform-console, git-bridge; compat: platform → api+console)') },
   async ({ name }) =>
     jsonResult(
       await platformPost(`/api/v1/dev-sessions/${encodeURIComponent(name)}/control`, {
