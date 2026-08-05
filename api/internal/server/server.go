@@ -260,6 +260,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/agent/retrospective/report", s.retrospective.HandleReport)
 		r.Get("/agent/retrospective/patterns", s.retrospective.HandlePatterns)
 		r.Get("/agent/retrospective/insights", s.retrospective.HandleInsights)
+		r.Get("/agent/retrospective/defects", s.retrospective.HandleDefects)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/agent/nightly-run", s.agentreport.HandleTriggerNightly)

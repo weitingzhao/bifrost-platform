@@ -118,7 +118,10 @@ lanes:
       track_type: maintain
       label: Drift detection & remediation
       short_label: Drift
-      description: 'Nightly catalog drift scan, deterministic + LLM comparison, auto-fix PR, Owner morning briefing. Retrospective Agent: cross-job pattern analysis → identify systemic platform defects → self-evolving fix proposals.'
+      description: >
+        Nightly catalog drift scan closed. Active Delivery Board program retrospective-agent
+        (Waves B–C): DefectReport code attribution + fix-PR proposal. Spine stream
+        retrospective-agent; Hermes LLM key is a separate Owner gate on hermes-gateway-integration.
       agent_mode: Ops
       work_intent: automate
     - id: agent-services

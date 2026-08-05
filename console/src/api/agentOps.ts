@@ -1,4 +1,4 @@
-import type { AgentBridgeResponse, AgentDeployStartResponse, AgentDeployStatusResponse, AgentNightlyReportResponse, AgentPerformanceResponse, NightlyTriggerResponse, RetrospectiveReport, RunnerSmokeResponse } from './agentTypes'
+import type { AgentBridgeResponse, AgentDeployStartResponse, AgentDeployStatusResponse, AgentNightlyReportResponse, AgentPerformanceResponse, NightlyTriggerResponse, RetrospectiveDefectsResponse, RetrospectiveReport, RunnerSmokeResponse } from './agentTypes'
 import type { ApproveDriftProposalResponse, DriftProposal, DriftProposalsResponse } from './remediationTypes'
 import { authedFetch, parseError } from './client'
 
@@ -87,5 +87,14 @@ export async function fetchRetrospectiveReport(refresh = false): Promise<Retrosp
   const r = await fetch(url)
   if (!r.ok) throw new Error(`retrospective report: HTTP ${r.status}`)
   return r.json() as Promise<RetrospectiveReport>
+}
+
+export async function fetchRetrospectiveDefects(refresh = false): Promise<RetrospectiveDefectsResponse> {
+  const url = refresh
+    ? '/api/v1/agent/retrospective/defects?refresh=true'
+    : '/api/v1/agent/retrospective/defects'
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`retrospective defects: HTTP ${r.status}`)
+  return r.json() as Promise<RetrospectiveDefectsResponse>
 }
 

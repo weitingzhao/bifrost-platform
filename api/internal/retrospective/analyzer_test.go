@@ -421,3 +421,97 @@ func TestHandlerReportCachesUntilForceRefresh(t *testing.T) {
 		t.Fatalf("expected forced refresh to pick up new job: got %d want %d", refreshed.TotalJobs, first.TotalJobs+1)
 	}
 }
+
+func TestAggregateDefectReportsFromPlatformDefect(t *testing.T) {
+	patterns := []PatternCluster{
+		{
+			ID: "pat-platform-self-health-recover-bifrost-prod",
+			Label: "platform-self-health-recover → bifrost-prod",
+			Description: "crash in api/internal/selfhealth/probe.go:42",
+			RootCause: RootCausePlatformDefect,
+			Confidence: 0.8,
+			Severity: SeverityCritical,
+			Occurrences: 3,
+			Component: ComponentRef{Namespace: "bifrost-prod"},
+			Jobs: []JobRef{
+				{ID: "j1", Scope: "platform-self-health-recover", Status: "failed"},
+				{ID: "j2", Scope: "platform-self-health-recover", Status: "done"},
+			},
+			Trending: "up",
+		},
+		{
+			ID: "pat-gitops-config-repair-bifrost-dev",
+			Label: "gitops-config-repair → bifrost-dev",
+			Description: "config drift",
+			RootCause: RootCauseConfigDrift,
+			Confidence: 0.7,
+			Severity: SeverityLow,
+			Occurrences: 2,
+			Component: ComponentRef{Namespace: "bifrost-dev"},
+			Jobs: []JobRef{{ID: "j3", Scope: "gitops-config-repair", Status: "done"}},
+		},
+	}
+
+	defs := aggregateDefectReports(patterns)
+	if len(defs) != 1 {
+		t.Fatalf("defects = %d, want 1 (only platform_defect)", len(defs))
+	}
+	d := defs[0]
+	if d.ID != "def-platform-self-health-recover-bifrost-prod" {
+		t.Fatalf("defect id = %q", d.ID)
+	}
+	if len(d.PatternIDs) != 1 || d.PatternIDs[0] != patterns[0].ID {
+		t.Fatalf("pattern_ids = %+v", d.PatternIDs)
+	}
+	if len(d.Attributions) == 0 {
+		t.Fatal("expected attributions")
+	}
+	foundSelfHealth := false
+	foundLine := false
+	for _, a := range d.Attributions {
+		if strings.Contains(a.File, "selfhealth") {
+			foundSelfHealth = true
+		}
+		if a.LineRange == "42" || strings.HasPrefix(a.LineRange, "42") {
+			foundLine = true
+		}
+	}
+	if !foundSelfHealth {
+		t.Fatalf("expected selfhealth attribution, got %+v", d.Attributions)
+	}
+	if !foundLine {
+		t.Fatalf("expected line 42 from text, got %+v", d.Attributions)
+	}
+	if d.SuggestedFix == "" {
+		t.Fatal("expected suggested_fix")
+	}
+}
+
+func TestAnalyzeIncludesDefectsForPlatformPatterns(t *testing.T) {
+	store := newTestJobStore(t)
+	t0 := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	store.Put(remediation.Job{
+		ID: "job-prod-1", Scope: "platform-self-health-recover", Status: remediation.JobFailed,
+		CreatedAt: t0, UpdatedAt: t0.Add(5 * time.Minute),
+		Events: []remediation.Event{
+			toolEvent("e1", "delete_pod", "bifrost-prod"),
+			errorEvent("e2", "CrashLoopBackOff in platform-api"),
+		},
+	})
+	store.Put(remediation.Job{
+		ID: "job-prod-2", Scope: "platform-self-health-recover", Status: remediation.JobDone,
+		CreatedAt: t0.Add(2 * time.Hour), UpdatedAt: t0.Add(2*time.Hour + 10*time.Minute),
+		InitBrief: "CrashLoopBackOff detected in bifrost-prod",
+		Events: []remediation.Event{
+			toolEvent("e3", "delete_pod", "bifrost-prod"),
+		},
+	})
+
+	report := NewAnalyzer(store).Analyze()
+	if len(report.Defects) == 0 {
+		t.Fatalf("expected defects for platform_defect pattern, patterns=%+v", report.Patterns)
+	}
+	if report.Defects[0].Attributions == nil || len(report.Defects[0].Attributions) == 0 {
+		t.Fatal("defect missing attributions")
+	}
+}

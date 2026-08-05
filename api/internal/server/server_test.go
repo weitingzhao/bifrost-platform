@@ -143,6 +143,7 @@ func TestRouterRegistersExpectedPublicRoutes(t *testing.T) {
 		"/api/v1/agent/retrospective/report",
 		"/api/v1/agent/retrospective/patterns",
 		"/api/v1/agent/retrospective/insights",
+		"/api/v1/agent/retrospective/defects",
 		"/api/v1/vision/v1/gate",
 		"/api/v1/audit",
 		"/api/v1/jobs",

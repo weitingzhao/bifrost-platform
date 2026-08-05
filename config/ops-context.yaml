@@ -536,9 +536,10 @@ tracks:
             - id: mission-auto-remediation
               label: "Mission Status → Agent auto-remediation closed loop"
               total: 5
-              done: 3
+              done: 4
               status: in_progress
-              note: "① buildDiagnosticPrompt — snapshot→structured prompt ✓ ② Diagnose & Fix button (Mission Board + FocusStrip) with composer prefill ✓ ③ Trade on K3s — deploy payload workloads to cluster so Agent kubectl/platform-api tools cover full stack ④ Mutual Watchdog — dual Mac Mini peer health monitor (restart_peer_agent tool + symmetric peer_watchdog launchd, platform-api primary+standby failover) ✓ see mutual-watchdog stream ⑤ Autonomous fix validation — Agent re-probes mission snapshot after remediation, confirms NOMINAL before closing job"
+              next_task: "③ Trade-on-K3s residual — Agent kubectl/platform-api coverage for full trade stack (lift-and-shift done via trade-k8s-migration; native/IB follow-on on trade-k8s-native). Do not block retrospective-agent."
+              note: "① buildDiagnosticPrompt ✓ ② Diagnose & Fix button ✓ ④ Mutual Watchdog ✓ ⑤ Autonomous fix validation ✓ — agent/remediation runner always runPostFixVerification (verify_mission_snapshot / post_fix_verification) before job close. Open: ③ Trade-on-K3s full Agent coverage residual (trade-k8s-migration CLOSED lift-and-shift; deeper native coverage → trade-k8s-native). Honest 4/5 — not fake-closed."
               prerequisites:
                 - "agent-mcp-integration stream closed"
                 - "release-agent-task stream closed"
@@ -572,9 +573,10 @@ tracks:
             - id: retrospective-agent
               label: "Retrospective Agent — self-evolving platform"
               total: 5
-              done: 2
-              status: in_progress
-              note: "AI agent that analyzes remediation job history to identify systemic platform defects. ① Cross-job pattern clustering (recurring pod/namespace/error) ✓ — Go analyzer reads JobStore, extracts scope/namespace/tool patterns, computes health score + insights; /api/v1/agent/retrospective/{report,patterns,insights} endpoints; Console Defects page (Observe → Diagnosis → Defects) with StatsCards, InsightsPanel, PatternsTable, ScopeBreakdown, ToolUsage, NamespaceActivity ② Root-cause classification ✓ — Multi-signal fusion classifier (8 signal categories: tool-pattern, scope-based, error-text, init-brief, summary, temporal, approval, failure-rate); ClassificationSignal + confidence score on PatternCluster; Console RootCauseDistBar (stacked bar + legend); expandable signal detail rows in PatternsTable; enhanced Insights with confidence % and platform-defect recommendations ③ Platform defect report generation with code-level attribution ④ Ops Console Defects dashboard (done as part of ①) ⑤ Autonomous fix-PR proposal for identified platform bugs"
+              done: 5
+              status: closed
+              next_task: ""
+              note: "CLOSED 2026-08-05 — ① Pattern clustering ✓ ② Root-cause classification ✓ ③ DefectReport code-level attribution ✓ — GET /api/v1/agent/retrospective/defects + report.defects[]; heuristic file/line_range/commit_sha + Console Code attribution panel ④ Defects dashboard ✓ (with ①) ⑤ Fix-PR proposal path ✓ — defect-pattern-remediate scoped prompt dry-run proposal + request_operator_approval before git write. Program config/programs/retrospective-agent.yaml (lane drift-remediation). Hermes LLM key remains separate Owner gate (hermes-gateway-integration ⑥)."
               prerequisites:
                 - "nightly-drift-scan stream closed"
                 - "agent-mcp-integration stream closed"
@@ -584,8 +586,8 @@ tracks:
               total: 6
               done: 5
               status: in_progress
-              next_task: "Owner: LLM key on Mac Mini .50 → GET /api/v1/agent/hermes/readiness ready:true → Hermes L0 first-task (⑥)"
-              note: "Elevate Agent from on-demand Dispatch (Cursor Runner) to LLM-powered autonomous engineer (Nous Research Hermes Agent v0.17.0). Mental model: Runner = on-call engineer you page; Hermes = full-time AI engineer with 72 bundled skills, MCP tool access, persistent memory, cron scheduling, and a web dashboard. ① Nous Hermes Agent installed on Mac Mini primary (.50) ✓ — v0.17.0 with uv+Python 3.11+Playwright, ~/.hermes/ config directory, gateway as launchd ai.hermes.gateway, dashboard on :9119 with basic auth ② bifrost-platform MCP server synced to Mac Mini ✓ — mcp-server-platform (35 ops tools) via stdio, config in ~/.hermes/config.yaml mcp_servers.bifrost-platform, hermes mcp test passed all 35 tools ③ platform-api agent bridge probeNousHermes ✓ — NOUS_HERMES_URL/NOUS_HERMES_USER/NOUS_HERMES_PASS env vars, bridge.nous_hermes status block in /api/v1/agent/bridge ④ Console Operator Plane shows Hermes Agent status ✓ — version/gateway-state/dashboard-link, legacy scheduler dimmed (opacity-60) ⑤ Self-built bifrost-hermes-gateway retired ✓ — com.bifrost.hermes-gateway launchd bootout, plist removed, deploy_mac_mini.sh updated to sync MCP server instead ⑥ LLM API key + first autonomous task — BLOCKED 2026-07-22: readiness ready=false (LLM_KEY_MISSING); gateway OK; Agent L0 dry-run evidence in hermesL0FirstTaskEvidence.ts (mission NOMINAL; post_fix false due to intentional DATA_LAYER on dev-local). Owner configures key then Hermes session (not Cursor) for stream ⑥ close."
+              next_task: "OWNER GATE — configure LLM provider key in ~/.hermes/.env on Mac Mini .50 (Agent cannot); then GET /api/v1/agent/hermes/readiness ready:true → Hermes L0 first-task (⑥). Does not block retrospective-agent Waves B/C."
+              note: "Elevate Agent from on-demand Dispatch (Cursor Runner) to LLM-powered autonomous engineer (Nous Research Hermes Agent v0.17.0). Mental model: Runner = on-call engineer you page; Hermes = full-time AI engineer with 72 bundled skills, MCP tool access, persistent memory, cron scheduling, and a web dashboard. ① Nous Hermes Agent installed on Mac Mini primary (.50) ✓ — v0.17.0 with uv+Python 3.11+Playwright, ~/.hermes/ config directory, gateway as launchd ai.hermes.gateway, dashboard on :9119 with basic auth ② bifrost-platform MCP server synced to Mac Mini ✓ — mcp-server-platform (35 ops tools) via stdio, config in ~/.hermes/config.yaml mcp_servers.bifrost-platform, hermes mcp test passed all 35 tools ③ platform-api agent bridge probeNousHermes ✓ — NOUS_HERMES_URL/NOUS_HERMES_USER/NOUS_HERMES_PASS env vars, bridge.nous_hermes status block in /api/v1/agent/bridge ④ Console Operator Plane shows Hermes Agent status ✓ — version/gateway-state/dashboard-link, legacy scheduler dimmed (opacity-60) ⑤ Self-built bifrost-hermes-gateway retired ✓ — com.bifrost.hermes-gateway launchd bootout, plist removed, deploy_mac_mini.sh updated to sync MCP server instead ⑥ LLM API key + first autonomous task — BLOCKED: readiness ready=false (LLM_KEY_MISSING); gateway OK on .50:9119. Owner-only key config; A2 Hermes L0 skipped until unblocked. Ready backlog: after key → run hermes-mission-health-l0 first task (read-only)."
               prerequisites:
                 - "agent-release-discipline stream closed"
                 - "mutual-watchdog stream closed"

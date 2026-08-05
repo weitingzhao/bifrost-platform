@@ -31,6 +31,7 @@ func (a *Analyzer) Analyze() AnalysisReport {
 	if len(jobs) == 0 {
 		report.HealthScore = 100
 		report.Patterns = []PatternCluster{}
+		report.Defects = []DefectReport{}
 		report.RootCauseDist = []RootCauseDistribution{}
 		report.ScopeStats = []ScopeStats{}
 		report.ToolUsage = []ToolUsage{}
@@ -46,6 +47,7 @@ func (a *Analyzer) Analyze() AnalysisReport {
 	report.ToolUsage = computeToolUsage(jobs)
 	report.Namespaces = computeNamespaceActivity(jobs)
 	report.Patterns = clusterPatterns(jobs)
+	report.Defects = aggregateDefectReports(report.Patterns)
 	report.RootCauseDist = computeRootCauseDist(report.Patterns)
 	report.HealthScore = computeHealthScore(jobs, report.Patterns)
 	report.Insights = generateInsights(report)
@@ -472,6 +474,17 @@ func generateInsights(report AnalysisReport) []string {
 			ins = append(ins, fmt.Sprintf("Platform defect: %q (%.0f%% confidence, %d occurrences) — consider structural fix",
 				p.Label, p.Confidence*100, p.Occurrences))
 		}
+	}
+
+	// Code-attributed defect reports
+	if len(report.Defects) > 0 {
+		top := report.Defects[0]
+		fileHint := "unknown"
+		if len(top.Attributions) > 0 {
+			fileHint = top.Attributions[0].File
+		}
+		ins = append(ins, fmt.Sprintf("%d defect report(s); top attribution: %s → %s",
+			len(report.Defects), top.Title, fileHint))
 	}
 
 	return ins

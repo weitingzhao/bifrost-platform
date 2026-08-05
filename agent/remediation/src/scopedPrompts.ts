@@ -141,10 +141,19 @@ export function buildDefectPatternRemediateRunnerPrompt(req: StartRunRequest): s
     '- platform_defect + gitops → gitops-config-repair',
     '- transient + nightly/health → READ ONLY report; no destructive actions',
     '',
+    '## Fix-PR proposal (platform_defect)',
+    'When root_cause is platform_defect (or DefectReport attributions point at bifrost-platform code):',
+    '1. Fetch GET /api/v1/agent/retrospective/defects — match pattern id; read attributions (file, line_range, confidence).',
+    '2. Draft a fix-PR proposal (dry-run): title, body, files to touch, rationale from pattern evidence.',
+    '3. Default is proposal-only — do NOT git_commit, push, or gh pr create until Owner approves.',
+    '4. Before any git write / PR create: call request_operator_approval with 2–4 options',
+    '   (e.g. create_pr / edit_proposal / skip / cancel). Proceed only on explicit approve.',
+    '5. Skip/cancel → leave proposal text in job summary; no repo mutation.',
+    '',
     '## Pattern context',
     userBlock(req),
     '',
-    'Classify track, execute routed playbook, verify_mission_snapshot before done.',
+    'Classify track, execute routed playbook or fix-PR proposal, verify_mission_snapshot before done.',
   ].join('\n')
 }
 

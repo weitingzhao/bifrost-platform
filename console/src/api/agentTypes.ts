@@ -497,11 +497,42 @@ export interface RetrospectiveNamespaceActivity {
   top_actions: RetrospectiveActionTaken[]
 }
 
+export interface RetrospectiveCodeAttribution {
+  file: string
+  line_range?: string
+  commit_sha?: string
+  evidence: string
+  confidence: number
+}
+
+export interface RetrospectiveDefectReport {
+  id: string
+  title: string
+  description: string
+  pattern_ids: string[]
+  root_cause: RetrospectiveRootCause
+  confidence: number
+  severity: RetrospectiveSeverity
+  occurrences: number
+  component: RetrospectiveComponentRef
+  attributions: RetrospectiveCodeAttribution[]
+  suggested_fix?: string
+  trending?: 'up' | 'stable' | 'down'
+}
+
+export interface RetrospectiveDefectsResponse {
+  generated_at: string
+  total: number
+  health_score?: number
+  defects: RetrospectiveDefectReport[]
+}
+
 export interface RetrospectiveReport {
   generated_at: string
   total_jobs: number
   analysis_window: string
   patterns: RetrospectivePatternCluster[]
+  defects?: RetrospectiveDefectReport[]
   root_cause_distribution: RetrospectiveRootCauseDistribution[]
   scope_stats: RetrospectiveScopeStats[]
   tool_usage: RetrospectiveToolUsage[]

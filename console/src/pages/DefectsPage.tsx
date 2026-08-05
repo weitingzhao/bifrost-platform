@@ -26,7 +26,7 @@ import {
 } from '@bifrost/ui'
 import { AlertCircle, RefreshCw, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Wrench } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
-import { fetchRetrospectiveReport } from '@/api/agentOps'
+import { fetchRetrospectiveDefects, fetchRetrospectiveReport } from '@/api/agentOps'
 import { startRemediation } from '@/api/remediation'
 import { buildDefectPatternRemediatePrompt } from '@/lib/agent/defectPatternRemediatePrompt'
 import { DEFECT_PATTERN_REMEDIATE_SCOPE } from '@/lib/agent/agentScopes'
@@ -50,7 +50,7 @@ import {
   FLEET_ROLE_ICON,
   FLEET_ROLE_LABEL,
 } from '@/lib/control-room/fleetRoleVisuals'
-import type { RetrospectiveReport, RetrospectivePatternCluster, RetrospectiveRootCauseDistribution, RetrospectiveScopeStats, RetrospectiveToolUsage, RetrospectiveNamespaceActivity, RetrospectiveSeverity, RetrospectiveRootCause } from '@/api/agentTypes'
+import type { RetrospectiveReport, RetrospectivePatternCluster, RetrospectiveRootCauseDistribution, RetrospectiveScopeStats, RetrospectiveToolUsage, RetrospectiveNamespaceActivity, RetrospectiveSeverity, RetrospectiveRootCause, RetrospectiveDefectReport } from '@/api/agentTypes'
 
 function DomainTag({ id }: { id: SystemDomainId }) {
   const Icon = SYSTEM_DOMAIN_ICON[id]
@@ -1114,6 +1114,93 @@ function NamespaceTable({ namespaces }: { namespaces: RetrospectiveNamespaceActi
   )
 }
 
+function CodeAttributionPanel({ defects }: { defects: RetrospectiveDefectReport[] }) {
+  if (defects.length === 0) {
+    return (
+      <OpsSection
+        title="Code attribution"
+        description="Platform-defect reports with file/line heuristics — empty until platform_defect patterns appear."
+        collapsible
+        defaultCollapsed
+      >
+        <p className="px-1 py-2 text-dense-meta text-muted-foreground">
+          No DefectReports yet. Patterns classified as platform_defect will show attributions here.
+        </p>
+      </OpsSection>
+    )
+  }
+
+  return (
+    <OpsSection
+      title="Code attribution"
+      description={`${defects.length} DefectReport(s) — file / line_range / confidence from analyzer heuristics.`}
+      collapsible
+      defaultCollapsed={false}
+    >
+      <DenseDataTable>
+        <DenseTableHeader>
+          <DenseTableHeadRow>
+            <DenseTableHead className="w-[22%]">Defect</DenseTableHead>
+            <DenseTableHead className="w-[10%]">Severity</DenseTableHead>
+            <DenseTableHead className="w-[28%]">File</DenseTableHead>
+            <DenseTableHead className="w-[10%]">Lines</DenseTableHead>
+            <DenseTableHead className="w-[10%]">Conf</DenseTableHead>
+            <DenseTableHead>Evidence / fix</DenseTableHead>
+          </DenseTableHeadRow>
+        </DenseTableHeader>
+        <DenseTableBody>
+          {defects.flatMap(d => {
+            const attrs = d.attributions?.length ? d.attributions : [{ file: '—', evidence: d.suggested_fix ?? '', confidence: d.confidence }]
+            return attrs.map((a, idx) => (
+              <DenseTableRow key={`${d.id}-${idx}`}>
+                <DenseTableCell>
+                  {idx === 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium text-dense-body">{d.title}</span>
+                      <span className="text-dense-caption text-muted-foreground">
+                        {(d.pattern_ids ?? []).join(', ') || d.id} · {d.occurrences}×
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-dense-caption text-muted-foreground">↳</span>
+                  )}
+                </DenseTableCell>
+                <DenseTableCell>
+                  {idx === 0 ? (
+                    <DenseTag variant={severityVariant(d.severity)}>{d.severity}</DenseTag>
+                  ) : null}
+                </DenseTableCell>
+                <DenseTableCell>
+                  <code className="text-dense-meta font-mono break-all">{a.file}</code>
+                  {a.commit_sha ? (
+                    <div className="text-dense-caption text-muted-foreground font-mono">
+                      {a.commit_sha.slice(0, 10)}
+                    </div>
+                  ) : null}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono text-dense-meta">
+                  {a.line_range ?? '—'}
+                </DenseTableCell>
+                <DenseTableCell className="font-mono text-dense-meta tabular-nums">
+                  {Math.round((a.confidence ?? 0) * 100)}%
+                </DenseTableCell>
+                <DenseTableCell>
+                  <div className="text-dense-meta text-muted-foreground">
+                    {a.evidence}
+                    {idx === 0 && d.suggested_fix ? (
+                      <div className="mt-0.5 text-dense-caption">{d.suggested_fix}</div>
+                    ) : null}
+                  </div>
+                </DenseTableCell>
+              </DenseTableRow>
+            ))
+          })}
+        </DenseTableBody>
+      </DenseDataTable>
+    </OpsSection>
+  )
+}
+
 function isReportEmpty(report: RetrospectiveReport): boolean {
   return report.total_jobs === 0 && (report.patterns?.length ?? 0) === 0
 }
@@ -1160,11 +1247,23 @@ export function DefectsPage({
     refetchInterval: 120_000,
   })
 
+  const defectsQuery = useQuery({
+    queryKey: ['agent', 'retrospective', 'defects'],
+    queryFn: () => fetchRetrospectiveDefects(),
+    refetchInterval: 120_000,
+  })
+
   const filteredPatterns = useMemo(() => {
     const all = data?.patterns ?? []
     if (domainFilter === 'all') return all
     return all.filter(p => patternToDomain(p) === domainFilter)
   }, [data?.patterns, domainFilter])
+
+  const defectReports = useMemo(() => {
+    const fromEndpoint = defectsQuery.data?.defects
+    if (fromEndpoint != null) return fromEndpoint
+    return data?.defects ?? []
+  }, [defectsQuery.data?.defects, data?.defects])
 
   const filteredScopeStats = useMemo(() => {
     const all = data?.scope_stats ?? []
@@ -1295,6 +1394,7 @@ export function DefectsPage({
 
       <div className="space-y-3" role="region" aria-label="Evidence">
         <RootCauseDistBar dist={data.root_cause_distribution ?? []} />
+        <CodeAttributionPanel defects={defectReports} />
         <PatternsTable
           patterns={filteredPatterns}
           onFixPattern={handleFixPattern}

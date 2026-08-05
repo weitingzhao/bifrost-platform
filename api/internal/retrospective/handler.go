@@ -55,6 +55,19 @@ func (h *Handler) HandleInsights(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleDefects returns platform defect reports with code-level attribution.
+// GET /api/v1/agent/retrospective/defects
+func (h *Handler) HandleDefects(w http.ResponseWriter, r *http.Request) {
+	forceRefresh := r.URL.Query().Get("refresh") == "true"
+	report := h.getOrRefresh(forceRefresh)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"defects":      report.Defects,
+		"total":        len(report.Defects),
+		"health_score": report.HealthScore,
+		"generated_at": report.GeneratedAt.Format(time.RFC3339),
+	})
+}
+
 func (h *Handler) getOrRefresh(force bool) AnalysisReport {
 	h.mu.Lock()
 	defer h.mu.Unlock()

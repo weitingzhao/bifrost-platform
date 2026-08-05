@@ -121,12 +121,38 @@ type RootCauseDistribution struct {
 	Fraction float64  `json:"fraction"` // 0.0–1.0
 }
 
+// CodeAttribution points at a likely source location for a platform defect.
+type CodeAttribution struct {
+	File       string  `json:"file"`
+	LineRange  string  `json:"line_range,omitempty"` // e.g. "110-171" or "42"
+	CommitSHA  string  `json:"commit_sha,omitempty"`
+	Evidence   string  `json:"evidence"`
+	Confidence float64 `json:"confidence"` // 0.0–1.0
+}
+
+// DefectReport is a platform-defect-oriented aggregation with code-level attribution.
+type DefectReport struct {
+	ID           string            `json:"id"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	PatternIDs   []string          `json:"pattern_ids"`
+	RootCause    RootCause         `json:"root_cause"`
+	Confidence   float64           `json:"confidence"`
+	Severity     Severity          `json:"severity"`
+	Occurrences  int               `json:"occurrences"`
+	Component    ComponentRef      `json:"component"`
+	Attributions []CodeAttribution `json:"attributions"`
+	SuggestedFix string            `json:"suggested_fix,omitempty"`
+	Trending     string            `json:"trending,omitempty"`
+}
+
 // AnalysisReport is the top-level result of retrospective analysis.
 type AnalysisReport struct {
 	GeneratedAt        time.Time              `json:"generated_at"`
 	TotalJobs          int                    `json:"total_jobs"`
 	AnalysisWindow     string                 `json:"analysis_window"`
 	Patterns           []PatternCluster       `json:"patterns"`
+	Defects            []DefectReport         `json:"defects"`
 	RootCauseDist      []RootCauseDistribution `json:"root_cause_distribution"`
 	ScopeStats         []ScopeStats           `json:"scope_stats"`
 	ToolUsage          []ToolUsage            `json:"tool_usage"`
