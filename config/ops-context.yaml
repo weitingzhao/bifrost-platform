@@ -143,10 +143,18 @@ milestones:
       # next_task: none for this milestone — residual Runtime probe expansion tracked on trade-k8s-migration
     - id: workload-placement-governance
       label: K8s workload placement governance (G1–G5)
-      status: IN_PROGRESS
+      status: CLOSED
+      signed_at: "2026-08-05"
       pipeline_lane: parallel
       pipeline_after: k3s-mac-agents
       authority: console/src/lib/architecture/workloadPlacementCatalog.ts
+      note: >
+        Owner CLOSED 2026-08-05 — core placement governance delivered: catalog +
+        GET /api/v1/cluster/placement evaluator live; pools amd64_ci / amd64_general /
+        nfs_client live; 6/8 rules satisfied (cicd_build/control, stg_runtime, data,
+        nfs_storage, monitoring). Residual (not blocking this milestone): GPU pool
+        planned (P5a gpu-server — park lane gpu-pool-join); arm64_edge optional with
+        0 nodes. Ongoing evaluation stays on Cluster page / Daily Ops.
     - id: autonomous-agent-v1
       label: Autonomous Agent v1 (nightly drift + morning briefing)
       status: NOT_STARTED

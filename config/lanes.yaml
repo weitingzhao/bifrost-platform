@@ -18,6 +18,19 @@ lanes:
       description: Node lifecycle, workload actuation, metrics-server, observability stack UI.
       agent_mode: Ops
       work_intent: cluster
+    - id: gpu-pool-join
+      track: build
+      component_line: rocket
+      track_type: build
+      label: GPU pool join (placement residual)
+      short_label: GPU pool
+      description: >
+        PARKED residual after workload-placement-governance CLOSED. Live placement
+        evaluator: GPU pool status=planned (P5a gpu-server not joined); ai rule unsatisfied.
+        Optional: arm64_edge pool has 0 nodes (frontend edge). Core amd64/nfs rules already OK.
+        Do not reopen placement milestone — join GPU when ai-compute-strategy buy-signal fires.
+      agent_mode: Ops
+      work_intent: cluster
     - id: mcp-gitops
       track: build
       component_line: rocket
