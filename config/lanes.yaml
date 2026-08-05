@@ -141,7 +141,12 @@ lanes:
       track_type: build
       label: AI network autonomy
       short_label: AI Net
-      description: UniFi MCP Server (REST API read/write), Ops Console Network dashboard, anomaly auto-response, predictive maintenance, self-healing network.
+      description: >
+        PARKED — aspirational vision lane (Ready / empty queue). No delivery program or
+        executable phases until Owner opens one. Foundation already delivered: UniFi MCP
+        (unifi-mcp-server closed 4/4) + L0 Network Monitoring Ops (health/bandwidth/anomaly/SLA).
+        Remaining vision (Home Assistant presence, isolate+alert, self-healing) stays in spine
+        stream ai-home-network as notes only — not a Planned execution contract.
       agent_mode: Ops
       work_intent: automate
     - id: governance

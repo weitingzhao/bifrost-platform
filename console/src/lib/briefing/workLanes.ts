@@ -715,6 +715,11 @@ export function buildQueueForLane(
       if (laneId === 'network-monitoring') {
         return buildNetworkMonitoringQueue()
       }
+      // PARKED vision — empty queue ⇒ Ready (not Planned). Spine streams unifi-mcp-server /
+      // ai-home-network stay in ops-context for history; do not project a fake 1/2 Planned queue.
+      if (laneId === 'ai-network') {
+        return []
+      }
       return buildQueueFromInfraStreams(tracks?.infra, laneId as InfraLaneId)
     case 'operate':
       // Mission Signal delivery complete — lane archived; ongoing health is Daily Ops / Control Room.

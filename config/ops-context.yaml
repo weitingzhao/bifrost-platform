@@ -624,7 +624,7 @@ tracks:
               total: 5
               done: 0
               status: not_started
-              note: "① Home Assistant + UniFi presence detection ② Automated network anomaly response (isolate + alert) ③ Ops Console unified Network dashboard (LAN + WiFi + IoT) ④ Predictive maintenance (node connectivity pattern → preemptive fix) ⑤ Self-healing network (auto-restart port, re-route traffic, failover)"
+              note: "PARKED — no delivery program / no executable phases until Owner opens one. Briefing lane ai-network is Ready (empty queue), not Planned. L0 dashboard/anomaly/predictive-lite already shipped via network-monitoring-ops; UniFi MCP foundation closed (unifi-mcp-server 4/4). Aspirational scope only (not a phase contract): ① Home Assistant + UniFi presence detection ② Automated network anomaly response (isolate + alert) ③ Ops Console unified Network dashboard (LAN + WiFi + IoT) ④ Predictive maintenance (node connectivity pattern → preemptive fix) ⑤ Self-healing network (auto-restart port, re-route traffic, failover)"
               prerequisites:
                 - "unifi-mcp-server stream closed"
                 - "network-upgrade-wifi stream closed"
