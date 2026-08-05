@@ -504,6 +504,12 @@ function SessionStatusRow({
             {readyLine != null ? ` · ${readyLine}` : ''}
             {session.image_tag ? ` · ${session.image_tag}` : ''}
             {running ? ` · ${formatUptime(session.uptime_sec)}` : ''}
+            {session.status === 'error' && session.crashed
+              ? ' · crashed — restart'
+              : ''}
+            {session.status === 'error' && session.last_exit_code != null
+              ? ` · exit ${session.last_exit_code}`
+              : ''}
             {session.restarts != null && session.restarts > 0
               ? ` · restarts ${session.restarts}`
               : ''}

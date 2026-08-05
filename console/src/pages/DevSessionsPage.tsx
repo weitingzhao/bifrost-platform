@@ -69,6 +69,12 @@ function SessionCard({
             <span className="font-mono">{session.image_tag}</span>
           )}
           {running && <span>{formatUptime(session.uptime_sec)}</span>}
+          {session.status === 'error' && session.crashed && (
+            <span className="text-warning">crashed — bdev restart</span>
+          )}
+          {session.status === 'error' && session.last_exit_code != null && (
+            <span>exit {session.last_exit_code}</span>
+          )}
           {session.restarts != null && session.restarts > 0 && (
             <span>restarts: {session.restarts}</span>
           )}

@@ -14,6 +14,12 @@ type DevSession struct {
 	LogBytes    int64  `json:"log_bytes,omitempty"`
 	LogMaxBytes int64  `json:"log_max_bytes,omitempty"`
 	LastOutputAt *int64 `json:"last_output_at,omitempty"`
+	// Crashed is true when bdev-supervise hit restart_max_failures (may be cooling).
+	Crashed *bool `json:"crashed,omitempty"`
+	// LastExitCode is the child exit code from the last supervised run.
+	LastExitCode *int `json:"last_exit_code,omitempty"`
+	// CoolingUntil is unix seconds when supervise will clear crash and retry.
+	CoolingUntil *int64 `json:"cooling_until,omitempty"`
 
 	// Mode is "bdev" (local) or "k8s" (cluster). Omitted by older clients is fine.
 	Mode string `json:"mode,omitempty"`

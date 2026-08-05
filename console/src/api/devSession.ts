@@ -16,6 +16,12 @@ export interface DevSession {
   log_max_bytes?: number
   /** Unix epoch seconds of the log file's last modification (API-enriched). */
   last_output_at?: number
+  /** True when bdev-supervise marked CRASHED (may be in cooldown). */
+  crashed?: boolean
+  /** Last supervised child exit code. */
+  last_exit_code?: number | null
+  /** Unix epoch when cooldown ends and supervise retries. */
+  cooling_until?: number | null
   /** Provider mode: "bdev" (local) or "k8s" (STG/PROD cluster). */
   mode?: 'bdev' | 'k8s' | string
   /** Viewer seat that produced this session (dev / stg / prod). */
