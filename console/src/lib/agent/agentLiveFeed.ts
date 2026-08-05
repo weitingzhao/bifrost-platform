@@ -293,13 +293,103 @@ export function formatToolArgsSummary(args: Record<string, unknown> | null): str
 
 export type UnwrappedToolResult =
   | { kind: 'text'; text: string; status?: string; isError?: boolean }
+  | { kind: 'structured'; data: unknown; status?: string; isError?: boolean }
   | { kind: 'raw'; text: string }
+
+/** Scalar chips preferred for Process Result summary row (scanability). */
+const STRUCTURED_SUMMARY_KEYS = [
+  'status',
+  'role',
+  'service',
+  'version',
+  'mode',
+  'reachability',
+  'url',
+  'environment',
+  'env',
+  'phase',
+  'ok',
+  'healthy',
+] as const
+
+export type StructuredSummaryChip = { key: string; value: string }
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (v != null && typeof v === 'object' && !Array.isArray(v)) {
     return v as Record<string, unknown>
   }
   return null
+}
+
+function formatChipValue(v: unknown): string | null {
+  if (v == null) return null
+  if (typeof v === 'string') {
+    const s = v.replace(/\s+/g, ' ').trim()
+    if (s === '') return null
+    return s.length > 48 ? `${s.slice(0, 48)}…` : s
+  }
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  return null
+}
+
+/**
+ * Pull a short chip row from structured tool results (aligned with tool-call chips).
+ * Prefers known keys on the root, then one level of nested objects (e.g. remediation_runner).
+ */
+export function extractStructuredSummaryChips(data: unknown, limit = 8): StructuredSummaryChip[] {
+  const chips: StructuredSummaryChip[] = []
+  const seen = new Set<string>()
+
+  const pushFrom = (rec: Record<string, unknown>, prefix?: string) => {
+    for (const key of STRUCTURED_SUMMARY_KEYS) {
+      if (chips.length >= limit) return
+      if (!(key in rec)) continue
+      const label = prefix != null ? `${prefix}.${key}` : key
+      if (seen.has(label)) continue
+      const formatted = formatChipValue(rec[key])
+      if (formatted == null) continue
+      seen.add(label)
+      chips.push({ key: label, value: formatted })
+    }
+  }
+
+  const root = asRecord(data)
+  if (root != null) {
+    pushFrom(root)
+    if (chips.length < limit) {
+      for (const [k, v] of Object.entries(root)) {
+        if (chips.length >= limit) break
+        const nested = asRecord(v)
+        if (nested == null) continue
+        // Prefer nested runner / health blobs.
+        if (
+          /runner|health|bridge|gateway|summary|probe/i.test(k) ||
+          STRUCTURED_SUMMARY_KEYS.some(sk => sk in nested)
+        ) {
+          pushFrom(nested, k)
+        }
+      }
+    }
+    return chips
+  }
+
+  if (Array.isArray(data) && data.length > 0) {
+    const first = asRecord(data[0])
+    if (first != null) pushFrom(first, '[0]')
+    chips.push({ key: 'length', value: String(data.length) })
+  }
+  return chips
+}
+
+/** True when a string body is pretty/minified JSON object or array (not prose). */
+export function tryParseJsonValue(text: string): unknown | null {
+  const trimmed = text.trim()
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) return null
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return null
+  }
 }
 
 function collectMcpContentTexts(content: unknown): string[] {
@@ -344,7 +434,12 @@ export function unwrapToolResultDisplay(raw: string): UnwrappedToolResult {
   }
 
   const root = asRecord(parsed)
-  if (root == null) return { kind: 'raw', text: raw }
+  if (root == null) {
+    if (Array.isArray(parsed)) {
+      return { kind: 'structured', data: parsed }
+    }
+    return { kind: 'raw', text: raw }
+  }
 
   const status = typeof root.status === 'string' ? root.status : undefined
   const isError =
@@ -363,28 +458,56 @@ export function unwrapToolResultDisplay(raw: string): UnwrappedToolResult {
   }
 
   if (typeof value === 'string') {
+    const asJson = tryParseJsonValue(value)
+    if (asJson != null && (asRecord(asJson) != null || Array.isArray(asJson))) {
+      return { kind: 'structured', data: asJson, status, isError }
+    }
     return { kind: 'text', text: value, status, isError }
   }
 
   const payload = asRecord(value) ?? root
   if (typeof payload.text === 'string' && payload.text.trim() !== '') {
+    const asJson = tryParseJsonValue(payload.text)
+    if (asJson != null && (asRecord(asJson) != null || Array.isArray(asJson))) {
+      return { kind: 'structured', data: asJson, status, isError }
+    }
     return { kind: 'text', text: payload.text, status, isError }
   }
   if (typeof payload.content === 'string' && payload.content.trim() !== '') {
+    const asJson = tryParseJsonValue(payload.content)
+    if (asJson != null && (asRecord(asJson) != null || Array.isArray(asJson))) {
+      return { kind: 'structured', data: asJson, status, isError }
+    }
     return { kind: 'text', text: payload.content, status, isError }
   }
 
   const mcpParts = collectMcpContentTexts(payload.content)
   if (mcpParts.length > 0) {
+    const joined = mcpParts.join('\n\n')
+    const errFlag = typeof payload.isError === 'boolean' ? payload.isError : isError
+    // Single MCP text part that is itself a JSON object/array → structured view.
+    if (mcpParts.length === 1) {
+      const asJson = tryParseJsonValue(mcpParts[0]!)
+      if (asJson != null && (asRecord(asJson) != null || Array.isArray(asJson))) {
+        return { kind: 'structured', data: asJson, status, isError: errFlag }
+      }
+    }
     return {
       kind: 'text',
-      text: mcpParts.join('\n\n'),
+      text: joined,
       status,
-      isError: typeof payload.isError === 'boolean' ? payload.isError : isError,
+      isError: errFlag,
     }
   }
 
-  // Pretty JSON fallback (already pretty from runner) — keep as raw.
+  // Structured MCP / API payloads (e.g. get_agent_bridge) — dense tree, not raw <pre>.
+  if (asRecord(value) != null || Array.isArray(value)) {
+    return { kind: 'structured', data: value, status, isError }
+  }
+  if (asRecord(parsed) != null || Array.isArray(parsed)) {
+    return { kind: 'structured', data: parsed, status, isError }
+  }
+
   return { kind: 'raw', text: raw }
 }
 

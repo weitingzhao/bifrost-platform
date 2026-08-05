@@ -5,6 +5,7 @@ import {
 } from '@/components/agent/DenseMarkdown'
 import type { RemediationEvent } from '@/api/remediationTypes'
 import {
+  extractStructuredSummaryChips,
   formatToolArgsSummary,
   groupDockProcessBlocks,
   joinThinkingFragments,
@@ -138,9 +139,56 @@ describe('unwrapToolResultDisplay', () => {
     expect(out).toEqual({ kind: 'text', text: 'hello\nworld', status: 'success', isError: false })
   })
 
-  it('returns raw when JSON has no text payload', () => {
+  it('returns structured when JSON value has no text payload', () => {
     const raw = JSON.stringify({ status: 'success', value: { ok: true, count: 3 } }, null, 2)
     const out = unwrapToolResultDisplay(raw)
-    expect(out.kind).toBe('raw')
+    expect(out.kind).toBe('structured')
+    if (out.kind === 'structured') {
+      expect(out.status).toBe('success')
+      expect(out.data).toEqual({ ok: true, count: 3 })
+    }
+  })
+
+  it('returns structured for agent-bridge style payloads', () => {
+    const bridge = {
+      generated_at: '2026-08-05T16:24:41.006398Z',
+      remediation_runner: {
+        url: 'http://192.168.10.50:8781',
+        role: 'primary',
+        status: 'ok',
+        version: '0.1.0',
+        service: 'bifrost-remediation-runner',
+      },
+      runners: [{ role: 'primary', status: 'ok' }],
+    }
+    const raw = JSON.stringify({ status: 'success', value: bridge }, null, 2)
+    const out = unwrapToolResultDisplay(raw)
+    expect(out.kind).toBe('structured')
+    if (out.kind === 'structured') {
+      expect(out.data).toEqual(bridge)
+    }
+    const chips = extractStructuredSummaryChips(bridge)
+    expect(chips.some(c => c.key === 'remediation_runner.status' && c.value === 'ok')).toBe(true)
+    expect(chips.some(c => c.key === 'remediation_runner.role' && c.value === 'primary')).toBe(true)
+  })
+
+  it('parses MCP content text that is itself JSON as structured', () => {
+    const payload = { status: 'ok', url: 'http://example' }
+    const raw = JSON.stringify(
+      {
+        status: 'success',
+        value: {
+          content: [{ type: 'text', text: JSON.stringify(payload) }],
+          isError: false,
+        },
+      },
+      null,
+      2,
+    )
+    const out = unwrapToolResultDisplay(raw)
+    expect(out.kind).toBe('structured')
+    if (out.kind === 'structured') {
+      expect(out.data).toEqual(payload)
+    }
   })
 })

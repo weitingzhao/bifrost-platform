@@ -1,11 +1,13 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import type { RemediationEvent } from '@/api/remediationTypes'
 import { DenseMarkdown, looksLikeMarkdown } from '@/components/agent/DenseMarkdown'
 import {
+  extractStructuredSummaryChips,
   formatFeedEventLine,
   formatToolArgsSummary,
   groupDockProcessBlocks,
   parseToolCallDisplay,
+  tryParseJsonValue,
   unwrapToolResultDisplay,
 } from '@/lib/agent/agentLiveFeed'
 import { cn } from '@bifrost/ui'
@@ -110,7 +112,135 @@ function shouldRenderRichBody(text: string): boolean {
   return false
 }
 
+function formatTreeScalar(v: unknown): string {
+  if (v === null) return 'null'
+  if (typeof v === 'string') return v
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  try {
+    return JSON.stringify(v)
+  } catch {
+    return String(v)
+  }
+}
+
+function isExpandable(v: unknown): v is Record<string, unknown> | unknown[] {
+  return (v != null && typeof v === 'object')
+}
+
+function DenseJsonNode({
+  name,
+  value,
+  depth,
+  defaultOpen,
+}: {
+  name?: string
+  value: unknown
+  depth: number
+  defaultOpen?: boolean
+}) {
+  const expandable = isExpandable(value)
+  const [open, setOpen] = useState(defaultOpen ?? depth < 1)
+
+  if (!expandable) {
+    return (
+      <div
+        className="console-agent-execution-dock__json-row"
+        style={{ paddingLeft: `${depth * 0.65}rem` }}
+      >
+        {name != null ? (
+          <span className="console-agent-execution-dock__json-key">{name}</span>
+        ) : null}
+        <span className="console-agent-execution-dock__json-val">{formatTreeScalar(value)}</span>
+      </div>
+    )
+  }
+
+  const entries = Array.isArray(value)
+    ? value.map((v, i) => [String(i), v] as const)
+    : Object.entries(value as Record<string, unknown>)
+  const label =
+    name != null
+      ? `${name} ${Array.isArray(value) ? `[${value.length}]` : `{${entries.length}}`}`
+      : Array.isArray(value)
+        ? `array[${value.length}]`
+        : `object{${entries.length}}`
+
+  return (
+    <div className="console-agent-execution-dock__json-node">
+      <button
+        type="button"
+        className="console-agent-execution-dock__json-toggle"
+        style={{ paddingLeft: `${depth * 0.65}rem` }}
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span className="console-agent-execution-dock__json-caret" aria-hidden>
+          {open ? '▾' : '▸'}
+        </span>
+        <span className="console-agent-execution-dock__json-key">{label}</span>
+      </button>
+      {open
+        ? entries.map(([k, v]) => (
+            <DenseJsonNode
+              key={k}
+              name={k}
+              value={v}
+              depth={depth + 1}
+              defaultOpen={depth + 1 < 1}
+            />
+          ))
+        : null}
+    </div>
+  )
+}
+
+/** Structured MCP/API payloads — summary chips + collapsible dense tree (not raw JSON pre). */
+function StructuredResultView({ data }: { data: unknown }) {
+  const chips = extractStructuredSummaryChips(data)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+
+  return (
+    <div className="console-agent-execution-dock__structured">
+      {chips.length > 0 ? (
+        <div className="console-agent-execution-dock__tool-call-meta console-agent-execution-dock__structured-chips">
+          {chips.map(c => (
+            <span
+              key={c.key}
+              className={cn(
+                'console-agent-execution-dock__tool-call-chip',
+                /status|role|ok|healthy|mode/i.test(c.key)
+                  ? undefined
+                  : 'console-agent-execution-dock__tool-call-chip--muted',
+              )}
+              title={`${c.key}=${c.value}`}
+            >
+              {c.key}={c.value}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className="console-agent-execution-dock__structured-details-toggle"
+        aria-expanded={detailsOpen}
+        onClick={() => setDetailsOpen(o => !o)}
+      >
+        {detailsOpen ? 'Hide details' : 'Show details'}
+      </button>
+      {detailsOpen ? (
+        <div className="console-agent-execution-dock__json-tree dense-scroll-y">
+          <DenseJsonNode value={data} depth={0} defaultOpen />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function FormattedBody({ text, className }: { text: string; className?: string }) {
+  const asJson = tryParseJsonValue(text)
+  if (asJson != null && (typeof asJson === 'object')) {
+    return <StructuredResultView data={asJson} />
+  }
   if (looksLikeMarkdown(text)) {
     return (
       <DenseMarkdown
@@ -189,18 +319,37 @@ function ToolResultBody({ ev }: { ev: RemediationEvent }) {
       ? ev.meta.name.trim()
       : null
   const unwrapped = unwrapToolResultDisplay(ev.text)
-  const body =
-    unwrapped.kind === 'text' ? unwrapped.text : unwrapped.text.trim() !== '' ? unwrapped.text : ''
-
-  if (body.trim() === '') {
-    return <span className="console-agent-execution-dock__log-text">{formatFeedEventLine(ev)}</span>
-  }
 
   const status =
-    unwrapped.kind === 'text' && unwrapped.status != null && unwrapped.status !== ''
+    (unwrapped.kind === 'text' || unwrapped.kind === 'structured') &&
+    unwrapped.status != null &&
+    unwrapped.status !== ''
       ? unwrapped.status
       : null
-  const isError = unwrapped.kind === 'text' && unwrapped.isError === true
+  const isError =
+    (unwrapped.kind === 'text' || unwrapped.kind === 'structured') && unwrapped.isError === true
+
+  let body: ReactNode = null
+  if (unwrapped.kind === 'structured') {
+    body = <StructuredResultView data={unwrapped.data} />
+  } else if (unwrapped.kind === 'text' && unwrapped.text.trim() !== '') {
+    body = <FormattedBody text={unwrapped.text} />
+  } else if (unwrapped.kind === 'raw' && unwrapped.text.trim() !== '') {
+    const asJson = tryParseJsonValue(unwrapped.text)
+    body =
+      asJson != null && typeof asJson === 'object' ? (
+        <StructuredResultView data={asJson} />
+      ) : (
+        <FormattedBody
+          text={unwrapped.text}
+          className="console-agent-execution-dock__thinking-pre--json"
+        />
+      )
+  }
+
+  if (body == null) {
+    return <span className="console-agent-execution-dock__log-text">{formatFeedEventLine(ev)}</span>
+  }
 
   return (
     <div className="console-agent-execution-dock__log-body">
@@ -213,18 +362,16 @@ function ToolResultBody({ ev }: { ev: RemediationEvent }) {
             className={cn(
               'console-agent-execution-dock__result-status',
               isError && 'console-agent-execution-dock__result-status--error',
+              !isError &&
+                /success|ok|passed/i.test(status) &&
+                'console-agent-execution-dock__result-status--ok',
             )}
           >
             {status}
           </span>
         ) : null}
       </div>
-      <FormattedBody
-        text={body}
-        className={
-          unwrapped.kind === 'raw' ? 'console-agent-execution-dock__thinking-pre--json' : undefined
-        }
-      />
+      {body}
     </div>
   )
 }
