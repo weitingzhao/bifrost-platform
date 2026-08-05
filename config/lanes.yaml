@@ -222,7 +222,10 @@ lanes:
       track_type: maintain
       label: Trade analysis & advisory
       short_label: Biz
-      description: Read-only portfolio/market/strategy analysis; Greeks monitoring, SEPA research, risk advisory via Trade APIs.
+      description: |
+        READY — On-demand Business Agent session template (not a Delivery Build). Vision V4 Business Agent SIGNED;
+        Trade portfolio/market/SEPA/strategy surfaces exist. Start via Prepare pack when Owner needs read-only analysis;
+        do not project a fake 0/4 Planned queue. No write paths (D10).
       agent_mode: Ops
       work_intent: business
     - id: platform-health

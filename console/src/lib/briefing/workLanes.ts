@@ -592,14 +592,6 @@ function buildReleaseQueue(context: OpsContextResponse | undefined, matrices: Ma
   return items
 }
 
-function buildBusinessAdvisoryQueue(): QueueItem[] {
-  return [
-    { id: 'biz-positions', label: 'Portfolio & positions analysis', status: 'pending', note: 'Greeks, P&L attribution, risk exposure' },
-    { id: 'biz-market', label: 'Market data & IV analysis', status: 'pending', note: 'Quote stream, IV cone, term structure' },
-    { id: 'biz-sepa', label: 'SEPA research pipeline', status: 'pending', note: 'Screener results, phase scoring, opportunities' },
-    { id: 'biz-strategy', label: 'Strategy & gate review', status: 'pending', note: 'Active instances, gate parameters, structure templates' },
-  ]
-}
 
 function buildQueueFromAutomateStreams(
   automate: { streams: MigrateStream[] } | undefined,
@@ -770,6 +762,11 @@ export function buildQueueForLane(
           },
         ]
       }
+      // On-demand Business Agent template — empty queue ⇒ Ready (not fake Planned 0/4).
+      // Vision V4 SIGNED; analysis topics live in pack/session, not a sticky delivery queue.
+      if (laneId === 'business-advisory') {
+        return []
+      }
       switch (laneId as OperateLaneId) {
         case 'governance':
           return buildGovernanceQueue(context)
@@ -778,7 +775,7 @@ export function buildQueueForLane(
         case 'release':
           return buildReleaseQueue(context, matrices)
         case 'business-advisory':
-          return buildBusinessAdvisoryQueue()
+          return [] // unreachable — handled above; keep for exhaustiveness
       }
   }
   return []
