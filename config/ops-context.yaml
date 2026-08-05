@@ -162,10 +162,16 @@ milestones:
       authority: bifrost-trade-infra/docs/PHASE2C_PROD_DEFERRED.md
     - id: k3s-data-layer
       label: K3s data layer (PG + Redis → data namespace)
-      status: IN_PROGRESS
+      status: CLOSED
+      signed_at: "2026-08-05"
       pipeline_lane: mainline
       pipeline_after: 2c-b-prod-cutover
       authority: console/src/lib/architecture/dataLayerCatalog.ts
+      note: >
+        Owner CLOSED 2026-08-05 — aligned with migrate stream data-layer-k3s closed 7/7
+        (①–⑦ complete; Owner sign-off via Briefing queue). PG+Redis @ data NS
+        (DEV/STG/PROD). Was stale IN_PROGRESS while stream already closed; hygiene so
+        Governance & spine lane no longer projects a false active milestone.
     - id: market-data-subcontractor
       label: Market Data Subcontractor (Polygon → plugin-market-data NS)
       status: DONE
