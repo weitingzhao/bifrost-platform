@@ -236,15 +236,16 @@ export function useAgentJobLiveSession(
 
   useEffect(() => {
     if (job == null || !isTerminal || completedRef.current === job.id) return
-    // Archive browse of already-finished jobs should not re-fire complete handlers.
-    if (knownTerminal || (isArchive && listHint != null && isTerminalStatus(listHint))) {
+    // Browse an already-finished job from Recent — do not re-fire complete handlers.
+    // Live jobs that finish into archive (stream orphan) must still settle Activity.
+    if (knownTerminal) {
       completedRef.current = job.id
       return
     }
     completedRef.current = job.id
     onCompleteRef.current?.(job)
     void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-  }, [job, isTerminal, qc, knownTerminal, isArchive, listHint])
+  }, [job, isTerminal, qc, knownTerminal])
 
   useEffect(() => {
     if (job?.status === 'done' && autoDismissMs > 0 && onDismissRef.current != null) {

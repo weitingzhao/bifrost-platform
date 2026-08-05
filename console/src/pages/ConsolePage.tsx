@@ -37,6 +37,7 @@ import { GuidesSettingsNav } from '@/components/GuidesSettingsNav'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useOperateQueueActivityBridge } from '@/hooks/useOperateQueueActivityBridge'
 import { usePipelineActivityBridge } from '@/hooks/usePipelineActivityBridge'
+import { useAgentActivityBridge } from '@/hooks/useAgentActivityBridge'
 import { upsertActivity, updateActivityPhase } from '@/lib/activity/activityStore'
 import { prepareSatelliteBusActivityFocus } from '@/lib/activity/activityPageFocus'
 import type { ActivityEvent } from '@/lib/activity/activityTypes'
@@ -586,6 +587,8 @@ function ConsolePageInner() {
   // W2: Pipeline + Operate Queue → Activity Feed (shell-wide)
   usePipelineActivityBridge()
   useOperateQueueActivityBridge()
+  // Ambient agent:* rows — settle APPLYING when job list shows terminal (archive / switch Recent).
+  useAgentActivityBridge()
   const openStandards = () => setViewTab('platform-standards')
   const openDefects = () => setViewTab('defects')
   const openSatelliteBus = () => setViewTab('satellite-bus')

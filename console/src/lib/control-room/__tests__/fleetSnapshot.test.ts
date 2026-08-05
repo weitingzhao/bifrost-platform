@@ -564,6 +564,75 @@ describe('buildFleetSnapshot integration', () => {
     expect(resolveCellGate(vendor)).toBe('GO')
   })
 
+  it('keeps Vendor GO when daemon-exec-arm observe chip is informational only', () => {
+    const now = Date.now()
+    const snap = buildFleetSnapshot({
+      viewerEnv: 'dev',
+      matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
+      self: selfHealth(['dev', 'stg', 'prod']),
+      stg: stgSmokeOk,
+      supply: supplyOk,
+      cluster: clusterOk,
+      groundBridgeReady: true,
+      runner: { status: 'ok' },
+      ibGateway: {
+        mode: 'live',
+        reachability: 'ok',
+        reachable: true,
+        summary: 'live · ib-gateway ok',
+        ingestor_health: { connected: 'True', client_id: '70', last_msg_ts: String(now / 1000) },
+        account_health: {
+          host_connected: 'True',
+          host_client_id: '70',
+          last_msg_ts: String(now / 1000),
+        },
+        sample_tick_nvda: JSON.stringify({
+          bid: 100,
+          ask: 100.1,
+          last: 100.05,
+          ts: now / 1000,
+        }),
+        account_snapshot: JSON.stringify({
+          host_connected: true,
+          secondary_connected: true,
+          accounts_snapshot: [{ account_id: 'U1' }],
+          updated_at: now / 1000,
+        }),
+      },
+      daemonIbObserve: true,
+      bridge: bridgeOk,
+    })
+    const vendor = getCell(snap, 'vendor', 'span')!
+    expect(resolveCellGate(vendor)).toBe('GO')
+    const arm = vendor.standards.find(s => s.id === 'daemon-exec-arm')!
+    expect(arm.required).toBe(false)
+    expect(arm.signal).toBe('degraded')
+    expect(arm.reason).toMatch(/observe|D10/i)
+  })
+
+  it('omits daemon-exec-arm chip when daemonIbObserve is false', () => {
+    const snap = buildFleetSnapshot({
+      viewerEnv: 'dev',
+      matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
+      self: selfHealth(['dev', 'stg', 'prod']),
+      stg: stgSmokeOk,
+      supply: supplyOk,
+      cluster: clusterOk,
+      groundBridgeReady: true,
+      runner: { status: 'ok' },
+      ibGateway: {
+        mode: 'live',
+        reachability: 'ok',
+        reachable: true,
+        summary: 'live · ib-gateway ok',
+      },
+      daemonIbObserve: false,
+      bridge: bridgeOk,
+    })
+    const vendor = getCell(snap, 'vendor', 'span')!
+    expect(vendor.standards.find(s => s.id === 'daemon-exec-arm')).toBeUndefined()
+  })
+
   it('is GO for a prod viewer even though Rocket DEV is structurally unavailable (info-only)', () => {
     const snap = buildFleetSnapshot({
       viewerEnv: 'prod',

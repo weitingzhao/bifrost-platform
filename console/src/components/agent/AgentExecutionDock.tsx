@@ -14,7 +14,7 @@ import {
   feedKindLabel,
 } from '@/lib/agent/agentLiveFeed'
 import { DockProcessFeed } from '@/components/agent/DockProcessFeed'
-import { updateActivityPhase } from '@/lib/activity/activityStore'
+import { updateActivityPhase, getActivityEvents } from '@/lib/activity/activityStore'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 
 const DOCK_HEIGHT_KEY = 'bifrost.console.agentExecutionDockHeight'
@@ -472,13 +472,34 @@ export function OperatorDock({
       lastActivityPhaseRef.current = null
       return
     }
-    if (job == null || isTerminal) return
+    if (job == null) return
+    if (isTerminal) {
+      const existing = getActivityEvents().find(e => e.id === `agent:${jobId}`)
+      if (
+        existing == null ||
+        existing.phase === 'completed' ||
+        existing.phase === 'failed' ||
+        existing.phase === 'settled'
+      ) {
+        lastActivityPhaseRef.current = `terminal:${job.status}`
+        return
+      }
+      const ok = job.status === 'done'
+      const terminalKey = `terminal:${job.status}`
+      if (lastActivityPhaseRef.current === terminalKey) return
+      lastActivityPhaseRef.current = terminalKey
+      updateActivityPhase(`agent:${jobId}`, ok ? 'completed' : 'failed', {
+        settledOutcome: ok ? 'resolved' : 'error',
+        detail: job.summary?.trim() || job.status,
+      })
+      return
+    }
     const phase = job.phase
     if (phase == null || phase === 'done' || phase === 'failed' || phase === 'cancelled') return
     if (phase === lastActivityPhaseRef.current) return
     lastActivityPhaseRef.current = phase
     updateActivityPhase(`agent:${jobId}`, 'applying', { detail: phase })
-  }, [jobId, job, job?.phase, isTerminal])
+  }, [jobId, job, job?.phase, job?.status, job?.summary, isTerminal])
 
   const showInlineFeed = toolId === 'agent' && !idle && !isTerminal && liveFeed != null
   const showFeedPlaceholder =

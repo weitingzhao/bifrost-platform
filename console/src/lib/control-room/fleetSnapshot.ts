@@ -933,6 +933,11 @@ export function buildVendorCell(input: {
   matrices?: MatrixResponse[]
   /** Platform IB Gateway plugin status — required for Vendor GO. */
   ibGateway?: IbGatewayStatusResponse
+  /**
+   * When true, Trade monitor still reports ib_not_connected (execution arm /
+   * observe gap). Informational only — does not block Vendor GO.
+   */
+  daemonIbObserve?: boolean
 }): FleetCell {
   const hermes = input.bridge?.nous_hermes ?? input.bridge?.hermes_mcp
   const targets = vendorTargets(input.matrices ?? [])
@@ -961,6 +966,22 @@ export function buildVendorCell(input: {
   // IB Client / Gateway — required for Vendor GO (plugin status). D10: observe/manual only, no Agent Fix.
   const ibProbe = resolveIbClientStandard(input.ibGateway, ibTargets)
   standards.push(ibProbe)
+
+  // Informational: daemon execution arm observe state (D10) — does not block Vendor GO.
+  if (input.ibGateway != null && (input.ibGateway.mode ?? '').toLowerCase() === 'live') {
+    if (input.daemonIbObserve === true) {
+      standards.push(
+        std(
+          'daemon-exec-arm',
+          'Daemon execution arm',
+          'degraded',
+          'Daemon reports ib_not_connected (observe only — D10)',
+          'feed',
+          false,
+        ),
+      )
+    }
+  }
 
   const hermesSig: Signal =
     hermes == null
@@ -1362,6 +1383,11 @@ export type BuildFleetSnapshotInput = {
   groundBridgeReady?: boolean
   /** IB Gateway plugin — required Vendor feed (IB Client). */
   ibGateway?: IbGatewayStatusResponse
+  /**
+   * Trade monitor reports ib_not_connected (execution arm / D10 observe).
+   * Surfaces as informational Vendor chip; does not block GO.
+   */
+  daemonIbObserve?: boolean
 }
 
 /**
@@ -1407,6 +1433,7 @@ export function buildFleetSnapshotCore(input: BuildFleetSnapshotInput): FleetSna
       bridge: input.bridge,
       matrices: input.matrices,
       ibGateway: input.ibGateway,
+      daemonIbObserve: input.daemonIbObserve,
     }),
   )
 

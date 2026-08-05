@@ -3,7 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchCluster } from '@/api/cluster'
 import { fetchSupplyChain } from '@/api/delivery'
 import { fetchStgSmoke } from '@/api/promote'
-import { fetchSelfHealth, fetchMatrix, isAllMatrices } from '@/api/core'
+import {
+  fetchSelfHealth,
+  fetchMatrix,
+  fetchSatelliteBusDeep,
+  isAllMatrices,
+  isAllSatelliteBusDeep,
+} from '@/api/core'
+import type { SatelliteBusDeepResponse } from '@/api/satelliteBusTypes'
 import { fetchRemediationHealth } from '@/api/remediation'
 import { fetchAgentBridge } from '@/api/agentOps'
 import { fetchIbGatewayStatus } from '@/api/network'
@@ -31,6 +38,11 @@ export function resolveGroundBridgeReady(
   return bridgeStatus === 'ok'
 }
 
+/** True when any bus-deep env reports daemon ib_not_connected (D10 observe gap). */
+export function resolveDaemonIbObserve(buses: SatelliteBusDeepResponse[]): boolean {
+  return buses.some(b => b.monitor?.daemon?.block_reasons?.includes('ib_not_connected') === true)
+}
+
 export function useFleetSnapshot(): {
   fleet: FleetSnapshot
   snapshot: MissionSnapshot
@@ -53,12 +65,27 @@ export function useFleetSnapshot(): {
     queryFn: fetchIbGatewayStatus,
     refetchInterval: REFETCH,
   })
+  const busDeepQ = useQuery({
+    queryKey: ['cockpit', 'bus-deep-all'],
+    queryFn: () => fetchSatelliteBusDeep(),
+    refetchInterval: REFETCH,
+    staleTime: 15_000,
+  })
 
   const matrices = useMemo((): MatrixResponse[] => {
     const data = matrixQ.data
     if (!data) return []
     return isAllMatrices(data) ? data.matrices : [data]
   }, [matrixQ.data])
+
+  const daemonIbObserve = useMemo(() => {
+    const data = busDeepQ.data
+    if (data == null) return false
+    const buses: SatelliteBusDeepResponse[] = isAllSatelliteBusDeep(data)
+      ? data.buses
+      : [data]
+    return resolveDaemonIbObserve(buses)
+  }, [busDeepQ.data])
 
   // Avoid DEV→PROD badge flash: wait for self-health payload before showing a seat label.
   const viewerEnvLoading = selfQ.data == null
@@ -86,6 +113,7 @@ export function useFleetSnapshot(): {
         matrices,
         groundBridgeReady,
         ibGateway: ibGatewayQ.data,
+        daemonIbObserve,
       }),
     [
       viewerEnv,
@@ -98,6 +126,7 @@ export function useFleetSnapshot(): {
       matrices,
       groundBridgeReady,
       ibGatewayQ.data,
+      daemonIbObserve,
     ],
   )
 
@@ -134,6 +163,7 @@ export function useFleetSnapshot(): {
     bridgeQ.dataUpdatedAt,
     matrixQ.dataUpdatedAt,
     ibGatewayQ.dataUpdatedAt,
+    busDeepQ.dataUpdatedAt,
   )
 
   return { fleet, snapshot, matrices, viewerEnv, viewerEnvLoading, dataUpdatedAt, isLoading }
