@@ -6,8 +6,8 @@
  * Live state (not this catalog):
  * - IB Gateway health + mode: Subcontractors → Plugin Gallery (observe / reconnect)
  * - Publish: Mission Launch · Launch Plugin (plugin-release) — Gallery ≠ Publish
- * - Phase / program sign-off: Mission Control → Delivery Board · ib-gateway-plugin · launch-plugin-lane
- * - Migrate lane: Engineer → Briefing · spine stream ib-gateway-plugin
+ * - Delivery Board: ib-gateway-plugin completed 7/7; launch-plugin-lane CLOSED-SUPERSEDED (hygiene 2026-08-05)
+ * - Briefing lane ib-vendor: Done (synthetic closed queue) — not Init Build
  */
 
 export const IB_GATEWAY_PLUGIN_SOURCE = 'bifrost-platform-plugin'
@@ -151,7 +151,7 @@ export const IB_GATEWAY_PLUGIN_PROGRESS = {
 export const IB_GATEWAY_RELATED_AUTHORITIES = [
   'Live IB Gateway health + mode: Subcontractors → Plugin Gallery (observe — not publish)',
   'Publish plugin: Mission Launch · Launch Plugin (plugin-release) — Detect→Approve→Install→Verify→Live',
-  'Program / phase sign-off: Delivery Board · ib-gateway-plugin · launch-plugin-lane',
+  'Program history: Delivery Board · ib-gateway-plugin (completed) · launch-plugin-lane (closed-superseded)',
   'Migrate lane + spine stream: Engineer → Briefing · ib-gateway-plugin',
   'Plugin implementation: bifrost-platform-plugin · k8s/data/redis-ib + k8s/data/ib-gateway',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
@@ -180,7 +180,7 @@ export function buildIbGatewayPluginLlmPack(): string {
     `Repo: ${IB_GATEWAY_PLUGIN_SOURCE}`,
     'Live health + mode: Subcontractors → Plugin Gallery (observe) — not this catalog.',
     'Publish: Mission Launch · Launch Plugin — Gallery ≠ Publish.',
-    'Sign-off state: Delivery Board · ib-gateway-plugin · launch-plugin-lane — not this catalog.',
+    'Sign-off state: Delivery Board · ib-gateway-plugin completed · launch-plugin-lane closed — not this catalog.',
     '',
     '## Launch Plugin lane',
     `- Label: ${LAUNCH_PLUGIN_LANE.label} · tab \`${LAUNCH_PLUGIN_LANE.tabId}\``,

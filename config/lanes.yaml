@@ -269,7 +269,10 @@ lanes:
       track_type: build
       label: Interactive Brokers lifecycle
       short_label: IB
-      description: TWS/Gateway version management, API compatibility, client ID allocation, IB Lease active-standby.
+      description: |
+        DONE — IB Gateway Plugin delivery complete (ib-gateway-plugin 7/7 signed; launch-plugin-lane closed-superseded).
+        Live evidence: ib-gateway 1/1 in data NS, host+secondary connected, redis-ib OK; D3 SIGNED; D10 BLOCKED (quotes-only).
+        Publish/observe: Mission Launch · Launch Plugin + Plugin Gallery. Ongoing version / client ID / Lease = maintain patches, not this Init Build lane.
       agent_mode: Ops
       work_intent: feature
     - id: vendor-health

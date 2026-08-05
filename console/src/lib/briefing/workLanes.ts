@@ -611,6 +611,31 @@ function buildQueueFromAutomateStreams(
     .map(streamToQueueItem)
 }
 
+/**
+ * Synthetic queue for Subcontractor · Automate lane ib-vendor.
+ * Gateway plugin + Launch Plugin meta-program closed; lane Done (not empty Init).
+ */
+function buildIbVendorQueue(): QueueItem[] {
+  return [
+    {
+      id: 'ib-gateway-plugin',
+      label: 'IB Gateway Plugin',
+      status: 'closed',
+      note:
+        'DONE — 7/7 gates signed · redis-ib + ib-gateway live (host+secondary) · D3 SIGNED · D10 BLOCKED',
+      progress: { done: 7, total: 7 },
+    },
+    {
+      id: 'launch-plugin-lane',
+      label: 'Launch Plugin Lane',
+      status: 'closed',
+      note:
+        'CLOSED-SUPERSEDED — Mission Launch dogfood meta-program; publish path remains Launch Plugin UI + make install/verify',
+      progress: { done: 4, total: 4 },
+    },
+  ]
+}
+
 function buildQueueFromInfraStreams(
   infra: { streams: MigrateStream[] } | undefined,
   laneId: InfraLaneId,
@@ -714,6 +739,10 @@ export function buildQueueForLane(
       // PARKED vision lanes — empty queue ⇒ Ready (streams stay in spine for history).
       if (laneId === 'agent-trade-advisory-parked' || laneId === 'flight-director-parked') {
         return []
+      }
+      // IB Gateway Plugin + Launch Plugin meta closed — lane Done; ongoing IB maintain ≠ Init Build.
+      if (laneId === 'ib-vendor') {
+        return buildIbVendorQueue()
       }
       return buildQueueFromAutomateStreams(tracks?.automate, laneId as AutomateLaneId)
     case 'infra':
