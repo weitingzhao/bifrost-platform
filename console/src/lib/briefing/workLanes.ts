@@ -29,6 +29,7 @@ export type AutomateLaneId =
   | 'agent-trade-advisory-parked'
   | 'flight-director-parked'
   | 'polygon-vendor'
+  | 'market-data-expand'
 export type InfraLaneId = 'network-server' | 'network-wifi' | 'ai-network'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
 export type FutureLaneId =
@@ -604,6 +605,66 @@ function buildQueueFromAutomateStreams(
 }
 
 /**
+ * Synthetic queue for Subcontractor · Automate lane market-data-expand.
+ * Program market-data-expand: Layer 1+2 expansion (P0–P7 planned).
+ */
+function buildMarketDataExpandQueue(): QueueItem[] {
+  return [
+    {
+      id: 'md-expand-p0',
+      label: 'P0 — Analytics schema + Plugin API skeleton',
+      status: 'done',
+      note: 'Owner signed off — market_analytics DDL + Plugin API skeleton + K8s',
+      progress: { done: 1, total: 1 },
+    },
+    {
+      id: 'md-expand-p1',
+      label: 'P1 — Raw ingest: Stock Snapshots + Trades & Quotes',
+      status: 'done',
+      note: 'verify_passed — stock_snapshot + stock_movers (D1=A: Trades/Quotes deferred to P5)',
+      progress: { done: 1, total: 1 },
+    },
+    {
+      id: 'md-expand-p2',
+      label: 'P2 — Raw ingest: Option Daily OI full backfill',
+      status: 'ready_for_signoff',
+      note: 'verify_passed — snapshot→OI extract + backfill registry + oi-gap-heal CronJob (D4=B,D5=A,D6=B); awaiting Owner sign-off',
+      progress: { done: 1, total: 1 },
+    },
+    {
+      id: 'md-expand-p3',
+      label: 'P3 — Analytics: Max Pain Daily CronJob',
+      status: 'pending',
+      note: 'Compute from market.option_open_interest → market_analytics.max_pain_daily',
+    },
+    {
+      id: 'md-expand-p4',
+      label: 'P4 — Analytics: ATM IV + PCR + IV Percentile',
+      status: 'pending',
+      note: 'Complete derived metrics suite; document black-box caveats',
+    },
+    {
+      id: 'md-expand-p5',
+      label: 'P5 — Plugin API: migrate Trade API research/massive/*',
+      status: 'pending',
+      note: 'Stand up Plugin REST API (port 8790); replace Trade API proxy routes',
+    },
+    {
+      id: 'md-expand-p6',
+      label: 'P6 — Ops Console: Subcontractors Plugin management UI',
+      status: 'pending',
+      note: 'Migrate Settings → Massive (67 files) → Ops Console Plugin page',
+    },
+    {
+      id: 'md-expand-p7',
+      label: 'P7 — Trade System cleanup: retire zombie tables',
+      status: 'pending',
+      note: 'DROP report_option_*; remove no-op Celery tasks; rewire frontend API',
+    },
+  ]
+}
+
+/**
  * Synthetic queue for Subcontractor · Automate lane ib-vendor.
  * Gateway plugin + Launch Plugin meta-program closed; lane Done (not empty Init).
  */
@@ -735,6 +796,10 @@ export function buildQueueForLane(
       // IB Gateway Plugin + Launch Plugin meta closed — lane Done; ongoing IB maintain ≠ Init Build.
       if (laneId === 'ib-vendor') {
         return buildIbVendorQueue()
+      }
+      // Market Data Plugin expansion — P0–P7 planned phases (program market-data-expand).
+      if (laneId === 'market-data-expand') {
+        return buildMarketDataExpandQueue()
       }
       return buildQueueFromAutomateStreams(tracks?.automate, laneId as AutomateLaneId)
     case 'infra':

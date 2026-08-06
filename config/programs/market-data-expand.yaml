@@ -1,0 +1,388 @@
+id: market-data-expand
+title: "Market Data Plugin Expansion — Layer 1+2 + UI Migration"
+description: >
+  Expand bifrost-platform-plugin-market-data with three layers:
+  Layer 1 (raw ingest gap-fill): Stock Snapshots, Trades & Quotes, Option Daily OI full backfill.
+  Layer 2 (derived analytics): market_analytics schema with Max Pain, ATM IV, PCR, IV Percentile CronJobs.
+  Layer 3 (surface migration): Trade API research/massive/* proxy → Plugin API; Trade Settings → Massive UI →
+  Ops Console Subcontractors Plugin management page. Final: retire public.report_option_* zombie tables
+  and Trade Worker no-op Celery tasks.
+status: planned
+
+delivery:
+  board_visible: true
+  sign_off_mechanism: api
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+model: composer-2.5
+
+phases:
+  - id: P0
+    title: "Analytics schema design + Plugin API skeleton"
+    status: planned
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Design and create market_analytics schema in PostgreSQL (via Plugin DDL).
+      Add lightweight FastAPI app skeleton to Plugin for future API migration.
+
+      Deliverables:
+      - src/bifrost_market_data/schema/ddl.py extended: CREATE SCHEMA market_analytics;
+        Tables: market_analytics.max_pain_daily, market_analytics.atm_iv_daily,
+        market_analytics.pcr_daily, market_analytics.iv_percentile_daily
+      - src/bifrost_market_data/api/ skeleton (FastAPI app, health endpoint)
+      - k8s/base/deployment-api.yaml (Plugin API Deployment + Service)
+      - docs/SCHEMA.md updated with market_analytics.* table definitions
+      - make db-init creates market_analytics schema + tables
+
+      Table design principles:
+      - max_pain_daily: symbol, trade_date, expiry, max_pain_strike, total_oi, computed_at
+      - atm_iv_daily: symbol, trade_date, expiry, atm_strike, atm_iv, iv_source(snapshot/computed), computed_at
+      - pcr_daily: symbol, trade_date, pcr_oi, pcr_volume, total_put_oi, total_call_oi, computed_at
+      - iv_percentile_daily: symbol, trade_date, iv_current, iv_percentile_1y, iv_rank_1y, computed_at
+      - All: UNIQUE(symbol, trade_date, expiry) or UNIQUE(symbol, trade_date); partition by month
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make db-init && make test"
+    acceptance:
+      - "market_analytics schema created in DEV PostgreSQL"
+      - "All four analytics tables created with correct columns"
+      - "Plugin API health endpoint responds 200"
+      - "docs/SCHEMA.md documents market_analytics.* tables"
+    sign_off:
+      required: true
+      checklist:
+        - "Owner reviewed analytics table DDL (columns, types, constraints)"
+        - "Owner confirmed partition strategy for analytics tables"
+        - "Owner confirmed Plugin API port allocation"
+
+  - id: P1
+    title: "Raw ingest gap-fill — Stock Snapshots + Trades & Quotes"
+    status: planned
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Implement ingest handlers for currently not-implemented Stock REST endpoints.
+      These are Polygon Starter tier endpoints, so no tier upgrade required.
+
+      New ingest handlers:
+      - stock_snapshot: GET /v2/snapshot/locale/us/markets/stocks/tickers → market.stock_snapshot
+      - stock_snapshot_single: GET /v2/snapshot/locale/us/markets/stocks/tickers/{ticker} → market.stock_snapshot
+      - stock_gainers_losers: GET /v2/snapshot/locale/us/markets/stocks/{direction} → market.stock_movers
+      - stock_trades: GET /v3/trades/{ticker} → market.stock_trades (if table needed)
+      - stock_quotes: GET /v3/quotes/{ticker} → market.stock_quotes (if table needed)
+      - stock_last_trade: GET /v2/last/trade/{ticker} → market.stock_snapshot (enrich)
+      - stock_last_quote: GET /v2/last/nbbo/{ticker} → market.stock_snapshot (enrich)
+
+      DDL additions (if not already in market.* schema):
+      - market.stock_snapshot (ticker, session_date, open, high, low, close, volume, vwap, prev_close,
+        change, change_percent, updated_at)
+      - market.stock_movers (direction, ticker, session_date, change_percent, price, volume)
+
+      Scheduler additions:
+      - stock_snapshot_universe: daily 21:15 UTC (after market close) — full universe snapshot
+      - stock_movers: daily 21:20 UTC — gainers/losers
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make test"
+    acceptance:
+      - "Stock snapshot handler fetches and upserts correctly"
+      - "Gainers/losers handler produces market.stock_movers rows"
+      - "CronJob schedule updated"
+      - "All tests pass"
+    depends_on:
+      - P0
+    sign_off:
+      required: false
+
+  - id: P2
+    title: "Raw ingest gap-fill — Option Daily OI full backfill"
+    status: planned
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Complete the partial Daily OI implementation. Currently OI data comes from
+      option chain snapshots but lacks dedicated historical backfill.
+
+      Approach:
+      - Option OI is embedded in option_snapshot (greeks.open_interest field from chain snapshot)
+      - Dedicated market.option_open_interest table already exists
+      - Need: historical OI extraction from existing snapshots + scheduled daily aggregation
+      - CronJob: nightly extract OI per contract from latest snapshot → market.option_open_interest
+
+      Deliverables:
+      - src/bifrost_market_data/ingest/option_oi_daily.py (extract from snapshots)
+      - Backfill script: scan existing market.option_snapshot → populate option_open_interest history
+      - CronJob: 22:30 UTC daily OI extraction for watchlist symbols
+      - Verify: market.option_open_interest has full date coverage for watchlist
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make test"
+    acceptance:
+      - "Daily OI extraction handler works from snapshot data"
+      - "Backfill produces continuous OI history (no date gaps for active contracts)"
+      - "CronJob YAML valid"
+    depends_on:
+      - P0
+    sign_off:
+      required: false
+
+  - id: P3
+    title: "Analytics CronJob — Max Pain Daily"
+    status: planned
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Implement Max Pain computation CronJob that reads from market.option_open_interest
+      and writes to market_analytics.max_pain_daily.
+
+      Algorithm (from existing Trade System logic in bifrost-trade-worker vendor/reader.py):
+      - For each (symbol, expiry): iterate strikes, sum pain = Σ OI_call * max(0, strike-K) + Σ OI_put * max(0, K-strike)
+      - Max Pain strike = argmin(total_pain)
+      - Store: symbol, trade_date, expiry, max_pain_strike, total_oi, total_pain_at_strike, computed_at
+
+      Important: This replaces the zombie table public.report_option_max_pain_daily.
+      The frontend currently computes max pain in real-time via the Research API;
+      this CronJob provides the persisted daily historical baseline.
+
+      Validation strategy:
+      - Compare CronJob results with real-time API computation for same date (should match)
+      - Document known divergence risk: stale OI vs real-time OI
+
+      Deliverables:
+      - src/bifrost_market_data/analytics/max_pain.py
+      - CronJob: 22:45 UTC (after OI extraction at 22:30)
+      - Integration test: mock OI data → correct max pain computation
+      - Validation script: compare CronJob output vs API real-time for sampled symbols
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make test"
+    acceptance:
+      - "Max pain computation matches known correct values for test data"
+      - "CronJob writes to market_analytics.max_pain_daily"
+      - "Validation script shows <0.1% divergence from real-time computation"
+    depends_on:
+      - P2
+    sign_off:
+      required: true
+      checklist:
+        - "Owner verified max pain algorithm matches Trade System logic"
+        - "Owner reviewed validation report (CronJob vs real-time divergence)"
+
+  - id: P4
+    title: "Analytics CronJob — ATM IV + PCR + IV Percentile"
+    status: planned
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Implement remaining analytics CronJobs.
+
+      1. ATM IV Daily:
+         - Source: market.option_snapshot (use v_option_snapshot_with_stock view or join)
+         - Logic: for each (symbol, expiry), find strike nearest stock price → extract IV
+         - Write: market_analytics.atm_iv_daily
+         - Replaces: public.report_option_atm_iv_daily (currently written by Research API on-demand)
+         - CronJob: 23:00 UTC
+
+      2. Put/Call Ratio Daily:
+         - Source: market.option_open_interest + market.option_snapshot (volume)
+         - Logic: PCR_OI = total_put_OI / total_call_OI; PCR_volume = total_put_vol / total_call_vol
+         - Write: market_analytics.pcr_daily
+         - CronJob: 23:00 UTC (same batch)
+
+      3. IV Percentile Daily:
+         - Source: market_analytics.atm_iv_daily (historical 1-year lookback)
+         - Logic: percentile_rank(current_iv, past_252_trading_days_iv)
+         - Write: market_analytics.iv_percentile_daily
+         - CronJob: 23:15 UTC (after ATM IV computed)
+
+      Black-box caveat: ATM IV relies on Polygon's pre-computed Greeks in option_snapshot.
+      Document this dependency and the inability to independently verify Polygon's IV model.
+
+      Deliverables:
+      - src/bifrost_market_data/analytics/atm_iv.py
+      - src/bifrost_market_data/analytics/pcr.py
+      - src/bifrost_market_data/analytics/iv_percentile.py
+      - CronJob YAML updates
+      - Integration tests for each computation
+      - docs/ANALYTICS.md documenting algorithms, data sources, and black-box caveats
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make test"
+    acceptance:
+      - "ATM IV computation produces reasonable values (10-200% range)"
+      - "PCR computation matches manual spot-check"
+      - "IV Percentile produces 0-100 range with correct lookback"
+      - "All CronJobs scheduled correctly"
+      - "docs/ANALYTICS.md documents black-box dependencies"
+    depends_on:
+      - P3
+    sign_off:
+      required: true
+      checklist:
+        - "Owner reviewed ATM IV selection logic (nearest strike to stock price)"
+        - "Owner accepted PCR formula (OI-based + volume-based)"
+        - "Owner acknowledged black-box caveat documentation"
+
+  - id: P5
+    title: "Plugin API — Migrate Trade API research/massive/* routes"
+    status: planned
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Stand up Plugin's own REST API that replaces the proxy routes currently in
+      bifrost-trade-api/src/bifrost_api/massive/ (and parts of research/).
+
+      Routes to migrate:
+      - GET /market/stocks/tickers (was /research/massive/tickers)
+      - GET /market/stocks/bars/* (was /research/massive/stocks/bars/*)
+      - GET /market/stocks/fundamentals/* (was /research/massive/stocks/fundamentals/*)
+      - GET /market/stocks/filings/* (was /research/massive/stocks/filings/*)
+      - GET /market/stocks/news (was /research/massive/stocks/news)
+      - GET /market/options/contracts (was /research/massive/contracts-*)
+      - GET /market/options/snapshots (was /research/option-snapshots)
+      - GET /market/options/oi (was /research/option-oi)
+      - GET /market/analytics/max-pain (was /research/max-pain — now reads market_analytics)
+      - GET /market/analytics/atm-iv (was /research/iv-volatility-cone — now reads market_analytics)
+      - GET /market/analytics/pcr (new)
+      - GET /market/analytics/iv-percentile (new)
+      - POST /market/ingest/enqueue (was /research/massive/sync)
+
+      Approach:
+      - Plugin API runs on its own port (suggest 8790)
+      - Polygon pass-through routes call client directly (no Celery)
+      - Analytics routes read from market_analytics.* tables
+      - Ingest enqueue route writes to data_ops.job_ingest
+
+      Deliverables:
+      - src/bifrost_market_data/api/routers/ (stocks.py, options.py, analytics.py, ingest.py)
+      - K8s Service + Ingress rule for Plugin API
+      - OpenAPI schema export
+      - Integration tests for key routes
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform-plugin-market-data && make test"
+    acceptance:
+      - "Plugin API serves all migrated routes with correct response schemas"
+      - "Analytics routes return data from market_analytics.* tables"
+      - "Ingest enqueue creates jobs in data_ops.job_ingest"
+      - "K8s deployment + service manifest valid"
+    depends_on:
+      - P4
+    sign_off:
+      required: true
+      checklist:
+        - "Owner approved API route naming convention (/market/...)"
+        - "Owner confirmed port allocation (8790)"
+        - "Owner verified OpenAPI schema completeness"
+
+  - id: P6
+    title: "Ops Console UI — Subcontractors Plugin management page"
+    status: planned
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Build the Market Data Plugin management UI in Ops Console under
+      Subcontractors section. This replaces Trade Frontend's Settings → Feed → Massive
+      (67 component files, 3 nav branches: Stock / Option / Common).
+
+      UI scope (in Ops Console):
+      - Subcontractors → Market Data Plugin → Management page
+      - Tab structure: Overview / Stock / Option / Common (mirrors existing)
+      - Overview: ingestion health, freshness dashboard, worker status, analytics pipeline status
+      - Stock/Option/Common: capability checklist (reuse ChecklistRow type),
+        JSON probe (execute Polygon API and show response), coverage metrics
+      - Ingest control: enqueue manual jobs, view job queue, retry failed
+      - Analytics dashboard: last computation times, row counts, data quality signals
+
+      Migration strategy:
+      - Reuse ChecklistRow type and data (stockChecklistRows.ts, optionChecklistRows.ts)
+      - Replace VITE_API_* calls with Plugin API (port 8790)
+      - Adapt to Ops Console design system (OpsSection, OpsVerdictStrip, DenseDataTable)
+      - Add freshness + analytics KPIs that Trade Settings never had
+
+      Deliverables:
+      - console/src/pages/subcontractors/market-data/ (page components)
+      - console/src/lib/architecture/marketDataPluginManagementCatalog.ts (if governance needed)
+      - Sidebar nav entry under Subcontractors group
+      - Plugin API client hooks (TanStack Query)
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform && make test"
+    acceptance:
+      - "Market Data management page accessible in Ops Console"
+      - "Capability checklist renders all Stock + Option + Common items"
+      - "JSON probe executes against Plugin API"
+      - "Freshness + analytics dashboard shows live data"
+      - "Console type-check passes"
+    depends_on:
+      - P5
+    sign_off:
+      required: true
+      checklist:
+        - "Owner visual review of Plugin management page"
+        - "Owner confirmed navigation placement"
+        - "Owner accepted that Trade Settings → Massive can be deprecated"
+
+  - id: P7
+    title: "Trade System cleanup — retire zombie tables + rewire frontend"
+    status: planned
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Complete migration — remove all Market Data artifacts from Trade System.
+
+      Cleanup items:
+      1. DROP TABLE public.report_option_max_pain_daily (zombie — no active writer)
+      2. DROP TABLE public.report_option_atm_iv_daily (replaced by market_analytics.atm_iv_daily)
+      3. Remove bifrost-trade-worker/data/massive/ no-op Celery tasks
+      4. Remove bifrost-trade-api/src/bifrost_api/massive/ proxy routes (superseded by Plugin API)
+      5. Update bifrost-trade-frontend to point market data API calls to Plugin API (port 8790)
+      6. Remove or archive Trade Frontend Settings → Feed → Massive pages (67 files)
+      7. Update bifrost-trade-frontend Settings nav (remove Massive section)
+      8. Update Trade Frontend Option Discovery / Research pages to use Plugin API for:
+         - Max Pain → GET Plugin:8790/market/analytics/max-pain
+         - IV Cone → GET Plugin:8790/market/analytics/atm-iv
+      9. Clean up bifrost-trade-core reader modules that referenced report_option_* tables
+
+      Verification:
+      - Trade Frontend: npm run build succeeds after removal
+      - Trade API: make test passes without massive routes
+      - PostgreSQL: report_option_* tables no longer exist
+      - Option Discovery page still works (now via Plugin API)
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: |
+      cd bifrost-trade-frontend && npm run build &&
+      cd ../bifrost-trade-api && make test &&
+      psql -d bifrost_dev -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'report_option_%'" | grep -E '^\s*0\s*$'
+    acceptance:
+      - "public.report_option_* tables dropped"
+      - "Trade Frontend builds without errors"
+      - "Option Discovery page functional via Plugin API"
+      - "No massive/ code remaining in Trade API"
+      - "No no-op Celery tasks remaining in Trade Worker"
+    depends_on:
+      - P6
+    sign_off:
+      required: true
+      checklist:
+        - "Owner verified Option Discovery still works"
+        - "Owner confirmed Massive Settings pages can be deleted"
+        - "Owner verified no regression in Trade Frontend"
+        - "Program complete"
+
+metadata:
+  created_at: "2026-08-06"
+  owner: "vision-mac-trader"
+  lane_id: market-data-expand
+  prerequisite_programs:
+    - market-data-subcontractor
+  tags:
+    - market-data
+    - polygon
+    - analytics
+    - plugin-expansion
+    - ui-migration
+    - ops-console
+    - schema-separation

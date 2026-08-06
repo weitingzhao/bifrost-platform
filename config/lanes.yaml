@@ -130,10 +130,11 @@ lanes:
       track_type: build
       label: Agent services (MCP + Trade)
       short_label: Services
-      description: >
-        Agent Desk, MCP bridge, release agent, mission remediation loop.
-        trade-k8s-migration CLOSED (lift-and-shift done; ⑥ waived). Vision parked on
-        Ready lanes agent-trade-advisory-parked + flight-director-parked — not this queue.
+      description: |
+        DONE — All agent-services streams closed: agent-mcp-integration 3/3, release-agent-task 3/3,
+        mission-auto-remediation 5/5 (③ Trade-on-K3s residual deferred to trade-k8s-native),
+        trade-k8s-migration 6/6, agent-release-discipline 5/5. Dev-agent--engineer-build program closed-superseded.
+        Vision parked on Ready lanes agent-trade-advisory-parked + flight-director-parked.
       agent_mode: Ops
       work_intent: automate
     - id: agent-trade-advisory-parked
@@ -267,6 +268,20 @@ lanes:
       label: Polygon.io data pipeline
       short_label: Polygon
       description: Options/stock WebSocket feeds, historical OHLCV, snapshot APIs, rate-limit management, data quality.
+      agent_mode: Ops
+      work_intent: feature
+    - id: market-data-expand
+      track: automate
+      component_line: subcontractor
+      track_type: build
+      label: Market Data Plugin expansion (Layer 1+2)
+      short_label: MD Expand
+      description: >
+        Layer 1: raw ingest gap-fill — Stock Snapshots, Stock Trades & Quotes, Option Daily OI full backfill,
+        Flat Files exploration. Layer 2: market_analytics schema — Max Pain, ATM IV, PCR, IV Percentile
+        derived CronJobs. Layer 3: API migration (Trade API research/massive/* → Plugin API) + UI migration
+        (Trade Settings → Massive → Ops Console Subcontractors Plugin management page). Final: retire
+        public.report_option_* zombie tables and Trade Worker no-op Celery tasks.
       agent_mode: Ops
       work_intent: feature
     - id: ib-vendor
