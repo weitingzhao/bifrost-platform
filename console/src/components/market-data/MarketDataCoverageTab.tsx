@@ -113,7 +113,11 @@ export function MarketDataCoverageTab() {
   const watchlist = watchlistQ.data
   const watchErr = watchlist != null && isProxyError(watchlist) ? watchlist.error : null
   const symbols =
-    watchlist != null && !isProxyError(watchlist) ? (watchlist.symbols ?? []) : []
+    watchlist != null && !isProxyError(watchlist)
+      ? (watchlist.symbols ?? [])
+          .map((s) => s.symbol?.trim())
+          .filter((s): s is string => Boolean(s))
+      : []
 
   const grouped = useMemo(() => {
     if (lens === 'stock') return groupedStockChecklistRows()

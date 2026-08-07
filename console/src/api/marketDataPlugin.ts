@@ -103,10 +103,18 @@ export type CoverageDbSummary = {
   error?: string
 }
 
+export type CoverageWatchlistSymbol = {
+  symbol: string
+  contract_count?: number
+  expiries?: number
+  newest_contract_ts?: string | null
+}
+
 export type CoverageWatchlist = {
   ok: boolean
-  symbols?: string[]
-  count?: number
+  source?: string
+  symbols?: CoverageWatchlistSymbol[]
+  symbols_count?: number
   error?: string
 }
 
