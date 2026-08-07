@@ -50,14 +50,17 @@ import { AgentSystemPage } from '@/pages/AgentSystemPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { BlueprintPage } from '@/pages/BlueprintPage'
 import { BriefingPage } from '@/pages/BriefingPage'
+import { ActiveSessionPage } from '@/pages/ActiveSessionPage'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { writeBriefingUrlState } from '@/lib/briefing/briefingUrlState'
+import { writeActiveSessionFocus } from '@/lib/briefing/deliveryPipelineNav'
 import { componentLineForTaskMode, trackTypeForTaskMode } from '@/lib/briefing/briefingViewTabs'
 import { ClusterPage } from '@/pages/ClusterPage'
 import { ComputePage } from '@/pages/ComputePage'
 import { DeliveryBoardPage } from '@/pages/DeliveryBoardPage'
 import { NetworkPage } from '@/pages/NetworkPage'
 import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
+import { MarketDataManagePage } from '@/pages/MarketDataManagePage'
 import { PluginReleasePage } from '@/pages/PluginReleasePage'
 import { SatelliteApiHealthPage } from '@/pages/SatelliteApiHealthPage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
@@ -93,6 +96,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'agent-desk': 'Agent Desk',
   'agent-capability': 'Agent Capability',
   briefing: 'Agent Briefing',
+  'active-session': 'Active Session',
   'autonomous-skills': 'Skills & Schedules',
   'execution-log': 'Execution Log',
   'agent-governance': 'Trust & Autonomy',
@@ -127,13 +131,16 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'satellite-telemetry': 'Satellite Runtime',
   'satellite-api': 'API & Auth Probes',
   'plugin-gallery': 'Plugin Gallery',
+  'market-data-manage': 'Market Data',
   defects: 'Defects',
 }
 
 /** Page help — shown on breadcrumb ? tooltip (system-wide; no in-page PageHeader subtitle). */
 const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
-  briefing: 'Plan and start work — pick scope and lane, open Session.',
-  'delivery-board': 'Phased sign-off checklists — verify and close delivery programs.',
+  briefing: 'Plan and start work — pick scope and lane, pack, then Launch.',
+  'active-session':
+    'Track Doing lanes — queue progress, verify, Owner sign-off.',
+  'delivery-board': 'Completed programs catalog (read-only archive).',
   'agent-desk': 'Operate and observe — run agent tasks, review remediation, close sessions.',
   'agent-capability':
     'Live capability readiness — which agent scopes are ready, running, awaiting approval, or failed.',
@@ -165,6 +172,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Per-environment matrix probes for Trade satellite endpoints — HTTP reachability, ops auth, and D10 blocked writes.',
   'plugin-gallery':
     'External subcontractor plugins — live L0 probes and L1 actuation (observe). Publish via Launch Plugin.',
+  'market-data-manage':
+    'Market Data Plugin management — Overview, Coverage checklist, Ingest queue, Analytics dashboard.',
   'plugin-release':
     'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Gallery ≠ Publish.',
   'operator-plane':
@@ -210,6 +219,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'operator-plane',
   'audit',
   'briefing',
+  'active-session',
   'console',
   'network',
   'compute',
@@ -217,6 +227,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'satellite-telemetry',
   'satellite-api',
   'plugin-gallery',
+  'market-data-manage',
   'plugin-release',
   'control-room',
   'observability',
@@ -354,6 +365,7 @@ function ConsolePageInner() {
     refetchInterval: 30_000,
     enabled:
       viewTab === 'briefing' ||
+      viewTab === 'active-session' ||
       viewTab === 'control-room' ||
       viewTab === 'task-cc' ||
       viewTab === 'trade-release' ||
@@ -368,6 +380,7 @@ function ConsolePageInner() {
     refetchInterval: 30_000,
     enabled:
       viewTab === 'briefing' ||
+      viewTab === 'active-session' ||
       viewTab === 'cluster' ||
       viewTab === 'compute' ||
       viewTab === 'placement' ||
@@ -414,7 +427,7 @@ function ConsolePageInner() {
     queryKey: ['platform', 'audit'],
     queryFn: fetchAudit,
     refetchInterval: 30_000,
-    enabled: viewTab === 'briefing' || viewTab === 'audit',
+    enabled: viewTab === 'briefing' || viewTab === 'active-session' || viewTab === 'audit',
   })
 
   const auditRecords = auditQuery.data?.records ?? []
@@ -491,6 +504,28 @@ function ConsolePageInner() {
     }
     setViewTab('briefing')
   }, [setViewTab])
+  const openActiveSession = useCallback(
+    (opts?: { laneId?: string; programId?: string }) => {
+      if (opts?.laneId != null || opts?.programId != null) {
+        writeActiveSessionFocus({
+          laneId: opts.laneId as BriefingUrlState['lane'],
+          programId: opts.programId,
+        })
+      }
+      setViewTab('active-session')
+    },
+    [setViewTab],
+  )
+  const openDeliveryBoard = useCallback((opts?: { laneId?: string }) => {
+    setViewTabState('delivery-board')
+    const params = new URLSearchParams()
+    if (opts?.laneId) params.set('lane_id', opts.laneId)
+    const q = params.toString()
+    const nextHash = q ? `#delivery-board?${q}` : '#delivery-board'
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, '', nextHash)
+    }
+  }, [])
   const openOperatorPlane = useCallback(() => {
     setViewTab('operator-plane')
     // Defer until Operator Plane mounts so #agent-host-deploy exists.
@@ -750,7 +785,7 @@ function ConsolePageInner() {
             onOpenAgentSystem={() => setViewTab('agent-system')}
             onOpenOperatorPlane={openOperatorPlane}
             onOpenTrustAutonomy={() => setViewTab('agent-governance')}
-            onOpenDeliveryBoard={() => setViewTab('delivery-board')}
+            onOpenDeliveryBoard={() => openDeliveryBoard()}
             onOpenBriefingReconciliation={() => setViewTab('briefing-reconciliation')}
           />
         )}
@@ -790,7 +825,23 @@ function ConsolePageInner() {
               auditRecords={auditRecords}
               auditLoading={auditQuery.isLoading}
               onOpenAudit={openAudit}
+              onOpenActiveSession={openActiveSession}
             />
+        )}
+
+        {viewTab === 'active-session' && (
+          <ActiveSessionPage
+            context={contextQuery.data}
+            contextLoading={contextQuery.isLoading}
+            matrices={pulseMatrices}
+            matrixLoading={matrixForPulse.isLoading}
+            clusterSummary={clusterQuery.data}
+            auditRecords={auditRecords}
+            auditLoading={auditQuery.isLoading}
+            onOpenAudit={openAudit}
+            onOpenBriefing={opts => openBriefing(opts)}
+            onOpenDeliveryBoard={openDeliveryBoard}
+          />
         )}
 
         {viewTab === 'control-room' && (
@@ -886,7 +937,12 @@ function ConsolePageInner() {
           <PlacementPage onOpenDelivery={openDelivery} onOpenCluster={openCluster} />
         )}
 
-        {viewTab === 'delivery-board' && <DeliveryBoardPage onOpenBriefing={openBriefing} />}
+        {viewTab === 'delivery-board' && (
+          <DeliveryBoardPage
+            onOpenBriefing={openBriefing}
+            onOpenActiveSession={openActiveSession}
+          />
+        )}
 
         {viewTab === 'trade-release' && (
           <TradeReleasePage
@@ -963,6 +1019,7 @@ function ConsolePageInner() {
         {viewTab === 'plugin-gallery' && (
           <PluginGalleryPage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
         )}
+        {viewTab === 'market-data-manage' && <MarketDataManagePage />}
 
         {isGovernanceTab && (
           <div className="flex min-w-0 gap-4">
@@ -985,7 +1042,7 @@ function ConsolePageInner() {
               )}
               {viewTab === 'agent-protocol' && (
                 <AgentProtocolPage
-                  onOpenDeliveryBoard={() => setViewTab('delivery-board')}
+                  onOpenDeliveryBoard={() => openDeliveryBoard()}
                   onOpenAgentSystem={() => setViewTab('agent-system')}
                 />
               )}

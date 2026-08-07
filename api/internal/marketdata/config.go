@@ -1,6 +1,9 @@
 package marketdata
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 const (
 	pluginNamespace   = "plugin-market-data"
@@ -14,11 +17,14 @@ const (
 	freshnessMaxAgeH   = 24.0
 )
 
-// Config holds optional overrides for health / freshness probing.
+// Config holds optional overrides for health / freshness probing / Plugin API proxy.
 type Config struct {
 	StocksHealthURL  string
 	OptionsHealthURL string
 	FreshnessDB      string
+	// APIBaseURL overrides Plugin API (:8790) for Console proxy (local port-forward).
+	// Example: http://127.0.0.1:8790 — paths are appended as /market/...
+	APIBaseURL string
 }
 
 func ConfigFromEnv() Config {
@@ -43,5 +49,10 @@ func ConfigFromEnv() Config {
 	if db == "" {
 		db = defaultFreshnessDB
 	}
-	return Config{StocksHealthURL: stocks, OptionsHealthURL: options, FreshnessDB: db}
+	return Config{
+		StocksHealthURL:  stocks,
+		OptionsHealthURL: options,
+		FreshnessDB:      db,
+		APIBaseURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("MARKET_DATA_API_URL")), "/"),
+	}
 }

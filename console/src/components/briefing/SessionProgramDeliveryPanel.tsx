@@ -8,7 +8,15 @@ import { DeliveryBoardProgramPanels } from '@/components/delivery/DeliveryBoardP
 import { PostCompletionPendingPanel } from '@/components/delivery/PostCompletionPendingPanel'
 import type { LaneId } from '@/lib/briefing/workLanes'
 
-function ProgramDeliveryFold({ program, focused }: { program: ProgramSummary; focused?: boolean }) {
+function ProgramDeliveryFold({
+  program,
+  focused,
+  allowSignOff,
+}: {
+  program: ProgramSummary
+  focused?: boolean
+  allowSignOff: boolean
+}) {
   const [open, setOpen] = useState(() => focused === true || !program.complete)
   const signed = program.signed ?? program.phases_signed ?? 0
   const gateTotal = program.sign_off_required_count ?? program.phase_count
@@ -38,7 +46,7 @@ function ProgramDeliveryFold({ program, focused }: { program: ProgramSummary; fo
       </button>
       {open && (
         <div className="border-t border-[var(--border)]/50 px-2 pb-2 pt-2">
-          <DeliveryBoardProgramPanels programId={program.id} allowSignOff />
+          <DeliveryBoardProgramPanels programId={program.id} allowSignOff={allowSignOff} />
         </div>
       )}
     </div>
@@ -46,10 +54,19 @@ function ProgramDeliveryFold({ program, focused }: { program: ProgramSummary; fo
 }
 
 /**
- * Briefing Session host for program phase sign-off + post-completion Approve (D12 API).
- * Delivery Board remains a read-only catalog.
+ * Session host for program phase sign-off + post-completion Approve (D12 API).
+ * Primary execute surface: Active Session. Delivery Board remains a read-only catalog.
  */
-export function SessionProgramDeliveryPanel({ laneId, focusedProgramId }: { laneId: LaneId; focusedProgramId?: string }) {
+export function SessionProgramDeliveryPanel({
+  laneId,
+  focusedProgramId,
+  allowSignOff = true,
+}: {
+  laneId: LaneId
+  focusedProgramId?: string
+  /** When false, panels stay read-only (Briefing plan preview). */
+  allowSignOff?: boolean
+}) {
   const programsQuery = useQuery({
     queryKey: PROGRAMS_BOARD_QUERY_KEY,
     queryFn: fetchDeliveryBoardPrograms,
@@ -64,9 +81,11 @@ export function SessionProgramDeliveryPanel({ laneId, focusedProgramId }: { lane
 
   if (programsQuery.isLoading) {
     return (
-      <p className="m-0 mt-3 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-        Loading linked delivery programs…
-      </p>
+      <div className="page-section panel-elevated min-w-0 max-w-full overflow-x-hidden border-[var(--border)]/60 px-3 py-2.5">
+        <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+          Loading linked delivery programs…
+        </p>
+      </div>
     )
   }
 
@@ -78,7 +97,7 @@ export function SessionProgramDeliveryPanel({ laneId, focusedProgramId }: { lane
   }
 
   return (
-    <div className="mt-3 flex min-w-0 max-w-full flex-col gap-3 border-t border-[var(--border)]/60 pt-3">
+    <div className="page-section panel-elevated flex min-w-0 max-w-full flex-col gap-3 overflow-x-hidden border-[var(--border)]/60 px-3 py-2.5">
       <div>
         <p className="briefing-section-kicker m-0">Delivery</p>
         <h3 className="m-0 mt-0.5 text-sm font-semibold">Program sign-off</h3>
@@ -90,11 +109,20 @@ export function SessionProgramDeliveryPanel({ laneId, focusedProgramId }: { lane
       </div>
 
       {showSmokeHandoff && (
-        <PostCompletionPendingPanel programId="dap-smoke-test" allowApprove emphasize />
+        <PostCompletionPendingPanel
+          programId="dap-smoke-test"
+          allowApprove={allowSignOff}
+          emphasize
+        />
       )}
 
       {lanePrograms.map(p => (
-        <ProgramDeliveryFold key={p.id} program={p} focused={p.id === focusedProgramId} />
+        <ProgramDeliveryFold
+          key={p.id}
+          program={p}
+          focused={p.id === focusedProgramId}
+          allowSignOff={allowSignOff}
+        />
       ))}
     </div>
   )

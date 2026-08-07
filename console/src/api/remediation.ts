@@ -14,8 +14,13 @@ export async function fetchRemediationJob(id: string): Promise<RemediationJob> {
   return r.json() as Promise<RemediationJob>
 }
 
-export async function fetchRemediationJobs(opts?: { limit?: number }): Promise<RemediationJobsResponse> {
-  const limit = opts?.limit ?? 80
+export async function fetchRemediationJobs(opts?: unknown): Promise<RemediationJobsResponse> {
+  // Accept `{ limit }` from call sites, or TanStack QueryFunctionContext when used as queryFn.
+  let limit = 80
+  if (opts != null && typeof opts === 'object' && 'limit' in opts) {
+    const n = (opts as { limit?: unknown }).limit
+    if (typeof n === 'number' && Number.isFinite(n)) limit = n
+  }
   const q = new URLSearchParams({ limit: String(limit) })
   const r = await authedFetch('remediation jobs', `/api/v1/remediation/?${q.toString()}`)
   return r.json() as Promise<RemediationJobsResponse>

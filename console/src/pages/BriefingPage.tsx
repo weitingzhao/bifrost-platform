@@ -87,6 +87,7 @@ interface BriefingPageProps {
   auditRecords: AuditRecord[]
   auditLoading: boolean
   onOpenAudit?: () => void
+  onOpenActiveSession?: (opts?: { laneId?: LaneId }) => void
 }
 
 async function copyText(text: string): Promise<void> {
@@ -104,6 +105,7 @@ export function BriefingPage({
   auditRecords,
   auditLoading,
   onOpenAudit,
+  onOpenActiveSession,
 }: BriefingPageProps) {
   const initialUrl = useMemo(() => {
     const parsed = parseBriefingUrlState()
@@ -323,6 +325,10 @@ export function BriefingPage({
     [laneQueue],
   )
   const isArchiveLane = selectedLaneLifecycle === 'complete'
+  const isDoingLane = selectedLaneLifecycle === 'active'
+  /** Ready/Planned keep plan queue; Doing executes on Active Session; Done stays archive. */
+  const showSessionWorkRow = !isDoingLane
+  const allowBriefingDeliverySignOff = false
 
   /** Completed archive must never keep a work-Session ACTIVE marker. */
   useEffect(() => {
@@ -521,7 +527,9 @@ export function BriefingPage({
       })
       setSessionLifecycle('active')
       const launch = launchCursorBriefingAfterPrepare()
-      setLaunchStatus(launch.status)
+      setLaunchStatus(
+        `${launch.status} · Continue in Active Session when the lane is Doing.`,
+      )
     } catch (err) {
       setLaunchStatus(err instanceof Error ? err.message : 'Prepare failed')
     } finally {
@@ -680,6 +688,13 @@ export function BriefingPage({
                 invalidateSessionPackUi()
               }}
               packReconcileOptions={packReconcileOptions}
+              showWorkRow={showSessionWorkRow}
+              allowDeliverySignOff={allowBriefingDeliverySignOff}
+              onOpenActiveSession={
+                onOpenActiveSession != null
+                  ? () => onOpenActiveSession({ laneId: selectedLane })
+                  : undefined
+              }
               packPreview={
                 <LlmPackPreview
                   charCount={sessionPack.length}
@@ -690,7 +705,9 @@ export function BriefingPage({
                   footer={
                     isArchiveLane
                       ? 'Archive pack (read-only). Completed lanes do not start a work Session — use New Lane (reference) instead.'
-                      : 'Open in Cursor (/briefing) or paste the pack into Cursor IDE for the first-reply protocol. The Agent must reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) Source Audit (full pack) — wait for your selection before implementing.'
+                      : isDoingLane
+                        ? 'Lane is Doing — continue execution in Active Session. Re-prepare only to refresh the pack.'
+                        : 'Open in Cursor (/briefing) or paste the pack into Cursor IDE for the first-reply protocol. The Agent must reply in your selected language with: (1) briefing understanding for confirmation, (2) a numbered task list, (3) Source Audit (full pack) — wait for your selection before implementing.'
                   }
                 />
               }

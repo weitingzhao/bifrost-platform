@@ -1,0 +1,339 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Button, EmptyState } from '@bifrost/ui'
+import { Orbit } from 'lucide-react'
+import type { AuditRecord } from '@/api/auditTypes'
+import type { ClusterSummary } from '@/api/clusterTypes'
+import type { MatrixResponse } from '@/api/matrixTypes'
+import type { OpsContextResponse } from '@/api/opsContextTypes'
+import {
+  BriefingStatusBadge,
+  BriefingStatusLamp,
+  briefingLaneListRowClass,
+} from '@/components/briefing/BriefingStatusChrome'
+import { ActiveSessionPhaseBoard } from '@/components/briefing/ActiveSessionPhaseBoard'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import {
+  laneLifecycleFromQueue,
+  lifecycleToBriefingStatus,
+} from '@/lib/briefing/briefingStatus'
+import {
+  parseActiveSessionFocus,
+  writeActiveSessionFocus,
+} from '@/lib/briefing/deliveryPipelineNav'
+import { computeAllTracks } from '@/lib/briefing/workTracks'
+import {
+  allWorkLanes,
+  buildQueueForLane,
+  type LaneId,
+  type QueueItem,
+  type WorkLane,
+} from '@/lib/briefing/workLanes'
+import { useOperateQueue } from '@/hooks/useOperateQueue'
+
+interface ActiveSessionPageProps {
+  context: OpsContextResponse | undefined
+  contextLoading: boolean
+  matrices: MatrixResponse[]
+  matrixLoading: boolean
+  clusterSummary: ClusterSummary | undefined
+  auditRecords: AuditRecord[]
+  auditLoading: boolean
+  onOpenAudit?: () => void
+  onOpenBriefing: (opts?: { lane?: LaneId }) => void
+  onOpenDeliveryBoard?: (opts?: { laneId?: LaneId }) => void
+}
+
+interface DoingLaneRow {
+  lane: WorkLane
+  queue: QueueItem[]
+  progress: { done: number; total: number } | null
+}
+
+function queueProgress(queue: QueueItem[]): { done: number; total: number } | null {
+  if (queue.length === 0) return null
+  const done = queue.filter(q => q.status === 'done' || q.status === 'closed').length
+  return { done, total: queue.length }
+}
+
+function laneAllPhasesSigned(queue: QueueItem[]): boolean {
+  if (queue.length === 0) return false
+  return queue.every(q => q.status === 'done' || q.status === 'closed')
+}
+
+export function ActiveSessionPage({
+  context,
+  contextLoading,
+  matrices,
+  matrixLoading,
+  clusterSummary,
+  auditRecords,
+  auditLoading,
+  onOpenAudit,
+  onOpenBriefing,
+  onOpenDeliveryBoard,
+}: ActiveSessionPageProps) {
+  const { canAdmin } = usePlatformAuth()
+  const operateQueueQuery = useOperateQueue()
+  const initialFocus = useMemo(() => parseActiveSessionFocus(), [])
+  const [selectedLaneId, setSelectedLaneId] = useState<LaneId | null>(
+    () => initialFocus.laneId ?? null,
+  )
+
+  const dataReady = !contextLoading && !matrixLoading
+
+  const doingLanes = useMemo((): DoingLaneRow[] => {
+    if (!dataReady) return []
+    return allWorkLanes()
+      .map(lane => {
+        const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+        return { lane, queue, progress: queueProgress(queue) }
+      })
+      .filter(row => laneLifecycleFromQueue(row.queue) === 'active')
+  }, [dataReady, context, matrices, clusterSummary])
+
+  useEffect(() => {
+    if (doingLanes.length === 0) {
+      if (selectedLaneId != null) setSelectedLaneId(null)
+      return
+    }
+    if (selectedLaneId != null && doingLanes.some(r => r.lane.id === selectedLaneId)) return
+    const preferred =
+      initialFocus.laneId != null && doingLanes.some(r => r.lane.id === initialFocus.laneId)
+        ? initialFocus.laneId
+        : doingLanes[0].lane.id
+    setSelectedLaneId(preferred)
+  }, [doingLanes, selectedLaneId, initialFocus.laneId])
+
+  useEffect(() => {
+    if (selectedLaneId == null) return
+    writeActiveSessionFocus({
+      laneId: selectedLaneId,
+      programId: initialFocus.programId,
+    })
+  }, [selectedLaneId, initialFocus.programId])
+
+  const selectedRow = useMemo(
+    () => doingLanes.find(r => r.lane.id === selectedLaneId) ?? null,
+    [doingLanes, selectedLaneId],
+  )
+
+  const migrateTrackNext = useMemo(() => {
+    const tracks = computeAllTracks(
+      context,
+      matrices,
+      clusterSummary?.failing_pods,
+      clusterSummary?.reachability,
+      operateQueueQuery.data?.open,
+    )
+    return tracks.find(t => t.id === 'migrate')?.nextStep ?? null
+  }, [context, matrices, clusterSummary, operateQueueQuery.data?.open])
+
+  const selectedComplete = selectedRow != null && laneAllPhasesSigned(selectedRow.queue)
+
+  if (!dataReady) {
+    return (
+      <section className="page-section panel-elevated flex min-h-[12rem] flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+        <p className="briefing-section-kicker m-0">Active Session</p>
+        <h2 className="m-0 text-sm font-semibold">Loading Doing lanes…</h2>
+        <p className="m-0 max-w-sm text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Waiting for spine and matrix so queue progress can be tracked.
+        </p>
+      </section>
+    )
+  }
+
+  if (doingLanes.length === 0) {
+    return (
+      <section className="page-section panel-elevated px-4 py-6">
+        <EmptyState
+          icon={<Orbit />}
+          title="No active sessions — start work from Agent Briefing"
+          description="Pack and Launch a Ready or Planned lane, then continue execution here."
+          action={
+            <Button size="sm" variant="outline" onClick={() => onOpenBriefing()}>
+              Open Agent Briefing
+            </Button>
+          }
+        />
+      </section>
+    )
+  }
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <section className="page-section panel-elevated w-full min-w-0 px-3 py-2.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <div className="min-w-0">
+            <p className="briefing-section-kicker m-0">Doing</p>
+            <h2 className="m-0 mt-0.5 text-sm font-semibold">Active lanes</h2>
+          </div>
+          <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            {doingLanes.length} in progress — select a lane, then work the full-width phase table
+            below.
+          </p>
+        </div>
+        <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
+          {doingLanes.map(({ lane, progress }) => {
+            const selected = lane.id === selectedLaneId
+            const status = lifecycleToBriefingStatus('active')
+            return (
+              <button
+                key={lane.id}
+                type="button"
+                onClick={() => setSelectedLaneId(lane.id)}
+                className={briefingLaneListRowClass(selected)}
+              >
+                <BriefingStatusLamp status={status} />
+                <span
+                  className={[
+                    'max-w-[16rem] truncate text-[var(--text-dense-meta)] sm:max-w-[22rem]',
+                    selected
+                      ? 'font-semibold text-[var(--foreground)]'
+                      : 'font-medium text-[var(--muted-foreground)]',
+                  ].join(' ')}
+                  title={lane.label}
+                >
+                  {lane.label}
+                </span>
+                {progress != null && (
+                  <span className="shrink-0 font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                    {progress.done}/{progress.total}
+                  </span>
+                )}
+                <BriefingStatusBadge status={status} />
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      {selectedRow == null ? (
+        <section className="page-section panel-elevated px-4 py-6">
+          <EmptyState
+            title="Select a Doing lane"
+            description="Choose a lane above to track its queue and delivery sign-off."
+          />
+        </section>
+      ) : (
+        <ActiveSessionDetail
+          lane={selectedRow.lane}
+          queue={selectedRow.queue}
+          progress={selectedRow.progress}
+          canAdmin={canAdmin}
+          context={context}
+          migrateTrackNext={migrateTrackNext}
+          auditRecords={auditRecords}
+          auditLoading={auditLoading}
+          onOpenAudit={onOpenAudit}
+          focusedProgramId={initialFocus.programId}
+          selectedComplete={selectedComplete}
+          onOpenBriefing={() => onOpenBriefing({ lane: selectedRow.lane.id })}
+          onOpenDeliveryBoard={
+            onOpenDeliveryBoard != null
+              ? () => onOpenDeliveryBoard({ laneId: selectedRow.lane.id })
+              : undefined
+          }
+        />
+      )}
+    </div>
+  )
+}
+
+function ActiveSessionDetail({
+  lane,
+  queue,
+  progress,
+  canAdmin,
+  context,
+  migrateTrackNext,
+  auditRecords,
+  auditLoading,
+  onOpenAudit,
+  focusedProgramId,
+  selectedComplete,
+  onOpenBriefing,
+  onOpenDeliveryBoard,
+}: {
+  lane: WorkLane
+  queue: QueueItem[]
+  progress: { done: number; total: number } | null
+  canAdmin: boolean
+  context: OpsContextResponse | undefined
+  migrateTrackNext: string | null
+  auditRecords: AuditRecord[]
+  auditLoading: boolean
+  onOpenAudit?: () => void
+  focusedProgramId?: string
+  selectedComplete: boolean
+  onOpenBriefing: () => void
+  onOpenDeliveryBoard?: () => void
+}) {
+  const readyForSignOff = queue.some(q => q.status === 'ready_for_signoff')
+
+  return (
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-3">
+      <section className="page-section panel-elevated w-full min-w-0 max-w-full overflow-x-hidden border-[var(--primary)]/25 px-3 py-2.5">
+        <p className="briefing-section-kicker m-0">Execute</p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-2">
+          <h2 className="m-0 text-sm font-semibold">{lane.label}</h2>
+          <BriefingStatusBadge status="doing" />
+          {progress != null && (
+            <span className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              {progress.done}/{progress.total}
+            </span>
+          )}
+        </div>
+        <p className="m-0 mt-1 break-words text-[var(--text-dense-caption)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
+          Track queue progress and Owner sign-off. Pack / Launch lives on Agent Briefing.
+        </p>
+
+        {!canAdmin && readyForSignOff && (
+          <div className="mt-2 rounded-md border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-2.5 py-1.5">
+            <p className="m-0 text-[var(--text-dense-caption)] text-[var(--foreground)]">
+              Admin auth required for sign-off. Authenticate as Admin, then approve ready phases.
+            </p>
+          </div>
+        )}
+        {canAdmin && readyForSignOff && (
+          <div className="mt-2 rounded-md border border-[var(--success)]/35 bg-[var(--success)]/10 px-2.5 py-1.5">
+            <p className="m-0 text-[var(--text-dense-caption)] text-[var(--foreground)]">
+              Ready for sign-off — review the phase table and approve completed phases.
+            </p>
+          </div>
+        )}
+
+        {selectedComplete && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)]/60 bg-[var(--secondary)]/20 px-2.5 py-1.5">
+            <p className="m-0 flex-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              Queue items are complete — review Delivery Board archive for this lane.
+            </p>
+            {onOpenDeliveryBoard != null && (
+              <Button size="sm" variant="outline" onClick={onOpenDeliveryBoard}>
+                Open Delivery Board
+              </Button>
+            )}
+          </div>
+        )}
+
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <Button size="sm" variant="ghost" onClick={onOpenBriefing}>
+            Re-prepare in Briefing
+          </Button>
+        </div>
+      </section>
+
+      <ActiveSessionPhaseBoard
+        lane={lane}
+        queue={queue}
+        focusedProgramId={focusedProgramId}
+        allowSignOff
+        context={context}
+        canAdmin={canAdmin}
+        migrateTrackNext={migrateTrackNext}
+        auditRecords={auditRecords}
+        auditLoading={auditLoading}
+        onOpenAudit={onOpenAudit}
+      />
+    </div>
+  )
+}

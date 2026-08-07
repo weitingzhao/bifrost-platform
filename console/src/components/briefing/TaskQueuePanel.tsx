@@ -90,7 +90,9 @@ function QueueItemRow({
   const parsed = item.note != null ? parseNoteMilestones(item.note) : null
   const hasMilestones = parsed != null && parsed.milestones.length > 0
   const actuationBusy = deliverMutation.isPending || signoffMutation.isPending
-  const showActuation = canAdmin && item.waveActuation != null && item.migrateStreamId != null
+  const hasActuation = item.waveActuation != null && item.migrateStreamId != null
+  const showActuation = canAdmin && hasActuation
+  const showActuationHint = !canAdmin && hasActuation && item.waveActuation === 'signoff'
   const workStatus = queueItemToBriefingStatus(item.status)
 
   return (
@@ -176,6 +178,14 @@ function QueueItemRow({
               </Button>
             )}
           </div>
+        </div>
+      )}
+
+      {showActuationHint && (
+        <div className="border-t border-[var(--border)] px-3 py-1.5 pl-8">
+          <span className="text-dense-caption text-[var(--muted-foreground)]">
+            Sign-off available with admin authentication
+          </span>
         </div>
       )}
 
@@ -349,7 +359,7 @@ export function TaskQueuePanel({
 
   if (items.length === 0) {
     return (
-      <div className="mt-3 flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] px-4 py-6 text-center">
+      <div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] px-4 py-6 text-center">
         <BriefingIconBadge icon={LANE_ICONS[lane.id]} />
         <p className="m-0 text-sm font-medium text-[var(--foreground)]">No active tasks</p>
         <p className="m-0 max-w-md text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -361,7 +371,7 @@ export function TaskQueuePanel({
   }
 
   return (
-    <div className="mt-3 min-w-0 max-w-full overflow-hidden rounded-lg border border-[var(--border)]">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-[var(--border)]">
       <header className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--background)] px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <BriefingIconBadge icon={LANE_ICONS[lane.id]} size="sm" />

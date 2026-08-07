@@ -153,8 +153,10 @@ function ProgramBandTable({
 
 export function DeliveryBoardPage({
   onOpenBriefing,
+  onOpenActiveSession,
 }: {
   onOpenBriefing?: (opts?: BriefingUrlState) => void
+  onOpenActiveSession?: (opts?: { laneId?: LaneId }) => void
 } = {}) {
   const initial = filtersFromHash()
   const [scope, setScope] = useState<BriefingScopeId>(initial.scope)
@@ -299,16 +301,36 @@ export function DeliveryBoardPage({
                 : `${programs.length} program${programs.length === 1 ? '' : 's'} · ${bands.inProgress.length} in progress · ${bands.complete.length} complete · ${bands.notStarted.length} not started`
         }
         actions={
-          onOpenBriefing != null ? (
-            <Button size="sm" variant="outline" className="shrink-0" onClick={() => onOpenBriefing()}>
-              Open Briefing Session
-            </Button>
-          ) : undefined
+          <div className="flex flex-wrap gap-2">
+            {onOpenActiveSession != null && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                onClick={() =>
+                  onOpenActiveSession(
+                    laneFilter != null ? { laneId: laneFilter } : undefined,
+                  )
+                }
+              >
+                Open Active Session
+              </Button>
+            )}
+            {onOpenBriefing != null && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                onClick={() => onOpenBriefing()}
+              >
+                Open Agent Briefing
+              </Button>
+            )}
+          </div>
         }
         meta={
           <span>
-            Read-only catalog — program sign-off and post-completion Approve live in Agent Briefing →
-            Session.
+            Read-only archive — program sign-off and post-completion Approve live in Active Session.
           </span>
         }
       />
@@ -380,7 +402,7 @@ export function DeliveryBoardPage({
       {selectedProgramId != null && selectedProgram != null && (
         <OpsSection
           title={selectedProgram.label}
-          description={`${selectedProgram.signed}/${selectedProgram.gateCount} gates · ${selectedProgram.phasesDone}/${selectedProgram.phaseCount} done · read-only on Delivery Board · sign-off in Briefing Session`}
+          description={`${selectedProgram.signed}/${selectedProgram.gateCount} gates · ${selectedProgram.phasesDone}/${selectedProgram.phaseCount} done · read-only on Delivery Board · sign-off in Active Session`}
           overflow="visible"
         >
           <DeliveryBoardProgramPanels programId={selectedProgramId} allowSignOff={false} />

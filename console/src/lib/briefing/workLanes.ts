@@ -627,39 +627,47 @@ function buildMarketDataExpandQueue(): QueueItem[] {
     {
       id: 'md-expand-p2',
       label: 'P2 — Raw ingest: Option Daily OI full backfill',
-      status: 'ready_for_signoff',
-      note: 'verify_passed — snapshot→OI extract + backfill registry + oi-gap-heal CronJob (D4=B,D5=A,D6=B); awaiting Owner sign-off',
+      status: 'done',
+      note: 'Owner signed / verify_passed — snapshot→OI extract + backfill registry + oi-gap-heal CronJob (D4=B,D5=A,D6=B)',
       progress: { done: 1, total: 1 },
     },
     {
       id: 'md-expand-p3',
       label: 'P3 — Analytics: Max Pain Daily CronJob',
-      status: 'pending',
-      note: 'Compute from market.option_open_interest → market_analytics.max_pain_daily',
+      status: 'done',
+      note: 'Owner signed off — max pain engine + CronJob + GET /market/analytics/max-pain (D7=A,D8=B,D9=A)',
+      progress: { done: 1, total: 1 },
     },
     {
       id: 'md-expand-p4',
       label: 'P4 — Analytics: ATM IV + PCR + IV Percentile',
-      status: 'pending',
-      note: 'Complete derived metrics suite; document black-box caveats',
+      status: 'done',
+      note: 'Owner signed off — ATM IV + PCR + IV Percentile (D10=A,D11=A,D12=A)',
+      progress: { done: 1, total: 1 },
     },
     {
       id: 'md-expand-p5',
       label: 'P5 — Plugin API: migrate Trade API research/massive/*',
-      status: 'pending',
-      note: 'Stand up Plugin REST API (port 8790); replace Trade API proxy routes',
+      status: 'done',
+      note:
+        'Owner signed off — ~70 /market/* routes (Polygon pass-through + DB coverage + ingest enqueue + options/analytics compute); D13=A staged migration, D14=A PolygonClient reuse, D15=A job_ingest direct write; Celery/SSE/fill-eligibility deferred to P7',
+      progress: { done: 1, total: 1 },
     },
     {
       id: 'md-expand-p6',
       label: 'P6 — Ops Console: Subcontractors Plugin management UI',
-      status: 'pending',
-      note: 'Migrate Settings → Massive (67 files) → Ops Console Plugin page',
+      status: 'done',
+      note:
+        'Owner signed off — Subcontractors → Market Data manage page (Overview/Coverage/Ingest/Analytics); D16=A nav, D17=A checklist copy, D18=A functional tabs; platform-api proxy /plugins/market-data/api/*',
+      progress: { done: 1, total: 1 },
     },
     {
       id: 'md-expand-p7',
       label: 'P7 — Trade System cleanup: retire zombie tables',
-      status: 'pending',
-      note: 'DROP report_option_*; remove no-op Celery tasks; rewire frontend API',
+      status: 'ready_for_signoff',
+      note:
+        'verify_passed — DROP report_option_max_pain/atm_iv_daily (DEV); delete worker data/massive + API massive:8766; FE Massive Settings removed; Option Discovery analytics/coverage/trades-quotes → Plugin via VITE_API_MARKET_DATA_PLUGIN; D19–D22=A',
+      progress: { done: 1, total: 1 },
     },
   ]
 }

@@ -804,7 +804,7 @@ export function TrackLaneSection({
       <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
         {filterActive
           ? `Showing ${filterChipLabel?.toLowerCase()} only across all track types (matches Summary). Clear filter for Track Type board.`
-          : 'Doing / Backlog → work Session. Completed = archive (reference for New Lane only).'}
+          : 'Doing → Active Session. Backlog → Pack & Launch. Completed = archive.'}
       </p>
 
       {filterEmpty && (
@@ -822,8 +822,8 @@ export function TrackLaneSection({
         <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2.5 text-center">
           <p className="m-0 text-sm font-medium text-[var(--foreground)]">All lanes complete</p>
           <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Start a new lane under Backlog. Program sign-off stays in Session; Delivery Board is the
-            read-only catalog. Completed below is an archive view of lanes.
+            Start a new lane under Backlog. Program sign-off in Active Session; Delivery Board is
+            read-only archive. Completed below is an archive view of lanes.
           </p>
         </div>
       )}
@@ -844,7 +844,7 @@ export function TrackLaneSection({
               status="doing"
               title="Doing"
               count={doingLanes.length}
-              hint="In progress"
+              hint="In progress — execute in Active Session"
             />
             {laneViewMode === 'tag' ? (
               <div className={LANE_TAG_GRID}>

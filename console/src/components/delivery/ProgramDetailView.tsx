@@ -27,16 +27,18 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 function phaseStatusVariant(phase: ProgramPhaseDetail): DenseTagVariant {
   if (phase.signed_off) return 'success'
-  if (phase.progress?.status === 'verify_failed') return 'danger'
-  if (phase.progress?.status === 'verify_pending' || phase.progress?.status === 'in_progress') {
-    return 'warning'
-  }
+  const st = phase.progress?.status
+  if (st === 'done' || st === 'verify_passed') return 'info'
+  if (st === 'verify_failed') return 'danger'
+  if (st === 'verify_pending' || st === 'in_progress') return 'warning'
   return 'neutral'
 }
 
 function phaseStatusLabel(phase: ProgramPhaseDetail): string {
   if (phase.signed_off) return 'Signed'
-  if (phase.progress?.status) return phase.progress.status.replace(/_/g, ' ')
+  const st = phase.progress?.status
+  if (st === 'done' || st === 'verify_passed') return 'Ready for sign-off'
+  if (st) return st.replace(/_/g, ' ')
   return phase.status
 }
 
@@ -87,10 +89,14 @@ function PhaseDetailRow({
           {phase.signed_off_at ?? '—'}
         </DenseTableCell>
         <DenseTableCell>
-          {!phase.signed_off && canAdmin && allowSignOff && phase.sign_off?.required !== false && (
-            <Button type="button" size="sm" variant="outline" onClick={() => onSignOff(phase.id)}>
-              Sign off
-            </Button>
+          {!phase.signed_off && allowSignOff && phase.sign_off?.required !== false && (
+            canAdmin ? (
+              <Button type="button" size="sm" variant="outline" onClick={() => onSignOff(phase.id)}>
+                Sign off
+              </Button>
+            ) : (
+              <span className="text-dense-caption text-muted-foreground">Admin auth required</span>
+            )
           )}
         </DenseTableCell>
       </DenseTableRow>
@@ -214,7 +220,9 @@ export function ProgramDetailView({
               ? 'Counts sync from unified programs API. Run and sign each gate in the Vision panels below.'
               : isMissionSignalProgram
                 ? 'Counts sync from unified programs API. Sign each phase in the Mission Signal panels below when live readiness passes.'
-                : 'Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands.'
+                : !canAdmin
+                  ? 'Server-persisted via platform-api. Sign-off requires admin authentication.'
+                  : 'Server-persisted via platform-api. Expand a phase for acceptance criteria and verify commands.'
         }
       >
         <DenseDataTable>

@@ -14,6 +14,7 @@ export type ConsoleViewTab =
   | 'agent-desk'
   | 'agent-capability'
   | 'briefing'
+  | 'active-session'
   | 'autonomous-skills'
   | 'execution-log'
   | 'agent-governance'
@@ -47,6 +48,7 @@ export type ConsoleViewTab =
   | 'satellite-telemetry'
   | 'satellite-api'
   | 'plugin-gallery'
+  | 'market-data-manage'
   | 'defects'
   | 'dev-sessions'
 

@@ -6,7 +6,7 @@
  *
  * Live state (not this catalog):
  * - Trade IB health aggregate: Rocket → Cluster + Monitor matrix probes
- * - Phase / rollout sign-off: Mission Control → Delivery Board · trade-ib-migration
+ * - Phase / rollout sign-off: Engineer → Active Session · trade-ib-migration
  * - Migrate lane: Engineer → Briefing · spine stream trade-ib-client-migration
  */
 
@@ -55,7 +55,7 @@ export const TRADE_IB_MIGRATION_PHASES: {
     title: 'Inventory & sign-off',
     summary:
       'Catalog every Trade IB surface: redis-ib read, operator RPC, direct TWS, stale health/UI refs. Lock Phase 1–4 scope.',
-    deliverable: 'Console inventory tables + Delivery Board TIBM0 Owner sign-off',
+    deliverable: 'Console inventory tables + Active Session TIBM0 Owner sign-off',
     status: 'done',
   },
   {
@@ -273,7 +273,7 @@ export const TRADE_IB_MIGRATION_PRINCIPLES = [
 
 export const TRADE_IB_MIGRATION_RELATED_AUTHORITIES = [
   'Trade IB health aggregate: Rocket → Cluster + Monitor matrix probes',
-  'Program / rollout sign-off: Mission Control → Delivery Board · trade-ib-migration',
+  'Program / rollout sign-off: Engineer → Active Session · trade-ib-migration',
   'Migrate lane + spine stream: Engineer → Briefing · trade-ib-client-migration',
   'Platform TWS bus prerequisite: ibGatewayPluginCatalog.ts · Subcontractors → Plugin Gallery (ib-gateway)',
   'Trading execution freeze: spine decision D10 · tradeIbClientMigrationRolloutCatalog.ts TRADE_EXECUTION_FREEZE',
@@ -311,7 +311,7 @@ export function surfaceStatusVariant(
   }
 }
 
-/** Archived phase statuses, surface tags, rollout wave snapshots — live sign-off in Briefing Session. */
+/** Archived phase statuses, surface tags, rollout wave snapshots — live sign-off in Active Session. */
 export function buildTradeIbClientMigrationHistoricalAppendix(): string {
   const lines: string[] = [
     '## Historical progress (archived — do not treat as live)',
@@ -350,7 +350,7 @@ export function buildTradeIbClientMigrationLlmPack(): string {
     '# Trade IB Client Migration',
     `Version: ${TRADE_IB_CLIENT_MIGRATION_VERSION}`,
     `Stream: ${TRADE_IB_CLIENT_MIGRATION_STREAM_ID}`,
-    'Live health + rollout state: Subcontractors → Plugin Gallery / Mission Control → Delivery Board — not this catalog.',
+    'Live health + rollout state: Subcontractors → Plugin Gallery / Engineer → Active Session (Delivery Board is read-only) — not this catalog.',
     '',
     '## Prerequisite',
     'IB Gateway Plugin (IBGP0–4) — Platform TWS bus @ data/redis-ib.',

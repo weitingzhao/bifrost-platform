@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { SegmentControl } from '@bifrost/ui'
+import { Button, SegmentControl } from '@bifrost/ui'
 import { ChevronDown, ChevronRight, Languages, Package } from 'lucide-react'
 import { SessionLaneCtaBar, type SessionLifecycle } from '@/components/briefing/SessionLaneCtaBar'
 import { MoveLaneBar } from '@/components/briefing/MoveLaneBar'
@@ -58,11 +58,21 @@ export interface SessionDetailSectionProps {
   focusedProgramId?: string
   /** After PATCH reclassification — sync Briefing Scope / Track Type filters. */
   onLaneMoved?: (line: ComponentLineId, trackType: WorkTrackType) => void
+  /**
+   * When false, hide Queue + Delivery (Doing lanes redirect to Active Session).
+   * Default true.
+   */
+  showWorkRow?: boolean
+  /** Delivery phase Approve — Active Session is the primary execute surface. */
+  allowDeliverySignOff?: boolean
+  /** Navigate to Active Session for this Doing lane. */
+  onOpenActiveSession?: () => void
 }
 
 /**
- * Session focus zone: CTA + pack knobs + reconcile status + queue + program sign-off.
- * Completed lanes keep queue archive; program sign-off / Approve remain available here.
+ * Session focus zone: CTA + pack knobs above; Task Queue + Delivery side-by-side below.
+ * Completed lanes keep queue archive; program sign-off / Approve remain available in the work row.
+ * Doing (active) lanes on Briefing redirect execute work to Active Session.
  */
 export function SessionDetailSection({
   scope,
@@ -96,12 +106,17 @@ export function SessionDetailSection({
   packPreview,
   focusedProgramId,
   onLaneMoved,
+  showWorkRow = true,
+  allowDeliverySignOff = true,
+  onOpenActiveSession,
 }: SessionDetailSectionProps) {
   const { canAdmin } = usePlatformAuth()
   const [previewOpen, setPreviewOpen] = useState(false)
   const isArchive = laneLifecycle === 'complete'
+  const isDoingRedirect = laneLifecycle === 'active' && !showWorkRow
 
   return (
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-3">
     <section
       className={
         isArchive
@@ -109,12 +124,23 @@ export function SessionDetailSection({
           : 'page-section panel-elevated w-full min-w-0 max-w-full overflow-x-hidden border-[var(--primary)]/25 px-3 py-2.5'
       }
     >
-      <p className="briefing-section-kicker m-0">{isArchive ? 'Archive' : 'Session'}</p>
+      <p className="briefing-section-kicker m-0">
+        {isArchive ? 'Archive' : isDoingRedirect ? 'In progress' : 'Session'}
+      </p>
       <h2 className="m-0 mt-0.5 text-sm font-semibold">
-        {isArchive ? 'Completed lane' : 'Selected lane detail'}
+        {isArchive
+          ? 'Completed lane'
+          : isDoingRedirect
+            ? lane.label
+            : 'Selected lane detail'}
       </h2>
       <p className="m-0 mt-1 break-words text-[var(--text-dense-caption)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
-        {isArchive ? (
+        {isDoingRedirect ? (
+          <>
+            This lane is in progress — continue in Active Session for queue tracking and Owner
+            sign-off. Use Re-prepare below only if the pack needs a refresh.
+          </>
+        ) : isArchive ? (
           <>
             Read-only history for this completed lane. Delivery sign-off and post-completion review
             remain available below. Create a new lane to start new work.
@@ -133,11 +159,22 @@ export function SessionDetailSection({
           )
         ) : (
           withBriefingCommandHighlight(
-            'Open in Cursor (/briefing) or copy the pack, then work the queue below.',
+            showWorkRow
+              ? 'Open in Cursor (/briefing) or copy the pack, then work the plan queue below.'
+              : 'Open in Cursor (/briefing) or copy the pack to start work.',
           )
         )}
       </p>
 
+      {isDoingRedirect && onOpenActiveSession != null && (
+        <div className="mt-2.5">
+          <Button size="sm" onClick={onOpenActiveSession}>
+            Continue in Active Session
+          </Button>
+        </div>
+      )}
+
+      {!isDoingRedirect && (
       <div className="mt-2.5">
         <SessionLaneCtaBar
           scope={scope}
@@ -160,14 +197,24 @@ export function SessionDetailSection({
           onUseAsReferenceForNewLane={onUseAsReferenceForNewLane}
           embedded
         />
+        {lifecycle === 'active' && onOpenActiveSession != null && (
+          <div className="mt-2">
+            <Button size="sm" variant="outline" onClick={onOpenActiveSession}>
+              Continue in Active Session
+            </Button>
+          </div>
+        )}
       </div>
+      )}
 
-      {!isArchive && (
+      {!isArchive && !isDoingRedirect && (
         <MoveLaneBar lane={lane} canOperate={canOperate} onMoved={onLaneMoved} />
       )}
 
       {!isArchive && (
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-[var(--border)]/60 pt-2">
+          {!isDoingRedirect && (
+            <>
           <div
             className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)]/50 bg-[var(--muted)]/20 px-1.5 py-0.5"
             title="Agent dialogue language"
@@ -218,6 +265,8 @@ export function SessionDetailSection({
               compact
             />
           </div>
+            </>
+          )}
 
           <button
             type="button"
@@ -230,8 +279,14 @@ export function SessionDetailSection({
             ) : (
               <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             )}
-            {previewOpen ? 'Hide pack' : 'Pack preview'}
+            {previewOpen ? 'Hide pack' : isDoingRedirect ? 'Pack preview (re-prepare)' : 'Pack preview'}
           </button>
+
+          {isDoingRedirect && (
+            <Button size="sm" variant="ghost" onClick={onOpenInCursor} disabled={!canOperate || preparingCursor}>
+              {preparingCursor ? 'Preparing…' : 'Re-prepare pack'}
+            </Button>
+          )}
         </div>
       )}
 
@@ -254,19 +309,31 @@ export function SessionDetailSection({
       )}
 
       {previewOpen && <div className="mt-2 min-w-0 max-w-full overflow-x-auto">{packPreview}</div>}
-
-      <TaskQueuePanel
-        items={queue}
-        lane={lane}
-        context={context}
-        canAdmin={canAdmin && !isArchive}
-        migrateTrackNext={migrateTrackNext}
-        auditRecords={auditRecords}
-        auditLoading={auditLoading}
-        onOpenAudit={onOpenAudit}
-      />
-
-      <SessionProgramDeliveryPanel laneId={lane.id} focusedProgramId={focusedProgramId} />
     </section>
+
+    {showWorkRow && (
+    <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+      <div className="min-w-0">
+        <TaskQueuePanel
+          items={queue}
+          lane={lane}
+          context={context}
+          canAdmin={canAdmin && !isArchive && allowDeliverySignOff}
+          migrateTrackNext={migrateTrackNext}
+          auditRecords={auditRecords}
+          auditLoading={auditLoading}
+          onOpenAudit={onOpenAudit}
+        />
+      </div>
+      <div className="min-w-0">
+        <SessionProgramDeliveryPanel
+          laneId={lane.id}
+          focusedProgramId={focusedProgramId}
+          allowSignOff={isArchive || allowDeliverySignOff}
+        />
+      </div>
+    </div>
+    )}
+    </div>
   )
 }

@@ -6,7 +6,7 @@
  * Live state (not this catalog):
  * - Worker health + deployments + freshness tables: Subcontractors → Plugin Gallery (observe)
  * - Optional readiness_rollup on GET /api/v1/plugins/market-data/status (read-only stock_readiness_daily snapshot; Trade owns runbook / gaps)
- * - Phase / program sign-off: Mission Control → Delivery Board · market-data-subcontractor
+ * - Phase / program sign-off: Engineer → Active Session · market-data-subcontractor
  * - Implementation: bifrost-platform-plugin-market-data
  */
 
@@ -185,17 +185,19 @@ export const MARKET_DATA_PROGRESS = {
 export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Live health + deployments + freshness: Subcontractors → Plugin Gallery (observe — not publish)',
   'Readiness rollup KPI: GET /api/v1/plugins/market-data/status → readiness_rollup (read-only; Trade Stock Data Readiness owns runbook / per-symbol gaps)',
+  'Manage UI: Subcontractors → Market Data (`market-data-manage`) — Overview / Coverage / Ingest / Analytics (market-data-expand P6)',
+  'Plugin API proxy: GET|POST /api/v1/plugins/market-data/api/market/* → market-data-api:8790 (or MARKET_DATA_API_URL)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
   'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; image bifrost-market-data:0.1.2)',
   'Image tag: bifrost-market-data:0.1.2 (k8s/base newTag; slots reference + fundamentals-rotate active)',
   'Readiness rollup: optional KPI from public.stock_readiness_daily (Trade runbook). fund_cache_valid requires included_in_universe; public.v_us_equity_universe uses synthetic hashtext tickers_id after P9 (bifrost-core ≥0.5.2)',
-  'Program / phase sign-off: Delivery Board · market-data-subcontractor',
+  'Program / phase sign-off: Active Session (Engineer → Delivery) · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',
   'Spine: config/ops-context.yaml · GET /api/v1/context · milestone market-data-subcontractor',
   'DDL authority: bifrost-platform-plugin-market-data/src/bifrost_market_data/schema/ddl.py',
 ]
 
-/** Archived phase statuses and spine progress snapshot — live sign-off in Delivery Board. */
+/** Archived phase statuses and spine progress snapshot — live sign-off in Active Session. */
 export function buildMarketDataHistoricalAppendix(): string {
   const lines: string[] = [
     '## Historical progress (archived — do not treat as live)',
@@ -217,7 +219,7 @@ export function buildMarketDataSubcontractorLlmPack(): string {
     `Version: ${MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION}`,
     `Repo: ${MARKET_DATA_SUBCONTRACTOR_SOURCE}`,
     'Live health: Subcontractors → Plugin Gallery (observe) — not this catalog.',
-    'Sign-off state: Delivery Board · market-data-subcontractor — not this catalog.',
+    'Sign-off state: Active Session · market-data-subcontractor — not this catalog.',
     '',
     '## Launch lane',
     `- Label: ${MARKET_DATA_LAUNCH_LANE.label}`,

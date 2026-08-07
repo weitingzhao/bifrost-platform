@@ -21,7 +21,7 @@ export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocol
  */
 export const MISSION_SIGNAL_PROGRAM_REFERENCE =
   'Mission Signal Phases 4–7 (Hermes First Task, Flight Director governance, Flight Director operations, ' +
-  'program closure) are program delivery history — see Delivery Board (Mission Control) and Agent System ' +
+  'program closure) are program delivery history — see Delivery Board (Engineer → Delivery) and Agent System ' +
   '(Governance) for status and step detail. Active per-session protocol remains: modes, domains, forbidden ' +
   'actions, D10 freeze, and the P2/P3 diagnostic playbooks above.'
 
@@ -175,13 +175,13 @@ export const WAVE3_P0_DECISIONS: Wave3P0Decision[] = [
     id: 'D12',
     topic: 'Sign-off single path api',
     rule:
-      'Only POST /api/v1/programs/{id}/phases/{pid}/signoff writes phase_sign_offs. Remove dev_agent/vision_gate mechanisms. UI host = Briefing Session; Delivery Board is read-only catalog.',
+      'Only POST /api/v1/programs/{id}/phases/{pid}/signoff writes phase_sign_offs. Remove dev_agent/vision_gate mechanisms. UI host = Active Session (Engineer → Delivery); Delivery Board is read-only catalog.',
     wave3Deliverables: [
       'Dev Agent approve → programs signoff API',
       'Vision gate Owner sign → programs signoff API (gate JSON = run artifact only)',
       'YAML: all programs sign_off_mechanism: api',
       'Remove vision_gate branch from programs_delivery.go reads',
-      'Briefing Session hosts phase Sign-off + post-completion Approve; Board Scope→Lane catalog only',
+      'Active Session hosts phase Sign-off + post-completion Approve; Board is read-only catalog',
     ],
   },
 ]

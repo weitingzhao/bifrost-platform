@@ -242,6 +242,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/network/sla", s.network.HandleSLA)
 		r.Get("/plugins/ib-gateway/status", s.ibgateway.HandleStatus)
 		r.Get("/plugins/market-data/status", s.marketdata.HandleStatus)
+		// Read-only Plugin API proxy (coverage / analytics / ingest list / JSON probes).
+		r.Get("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
 		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)
@@ -381,6 +383,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/ops-agent/alertmanager", s.opsagent.HandleAlertmanager)
 			r.Post("/network/firewall/apply", s.network.HandleFirewallApply)
 			r.Post("/plugins/ib-gateway/control/{action}", s.ibgateway.HandleControl)
+			// Ingest enqueue (and other Plugin API writes) — operator auth.
+			r.Post("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
 		})
 		r.Group(func(r chi.Router) {

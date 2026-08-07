@@ -1,6 +1,7 @@
 import type { ShellNavGroup } from '@bifrost/ui'
 import {
   Activity,
+  Archive,
   BookOpen,
   Bot,
   Boxes,
@@ -10,6 +11,7 @@ import {
   Code2,
   Container,
   Cpu,
+  Database,
   FileCode2,
   Gauge,
   Handshake,
@@ -43,12 +45,12 @@ import {
  *
  * | Group            | Domain                | Intent                                           |
  * |------------------|-----------------------|--------------------------------------------------|
- * | Mission Control  | Cross-domain ops hub  | Execute (TCC) → Posture (Control Room) → Health (Observability); defects, audit, delivery |
+ * | Mission Control  | Cross-domain ops hub  | Execute (TCC) → Posture (Control Room) → Health (Observability); defects, audit |
  * | Rocket           | Ops Platform itself   | K8s cluster, Launch Rocket, placement             |
  * | Ground Systems   | Infrastructure        | Network, compute (SSH via shell Operator Dock)    |
  * | Satellite        | Payload satellite(s)  | Bus, runtime, API & Auth Probes, Deploy Satellite |
  * | Subcontractors   | External plugins      | Plugin Gallery, future plugins                    |
- * | Engineer         | AI Agent              | Workspace, autonomous, trust, L-1 plane           |
+ * | Engineer         | AI Agent              | Delivery (Plan → Execute → Archive) + Workspace, autonomous, trust, L-1 |
  *
  * Governance (Vision / Blueprint / Standards / …) lives in the shell User menu
  * — cross-domain reference library, not a daily-ops rail group.
@@ -69,7 +71,6 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
           { id: 'observability', label: 'Observability', icon: LineChart },
           { id: 'defects', label: 'Defects', icon: Microscope },
           { id: 'audit', label: 'Audit', icon: History },
-          { id: 'delivery-board', label: 'Delivery Board', icon: ClipboardList },
         ],
       },
     ],
@@ -108,10 +109,17 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
     icon: Bot,
     subGroups: [
       {
+        label: 'Delivery',
+        items: [
+          { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
+          { id: 'active-session', label: 'Active Session', icon: Orbit },
+          { id: 'delivery-board', label: 'Delivery Board', icon: Archive },
+        ],
+      },
+      {
         label: 'Workspace',
         items: [
           { id: 'agent-capability', label: 'Agent Capability', icon: Network },
-          { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
           { id: 'dev-agent', label: 'Dev Agent', icon: Code2 },
           { id: 'dev-sessions', label: 'Dev Sessions', icon: Terminal },
         ],
@@ -158,6 +166,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'plugin-gallery', label: 'Plugin Gallery', icon: Plug },
+          { id: 'market-data-manage', label: 'Market Data', icon: Database },
           { id: 'plugin-release', label: 'Launch Plugin', icon: Workflow },
         ],
       },
@@ -220,7 +229,6 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'runtime-map': 'Mission Control',
   defects: 'Mission Control',
   audit: 'Mission Control',
-  'delivery-board': 'Mission Control',
   cluster: 'Rocket',
   'platform-release': 'Rocket',
   placement: 'Rocket',
@@ -233,10 +241,13 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'satellite-api': 'Satellite',
   'trade-release': 'Satellite',
   'plugin-gallery': 'Subcontractors',
+  'market-data-manage': 'Subcontractors',
   'plugin-release': 'Subcontractors',
   'agent-desk': 'Engineer',
   'agent-capability': 'Engineer',
   briefing: 'Engineer',
+  'active-session': 'Engineer',
+  'delivery-board': 'Engineer',
   'dev-agent': 'Engineer',
   'dev-sessions': 'Engineer',
   'autonomous-skills': 'Engineer',
