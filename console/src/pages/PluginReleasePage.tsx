@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from 'react'
-import { Button, DenseTag } from '@bifrost/ui'
-import { postIbGatewayControl } from '@/api/network'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Button, DenseTag, SegmentControl } from '@bifrost/ui'
+import { fetchMarketDataStatus, postIbGatewayControl } from '@/api/network'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import {
   LaneDetailCollapse,
@@ -25,11 +26,19 @@ import {
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import {
   evidenceSummaryLine,
+  MARKET_DATA_IMAGE_TAG,
+  marketDataApplyCmd,
+  marketDataNamespace,
+  marketDataVerifyCmd,
   PLUGIN_DOGFOOD_FEATURE,
   PLUGIN_DOGFOOD_REVISION,
   readPluginLaunchEvidence,
+  readPluginLaunchStore,
   writePluginLaunchEvidence,
+  writePluginLaunchStore,
   type PluginLaunchEvidence,
+  type PluginLaunchSeat,
+  type PluginLaunchTargetId,
 } from '@/lib/delivery/pluginLaunchEvidence'
 import type { StepStatus } from '@/lib/delivery/releaseStepTypes'
 
@@ -50,12 +59,8 @@ function statusFromEvidence(
 
 function buildSteps(
   evidence: PluginLaunchEvidence,
-  probeReach: string,
-  mode: string | undefined,
+  detectDone: boolean,
 ): PluginFlowStep[] {
-  const detectDone =
-    evidence.lastDetectAt != null ||
-    (probeReach !== 'unknown' && mode != null && mode !== '')
   const approve = statusFromEvidence(
     evidence.lastApproveAt != null ? 'ok' : undefined,
     evidence.lastApproveAt,
@@ -64,7 +69,6 @@ function buildSteps(
   const verify = statusFromEvidence(evidence.verifyOutcome, evidence.lastVerifyAt)
   const live = statusFromEvidence(evidence.liveCheckOutcome, evidence.lastLiveCheckAt)
 
-  // Cascade: first pending after completed becomes active-ish for focus
   const detect: PluginFlowStep = {
     key: 'detect',
     label: 'Detect',
@@ -109,6 +113,59 @@ function buildSteps(
   return [detect, approveStep, installStep, verifyStep, liveStep]
 }
 
+function RecordedOutcomeButtons({
+  outcome,
+  okLabel,
+  failLabel,
+  canOperate,
+  onOk,
+  onFail,
+}: {
+  outcome?: 'ok' | 'failed' | 'pending'
+  okLabel: string
+  failLabel: string
+  canOperate: boolean
+  onOk: () => void
+  onFail: () => void
+}) {
+  if (outcome === 'ok') {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <DenseTag variant="success">Recorded OK</DenseTag>
+        <Button size="sm" variant="outline" disabled={!canOperate} onClick={onOk}>
+          Re-record OK
+        </Button>
+        <Button size="sm" variant="outline" disabled={!canOperate} onClick={onFail}>
+          {failLabel}
+        </Button>
+      </div>
+    )
+  }
+  if (outcome === 'failed') {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <DenseTag variant="danger">Recorded failed</DenseTag>
+        <Button size="sm" disabled={!canOperate} onClick={onOk}>
+          {okLabel}
+        </Button>
+        <Button size="sm" variant="outline" disabled={!canOperate} onClick={onFail}>
+          Re-record failed
+        </Button>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button size="sm" disabled={!canOperate} onClick={onOk}>
+        {okLabel}
+      </Button>
+      <Button size="sm" variant="outline" disabled={!canOperate} onClick={onFail}>
+        {failLabel}
+      </Button>
+    </div>
+  )
+}
+
 type PluginReleasePageProps = AmbientAgentShellProps & {
   onNavigate?: (tabId: string) => void
 }
@@ -121,23 +178,66 @@ export function PluginReleasePage({
   const { canOperate } = usePlatformAuth()
   const [detailReason] = useState(readLaneDetailReasonFromLocation)
   const liveProbe = useIbGatewayLiveProbe()
-  const [evidence, setEvidence] = useState<PluginLaunchEvidence>(() => readPluginLaunchEvidence())
+  const mdStatusQ = useQuery({
+    queryKey: ['plugin-launch', 'market-data-status'],
+    queryFn: fetchMarketDataStatus,
+    refetchInterval: 30_000,
+    retry: 1,
+  })
+
+  const initialStore = useMemo(() => readPluginLaunchStore(), [])
+  const [target, setTarget] = useState<PluginLaunchTargetId>(initialStore.selectedTarget)
+  const [seat, setSeat] = useState<PluginLaunchSeat>(initialStore.selectedSeat)
+  const [evidence, setEvidence] = useState<PluginLaunchEvidence>(() =>
+    readPluginLaunchEvidence(initialStore.selectedTarget, initialStore.selectedSeat),
+  )
   const [activeIndex, setActiveIndex] = useState(0)
   const [acting, setActing] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [actionFailed, setActionFailed] = useState(false)
 
-  const mode = liveProbe.status?.mode
-  const steps = useMemo(
-    () => buildSteps(evidence, liveProbe.probeReach, mode),
-    [evidence, liveProbe.probeReach, mode],
-  )
-  const outcome = derivePluginLaunchOutcome(steps)
-  const revisionHint = evidence.revisionHint ?? PLUGIN_DOGFOOD_REVISION
+  const effectiveSeat: PluginLaunchSeat = target === 'market-data' ? seat : 'dev'
+  const revisionHint =
+    evidence.revisionHint ??
+    (target === 'market-data' ? MARKET_DATA_IMAGE_TAG : PLUGIN_DOGFOOD_REVISION)
 
-  const patchEvidence = useCallback((patch: Partial<PluginLaunchEvidence>) => {
-    setEvidence(writePluginLaunchEvidence(patch))
-  }, [])
+  const ibDetectDone =
+    evidence.lastDetectAt != null ||
+    (liveProbe.probeReach !== 'unknown' && liveProbe.status?.mode != null)
+  const mdDetectDone =
+    evidence.lastDetectAt != null ||
+    (mdStatusQ.data != null && (mdStatusQ.data.reachable === true || mdStatusQ.data.reachable === false))
+  const detectDone = target === 'ib-gateway' ? ibDetectDone : mdDetectDone
+
+  const steps = useMemo(() => buildSteps(evidence, detectDone), [evidence, detectDone])
+  const outcome = derivePluginLaunchOutcome(steps)
+
+  useEffect(() => {
+    const ev = readPluginLaunchEvidence(target, effectiveSeat)
+    setEvidence(ev)
+    writePluginLaunchStore({ selectedTarget: target, selectedSeat: seat })
+    // Focus first incomplete step
+    const rebuilt = buildSteps(
+      ev,
+      target === 'ib-gateway'
+        ? ev.lastDetectAt != null || liveProbe.probeReach !== 'unknown'
+        : ev.lastDetectAt != null,
+    )
+    const idx = rebuilt.findIndex(s => s.status === 'active' || s.status === 'pending')
+    setActiveIndex(idx >= 0 ? idx : Math.max(0, rebuilt.length - 1))
+    setActionMsg(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-focus on target/seat change
+  }, [target, effectiveSeat])
+
+  const patchEvidence = useCallback(
+    (patch: Partial<PluginLaunchEvidence>, feedback: string) => {
+      const next = writePluginLaunchEvidence(patch, target, effectiveSeat)
+      setEvidence(next)
+      setActionFailed(false)
+      setActionMsg(feedback)
+    },
+    [target, effectiveSeat],
+  )
 
   const aiLaunch = useAmbientAgentTask({
     canOperate,
@@ -147,7 +247,10 @@ export function PluginReleasePage({
     label: AI_LAUNCH_TASK_LABEL,
     buildRequest: () => ({
       prompt: buildPluginLaunchPrompt({
-        status: liveProbe.status,
+        target,
+        seat: effectiveSeat,
+        ibStatus: liveProbe.status,
+        marketDataStatus: mdStatusQ.data,
         evidence,
         outcomeKind: outcome.kind,
         outcomeDetail: outcome.detail,
@@ -157,43 +260,58 @@ export function PluginReleasePage({
   })
 
   const markDetect = () => {
-    patchEvidence({ lastDetectAt: new Date().toISOString(), revisionHint })
+    patchEvidence(
+      { lastDetectAt: new Date().toISOString(), revisionHint },
+      'Detect recorded.',
+    )
     setActiveIndex(1)
   }
 
   const markApprove = () => {
-    patchEvidence({
-      lastApproveAt: new Date().toISOString(),
-      approvedBy: 'operator',
-      revisionHint,
-    })
+    patchEvidence(
+      {
+        lastApproveAt: new Date().toISOString(),
+        approvedBy: 'operator',
+        revisionHint,
+      },
+      'Approve recorded.',
+    )
     setActiveIndex(2)
   }
 
   const markInstall = (ok: boolean) => {
-    patchEvidence({
-      lastInstallAt: new Date().toISOString(),
-      installOutcome: ok ? 'ok' : 'failed',
-      revisionHint,
-    })
+    patchEvidence(
+      {
+        lastInstallAt: new Date().toISOString(),
+        installOutcome: ok ? 'ok' : 'failed',
+        revisionHint,
+      },
+      ok ? 'Install/Apply recorded OK.' : 'Install/Apply marked failed.',
+    )
     if (ok) setActiveIndex(3)
   }
 
   const markVerify = (ok: boolean) => {
-    patchEvidence({
-      lastVerifyAt: new Date().toISOString(),
-      verifyOutcome: ok ? 'ok' : 'failed',
-      revisionHint,
-    })
+    patchEvidence(
+      {
+        lastVerifyAt: new Date().toISOString(),
+        verifyOutcome: ok ? 'ok' : 'failed',
+        revisionHint,
+      },
+      ok ? 'Verify recorded OK.' : 'Verify marked failed.',
+    )
     if (ok) setActiveIndex(4)
   }
 
   const markLiveCheck = (ok: boolean) => {
-    patchEvidence({
-      lastLiveCheckAt: new Date().toISOString(),
-      liveCheckOutcome: ok ? 'ok' : 'failed',
-      revisionHint,
-    })
+    patchEvidence(
+      {
+        lastLiveCheckAt: new Date().toISOString(),
+        liveCheckOutcome: ok ? 'ok' : 'failed',
+        revisionHint,
+      },
+      ok ? 'Live check recorded OK.' : 'Live check marked failed.',
+    )
   }
 
   const setLiveMode = async () => {
@@ -214,6 +332,149 @@ export function PluginReleasePage({
   }
 
   const renderStepActions = (idx: number) => {
+    if (target === 'market-data') {
+      const ns = marketDataNamespace(effectiveSeat)
+      const applyCmd = marketDataApplyCmd(effectiveSeat)
+      const verifyCmd = marketDataVerifyCmd(effectiveSeat)
+      switch (STEP_KEYS[idx]) {
+        case 'detect':
+          return (
+            <div className="flex flex-col gap-2">
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                Probe Market Data for seat <span className="font-mono">{effectiveSeat}</span> (
+                <span className="font-mono">{ns}</span>). Platform status API covers DEV NS;
+                STG/PROD rely on kubectl after AI Launch.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <DenseTag variant="neutral">seat {effectiveSeat}</DenseTag>
+                <DenseTag variant="neutral">ns {ns}</DenseTag>
+                <DenseTag variant="neutral">image {MARKET_DATA_IMAGE_TAG}</DenseTag>
+                <DenseTag
+                  variant={
+                    mdStatusQ.data?.reachable === true
+                      ? 'success'
+                      : mdStatusQ.data?.reachable === false
+                        ? 'danger'
+                        : 'warning'
+                  }
+                >
+                  platform-status {mdStatusQ.data?.reachable === true ? 'ok' : mdStatusQ.isLoading ? '…' : 'n/a'}
+                </DenseTag>
+              </div>
+              <p className="m-0 text-dense-caption text-muted-foreground">
+                {mdStatusQ.data?.summary ?? 'Refresh platform status or use AI Launch Detect.'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => void mdStatusQ.refetch()}>
+                  Refresh status
+                </Button>
+                <Button size="sm" onClick={markDetect}>
+                  {evidence.lastDetectAt != null ? 'Re-record detect' : 'Record detect'}
+                </Button>
+                {onNavigate != null && (
+                  <Button size="sm" variant="ghost" onClick={() => onNavigate('market-data-manage')}>
+                    Market Data manage →
+                  </Button>
+                )}
+              </div>
+            </div>
+          )
+        case 'approve':
+          return (
+            <div className="flex flex-col gap-2">
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                Owner approval before apply. Prefer AI Launch Plugin — Dock holds approval +
+                checklist. Or record local approve after Dock confirmation.
+              </p>
+              <ul className="m-0 list-disc pl-4 text-dense-caption text-muted-foreground">
+                <li>
+                  Target: Market Data · seat {effectiveSeat.toUpperCase()} · {ns}
+                </li>
+                <li>Image: bifrost-market-data:{MARKET_DATA_IMAGE_TAG}</li>
+                <li>D10: Polygon REST ingest only — no place_order</li>
+              </ul>
+              <div className="flex flex-wrap gap-2">
+                <AgentTriggerButton
+                  label={AI_LAUNCH_LABEL}
+                  pending={aiLaunch.isPending}
+                  disabled={aiLaunch.disabled}
+                  title={aiLaunch.disabledReason ?? AI_LAUNCH_LABEL}
+                  onClick={() => aiLaunch.trigger()}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!canOperate}
+                  onClick={markApprove}
+                >
+                  {evidence.lastApproveAt != null ? 'Re-record approve' : 'Record approve'}
+                </Button>
+              </div>
+            </div>
+          )
+        case 'install':
+          return (
+            <div className="flex flex-col gap-2">
+              <p className="m-0 font-mono text-dense-caption text-foreground">{applyCmd}</p>
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                AI Launch Plugin runs this after Dock approval. When apply finishes, record outcome
+                here for TCC evidence.
+              </p>
+              <RecordedOutcomeButtons
+                outcome={evidence.installOutcome}
+                okLabel="Mark apply OK"
+                failLabel="Mark apply failed"
+                canOperate={canOperate}
+                onOk={() => markInstall(true)}
+                onFail={() => markInstall(false)}
+              />
+            </div>
+          )
+        case 'verify':
+          return (
+            <div className="flex flex-col gap-2">
+              <p className="m-0 font-mono text-dense-caption text-foreground whitespace-pre-wrap">
+                {verifyCmd}
+              </p>
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                Expect market-data-api Ready, workers Ready, image {MARKET_DATA_IMAGE_TAG}, expand
+                CronJobs (max-pain / atm-iv-pcr / stock-snapshot).
+              </p>
+              <RecordedOutcomeButtons
+                outcome={evidence.verifyOutcome}
+                okLabel="Mark verify OK"
+                failLabel="Mark verify failed"
+                canOperate={canOperate}
+                onOk={() => markVerify(true)}
+                onFail={() => markVerify(false)}
+              />
+            </div>
+          )
+        default:
+          return (
+            <div className="flex flex-col gap-2">
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                Confirm seat {effectiveSeat.toUpperCase()} is healthy: API /health ok, workers
+                Ready, Coverage/Analytics usable in Subcontractors → Market Data.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <DenseTag variant="neutral">seat {effectiveSeat}</DenseTag>
+                <DenseTag variant="neutral">ns {ns}</DenseTag>
+              </div>
+              <RecordedOutcomeButtons
+                outcome={evidence.liveCheckOutcome}
+                okLabel="Mark live check OK"
+                failLabel="Mark live check failed"
+                canOperate={canOperate}
+                onOk={() => markLiveCheck(true)}
+                onFail={() => markLiveCheck(false)}
+              />
+            </div>
+          )
+      }
+    }
+
+    // IB Gateway steps
     switch (STEP_KEYS[idx]) {
       case 'detect':
         return (
@@ -222,9 +483,7 @@ export function PluginReleasePage({
               Probe IB Gateway via platform-api. Gallery observes the same bus — this lane publishes.
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <DenseTag variant="neutral">
-                mode {mode ?? '—'}
-              </DenseTag>
+              <DenseTag variant="neutral">mode {liveProbe.status?.mode ?? '—'}</DenseTag>
               <DenseTag variant="neutral">
                 deploy {liveProbe.status?.deployment?.ready ?? '—'}
               </DenseTag>
@@ -246,7 +505,7 @@ export function PluginReleasePage({
                 Refresh probe
               </Button>
               <Button size="sm" onClick={markDetect}>
-                Record detect
+                {evidence.lastDetectAt != null ? 'Re-record detect' : 'Record detect'}
               </Button>
               {onNavigate != null && (
                 <Button size="sm" variant="ghost" onClick={() => onNavigate('plugin-gallery')}>
@@ -279,7 +538,7 @@ export function PluginReleasePage({
                 onClick={() => aiLaunch.trigger()}
               />
               <Button size="sm" variant="outline" disabled={!canOperate} onClick={markApprove}>
-                Record approve
+                {evidence.lastApproveAt != null ? 'Re-record approve' : 'Record approve'}
               </Button>
             </div>
           </div>
@@ -291,22 +550,17 @@ export function PluginReleasePage({
               cd bifrost-platform-plugin && make install-ib-gateway
             </p>
             <p className="m-0 text-dense-meta text-muted-foreground">
-              Agent requests Operator Dock checklist after approval. When install finishes on the
-              dev Mac, record outcome here for TCC evidence.
+              Agent requests Operator Dock checklist after approval. When install finishes, record
+              outcome here for TCC evidence.
             </p>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" disabled={!canOperate} onClick={() => markInstall(true)}>
-                Mark install OK
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!canOperate}
-                onClick={() => markInstall(false)}
-              >
-                Mark install failed
-              </Button>
-            </div>
+            <RecordedOutcomeButtons
+              outcome={evidence.installOutcome}
+              okLabel="Mark install OK"
+              failLabel="Mark install failed"
+              canOperate={canOperate}
+              onOk={() => markInstall(true)}
+              onFail={() => markInstall(false)}
+            />
           </div>
         )
       case 'verify':
@@ -318,22 +572,17 @@ export function PluginReleasePage({
             <p className="m-0 text-dense-meta text-muted-foreground">
               accounts_snapshot empty / ghost TWS do not fail publish acceptance.
             </p>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" disabled={!canOperate} onClick={() => markVerify(true)}>
-                Mark verify OK
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!canOperate}
-                onClick={() => markVerify(false)}
-              >
-                Mark verify failed
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => liveProbe.refetch()}>
-                Refresh status
-              </Button>
-            </div>
+            <RecordedOutcomeButtons
+              outcome={evidence.verifyOutcome}
+              okLabel="Mark verify OK"
+              failLabel="Mark verify failed"
+              canOperate={canOperate}
+              onOk={() => markVerify(true)}
+              onFail={() => markVerify(false)}
+            />
+            <Button size="sm" variant="ghost" onClick={() => liveProbe.refetch()}>
+              Refresh status
+            </Button>
           </div>
         )
       default:
@@ -344,35 +593,37 @@ export function PluginReleasePage({
               5). D10 quotes only.
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <DenseTag variant={mode === 'live' ? 'success' : 'warning'}>
-                mode {mode ?? '—'}
+              <DenseTag variant={liveProbe.status?.mode === 'live' ? 'success' : 'warning'}>
+                mode {liveProbe.status?.mode ?? '—'}
               </DenseTag>
               <DenseTag variant="neutral">
                 deploy {liveProbe.status?.deployment?.ready ?? '—'}
               </DenseTag>
             </div>
             <div className="flex flex-wrap gap-2">
-              {canOperate && mode !== 'live' && (
+              {canOperate && liveProbe.status?.mode !== 'live' && (
                 <Button size="sm" disabled={acting} onClick={() => void setLiveMode()}>
                   Set mode live
                 </Button>
               )}
-              <Button size="sm" disabled={!canOperate} onClick={() => markLiveCheck(true)}>
-                Mark live check OK
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!canOperate}
-                onClick={() => markLiveCheck(false)}
-              >
-                Mark live check failed
-              </Button>
             </div>
+            <RecordedOutcomeButtons
+              outcome={evidence.liveCheckOutcome}
+              okLabel="Mark live check OK"
+              failLabel="Mark live check failed"
+              canOperate={canOperate}
+              onOk={() => markLiveCheck(true)}
+              onFail={() => markLiveCheck(false)}
+            />
           </div>
         )
     }
   }
+
+  const stripHint =
+    target === 'market-data'
+      ? `Not Tekton — ${marketDataApplyCmd(effectiveSeat)}. Gallery ≠ Publish.`
+      : 'Not Tekton — make install-ib-gateway + verify-ib-gateway-program. Gallery ≠ Publish.'
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
@@ -380,12 +631,49 @@ export function PluginReleasePage({
         <p className="m-0 text-dense-meta text-destructive">{aiLaunch.error.message}</p>
       )}
       {actionMsg != null && (
-        <OpsFeedback variant={actionFailed ? 'error' : 'success'} title="Plugin control">
+        <OpsFeedback variant={actionFailed ? 'error' : 'success'} title="Plugin launch">
           {actionMsg}
         </OpsFeedback>
       )}
 
       <LaneDetailContextStrip reason={detailReason} />
+
+      <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-secondary/20 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-dense-meta font-medium text-muted-foreground shrink-0">
+            Target:
+          </span>
+          <SegmentControl
+            ariaLabel="Plugin launch target"
+            options={[
+              { value: 'ib-gateway', label: 'IB Gateway' },
+              { value: 'market-data', label: 'Market Data' },
+            ]}
+            value={target}
+            onChange={v => setTarget(v as PluginLaunchTargetId)}
+          />
+        </div>
+        {target === 'market-data' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-dense-meta font-medium text-muted-foreground shrink-0">
+              Seat:
+            </span>
+            <SegmentControl
+              ariaLabel="Market Data publish seat"
+              options={[
+                { value: 'dev', label: 'DEV' },
+                { value: 'stg', label: 'STG' },
+                { value: 'prod', label: 'PROD' },
+              ]}
+              value={seat}
+              onChange={v => setSeat(v as PluginLaunchSeat)}
+            />
+            <span className="font-mono text-dense-caption text-muted-foreground">
+              {marketDataNamespace(seat)} · bifrost-market-data:{MARKET_DATA_IMAGE_TAG}
+            </span>
+          </div>
+        )}
+      </div>
 
       <LaneStateStrip
         laneLabel="Plugin"
@@ -402,13 +690,15 @@ export function PluginReleasePage({
         <div className="flex flex-wrap items-center gap-2 text-dense-meta">
           <span className="font-mono text-dense-caption">{revisionHint}</span>
           <span className="text-muted-foreground">·</span>
-          <span>mode {mode ?? '—'}</span>
+          <span>
+            {target === 'market-data'
+              ? `Market Data · ${effectiveSeat}`
+              : `IB · mode ${liveProbe.status?.mode ?? '—'}`}
+          </span>
           <span className="text-muted-foreground">·</span>
           <span className="text-muted-foreground">{evidenceSummaryLine(evidence)}</span>
         </div>
-        <p className="m-0 text-dense-caption text-muted-foreground">
-          Not Tekton — make install-ib-gateway + verify-ib-gateway-program. Gallery ≠ Publish.
-        </p>
+        <p className="m-0 text-dense-caption text-muted-foreground">{stripHint}</p>
       </LaneStateStrip>
 
       <PluginStepCommandCenter
@@ -416,36 +706,58 @@ export function PluginReleasePage({
         activeIndex={activeIndex}
         onSelect={setActiveIndex}
         evidence={evidence}
-        modeLabel={mode}
+        modeLabel={
+          target === 'market-data' ? `md-${effectiveSeat}` : liveProbe.status?.mode
+        }
         revisionHint={revisionHint}
         renderStepActions={renderStepActions}
       />
 
-      <LaneDetailCollapse title="Acceptance · on-demand STK dogfood" bodyClassName="p-3">
-        <ul className="m-0 list-disc pl-4 text-dense-meta text-muted-foreground">
-          <li>
-            Payload on main: {PLUGIN_DOGFOOD_REVISION} — {PLUGIN_DOGFOOD_FEATURE}
-          </li>
-          <li>After publish: Trade Live on-demand symbols &gt; default 5; dynamic subscribe works</li>
-          <li>Ghost TWS / empty accounts_snapshot do not block P2 acceptance</li>
-          <li>Program: Delivery Board · launch-plugin-lane</li>
-        </ul>
+      <LaneDetailCollapse
+        title={
+          target === 'market-data'
+            ? `Acceptance · Market Data ${effectiveSeat.toUpperCase()}`
+            : 'Acceptance · on-demand STK dogfood'
+        }
+        bodyClassName="p-3"
+      >
+        {target === 'market-data' ? (
+          <ul className="m-0 list-disc pl-4 text-dense-meta text-muted-foreground">
+            <li>
+              Apply: <span className="font-mono">{marketDataApplyCmd(effectiveSeat)}</span>
+            </li>
+            <li>
+              Image bifrost-market-data:{MARKET_DATA_IMAGE_TAG}; API + expand CronJobs present
+            </li>
+            <li>After publish: Subcontractors → Market Data Coverage / Analytics</li>
+            <li>Program: market-data-expand / market-data-subcontractor</li>
+          </ul>
+        ) : (
+          <ul className="m-0 list-disc pl-4 text-dense-meta text-muted-foreground">
+            <li>
+              Payload on main: {PLUGIN_DOGFOOD_REVISION} — {PLUGIN_DOGFOOD_FEATURE}
+            </li>
+            <li>After publish: Trade Live on-demand symbols &gt; default 5; dynamic subscribe works</li>
+            <li>Ghost TWS / empty accounts_snapshot do not block P2 acceptance</li>
+            <li>Program: Delivery Board · launch-plugin-lane</li>
+          </ul>
+        )}
       </LaneDetailCollapse>
 
       <LaneDetailCollapse title="Advanced · observe only" bodyClassName="p-3">
         <p className="m-0 text-dense-meta text-muted-foreground">
-          Runtime health & reconnect stay on Plugin Gallery. Primary Agent Launch lives in Mission
-          Launch TCC; AI Launch Plugin is on the lane strip above.
+          Runtime health stays on Plugin Gallery / Market Data manage. Primary Agent Launch lives
+          in Mission Launch TCC; AI Launch Plugin is on the lane strip above.
         </p>
         {onNavigate != null && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="mt-2"
-            onClick={() => onNavigate('plugin-gallery')}
-          >
-            Plugin Gallery →
-          </Button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => onNavigate('plugin-gallery')}>
+              Plugin Gallery →
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onNavigate('market-data-manage')}>
+              Market Data manage →
+            </Button>
+          </div>
         )}
       </LaneDetailCollapse>
     </div>

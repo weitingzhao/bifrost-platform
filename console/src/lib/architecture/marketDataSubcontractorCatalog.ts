@@ -13,18 +13,22 @@
 export const MARKET_DATA_SUBCONTRACTOR_SOURCE = 'bifrost-platform-plugin-market-data'
 export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-02-library-sla'
 
-/** Mission Launch lane — publish market-data plugin via make apply (not Tekton). */
+/** Mission Launch lane — publish market-data plugin via kubectl apply (not Tekton). */
 export const MARKET_DATA_LAUNCH_LANE = {
   id: 'launch-market-data',
   label: 'Launch Market Data',
   tabId: 'plugin-release',
   programId: 'market-data-subcontractor',
-  executor: 'cd bifrost-platform-plugin-market-data && kubectl apply -k k8s/base',
-  verify: 'make verify-market-data',
-  steps: ['Detect', 'Apply', 'Verify', 'Live check'] as const,
+  /** Seat-aware: DEV=k8s/base · STG/PROD=k8s/overlays/{stg|prod}. UI: Launch Plugin → Market Data. */
+  executor:
+    'cd bifrost-platform-plugin-market-data && kubectl apply -k k8s/overlays/{stg|prod}  # or k8s/base for DEV',
+  verify:
+    'kubectl -n plugin-market-data-{stg|prod} get deploy + /health (DEV: make verify-market-data)',
+  steps: ['Detect', 'Approve', 'Install', 'Verify', 'Live check'] as const,
   galleryIsNotPublish:
-    'Plugin Gallery = observe health / deployments / freshness (+ optional readiness_rollup KPI). Apply kustomize = publish workers + CronJobs.',
+    'Plugin Gallery = observe health / deployments / freshness (+ optional readiness_rollup KPI). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
   d10: 'Market-data REST ingest only — no place_order / no IB socket',
+  imageTag: '0.2.0',
 } as const
 
 export type MarketDataPhaseId =
@@ -188,8 +192,8 @@ export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Manage UI: Subcontractors → Market Data (`market-data-manage`) — Overview / Coverage / Ingest / Analytics (market-data-expand P6)',
   'Plugin API proxy: GET|POST /api/v1/plugins/market-data/api/market/* → market-data-api:8790 (or MARKET_DATA_API_URL)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
-  'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; image bifrost-market-data:0.1.2)',
-  'Image tag: bifrost-market-data:0.1.2 (k8s/base newTag; slots reference + fundamentals-rotate active)',
+  'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; image bifrost-market-data:0.2.0)',
+  'Image tag: bifrost-market-data:0.2.0 (k8s/base + overlays stg/prod; Launch Plugin → Market Data seat)',
   'Readiness rollup: optional KPI from public.stock_readiness_daily (Trade runbook). fund_cache_valid requires included_in_universe; public.v_us_equity_universe uses synthetic hashtext tickers_id after P9 (bifrost-core ≥0.5.2)',
   'Program / phase sign-off: Active Session (Engineer → Delivery) · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',

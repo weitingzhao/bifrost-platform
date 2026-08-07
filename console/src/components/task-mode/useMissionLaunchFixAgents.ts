@@ -33,6 +33,10 @@ import {
   buildPluginLaunchPrompt,
   PLUGIN_LAUNCH_SCOPE,
 } from '@/lib/agent/pluginLaunchAgentPrompt'
+import {
+  readPluginLaunchEvidence,
+  readPluginLaunchStore,
+} from '@/lib/delivery/pluginLaunchEvidence'
 import type {
   useRocketProdReadiness,
   useSatelliteDeployOverall,
@@ -127,9 +131,18 @@ export function useMissionLaunchFixAgents({
     onStartAgentJob,
     scope: PLUGIN_LAUNCH_SCOPE,
     label: scopeToLabel(PLUGIN_LAUNCH_SCOPE),
-    buildRequest: () => ({
-      prompt: buildPluginLaunchPrompt({ operatorSurface: 'Mission Launch TCC' }),
-    }),
+    buildRequest: () => {
+      const store = readPluginLaunchStore()
+      const seat = store.selectedTarget === 'market-data' ? store.selectedSeat : 'dev'
+      return {
+        prompt: buildPluginLaunchPrompt({
+          target: store.selectedTarget,
+          seat,
+          evidence: readPluginLaunchEvidence(store.selectedTarget, seat),
+          operatorSurface: 'Mission Launch TCC',
+        }),
+      }
+    },
   })
 
   const aiPlatformProdFix = useAmbientAgentTask({
