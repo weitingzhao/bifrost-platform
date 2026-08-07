@@ -17,6 +17,9 @@ import {
   isProxyError,
 } from '@/api/marketDataPlugin'
 import { MarketDataJsonProbeCard } from '@/components/market-data/MarketDataJsonProbeCard'
+import { OptionCoverageSection } from '@/components/market-data/OptionCoverageSection'
+import { QualityScoreSection } from '@/components/market-data/QualityScoreSection'
+import { StockDepthSection } from '@/components/market-data/StockDepthSection'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import {
   CAPABILITY_GROUP_LABELS,
@@ -28,6 +31,7 @@ import {
   optionFeedChecklistRows,
   shortServiceLabel,
   STOCK_CHECKLIST_ROWS,
+  OPTION_CHECKLIST_ROWS,
   type ChecklistRow,
 } from '@/lib/market-data/checklist'
 
@@ -135,15 +139,27 @@ export function MarketDataCoverageTab() {
         ? optionFeedChecklistRows().length
         : commonFeedChecklistRows().length
 
+  const allRows = useMemo(() => [...STOCK_CHECKLIST_ROWS, ...OPTION_CHECKLIST_ROWS], [])
+  const capTotal = allRows.length
+  const capImpl = allRows.filter(r => r.projectStatus === 'implemented').length
+  const capPartial = allRows.filter(r => r.projectStatus === 'partial').length
+  const capPct = capTotal > 0 ? Math.round(((capImpl + capPartial * 0.5) / capTotal) * 100) : 0
+
   return (
     <div className="flex flex-col gap-4">
+      <QualityScoreSection />
+
+      <StockDepthSection symbols={symbols} watchlistLoading={watchlistQ.isLoading} />
+
+      <OptionCoverageSection />
+
       <OpsSection
-        title="DB coverage"
-        description="Plugin GET /market/coverage/db-summary + watchlist"
+        title="DB summary (raw counts)"
+        description="Secondary — Plugin GET /market/coverage/db-summary + watchlist row counts"
         bodyPadding="default"
         overflow="visible"
         collapsible
-        defaultCollapsed={false}
+        defaultCollapsed={true}
       >
         {summaryQ.isLoading ? (
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -189,7 +205,7 @@ export function MarketDataCoverageTab() {
 
       <OpsSection
         title="Capability checklist"
-        description={`${rowCount} capabilities · adapted from Trade Massive checklist (Plugin API paths)`}
+        description={`${capTotal} Polygon features · Plugin utilization ${capPct}%`}
         headerExtra={
           <SegmentControl
             size="sm"
@@ -205,9 +221,45 @@ export function MarketDataCoverageTab() {
         bodyPadding="none"
         overflow="visible"
         collapsible
-        defaultCollapsed={false}
+        defaultCollapsed={true}
       >
         <div className="flex flex-col gap-3 p-3">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <span className="shrink-0 text-xs font-medium text-[var(--muted-foreground)]">
+                Polygon offers {capTotal} features
+              </span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--muted)]/30">
+                <div
+                  className="flex h-full"
+                  style={{ width: `${Math.round(((capImpl + capPartial) / capTotal) * 100)}%` }}
+                >
+                  <div
+                    className="h-full bg-emerald-500"
+                    style={{ width: `${Math.round((capImpl / (capImpl + capPartial || 1)) * 100)}%` }}
+                  />
+                  <div className="h-full bg-amber-500" style={{ flex: 1 }} />
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs tabular-nums">
+              <span>
+                <span className="font-semibold text-emerald-500">{capImpl}</span>
+                <span className="text-[var(--muted-foreground)]"> implemented</span>
+              </span>
+              <span>
+                <span className="font-semibold text-amber-500">{capPartial}</span>
+                <span className="text-[var(--muted-foreground)]"> partial</span>
+              </span>
+              <span>
+                <span className="font-semibold text-[var(--muted-foreground)]">{capTotal - capImpl - capPartial}</span>
+                <span className="text-[var(--muted-foreground)]"> not implemented</span>
+              </span>
+            </div>
+          </div>
+          <OpsSubsectionTitle className="mt-1">
+            {lens === 'stock' ? 'Stock' : lens === 'option' ? 'Option' : 'Common'} — {rowCount} capabilities
+          </OpsSubsectionTitle>
           {grouped.map(g => (
             <div key={g.group} className="flex flex-col gap-1">
               <OpsSubsectionTitle>{CAPABILITY_GROUP_LABELS[g.group]}</OpsSubsectionTitle>

@@ -77,6 +77,13 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 		}
 		healthReach = worseReach(healthReach, reach)
 	}
+	nextByPool := s.probeCronJobNextFire(ctx, now)
+	for i := range workers {
+		if t, ok := nextByPool[workers[i].Pool]; ok {
+			workers[i].NextRunAt = t.UTC().Format(time.RFC3339)
+		}
+	}
+
 	resp.Workers = workers
 	resp.HealthReach = healthReach
 	if healthReach == probe.ReachFail && len(healthErrors) > 0 {

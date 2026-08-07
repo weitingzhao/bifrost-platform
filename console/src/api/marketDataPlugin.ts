@@ -88,6 +88,24 @@ export function isProxyError<T>(
 
 /* ── Coverage ─────────────────────────────────────────── */
 
+export type QualityCheckItem = {
+  check: string
+  ok: boolean
+  detail?: string
+  [key: string]: unknown
+}
+
+export type QualityScoreResponse = {
+  ok: boolean
+  summary?: 'PASS' | 'FAIL' | string
+  checks?: QualityCheckItem[]
+  error?: string
+}
+
+export function fetchQualityScore() {
+  return proxyGet<QualityScoreResponse>('/market/coverage/quality-score')
+}
+
 export type CoverageDbSummary = {
   ok: boolean
   source?: string
@@ -124,6 +142,210 @@ export function fetchCoverageDbSummary() {
 
 export function fetchCoverageWatchlist() {
   return proxyGet<CoverageWatchlist>('/market/coverage/watchlist')
+}
+
+export type BarQualityDaily = {
+  bar_date?: string
+  open?: number | null
+  high?: number | null
+  low?: number | null
+  close?: number | null
+  volume?: number | null
+  vwap?: number | null
+  ohlc_complete?: boolean
+}
+
+export type BarQualityDetailResponse = {
+  ok: boolean
+  symbol?: string
+  table?: string
+  latest_date?: string | null
+  summary?: {
+    row_count?: number
+    min_date?: string | null
+    max_date?: string | null
+  }
+  daily?: BarQualityDaily[]
+  error?: string
+}
+
+export type StockDayGapResponse = {
+  ok: boolean
+  symbol?: string
+  lookback_years?: number
+  /**
+   * Expected trading-day count for the lookback window.
+   * Known issue (2026-08): Plugin may return 0 when `us_trading_calendar` is empty
+   * or the calendar lookup fails — do not trust this field for Gap UI until fixed
+   * (see market-data-vitals md-vitals-p7). Prefer `missing_dates` / `covered_days`.
+   */
+  expected_trading_days?: number
+  covered_days?: number
+  missing_days?: number
+  missing_dates?: string[]
+  note?: string
+  error?: string
+}
+
+export type CoverageContractRow = {
+  symbol?: string
+  contract_count?: number
+  expiries?: number
+  strikes?: number
+  min_expiry?: string | null
+  max_expiry?: string | null
+  newest_updated_at?: string | null
+}
+
+export type CoverageContractsResponse = {
+  ok: boolean
+  rows?: CoverageContractRow[]
+  count?: number
+  error?: string
+}
+
+export type CoverageGreeksRow = {
+  symbol?: string
+  total_contracts?: number
+  with_iv?: number
+  with_delta?: number
+  with_full_greeks?: number
+  newest_ts?: string | null
+}
+
+export type CoverageGreeksResponse = {
+  ok: boolean
+  rows?: CoverageGreeksRow[]
+  count?: number
+  symbol?: string | null
+  error?: string
+}
+
+export type DailyChecklistSymbolItem = {
+  symbol?: string
+  trade_date?: string
+  stock_daily_rows?: number
+  option_oi_rows?: number
+  corporate_action_rows?: number
+}
+
+export type DailyChecklistFreshness = {
+  last_run_at?: string | null
+  status?: string
+  rows_written?: number
+}
+
+export type DailyChecklistResponse = {
+  ok: boolean
+  trade_date?: string
+  symbols?: Record<string, DailyChecklistSymbolItem>
+  freshness?: Record<string, DailyChecklistFreshness>
+  note?: string
+  error?: string
+}
+
+export type SnapshotQualityDaily = {
+  snap_day?: string | null
+  contract_count?: number
+  iv_pct?: number | null
+  full_greeks_pct?: number | null
+  oi_pct?: number | null
+}
+
+export type SnapshotQualityDetailResponse = {
+  ok: boolean
+  symbol?: string
+  source?: string
+  latest_date?: string | null
+  daily?: SnapshotQualityDaily[]
+  expiries?: unknown[]
+  error?: string
+}
+
+export type UniverseCountResponse = {
+  ok: boolean
+  total_tickers?: number
+  source?: string
+  error?: string
+}
+
+export type MarketStatusFreshnessItem = {
+  dimension?: string
+  last_run_at?: string | null
+  status?: string
+  rows_written?: number
+}
+
+export type MarketStatusResponse = {
+  ok: boolean
+  service?: string
+  db?: string
+  polygon_configured?: boolean
+  freshness_summary?: MarketStatusFreshnessItem[]
+  error?: string
+}
+
+export function fetchBarQualityDetail(params: { symbol: string; days?: number }) {
+  const q = new URLSearchParams()
+  q.set('symbol', params.symbol)
+  if (params.days != null) q.set('days', String(params.days))
+  return proxyGet<BarQualityDetailResponse>(
+    `/market/coverage/bar-quality-detail?${q.toString()}`,
+  )
+}
+
+export function fetchStockDayGap(params: { symbol: string; years?: number }) {
+  const q = new URLSearchParams()
+  q.set('symbol', params.symbol)
+  if (params.years != null) q.set('years', String(params.years))
+  return proxyGet<StockDayGapResponse>(`/market/coverage/stock-day-gap?${q.toString()}`)
+}
+
+export function fetchCoverageContracts(params?: { limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return proxyGet<CoverageContractsResponse>(
+    `/market/coverage/contracts${qs ? `?${qs}` : ''}`,
+  )
+}
+
+export function fetchCoverageGreeks(params?: { symbol?: string; limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.symbol) q.set('symbol', params.symbol)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return proxyGet<CoverageGreeksResponse>(`/market/coverage/greeks${qs ? `?${qs}` : ''}`)
+}
+
+export function fetchDailyChecklist(params: {
+  symbols: string | string[]
+  trade_date?: string
+}) {
+  const q = new URLSearchParams()
+  const symbols = Array.isArray(params.symbols)
+    ? params.symbols.join(',')
+    : params.symbols
+  q.set('symbols', symbols)
+  if (params.trade_date) q.set('trade_date', params.trade_date)
+  return proxyGet<DailyChecklistResponse>(`/market/daily-checklist?${q.toString()}`)
+}
+
+export function fetchSnapshotQualityDetail(params: { symbol: string; days?: number }) {
+  const q = new URLSearchParams()
+  q.set('symbol', params.symbol)
+  if (params.days != null) q.set('days', String(params.days))
+  return proxyGet<SnapshotQualityDetailResponse>(
+    `/market/coverage/snapshot-quality-detail?${q.toString()}`,
+  )
+}
+
+export function fetchUniverseCount() {
+  return proxyGet<UniverseCountResponse>('/market/reference/tickers/universe-count')
+}
+
+export function fetchMarketStatus() {
+  return proxyGet<MarketStatusResponse>('/market/status')
 }
 
 /* ── Ingest ───────────────────────────────────────────── */

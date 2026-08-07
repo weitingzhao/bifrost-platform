@@ -30,6 +30,7 @@ export type AutomateLaneId =
   | 'flight-director-parked'
   | 'polygon-vendor'
   | 'market-data-expand'
+  | 'market-data-vitals'
 export type InfraLaneId = 'network-server' | 'network-wifi' | 'ai-network'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
 export type FutureLaneId =
@@ -606,67 +607,133 @@ function buildQueueFromAutomateStreams(
 
 /**
  * Synthetic queue for Subcontractor · Automate lane market-data-expand.
- * Program market-data-expand: Layer 1+2 expansion (P0–P7 planned).
+ * Program market-data-expand: Layer 1+2+3 expansion (P0–P7) — COMPLETED.
+ * Vitals UI follow-on moved to separate lane market-data-vitals.
  */
 function buildMarketDataExpandQueue(): QueueItem[] {
-  return [
+  const phases: Array<{ id: string; label: string; note: string }> = [
     {
       id: 'md-expand-p0',
       label: 'P0 — Analytics schema + Plugin API skeleton',
-      status: 'done',
       note: 'Owner signed off — market_analytics DDL + Plugin API skeleton + K8s',
-      progress: { done: 1, total: 1 },
     },
     {
       id: 'md-expand-p1',
       label: 'P1 — Raw ingest: Stock Snapshots + Trades & Quotes',
-      status: 'done',
-      note: 'verify_passed — stock_snapshot + stock_movers (D1=A: Trades/Quotes deferred to P5)',
-      progress: { done: 1, total: 1 },
+      note: 'verify_passed — stock_snapshot + stock_movers (D1=A)',
     },
     {
       id: 'md-expand-p2',
       label: 'P2 — Raw ingest: Option Daily OI full backfill',
-      status: 'done',
-      note: 'Owner signed / verify_passed — snapshot→OI extract + backfill registry + oi-gap-heal CronJob (D4=B,D5=A,D6=B)',
-      progress: { done: 1, total: 1 },
+      note: 'Owner signed — snapshot→OI extract + backfill + oi-gap-heal CronJob (D4=B,D5=A,D6=B)',
     },
     {
       id: 'md-expand-p3',
       label: 'P3 — Analytics: Max Pain Daily CronJob',
-      status: 'done',
-      note: 'Owner signed off — max pain engine + CronJob + GET /market/analytics/max-pain (D7=A,D8=B,D9=A)',
-      progress: { done: 1, total: 1 },
+      note: 'Owner signed off — max pain engine + CronJob (D7=A,D8=B,D9=A)',
     },
     {
       id: 'md-expand-p4',
       label: 'P4 — Analytics: ATM IV + PCR + IV Percentile',
-      status: 'done',
-      note: 'Owner signed off — ATM IV + PCR + IV Percentile (D10=A,D11=A,D12=A)',
-      progress: { done: 1, total: 1 },
+      note: 'Owner signed off (D10=A,D11=A,D12=A)',
     },
     {
       id: 'md-expand-p5',
       label: 'P5 — Plugin API: migrate Trade API research/massive/*',
-      status: 'done',
-      note:
-        'Owner signed off — ~70 /market/* routes (Polygon pass-through + DB coverage + ingest enqueue + options/analytics compute); D13=A staged migration, D14=A PolygonClient reuse, D15=A job_ingest direct write; Celery/SSE/fill-eligibility deferred to P7',
-      progress: { done: 1, total: 1 },
+      note: 'Owner signed off — ~70 /market/* routes (D13=A,D14=A,D15=A)',
     },
     {
       id: 'md-expand-p6',
       label: 'P6 — Ops Console: Subcontractors Plugin management UI',
-      status: 'done',
-      note:
-        'Owner signed off — Subcontractors → Market Data manage page (Overview/Coverage/Ingest/Analytics); D16=A nav, D17=A checklist copy, D18=A functional tabs; platform-api proxy /plugins/market-data/api/*',
-      progress: { done: 1, total: 1 },
+      note: 'Owner signed off — Subcontractors manage page (D16=A,D17=A,D18=A)',
     },
     {
       id: 'md-expand-p7',
       label: 'P7 — Trade System cleanup: retire zombie tables',
-      status: 'ready_for_signoff',
+      note: 'Owner signed off — zombie tables + massive domain retired (D19–D22=A)',
+    },
+  ]
+  return phases.map(p => ({
+    id: p.id,
+    label: p.label,
+    status: 'closed' as const,
+    note: p.note,
+    progress: { done: 1, total: 1 },
+  }))
+}
+
+/**
+ * Synthetic queue for Subcontractor · Automate lane market-data-vitals.
+ * Program market-data-vitals: Data Vitals UI upgrade — depth, freshness, gap, quality.
+ * Wave 1 (P1–P3): Overview answers · Wave 2 (P4–P6): Coverage depth · Wave 3 (P7–P8): Quality.
+ */
+function buildMarketDataVitalsQueue(): QueueItem[] {
+  return [
+    // ── Wave 1: Data Vitals (Overview 一眼可答) ──────────────────────────
+    {
+      id: 'md-vitals-p1',
+      label: 'P1 — Fetch functions: coverage/depth/gap endpoints',
+      status: 'done',
       note:
-        'verify_passed — DROP report_option_max_pain/atm_iv_daily (DEV); delete worker data/massive + API massive:8766; FE Massive Settings removed; Option Discovery analytics/coverage/trades-quotes → Plugin via VITE_API_MARKET_DATA_PLUGIN; D19–D22=A',
+        'Owner signed off P1 (API signed_off_at 2026-08-07). 8 types + fetchers; tsc clean + proxy smoke 200.',
+      progress: { done: 1, total: 1 },
+    },
+    {
+      id: 'md-vitals-p2',
+      label: 'P2 — Data Vitals component (Overview top strip)',
+      status: 'done',
+      note:
+        'Owner signed off P2. DataVitalsStrip on Overview: Stock Daily / Option Contracts / Data Freshness / Universe; independent TanStack queries; tsc clean.',
+      progress: { done: 1, total: 1 },
+    },
+    {
+      id: 'md-vitals-p3',
+      label: "P3 — Today's Data verdict logic",
+      status: 'done',
+      note:
+        'Signed off — computeVerdict in DataVitalsStrip (UTC today / Scheduled≤6h / Missing); VitalCell detail semantic colors; workers next_run_at via shared live-probe status; tsc clean.',
+      progress: { done: 1, total: 1 },
+    },
+    // ── Wave 2: Coverage Depth (深度展示) ────────────────────────────────
+    {
+      id: 'md-vitals-p4',
+      label: 'P4 — Stock historical depth panel',
+      status: 'done',
+      note:
+        'Owner signed off P4. Coverage tab Stock historical depth OpsSection (bar-quality-detail + stock-day-gap); DenseDataTable Symbol/Date Range/Days/Gaps/Status; tsc clean.',
+      progress: { done: 1, total: 1 },
+    },
+    {
+      id: 'md-vitals-p5',
+      label: 'P5 — Option chain coverage panel',
+      status: 'done',
+      note:
+        'Owner signed off P5. OptionCoverageSection: fetchCoverageContracts + fetchCoverageGreeks (limit=500), join by symbol, DenseDataTable + Greeks % DenseTag; tsc clean.',
+      progress: { done: 1, total: 1 },
+    },
+    {
+      id: 'md-vitals-p6',
+      label: 'P6 — Coverage tab refactor (depth over row counts)',
+      status: 'done',
+      note:
+        'Owner signed off P6. Coverage tab: StockDepth + OptionCoverage first; DB summary (raw counts) + checklist defaultCollapsed; probe unchanged; tsc clean.',
+      progress: { done: 1, total: 1 },
+    },
+    // ── Wave 3: Data Quality (Gap 检测与质量) ────────────────────────────
+    {
+      id: 'md-vitals-p7',
+      label: 'P7 — Gap detection UI (last 7 days)',
+      status: 'done',
+      note:
+        'Owner signed off P7. StockDepthSection "Recent gaps (7 days)": missing_dates filtered today−7d…today; zero → All clear; else red Symbol/Missing dates table.',
+      progress: { done: 1, total: 1 },
+    },
+    {
+      id: 'md-vitals-p8',
+      label: 'P8 — Quality Score HTTP endpoint + UI (optional)',
+      status: 'done',
+      note:
+        'Owner signed off P8. GET /market/coverage/quality-score (run_all_checks); Coverage tab OpsSection "Data Quality Score" 4×PASS/FAIL + overall verdict; plugin 235 tests + tsc clean.',
       progress: { done: 1, total: 1 },
     },
   ]
@@ -805,9 +872,13 @@ export function buildQueueForLane(
       if (laneId === 'ib-vendor') {
         return buildIbVendorQueue()
       }
-      // Market Data Plugin expansion — P0–P7 planned phases (program market-data-expand).
+      // Market Data Plugin expansion — P0–P7 COMPLETED (program market-data-expand).
       if (laneId === 'market-data-expand') {
         return buildMarketDataExpandQueue()
+      }
+      // Market Data Vitals UI — depth/freshness/gap/quality (program market-data-vitals).
+      if (laneId === 'market-data-vitals') {
+        return buildMarketDataVitalsQueue()
       }
       return buildQueueFromAutomateStreams(tracks?.automate, laneId as AutomateLaneId)
     case 'infra':

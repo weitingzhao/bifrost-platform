@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
+import { DataVitalsStrip } from '@/components/market-data/DataVitalsStrip'
 import {
   MarketDataFreshnessTable,
   MarketDataWorkersTable,
@@ -83,6 +84,8 @@ export function MarketDataOverviewTab({
           </span>
         }
       />
+
+      <DataVitalsStrip />
 
       <OpsSection
         title="Workers & freshness"

@@ -1,13 +1,14 @@
 id: market-data-expand
 title: "Market Data Plugin Expansion — Layer 1+2 + UI Migration"
 description: >
-  Expand bifrost-platform-plugin-market-data with three layers:
+  COMPLETED — Expand bifrost-platform-plugin-market-data with three layers:
   Layer 1 (raw ingest gap-fill): Stock Snapshots, Trades & Quotes, Option Daily OI full backfill.
   Layer 2 (derived analytics): market_analytics schema with Max Pain, ATM IV, PCR, IV Percentile CronJobs.
   Layer 3 (surface migration): Trade API research/massive/* proxy → Plugin API; Trade Settings → Massive UI →
   Ops Console Subcontractors Plugin management page. Final: retire public.report_option_* zombie tables
   and Trade Worker no-op Celery tasks.
-status: planned
+  Vitals UI follow-on lives in program market-data-vitals only (orphan md-vitals-* progress removed from this program).
+status: completed
 
 delivery:
   board_visible: true
@@ -370,7 +371,7 @@ phases:
         - "Owner verified Option Discovery still works"
         - "Owner confirmed Massive Settings pages can be deleted"
         - "Owner verified no regression in Trade Frontend"
-        - "Program complete"
+        - "Layer 1–3 expansion complete; Vitals UI waves follow"
 
 metadata:
   created_at: "2026-08-06"

@@ -277,11 +277,21 @@ lanes:
       label: Market Data Plugin expansion (Layer 1+2)
       short_label: MD Expand
       description: >
-        Layer 1: raw ingest gap-fill — Stock Snapshots, Stock Trades & Quotes, Option Daily OI full backfill,
-        Flat Files exploration. Layer 2: market_analytics schema — Max Pain, ATM IV, PCR, IV Percentile
-        derived CronJobs. Layer 3: API migration (Trade API research/massive/* → Plugin API) + UI migration
-        (Trade Settings → Massive → Ops Console Subcontractors Plugin management page). Final: retire
-        public.report_option_* zombie tables and Trade Worker no-op Celery tasks.
+        DONE — 8/8 phases signed · Layer 1 (raw ingest) + Layer 2 (analytics) + Layer 3 (API/UI migration + cleanup).
+        Vitals UI follow-on → market-data-vitals.
+      agent_mode: Ops
+      work_intent: feature
+    - id: market-data-vitals
+      track: automate
+      component_line: subcontractor
+      track_type: build
+      label: Market Data Vitals UI
+      short_label: MD Vitals
+      description: >
+        Data quality visibility upgrade for Ops Console Market Data page.
+        Wave 1 (P1–P3): Overview Vitals strip + Today's Data verdict.
+        Wave 2 (P4–P6): Stock depth + Option coverage + Coverage tab refactor.
+        Wave 3 (P7–P8): Gap detection + Quality Score.
       agent_mode: Ops
       work_intent: feature
     - id: ib-vendor

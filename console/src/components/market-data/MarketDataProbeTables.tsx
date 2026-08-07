@@ -49,6 +49,36 @@ function formatUptime(sec: number | undefined): string {
   return `${(sec / 3600).toFixed(1)}h`
 }
 
+function timeAgo(iso: string | undefined | null): string {
+  if (iso == null || iso === '') return '—'
+  const ms = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return '—'
+  const sec = ms / 1000
+  if (sec < 60) return `${Math.round(sec)}s ago`
+  if (sec < 3600) return `${Math.round(sec / 60)}m ago`
+  if (sec < 86400) return `${(sec / 3600).toFixed(1)}h ago`
+  return `${(sec / 86400).toFixed(1)}d ago`
+}
+
+function timeUntil(iso: string | undefined | null): string {
+  if (iso == null || iso === '') return '—'
+  const ms = new Date(iso).getTime() - Date.now()
+  if (!Number.isFinite(ms)) return '—'
+  if (ms <= 0) return 'now'
+  const sec = ms / 1000
+  if (sec < 60) return `in ${Math.round(sec)}s`
+  if (sec < 3600) return `in ${Math.round(sec / 60)}m`
+  if (sec < 86400) return `in ${(sec / 3600).toFixed(1)}h`
+  return `in ${(sec / 86400).toFixed(1)}d`
+}
+
+interface MergedWorkerRow {
+  name: string
+  ready?: string
+  reachability?: string
+  pool?: MarketDataWorkerInfo
+}
+
 export function MarketDataFreshnessTable({
   rows,
   collapsibleWhenOk,
@@ -112,62 +142,77 @@ export function MarketDataWorkersTable({
   workers: MarketDataWorkerInfo[]
   collapsibleWhenOk: boolean
 }) {
+  const poolByName = new Map<string, MarketDataWorkerInfo>()
+  for (const w of workers) {
+    poolByName.set(w.pool, w)
+  }
+
+  const rows: MergedWorkerRow[] = deployments.map(d => {
+    const poolKey = d.name.replace(/^polygon-worker-/, '')
+    return {
+      name: d.name,
+      ready: d.ready,
+      reachability: d.reachability,
+      pool: poolByName.get(poolKey),
+    }
+  })
+
+  for (const w of workers) {
+    const alreadyMerged = rows.some(r => r.pool === w)
+    if (!alreadyMerged) {
+      rows.push({ name: `pool-${w.pool}`, pool: w })
+    }
+  }
+
   const table = (
     <DenseDataTable>
       <DenseTableHeader>
         <DenseTableHeadRow>
-          <DenseTableHead>Name / pool</DenseTableHead>
-          <DenseTableHead>Ready / status</DenseTableHead>
-          <DenseTableHead>Done / fail</DenseTableHead>
+          <DenseTableHead>Worker</DenseTableHead>
+          <DenseTableHead>Replicas</DenseTableHead>
+          <DenseTableHead>Done / Fail</DenseTableHead>
+          <DenseTableHead>Last Activity</DenseTableHead>
+          <DenseTableHead>Next Run</DenseTableHead>
           <DenseTableHead>Uptime</DenseTableHead>
-          <DenseTableHead>Last claim</DenseTableHead>
         </DenseTableHeadRow>
       </DenseTableHeader>
       <DenseTableBody>
-        {deployments.map(d => (
-          <DenseTableRow key={`deploy-${d.name}`}>
-            <DenseTableCell className="font-semibold">{d.name}</DenseTableCell>
-            <DenseTableCell>
-              <DenseTag
-                variant={
-                  d.reachability === 'ok'
-                    ? 'success'
-                    : d.reachability === 'degraded'
-                      ? 'warning'
-                      : d.reachability === 'fail'
-                        ? 'danger'
-                        : 'neutral'
-                }
-              >
-                {d.ready}
-              </DenseTag>
-            </DenseTableCell>
-            <DenseTableCell className="text-[var(--muted-foreground)]">—</DenseTableCell>
-            <DenseTableCell className="text-[var(--muted-foreground)]">—</DenseTableCell>
-            <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              {d.detail ?? '—'}
-            </DenseTableCell>
-          </DenseTableRow>
-        ))}
-        {workers.map(w => (
-          <DenseTableRow key={`pool-${w.pool}`}>
-            <DenseTableCell className="font-mono text-xs">pool {w.pool}</DenseTableCell>
-            <DenseTableCell>
-              <DenseTag variant={workerReady(w) ? 'success' : 'warning'}>
-                {w.status ?? 'ok'}
-              </DenseTag>
-            </DenseTableCell>
-            <DenseTableCell className="font-mono tabular-nums">
-              {w.jobs_done} / {w.jobs_failed}
-            </DenseTableCell>
-            <DenseTableCell className="font-mono tabular-nums">
-              {formatUptime(w.uptime_sec)}
-            </DenseTableCell>
-            <DenseTableCell className="font-mono text-xs">
-              {w.last_claim_at != null && w.last_claim_at !== '' ? w.last_claim_at : '—'}
-            </DenseTableCell>
-          </DenseTableRow>
-        ))}
+        {rows.map(r => {
+          const p = r.pool
+          const reachVariant =
+            r.reachability === 'ok'
+              ? 'success'
+              : r.reachability === 'degraded'
+                ? 'warning'
+                : r.reachability === 'fail'
+                  ? 'danger'
+                  : ('neutral' as const)
+
+          return (
+            <DenseTableRow key={r.name}>
+              <DenseTableCell className="font-semibold">{r.name}</DenseTableCell>
+              <DenseTableCell>
+                {r.ready != null ? (
+                  <DenseTag variant={reachVariant}>{r.ready}</DenseTag>
+                ) : (
+                  '—'
+                )}
+              </DenseTableCell>
+              <DenseTableCell className="font-mono tabular-nums">
+                {p != null ? `${p.jobs_done} / ${p.jobs_failed}` : '—'}
+              </DenseTableCell>
+              <DenseTableCell className="font-mono tabular-nums">
+                {p != null ? timeAgo(p.last_claim_at) : '—'}
+              </DenseTableCell>
+              <DenseTableCell className="font-mono tabular-nums">
+                {p != null ? timeUntil(p.next_run_at) : '—'}
+              </DenseTableCell>
+              <DenseTableCell className="font-mono tabular-nums">
+                {p != null ? formatUptime(p.uptime_sec) : '—'}
+              </DenseTableCell>
+            </DenseTableRow>
+          )
+        })}
       </DenseTableBody>
     </DenseDataTable>
   )

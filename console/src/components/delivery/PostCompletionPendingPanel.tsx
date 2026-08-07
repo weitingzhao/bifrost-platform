@@ -219,17 +219,21 @@ export function PostCompletionPendingPanel({
         </div>
       )}
       {programId != null && canAdmin && allowApprove && assessmentStatus !== 'NO HANDOFF' && assessmentStatus !== 'CLOSED' && (
-        <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
-          <label className="text-dense-caption font-medium text-muted-foreground" htmlFor={`no-handoff-${programId}`}>Owner decision reason</label>
+        <div className="flex flex-col gap-2 border-t border-border/60 pt-3">
+          <p className="m-0 text-dense-label font-medium">Close this program — Owner decision</p>
+          <p className="m-0 text-dense-meta text-muted-foreground">
+            All phases are signed. Record that no ongoing operational handoff is needed to close.
+          </p>
+          <label className="text-dense-caption font-medium text-muted-foreground" htmlFor={`no-handoff-${programId}`}>Reason</label>
           <textarea
             id={`no-handoff-${programId}`}
-            className="min-h-16 rounded border border-border bg-background px-2 py-1 text-dense-meta"
-            placeholder="Explain why no ongoing operational responsibility remains…"
+            className="min-h-16 rounded border border-border bg-background px-2 py-1.5 text-dense-meta"
+            placeholder="e.g. All phases delivered. No ongoing operational responsibility."
             value={decisionReason}
             onChange={event => setDecisionReason(event.target.value)}
           />
-          <Button size="sm" variant="outline" className="self-start" disabled={decisionReason.trim() === ''} onClick={() => setConfirmNoHandoff(true)}>
-            Record no handoff
+          <Button size="sm" variant="default" className="self-start" disabled={decisionReason.trim() === ''} onClick={() => setConfirmNoHandoff(true)}>
+            Record no handoff & close
           </Button>
         </div>
       )}

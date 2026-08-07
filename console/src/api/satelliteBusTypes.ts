@@ -186,6 +186,7 @@ export interface MarketDataWorkerInfo {
   jobs_failed: number
   uptime_sec?: number
   last_claim_at?: string
+  next_run_at?: string
 }
 
 export interface MarketDataFreshnessInfo {

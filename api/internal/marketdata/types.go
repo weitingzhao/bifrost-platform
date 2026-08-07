@@ -21,6 +21,7 @@ type WorkerInfo struct {
 	JobsFailed int     `json:"jobs_failed"`
 	UptimeSec  float64 `json:"uptime_sec,omitempty"`
 	LastClaim  string  `json:"last_claim_at,omitempty"`
+	NextRunAt  string  `json:"next_run_at,omitempty"`
 }
 
 // FreshnessInfo is one row from data_ops.ingest_freshness.
