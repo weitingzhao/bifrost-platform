@@ -149,12 +149,8 @@ milestones:
       pipeline_after: k3s-mac-agents
       authority: console/src/lib/architecture/workloadPlacementCatalog.ts
       note: >
-        Owner CLOSED 2026-08-05 — core placement governance delivered: catalog +
-        GET /api/v1/cluster/placement evaluator live; pools amd64_ci / amd64_general /
-        nfs_client live; 6/8 rules satisfied (cicd_build/control, stg_runtime, data,
-        nfs_storage, monitoring). Residual (not blocking this milestone): GPU pool
-        planned (P5a gpu-server — park lane gpu-pool-join); arm64_edge optional with
-        0 nodes. Ongoing evaluation stays on Cluster page / Daily Ops.
+        Owner CLOSED 2026-08-05 — core placement governance delivered: catalog + GET /api/v1/cluster/placement evaluator live; pools amd64_ci / amd64_general / nfs_client live; 6/8 rules satisfied (cicd_build/control, stg_runtime, data, nfs_storage, monitoring). Residual (not blocking this milestone): GPU pool planned (P5a gpu-server — park lane gpu-pool-join); arm64_edge optional with 0 nodes. Ongoing evaluation stays on Cluster page / Daily Ops.
+
     - id: autonomous-agent-v1
       label: Autonomous Agent v1 (nightly drift + morning briefing)
       status: NOT_STARTED
@@ -176,10 +172,8 @@ milestones:
       pipeline_after: 2c-b-prod-cutover
       authority: console/src/lib/architecture/dataLayerCatalog.ts
       note: >
-        Owner CLOSED 2026-08-05 — aligned with migrate stream data-layer-k3s closed 7/7
-        (①–⑦ complete; Owner sign-off via Briefing queue). PG+Redis @ data NS
-        (DEV/STG/PROD). Was stale IN_PROGRESS while stream already closed; hygiene so
-        Governance & spine lane no longer projects a false active milestone.
+        Owner CLOSED 2026-08-05 — aligned with migrate stream data-layer-k3s closed 7/7 (①–⑦ complete; Owner sign-off via Briefing queue). PG+Redis @ data NS (DEV/STG/PROD). Was stale IN_PROGRESS while stream already closed; hygiene so Governance & spine lane no longer projects a false active milestone.
+
     - id: market-data-subcontractor
       label: Market Data Subcontractor (Polygon → plugin-market-data NS)
       status: DONE
@@ -287,7 +281,7 @@ coupling_surfaces:
     - unifi_session_v2
 promotion:
     last_gate:
-        at: "2026-07-31T16:15:41Z"
+        at: "2026-08-07T04:07:53Z"
         result: pass
         log_path: bifrost-trade-infra/scripts/release_gate.log
 environments_extended:
