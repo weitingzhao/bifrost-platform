@@ -1,4 +1,4 @@
-import { LayoutGrid, ListTodo } from 'lucide-react'
+import { ListTodo } from 'lucide-react'
 import type { ShellNavGroup, ShellNavItem } from '@bifrost/ui'
 import { getAllNavItems } from '@bifrost/ui'
 import type { DeliveryPipelineRunView, ReleaseGateResponse, SupplyChainResponse } from '@/api/deliveryTypes'
@@ -82,26 +82,6 @@ function injectTaskCc(groups: ShellNavGroup[]): ShellNavGroup[] {
   )
 }
 
-function buildMoreDomainsGroup(fullGroups: ShellNavGroup[], allowed: Set<string>): ShellNavGroup | null {
-  const subGroups = fullGroups
-    .map(g => {
-      const items = getAllNavItems(g).filter(item => !allowed.has(item.id))
-      if (items.length === 0) return null
-      return { label: g.label, items }
-    })
-    .filter((sg): sg is NonNullable<typeof sg> => sg != null)
-
-  if (subGroups.length === 0) return null
-
-  return {
-    label: 'More domains',
-    icon: LayoutGrid,
-    defaultOpen: false,
-    dividerBefore: true,
-    subGroups,
-  }
-}
-
 /** Filter full CONSOLE_NAV_GROUPS to the lens for a task mode. System mode returns full groups. */
 export function buildTaskNavGroups(modeId: TaskModeId, fullGroups: ShellNavGroup[]): ShellNavGroup[] {
   const mode = taskModeById(modeId)
@@ -118,9 +98,52 @@ export function buildTaskNavGroups(modeId: TaskModeId, fullGroups: ShellNavGroup
     .map(g => filterGroupItems(g, allowed))
     .filter((g): g is ShellNavGroup => g != null)
 
-  const focused = mode.navLens.showTaskControlCenter ? injectTaskCc(filtered) : filtered
-  const more = buildMoreDomainsGroup(fullGroups, allowed)
-  return more != null ? [...focused, more] : focused
+  return mode.navLens.showTaskControlCenter ? injectTaskCc(filtered) : filtered
+}
+
+/**
+ * Active phase for dimming: first `active` status, else first non-`done`.
+ * Returns null when the mode has no phases / statuses.
+ */
+export function resolveActivePhaseId(
+  statuses: Record<string, TaskPhaseStatus>,
+  phaseOrder?: string[],
+): string | null {
+  const ids = phaseOrder ?? Object.keys(statuses)
+  for (const id of ids) {
+    if (statuses[id] === 'active') return id
+  }
+  for (const id of ids) {
+    const st = statuses[id]
+    if (st != null && st !== 'done') return id
+  }
+  return null
+}
+
+/** Tab ids that stay full-opacity for the active phase (empty = no dimming). */
+export function phaseRelevantTabIds(
+  modeId: TaskModeId,
+  activePhaseId: string | null,
+): Set<string> | null {
+  const mode = taskModeById(modeId)
+  const map = mode.navLens.phaseRelevantTabs
+  if (map == null || activePhaseId == null) return null
+  const tabs = map[activePhaseId]
+  if (tabs == null || tabs.length === 0) return null
+  return new Set(tabs)
+}
+
+/** includeTabs not in the phase-relevant set — still visible, but dimmed. */
+export function dimmedNavTabIds(
+  modeId: TaskModeId,
+  activePhaseId: string | null,
+): string[] {
+  const mode = taskModeById(modeId)
+  const include = mode.navLens.includeTabs
+  if (include == null || include.length === 0) return []
+  const relevant = phaseRelevantTabIds(modeId, activePhaseId)
+  if (relevant == null) return []
+  return include.filter(id => !relevant.has(id))
 }
 
 export function allNavTabIds(groups: ShellNavGroup[]): string[] {
@@ -242,8 +265,8 @@ function resolveMissionLaunchPhase(phaseId: string, input: TaskPhaseStatusInput)
   }
 }
 
-/** Ground Build deliver-stg: Board/program progress — not Tekton pipeline runs (F3). */
-function resolveGroundDeliverStg(input: TaskPhaseStatusInput): TaskPhaseStatus {
+/** Board/program progress when no Tekton pipeline run is available. */
+function resolveBoardDeliverStg(input: TaskPhaseStatusInput): TaskPhaseStatus {
   const program = input.programDetail
   if (program == null) return 'planned'
   const signed = program.program.phases_signed ?? program.program.signed ?? 0
@@ -254,7 +277,6 @@ function resolveGroundDeliverStg(input: TaskPhaseStatusInput): TaskPhaseStatus {
 }
 
 function resolveDevBuildPhase(
-  modeId: TaskModeId,
   phaseId: string,
   input: TaskPhaseStatusInput,
 ): TaskPhaseStatus {
@@ -269,10 +291,10 @@ function resolveDevBuildPhase(
     case 'pre-push':
       return input.devAgentPhaseDone?.('pre-push') === true ? 'done' : 'planned'
     case 'deliver-stg': {
-      if (modeId === 'ground-build') return resolveGroundDeliverStg(input)
       const run = input.tradeStgRun ?? input.platformStgRun
       if (run != null && isPipelineRunSucceeded(run)) return 'done'
-      return run != null ? 'active' : 'planned'
+      if (run != null) return 'active'
+      return resolveBoardDeliverStg(input)
     }
     case 'sign-off': {
       if (program == null) return 'planned'
@@ -297,12 +319,8 @@ function rawPhaseStatus(
       return resolveDailyOpsPhase(phaseId, input)
     case 'mission-launch':
       return resolveMissionLaunchPhase(phaseId, input)
-    case 'rocket-build':
-    case 'satellite-build':
-    case 'engineer-build':
-    case 'ground-build':
-    case 'plugin-build':
-      return resolveDevBuildPhase(modeId, phaseId, input)
+    case 'build':
+      return resolveDevBuildPhase(phaseId, input)
     default:
       return 'unknown'
   }

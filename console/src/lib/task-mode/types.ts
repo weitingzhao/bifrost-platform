@@ -2,16 +2,12 @@ import type { TrackId } from '@/lib/briefing/workTracks'
 import type { LaneId, WorkTrackType, ComponentLineId } from '@/lib/briefing/workLanes'
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 
-/** Task mode identifiers — focused Console lenses for ops vs dev loops. */
+/** Task mode identifiers — focused Console lenses for ops vs build loops. */
 export type TaskModeId =
   | 'system'
   | 'daily-ops'
   | 'mission-launch'
-  | 'rocket-build'
-  | 'satellite-build'
-  | 'engineer-build'
-  | 'ground-build'
-  | 'plugin-build'
+  | 'build'
 
 export type LoopArchetype = 'system' | 'ops' | 'dev'
 
@@ -41,6 +37,11 @@ export type NavLensConfig = {
   includeTabs?: string[]
   /** Always prepend Task Control Center when true. */
   showTaskControlCenter?: boolean
+  /**
+   * Phase → tab ids that remain full-opacity for the active phase.
+   * Tabs in includeTabs but absent here are dimmed (still clickable).
+   */
+  phaseRelevantTabs?: Record<string, string[]>
 }
 
 export type OpsLoopConfig = {
@@ -57,7 +58,7 @@ export type DevLoopConfig = {
   programId?: string
   /** Template for spawning program instances via POST /programs/from-template. */
   templateId?: TaskModeId
-  /** Three-tier Layer 1 — component line. */
+  /** Three-tier Layer 1 — component line (optional; Build inherits from session). */
   briefingComponentLine?: ComponentLineId
   /** Three-tier Layer 2 — work track type. */
   briefingTrackType?: WorkTrackType

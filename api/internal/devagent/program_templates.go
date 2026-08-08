@@ -16,10 +16,22 @@ import (
 
 // ProgramTemplate defines how to spawn a Delivery Board program instance for a dev task mode.
 type ProgramTemplate struct {
-	ID              string `yaml:"id" json:"id"`
-	Title           string `yaml:"title" json:"title"`
-	Description     string `yaml:"description" json:"description"`
-	BaseBlueprintID string `yaml:"base_blueprint_id" json:"base_blueprint_id"`
+	ID               string            `yaml:"id" json:"id"`
+	Title            string            `yaml:"title" json:"title"`
+	Description      string            `yaml:"description" json:"description"`
+	BaseBlueprintID  string            `yaml:"base_blueprint_id" json:"base_blueprint_id"`
+	LaneBlueprintMap map[string]string `yaml:"lane_blueprint_map,omitempty" json:"lane_blueprint_map,omitempty"`
+}
+
+// ResolveBaseBlueprintID returns the blueprint id for a spawn: lane map override when present, else BaseBlueprintID.
+func (t ProgramTemplate) ResolveBaseBlueprintID(laneID string) string {
+	lane := strings.TrimSpace(laneID)
+	if lane != "" && t.LaneBlueprintMap != nil {
+		if mapped, ok := t.LaneBlueprintMap[lane]; ok && strings.TrimSpace(mapped) != "" {
+			return strings.TrimSpace(mapped)
+		}
+	}
+	return strings.TrimSpace(t.BaseBlueprintID)
 }
 
 type templatesFile struct {
@@ -192,7 +204,7 @@ func cloneBlueprintInstance(base *ProgramBlueprint, tmpl ProgramTemplate, progra
 		clone.Metadata = map[string]interface{}{}
 	}
 	clone.Metadata["template_id"] = tmpl.ID
-	clone.Metadata["base_blueprint_id"] = tmpl.BaseBlueprintID
+	clone.Metadata["base_blueprint_id"] = tmpl.ResolveBaseBlueprintID(laneID)
 	if strings.TrimSpace(instanceLabel) != "" {
 		clone.Metadata["instance_label"] = strings.TrimSpace(instanceLabel)
 	}
@@ -302,13 +314,14 @@ func (h *Handler) HandleCreateFromTemplate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	base, err := h.loadBaseBlueprint(tmpl.BaseBlueprintID)
+	baseID := tmpl.ResolveBaseBlueprintID(req.LaneID)
+	base, err := h.loadBaseBlueprint(baseID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
 
-	programID := instanceProgramID(tmpl.BaseBlueprintID, req.InstanceLabel)
+	programID := instanceProgramID(baseID, req.InstanceLabel)
 
 	h.mu.Lock()
 	if _, exists := h.runtimes[programID]; exists {

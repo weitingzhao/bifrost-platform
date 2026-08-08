@@ -168,14 +168,14 @@ export function useTaskControlQueries({
       if (ambientJobId != null && ambientJobScope === PLATFORM_RELEASE_SCOPE) return 5_000
       return 20_000
     },
-    enabled: isMissionLaunch || mode.id === 'rocket-build' || mode.id === 'engineer-build',
+    enabled: isMissionLaunch || isDevLoop,
   })
 
   const platformStgGateQ = useQuery({
     queryKey: ['task-cc', 'platform-stg-gate'],
     queryFn: () => fetchReleaseGate('platform-stg'),
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || mode.id === 'rocket-build' || mode.id === 'engineer-build',
+    enabled: isMissionLaunch || isDevLoop,
   })
 
   const platformProdGateQ = useQuery({
@@ -194,21 +194,21 @@ export function useTaskControlQueries({
       if (ambientJobId != null && ambientJobScope === TRADE_DEPLOY_SCOPE) return 5_000
       return 20_000
     },
-    enabled: isMissionLaunch || mode.id === 'satellite-build' || mode.id === 'plugin-build',
+    enabled: isMissionLaunch || isDevLoop,
   })
 
   const tradeGateQ = useQuery({
     queryKey: ['task-cc', 'trade-gate-detail'],
     queryFn: () => fetchReleaseGate('stg'),
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || mode.id === 'satellite-build' || mode.id === 'plugin-build',
+    enabled: isMissionLaunch || isDevLoop,
   })
 
   const smokeQ = useQuery({
     queryKey: ['task-cc', 'smoke-detail'],
     queryFn: fetchStgSmoke,
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || mode.id === 'satellite-build' || mode.id === 'plugin-build',
+    enabled: isMissionLaunch || isDevLoop,
   })
 
   const statusInput = useMemo((): TaskPhaseStatusInput => {

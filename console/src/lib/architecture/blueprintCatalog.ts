@@ -239,29 +239,27 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   },
 ]
 
-/** Task mode lenses — focused Console navigation for ops vs dev loops (Constitution). */
+/** Task mode lenses — focused Console navigation for ops vs build loops (Constitution). */
 export const TASK_MODE_BLUEPRINT = {
-  version: '2026-07-31',
+  version: '2026-08-07',
   source: 'console/src/lib/task-mode/taskModeCatalog.ts',
   statement:
     'Task modes filter sidebar navigation and land on Task Control Center for phased playbooks. ' +
+    'Four views: System · Daily Ops · Launch · Build. ' +
     'Ops / Dev Mode: Launch and primary Mission actions live only on TCC — Control Room is posture deep-dive (ROOM POSTURE + bays), not a second Mission home. ' +
     'Daily Ops uses Fleet Desk (Ops loop: viewer env · GO|HOLD|NO-GO · circle Discover→Clear · single CTA · Agent live panel · role×env board with probePath / per-cell Agent Fix); ' +
     'unavailable cells are display-only (Excluded from GO); Prod pins clusters.yaml viewer_env=prod (OPS_VIEWER_ENV overrides). ' +
-    'Mission Launch keeps readiness + LaunchPad + Release posture on TCC (Promote / cutover · Tier A·B); Daily Ops does not. Ops loops — no Briefing/DevAgent. ' +
-    'Dev loops (rocket-build, satellite-build, engineer-build, ground-build, plugin-build) chain Briefing → Dev Agent → Delivery Board. ' +
+    'Launch keeps readiness + LaunchPad + Release posture on TCC (Promote / cutover · Tier A·B); Daily Ops does not. Ops loops — no Briefing/DevAgent. ' +
+    'Build (unified) chains Briefing → Implement → Pre-push → Deliver STG → Sign-off; component line inherits from Active Session. ' +
+    'Nav lens is focused-only (no More domains); phase-aware dimming highlights phase-relevant tabs. ' +
     'System Mode may land Control Room for panoramic posture; Observability remains read-only health.',
   modes: [
     'system',
     'daily-ops',
     'mission-launch',
-    'rocket-build',
-    'satellite-build',
-    'engineer-build',
-    'ground-build',
-    'plugin-build',
+    'build',
   ] as const,
-  escapeHatch: 'Sidebar footer — Switch to System view restores full CONSOLE_NAV_GROUPS.',
+  escapeHatch: 'Switch to System view restores full CONSOLE_NAV_GROUPS.',
 }
 
 export type AuthorizationLevel = {

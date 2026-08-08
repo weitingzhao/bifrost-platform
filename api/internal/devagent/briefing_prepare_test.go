@@ -21,7 +21,7 @@ func TestHandleBriefingPrepare(t *testing.T) {
 		SessionID:   "abc",
 		ProgramID:   "prog-1",
 		PhaseID:     "briefing",
-		Lane:        "rocket-build",
+		Lane:        "console-api",
 		Intent:      "ops",
 	}
 	payload, err := json.Marshal(body)
@@ -66,7 +66,7 @@ func TestHandleBriefingPrepare(t *testing.T) {
 	if meta.SessionID != "abc" || meta.ProgramID != "prog-1" || meta.PhaseID != "briefing" {
 		t.Fatalf("meta=%+v", meta)
 	}
-	if meta.Lane != "rocket-build" || meta.Intent != "ops" {
+	if meta.Lane != "console-api" || meta.Intent != "ops" {
 		t.Fatalf("meta lane/intent=%+v", meta)
 	}
 	if meta.PreparedAt == "" {

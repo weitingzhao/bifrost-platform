@@ -6,6 +6,7 @@ import {
   invalidateProgramDeliveryQueries,
 } from '@/api/programs'
 import type { ProgramDetailResponse } from '@/api/programsTypes'
+import { loadBriefingActiveSession } from '@/lib/briefing/briefingActiveSession'
 import type { TaskModeDef } from '@/lib/task-mode/types'
 
 const STORAGE_PREFIX = 'bifrost-task-program-'
@@ -37,7 +38,7 @@ export type UseDevProgramInstanceResult = {
   programError: Error | null
   createPending: boolean
   ensureProgram: () => void
-  createNewInstance: (opts?: { instanceLabel?: string; notes?: string }) => void
+  createNewInstance: (opts?: { instanceLabel?: string; notes?: string; laneId?: string }) => void
 }
 
 /** Resolve or auto-create a Delivery Board program instance for a dev task mode. */
@@ -76,11 +77,13 @@ export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceR
   })
 
   const createNewInstance = useCallback(
-    (opts?: { instanceLabel?: string; notes?: string }) => {
+    (opts?: { instanceLabel?: string; notes?: string; laneId?: string }) => {
       if (templateId == null) return
+      const activeLane = opts?.laneId ?? loadBriefingActiveSession()?.lane
       createMutation.mutate({
         instance_label: opts?.instanceLabel ?? mode.label,
         notes: opts?.notes,
+        lane_id: activeLane,
       })
     },
     [createMutation, mode.label, templateId],

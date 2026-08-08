@@ -36,26 +36,27 @@ templates:
     title: Plugin Build
     description: test
     base_blueprint_id: ib-gateway-plugin
+  - id: build
+    title: Build
+    description: unified build
+    base_blueprint_id: control-room-ui
+    lane_blueprint_map:
+      console-api: control-room-ui
+      trade-stack: trade-ib-client-migration
+      agent-infra: dev-agent
+      network-server: network-governance
+      agent-services: ib-gateway-plugin
 `
 	if err := os.WriteFile(filepath.Join(programsDir, "_templates.yaml"), []byte(tpl), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestHandleCreateFromTemplate(t *testing.T) {
-	dir := t.TempDir()
-	configDir := filepath.Join(dir, "config")
-	programsDir := filepath.Join(configDir, "programs")
-	if err := os.MkdirAll(programsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeTestTemplates(t, programsDir)
-	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
-	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
-
+func writeMinimalBlueprint(t *testing.T, programsDir, id, title string) {
+	t.Helper()
 	base := &ProgramBlueprint{
-		ID:          "control-room-ui",
-		Title:       "Control Room UI",
+		ID:          id,
+		Title:       title,
 		Description: "Test base blueprint",
 		Status:      "active",
 		Delivery: &DeliveryConfig{
@@ -71,9 +72,23 @@ func TestHandleCreateFromTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if writeErr := os.WriteFile(filepath.Join(programsDir, "control-room-ui.yaml"), data, 0o644); writeErr != nil {
-		t.Fatal(writeErr)
+	if err := os.WriteFile(filepath.Join(programsDir, id+".yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
 	}
+}
+
+func TestHandleCreateFromTemplate(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	programsDir := filepath.Join(configDir, "programs")
+	if err := os.MkdirAll(programsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestTemplates(t, programsDir)
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+
+	writeMinimalBlueprint(t, programsDir, "control-room-ui", "Control Room UI")
 
 	h, err := NewHandler(configDir)
 	if err != nil {
@@ -121,6 +136,64 @@ func TestHandleCreateFromTemplate(t *testing.T) {
 	}
 	if len(listResp.Programs) != 1 {
 		t.Fatalf("filtered programs = %d", len(listResp.Programs))
+	}
+}
+
+func TestHandleCreateFromTemplateBuildLane(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	programsDir := filepath.Join(configDir, "programs")
+	if err := os.MkdirAll(programsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestTemplates(t, programsDir)
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+
+	writeMinimalBlueprint(t, programsDir, "control-room-ui", "Control Room UI")
+	writeMinimalBlueprint(t, programsDir, "trade-ib-client-migration", "Trade IB Client Migration")
+
+	h, err := NewHandler(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := []byte(`{"template_id":"build","instance_label":"lane-test","lane_id":"trade-stack","notes":"lane resolve"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.HandleCreateFromTemplate(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp ProgramDetailBoardResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Program.ID != "trade-ib-client-migration--lane-test" {
+		t.Fatalf("program id = %q want trade-ib-client-migration--lane-test", resp.Program.ID)
+	}
+	if resp.Program.LaneID != "trade-stack" {
+		t.Fatalf("lane_id = %q", resp.Program.LaneID)
+	}
+
+	// Verify written blueprint metadata used resolved base.
+	raw, err := os.ReadFile(filepath.Join(programsDir, "trade-ib-client-migration--lane-test.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var written ProgramBlueprint
+	if err := yaml.Unmarshal(raw, &written); err != nil {
+		t.Fatal(err)
+	}
+	if written.Metadata["template_id"] != "build" {
+		t.Fatalf("template_id = %v", written.Metadata["template_id"])
+	}
+	if written.Metadata["base_blueprint_id"] != "trade-ib-client-migration" {
+		t.Fatalf("base_blueprint_id = %v", written.Metadata["base_blueprint_id"])
+	}
+	if written.Metadata["lane_id"] != "trade-stack" {
+		t.Fatalf("lane_id = %v", written.Metadata["lane_id"])
 	}
 }
 
@@ -185,6 +258,7 @@ func TestGetProgramTemplate(t *testing.T) {
 		{"engineer-build", "dev-agent"},
 		{"ground-build", "network-governance"},
 		{"plugin-build", "ib-gateway-plugin"},
+		{"build", "control-room-ui"},
 	}
 	for _, tc := range cases {
 		got, ok := GetProgramTemplate(tc.id)
@@ -194,6 +268,39 @@ func TestGetProgramTemplate(t *testing.T) {
 		if got.BaseBlueprintID != tc.base {
 			t.Fatalf("%s base = %q want %q", tc.id, got.BaseBlueprintID, tc.base)
 		}
+	}
+
+	build, ok := GetProgramTemplate("build")
+	if !ok {
+		t.Fatal("expected build template")
+	}
+	if build.ResolveBaseBlueprintID("trade-stack") != "trade-ib-client-migration" {
+		t.Fatalf("lane resolve trade-stack = %q", build.ResolveBaseBlueprintID("trade-stack"))
+	}
+	if build.ResolveBaseBlueprintID("") != "control-room-ui" {
+		t.Fatalf("default resolve = %q", build.ResolveBaseBlueprintID(""))
+	}
+	if build.ResolveBaseBlueprintID("unknown-lane") != "control-room-ui" {
+		t.Fatalf("unknown lane fallback = %q", build.ResolveBaseBlueprintID("unknown-lane"))
+	}
+	if len(build.LaneBlueprintMap) < 5 {
+		t.Fatalf("lane_blueprint_map size = %d", len(build.LaneBlueprintMap))
+	}
+}
+
+func TestResolveBaseBlueprintID(t *testing.T) {
+	tmpl := ProgramTemplate{
+		ID:              "build",
+		BaseBlueprintID: "control-room-ui",
+		LaneBlueprintMap: map[string]string{
+			"trade-stack": "trade-ib-client-migration",
+		},
+	}
+	if got := tmpl.ResolveBaseBlueprintID("trade-stack"); got != "trade-ib-client-migration" {
+		t.Fatalf("got %q", got)
+	}
+	if got := tmpl.ResolveBaseBlueprintID("  "); got != "control-room-ui" {
+		t.Fatalf("blank lane got %q", got)
 	}
 }
 

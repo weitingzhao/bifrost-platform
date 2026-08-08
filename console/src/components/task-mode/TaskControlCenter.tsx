@@ -221,7 +221,7 @@ export function TaskControlCenter({
         return
       }
       setPhaseFixUnavailableHint(
-        `Agent Fix is not available in ${mode.label}. Switch to Daily Ops or Mission Launch.`,
+        `Agent Fix is not available in ${mode.label}. Switch to Daily Ops or Launch.`,
       )
       return
     }

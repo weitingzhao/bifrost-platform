@@ -5,8 +5,15 @@ import { TaskModeIconRail } from '@/components/task-mode/TaskModeIconRail'
 import { TradeMonitoringPeerLinks } from '@/components/TradeMonitoringPeerLinks'
 import { useControlRoomBayNavSignal } from '@/hooks/useControlRoomBayNavSignal'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
+import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { missionStatus, signalColor } from '@/lib/control-room/missionSignals'
-import { buildTaskNavGroups } from '@/lib/task-mode/navLens'
+import { isBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
+import {
+  buildTaskNavGroups,
+  dimmedNavTabIds,
+  resolveActivePhaseId,
+  resolveAllTaskPhaseStatuses,
+} from '@/lib/task-mode/navLens'
 import type { TaskModeId } from '@/lib/task-mode/types'
 import { useTaskMode } from '@/lib/task-mode/TaskModeContext'
 
@@ -62,12 +69,35 @@ export function ConsoleSidebar({
   onModeChange?: (landingTab: string, modeId: TaskModeId) => void
 }) {
   const { modeId, mode, isTaskLens } = useTaskMode()
-  const { viewerEnv, viewerEnvLoading } = useFleetSnapshot()
+  const { fleet, snapshot, viewerEnv, viewerEnvLoading } = useFleetSnapshot()
+  const queueQ = useOperateQueue()
   const controlRoomBaySignal = useControlRoomBayNavSignal()
 
   const navGroups = useMemo(
     () => buildTaskNavGroups(modeId, CONSOLE_NAV_GROUPS),
     [modeId],
+  )
+
+  const phaseStatuses = useMemo(
+    () =>
+      resolveAllTaskPhaseStatuses(modeId, {
+        snapshot,
+        operateQueueOpenCount: queueQ.data?.open.length ?? 0,
+        briefingOpened: isBriefingOpened(modeId),
+      }),
+    // activeTab forces recalc when user navigates after marking briefing opened
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [modeId, snapshot, queueQ.data?.open.length, activeTab],
+  )
+
+  const activePhaseId = useMemo(
+    () => resolveActivePhaseId(phaseStatuses, mode.phases?.map(p => p.id)),
+    [phaseStatuses, mode.phases],
+  )
+
+  const dimmedIds = useMemo(
+    () => dimmedNavTabIds(modeId, activePhaseId),
+    [modeId, activePhaseId],
   )
 
   const productContext = mode.label
@@ -111,6 +141,9 @@ export function ConsoleSidebar({
     </>
   )
 
+  const fleetCritical = fleet.verdict.kind === 'NO-GO' || snapshot.missionOverall === 'fail'
+  const operateQueueOpen = queueQ.data?.open.length ?? 0
+
   return (
     <ShellNavSidebar
       productName="Bifrost Ops"
@@ -121,8 +154,14 @@ export function ConsoleSidebar({
       onSelect={item => onSelect(item.id)}
       storageKey="bifrost-ops"
       renderItemIcon={renderItemIcon}
+      dimmedIds={dimmedIds.length > 0 ? dimmedIds : undefined}
       navPrefix={collapsed => (
-        <TaskModeIconRail collapsed={collapsed} onModeChange={onModeChange} />
+        <TaskModeIconRail
+          collapsed={collapsed}
+          onModeChange={onModeChange}
+          operateQueueOpen={operateQueueOpen}
+          fleetCritical={fleetCritical}
+        />
       )}
       footer={footer}
     />

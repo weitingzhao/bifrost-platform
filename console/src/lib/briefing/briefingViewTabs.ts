@@ -229,18 +229,14 @@ export function defaultLaneForLineTrack(
   return defaultLaneForScopeTrack(line, tt)
 }
 
-/** Map Task Mode → Component Line. */
+/**
+ * Map Task Mode → Component Line.
+ * `build` has no static line — fallback `'rocket'` only when session has not set one.
+ */
 export function componentLineForTaskMode(modeId: string): ComponentLineId {
   switch (modeId as TaskModeId) {
-    case 'rocket-build':
+    case 'build':
       return 'rocket'
-    case 'satellite-build':
-      return 'satellite'
-    case 'engineer-build':
-    case 'plugin-build':
-      return 'engineer'
-    case 'ground-build':
-      return 'ground'
     case 'daily-ops':
     case 'mission-launch':
       return 'operations'
@@ -252,36 +248,28 @@ export function componentLineForTaskMode(modeId: string): ComponentLineId {
 /**
  * Map Briefing Scope → Task Mode accent identity
  * (drives `data-task-mode` → `--task-mode-accent` from taskModeChrome.css).
+ * All component lines map to unified `build`; operations → daily-ops.
  */
 export function taskModeForBriefingScope(scope: BriefingScopeId): TaskModeId {
   switch (scope) {
     case 'all':
       return 'system'
-    case 'rocket':
-      return 'rocket-build'
-    case 'satellite':
-      return 'satellite-build'
-    case 'engineer':
-      return 'engineer-build'
-    case 'ground':
-      return 'ground-build'
     case 'operations':
       return 'daily-ops'
+    case 'rocket':
+    case 'satellite':
+    case 'engineer':
+    case 'ground':
     case 'subcontractor':
-      return 'plugin-build'
+      return 'build'
   }
 }
 
 /** Map Task Mode → default Work Track Type. */
 export function trackTypeForTaskMode(modeId: string): WorkTrackType {
   switch (modeId as TaskModeId) {
-    case 'rocket-build':
-    case 'engineer-build':
-    case 'plugin-build':
-    case 'ground-build':
+    case 'build':
       return 'build'
-    case 'satellite-build':
-      return 'migrate'
     case 'daily-ops':
       return 'maintain'
     case 'mission-launch':

@@ -1,4 +1,7 @@
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { cn, DenseTag, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
+import { fetchReleaseGate } from '@/api/promote'
 import { taskModesForSwitcher } from '@/lib/task-mode/taskModeCatalog'
 import { taskModeVisual } from '@/lib/task-mode/taskModeVisual'
 import type { LoopArchetype, TaskModeDef, TaskModeId } from '@/lib/task-mode/types'
@@ -8,6 +11,7 @@ import { useTaskMode } from '@/lib/task-mode/TaskModeContext'
  * Flat single-row rail: Home | Flight | Forge via hairline dividers only.
  * Idle glyphs small + muted; hover/active grow in-flow (push neighbors);
  * only active restores accent (System = Bifrost lime).
+ * Non-active modes may show a cross-view attention dot (warn / error).
  */
 
 const DECK_ORDER: LoopArchetype[] = ['system', 'ops', 'dev']
@@ -21,14 +25,73 @@ const ARCHETYPE_TOOLTIP: Record<
   dev: { label: 'Build', variant: 'info' },
 }
 
+export type ViewSignalLevel = 'warn' | 'error'
+
 type TaskModeIconRailProps = {
   collapsed?: boolean
   onModeChange?: (landingTab: string, modeId: TaskModeId) => void
+  /** Daily Ops — open operate-queue count (from parent; avoids duplicate heavy polling). */
+  operateQueueOpen?: number
+  /** Daily Ops — fleet NO-GO / mission fail. */
+  fleetCritical?: boolean
 }
 
-export function TaskModeIconRail({ collapsed = false, onModeChange }: TaskModeIconRailProps) {
+function resolveDailyOpsSignal(
+  operateQueueOpen: number,
+  fleetCritical: boolean,
+): ViewSignalLevel | null {
+  if (fleetCritical) return 'error'
+  if (operateQueueOpen > 0) return 'warn'
+  return null
+}
+
+function resolveLaunchSignal(
+  platformStg: string | undefined,
+  tradeStg: string | undefined,
+): ViewSignalLevel | null {
+  const results = [platformStg, tradeStg].filter((r): r is string => r != null && r !== '')
+  if (results.some(r => r === 'fail' || r === 'error')) return 'error'
+  if (results.some(r => r === 'pending' || r === 'running' || r === 'unknown')) return 'warn'
+  return null
+}
+
+export function TaskModeIconRail({
+  collapsed = false,
+  onModeChange,
+  operateQueueOpen = 0,
+  fleetCritical = false,
+}: TaskModeIconRailProps) {
   const { modeId, setModeId, mode } = useTaskMode()
   const allModes = taskModesForSwitcher()
+
+  // Light gate polls for Launch cross-view signal (≥20s). Skip when Launch is active
+  // (TCC already owns denser polling) but still refresh so dots update after leave.
+  const platformGateQ = useQuery({
+    queryKey: ['task-mode-rail', 'platform-stg-gate'],
+    queryFn: () => fetchReleaseGate('platform-stg'),
+    refetchInterval: 20_000,
+    staleTime: 15_000,
+  })
+  const tradeGateQ = useQuery({
+    queryKey: ['task-mode-rail', 'trade-stg-gate'],
+    queryFn: () => fetchReleaseGate('stg'),
+    refetchInterval: 20_000,
+    staleTime: 15_000,
+  })
+
+  const signals = useMemo((): Partial<Record<TaskModeId, ViewSignalLevel>> => {
+    const out: Partial<Record<TaskModeId, ViewSignalLevel>> = {}
+    const daily = resolveDailyOpsSignal(operateQueueOpen, fleetCritical)
+    if (daily != null) out['daily-ops'] = daily
+    const launch = resolveLaunchSignal(platformGateQ.data?.result, tradeGateQ.data?.result)
+    if (launch != null) out['mission-launch'] = launch
+    return out
+  }, [
+    operateQueueOpen,
+    fleetCritical,
+    platformGateQ.data?.result,
+    tradeGateQ.data?.result,
+  ])
 
   const decks = DECK_ORDER.map(archetype => ({
     archetype,
@@ -85,6 +148,7 @@ export function TaskModeIconRail({ collapsed = false, onModeChange }: TaskModeIc
                 active={m.id === modeId}
                 collapsed={collapsed}
                 onPick={pick}
+                signal={m.id === modeId ? null : (signals[m.id] ?? null)}
               />
             ))}
           </div>
@@ -99,11 +163,13 @@ function ModeGlyph({
   active,
   collapsed,
   onPick,
+  signal,
 }: {
   mode: TaskModeDef
   active: boolean
   collapsed: boolean
   onPick: (id: TaskModeId) => void
+  signal: ViewSignalLevel | null
 }) {
   const visual = taskModeVisual(mode.id)
   const Icon = visual.icon
@@ -116,14 +182,27 @@ function ModeGlyph({
           data-task-mode={mode.id}
           data-active={active ? 'true' : undefined}
           className={cn(
-            'task-mode-icon-rail__btn inline-flex shrink-0 items-center justify-center rounded-md',
+            'task-mode-icon-rail__btn relative inline-flex shrink-0 items-center justify-center rounded-md',
             active && 'task-mode-icon-rail__btn--active',
           )}
-          aria-label={mode.label}
+          aria-label={
+            signal == null
+              ? mode.label
+              : `${mode.label} (${signal === 'error' ? 'attention required' : 'needs review'})`
+          }
           aria-pressed={active}
           onClick={() => onPick(mode.id)}
         >
           <Icon className="task-mode-icon-rail__icon" aria-hidden />
+          {signal != null && (
+            <span
+              className={cn(
+                'pointer-events-none absolute right-0.5 top-0.5 size-1.5 rounded-full',
+                signal === 'error' ? 'bg-destructive' : 'bg-warning',
+              )}
+              aria-hidden
+            />
+          )}
         </button>
       </TooltipTrigger>
       <TooltipContent side={collapsed ? 'right' : 'bottom'} className="max-w-[14rem]">
@@ -132,6 +211,11 @@ function ModeGlyph({
           {mode.loopArchetype !== 'system' && (
             <DenseTag variant={archetypeBadge.variant} className="text-[9px]">
               {archetypeBadge.label}
+            </DenseTag>
+          )}
+          {signal != null && (
+            <DenseTag variant={signal === 'error' ? 'danger' : 'warning'} className="text-[9px]">
+              {signal === 'error' ? 'Attention' : 'Review'}
             </DenseTag>
           )}
         </div>

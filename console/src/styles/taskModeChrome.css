@@ -22,34 +22,10 @@
   --task-mode-accent-border: color-mix(in oklab, oklch(0.78 0.16 55) 45%, transparent);
 }
 
-[data-task-mode='rocket-build'] {
-  --task-mode-accent: oklch(0.68 0.16 285);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.68 0.16 285) 14%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.68 0.16 285) 42%, transparent);
-}
-
-[data-task-mode='satellite-build'] {
-  --task-mode-accent: oklch(0.72 0.14 155);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.72 0.14 155) 14%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.14 155) 42%, transparent);
-}
-
-[data-task-mode='engineer-build'] {
+[data-task-mode='build'] {
   --task-mode-accent: oklch(0.70 0.14 270);
   --task-mode-accent-subtle: color-mix(in oklab, oklch(0.70 0.14 270) 14%, transparent);
   --task-mode-accent-border: color-mix(in oklab, oklch(0.70 0.14 270) 42%, transparent);
-}
-
-[data-task-mode='ground-build'] {
-  --task-mode-accent: oklch(0.68 0.12 145);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.68 0.12 145) 14%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.68 0.12 145) 42%, transparent);
-}
-
-[data-task-mode='plugin-build'] {
-  --task-mode-accent: oklch(0.72 0.14 250);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.72 0.14 250) 14%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.14 250) 42%, transparent);
 }
 
 /* Fallback only when chrome root has no mode attribute */
@@ -249,7 +225,7 @@
   filter: drop-shadow(0 0 4px color-mix(in oklab, currentColor 45%, transparent));
 }
 
-/* Align with rocket-build / satellite-build accents in this file */
+/* Align with build / Launch accents in this file */
 .release-lane-opt--active .release-lane-opt__icon--vehicle {
   color: oklch(0.72 0.17 285);
 }

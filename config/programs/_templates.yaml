@@ -26,3 +26,16 @@ templates:
     title: Plugin Build
     description: Dev loop instance for platform plugin work (e.g. IB Gateway).
     base_blueprint_id: ib-gateway-plugin
+
+  # Unified Build view (Console taskModeCatalog templateId: build).
+  # Legacy *-build templates above remain for existing program instances.
+  - id: build
+    title: Build
+    description: Unified dev loop — base blueprint resolved by lane_id param at spawn time.
+    base_blueprint_id: control-room-ui
+    lane_blueprint_map:
+      console-api: control-room-ui
+      trade-stack: trade-ib-client-migration
+      agent-infra: dev-agent
+      network-server: network-governance
+      agent-services: ib-gateway-plugin
