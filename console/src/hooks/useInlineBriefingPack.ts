@@ -6,6 +6,7 @@ import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { fetchClusterObservability } from '@/api/cluster'
 import { buildBriefingPack } from '@/lib/briefing/buildBriefingPack'
 import { ensureSessionForPack } from '@/lib/briefing/ensureSessionForPack'
+import { saveBriefingActiveSession } from '@/lib/briefing/briefingActiveSession'
 import {
   buildQueueForLane,
   laneById,
@@ -254,6 +255,14 @@ export function useInlineBriefingPack({
         document.body.removeChild(ta)
         if (!ok) return false
       }
+      saveBriefingActiveSession({
+        track: trackId,
+        lane: selectedLaneId,
+        intent,
+        packSize: 'compact',
+        startedAt: new Date().toISOString(),
+        programId: resolvedProgramId,
+      })
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2000)
       return true

@@ -299,6 +299,10 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
     dev: {
       kind: 'dev',
       templateId: 'build',
+      /** Spine track for inline pack readiness (Copy session). */
+      briefingTrack: 'build',
+      briefingTrackType: 'build',
+      briefingComponentLine: 'rocket',
     },
   },
 ]

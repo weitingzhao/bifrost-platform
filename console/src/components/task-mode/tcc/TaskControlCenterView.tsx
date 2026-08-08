@@ -9,6 +9,7 @@ import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
 import type { CommandLane } from '@/components/task-mode/MissionLaunchBoard'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { TaskCCVerdict } from '@/components/task-mode/tcc/TaskCCVerdict'
+import { LaunchFleetStrip } from '@/components/task-mode/tcc/LaunchFleetStrip'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import type { FleetViewerEnv } from '@/lib/control-room/fleetSnapshot'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
@@ -175,7 +176,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
       : 'Collapsed — not live Go/No-Go'
 
   const phaseProgressCaption = isDevLoop
-    ? 'Playbook phase status — Briefing → implement → deliver → sign-off'
+    ? 'Playbook phases (not Lane queue %) — Briefing → implement → deliver → sign-off'
     : 'Historical phase checklist — not live environment health'
 
   const firstIncompletePhase = isMissionLaunch
@@ -422,12 +423,30 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
                 </span>
               </span>
             </>
+          ) : isDevLoop && phases.length > 0 ? (
+            <span className="font-mono-tabular">
+              Playbook phases {doneCount}/{phases.length}
+              {props.resolvedProgramId != null
+                ? ` · ${props.resolvedProgramId}`
+                : props.devProgram.hasActiveSession
+                  ? ' · no program yet'
+                  : ' · no Active Session'}
+            </span>
           ) : !isDailyOps && phases.length > 0 ? (
             <span className="font-mono-tabular">{doneCount}/{phases.length} phases complete</span>
           ) : undefined
         }
         actions={verdictActions}
       />
+
+      {isMissionLaunch && showLaunchPad ? (
+        <LaunchFleetStrip
+          rocket={q.rocketVerdict}
+          satellite={q.satelliteVerdict}
+          plugin={props.pluginLaunchVerdict}
+          overallLamp={verdictLamp}
+        />
+      ) : null}
 
       {isDailyOps && fix.aiDailyOpsFix.error != null && (
         <OpsFeedback variant="error" title="Failed to start Agent Fix">

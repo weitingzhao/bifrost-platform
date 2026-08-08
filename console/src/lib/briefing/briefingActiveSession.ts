@@ -12,11 +12,14 @@ export interface BriefingActiveSession {
   packSize: BriefingPackSize
   startedAt: string
   jobId?: string
+  /** Delivery Board program bound to this session — shared with Build TCC. */
+  programId?: string
 }
 
 export function saveBriefingActiveSession(session: BriefingActiveSession): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+    window.dispatchEvent(new Event('bifrost-briefing-active-session'))
   } catch {
     // ignore
   }
@@ -38,9 +41,27 @@ export function attachJobToBriefingSession(jobId: string): void {
   saveBriefingActiveSession({ ...current, jobId })
 }
 
+/** Bind a Delivery program to the current Active Session (same lane context). */
+export function attachProgramToBriefingSession(programId: string): void {
+  const current = loadBriefingActiveSession()
+  if (current == null) return
+  const id = programId.trim()
+  if (id === '') return
+  if (current.programId === id) return
+  saveBriefingActiveSession({ ...current, programId: id })
+}
+
+/** Drop program bind when lane mismatches or instance is discarded. */
+export function clearProgramFromBriefingSession(): void {
+  const current = loadBriefingActiveSession()
+  if (current == null || current.programId == null) return
+  saveBriefingActiveSession({ ...current, programId: undefined })
+}
+
 export function clearBriefingActiveSession(): void {
   try {
     localStorage.removeItem(STORAGE_KEY)
+    window.dispatchEvent(new Event('bifrost-briefing-active-session'))
   } catch {
     // ignore
   }

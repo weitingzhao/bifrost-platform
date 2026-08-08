@@ -17,6 +17,7 @@ import {
   isProxyError,
 } from '@/api/marketDataPlugin'
 import { MarketDataJsonProbeCard } from '@/components/market-data/MarketDataJsonProbeCard'
+import { DataInventoryStrip } from '@/components/market-data/DataInventoryStrip'
 import { OptionCoverageSection } from '@/components/market-data/OptionCoverageSection'
 import { QualityScoreSection } from '@/components/market-data/QualityScoreSection'
 import { StockDepthSection } from '@/components/market-data/StockDepthSection'
@@ -147,6 +148,8 @@ export function MarketDataCoverageTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      <DataInventoryStrip />
+
       <QualityScoreSection />
 
       <StockDepthSection symbols={symbols} watchlistLoading={watchlistQ.isLoading} />

@@ -121,6 +121,46 @@ export type CoverageDbSummary = {
   error?: string
 }
 
+export type CoverageInventoryMetric = {
+  symbols?: number
+  days?: number
+  latest?: string | null
+}
+
+export type CoverageInventoryStockDaily = {
+  symbols?: number
+  total_rows?: number
+  min_date?: string | null
+  max_date?: string | null
+}
+
+export type CoverageInventoryOption = {
+  underlyings?: number
+  total_contracts?: number
+  total_expiries?: number
+  snapshot_symbols?: number
+  snapshot_latest?: string | null
+  oi_symbols?: number
+  oi_latest?: string | null
+}
+
+export type CoverageInventoryResponse = {
+  ok: boolean
+  scope?: string
+  watchlist_symbols?: string[]
+  stock_daily?: CoverageInventoryStockDaily | null
+  stock_min?: CoverageInventoryStockDaily | null
+  option?: CoverageInventoryOption | null
+  analytics?: {
+    max_pain?: CoverageInventoryMetric | null
+    atm_iv?: CoverageInventoryMetric | null
+    pcr?: CoverageInventoryMetric | null
+    iv_percentile?: CoverageInventoryMetric | null
+  }
+  generated_at?: string
+  error?: string
+}
+
 export type CoverageWatchlistSymbol = {
   symbol: string
   contract_count?: number
@@ -138,6 +178,10 @@ export type CoverageWatchlist = {
 
 export function fetchCoverageDbSummary() {
   return proxyGet<CoverageDbSummary>('/market/coverage/db-summary')
+}
+
+export function fetchCoverageInventory() {
+  return proxyGet<CoverageInventoryResponse>('/market/coverage/inventory')
 }
 
 export function fetchCoverageWatchlist() {

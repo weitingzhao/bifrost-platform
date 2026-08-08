@@ -524,6 +524,7 @@ export function BriefingPage({
         intent,
         packSize,
         startedAt: new Date().toISOString(),
+        programId: linkedProgramId,
       })
       setSessionLifecycle('active')
       const launch = launchCursorBriefingAfterPrepare()
@@ -559,6 +560,7 @@ export function BriefingPage({
         intent,
         packSize,
         startedAt: new Date().toISOString(),
+        programId: linkedProgramId,
       })
       setSessionLifecycle('active')
       setSessionCopied(true)

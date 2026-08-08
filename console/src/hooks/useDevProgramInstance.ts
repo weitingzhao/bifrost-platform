@@ -1,12 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createProgramFromTemplate,
+  fetchDeliveryBoardPrograms,
   fetchProgramDetail,
   invalidateProgramDeliveryQueries,
+  PROGRAMS_BOARD_QUERY_KEY,
 } from '@/api/programs'
 import type { ProgramDetailResponse } from '@/api/programsTypes'
-import { loadBriefingActiveSession } from '@/lib/briefing/briefingActiveSession'
+import {
+  attachProgramToBriefingSession,
+  clearProgramFromBriefingSession,
+  loadBriefingActiveSession,
+  type BriefingActiveSession,
+} from '@/lib/briefing/briefingActiveSession'
 import type { TaskModeDef } from '@/lib/task-mode/types'
 
 const STORAGE_PREFIX = 'bifrost-task-program-'
@@ -31,26 +38,97 @@ function persistProgramId(modeId: string, programId: string) {
   }
 }
 
+function clearStoredProgramId(modeId: string) {
+  try {
+    localStorage.removeItem(storageKey(modeId))
+  } catch {
+    // ignore
+  }
+}
+
+function useBriefingActiveSessionLive(): BriefingActiveSession | null {
+  const [session, setSession] = useState<BriefingActiveSession | null>(() =>
+    loadBriefingActiveSession(),
+  )
+
+  useEffect(() => {
+    const refresh = () => setSession(loadBriefingActiveSession())
+    refresh()
+    window.addEventListener('storage', refresh)
+    window.addEventListener('focus', refresh)
+    window.addEventListener('bifrost-briefing-active-session', refresh)
+    return () => {
+      window.removeEventListener('storage', refresh)
+      window.removeEventListener('focus', refresh)
+      window.removeEventListener('bifrost-briefing-active-session', refresh)
+    }
+  }, [])
+
+  return session
+}
+
 export type UseDevProgramInstanceResult = {
   programId: string | undefined
   programDetail: ProgramDetailResponse | undefined
   programLoading: boolean
   programError: Error | null
   createPending: boolean
+  /** Active Session present — required before Create. */
+  hasActiveSession: boolean
+  activeLane: string | undefined
+  canCreateProgram: boolean
   ensureProgram: () => void
   createNewInstance: (opts?: { instanceLabel?: string; notes?: string; laneId?: string }) => void
 }
 
-/** Resolve or auto-create a Delivery Board program instance for a dev task mode. */
+/**
+ * Resolve a Delivery Board program for a dev task mode.
+ * Authority: Active Session lane — never auto-create without a session.
+ */
 export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceResult {
   const qc = useQueryClient()
   const templateId = mode.dev?.templateId
-  const autoCreateAttempted = useRef(false)
+  const session = useBriefingActiveSessionLive()
+  const activeLane = session?.lane
+  const hasActiveSession = session != null && activeLane != null && activeLane !== ''
 
-  const [programId, setProgramId] = useState<string | undefined>(() => {
-    if (mode.loopArchetype !== 'dev') return undefined
-    return readStoredProgramId(mode.id) ?? undefined
+  const boardQ = useQuery({
+    queryKey: PROGRAMS_BOARD_QUERY_KEY,
+    queryFn: fetchDeliveryBoardPrograms,
+    enabled: mode.loopArchetype === 'dev' && hasActiveSession,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   })
+
+  const resolvedId = useMemo(() => {
+    if (mode.loopArchetype !== 'dev' || !hasActiveSession || activeLane == null) {
+      return undefined
+    }
+    if (session?.programId != null && session.programId.trim() !== '') {
+      return session.programId.trim()
+    }
+    const boardHit = (boardQ.data?.programs ?? []).find(p => p.lane_id === activeLane)
+    if (boardHit != null) return boardHit.id
+    // Prefer board lane match before localStorage; wait for first board fetch.
+    // Detail fetch still validates program.lane_id === activeLane.
+    if (!boardQ.isFetched) return undefined
+    const stored = readStoredProgramId(mode.id)
+    return stored ?? undefined
+  }, [
+    mode.loopArchetype,
+    mode.id,
+    hasActiveSession,
+    activeLane,
+    session?.programId,
+    boardQ.data?.programs,
+    boardQ.isFetched,
+  ])
+
+  const [programId, setProgramId] = useState<string | undefined>(resolvedId)
+
+  useEffect(() => {
+    setProgramId(resolvedId)
+  }, [resolvedId])
 
   const programQ = useQuery({
     queryKey: ['programs', programId],
@@ -59,18 +137,42 @@ export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceR
     retry: false,
   })
 
+  // Drop stored/session bind when program lane mismatches Active Session.
+  // Must clear session.programId too — otherwise resolvedId rebinds the same id.
+  useEffect(() => {
+    if (!hasActiveSession || activeLane == null || programQ.data == null) return
+    const progLane = programQ.data.program.lane_id
+    if (progLane != null && progLane !== '' && progLane !== activeLane) {
+      clearStoredProgramId(mode.id)
+      if (session?.programId === programQ.data.program.id) {
+        clearProgramFromBriefingSession()
+      }
+      setProgramId(undefined)
+    }
+  }, [hasActiveSession, activeLane, programQ.data, mode.id, session?.programId])
+
+  // Persist + attach when a matching program is resolved.
+  useEffect(() => {
+    if (!hasActiveSession || programId == null || programQ.data == null) return
+    const progLane = programQ.data.program.lane_id
+    if (progLane != null && progLane !== '' && progLane !== activeLane) return
+    persistProgramId(mode.id, programId)
+    attachProgramToBriefingSession(programId)
+  }, [hasActiveSession, programId, programQ.data, activeLane, mode.id])
+
   const createMutation = useMutation({
     mutationFn: (body: { instance_label?: string; notes?: string; lane_id?: string }) =>
       createProgramFromTemplate({
         template_id: templateId!,
         instance_label: body.instance_label,
         notes: body.notes,
-        lane_id: body.lane_id ?? mode.dev?.briefingLane,
+        lane_id: body.lane_id,
       }),
     onSuccess: data => {
       const id = data.program.id
       setProgramId(id)
       persistProgramId(mode.id, id)
+      attachProgramToBriefingSession(id)
       qc.setQueryData(['programs', id], data)
       invalidateProgramDeliveryQueries(qc, id)
     },
@@ -79,65 +181,46 @@ export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceR
   const createNewInstance = useCallback(
     (opts?: { instanceLabel?: string; notes?: string; laneId?: string }) => {
       if (templateId == null) return
-      const activeLane = opts?.laneId ?? loadBriefingActiveSession()?.lane
+      const live = loadBriefingActiveSession()
+      const lane = opts?.laneId ?? live?.lane
+      if (lane == null || lane === '') return
+      const label = opts?.instanceLabel ?? `${mode.label} · ${lane}`
       createMutation.mutate({
-        instance_label: opts?.instanceLabel ?? mode.label,
+        instance_label: label,
         notes: opts?.notes,
-        lane_id: activeLane,
+        lane_id: lane,
       })
     },
     [createMutation, mode.label, templateId],
   )
 
+  const canCreateProgram = hasActiveSession && templateId != null
+
   const ensureProgram = useCallback(() => {
-    createNewInstance({ instanceLabel: mode.label })
-  }, [createNewInstance, mode.label])
+    if (!canCreateProgram) return
+    createNewInstance()
+  }, [canCreateProgram, createNewInstance])
 
-  useEffect(() => {
-    autoCreateAttempted.current = false
-    if (mode.loopArchetype !== 'dev') {
-      setProgramId(undefined)
-      return
-    }
-    setProgramId(readStoredProgramId(mode.id) ?? undefined)
-  }, [mode.id, mode.loopArchetype])
-
-  useEffect(() => {
-    if (mode.loopArchetype !== 'dev' || templateId == null) return
-    if (programId != null || createMutation.isPending) return
-    if (autoCreateAttempted.current) return
-    autoCreateAttempted.current = true
-    createNewInstance({ instanceLabel: mode.label })
-  }, [
-    mode.loopArchetype,
-    mode.label,
-    templateId,
-    programId,
-    createMutation.isPending,
-    createNewInstance,
-  ])
-
-  useEffect(() => {
-    if (mode.loopArchetype !== 'dev' || templateId == null) return
-    if (programQ.isLoading || createMutation.isPending) return
-    if (programQ.error == null) return
-    createNewInstance({ instanceLabel: mode.label })
-  }, [
-    mode.loopArchetype,
-    mode.label,
-    templateId,
-    programQ.isLoading,
-    programQ.error,
-    createMutation.isPending,
-    createNewInstance,
-  ])
+  // Surface template/API errors only when user attempted create or resolved id fails.
+  const programError =
+    createMutation.error != null
+      ? (createMutation.error as Error)
+      : programId != null && programQ.error != null
+        ? (programQ.error as Error)
+        : null
 
   return {
     programId,
     programDetail: programQ.data ?? createMutation.data,
-    programLoading: programQ.isLoading || createMutation.isPending,
-    programError: (programQ.error as Error | null) ?? (createMutation.error as Error | null),
+    programLoading:
+      (programId != null && programQ.isLoading) ||
+      createMutation.isPending ||
+      (hasActiveSession && boardQ.isLoading && programId == null),
+    programError,
     createPending: createMutation.isPending,
+    hasActiveSession,
+    activeLane,
+    canCreateProgram,
     ensureProgram,
     createNewInstance,
   }

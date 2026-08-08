@@ -18,6 +18,9 @@ export type DevTaskStripsProps = {
   programError?: Error | null
   resolvedProgramId?: string
   createPending?: boolean
+  hasActiveSession?: boolean
+  activeLane?: string
+  canCreateProgram?: boolean
   onCreateProgram?: () => void
   onCreateNewInstance?: () => void
   onNavigate: (tabId: string) => void
@@ -44,6 +47,12 @@ function firstIncompletePhase(
   return null
 }
 
+function isTemplateMissing(err: Error | null | undefined): boolean {
+  if (err == null) return false
+  const msg = err.message.toLowerCase()
+  return msg.includes('template not found') || msg.includes('template_id')
+}
+
 export function DevTaskStrips({
   mode,
   canOperate = false,
@@ -52,6 +61,9 @@ export function DevTaskStrips({
   programError,
   resolvedProgramId,
   createPending,
+  hasActiveSession = false,
+  activeLane,
+  canCreateProgram = false,
   onCreateProgram,
   onCreateNewInstance,
   onNavigate,
@@ -79,6 +91,10 @@ export function DevTaskStrips({
     firstIncompletePhase(phases, phaseStatuses)
   const signed = programDetail?.program.phases_signed ?? programDetail?.program.signed ?? 0
   const phaseCount = programDetail?.program.phase_count ?? 0
+  const playbookDone = phases.filter(p => phaseStatuses[p.id] === 'done').length
+  const templateMissing = isTemplateMissing(programError)
+  const needsProgram =
+    hasActiveSession && !programLoading && programDetail == null && dev.templateId != null
 
   return (
     <div className="flex flex-col gap-3">
@@ -86,6 +102,9 @@ export function DevTaskStrips({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
           <span className="text-[var(--text-dense-meta)] text-muted-foreground">Current step:</span>
           <span className="text-[var(--text-dense-label)] font-semibold">{currentPhase.title}</span>
+          <DenseTag variant="neutral" className="text-[9px]">
+            Playbook phases {playbookDone}/{phases.length}
+          </DenseTag>
           {currentPhase.id !== 'briefing' && currentPhase.navigateTab != null && (
             <Button
               variant="secondary"
@@ -112,17 +131,17 @@ export function DevTaskStrips({
             loading={devAgentLoading}
             onOpenDevAgent={() => onNavigate('dev-agent')}
           />
-          {programError != null && (
-            <OpsFeedback variant="error" title="Program instance unavailable">
-              {programError.message}
-            </OpsFeedback>
-          )}
-          {programDetail != null && (
+
+          {/* Single program-binding strip — follows Active Session */}
+          {programDetail != null ? (
             <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-2">
                 <ClipboardList size={16} />
                 <span className="text-[var(--text-dense-label)] font-semibold">Linked program</span>
                 <DenseTag variant="neutral">{programDetail.program.id}</DenseTag>
+                {programDetail.program.lane_id != null && (
+                  <DenseTag variant="info">{programDetail.program.lane_id}</DenseTag>
+                )}
                 <DenseTag variant={programDetail.program.complete ? 'success' : 'warning'}>
                   {signed}/{phaseCount} signed
                 </DenseTag>
@@ -138,35 +157,77 @@ export function DevTaskStrips({
                 <Button variant="ghost" size="xs" onClick={() => onNavigate('delivery-board')}>
                   Delivery Board →
                 </Button>
-                {onCreateNewInstance != null && (
+                {onCreateNewInstance != null && canCreateProgram && (
                   <Button
                     variant="secondary"
                     size="xs"
-                    disabled={createPending}
+                    disabled={createPending || !canOperate}
                     onClick={onCreateNewInstance}
+                    title={
+                      !canOperate
+                        ? 'Authenticate as operator'
+                        : `Create a new instance for lane ${activeLane ?? 'session'}`
+                    }
                   >
-                    {createPending ? 'Creating…' : 'New instance'}
+                    {createPending ? 'Creating…' : 'New instance for lane'}
                   </Button>
                 )}
               </div>
             </div>
-          )}
-          {programLoading && (
-            <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">Loading program…</p>
-          )}
-          {!programLoading && programDetail == null && dev.templateId != null && (
+          ) : programLoading ? (
+            <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
+              Loading program…
+            </p>
+          ) : !hasActiveSession ? (
             <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <Code2 size={16} />
-                <span className="text-[var(--text-dense-label)] font-semibold">Program template</span>
-                <DenseTag variant="info">{dev.templateId}</DenseTag>
+                <span className="text-[var(--text-dense-label)] font-semibold">
+                  No Active Session
+                </span>
               </div>
               <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-muted-foreground">
-                No Delivery Board instance linked yet — create one from the {dev.templateId} template.
+                Select a lane in Agent Briefing and Copy session (or Full Briefing) before linking a
+                Delivery Board program — TCC follows the Active Session.
               </p>
+              <Button
+                variant="secondary"
+                size="xs"
+                className="mt-2"
+                onClick={() => onNavigate('briefing')}
+              >
+                Open Briefing →
+              </Button>
+            </div>
+          ) : needsProgram ? (
+            <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <Code2 size={16} />
+                <span className="text-[var(--text-dense-label)] font-semibold">
+                  No program for this session
+                </span>
+                {activeLane != null && <DenseTag variant="info">{activeLane}</DenseTag>}
+                {dev.templateId != null && (
+                  <DenseTag variant="neutral">{dev.templateId}</DenseTag>
+                )}
+              </div>
+              <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-muted-foreground">
+                Create a Delivery Board instance for the Active Session lane. This becomes the shared
+                program for Briefing, phases, and sign-off.
+              </p>
+              {templateMissing && (
+                <OpsFeedback variant="error" title="Program template unavailable">
+                  {programError?.message ?? 'Template not found — check API programs/templates.'}
+                </OpsFeedback>
+              )}
+              {!templateMissing && programError != null && (
+                <OpsFeedback variant="error" title="Program create failed">
+                  {programError.message}
+                </OpsFeedback>
+              )}
               {!canOperate && (
                 <OpsFeedback variant="warning" title="Operator authentication required">
-                  Authenticate as operator to create program instance from template.
+                  Authenticate as operator to create a program instance from template.
                 </OpsFeedback>
               )}
               {onCreateProgram != null && (
@@ -174,14 +235,16 @@ export function DevTaskStrips({
                   variant="secondary"
                   size="xs"
                   className="mt-2"
-                  disabled={createPending || !canOperate}
+                  disabled={createPending || !canOperate || !canCreateProgram || templateMissing}
                   onClick={onCreateProgram}
                 >
-                  {createPending ? 'Creating…' : 'Create program instance'}
+                  {createPending
+                    ? 'Creating…'
+                    : `Create program for ${activeLane ?? 'session'}`}
                 </Button>
               )}
             </div>
-          )}
+          ) : null}
         </div>
       </OpsSection>
     </div>

@@ -156,8 +156,11 @@ export function DevModeStrips({
       programError={devProgram.programError}
       resolvedProgramId={resolvedProgramId}
       createPending={devProgram.createPending}
+      hasActiveSession={devProgram.hasActiveSession}
+      activeLane={devProgram.activeLane}
+      canCreateProgram={devProgram.canCreateProgram}
       onCreateProgram={devProgram.ensureProgram}
-      onCreateNewInstance={() => devProgram.createNewInstance({ instanceLabel: mode.label })}
+      onCreateNewInstance={() => devProgram.createNewInstance()}
       onNavigate={onNavigate}
       inlineBriefingPack={inlineBriefingPack}
       onOpenFullBriefing={onOpenFullBriefing}

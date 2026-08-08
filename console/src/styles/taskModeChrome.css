@@ -192,6 +192,77 @@
   height: 1.125rem;
 }
 
+/* Launch glyph — horizontal DEV / STG / PROD strip (uses rail width) */
+.task-mode-icon-rail__btn--env {
+  width: auto !important;
+  min-width: 1.75rem;
+  height: 1.5rem !important;
+  gap: 0.2rem;
+  padding: 0 0.3rem 0 0.2rem;
+  overflow: visible;
+}
+
+.task-mode-icon-rail__btn--env:hover,
+.task-mode-icon-rail__btn--env.task-mode-icon-rail__btn--active,
+.task-mode-icon-rail__btn--env[data-active='true'] {
+  width: auto !important;
+  height: 1.625rem !important;
+}
+
+.task-mode-icon-rail__btn--env .task-mode-icon-rail__icon {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.task-mode-icon-rail__env-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.task-mode-icon-rail__env-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.7rem;
+  height: 0.85rem;
+  padding: 0 2px;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  line-height: 1;
+}
+
+.task-mode-icon-rail__env-key {
+  font-size: 8px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.task-mode-icon-rail__env-cell--ok {
+  color: var(--color-lamp-green);
+  background: color-mix(in oklab, var(--color-lamp-green) 14%, transparent);
+  border-color: color-mix(in oklab, var(--color-lamp-green) 40%, transparent);
+}
+
+.task-mode-icon-rail__env-cell--fail {
+  color: var(--color-lamp-red);
+  background: color-mix(in oklab, var(--color-lamp-red) 14%, transparent);
+  border-color: color-mix(in oklab, var(--color-lamp-red) 45%, transparent);
+}
+
+.task-mode-icon-rail__env-cell--degraded {
+  color: var(--color-lamp-yellow);
+  background: color-mix(in oklab, var(--color-lamp-yellow) 14%, transparent);
+  border-color: color-mix(in oklab, var(--color-lamp-yellow) 45%, transparent);
+}
+
+.task-mode-icon-rail__env-cell--unknown {
+  color: color-mix(in oklab, var(--sidebar-foreground) 45%, transparent);
+  background: color-mix(in oklab, var(--sidebar-foreground) 8%, transparent);
+  border-color: color-mix(in oklab, var(--sidebar-foreground) 22%, transparent);
+}
+
 /* Mission Launch — release-lane segments (Rocket / Satellite / Plugin / Data) */
 .release-lane-opt {
   display: inline-flex;

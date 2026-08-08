@@ -134,7 +134,7 @@ export function TaskBriefingLauncher({
       {laneOptions.length > 1 && (
         <div className="mt-2.5">
           <p className="m-0 mb-1.5 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-muted-foreground">
-            Select lane
+            Select lane · Lane queue progress
           </p>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
             {laneOptions.map(({ lane, progress }) => {
@@ -186,7 +186,7 @@ export function TaskBriefingLauncher({
         <div className="mt-2.5 overflow-hidden rounded-md border border-border/60">
           <header className="flex items-center justify-between border-b border-border/60 bg-background px-2.5 py-1.5">
             <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
-              Queue · {laneMeta.shortLabel}
+              Lane queue · {laneMeta.shortLabel}
             </span>
             <span className="text-[var(--text-dense-caption)] text-muted-foreground">
               {activeQueue.length} active

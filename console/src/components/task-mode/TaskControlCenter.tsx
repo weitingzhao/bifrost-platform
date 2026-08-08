@@ -234,14 +234,26 @@ export function TaskControlCenter({
     return !q.phases.every((p: TaskPhaseDef) => q.statuses[p.id] === 'done')
   }, [q.phases, q.statuses, isDevLoop, isDailyOps])
 
-  const headerDescription =
-    mode.loopArchetype === 'dev'
-      ? `Briefing → implement → deliver — playbook for ${mode.label}.`
-      : isDailyOps
-        ? `Ops loop — Discover → Remediate → Verify → Clear — Fleet Desk is health ground truth.`
-        : mode.loopArchetype === 'ops'
-          ? `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
-          : `${mode.label} · ${loopLabel}`
+  const headerDescription = (() => {
+    if (mode.loopArchetype === 'dev') {
+      const lane = devProgram.activeLane
+      const prog = resolvedProgramId
+      if (!devProgram.hasActiveSession) {
+        return 'No Active Session — select a lane in Agent Briefing and Copy session before linking a program.'
+      }
+      if (prog == null) {
+        return `Active Session · ${lane ?? 'lane'} — no Delivery program yet. Create one for this lane.`
+      }
+      return `Lane ${lane ?? '—'} · program ${prog} · ${doneCount}/${q.phases.length} playbook phases`
+    }
+    if (isDailyOps) {
+      return 'Ops loop — Discover → Remediate → Verify → Clear — Fleet Desk is health ground truth.'
+    }
+    if (mode.loopArchetype === 'ops') {
+      return `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
+    }
+    return `${mode.label} · ${loopLabel}`
+  })()
 
   return (
     <TaskControlCenterView

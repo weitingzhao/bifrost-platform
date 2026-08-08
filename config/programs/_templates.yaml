@@ -34,8 +34,16 @@ templates:
     description: Unified dev loop — base blueprint resolved by lane_id param at spawn time.
     base_blueprint_id: control-room-ui
     lane_blueprint_map:
+      # Rocket / Console build lanes
       console-api: control-room-ui
+      cluster-infra: control-room-ui
+      mcp-gitops: control-room-ui
+      cicd-delivery: control-room-ui
+      # Satellite / Trade
       trade-stack: trade-ib-client-migration
+      # Engineer / Agent
       agent-infra: dev-agent
+      # Ground / Network
       network-server: network-governance
+      # Plugin
       agent-services: ib-gateway-plugin

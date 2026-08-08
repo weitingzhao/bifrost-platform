@@ -29,6 +29,7 @@ import {
   type WorkLane,
 } from '@/lib/briefing/workLanes'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { loadBriefingActiveSession } from '@/lib/briefing/briefingActiveSession'
 
 interface ActiveSessionPageProps {
   context: OpsContextResponse | undefined
@@ -225,7 +226,9 @@ export function ActiveSessionPage({
           auditRecords={auditRecords}
           auditLoading={auditLoading}
           onOpenAudit={onOpenAudit}
-          focusedProgramId={initialFocus.programId}
+          focusedProgramId={
+            initialFocus.programId ?? loadBriefingActiveSession()?.programId
+          }
           selectedComplete={selectedComplete}
           onOpenBriefing={() => onOpenBriefing({ lane: selectedRow.lane.id })}
           onOpenDeliveryBoard={
