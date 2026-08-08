@@ -1,78 +1,37 @@
-import { useState } from 'react'
-import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
-import { Check, ChevronDown, ChevronRight, ClipboardList } from 'lucide-react'
+import { Button, DenseTag } from '@bifrost/ui'
+import { ClipboardList } from 'lucide-react'
+import { BriefingStatusBadge } from '@/components/briefing/BriefingStatusChrome'
 import { markBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
+import { resolveSessionLaneFocus } from '@/lib/task-mode/sessionLaneFocus'
 import { workIntentById } from '@/lib/briefing/workIntents'
 import { componentLineForTaskMode, trackTypeForTaskMode } from '@/lib/briefing/briefingViewTabs'
 import type { TaskModeDef } from '@/lib/task-mode/types'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
-import type { InlineBriefingPackResult, LaneOption } from '@/hooks/useInlineBriefingPack'
-import type { QueueItem, QueueItemStatus } from '@/lib/briefing/workLanes'
-
-function laneReach(
-  progress: LaneOption['progress'],
-): 'ok' | 'degraded' | 'fail' | 'unknown' {
-  if (progress == null) return 'unknown'
-  if (progress.percent === 100) return 'ok'
-  if (progress.percent > 0) return 'degraded'
-  return 'unknown'
-}
-
-function queueItemReach(status: QueueItemStatus): 'ok' | 'degraded' | 'fail' | 'unknown' {
-  switch (status) {
-    case 'done':
-    case 'closed':
-      return 'ok'
-    case 'in_progress':
-    case 'next':
-    case 'ready_for_signoff':
-      return 'degraded'
-    case 'issue':
-    case 'blocked':
-      return 'fail'
-    default:
-      return 'unknown'
-  }
-}
-
-function statusLabel(status: QueueItemStatus): string {
-  if (status === 'ready_for_signoff') return 'sign-off'
-  return status.replace('_', ' ')
-}
-
-function QueueRow({ item }: { item: QueueItem }) {
-  return (
-    <li className="flex items-center gap-2 px-2 py-1.5">
-      <StatusLamp value={queueItemReach(item.status)} kind="reach" />
-      <span className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)]">
-        {item.label}
-      </span>
-      {item.progress != null && item.progress.total > 0 && (
-        <span className="font-mono text-[var(--text-dense-caption)] text-muted-foreground">
-          {item.progress.done}/{item.progress.total}
-        </span>
-      )}
-      <span className="shrink-0 font-mono text-[var(--text-dense-caption)] uppercase text-muted-foreground">
-        {statusLabel(item.status)}
-      </span>
-    </li>
-  )
-}
+import type { InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
+import { queueItemToBriefingStatus } from '@/lib/briefing/briefingStatus'
 
 export type TaskBriefingLauncherProps = {
   mode: TaskModeDef
   programId?: string
   inlinePack: InlineBriefingPackResult
+  hasActiveSession?: boolean
+  programSigned?: number
+  programPhaseCount?: number
   onBriefingOpened?: () => void
   onOpenFullBriefing?: (opts?: BriefingUrlState) => void
+  onNavigate?: (tabId: string) => void
 }
 
 export function TaskBriefingLauncher({
   mode,
   programId,
   inlinePack,
+  hasActiveSession = false,
+  programSigned = 0,
+  programPhaseCount = 0,
   onBriefingOpened,
   onOpenFullBriefing,
+  onNavigate,
 }: TaskBriefingLauncherProps) {
   const dev = mode.dev
   if (dev == null) return null
@@ -84,21 +43,27 @@ export function TaskBriefingLauncher({
     copyToClipboard,
     copyError,
     track,
-    laneOptions,
     selectedLaneId,
-    selectLane,
-    activeQueue,
-    completedQueue,
+    laneQueue,
     selectedLane: laneMeta,
     intent,
   } = inlinePack
 
-  const [completedOpen, setCompletedOpen] = useState(false)
+  const focus = resolveSessionLaneFocus({
+    queue: laneQueue,
+    hasActiveSession,
+    hasProgram: resolvedProgramId != null && resolvedProgramId !== '',
+    programSigned,
+    programPhaseCount,
+  })
+
+  const catalogLoading =
+    laneMeta != null && laneMeta.description === 'Lane catalog loading…'
 
   const briefingOpts: BriefingUrlState = {
-    view: componentLineForTaskMode(mode.id),
-    trackType: trackTypeForTaskMode(mode.id),
-    track: dev.briefingTrack,
+    view: laneMeta?.componentLine ?? componentLineForTaskMode(mode.id),
+    trackType: laneMeta?.trackType ?? trackTypeForTaskMode(mode.id),
+    track: laneMeta?.track ?? dev.briefingTrack,
     lane: selectedLaneId ?? dev.briefingLane,
     intent: intent ?? dev.briefingIntent,
     pack: 'compact',
@@ -119,137 +84,102 @@ export function TaskBriefingLauncher({
 
   const ctaLabel = copied ? 'Copied ✓' : isReady ? 'Copy session pack' : 'Preparing…'
   const intentLabel = intent != null ? workIntentById(intent).shortLabel : undefined
+  const progressLabel =
+    focus.progress != null ? `${focus.progress.done}/${focus.progress.total}` : null
 
   return (
     <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
-      {/* Header */}
       <div className="flex flex-wrap items-center gap-2">
         <ClipboardList size={16} />
         <span className="text-[var(--text-dense-label)] font-semibold">Agent Briefing</span>
-        {track != null && <DenseTag variant="neutral">Track · {track}</DenseTag>}
+        {track != null && (
+          <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+            Track · {track}
+          </span>
+        )}
         {intentLabel != null && <DenseTag variant="info">Intent · {intentLabel}</DenseTag>}
       </div>
 
-      {/* Lane selector */}
-      {laneOptions.length > 1 && (
-        <div className="mt-2.5">
-          <p className="m-0 mb-1.5 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-muted-foreground">
-            Select lane · Lane queue progress
-          </p>
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
-            {laneOptions.map(({ lane, progress }) => {
-              const selected = selectedLaneId === lane.id
-              const reach = laneReach(progress)
-              return (
-                <button
-                  key={lane.id}
-                  type="button"
-                  className={[
-                    'flex flex-col rounded-md border px-2.5 py-2 text-left transition-colors',
-                    selected
-                      ? 'border-primary bg-primary/8 ring-1 ring-primary/25'
-                      : 'border-border bg-card hover:bg-secondary/80',
-                  ].join(' ')}
-                  onClick={() => selectLane(lane.id)}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <StatusLamp value={reach} kind="reach" />
-                    <span className="min-w-0 truncate text-[var(--text-dense-label)] font-semibold">
-                      {lane.shortLabel}
-                    </span>
-                  </div>
-                  {progress != null && (
-                    <div className="mt-1">
-                      <div className="flex items-center justify-between text-[var(--text-dense-caption)] text-muted-foreground">
-                        <span>
-                          {progress.done}/{progress.total}
-                        </span>
-                        <span>{progress.percent}%</span>
-                      </div>
-                      <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-border">
-                        <div
-                          className="h-full rounded-full bg-primary transition-all"
-                          style={{ width: `${progress.percent}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Task queue for selected lane */}
-      {laneMeta != null && (activeQueue.length > 0 || completedQueue.length > 0) && (
-        <div className="mt-2.5 overflow-hidden rounded-md border border-border/60">
-          <header className="flex items-center justify-between border-b border-border/60 bg-background px-2.5 py-1.5">
-            <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
-              Lane queue · {laneMeta.shortLabel}
-            </span>
-            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-              {activeQueue.length} active
-              {completedQueue.length > 0 ? ` · ${completedQueue.length} done` : ''}
-            </span>
-          </header>
-          <ul className="m-0 flex list-none flex-col divide-y divide-border/40 p-0">
-            {activeQueue.map(item => (
-              <QueueRow key={item.id} item={item} />
-            ))}
-            {completedQueue.length > 0 && (
-              <li>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[var(--text-dense-caption)] text-muted-foreground hover:bg-secondary/40"
-                  onClick={() => setCompletedOpen(v => !v)}
-                >
-                  <Check size={12} className="text-success" />
-                  <span>{completedQueue.length} completed</span>
-                  {completedOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                </button>
-                {completedOpen && (
-                  <ul className="m-0 flex list-none flex-col divide-y divide-border/40 p-0 opacity-70">
-                    {completedQueue.map(item => (
-                      <QueueRow key={item.id} item={item} />
-                    ))}
-                  </ul>
-                )}
-              </li>
+      <div className="mt-2.5 overflow-hidden rounded-md border border-border/60 bg-background">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-2.5 py-1.5">
+          <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
+            Session lane
+          </span>
+          <span className="flex items-center gap-1.5">
+            <BriefingStatusBadge status={focus.status} />
+            {progressLabel != null && (
+              <span className="font-mono text-[var(--text-dense-caption)] text-muted-foreground">
+                {progressLabel}
+              </span>
             )}
-          </ul>
+          </span>
+        </header>
+        <div className="flex flex-col gap-1 px-2.5 py-2">
+          {hasActiveSession && catalogLoading ? (
+            <span className="text-[var(--text-dense-label)] font-semibold text-muted-foreground">
+              Loading lane catalog…
+            </span>
+          ) : hasActiveSession && laneMeta != null ? (
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-[var(--text-dense-label)] font-semibold">
+                {laneMeta.shortLabel}
+              </span>
+              <span className="font-mono text-[var(--text-dense-caption)] text-muted-foreground">
+                {laneMeta.id}
+              </span>
+              {resolvedProgramId != null && programPhaseCount > 0 && (
+                <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+                  · program {programSigned}/{programPhaseCount} signed
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-[var(--text-dense-label)] font-semibold">No Active Session</span>
+          )}
+          <p className="m-0 text-[var(--text-dense-meta)]">{focus.line}</p>
+          {focus.nextItem != null && (
+            <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
+              Next:{' '}
+              <span className="text-foreground">{focus.nextItem.label}</span>
+              {' · '}
+              {queueItemToBriefingStatus(focus.nextItem.status) === 'blocked'
+                ? 'blocked'
+                : 'pending'}
+            </p>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Lane description when no queue */}
-      {laneMeta != null && activeQueue.length === 0 && completedQueue.length === 0 && (
-        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-muted-foreground">
-          {laneMeta.label} — {laneMeta.description}
-        </p>
-      )}
-
-      {/* Copy + secondary link */}
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        <Button
-          variant={copied ? 'default' : 'secondary'}
-          size="xs"
-          disabled={!isReady || copied}
-          onClick={() => void handleCopy()}
-        >
-          {ctaLabel}
-        </Button>
+        {hasActiveSession && (
+          <Button
+            variant={copied ? 'default' : 'secondary'}
+            size="xs"
+            disabled={!isReady || copied}
+            onClick={() => void handleCopy()}
+          >
+            {ctaLabel}
+          </Button>
+        )}
+        {focus.kind === 'signoff' && onNavigate != null && (
+          <Button variant="secondary" size="xs" onClick={() => onNavigate('delivery-board')}>
+            Delivery Board →
+          </Button>
+        )}
         {onOpenFullBriefing != null && (
           <button
             type="button"
             className="text-[var(--text-dense-meta)] text-muted-foreground underline-offset-2 hover:underline"
             onClick={() => onOpenFullBriefing(briefingOpts)}
           >
-            Full Briefing →
+            {hasActiveSession ? 'Change lane in Briefing →' : 'Full Briefing →'}
           </button>
         )}
       </div>
       <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-muted-foreground">
-        Pack is scoped to the selected lane. Paste into a new Cursor chat.
+        {hasActiveSession
+          ? 'Pack is scoped to the Active Session lane. Paste into a new Cursor chat.'
+          : 'TCC follows the Active Session — pick a lane in Agent Briefing first.'}
       </p>
       {copyError != null && (
         <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-destructive">{copyError}</p>

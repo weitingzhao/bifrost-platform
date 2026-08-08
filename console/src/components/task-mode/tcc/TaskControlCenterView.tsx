@@ -17,6 +17,7 @@ import { pickFailingFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { fixScopeAgentTitle } from '@/lib/agent/readinessFixDispatch'
 import { launchVerdictToSignal } from '@/lib/task-mode/satelliteLaunchVerdict'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
+import { resolveBuildWorkbenchVerdict } from '@/lib/task-mode/buildWorkbenchVerdict'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import type { PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
 import type { TaskPhaseFixAction, TaskPhaseHint } from '@/lib/task-mode/taskPhaseDiagnostics'
@@ -167,17 +168,11 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     setPhaseOpen(phaseDefaultOpen)
   }, [phaseDefaultOpen, mode.id])
 
-  const phaseProgressHint = isDevLoop
-    ? phaseOpen
-      ? 'Open — Dev playbook checklist'
-      : 'Collapsed — Dev playbook checklist'
-    : phaseOpen
-      ? 'Open — not live Go/No-Go'
-      : 'Collapsed — not live Go/No-Go'
+  const phaseProgressHint = phaseOpen
+    ? 'Open — not live Go/No-Go'
+    : 'Collapsed — not live Go/No-Go'
 
-  const phaseProgressCaption = isDevLoop
-    ? 'Playbook phases (not Lane queue %) — Briefing → implement → deliver → sign-off'
-    : 'Historical phase checklist — not live environment health'
+  const phaseProgressCaption = 'Historical phase checklist — not live environment health'
 
   const firstIncompletePhase = isMissionLaunch
     ? phases.find(phase => statuses[phase.id] !== 'done')
@@ -237,12 +232,34 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   const globalHealthClass = signalTextClass(props.missionOverall)
   const checklistClass = checklistTextClass(phases, statuses, doneCount)
 
+  const buildWorkbench = useMemo(() => {
+    if (!isDevLoop) return null
+    const program = props.devProgram.programDetail?.program
+    return resolveBuildWorkbenchVerdict({
+      hasActiveSession: props.devProgram.hasActiveSession,
+      activeLane: props.devProgram.activeLane,
+      programId: props.resolvedProgramId,
+      programLoading: props.devProgram.programLoading,
+      packReady: props.inlineBriefingPack.isReady,
+      laneQueue: props.inlineBriefingPack.laneQueue,
+      programSigned: program?.phases_signed ?? program?.signed ?? 0,
+      programPhaseCount: program?.phase_count ?? 0,
+      devAgentError: props.devAgentQ.isError,
+    })
+  }, [
+    isDevLoop,
+    props.devProgram.hasActiveSession,
+    props.devProgram.activeLane,
+    props.devProgram.programLoading,
+    props.devProgram.programDetail,
+    props.resolvedProgramId,
+    props.inlineBriefingPack.isReady,
+    props.inlineBriefingPack.laneQueue,
+    props.devAgentQ.isError,
+  ])
+
   const verdictLamp = useMemo((): VerdictLamp => {
-    if (isDevLoop) {
-      if (doneCount === phases.length && phases.length > 0) return 'ok'
-      if (doneCount > 0) return 'degraded'
-      return 'unknown'
-    }
+    if (isDevLoop && buildWorkbench != null) return buildWorkbench.lamp
     if (isDailyOps) {
       if (!q.runnerHealthy) return 'fail'
       if (q.fleetClear) return 'ok'
@@ -257,10 +274,9 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     return 'unknown'
   }, [
     isDevLoop,
+    buildWorkbench,
     isDailyOps,
     isMissionLaunch,
-    doneCount,
-    phases.length,
     q.runnerHealthy,
     q.fleetClear,
     q.rocketVerdict.kind,
@@ -268,8 +284,32 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     props.pluginLaunchVerdict.kind,
   ])
 
+  const runBuildCta = (cta: NonNullable<typeof buildWorkbench>['cta']) => {
+    if (cta == null) return
+    if (cta.kind === 'navigate') {
+      onNavigate(cta.tabId)
+      return
+    }
+    document.getElementById(cta.elementId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   const verdictActions = useMemo(() => {
     const nodes: ReactNode[] = []
+    if (isDevLoop && buildWorkbench?.cta != null) {
+      const cta = buildWorkbench.cta
+      nodes.push(
+        <Button
+          key="build-workbench-cta"
+          type="button"
+          size="sm"
+          variant="outline"
+          className="shrink-0"
+          onClick={() => runBuildCta(cta)}
+        >
+          {cta.label}
+        </Button>,
+      )
+    }
     if (isDailyOps && !q.fleetClear) {
       nodes.push(
         <Button
@@ -309,6 +349,8 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     }
     return nodes.length > 0 ? <>{nodes}</> : undefined
   }, [
+    isDevLoop,
+    buildWorkbench,
     isDailyOps,
     isMissionLaunch,
     showLaunchPad,
@@ -317,9 +359,10 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     fix,
     fix.dailyOpsWorkflow?.primaryAction.label,
     verdictLamp,
+    onNavigate,
   ])
 
-  const phaseProgressBlock: ReactNode = isDailyOps ? null : phases.length > 0 ? (
+  const phaseProgressBlock: ReactNode = isDailyOps || isDevLoop ? null : phases.length > 0 ? (
     <details
       id="task-cc-phase-progress"
       className="rounded-lg border border-border bg-card px-3 py-1.5"
@@ -370,8 +413,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
       onOpenFullBriefing={props.onOpenBriefing}
       onBriefingOpened={props.handleBriefingOpened}
       devAgentQ={props.devAgentQ}
-      phases={phases}
-      phaseStatuses={statuses}
     />
   ) : null
 
@@ -382,8 +423,14 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         lamp={verdictLamp}
         tagLabel={loopLabel}
         tagVariant={mode.loopArchetype === 'dev' ? 'info' : 'neutral'}
-        tagTitle={mode.loopArchetype === 'ops' ? 'Workflow identity — not an alert' : undefined}
-        summary={props.headerDescription}
+        tagTitle={
+          mode.loopArchetype === 'ops'
+            ? 'Workflow identity — not an alert'
+            : mode.loopArchetype === 'dev'
+              ? 'Workbench identity — Session bind + next action (not playbook progress)'
+              : undefined
+        }
+        summary={buildWorkbench?.summary ?? props.headerDescription}
         meta={
           isMissionLaunch ? (
             <>
@@ -423,15 +470,19 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
                 </span>
               </span>
             </>
-          ) : isDevLoop && phases.length > 0 ? (
-            <span className="font-mono-tabular">
-              Playbook phases {doneCount}/{phases.length}
-              {props.resolvedProgramId != null
-                ? ` · ${props.resolvedProgramId}`
-                : props.devProgram.hasActiveSession
-                  ? ' · no program yet'
-                  : ' · no Active Session'}
-            </span>
+          ) : isDevLoop && buildWorkbench != null ? (
+            buildWorkbench.cta != null ? (
+              <button
+                type="button"
+                className="text-left hover:text-foreground hover:underline"
+                title={buildWorkbench.cta.label}
+                onClick={() => runBuildCta(buildWorkbench.cta)}
+              >
+                <span className="font-semibold text-foreground">{buildWorkbench.nextLine}</span>
+              </button>
+            ) : (
+              <span className="font-semibold text-foreground">{buildWorkbench.nextLine}</span>
+            )
           ) : !isDailyOps && phases.length > 0 ? (
             <span className="font-mono-tabular">{doneCount}/{phases.length} phases complete</span>
           ) : undefined

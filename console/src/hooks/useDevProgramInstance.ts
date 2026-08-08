@@ -12,8 +12,12 @@ import {
   attachProgramToBriefingSession,
   clearProgramFromBriefingSession,
   loadBriefingActiveSession,
-  type BriefingActiveSession,
 } from '@/lib/briefing/briefingActiveSession'
+import { useBriefingActiveSessionLive } from '@/hooks/useBriefingActiveSessionLive'
+import {
+  programLaneCompatible,
+  resolveDevProgramId,
+} from '@/lib/task-mode/devProgramResolve'
 import type { TaskModeDef } from '@/lib/task-mode/types'
 
 const STORAGE_PREFIX = 'bifrost-task-program-'
@@ -44,27 +48,6 @@ function clearStoredProgramId(modeId: string) {
   } catch {
     // ignore
   }
-}
-
-function useBriefingActiveSessionLive(): BriefingActiveSession | null {
-  const [session, setSession] = useState<BriefingActiveSession | null>(() =>
-    loadBriefingActiveSession(),
-  )
-
-  useEffect(() => {
-    const refresh = () => setSession(loadBriefingActiveSession())
-    refresh()
-    window.addEventListener('storage', refresh)
-    window.addEventListener('focus', refresh)
-    window.addEventListener('bifrost-briefing-active-session', refresh)
-    return () => {
-      window.removeEventListener('storage', refresh)
-      window.removeEventListener('focus', refresh)
-      window.removeEventListener('bifrost-briefing-active-session', refresh)
-    }
-  }, [])
-
-  return session
 }
 
 export type UseDevProgramInstanceResult = {
@@ -100,35 +83,51 @@ export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceR
     refetchInterval: 30_000,
   })
 
-  const resolvedId = useMemo(() => {
-    if (mode.loopArchetype !== 'dev' || !hasActiveSession || activeLane == null) {
-      return undefined
-    }
-    if (session?.programId != null && session.programId.trim() !== '') {
-      return session.programId.trim()
-    }
-    const boardHit = (boardQ.data?.programs ?? []).find(p => p.lane_id === activeLane)
-    if (boardHit != null) return boardHit.id
-    // Prefer board lane match before localStorage; wait for first board fetch.
-    // Detail fetch still validates program.lane_id === activeLane.
-    if (!boardQ.isFetched) return undefined
-    const stored = readStoredProgramId(mode.id)
-    return stored ?? undefined
-  }, [
-    mode.loopArchetype,
-    mode.id,
-    hasActiveSession,
-    activeLane,
-    session?.programId,
-    boardQ.data?.programs,
-    boardQ.isFetched,
-  ])
+  const resolvedId = useMemo(
+    () =>
+      resolveDevProgramId({
+        hasActiveSession,
+        activeLane,
+        sessionProgramId: session?.programId,
+        boardPrograms: boardQ.data?.programs ?? [],
+        boardFetched: boardQ.isFetched,
+        storedProgramId: readStoredProgramId(mode.id),
+      }),
+    [
+      hasActiveSession,
+      activeLane,
+      session?.programId,
+      boardQ.data?.programs,
+      boardQ.isFetched,
+      mode.id,
+    ],
+  )
 
   const [programId, setProgramId] = useState<string | undefined>(resolvedId)
 
   useEffect(() => {
     setProgramId(resolvedId)
   }, [resolvedId])
+
+  // Board already proves session.programId is wrong-lane — clear immediately (less flash).
+  useEffect(() => {
+    if (!hasActiveSession || activeLane == null || !boardQ.isFetched) return
+    const sessionId = session?.programId?.trim()
+    if (sessionId == null || sessionId === '') return
+    const onBoard = (boardQ.data?.programs ?? []).find(p => p.id === sessionId)
+    if (onBoard != null && !programLaneCompatible(onBoard.lane_id, activeLane)) {
+      clearProgramFromBriefingSession()
+      clearStoredProgramId(mode.id)
+      setProgramId(undefined)
+    }
+  }, [
+    hasActiveSession,
+    activeLane,
+    boardQ.isFetched,
+    boardQ.data?.programs,
+    session?.programId,
+    mode.id,
+  ])
 
   const programQ = useQuery({
     queryKey: ['programs', programId],
@@ -137,12 +136,10 @@ export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceR
     retry: false,
   })
 
-  // Drop stored/session bind when program lane mismatches Active Session.
-  // Must clear session.programId too — otherwise resolvedId rebinds the same id.
+  // Detail path: drop bind when lane missing or mismatches Active Session.
   useEffect(() => {
     if (!hasActiveSession || activeLane == null || programQ.data == null) return
-    const progLane = programQ.data.program.lane_id
-    if (progLane != null && progLane !== '' && progLane !== activeLane) {
+    if (!programLaneCompatible(programQ.data.program.lane_id, activeLane)) {
       clearStoredProgramId(mode.id)
       if (session?.programId === programQ.data.program.id) {
         clearProgramFromBriefingSession()
@@ -151,11 +148,10 @@ export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceR
     }
   }, [hasActiveSession, activeLane, programQ.data, mode.id, session?.programId])
 
-  // Persist + attach when a matching program is resolved.
+  // Persist + attach only after lane-compatible detail is confirmed.
   useEffect(() => {
-    if (!hasActiveSession || programId == null || programQ.data == null) return
-    const progLane = programQ.data.program.lane_id
-    if (progLane != null && progLane !== '' && progLane !== activeLane) return
+    if (!hasActiveSession || activeLane == null || programId == null || programQ.data == null) return
+    if (!programLaneCompatible(programQ.data.program.lane_id, activeLane)) return
     persistProgramId(mode.id, programId)
     attachProgramToBriefingSession(programId)
   }, [hasActiveSession, programId, programQ.data, activeLane, mode.id])
@@ -201,7 +197,6 @@ export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceR
     createNewInstance()
   }, [canCreateProgram, createNewInstance])
 
-  // Surface template/API errors only when user attempted create or resolved id fails.
   const programError =
     createMutation.error != null
       ? (createMutation.error as Error)
@@ -209,13 +204,25 @@ export function useDevProgramInstance(mode: TaskModeDef): UseDevProgramInstanceR
         ? (programQ.error as Error)
         : null
 
+  const detailOk =
+    programQ.data != null &&
+    activeLane != null &&
+    programLaneCompatible(programQ.data.program.lane_id, activeLane)
+
+  const createdOk =
+    createMutation.data != null &&
+    activeLane != null &&
+    programLaneCompatible(createMutation.data.program.lane_id, activeLane)
+
   return {
     programId,
-    programDetail: programQ.data ?? createMutation.data,
+    // Hide detail until lane-compatible — avoids wrong-program flash in UI.
+    programDetail: detailOk ? programQ.data : createdOk ? createMutation.data : undefined,
     programLoading:
-      (programId != null && programQ.isLoading) ||
       createMutation.isPending ||
-      (hasActiveSession && boardQ.isLoading && programId == null),
+      (hasActiveSession && boardQ.isLoading && programId == null) ||
+      (programId != null && programQ.isLoading) ||
+      (programId != null && programQ.isSuccess && !detailOk),
     programError,
     createPending: createMutation.isPending,
     hasActiveSession,

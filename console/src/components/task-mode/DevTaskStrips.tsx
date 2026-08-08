@@ -7,7 +7,8 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { TaskBriefingLauncher } from '@/components/task-mode/TaskBriefingLauncher'
 import { TaskDevAgentStatus } from '@/components/task-mode/TaskDevAgentStatus'
 import type { InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
-import type { TaskModeDef, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
+import type { TaskModeDef } from '@/lib/task-mode/types'
+import { BUILD_DEV_LOOP_ELEMENT_ID } from '@/lib/task-mode/buildWorkbenchVerdict'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 
 export type DevTaskStripsProps = {
@@ -32,19 +33,6 @@ export type DevTaskStripsProps = {
   /** Lifted Dev Agent status from TaskControlCenter (F2) — avoid duplicate query. */
   devAgentStatus?: DevAgentStatusResponse
   devAgentLoading?: boolean
-  /** Current playbook step (F11). */
-  phases?: TaskPhaseDef[]
-  phaseStatuses?: Record<string, TaskPhaseStatus>
-}
-
-function firstIncompletePhase(
-  phases: TaskPhaseDef[],
-  statuses: Record<string, TaskPhaseStatus>,
-): TaskPhaseDef | null {
-  for (const p of phases) {
-    if (statuses[p.id] !== 'done') return p
-  }
-  return null
 }
 
 function isTemplateMissing(err: Error | null | undefined): boolean {
@@ -72,8 +60,6 @@ export function DevTaskStrips({
   onBriefingOpened,
   devAgentStatus,
   devAgentLoading,
-  phases = [],
-  phaseStatuses = {},
 }: DevTaskStripsProps) {
   const dev = mode.dev
   if (dev == null) return null
@@ -86,45 +72,26 @@ export function DevTaskStrips({
         }
       : mode
 
-  const currentPhase =
-    phases.find(p => phaseStatuses[p.id] === 'active') ??
-    firstIncompletePhase(phases, phaseStatuses)
   const signed = programDetail?.program.phases_signed ?? programDetail?.program.signed ?? 0
   const phaseCount = programDetail?.program.phase_count ?? 0
-  const playbookDone = phases.filter(p => phaseStatuses[p.id] === 'done').length
   const templateMissing = isTemplateMissing(programError)
   const needsProgram =
     hasActiveSession && !programLoading && programDetail == null && dev.templateId != null
 
   return (
-    <div className="flex flex-col gap-3">
-      {currentPhase != null && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
-          <span className="text-[var(--text-dense-meta)] text-muted-foreground">Current step:</span>
-          <span className="text-[var(--text-dense-label)] font-semibold">{currentPhase.title}</span>
-          <DenseTag variant="neutral" className="text-[9px]">
-            Playbook phases {playbookDone}/{phases.length}
-          </DenseTag>
-          {currentPhase.id !== 'briefing' && currentPhase.navigateTab != null && (
-            <Button
-              variant="secondary"
-              size="xs"
-              onClick={() => onNavigate(currentPhase.navigateTab!)}
-            >
-              Open →
-            </Button>
-          )}
-        </div>
-      )}
-
+    <div id={BUILD_DEV_LOOP_ELEMENT_ID} className="flex flex-col gap-3">
       <OpsSection title="Dev loop">
         <div className="flex flex-col gap-3 p-3">
           <TaskBriefingLauncher
             mode={briefingMode}
             programId={resolvedProgramId}
             inlinePack={inlineBriefingPack}
+            hasActiveSession={hasActiveSession}
+            programSigned={signed}
+            programPhaseCount={phaseCount}
             onOpenFullBriefing={onOpenFullBriefing}
             onBriefingOpened={onBriefingOpened}
+            onNavigate={onNavigate}
           />
           <TaskDevAgentStatus
             status={devAgentStatus}

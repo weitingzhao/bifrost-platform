@@ -11,7 +11,7 @@ import {
 } from '@/hooks/useDevProgramInstance'
 import { useInlineBriefingPack, type InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
 import { isBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
-import type { TaskModeDef, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
+import type { TaskModeDef } from '@/lib/task-mode/types'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 
 /**
@@ -132,8 +132,6 @@ export function DevModeStrips({
   onOpenFullBriefing,
   onBriefingOpened,
   devAgentQ,
-  phases,
-  phaseStatuses,
 }: {
   mode: TaskModeDef
   canOperate?: boolean
@@ -144,8 +142,6 @@ export function DevModeStrips({
   onOpenFullBriefing?: (opts?: BriefingUrlState) => void
   onBriefingOpened?: () => void
   devAgentQ: DevModeControllerResult['devAgentQ']
-  phases: TaskPhaseDef[]
-  phaseStatuses: Record<string, TaskPhaseStatus>
 }) {
   return (
     <DevTaskStrips
@@ -167,8 +163,6 @@ export function DevModeStrips({
       onBriefingOpened={onBriefingOpened}
       devAgentStatus={devAgentQ.data}
       devAgentLoading={devAgentQ.isLoading}
-      phases={phases}
-      phaseStatuses={phaseStatuses}
     />
   )
 }

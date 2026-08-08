@@ -235,17 +235,6 @@ export function TaskControlCenter({
   }, [q.phases, q.statuses, isDevLoop, isDailyOps])
 
   const headerDescription = (() => {
-    if (mode.loopArchetype === 'dev') {
-      const lane = devProgram.activeLane
-      const prog = resolvedProgramId
-      if (!devProgram.hasActiveSession) {
-        return 'No Active Session — select a lane in Agent Briefing and Copy session before linking a program.'
-      }
-      if (prog == null) {
-        return `Active Session · ${lane ?? 'lane'} — no Delivery program yet. Create one for this lane.`
-      }
-      return `Lane ${lane ?? '—'} · program ${prog} · ${doneCount}/${q.phases.length} playbook phases`
-    }
     if (isDailyOps) {
       return 'Ops loop — Discover → Remediate → Verify → Clear — Fleet Desk is health ground truth.'
     }

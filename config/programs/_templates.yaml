@@ -39,11 +39,18 @@ templates:
       cluster-infra: control-room-ui
       mcp-gitops: control-room-ui
       cicd-delivery: control-room-ui
-      # Satellite / Trade
+      platform-gitops: control-room-ui
+      # Satellite / Trade (+ migrate)
       trade-stack: trade-ib-client-migration
+      compose-k3s: trade-ib-client-migration
+      trade-k8s-native: trade-ib-client-migration
+      data-layer-k3s: trade-ib-client-migration
+      legacy-retire: trade-ib-client-migration
       # Engineer / Agent
       agent-infra: dev-agent
       # Ground / Network
       network-server: network-governance
+      network-wifi: network-governance
+      ai-network: network-governance
       # Plugin
       agent-services: ib-gateway-plugin
