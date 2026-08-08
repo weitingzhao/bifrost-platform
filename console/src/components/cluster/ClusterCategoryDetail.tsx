@@ -54,7 +54,7 @@ export function ClusterCategoryDetail({
 }: ClusterCategoryDetailProps) {
   if (category == null) return null
 
-  let body: ReactNode = null
+  let body: ReactNode
   if (categoryDimension(category) === 'application') {
     body = applicationContent(category)
   } else {

@@ -40,6 +40,7 @@ import {
 } from '@/lib/briefing/briefingViewTabs'
 import {
   computeScopeWorkSummary,
+  isLaneLifecycleHold,
   laneLifecycleFromQueue,
   type BriefingLaneLifecycleFilter,
 } from '@/lib/briefing/briefingStatus'
@@ -75,6 +76,7 @@ import { isEmptyLaneInit } from '@/lib/briefing/laneInitPack'
 import { computeAllTracks } from '@/lib/briefing/workTracks'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 
 interface BriefingPageProps {
   context: OpsContextResponse | undefined
@@ -100,7 +102,6 @@ export function BriefingPage({
   matrices,
   matrixLoading,
   clusterSummary,
-  clusterLoading: _clusterLoading,
   platformHealthy,
   auditRecords,
   auditLoading,
@@ -153,6 +154,7 @@ export function BriefingPage({
 
   const { canOperate } = usePlatformAuth()
   const operateQueueQuery = useOperateQueue()
+  const { releasedByLane, programsReleasedFor } = useDeliveryProgramClosure()
   const [localSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
 
@@ -205,8 +207,11 @@ export function BriefingPage({
       const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
       return {
         label: lane.label,
+        laneId: lane.id,
         queue,
-        lifecycle: laneLifecycleFromQueue(queue),
+        lifecycle: laneLifecycleFromQueue(queue, {
+          programsReleased: programsReleasedFor(lane.id),
+        }),
       }
     })
     const visible =
@@ -214,9 +219,10 @@ export function BriefingPage({
         ? queues
         : queues.filter(q => q.lifecycle === lifecycleFilter)
     return computeScopeWorkSummary(
-      visible.map(({ label, queue }) => ({ label, queue })),
+      visible.map(({ label, queue, laneId }) => ({ label, queue, laneId })),
+      { programsReleasedByLane: releasedByLane },
     )
-  }, [selectedScope, selectedTrackType, lifecycleFilter, context, matrices, clusterSummary])
+  }, [selectedScope, selectedTrackType, lifecycleFilter, context, matrices, clusterSummary, releasedByLane, programsReleasedFor])
 
   /** Config / lane changes invalidate the "Active" session marker until re-copy. */
   function invalidateSessionPackUi() {
@@ -231,9 +237,10 @@ export function BriefingPage({
     if (lifecycleFilter == null) return
     const lanes = lanesForScope(selectedScope)
     const matching = lanes.filter(lane => {
-      const life = laneLifecycleFromQueue(
-        buildQueueForLane(lane.id, context, matrices, clusterSummary),
-      )
+      const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+      const released = programsReleasedFor(lane.id)
+      if (isLaneLifecycleHold(queue, released)) return false
+      const life = laneLifecycleFromQueue(queue, { programsReleased: released })
       return life === lifecycleFilter
     })
     if (matching.length === 0) return
@@ -250,6 +257,7 @@ export function BriefingPage({
     context,
     matrices,
     clusterSummary,
+    programsReleasedFor,
   ])
 
   useEffect(() => {
@@ -321,14 +329,20 @@ export function BriefingPage({
     [selectedLane, context, matrices, clusterSummary],
   )
   const selectedLaneLifecycle = useMemo(
-    () => laneLifecycleFromQueue(laneQueue),
-    [laneQueue],
+    () =>
+      laneLifecycleFromQueue(laneQueue, {
+        programsReleased: programsReleasedFor(selectedLane),
+      }),
+    [laneQueue, programsReleasedFor, selectedLane],
   )
-  const isArchiveLane = selectedLaneLifecycle === 'complete'
-  const isDoingLane = selectedLaneLifecycle === 'active'
+  const selectedLaneHold = isLaneLifecycleHold(
+    laneQueue,
+    programsReleasedFor(selectedLane),
+  )
+  const isArchiveLane = !selectedLaneHold && selectedLaneLifecycle === 'complete'
+  const isDoingLane = !selectedLaneHold && selectedLaneLifecycle === 'active'
   /** Ready/Planned keep plan queue; Doing executes on Active Session; Done stays archive. */
   const showSessionWorkRow = !isDoingLane
-  const allowBriefingDeliverySignOff = false
 
   /** Completed archive must never keep a work-Session ACTIVE marker. */
   useEffect(() => {
@@ -597,50 +611,49 @@ export function BriefingPage({
       />
 
       <BriefingMasterDetail
-        master={
-          <>
-            <BriefingViewTabsSection
-              selectedScope={selectedScope}
-              selectedTrackType={selectedTrackType}
-              onSelectScope={scope => {
-                setSelectedScope(scope)
-                const types = trackTypesForScope(scope)
-                const tt = types.includes(selectedTrackType) ? selectedTrackType : types[0] ?? 'build'
-                setSelectedTrackType(tt)
-                setSelectedLane(defaultLaneForScopeTrack(scope, tt))
-                invalidateSessionPackUi()
-              }}
-              onSelectTrackType={tt => {
-                setSelectedTrackType(tt)
-                setSelectedLane(defaultLaneForScopeTrack(selectedScope, tt))
-                invalidateSessionPackUi()
-              }}
-              scopeWorkSummary={scopeWorkSummary}
-              lifecycleFilter={lifecycleFilter}
-              onClearLifecycleFilter={handleClearLifecycleFilter}
-              context={context}
-              matrices={matrices}
-              clusterSummary={clusterSummary}
-            />
-
-            <TrackLaneSection
-              scope={selectedScope}
-              trackType={selectedTrackType}
-              track={selectedTrack}
-              selectedLane={selectedLane}
-              onSelectLane={(id) => {
-                setSelectedLane(id)
-                invalidateSessionPackUi()
-              }}
-              lifecycleFilter={lifecycleFilter}
-              onClearLifecycleFilter={handleClearLifecycleFilter}
-              newLaneOpenToken={newLaneOpenToken}
-              newLaneReference={newLaneReference}
-              context={context}
-              matrices={matrices}
-              clusterSummary={clusterSummary}
-            />
-          </>
+        scope={
+          <BriefingViewTabsSection
+            selectedScope={selectedScope}
+            selectedTrackType={selectedTrackType}
+            onSelectScope={scope => {
+              setSelectedScope(scope)
+              const types = trackTypesForScope(scope)
+              const tt = types.includes(selectedTrackType) ? selectedTrackType : types[0] ?? 'build'
+              setSelectedTrackType(tt)
+              setSelectedLane(defaultLaneForScopeTrack(scope, tt))
+              invalidateSessionPackUi()
+            }}
+            onSelectTrackType={tt => {
+              setSelectedTrackType(tt)
+              setSelectedLane(defaultLaneForScopeTrack(selectedScope, tt))
+              invalidateSessionPackUi()
+            }}
+            scopeWorkSummary={scopeWorkSummary}
+            lifecycleFilter={lifecycleFilter}
+            onClearLifecycleFilter={handleClearLifecycleFilter}
+            context={context}
+            matrices={matrices}
+            clusterSummary={clusterSummary}
+          />
+        }
+        lanes={
+          <TrackLaneSection
+            scope={selectedScope}
+            trackType={selectedTrackType}
+            track={selectedTrack}
+            selectedLane={selectedLane}
+            onSelectLane={(id) => {
+              setSelectedLane(id)
+              invalidateSessionPackUi()
+            }}
+            lifecycleFilter={lifecycleFilter}
+            onClearLifecycleFilter={handleClearLifecycleFilter}
+            newLaneOpenToken={newLaneOpenToken}
+            newLaneReference={newLaneReference}
+            context={context}
+            matrices={matrices}
+            clusterSummary={clusterSummary}
+          />
         }
         detail={
           !dataReady ? (
@@ -649,12 +662,11 @@ export function BriefingPage({
               <h2 className="m-0 text-sm font-semibold">Waiting for data</h2>
               <p className="m-0 max-w-sm text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                 Loading spine, matrix, and audit so the Session pack can be built. Pick a Doing or
-                Backlog lane on the left — Completed lanes open as archive only.
+                Backlog lane above — Completed lanes open as archive only.
               </p>
             </section>
           ) : (
             <SessionDetailSection
-              focusedProgramId={initialUrl.program}
               scope={selectedScope}
               trackType={selectedTrackType}
               lane={activeLane}
@@ -691,7 +703,6 @@ export function BriefingPage({
               }}
               packReconcileOptions={packReconcileOptions}
               showWorkRow={showSessionWorkRow}
-              allowDeliverySignOff={allowBriefingDeliverySignOff}
               onOpenActiveSession={
                 onOpenActiveSession != null
                   ? () => onOpenActiveSession({ laneId: selectedLane })

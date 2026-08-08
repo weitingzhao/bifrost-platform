@@ -11,10 +11,12 @@ import {
 } from '@/components/briefing/BriefingStatusChrome'
 import {
   briefingLifecycleFilterLabel,
+  isLaneLifecycleHold,
   laneLifecycleFromQueue,
   type ScopeWorkSummary,
   type BriefingLaneLifecycleFilter,
 } from '@/lib/briefing/briefingStatus'
+import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 import {
   COMPONENT_LINE_DEFS,
   briefingScopeById,
@@ -50,6 +52,7 @@ function countActiveLanes(
   context: OpsContextResponse | undefined,
   matrices: MatrixResponse[],
   clusterSummary: ClusterSummary | undefined,
+  programsReleasedFor: (laneId: string) => boolean | undefined,
 ): ScopeActiveCounts {
   const counts: ScopeActiveCounts = { doing: 0, planned: 0, ready: 0 }
   const lanes =
@@ -57,9 +60,10 @@ function countActiveLanes(
       ? allWorkLanes()
       : allWorkLanes().filter(l => l.componentLine === scope)
   for (const lane of lanes) {
-    const life = laneLifecycleFromQueue(
-      buildQueueForLane(lane.id, context, matrices, clusterSummary),
-    )
+    const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+    const released = programsReleasedFor(lane.id)
+    if (isLaneLifecycleHold(queue, released)) continue
+    const life = laneLifecycleFromQueue(queue, { programsReleased: released })
     if (life === 'active') counts.doing += 1
     else if (life === 'planned') counts.planned += 1
     else if (life === 'empty') counts.ready += 1
@@ -74,12 +78,14 @@ function countOpenLanes(
   context: OpsContextResponse | undefined,
   matrices: MatrixResponse[],
   clusterSummary: ClusterSummary | undefined,
+  programsReleasedFor: (laneId: string) => boolean | undefined,
 ): number {
   let n = 0
   for (const lane of lanesForScopeTrack(scope, trackType)) {
-    const life = laneLifecycleFromQueue(
-      buildQueueForLane(lane.id, context, matrices, clusterSummary),
-    )
+    const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+    const released = programsReleasedFor(lane.id)
+    if (isLaneLifecycleHold(queue, released)) continue
+    const life = laneLifecycleFromQueue(queue, { programsReleased: released })
     if (life !== 'complete') n += 1
   }
   return n
@@ -255,6 +261,7 @@ export function BriefingViewTabsSection({
   matrices,
   clusterSummary,
 }: BriefingViewTabsSectionProps) {
+  const { programsReleasedFor } = useDeliveryProgramClosure()
   const scopeDef = briefingScopeById(selectedScope)
   const trackTypeDefs = trackTypeDefsForScope(selectedScope)
   const ttDef = trackTypeById(selectedTrackType)
@@ -268,20 +275,23 @@ export function BriefingViewTabsSection({
     const byLine = Object.fromEntries(
       COMPONENT_LINE_DEFS.map(line => [
         line.id,
-        countActiveLanes(line.id, context, matrices, clusterSummary),
+        countActiveLanes(line.id, context, matrices, clusterSummary, programsReleasedFor),
       ]),
     ) as Record<ComponentLineId, ScopeActiveCounts>
-    const all = countActiveLanes('all', context, matrices, clusterSummary)
+    const all = countActiveLanes('all', context, matrices, clusterSummary, programsReleasedFor)
     return { byLine, all }
-  }, [context, matrices, clusterSummary])
+  }, [context, matrices, clusterSummary, programsReleasedFor])
 
   const trackTypeOpenCounts = useMemo(() => {
     const map = new Map<WorkTrackType, number>()
     for (const def of trackTypeDefs) {
-      map.set(def.id, countOpenLanes(selectedScope, def.id, context, matrices, clusterSummary))
+      map.set(
+        def.id,
+        countOpenLanes(selectedScope, def.id, context, matrices, clusterSummary, programsReleasedFor),
+      )
     }
     return map
-  }, [trackTypeDefs, selectedScope, context, matrices, clusterSummary])
+  }, [trackTypeDefs, selectedScope, context, matrices, clusterSummary, programsReleasedFor])
 
   return (
     <section className="page-section panel-elevated px-3 py-2">
@@ -366,7 +376,7 @@ export function BriefingViewTabsSection({
           </p>
         )}
 
-        {/* Summary strip — compact for master pane */}
+        {/* Summary strip — compact for Scope column */}
         <div className="mt-2 flex flex-wrap items-start gap-2 rounded-md border border-border bg-[var(--card)] px-2.5 py-2">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <div className="flex flex-wrap items-center gap-1.5">

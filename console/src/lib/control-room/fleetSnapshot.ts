@@ -1169,10 +1169,10 @@ export function assessIbGatewaySocketQuality(
     return { signal: sig, reason: `${baseReason} · no sample tick (NVDA)` }
   }
 
-  let bid = 0
-  let ask = 0
-  let last = 0
-  let tickTs = 0
+  let bid: number
+  let ask: number
+  let last: number
+  let tickTs: number
   try {
     const tick = typeof tickRaw === 'string' ? JSON.parse(tickRaw) : tickRaw
     bid = Number(tick?.bid ?? 0)

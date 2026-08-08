@@ -73,9 +73,9 @@ export function ServerConsolePanel({
   const totalCount = hosts.length
   const hostsSummary = `${reachableCount}/${totalCount} hosts reachable`
 
-  let verdictLamp: OpsVerdictLamp = 'ok'
-  let verdictTag = 'READY'
-  let verdictTagVariant: OpsVerdictTagVariant = 'success'
+  let verdictLamp: OpsVerdictLamp
+  let verdictTag: string
+  let verdictTagVariant: OpsVerdictTagVariant
   let verdictSummary = hostsSummary
 
   if (hostsQuery.isLoading) {

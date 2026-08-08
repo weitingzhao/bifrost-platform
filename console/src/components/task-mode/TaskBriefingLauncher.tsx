@@ -9,6 +9,7 @@ import type { TaskModeDef } from '@/lib/task-mode/types'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import type { InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
 import { queueItemToBriefingStatus } from '@/lib/briefing/briefingStatus'
+import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 
 export type TaskBriefingLauncherProps = {
   mode: TaskModeDef
@@ -33,6 +34,7 @@ export function TaskBriefingLauncher({
   onOpenFullBriefing,
   onNavigate,
 }: TaskBriefingLauncherProps) {
+  const { programsReleasedFor } = useDeliveryProgramClosure()
   const dev = mode.dev
   if (dev == null) return null
 
@@ -48,13 +50,13 @@ export function TaskBriefingLauncher({
     selectedLane: laneMeta,
     intent,
   } = inlinePack
+  const focusLane = selectedLaneId ?? dev.briefingLane
 
   const focus = resolveSessionLaneFocus({
     queue: laneQueue,
     hasActiveSession,
     hasProgram: resolvedProgramId != null && resolvedProgramId !== '',
-    programSigned,
-    programPhaseCount,
+    programsReleased: focusLane != null ? programsReleasedFor(focusLane) : undefined,
   })
 
   const catalogLoading =

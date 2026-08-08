@@ -114,8 +114,8 @@ export function buildBriefingSyncLoopSteps(input: {
   const specs = BRIEFING_SYNC_LOOP_STEPS
 
   // 1 — Runtime SYNC
-  let runtimeStatus: SyncLoopStepStatus = 'unknown'
-  let runtimeDetail = 'Spine not loaded'
+  let runtimeStatus: SyncLoopStepStatus
+  let runtimeDetail: string
   if (reconcileFindings.length === 0) {
     runtimeStatus = 'ok'
     runtimeDetail = 'Reconcile gate clear — matches nightly L3 when scan runs'

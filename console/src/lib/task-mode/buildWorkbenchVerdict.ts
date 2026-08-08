@@ -1,3 +1,4 @@
+import { isLaneLifecycleHold } from '@/lib/briefing/briefingStatus'
 import type { QueueItem } from '@/lib/briefing/workLanes'
 import {
   resolveSessionLaneFocus,
@@ -26,6 +27,8 @@ export type BuildWorkbenchInput = {
   programLoading?: boolean
   packReady: boolean
   laneQueue?: QueueItem[]
+  /** sessionReleased for the Active Session lane. */
+  programsReleased?: boolean
   programSigned?: number
   programPhaseCount?: number
   /** True when Dev Agent status probe failed. */
@@ -54,8 +57,9 @@ function ctaFromFocusKind(kind: SessionLaneFocusKind): BuildWorkbenchCta {
     case 'pick-session':
       return { kind: 'navigate', tabId: 'briefing', label: 'Open Briefing →' }
     case 'signoff':
+      return { kind: 'navigate', tabId: 'active-session', label: 'Active Session →' }
     case 'archive':
-      return { kind: 'navigate', tabId: 'delivery-board', label: 'Delivery Board →' }
+      return { kind: 'navigate', tabId: 'briefing', label: 'Open Briefing →' }
     case 'plan':
     case 'start':
       return {
@@ -98,6 +102,14 @@ export function resolveBuildWorkbenchVerdict(input: BuildWorkbenchInput): BuildW
     }
   }
 
+  if (isLaneLifecycleHold(input.laneQueue ?? [], input.programsReleased)) {
+    return {
+      lamp: 'unknown',
+      summary: bindingSummary(lane, programId ?? '—'),
+      nextLine: 'Next: Wait for Delivery close state',
+    }
+  }
+
   if (programId == null) {
     return {
       lamp: 'degraded',
@@ -115,8 +127,7 @@ export function resolveBuildWorkbenchVerdict(input: BuildWorkbenchInput): BuildW
     queue: input.laneQueue ?? [],
     hasActiveSession: true,
     hasProgram: true,
-    programSigned: input.programSigned,
-    programPhaseCount: input.programPhaseCount,
+    programsReleased: input.programsReleased,
   })
 
   const nextLine =

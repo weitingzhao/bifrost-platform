@@ -5,6 +5,7 @@ import type { AuditRecord } from '@/api/auditTypes'
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
+import type { ProgramSummary } from '@/api/programsTypes'
 import {
   BriefingStatusBadge,
   BriefingStatusLamp,
@@ -13,6 +14,7 @@ import {
 import { ActiveSessionPhaseBoard } from '@/components/briefing/ActiveSessionPhaseBoard'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import {
+  isGatesComplete,
   laneLifecycleFromQueue,
   lifecycleToBriefingStatus,
 } from '@/lib/briefing/briefingStatus'
@@ -29,6 +31,7 @@ import {
   type WorkLane,
 } from '@/lib/briefing/workLanes'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 import { loadBriefingActiveSession } from '@/lib/briefing/briefingActiveSession'
 
 interface ActiveSessionPageProps {
@@ -75,6 +78,7 @@ export function ActiveSessionPage({
 }: ActiveSessionPageProps) {
   const { canAdmin } = usePlatformAuth()
   const operateQueueQuery = useOperateQueue()
+  const { programsReleasedFor, openProgramsFor, programsReady } = useDeliveryProgramClosure()
   const initialFocus = useMemo(() => parseActiveSessionFocus(), [])
   const [selectedLaneId, setSelectedLaneId] = useState<LaneId | null>(
     () => initialFocus.laneId ?? null,
@@ -83,14 +87,19 @@ export function ActiveSessionPage({
   const dataReady = !contextLoading && !matrixLoading
 
   const doingLanes = useMemo((): DoingLaneRow[] => {
-    if (!dataReady) return []
+    if (!dataReady || !programsReady) return []
     return allWorkLanes()
       .map(lane => {
         const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
         return { lane, queue, progress: queueProgress(queue) }
       })
-      .filter(row => laneLifecycleFromQueue(row.queue) === 'active')
-  }, [dataReady, context, matrices, clusterSummary])
+      .filter(
+        row =>
+          laneLifecycleFromQueue(row.queue, {
+            programsReleased: programsReleasedFor(row.lane.id),
+          }) === 'active',
+      )
+  }, [dataReady, programsReady, context, matrices, clusterSummary, programsReleasedFor])
 
   useEffect(() => {
     if (doingLanes.length === 0) {
@@ -129,9 +138,12 @@ export function ActiveSessionPage({
     return tracks.find(t => t.id === 'migrate')?.nextStep ?? null
   }, [context, matrices, clusterSummary, operateQueueQuery.data?.open])
 
-  const selectedComplete = selectedRow != null && laneAllPhasesSigned(selectedRow.queue)
+  const selectedQueueDone = selectedRow != null && laneAllPhasesSigned(selectedRow.queue)
+  const selectedProgramsReleased =
+    selectedRow != null ? programsReleasedFor(selectedRow.lane.id) !== false : true
+  const selectedComplete = selectedQueueDone && selectedProgramsReleased
 
-  if (!dataReady) {
+  if (!dataReady || !programsReady) {
     return (
       <section className="page-section panel-elevated flex min-h-[12rem] flex-col items-center justify-center gap-1 px-4 py-8 text-center">
         <p className="briefing-section-kicker m-0">Active Session</p>
@@ -230,6 +242,8 @@ export function ActiveSessionPage({
             initialFocus.programId ?? loadBriefingActiveSession()?.programId
           }
           selectedComplete={selectedComplete}
+          signoffPending={selectedQueueDone && !selectedProgramsReleased}
+          openPrograms={openProgramsFor(selectedRow.lane.id)}
           onOpenBriefing={() => onOpenBriefing({ lane: selectedRow.lane.id })}
           onOpenDeliveryBoard={
             onOpenDeliveryBoard != null
@@ -254,6 +268,8 @@ function ActiveSessionDetail({
   onOpenAudit,
   focusedProgramId,
   selectedComplete,
+  signoffPending,
+  openPrograms,
   onOpenBriefing,
   onOpenDeliveryBoard,
 }: {
@@ -268,10 +284,17 @@ function ActiveSessionDetail({
   onOpenAudit?: () => void
   focusedProgramId?: string
   selectedComplete: boolean
+  signoffPending: boolean
+  openPrograms: ProgramSummary[]
   onOpenBriefing: () => void
   onOpenDeliveryBoard?: () => void
 }) {
   const readyForSignOff = queue.some(q => q.status === 'ready_for_signoff')
+  const openProgramLabels = openPrograms.map(p => p.label ?? p.title ?? p.id)
+  const closeHint =
+    openPrograms.length === 0 || openPrograms.some(p => !isGatesComplete(p))
+      ? 'sign-gates'
+      : 'no-handoff'
 
   return (
     <div className="flex w-full min-w-0 max-w-full flex-col gap-3">
@@ -305,6 +328,19 @@ function ActiveSessionDetail({
           </div>
         )}
 
+        {signoffPending && (
+          <div className="mt-2 rounded-md border border-[var(--color-lamp-yellow)]/35 bg-[var(--color-lamp-yellow)]/10 px-2.5 py-1.5">
+            <p className="m-0 text-[var(--text-dense-caption)] text-[var(--foreground)]">
+              Queue items are complete — still open:{' '}
+              {openProgramLabels.length > 0
+                ? openProgramLabels.join(' · ')
+                : 'linked Delivery program'}
+              {closeHint === 'sign-gates'
+                ? '. Sign remaining gates before close.'
+                : '. Record no-handoff / close on that program (a lane can have more than one).'}
+            </p>
+          </div>
+        )}
         {selectedComplete && (
           <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)]/60 bg-[var(--secondary)]/20 px-2.5 py-1.5">
             <p className="m-0 flex-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">

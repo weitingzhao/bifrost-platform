@@ -14,6 +14,7 @@ import {
 } from '@/components/briefing/BriefingStatusChrome'
 import { BriefingIconBadge, LANE_ICONS, TRACK_ICONS } from '@/lib/briefing/briefingIcons'
 import {
+  isLaneLifecycleHold,
   laneLifecycleFromQueue,
   lifecycleToBriefingStatus,
   type LaneLifecycle,
@@ -49,6 +50,7 @@ import {
 } from '@/lib/briefing/laneInitPack'
 import { createLane, deleteLane, LANES_QUERY_KEY } from '@/api/lanes'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 
 export type NewLaneReference = {
   id: LaneId
@@ -132,7 +134,7 @@ function LaneCard({
               <BriefingStatusLamp status={status} />
               <span
                 className={[
-                  'min-w-0 flex-1 truncate text-sm transition-colors',
+                  'min-w-0 flex-1 break-words text-sm transition-colors',
                   selected
                     ? 'font-semibold text-[var(--foreground)]'
                     : 'font-medium text-[var(--muted-foreground)]',
@@ -312,8 +314,11 @@ function NewLaneInlineForm({
   )
 }
 
-function laneLifecycle(queue: QueueItem[]): LaneLifecycle {
-  return laneLifecycleFromQueue(queue)
+function laneLifecycle(
+  queue: QueueItem[],
+  programsReleased?: boolean,
+): LaneLifecycle {
+  return laneLifecycleFromQueue(queue, { programsReleased })
 }
 
 interface LaneWithQueue {
@@ -351,7 +356,7 @@ function EmptyLaneCard({
               <BriefingStatusLamp status="ready" />
               <span
                 className={[
-                  'min-w-0 flex-1 truncate text-sm transition-colors',
+                  'min-w-0 flex-1 break-words text-sm transition-colors',
                   selected
                     ? 'font-semibold text-[var(--foreground)]'
                     : 'font-medium text-[var(--muted-foreground)]',
@@ -480,7 +485,7 @@ function LaneListRow({
         <BriefingStatusLamp status={status} />
         <span
           className={[
-            'min-w-0 flex-1 truncate text-[var(--text-dense-meta)] transition-colors',
+            'min-w-0 flex-1 break-words text-[var(--text-dense-meta)] transition-colors',
             selected
               ? 'font-semibold text-[var(--foreground)]'
               : 'font-medium text-[var(--muted-foreground)]',
@@ -645,6 +650,7 @@ export function TrackLaneSection({
   const showLineBadge = resolvedScope === 'all' || crossTrack
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
+  const { programsReleasedFor } = useDeliveryProgramClosure()
 
   const requestDelete = useCallback(
     (lane: WorkLane) => {
@@ -701,15 +707,23 @@ export function TrackLaneSection({
     () =>
       lanes.map(lane => {
         const q = buildQueueForLane(lane.id, context, matrices, clusterSummary)
-        return { lane, queue: q, progress: queueProgress(q), lifecycle: laneLifecycle(q) }
+        return {
+          lane,
+          queue: q,
+          progress: queueProgress(q),
+          lifecycle: laneLifecycle(q, programsReleasedFor(lane.id)),
+        }
       }),
-    [lanes, context, matrices, clusterSummary],
+    [lanes, context, matrices, clusterSummary, programsReleasedFor],
   )
 
   const filteredLaneItems = useMemo(() => {
-    if (lifecycleFilter == null) return laneItems
-    return laneItems.filter(item => item.lifecycle === lifecycleFilter)
-  }, [laneItems, lifecycleFilter])
+    const visible = laneItems.filter(
+      item => !isLaneLifecycleHold(item.queue, programsReleasedFor(item.lane.id)),
+    )
+    if (lifecycleFilter == null) return visible
+    return visible.filter(item => item.lifecycle === lifecycleFilter)
+  }, [laneItems, lifecycleFilter, programsReleasedFor])
 
   const groups = useMemo(() => {
     const g: Record<LaneLifecycle, LaneWithQueue[]> = {

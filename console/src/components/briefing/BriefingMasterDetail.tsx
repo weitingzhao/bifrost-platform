@@ -1,27 +1,31 @@
 import type { ReactNode } from 'react'
-import { MasterDetailShell } from '@/components/layout/MasterDetailShell'
+import { cn } from '@bifrost/ui'
 
 /**
- * Briefing-specific Master-Detail shell.
- * Wraps {@link MasterDetailShell} so Agent Briefing keeps a stable import path
- * while Agent Desk can adopt the shared shell directly later.
+ * Agent Briefing body layout:
+ *   Row 1 — Scope | Lanes (Lanes takes remaining width so backlog labels are readable)
+ *   Row 2 — Archive / Session (full width)
+ *
+ * Narrow viewports stack Scope → Lanes → Archive.
  */
 export function BriefingMasterDetail({
-  master,
+  scope,
+  lanes,
   detail,
   className,
 }: {
-  master: ReactNode
+  scope: ReactNode
+  lanes: ReactNode
   detail: ReactNode
   className?: string
 }) {
   return (
-    <MasterDetailShell
-      master={master}
-      detail={detail}
-      className={className}
-      masterClassName="briefing-master-pane"
-      detailClassName="briefing-detail-pane"
-    />
+    <div className={cn('flex min-h-0 w-full min-w-0 flex-col gap-3', className)}>
+      <div className="grid min-w-0 grid-cols-1 items-stretch gap-3 lg:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
+        <div className="briefing-scope-pane min-w-0 [&>*]:h-full">{scope}</div>
+        <div className="briefing-lanes-pane min-w-0 [&>*]:h-full">{lanes}</div>
+      </div>
+      <div className="briefing-detail-pane min-w-0 [&>*]:min-w-0 [&>*]:max-w-full">{detail}</div>
+    </div>
   )
 }

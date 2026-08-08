@@ -217,7 +217,7 @@ export function comparePipelineRuns(
   key: PipelineRunSortKey,
   dir: PipelineRunSortDir,
 ): number {
-  let cmp = 0
+  let cmp: number
   if (key === 'status') {
     cmp = statusSortRank(a) - statusSortRank(b)
     if (cmp === 0) {

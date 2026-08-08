@@ -10,6 +10,7 @@ import type { InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
 import type { TaskModeDef } from '@/lib/task-mode/types'
 import { BUILD_DEV_LOOP_ELEMENT_ID } from '@/lib/task-mode/buildWorkbenchVerdict'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
+import { boardCloseTag, isProgramCatalogComplete } from '@/lib/briefing/programClose'
 
 export type DevTaskStripsProps = {
   mode: TaskModeDef
@@ -74,6 +75,9 @@ export function DevTaskStrips({
 
   const signed = programDetail?.program.phases_signed ?? programDetail?.program.signed ?? 0
   const phaseCount = programDetail?.program.phase_count ?? 0
+  const catalogComplete =
+    programDetail != null ? isProgramCatalogComplete(programDetail.program) : false
+  const closeTag = programDetail != null ? boardCloseTag(programDetail.program) : null
   const templateMissing = isTemplateMissing(programError)
   const needsProgram =
     hasActiveSession && !programLoading && programDetail == null && dev.templateId != null
@@ -109,17 +113,26 @@ export function DevTaskStrips({
                 {programDetail.program.lane_id != null && (
                   <DenseTag variant="info">{programDetail.program.lane_id}</DenseTag>
                 )}
-                <DenseTag variant={programDetail.program.complete ? 'success' : 'warning'}>
-                  {signed}/{phaseCount} signed
+                <DenseTag variant={catalogComplete ? 'success' : 'warning'}>
+                  {catalogComplete
+                    ? `${signed}/${phaseCount} signed`
+                    : closeTag != null
+                      ? 'Close pending'
+                      : `${signed}/${phaseCount} signed`}
                 </DenseTag>
                 <StatusLamp
-                  value={programDetail.program.complete ? 'ok' : 'degraded'}
+                  value={catalogComplete ? 'ok' : 'degraded'}
                   kind="reach"
                 />
               </div>
               <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-muted-foreground">
                 {programDetail.program.description}
               </p>
+              {programError != null && (
+                <OpsFeedback variant="error" title="Program create failed">
+                  {programError.message}
+                </OpsFeedback>
+              )}
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button variant="ghost" size="xs" onClick={() => onNavigate('delivery-board')}>
                   Delivery Board →

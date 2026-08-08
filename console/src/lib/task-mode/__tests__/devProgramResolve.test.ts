@@ -40,9 +40,17 @@ describe('pickBoardProgramForLane', () => {
     prog({ id: 'c--nolan' }),
   ]
 
-  it('prefers preferred id when lane-compatible', () => {
+  it('ignores preferred sessionReleased id when a live sibling exists', () => {
     const hit = pickBoardProgramForLane(programs, 'console-api', 'a--old')
-    expect(hit?.id).toBe('a--old')
+    expect(hit?.id).toBe('a--active')
+  })
+
+  it('honors preferred id among live programs', () => {
+    const extra = [
+      ...programs,
+      prog({ id: 'a--other', lane_id: 'console-api', active: false, complete: false }),
+    ]
+    expect(pickBoardProgramForLane(extra, 'console-api', 'a--other')?.id).toBe('a--other')
   })
 
   it('ignores preferred id on wrong lane and picks active', () => {
@@ -56,6 +64,14 @@ describe('pickBoardProgramForLane', () => {
 
   it('excludes programs without lane_id', () => {
     expect(pickBoardProgramForLane(programs, 'console-api', 'c--nolan')?.id).toBe('a--active')
+  })
+
+  it('falls back to historical when every sibling is sessionReleased', () => {
+    const hist = [
+      prog({ id: 'a--old', lane_id: 'console-api', active: false, complete: true }),
+      prog({ id: 'a--older', lane_id: 'console-api', active: false, complete: true }),
+    ]
+    expect(pickBoardProgramForLane(hist, 'console-api')?.id).toBe('a--old')
   })
 })
 
@@ -128,5 +144,22 @@ describe('resolveDevProgramId', () => {
         storedProgramId: null,
       }),
     ).toBe('ctrl--build')
+  })
+
+  it('does not bind a sessionReleased program when an open sibling exists', () => {
+    const mixed = [
+      prog({ id: 'hist', lane_id: 'console-api', complete: true }),
+      prog({ id: 'live', lane_id: 'console-api', complete: false }),
+    ]
+    expect(
+      resolveDevProgramId({
+        hasActiveSession: true,
+        activeLane: 'console-api',
+        sessionProgramId: 'hist',
+        boardPrograms: mixed,
+        boardFetched: true,
+        storedProgramId: null,
+      }),
+    ).toBe('live')
   })
 })

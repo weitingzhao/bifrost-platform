@@ -18,6 +18,7 @@ import { fixScopeAgentTitle } from '@/lib/agent/readinessFixDispatch'
 import { launchVerdictToSignal } from '@/lib/task-mode/satelliteLaunchVerdict'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
 import { resolveBuildWorkbenchVerdict } from '@/lib/task-mode/buildWorkbenchVerdict'
+import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import type { PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
 import type { TaskPhaseFixAction, TaskPhaseHint } from '@/lib/task-mode/taskPhaseDiagnostics'
@@ -144,7 +145,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     isDevLoop,
     canOperate,
     loopLabel,
-    headerDescription: _headerDescription,
     showLaunchPad,
     phases,
     statuses,
@@ -163,6 +163,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
 
   const [phaseOpen, setPhaseOpen] = useState(phaseDefaultOpen)
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | undefined>()
+  const { programsReleasedFor } = useDeliveryProgramClosure()
   const [selectedCommandLane, setSelectedCommandLane] = useState<CommandLane>('vehicle')
   useEffect(() => {
     setPhaseOpen(phaseDefaultOpen)
@@ -235,13 +236,15 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   const buildWorkbench = useMemo(() => {
     if (!isDevLoop) return null
     const program = props.devProgram.programDetail?.program
+    const lane = props.devProgram.activeLane
     return resolveBuildWorkbenchVerdict({
       hasActiveSession: props.devProgram.hasActiveSession,
-      activeLane: props.devProgram.activeLane,
+      activeLane: lane,
       programId: props.resolvedProgramId,
       programLoading: props.devProgram.programLoading,
       packReady: props.inlineBriefingPack.isReady,
       laneQueue: props.inlineBriefingPack.laneQueue,
+      programsReleased: lane != null ? programsReleasedFor(lane) : undefined,
       programSigned: program?.phases_signed ?? program?.signed ?? 0,
       programPhaseCount: program?.phase_count ?? 0,
       devAgentError: props.devAgentQ.isError,
@@ -256,6 +259,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     props.inlineBriefingPack.isReady,
     props.inlineBriefingPack.laneQueue,
     props.devAgentQ.isError,
+    programsReleasedFor,
   ])
 
   const verdictLamp = useMemo((): VerdictLamp => {

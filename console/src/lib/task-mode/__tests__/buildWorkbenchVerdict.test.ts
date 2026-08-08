@@ -84,39 +84,62 @@ describe('resolveBuildWorkbenchVerdict', () => {
     expect(v.cta?.kind).toBe('scroll')
   })
 
-  it('points at Delivery sign-off when queue is Done but program unsigned', () => {
+  it('points at Active Session sign-off when queue is Done but close is pending', () => {
     const v = resolveBuildWorkbenchVerdict({
       hasActiveSession: true,
       activeLane: 'market-data-expand',
       programId: 'control-room-ui--build',
       packReady: true,
-      programSigned: 0,
-      programPhaseCount: 7,
+      programsReleased: false,
+      programSigned: 8,
+      programPhaseCount: 8,
       laneQueue: [
         item({ id: 'a', status: 'closed', label: 'P0' }),
         item({ id: 'b', status: 'done', label: 'P1' }),
       ],
     })
     expect(v.lamp).toBe('degraded')
-    expect(v.nextLine).toMatch(/Delivery Board sign-off/)
+    expect(v.nextLine).toMatch(/Active Session/)
     expect(v.cta).toEqual({
       kind: 'navigate',
-      tabId: 'delivery-board',
-      label: 'Delivery Board →',
+      tabId: 'active-session',
+      label: 'Active Session →',
     })
   })
 
-  it('returns ok when queue complete and program signed', () => {
+  it('does not flash sign-off or archive while close predicate is loading', () => {
+    const v = resolveBuildWorkbenchVerdict({
+      hasActiveSession: true,
+      activeLane: 'console-api',
+      programId: 'delivery-lifecycle-close',
+      packReady: true,
+      laneQueue: [
+        item({ id: 'a', status: 'closed', label: 'P0' }),
+        item({ id: 'b', status: 'done', label: 'P1' }),
+      ],
+    })
+    expect(v.lamp).toBe('unknown')
+    expect(v.nextLine).toMatch(/Wait for Delivery close/)
+    expect(v.cta).toBeUndefined()
+  })
+
+  it('archives to Briefing after no_handoff (6/6 gates + 8 phases)', () => {
     const v = resolveBuildWorkbenchVerdict({
       hasActiveSession: true,
       activeLane: 'trade-stack',
       programId: 'trade-stack--build',
       packReady: true,
-      programSigned: 7,
-      programPhaseCount: 7,
+      programsReleased: true,
+      programSigned: 6,
+      programPhaseCount: 8,
       laneQueue: [item({ id: 'a', status: 'done', label: 'P1' })],
     })
     expect(v.lamp).toBe('ok')
-    expect(v.nextLine).toMatch(/Archive session/)
+    expect(v.nextLine).toMatch(/Briefing/)
+    expect(v.cta).toEqual({
+      kind: 'navigate',
+      tabId: 'briefing',
+      label: 'Open Briefing →',
+    })
   })
 })

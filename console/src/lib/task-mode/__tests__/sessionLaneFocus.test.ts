@@ -50,19 +50,49 @@ describe('resolveSessionLaneFocus', () => {
     expect(f.nextItem?.id).toBe('c')
   })
 
-  it('points at Delivery sign-off when queue is Done but program unsigned', () => {
+  it('keeps Doing / sign-off when queue is Done but program not sessionReleased', () => {
     const f = resolveSessionLaneFocus({
       hasActiveSession: true,
       hasProgram: true,
-      programSigned: 0,
-      programPhaseCount: 7,
+      programsReleased: false,
       queue: [
         item({ id: 'a', status: 'closed', label: 'P0' }),
         item({ id: 'b', status: 'done', label: 'P1' }),
       ],
     })
     expect(f.kind).toBe('signoff')
-    expect(f.status).toBe('done')
-    expect(f.line).toMatch(/Delivery Board sign-off/)
+    expect(f.lifecycle).toBe('active')
+    expect(f.status).toBe('doing')
+    expect(f.line).toMatch(/Active Session/)
+  })
+
+  it('holds all-done queue until sessionReleased is known', () => {
+    const f = resolveSessionLaneFocus({
+      hasActiveSession: true,
+      hasProgram: true,
+      queue: [
+        item({ id: 'a', status: 'closed', label: 'P0' }),
+        item({ id: 'b', status: 'done', label: 'P1' }),
+      ],
+    })
+    expect(f.kind).toBe('plan')
+    expect(f.line).toMatch(/Wait for Delivery close/)
+    expect(f.kind).not.toBe('signoff')
+    expect(f.kind).not.toBe('archive')
+  })
+
+  it('archives when queue is Done and program is sessionReleased', () => {
+    const f = resolveSessionLaneFocus({
+      hasActiveSession: true,
+      hasProgram: true,
+      programsReleased: true,
+      queue: [
+        item({ id: 'a', status: 'closed', label: 'P0' }),
+        item({ id: 'b', status: 'done', label: 'P1' }),
+      ],
+    })
+    expect(f.kind).toBe('archive')
+    expect(f.line).toMatch(/Briefing/)
+    expect(f.line).not.toMatch(/Delivery Board →/)
   })
 })

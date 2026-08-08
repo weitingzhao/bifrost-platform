@@ -309,3 +309,128 @@ func TestSlugInstanceLabel(t *testing.T) {
 		t.Fatalf("slug = %q", slugInstanceLabel("My Build #3"))
 	}
 }
+
+func signAllRuntimeGates(rt *programRuntime) {
+	if rt.state == nil {
+		rt.state = &ProgramStateRecord{ProgramID: rt.blueprint.ID}
+	}
+	rt.state.PhaseSignOffs = nil
+	for _, p := range rt.blueprint.Phases {
+		rt.state.PhaseSignOffs = append(rt.state.PhaseSignOffs, PhaseSignOffRecord{
+			PhaseID:     p.ID,
+			SignedOffAt: "2026-08-08T00:00:00Z",
+			SignedOffBy: "test",
+		})
+	}
+}
+
+func TestHandleCreateFromTemplateRejectsSecondLiveLaneBind(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	programsDir := filepath.Join(configDir, "programs")
+	if err := os.MkdirAll(programsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestTemplates(t, programsDir)
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+	writeMinimalBlueprint(t, programsDir, "control-room-ui", "Control Room UI")
+
+	h, err := NewHandler(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body1 := []byte(`{"template_id":"build","instance_label":"first","lane_id":"console-api"}`)
+	rec1 := httptest.NewRecorder()
+	h.HandleCreateFromTemplate(rec1, httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body1)))
+	if rec1.Code != http.StatusCreated {
+		t.Fatalf("first create status = %d body=%s", rec1.Code, rec1.Body.String())
+	}
+
+	body2 := []byte(`{"template_id":"build","instance_label":"second","lane_id":"console-api"}`)
+	rec2 := httptest.NewRecorder()
+	h.HandleCreateFromTemplate(rec2, httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body2)))
+	if rec2.Code != http.StatusConflict {
+		t.Fatalf("second live bind status = %d body=%s", rec2.Code, rec2.Body.String())
+	}
+	if !bytes.Contains(rec2.Body.Bytes(), []byte("control-room-ui--first")) {
+		t.Fatalf("409 body should name blocking program: %s", rec2.Body.String())
+	}
+}
+
+func TestHandleCreateFromTemplateAllowsBindWhenSiblingSessionReleased(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	programsDir := filepath.Join(configDir, "programs")
+	if err := os.MkdirAll(programsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestTemplates(t, programsDir)
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+	writeMinimalBlueprint(t, programsDir, "control-room-ui", "Control Room UI")
+
+	h, err := NewHandler(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body1 := []byte(`{"template_id":"build","instance_label":"closed","lane_id":"console-api"}`)
+	rec1 := httptest.NewRecorder()
+	h.HandleCreateFromTemplate(rec1, httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body1)))
+	if rec1.Code != http.StatusCreated {
+		t.Fatalf("first create status = %d body=%s", rec1.Code, rec1.Body.String())
+	}
+
+	h.mu.Lock()
+	rt := h.runtimes["control-room-ui--closed"]
+	signAllRuntimeGates(rt)
+	h.mu.Unlock()
+
+	body2 := []byte(`{"template_id":"build","instance_label":"next","lane_id":"console-api"}`)
+	rec2 := httptest.NewRecorder()
+	h.HandleCreateFromTemplate(rec2, httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body2)))
+	if rec2.Code != http.StatusCreated {
+		t.Fatalf("bind after sessionReleased status = %d body=%s", rec2.Code, rec2.Body.String())
+	}
+}
+
+func TestHandleCreateFromTemplateAllowsBindWhenSiblingInOperate(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	programsDir := filepath.Join(configDir, "programs")
+	if err := os.MkdirAll(programsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestTemplates(t, programsDir)
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+	writeMinimalBlueprint(t, programsDir, "control-room-ui", "Control Room UI")
+
+	h, err := NewHandler(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body1 := []byte(`{"template_id":"build","instance_label":"ops","lane_id":"console-api"}`)
+	rec1 := httptest.NewRecorder()
+	h.HandleCreateFromTemplate(rec1, httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body1)))
+	if rec1.Code != http.StatusCreated {
+		t.Fatalf("first create status = %d body=%s", rec1.Code, rec1.Body.String())
+	}
+
+	h.mu.Lock()
+	rt := h.runtimes["control-room-ui--ops"]
+	signAllRuntimeGates(rt)
+	rt.blueprint.PostCompletion = &PostCompletionBlueprint{NewCapabilities: []string{"x"}}
+	rt.state.PostCompletion = &PostCompletionState{AssessmentStatus: "in_operate"}
+	h.mu.Unlock()
+
+	body2 := []byte(`{"template_id":"build","instance_label":"after-ops","lane_id":"console-api"}`)
+	rec2 := httptest.NewRecorder()
+	h.HandleCreateFromTemplate(rec2, httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body2)))
+	if rec2.Code != http.StatusCreated {
+		t.Fatalf("bind after in_operate status = %d body=%s", rec2.Code, rec2.Body.String())
+	}
+}

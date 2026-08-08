@@ -8,20 +8,25 @@ function renderInline(text: string): ReactNode[] {
   let last = 0
   let m: RegExpExecArray | null
   let key = 0
+  const nextKey = () => {
+    const k = key
+    key += 1
+    return k
+  }
   while ((m = re.exec(text)) != null) {
     if (m.index > last) {
-      nodes.push(<Fragment key={`t${key++}`}>{text.slice(last, m.index)}</Fragment>)
+      nodes.push(<Fragment key={`t${nextKey()}`}>{text.slice(last, m.index)}</Fragment>)
     }
     const token = m[0]
     if (token.startsWith('`')) {
       nodes.push(
-        <code key={`c${key++}`} className="dense-md__code">
+        <code key={`c${nextKey()}`} className="dense-md__code">
           {token.slice(1, -1)}
         </code>,
       )
     } else {
       nodes.push(
-        <strong key={`b${key++}`} className="dense-md__strong">
+        <strong key={`b${nextKey()}`} className="dense-md__strong">
           {token.slice(2, -2)}
         </strong>,
       )
@@ -29,7 +34,7 @@ function renderInline(text: string): ReactNode[] {
     last = m.index + token.length
   }
   if (last < text.length) {
-    nodes.push(<Fragment key={`t${key++}`}>{text.slice(last)}</Fragment>)
+    nodes.push(<Fragment key={`t${nextKey()}`}>{text.slice(last)}</Fragment>)
   }
   return nodes
 }

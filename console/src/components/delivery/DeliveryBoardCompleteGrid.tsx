@@ -18,7 +18,7 @@ export type DeliveryBoardCompleteGridProps = {
 
 /**
  * Complete programs — Tag Grid aligned with Briefing CompletedLanesGroup visuals.
- * Read-only catalog cards (sign-off lives in Briefing Session).
+ * Read-only catalog cards (sign-off lives in Active Session).
  */
 export function DeliveryBoardCompleteGrid({
   programs,
@@ -43,7 +43,7 @@ export function DeliveryBoardCompleteGrid({
         </span>
         <BriefingStatusBadge status="done" label={`${programs.length}`} />
         <span className="text-dense-caption text-muted-foreground">
-          Catalog · Sign-off in Briefing Session
+          Catalog · Sign-off in Active Session
         </span>
         <CollapseExpandIcon open={expanded} className="ml-auto" />
       </button>
@@ -68,7 +68,7 @@ export function DeliveryBoardCompleteGrid({
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-dense-label font-medium text-foreground">{program.label}</span>
-                  <BriefingStatusBadge status="done" label="Done" />
+                  <BriefingStatusBadge status="done" label="Closed" />
                 </div>
                 <p className="m-0 line-clamp-2 text-dense-caption text-muted-foreground">
                   {program.description}

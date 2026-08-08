@@ -476,8 +476,6 @@ export function buildClusterCategoryLlmContext(input: ClusterCategoryLlmInput): 
         break
       }
     }
-  } else if (domain != null) {
-    lines.push(...llmSection(`Live · ${label}`, buildApplicationDomainSection(domain)))
   } else {
     lines.push('', `(Unknown category "${category}")`)
   }

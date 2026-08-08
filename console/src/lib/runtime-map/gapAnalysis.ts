@@ -119,7 +119,7 @@ function buildScopeGap(layer: ScopeLayer, matrix: MatrixResponse | undefined): S
     t => t.reachability === 'ok' || t.reachability === 'degraded',
   ).length
 
-  let status: ScopeGapSummary['status'] = 'planned'
+  let status: ScopeGapSummary['status']
   if (layer.plannedOnly || targets.length === 0) {
     status = 'planned'
   } else if (liveTargets === targets.length) {

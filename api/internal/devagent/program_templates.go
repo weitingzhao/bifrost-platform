@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 )
 
@@ -322,12 +323,18 @@ func (h *Handler) HandleCreateFromTemplate(w http.ResponseWriter, r *http.Reques
 	}
 
 	programID := instanceProgramID(baseID, req.InstanceLabel)
+	laneID := strings.TrimSpace(req.LaneID)
 
 	h.mu.Lock()
 	if _, exists := h.runtimes[programID]; exists {
 		rt := h.runtimes[programID]
 		h.mu.Unlock()
 		writeJSON(w, http.StatusOK, h.programDetailBoardResponse(programID, rt))
+		return
+	}
+	if err := h.errIfLiveLaneBindLocked(laneID, programID); err != nil {
+		h.mu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
 	h.mu.Unlock()
@@ -346,4 +353,66 @@ func (h *Handler) HandleCreateFromTemplate(w http.ResponseWriter, r *http.Reques
 	rt := h.runtimes[programID]
 	h.mu.Unlock()
 	writeJSON(w, http.StatusCreated, h.programDetailBoardResponse(programID, rt))
+}
+
+type ProgramLaneRebindRequest struct {
+	LaneID string `json:"lane_id"`
+}
+
+// HandlePatchProgram rebinds a program's lane_id (D2: same live-lane lock as from-template).
+func (h *Handler) HandlePatchProgram(w http.ResponseWriter, r *http.Request) {
+	programID := chi.URLParam(r, "programId")
+	var req ProgramLaneRebindRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	laneID := strings.TrimSpace(req.LaneID)
+	if laneID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "lane_id required"})
+		return
+	}
+
+	h.mu.Lock()
+	rt, ok := h.runtimes[programID]
+	if !ok {
+		h.mu.Unlock()
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
+		return
+	}
+	current := sourceLaneForRuntime(rt)
+	if laneID != current {
+		if err := h.errIfLiveLaneBindLocked(laneID, programID); err != nil {
+			h.mu.Unlock()
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	if rt.state == nil {
+		rt.state = &ProgramStateRecord{ProgramID: programID, History: []Job{}}
+	}
+	rt.state.LaneID = laneID
+	if rt.blueprint != nil {
+		if rt.blueprint.Metadata == nil {
+			rt.blueprint.Metadata = map[string]interface{}{}
+		}
+		rt.blueprint.Metadata["lane_id"] = laneID
+	}
+	if err := h.persistRuntimeLocked(programID); err != nil {
+		h.mu.Unlock()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	bp := rt.blueprint
+	blueprintDir := h.blueprintDir
+	resp := h.programDetailBoardResponse(programID, rt)
+	h.mu.Unlock()
+
+	if bp != nil && strings.TrimSpace(blueprintDir) != "" {
+		if err := writeProgramBlueprint(blueprintDir, bp); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

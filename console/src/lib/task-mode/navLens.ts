@@ -8,6 +8,7 @@ import type { DeliveryReleasePhase } from '@/lib/architecture/deliveryMainlineCa
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
 import { gateStepStatus, runStepStatus } from '@/components/delivery/ReleaseStepCommandCenter'
 import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
+import { isGatesComplete, isProgramCatalogComplete } from '@/lib/briefing/programClose'
 import { taskModeById } from './taskModeCatalog'
 import type { TaskModeId, TaskPhaseDef, TaskPhaseStatus } from './types'
 
@@ -269,9 +270,7 @@ function resolveMissionLaunchPhase(phaseId: string, input: TaskPhaseStatusInput)
 function resolveBoardDeliverStg(input: TaskPhaseStatusInput): TaskPhaseStatus {
   const program = input.programDetail
   if (program == null) return 'planned'
-  const signed = program.program.phases_signed ?? program.program.signed ?? 0
-  const phasesDone = program.program.phases_done ?? 0
-  if (signed > 0 || phasesDone > 0 || program.program.complete === true) return 'done'
+  if (isProgramCatalogComplete(program.program)) return 'done'
   if (program.active === true || program.program.active === true) return 'active'
   return 'planned'
 }
@@ -299,8 +298,7 @@ function resolveDevBuildPhase(
     case 'sign-off': {
       if (program == null) return 'planned'
       const signed = program.program.phases_signed ?? program.program.signed ?? 0
-      const total = program.program.phase_count
-      if (program.program.complete === true || signed >= total) return 'done'
+      if (isGatesComplete(program.program)) return 'done'
       if (signed > 0) return 'active'
       return 'planned'
     }

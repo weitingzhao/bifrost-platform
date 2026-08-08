@@ -1,4 +1,19 @@
+import type { ProgramSummary } from '@/api/programsTypes'
 import type { QueueItem, QueueItemStatus } from '@/lib/briefing/workLanes'
+import {
+  isProgramCatalogComplete,
+  isProgramSessionReleased,
+} from '@/lib/briefing/programClose'
+
+export {
+  boardCloseTag,
+  isGatesComplete,
+  isProgramCatalogComplete,
+  isProgramDeliveryClosed,
+  isProgramSessionReleased,
+  type BoardCloseTag,
+  type ProgramCloseFields,
+} from '@/lib/briefing/programClose'
 
 /** Unified Briefing work-status vocabulary (Scope / Lane / Queue). */
 export type BriefingWorkStatus = 'doing' | 'planned' | 'ready' | 'done' | 'new' | 'blocked'
@@ -61,19 +76,115 @@ export function lifecycleToBriefingStatus(lifecycle: LaneLifecycle): BriefingWor
   }
 }
 
-/** Classify a lane queue the same way TrackLaneSection does. */
-export function laneLifecycleFromQueue(queue: QueueItem[]): LaneLifecycle {
-  if (queue.length === 0) return 'empty'
-  const hasActive = queue.some(
+type LaneProgram = Pick<ProgramSummary, 'lane_id'> &
+  Parameters<typeof isProgramSessionReleased>[0] & {
+    id?: string
+    title?: string
+    label?: string
+  }
+
+export function openDeliveryProgramsForLane<T extends LaneProgram>(
+  laneId: string,
+  programs: T[],
+): T[] {
+  return programs.filter(p => p.lane_id === laneId && !isProgramSessionReleased(p))
+}
+
+function buildLanePredicateMap(
+  programs: Array<Pick<ProgramSummary, 'lane_id'> & Parameters<typeof isProgramSessionReleased>[0]>,
+  pred: (p: Parameters<typeof isProgramSessionReleased>[0]) => boolean,
+): Map<string, boolean> {
+  const byLane = new Map<string, Array<Parameters<typeof isProgramSessionReleased>[0]>>()
+  for (const p of programs) {
+    const laneId = p.lane_id?.trim()
+    if (laneId == null || laneId === '') continue
+    const list = byLane.get(laneId) ?? []
+    list.push(p)
+    byLane.set(laneId, list)
+  }
+  const out = new Map<string, boolean>()
+  for (const [laneId, list] of byLane) {
+    out.set(laneId, list.every(pred))
+  }
+  return out
+}
+
+/** Per-lane AND of sessionReleased (Active Session / Briefing Doing). */
+export function buildLaneProgramsSessionReleasedMap(
+  programs: Array<Pick<ProgramSummary, 'lane_id'> & Parameters<typeof isProgramSessionReleased>[0]>,
+): Map<string, boolean> {
+  return buildLanePredicateMap(programs, isProgramSessionReleased)
+}
+
+/** Per-lane AND of catalogComplete (Delivery Board Complete). */
+export function buildLaneProgramsCatalogCompleteMap(
+  programs: Array<Pick<ProgramSummary, 'lane_id'> & Parameters<typeof isProgramCatalogComplete>[0]>,
+): Map<string, boolean> {
+  return buildLanePredicateMap(programs, isProgramCatalogComplete)
+}
+
+/** @deprecated Use buildLaneProgramsSessionReleasedMap for Session; catalog map for Board. */
+export function buildLaneProgramsClosedMap(
+  programs: Array<Pick<ProgramSummary, 'lane_id'> & Parameters<typeof isProgramSessionReleased>[0]>,
+): Map<string, boolean> {
+  return buildLaneProgramsSessionReleasedMap(programs)
+}
+
+/** `undefined` while the programs board is still loading. Missing lane → no programs → released. */
+export function programsReleasedForLane(
+  laneId: string,
+  releasedByLane: Map<string, boolean> | undefined,
+): boolean | undefined {
+  if (releasedByLane == null) return undefined
+  return releasedByLane.get(laneId) ?? true
+}
+
+/** Alias of programsReleasedForLane (sessionReleased map). */
+export function programsClosedForLane(
+  laneId: string,
+  closedByLane: Map<string, boolean> | undefined,
+): boolean | undefined {
+  return programsReleasedForLane(laneId, closedByLane)
+}
+
+function queueHasActiveWork(queue: QueueItem[]): boolean {
+  return queue.some(
     q =>
       q.status === 'in_progress' ||
       q.status === 'next' ||
       q.status === 'ready_for_signoff' ||
       q.status === 'issue',
   )
-  if (hasActive) return 'active'
-  const allDone = queue.every(q => q.status === 'done' || q.status === 'closed')
-  if (allDone) return 'complete'
+}
+
+function queueAllDone(queue: QueueItem[]): boolean {
+  return queue.length > 0 && queue.every(q => q.status === 'done' || q.status === 'closed')
+}
+
+/**
+ * Board map not loaded yet — all-done lanes must not count as Doing or Archive.
+ * Callers skip these until `programsReady`.
+ */
+export function isLaneLifecycleHold(
+  queue: QueueItem[],
+  programsReleased: boolean | undefined,
+): boolean {
+  return programsReleased === undefined && queueAllDone(queue) && !queueHasActiveWork(queue)
+}
+
+/** Classify a lane queue the same way TrackLaneSection does. */
+export function laneLifecycleFromQueue(
+  queue: QueueItem[],
+  opts?: { programsReleased?: boolean; programsClosed?: boolean },
+): LaneLifecycle {
+  if (queue.length === 0) return 'empty'
+  if (queueHasActiveWork(queue)) return 'active'
+  if (queueAllDone(queue)) {
+    const released = opts?.programsReleased ?? opts?.programsClosed
+    if (released === true) return 'complete'
+    // Known not-released → Doing. Unknown → caller must use isLaneLifecycleHold.
+    return 'active'
+  }
   return 'planned'
 }
 
@@ -104,15 +215,23 @@ export interface ScopeWorkSummary {
  * truth as the Lanes section (lane queues), not the whole spine track.
  */
 export function computeScopeWorkSummary(
-  laneQueues: Array<{ label: string; queue: QueueItem[] }>,
+  laneQueues: Array<{ label: string; queue: QueueItem[]; laneId?: string }>,
+  opts?: {
+    programsReleasedByLane?: Map<string, boolean>
+    programsClosedByLane?: Map<string, boolean>
+  },
 ): ScopeWorkSummary {
   const laneCounts = { doing: 0, planned: 0, ready: 0, done: 0 }
   let doneItems = 0
   let totalItems = 0
   let nextStep: string | null = null
+  const releasedMap = opts?.programsReleasedByLane ?? opts?.programsClosedByLane
 
-  for (const { label, queue } of laneQueues) {
-    const life = laneLifecycleFromQueue(queue)
+  for (const { label, queue, laneId } of laneQueues) {
+    const programsReleased =
+      laneId != null ? programsReleasedForLane(laneId, releasedMap) : undefined
+    if (isLaneLifecycleHold(queue, programsReleased)) continue
+    const life = laneLifecycleFromQueue(queue, { programsReleased })
     switch (life) {
       case 'active':
         laneCounts.doing += 1
@@ -144,6 +263,8 @@ export function computeScopeWorkSummary(
       )
       if (activeItem != null) {
         nextStep = activeItem.label
+      } else if (life === 'active' && programsReleased === false) {
+        nextStep = `${label}: Program sign-off`
       } else {
         const plannedItem = queue.find(q => q.status === 'pending' || q.status === 'blocked')
         if (plannedItem != null) nextStep = `${label}: ${plannedItem.label}`
@@ -151,14 +272,16 @@ export function computeScopeWorkSummary(
     }
   }
 
+  const considered =
+    laneCounts.doing + laneCounts.planned + laneCounts.ready + laneCounts.done
   let status: BriefingWorkStatus
-  if (laneQueues.length === 0) {
+  if (laneQueues.length === 0 || considered === 0) {
     status = 'ready'
   } else if (laneCounts.doing > 0) {
     status = 'doing'
   } else if (laneCounts.planned > 0) {
     status = 'planned'
-  } else if (laneCounts.done === laneQueues.length) {
+  } else if (laneCounts.done === considered) {
     status = 'done'
   } else if (laneCounts.ready > 0) {
     status = 'ready'

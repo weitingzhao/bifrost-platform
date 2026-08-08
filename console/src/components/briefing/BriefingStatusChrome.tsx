@@ -283,18 +283,18 @@ export function briefingLaneListRowClass(
   const emptyHint = opts?.emptyHint === true
   const dimmed = opts?.dimmed === true
   if (selected) {
-    return 'flex w-full items-center gap-2 rounded-md border border-[var(--primary)] bg-[var(--primary)]/8 px-2.5 py-1.5 text-left transition-colors'
+    return 'flex w-full min-w-0 items-center gap-2 rounded-md border border-[var(--primary)] bg-[var(--primary)]/8 px-2.5 py-1.5 text-left transition-colors'
   }
   if (dimmed) {
     return [
-      'flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left opacity-70 transition-colors hover:opacity-90',
+      'flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left opacity-70 transition-colors hover:opacity-90',
       emptyHint
         ? 'border-dashed border-[var(--border)]/50 bg-transparent hover:bg-[var(--secondary)]/40'
         : 'border-[var(--border)]/50 bg-[var(--muted)]/30 hover:bg-[var(--secondary)]',
     ].join(' ')
   }
   return [
-    'flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
+    'flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
     emptyHint
       ? 'border-dashed border-[var(--border)] bg-transparent hover:border-[var(--primary)]/40 hover:bg-[var(--secondary)]/40'
       : 'border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)]',

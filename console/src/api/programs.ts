@@ -74,9 +74,20 @@ export async function launchProgramAgent(body: LaunchProgramRequest): Promise<La
 export async function createProgramFromTemplate(
   body: CreateProgramFromTemplateRequest,
 ): Promise<ProgramDetailResponse> {
-  const r = await programsFetch('/api/v1/programs/from-template', {
+  const r = await authedFetch('create program', '/api/v1/programs/from-template', {
     method: 'POST',
     body: JSON.stringify(body),
+  })
+  return r.json() as Promise<ProgramDetailResponse>
+}
+
+export async function patchProgramLane(
+  programId: string,
+  laneId: string,
+): Promise<ProgramDetailResponse> {
+  const r = await programsFetch(`/api/v1/programs/${encodeURIComponent(programId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ lane_id: laneId }),
   })
   return r.json() as Promise<ProgramDetailResponse>
 }

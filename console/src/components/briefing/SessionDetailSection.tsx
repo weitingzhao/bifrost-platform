@@ -1,6 +1,10 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Button, SegmentControl } from '@bifrost/ui'
 import { ChevronDown, ChevronRight, Languages, Package } from 'lucide-react'
+import {
+  CollapseExpandIcon,
+  collapseExpandAriaLabel,
+} from '@/components/layout/CollapseExpandIcon'
 import { SessionLaneCtaBar, type SessionLifecycle } from '@/components/briefing/SessionLaneCtaBar'
 import { MoveLaneBar } from '@/components/briefing/MoveLaneBar'
 import {
@@ -8,9 +12,7 @@ import {
   withBriefingCommandHighlight,
 } from '@/components/briefing/BriefingCommandChip'
 import { TaskQueuePanel } from '@/components/briefing/TaskQueuePanel'
-import { SessionProgramDeliveryPanel } from '@/components/briefing/SessionProgramDeliveryPanel'
 import { BriefingReconcilePanel } from '@/components/briefing/BriefingReconcilePanel'
-import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { LaneLifecycle } from '@/lib/briefing/briefingStatus'
 import type { BriefingScopeId, ComponentLineId, WorkTrackType } from '@/lib/briefing/briefingViewTabs'
 import type { BriefingPackSize } from '@/lib/briefing/briefingUrlState'
@@ -55,23 +57,21 @@ export interface SessionDetailSectionProps {
   packReconcileOptions: ReconcileBriefingOptions
   /** Collapsed by default — inspect generated pack text only. */
   packPreview: ReactNode
-  focusedProgramId?: string
   /** After PATCH reclassification — sync Briefing Scope / Track Type filters. */
   onLaneMoved?: (line: ComponentLineId, trackType: WorkTrackType) => void
   /**
-   * When false, hide Queue + Delivery (Doing lanes redirect to Active Session).
+   * When false, hide Queue (Doing lanes redirect to Active Session).
    * Default true.
    */
   showWorkRow?: boolean
-  /** Delivery phase Approve — Active Session is the primary execute surface. */
-  allowDeliverySignOff?: boolean
   /** Navigate to Active Session for this Doing lane. */
   onOpenActiveSession?: () => void
 }
 
 /**
- * Session focus zone: CTA + pack knobs above; Task Queue + Delivery side-by-side below.
- * Completed lanes keep queue archive; program sign-off / Approve remain available in the work row.
+ * Archive / Session focus zone (full-width row under Scope | Lanes).
+ * CTA + pack knobs above; Task Queue below (plan / archive history).
+ * Program sign-off lives on Active Session; Delivery Board is the read-only catalog.
  * Doing (active) lanes on Briefing redirect execute work to Active Session.
  */
 export function SessionDetailSection({
@@ -104,16 +104,25 @@ export function SessionDetailSection({
   onPackSizeChange,
   packReconcileOptions,
   packPreview,
-  focusedProgramId,
   onLaneMoved,
   showWorkRow = true,
-  allowDeliverySignOff = true,
   onOpenActiveSession,
 }: SessionDetailSectionProps) {
-  const { canAdmin } = usePlatformAuth()
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [sectionOpen, setSectionOpen] = useState(true)
   const isArchive = laneLifecycle === 'complete'
   const isDoingRedirect = laneLifecycle === 'active' && !showWorkRow
+  const sectionKicker = isArchive ? 'Archive' : isDoingRedirect ? 'In progress' : 'Session'
+  const sectionTitle = isArchive
+    ? 'Completed lane'
+    : isDoingRedirect
+      ? lane.label
+      : 'Selected lane detail'
+
+  useEffect(() => {
+    setSectionOpen(true)
+    setPreviewOpen(false)
+  }, [lane.id])
 
   return (
     <div className="flex w-full min-w-0 max-w-full flex-col gap-3">
@@ -124,26 +133,39 @@ export function SessionDetailSection({
           : 'page-section panel-elevated w-full min-w-0 max-w-full overflow-x-hidden border-[var(--primary)]/25 px-3 py-2.5'
       }
     >
-      <p className="briefing-section-kicker m-0">
-        {isArchive ? 'Archive' : isDoingRedirect ? 'In progress' : 'Session'}
-      </p>
-      <h2 className="m-0 mt-0.5 text-sm font-semibold">
-        {isArchive
-          ? 'Completed lane'
-          : isDoingRedirect
-            ? lane.label
-            : 'Selected lane detail'}
-      </h2>
+      <button
+        type="button"
+        className="flex w-full min-w-0 items-start gap-2 text-left"
+        aria-expanded={sectionOpen}
+        aria-label={collapseExpandAriaLabel(sectionOpen, sectionKicker.toLowerCase())}
+        onClick={() => setSectionOpen(v => !v)}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="briefing-section-kicker m-0">{sectionKicker}</p>
+          <h2 className="m-0 mt-0.5 text-sm font-semibold">{sectionTitle}</h2>
+          {!sectionOpen && (
+            <p className="m-0 mt-1 truncate text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              {lane.label}
+            </p>
+          )}
+        </div>
+        <CollapseExpandIcon open={sectionOpen} className="mt-0.5" />
+      </button>
+
+      {sectionOpen && (
+        <>
       <p className="m-0 mt-1 break-words text-[var(--text-dense-caption)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
-        {isDoingRedirect ? (
+              {isDoingRedirect ? (
+                <>
+                  {queue.length > 0 &&
+                  queue.every(q => q.status === 'done' || q.status === 'closed')
+                    ? 'Queue items are complete — continue in Active Session for program sign-off and close.'
+                    : 'This lane is in progress — continue in Active Session for queue tracking and Owner sign-off. Use Re-prepare below only if the pack needs a refresh.'}
+                </>
+              ) : isArchive ? (
           <>
-            This lane is in progress — continue in Active Session for queue tracking and Owner
-            sign-off. Use Re-prepare below only if the pack needs a refresh.
-          </>
-        ) : isArchive ? (
-          <>
-            Read-only history for this completed lane. Delivery sign-off and post-completion review
-            remain available below. Create a new lane to start new work.
+            Read-only history for this completed lane. Program sign-off is on Active Session;
+            Delivery Board is the catalog. Create a new lane to start new work.
           </>
         ) : insideCursorBrowser ? (
           lifecycle === 'active' ? (
@@ -309,29 +331,22 @@ export function SessionDetailSection({
       )}
 
       {previewOpen && <div className="mt-2 min-w-0 max-w-full overflow-x-auto">{packPreview}</div>}
+        </>
+      )}
     </section>
 
     {showWorkRow && (
-    <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
-      <div className="min-w-0">
-        <TaskQueuePanel
-          items={queue}
-          lane={lane}
-          context={context}
-          canAdmin={canAdmin && !isArchive && allowDeliverySignOff}
-          migrateTrackNext={migrateTrackNext}
-          auditRecords={auditRecords}
-          auditLoading={auditLoading}
-          onOpenAudit={onOpenAudit}
-        />
-      </div>
-      <div className="min-w-0">
-        <SessionProgramDeliveryPanel
-          laneId={lane.id}
-          focusedProgramId={focusedProgramId}
-          allowSignOff={isArchive || allowDeliverySignOff}
-        />
-      </div>
+    <div className="min-w-0">
+      <TaskQueuePanel
+        items={queue}
+        lane={lane}
+        context={context}
+        canAdmin={false}
+        migrateTrackNext={migrateTrackNext}
+        auditRecords={auditRecords}
+        auditLoading={auditLoading}
+        onOpenAudit={onOpenAudit}
+      />
     </div>
     )}
     </div>

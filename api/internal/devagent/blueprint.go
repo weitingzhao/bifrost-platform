@@ -92,6 +92,10 @@ type ProgramSummary struct {
 	FormerLocation        string          `json:"former_location,omitempty"`
 	SignOffMechanism      string          `json:"sign_off_mechanism,omitempty"`
 	Delivery              *DeliveryConfig `json:"delivery,omitempty"`
+	// AssessmentStatus is post-completion close state (no_handoff / closed / …).
+	AssessmentStatus string `json:"assessment_status,omitempty"`
+	// RequiresPostCompletion is true when the blueprint declares post_completion.
+	RequiresPostCompletion bool `json:"requires_post_completion,omitempty"`
 }
 
 type ProgramInfo struct {

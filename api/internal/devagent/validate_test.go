@@ -196,3 +196,26 @@ func TestCountSignedPhasesIgnoresWorkPhases(t *testing.T) {
 		t.Fatalf("summary = %+v", sum)
 	}
 }
+
+func TestBuildProgramSummaryPostCompletionFields(t *testing.T) {
+	h := &Handler{}
+	rt := &programRuntime{
+		blueprint: &ProgramBlueprint{
+			Phases:         []PhaseBlueprint{gatePhase("g1")},
+			PostCompletion: &PostCompletionBlueprint{NewCapabilities: []string{"x"}},
+		},
+		state: &ProgramStateRecord{
+			PhaseSignOffs: []PhaseSignOffRecord{
+				{PhaseID: "g1", SignedOffAt: "2026-08-08T00:00:00Z", SignedOffBy: "owner"},
+			},
+			PostCompletion: &PostCompletionState{AssessmentStatus: "no_handoff"},
+		},
+	}
+	sum := h.buildProgramSummary("p", rt)
+	if !sum.RequiresPostCompletion {
+		t.Fatal("want requires_post_completion when blueprint declares post_completion")
+	}
+	if sum.AssessmentStatus != "no_handoff" {
+		t.Fatalf("assessment_status = %q, want no_handoff", sum.AssessmentStatus)
+	}
+}

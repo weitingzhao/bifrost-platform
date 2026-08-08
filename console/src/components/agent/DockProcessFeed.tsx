@@ -67,16 +67,21 @@ function highlightStatusTokens(text: string): ReactNode {
   const nodes: ReactNode[] = []
   let last = 0
   let key = 0
+  const nextKey = () => {
+    const k = key
+    key += 1
+    return k
+  }
   const re = new RegExp(STATUS_TOKEN_RE.source, 'gi')
   let m: RegExpExecArray | null
   while ((m = re.exec(text)) != null) {
     if (m.index > last) {
-      nodes.push(<Fragment key={`t${key++}`}>{text.slice(last, m.index)}</Fragment>)
+      nodes.push(<Fragment key={`t${nextKey()}`}>{text.slice(last, m.index)}</Fragment>)
     }
     const tok = m[0]
     nodes.push(
       <span
-        key={`k${key++}`}
+        key={`k${nextKey()}`}
         className={cn(
           'console-agent-execution-dock__log-token',
           `console-agent-execution-dock__log-token--${tokenTone(tok)}`,
@@ -88,7 +93,7 @@ function highlightStatusTokens(text: string): ReactNode {
     last = m.index + tok.length
   }
   if (last < text.length) {
-    nodes.push(<Fragment key={`t${key++}`}>{text.slice(last)}</Fragment>)
+    nodes.push(<Fragment key={`t${nextKey()}`}>{text.slice(last)}</Fragment>)
   }
   return nodes.length > 0 ? nodes : text
 }

@@ -1,5 +1,11 @@
 import {
   Button,
+  CollapsibleChevron,
+  CollapsibleGroup,
+  CollapsibleGroupBody,
+  CollapsibleGroupHeader,
+  CollapsibleGroupStats,
+  CollapsibleGroupTitle,
   ConfirmDialog,
   DenseDataTable,
   DenseTableBody,
@@ -13,7 +19,11 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  CollapseExpandIcon,
+  collapseExpandAriaLabel,
+} from '@/components/layout/CollapseExpandIcon'
 import {
   fetchDeliveryBoardPrograms,
   fetchProgramDetail,
@@ -26,7 +36,7 @@ import { PostCompletionPendingPanel } from '@/components/delivery/PostCompletion
 import { BriefingStatusBadge } from '@/components/briefing/BriefingStatusChrome'
 import { TaskQueuePanel } from '@/components/briefing/TaskQueuePanel'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { queueItemToBriefingStatus } from '@/lib/briefing/briefingStatus'
+import { isProgramSessionReleased, queueItemToBriefingStatus } from '@/lib/briefing/briefingStatus'
 import type { QueueItem, WorkLane } from '@/lib/briefing/workLanes'
 import type { AuditRecord } from '@/api/auditTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
@@ -58,7 +68,10 @@ function deliveryStatusVariant(phase: ProgramPhaseDetail): DenseTagVariant {
 
 function deliveryStatusLabel(phase: ProgramPhaseDetail): string {
   if (phase.signed_off) return 'Signed'
+  const noGate = phase.sign_off?.required === false
   const st = phase.progress?.status
+  const progressDone = st === 'done' || st === 'verify_passed' || phase.status === 'done'
+  if (noGate && progressDone) return 'Done (no gate)'
   if (st === 'done' || st === 'verify_passed') return 'Ready for sign-off'
   if (st) return st.replace(/_/g, ' ')
   return phase.status
@@ -225,14 +238,121 @@ function UnifiedPhaseRow({
   )
 }
 
+function PhaseGridFold({
+  programId,
+  rowCount,
+  unsignedCount,
+  children,
+}: {
+  programId: string
+  rowCount: number
+  unsignedCount: number
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    setOpen(false)
+  }, [programId])
+
+  return (
+    <CollapsibleGroup variant="card" className="mb-0">
+      <CollapsibleGroupHeader
+        expanded={open}
+        onToggle={() => setOpen(v => !v)}
+        aria-label={collapseExpandAriaLabel(open, 'phase grid')}
+      >
+        <CollapsibleChevron expanded={open} />
+        <CollapsibleGroupTitle>Phase grid</CollapsibleGroupTitle>
+        <CollapsibleGroupStats>
+          {rowCount} phases
+          {unsignedCount > 0 ? ` · ${unsignedCount} unsigned` : ''}
+        </CollapsibleGroupStats>
+      </CollapsibleGroupHeader>
+      {open ? (
+        <CollapsibleGroupBody className="px-0 pb-0">
+          <div className="min-w-0 overflow-x-auto border-t border-border">{children}</div>
+        </CollapsibleGroupBody>
+      ) : null}
+    </CollapsibleGroup>
+  )
+}
+
+function ProgramBoardShell({
+  program,
+  signedCount,
+  gateCount,
+  phasesDone,
+  phaseTotal,
+  defaultOpen,
+  children,
+}: {
+  program: ProgramSummary
+  signedCount: number
+  gateCount: number
+  phasesDone: number
+  phaseTotal: number
+  defaultOpen: boolean
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  useEffect(() => {
+    setOpen(defaultOpen)
+  }, [program.id, defaultOpen])
+
+  const title = program.label ?? program.title
+  const released = isProgramSessionReleased(program)
+  const gatesOk = gateCount > 0 && signedCount === gateCount
+  const closePending = !released && gatesOk
+
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      <button
+        type="button"
+        className="flex w-full min-w-0 items-start gap-2 text-left"
+        aria-expanded={open}
+        aria-label={collapseExpandAriaLabel(open, title)}
+        onClick={() => setOpen(v => !v)}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="briefing-section-kicker m-0">Phases</p>
+          <h3 className="m-0 mt-0.5 text-sm font-semibold">{title}</h3>
+          {!open && (
+            <p className="m-0 mt-1 text-dense-caption text-muted-foreground">
+              {signedCount}/{gateCount} gates signed
+              {phaseTotal > 0 ? ` · ${phasesDone}/${phaseTotal} phases done` : ''}
+              {closePending ? ' · close pending' : released ? ' · closed' : ''}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <DenseTag variant={gatesOk ? 'success' : 'warning'}>
+            {signedCount}/{gateCount} gates signed
+          </DenseTag>
+          {phaseTotal > 0 && (
+            <DenseTag variant={phasesDone === phaseTotal ? 'success' : 'neutral'}>
+              {phasesDone}/{phaseTotal} phases done
+            </DenseTag>
+          )}
+          {closePending && <DenseTag variant="warning">Close pending</DenseTag>}
+          {released && <DenseTag variant="success">Closed</DenseTag>}
+          <CollapseExpandIcon open={open} className="mt-0.5" />
+        </div>
+      </button>
+      {open ? children : null}
+    </div>
+  )
+}
+
 function ProgramUnifiedBoard({
   program,
   queue,
   allowSignOff,
+  defaultOpen,
 }: {
   program: ProgramSummary
   queue: QueueItem[]
   allowSignOff: boolean
+  defaultOpen: boolean
 }) {
   const { canAdmin } = usePlatformAuth()
   const queryClient = useQueryClient()
@@ -258,63 +378,65 @@ function ProgramUnifiedBoard({
     [detail, queue],
   )
 
-  const signedCount = detail?.phases.filter(p => p.signed_off).length ?? 0
+  const signedCount =
+    detail?.phases.filter(p => p.signed_off).length ??
+    program.signed ??
+    program.phases_signed ??
+    0
   const gateCount =
     detail?.phases.filter(p => p.sign_off?.required !== false).length ??
     program.sign_off_required_count ??
     program.phase_count
+  const phasesDone = detail?.program.phases_done ?? program.phases_done
+  const phaseTotal = detail?.phases.length ?? program.phase_count
   const panelSignOffOnly = program.id === 'vision' || program.id === 'mission-signal'
   const tableAllowSignOff = allowSignOff && !panelSignOffOnly
 
+  const shell = {
+    program,
+    signedCount,
+    gateCount,
+    phasesDone,
+    phaseTotal,
+    defaultOpen,
+  }
+
   if (panelSignOffOnly) {
     return (
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="m-0 text-sm font-semibold">{program.label ?? program.title}</h3>
-          <DenseTag variant={signedCount === gateCount && gateCount > 0 ? 'success' : 'warning'}>
-            {signedCount}/{gateCount} gates
-          </DenseTag>
-        </div>
+      <ProgramBoardShell {...shell}>
         <DeliveryBoardProgramPanels programId={program.id} allowSignOff={allowSignOff} />
-      </div>
+      </ProgramBoardShell>
     )
   }
 
   if (detailQuery.isLoading) {
-    return <p className="m-0 text-dense-meta text-muted-foreground">Loading phases…</p>
+    return (
+      <ProgramBoardShell {...shell}>
+        <p className="m-0 text-dense-meta text-muted-foreground">Loading phases…</p>
+      </ProgramBoardShell>
+    )
   }
   if (detailQuery.isError || detail == null) {
-    return <p className="m-0 text-dense-meta text-destructive">Failed to load program phases.</p>
+    return (
+      <ProgramBoardShell {...shell}>
+        <p className="m-0 text-dense-meta text-destructive">Failed to load program phases.</p>
+      </ProgramBoardShell>
+    )
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="briefing-section-kicker m-0">Phases</p>
-          <h3 className="m-0 mt-0.5 text-sm font-semibold">{program.label ?? program.title}</h3>
-          <p className="m-0 mt-1 max-w-3xl text-dense-caption text-muted-foreground">
-            Plan status and Owner sign-off on one row per phase.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <DenseTag variant={signedCount === gateCount && gateCount > 0 ? 'success' : 'warning'}>
-            {signedCount}/{gateCount} gates signed
-          </DenseTag>
-          <DenseTag
-            variant={
-              detail.program.phases_done === detail.phases.length && detail.phases.length > 0
-                ? 'success'
-                : 'neutral'
-            }
-          >
-            {detail.program.phases_done}/{detail.phases.length} phases done
-          </DenseTag>
-        </div>
-      </div>
+    <>
+    <ProgramBoardShell {...shell}>
+      <p className="m-0 max-w-3xl text-dense-caption text-muted-foreground">
+        Plan status and Owner sign-off on one row per phase.
+      </p>
 
-      <div className="min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
-        <DenseDataTable>
+      <PhaseGridFold
+        programId={program.id}
+        rowCount={joined.rows.length + joined.orphanQueue.length}
+        unsignedCount={detail.phases.filter(p => !p.signed_off && p.sign_off?.required !== false).length}
+      >
+        <DenseDataTable wrapClassName="rounded-none border-0">
           <DenseTableHeader>
             <DenseTableHeadRow>
               <DenseTableHead className="w-8" />
@@ -359,9 +481,10 @@ function ProgramUnifiedBoard({
             ))}
           </DenseTableBody>
         </DenseDataTable>
-      </div>
+      </PhaseGridFold>
 
       {allowSignOff && <PostCompletionPendingPanel programId={program.id} />}
+    </ProgramBoardShell>
 
       <ConfirmDialog
         open={confirmPhaseId != null}
@@ -374,7 +497,7 @@ function ProgramUnifiedBoard({
         }}
         onCancel={() => setConfirmPhaseId(null)}
       />
-    </div>
+    </>
   )
 }
 
@@ -418,10 +541,14 @@ export function ActiveSessionPhaseBoard({
   const lanePrograms = useMemo(() => {
     const all = programsQuery.data?.programs ?? []
     const linked = all.filter(p => p.lane_id === lane.id)
-    if (focusedProgramId == null) return linked
     return [...linked].sort((a, b) => {
-      if (a.id === focusedProgramId) return -1
-      if (b.id === focusedProgramId) return 1
+      const aOpen = !isProgramSessionReleased(a)
+      const bOpen = !isProgramSessionReleased(b)
+      if (aOpen !== bOpen) return aOpen ? -1 : 1
+      if (focusedProgramId != null) {
+        if (a.id === focusedProgramId) return -1
+        if (b.id === focusedProgramId) return 1
+      }
       return 0
     })
   }, [programsQuery.data, lane.id, focusedProgramId])
@@ -458,13 +585,18 @@ export function ActiveSessionPhaseBoard({
           emphasize
         />
       )}
-      {lanePrograms.map(program => (
-        <ProgramUnifiedBoard
+      {lanePrograms.map((program, index) => (
+        <div
           key={program.id}
-          program={program}
-          queue={queue}
-          allowSignOff={allowSignOff}
-        />
+          className={index > 0 ? 'border-t border-border/60 pt-4' : undefined}
+        >
+          <ProgramUnifiedBoard
+            program={program}
+            queue={queue}
+            allowSignOff={allowSignOff}
+            defaultOpen={!isProgramSessionReleased(program)}
+          />
+        </div>
       ))}
     </section>
   )

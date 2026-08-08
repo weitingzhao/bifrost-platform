@@ -1,4 +1,5 @@
 import type { ProgramSummary } from '@/api/programsTypes'
+import { isProgramSessionReleased } from '@/lib/briefing/programClose'
 
 /** True when program lane is safe to bind under an Active Session lane. */
 export function programLaneCompatible(
@@ -15,7 +16,9 @@ export function programLaneCompatible(
 
 /**
  * Pick a Delivery Board program for the Active Session lane.
- * Order: preferred id (if lane-compatible) → active → incomplete → id.
+ * Prefer the single not-sessionReleased program; if multiple live (legacy),
+ * prefer incomplete then id. Do not bind a sessionReleased program when an
+ * open sibling exists.
  */
 export function pickBoardProgramForLane(
   programs: ProgramSummary[],
@@ -27,14 +30,20 @@ export function pickBoardProgramForLane(
   const linked = programs.filter(p => programLaneCompatible(p.lane_id, lane))
   if (linked.length === 0) return undefined
 
+  const live = linked.filter(p => !isProgramSessionReleased(p))
+  const pool = live.length > 0 ? live : linked
+
   const preferred = preferredProgramId?.trim()
   if (preferred) {
-    const hit = linked.find(p => p.id === preferred)
+    const hit = pool.find(p => p.id === preferred)
     if (hit != null) return hit
   }
 
-  return [...linked].sort((a, b) => {
+  return [...pool].sort((a, b) => {
     if (a.active !== b.active) return a.active ? -1 : 1
+    const aLive = !isProgramSessionReleased(a)
+    const bLive = !isProgramSessionReleased(b)
+    if (aLive !== bLive) return aLive ? -1 : 1
     if (a.complete !== b.complete) return a.complete ? 1 : -1
     return a.id.localeCompare(b.id)
   })[0]
@@ -65,7 +74,18 @@ export function resolveDevProgramId(input: ResolveDevProgramIdInput): string | u
     if (sessionId != null) {
       const onBoard = input.boardPrograms.find(p => p.id === sessionId)
       if (onBoard != null) {
-        if (programLaneCompatible(onBoard.lane_id, lane)) return sessionId
+        if (programLaneCompatible(onBoard.lane_id, lane)) {
+          const livePick = pickBoardProgramForLane(input.boardPrograms, lane)
+          if (
+            livePick != null &&
+            isProgramSessionReleased(onBoard) &&
+            livePick.id !== sessionId &&
+            !isProgramSessionReleased(livePick)
+          ) {
+            return livePick.id
+          }
+          return sessionId
+        }
         // Board proves mismatch — do not bind; caller clears session.programId.
       } else {
         // Not listed on board yet — keep provisional id for detail fetch + lane check.
@@ -80,7 +100,17 @@ export function resolveDevProgramId(input: ResolveDevProgramIdInput): string | u
     if (stored) {
       const storedOnBoard = input.boardPrograms.find(p => p.id === stored)
       if (storedOnBoard != null) {
-        return programLaneCompatible(storedOnBoard.lane_id, lane) ? stored : undefined
+        if (!programLaneCompatible(storedOnBoard.lane_id, lane)) return undefined
+        const livePick = pickBoardProgramForLane(input.boardPrograms, lane)
+        if (
+          livePick != null &&
+          isProgramSessionReleased(storedOnBoard) &&
+          livePick.id !== stored &&
+          !isProgramSessionReleased(livePick)
+        ) {
+          return livePick.id
+        }
+        return stored
       }
       // Stored id not on board — allow detail validation path.
       return stored

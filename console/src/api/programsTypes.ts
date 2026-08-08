@@ -1,3 +1,5 @@
+import { boardCloseTag, isProgramCatalogComplete } from '@/lib/briefing/programClose'
+
 export interface ProgramDeliveryConfig {
   board_visible: boolean
   former_location?: string
@@ -23,6 +25,10 @@ export interface ProgramSummary {
   former_location?: string
   sign_off_mechanism?: string
   delivery?: ProgramDeliveryConfig
+  /** Post-completion close state from programs API (no_handoff / closed / …). */
+  assessment_status?: PostCompletionAssessmentStatus | string
+  /** True when the program blueprint declares post_completion. */
+  requires_post_completion?: boolean
 }
 
 export interface ProgramPhaseDetail {
@@ -162,6 +168,8 @@ export interface CreateProgramFromTemplateRequest {
   lane_id?: string
 }
 
+export type DeliveryBoardCloseTag = 'close_pending' | 'in_operate' | null
+
 export type DeliveryBoardProgramOverview = {
   id: string
   label: string
@@ -171,7 +179,11 @@ export type DeliveryBoardProgramOverview = {
   phasesDone: number
   gateCount: number
   signed: number
+  /** catalogComplete — not gates-only API `complete`. */
   complete: boolean
+  closeTag: DeliveryBoardCloseTag
+  assessmentStatus?: string
+  requiresPostCompletion?: boolean
   signOffMechanism?: string
   laneId?: string
 }
@@ -179,11 +191,8 @@ export type DeliveryBoardProgramOverview = {
 export function mapProgramSummaryToOverview(p: ProgramSummary): DeliveryBoardProgramOverview {
   const signed = p.signed ?? p.phases_signed ?? 0
   const gateCount = p.sign_off_required_count ?? p.phase_count
-  // Prefer API complete; fallback matches gate-based Complete (not phase_count).
-  const completeFallback =
-    gateCount > 0
-      ? signed === gateCount
-      : p.phase_count > 0 && p.phases_done === p.phase_count
+  const catalogComplete = isProgramCatalogComplete(p)
+  const closeTag = boardCloseTag(p)
   return {
     id: p.id,
     label: p.label ?? p.title,
@@ -193,7 +202,10 @@ export function mapProgramSummaryToOverview(p: ProgramSummary): DeliveryBoardPro
     phasesDone: p.phases_done,
     gateCount,
     signed,
-    complete: p.complete ?? completeFallback,
+    complete: catalogComplete,
+    closeTag,
+    assessmentStatus: p.assessment_status,
+    requiresPostCompletion: p.requires_post_completion,
     signOffMechanism: p.sign_off_mechanism ?? p.delivery?.sign_off_mechanism,
     laneId: p.lane_id,
   }

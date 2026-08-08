@@ -14,6 +14,7 @@ import { OPERATE_QUEUE_QUERY_KEY } from '@/api/operateQueue'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import type { PostCompletionItem } from '@/api/programsTypes'
+import { isGatesComplete } from '@/lib/briefing/programClose'
 import { deriveAssessmentLabel } from '@/lib/operate/handoff'
 
 function DetailList({ label, values }: { label: string; values?: string[] }) {
@@ -92,6 +93,7 @@ export function PostCompletionPendingPanel({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['programs', 'post-completion', 'pending'] })
       if (programId) void queryClient.invalidateQueries({ queryKey: ['programs', programId] })
+      void queryClient.invalidateQueries({ queryKey: PROGRAMS_BOARD_QUERY_KEY })
       setRejectId(null)
       setDecisionReason('')
     },
@@ -101,6 +103,7 @@ export function PostCompletionPendingPanel({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['programs', programId] })
       void queryClient.invalidateQueries({ queryKey: ['programs', 'post-completion', 'pending'] })
+      void queryClient.invalidateQueries({ queryKey: PROGRAMS_BOARD_QUERY_KEY })
       setConfirmNoHandoff(false)
       setDecisionReason('')
     },
@@ -115,6 +118,7 @@ export function PostCompletionPendingPanel({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['programs', programId] })
       void queryClient.invalidateQueries({ queryKey: ['programs', 'post-completion', 'pending'] })
+      void queryClient.invalidateQueries({ queryKey: PROGRAMS_BOARD_QUERY_KEY })
     },
   })
 
@@ -136,6 +140,9 @@ export function PostCompletionPendingPanel({
     programId ?? '',
   )
   const suggestions = detail?.post_completion?.suggested_items ?? []
+  const gatesComplete = detail?.program != null ? isGatesComplete(detail.program) : false
+  const signed = detail?.program.signed ?? detail?.program.phases_signed ?? 0
+  const gates = detail?.program.sign_off_required_count ?? detail?.program.phase_count ?? 0
 
   if (items.length === 0 && programId == null) {
     return null
@@ -187,7 +194,7 @@ export function PostCompletionPendingPanel({
           </li>
         ))}
       </ul>
-      {programId != null && assessmentStatus === 'NOT ASSESSED' &&
+      {programId != null && gatesComplete && assessmentStatus === 'NOT ASSESSED' &&
         (suggestions.length > 0 || detail?.post_completion?.suggested_assessment === 'no_handoff') &&
         !dismissedDraft && (
         <div className="rounded border border-dashed border-border p-2">
@@ -218,11 +225,16 @@ export function PostCompletionPendingPanel({
           )}
         </div>
       )}
-      {programId != null && canAdmin && allowApprove && assessmentStatus !== 'NO HANDOFF' && assessmentStatus !== 'CLOSED' && (
+      {programId != null && !gatesComplete && (
+        <p className="m-0 text-dense-meta text-muted-foreground">
+          Sign all required gates before close ({signed}/{gates}).
+        </p>
+      )}
+      {programId != null && gatesComplete && canAdmin && allowApprove && assessmentStatus !== 'NO HANDOFF' && assessmentStatus !== 'CLOSED' && (
         <div className="flex flex-col gap-2 border-t border-border/60 pt-3">
           <p className="m-0 text-dense-label font-medium">Close this program — Owner decision</p>
           <p className="m-0 text-dense-meta text-muted-foreground">
-            All phases are signed. Record that no ongoing operational handoff is needed to close.
+            All required gates are signed. Record that no ongoing operational handoff is needed to close.
           </p>
           <label className="text-dense-caption font-medium text-muted-foreground" htmlFor={`no-handoff-${programId}`}>Reason</label>
           <textarea

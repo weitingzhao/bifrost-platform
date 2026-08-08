@@ -13,7 +13,10 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { fetchDeliveryBoardPrograms, PROGRAMS_BOARD_QUERY_KEY } from '@/api/programs'
-import { mapProgramSummaryToOverview } from '@/api/programsTypes'
+import {
+  mapProgramSummaryToOverview,
+  type DeliveryBoardProgramOverview,
+} from '@/api/programsTypes'
 import { BriefingStatusBadge, BriefingStatusLamp } from '@/components/briefing/BriefingStatusChrome'
 import { DeliveryBoardCompleteGrid } from '@/components/delivery/DeliveryBoardCompleteGrid'
 import {
@@ -37,10 +40,27 @@ import {
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { laneById, type LaneId } from '@/lib/briefing/workLanes'
 
-function programStatusVariant(signed: number, complete: boolean): DenseTagVariant {
+function programStatusVariant(
+  signed: number,
+  complete: boolean,
+  closeTag: DeliveryBoardProgramOverview['closeTag'],
+): DenseTagVariant {
   if (complete) return 'success'
-  if (signed > 0) return 'warning'
+  if (closeTag === 'in_operate') return 'info'
+  if (closeTag === 'close_pending' || signed > 0) return 'warning'
   return 'neutral'
+}
+
+function programStatusLabel(
+  signed: number,
+  complete: boolean,
+  closeTag: DeliveryBoardProgramOverview['closeTag'],
+): string {
+  if (complete) return 'Complete'
+  if (closeTag === 'in_operate') return 'In operate'
+  if (closeTag === 'close_pending') return 'Close pending'
+  if (signed > 0) return 'In progress'
+  return 'Not started'
 }
 
 function filtersFromHash(): {
@@ -136,8 +156,8 @@ function ProgramBandTable({
                 {program.signed}/{program.gateCount} gates
               </DenseTableCell>
               <DenseTableCell>
-                <DenseTag variant={programStatusVariant(program.signed, program.complete)}>
-                  {program.complete ? 'Complete' : program.signed > 0 ? 'In progress' : 'Not started'}
+                <DenseTag variant={programStatusVariant(program.signed, program.complete, program.closeTag)}>
+                  {programStatusLabel(program.signed, program.complete, program.closeTag)}
                 </DenseTag>
               </DenseTableCell>
               <DenseTableCell className="text-dense-meta text-muted-foreground">
@@ -187,7 +207,7 @@ export function DeliveryBoardPage({
   const scopeBandCounts = useMemo(() => {
     const bandOf = (p: (typeof allPrograms)[number]): keyof DeliveryScopeBandCounts => {
       if (p.complete) return 'complete'
-      if (p.signed > 0) return 'inProgress'
+      if (p.signed > 0 || p.closeTag != null) return 'inProgress'
       return 'notStarted'
     }
     const tally = (list: typeof allPrograms): DeliveryScopeBandCounts => {
@@ -222,8 +242,8 @@ export function DeliveryBoardPage({
 
   const bands = useMemo(() => {
     const complete = programs.filter(p => p.complete)
-    const inProgress = programs.filter(p => !p.complete && p.signed > 0)
-    const notStarted = programs.filter(p => !p.complete && p.signed <= 0)
+    const inProgress = programs.filter(p => !p.complete && (p.signed > 0 || p.closeTag != null))
+    const notStarted = programs.filter(p => !p.complete && p.signed <= 0 && p.closeTag == null)
     return { complete, inProgress, notStarted }
   }, [programs])
 

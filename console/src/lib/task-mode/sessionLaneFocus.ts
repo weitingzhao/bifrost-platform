@@ -1,4 +1,5 @@
 import {
+  isLaneLifecycleHold,
   laneLifecycleFromQueue,
   lifecycleToBriefingStatus,
   type BriefingWorkStatus,
@@ -31,8 +32,10 @@ export type ResolveSessionLaneFocusInput = {
   queue: QueueItem[]
   hasActiveSession: boolean
   hasProgram?: boolean
-  programSigned?: number
-  programPhaseCount?: number
+  /** sessionReleased for the lane — from useDeliveryProgramClosure. */
+  programsReleased?: boolean
+  /** Alias of programsReleased. */
+  programsClosed?: boolean
 }
 
 /**
@@ -50,13 +53,19 @@ export function resolveSessionLaneFocus(input: ResolveSessionLaneFocusInput): Se
     }
   }
 
-  const lifecycle = laneLifecycleFromQueue(input.queue)
+  const programsReleased = input.programsReleased ?? input.programsClosed
+  if (isLaneLifecycleHold(input.queue, programsReleased)) {
+    return {
+      lifecycle: 'planned',
+      status: 'planned',
+      progress: queueProgress(input.queue),
+      kind: 'plan',
+      line: 'Next: Wait for Delivery close state',
+    }
+  }
+  const lifecycle = laneLifecycleFromQueue(input.queue, { programsReleased })
   const status = lifecycleToBriefingStatus(lifecycle)
   const progress = queueProgress(input.queue)
-  const signed = input.programSigned ?? 0
-  const phaseCount = input.programPhaseCount ?? 0
-  const unsigned =
-    input.hasProgram === true && phaseCount > 0 && signed < phaseCount
 
   if (lifecycle === 'empty') {
     return {
@@ -69,27 +78,27 @@ export function resolveSessionLaneFocus(input: ResolveSessionLaneFocusInput): Se
   }
 
   if (lifecycle === 'complete') {
-    if (unsigned) {
-      return {
-        lifecycle,
-        status,
-        progress,
-        kind: 'signoff',
-        line: 'Focus: Delivery Board sign-off (queue complete, program unsigned)',
-      }
-    }
     return {
       lifecycle,
       status,
       progress,
       kind: 'archive',
-      line: 'Next: Archive session or start a new lane in Briefing',
+      line: 'Next: Archive session in Briefing — catalog stays on Delivery Board',
     }
   }
 
   if (lifecycle === 'active') {
     const focusItem = firstMatching(input.queue, ACTIVE_STATUSES)
     const nextItem = firstMatching(input.queue, PLANNED_STATUSES)
+    if (programsReleased === false && focusItem == null) {
+      return {
+        lifecycle,
+        status,
+        progress,
+        kind: 'signoff',
+        line: 'Focus: Program sign-off in Active Session',
+      }
+    }
     return {
       lifecycle,
       status,

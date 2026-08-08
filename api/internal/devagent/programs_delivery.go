@@ -347,6 +347,14 @@ func (h *Handler) HandleProgramComplete(w http.ResponseWriter, r *http.Request) 
 	if rt.state == nil {
 		rt.state = &ProgramStateRecord{ProgramID: programID, History: []Job{}}
 	}
+	sum := h.buildProgramSummary(programID, rt)
+	if !IsGatesComplete(sum) {
+		h.mu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": fmt.Sprintf("program %s gates are not complete", programID),
+		})
+		return
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	caps := req.NewCapabilities
 	risks := req.NewRisks
@@ -570,10 +578,18 @@ func (h *Handler) HandleNoPostCompletionHandoff(w http.ResponseWriter, r *http.R
 		by = "owner"
 	}
 	h.mu.Lock()
-	_, exists := h.runtimes[programID]
-	h.mu.Unlock()
+	rt, exists := h.runtimes[programID]
 	if !exists {
+		h.mu.Unlock()
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
+		return
+	}
+	sum := h.buildProgramSummary(programID, rt)
+	h.mu.Unlock()
+	if !IsGatesComplete(sum) {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": fmt.Sprintf("program %s gates are not complete", programID),
+		})
 		return
 	}
 	items, err := h.store.LoadPendingPostCompletion()

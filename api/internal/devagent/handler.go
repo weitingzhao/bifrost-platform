@@ -203,7 +203,20 @@ func NewHandler(configDir string) (*Handler, error) {
 	}
 
 	h.blueprintDir = programsDir
+	h.logLiveLaneCollisions()
 	return h, nil
+}
+
+func (h *Handler) logLiveLaneCollisions() {
+	h.mu.Lock()
+	collisions := h.liveLaneCollisionsLocked()
+	h.mu.Unlock()
+	for _, c := range collisions {
+		slog.Error("D2 live lane collision at startup",
+			"lane_id", c.LaneID,
+			"programs", strings.Join(c.ProgramIDs, ","),
+		)
+	}
 }
 
 func (h *Handler) persistRuntimeLocked(programID string) error {
@@ -312,6 +325,12 @@ func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) Prog
 	if rt.blueprint.Delivery != nil {
 		summary.FormerLocation = rt.blueprint.Delivery.FormerLocation
 		summary.SignOffMechanism = rt.blueprint.Delivery.SignOffMechanism
+	}
+	if rt.blueprint.PostCompletion != nil {
+		summary.RequiresPostCompletion = true
+	}
+	if rt.state != nil && rt.state.PostCompletion != nil {
+		summary.AssessmentStatus = strings.TrimSpace(rt.state.PostCompletion.AssessmentStatus)
 	}
 	return summary
 }

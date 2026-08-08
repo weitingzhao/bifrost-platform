@@ -36,7 +36,10 @@ function phaseStatusVariant(phase: ProgramPhaseDetail): DenseTagVariant {
 
 function phaseStatusLabel(phase: ProgramPhaseDetail): string {
   if (phase.signed_off) return 'Signed'
+  const noGate = phase.sign_off?.required === false
   const st = phase.progress?.status
+  const progressDone = st === 'done' || st === 'verify_passed' || phase.status === 'done'
+  if (noGate && progressDone) return 'Done (no gate)'
   if (st === 'done' || st === 'verify_passed') return 'Ready for sign-off'
   if (st) return st.replace(/_/g, ' ')
   return phase.status

@@ -284,9 +284,9 @@ export function ComputePage({
   const notReadyCount = notReadyNodes.length
   const readyCount = clusterNodes.filter(n => n.status === 'Ready').length
 
-  let verdictLamp: OpsVerdictLamp = 'unknown'
-  let verdictTagLabel = 'LOADING'
-  let verdictTagVariant: OpsVerdictTagVariant = 'neutral'
+  let verdictLamp: OpsVerdictLamp
+  let verdictTagLabel: string
+  let verdictTagVariant: OpsVerdictTagVariant
   if (nodesQuery.isError) {
     verdictLamp = 'fail'
     verdictTagLabel = 'ERROR'

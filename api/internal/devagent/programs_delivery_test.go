@@ -120,9 +120,15 @@ func TestNoHandoffDistinctFromNotAssessed(t *testing.T) {
 		store: NewFileStore(configDir),
 		runtimes: map[string]*programRuntime{
 			"p": {
-				blueprint: &ProgramBlueprint{ID: "p", Title: "Program"},
+				blueprint: &ProgramBlueprint{
+					ID: "p", Title: "Program",
+					Phases: []PhaseBlueprint{gatePhase("P0")},
+				},
 				state: &ProgramStateRecord{
 					ProgramID: "p", PostCompletion: &PostCompletionState{AssessmentStatus: "not_assessed"},
+					PhaseSignOffs: []PhaseSignOffRecord{
+						{PhaseID: "P0", SignedOffAt: "2026-08-08T00:00:00Z", SignedOffBy: "owner"},
+					},
 				},
 			},
 		},
@@ -136,6 +142,94 @@ func TestNoHandoffDistinctFromNotAssessed(t *testing.T) {
 	if got := h.runtimes["p"].state.PostCompletion; got.AssessmentStatus != "no_handoff" ||
 		got.NoHandoffReason != "Pure UI change" {
 		t.Fatalf("assessment=%+v", got)
+	}
+}
+
+func TestNoHandoffRequiresGatesComplete(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+	h := &Handler{
+		store: NewFileStore(configDir),
+		runtimes: map[string]*programRuntime{
+			"p": {
+				blueprint: &ProgramBlueprint{
+					ID: "p", Title: "Program",
+					Phases: []PhaseBlueprint{gatePhase("P0")},
+				},
+				state: &ProgramStateRecord{
+					ProgramID: "p", PostCompletion: &PostCompletionState{AssessmentStatus: "not_assessed"},
+				},
+			},
+		},
+	}
+	req := requestWithParam(http.MethodPost, "/no-handoff", `{"reason":"too early"}`, "programId", "p")
+	rec := httptest.NewRecorder()
+	h.HandleNoPostCompletionHandoff(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := h.runtimes["p"].state.PostCompletion.AssessmentStatus; got != "not_assessed" {
+		t.Fatalf("assessment mutated: %s", got)
+	}
+}
+
+func TestProgramCompleteRequiresGatesComplete(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+	unsigned := &Handler{
+		store: NewFileStore(configDir),
+		runtimes: map[string]*programRuntime{
+			"p": {
+				blueprint: &ProgramBlueprint{
+					ID: "p", Title: "Program",
+					Phases: []PhaseBlueprint{gatePhase("P0")},
+				},
+				state: &ProgramStateRecord{
+					ProgramID: "p", PostCompletion: &PostCompletionState{AssessmentStatus: "not_assessed"},
+				},
+			},
+		},
+	}
+	req := requestWithParam(http.MethodPost, "/complete", `{}`, "programId", "p")
+	rec := httptest.NewRecorder()
+	unsigned.HandleProgramComplete(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("unsigned status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := unsigned.runtimes["p"].state.PostCompletion.AssessmentStatus; got != "not_assessed" {
+		t.Fatalf("assessment mutated: %s", got)
+	}
+
+	signed := &Handler{
+		store: NewFileStore(configDir),
+		runtimes: map[string]*programRuntime{
+			"p": {
+				blueprint: &ProgramBlueprint{
+					ID: "p", Title: "Program",
+					PostCompletion: &PostCompletionBlueprint{NewCapabilities: []string{"x"}},
+					Phases:         []PhaseBlueprint{gatePhase("P0")},
+				},
+				state: &ProgramStateRecord{
+					ProgramID: "p",
+					PhaseSignOffs: []PhaseSignOffRecord{
+						{PhaseID: "P0", SignedOffAt: "2026-08-08T00:00:00Z", SignedOffBy: "owner"},
+					},
+				},
+			},
+		},
+	}
+	reqOK := requestWithParam(http.MethodPost, "/complete", `{}`, "programId", "p")
+	recOK := httptest.NewRecorder()
+	signed.HandleProgramComplete(recOK, reqOK)
+	if recOK.Code != http.StatusOK {
+		t.Fatalf("signed status=%d body=%s", recOK.Code, recOK.Body.String())
+	}
+	if got := signed.runtimes["p"].state.PostCompletion; got == nil || got.SubmittedAt == "" {
+		t.Fatalf("expected submit recorded: %+v", got)
 	}
 }
 
@@ -195,6 +289,116 @@ func TestQueueLifecycleWritesProgramAssessmentAndEvidence(t *testing.T) {
 	}
 	if got := h.runtimes["p"].state.PostCompletion.AssessmentStatus; got != "closed" {
 		t.Fatalf("assessment after close=%s", got)
+	}
+}
+
+func TestHandlePatchProgramRejectsLiveLaneRebind(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+	h := &Handler{
+		store:        NewFileStore(configDir),
+		blueprintDir: filepath.Join(configDir, "programs"),
+		runtimes: map[string]*programRuntime{
+			"a": {
+				blueprint: &ProgramBlueprint{
+					ID: "a", Title: "A",
+					Metadata: map[string]interface{}{"lane_id": "console-api"},
+					Phases:   []PhaseBlueprint{gatePhase("P0")},
+				},
+				state: &ProgramStateRecord{ProgramID: "a", LaneID: "console-api"},
+			},
+			"b": {
+				blueprint: &ProgramBlueprint{
+					ID: "b", Title: "B",
+					Metadata: map[string]interface{}{"lane_id": "other-lane"},
+					Phases:   []PhaseBlueprint{gatePhase("P0")},
+				},
+				state: &ProgramStateRecord{ProgramID: "b", LaneID: "other-lane"},
+			},
+		},
+	}
+	req := requestWithParam(http.MethodPatch, "/programs/b", `{"lane_id":"console-api"}`, "programId", "b")
+	rec := httptest.NewRecorder()
+	h.HandlePatchProgram(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := h.runtimes["b"].state.LaneID; got != "other-lane" {
+		t.Fatalf("lane mutated on 409: %s", got)
+	}
+}
+
+func TestHandlePatchProgramRebindWhenTargetReleased(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+	h := &Handler{
+		store:        NewFileStore(configDir),
+		blueprintDir: filepath.Join(configDir, "programs"),
+		runtimes: map[string]*programRuntime{
+			"closed": {
+				blueprint: &ProgramBlueprint{
+					ID: "closed", Title: "Closed",
+					Metadata:       map[string]interface{}{"lane_id": "console-api"},
+					PostCompletion: &PostCompletionBlueprint{NewCapabilities: []string{"x"}},
+					Phases:         []PhaseBlueprint{gatePhase("P0")},
+				},
+				state: &ProgramStateRecord{
+					ProgramID: "closed", LaneID: "console-api",
+					PostCompletion: &PostCompletionState{AssessmentStatus: "no_handoff"},
+					PhaseSignOffs: []PhaseSignOffRecord{
+						{PhaseID: "P0", SignedOffAt: "2026-08-08T00:00:00Z", SignedOffBy: "owner"},
+					},
+				},
+			},
+			"b": {
+				blueprint: &ProgramBlueprint{
+					ID: "b", Title: "B",
+					Metadata: map[string]interface{}{"lane_id": "other-lane"},
+					Phases:   []PhaseBlueprint{gatePhase("P0")},
+				},
+				state: &ProgramStateRecord{ProgramID: "b", LaneID: "other-lane"},
+			},
+		},
+	}
+	req := requestWithParam(http.MethodPatch, "/programs/b", `{"lane_id":"console-api"}`, "programId", "b")
+	rec := httptest.NewRecorder()
+	h.HandlePatchProgram(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := h.runtimes["b"].state.LaneID; got != "console-api" {
+		t.Fatalf("lane_id=%s", got)
+	}
+}
+
+func TestHandlePatchProgramIdempotentSameLane(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+	h := &Handler{
+		store:        NewFileStore(configDir),
+		blueprintDir: filepath.Join(configDir, "programs"),
+		runtimes: map[string]*programRuntime{
+			"a": {
+				blueprint: &ProgramBlueprint{
+					ID: "a", Title: "A",
+					Metadata: map[string]interface{}{"lane_id": "console-api"},
+					Phases:   []PhaseBlueprint{gatePhase("P0")},
+				},
+				state: &ProgramStateRecord{ProgramID: "a", LaneID: "console-api"},
+			},
+		},
+	}
+	req := requestWithParam(http.MethodPatch, "/programs/a", `{"lane_id":"console-api"}`, "programId", "a")
+	rec := httptest.NewRecorder()
+	h.HandlePatchProgram(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

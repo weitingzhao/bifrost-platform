@@ -11,12 +11,14 @@ import {
 } from '@/components/briefing/BriefingStatusChrome'
 import {
   computeScopeWorkSummary,
+  isLaneLifecycleHold,
   laneLifecycleFromQueue,
   briefingLifecycleFilterLabel,
   type BriefingLaneLifecycleFilter,
 } from '@/lib/briefing/briefingStatus'
 import { componentLineById, type ComponentLineId } from '@/lib/briefing/briefingViewTabs'
 import { allWorkLanes, buildQueueForLane } from '@/lib/briefing/workLanes'
+import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 
 /** Maturity timeline: Ready → Planned → Doing → Done. */
 const LIFECYCLE_TILES: Array<{
@@ -159,20 +161,27 @@ export function BriefingWorkDigestPanel({
   onNewLane,
   compact = false,
 }: BriefingWorkDigestPanelProps) {
+  const { releasedByLane, programsReleasedFor } = useDeliveryProgramClosure()
   const { summary, hotLines, laneTotal } = useMemo(() => {
     const lanes = allWorkLanes()
     const queues = lanes.map(lane => ({
       label: lane.label,
+      laneId: lane.id,
       queue: buildQueueForLane(lane.id, context, matrices, clusterSummary),
       line: lane.componentLine,
     }))
     const summary = computeScopeWorkSummary(
-      queues.map(({ label, queue }) => ({ label, queue })),
+      queues.map(({ label, queue, laneId }) => ({ label, queue, laneId })),
+      { programsReleasedByLane: releasedByLane },
     )
 
     const doingByLine = new Map<ComponentLineId, number>()
-    for (const { queue, line } of queues) {
-      if (laneLifecycleFromQueue(queue) !== 'active') continue
+    for (const { queue, line, laneId } of queues) {
+      const released = programsReleasedFor(laneId)
+      if (isLaneLifecycleHold(queue, released)) continue
+      if (laneLifecycleFromQueue(queue, { programsReleased: released }) !== 'active') {
+        continue
+      }
       doingByLine.set(line, (doingByLine.get(line) ?? 0) + 1)
     }
     const hotLines = [...doingByLine.entries()]
@@ -185,7 +194,7 @@ export function BriefingWorkDigestPanel({
       }))
 
     return { summary, hotLines, laneTotal: lanes.length }
-  }, [context, matrices, clusterSummary])
+  }, [context, matrices, clusterSummary, releasedByLane, programsReleasedFor])
 
   const { status, nextStep, laneCounts } = summary
   const hasActiveFilter = lifecycleFilter != null
