@@ -1,32 +1,37 @@
 /**
- * Agent dry-run of Hermes L0 first-task (Wave C Phase C2 prep).
- * Hermes session itself still needs Owner LLM key (C1) before stream ⑥ can close.
+ * Hermes L0 first-task evidence — live session 2026-08-08 (stream ⑥ close).
+ * Session: Hermes dashboard 20260808_013539_3a2845 (deepseek/deepseek-chat).
  */
 
 export const HERMES_L0_FIRST_TASK_EVIDENCE = {
   taskId: 'hermes-mission-health-l0',
   autonomy: 'L0',
-  agentDryRunAt: '2026-07-22T17:36:07Z',
-  hermesSessionStatus: 'blocked_llm_key' as const,
+  hermesSessionId: '20260808_013539_3a2845',
+  hermesSessionTitle: 'Mission health read-only verification',
+  liveRunAt: '2026-08-08T06:38:38Z',
+  hermesSessionStatus: 'completed' as const,
+  model: 'deepseek/deepseek-chat',
   toolsInvoked: [
     'get_agent_bridge',
-    'verify_mission_snapshot',
     'get_connectivity_matrix',
-    'get_hermes_readiness',
-    'get_hermes_first_task',
+    'verify_mission_snapshot',
+    'verify_payload',
+    'get_cluster_summary',
+    'get_release_state',
   ] as const,
   reportEnglish: {
     status:
-      'Mission matrix NOMINAL for trade_dev/stg/prod (12/12). post_fix_verification.passed=false because verify_payload overall=DATA_LAYER (dev-local thin-client postgres/redis TCP refused). No PROBE_DRIFT. No HTTP_FAIL on trade envs.',
+      'Hermes bridge READY. Nous gateway v0.17.0 running. Mission snapshot trade_dev/stg/prod 12/12. post_fix_verification.passed=true. No actuation.',
     datastore:
-      'dev/stg/prod: NOMINAL (CNPG + redis). dev-local: DATA_LAYER — expected when Mac thin-client does not expose :30432/:30379; not a K3s trade datastore outage.',
+      'verify_payload overall=NOMINAL. probe_drift_count=0 · data_layer_count=0 · http_fail_count=0 · nominal_count=4 (dev / dev-local / stg / prod).',
     payloadMatrix:
-      'probe_drift_count=0 · data_layer_count=1 (dev-local) · http_fail_count=0 · nominal_count=3',
+      'All trade HTTP + postgres/redis ok. ops-capabilities unknown (no ops token, expected L0). ib-operator-rpc / daemon-control-write blocked by R-DV3 — correct.',
     hermesBridge:
-      'Nous Hermes gateway running v0.17.0 on .50:9119; llm_key_configured=false; platform MCP agent tools=29; legacy hermes_mcp :8782 unavailable (non-blocking for Nous path).',
-    recommendedNextStep:
-      'Owner: configure LLM key on Mac Mini .50 (~/.hermes/ or ANTHROPIC_API_KEY/OPENROUTER_API_KEY), re-probe GET /api/v1/agent/hermes/readiness → ready:true, then re-run first-task via Hermes (not Cursor) and paste report into Control Room / Briefing for stream ⑥ sign-off. Optional: ignore or retarget dev-local datastore probes if thin-client is intentional.',
+      'Nous Hermes 0.17.0 on .50:9119; DeepSeek key is_set; mcp-server-platform 79 tools; tool_search disabled after first-task so verify_* stay first-class MCP tools.',
+    recommendedNextStep: 'none — Mission healthy. Optional hygiene closed separately (gates re-run, Failed Tekton pod deleted, promtail bounce).',
   },
-  ownerPasteHint:
-    'Copy reportEnglish.* into Control Room or Briefing after Hermes live session (or cite this dry-run until LLM key is set).',
+  caveats: [
+    'First live session called verify_* via read-only GET after tool_search hid MCP schemas; subsequent sessions use tools.tool_search.enabled=false + synced mcp-platform.',
+  ],
+  ownerPasteHint: 'Live report is on Hermes session 20260808_013539_3a2845; stream hermes-gateway-integration ⑥ closed 2026-08-08.',
 } as const

@@ -237,6 +237,9 @@ rsync -az --delete -e "${RSYNC_SSH}" \
   "${MCP_SRC}/" "${REMOTE}:${REMOTE_DIR}/mcp-platform/"
 run_remote "cd ${REMOTE_DIR}/mcp-platform && npm install --no-audit --no-fund"
 
+echo "==> Pin Hermes tool_search=off (keep L0 MCP tools eager: verify_mission_snapshot / verify_payload)"
+run_remote 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; if command -v hermes >/dev/null 2>&1; then hermes config set tools.tool_search.enabled off; else echo "  skip — hermes CLI not on PATH"; fi'
+
 echo "==> Post-deploy health smoke"
 RUNNER_PORT="${RUNNER_PORT:-8781}"
 HEALTH_URL="http://$(echo "${REMOTE}" | cut -d@ -f2):${RUNNER_PORT}/health"

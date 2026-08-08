@@ -121,7 +121,7 @@ lanes:
       description: >
         Nightly catalog drift scan closed. Active Delivery Board program retrospective-agent
         (Waves B–C): DefectReport code attribution + fix-PR proposal. Spine stream
-        retrospective-agent; Hermes LLM key is a separate Owner gate on hermes-gateway-integration.
+        retrospective-agent. Hermes L0 first-task closed 2026-08-08 (hermes-gateway-integration 6/6).
       agent_mode: Ops
       work_intent: automate
     - id: agent-services

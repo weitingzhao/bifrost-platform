@@ -578,10 +578,10 @@ tracks:
             - id: hermes-gateway-integration
               label: "Nous Hermes Agent integration — LLM-powered autonomous engineer"
               total: 6
-              done: 5
-              status: in_progress
-              next_task: "OWNER GATE — configure LLM provider key in ~/.hermes/.env on Mac Mini .50 (Agent cannot); then GET /api/v1/agent/hermes/readiness ready:true → Hermes L0 first-task (⑥). Does not block retrospective-agent Waves B/C."
-              note: "Elevate Agent from on-demand Dispatch (Cursor Runner) to LLM-powered autonomous engineer (Nous Research Hermes Agent v0.17.0). Mental model: Runner = on-call engineer you page; Hermes = full-time AI engineer with 72 bundled skills, MCP tool access, persistent memory, cron scheduling, and a web dashboard. ① Nous Hermes Agent installed on Mac Mini primary (.50) ✓ — v0.17.0 with uv+Python 3.11+Playwright, ~/.hermes/ config directory, gateway as launchd ai.hermes.gateway, dashboard on :9119 with basic auth ② bifrost-platform MCP server synced to Mac Mini ✓ — mcp-server-platform (35 ops tools) via stdio, config in ~/.hermes/config.yaml mcp_servers.bifrost-platform, hermes mcp test passed all 35 tools ③ platform-api agent bridge probeNousHermes ✓ — NOUS_HERMES_URL/NOUS_HERMES_USER/NOUS_HERMES_PASS env vars, bridge.nous_hermes status block in /api/v1/agent/bridge ④ Console Operator Plane shows Hermes Agent status ✓ — version/gateway-state/dashboard-link, legacy scheduler dimmed (opacity-60) ⑤ Self-built bifrost-hermes-gateway retired ✓ — com.bifrost.hermes-gateway launchd bootout, plist removed, deploy_mac_mini.sh updated to sync MCP server instead ⑥ LLM API key + first autonomous task — BLOCKED: readiness ready=false (LLM_KEY_MISSING); gateway OK on .50:9119. Owner-only key config; A2 Hermes L0 skipped until unblocked. Ready backlog: after key → run hermes-mission-health-l0 first task (read-only)."
+              done: 6
+              status: closed
+              next_task: ""
+              note: "CLOSED 2026-08-08 — ① Nous Hermes v0.17.0 on .50:9119 ✓ ② bifrost-platform MCP stdio on Mini ✓ ③ platform-api probeNousHermes ✓ ④ Console Operator Plane Hermes status ✓ ⑤ self-built gateway retired ✓ ⑥ DeepSeek key + L0 first-task live: session 20260808_013539_3a2845 (deepseek/deepseek-chat); post_fix_verification.passed=true; verify_payload NOMINAL 4/4; no actuation. Follow-up applied same day: readiness probe uses dashboard /api/env (public /api/status has no llm_key field); tools.tool_search.enabled=false so verify_mission_snapshot/verify_payload stay first-class; mcp-platform rsynced to Mini. Evidence: console/src/lib/architecture/hermesL0FirstTaskEvidence.ts."
               prerequisites:
                 - "agent-release-discipline stream closed"
                 - "mutual-watchdog stream closed"

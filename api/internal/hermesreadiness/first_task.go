@@ -11,7 +11,9 @@ func FirstTask() FirstTaskDefinition {
 			"## Rules\n" +
 			"- Use **bifrost-platform** MCP tools only (stdio).\n" +
 			"- **L0 autonomy**: no writes, no kubectl actuation, no rollout restart, no deploy.\n" +
-			"- Call verify_mission_snapshot and verify_payload before summarizing datastore health.\n" +
+			"- Call **verify_mission_snapshot** and **verify_payload** as first-class MCP tools " +
+			"(mcp_bifrost_platform_verify_mission_snapshot / mcp_bifrost_platform_verify_payload). " +
+			"Do not substitute terminal curl. If a required tool is not in the visible set, call tool_search first — do not claim it is missing.\n" +
 			"- If post_fix_verification.passed is false, explain blockers — do not claim Mission is fixed.\n\n" +
 			"## Steps\n" +
 			"1. get_agent_bridge — confirm Hermes + platform MCP + Nous gateway status.\n" +

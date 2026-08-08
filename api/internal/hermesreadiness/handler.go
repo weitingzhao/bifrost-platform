@@ -4,23 +4,38 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 )
 
 type Handler struct {
-	httpClient *http.Client
+	httpClient  *http.Client
+	dashMu      sync.Mutex
+	dashCache   *dashProbeResult
+	dashCacheAt time.Time
 }
 
 func NewHandler() *Handler {
-	return &Handler{httpClient: &http.Client{Timeout: 8 * time.Second}}
+	jar, _ := cookiejar.New(nil)
+	return &Handler{httpClient: &http.Client{Timeout: 15 * time.Second, Jar: jar}}
 }
 
 func (h *Handler) HandleReadiness(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, Build(r.Context(), h.httpClient))
+	writeJSON(w, http.StatusOK, h.Build(r.Context()))
+}
+
+func (h *Handler) Build(ctx context.Context) ReadinessResponse {
+	return buildReadiness(ctx, h)
+}
+
+// Build is the test/package entry used by existing unit tests.
+func Build(ctx context.Context, client *http.Client) ReadinessResponse {
+	return (&Handler{httpClient: ensureJar(client)}).Build(ctx)
 }
 
 func (h *Handler) HandleFirstTask(w http.ResponseWriter, r *http.Request) {
@@ -30,10 +45,26 @@ func (h *Handler) HandleFirstTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func Build(ctx context.Context, client *http.Client) ReadinessResponse {
+func buildReadiness(ctx context.Context, h *Handler) ReadinessResponse {
 	now := time.Now().UTC()
+	client := ensureJar(h.httpClient)
 	nous := probeNousHermes(ctx, client)
+	var dash dashProbeResult
+	if nous.Status == "ok" && nous.URL != "" {
+		dash = h.cachedDashProbe(ctx, nous.URL)
+		if dash.mcpCount > 0 {
+			nous.McpToolCount = dash.mcpCount
+		}
+		if dash.llm.Configured {
+			nous.LlmKeyConfigured = true
+		}
+	}
 	llm := probeLlmKey(nous)
+	if dash.llm.Configured {
+		llm = dash.llm
+	} else if !llm.Configured && dash.llm.Source != "" {
+		llm = dash.llm
+	}
 	tools := mcp.Catalog()
 	agentTools := 0
 	for _, t := range tools {

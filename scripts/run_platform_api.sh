@@ -33,7 +33,14 @@ if env_path.is_file():
             continue
         key, _, val = line.partition("=")
         key, val = key.strip(), val.strip().strip('"').strip("'")
-        if key in keys or key.startswith("PLATFORM_") or key.startswith("REMEDIATION_") or key.startswith("OPS_"):
+        if (
+            key in keys
+            or key.startswith("PLATFORM_")
+            or key.startswith("REMEDIATION_")
+            or key.startswith("OPS_")
+            or key.startswith("NOUS_")
+            or key.startswith("HERMES_")
+        ):
             os.environ[key] = val
 
 os.environ.setdefault("OPS_VIEWER_ENV", "dev")
@@ -51,7 +58,8 @@ if os.path.isdir(brew):
 export_keys = sorted(
     k for k in os.environ
     if k in keys or k.startswith("PLATFORM_") or k.startswith("REMEDIATION_")
-    or k.startswith("OPS_") or k in ("PATH", "CURSOR_API_KEY", "HOME")
+    or k.startswith("OPS_") or k.startswith("NOUS_") or k.startswith("HERMES_")
+    or k in ("PATH", "CURSOR_API_KEY", "HOME")
 )
 for k in export_keys:
     print(f"export {shlex.quote(k)}={shlex.quote(os.environ[k])}")
