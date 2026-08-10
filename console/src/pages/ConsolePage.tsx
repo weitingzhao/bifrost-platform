@@ -593,7 +593,7 @@ function ConsolePageInner() {
   }, [viewTab, openOperatorDock, setViewTab])
 
   const startAmbientAgentJob = useCallback((job: AmbientAgentJob) => {
-    setAmbientJob(job)
+    setAmbientJob({ ...job, status: job.status ?? 'running' })
     setOperatorToolId('agent')
     setDockExpanded(true)
     upsertActivity({
@@ -618,6 +618,14 @@ function ConsolePageInner() {
   const handleAmbientJobComplete = useCallback(
     (job: RemediationJob) => {
       const ok = job.status === 'done'
+      setAmbientJob(prev => {
+        if (prev == null || prev.id !== job.id) return prev
+        const status =
+          job.status === 'done' || job.status === 'failed' || job.status === 'cancelled'
+            ? job.status
+            : prev.status
+        return { ...prev, status }
+      })
       updateActivityPhase(`agent:${job.id}`, ok ? 'completed' : 'failed', {
         settledOutcome: ok ? 'resolved' : 'error',
         detail: job.summary?.trim() || job.status,
@@ -817,6 +825,7 @@ function ConsolePageInner() {
             onOpenMcpContract={() => setViewTab('mcp-contract')}
             onOpenBriefing={openBriefing}
             ambientJobId={ambientJob?.id ?? null}
+            ambientJobStatus={ambientJob?.status ?? null}
             onStartAgentJob={startAmbientAgentJob}
           />
         )}
@@ -884,6 +893,7 @@ function ConsolePageInner() {
                 onOpenBriefing={openBriefing}
                 onOpenAgentDesk={(opts) => openAgentDesk(opts)}
                 ambientJobId={ambientJob?.id ?? null}
+                ambientJobStatus={ambientJob?.status ?? null}
                 onStartAgentJob={startAmbientAgentJob}
                 onOpenPlatformRelease={() => setViewTab('platform-release')}
                 onOpenTradeDeploy={() => setViewTab('trade-release')}
@@ -919,6 +929,7 @@ function ConsolePageInner() {
             onOpenPromote={openPromote}
             onOpenDelivery={openDelivery}
             ambientJobId={ambientJob?.id ?? null}
+            ambientJobStatus={ambientJob?.status ?? null}
             ambientJobScope={ambientJob?.scope ?? null}
             onStartAgentJob={startAmbientAgentJob}
             onOpenAgentDesk={openAgentDesk}
@@ -971,6 +982,7 @@ function ConsolePageInner() {
               onOpenObservability={openObservability}
               onOpenApiHealth={openSatelliteApi}
               ambientJobId={ambientJob?.id ?? null}
+              ambientJobStatus={ambientJob?.status ?? null}
               onStartAgentJob={startAmbientAgentJob}
             />
         )}
@@ -978,13 +990,17 @@ function ConsolePageInner() {
         {viewTab === 'platform-release' && (
           <PlatformReleasePage
               ambientJobId={ambientJob?.id ?? null}
+              ambientJobStatus={ambientJob?.status ?? null}
+              ambientJobScope={ambientJob?.scope ?? null}
               onStartAgentJob={startAmbientAgentJob}
+              onExpandAgentDock={expandAgentDock}
             />
         )}
 
         {viewTab === 'plugin-release' && (
           <PluginReleasePage
             ambientJobId={ambientJob?.id ?? null}
+            ambientJobStatus={ambientJob?.status ?? null}
             onStartAgentJob={startAmbientAgentJob}
             onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
           />
@@ -1011,6 +1027,7 @@ function ConsolePageInner() {
             onOpenApiHealth={openSatelliteApi}
             onOpenControlRoom={() => setViewTab('control-room')}
             ambientJobId={ambientJob?.id ?? null}
+            ambientJobStatus={ambientJob?.status ?? null}
             onStartAgentJob={startAmbientAgentJob}
           />
         )}
@@ -1030,6 +1047,7 @@ function ConsolePageInner() {
           <ObservabilityPage
             onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
             ambientJobId={ambientJob?.id ?? null}
+            ambientJobStatus={ambientJob?.status ?? null}
             onStartAgentJob={startAmbientAgentJob}
           />
         )}
@@ -1119,6 +1137,9 @@ function ConsolePageInner() {
               : null
         }
         onComplete={handleAmbientJobComplete}
+        onJobStatus={status => {
+          setAmbientJob(prev => (prev == null ? prev : { ...prev, status }))
+        }}
       />
     </SidebarProvider>
     </div>

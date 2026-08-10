@@ -146,6 +146,14 @@ export function deriveReleaseOutcome(steps: FlowStep[]): ReleaseOutcome {
   }
 }
 
+/** True when the 4-step lane is in a finished Released cycle (not mid next-cycle). */
+export function isReleaseCycleTerminal(
+  outcome: ReleaseOutcome,
+  nextCycleStarted: boolean,
+): boolean {
+  return outcome.kind === 'released' && !nextCycleStarted
+}
+
 export function stepRevisionForIndex(
   index: number,
   stgRun: DeliveryPipelineRunView | undefined,

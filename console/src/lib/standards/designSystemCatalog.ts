@@ -10,7 +10,7 @@
  * governance summary that Ops Console and LLM agents need.
  */
 
-export const DESIGN_SYSTEM_VERSION = '2026-08-10.5'
+export const DESIGN_SYSTEM_VERSION = '2026-08-10.8'
 export const DESIGN_SYSTEM_SOURCE = 'console/src/lib/standards/designSystemCatalog.ts'
 export const LIVING_CONTRACT_PATH = '/settings/ui-design-system'
 
@@ -185,7 +185,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Observability: Runtime domain cards (clickable) → detail table; Mission Control / Governance demoted to Reference domains (not probed) chips — by design · no runtime contract; do not invent probes for reference planes',
       'Control Room: Bay cards (Operate / Release / Health / Governance) — expand reveals strips',
       'Satellite Bus: Verdict BUS HEALTH + inline Trade NS Segment → View Operate | Shared | Compare; Evidence folds under Operate (OBSERVE ≠ verdict); Compare lamp = DRIFT for env diverge + Inspect CTA; OpsContextStrip density=seat + CAUTION why-line + Fix; scope chips ≠ health; below-verdict summary line Bus·Mission·Shared·Compare clickable when non-green; Bus non-green → Operate default + issues auto-scroll; Shared non-OK → Cluster/Observability CTA',
-      'Launch Rocket: LaneStateStrip full-width; below = fixed 6/4 LaneOperateSplit (Release+Active Run | Supporting evidence+Toolbox); divider click focuses one pane (not draggable); sections collapsible; Supporting evidence Summary (health strip) by default → Detail on expand',
+      'Launch Rocket: agent-driven — AI Release gated by Release checklist GO (same checkpoints as TCC); checklist in right 4/10; Step detail observe-only',
       'Deploy Satellite: same 6/4 LaneOperateSplit as Launch Rocket (Release+Active Run | Supporting evidence+Toolbox); Supporting evidence Summary = supply-chain chips → Detail = supply chain + gate history; Toolbox = GitOps + workflow',
       'Launch Plugin: PluginStepCommandCenter (Detect→Live) + LaneDetailCollapse for dogfood acceptance',
       'Placement / Cluster: Verdict meta chips scroll to Body anchors (#placement-violations, #cluster-issues, …)',

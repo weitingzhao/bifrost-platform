@@ -124,6 +124,11 @@ export type OperatorDockProps = {
   /** Current console view — highlights matching page link in dock head. */
   activePage?: 'operator-plane' | 'agent-desk' | 'dev-sessions' | null
   onComplete?: (job: RemediationJob) => void
+  /**
+   * Sync live/archive terminal status back to the shell so Agent CTAs unlock
+   * while the dock still shows the finished task (Dismiss is optional).
+   */
+  onJobStatus?: (status: NonNullable<AmbientAgentJob['status']>) => void
   /** Uncontrolled initial mode when expanded defaults to working. */
   defaultExpanded?: boolean
   /** Controlled expanded (working/maximized). When false → collapsed. */
@@ -221,6 +226,7 @@ export function OperatorDock({
   onOpenDevSessions,
   activePage = null,
   onComplete,
+  onJobStatus,
   defaultExpanded = false,
   expanded: expandedProp,
   onExpandedChange,
@@ -293,6 +299,14 @@ export function OperatorDock({
     autoDismissMs: 0,
     knownTerminal,
   })
+
+  useEffect(() => {
+    if (!session.isTerminal || session.job == null) return
+    const status = session.job.status
+    if (status !== 'done' && status !== 'failed' && status !== 'cancelled') return
+    if (jobStatus === status) return
+    onJobStatus?.(status)
+  }, [session.isTerminal, session.job, jobStatus, onJobStatus])
 
   useEffect(() => {
     if (!controlled) return

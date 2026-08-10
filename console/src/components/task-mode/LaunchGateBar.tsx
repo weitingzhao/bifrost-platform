@@ -13,13 +13,15 @@ export type LaunchGateBarProps = {
   checkpoints: LaunchCheckpoint[]
   /** row = full-width strip; column = Task CC 1/4 Launch rail */
   layout?: 'row' | 'column'
-  /** Agent Fix — only for NO_GO env blocks (not auth). */
+  /** Agent Fix / AI Resolve — only for NO_GO env blocks (not auth). */
   onAgentFix?: () => void
   agentFixPending?: boolean
   agentFixActive?: boolean
   agentFixDisabled?: boolean
   agentFixTitle?: string
   agentFixActiveLabel?: string
+  /** Button label; default Agent Fix (TCC). Rocket Launch may pass AI Resolve. */
+  agentFixLabel?: string
   /** When Fix is already running — expand Execution Dock (preferred over Desk). */
   onExpandAgentDock?: () => void
   /** Explicit archive escape — do not use for Fix-running CTA. */
@@ -66,6 +68,7 @@ export function LaunchGateBar({
   agentFixDisabled,
   agentFixTitle,
   agentFixActiveLabel = 'Expand dock',
+  agentFixLabel = 'Agent Fix',
   onExpandAgentDock,
   onOpenAgentDesk,
   onLaunch,
@@ -93,8 +96,8 @@ export function LaunchGateBar({
   const title =
     verdict.kind === 'NO_GO' && (agentFixActive || agentFixPending)
       ? agentFixPending
-        ? 'Starting Agent Fix…'
-        : 'Agent Fix running — expand execution dock'
+        ? `Starting ${agentFixLabel}…`
+        : `${agentFixLabel} running — expand execution dock`
       : verdict.title
 
   const canLaunch = verdict.kind === 'GO' && !launchDisabled
@@ -105,7 +108,7 @@ export function LaunchGateBar({
 
   const fixButton = showFix ? (
     <AgentTriggerButton
-      label="Agent Fix"
+      label={agentFixLabel}
       size="xs"
       pending={agentFixPending}
       active={fixRunning}

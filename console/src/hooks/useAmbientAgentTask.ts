@@ -17,6 +17,7 @@ type UseAmbientAgentTaskOptions = AmbientAgentShellProps & {
 export function useAmbientAgentTask({
   canOperate,
   ambientJobId,
+  ambientJobStatus,
   onStartAgentJob,
   scope,
   label,
@@ -31,12 +32,17 @@ export function useAmbientAgentTask({
     },
     onSuccess: job => {
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-      onStartAgentJob?.({ id: job.id, scope, label })
+      onStartAgentJob?.({ id: job.id, scope, label, status: 'running' })
     },
   })
 
-  const disabledReason = ambientAgentBlockedReason(canOperate, ambientJobId, onStartAgentJob)
-  const isActive = isAmbientAgentActive(ambientJobId)
+  const disabledReason = ambientAgentBlockedReason(
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    ambientJobStatus,
+  )
+  const isActive = isAmbientAgentActive(ambientJobId, ambientJobStatus)
 
   return {
     trigger: () => mutation.mutate(),

@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
-import { fetchPipelineRuns } from '@/api/delivery'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { fetchCluster, fetchClusterServiceReadiness } from '@/api/cluster'
+import { fetchPipelineRuns, fetchSupplyChain } from '@/api/delivery'
 import { fetchStackAddons } from '@/api/stack'
-import { fetchReleaseGate, fetchReleaseState } from '@/api/promote'
+import { fetchReleaseGate, fetchReleaseState, fetchStgSmoke } from '@/api/promote'
+import { DenseTag } from '@bifrost/ui'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
 import { DeployActionBar } from '@/components/delivery/DeployActionBar'
@@ -21,10 +23,18 @@ import { ReleaseHealthStrip } from '@/components/delivery/ReleaseHealthStrip'
 import { SelfHealthPanel } from '@/components/architecture/SelfHealthPanel'
 import { EscapeHatchPanel } from '@/components/architecture/EscapeHatchPanel'
 import { ReleaseStepCommandCenter } from '@/components/delivery/ReleaseStepCommandCenter'
+import { LaunchGateBar } from '@/components/task-mode/LaunchGateBar'
+import {
+  usePromoteVerifyReadiness,
+  useRocketProdReadiness,
+} from '@/components/task-mode/readiness/hooks'
 import {
   runStepStatus,
   gateStepStatus,
   deriveReleaseOutcome,
+  pickDeployPipelineRun,
+  isReleaseCycleTerminal,
+  deriveReleaseIdentity,
   type FlowStep,
 } from '@/lib/delivery/releaseStepTypes'
 import { ReleaseStateBanner } from '@/components/delivery/ReleaseStateBanner'
@@ -37,18 +47,37 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { useLaneStepFocus } from '@/hooks/useLaneStepFocus'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { isAmbientAgentActive } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   buildPlatformReleasePrompt,
   PLATFORM_RELEASE_SCOPE,
 } from '@/lib/agent/platformReleaseAgentPrompt'
+import {
+  buildPlatformProdFixPrompt,
+  pickFixScope,
+  PROD_ENV_FIX_SCOPE,
+} from '@/lib/agent/prodEnvironmentFixPrompt'
+import {
+  buildClusterPackBody,
+  buildDispatchedFixPrompt,
+} from '@/lib/agent/readinessFixDispatch'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
-import { deriveReleaseIdentity } from '@/lib/delivery/releaseStepTypes'
+import { isPipelineRunRunning } from '@/lib/delivery/pipelineRunAskPack'
 import { stackNeedsOperatePanel } from '@/lib/delivery/stackWizard'
+import { missionStatus } from '@/lib/control-room/missionSignals'
+import {
+  buildLaunchCheckpoints,
+  hasDeliverInFlight,
+  resolveLaunchVerdict,
+} from '@/lib/task-mode/satelliteLaunchVerdict'
 
 const AI_RELEASE_LABEL = 'AI Release'
 const AI_RELEASE_TASK_LABEL = scopeToLabel(PLATFORM_RELEASE_SCOPE)
+const AI_RESOLVE_LABEL = 'AI Resolve'
+const AI_RESOLVE_TITLE =
+  'AI Resolve release conditions — clear NO-GO checkpoints before AI Release'
 
 const PLATFORM_STG_TARGET = deliveryTargetById('platform-stg')
 const PLATFORM_PROD_TARGET = deliveryTargetById('platform-prod')
@@ -74,10 +103,18 @@ type PlatformReleasePageProps = AmbientAgentShellProps
 
 export function PlatformReleasePage({
   ambientJobId,
+  ambientJobScope,
+  ambientJobStatus,
   onStartAgentJob,
+  onExpandAgentDock,
 }: PlatformReleasePageProps = {}) {
   const { canOperate } = usePlatformAuth()
   const [detailReason] = useState(readLaneDetailReasonFromLocation)
+  const [nextCycle, setNextCycle] = useState(false)
+  const nextCycleAdvancedRef = useRef(false)
+
+  const rocketProd = useRocketProdReadiness(true)
+  const promoteVerify = usePromoteVerifyReadiness(true)
 
   const releaseStateQuery = useQuery({
     queryKey: ['promote', 'release-state', 'platform'],
@@ -111,8 +148,20 @@ export function PlatformReleasePage({
     refetchInterval: 30_000,
   })
 
-  const stgDeploy = runStepStatus(stgRuns.data?.runs?.[0])
-  const prodDeploy = runStepStatus(prodRuns.data?.runs?.[0])
+  const stgGatePassed = stgGate.data?.result === 'pass'
+  const prodGatePassed = prodGate.data?.result === 'pass'
+  const latestStgRun = stgRuns.data?.runs?.[0]
+  const latestProdRun = prodRuns.data?.runs?.[0]
+
+  const stgRun = nextCycle
+    ? latestStgRun
+    : pickDeployPipelineRun(stgRuns.data?.runs, { gatePassed: stgGatePassed })
+  const prodRun = nextCycle
+    ? latestProdRun
+    : pickDeployPipelineRun(prodRuns.data?.runs, { gatePassed: prodGatePassed })
+
+  const stgDeploy = runStepStatus(stgRun)
+  const prodDeploy = runStepStatus(prodRun)
   const stgGateStep = gateStepStatus(stgGate.data)
   const prodGateStep = gateStepStatus(prodGate.data)
 
@@ -130,13 +179,51 @@ export function PlatformReleasePage({
     reason: detailReason,
   })
 
-  const releaseIdentity = deriveReleaseIdentity(
-    stgRuns.data?.runs?.[0],
-    prodRuns.data?.runs?.[0],
-    stgGate.data,
-    prodGate.data,
-  )
+  const releaseIdentity = deriveReleaseIdentity(stgRun, prodRun, stgGate.data, prodGate.data)
   const releaseOutcome = deriveReleaseOutcome(steps)
+  const cycleTerminal = isReleaseCycleTerminal(releaseOutcome, nextCycle)
+
+  const rocketVerdictInput = useMemo(
+    () => ({
+      mode: 'rocket' as const,
+      canOperate,
+      prodBlocked: rocketProd.prodBlocked,
+      tradeProdLabel: missionStatus(rocketProd.prodOverall),
+      tradeProdSignal: rocketProd.prodOverall,
+      promoteSignal: promoteVerify.promoteSignal,
+      promoteDetail: promoteVerify.promoteDetail,
+      deliverInFlight:
+        hasDeliverInFlight(stgRuns.data?.runs) || hasDeliverInFlight(prodRuns.data?.runs),
+      agentInFlight:
+        isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+        ambientJobScope === PLATFORM_RELEASE_SCOPE,
+    }),
+    [
+      canOperate,
+      rocketProd.prodBlocked,
+      rocketProd.prodOverall,
+      promoteVerify.promoteSignal,
+      promoteVerify.promoteDetail,
+      stgRuns.data?.runs,
+      prodRuns.data?.runs,
+      ambientJobId,
+      ambientJobScope,
+      ambientJobStatus,
+    ],
+  )
+  const rocketVerdict = useMemo(
+    () => resolveLaunchVerdict(rocketVerdictInput),
+    [rocketVerdictInput],
+  )
+  const rocketCheckpoints = useMemo(
+    () => buildLaunchCheckpoints(rocketVerdictInput),
+    [rocketVerdictInput],
+  )
+  const checklistOkCount = rocketCheckpoints.filter(c => c.ok).length
+  const checklistTotal = rocketCheckpoints.length
+
+  const platformProdFixScope = pickFixScope(rocketProd.fixSignals ?? [])
+  const platformProdFixLabel = scopeToLabel(platformProdFixScope)
 
   const aiRelease = useAmbientAgentTask({
     canOperate,
@@ -147,8 +234,8 @@ export function PlatformReleasePage({
     buildRequest: () => ({
       prompt: buildPlatformReleasePrompt({
         releaseState: releaseStateQuery.data,
-        stgRun: stgRuns.data?.runs?.[0],
-        prodRun: prodRuns.data?.runs?.[0],
+        stgRun,
+        prodRun,
         stgGate: stgGate.data,
         prodGate: prodGate.data,
         outcomeKind: releaseOutcome.kind,
@@ -157,6 +244,101 @@ export function PlatformReleasePage({
       }),
     }),
   })
+
+  const aiResolve = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    onStartAgentJob,
+    scope: platformProdFixScope,
+    label: platformProdFixLabel,
+    buildRequest: async () => {
+      const signals = rocketProd.fixSignals ?? []
+      const scope = pickFixScope(signals)
+      const [cluster, serviceReadiness, supply, smoke] = await Promise.all([
+        fetchCluster(),
+        fetchClusterServiceReadiness(),
+        fetchSupplyChain(),
+        fetchStgSmoke(),
+      ])
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const fallback = buildPlatformProdFixPrompt({
+        prodOverall: rocketProd.prodOverall,
+        namespace: rocketProd.prodNamespace ?? 'bifrost-platform-prod',
+        signals,
+      })
+      return {
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: {
+            supply,
+            stgSmoke: smoke,
+            pipeline: 'bifrost-deliver-platform',
+          },
+        }),
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
+      }
+    },
+  })
+
+  const releaseDispatchAllowed = !aiRelease.disabled && rocketVerdict.kind === 'GO'
+  const releaseDisabledReason =
+    rocketVerdict.kind !== 'GO'
+      ? (rocketVerdict.disabledReason ?? rocketVerdict.detail)
+      : aiRelease.disabledReason
+
+  const showAiResolve =
+    rocketVerdict.kind === 'NO_GO' && rocketVerdict.blockKind !== 'auth'
+  const resolveRunning =
+    isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+    ambientJobScope === platformProdFixScope &&
+    !aiResolve.isPending
+  const handleAiResolveClick = () => {
+    if (resolveRunning) {
+      onExpandAgentDock?.()
+      return
+    }
+    aiResolve.trigger()
+  }
+
+  useEffect(() => {
+    if (!nextCycle) {
+      nextCycleAdvancedRef.current = false
+      return
+    }
+    if (releaseOutcome.kind === 'in_progress' || releaseOutcome.kind === 'failed') {
+      nextCycleAdvancedRef.current = true
+    }
+    if (nextCycleAdvancedRef.current && releaseOutcome.kind === 'released') {
+      setNextCycle(false)
+      nextCycleAdvancedRef.current = false
+    }
+  }, [nextCycle, releaseOutcome.kind])
+
+  useEffect(() => {
+    if (!nextCycle) return
+    if (latestStgRun != null && isPipelineRunRunning(latestStgRun)) {
+      nextCycleAdvancedRef.current = true
+    }
+  }, [nextCycle, latestStgRun])
+
+  const handleStartNextRelease = () => {
+    if (!releaseDispatchAllowed) return
+    setNextCycle(true)
+    nextCycleAdvancedRef.current = false
+    setActiveIndex(0)
+    aiRelease.trigger()
+  }
+
+  const handleAiReleaseClick = () => {
+    if (cycleTerminal) {
+      handleStartNextRelease()
+      return
+    }
+    if (!releaseDispatchAllowed) return
+    aiRelease.trigger()
+  }
 
   const stackNeedsOperate = stackNeedsOperatePanel(stackQuery.data?.addons ?? [])
 
@@ -229,19 +411,43 @@ export function PlatformReleasePage({
       {aiRelease.error != null && (
         <p className="m-0 text-dense-meta text-destructive">{aiRelease.error.message}</p>
       )}
+      {aiResolve.error != null && (
+        <p className="m-0 text-dense-meta text-destructive">{aiResolve.error.message}</p>
+      )}
 
       <LaneDetailContextStrip reason={detailReason} />
 
       <LaneStateStrip
         laneLabel="Rocket"
         actions={
-          <AgentTriggerButton
-            label={AI_RELEASE_LABEL}
-            pending={aiRelease.isPending}
-            disabled={aiRelease.disabled}
-            title={aiRelease.disabledReason ?? AI_RELEASE_LABEL}
-            onClick={() => aiRelease.trigger()}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <AgentTriggerButton
+              label={AI_RELEASE_LABEL}
+              pending={aiRelease.isPending}
+              disabled={!releaseDispatchAllowed}
+              title={
+                cycleTerminal && releaseDispatchAllowed
+                  ? 'Start the next release cycle with AI Release'
+                  : (releaseDisabledReason ?? AI_RELEASE_LABEL)
+              }
+              onClick={handleAiReleaseClick}
+            />
+            {showAiResolve && (
+              <AgentTriggerButton
+                label={AI_RESOLVE_LABEL}
+                pending={aiResolve.isPending}
+                active={resolveRunning}
+                activeLabel="Expand dock"
+                disabled={aiResolve.disabled && !resolveRunning}
+                title={
+                  resolveRunning
+                    ? 'Expand Agent Execution Dock — live progress stays on this board'
+                    : (aiResolve.disabledReason ?? AI_RESOLVE_TITLE)
+                }
+                onClick={handleAiResolveClick}
+              />
+            )}
+          </div>
         }
       >
         <ReleaseEnvAccessBar />
@@ -257,18 +463,79 @@ export function PlatformReleasePage({
               activeIndex={activeIndex}
               onSelect={setActiveIndex}
               stepLabels={STEP_LABELS}
-              stgRun={stgRuns.data?.runs?.[0]}
-              prodRun={prodRuns.data?.runs?.[0]}
+              stgRun={stgRun}
+              prodRun={prodRun}
               stgGate={stgGate.data}
               prodGate={prodGate.data}
               renderStepActions={renderPlatformStepActions}
               collapsibleBody
+              agentDriven
+              cycleTerminal={cycleTerminal}
+              onStartNextRelease={handleStartNextRelease}
+              nextCycleActive={nextCycle}
+              aiReleasePending={aiRelease.isPending}
+              aiReleaseDisabled={!releaseDispatchAllowed}
+              aiReleaseDisabledReason={releaseDisabledReason ?? undefined}
+              aiReleaseLabel={AI_RELEASE_LABEL}
             />
             <div className="flex flex-col gap-3">{stepDetail}</div>
           </>
         }
         support={
           <>
+            <LaneDetailCollapse
+              title="Release checklist"
+              summaryExtra={
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <DenseTag
+                    variant={
+                      rocketVerdict.kind === 'GO'
+                        ? 'success'
+                        : rocketVerdict.kind === 'IN_FLIGHT'
+                          ? 'warning'
+                          : 'danger'
+                    }
+                  >
+                    {rocketVerdict.kind === 'GO'
+                      ? 'GO'
+                      : rocketVerdict.kind === 'IN_FLIGHT'
+                        ? 'IN FLIGHT'
+                        : 'NO-GO'}
+                  </DenseTag>
+                  <DenseTag
+                    variant={checklistOkCount === checklistTotal ? 'success' : 'warning'}
+                  >
+                    {checklistOkCount}/{checklistTotal} ready
+                  </DenseTag>
+                </span>
+              }
+              defaultOpen
+              showModeBadge
+              bodyClassName="flex flex-col gap-3 p-3"
+            >
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                AI Release stays disabled until every checkpoint is green (same gate as Mission
+                Launch / Daily Ops Release). When NO-GO, use AI Resolve to clear release
+                conditions first.
+              </p>
+              <LaunchGateBar
+                layout="column"
+                verdict={rocketVerdict}
+                checkpoints={rocketCheckpoints}
+                hidePrimaryLaunch
+                onExpandAgentDock={onExpandAgentDock}
+                onAgentFix={handleAiResolveClick}
+                agentFixLabel={AI_RESOLVE_LABEL}
+                agentFixPending={aiResolve.isPending}
+                agentFixActive={
+                  isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+                  ambientJobScope === platformProdFixScope
+                }
+                agentFixDisabled={aiResolve.disabled}
+                agentFixTitle={aiResolve.disabledReason ?? AI_RESOLVE_TITLE}
+              />
+            </LaneDetailCollapse>
+
             <LaneDetailCollapse
               title="Supporting evidence"
               summaryExtra={<ReleaseHealthStrip />}

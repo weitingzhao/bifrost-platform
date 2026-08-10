@@ -24,6 +24,7 @@ export function useChecklistGitDirtyFix({
   isDailyOps,
   canOperate,
   ambientJobId,
+  ambientJobStatus,
   onStartAgentJob,
   fleet,
   runnerHealthy,
@@ -32,7 +33,7 @@ export function useChecklistGitDirtyFix({
   dailyOpsFixStartedRef,
   checklistCheckStartedRef,
   setAgentJustSucceeded,
-}: Pick<AmbientAgentShellProps, 'ambientJobId' | 'onStartAgentJob'> & {
+}: Pick<AmbientAgentShellProps, 'ambientJobId' | 'ambientJobStatus' | 'onStartAgentJob'> & {
   isDailyOps: boolean
   canOperate: boolean
   fleet: FleetSnapshot
@@ -158,6 +159,7 @@ export function useChecklistGitDirtyFix({
     canOperate,
     ambientJobId,
     onStartAgentJob,
+    ambientJobStatus,
   )
 
   const handleChecklistItemFix = (args: {

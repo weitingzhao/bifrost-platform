@@ -21,6 +21,12 @@ describe('ambientAgentBlockedReason', () => {
     )
   })
 
+  it('does not block when the ambient dock still shows a terminal archive job', () => {
+    expect(ambientAgentBlockedReason(true, 'job-1', () => {}, 'done')).toBeUndefined()
+    expect(ambientAgentBlockedReason(true, 'job-1', () => {}, 'failed')).toBeUndefined()
+    expect(ambientAgentBlockedReason(true, 'job-1', () => {}, 'cancelled')).toBeUndefined()
+  })
+
   it('blocks when the ambient agent shell is unavailable', () => {
     expect(ambientAgentBlockedReason(true, null, undefined)).toBe(
       'Ambient agent shell not available',
@@ -39,8 +45,14 @@ describe('isAmbientAgentActive', () => {
     expect(isAmbientAgentActive('')).toBe(false)
   })
 
-  it('is true for a non-empty job id', () => {
+  it('is true for a non-empty live job id', () => {
     expect(isAmbientAgentActive('job-1')).toBe(true)
+    expect(isAmbientAgentActive('job-1', 'running')).toBe(true)
+  })
+
+  it('is false for terminal archive jobs still selected in the dock', () => {
+    expect(isAmbientAgentActive('job-1', 'done')).toBe(false)
+    expect(isAmbientAgentActive('job-1', 'failed')).toBe(false)
   })
 })
 
@@ -106,6 +118,7 @@ describe('useAmbientAgentTask', () => {
       id: 'job-42',
       scope: 'trade-deploy',
       label: 'Redeploy satellite',
+      status: 'running',
     })
   })
 })

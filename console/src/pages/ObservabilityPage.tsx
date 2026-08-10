@@ -477,10 +477,12 @@ function SystemGapMeta({ summary }: { summary: GapSummary }) {
 export function ObservabilityPage({
   onNavigate,
   ambientJobId,
+  ambientJobStatus,
   onStartAgentJob,
 }: {
   onNavigate?: (tab: string) => void
   ambientJobId?: string | null
+  ambientJobStatus?: AmbientAgentJob['status'] | null
   onStartAgentJob?: (job: AmbientAgentJob) => void
 }) {
   const {
@@ -512,6 +514,7 @@ export function ObservabilityPage({
     canOperate,
     ambientJobId,
     onStartAgentJob,
+    ambientJobStatus,
   )
 
   const invalidateObservability = useCallback(() => {

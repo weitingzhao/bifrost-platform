@@ -196,6 +196,7 @@ function StepStatusBanner({
   stepRevision,
   nextStep,
   onContinue,
+  suppressContinue = false,
 }: {
   label: string
   env: 'STG' | 'PROD'
@@ -204,6 +205,7 @@ function StepStatusBanner({
   stepRevision?: string
   nextStep: FlowStep | undefined
   onContinue: () => void
+  suppressContinue?: boolean
 }) {
   const banner = STEP_BANNER_CONFIG[status]
   return (
@@ -225,7 +227,7 @@ function StepStatusBanner({
           {env}
         </span>
         <span className={cn('text-dense-caption font-medium', banner.textClass)}>
-          {banner.prefix}
+          {suppressContinue && status === 'done' ? 'Previous cycle · ' : banner.prefix}
           {statusLabel}
         </span>
         {stepRevision != null && stepRevision !== '' && (
@@ -236,13 +238,13 @@ function StepStatusBanner({
         )}
       </div>
 
-      {status === 'done' && nextStep != null && (
+      {!suppressContinue && status === 'done' && nextStep != null && (
         <Button size="sm" onClick={onContinue} className="shadow-sm">
           Continue to {nextStep.label}
           <ArrowRight className="ml-1 h-3.5 w-3.5" />
         </Button>
       )}
-      {status === 'done' && nextStep == null && (
+      {!suppressContinue && status === 'done' && nextStep == null && (
         <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-success">
           <CheckCircle2 className="h-4 w-4" />
           Release complete
@@ -256,12 +258,15 @@ function StepActionZone({
   activeIndex,
   status,
   renderStepActions,
+  preferPrimaryActions = false,
 }: {
   activeIndex: number
   status: StepStatus
   renderStepActions: (activeIndex: number) => ReactNode
+  /** Next-cycle start: show Deploy/Gate immediately even if step still reads done. */
+  preferPrimaryActions?: boolean
 }) {
-  if (status === 'done') {
+  if (!preferPrimaryActions && status === 'done') {
     const isDeployStep = activeIndex === 0 || activeIndex === 2
     return (
       <details className="group rounded-md border border-border/50 bg-background/40">
@@ -274,6 +279,28 @@ function StepActionZone({
     )
   }
   return <>{renderStepActions(activeIndex)}</>
+}
+
+function ManualOverrideDetails({
+  children,
+}: {
+  children: ReactNode
+}) {
+  return (
+    <details className="group rounded-md border border-border/50 bg-background/40">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
+        <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+        Manual override (advanced)
+      </summary>
+      <div className="border-t border-border/50 px-3 py-2.5">
+        <p className="m-0 mb-2 text-dense-meta text-muted-foreground">
+          Prefer AI Release on the lane strip and decisions in Agent Session. Use this only when the
+          agent path is unavailable.
+        </p>
+        {children}
+      </div>
+    </details>
+  )
 }
 
 export interface ReleaseStepCommandCenterProps {
@@ -297,6 +324,116 @@ export interface ReleaseStepCommandCenterProps {
    * Defaults open when the active step is not done.
    */
   collapsibleBody?: boolean
+  /**
+   * Released cycle terminal — hide primary Deploy/Gate actions; show Start next release.
+   */
+  cycleTerminal?: boolean
+  onStartNextRelease?: () => void
+  /** After Start next release — show Deploy/Gate primary even while stepper still reads done. */
+  nextCycleActive?: boolean
+  /**
+   * Rocket AI-first path: Step detail is observe-only; Deploy/Gate live under Manual override.
+   * Primary CTA is AI Release (lane strip / Start next).
+   */
+  agentDriven?: boolean
+}
+
+function ReleaseCycleTerminalPanel({
+  revision,
+  onStartNextRelease,
+  renderStepActions,
+  activeIndex,
+  agentDriven = false,
+  aiReleasePending = false,
+}: {
+  revision: string | null
+  onStartNextRelease?: () => void
+  renderStepActions: (activeIndex: number) => ReactNode
+  activeIndex: number
+  agentDriven?: boolean
+  aiReleasePending?: boolean
+}) {
+  return (
+    <div className="release-cc__action-zone flex flex-col gap-3 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden />
+        <span className="text-dense-label font-medium text-success">Release complete</span>
+        {revision != null && revision !== '' && (
+          <span className="font-mono text-dense-caption text-muted-foreground">{revision}</span>
+        )}
+        <span className="text-dense-caption text-muted-foreground">
+          {agentDriven
+            ? '— use AI Release on the lane strip to start the next cycle'
+            : '— start a new cycle to deploy again'}
+        </span>
+      </div>
+      {!agentDriven && onStartNextRelease != null && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={onStartNextRelease}
+            disabled={aiReleasePending}
+            className="shadow-sm"
+          >
+            Start next release
+            <ArrowRight className="ml-1 h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+      {agentDriven ? (
+        <ManualOverrideDetails>{renderStepActions(activeIndex)}</ManualOverrideDetails>
+      ) : (
+        <details className="group rounded-md border border-border/50 bg-background/40">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+            Re-run a stage (advanced)
+          </summary>
+          <div className="border-t border-border/50 px-3 py-2.5">
+            {renderStepActions(activeIndex)}
+          </div>
+        </details>
+      )}
+    </div>
+  )
+}
+
+function AgentDrivenStepDetail({
+  label,
+  env,
+  status,
+  statusLabel,
+  stepRevision,
+  renderStepActions,
+  activeIndex,
+}: {
+  label: string
+  env: 'STG' | 'PROD'
+  status: StepStatus
+  statusLabel: string
+  stepRevision?: string
+  renderStepActions: (activeIndex: number) => ReactNode
+  activeIndex: number
+}) {
+  return (
+    <div className="release-cc__action-zone flex flex-col gap-3 px-4 py-3">
+      <StepStatusBanner
+        label={label}
+        env={env}
+        status={status}
+        statusLabel={statusLabel}
+        stepRevision={stepRevision}
+        nextStep={undefined}
+        onContinue={() => {}}
+        suppressContinue
+      />
+      <p className="m-0 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-dense-meta text-muted-foreground">
+        Agent-driven release — this panel is observe-only. Launch with{' '}
+        <span className="font-medium text-foreground">AI Release</span> on the lane strip; decide in{' '}
+        <span className="font-medium text-foreground">Agent Session</span> below.
+      </p>
+      <ManualOverrideDetails>{renderStepActions(activeIndex)}</ManualOverrideDetails>
+    </div>
+  )
 }
 
 export function ReleaseStepCommandCenter({
@@ -316,17 +453,22 @@ export function ReleaseStepCommandCenter({
   aiReleaseDisabledReason,
   aiReleaseLabel,
   collapsibleBody = false,
+  cycleTerminal = false,
+  onStartNextRelease,
+  nextCycleActive = false,
+  agentDriven = false,
 }: ReleaseStepCommandCenterProps) {
   const isStg = activeIndex < 2
   const accentClass = isStg ? 'release-cc__accent--stg' : 'release-cc__accent--prod'
   const stepRevision = stepRevisionForIndex(activeIndex, stgRun, prodRun, stgGate, prodGate)
   const activeStatus = steps[activeIndex]?.status
-  const bodyDefaultOpen = activeStatus !== 'done'
+  const identity = deriveReleaseIdentity(stgRun, prodRun, stgGate, prodGate)
+  const bodyDefaultOpen = cycleTerminal || activeStatus !== 'done'
 
   const [bodyOpen, setBodyOpen] = useState(bodyDefaultOpen)
   useEffect(() => {
     if (collapsibleBody) setBodyOpen(bodyDefaultOpen)
-  }, [collapsibleBody, bodyDefaultOpen, activeIndex])
+  }, [collapsibleBody, bodyDefaultOpen, activeIndex, cycleTerminal])
 
   let summary: ReactNode
   switch (activeIndex) {
@@ -344,7 +486,35 @@ export function ReleaseStepCommandCenter({
       break
   }
 
-  const actionBody = (
+  const actionBody = cycleTerminal ? (
+    <>
+      <ReleaseCycleTerminalPanel
+        revision={identity.revision}
+        onStartNextRelease={onStartNextRelease}
+        renderStepActions={renderStepActions}
+        activeIndex={activeIndex}
+        agentDriven={agentDriven}
+        aiReleasePending={aiReleasePending}
+      />
+      <div className="border-t border-border/40 px-4 py-1.5">{summary}</div>
+    </>
+  ) : agentDriven ? (
+    <>
+      <AgentDrivenStepDetail
+        label={stepLabels[activeIndex] ?? steps[activeIndex]?.label ?? ''}
+        env={isStg ? 'STG' : 'PROD'}
+        status={steps[activeIndex].status}
+        statusLabel={steps[activeIndex].statusLabel}
+        stepRevision={stepRevision}
+        renderStepActions={renderStepActions}
+        activeIndex={activeIndex}
+      />
+      <div className="border-t border-border/40 px-4 py-1.5">
+        {summary}
+        {renderStepDetail?.(activeIndex)}
+      </div>
+    </>
+  ) : (
     <>
       <div className="release-cc__action-zone px-4 py-3">
         <StepStatusBanner
@@ -355,11 +525,13 @@ export function ReleaseStepCommandCenter({
           stepRevision={stepRevision}
           nextStep={steps[activeIndex + 1]}
           onContinue={() => onSelect(activeIndex + 1)}
+          suppressContinue={nextCycleActive}
         />
         <StepActionZone
           activeIndex={activeIndex}
           status={steps[activeIndex].status}
           renderStepActions={renderStepActions}
+          preferPrimaryActions={nextCycleActive}
         />
       </div>
 
@@ -369,6 +541,23 @@ export function ReleaseStepCommandCenter({
       </div>
     </>
   )
+
+  const sectionTitle = cycleTerminal
+    ? 'Release complete'
+    : agentDriven
+      ? 'Step detail'
+      : 'Step actions'
+  const sectionHint = cycleTerminal
+    ? bodyOpen
+      ? agentDriven
+        ? 'Observe · next via AI Release'
+        : 'Start next or re-run'
+      : 'Summary · stepper only'
+    : bodyOpen
+      ? agentDriven
+        ? 'Observe · AI path'
+        : 'Detail'
+      : 'Summary · stepper only'
 
   return (
     <div className="relative overflow-hidden rounded-lg border border-border bg-card">
@@ -380,7 +569,8 @@ export function ReleaseStepCommandCenter({
         prodRun={prodRun}
         stgGate={stgGate}
         prodGate={prodGate}
-        onAiRelease={onAiRelease}
+        // Lane strip owns the primary AI Release CTA when agentDriven.
+        onAiRelease={agentDriven ? undefined : onAiRelease}
         aiReleasePending={aiReleasePending}
         aiReleaseDisabled={aiReleaseDisabled}
         aiReleaseDisabledReason={aiReleaseDisabledReason}
@@ -398,13 +588,13 @@ export function ReleaseStepCommandCenter({
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 hover:bg-secondary/30 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-muted-foreground">
               <CollapseExpandIcon open={bodyOpen} size={14} />
-              Step actions
-              <span className="text-dense-micro text-muted-foreground/70">
-                {bodyOpen ? 'Detail' : 'Summary · stepper only'}
-              </span>
+              {sectionTitle}
+              <span className="text-dense-micro text-muted-foreground/70">{sectionHint}</span>
             </span>
             <span className="font-mono text-dense-micro text-muted-foreground/60">
-              {steps[activeIndex]?.label}: {steps[activeIndex]?.statusLabel}
+              {cycleTerminal
+                ? 'Released'
+                : `${steps[activeIndex]?.label}: ${steps[activeIndex]?.statusLabel}`}
             </span>
           </summary>
           {actionBody}
