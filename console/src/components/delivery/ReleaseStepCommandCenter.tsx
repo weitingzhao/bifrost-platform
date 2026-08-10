@@ -281,28 +281,6 @@ function StepActionZone({
   return <>{renderStepActions(activeIndex)}</>
 }
 
-function ManualOverrideDetails({
-  children,
-}: {
-  children: ReactNode
-}) {
-  return (
-    <details className="group rounded-md border border-border/50 bg-background/40">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
-        <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-        Manual override (advanced)
-      </summary>
-      <div className="border-t border-border/50 px-3 py-2.5">
-        <p className="m-0 mb-2 text-dense-meta text-muted-foreground">
-          Prefer AI Release on the lane strip and decisions in Agent Session. Use this only when the
-          agent path is unavailable.
-        </p>
-        {children}
-      </div>
-    </details>
-  )
-}
-
 export interface ReleaseStepCommandCenterProps {
   steps: FlowStep[]
   activeIndex: number
@@ -332,8 +310,8 @@ export interface ReleaseStepCommandCenterProps {
   /** After Start next release — show Deploy/Gate primary even while stepper still reads done. */
   nextCycleActive?: boolean
   /**
-   * Rocket AI-first path: Step detail is observe-only; Deploy/Gate live under Manual override.
-   * Primary CTA is AI Release (lane strip / Start next).
+   * Rocket / Satellite AI-first path: Step detail is observe-only (no Deploy/Gate CTAs).
+   * Primary CTA is AI Release / AI Deploy on the lane strip; decisions in Agent Session.
    */
   agentDriven?: boolean
 }
@@ -345,6 +323,7 @@ function ReleaseCycleTerminalPanel({
   activeIndex,
   agentDriven = false,
   aiReleasePending = false,
+  launchLabel = 'AI Release',
 }: {
   revision: string | null
   onStartNextRelease?: () => void
@@ -352,6 +331,7 @@ function ReleaseCycleTerminalPanel({
   activeIndex: number
   agentDriven?: boolean
   aiReleasePending?: boolean
+  launchLabel?: string
 }) {
   return (
     <div className="release-cc__action-zone flex flex-col gap-3 px-4 py-3">
@@ -363,7 +343,7 @@ function ReleaseCycleTerminalPanel({
         )}
         <span className="text-dense-caption text-muted-foreground">
           {agentDriven
-            ? '— use AI Release on the lane strip to start the next cycle'
+            ? `— use ${launchLabel} on the lane strip to start the next cycle`
             : '— start a new cycle to deploy again'}
         </span>
       </div>
@@ -380,9 +360,7 @@ function ReleaseCycleTerminalPanel({
           </Button>
         </div>
       )}
-      {agentDriven ? (
-        <ManualOverrideDetails>{renderStepActions(activeIndex)}</ManualOverrideDetails>
-      ) : (
+      {!agentDriven && (
         <details className="group rounded-md border border-border/50 bg-background/40">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
             <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
@@ -403,16 +381,14 @@ function AgentDrivenStepDetail({
   status,
   statusLabel,
   stepRevision,
-  renderStepActions,
-  activeIndex,
+  launchLabel = 'AI Release',
 }: {
   label: string
   env: 'STG' | 'PROD'
   status: StepStatus
   statusLabel: string
   stepRevision?: string
-  renderStepActions: (activeIndex: number) => ReactNode
-  activeIndex: number
+  launchLabel?: string
 }) {
   return (
     <div className="release-cc__action-zone flex flex-col gap-3 px-4 py-3">
@@ -428,10 +404,9 @@ function AgentDrivenStepDetail({
       />
       <p className="m-0 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-dense-meta text-muted-foreground">
         Agent-driven release — this panel is observe-only. Launch with{' '}
-        <span className="font-medium text-foreground">AI Release</span> on the lane strip; decide in{' '}
-        <span className="font-medium text-foreground">Agent Session</span> below.
+        <span className="font-medium text-foreground">{launchLabel}</span> on the lane strip; decide
+        in <span className="font-medium text-foreground">Agent Session</span> below.
       </p>
-      <ManualOverrideDetails>{renderStepActions(activeIndex)}</ManualOverrideDetails>
     </div>
   )
 }
@@ -495,6 +470,7 @@ export function ReleaseStepCommandCenter({
         activeIndex={activeIndex}
         agentDriven={agentDriven}
         aiReleasePending={aiReleasePending}
+        launchLabel={aiReleaseLabel}
       />
       <div className="border-t border-border/40 px-4 py-1.5">{summary}</div>
     </>
@@ -506,8 +482,7 @@ export function ReleaseStepCommandCenter({
         status={steps[activeIndex].status}
         statusLabel={steps[activeIndex].statusLabel}
         stepRevision={stepRevision}
-        renderStepActions={renderStepActions}
-        activeIndex={activeIndex}
+        launchLabel={aiReleaseLabel}
       />
       <div className="border-t border-border/40 px-4 py-1.5">
         {summary}
