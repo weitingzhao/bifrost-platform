@@ -7,6 +7,7 @@
  */
 import {
   applyChecklistFleetUnion,
+  type ChecklistSignalPaint,
 } from '@/lib/control-room/dailyOpsChecklistInject'
 import {
   buildFleetSnapshotCore,
@@ -14,14 +15,21 @@ import {
   type FleetSnapshot,
 } from '@/lib/control-room/fleetSnapshot'
 
+export type BuildFleetSnapshotWithChecklistInput = BuildFleetSnapshotInput & {
+  checklistSignals?: ChecklistSignalPaint[]
+}
+
 /** Recompute verdict after injecting checklist virtual standards. */
-export function finalizeFleetSnapshot(fleet: FleetSnapshot): FleetSnapshot {
-  return applyChecklistFleetUnion(fleet)
+export function finalizeFleetSnapshot(
+  fleet: FleetSnapshot,
+  checklistSignals?: ChecklistSignalPaint[],
+): FleetSnapshot {
+  return applyChecklistFleetUnion(fleet, checklistSignals)
 }
 
 /** Canonical Fleet snapshot builder — always includes Checklist↔Board union. */
-export function buildFleetSnapshot(input: BuildFleetSnapshotInput): FleetSnapshot {
-  return finalizeFleetSnapshot(buildFleetSnapshotCore(input))
+export function buildFleetSnapshot(input: BuildFleetSnapshotWithChecklistInput): FleetSnapshot {
+  return finalizeFleetSnapshot(buildFleetSnapshotCore(input), input.checklistSignals)
 }
 
 export type { BuildFleetSnapshotInput, FleetSnapshot }

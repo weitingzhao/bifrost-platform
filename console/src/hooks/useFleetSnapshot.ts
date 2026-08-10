@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchCluster } from '@/api/cluster'
+import { fetchChecklistSignals } from '@/api/checklist'
+import { fetchCluster, fetchClusterPostgresBackupStatus } from '@/api/cluster'
 import { fetchSupplyChain } from '@/api/delivery'
 import { fetchStgSmoke } from '@/api/promote'
 import {
@@ -54,6 +55,16 @@ export function useFleetSnapshot(): {
   isLoading: boolean
 } {
   const clusterQ = useQuery({ queryKey: ['cockpit', 'cluster'], queryFn: fetchCluster, refetchInterval: REFETCH })
+  const backupQ = useQuery({
+    queryKey: ['cockpit', 'postgres-backup'],
+    queryFn: fetchClusterPostgresBackupStatus,
+    refetchInterval: REFETCH,
+  })
+  const checklistQ = useQuery({
+    queryKey: ['cockpit', 'checklist-signals'],
+    queryFn: fetchChecklistSignals,
+    refetchInterval: REFETCH,
+  })
   const supplyQ = useQuery({ queryKey: ['cockpit', 'supply-chain'], queryFn: fetchSupplyChain, refetchInterval: REFETCH })
   const stgQ = useQuery({ queryKey: ['cockpit', 'stg-smoke'], queryFn: fetchStgSmoke, refetchInterval: REFETCH })
   const selfQ = useQuery({ queryKey: ['cockpit', 'self-health'], queryFn: fetchSelfHealth, refetchInterval: REFETCH })
@@ -114,6 +125,8 @@ export function useFleetSnapshot(): {
         groundBridgeReady,
         ibGateway: ibGatewayQ.data,
         daemonIbObserve,
+        postgresBackup: backupQ.data,
+        checklistSignals: checklistQ.data?.signals,
       }),
     [
       viewerEnv,
@@ -127,6 +140,8 @@ export function useFleetSnapshot(): {
       groundBridgeReady,
       ibGatewayQ.data,
       daemonIbObserve,
+      backupQ.data,
+      checklistQ.data?.signals,
     ],
   )
 

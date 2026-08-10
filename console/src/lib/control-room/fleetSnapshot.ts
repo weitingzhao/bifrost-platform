@@ -4,12 +4,13 @@
  * `buildFleetSnapshot` from `./buildFleetSnapshot` (core + Checklist union).
  */
 import type { AgentBridgeResponse } from '@/api/agentTypes'
-import type { ClusterSummary } from '@/api/clusterTypes'
+import type { ClusterPostgresBackupStatusResponse, ClusterSummary } from '@/api/clusterTypes'
 import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { MatrixResponse, SelfHealthResponse } from '@/api/matrixTypes'
 import type { RemediationHealthResponse } from '@/api/remediationTypes'
 import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import {
+  DATA_LAYER_BACKUP_SCOPE,
   DELIVER_STG_RECOVER_SCOPE,
   PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
 } from '@/lib/agent/agentScopes'
@@ -627,10 +628,39 @@ function rocketCellFromState(
   }
 }
 
+export function backupFreshStandard(
+  backup?: ClusterPostgresBackupStatusResponse,
+): FleetStandard {
+  if (backup == null) {
+    return std(
+      'db-backup-fresh',
+      'CNPG backup < 48h',
+      'unknown',
+      'CNPG backup status unavailable',
+      'datastore',
+    )
+  }
+  const raw = (backup.signal || '').toLowerCase()
+  const signal: Signal =
+    raw === 'ok' || raw === 'degraded' || raw === 'fail'
+      ? raw
+      : backup.fresh
+        ? 'ok'
+        : 'fail'
+  return std(
+    'db-backup-fresh',
+    'CNPG backup < 48h',
+    signal,
+    backup.detail || 'CNPG barman freshness',
+    'datastore',
+  )
+}
+
 export function buildSatelliteCell(input: {
   env: FleetEnvColumn
   matrices: MatrixResponse[]
   stg?: StgSmokeResponse
+  postgresBackup?: ClusterPostgresBackupStatusResponse
 }): FleetCell {
   const { env, matrices, stg } = input
   const key = cellKey('satellite', env)
@@ -673,7 +703,11 @@ export function buildSatelliteCell(input: {
       'Matrix missing for this environment',
     )
   }
-  return satelliteCellFromState(key, env, tradeEnvSignal(matrix), standardsFromMatrix(matrix))
+  const standards = standardsFromMatrix(matrix)
+  if (env === 'prod') {
+    standards.push(backupFreshStandard(input.postgresBackup))
+  }
+  return satelliteCellFromState(key, env, tradeEnvSignal(matrix), standards)
 }
 
 function satelliteFixScopeForEnv(env: FleetEnvColumn): string {
@@ -691,7 +725,16 @@ function satelliteCellFromState(
   const cellSignal: FleetCellSignal =
     derived === 'unavailable' ? moduleToCellSignal(state) : derived
   const ok = cellSignal === 'ok'
-  const fixScope = satelliteFixScopeForEnv(env)
+  const backupBlocking = standards.some(
+    s => s.id === 'db-backup-fresh' && (s.signal === 'fail' || s.signal === 'degraded'),
+  )
+  const backupOnly =
+    !ok &&
+    backupBlocking &&
+    standards
+      .filter(s => s.required !== false && s.id !== 'db-backup-fresh')
+      .every(s => s.signal === 'ok')
+  const fixScope = backupOnly ? DATA_LAYER_BACKUP_SCOPE : satelliteFixScopeForEnv(env)
   return {
     key,
     role: 'satellite',
@@ -1381,6 +1424,8 @@ export type BuildFleetSnapshotInput = {
   matrices: MatrixResponse[]
   /** Mac seat readiness for Engineer row (local viewer only scores bridge) */
   groundBridgeReady?: boolean
+  /** Live CNPG Backup CR freshness — Satellite PROD datastore chip (not per-env matrix). */
+  postgresBackup?: ClusterPostgresBackupStatusResponse
   /** IB Gateway plugin — required Vendor feed (IB Client). */
   ibGateway?: IbGatewayStatusResponse
   /**
@@ -1415,6 +1460,7 @@ export function buildFleetSnapshotCore(input: BuildFleetSnapshotInput): FleetSna
         env,
         matrices: input.matrices,
         stg: input.stg,
+        postgresBackup: input.postgresBackup,
       }),
     )
   }

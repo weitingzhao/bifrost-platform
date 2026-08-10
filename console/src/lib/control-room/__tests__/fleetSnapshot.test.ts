@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { MatrixResponse, SelfHealthResponse, Target } from '@/api/matrixTypes'
 import type { StgSmokeResponse } from '@/api/deliveryTypes'
-import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
+import { DATA_LAYER_BACKUP_SCOPE, DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
 import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { buildFleetSnapshot } from '@/lib/control-room/buildFleetSnapshot'
 import {
@@ -77,6 +77,15 @@ function selfHealth(
       latency_ms: 1,
     })),
   }
+}
+
+const backupOk = {
+  fresh: true,
+  signal: 'ok',
+  detail: 'last completed 1h ago',
+  max_age_hours: 48,
+  backup_count: 1,
+  generated_at: '2026-07-18T00:00:00Z',
 }
 
 const clusterOk: ClusterSummary = {
@@ -555,6 +564,7 @@ describe('buildFleetSnapshot integration', () => {
       groundBridgeReady: true,
       runner: { status: 'ok' },
       ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
+      postgresBackup: backupOk,
       bridge: bridgeOk,
     })
     expect(snap.verdict.kind).toBe('GO')
@@ -562,6 +572,37 @@ describe('buildFleetSnapshot integration', () => {
     expect(snap.fleetNominal).toBe(true)
     const vendor = getCell(snap, 'vendor', 'span')!
     expect(resolveCellGate(vendor)).toBe('GO')
+    const satProd = getCell(snap, 'satellite', 'prod')!
+    expect(satProd.standards.find(s => s.id === 'db-backup-fresh')?.signal).toBe('ok')
+    expect(resolveCellGate(satProd)).toBe('GO')
+  })
+
+  it('is NO-GO on Satellite PROD when CNPG backup is stale (data-layer-backup scope)', () => {
+    const snap = buildFleetSnapshot({
+      viewerEnv: 'dev',
+      matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
+      self: selfHealth(['dev', 'stg', 'prod']),
+      stg: stgSmokeOk,
+      supply: supplyOk,
+      cluster: clusterOk,
+      groundBridgeReady: true,
+      runner: { status: 'ok' },
+      ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
+      postgresBackup: {
+        fresh: false,
+        signal: 'fail',
+        detail: 'last completed 72h ago',
+        max_age_hours: 48,
+        backup_count: 1,
+        generated_at: '2026-07-18T00:00:00Z',
+      },
+      bridge: bridgeOk,
+    })
+    const satProd = getCell(snap, 'satellite', 'prod')!
+    expect(satProd.standards.find(s => s.id === 'db-backup-fresh')?.signal).toBe('fail')
+    expect(resolveCellGate(satProd)).toBe('NO-GO')
+    expect(satProd.fixScope).toBe(DATA_LAYER_BACKUP_SCOPE)
+    expect(snap.verdict.kind).toBe('NO-GO')
   })
 
   it('keeps Vendor GO when daemon-exec-arm observe chip is informational only', () => {
@@ -644,6 +685,7 @@ describe('buildFleetSnapshot integration', () => {
       groundBridgeReady: false,
       runner: { status: 'ok' },
       ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
+      postgresBackup: backupOk,
       bridge: { ...bridgeOk, satellite_probe_bridge: { status: 'fail', error: 'unreachable from prod' } },
     })
     const rocketDev = getCell(snap, 'rocket', 'dev')

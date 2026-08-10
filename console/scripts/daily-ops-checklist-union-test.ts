@@ -123,6 +123,25 @@ check('injects IB when only massive-polygon placeholder exists (claimed by massi
   assert.ok(ib != null && ib.source === 'checklist')
 })
 
+check('paints db-backup-fresh virtual from checklist signals', () => {
+  const sat = cell('satellite', 'prod', [
+    std('nginx', 'edge'),
+    std('postgres', 'datastore'),
+    std('redis', 'datastore'),
+  ])
+  const out = injectChecklistVirtualStandards([sat], [
+    {
+      item_id: 'db-backup-fresh',
+      signal: 'ok',
+      detail: 'last completed 1h ago',
+    },
+  ])[0]
+  const chip = out.standards.find(s => s.id === 'db-backup-fresh')
+  assert.equal(chip?.source, 'checklist')
+  assert.equal(chip?.signal, 'ok')
+  assert.equal(resolveCellGate(out), 'GO')
+})
+
 check('IB virtual is required — Vendor cannot GO without IB Client', () => {
   const vendor = cell('vendor', null, [
     std('api-massive', 'feed'),

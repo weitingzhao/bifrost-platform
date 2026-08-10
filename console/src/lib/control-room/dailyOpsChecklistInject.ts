@@ -49,7 +49,29 @@ function cellHasProbeForItem(
   )
 }
 
-function buildVirtualStandard(item: ChecklistItem): FleetStandard {
+export type ChecklistSignalPaint = {
+  item_id: string
+  signal: string
+  detail?: string
+}
+
+function paintSignal(raw: string | undefined): FleetStandard['signal'] {
+  switch ((raw ?? '').toLowerCase()) {
+    case 'ok':
+      return 'ok'
+    case 'degraded':
+      return 'degraded'
+    case 'fail':
+      return 'fail'
+    default:
+      return 'unknown'
+  }
+}
+
+function buildVirtualStandard(
+  item: ChecklistItem,
+  painted?: ChecklistSignalPaint,
+): FleetStandard {
   const proj = item.boardProjection!
   // Explicit required:true wins (e.g. IB observe-but-required-for-Vendor-GO).
   // Explicit required:false stays optional. Otherwise observe → not required.
@@ -59,12 +81,16 @@ function buildVirtualStandard(item: ChecklistItem): FleetStandard {
       : proj.required === false
         ? false
         : item.fixCapability !== 'observe'
+  const signal = paintSignal(painted?.signal)
   return {
     id: proj.standardId,
     label: proj.label,
-    signal: 'unknown',
+    signal,
     group: proj.group,
-    reason: proj.reason ?? `Checklist projection · ${item.label}`,
+    reason:
+      painted?.detail?.trim() ||
+      proj.reason ||
+      `Checklist projection · ${item.label}`,
     required,
     source: 'checklist',
   }
@@ -73,7 +99,10 @@ function buildVirtualStandard(item: ChecklistItem): FleetStandard {
 /**
  * Inject checklist-only virtual standards into cells (mutates copies).
  */
-export function injectChecklistVirtualStandards(cells: FleetCell[]): FleetCell[] {
+export function injectChecklistVirtualStandards(
+  cells: FleetCell[],
+  checklistSignals?: ChecklistSignalPaint[],
+): FleetCell[] {
   const byKey = new Map(cells.map(c => [c.key, { ...c, standards: [...c.standards] }]))
 
   for (const step of DAILY_OPS_CHECKLIST) {
@@ -92,7 +121,8 @@ export function injectChecklistVirtualStandards(cells: FleetCell[]): FleetCell[]
         continue
       }
 
-      cell.standards.push(buildVirtualStandard(item))
+      const painted = checklistSignals?.find(s => s.item_id === item.id)
+      cell.standards.push(buildVirtualStandard(item, painted))
       cell.signal = signalFromStandards(cell.standards)
       // Keep value/detail from probes; append note only in detail when virtual present
       const virtualNotes = cell.standards
@@ -114,8 +144,11 @@ export function injectChecklistVirtualStandards(cells: FleetCell[]): FleetCell[]
 /**
  * Apply Checklist↔Board union: inject virtuals and recompute verdict.
  */
-export function applyChecklistFleetUnion(fleet: FleetSnapshot): FleetSnapshot {
-  const cells = injectChecklistVirtualStandards(fleet.cells).map(c => ({
+export function applyChecklistFleetUnion(
+  fleet: FleetSnapshot,
+  checklistSignals?: ChecklistSignalPaint[],
+): FleetSnapshot {
+  const cells = injectChecklistVirtualStandards(fleet.cells, checklistSignals).map(c => ({
     ...c,
     countsTowardVerdict: c.countsTowardVerdict,
   }))

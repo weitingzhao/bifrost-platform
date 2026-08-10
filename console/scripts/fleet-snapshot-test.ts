@@ -294,6 +294,14 @@ check('all green + Mac seat ok → GO + fleetClear', () => {
     groundBridgeReady: true,
     runner: { status: 'ok' },
     ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
+    postgresBackup: {
+      fresh: true,
+      signal: 'ok',
+      detail: 'last completed 1h ago',
+      max_age_hours: 48,
+      backup_count: 1,
+      generated_at: '2026-07-18T00:00:00Z',
+    },
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
@@ -343,6 +351,14 @@ check('PROD viewer all green + Rocket DEV structural unavailable → GO (Mac inf
     groundBridgeReady: false,
     runner: { status: 'ok' },
     ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
+    postgresBackup: {
+      fresh: true,
+      signal: 'ok',
+      detail: 'last completed 1h ago',
+      max_age_hours: 48,
+      backup_count: 1,
+      generated_at: '2026-07-18T00:00:00Z',
+    },
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
