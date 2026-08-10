@@ -983,7 +983,9 @@ function ConsolePageInner() {
               onOpenApiHealth={openSatelliteApi}
               ambientJobId={ambientJob?.id ?? null}
               ambientJobStatus={ambientJob?.status ?? null}
+              ambientJobScope={ambientJob?.scope ?? null}
               onStartAgentJob={startAmbientAgentJob}
+              onExpandAgentDock={expandAgentDock}
             />
         )}
 

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fetchCluster, fetchClusterServiceReadiness } from '@/api/cluster'
 import { fetchPipelineRuns, fetchSupplyChain } from '@/api/delivery'
 import { fetchStackAddons } from '@/api/stack'
@@ -33,6 +33,7 @@ import {
   gateStepStatus,
   deriveReleaseOutcome,
   pickDeployPipelineRun,
+  pickNextCycleDeployRun,
   isReleaseCycleTerminal,
   deriveReleaseIdentity,
   type FlowStep,
@@ -64,7 +65,6 @@ import {
 } from '@/lib/agent/readinessFixDispatch'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
-import { isPipelineRunRunning } from '@/lib/delivery/pipelineRunAskPack'
 import { stackNeedsOperatePanel } from '@/lib/delivery/stackWizard'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import {
@@ -111,7 +111,11 @@ export function PlatformReleasePage({
   const { canOperate } = usePlatformAuth()
   const [detailReason] = useState(readLaneDetailReasonFromLocation)
   const [nextCycle, setNextCycle] = useState(false)
-  const nextCycleAdvancedRef = useRef(false)
+  /** PipelineRun names at the moment AI Release started the next cycle. */
+  const [nextCycleBaseline, setNextCycleBaseline] = useState<{
+    stg: string | null
+    prod: string | null
+  } | null>(null)
 
   const rocketProd = useRocketProdReadiness(true)
   const promoteVerify = usePromoteVerifyReadiness(true)
@@ -154,16 +158,27 @@ export function PlatformReleasePage({
   const latestProdRun = prodRuns.data?.runs?.[0]
 
   const stgRun = nextCycle
-    ? latestStgRun
+    ? pickNextCycleDeployRun(stgRuns.data?.runs, nextCycleBaseline?.stg ?? null)
     : pickDeployPipelineRun(stgRuns.data?.runs, { gatePassed: stgGatePassed })
   const prodRun = nextCycle
-    ? latestProdRun
+    ? pickNextCycleDeployRun(prodRuns.data?.runs, nextCycleBaseline?.prod ?? null)
     : pickDeployPipelineRun(prodRuns.data?.runs, { gatePassed: prodGatePassed })
 
-  const stgDeploy = runStepStatus(stgRun)
-  const prodDeploy = runStepStatus(prodRun)
-  const stgGateStep = gateStepStatus(stgGate.data)
-  const prodGateStep = gateStepStatus(prodGate.data)
+  /** New cycle started but Agent has not produced a fresh PipelineRun yet. */
+  const awaitingNextCycleDeliver = nextCycle && stgRun == null && prodRun == null
+
+  const stgDeploy = awaitingNextCycleDeliver
+    ? { status: 'pending' as const, label: 'Awaiting agent' }
+    : runStepStatus(stgRun)
+  const prodDeploy = awaitingNextCycleDeliver
+    ? { status: 'pending' as const, label: 'Not started' }
+    : runStepStatus(prodRun)
+  const stgGateStep = awaitingNextCycleDeliver
+    ? { status: 'pending' as const, label: 'Not run' }
+    : gateStepStatus(stgGate.data)
+  const prodGateStep = awaitingNextCycleDeliver
+    ? { status: 'pending' as const, label: 'Not run' }
+    : gateStepStatus(prodGate.data)
 
   const steps: FlowStep[] = [
     { key: 'stg-deploy', label: 'Staging Deploy', env: 'STG', status: stgDeploy.status, statusLabel: stgDeploy.label },
@@ -180,7 +195,16 @@ export function PlatformReleasePage({
   })
 
   const releaseIdentity = deriveReleaseIdentity(stgRun, prodRun, stgGate.data, prodGate.data)
-  const releaseOutcome = deriveReleaseOutcome(steps)
+  const releaseOutcomeBase = deriveReleaseOutcome(steps)
+  const releaseOutcome =
+    awaitingNextCycleDeliver
+      ? {
+          kind: 'in_progress' as const,
+          label: 'Starting',
+          detail:
+            'AI Release in progress — decide in Agent Session before Staging Deploy starts',
+        }
+      : releaseOutcomeBase
   const cycleTerminal = isReleaseCycleTerminal(releaseOutcome, nextCycle)
 
   const rocketVerdictInput = useMemo(
@@ -304,29 +328,22 @@ export function PlatformReleasePage({
 
   useEffect(() => {
     if (!nextCycle) {
-      nextCycleAdvancedRef.current = false
+      setNextCycleBaseline(null)
       return
     }
-    if (releaseOutcome.kind === 'in_progress' || releaseOutcome.kind === 'failed') {
-      nextCycleAdvancedRef.current = true
-    }
-    if (nextCycleAdvancedRef.current && releaseOutcome.kind === 'released') {
+    if (releaseOutcome.kind === 'released') {
       setNextCycle(false)
-      nextCycleAdvancedRef.current = false
+      setNextCycleBaseline(null)
     }
   }, [nextCycle, releaseOutcome.kind])
-
-  useEffect(() => {
-    if (!nextCycle) return
-    if (latestStgRun != null && isPipelineRunRunning(latestStgRun)) {
-      nextCycleAdvancedRef.current = true
-    }
-  }, [nextCycle, latestStgRun])
 
   const handleStartNextRelease = () => {
     if (!releaseDispatchAllowed) return
     setNextCycle(true)
-    nextCycleAdvancedRef.current = false
+    setNextCycleBaseline({
+      stg: latestStgRun?.name ?? null,
+      prod: latestProdRun?.name ?? null,
+    })
     setActiveIndex(0)
     aiRelease.trigger()
   }
@@ -347,7 +364,14 @@ export function PlatformReleasePage({
     case 0:
       stepDetail = (
         <>
-          <DeliveryActiveRunPanel target={PLATFORM_STG_TARGET} collapsible />
+          {awaitingNextCycleDeliver ? (
+            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+              No new Staging Deploy yet — finish Agent Session decisions (Commit &amp; Push /
+              approvals) first. A prior failed PipelineRun in Tekton history is not this cycle.
+            </p>
+          ) : (
+            <DeliveryActiveRunPanel target={PLATFORM_STG_TARGET} collapsible />
+          )}
           <LaneDetailCollapse
             title="Deliver readiness · Platform STG"
             defaultOpen={false}
@@ -361,7 +385,13 @@ export function PlatformReleasePage({
     case 1:
       stepDetail = (
         <>
-          <DeliveryActiveRunPanel target={PLATFORM_STG_TARGET} collapsible />
+          {awaitingNextCycleDeliver ? (
+            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+              Staging Gate waits until the new Staging Deploy finishes.
+            </p>
+          ) : (
+            <DeliveryActiveRunPanel target={PLATFORM_STG_TARGET} collapsible />
+          )}
           <LaneDetailCollapse
             key="stg-gate-detail"
             title="STG gate check detail"
@@ -377,7 +407,13 @@ export function PlatformReleasePage({
     case 2:
       stepDetail = (
         <>
-          <DeliveryActiveRunPanel target={PLATFORM_PROD_TARGET} collapsible />
+          {awaitingNextCycleDeliver ? (
+            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+              Production Deploy waits until Staging Gate passes for this cycle.
+            </p>
+          ) : (
+            <DeliveryActiveRunPanel target={PLATFORM_PROD_TARGET} collapsible />
+          )}
           <LaneDetailCollapse
             title="Deliver readiness · Platform PROD"
             defaultOpen={false}
@@ -391,7 +427,13 @@ export function PlatformReleasePage({
     default:
       stepDetail = (
         <>
-          <DeliveryActiveRunPanel target={PLATFORM_PROD_TARGET} collapsible />
+          {awaitingNextCycleDeliver ? (
+            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+              Production Gate waits until Production Deploy finishes.
+            </p>
+          ) : (
+            <DeliveryActiveRunPanel target={PLATFORM_PROD_TARGET} collapsible />
+          )}
           <LaneDetailCollapse
             key="prod-gate-detail"
             title="PROD gate check detail"

@@ -73,6 +73,24 @@ export function deployRunRetryFailed(
   return latest !== displayRun && isPipelineRunFailed(latest)
 }
 
+/**
+ * After the operator starts the next release cycle, ignore stale PipelineRuns until a
+ * new deliver appears (running now, or a different run than the baseline at click time).
+ * Prevents "Staging Deploy Failed" while AI Release is still on Phase A Commit & Push.
+ */
+export function pickNextCycleDeployRun(
+  runs: DeliveryPipelineRunView[] | undefined,
+  baselineRunName: string | null,
+): DeliveryPipelineRunView | undefined {
+  if (runs == null || runs.length === 0) return undefined
+  const latest = runs[0]
+  // Same run that existed when the operator clicked AI Release — not this cycle yet.
+  if (baselineRunName != null && latest.name === baselineRunName) return undefined
+  if (isPipelineRunRunning(latest)) return latest
+  if (baselineRunName != null) return latest
+  return undefined
+}
+
 export function gateStepStatus(gate: ReleaseGateResponse | undefined): { status: StepStatus; label: string } {
   const result = gate?.result ?? ''
   if (result === 'pass') return { status: 'done', label: 'Passed' }

@@ -2,7 +2,8 @@ import type { SupplyChainResponse } from '@/api/deliveryTypes'
 import { Button, DenseTag } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { fetchCluster, fetchClusterServiceReadiness } from '@/api/cluster'
 import { fetchDeliveryPipelines, fetchPipelineRuns, fetchSupplyChain } from '@/api/delivery'
 import { fetchGitOpsApps } from '@/api/gitOps'
 import { fetchReleaseGate, fetchStgSmoke, fetchTierBStatus } from '@/api/promote'
@@ -25,9 +26,18 @@ import { LaneOperateSplit } from '@/components/delivery/LaneOperateSplit'
 import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
 import { PipelineRunsPanel } from '@/components/delivery/PipelineRunsPanel'
 import { ReleaseStepCommandCenter } from '@/components/delivery/ReleaseStepCommandCenter'
+import { LaunchGateBar } from '@/components/task-mode/LaunchGateBar'
+import {
+  usePromoteVerifyReadiness,
+  useSatelliteProdReadiness,
+} from '@/components/task-mode/readiness/hooks'
 import {
   runStepStatus,
   gateStepStatus,
+  deriveReleaseOutcome,
+  pickDeployPipelineRun,
+  pickNextCycleDeployRun,
+  isReleaseCycleTerminal,
   type FlowStep,
 } from '@/lib/delivery/releaseStepTypes'
 import { ReleaseStateBanner } from '@/components/delivery/ReleaseStateBanner'
@@ -41,16 +51,36 @@ import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { useLaneStepFocus } from '@/hooks/useLaneStepFocus'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { isAmbientAgentActive } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   buildTradeDeployPrompt,
   TRADE_DEPLOY_SCOPE,
 } from '@/lib/agent/tradeDeployAgentPrompt'
+import {
+  buildTradeProdFixPrompt,
+  pickFixScope,
+  PROD_ENV_FIX_SCOPE,
+  type ProdFixSignal,
+} from '@/lib/agent/prodEnvironmentFixPrompt'
+import {
+  buildClusterPackBody,
+  buildDispatchedFixPrompt,
+} from '@/lib/agent/readinessFixDispatch'
+import { missionStatus } from '@/lib/control-room/missionSignals'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
+import {
+  buildLaunchCheckpoints,
+  hasDeliverInFlight,
+  resolveLaunchVerdict,
+} from '@/lib/task-mode/satelliteLaunchVerdict'
 
 const AI_DEPLOY_LABEL = 'AI Deploy'
 const AI_DEPLOY_TASK_LABEL = scopeToLabel(TRADE_DEPLOY_SCOPE)
+const AI_RESOLVE_LABEL = 'AI Resolve'
+const AI_RESOLVE_TITLE =
+  'AI Resolve release conditions — clear NO-GO checkpoints before AI Deploy'
 
 const TRADE_STG_TARGET = deliveryTargetById('trade-stg')
 const TRADE_PROD_TARGET = deliveryTargetById('trade-prod')
@@ -111,7 +141,6 @@ type TradeReleasePageProps = {
   context: OpsContextResponse | undefined
   isLoading?: boolean
   onOpenPlacement?: () => void
-  /** Compact evidence deep links — health is computed on those surfaces, not here. */
   onOpenSatelliteBus?: () => void
   onOpenObservability?: () => void
   onOpenApiHealth?: () => void
@@ -125,10 +154,21 @@ export function TradeReleasePage({
   onOpenObservability,
   onOpenApiHealth,
   ambientJobId,
+  ambientJobScope,
+  ambientJobStatus,
   onStartAgentJob,
+  onExpandAgentDock,
 }: TradeReleasePageProps) {
   const { canOperate } = usePlatformAuth()
   const [detailReason] = useState(readLaneDetailReasonFromLocation)
+  const [nextCycle, setNextCycle] = useState(false)
+  const [nextCycleBaseline, setNextCycleBaseline] = useState<{
+    stg: string | null
+    prod: string | null
+  } | null>(null)
+
+  const satelliteProd = useSatelliteProdReadiness(true)
+  const promoteVerify = usePromoteVerifyReadiness(true)
 
   const stgRuns = useQuery({
     queryKey: ['delivery', 'runs', STG_PIPELINE],
@@ -176,10 +216,43 @@ export function TradeReleasePage({
     refetchInterval: 30_000,
   })
 
-  const stgDeploy = runStepStatus(stgRuns.data?.runs?.[0])
-  const prodDeploy = runStepStatus(prodRuns.data?.runs?.[0])
-  const stgGateStep = gateStepStatus(stgGate.data)
-  const prodGateStep = gateStepStatus(prodGate.data)
+  const stgGatePassed = stgGate.data?.result === 'pass'
+  const prodGatePassed = prodGate.data?.result === 'pass'
+  const latestStgRun = stgRuns.data?.runs?.[0]
+  const latestProdRun = prodRuns.data?.runs?.[0]
+  const smokeOk = stgSmoke.data?.reachability === 'ok'
+
+  const stgRun = nextCycle
+    ? pickNextCycleDeployRun(stgRuns.data?.runs, nextCycleBaseline?.stg ?? null)
+    : pickDeployPipelineRun(stgRuns.data?.runs, {
+        gatePassed: stgGatePassed,
+        smokeOk,
+      })
+  const prodRun = nextCycle
+    ? pickNextCycleDeployRun(prodRuns.data?.runs, nextCycleBaseline?.prod ?? null)
+    : pickDeployPipelineRun(prodRuns.data?.runs, { gatePassed: prodGatePassed })
+
+  const awaitingNextCycleDeliver = nextCycle && stgRun == null && prodRun == null
+
+  const stgDeploy = awaitingNextCycleDeliver
+    ? { status: 'pending' as const, label: 'Awaiting agent' }
+    : runStepStatus(stgRun)
+  const prodDeploy = awaitingNextCycleDeliver
+    ? { status: 'pending' as const, label: 'Not started' }
+    : runStepStatus(prodRun)
+  const stgGateStep = awaitingNextCycleDeliver
+    ? { status: 'pending' as const, label: 'Not run' }
+    : gateStepStatus(stgGate.data)
+  const prodGateStep = awaitingNextCycleDeliver
+    ? { status: 'pending' as const, label: 'Not run' }
+    : gateStepStatus(prodGate.data)
+
+  const steps: FlowStep[] = [
+    { key: 'stg-deploy', label: 'Staging Deploy', env: 'STG', status: stgDeploy.status, statusLabel: stgDeploy.label },
+    { key: 'stg-gate', label: 'Staging Gate', env: 'STG', status: stgGateStep.status, statusLabel: stgGateStep.label },
+    { key: 'prod-deploy', label: 'Production Deploy', env: 'PROD', status: prodDeploy.status, statusLabel: prodDeploy.label },
+    { key: 'prod-gate', label: 'Production Gate', env: 'PROD', status: prodGateStep.status, statusLabel: prodGateStep.label },
+  ]
 
   const [activeIndex, setActiveIndex] = useLaneStepFocus({
     statuses: [stgDeploy.status, stgGateStep.status, prodDeploy.status, prodGateStep.status],
@@ -188,16 +261,83 @@ export function TradeReleasePage({
     reason: detailReason,
   })
 
+  const releaseOutcomeBase = deriveReleaseOutcome(steps)
+  const releaseOutcome = awaitingNextCycleDeliver
+    ? {
+        kind: 'in_progress' as const,
+        label: 'Starting',
+        detail:
+          'AI Deploy in progress — decide in Agent Session before Staging Deploy starts',
+      }
+    : releaseOutcomeBase
+  const cycleTerminal = isReleaseCycleTerminal(releaseOutcome, nextCycle)
+
+  const tradeProdFixSignals: ProdFixSignal[] = [
+    ...(satelliteProd.rocketBlocked && satelliteProd.rocketFixSignal != null
+      ? [satelliteProd.rocketFixSignal]
+      : []),
+    ...(satelliteProd.fixSignals ?? []),
+  ]
+  const tradeProdFixScope = pickFixScope(tradeProdFixSignals)
+  const tradeProdFixLabel = scopeToLabel(tradeProdFixScope)
+
+  const satelliteVerdictInput = useMemo(
+    () => ({
+      mode: 'satellite' as const,
+      canOperate,
+      prodBlocked: satelliteProd.prodBlocked,
+      blockKind: satelliteProd.blockKind ?? undefined,
+      rocketLabel: missionStatus(satelliteProd.rocketSignal),
+      rocketDetail: satelliteProd.rocketDetail,
+      tradeProdLabel: missionStatus(satelliteProd.tradeProdOverall),
+      tradeProdSignal: satelliteProd.tradeProdOverall,
+      rocketSignal: satelliteProd.rocketSignal,
+      promoteSignal: promoteVerify.promoteSignal,
+      promoteDetail: promoteVerify.promoteDetail,
+      deliverInFlight:
+        hasDeliverInFlight(stgRuns.data?.runs) || hasDeliverInFlight(prodRuns.data?.runs),
+      agentInFlight:
+        isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+        ambientJobScope === TRADE_DEPLOY_SCOPE,
+    }),
+    [
+      canOperate,
+      satelliteProd.prodBlocked,
+      satelliteProd.blockKind,
+      satelliteProd.rocketSignal,
+      satelliteProd.rocketDetail,
+      satelliteProd.tradeProdOverall,
+      promoteVerify.promoteSignal,
+      promoteVerify.promoteDetail,
+      stgRuns.data?.runs,
+      prodRuns.data?.runs,
+      ambientJobId,
+      ambientJobScope,
+      ambientJobStatus,
+    ],
+  )
+  const satelliteVerdict = useMemo(
+    () => resolveLaunchVerdict(satelliteVerdictInput),
+    [satelliteVerdictInput],
+  )
+  const satelliteCheckpoints = useMemo(
+    () => buildLaunchCheckpoints(satelliteVerdictInput),
+    [satelliteVerdictInput],
+  )
+  const checklistOkCount = satelliteCheckpoints.filter(c => c.ok).length
+  const checklistTotal = satelliteCheckpoints.length
+
   const aiDeploy = useAmbientAgentTask({
     canOperate,
     ambientJobId,
+    ambientJobStatus,
     onStartAgentJob,
     scope: TRADE_DEPLOY_SCOPE,
     label: AI_DEPLOY_TASK_LABEL,
     buildRequest: () => ({
       prompt: buildTradeDeployPrompt({
-        stgRun: stgRuns.data?.runs?.[0],
-        prodRun: prodRuns.data?.runs?.[0],
+        stgRun,
+        prodRun,
         stgGate: stgGate.data,
         prodGate: prodGate.data,
         stgSmoke: stgSmoke.data,
@@ -208,26 +348,123 @@ export function TradeReleasePage({
     }),
   })
 
+  const aiResolve = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    ambientJobStatus,
+    onStartAgentJob,
+    scope: tradeProdFixScope,
+    label: tradeProdFixLabel,
+    buildRequest: async () => {
+      const signals = tradeProdFixSignals
+      const scope = pickFixScope(signals)
+      const [cluster, serviceReadiness, supply, smoke] = await Promise.all([
+        fetchCluster(),
+        fetchClusterServiceReadiness(),
+        fetchSupplyChain(),
+        fetchStgSmoke(),
+      ])
+      const pack = buildClusterPackBody({ cluster, serviceReadiness })
+      const fallback = buildTradeProdFixPrompt({
+        prodOverall: satelliteProd.prodOverall,
+        stgNamespace: satelliteProd.stgNamespace ?? 'bifrost-stg',
+        prodNamespace: satelliteProd.prodNamespace ?? 'bifrost-prod',
+        signals,
+      })
+      return {
+        prompt: buildDispatchedFixPrompt({
+          scope,
+          signals,
+          clusterFallbackPrompt: fallback,
+          extras: {
+            supply,
+            stgSmoke: smoke,
+            pipeline: 'bifrost-deliver-stg',
+          },
+        }),
+        ...(scope === PROD_ENV_FIX_SCOPE ? pack : {}),
+      }
+    },
+  })
+
+  const deployDispatchAllowed = !aiDeploy.disabled && satelliteVerdict.kind === 'GO'
+  const deployDisabledReason =
+    satelliteVerdict.kind !== 'GO'
+      ? (satelliteVerdict.disabledReason ?? satelliteVerdict.detail)
+      : aiDeploy.disabledReason
+
+  const showAiResolve =
+    satelliteVerdict.kind === 'NO_GO' && satelliteVerdict.blockKind !== 'auth'
+  const resolveRunning =
+    isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+    ambientJobScope === tradeProdFixScope &&
+    !aiResolve.isPending
+
+  const handleAiResolveClick = () => {
+    if (resolveRunning) {
+      onExpandAgentDock?.()
+      return
+    }
+    aiResolve.trigger()
+  }
+
+  useEffect(() => {
+    if (!nextCycle) {
+      setNextCycleBaseline(null)
+      return
+    }
+    if (releaseOutcome.kind === 'released') {
+      setNextCycle(false)
+      setNextCycleBaseline(null)
+    }
+  }, [nextCycle, releaseOutcome.kind])
+
+  const handleStartNextRelease = () => {
+    if (!deployDispatchAllowed) return
+    setNextCycle(true)
+    setNextCycleBaseline({
+      stg: latestStgRun?.name ?? null,
+      prod: latestProdRun?.name ?? null,
+    })
+    setActiveIndex(0)
+    aiDeploy.trigger()
+  }
+
+  const handleAiDeployClick = () => {
+    if (cycleTerminal) {
+      handleStartNextRelease()
+      return
+    }
+    if (!deployDispatchAllowed) return
+    aiDeploy.trigger()
+  }
+
   if (isLoading || !context) {
     return <p className="text-muted-foreground">Loading release context…</p>
   }
 
-  const steps: FlowStep[] = [
-    { key: 'stg-deploy', label: 'Staging Deploy', env: 'STG', status: stgDeploy.status, statusLabel: stgDeploy.label },
-    { key: 'stg-gate', label: 'Staging Gate', env: 'STG', status: stgGateStep.status, statusLabel: stgGateStep.label },
-    { key: 'prod-deploy', label: 'Production Deploy', env: 'PROD', status: prodDeploy.status, statusLabel: prodDeploy.label },
-    { key: 'prod-gate', label: 'Production Gate', env: 'PROD', status: prodGateStep.status, statusLabel: prodGateStep.label },
-  ]
-
   let stepDetail: ReactNode
   switch (activeIndex) {
     case 0:
-      stepDetail = <DeliveryActiveRunPanel target={TRADE_STG_TARGET} collapsible />
+      stepDetail = awaitingNextCycleDeliver ? (
+        <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+          No new Staging Deploy yet — finish Agent Session decisions (Commit &amp; Push /
+          approvals) first. A prior failed PipelineRun in Tekton history is not this cycle.
+        </p>
+      ) : (
+        <DeliveryActiveRunPanel target={TRADE_STG_TARGET} collapsible />
+      )
       break
     case 1:
       stepDetail = (
         <>
-          <DeliveryActiveRunPanel target={TRADE_STG_TARGET} collapsible />
+          {awaitingNextCycleDeliver ? (
+            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+              Staging Gate waits until the new Staging Deploy finishes.
+            </p>
+          ) : (
+            <DeliveryActiveRunPanel target={TRADE_STG_TARGET} collapsible />
+          )}
           <StgSmokePanel
             data={stgSmoke.data}
             isLoading={stgSmoke.isLoading}
@@ -251,7 +488,13 @@ export function TradeReleasePage({
       stepDetail = (
         <>
           <LiveTradingFreezeNote />
-          <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} collapsible />
+          {awaitingNextCycleDeliver ? (
+            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+              Production Deploy waits until Staging Gate passes for this cycle.
+            </p>
+          ) : (
+            <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} collapsible />
+          )}
           <LaneDetailCollapse
             title="Deliver readiness · Trade PROD"
             defaultOpen={false}
@@ -279,7 +522,13 @@ export function TradeReleasePage({
       stepDetail = (
         <>
           <LiveTradingFreezeNote />
-          <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} collapsible />
+          {awaitingNextCycleDeliver ? (
+            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+              Production Gate waits until Production Deploy finishes.
+            </p>
+          ) : (
+            <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} collapsible />
+          )}
           <LaneDetailCollapse
             key="prod-gate-detail"
             title="Gate check detail — STG vs Prod"
@@ -331,6 +580,9 @@ export function TradeReleasePage({
       {aiDeploy.error != null && (
         <p className="m-0 text-dense-meta text-destructive">{aiDeploy.error.message}</p>
       )}
+      {aiResolve.error != null && (
+        <p className="m-0 text-dense-meta text-destructive">{aiResolve.error.message}</p>
+      )}
 
       <LaneDetailContextStrip reason={detailReason} />
 
@@ -342,10 +594,30 @@ export function TradeReleasePage({
               className="shrink-0"
               label={AI_DEPLOY_LABEL}
               pending={aiDeploy.isPending}
-              disabled={aiDeploy.disabled}
-              title={aiDeploy.disabledReason ?? AI_DEPLOY_LABEL}
-              onClick={() => aiDeploy.trigger()}
+              disabled={!deployDispatchAllowed}
+              title={
+                cycleTerminal && deployDispatchAllowed
+                  ? 'Start the next release cycle with AI Deploy'
+                  : (deployDisabledReason ?? AI_DEPLOY_LABEL)
+              }
+              onClick={handleAiDeployClick}
             />
+            {showAiResolve && (
+              <AgentTriggerButton
+                className="shrink-0"
+                label={AI_RESOLVE_LABEL}
+                pending={aiResolve.isPending}
+                active={resolveRunning}
+                activeLabel="Expand dock"
+                disabled={aiResolve.disabled && !resolveRunning}
+                title={
+                  resolveRunning
+                    ? 'Expand Agent Execution Dock — live progress stays on this board'
+                    : (aiResolve.disabledReason ?? AI_RESOLVE_TITLE)
+                }
+                onClick={handleAiResolveClick}
+              />
+            )}
             {evidenceLinks}
           </div>
         }
@@ -363,18 +635,79 @@ export function TradeReleasePage({
               activeIndex={activeIndex}
               onSelect={setActiveIndex}
               stepLabels={STEP_LABELS}
-              stgRun={stgRuns.data?.runs?.[0]}
-              prodRun={prodRuns.data?.runs?.[0]}
+              stgRun={stgRun}
+              prodRun={prodRun}
               stgGate={stgGate.data}
               prodGate={prodGate.data}
               renderStepActions={renderTradeStepActions}
               collapsibleBody
+              agentDriven
+              cycleTerminal={cycleTerminal}
+              onStartNextRelease={handleStartNextRelease}
+              nextCycleActive={nextCycle}
+              aiReleasePending={aiDeploy.isPending}
+              aiReleaseDisabled={!deployDispatchAllowed}
+              aiReleaseDisabledReason={deployDisabledReason ?? undefined}
+              aiReleaseLabel={AI_DEPLOY_LABEL}
             />
             <div className="flex flex-col gap-3">{stepDetail}</div>
           </>
         }
         support={
           <>
+            <LaneDetailCollapse
+              title="Release checklist"
+              summaryExtra={
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <DenseTag
+                    variant={
+                      satelliteVerdict.kind === 'GO'
+                        ? 'success'
+                        : satelliteVerdict.kind === 'IN_FLIGHT'
+                          ? 'warning'
+                          : 'danger'
+                    }
+                  >
+                    {satelliteVerdict.kind === 'GO'
+                      ? 'GO'
+                      : satelliteVerdict.kind === 'IN_FLIGHT'
+                        ? 'IN FLIGHT'
+                        : 'NO-GO'}
+                  </DenseTag>
+                  <DenseTag
+                    variant={checklistOkCount === checklistTotal ? 'success' : 'warning'}
+                  >
+                    {checklistOkCount}/{checklistTotal} ready
+                  </DenseTag>
+                </span>
+              }
+              defaultOpen
+              showModeBadge
+              bodyClassName="flex flex-col gap-3 p-3"
+            >
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                AI Deploy stays disabled until every checkpoint is green (same gate as Mission
+                Launch / Daily Ops Release). When NO-GO, use AI Resolve to clear release
+                conditions first.
+              </p>
+              <LaunchGateBar
+                layout="column"
+                verdict={satelliteVerdict}
+                checkpoints={satelliteCheckpoints}
+                hidePrimaryLaunch
+                onExpandAgentDock={onExpandAgentDock}
+                onAgentFix={handleAiResolveClick}
+                agentFixLabel={AI_RESOLVE_LABEL}
+                agentFixPending={aiResolve.isPending}
+                agentFixActive={
+                  isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+                  ambientJobScope === tradeProdFixScope
+                }
+                agentFixDisabled={aiResolve.disabled}
+                agentFixTitle={aiResolve.disabledReason ?? AI_RESOLVE_TITLE}
+              />
+            </LaneDetailCollapse>
+
             <LaneDetailCollapse
               title="Supporting evidence"
               summaryExtra={
@@ -406,6 +739,10 @@ export function TradeReleasePage({
                 <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
                   GitOps · sync and rollback
                 </span>
+                <p className="m-0 text-dense-meta text-muted-foreground">
+                  Escape hatches for this lane. Primary AI Deploy stays on the lane state strip
+                  above.
+                </p>
                 <GitOpsQuickActionsPanel
                   data={gitops.data}
                   isLoading={gitops.isLoading}

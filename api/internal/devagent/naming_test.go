@@ -171,6 +171,40 @@ phases:
 	}
 }
 
+func TestLoadProgramBlueprintsSkipsConfigMapAtomicDirs(t *testing.T) {
+	dir := t.TempDir()
+	atomic := filepath.Join(dir, "..2026_08_10_18_26_04.1331625417")
+	if err := os.MkdirAll(atomic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `
+id: dap-smoke-test
+title: Smoke
+status: archived
+phases:
+  - id: P1
+    title: One
+`
+	if err := os.WriteFile(filepath.Join(atomic, "dap-smoke-test.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Root entry is the live ConfigMap projection (symlink to the atomic dir file).
+	if err := os.Symlink(
+		filepath.Join(atomic, "dap-smoke-test.yaml"),
+		filepath.Join(dir, "dap-smoke-test.yaml"),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	programs, err := LoadProgramBlueprints(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(programs) != 1 || programs[0].ID != "dap-smoke-test" {
+		t.Fatalf("got %+v", programs)
+	}
+}
+
 func TestHandleProgramsArchivedFilter(t *testing.T) {
 	h := &Handler{
 		runtimes: map[string]*programRuntime{

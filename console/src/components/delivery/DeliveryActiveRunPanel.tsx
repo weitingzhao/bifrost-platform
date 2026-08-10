@@ -1,6 +1,6 @@
 import { Button, cn, DenseTag } from '@bifrost/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 import { fetchPipelineRunLogs, fetchPipelineRuns } from '@/api/delivery'
 import { DeliveryPipelineStepProgress } from '@/components/delivery/DeliveryPipelineStepProgress'
@@ -31,6 +31,12 @@ function logsNeedPoll(logs: string | undefined): boolean {
   return logs.includes('no pods yet') || logs.includes('no log lines yet')
 }
 
+const LOG_TAIL_FOLLOW_BOTTOM_PX = 32
+
+function isLogScrolledToBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= LOG_TAIL_FOLLOW_BOTTOM_PX
+}
+
 interface DeliveryActiveRunPanelProps {
   target: DeliveryTargetConfig
   /** Collapse section body; defaults open while running/failed. */
@@ -44,6 +50,9 @@ export function DeliveryActiveRunPanel({
   const qc = useQueryClient()
   const focusKey = deliveryFocusRunQueryKey(target.pipeline)
   const pipeline = target.pipeline
+  const logPreRef = useRef<HTMLPreElement>(null)
+  /** Default on — keep the viewport pinned to the newest log lines. */
+  const [followLatest, setFollowLatest] = useState(true)
 
   const { data: pinnedName = null } = useQuery<string | null>({
     queryKey: focusKey,
@@ -170,6 +179,21 @@ export function DeliveryActiveRunPanel({
   const defaultCollapsed =
     collapsible && focusRun != null && isPipelineRunSucceeded(focusRun) && !running
 
+  useEffect(() => {
+    if (!followLatest) return
+    const el = logPreRef.current
+    if (el == null) return
+    el.scrollTop = el.scrollHeight
+  }, [followLatest, logsText, logsQuery.dataUpdatedAt, focusRun?.name])
+
+  const handleLogScroll = () => {
+    const el = logPreRef.current
+    if (el == null) return
+    const atBottom = isLogScrolledToBottom(el)
+    if (!atBottom && followLatest) setFollowLatest(false)
+    else if (atBottom && !followLatest) setFollowLatest(true)
+  }
+
   return (
     <OpsSection
       title={running ? `Active run — ${target.shortLabel}` : `Latest run — ${target.shortLabel}`}
@@ -243,9 +267,29 @@ export function DeliveryActiveRunPanel({
             runRunning={running}
           />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-              Log tail
-            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                Log tail
+              </span>
+              <label
+                className="inline-flex cursor-pointer items-center gap-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]"
+                title="Keep the viewport pinned to the newest log lines as they refresh"
+              >
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-primary"
+                  checked={followLatest}
+                  onChange={e => {
+                    const on = e.target.checked
+                    setFollowLatest(on)
+                    if (on && logPreRef.current != null) {
+                      logPreRef.current.scrollTop = logPreRef.current.scrollHeight
+                    }
+                  }}
+                />
+                Follow latest
+              </label>
+            </div>
             <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
               {running && (
                 <span className="mr-2 inline-flex items-center gap-1 text-primary">
@@ -268,7 +312,11 @@ export function DeliveryActiveRunPanel({
               {logHint.message}
             </p>
           )}
-          <pre className="llm-content-pre m-0 mt-2 max-h-80 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
+          <pre
+            ref={logPreRef}
+            onScroll={handleLogScroll}
+            className="llm-content-pre m-0 mt-2 max-h-80 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]"
+          >
             {logsQuery.isLoading && logsQuery.data == null
               ? 'Loading logs…'
               : logsText !== '' ? logsText : '(empty)'}

@@ -134,7 +134,11 @@ func LoadProgramBlueprints(dir string) ([]*ProgramBlueprint, error) {
 			return err
 		}
 		if d.IsDir() {
-			if strings.HasPrefix(d.Name(), "_") && path != dir {
+			name := d.Name()
+			// Skip ConfigMap atomic-update dirs (..data / ..TIMESTAMP) and underscore-private trees.
+			// K8s mounts expose both the live symlinks at the root and a hidden timestamp dir;
+			// walking both causes duplicate program id failures and CrashLoop on STG/PROD.
+			if path != dir && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
 				return fs.SkipDir
 			}
 			return nil
