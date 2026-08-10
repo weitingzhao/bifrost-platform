@@ -321,8 +321,8 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         fixScope: 'data-layer-backup',
         fixCapability: 'semi_auto',
         manualAction:
-          'Trigger on-demand CNPG Backup (barmanObjectStore) or inspect ScheduledBackup bifrost-postgres-daily / MinIO',
-        agentTools: ['get_cluster_summary'],
+          'Repair MinIO WAL store (history key collision / orphan xl.meta), delete stuck Backup CRs, trigger on-demand CNPG Backup',
+        agentTools: ['get_postgres_backup_status', 'repair_cnpg_wal_store', 'trigger_cnpg_backup'],
         boardProjection: {
           standardId: 'db-backup-fresh',
           label: 'CNPG backup < 48h',

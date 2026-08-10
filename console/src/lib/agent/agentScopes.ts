@@ -11,6 +11,8 @@ export const REGISTRY_PULL_RECOVER_SCOPE = 'registry-pull-recover'
 export const DAILY_OPS_CHECKLIST_RUN_SCOPE = 'daily-ops-checklist-run'
 /** Engineer git dirty — propose commit / stash with operator approval. */
 export const GIT_DIRTY_REMEDIATE_SCOPE = 'git-dirty-remediate'
+/** CNPG barman backup freshness — repair WAL object store + trigger Backup CR when >48h stale. */
+export const DATA_LAYER_BACKUP_SCOPE = 'data-layer-backup'
 
 /** Maps cluster triage playbookId → remediation scope for one-click Fix. */
 export const PLAYBOOK_ID_TO_SCOPE: Record<string, string> = {

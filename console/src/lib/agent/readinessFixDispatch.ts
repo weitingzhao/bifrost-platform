@@ -6,6 +6,7 @@ import type { ClusterServiceReadinessResponse, ClusterSummary } from '@/api/clus
 import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
 import {
+  DATA_LAYER_BACKUP_SCOPE,
   DELIVER_STG_RECOVER_SCOPE,
   PLATFORM_SELF_HEALTH_RECOVER_SCOPE,
 } from '@/lib/agent/agentScopes'
@@ -56,6 +57,23 @@ export function buildDispatchedFixPrompt(input: {
       stgSmoke: extras?.stgSmoke,
       pipeline: extras?.pipeline ?? 'bifrost-deliver-stg',
     })
+  }
+
+  if (scope === DATA_LAYER_BACKUP_SCOPE) {
+    return [
+      'Playbook: data-layer-backup',
+      '',
+      failing != null
+        ? `Issue: ${failing.label} (${failing.signal}): ${failing.detail}`
+        : 'Issue: CNPG backup older than 48h',
+      '',
+      '## Backup freshness workflow',
+      '1. get_postgres_backup_status',
+      '2. If stale / stuck / WAL archive fail: repair_cnpg_wal_store (operator)',
+      '3. Re-check get_postgres_backup_status; report Backup CR name + cleared objects',
+      '',
+      'No DDL / PVC wipe / D10. Do not delete completed Backup CRs.',
+    ].join('\n')
   }
 
   if (scope === PLATFORM_SELF_HEALTH_RECOVER_SCOPE) {

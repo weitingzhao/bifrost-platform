@@ -228,6 +228,31 @@ export function buildMassiveFeedRecoverRunnerPrompt(req: StartRunRequest): strin
   ].join('\n')
 }
 
+export function buildDataLayerBackupRunnerPrompt(req: StartRunRequest): string {
+  return [
+    'You are the Bifrost CNPG Backup Recovery Agent (L1).',
+    'Restore Daily Ops item db-backup-fresh: latest completed CNPG Backup must be younger than 48h.',
+    '',
+    '## Operator context',
+    userBlock(req),
+    '',
+    '## Workflow (strict order)',
+    '1. get_postgres_backup_status — read fresh/signal/last_completed_at/age_hours/stuck_backups/wal_archiving_ok.',
+    '2. If already fresh (signal=ok, age < 48h, no stuck backups, wal_archiving_ok): report ALL_OK and stop.',
+    '3. If stale, stuck Backup, or WAL archive failing: repair_cnpg_wal_store (operator).',
+    '   This clears MinIO *.history vs *.history.gz collisions + orphan xl.meta, deletes Backup CRs in walArchivingFailing/failed, then triggers on-demand Backup.',
+    '4. Re-call get_postgres_backup_status. Note triggered Backup CR name. phase=started is OK for actuation.',
+    '5. If repair returns 502: report MinIO/WAL detail; do not wipe PVCs or CNPG primary pods.',
+    '6. Do not delete completed Backup CRs. No DDL / D10.',
+    '',
+    '## Must-not',
+    `- ${D10_MUST_NOT}`,
+    '- No DB DDL, no data DELETE/TRUNCATE, no pg_dump to local disk.',
+    '',
+    'Begin now.',
+  ].join('\n')
+}
+
 export function buildDataLayerRecoverRunnerPrompt(req: StartRunRequest): string {
   return [
     'You are the Bifrost Data Layer Recovery Agent (L1).',
@@ -255,15 +280,16 @@ export function buildDataLayerRecoverRunnerPrompt(req: StartRunRequest): string 
 export function buildDailyOpsChecklistRunPrompt(req: StartRunRequest): string {
   return [
     'You are the Bifrost Daily Ops Checklist Prober (L0 read-mostly).',
-    'Probe the 18-item Daily Ops Checklist in dependency order and report structured per-item signals.',
+    'Probe the 19-item Daily Ops Checklist in dependency order and report structured per-item signals.',
     '',
     '## Tools (call in this order for evidence)',
     '1. verify_mission_snapshot',
     '2. get_cluster_summary',
-    '3. get_agent_bridge',
-    '4. get_gitops_apps',
-    '5. get_stg_smoke',
-    '6. get_delivery_pipelines',
+    '3. get_postgres_backup_status',
+    '4. get_agent_bridge',
+    '5. get_gitops_apps',
+    '6. get_stg_smoke',
+    '7. get_delivery_pipelines',
     '',
     '## Checklist items (report every id)',
     'infra-cluster: cluster-api, nodes-ready, failing-pods',

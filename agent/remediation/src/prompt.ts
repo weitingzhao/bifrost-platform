@@ -1,6 +1,7 @@
 import type { StartRunRequest } from './types.js'
 import {
   buildDailyOpsChecklistRunPrompt,
+  buildDataLayerBackupRunnerPrompt,
   buildDataLayerRecoverRunnerPrompt,
   buildDefectPatternRemediateRunnerPrompt,
   buildDeliverStgRecoverRunnerPrompt,
@@ -31,7 +32,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'plugin-launch' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'plugin-launch' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover' || req.scope === 'data-layer-backup') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -439,6 +440,9 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
   if (req.scope === 'massive-feed-recover' || promptMentions(req, 'Playbook: massive-feed-recover')) {
     return buildMassiveFeedRecoverRunnerPrompt(req)
+  }
+  if (req.scope === 'data-layer-backup' || promptMentions(req, 'Playbook: data-layer-backup')) {
+    return buildDataLayerBackupRunnerPrompt(req)
   }
   if (req.scope === 'data-layer-recover' || promptMentions(req, 'Playbook: data-layer-recover')) {
     return buildDataLayerRecoverRunnerPrompt(req)

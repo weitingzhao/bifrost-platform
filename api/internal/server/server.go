@@ -460,6 +460,7 @@ func (s *Server) Router() http.Handler {
 				r.Use(s.auth.Require(actuation.RoleOperator))
 				r.Post("/namespaces/ensure-bifrost", s.cluster.HandleEnsureBifrost)
 				r.Post("/postgres/backup", s.cluster.HandleTriggerPostgresBackup)
+				r.Post("/postgres/wal-store/repair", s.cluster.HandleRepairPostgresWalStore)
 				r.Post("/workloads/rollout-restart", s.cluster.HandleRolloutRestart)
 				r.Post("/workloads/scale", s.cluster.HandleScale)
 				r.Post("/nodes/{name}/wake", s.cluster.HandleWakeNode)

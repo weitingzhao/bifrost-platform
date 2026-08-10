@@ -699,6 +699,7 @@ func TestAutopilotGitBridgeInClusterUsesRollout(t *testing.T) {
 }
 
 func TestAutopilotTriggersCnpgBackupWhenStale(t *testing.T) {
+	var repairPosts int
 	var backupPosts int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -711,6 +712,10 @@ func TestAutopilotTriggersCnpgBackupWhenStale(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"fresh": false, "signal": "fail", "detail": "last completed 60h ago",
 			})
+		case r.URL.Path == "/api/v1/cluster/postgres/wal-store/repair" && r.Method == http.MethodPost:
+			repairPosts++
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "action": "repair_cnpg_wal_store"})
 		case r.URL.Path == "/api/v1/cluster/postgres/backup" && r.Method == http.MethodPost:
 			backupPosts++
 			w.WriteHeader(http.StatusAccepted)
@@ -732,11 +737,14 @@ func TestAutopilotTriggersCnpgBackupWhenStale(t *testing.T) {
 	if out.Result != ResultSuccess {
 		t.Fatalf("expected success: %+v\n%s", out, out.Evidence)
 	}
-	if backupPosts != 1 {
-		t.Fatalf("stale backup should trigger on-demand Backup once, got %d\n%s", backupPosts, out.Evidence)
+	if repairPosts != 1 {
+		t.Fatalf("stale backup should repair WAL store once, got %d\n%s", repairPosts, out.Evidence)
 	}
-	if !strings.Contains(out.Evidence, "trigger_cnpg_backup") {
-		t.Fatalf("evidence should mention trigger_cnpg_backup:\n%s", out.Evidence)
+	if backupPosts != 0 {
+		t.Fatalf("Autopilot should call wal-store/repair (includes trigger), not backup directly, got %d\n%s", backupPosts, out.Evidence)
+	}
+	if !strings.Contains(out.Evidence, "repair_cnpg_wal_store") {
+		t.Fatalf("evidence should mention repair_cnpg_wal_store:\n%s", out.Evidence)
 	}
 }
 

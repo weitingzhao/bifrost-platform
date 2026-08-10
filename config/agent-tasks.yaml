@@ -89,6 +89,15 @@ tasks:
     domain: Platform
     action: "Remediate"
 
+  - id: data-layer-backup
+    scope: "data-layer-backup"
+    label: "Cluster · Backup Recover"
+    tier: manual
+    default_level: L1
+    domain: Cluster
+    action: "Remediate"
+    # L1: repair_cnpg_wal_store (MinIO WAL + stuck Backup CR) then on-demand Backup.
+
   - id: registry-pull-recover
     scope: "registry-pull-recover"
     label: "Infra · Registry Pull Recover"

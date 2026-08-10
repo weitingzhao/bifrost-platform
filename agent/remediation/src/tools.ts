@@ -480,6 +480,31 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
         return textResult(jsonText(data))
       },
     },
+    get_postgres_backup_status: {
+      description: 'CNPG Backup CR freshness (completed < 48h) via platform-api.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/cluster/postgres/backup-status')
+        return textResult(jsonText(data))
+      },
+    },
+    trigger_cnpg_backup: {
+      description: 'Create on-demand CNPG Backup CR (barmanObjectStore). Operator, audited.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformPost('/api/v1/cluster/postgres/backup', {})
+        return textResult(jsonText(data))
+      },
+    },
+    repair_cnpg_wal_store: {
+      description:
+        'Repair MinIO WAL object store (clear history key collisions + orphan xl.meta), delete stuck Backup CRs (walArchivingFailing/failed), trigger on-demand backup. Operator, audited.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformPost('/api/v1/cluster/postgres/wal-store/repair', {})
+        return textResult(jsonText(data))
+      },
+    },
     verify_payload: {
       description:
         'Matrix vs cluster datastore classification (NOMINAL/PROBE_DRIFT/DATA_LAYER/HTTP_FAIL). Call before remediating PG/Redis.',

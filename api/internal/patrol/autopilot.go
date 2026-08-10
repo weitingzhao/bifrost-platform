@@ -149,8 +149,8 @@ func (a *autopilotDispatcher) fixItem(ctx context.Context, sig checklist.ItemSig
 		return fixResult{ItemID: meta.ID, Skipped: true, Detail: "observe/manual — skip"}
 	}
 
-	// Throttle check
-	if a.throttle != nil && !a.throttle.CanRestart(meta.ID) {
+	// Throttle check (restarts only — backup/WAL repair must be retryable)
+	if shouldThrottleFix(meta.ID) && a.throttle != nil && !a.throttle.CanRestart(meta.ID) {
 		fmt.Fprintf(b, "### %s (%s)\nTHROTTLED: restarted within 24h\n\n", meta.ID, meta.Label)
 		emitProgress(progress, b.String())
 		return fixResult{ItemID: meta.ID, Skipped: true, Detail: "throttled: 24h cooldown"}
@@ -176,7 +176,7 @@ func (a *autopilotDispatcher) fixItem(ctx context.Context, sig checklist.ItemSig
 	}
 
 	ok = status >= 200 && status < 300
-	if ok && a.throttle != nil {
+	if ok && shouldThrottleFix(meta.ID) && a.throttle != nil {
 		a.throttle.RecordRestart(meta.ID)
 	}
 
@@ -218,7 +218,7 @@ func (a *autopilotDispatcher) executeFixRoute(ctx context.Context, meta checklis
 	case "postgres":
 		return "observe-only", 0, fmt.Errorf("postgres is CNPG-managed — rollout-restart is not valid; escalate to operator")
 	case "db-backup-fresh":
-		return a.triggerCnpgBackup(ctx)
+		return a.repairCnpgWalStore(ctx)
 	case "deliver-pipeline":
 		return "observe-only", 0, fmt.Errorf("deliver-pipeline fix not automatable in Wave 1")
 	case "stg-smoke":
@@ -340,6 +340,15 @@ func (a *autopilotDispatcher) rolloutRestart(ctx context.Context, namespace, nam
 func (a *autopilotDispatcher) triggerCnpgBackup(ctx context.Context) (string, int, error) {
 	status, err := a.doRequest(ctx, http.MethodPost, "/api/v1/cluster/postgres/backup", []byte(`{}`))
 	return "trigger_cnpg_backup", status, err
+}
+
+func (a *autopilotDispatcher) repairCnpgWalStore(ctx context.Context) (string, int, error) {
+	status, err := a.doRequest(ctx, http.MethodPost, "/api/v1/cluster/postgres/wal-store/repair", []byte(`{}`))
+	return "repair_cnpg_wal_store", status, err
+}
+
+func shouldThrottleFix(itemID string) bool {
+	return itemID != "db-backup-fresh"
 }
 
 func (a *autopilotDispatcher) restartDevSession(ctx context.Context, name string) (string, int, error) {

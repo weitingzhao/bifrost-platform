@@ -152,6 +152,9 @@ export interface ClusterPostgresBackupStatusResponse {
   max_age_hours: number
   age_hours?: number
   backup_count: number
+  stuck_backups?: string[]
+  wal_archiving_ok?: boolean
+  wal_archiving_detail?: string
   generated_at: string
 }
 

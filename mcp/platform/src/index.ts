@@ -81,6 +81,27 @@ server.tool(
 )
 
 server.tool(
+  'get_postgres_backup_status',
+  'CNPG Backup CR freshness (completed < 48h)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/cluster/postgres/backup-status')),
+)
+
+server.tool(
+  'trigger_cnpg_backup',
+  'Create on-demand CNPG Backup CR (barmanObjectStore)',
+  {},
+  async () => jsonResult(await platformPost('/api/v1/cluster/postgres/backup', {})),
+)
+
+server.tool(
+  'repair_cnpg_wal_store',
+  'Repair MinIO WAL object store, delete stuck Backup CRs, trigger on-demand backup',
+  {},
+  async () => jsonResult(await platformPost('/api/v1/cluster/postgres/wal-store/repair', {})),
+)
+
+server.tool(
   'trigger_data_clone',
   'Clone bifrost_prod → bifrost_dev/stg (admin; confirmation_token + confirm:true required)',
   {

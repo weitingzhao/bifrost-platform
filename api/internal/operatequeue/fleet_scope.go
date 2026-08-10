@@ -12,6 +12,7 @@ type FleetProbe struct {
 // scopeToFleetProbe mirrors the plan + fleetCellFix reverse mapping.
 var scopeToFleetProbe = map[string]FleetProbe{
 	"cluster_issues_full_auto":     {Role: "satellite", Env: "prod"},
+	"data-layer-backup":            {Role: "satellite", Env: "prod"},
 	"platform-self-health-recover": {Role: "rocket", Env: "prod"},
 	"deliver-stg-recover":          {Role: "rocket", Env: "stg"},
 	"operator-plane-remediate":     {Role: "engineer", Env: ""},

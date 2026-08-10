@@ -74,6 +74,20 @@ func (h *Handler) HandleTriggerPostgresBackup(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusAccepted, resp)
 }
 
+func (h *Handler) HandleRepairPostgresWalStore(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.svc.RepairPostgresWalStore(r.Context())
+	h.recordAudit(r, resp.Action, resp.Target, auditStatus(err), resp.Message)
+	if err != nil {
+		resp.OK = false
+		if resp.Message == "" {
+			resp.Message = err.Error()
+		}
+		writeJSON(w, http.StatusBadGateway, resp)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, resp)
+}
+
 func (h *Handler) HandleRedisStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.RedisStatus(r.Context()))
 }

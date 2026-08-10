@@ -17,6 +17,9 @@ mcp_tools:
   - gitops_sync_app
   - verify_mission_snapshot
   - restart_dev_session
+  - get_postgres_backup_status
+  - repair_cnpg_wal_store
+  - trigger_cnpg_backup
 prompt_template: |
   You are Bifrost Ops Autopilot (L1). Query daily ops checklist signals and
   remediate red items (fail/degraded) autonomously.

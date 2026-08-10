@@ -315,6 +315,8 @@ func checklistFixScope(itemID string) string {
 	switch strings.TrimSpace(itemID) {
 	case "cluster-api", "nodes-ready", "failing-pods", "postgres", "redis", "nginx-edge", "trade-apis", "massive-polygon":
 		return "cluster_issues_full_auto"
+	case "db-backup-fresh":
+		return "data-layer-backup"
 	case "platform-api", "platform-console", "argo-apps":
 		return "platform-self-health-recover"
 	case "runners-ha", "hermes-tooling":

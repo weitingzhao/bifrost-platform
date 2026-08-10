@@ -23,16 +23,19 @@ var cnpgBackupGVR = schema.GroupVersionResource{
 
 // PostgresBackupStatusResponse is the freshness probe for CNPG Backup CRs.
 type PostgresBackupStatusResponse struct {
-	Fresh           bool      `json:"fresh"`
-	Signal          string    `json:"signal"`
-	Detail          string    `json:"detail"`
-	LastCompletedAt string    `json:"last_completed_at,omitempty"`
-	LastBackupName  string    `json:"last_backup_name,omitempty"`
-	LastBackupPhase string    `json:"last_backup_phase,omitempty"`
-	MaxAgeHours     int       `json:"max_age_hours"`
-	AgeHours        *float64  `json:"age_hours,omitempty"`
-	BackupCount     int       `json:"backup_count"`
-	GeneratedAt     time.Time `json:"generated_at"`
+	Fresh              bool      `json:"fresh"`
+	Signal             string    `json:"signal"`
+	Detail             string    `json:"detail"`
+	LastCompletedAt    string    `json:"last_completed_at,omitempty"`
+	LastBackupName     string    `json:"last_backup_name,omitempty"`
+	LastBackupPhase    string    `json:"last_backup_phase,omitempty"`
+	MaxAgeHours        int       `json:"max_age_hours"`
+	AgeHours           *float64  `json:"age_hours,omitempty"`
+	BackupCount        int       `json:"backup_count"`
+	StuckBackups       []string  `json:"stuck_backups,omitempty"`
+	WalArchivingOK     *bool     `json:"wal_archiving_ok,omitempty"`
+	WalArchivingDetail string    `json:"wal_archiving_detail,omitempty"`
+	GeneratedAt        time.Time `json:"generated_at"`
 }
 
 type completedBackup struct {
@@ -78,6 +81,28 @@ func (s *Service) PostgresBackupStatus(ctx context.Context) PostgresBackupStatus
 	if latest != nil && resp.LastBackupName != "" && !strings.Contains(resp.Detail, resp.LastBackupName) {
 		resp.Detail = fmt.Sprintf("%s · %s", resp.LastBackupName, resp.Detail)
 	}
+	resp.StuckBackups = pickStuckBackupNames(list.Items)
+	if len(resp.StuckBackups) > 0 {
+		resp.Detail = fmt.Sprintf("%s · stuck Backup %s", resp.Detail, strings.Join(resp.StuckBackups, ","))
+		if resp.Signal == "ok" {
+			resp.Signal = "degraded"
+			resp.Fresh = false
+		}
+	}
+	if clusterObj, cErr := dyn.Resource(cnpgClusterGVR).Namespace(cnpgNamespace).Get(ctx, cnpgClusterName, metav1.GetOptions{}); cErr == nil {
+		ok, detail := parseWalArchivingCondition(clusterObj)
+		resp.WalArchivingOK = &ok
+		resp.WalArchivingDetail = detail
+		if !ok {
+			if resp.Signal == "ok" {
+				resp.Signal = "degraded"
+				resp.Fresh = false
+			}
+			if detail != "" && !strings.Contains(resp.Detail, detail) {
+				resp.Detail = fmt.Sprintf("%s · WAL archive: %s", resp.Detail, detail)
+			}
+		}
+	}
 	return resp
 }
 
@@ -93,6 +118,14 @@ func (s *Service) TriggerPostgresBackup(ctx context.Context) (ActuationResponse,
 	if err != nil {
 		resp.Message = err.Error()
 		return resp, err
+	}
+	if list, lerr := dyn.Resource(cnpgBackupGVR).Namespace(cnpgNamespace).List(ctx, metav1.ListOptions{}); lerr == nil {
+		if running := pickInProgressBackupName(list.Items); running != "" {
+			resp.OK = true
+			resp.Target = cnpgNamespace + "/" + running
+			resp.Message = "backup already in progress: " + running
+			return resp, nil
+		}
 	}
 	obj := newOnDemandBackupCR(name, now)
 	created, err := dyn.Resource(cnpgBackupGVR).Namespace(cnpgNamespace).Create(ctx, obj, metav1.CreateOptions{})
@@ -196,7 +229,7 @@ func newOnDemandBackupCR(name string, now time.Time) *unstructured.Unstructured 
 					"app.kubernetes.io/name":    "bifrost-postgres",
 					"app.kubernetes.io/part-of": "bifrost",
 					"bifrost.dev/triggered-by":  "ops-autopilot",
-					"bifrost.dev/triggered-at":  now.UTC().Format(time.RFC3339),
+					"bifrost.dev/triggered-at":  now.UTC().Format("20060102-150405"),
 				},
 			},
 			"spec": map[string]any{

@@ -278,6 +278,12 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     trigger: 'Control plane self-health probes failing (console/API routes)',
     description: 'Restart platform-prod workloads; verify console/API NodePort reachability.',
   },
+  'data-layer-backup': {
+    entryPoint: 'Daily Ops Checklist · db-backup-fresh Row Fix · Satellite PROD cell',
+    trigger: 'CNPG Backup CR older than 48h or missing completed backup',
+    description:
+      'Read backup-status; repair MinIO WAL store + clear stuck Backup CRs; trigger on-demand CNPG Backup. No DDL, no PVC wipe, no D10.',
+  },
   'registry-pull-recover': {
     entryPoint: 'Cluster Failure triage · ImagePull rows',
     trigger: 'ImagePullBackOff / ErrImagePull from registry.cicd',
