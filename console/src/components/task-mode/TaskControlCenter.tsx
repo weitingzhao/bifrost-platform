@@ -8,8 +8,8 @@ import {
   usePromoteVerifyReadiness,
   useSatelliteDeployOverall,
   useSatelliteProdReadiness,
-} from '@/components/task-mode/TaskModeReadinessStrip'
-import { useDevModeController } from '@/components/task-mode/DevModeController'
+} from '@/components/task-mode/readiness/hooks'
+import { useDevModeController } from '@/components/task-mode/useDevModeController'
 import { useMissionLaunchFixAgents } from '@/components/task-mode/useMissionLaunchFixAgents'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
@@ -30,8 +30,8 @@ import {
   resolveCellFixScope,
 } from '@/lib/control-room/fleetCellFix'
 import type { FleetCell } from '@/lib/control-room/fleetSnapshot'
-import { useTaskMode } from '@/lib/task-mode/TaskModeContext'
-import type { TaskPhaseDef } from '@/lib/task-mode/types'
+import { useTaskMode } from '@/lib/task-mode/useTaskMode'
+import type { TaskModeId, TaskPhaseDef } from '@/lib/task-mode/types'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import type { TaskPhaseFixAction } from '@/lib/task-mode/taskPhaseDiagnostics'
 import { useTaskControlQueries } from '@/components/task-mode/tcc/useTaskControlQueries'
@@ -49,6 +49,7 @@ export type TaskControlCenterProps = AmbientAgentShellProps & {
   lastDeliverSucceeded?: boolean
   tierB?: TierBStatusResponse
   onNavigate: (tabId: string) => void
+  onModeChange?: (landingTab: string, modeId: TaskModeId) => void
   onOpenBriefing?: (opts?: BriefingUrlState) => void
   onOpenPromote?: () => void
   onOpenDelivery?: () => void
@@ -67,6 +68,7 @@ export function TaskControlCenter({
   lastDeliverSucceeded,
   tierB,
   onNavigate,
+  onModeChange,
   onOpenBriefing,
   onOpenPromote,
   onOpenDelivery,
@@ -83,10 +85,13 @@ export function TaskControlCenter({
   const [fleetFixCell, setFleetFixCell] = useState<FleetCell | null>(null)
   const fleetFixCellRef = useRef<FleetCell | null>(null)
 
-  const isMissionLaunch = mode.id === 'mission-launch'
-  const isDailyOps = mode.id === 'daily-ops'
+  const isOps = mode.id === 'ops'
+  /** Launch Pad path kept compiled but unused after Launch merged into Ops. */
+  const isMissionLaunch = false
+  const isDailyOps = isOps
+  const isSystem = mode.id === 'system'
   const isDevLoop = mode.loopArchetype === 'dev'
-  const showLaunchPad = mode.ops?.showLaunchPad === true
+  const showLaunchPad = false
 
   const rocketProd = useRocketProdReadiness(isMissionLaunch)
   const satelliteProd = useSatelliteProdReadiness(isMissionLaunch)
@@ -120,7 +125,6 @@ export function TaskControlCenter({
     devProgram,
     resolvedProgramId,
     inlineBriefingPack,
-    devAgentQ,
     briefingOpened,
     handleBriefingOpened,
     devAgentPhaseDone,
@@ -199,7 +203,13 @@ export function TaskControlCenter({
 
   const doneCount = q.phases.filter((p: TaskPhaseDef) => q.statuses[p.id] === 'done').length
   const loopLabel =
-    mode.loopArchetype === 'ops' ? 'Ops loop' : mode.loopArchetype === 'dev' ? 'Dev loop' : 'System'
+    mode.loopArchetype === 'ops'
+      ? 'Ops loop'
+      : mode.loopArchetype === 'dev'
+        ? 'Dev loop'
+        : mode.loopArchetype === 'analysis'
+          ? 'Analysis'
+          : 'System'
 
   const [phaseFixUnavailableHint, setPhaseFixUnavailableHint] = useState<string | null>(null)
 
@@ -208,20 +218,14 @@ export function TaskControlCenter({
   }
   const handlePhaseFixAction = (action: TaskPhaseFixAction, _phase: TaskPhaseDef) => {
     if (action.kind === 'agent-fix') {
-      if (mode.id === 'daily-ops') {
+      if (mode.id === 'ops') {
         setPhaseFixUnavailableHint(null)
         const cell = pickFleetFixCell(fleet)
         if (cell != null) fix.handleFleetCellFix(cell)
         return
       }
-      if (isMissionLaunch) {
-        setPhaseFixUnavailableHint(null)
-        if (rocketProd.prodBlocked) agents.aiPlatformProdFix.trigger()
-        else agents.aiTradeProdFix.trigger()
-        return
-      }
       setPhaseFixUnavailableHint(
-        `Agent Fix is not available in ${mode.label}. Switch to Daily Ops or Launch.`,
+        `Agent Fix is not available in ${mode.label}. Switch to Ops.`,
       )
       return
     }
@@ -235,11 +239,14 @@ export function TaskControlCenter({
   }, [q.phases, q.statuses, isDevLoop, isDailyOps])
 
   const headerDescription = (() => {
-    if (isDailyOps) {
-      return 'Ops loop — Discover → Remediate → Verify → Clear — Fleet Desk is health ground truth.'
+    if (isOps) {
+      return 'Ops loop — Discover → Remediate → Deploy → Patrol → Clear — Fleet + Queue + Patrol on one desk.'
+    }
+    if (mode.id === 'analysis') {
+      return mode.description
     }
     if (mode.loopArchetype === 'ops') {
-      return `${mode.label} · ${loopLabel} — live Go/No-Go, recent launches, and playbook reference.`
+      return `${mode.label} · ${loopLabel} — live Go/No-Go and playbook reference.`
     }
     return `${mode.label} · ${loopLabel}`
   })()
@@ -250,6 +257,9 @@ export function TaskControlCenter({
       isMissionLaunch={isMissionLaunch}
       isDailyOps={isDailyOps}
       isDevLoop={isDevLoop}
+      isSystem={isSystem}
+      operateQueueOpen={queueQ.data?.open.length ?? 0}
+      onModeChange={onModeChange}
       canOperate={canOperate}
       loopLabel={loopLabel}
       headerDescription={headerDescription}
@@ -271,7 +281,6 @@ export function TaskControlCenter({
       onNavigate={onNavigate}
       onOpenBriefing={onOpenBriefing}
       handleBriefingOpened={handleBriefingOpened}
-      devAgentQ={devAgentQ}
       context={context}
       matrices={matrices}
       stgSmoke={stgSmoke}

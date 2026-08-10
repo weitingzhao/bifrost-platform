@@ -22,11 +22,11 @@ import {
   type DevSession,
 } from '@/api/devSession'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { SessionLogLine } from '@/components/agent/sessionLogColor'
 import {
   DOCK_SESSION_LOG_LINES_MAXIMIZED,
   DOCK_SESSION_LOG_LINES_TILED,
-  SessionLogLine,
-} from '@/components/agent/sessionLogColor'
+} from '@/components/agent/sessionLogTone'
 
 type Lamp = 'ok' | 'fail' | 'degraded' | 'unknown'
 
@@ -640,7 +640,7 @@ export function DockDevSessionsPanel({
     refetchInterval: enabled ? 10_000 : false,
   })
 
-  const list = sessions ?? []
+  const list = useMemo(() => sessions ?? [], [sessions])
   const running = list.filter(s => s.status === 'running').length
   const total = list.length
   const issueCount = list.filter(s => isSessionIssue(s.status)).length

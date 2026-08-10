@@ -39,7 +39,7 @@ interface MissionControlHeaderProps {
   onOpenDelivery: () => void
   onOpenPlatformRelease: () => void
   onOpenAgentDesk: (opts?: { prefill: string }) => void
-  onOpenLaunchView: (mode: 'mission-launch') => void
+  onOpenLaunchView: (mode: 'ops') => void
   /** Trade readiness IB → Daily Ops Fleet Vendor */
   onOpenFleetVendor?: () => void
   onOpenPromote?: () => void

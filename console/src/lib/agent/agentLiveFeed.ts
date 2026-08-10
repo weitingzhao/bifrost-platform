@@ -1,5 +1,5 @@
 import type { RemediationEvent, RemediationJob } from '@/api/remediationTypes'
-import { normalizeMarkdownTables } from '@/components/agent/DenseMarkdown'
+import { normalizeMarkdownTables } from '@/components/agent/denseMarkdownUtils'
 
 export type AgentLiveFeed = {
   kind: 'status' | 'tool' | 'thinking' | 'error'

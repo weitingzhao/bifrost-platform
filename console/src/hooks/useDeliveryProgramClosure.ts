@@ -20,7 +20,7 @@ export function useDeliveryProgramClosure() {
       query.isSuccess ? buildLaneProgramsSessionReleasedMap(query.data.programs ?? []) : undefined,
     [query.isSuccess, query.data?.programs],
   )
-  const programs = query.data?.programs ?? []
+  const programs = useMemo(() => query.data?.programs ?? [], [query.data?.programs])
   const programsReleasedFor = useCallback(
     (laneId: string) => programsReleasedForLane(laneId, releasedByLane),
     [releasedByLane],

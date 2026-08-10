@@ -20,7 +20,7 @@ import {
   clearSatelliteBusTradeEnvFocus,
   peekSatelliteBusTradeEnvFocus,
 } from '@/lib/activity/activityPageFocus'
-import { useInFlightBusWorkload } from '@/components/activity/BusActuationStrip'
+import { useInFlightBusWorkload } from '@/components/activity/useInFlightBusWorkload'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   buildSatelliteBusIngestTriagePrompt,

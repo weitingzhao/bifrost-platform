@@ -88,8 +88,11 @@ func TestPlanActionsDedup(t *testing.T) {
 	}
 }
 
-func TestCatalogHas18Items(t *testing.T) {
-	if len(CatalogItems) != 18 {
-		t.Fatalf("expected 18 catalog items, got %d", len(CatalogItems))
+func TestCatalogHas19Items(t *testing.T) {
+	if len(CatalogItems) != 19 {
+		t.Fatalf("expected 19 catalog items, got %d", len(CatalogItems))
+	}
+	if _, ok := ItemByID("db-backup-fresh"); !ok {
+		t.Fatal("db-backup-fresh missing from catalog")
 	}
 }

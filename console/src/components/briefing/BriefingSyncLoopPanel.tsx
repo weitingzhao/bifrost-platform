@@ -49,7 +49,10 @@ export function BriefingSyncLoopPanel({
     staleTime: 60_000,
   })
 
-  const proposals = proposalsQuery.data?.proposals ?? []
+  const proposals = useMemo(
+    () => proposalsQuery.data?.proposals ?? [],
+    [proposalsQuery.data?.proposals],
+  )
   const hasActiveFix = proposals.some(p =>
     ['pending_approval', 'approved', 'running'].includes(p.status),
   )

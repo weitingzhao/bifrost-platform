@@ -4,6 +4,7 @@ import type { ProgramSummary } from '@/api/programsTypes'
 export type ProgramCloseFields = Pick<
   ProgramSummary,
   | 'complete'
+  | 'status'
   | 'signed'
   | 'phases_signed'
   | 'sign_off_required_count'
@@ -12,6 +13,11 @@ export type ProgramCloseFields = Pick<
   | 'assessment_status'
   | 'requires_post_completion'
 >
+
+function isCatalogClosedStatus(status: string | undefined): boolean {
+  const s = (status ?? '').trim().toLowerCase()
+  return s === 'completed' || s === 'archived'
+}
 
 const CATALOG_COMPLETE_ASSESSMENT = new Set(['no_handoff', 'closed'])
 const SESSION_RELEASED_ASSESSMENT = new Set(['no_handoff', 'closed', 'approved', 'in_operate'])
@@ -25,6 +31,7 @@ function assessmentOf(p: ProgramCloseFields): string {
  * Keep in sync with api/internal/devagent/close_predicate.go.
  */
 export function isGatesComplete(p: ProgramCloseFields): boolean {
+  if (isCatalogClosedStatus(p.status)) return true
   const signed = p.signed ?? p.phases_signed ?? 0
   const gates = p.sign_off_required_count ?? p.phase_count
   return (
@@ -39,6 +46,7 @@ export function isGatesComplete(p: ProgramCloseFields): boolean {
  *   else: gatesComplete
  */
 export function isProgramCatalogComplete(p: ProgramCloseFields): boolean {
+  if (isCatalogClosedStatus(p.status)) return true
   if (!isGatesComplete(p)) return false
   if (p.requires_post_completion) {
     return CATALOG_COMPLETE_ASSESSMENT.has(assessmentOf(p))
@@ -53,6 +61,7 @@ export function isProgramCatalogComplete(p: ProgramCloseFields): boolean {
  * pending_review or empty assessment + requires_post_completion → NOT released.
  */
 export function isProgramSessionReleased(p: ProgramCloseFields): boolean {
+  if (isCatalogClosedStatus(p.status)) return true
   if (!isGatesComplete(p)) return false
   if (p.requires_post_completion) {
     return SESSION_RELEASED_ASSESSMENT.has(assessmentOf(p))

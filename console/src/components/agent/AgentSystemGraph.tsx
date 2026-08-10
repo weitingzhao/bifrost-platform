@@ -80,7 +80,7 @@ export function AgentSystemGraph({
 }: AgentSystemGraphProps = {}) {
   const [hoverId, setHoverId] = useState<string | null>(null)
   // Catalog hydrates async from GET /api/v1/agent-tasks — must recompute when it fills.
-  const taskCount = allAgentTasks().length
+  const tasks = allAgentTasks()
   const liveMode = liveStatusByTaskId != null
   const highlightSet = useMemo(() => asIdSet(highlightedEdgeKeys), [highlightedEdgeKeys])
   const visibleSet = useMemo(() => asIdSet(visibleTaskIds), [visibleTaskIds])
@@ -96,11 +96,11 @@ export function AgentSystemGraph({
       }
     })
     const height =
-      groups.length === 0
+      tasks.length === 0 || groups.length === 0
         ? 80
         : TOP_Y + (groups.length - 1) * ROW_GAP + NODE_H / 2 + 28
     return { nodes: placed, vbHeight: height }
-  }, [taskCount])
+  }, [tasks])
 
   const posById = useMemo(() => {
     const m = new Map<string, NodePos>()
@@ -133,7 +133,7 @@ export function AgentSystemGraph({
 
   return (
     <div className="agent-graph">
-      {taskCount === 0 ? (
+      {tasks.length === 0 ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           Loading capability map from platform-api…
         </p>

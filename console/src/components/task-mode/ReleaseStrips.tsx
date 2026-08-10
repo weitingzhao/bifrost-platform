@@ -8,7 +8,7 @@ import {
   runStepStatus,
   pickDeployPipelineRun,
   deployRunRetryFailed,
-} from '@/components/delivery/ReleaseStepCommandCenter'
+} from '@/lib/delivery/releaseStepTypes'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
 import { DELIVER_STG_PIPELINE } from '@/lib/delivery/deliverStgPhases'
 import { DELIVER_PLATFORM_PIPELINE } from '@/lib/delivery/deliverPlatformPhases'

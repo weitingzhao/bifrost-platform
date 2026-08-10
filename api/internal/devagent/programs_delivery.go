@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -64,34 +63,6 @@ type ProgramCompleteRequest struct {
 type PostCompletionDecisionRequest struct {
 	Reason     string `json:"reason"`
 	DecisionBy string `json:"decision_by,omitempty"`
-}
-
-type LaunchRequest struct {
-	SessionPack string `json:"session_pack"`
-	Track       string `json:"track,omitempty"`
-	Lane        string `json:"lane,omitempty"`
-	Intent      string `json:"intent,omitempty"`
-	ProgramID   string `json:"program_id,omitempty"`
-	Model       string `json:"model,omitempty"`
-	Workspace   string `json:"workspace,omitempty"`
-}
-
-type LaunchResponse struct {
-	AgentID   string `json:"agent_id,omitempty"`
-	SessionID string `json:"session_id"`
-	Status    string `json:"status"`
-	Message   string `json:"message,omitempty"`
-}
-
-type SessionStopRequest struct {
-	ProgramID     string `json:"program_id,omitempty"`
-	PhaseID       string `json:"phase_id,omitempty"`
-	CursorAgentID string `json:"cursor_agent_id,omitempty"`
-	Summary       string `json:"summary,omitempty"`
-	Track         string `json:"track,omitempty"`
-	Lane          string `json:"lane,omitempty"`
-	Intent        string `json:"intent,omitempty"`
-	DurationMs    int64  `json:"duration_ms,omitempty"`
 }
 
 // phaseRequiresSignOff reports whether a phase is a Delivery Board gate.
@@ -184,7 +155,7 @@ func (h *Handler) programDetailBoardResponse(programID string, rt *programRuntim
 	resp := ProgramDetailBoardResponse{
 		Program: h.buildProgramSummary(programID, rt),
 		Phases:  phases,
-		Active:  programID == h.activeProgramID,
+		Active:  rt.blueprint != nil && isSelectableActiveStatus(rt.blueprint.Status),
 	}
 	if rt.blueprint.Workspace != "" {
 		resp.Bridge = BridgeConfig{
@@ -234,6 +205,7 @@ func (h *Handler) HandlePhaseSignoff(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
 		return
 	}
+	phaseID = canonicalPhaseID(rt.blueprint, phaseID)
 	if !phaseExists(rt.blueprint, phaseID) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "phase not found"})
 		return
@@ -278,6 +250,11 @@ func (h *Handler) HandlePhaseProgress(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
+	h.mu.Lock()
+	if rtPeek, ok := h.runtimes[programID]; ok {
+		phaseID = canonicalPhaseID(rtPeek.blueprint, phaseID)
+	}
+	h.mu.Unlock()
 	if h.sessionStore != nil {
 		if err := h.sessionStore.ValidateProgressHook(req.SessionID, programID, phaseID); err != nil {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
@@ -293,6 +270,7 @@ func (h *Handler) HandlePhaseProgress(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
 		return
 	}
+	phaseID = canonicalPhaseID(rt.blueprint, phaseID)
 	if !phaseExists(rt.blueprint, phaseID) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "phase not found"})
 		return
@@ -845,119 +823,11 @@ func (h *Handler) HandleListPendingPostCompletion(w http.ResponseWriter, _ *http
 	writeJSON(w, http.StatusOK, map[string]any{"items": out})
 }
 
-func (h *Handler) HandleLaunch(w http.ResponseWriter, r *http.Request) {
-	var req LaunchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-	if strings.TrimSpace(req.SessionPack) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_pack required"})
-		return
-	}
-
-	workspace := strings.TrimSpace(req.Workspace)
-	model := strings.TrimSpace(req.Model)
-	programID := strings.TrimSpace(req.ProgramID)
-
-	h.mu.Lock()
-	if workspace == "" && programID != "" {
-		if rt, ok := h.runtimes[programID]; ok {
-			workspace = rt.blueprint.Workspace
-			if model == "" {
-				model = rt.blueprint.Model
-			}
-		}
-	}
-	h.mu.Unlock()
-
-	if workspace == "" {
-		workspace = filepath.Join(h.repoRoot, "..")
-	}
-	if model == "" {
-		model = "composer-2.5"
-	}
-
-	prompt := req.SessionPack
-	if req.Track != "" || req.Lane != "" || req.Intent != "" {
-		prompt = fmt.Sprintf("Track: %s\nLane: %s\nIntent: %s\n\n%s", req.Track, req.Lane, req.Intent, prompt)
-	}
-
-	args := []string{
-		h.bridgeScriptPath(),
-		"--prompt", prompt,
-		"--workspace", workspace,
-		"--model", model,
-	}
-	out, err := h.runBridgeCommand(args)
-	sessionID := uuid.New().String()
-	resp := LaunchResponse{
-		SessionID: sessionID,
-		Status:    "launched",
-		Message:   string(out),
-	}
-	if err != nil {
-		resp.Status = "failed"
-		resp.Message = string(out) + "\n" + err.Error()
-		writeJSON(w, http.StatusAccepted, resp)
-		return
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "[bridge] agent_id=") {
-			resp.AgentID = strings.TrimPrefix(line, "[bridge] agent_id=")
-		}
-	}
-
-	if programID != "" {
-		h.mu.Lock()
-		if rt, ok := h.runtimes[programID]; ok {
-			if rt.state == nil {
-				rt.state = &ProgramStateRecord{ProgramID: programID, History: []Job{}}
-			}
-			rt.state.AgentSessions = append(rt.state.AgentSessions, AgentSessionRecord{
-				ID: sessionID, ProgramID: programID, StartedAt: time.Now().UTC().Format(time.RFC3339),
-				CursorAgentID: resp.AgentID, Track: req.Track, Lane: req.Lane, Intent: req.Intent,
-				Summary: "briefing launch",
-			})
-			_ = h.persistRuntimeLocked(programID)
-		}
-		h.mu.Unlock()
-	}
-
-	writeJSON(w, http.StatusAccepted, resp)
-}
-
-func (h *Handler) HandleSessionStop(w http.ResponseWriter, r *http.Request) {
-	var req SessionStopRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-	if req.ProgramID == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
-		return
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	rt, ok := h.runtimes[req.ProgramID]
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
-		return
-	}
-	if rt.state == nil {
-		rt.state = &ProgramStateRecord{ProgramID: req.ProgramID, History: []Job{}}
-	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	rt.state.AgentSessions = append(rt.state.AgentSessions, AgentSessionRecord{
-		ID: uuid.New().String(), ProgramID: req.ProgramID, PhaseID: req.PhaseID,
-		StartedAt: now, EndedAt: now, CursorAgentID: req.CursorAgentID,
-		Summary: req.Summary, Track: req.Track, Lane: req.Lane, Intent: req.Intent,
-	})
-	_ = h.persistRuntimeLocked(req.ProgramID)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "recorded"})
-}
-
 func phaseExists(bp *ProgramBlueprint, phaseID string) bool {
+	if bp == nil {
+		return false
+	}
+	phaseID = canonicalPhaseID(bp, phaseID)
 	for _, p := range bp.Phases {
 		if p.ID == phaseID {
 			return true
@@ -970,6 +840,7 @@ func phaseVerifyCmd(bp *ProgramBlueprint, phaseID string) string {
 	if bp == nil {
 		return ""
 	}
+	phaseID = canonicalPhaseID(bp, phaseID)
 	for _, p := range bp.Phases {
 		if p.ID == phaseID {
 			return strings.TrimSpace(p.VerifyCmd)

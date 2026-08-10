@@ -1,9 +1,7 @@
 import type { ReactNode } from 'react'
 import { StatusLamp, cn } from '@bifrost/ui'
-import {
-  CollapseExpandIcon,
-  collapseExpandAriaLabel,
-} from '@/components/layout/CollapseExpandIcon'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
+import { collapseExpandAriaLabel } from '@/components/layout/collapseExpandAria'
 import type { Signal } from '@/lib/control-room/missionSignals'
 import {
   controlRoomBayDomId,

@@ -3,14 +3,17 @@ import type { TaskModeDef, TaskModeId } from './types'
 export const TASK_MODE_STORAGE_KEY = 'bifrost-ops-task-mode'
 export const TASK_MODE_QUERY_PARAM = 'taskMode'
 
-export const TASK_MODE_CATALOG_VERSION = '2026-08-07'
+export const TASK_MODE_CATALOG_VERSION = '2026-08-09'
 /** UI task-mode definitions. templateId must match config/programs/_templates.yaml (GET /api/v1/programs/templates). */
 export const TASK_MODE_CATALOG_SOURCE = 'console/src/lib/task-mode/taskModeCatalog.ts · templates: config/programs/_templates.yaml'
 
-/** Legacy mode ids remapped after view consolidation (8 → 4). */
+/** Legacy mode ids remapped after Three Desks consolidation (5 → 4). */
 const LEGACY_TASK_MODE_ALIASES: Record<string, TaskModeId> = {
-  'rocket-launch': 'mission-launch',
-  'satellite-deploy': 'mission-launch',
+  'daily-ops': 'ops',
+  'mission-launch': 'ops',
+  patrol: 'ops',
+  'rocket-launch': 'ops',
+  'satellite-deploy': 'ops',
   'rocket-build': 'build',
   'satellite-build': 'build',
   'engineer-build': 'build',
@@ -18,8 +21,8 @@ const LEGACY_TASK_MODE_ALIASES: Record<string, TaskModeId> = {
   'plugin-build': 'build',
 }
 
-/** Aligned with Daily Ops workflow bar: Discover → Remediate → Verify → Clear. */
-const DAILY_OPS_PHASES: TaskModeDef['phases'] = [
+/** Ops loop: Discover → Remediate → Deploy → Patrol → Clear. */
+const OPS_PHASES: TaskModeDef['phases'] = [
   {
     id: 'discover',
     seq: 1,
@@ -43,94 +46,40 @@ const DAILY_OPS_PHASES: TaskModeDef['phases'] = [
     ],
   },
   {
-    id: 'verify',
+    id: 'deploy',
     seq: 3,
-    title: 'Verify',
-    summary: 'Re-probe fleet after Agent Fix — confirm scored cells return to GO.',
+    title: 'Deploy',
+    summary:
+      'Advance Launch Rocket / Deploy Satellite / Launch Plugin when fleet is ready. Release tabs stay in this lens.',
     dependsOn: ['remediate'],
-    navigateTab: 'task-cc',
-    actions: [{ label: 'Task Control Center', tabId: 'task-cc' }],
+    navigateTab: 'platform-release',
+    actions: [
+      { label: 'Launch Rocket', tabId: 'platform-release' },
+      { label: 'Deploy Satellite', tabId: 'trade-release' },
+      { label: 'Launch Plugin', tabId: 'plugin-release' },
+    ],
+  },
+  {
+    id: 'patrol',
+    seq: 4,
+    title: 'Patrol',
+    summary: 'Review scheduled health skills and trust before clearing the queue.',
+    dependsOn: ['deploy'],
+    navigateTab: 'execution-log',
+    actions: [
+      { label: 'Execution Log', tabId: 'execution-log' },
+      { label: 'Patrol', tabId: 'autonomous-skills' },
+    ],
   },
   {
     id: 'clear',
-    seq: 4,
+    seq: 5,
     title: 'Clear',
     summary:
       'Fleet clear + operate queue clear. Queue Clear ≠ fleet clear when fleetClear=false.',
-    dependsOn: ['verify'],
-    navigateTab: 'agent-desk',
-    actions: [{ label: 'Agent Desk queue', tabId: 'agent-desk' }],
-  },
-]
-
-const MISSION_LAUNCH_PHASES: TaskModeDef['phases'] = [
-  {
-    id: 'supply-chain',
-    seq: 1,
-    title: 'Supply chain · all domains',
-    summary:
-      'Gitea mirrors + Dockerfile CMs ready for platform/trade; plugin publish uses Launch Plugin (make install).',
-    navigateTab: 'platform-release',
-    actions: [
-      { label: 'Launch Rocket', tabId: 'platform-release' },
-      { label: 'Deploy Satellite', tabId: 'trade-release' },
-      { label: 'Launch Plugin', tabId: 'plugin-release' },
-    ],
-  },
-  {
-    id: 'deploy-stg',
-    seq: 2,
-    title: 'Deploy STG',
-    summary:
-      'Run platform + trade STG deliver; plugin lane uses Detect→Install on Launch Plugin (not Tekton).',
-    dependsOn: ['supply-chain'],
-    navigateTab: 'control-room',
-    actions: [
-      { label: 'Launch Rocket', tabId: 'platform-release' },
-      { label: 'Deploy Satellite', tabId: 'trade-release' },
-      { label: 'Launch Plugin', tabId: 'plugin-release' },
-      { label: 'Control Room', tabId: 'control-room' },
-    ],
-  },
-  {
-    id: 'stg-gate',
-    seq: 3,
-    title: 'STG gate · unified',
-    summary: 'Platform STG gate + trade STG gate both pass; plugin verify via make verify-ib-gateway-program.',
-    dependsOn: ['deploy-stg'],
-    navigateTab: 'platform-release',
-    actions: [
-      { label: 'Launch Rocket', tabId: 'platform-release' },
-      { label: 'Deploy Satellite', tabId: 'trade-release' },
-      { label: 'Launch Plugin', tabId: 'plugin-release' },
-    ],
-  },
-  {
-    id: 'deploy-prod',
-    seq: 4,
-    title: 'Deploy PROD',
-    summary: 'Promote platform + trade to PROD; plugin live mode via Launch Plugin Live check.',
-    dependsOn: ['stg-gate'],
-    navigateTab: 'platform-release',
-    actions: [
-      { label: 'Launch Rocket', tabId: 'platform-release' },
-      { label: 'Deploy Satellite', tabId: 'trade-release' },
-      { label: 'Launch Plugin', tabId: 'plugin-release' },
-    ],
-  },
-  {
-    id: 'prod-gate',
-    seq: 5,
-    title: 'PROD gate + mission verify',
-    summary: 'PROD gates pass and mission snapshot nominal; plugin dogfood on-demand STK when publishing.',
-    dependsOn: ['deploy-prod'],
-    navigateTab: 'control-room',
-    actions: [
-      { label: 'Control Room', tabId: 'control-room' },
-      { label: 'Launch Rocket', tabId: 'platform-release' },
-      { label: 'Deploy Satellite', tabId: 'trade-release' },
-      { label: 'Launch Plugin', tabId: 'plugin-release' },
-    ],
+    dependsOn: ['patrol'],
+    navigateTab: 'queue',
+    actions: [{ label: 'Queue', tabId: 'queue' }],
   },
 ]
 
@@ -139,11 +88,11 @@ const UNIFIED_BUILD_PHASES: TaskModeDef['phases'] = [
   {
     id: 'briefing',
     seq: 1,
-    title: 'Agent Briefing',
-    summary: 'Open scoped Briefing from Active Session or explicit line selection — no static Build binding.',
+    title: 'Briefing',
+    summary: 'Open scoped Briefing from In Flight or explicit line selection — no static Build binding.',
     navigateTab: 'briefing',
     actions: [
-      { label: 'Agent Briefing', tabId: 'briefing' },
+      { label: 'Briefing', tabId: 'briefing' },
       { label: 'Task Control Center', tabId: 'task-cc' },
     ],
   },
@@ -153,10 +102,9 @@ const UNIFIED_BUILD_PHASES: TaskModeDef['phases'] = [
     title: 'Implement in Cursor',
     summary: 'Execute phase work in IDE; follow program skill when linked.',
     dependsOn: ['briefing'],
-    navigateTab: 'dev-agent',
+    navigateTab: 'active-session',
     actions: [
-      { label: 'Active Session', tabId: 'active-session' },
-      { label: 'Dev Agent', tabId: 'dev-agent' },
+      { label: 'In Flight', tabId: 'active-session' },
       { label: 'Dev Sessions', tabId: 'dev-sessions' },
     ],
   },
@@ -166,29 +114,69 @@ const UNIFIED_BUILD_PHASES: TaskModeDef['phases'] = [
     title: 'Pre-push verify',
     summary: 'Lint + build (+ legacy-css when UI touched) before git push.',
     dependsOn: ['implement'],
-    navigateTab: 'dev-agent',
-    actions: [{ label: 'Dev Agent', tabId: 'dev-agent' }],
+    navigateTab: 'active-session',
+    actions: [
+      { label: 'In Flight', tabId: 'active-session' },
+    ],
   },
   {
     id: 'deliver-stg',
     seq: 4,
     title: 'Deliver STG',
-    summary: 'Advance Delivery Board / Control Room — release tabs are secondary (Launch view owns them).',
+    summary: 'Advance Delivery / Control Room — release tabs are secondary (Ops lens owns them).',
     dependsOn: ['pre-push'],
     navigateTab: 'delivery-board',
     actions: [
-      { label: 'Delivery Board', tabId: 'delivery-board' },
+      { label: 'Delivery', tabId: 'delivery-board' },
       { label: 'Control Room', tabId: 'control-room' },
     ],
   },
   {
     id: 'sign-off',
     seq: 5,
-    title: 'Delivery Board sign-off',
+    title: 'Delivery sign-off',
     summary: 'Owner sign-off on linked program phases.',
     dependsOn: ['deliver-stg'],
     navigateTab: 'delivery-board',
-    actions: [{ label: 'Delivery Board', tabId: 'delivery-board' }],
+    actions: [{ label: 'Delivery', tabId: 'delivery-board' }],
+  },
+]
+
+const ANALYSIS_PHASES: TaskModeDef['phases'] = [
+  {
+    id: 'review-insights',
+    seq: 1,
+    title: 'Review Insights',
+    summary: 'Read the latest Hermes insights before triggering a new analysis.',
+    navigateTab: 'analysis-workspace',
+    actions: [
+      { label: 'Analysis Workspace', tabId: 'analysis-workspace' },
+      { label: 'Insight Log', tabId: 'insight-log' },
+    ],
+  },
+  {
+    id: 'trigger-analysis',
+    seq: 2,
+    title: 'Trigger Analysis',
+    summary: 'Run First Task or open Chat UI. Analysis is read-only — D10 blocked.',
+    dependsOn: ['review-insights'],
+    navigateTab: 'analysis-workspace',
+    actions: [
+      { label: 'Analysis Workspace', tabId: 'analysis-workspace' },
+      { label: 'Hermes Status', tabId: 'hermes-status' },
+    ],
+  },
+  {
+    id: 'verify',
+    seq: 3,
+    title: 'Verify',
+    summary: 'Confirm the insight log recorded the run and Hermes remains reachable.',
+    dependsOn: ['trigger-analysis'],
+    navigateTab: 'insight-log',
+    actions: [
+      { label: 'Insight Log', tabId: 'insight-log' },
+      { label: 'Hermes Status', tabId: 'hermes-status' },
+    ],
   },
 ]
 
@@ -200,72 +188,6 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
     loopArchetype: 'system',
     landingTab: 'control-room',
     navLens: {},
-  },
-  {
-    id: 'daily-ops',
-    label: 'Daily Ops',
-    description:
-      'Ops loop — Discover → Remediate → Verify → Clear. Fleet Desk is health ground truth; single primary CTA; Agent Fix binds to Remediate; queue Clear ≠ fleet clear.',
-    loopArchetype: 'ops',
-    landingTab: 'task-cc',
-    phases: DAILY_OPS_PHASES,
-    navLens: {
-      showTaskControlCenter: true,
-      includeTabs: [
-        'task-cc',
-        'control-room',
-        'observability',
-        'defects',
-        'operator-plane',
-        'agent-desk',
-      ],
-      phaseRelevantTabs: {
-        discover: ['task-cc', 'control-room'],
-        remediate: ['task-cc', 'operator-plane', 'defects'],
-        verify: ['task-cc', 'control-room', 'observability'],
-        clear: ['task-cc', 'agent-desk'],
-      },
-    },
-    ops: {
-      kind: 'ops',
-      signalSource: 'operate-queue',
-      showMissionSignals: true,
-    },
-  },
-  {
-    id: 'mission-launch',
-    label: 'Launch',
-    description:
-      'Ops loop — unified platform + trade + plugin publish lanes. Task Control Center shows Launch board (Rocket / Satellite / Plugin) + Release posture.',
-    loopArchetype: 'ops',
-    landingTab: 'task-cc',
-    phases: MISSION_LAUNCH_PHASES,
-    navLens: {
-      showTaskControlCenter: true,
-      includeTabs: [
-        'task-cc',
-        'control-room',
-        'platform-release',
-        'trade-release',
-        'plugin-release',
-        'cluster',
-        'satellite-bus',
-        'observability',
-      ],
-      phaseRelevantTabs: {
-        'supply-chain': ['task-cc', 'platform-release', 'trade-release', 'plugin-release'],
-        'deploy-stg': ['task-cc', 'control-room', 'platform-release', 'trade-release', 'plugin-release'],
-        'stg-gate': ['task-cc', 'platform-release', 'trade-release', 'plugin-release'],
-        'deploy-prod': ['task-cc', 'platform-release', 'trade-release', 'plugin-release'],
-        'prod-gate': ['task-cc', 'control-room', 'observability'],
-      },
-    },
-    ops: {
-      kind: 'ops',
-      signalSource: 'mission-launch',
-      showLaunchPad: true,
-      showMissionSignals: true,
-    },
   },
   {
     id: 'build',
@@ -281,17 +203,16 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
         'task-cc',
         'briefing',
         'active-session',
-        'dev-agent',
         'dev-sessions',
         'delivery-board',
-        'agent-desk',
+        'queue',
         'control-room',
         'blueprint',
       ],
       phaseRelevantTabs: {
         briefing: ['task-cc', 'briefing'],
-        implement: ['task-cc', 'active-session', 'dev-agent', 'dev-sessions'],
-        'pre-push': ['task-cc', 'dev-agent'],
+        implement: ['task-cc', 'active-session', 'dev-sessions'],
+        'pre-push': ['task-cc', 'active-session'],
         'deliver-stg': ['task-cc', 'delivery-board', 'control-room'],
         'sign-off': ['task-cc', 'delivery-board'],
       },
@@ -303,6 +224,76 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
       briefingTrack: 'build',
       briefingTrackType: 'build',
       briefingComponentLine: 'rocket',
+    },
+  },
+  {
+    id: 'ops',
+    label: 'Ops',
+    description:
+      'Ops loop — Discover → Remediate → Deploy → Patrol → Clear. Launch, Daily Ops, and Patrol share this lens. Fleet Desk is health ground truth; queue Clear ≠ fleet clear.',
+    loopArchetype: 'ops',
+    landingTab: 'task-cc',
+    phases: OPS_PHASES,
+    navLens: {
+      showTaskControlCenter: true,
+      includeTabs: [
+        'task-cc',
+        'control-room',
+        'observability',
+        'defects',
+        'operator-plane',
+        'queue',
+        'platform-release',
+        'trade-release',
+        'plugin-release',
+        'cluster',
+        'satellite-bus',
+        'execution-log',
+        'autonomous-skills',
+        'agent-governance',
+        'agent-capability',
+      ],
+      phaseRelevantTabs: {
+        discover: ['task-cc', 'control-room'],
+        remediate: ['task-cc', 'operator-plane', 'defects'],
+        deploy: ['task-cc', 'platform-release', 'trade-release', 'plugin-release', 'control-room'],
+        patrol: ['task-cc', 'execution-log', 'autonomous-skills', 'agent-governance'],
+        clear: ['task-cc', 'queue'],
+      },
+    },
+    ops: {
+      kind: 'ops',
+      signalSource: 'operate-queue',
+      showMissionSignals: true,
+    },
+  },
+  {
+    id: 'analysis',
+    label: 'Analysis',
+    description:
+      'Analysis Desk V1 — Hermes status, Chat UI, and First Task. Read-only; no stock-analysis engine; D10 blocked.',
+    loopArchetype: 'analysis',
+    landingTab: 'analysis-workspace',
+    phases: ANALYSIS_PHASES,
+    navLens: {
+      showTaskControlCenter: true,
+      includeTabs: [
+        'task-cc',
+        'analysis-workspace',
+        'insight-log',
+        'hermes-status',
+        'control-room',
+      ],
+      phaseRelevantTabs: {
+        'review-insights': ['task-cc', 'analysis-workspace', 'insight-log'],
+        'trigger-analysis': ['task-cc', 'analysis-workspace', 'hermes-status'],
+        verify: ['task-cc', 'insight-log', 'hermes-status'],
+      },
+    },
+    ops: {
+      kind: 'ops',
+      signalSource: 'operate-queue',
+      showMissionSignals: false,
     },
   },
 ]
@@ -317,7 +308,7 @@ export function isTaskModeId(value: string): value is TaskModeId {
   return TASK_MODE_DEFINITIONS.some(m => m.id === value)
 }
 
-/** Resolve catalog id including legacy aliases (rocket-build → build, rocket-launch → mission-launch). */
+/** Resolve catalog id including legacy aliases (daily-ops → ops, rocket-build → build). */
 export function resolveTaskModeId(value: string): TaskModeId | null {
   if (isTaskModeId(value)) return value
   const aliased = LEGACY_TASK_MODE_ALIASES[value]

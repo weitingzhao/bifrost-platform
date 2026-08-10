@@ -8,6 +8,7 @@ import type {
   ClusterNodesResponse,
   ClusterObservabilityResponse,
   ClusterPlacementResponse,
+  ClusterPostgresBackupStatusResponse,
   ClusterPostgresStatusResponse,
   ClusterRedisStatusResponse,
   ClusterServiceReadinessResponse,
@@ -49,6 +50,12 @@ export async function fetchClusterPostgresStatus(): Promise<ClusterPostgresStatu
   const r = await fetch('/api/v1/cluster/postgres')
   if (!r.ok) throw new Error(`cluster postgres: HTTP ${r.status}`)
   return r.json() as Promise<ClusterPostgresStatusResponse>
+}
+
+export async function fetchClusterPostgresBackupStatus(): Promise<ClusterPostgresBackupStatusResponse> {
+  const r = await fetch('/api/v1/cluster/postgres/backup-status')
+  if (!r.ok) throw new Error(`cluster postgres backup-status: HTTP ${r.status}`)
+  return r.json() as Promise<ClusterPostgresBackupStatusResponse>
 }
 
 export async function fetchDataFreshness(): Promise<DataFreshnessResponse> {

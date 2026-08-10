@@ -10,6 +10,17 @@ export interface DevAgentProgramSummary extends DevAgentProgramInfo {
   phases_done: number
   all_phases_done: boolean
   active: boolean
+  lane_id?: string
+  runtime_job_status?: string
+  pending_count?: number
+  prompt_ready?: boolean
+  runtime_bucket?: 'running' | 'ready' | 'idle' | 'settled' | string
+}
+
+export interface DevAgentNamingWarning {
+  program_id: string
+  field: string
+  message: string
 }
 
 export interface DevAgentPhase {
@@ -26,20 +37,30 @@ export interface DevAgentJob {
   status: 'running' | 'awaiting_review' | 'done' | 'failed' | 'cancelled' | 'idle'
   output: string
   summary?: string
+  started_at?: string
   completed_at?: string
+  approved_by?: string
   cursor_agent_id?: string
 }
 
-export interface DevAgentStatusResponse {
-  project: string
-  program: DevAgentProgramInfo
-  phases: DevAgentPhase[]
+export interface DevAgentJobTrace {
   active_job: DevAgentJob | null
   history: DevAgentJob[]
 }
 
+export interface DevAgentStatusResponse extends DevAgentJobTrace {
+  project: string
+  program: DevAgentProgramInfo
+  phases: DevAgentPhase[]
+}
+
+export interface DevAgentProgramJobsResponse extends DevAgentJobTrace {
+  program_id: string
+}
+
 export interface DevAgentProgramsResponse {
   programs: DevAgentProgramSummary[]
+  naming_warnings?: DevAgentNamingWarning[]
 }
 
 export interface DevAgentProgramDetailResponse {
@@ -61,18 +82,4 @@ export interface DevAgentProgramDetailResponse {
     skill_loaded: boolean
   }
   active: boolean
-}
-
-export interface DevAgentPersistenceFile {
-  program_id: string
-  path: string
-  updated_at?: string
-  bytes: number
-}
-
-export interface DevAgentPersistenceResponse {
-  state_dir: string
-  active_program_id: string
-  active_program_path: string
-  files: DevAgentPersistenceFile[]
 }

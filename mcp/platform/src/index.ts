@@ -412,6 +412,13 @@ server.tool(
 )
 
 server.tool(
+  'get_hermes_insights',
+  'Analysis Desk Hermes insight history (newest first, L0 read-only)',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/hermes/insights')),
+)
+
+server.tool(
   'get_agent_performance',
   'Flight Director — agent performance KPIs (7d/30d windows)',
   {},
@@ -526,10 +533,33 @@ server.tool(
 
 server.tool(
   'get_program_context',
-  'Program blueprint + phase sign-off state for Delivery Board program',
+  'Program blueprint + phase sign-off state for Delivery Board program (archived still fetchable by id)',
   { program_id: z.string().describe('Program id e.g. trade-ib-migration') },
   async ({ program_id }) =>
     jsonResult(await platformGet(`/api/v1/programs/${encodeURIComponent(program_id)}`)),
+)
+
+server.tool(
+  'get_program_agent_jobs',
+  'Per-program agent job history (active_job + history). Does not switch active program. Not Owner sign-off.',
+  { program_id: z.string().describe('Program id e.g. trade-ib-migration') },
+  async ({ program_id }) =>
+    jsonResult(await platformGet(`/api/v1/programs/${encodeURIComponent(program_id)}/jobs`)),
+)
+
+server.tool(
+  'rebind_program_lane',
+  'Rebind a Delivery program to another lane_id (operator). D2: 409 if the target lane already has a live (not session-released) program.',
+  {
+    program_id: z.string(),
+    lane_id: z.string(),
+  },
+  async ({ program_id, lane_id }) =>
+    jsonResult(
+      await platformPatch(`/api/v1/programs/${encodeURIComponent(program_id)}`, {
+        lane_id,
+      }),
+    ),
 )
 
 server.tool(

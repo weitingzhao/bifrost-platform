@@ -21,6 +21,8 @@ import {
   CSS_EXCEPTIONS,
   DESIGN_SYSTEM_SOURCE,
   DESIGN_SYSTEM_VERSION,
+  DUAL_PERSPECTIVE_LIFECYCLE,
+  DUAL_PERSPECTIVE_LIFECYCLE_RULES,
   FORBIDDEN_PATTERNS,
   LAYER_STACK,
   LIVING_CONTRACT_PATH,
@@ -30,6 +32,7 @@ import {
   PAGE_SURFACES,
   PRIMITIVES,
   SEMANTIC_COLORS,
+  SIDEBAR_ZONES,
   TRADE_FRONTEND_URL_DEFAULT,
   buildDesignSystemLlmPack,
 } from '@/lib/standards/designSystemCatalog'
@@ -42,8 +45,8 @@ const DESIGN_SECTIONS: Array<GovernanceCatalogSection<DesignSection>> = [
     id: 'foundations',
     label: 'Foundations',
     badge: 'TOKENS',
-    summary: 'Layer stack, page surfaces, semantic colors, and ops outcome text.',
-    hint: 'Layers · Surfaces · Colors · Semantics',
+    summary: 'Layer stack, page surfaces, sidebar zones, dual-perspective lifecycle, semantic colors.',
+    hint: 'Layers · Surfaces · Lifecycle · Colors · Semantics',
   },
   {
     id: 'composition',
@@ -70,6 +73,7 @@ const DESIGN_SECTIONS: Array<GovernanceCatalogSection<DesignSection>> = [
 
 const DESIGN_SHORTCUTS: Array<GovernanceCatalogShortcut<DesignSection>> = [
   { label: 'Tokens & surfaces? → Foundations', sectionId: 'foundations' },
+  { label: 'Briefing / Session / Board? → Foundations', sectionId: 'foundations' },
   { label: 'What must I use? → Rules', sectionId: 'rules' },
   { label: 'Where are components? → Inventory', sectionId: 'inventory' },
 ]
@@ -168,6 +172,57 @@ export function DesignSystemPage() {
               </DenseDataTable>
             </CatalogSection>
           </div>
+
+          <CatalogSection title="Sidebar zones (Command Hierarchy)">
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Zone</DenseTableHead>
+                  <DenseTableHead>Surface</DenseTableHead>
+                  <DenseTableHead>Intent</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {SIDEBAR_ZONES.map(z => (
+                  <DenseTableRow key={z.zone}>
+                    <DenseTableCell className="font-medium whitespace-nowrap">{z.zone}</DenseTableCell>
+                    <DenseTableCell className="text-dense-meta">{z.surface}</DenseTableCell>
+                    <DenseTableCell className="text-[var(--muted-foreground)]">{z.intent}</DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          </CatalogSection>
+
+          <CatalogSection title="Dual-perspective lifecycle (Engineer Partner)">
+            <p className="m-0 mb-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Three nodes on one path. Phase work runs in Cursor IDE Agent; Owner sign-off is the
+              Console write. Daily run and sign-off stay on In Flight.
+            </p>
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Node</DenseTableHead>
+                  <DenseTableHead>Owner</DenseTableHead>
+                  <DenseTableHead>Agent</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {DUAL_PERSPECTIVE_LIFECYCLE.map(n => (
+                  <DenseTableRow key={n.node}>
+                    <DenseTableCell className="font-medium whitespace-nowrap">{n.node}</DenseTableCell>
+                    <DenseTableCell className="text-[var(--muted-foreground)]">{n.owner}</DenseTableCell>
+                    <DenseTableCell className="text-[var(--muted-foreground)]">{n.agent}</DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+            <ul className="m-0 mt-2 list-inside list-disc space-y-0.5 pl-0 text-[var(--text-dense-meta)] text-muted-foreground">
+              {DUAL_PERSPECTIVE_LIFECYCLE_RULES.map(r => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          </CatalogSection>
 
           <CatalogSection title="Business semantic colors (three independent taxonomies)">
             <DenseDataTable>

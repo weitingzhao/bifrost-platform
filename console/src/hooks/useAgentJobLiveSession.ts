@@ -135,7 +135,7 @@ export function useAgentJobLiveSession(
     if (jobId == null || jobId === '') return null
     const cached = qc.getQueryData<{ jobs: RemediationJob[] }>(['remediation', 'jobs'])
     return cached?.jobs?.find(j => j.id === jobId) ?? null
-  }, [jobId, qc, snapshotQuery.dataUpdatedAt, streamJob?.updated_at])
+  }, [jobId, qc])
 
   const baseJob: RemediationJob | null =
     streamJob ?? snapshotQuery.data ?? listHint ?? null

@@ -83,7 +83,7 @@ export function resolveSessionLaneFocus(input: ResolveSessionLaneFocusInput): Se
       status,
       progress,
       kind: 'archive',
-      line: 'Next: Archive session in Briefing — catalog stays on Delivery Board',
+      line: 'Next: Archive session in Briefing — catalog stays on Delivery',
     }
   }
 
@@ -96,7 +96,7 @@ export function resolveSessionLaneFocus(input: ResolveSessionLaneFocusInput): Se
         status,
         progress,
         kind: 'signoff',
-        line: 'Focus: Program sign-off in Active Session',
+        line: 'Focus: Program sign-off in In Flight',
       }
     }
     return {

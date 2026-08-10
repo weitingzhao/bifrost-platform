@@ -8,11 +8,11 @@ import {
   LaneDetailContextStrip,
   LaneStateStrip,
 } from '@/components/delivery/LaneDetailShell'
+import { PluginStepCommandCenter } from '@/components/delivery/PluginStepCommandCenter'
 import {
   derivePluginLaunchOutcome,
-  PluginStepCommandCenter,
   type PluginFlowStep,
-} from '@/components/delivery/PluginStepCommandCenter'
+} from '@/components/delivery/pluginLaunchOutcome'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'

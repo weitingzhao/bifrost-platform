@@ -148,6 +148,7 @@ export function useRemediationStream(jobId: string | null): UseRemediationStream
       abortRef.current = null
       setConnected(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- subscribe once per jobId; events.length is a stale snapshot by design
   }, [jobId, stop])
 
   return { job, events, connected, error, stop }

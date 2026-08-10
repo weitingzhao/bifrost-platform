@@ -19,13 +19,13 @@ import { ReleaseEnvAccessBar } from '@/components/delivery/ReleaseEnvAccessBar'
 import { ReleaseHealthStrip } from '@/components/delivery/ReleaseHealthStrip'
 import { SelfHealthPanel } from '@/components/architecture/SelfHealthPanel'
 import { EscapeHatchPanel } from '@/components/architecture/EscapeHatchPanel'
+import { ReleaseStepCommandCenter } from '@/components/delivery/ReleaseStepCommandCenter'
 import {
-  ReleaseStepCommandCenter,
   runStepStatus,
   gateStepStatus,
   deriveReleaseOutcome,
   type FlowStep,
-} from '@/components/delivery/ReleaseStepCommandCenter'
+} from '@/lib/delivery/releaseStepTypes'
 import { ReleaseStateBanner } from '@/components/delivery/ReleaseStateBanner'
 import { StackInstallWizardPanel } from '@/components/delivery/StackInstallWizardPanel'
 import {

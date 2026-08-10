@@ -94,6 +94,9 @@ phases:
 	t.Setenv("PLATFORM_REMEDIATION_JOBS_DIR", filepath.Join(dir, "remediation-jobs"))
 	t.Setenv("PLATFORM_AUDIT_LOG", filepath.Join(dir, "audit.json"))
 	t.Setenv("PLATFORM_KUBECONFIG", filepath.Join(dir, "does-not-exist-kubeconfig.yaml"))
+	t.Setenv("PATROL_DISPATCH", "stub")
+	t.Setenv("PATROL_STATE_DIR", filepath.Join(dir, "patrol-state"))
+	t.Setenv("PATROL_SKILLS_DIR", filepath.Join(configDir, "patrol-skills"))
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -147,6 +150,11 @@ func TestRouterRegistersExpectedPublicRoutes(t *testing.T) {
 		"/api/v1/vision/v1/gate",
 		"/api/v1/audit",
 		"/api/v1/jobs",
+		"/api/v1/patrol/skills",
+		"/api/v1/patrol/runs",
+		"/api/v1/hermes/insights",
+		"/api/v1/agent/hermes/readiness",
+		"/api/v1/agent/hermes/first-task",
 	}
 	for _, path := range getRoutes {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -189,6 +197,13 @@ func TestRouterRequiresAuthForOperatorRoutes(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code == http.StatusOK {
 		t.Fatalf("expected operator-gated route to reject unauthenticated request, got 200")
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/patrol/trigger/fleet-drift-scan", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code == http.StatusOK {
+		t.Fatalf("expected patrol trigger to reject unauthenticated request, got 200")
 	}
 }
 

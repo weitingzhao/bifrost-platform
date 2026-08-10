@@ -285,7 +285,7 @@ export function AgentMcpPanel({
             <p className="m-0 mt-2">
               After ~1–2 min open{' '}
               <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={onOpenBriefing}>
-                Agent Briefing
+                Briefing
               </Button>{' '}
               for the report and Layer 4 approval.
             </p>

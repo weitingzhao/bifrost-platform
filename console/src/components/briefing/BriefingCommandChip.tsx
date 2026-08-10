@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { cn } from '@/lib/cn'
 
 export const BRIEFING_CMD = '/briefing'
@@ -46,18 +46,4 @@ export function BriefingCommandChip({ className }: { className?: string }) {
       {copied ? 'Copied!' : BRIEFING_CMD}
     </button>
   )
-}
-
-/** Split plain text on `/briefing` and wrap matches in {@link BriefingCommandChip}. */
-export function withBriefingCommandHighlight(text: string): ReactNode {
-  if (!text.includes(BRIEFING_CMD)) return text
-  const parts = text.split(BRIEFING_CMD)
-  const out: ReactNode[] = []
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i] !== '') out.push(parts[i])
-    if (i < parts.length - 1) {
-      out.push(<BriefingCommandChip key={`briefing-cmd-${i}`} />)
-    }
-  }
-  return <>{out}</>
 }

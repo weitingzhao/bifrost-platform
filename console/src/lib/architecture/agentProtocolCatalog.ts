@@ -10,7 +10,7 @@
 
 import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog'
 
-export const AGENT_PROTOCOL_VERSION = '2026-07-27'
+export const AGENT_PROTOCOL_VERSION = '2026-08-09'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 /**
@@ -100,6 +100,11 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   { action: 'ib:operator:cmd RPC', scope: 'All modes' },
   {
     action:
+      'Session SDK runtime (bridge.ts Start/Approve/Reject/Cancel/Launch) — removed; phase work for Briefing→In Flight→Delivery runs in Cursor IDE Agent',
+    scope: 'Session construction (Briefing→In Flight→Delivery)',
+  },
+  {
+    action:
       'Live trading enablement — scale daemon for auto-trade, remove STG daemon-scale-zero, enable live hedge/place_order, or Monitor /control/* that arms live trading (spine D10 BLOCKED until Owner explicit unlock)',
     scope: 'All modes',
   },
@@ -175,13 +180,13 @@ export const WAVE3_P0_DECISIONS: Wave3P0Decision[] = [
     id: 'D12',
     topic: 'Sign-off single path api',
     rule:
-      'Only POST /api/v1/programs/{id}/phases/{pid}/signoff writes phase_sign_offs. Remove dev_agent/vision_gate mechanisms. UI host = Active Session (Engineer → Delivery); Delivery Board is read-only catalog.',
+      'Only POST /api/v1/programs/{id}/phases/{pid}/signoff writes phase_sign_offs. Session SDK runtime (bridge.ts /active/* /launch) is removed — phase work runs in Cursor IDE Agent. UI host = In Flight (Engineer → Delivery); Delivery is read-only catalog.',
     wave3Deliverables: [
-      'Dev Agent approve → programs signoff API',
+      'Session SDK runtime removed; only programs signoff API writes phase_sign_offs',
       'Vision gate Owner sign → programs signoff API (gate JSON = run artifact only)',
       'YAML: all programs sign_off_mechanism: api',
       'Remove vision_gate branch from programs_delivery.go reads',
-      'Active Session hosts phase Sign-off + post-completion Approve; Board is read-only catalog',
+      'In Flight hosts phase Sign-off + post-completion Approve; Delivery is read-only catalog',
     ],
   },
 ]
@@ -705,6 +710,36 @@ export const DEV_AGENT_CLOSED_LOOP = {
   },
 } as const
 
+/** Ops Desk — Patrol (scheduled health skills via Cursor SDK nightshift). Distinct from Hermes Analysis. */
+export const PATROL_AGENT = {
+  surface: 'Ops Desk · Patrol skills (Console Task Mode ops)',
+  runtime:
+    'L0: platform-api local probe (same GET routes as Platform MCP, live evidence). L1+: Cursor SDK HTTP POST /v1/agents when PATROL_DISPATCH=live|cursor. Force all-cloud with PATROL_DISPATCH=cursor (LAN MCP usually unreachable).',
+  trigger: 'cron goroutine in platform-api + manual POST /api/v1/patrol/trigger/{id}',
+  trust: {
+    L0: 'read',
+    L1: 'manual write & cron escalate',
+    L2: 'reserved escalate',
+  },
+  cost: 'Cursor subscription monthly quota (PATROL_DISPATCH=stub|live)',
+  skillsAPI: 'GET /api/v1/patrol/skills',
+  runsAPI: 'GET /api/v1/patrol/runs',
+  dispatchEnv: 'PATROL_DISPATCH=stub|live',
+  distinctFrom:
+    'Hermes / Analysis Desk is premium analysis (Chat UI + First Task; Trade later). Patrol is not Hermes metered API. D10 blocked — no trading actuation.',
+} as const
+
+/** Analysis Desk V1 — Nous Hermes premium analysis (read-only). */
+export const HERMES_ANALYSIS_DESK = {
+  surface: 'Analysis Desk · Analysis Workspace / Insight Log / Hermes Status',
+  chatUI: 'http://192.168.10.50:9119/chat',
+  readinessAPI: 'GET /api/v1/agent/hermes/readiness',
+  healthAPI: 'GET /api/v1/agent/hermes/health',
+  insightsAPI: 'GET /api/v1/hermes/insights?limit=50',
+  firstTaskAPI: 'POST /api/v1/hermes/run-first-task',
+  d10: 'Analysis is read-only. No trading actuation.',
+} as const
+
 /** Vision V3 — Ops Agent L1/L2 (Alertmanager → MCP actuation + audit). */
 export const OPS_AGENT_CLOSED_LOOP = {
   webhook: 'POST /api/v1/ops-agent/alertmanager',
@@ -823,6 +858,26 @@ export function buildAgentProtocolLlmPack(): string {
     `- Promote: \`${DEV_AGENT_CLOSED_LOOP.releaseGate}\` or MCP \`run_release_gate\` before deliver-prod`,
     `- Available tags: MCP \`get_delivery_revisions\` — select revision for deploys`,
     `- Catalog: \`${DEV_AGENT_CLOSED_LOOP.catalog}\``,
+    '',
+    '## Three Desks (Build / Ops / Analysis)',
+    '- Rail: System + Build + Ops + Analysis. Legacy daily-ops / mission-launch / patrol → ops.',
+    '- Engineer Partner: Build Desk / Ops Desk / Analysis Desk. Queue tab id `queue` (`#agent-desk` alias).',
+    '',
+    '## Patrol (Ops Desk — Cursor SDK nightshift)',
+    `- Surface: ${PATROL_AGENT.surface}`,
+    `- Runtime: ${PATROL_AGENT.runtime}`,
+    `- Trigger: ${PATROL_AGENT.trigger}`,
+    `- Trust: L0 ${PATROL_AGENT.trust.L0} / L1 ${PATROL_AGENT.trust.L1} / L2 ${PATROL_AGENT.trust.L2}`,
+    `- Cost: ${PATROL_AGENT.cost}`,
+    `- Skills: \`${PATROL_AGENT.skillsAPI}\` · Runs: \`${PATROL_AGENT.runsAPI}\``,
+    `- Distinct from Hermes: ${PATROL_AGENT.distinctFrom}`,
+    '',
+    '## Hermes (Analysis Desk — premium analysis)',
+    `- Surface: ${HERMES_ANALYSIS_DESK.surface}`,
+    `- Chat UI: ${HERMES_ANALYSIS_DESK.chatUI}`,
+    `- Readiness: \`${HERMES_ANALYSIS_DESK.readinessAPI}\` · Health: \`${HERMES_ANALYSIS_DESK.healthAPI}\``,
+    `- Insights: \`${HERMES_ANALYSIS_DESK.insightsAPI}\` · First Task: \`${HERMES_ANALYSIS_DESK.firstTaskAPI}\``,
+    `- D10: ${HERMES_ANALYSIS_DESK.d10}`,
     '',
     '## Ops Agent closed loop (Vision V3)',
     `- Webhook: \`${OPS_AGENT_CLOSED_LOOP.webhook}\``,

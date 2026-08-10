@@ -129,7 +129,7 @@ export function ServerTerminal({
     if (pickerHost) {
       ensureSession(pickerHost.id)
     }
-  }, [pickerHost?.id, ensureSession])
+  }, [pickerHost, ensureSession])
 
   const closeTab = useCallback((tabId: string) => {
     setTabs(prev => prev.filter(t => t.id !== tabId))

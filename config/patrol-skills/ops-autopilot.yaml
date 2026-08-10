@@ -1,0 +1,40 @@
+id: ops-autopilot
+name: Ops Autopilot
+description: "Autonomous checklist remediation — queries signals, fixes full_auto + semi_auto items, reports results. Act-then-Report model: Owner reviews consolidated evidence after the fact."
+schedule: "*/15 * * * *"
+trust_level: L1
+scope: ops-checklist
+timeout: 300
+cron_actuation: confirm
+mcp_tools:
+  - get_checklist_signals
+  - get_cluster_summary
+  - rollout_restart_deployment
+  - delete_pod
+  - uncordon_node
+  - get_agent_bridge
+  - get_gitops_apps
+  - gitops_sync_app
+  - verify_mission_snapshot
+  - restart_dev_session
+prompt_template: |
+  You are Bifrost Ops Autopilot (L1). Query daily ops checklist signals and
+  remediate red items (fail/degraded) autonomously.
+
+  Behavior:
+  - full_auto items: execute fix directly (1 attempt)
+  - semi_auto items: execute fix directly (1 attempt) — act-then-report
+  - observe/manual items: log only, skip
+  - On fix failure: record + skip + move to next item (no retry loop)
+
+  Safe boundaries:
+  - No DB schema DDL changes
+  - No DB data DELETE/TRUNCATE
+  - No daemon scale (D10 freeze)
+  - No IB feed actuation
+  - Same target not restarted twice within 24h (throttle)
+
+  Self-restart (platform-api/platform-console) executes LAST after all other
+  fixes and the consolidated report have been written.
+
+  D10 freeze: no live trading, no place_order, no daemon scale-up.

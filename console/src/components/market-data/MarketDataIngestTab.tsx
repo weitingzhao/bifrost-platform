@@ -68,8 +68,10 @@ export function MarketDataIngestTab() {
 
   const kindsRaw = kindsQ.data
   const kindsErr = kindsRaw != null && isProxyError(kindsRaw) ? kindsRaw.error : null
-  const kinds =
-    kindsRaw != null && !isProxyError(kindsRaw) ? (kindsRaw.kinds ?? []) : []
+  const kinds = useMemo(
+    () => (kindsRaw != null && !isProxyError(kindsRaw) ? (kindsRaw.kinds ?? []) : []),
+    [kindsRaw],
+  )
 
   const jobsRaw = jobsQ.data
   const jobsErr = jobsRaw != null && isProxyError(jobsRaw) ? jobsRaw.error : null

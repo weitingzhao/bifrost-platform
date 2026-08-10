@@ -147,7 +147,3 @@ export function RevisionPicker({
     </div>
   )
 }
-
-export function isRevisionDeployReady(rev: string): boolean {
-  return validateGitRevision(rev) == null
-}

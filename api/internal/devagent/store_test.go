@@ -59,7 +59,7 @@ func TestFileStoreSaveLoadRoundTrip(t *testing.T) {
 		t.Fatalf("state file not human-readable JSON: %s", string(data))
 	}
 
-	info, err := store.ListInfo("test-program")
+	info, err := store.ListInfo("test-program", false, map[string]struct{}{"test-program": {}})
 	if err != nil {
 		t.Fatalf("ListInfo: %v", err)
 	}
@@ -118,6 +118,82 @@ metadata:
 	}
 	if len(rt2.history) != 1 {
 		t.Fatalf("history not restored: %+v", rt2.history)
+	}
+}
+
+func TestListInfoDefaultsToActiveIDs(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	store := NewFileStore(configDir)
+	if err := store.SaveProgram("live-one", []Phase{{ID: "P1", Status: PhasePending}}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveProgram("old-done", []Phase{{ID: "P1", Status: PhaseDone}}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	filtered, err := store.ListInfo("live-one", false, map[string]struct{}{"live-one": {}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filtered.Files) != 1 || filtered.Files[0].ProgramID != "live-one" {
+		t.Fatalf("default ListInfo=%+v", filtered.Files)
+	}
+	all, err := store.ListInfo("live-one", true, map[string]struct{}{"live-one": {}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all.Files) != 2 {
+		t.Fatalf("include_archived ListInfo=%+v", all.Files)
+	}
+}
+
+func TestCompletedBlueprintWithoutStateUsesYAMLPhases(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	programsDir := filepath.Join(configDir, "programs", "completed")
+	if err := os.MkdirAll(programsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestTemplates(t, filepath.Join(configDir, "programs"))
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+
+	yaml := `id: closed-ledger
+title: Closed Ledger
+description: test
+status: completed
+phases:
+  - id: P1
+    title: One
+    status: done
+  - id: P2
+    title: Two
+    status: done
+`
+	if err := os.WriteFile(filepath.Join(programsDir, "closed-ledger.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := NewHandler(configDir)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	rt := h.runtimes["closed-ledger"]
+	if rt == nil {
+		t.Fatal("expected closed-ledger runtime")
+	}
+	sum := h.buildProgramSummary("closed-ledger", rt)
+	if sum.Status != "completed" {
+		t.Fatalf("status=%q", sum.Status)
+	}
+	if !sum.AllPhasesDone || sum.PhasesDone != 2 {
+		t.Fatalf("summary=%+v", sum)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "data", "programs", "closed-ledger.json")); !os.IsNotExist(err) {
+		t.Fatalf("completed program must not require/create state file: err=%v", err)
 	}
 }
 

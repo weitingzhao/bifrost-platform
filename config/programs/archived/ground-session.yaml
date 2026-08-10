@@ -1,0 +1,45 @@
+id: ground-session
+title: Ground Session
+description: >
+  Spawn skeleton for Ground / network lanes. Not a delivery capability —
+  clone via from-template into a new {lane}-{yyyymmdd} program.
+status: archived
+delivery:
+  board_visible: false
+  sign_off_mechanism: api
+workspace: /Users/vision-mac-trader/Desktop/stocks
+model: composer-2.5
+phases:
+  - id: P1
+    title: Scope
+    status: pending
+    prompt_template: |
+      Scope the Ground / network change for program {{id}}.
+      Identify the device, UniFi/network surface, and acceptance before editing.
+    verify_cmd: "echo scoped"
+    acceptance:
+      - "Scope and acceptance written"
+  - id: P2
+    title: Implement
+    status: pending
+    prompt_template: |
+      Implement the scoped Ground / network change for program {{id}}.
+      Follow existing platform-api /mcp/unifi contracts; do not rebuild the UniFi stack.
+    verify_cmd: "echo implemented"
+    acceptance:
+      - "Change landed with verify evidence"
+    depends_on: [P1]
+  - id: P3
+    title: Verify
+    status: pending
+    prompt_template: |
+      Verify the Ground / network change for program {{id}}.
+      Run the stated verify command and report remaining risk.
+    verify_cmd: "echo verified"
+    acceptance:
+      - "Verify command passed or gaps listed"
+    depends_on: [P2]
+metadata:
+  created_at: "2026-08-09"
+  owner: vision-mac-trader
+  tags: [ground, skeleton, from-template]

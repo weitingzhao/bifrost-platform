@@ -260,7 +260,7 @@ export function resolveDailyOpsWorkflow(
       primaryAction: {
         kind: 'view-agent',
         label: 'View agent',
-        tabId: 'agent-desk',
+        tabId: 'queue',
         cellKey,
         blockerItemId: primary?.itemId,
       },
@@ -286,7 +286,7 @@ export function resolveDailyOpsWorkflow(
       primaryAction: {
         kind: 'clear-queue',
         label: `Clear queue (${queueOpen})`,
-        tabId: 'agent-desk',
+        tabId: 'queue',
       },
     }
   }

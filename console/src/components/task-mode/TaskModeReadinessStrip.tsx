@@ -6,13 +6,6 @@ import type { TaskModeId } from '@/lib/task-mode/types'
 import { ReadinessChip, RocketReadinessStrip } from '@/components/task-mode/readiness/RocketReadinessStrip'
 import { SatelliteReadinessStrip } from '@/components/task-mode/readiness/SatelliteReadinessStrip'
 
-// Re-export split modules so all existing `@/components/task-mode/TaskModeReadinessStrip`
-// import paths keep working unchanged. See readiness/ for the actual implementations.
-export * from '@/components/task-mode/readiness/utils'
-export * from '@/components/task-mode/readiness/hooks'
-export * from '@/components/task-mode/readiness/RocketReadinessStrip'
-export * from '@/components/task-mode/readiness/SatelliteReadinessStrip'
-
 export type TaskModeReadinessStripProps = {
   modeId: TaskModeId
   onNavigate: (tabId: string) => void
@@ -41,7 +34,7 @@ export function TaskModeReadinessStrip({
   agentFixDisabled = false,
   agentFixTitle,
 }: TaskModeReadinessStripProps) {
-  if (modeId === 'mission-launch') {
+  if (modeId === 'ops') {
     return (
       <div className={summaryColumn ? 'flex flex-col gap-1.5' : 'flex flex-col gap-3'}>
         <RocketReadinessStrip

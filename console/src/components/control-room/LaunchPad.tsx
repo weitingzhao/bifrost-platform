@@ -8,11 +8,11 @@ import { fetchReleaseGate, fetchReleaseState, fetchStgSmoke, fetchTierBStatus } 
 import type { MatrixResponse } from '@/api/matrixTypes'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
-import { gateStepStatus, runStepStatus, pickDeployPipelineRun } from '@/components/delivery/ReleaseStepCommandCenter'
+import { gateStepStatus, runStepStatus, pickDeployPipelineRun } from '@/lib/delivery/releaseStepTypes'
 import {
   useRocketProdReadiness,
   useSatelliteProdReadiness,
-} from '@/components/task-mode/TaskModeReadinessStrip'
+} from '@/components/task-mode/readiness/hooks'
 import { countsTowardTradeReadiness } from '@/lib/control-room/matrixSummary'
 import {
   DELIVER_PLATFORM_PIPELINE,

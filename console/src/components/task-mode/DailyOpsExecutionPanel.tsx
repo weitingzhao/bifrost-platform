@@ -43,7 +43,7 @@ import {
   remediationJobStatusLabel,
   remediationScopeShortLabel,
 } from '@/lib/remediation/remediationJobDisplay'
-import { useDailyOpsContext } from '@/components/task-mode/daily-ops/DailyOpsContext'
+import { useDailyOpsContext } from '@/components/task-mode/daily-ops/useDailyOpsContext'
 
 export type DailyOpsExecutionTab = 'now' | 'queue-history'
 
@@ -318,8 +318,11 @@ export function DailyOpsExecutionPanel({
   }, [preferNow, ambientJobId, checklistItemFixActiveId, showStartingHint])
 
   const queueQ = useOperateQueue()
-  const open = queueQ.data?.open ?? []
-  const recentClosed = queueQ.data?.recent_closed ?? []
+  const open = useMemo(() => queueQ.data?.open ?? [], [queueQ.data?.open])
+  const recentClosed = useMemo(
+    () => queueQ.data?.recent_closed ?? [],
+    [queueQ.data?.recent_closed],
+  )
 
   const lastSweepQ = useQuery({
     queryKey: OPERATE_SWEEP_LAST_KEY,
@@ -352,7 +355,7 @@ export function DailyOpsExecutionPanel({
     queryFn: fetchRemediationJobs,
     refetchInterval: 15_000,
   })
-  const allJobs = jobsQ.data?.jobs ?? []
+  const allJobs = useMemo(() => jobsQ.data?.jobs ?? [], [jobsQ.data?.jobs])
 
   const partitioned = useMemo(
     () => partitionOpenQueue(open, { drainItemIds }),

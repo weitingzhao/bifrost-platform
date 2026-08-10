@@ -41,7 +41,7 @@ import type {
   useRocketProdReadiness,
   useSatelliteDeployOverall,
   useSatelliteProdReadiness,
-} from '@/components/task-mode/TaskModeReadinessStrip'
+} from '@/components/task-mode/readiness/hooks'
 
 import type { StgSmokeResponse } from '@/api/deliveryTypes'
 /**

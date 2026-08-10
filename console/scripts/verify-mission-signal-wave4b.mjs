@@ -15,7 +15,7 @@ function check(name, ok, detail) {
   checks.push({ name, ok, detail })
 }
 
-const yaml = readRepo('config/programs/mission-signal.yaml')
+const yaml = readRepo('config/programs/completed/mission-signal.yaml')
 const catalog = read('src/lib/architecture/missionSignalCatalog.ts')
 
 check('mission-signal.yaml has P1–P7', ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'].every(id => yaml.includes(`id: ${id}`)))

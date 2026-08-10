@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Daily Ops Checklist probe (L0) — 18 items via remediation scope daily-ops-checklist-run.
+# Daily Ops Checklist probe (L0) — 19 items via remediation scope daily-ops-checklist-run.
 # Naming lock: AI Check (TCC Checklist) == this scope. Distinct from:
 #   - Fleet cell Fix (per-cell remediation scopes)
 #   - Operator Plane Fix (operator-plane-remediate)
@@ -53,7 +53,7 @@ fi
 PROMPT=$(cat <<'EOF'
 Scheduled Daily Ops Checklist probe (scope daily-ops-checklist-run).
 1. Call verify_mission_snapshot, get_cluster_summary, get_agent_bridge, get_gitops_apps, get_stg_smoke, get_delivery_pipelines.
-2. Map evidence to all 18 checklist item_ids (ok/degraded/fail/unknown).
+2. Map evidence to all 19 checklist item_ids (ok/degraded/fail/unknown).
 3. Call report_checklist_signals with auto_dispatch=true and the full signals array.
 4. Do not actuate directly in this job — platform gates dispatch (D10: never auto IB).
 EOF

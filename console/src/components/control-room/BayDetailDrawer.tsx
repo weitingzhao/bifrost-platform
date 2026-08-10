@@ -1,7 +1,7 @@
 import { Button, DenseTag, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHeadRow, DenseTableRow, DenseTableHead, DenseTableCell } from '@bifrost/ui'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { milestoneStatusVariant } from '@/components/FocusStrip'
+import { milestoneStatusVariant } from '@/components/focusStripUtils'
 import { getBay } from '@/lib/control-room/bayRegistry'
 import { filterTargetsForBay } from '@/lib/control-room/matrixSummary'
 import type { ControlRoomSelection } from '@/components/control-room/DualFlywheelPanel'

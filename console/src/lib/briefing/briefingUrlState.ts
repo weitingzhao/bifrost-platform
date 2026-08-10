@@ -9,7 +9,7 @@ import {
 } from '@/lib/briefing/briefingViewTabs'
 import { isLaneId, type LaneId } from '@/lib/briefing/workLanes'
 import type { TrackId } from '@/lib/briefing/workTracks'
-import type { TaskModeBriefingContext } from '@/lib/task-mode/TaskModeContext'
+import type { TaskModeBriefingContext } from '@/lib/task-mode/taskModeBriefing'
 
 export const BRIEFING_VIEW_PARAM = 'view'
 export const BRIEFING_TRACK_TYPE_PARAM = 'tt'

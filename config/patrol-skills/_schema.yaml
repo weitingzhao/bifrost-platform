@@ -1,0 +1,55 @@
+# Patrol Skill Schema
+# ============================================================
+# Each YAML file under config/patrol-skills/ (except _*.yaml)
+# declares one Patrol skill. platform-api loads them at boot
+# (api/internal/patrol). Runtime enable + run history live in
+# a local JSON file — not a database.
+#
+# Override directory: PATROL_SKILLS_DIR
+# Default: <platform-root>/config/patrol-skills
+# ============================================================
+
+# --- Required ---
+
+id: string              # kebab-case, unique; ^[a-z][a-z0-9-]{1,62}$
+name: string            # display name
+description: string
+schedule: string        # 5-field cron (min hour dom month dow), UTC
+prompt_template: string # sent to Cursor Agent; keep read-only intent for L0
+mcp_tools: [string]     # must be real catalog ids (see api/internal/mcp/catalog.go)
+trust_level: enum       # L0 | L1 | L2
+scope: string           # free-text scope label (fleet, cluster, …)
+timeout: int            # seconds (JSON API field: timeout_seconds)
+
+# --- Optional ---
+
+enabled: bool           # YAML default; runtime overlay in state.json. Default true.
+cron_actuation: enum    # confirm | escalate
+                        # L1 cron: default escalate (do not write).
+                        # Set confirm to allow L1 cron write after Owner policy.
+                        # L0 ignores this. L2 always escalates.
+
+# --- Trust (Wave 4) ---
+#
+# L0  read-only. mcp_tools must all be catalog level=read.
+#     Write tools at load → skill rejected. At trigger → escalated.
+# L1  manual trigger may use write tools (Owner confirm implied).
+#     cron trigger escalates unless cron_actuation: confirm.
+# L2  reserved. Any automatic execution escalates; never dispatch.
+#
+# D10: never include live trading / place_order tools.
+
+# --- Example ---
+#
+# id: fleet-drift-scan
+# name: Fleet Drift Scan
+# description: Compare mission snapshot vs connectivity matrix.
+# schedule: "0 3 * * *"
+# trust_level: L0
+# scope: fleet
+# timeout: 180
+# mcp_tools:
+#   - verify_mission_snapshot
+#   - get_connectivity_matrix
+# prompt_template: |
+#   Read fleet health. Report drift. Do not mutate.

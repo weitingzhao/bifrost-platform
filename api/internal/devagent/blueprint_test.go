@@ -42,11 +42,11 @@ func TestLoadProgramBlueprints(t *testing.T) {
 func TestRenderPrompt(t *testing.T) {
 	tmpl := "Execute {{phase_id}}. Follow {{skill_path}}. Verify: {{verify_cmd}}"
 	got := renderPrompt(tmpl, map[string]string{
-		"phase_id":   "TIBM4",
+		"phase_id":   "P5",
 		"skill_path": ".cursor/skills/ib-migration/SKILL.md",
 		"verify_cmd": "make verify",
 	})
-	if !strings.Contains(got, "TIBM4") {
+	if !strings.Contains(got, "P5") {
 		t.Fatalf("missing phase_id: %q", got)
 	}
 	if !strings.Contains(got, ".cursor/skills/ib-migration/SKILL.md") {
@@ -86,14 +86,11 @@ func TestNewHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
-	if h.activeProgramID == "" {
-		t.Fatal("expected an active program")
-	}
-	rt := h.activeRuntime()
+	rt := h.runtimes["trade-ib-client-migration"]
 	if rt == nil {
-		t.Fatalf("expected active runtime for %q", h.activeProgramID)
+		t.Fatal("expected runtime for trade-ib-client-migration")
 	}
 	if len(rt.phases) == 0 {
-		t.Fatalf("expected phases for active program %q", h.activeProgramID)
+		t.Fatal("expected phases for trade-ib-client-migration")
 	}
 }

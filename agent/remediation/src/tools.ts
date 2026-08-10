@@ -613,7 +613,7 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
     report_checklist_signals: {
       description:
         'Merge Daily Ops Checklist per-item signals into platform-api (POST /api/v1/checklist/signals). ' +
-        'Call at end of daily-ops-checklist-run with all 18 item_ids.',
+        'Call at end of daily-ops-checklist-run with all 19 item_ids.',
       inputSchema: {
         type: 'object',
         properties: {

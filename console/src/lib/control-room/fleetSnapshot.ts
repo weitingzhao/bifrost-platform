@@ -410,7 +410,7 @@ export function fleetRoleNavigateTab(role: FleetRole): string {
     case 'satellite':
       return 'satellite-bus'
     case 'engineer':
-      return 'agent-desk'
+      return 'queue'
     case 'ground':
       return 'operator-plane'
     case 'vendor':

@@ -17,7 +17,7 @@ import {
 } from '@/lib/control-room/dailyOpsWorkflow'
 import type { FleetVerdictKind } from '@/lib/control-room/fleetSnapshot'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
-import { useDailyOpsContext } from '@/components/task-mode/daily-ops/DailyOpsContext'
+import { useDailyOpsContext } from '@/components/task-mode/daily-ops/useDailyOpsContext'
 
 const VERDICT_VARIANT: Record<FleetVerdictKind, 'success' | 'warning' | 'danger'> = {
   GO: 'success',
@@ -47,7 +47,7 @@ const DAILY_OPS_HELP_LINKS: { label: string; tabId: string }[] = [
   { label: 'Topology', tabId: 'runtime-map' },
   { label: 'Cluster', tabId: 'cluster' },
   { label: 'Operator Plane', tabId: 'operator-plane' },
-  { label: 'Agent Desk', tabId: 'agent-desk' },
+  { label: 'Queue', tabId: 'queue' },
   { label: 'Defects', tabId: 'defects' },
   { label: 'Agent Protocol', tabId: 'agent-protocol' },
 ]
@@ -612,7 +612,7 @@ export function DailyOpsAgentLivePanel({
             className="text-[var(--text-dense-caption)] text-muted-foreground hover:text-primary hover:underline"
             onClick={() => onOpenAgentDesk(jobId)}
           >
-            Open in Agent Desk
+            Open in Queue
           </button>
         )}
         {succeeded && onVerifyReprobe != null && (

@@ -10,7 +10,7 @@ import { fetchSupplyChain } from '@/api/delivery'
 import {
   useRocketLaunchOverall,
   useSatelliteDeployOverall,
-} from '@/components/task-mode/TaskModeReadinessStrip'
+} from '@/components/task-mode/readiness/hooks'
 import { buildDeliverStgRecoverPrompt, isDeliverStgStaleFailure } from '@/lib/agent/deliverStgRecoverPrompt'
 import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
 import {
@@ -32,7 +32,7 @@ import type { TaskModeId } from '@/lib/task-mode/types'
 import type { OpenRuntimeMapFn } from '@/lib/runtime-map/runtimeMapNavigation'
 
 type DetailScope = 'mission' | MissionDegradationSegment
-type LaunchViewMode = Extract<TaskModeId, 'mission-launch'>
+type LaunchViewMode = Extract<TaskModeId, 'ops'>
 
 interface MissionBoardProps {
   snapshot: MissionSnapshot
@@ -228,14 +228,14 @@ export function MissionBoard({
             ? 'Starting…'
             : canOperate && onPlaybookFix != null
               ? 'Propose commit'
-              : 'Agent Desk →',
+              : 'Queue →',
         onClick: startGitDirtyRemediate,
       }
     }
     if (item.segment === 'rocket') {
-      return { label: 'Mission Launch →', onClick: () => onOpenLaunchView('mission-launch') }
+      return { label: 'Mission Launch →', onClick: () => onOpenLaunchView('ops') }
     }
-    return { label: 'Mission Launch →', onClick: () => onOpenLaunchView('mission-launch') }
+    return { label: 'Mission Launch →', onClick: () => onOpenLaunchView('ops') }
   }
 
   const toggleScope = (scope: DetailScope) => {
@@ -318,8 +318,8 @@ export function MissionBoard({
           <button
             type="button"
             className="mission-board-segment mission-board-segment-btn mission-board-segment-btn--launch"
-            onClick={() => onOpenLaunchView('mission-launch')}
-            title={`Open ${launchViewLabel('mission-launch')} — STG ${missionStatus(rocketLaunch.stgOverall)} · PROD ${missionStatus(rocketLaunch.prodOverall)}`}
+            onClick={() => onOpenLaunchView('ops')}
+            title={`Open ${launchViewLabel('ops')} — STG ${missionStatus(rocketLaunch.stgOverall)} · PROD ${missionStatus(rocketLaunch.prodOverall)}`}
           >
             <span className="mission-board-seg-label">Rocket</span>
             <span className="mission-board-seg-val" style={{ color: missionStatusColor(rocketMission) }}>
@@ -352,8 +352,8 @@ export function MissionBoard({
           <button
             type="button"
             className="mission-board-segment mission-board-segment-btn mission-board-segment-btn--launch"
-            onClick={() => onOpenLaunchView('mission-launch')}
-            title={`Open ${launchViewLabel('mission-launch')} — STG ${missionStatus(satelliteDeploy.stgOverall)} · PROD ${missionStatus(satelliteDeploy.prodOverall)}`}
+            onClick={() => onOpenLaunchView('ops')}
+            title={`Open ${launchViewLabel('ops')} — STG ${missionStatus(satelliteDeploy.stgOverall)} · PROD ${missionStatus(satelliteDeploy.prodOverall)}`}
           >
             <Satellite size={16} style={{ color: missionStatusColor(payloadMission) }} />
             <span className="mission-board-seg-label">Payload</span>
@@ -394,7 +394,7 @@ export function MissionBoard({
               title={
                 degradationItems.some(isAgentDirtyCause)
                   ? 'Start git-dirty-remediate — approval required before commit/stash'
-                  : 'Open Agent Desk with a pre-filled diagnostic prompt based on current failures'
+                  : 'Open Queue with a pre-filled diagnostic prompt based on current failures'
               }
             >
               <Wrench size={14} />
@@ -448,7 +448,7 @@ export function MissionBoard({
                   title={
                     missionCauseItems.some(isAgentDirtyCause)
                       ? 'Start git-dirty-remediate — approval required before commit/stash'
-                      : 'Open Agent Desk with diagnostic prefill'
+                      : 'Open Queue with diagnostic prefill'
                   }
                 >
                   <Wrench size={12} className="mr-1" aria-hidden />
@@ -513,7 +513,7 @@ export function MissionBoard({
               </p>
             </div>
             <div className="mission-board-detail-actions">
-              <Button variant="ghost" size="xs" onClick={() => onOpenLaunchView('mission-launch')}>
+              <Button variant="ghost" size="xs" onClick={() => onOpenLaunchView('ops')}>
                 Mission Launch →
               </Button>
             </div>

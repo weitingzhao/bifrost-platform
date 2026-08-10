@@ -1,6 +1,8 @@
 import type { ClusterSummary } from '@/api/clusterTypes'
+import { isAllSatelliteBusDeep } from '@/api/core'
 import type { ReleaseGateResponse } from '@/api/deliveryTypes'
 import type {
+  AllSatelliteBusDeepResponse,
   SatelliteBusDeepResponse,
   SatelliteBusSocketComponent,
 } from '@/api/satelliteBusTypes'
@@ -223,6 +225,15 @@ export function selfHealthEnvSignal(
 
 export function isProdReleaseBlocked(signal: Signal): boolean {
   return signal === 'fail' || signal === 'degraded'
+}
+
+export function busForEnv(
+  data: SatelliteBusDeepResponse | AllSatelliteBusDeepResponse | undefined,
+  env: 'stg' | 'prod',
+): SatelliteBusDeepResponse | undefined {
+  if (data == null) return undefined
+  if (isAllSatelliteBusDeep(data)) return data.buses.find(b => b.environment === env)
+  return data
 }
 
 /** Prefer Account sync when selecting FixBar primary chip so pair-asymmetric gets restart action. */

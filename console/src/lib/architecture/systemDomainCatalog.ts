@@ -156,6 +156,7 @@ export const SCOPE_TO_SYSTEM_DOMAIN: Record<string, SystemDomainId> = {
   // Engineer — agent / operator plane
   ops: 'engineer',
   'agent-desk': 'engineer',
+  queue: 'engineer',
   'agent-capability': 'engineer',
   'operator-plane-remediate': 'engineer',
   'git-dirty-remediate': 'engineer',

@@ -7,8 +7,8 @@ import {
   BriefingLifecycleStackMeter,
   BriefingStatusBadge,
   BriefingStatusLamp,
-  briefingDigestTileClass,
 } from '@/components/briefing/BriefingStatusChrome'
+import { briefingDigestTileClass } from '@/components/briefing/briefingStatusChromeClasses'
 import {
   computeScopeWorkSummary,
   isLaneLifecycleHold,

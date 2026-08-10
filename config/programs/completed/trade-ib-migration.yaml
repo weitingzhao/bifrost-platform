@@ -1,0 +1,89 @@
+id: trade-ib-migration
+title: Trade IB Migration
+description: Gateway RPC cutover and rollout waves (W1–W3, STG, prod).
+status: completed
+delivery:
+  board_visible: true
+  former_location: Subcontractors → Plugin Gallery · Delivery Board
+  sign_off_mechanism: api
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/ib-migration/SKILL.md
+model: composer-2.5
+phases:
+  - id: P1
+    aliases: [TIBM0]
+    title: "P1"
+    status: done
+    sign_off:
+      required: true
+  - id: P2
+    aliases: [TIBM1]
+    title: "P2"
+    status: done
+    sign_off:
+      required: true
+  - id: P3
+    aliases: [TIBM2]
+    title: "P3"
+    status: done
+    sign_off:
+      required: true
+  - id: P4
+    aliases: [TIBM3]
+    title: "P4"
+    status: done
+    sign_off:
+      required: true
+  - id: P5
+    aliases: [TIBM4]
+    title: "P5"
+    status: done
+    sign_off:
+      required: true
+  - id: program
+    aliases: [PROGRAM]
+    title: "Program close"
+    status: done
+    sign_off:
+      required: true
+  - id: rollout-w1
+    aliases: [W1]
+    title: "Rollout W1"
+    status: done
+    sign_off:
+      required: true
+  - id: rollout-w2
+    aliases: [W2]
+    title: "Rollout W2"
+    status: done
+    sign_off:
+      required: true
+  - id: rollout-w3
+    aliases: [W3]
+    title: "Rollout W3"
+    status: done
+    sign_off:
+      required: true
+  - id: rollout-stg
+    aliases: [STG]
+    title: "Rollout STG"
+    status: done
+    sign_off:
+      required: true
+  - id: rollout-dev-compose
+    aliases: [DEV-COMPOSE]
+    title: "Rollout Dev Compose"
+    status: done
+    sign_off:
+      required: true
+  - id: rollout-prod
+    aliases: [PROD]
+    title: "Rollout Prod"
+    status: done
+    sign_off:
+      required: true
+metadata:
+  created_at: "2026-07-07"
+  owner: vision-mac-trader
+  lane_id: trade-stack
+  tags: [delivery-board, trade-ib]

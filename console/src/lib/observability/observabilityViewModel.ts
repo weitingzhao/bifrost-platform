@@ -769,8 +769,9 @@ function routeLabel(route: string): string {
       return 'Satellite → API & Auth Probes'
     case 'plugin-gallery':
       return 'Subcontractors → Plugin Gallery'
+    case 'queue':
     case 'agent-desk':
-      return 'Engineer → Agent Desk'
+      return 'Engineer → Queue'
     case 'operator-plane':
       return 'Engineer → Operator Plane'
     case 'network':

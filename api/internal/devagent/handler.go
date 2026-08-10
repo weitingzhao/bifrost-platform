@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
@@ -52,34 +49,16 @@ type Job struct {
 	Status        JobStatus `json:"status"`
 	Output        string    `json:"output"`
 	Summary       string    `json:"summary,omitempty"`
+	StartedAt     string    `json:"started_at,omitempty"`
 	CompletedAt   string    `json:"completed_at,omitempty"`
+	ApprovedBy    string    `json:"approved_by,omitempty"`
 	CursorAgentID string    `json:"cursor_agent_id,omitempty"`
 }
 
-type StatusResponse struct {
-	Project   string       `json:"project"`
-	Program   ProgramInfo  `json:"program"`
-	Phases    []Phase      `json:"phases"`
-	ActiveJob *Job         `json:"active_job"`
-	History   []Job        `json:"history"`
-}
-
-type ProgramDetailResponse struct {
-	Program ProgramInfo   `json:"program"`
-	Phases  []PhaseDetail `json:"phases"`
-	Bridge  BridgeConfig  `json:"bridge"`
-	Active  bool          `json:"active"`
-}
-
-type PhaseDetail struct {
-	ID             string   `json:"id"`
-	Title          string   `json:"title"`
-	Status         string   `json:"status"`
-	VerifyCmd      string   `json:"verify_cmd,omitempty"`
-	Acceptance     []string `json:"acceptance,omitempty"`
-	DependsOn      []string `json:"depends_on,omitempty"`
-	RenderedPrompt string   `json:"rendered_prompt,omitempty"`
-	SkillInjected  bool     `json:"skill_injected,omitempty"`
+type ProgramJobsResponse struct {
+	ProgramID string `json:"program_id"`
+	ActiveJob *Job   `json:"active_job"`
+	History   []Job  `json:"history"`
 }
 
 type BridgeConfig struct {
@@ -87,14 +66,6 @@ type BridgeConfig struct {
 	Model       string `json:"model"`
 	SkillPath   string `json:"skill_path,omitempty"`
 	SkillLoaded bool   `json:"skill_loaded"`
-}
-
-type StartRequest struct {
-	PhaseID string `json:"phase_id"`
-}
-
-type RejectRequest struct {
-	Feedback string `json:"feedback"`
 }
 
 type programRuntime struct {
@@ -106,16 +77,16 @@ type programRuntime struct {
 }
 
 type Handler struct {
-	mu              sync.Mutex
-	runtimes        map[string]*programRuntime
-	activeProgramID string
-	blueprintDir    string
-	repoRoot        string
-	configDir       string
-	bridgeCmd       string
-	store           *FileStore
-	operateQueue    *operatequeue.Handler
-	sessionStore    sessionValidator
+	mu             sync.Mutex
+	runtimes       map[string]*programRuntime
+	blueprintDir   string
+	repoRoot       string
+	configDir      string
+	store          *FileStore
+	operateQueue   *operatequeue.Handler
+	sessionStore   sessionValidator
+	audit          *actuation.AuditLog
+	namingWarnings []NamingWarning
 }
 
 // sessionValidator is the progress-hook surface from api/internal/sessions.
@@ -125,6 +96,10 @@ type sessionValidator interface {
 
 func (h *Handler) BindOperateQueue(oq *operatequeue.Handler) {
 	h.operateQueue = oq
+}
+
+func (h *Handler) BindAudit(a *actuation.AuditLog) {
+	h.audit = a
 }
 
 func (h *Handler) BindSessions(sv sessionValidator) {
@@ -152,12 +127,12 @@ func NewHandler(configDir string) (*Handler, error) {
 	store := NewFileStore(configDir)
 	repoRoot := filepath.Dir(configDir)
 	h := &Handler{
-		bridgeCmd:    "node",
-		repoRoot:     repoRoot,
-		configDir:    configDir,
-		blueprintDir: programsDir,
-		runtimes:     make(map[string]*programRuntime, len(blueprints)),
-		store:        store,
+		repoRoot:       repoRoot,
+		configDir:      configDir,
+		blueprintDir:   programsDir,
+		runtimes:       make(map[string]*programRuntime, len(blueprints)),
+		store:          store,
+		namingWarnings: CollectNamingWarnings(blueprints),
 	}
 
 	for _, bp := range blueprints {
@@ -169,6 +144,7 @@ func NewHandler(configDir string) (*Handler, error) {
 		if saved, loadErr := store.LoadProgram(bp.ID); loadErr != nil {
 			return nil, loadErr
 		} else if saved != nil {
+			remapped := RemapPhaseIDs(saved, phaseIDAliasMap(bp))
 			rt.phases = mergePhasesFromState(bp, saved.Phases)
 			rt.activeJob = saved.ActiveJob
 			rt.history = saved.History
@@ -176,26 +152,16 @@ func NewHandler(configDir string) (*Handler, error) {
 			if rt.history == nil {
 				rt.history = []Job{}
 			}
+			if remapped {
+				h.runtimes[bp.ID] = rt
+				if persistErr := h.persistRuntimeLocked(bp.ID); persistErr != nil {
+					return nil, persistErr
+				}
+			}
 		} else {
 			rt.state = &ProgramStateRecord{ProgramID: bp.ID, History: []Job{}}
 		}
 		h.runtimes[bp.ID] = rt
-	}
-
-	activeID, err := store.LoadActiveProgramID()
-	if err != nil {
-		return nil, err
-	}
-	if activeID != "" {
-		if _, ok := h.runtimes[activeID]; ok {
-			h.activeProgramID = activeID
-		}
-	}
-	if h.activeProgramID == "" {
-		h.activeProgramID = pickDefaultActive(blueprints)
-	}
-	if err := store.SaveActiveProgramID(h.activeProgramID); err != nil {
-		return nil, err
 	}
 
 	if err := h.syncVisionSignoffsFromGateFiles(); err != nil {
@@ -224,6 +190,9 @@ func (h *Handler) persistRuntimeLocked(programID string) error {
 	if !ok {
 		return fmt.Errorf("program runtime not found: %s", programID)
 	}
+	if rt.blueprint != nil && isClosedProgramStatus(rt.blueprint.Status) {
+		return nil
+	}
 	if rt.state == nil {
 		rt.state = &ProgramStateRecord{ProgramID: programID, History: []Job{}}
 	}
@@ -234,37 +203,28 @@ func (h *Handler) persistRuntimeLocked(programID string) error {
 	return h.store.SaveProgramRecord(rt.state)
 }
 
-func (h *Handler) persistActiveLocked() error {
-	return h.store.SaveActiveProgramID(h.activeProgramID)
-}
-
-func pickDefaultActive(blueprints []*ProgramBlueprint) string {
-	for _, bp := range blueprints {
-		if bp.ID == "trade-ib-migration" || bp.ID == "trade-ib-client-migration" {
-			return bp.ID
-		}
-	}
-	for _, bp := range blueprints {
-		if bp.Status == "active" && bp.Workspace != "" {
-			return bp.ID
-		}
-	}
-	return blueprints[0].ID
-}
-
-func (h *Handler) activeRuntime() *programRuntime {
-	return h.runtimes[h.activeProgramID]
-}
-
 func (h *Handler) HandlePrograms(w http.ResponseWriter, r *http.Request) {
 	boardOnly := r.URL.Query().Get("board") == "1" || r.URL.Query().Get("board") == "true"
 	templateFilter := strings.TrimSpace(r.URL.Query().Get("template_id"))
 	laneFilter := strings.TrimSpace(r.URL.Query().Get("lane_id"))
+	statusFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+	includeArchived := queryFlagTrue(r.URL.Query().Get("include_archived"))
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	list := make([]ProgramSummary, 0, len(h.runtimes))
 	for id, rt := range h.runtimes {
+		bpStatus := ""
+		if rt.blueprint != nil {
+			bpStatus = strings.ToLower(strings.TrimSpace(rt.blueprint.Status))
+		}
+		if statusFilter != "" {
+			if bpStatus != statusFilter {
+				continue
+			}
+		} else if !includeArchived && isArchivedStatus(bpStatus) {
+			continue
+		}
 		if boardOnly && (rt.blueprint.Delivery == nil || !rt.blueprint.Delivery.BoardVisible) {
 			continue
 		}
@@ -277,7 +237,17 @@ func (h *Handler) HandlePrograms(w http.ResponseWriter, r *http.Request) {
 		}
 		list = append(list, sum)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"programs": list})
+	warnings := h.namingWarnings
+	if warnings == nil {
+		warnings = []NamingWarning{}
+	}
+	// Collisions are a full-runtime scan (same as startup). Board/lane filters
+	// must not hide a D2 break that still exists in memory.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"programs":             list,
+		"live_lane_collisions": h.liveLaneCollisionsLocked(),
+		"naming_warnings":      warnings,
+	})
 }
 
 func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) ProgramSummary {
@@ -299,6 +269,9 @@ func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) Prog
 	phaseCount := len(rt.blueprint.Phases)
 	gatesRequired := countSignOffRequiredPhases(rt.blueprint)
 	complete := programCompleteFromGates(gatesRequired, signed, phaseCount, phasesDone)
+	allPhasesDone := phaseCount > 0 && phasesDone == phaseCount
+	pendingCount, promptReady := pendingAndPromptReady(rt.blueprint, doneFromPhases)
+	jobStatus := runtimeJobStatusFromJob(rt.activeJob)
 	summary := ProgramSummary{
 		ID:                   programID,
 		Title:                rt.blueprint.Title,
@@ -311,9 +284,13 @@ func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) Prog
 		Signed:               signed,
 		SignOffRequiredCount: gatesRequired,
 		Complete:             complete,
-		AllPhasesDone:        phaseCount > 0 && phasesDone == phaseCount,
-		Active:               programID == h.activeProgramID,
+		AllPhasesDone:        allPhasesDone,
+		Active:               isSelectableActiveStatus(rt.blueprint.Status),
 		Delivery:             rt.blueprint.Delivery,
+		RuntimeJobStatus:     jobStatus,
+		PendingCount:         pendingCount,
+		PromptReady:          promptReady,
+		RuntimeBucket:        ClassifyRuntimeBucket(jobStatus, rt.blueprint.Status, allPhasesDone, promptReady, pendingCount),
 	}
 	if rt.state != nil && rt.state.LaneID != "" {
 		summary.LaneID = rt.state.LaneID
@@ -335,20 +312,7 @@ func (h *Handler) buildProgramSummary(programID string, rt *programRuntime) Prog
 	return summary
 }
 
-func (h *Handler) HandlePersistence(w http.ResponseWriter, _ *http.Request) {
-	h.mu.Lock()
-	activeID := h.activeProgramID
-	h.mu.Unlock()
-
-	info, err := h.store.ListInfo(activeID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, info)
-}
-
-func (h *Handler) HandleActivateProgram(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleProgramJobs(w http.ResponseWriter, r *http.Request) {
 	programID := chi.URLParam(r, "programId")
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -358,303 +322,16 @@ func (h *Handler) HandleActivateProgram(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "program not found"})
 		return
 	}
-	if rt.activeJob != nil && rt.activeJob.Status == JobRunning {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot switch program while agent is running"})
-		return
+
+	history := rt.history
+	if history == nil {
+		history = []Job{}
 	}
-
-	h.activeProgramID = programID
-	if err := h.persistActiveLocked(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, h.programDetailBoardResponse(programID, rt))
-}
-
-func (h *Handler) HandleStatus(w http.ResponseWriter, _ *http.Request) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	rt := h.activeRuntime()
-	if rt == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "no active program"})
-		return
-	}
-
-	bp := rt.blueprint
-	resp := StatusResponse{
-		Project: bp.ID,
-		Program: ProgramInfo{
-			ID:          bp.ID,
-			Title:       bp.Title,
-			Description: bp.Description,
-			Status:      bp.Status,
-		},
-		Phases:    rt.phases,
+	writeJSON(w, http.StatusOK, ProgramJobsResponse{
+		ProgramID: programID,
 		ActiveJob: rt.activeJob,
-		History:   rt.history,
-	}
-	if resp.History == nil {
-		resp.History = []Job{}
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
-	var req StartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-
-	h.mu.Lock()
-	rt := h.activeRuntime()
-	if rt == nil {
-		h.mu.Unlock()
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "no active program"})
-		return
-	}
-	if rt.activeJob != nil && rt.activeJob.Status == JobRunning {
-		h.mu.Unlock()
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "agent already running"})
-		return
-	}
-
-	var targetPhase *Phase
-	for i := range rt.phases {
-		if rt.phases[i].ID == req.PhaseID {
-			targetPhase = &rt.phases[i]
-			break
-		}
-	}
-	if targetPhase == nil {
-		h.mu.Unlock()
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "phase not found"})
-		return
-	}
-
-	job := &Job{
-		ID:      uuid.New().String(),
-		PhaseID: req.PhaseID,
-		Status:  JobRunning,
-		Output:  "",
-	}
-	targetPhase.Status = PhaseRunning
-	targetPhase.StartedAt = time.Now().UTC().Format(time.RFC3339)
-	rt.activeJob = job
-	programID := h.activeProgramID
-	if err := h.persistRuntimeLocked(programID); err != nil {
-		h.mu.Unlock()
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	h.mu.Unlock()
-
-	go h.runBridge(programID, job)
-
-	writeJSON(w, http.StatusAccepted, job)
-}
-
-func (h *Handler) HandleApprove(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	h.mu.Lock()
-
-	rt := h.activeRuntime()
-	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != id {
-		h.mu.Unlock()
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
-		return
-	}
-
-	rt.activeJob.Status = JobDone
-	rt.activeJob.CompletedAt = time.Now().UTC().Format(time.RFC3339)
-
-	rt.history = append([]Job{*rt.activeJob}, rt.history...)
-	archived := *rt.activeJob
-	phaseID := archived.PhaseID
-	programID := h.activeProgramID
-	rt.activeJob = nil
-	if err := h.persistRuntimeLocked(programID); err != nil {
-		h.mu.Unlock()
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	h.mu.Unlock()
-
-	by := actuation.PrincipalFromContext(r.Context()).Name
-	if by == "" {
-		by = "owner"
-	}
-	notes := "Dev Agent phase verified"
-	if err := h.RecordPhaseSignoff(programID, phaseID, by, archived.CompletedAt, notes); err != nil {
-		if strings.Contains(err.Error(), "already signed off") {
-			writeJSON(w, http.StatusOK, archived)
-			return
-		}
-		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, archived)
-}
-
-func (h *Handler) HandleReject(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	var req RejectRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
-
-	h.mu.Lock()
-	rt := h.activeRuntime()
-	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != id {
-		h.mu.Unlock()
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
-		return
-	}
-
-	rt.activeJob.Status = JobRunning
-	rt.activeJob.Output += fmt.Sprintf("\n\n--- Owner feedback ---\n%s\n--- Resuming agent ---\n", req.Feedback)
-	programID := h.activeProgramID
-	job := rt.activeJob
-	if err := h.persistRuntimeLocked(programID); err != nil {
-		h.mu.Unlock()
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	h.mu.Unlock()
-
-	go h.resumeBridge(programID, job, req.Feedback)
-
-	writeJSON(w, http.StatusOK, job)
-}
-
-func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	rt := h.activeRuntime()
-	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != id {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
-		return
-	}
-
-	rt.activeJob.Status = JobCancelled
-	rt.activeJob.CompletedAt = time.Now().UTC().Format(time.RFC3339)
-
-	for i := range rt.phases {
-		if rt.phases[i].ID == rt.activeJob.PhaseID {
-			rt.phases[i].Status = PhasePending
-			break
-		}
-	}
-
-	rt.history = append([]Job{*rt.activeJob}, rt.history...)
-	archived := *rt.activeJob
-	rt.activeJob = nil
-	if err := h.persistRuntimeLocked(h.activeProgramID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, archived)
-}
-
-func (h *Handler) bridgeScriptPath() string {
-	return filepath.Join(h.repoRoot, "scripts", "dev-agent", "dist", "bridge.js")
-}
-
-func (h *Handler) bridgeArgs(bp *ProgramBlueprint, phaseID string, extra ...string) []string {
-	prompt := promptForPhase(bp, phaseID)
-	args := []string{
-		h.bridgeScriptPath(),
-		"--prompt", prompt,
-		"--phase", phaseID,
-		"--workspace", bp.Workspace,
-		"--model", bp.Model,
-	}
-	if strings.TrimSpace(bp.SkillPath) != "" {
-		args = append(args, "--skill-path", bp.SkillPath)
-	}
-	args = append(args, extra...)
-	return args
-}
-
-func (h *Handler) runBridgeCommand(args []string) ([]byte, error) {
-	cmd := exec.Command(h.bridgeCmd, args...)
-	cmd.Dir = h.repoRoot
-	return cmd.CombinedOutput()
-}
-
-func (h *Handler) runBridge(programID string, job *Job) {
-	h.mu.Lock()
-	rt := h.runtimes[programID]
-	if rt == nil {
-		h.mu.Unlock()
-		return
-	}
-	bp := rt.blueprint
-	phaseID := job.PhaseID
-	h.mu.Unlock()
-
-	out, err := h.runBridgeCommand(h.bridgeArgs(bp, phaseID))
-
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	rt = h.runtimes[programID]
-	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != job.ID {
-		return
-	}
-
-	if err != nil {
-		rt.activeJob.Output += string(out) + "\n[Bridge error: " + err.Error() + "]"
-		rt.activeJob.Status = JobAwaitingReview
-	} else {
-		rt.activeJob.Output = string(out)
-		rt.activeJob.Status = JobAwaitingReview
-	}
-	_ = h.persistRuntimeLocked(programID)
-}
-
-func (h *Handler) resumeBridge(programID string, job *Job, feedback string) {
-	h.mu.Lock()
-	rt := h.runtimes[programID]
-	if rt == nil {
-		h.mu.Unlock()
-		return
-	}
-	bp := rt.blueprint
-	h.mu.Unlock()
-
-	prompt := fmt.Sprintf("Owner requested changes: %s\nPlease fix and re-verify.", feedback)
-	args := []string{
-		h.bridgeScriptPath(),
-		"--resume", job.CursorAgentID,
-		"--prompt", prompt,
-		"--workspace", bp.Workspace,
-		"--model", bp.Model,
-	}
-	if strings.TrimSpace(bp.SkillPath) != "" {
-		args = append(args, "--skill-path", bp.SkillPath)
-	}
-
-	out, err := h.runBridgeCommand(args)
-
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	rt = h.runtimes[programID]
-	if rt == nil || rt.activeJob == nil || rt.activeJob.ID != job.ID {
-		return
-	}
-
-	if err != nil {
-		rt.activeJob.Output += string(out) + "\n[Bridge error: " + err.Error() + "]"
-	} else {
-		rt.activeJob.Output += string(out)
-	}
-	rt.activeJob.Status = JobAwaitingReview
-	_ = h.persistRuntimeLocked(programID)
+		History:   history,
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

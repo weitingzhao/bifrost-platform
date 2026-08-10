@@ -1,23 +1,17 @@
-import { ListTodo } from 'lucide-react'
-import type { ShellNavGroup, ShellNavItem } from '@bifrost/ui'
+import type { ShellNavGroup } from '@bifrost/ui'
 import { getAllNavItems } from '@bifrost/ui'
 import type { DeliveryPipelineRunView, ReleaseGateResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { ProgramDetailResponse } from '@/api/programsTypes'
 import type { DeliveryReleasePhase } from '@/lib/architecture/deliveryMainlineCatalog'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
-import { gateStepStatus, runStepStatus } from '@/components/delivery/ReleaseStepCommandCenter'
+import { gateStepStatus, runStepStatus } from '@/lib/delivery/releaseStepTypes'
 import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 import { isGatesComplete, isProgramCatalogComplete } from '@/lib/briefing/programClose'
+import type { PatrolRun } from '@/api/patrol'
+import { latestPatrolRun } from '@/lib/patrol/patrolStatus'
 import { taskModeById } from './taskModeCatalog'
 import type { TaskModeId, TaskPhaseDef, TaskPhaseStatus } from './types'
-
-const TASK_CC_NAV_ITEM: ShellNavItem = {
-  id: 'task-cc',
-  label: 'Task Control Center',
-  icon: ListTodo,
-  shortLabel: 'T',
-}
 
 export type TaskPhaseStatusInput = {
   context?: OpsContextResponse
@@ -38,6 +32,8 @@ export type TaskPhaseStatusInput = {
   devAgentPhaseDone?: (phaseId: string) => boolean
   /** Daily Ops: true when pickFleetFixCell finds an Agent-Fixable cell (align phase CTA). */
   fleetAgentFixAvailable?: boolean
+  /** Live patrol runs (GET /api/v1/patrol/runs). Omit / empty → review stays active (Idle). */
+  patrolRuns?: PatrolRun[]
 }
 
 function filterGroupItems(group: ShellNavGroup, allowed: Set<string>): ShellNavGroup | null {
@@ -59,47 +55,30 @@ function filterGroupItems(group: ShellNavGroup, allowed: Set<string>): ShellNavG
   }
 }
 
-function injectTaskCc(groups: ShellNavGroup[]): ShellNavGroup[] {
-  if (groups.length === 0) return groups
-  const missionIdx = groups.findIndex(g => g.label === 'Mission Control')
-  const idx = missionIdx >= 0 ? missionIdx : 0
-  const target = groups[idx]
-
-  if (target.subGroups != null && target.subGroups.length > 0) {
-    const first = target.subGroups[0]
-    const already = first.items.some(i => i.id === 'task-cc')
-    const nextSubGroups = [...target.subGroups]
-    nextSubGroups[0] = {
-      ...first,
-      items: already ? first.items : [TASK_CC_NAV_ITEM, ...first.items],
-    }
-    return groups.map((g, i) => (i === idx ? { ...target, subGroups: nextSubGroups } : g))
-  }
-
-  const flatItems = target.items ?? []
-  if (flatItems.some(i => i.id === 'task-cc')) return groups
-  return groups.map((g, i) =>
-    i === idx ? { ...target, items: [TASK_CC_NAV_ITEM, ...flatItems] } : g,
-  )
-}
-
-/** Filter full CONSOLE_NAV_GROUPS to the lens for a task mode. System mode returns full groups. */
-export function buildTaskNavGroups(modeId: TaskModeId, fullGroups: ShellNavGroup[]): ShellNavGroup[] {
+/** Tab ids visible under the current Task Mode lens. `null` = System mode (no filter). */
+export function resolveAllowedTabIds(modeId: TaskModeId): Set<string> | null {
   const mode = taskModeById(modeId)
   if (mode.loopArchetype === 'system' || mode.navLens.includeTabs == null) {
-    return fullGroups
+    return null
   }
-
   const allowed = new Set(mode.navLens.includeTabs)
   if (mode.navLens.showTaskControlCenter) {
     allowed.add('task-cc')
   }
+  return allowed
+}
 
-  const filtered = fullGroups
+/**
+ * Filter remaining Mission + Support navGroups for a task mode.
+ * TCC / Mission Control / Engineer are Seat + Partner slots — never injected here.
+ */
+export function buildTaskNavGroups(modeId: TaskModeId, fullGroups: ShellNavGroup[]): ShellNavGroup[] {
+  const allowed = resolveAllowedTabIds(modeId)
+  if (allowed == null) return fullGroups
+
+  return fullGroups
     .map(g => filterGroupItems(g, allowed))
     .filter((g): g is ShellNavGroup => g != null)
-
-  return mode.navLens.showTaskControlCenter ? injectTaskCc(filtered) : filtered
 }
 
 /**
@@ -173,7 +152,7 @@ function firstIncompletePhase(phases: TaskPhaseDef[], statusOf: (id: string) => 
   return null
 }
 
-function resolveDailyOpsPhase(phaseId: string, input: TaskPhaseStatusInput): TaskPhaseStatus {
+function resolveOpsPhase(phaseId: string, input: TaskPhaseStatusInput): TaskPhaseStatus {
   const snap = input.snapshot
   const open = input.operateQueueOpenCount ?? 0
   const fleetOk = snap?.missionOverall === 'ok'
@@ -184,14 +163,32 @@ function resolveDailyOpsPhase(phaseId: string, input: TaskPhaseStatusInput): Tas
     case 'remediate':
       if (snap == null) return 'unknown'
       return fleetOk ? 'done' : 'active'
-    case 'verify':
+    case 'deploy': {
+      if (input.supplyChain != null || input.platformStgRun != null || input.platformStgGate != null) {
+        return resolveMissionLaunchPhase('stg-gate', input)
+      }
       if (snap == null) return 'unknown'
       return fleetOk ? 'done' : 'planned'
+    }
+    case 'patrol':
+      return resolvePatrolPhase('review', input)
     case 'clear': {
       if (!fleetOk) return 'planned'
       if (open === 0) return 'done'
       return 'active'
     }
+    default:
+      return 'unknown'
+  }
+}
+
+function resolveAnalysisPhase(phaseId: string, _input: TaskPhaseStatusInput): TaskPhaseStatus {
+  switch (phaseId) {
+    case 'review-insights':
+      return 'active'
+    case 'trigger-analysis':
+    case 'verify':
+      return 'planned'
     default:
       return 'unknown'
   }
@@ -307,18 +304,34 @@ function resolveDevBuildPhase(
   }
 }
 
+function resolvePatrolPhase(phaseId: string, input: TaskPhaseStatusInput): TaskPhaseStatus {
+  const latest = latestPatrolRun(input.patrolRuns ?? [])
+  switch (phaseId) {
+    case 'review':
+      if (latest == null) return 'active'
+      if (latest.result === 'failure' || latest.result === 'escalated') return 'active'
+      return 'done'
+    case 'adjust':
+      return 'planned'
+    case 'trust':
+      return 'planned'
+    default:
+      return 'unknown'
+  }
+}
+
 function rawPhaseStatus(
   modeId: TaskModeId,
   phaseId: string,
   input: TaskPhaseStatusInput,
 ): TaskPhaseStatus {
   switch (modeId) {
-    case 'daily-ops':
-      return resolveDailyOpsPhase(phaseId, input)
-    case 'mission-launch':
-      return resolveMissionLaunchPhase(phaseId, input)
+    case 'ops':
+      return resolveOpsPhase(phaseId, input)
     case 'build':
       return resolveDevBuildPhase(phaseId, input)
+    case 'analysis':
+      return resolveAnalysisPhase(phaseId, input)
     default:
       return 'unknown'
   }

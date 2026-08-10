@@ -298,7 +298,7 @@ describe('cellKey / fleetCellNavigateTab / fleetRoleNavigateTab', () => {
   it('maps each role to its default navigate tab', () => {
     expect(fleetRoleNavigateTab('rocket')).toBe('cluster')
     expect(fleetRoleNavigateTab('satellite')).toBe('satellite-bus')
-    expect(fleetRoleNavigateTab('engineer')).toBe('agent-desk')
+    expect(fleetRoleNavigateTab('engineer')).toBe('queue')
     expect(fleetRoleNavigateTab('ground')).toBe('operator-plane')
     expect(fleetRoleNavigateTab('vendor')).toBe('satellite-bus')
   })

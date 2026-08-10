@@ -2,13 +2,15 @@ import { useMemo } from 'react'
 import { LayoutGrid } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
-  BRIEFING_DPR_COLOR,
   BriefingProgressMeter,
   BriefingStatusBadge,
   BriefingStatusLamp,
+} from '@/components/briefing/BriefingStatusChrome'
+import {
+  BRIEFING_DPR_COLOR,
   briefingScopeGridCellClass,
   briefingTrackTypeCardClass,
-} from '@/components/briefing/BriefingStatusChrome'
+} from '@/components/briefing/briefingStatusChromeClasses'
 import {
   briefingLifecycleFilterLabel,
   isLaneLifecycleHold,

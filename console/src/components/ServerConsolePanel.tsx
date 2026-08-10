@@ -64,7 +64,7 @@ export function ServerConsolePanel({
     [bridgeQuery.data],
   )
 
-  const hosts = hostsQuery.data ?? []
+  const hosts = useMemo(() => hostsQuery.data ?? [], [hostsQuery.data])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const effectiveId = selectedId ?? hosts[0]?.id ?? null
   const selectedHost = hosts.find(h => h.id === effectiveId) ?? hosts[0] ?? null

@@ -1,0 +1,42 @@
+id: dev-agent--engineer-build
+title: Dev Agent Platform · Engineer Build
+description: >
+  CLOSED — Empty template instance (DAP-1 placeholder). Real Agent services delivery
+  completed via spine streams: agent-mcp-integration 3/3, release-agent-task 3/3,
+  mission-auto-remediation 5/5, trade-k8s-migration 6/6, agent-release-discipline 5/5,
+  mutual-watchdog 4/4. Retrospective Agent delivered via separate program.
+status: archived
+workspace: ""
+skill_path: ""
+model: composer-2.5
+delivery:
+    board_visible: true
+    former_location: Engineer → Dev Agent
+    sign_off_mechanism: api
+phases:
+    - id: DAP-1
+      title: Platform delivery closure
+      status: done
+      prompt_template: "Superseded — agent-services streams all closed; retrospective-agent program completed separately."
+      verify_cmd: ""
+      acceptance:
+        - "Superseded by spine streams closure + retrospective-agent program"
+      depends_on: []
+      sign_off:
+        required: true
+        checklist:
+          - "Superseded — no additional work"
+      agent_session: null
+post_completion: null
+metadata:
+    base_blueprint_id: dev-agent
+    created_at: "2026-07-13T18:01:38Z"
+    completed_at: "2026-08-05T21:30:00Z"
+    instance_label: Engineer Build
+    lane_id: agent-services
+    owner: vision-mac-trader
+    tags:
+        - delivery-board
+        - dev-agent
+        - closed-superseded
+    template_id: engineer-build

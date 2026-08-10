@@ -34,7 +34,7 @@ export function StackInstallWizardPanel({
 }: StackInstallWizardPanelProps) {
   const { canAdmin } = usePlatformAuth()
   const qc = useQueryClient()
-  const addons = data?.addons ?? []
+  const addons = useMemo(() => data?.addons ?? [], [data?.addons])
   const steps = useMemo(() => stackInstallWizardSteps(addons), [addons])
   const current = currentStackWizardStep(steps)
   const complete = stackInstallComplete(addons)

@@ -60,7 +60,7 @@ export function ComputePage({
     refetchInterval: 60_000,
   })
 
-  const clusterNodes = nodesQuery.data?.nodes ?? []
+  const clusterNodes = useMemo(() => nodesQuery.data?.nodes ?? [], [nodesQuery.data?.nodes])
 
   const selectedNodeLive = useMemo(() => {
     if (selectedNode?.name == null) return null

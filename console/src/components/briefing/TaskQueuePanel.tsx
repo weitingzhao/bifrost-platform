@@ -17,7 +17,8 @@ import {
   MIGRATE_LANE_STREAM_IDS,
   reconcileBriefing,
 } from '@/lib/briefing/reconcileBriefing'
-import { BriefingIconBadge, LANE_ICONS } from '@/lib/briefing/briefingIcons'
+import { BriefingIconBadge } from '@/lib/briefing/briefingIcons'
+import { LANE_ICONS } from '@/lib/briefing/briefingIconMaps'
 import { queueItemToBriefingStatus } from '@/lib/briefing/briefingStatus'
 import { splitQueueByCompletion } from '@/lib/briefing/queueDisplay'
 import type { QueueItem, WorkLane } from '@/lib/briefing/workLanes'

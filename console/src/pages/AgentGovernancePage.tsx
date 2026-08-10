@@ -134,7 +134,8 @@ export function AgentGovernancePage() {
             Flight Director governance — monitor Agent performance and manage per-Skill trust levels.
             KPIs sourced from <strong>remediation runner JobStore</strong>. Owner overrides persist via{' '}
             <code className="font-mono text-[var(--text-dense-caption)]">PUT /agent/governance/trust-overrides</code>{' '}
-            (Mission Signal Phase 6).
+            (Mission Signal Phase 6). Patrol skill trust (L0/L1/L2) is shown and toggled on{' '}
+            <strong>Autonomous Skills</strong> via <code className="font-mono text-[var(--text-dense-caption)]">/api/v1/patrol/*</code>.
           </>
         }
         overflow="visible"

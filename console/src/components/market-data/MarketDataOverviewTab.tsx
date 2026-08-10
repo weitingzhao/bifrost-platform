@@ -4,9 +4,8 @@ import { DataVitalsStrip } from '@/components/market-data/DataVitalsStrip'
 import {
   MarketDataFreshnessTable,
   MarketDataWorkersTable,
-  sortFreshness,
-  workerReady,
 } from '@/components/market-data/MarketDataProbeTables'
+import { sortFreshness, workerReady } from '@/components/market-data/marketDataProbeUtils'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import type { MarketDataLiveProbeState } from '@/hooks/useMarketDataLiveProbe'

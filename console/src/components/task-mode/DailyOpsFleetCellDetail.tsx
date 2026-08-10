@@ -60,8 +60,9 @@ function navigateTabLabel(tabId: string, role: FleetCell['role']): string {
       return 'Open Plugin Gallery'
     case 'operator-plane':
       return 'Open Operator Plane'
+    case 'queue':
     case 'agent-desk':
-      return 'Open Agent Desk'
+      return 'Open Queue'
     case 'satellite-bus':
       return 'Open Satellite Bus'
     case 'cluster':

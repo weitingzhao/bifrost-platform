@@ -26,6 +26,7 @@ import {
   MACOS_K8S_CONSTRAINT,
   MODEL_TIERS,
   NEED_RESOLUTION_LADDER,
+  PATROL_COMPUTE_NOTE,
   PURCHASE_PRINCIPLE,
   PURCHASE_SIGNALS,
   QUANTIZATION_GUIDE,
@@ -116,6 +117,7 @@ export function AiComputeStrategyPage() {
             ))}
           </DenseTableBody>
         </DenseDataTable>
+        <p className="mt-2 px-3 pb-2 text-[var(--text-dense-meta)] text-muted-foreground">{PATROL_COMPUTE_NOTE}</p>
       </CatalogSection>
 
       {/* Token sourcing */}

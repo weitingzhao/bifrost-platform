@@ -19,7 +19,7 @@ const panels = read('src/components/delivery/DeliveryBoardProgramPanels.tsx')
 check('Delivery Board uses ProgramDetailView', panels.includes('ProgramDetailView'))
 check('Legacy SignoffPanel removed from Delivery Board', !panels.includes('SignoffPanel'))
 
-const ngYaml = readRepo('config/programs/network-governance.yaml')
+const ngYaml = readRepo('config/programs/completed/network-governance.yaml')
 check('network-governance program YAML exists', ngYaml.includes('id: network-governance'))
 check('network-governance API sign-off mechanism', ngYaml.includes('sign_off_mechanism: api'))
 

@@ -9,6 +9,8 @@ import { ControlRoomBay } from '@/components/control-room/ControlRoomBay'
 import { ControlRoomBayCards } from '@/components/control-room/ControlRoomBayCards'
 import { ControlRoomAttentionStrip } from '@/components/control-room/ControlRoomAttentionStrip'
 import { ControlRoomVerdictStrip } from '@/components/control-room/ControlRoomVerdictStrip'
+import { AgentTriadStrip } from '@/components/task-mode/AgentTriadStrip'
+import type { TaskModeId } from '@/lib/task-mode/types'
 import { MissionTimelinePanel } from '@/components/control-room/MissionTimelinePanel'
 import { NetworkHealthPanel } from '@/components/control-room/NetworkHealthPanel'
 import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
@@ -101,9 +103,10 @@ type ControlRoomPageProps = {
   onOpenCompute?: () => void
   onOpenDefects?: () => void
   onOpenAgentDeskTab?: () => void
-  onOpenLaunchView?: (mode: 'mission-launch') => void
+  onOpenLaunchView?: (mode: 'ops') => void
   /** Trade readiness IB Fleet CTA → Daily Ops TCC */
   onOpenFleetVendor?: () => void
+  onModeChange?: (landingTab: string, modeId: TaskModeId) => void
 } & AmbientAgentShellProps
 
 function bayById(
@@ -142,6 +145,7 @@ export function ControlRoomPage({
   onOpenAgentDeskTab,
   onOpenLaunchView,
   onOpenFleetVendor,
+  onModeChange,
   ambientJobId,
   onStartAgentJob,
 }: ControlRoomPageProps) {
@@ -179,6 +183,14 @@ export function ControlRoomPage({
     refetchInterval: 10_000,
   })
   const activeAgentJobCount = findActiveRemediationJobs(jobsQuery.data?.jobs ?? []).length
+  const recentRemediationFail = useMemo(() => {
+    const jobs = jobsQuery.data?.jobs ?? []
+    if (jobs.length === 0) return false
+    const latest = [...jobs].sort(
+      (a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at),
+    )[0]
+    return latest?.status === 'failed' || latest?.phase === 'failed'
+  }, [jobsQuery.data?.jobs])
 
   const aiRelease = useAmbientAgentTask({
     canOperate,
@@ -380,6 +392,14 @@ export function ControlRoomPage({
         onSelectBay={jumpToBay}
       />
 
+      {onModeChange != null && (
+        <AgentTriadStrip
+          onModeChange={onModeChange}
+          operateQueueOpen={operateQueueQuery.data?.open.length ?? 0}
+          recentRemediationFail={recentRemediationFail}
+        />
+      )}
+
       <ControlRoomAttentionStrip items={attentionItems} onSelectBay={jumpToBay} />
 
       <ControlRoomBayCards
@@ -451,10 +471,10 @@ export function ControlRoomPage({
           >
             <LaunchPad
               role="posture"
-              onOpenTaskControlCenter={() => onOpenLaunchView?.('mission-launch')}
+              onOpenTaskControlCenter={() => onOpenLaunchView?.('ops')}
               onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
               onOpenTradeDeploy={onOpenTradeDeploy ?? onOpenDelivery}
-              onOpenPluginRelease={onOpenPluginRelease ?? onOpenLaunchView?.bind(null, 'mission-launch')}
+              onOpenPluginRelease={onOpenPluginRelease ?? onOpenLaunchView?.bind(null, 'ops')}
             />
           </ControlRoomBay>
         )}

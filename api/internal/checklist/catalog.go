@@ -31,6 +31,7 @@ var CatalogItems = []ItemMeta{
 	{ID: "git-bridge", Label: "Git bridge healthy + clean", FixScope: "git-dirty-remediate", FixCapability: FixSemiAuto},
 	{ID: "mac-probe-bridge", Label: "Mac seat · probe-bridge", FixScope: "", FixCapability: FixManual},
 	{ID: "postgres", Label: "PostgreSQL reachable", FixScope: "cluster_issues_full_auto", FixCapability: FixSemiAuto},
+	{ID: "db-backup-fresh", Label: "CNPG backup < 48h", FixScope: "data-layer-backup", FixCapability: FixSemiAuto},
 	{ID: "redis", Label: "Redis reachable", FixScope: "cluster_issues_full_auto", FixCapability: FixFullAuto},
 	{ID: "nginx-edge", Label: "Nginx / SPA edge", FixScope: "cluster_issues_full_auto", FixCapability: FixFullAuto},
 	{ID: "trade-apis", Label: "Trade APIs (9 domains)", FixScope: "cluster_issues_full_auto", FixCapability: FixFullAuto},

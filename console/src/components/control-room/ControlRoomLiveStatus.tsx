@@ -14,7 +14,7 @@ import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { StgSmokeResponse } from '@/api/deliveryTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { flywheelLabel } from '@/components/FocusStrip'
+import { flywheelLabel } from '@/components/focusStripUtils'
 import { summarizeCluster } from '@/lib/cluster/clusterHealth'
 import { countsTowardTradeReadiness } from '@/lib/control-room/matrixSummary'
 import {

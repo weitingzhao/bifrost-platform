@@ -83,7 +83,7 @@ export function useClusterPageQueries(input: ClusterPageQueriesInput) {
     refetchInterval: 30_000,
   })
 
-  const clusterNodes = nodesQuery.data?.nodes ?? []
+  const clusterNodes = useMemo(() => nodesQuery.data?.nodes ?? [], [nodesQuery.data?.nodes])
 
   /** Merge latest probe fields (unschedulable, status) — selectedNode state alone goes stale after actuation. */
   const selectedNodeLive = useMemo(() => {

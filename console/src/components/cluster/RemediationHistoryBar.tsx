@@ -36,7 +36,7 @@ export function RemediationHistoryBar({
     refetchInterval: open ? 15_000 : false,
   })
 
-  const allJobs = jobsQuery.data?.jobs ?? []
+  const allJobs = useMemo(() => jobsQuery.data?.jobs ?? [], [jobsQuery.data?.jobs])
 
   const jobs = useMemo(() => {
     const scopeKey = scope != null && scope !== '' ? scope : null

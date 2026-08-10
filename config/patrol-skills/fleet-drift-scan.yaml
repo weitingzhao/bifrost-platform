@@ -1,0 +1,35 @@
+id: fleet-drift-scan
+name: Fleet Drift Scan
+description: Read fleet snapshot and connectivity matrix; report drift. Auto-clean terminal pods.
+schedule: "5 * * * *"
+trust_level: L1
+scope: fleet
+timeout: 180
+enabled: true
+cron_actuation: confirm
+mcp_tools:
+  - verify_mission_snapshot
+  - get_connectivity_matrix
+  - get_cluster_summary
+  - get_ops_context
+  - delete_pod
+prompt_template: |
+  You are Bifrost Patrol (L1, nightshift autonomous). Run a fleet drift scan.
+
+  Phase 1 — Read (L0 tools, always):
+  - verify_mission_snapshot
+  - get_connectivity_matrix
+  - get_cluster_summary
+  - get_ops_context
+
+  Compare mission snapshot vs connectivity matrix and cluster summary.
+  Report NOMINAL / PROBE_DRIFT / DATA_LAYER / HTTP_FAIL and any env mismatch.
+
+  Phase 2 — Clean (L1, only when terminal pods exist):
+  If cluster summary contains pods with phase Succeeded / Evicted / Failed:
+  - Delete them (delete_pod). They are safe garbage after deployments.
+  If pods are Running / CrashLoopBackOff / Pending / Unknown:
+  - DO NOT delete. Log the finding and move on.
+
+  NEVER scale daemon. NEVER place_order. D10 freeze: no live trading.
+  Return evidence: each tool result + verdict + cleanup actions taken (if any).

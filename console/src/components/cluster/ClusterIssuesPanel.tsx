@@ -38,8 +38,6 @@ interface ClusterIssuesPanelProps {
   onOpenRemediationSession?: (jobId: string) => void
 }
 
-export { collectClusterIssues, type ClusterIssueRow } from '@/lib/cluster/collectClusterIssues'
-
 /** One-line summary for dense tables; full text stays in title/tooltip. */
 function compactIssueText(text: string, max = 96): string {
   const t = text.trim()
@@ -75,7 +73,7 @@ export function ClusterIssuesPanel({
     serviceReadiness,
     postgresStatus,
   })
-  const pods = summary.failing_pod_details ?? []
+  const pods = useMemo(() => summary.failing_pod_details ?? [], [summary.failing_pod_details])
   const healthy = issues.length === 0
   const issueReach = clusterIssuesReachability(issues)
   const [podsExpanded, setPodsExpanded] = useState(() => pods.length <= 2)

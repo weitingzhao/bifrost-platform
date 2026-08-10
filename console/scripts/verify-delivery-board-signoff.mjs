@@ -28,14 +28,29 @@ check('TIBM catalog — no Phase N panel sign-off', !/Phase \d panel signed/.tes
 const agentCat = read('src/lib/architecture/agentProtocolCatalog.ts')
 check('Agent Protocol — Delivery Board mission-signal closure', agentCat.includes('Delivery Board · mission-signal'))
 
-const tibmYaml = readRepo('config/programs/trade-ib-client-migration.yaml')
+const tibmYaml = readRepo('config/programs/active/trade-ib-client-migration.yaml')
 check('TIBM YAML — no legacy panel acceptance', !tibmYaml.includes('panel signed in Console'))
 check('TIBM YAML — api sign-off mechanism', tibmYaml.includes('sign_off_mechanism: api'))
 
 const programsDir = path.join(repoRoot, 'config/programs')
-const yamlFiles = fs.readdirSync(programsDir).filter(f => f.endsWith('.yaml') && f !== '_schema.yaml')
+function listProgramYamls(dir) {
+  const out = []
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name)
+    if (ent.isDirectory()) {
+      if (ent.name.startsWith('_')) continue
+      out.push(...listProgramYamls(p))
+      continue
+    }
+    if (!ent.name.endsWith('.yaml') && !ent.name.endsWith('.yml')) continue
+    if (ent.name.startsWith('_') || ent.name.startsWith('example-')) continue
+    out.push(p)
+  }
+  return out
+}
+const yamlFiles = listProgramYamls(programsDir)
 const legacyMech = yamlFiles.filter(f => {
-  const body = fs.readFileSync(path.join(programsDir, f), 'utf8')
+  const body = fs.readFileSync(f, 'utf8')
   return /sign_off_mechanism:\s*(vision_gate|dev_agent)/.test(body)
 })
 check(

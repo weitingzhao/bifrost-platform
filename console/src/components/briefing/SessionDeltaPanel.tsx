@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { milestoneStatusVariant } from '@/components/FocusStrip'
+import { milestoneStatusVariant } from '@/components/focusStripUtils'
 import type { SessionDelta } from '@/lib/briefing/sessionDiff'
 import { isEmptyDelta } from '@/lib/briefing/sessionDiff'
 

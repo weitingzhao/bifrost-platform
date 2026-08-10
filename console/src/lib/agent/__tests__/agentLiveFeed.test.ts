@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   looksLikeMarkdown,
   normalizeMarkdownTables,
-} from '@/components/agent/DenseMarkdown'
+} from '@/components/agent/denseMarkdownUtils'
 import type { RemediationEvent } from '@/api/remediationTypes'
 import {
   extractStructuredSummaryChips,

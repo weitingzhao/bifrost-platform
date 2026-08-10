@@ -65,7 +65,7 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
     },
   })
 
-  const runs = runsQuery.data?.runs ?? []
+  const runs = useMemo(() => runsQuery.data?.runs ?? [], [runsQuery.data?.runs])
   const ns = runsQuery.data?.namespace ?? 'cicd'
 
   const focusRun = useMemo((): DeliveryPipelineRunView | undefined => {

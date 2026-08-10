@@ -29,6 +29,12 @@ export interface ProgramSummary {
   assessment_status?: PostCompletionAssessmentStatus | string
   /** True when the program blueprint declares post_completion. */
   requires_post_completion?: boolean
+  /** Persisted active job on this program: "" | running | awaiting_review | failed. */
+  runtime_job_status?: string
+  pending_count?: number
+  prompt_ready?: boolean
+  /** Phase readiness bucket: running | ready | idle | settled. */
+  runtime_bucket?: 'running' | 'ready' | 'idle' | 'settled' | string
 }
 
 export interface ProgramPhaseDetail {
@@ -140,25 +146,21 @@ export interface PostCompletionDraftItem {
   due_at?: string
 }
 
+export interface LiveLaneCollision {
+  lane_id: string
+  program_ids: string[]
+}
+
+export interface ProgramNamingWarning {
+  program_id: string
+  field: string
+  message: string
+}
+
 export interface ProgramsListResponse {
   programs: ProgramSummary[]
-}
-
-export interface LaunchProgramRequest {
-  session_pack: string
-  track?: string
-  lane?: string
-  intent?: string
-  program_id?: string
-  model?: string
-  workspace?: string
-}
-
-export interface LaunchProgramResponse {
-  agent_id?: string
-  session_id: string
-  status: string
-  message?: string
+  live_lane_collisions?: LiveLaneCollision[]
+  naming_warnings?: ProgramNamingWarning[]
 }
 
 export interface CreateProgramFromTemplateRequest {

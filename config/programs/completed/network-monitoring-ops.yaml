@@ -1,0 +1,87 @@
+id: network-monitoring-ops
+title: Network Monitoring Ops
+description: >
+  Ground · Maintain — UniFi device health, bandwidth, rule-based anomaly, and SLA strip.
+  Reuses platform-api /api/v1/network/* + mcp/unifi (do not rebuild UniFi stack).
+  Waves C–D share API/MCP with spine ai-home-network — single implementation.
+status: completed
+delivery:
+  board_visible: true
+  former_location: Ground Systems → Network · Briefing lane network-monitoring
+  sign_off_mechanism: api
+phases:
+  - id: P0
+    title: Baseline contract
+    status: done
+    depends_on: []
+    verify_cmd: "test -f config/programs/completed/network-monitoring-ops.yaml && grep -q 'lane_id: network-monitoring' config/programs/completed/network-monitoring-ops.yaml"
+    acceptance:
+      - Program YAML active on lane network-monitoring
+      - lanes.yaml description points at this program
+      - Briefing workLanes queue surfaces P0–P4 for network-monitoring
+    sign_off:
+      required: true
+      checklist:
+        - Program + lane contract present
+  - id: P1
+    title: Device health (Wave A)
+    status: done
+    depends_on: [P0]
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/network/health | jq -e '.autonomy == \"L0\"'"
+    acceptance:
+      - GET /api/v1/network/health wraps UniFi Client.Health()
+      - Devices list exposes state / uptime / adopted
+      - MCP get_network_health proxies the endpoint
+      - Console Devices table shows StatusLamp health columns
+    sign_off:
+      required: true
+      checklist:
+        - Health endpoint live
+        - Console health columns visible
+  - id: P2
+    title: Bandwidth (Wave B)
+    status: done
+    depends_on: [P1]
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/network/bandwidth | jq -e '.autonomy == \"L0\"'"
+    acceptance:
+      - GET /api/v1/network/bandwidth (or enriched devices/clients) exposes rx/tx
+      - MCP get_network_bandwidth proxies the endpoint
+      - Console dense table / mini bars for rates
+    sign_off:
+      required: true
+      checklist:
+        - Bandwidth endpoint live
+        - Console bandwidth columns visible
+  - id: P3
+    title: Rule anomaly (Wave C)
+    status: done
+    depends_on: [P2]
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/network/anomalies | jq -e '.autonomy == \"L0\"'"
+    acceptance:
+      - Config-driven rules (device down, probe fail streak; optional client drop)
+      - Console warning strip / tags — L0 read-first, no unsafe actuation
+    sign_off:
+      required: true
+      checklist:
+        - Anomaly endpoint live
+        - Console anomaly strip visible
+  - id: P4
+    title: SLA + predictive-lite (Wave D)
+    status: done
+    depends_on: [P3]
+    verify_cmd: "curl -sf http://127.0.0.1:8780/api/v1/network/sla | jq -e '.autonomy == \"L0\"'"
+    acceptance:
+      - Minimal SLA strip (probe success / device up fraction)
+      - predictive-lite tip for flapping / repeated fail streak
+      - ground.network signal wired to probe/health source or honest deferral documented
+    sign_off:
+      required: false
+      checklist:
+        - SLA strip shipped
+metadata:
+  created_at: "2026-08-05"
+  completed_at: "2026-08-05"
+  owner: vision-mac-trader
+  lane_id: network-monitoring
+  tags: [delivery-board, ground, network-monitoring, maintain]
+  completed_waves_at: "2026-08-05"

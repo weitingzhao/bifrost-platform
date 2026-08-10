@@ -16,7 +16,7 @@
  * Status: RESEARCH — strategy framework agreed; hardware purchase DEFERRED until demand signals fire.
  */
 
-export const AI_COMPUTE_VERSION = '2026-06-29-v1'
+export const AI_COMPUTE_VERSION = '2026-08-09-v1'
 export const AI_COMPUTE_SOURCE = 'console/src/lib/architecture/aiComputeStrategyCatalog.ts'
 export const AI_COMPUTE_STATUS =
   'RESEARCH — tiered-compute strategy agreed; AMD AI Max purchase deferred until 32B-insufficient / API-cost / concurrency signals fire'
@@ -62,7 +62,8 @@ export type ComputeTierRow = {
 export const COMPUTE_TIERS: ComputeTierRow[] = [
   {
     tier: 'Cursor subscription tokens (SDK + CURSOR_API_KEY)',
-    workload: 'Remediation Runner coding / fix Jobs (Agent Desk "Diagnose & Fix")',
+    workload:
+      'Remediation Runner coding / fix Jobs (Agent Desk "Diagnose & Fix") + Patrol L1+ (Cursor SDK). Patrol L0 is in-process platform-api probe (no Cursor quota).',
     economics: '≈ free — already paid in subscription; squeeze in-plan quota',
     intelligence: 'High (Cursor-hosted models, strong at coding)',
     status: 'active',
@@ -112,7 +113,7 @@ export const TOKEN_SOURCING: TokenSourceRow[] = [
     source: 'Cursor subscription (Pro / Ultra / Teams)',
     billing: 'Fixed monthly fee; quota inside Cursor',
     portable: 'NO — locked to Cursor IDE/SDK/CLI; cannot feed external agents',
-    bestFor: 'Human-in-IDE coding + Remediation Runner Jobs (Cursor SDK)',
+    bestFor: 'Human-in-IDE coding + Remediation Runner Jobs + Patrol scheduled skills (Cursor SDK)',
     limit: 'CURSOR_API_KEY only drives Cursor agents; not a general OpenAI endpoint; inference always Cursor-hosted',
   },
   {
@@ -412,6 +413,17 @@ export const PURCHASE_SIGNALS: PurchaseSignalRow[] = [
   },
 ]
 
+/** Patrol compute — L0 is in-process; L1+ may use Cursor monthly quota. Hermes readiness stays. */
+export const PATROL_COMPUTE_NOTE =
+  'Patrol L0 runs in platform-api (local GET probes, no Cursor quota). L1+ uses Cursor SDK when PATROL_DISPATCH=live|cursor. ' +
+  'It does not consume Nous Hermes pay-per-token API. Hermes readiness probe ' +
+  '(GET /api/v1/agent/hermes/readiness) remains additive — not removed.'
+
+/** Analysis Desk — Hermes is the premium analysis runtime (Trade later); D10 blocked. */
+export const ANALYSIS_DESK_COMPUTE_NOTE =
+  'Analysis Desk V1 uses Nous Hermes (Chat UI + First Task + insights). Patrol stays on Ops Desk (L0 local probe / L1+ Cursor). ' +
+  'Hermes is not a stock-analysis engine yet. D10: Analysis is read-only — no trading actuation.'
+
 export const PURCHASE_PRINCIPLE =
   'Demand-driven, not spec-driven: existing RTX 4090 + Cursor tokens + OpenAI key already run Hermes and the tiered ' +
   'architecture. Run 32B on the 4090 first, measure real tool-calling reliability on Bifrost, and let the four signals ' +
@@ -536,6 +548,10 @@ export function buildAiComputeStrategyLlmPack(): string {
     '',
     '## Compute tiers',
     ...COMPUTE_TIERS.map(t => `- **${t.tier}** [${t.status}]: ${t.workload} — ${t.economics}`),
+    '',
+    '## Patrol compute',
+    PATROL_COMPUTE_NOTE,
+    ANALYSIS_DESK_COMPUTE_NOTE,
     '',
     '## Token sourcing economics',
     ...TOKEN_SOURCING.map(s => `- **${s.source}**: ${s.billing}; portable=${s.portable}; best for ${s.bestFor}`),

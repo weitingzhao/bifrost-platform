@@ -3,13 +3,9 @@ import type { LaneId, WorkTrackType, ComponentLineId } from '@/lib/briefing/work
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 
 /** Task mode identifiers — focused Console lenses for ops vs build loops. */
-export type TaskModeId =
-  | 'system'
-  | 'daily-ops'
-  | 'mission-launch'
-  | 'build'
+export type TaskModeId = 'system' | 'build' | 'ops' | 'analysis'
 
-export type LoopArchetype = 'system' | 'ops' | 'dev'
+export type LoopArchetype = 'system' | 'ops' | 'dev' | 'analysis'
 
 export type TaskPhaseStatus = 'done' | 'active' | 'blocked' | 'planned' | 'unknown'
 
@@ -47,7 +43,8 @@ export type NavLensConfig = {
 export type OpsLoopConfig = {
   kind: 'ops'
   /** Primary live signal source for phase status projection. */
-  signalSource: 'mission-snapshot' | 'supply-chain' | 'stg-release' | 'operate-queue' | 'mission-launch'
+  /** Patrol uses live GET /api/v1/patrol/{skills,runs}. */
+  signalSource: 'mission-snapshot' | 'supply-chain' | 'stg-release' | 'operate-queue' | 'mission-launch' | 'patrol'
   showLaunchPad?: boolean
   showMissionSignals?: boolean
 }

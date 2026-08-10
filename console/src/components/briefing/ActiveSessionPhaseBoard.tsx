@@ -20,10 +20,8 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import {
-  CollapseExpandIcon,
-  collapseExpandAriaLabel,
-} from '@/components/layout/CollapseExpandIcon'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
+import { collapseExpandAriaLabel } from '@/components/layout/collapseExpandAria'
 import {
   fetchDeliveryBoardPrograms,
   fetchProgramDetail,
@@ -40,13 +38,9 @@ import { isProgramSessionReleased, queueItemToBriefingStatus } from '@/lib/brief
 import type { QueueItem, WorkLane } from '@/lib/briefing/workLanes'
 import type { AuditRecord } from '@/api/auditTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
+import { phaseJoinKey } from '@/lib/briefing/phaseJoinKey'
 
-/** Normalize `P0` / `md-expand-p0` / `foo-p0` → `p0` for Plan↔Delivery join. */
-export function phaseJoinKey(id: string): string {
-  const lower = id.trim().toLowerCase()
-  const m = lower.match(/(?:^|[-_])(p\d+)$/)
-  return m?.[1] ?? lower
-}
+const PHASE_TABLE_COL_COUNT = 6
 
 function matchQueueItem(phase: ProgramPhaseDetail, queue: QueueItem[]): QueueItem | undefined {
   const key = phaseJoinKey(phase.id)
@@ -179,7 +173,7 @@ function UnifiedPhaseRow({
           {!phase.signed_off && allowSignOff && phase.sign_off?.required !== false && (
             canAdmin ? (
               <Button type="button" size="sm" variant="outline" onClick={() => onSignOff(phase.id)}>
-                Sign off
+                Owner sign-off
               </Button>
             ) : (
               <span className="text-dense-caption text-muted-foreground">Admin auth required</span>
@@ -189,7 +183,7 @@ function UnifiedPhaseRow({
       </DenseTableRow>
       {expanded && hasDetail && (
         <DenseTableRow className="bg-background/60">
-          <DenseTableCell colSpan={6}>
+          <DenseTableCell colSpan={PHASE_TABLE_COL_COUNT}>
             <div className="flex flex-col gap-3 px-1 py-2">
               {queueItem?.note != null && queueItem.note !== '' && (
                 <div>
@@ -428,7 +422,7 @@ function ProgramUnifiedBoard({
     <>
     <ProgramBoardShell {...shell}>
       <p className="m-0 max-w-3xl text-dense-caption text-muted-foreground">
-        Plan status and Owner sign-off on one row per phase.
+        Plan status and Owner sign-off on one row per phase. Phase work runs in Cursor IDE Agent.
       </p>
 
       <PhaseGridFold
@@ -444,7 +438,7 @@ function ProgramUnifiedBoard({
               <DenseTableHead>Plan</DenseTableHead>
               <DenseTableHead>Delivery</DenseTableHead>
               <DenseTableHead>Signed at</DenseTableHead>
-              <DenseTableHead />
+              <DenseTableHead>Owner</DenseTableHead>
             </DenseTableHeadRow>
           </DenseTableHeader>
           <DenseTableBody>

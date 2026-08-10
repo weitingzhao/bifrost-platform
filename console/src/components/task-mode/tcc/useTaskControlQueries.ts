@@ -5,7 +5,7 @@ import { fetchPipelineRuns, fetchSupplyChain } from '@/api/delivery'
 import { fetchReleaseGate, fetchStgSmoke } from '@/api/promote'
 import { fetchRemediationJobs } from '@/api/remediation'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { pickDeployPipelineRun } from '@/components/delivery/ReleaseStepCommandCenter'
+import { pickDeployPipelineRun } from '@/lib/delivery/releaseStepTypes'
 import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import { TRADE_DEPLOY_SCOPE } from '@/lib/agent/tradeDeployAgentPrompt'
@@ -32,8 +32,9 @@ import {
   usePromoteVerifyReadiness,
   useSatelliteDeployOverall,
   useSatelliteProdReadiness,
-} from '@/components/task-mode/TaskModeReadinessStrip'
+} from '@/components/task-mode/readiness/hooks'
 import { cellAllowsAgentFix } from '@/lib/control-room/fleetCellFix'
+import { usePatrolSnapshot } from '@/hooks/usePatrolSnapshot'
 
 /**
  * Task Control Center data layer — cluster/delivery/promote/smoke useQuery
@@ -112,6 +113,8 @@ export function useTaskControlQueries({
   useEffect(() => {
     setChecklistJobsPollFast(activeChecklistRunJob != null || checklistCheckAmbient)
   }, [activeChecklistRunJob, checklistCheckAmbient])
+
+  const patrol = usePatrolSnapshot()
 
   const runnerHealthy = useMemo(() => {
     const eng = fleet.cells.find(c => c.role === 'engineer')
@@ -240,6 +243,7 @@ export function useTaskControlQueries({
       devAgentPhaseDone: isDevLoop ? devAgentPhaseDone : undefined,
       fleetAgentFixAvailable:
         isDailyOps && dailyOpsTargetCell != null && cellAllowsAgentFix(dailyOpsTargetCell),
+      patrolRuns: patrol.runs,
     }
   }, [
     context,
@@ -258,9 +262,10 @@ export function useTaskControlQueries({
     devAgentPhaseDone,
     isDailyOps,
     dailyOpsTargetCell,
+    patrol.runs,
   ])
 
-  const phases = mode.phases ?? []
+  const phases = useMemo(() => mode.phases ?? [], [mode.phases])
   const statuses = useMemo(
     () => resolveAllTaskPhaseStatuses(mode.id, statusInput),
     [mode.id, statusInput],
@@ -346,6 +351,7 @@ export function useTaskControlQueries({
     activeChecklistRunJob,
     runnerHealthy,
     fleetClear,
+    patrolPosture: patrol.posture,
     stgReadinessSignals,
     prodReadinessSignals,
     clusterForFixQ,

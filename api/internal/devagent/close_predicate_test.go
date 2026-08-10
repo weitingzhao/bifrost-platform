@@ -1,6 +1,11 @@
 package devagent
 
-import "testing"
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
 
 func TestClosePredicatesNoPostCompletionAutoGraduate(t *testing.T) {
 	sum := ProgramSummary{Complete: true, RequiresPostCompletion: false}
@@ -83,6 +88,21 @@ func TestIsGatesCompleteFallsBackToSignedCounts(t *testing.T) {
 	}
 }
 
+func TestClosePredicatesCatalogStatusCompleted(t *testing.T) {
+	sum := ProgramSummary{
+		Status:                 "completed",
+		Complete:               false,
+		RequiresPostCompletion: true,
+	}
+	if !IsGatesComplete(sum) || !IsProgramCatalogComplete(sum) || !IsProgramSessionReleased(sum) {
+		t.Fatalf("YAML status completed must close without scratch JSON: %+v", sum)
+	}
+	archived := ProgramSummary{Status: "archived", Complete: false, RequiresPostCompletion: true}
+	if !IsProgramSessionReleased(archived) || !IsProgramCatalogComplete(archived) {
+		t.Fatalf("archived must close: %+v", archived)
+	}
+}
+
 func TestClosePredicatesGatesIncomplete(t *testing.T) {
 	sum := ProgramSummary{
 		Complete:               false,
@@ -143,5 +163,90 @@ func TestLiveLaneCollisionsIgnoresSessionReleased(t *testing.T) {
 	}
 	if got := h.liveLaneCollisionsLocked(); len(got) != 0 {
 		t.Fatalf("released sibling must not collide: %+v", got)
+	}
+}
+
+type programsListBody struct {
+	Programs        []ProgramSummary    `json:"programs"`
+	Collisions      []LiveLaneCollision `json:"live_lane_collisions"`
+	NamingWarnings  []NamingWarning     `json:"naming_warnings"`
+}
+
+func TestHandleProgramsEmptyLiveLaneCollisions(t *testing.T) {
+	h := &Handler{
+		runtimes: map[string]*programRuntime{
+			"a": {
+				blueprint: &ProgramBlueprint{
+					ID: "a", Title: "A",
+					Delivery: &DeliveryConfig{BoardVisible: true},
+					Metadata: map[string]interface{}{"lane_id": "console-api"},
+				},
+				state: &ProgramStateRecord{ProgramID: "a", LaneID: "console-api"},
+			},
+		},
+	}
+	rec := httptest.NewRecorder()
+	h.HandlePrograms(rec, httptest.NewRequest(http.MethodGet, "/api/v1/programs?board=1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body programsListBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Collisions == nil {
+		t.Fatal("live_lane_collisions must be [] not null")
+	}
+	if len(body.Collisions) != 0 {
+		t.Fatalf("collisions=%+v", body.Collisions)
+	}
+	if len(body.Programs) != 1 {
+		t.Fatalf("programs=%d", len(body.Programs))
+	}
+}
+
+func TestHandleProgramsReportsCollisionsDespiteLaneFilter(t *testing.T) {
+	h := &Handler{
+		runtimes: map[string]*programRuntime{
+			"a": {
+				blueprint: &ProgramBlueprint{
+					ID: "a", Title: "A",
+					Delivery: &DeliveryConfig{BoardVisible: true},
+					Metadata: map[string]interface{}{"lane_id": "console-api"},
+				},
+				state: &ProgramStateRecord{ProgramID: "a", LaneID: "console-api"},
+			},
+			"b": {
+				blueprint: &ProgramBlueprint{
+					ID: "b", Title: "B",
+					Delivery: &DeliveryConfig{BoardVisible: true},
+					Metadata: map[string]interface{}{"lane_id": "console-api"},
+				},
+				state: &ProgramStateRecord{ProgramID: "b", LaneID: "console-api"},
+			},
+			"c": {
+				blueprint: &ProgramBlueprint{
+					ID: "c", Title: "C",
+					Delivery: &DeliveryConfig{BoardVisible: true},
+					Metadata: map[string]interface{}{"lane_id": "other"},
+				},
+				state: &ProgramStateRecord{ProgramID: "c", LaneID: "other"},
+			},
+		},
+	}
+	rec := httptest.NewRecorder()
+	h.HandlePrograms(rec, httptest.NewRequest(http.MethodGet, "/api/v1/programs?board=1&lane_id=other", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body programsListBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Programs) != 1 || body.Programs[0].ID != "c" {
+		t.Fatalf("filtered programs=%+v", body.Programs)
+	}
+	if len(body.Collisions) != 1 || body.Collisions[0].LaneID != "console-api" || len(body.Collisions[0].ProgramIDs) != 2 {
+		t.Fatalf("collisions=%+v", body.Collisions)
 	}
 }

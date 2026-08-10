@@ -391,7 +391,7 @@ export function formatDispatchHeaderStrip(header: ChecklistHeaderProgress): stri
 export const DAILY_OPS_CHECKLIST_RUN_PROMPT = [
   'Scheduled Daily Ops Checklist probe (scope daily-ops-checklist-run).',
   '1. Call verify_mission_snapshot, get_cluster_summary, get_agent_bridge, get_gitops_apps, get_stg_smoke, get_delivery_pipelines.',
-  '2. Map evidence to all 18 checklist item_ids (ok/degraded/fail/unknown).',
+  '2. Map evidence to all 19 checklist item_ids (ok/degraded/fail/unknown).',
   '3. Call report_checklist_signals with auto_dispatch=true and the full signals array.',
   '4. Do not actuate directly in this job — platform gates dispatch (D10: never auto IB).',
 ].join('\n')

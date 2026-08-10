@@ -14,7 +14,7 @@ import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog
 import { buildOpsUiActuationSignoffMarkdown } from '@/lib/architecture/opsUiActuationSignoffChecklist'
 import { buildPostQaOwnerGateMarkdown } from '@/lib/architecture/postQaOwnerGatePack'
 
-export const BLUEPRINT_VERSION = '2026-07-20'
+export const BLUEPRINT_VERSION = '2026-08-09'
 export const BLUEPRINT_SOURCE = 'console/src/lib/architecture/blueprintCatalog.ts'
 
 /** Slow-changing principles — North Star, design rules, forbidden actions. */
@@ -179,7 +179,10 @@ export type ConsoleViewRow = {
 }
 
 export const CONSOLE_VIEWS: ConsoleViewRow[] = [
-  { view: 'Agent Desk', plane: 'Engineer', purpose: 'Engineer workspace — Ops + Trade payload actor' },
+  { view: 'Queue', plane: 'Engineer', purpose: 'Ops Desk queue — operate, remediate, close sessions (legacy Agent Desk)' },
+  { view: 'Analysis Workspace', plane: 'Engineer', purpose: 'Analysis Desk V1 — Hermes status, Chat UI, First Task (D10 read-only)' },
+  { view: 'Insight Log', plane: 'Engineer', purpose: 'Hermes insight history' },
+  { view: 'Hermes Status', plane: 'Engineer', purpose: 'Nous Hermes gateway lamp, model, version, MCP tools' },
   { view: 'Agent Briefing', plane: 'Engineer', purpose: 'New-session entry — work intent, progress, briefing pack' },
   { view: 'Agent Protocol', plane: 'Governance', purpose: 'Agent doctrine — modes, architecture, forbidden actions' },
   { view: 'Briefing Reconciliation', plane: 'Governance', purpose: 'Spine projection rules and drift reconciliation' },
@@ -192,7 +195,13 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
     view: 'Task Control Center',
     plane: 'Mission Control',
     purpose:
-      'Sole Mission / Task Mode execution entry — phased playbook, Fleet Desk, Launch board, Agent CTAs (ops/dev loop lens)',
+      'Sole Mission / Task Mode execution entry — phased playbook, Ops Desk Board (Fleet + Queue + Patrol), Three Desks switcher, Agent CTAs',
+  },
+  {
+    view: 'Three Desks Strip',
+    plane: 'Mission Control',
+    purpose:
+      'Three-up Build / Ops / Analysis switcher on TCC (System) + Control Room — no extra chrome row',
   },
   {
     view: 'Control Room',
@@ -241,23 +250,25 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
 
 /** Task mode lenses — focused Console navigation for ops vs build loops (Constitution). */
 export const TASK_MODE_BLUEPRINT = {
-  version: '2026-08-07',
+  version: '2026-08-09',
   source: 'console/src/lib/task-mode/taskModeCatalog.ts',
   statement:
-    'Task modes filter sidebar navigation and land on Task Control Center for phased playbooks. ' +
-    'Four views: System · Daily Ops · Launch · Build. ' +
-    'Ops / Dev Mode: Launch and primary Mission actions live only on TCC — Control Room is posture deep-dive (ROOM POSTURE + bays), not a second Mission home. ' +
-    'Daily Ops uses Fleet Desk (Ops loop: viewer env · GO|HOLD|NO-GO · circle Discover→Clear · single CTA · Agent live panel · role×env board with probePath / per-cell Agent Fix); ' +
+    'Task modes filter sidebar navigation and land on Task Control Center (or Analysis Workspace) for phased playbooks. ' +
+    'Four views: System · Build · Ops · Analysis. Launch / Daily Ops / Patrol merge into Ops. ' +
+    'Three Desks (Build / Ops / Analysis) is the System + Control Room switcher. ' +
+    'Ops / Dev Mode: Launch and primary Mission actions live on TCC Ops Desk Board + release tabs — Control Room is posture deep-dive (ROOM POSTURE + bays), not a second Mission home. ' +
+    'Ops uses Fleet + Queue + Patrol on one board (Discover → Remediate → Deploy → Patrol → Clear). ' +
     'unavailable cells are display-only (Excluded from GO); Prod pins clusters.yaml viewer_env=prod (OPS_VIEWER_ENV overrides). ' +
-    'Launch keeps readiness + LaunchPad + Release posture on TCC (Promote / cutover · Tier A·B); Daily Ops does not. Ops loops — no Briefing/DevAgent. ' +
     'Build (unified) chains Briefing → Implement → Pre-push → Deliver STG → Sign-off; component line inherits from Active Session. ' +
+    'Analysis Desk V1 is Hermes status + Chat UI + First Task (read-only, D10 blocked; no stock-analysis engine). ' +
+    'Patrol skills stay on Ops Desk (Cursor SDK nightshift via GET /api/v1/patrol/*) — distinct from Hermes Analysis. ' +
     'Nav lens is focused-only (no More domains); phase-aware dimming highlights phase-relevant tabs. ' +
     'System Mode may land Control Room for panoramic posture; Observability remains read-only health.',
   modes: [
     'system',
-    'daily-ops',
-    'mission-launch',
     'build',
+    'ops',
+    'analysis',
   ] as const,
   escapeHatch: 'Switch to System view restores full CONSOLE_NAV_GROUPS.',
 }
@@ -357,6 +368,7 @@ export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
       'Config drift detection via ArgoCD diff + periodic make prod-health',
       'Agent Briefing reconcile gate — briefingReconciliationCatalog.ts (queue ≟ spine ≟ appendix)',
       'Firewall policy drift — audit Bifrost zones/policies against networkUpgradeCatalog.ts FIREWALL_RULES',
+      'Three Desks landing — Build / Ops (queue + Patrol Cursor SDK) / Analysis (Hermes premium, D10 blocked)',
     ],
   },
   {
@@ -410,6 +422,11 @@ export const AI_PLATFORM_SUCCESS: AiSuccessCriterion[] = [
     area: 'Network',
     criterion:
       'One platform-api call returns zone-matrix + firewall policy list + AP health; firewall drift auto-detected',
+  },
+  {
+    area: 'Three Desks',
+    criterion:
+      'Build / Ops / Analysis share Console Task Mode; Patrol = Cursor SDK nightshift on Ops Desk; Hermes = Analysis Desk premium analysis (Trade later); D10 blocked',
   },
 ]
 

@@ -1,0 +1,45 @@
+id: plugin-session
+title: Plugin Session
+description: >
+  Spawn skeleton for Plugin / subcontractor lanes. Not a delivery capability —
+  clone via from-template into a new {lane}-{yyyymmdd} program.
+status: archived
+delivery:
+  board_visible: false
+  sign_off_mechanism: api
+workspace: /Users/vision-mac-trader/Desktop/stocks
+model: composer-2.5
+phases:
+  - id: P1
+    title: Scope
+    status: pending
+    prompt_template: |
+      Scope the plugin / subcontractor change for program {{id}}.
+      Identify the plugin surface, contract, and acceptance before editing.
+    verify_cmd: "echo scoped"
+    acceptance:
+      - "Scope and acceptance written"
+  - id: P2
+    title: Implement
+    status: pending
+    prompt_template: |
+      Implement the scoped plugin change for program {{id}}.
+      Keep Platform core vs plugin boundaries; do not import bifrost-trade Python packages.
+    verify_cmd: "echo implemented"
+    acceptance:
+      - "Change landed with verify evidence"
+    depends_on: [P1]
+  - id: P3
+    title: Verify
+    status: pending
+    prompt_template: |
+      Verify the plugin change for program {{id}}.
+      Run the stated verify command and report remaining risk.
+    verify_cmd: "echo verified"
+    acceptance:
+      - "Verify command passed or gaps listed"
+    depends_on: [P2]
+metadata:
+  created_at: "2026-08-09"
+  owner: vision-mac-trader
+  tags: [plugin, skeleton, from-template]

@@ -3,10 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DenseTag, SegmentControl, StatusLamp } from '@bifrost/ui'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { TradeNsSegmentControl } from '@/components/TradeNsSegmentControl'
-import {
-  BusActuationStrip,
-  useInFlightBusWorkload,
-} from '@/components/activity/BusActuationStrip'
+import { BusActuationStrip } from '@/components/activity/BusActuationStrip'
+import { useInFlightBusWorkload } from '@/components/activity/useInFlightBusWorkload'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { PageToolbar } from '@/components/layout/PageToolbar'
@@ -30,10 +28,8 @@ import {
   clearSatelliteBusFocus,
   peekSatelliteBusFocus,
 } from '@/lib/task-mode/readinessChipActions'
-import {
-  busHealthTagVariant,
-  SatelliteBusDetailSections,
-} from '@/pages/satellite-bus/SatelliteBusTables'
+import { busHealthTagVariant } from '@/pages/satellite-bus/satelliteBusTableUtils'
+import { SatelliteBusDetailSections } from '@/pages/satellite-bus/SatelliteBusTables'
 import type { BusBodyMode } from '@/pages/satellite-bus/SatelliteBusDetailSections'
 import type { InspectTarget } from '@/pages/satellite-bus/inspectTypes'
 import { SatelliteBusInspectSheet } from '@/pages/satellite-bus/SatelliteBusSheets'
@@ -351,6 +347,7 @@ export function SatelliteBusPage({
     requestAnimationFrame(() => {
       scrollToBusSection(target.ref, detailScrollRef, setHighlightSection, focus)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- q is a new object each render; depend on focus-relevant fields only
   }, [
     activityFocusTick,
     bodyMode,

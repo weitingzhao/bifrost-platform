@@ -1,0 +1,26 @@
+id: stale-pod-cleanup
+name: Stale Pod Cleanup
+description: "Standalone cleanup (subsumed by fleet-drift-scan hourly chain; kept for manual one-off use after deploys)."
+schedule: "0 4 * * *"
+trust_level: L1
+scope: cluster-workloads
+timeout: 240
+enabled: false
+cron_actuation: confirm
+mcp_tools:
+  - get_cluster_summary
+  - get_cluster_nodes
+  - delete_pod
+prompt_template: |
+  You are Bifrost Patrol (L1). Clean stale Kubernetes pods (Succeeded / Evicted / Failed)
+  that are leftover junk — not running workloads.
+
+  Tools:
+  - get_cluster_summary (read)
+  - get_cluster_nodes (read)
+  - delete_pod (write)
+
+  Delete only clearly terminal pods (Succeeded, Evicted, Failed).
+  Never delete Running pods. Never scale daemon.
+  D10 freeze: no live trading, no place_order, no daemon scale-up.
+  Return evidence: namespaces, pod names, delete outcomes.

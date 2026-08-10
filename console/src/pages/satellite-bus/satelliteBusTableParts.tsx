@@ -11,10 +11,8 @@ import {
   cn,
 } from '@bifrost/ui'
 import type { Target } from '@/api/matrixTypes'
-import {
-  CollapseExpandIcon,
-  collapseExpandAriaLabel,
-} from '@/components/layout/CollapseExpandIcon'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
+import { collapseExpandAriaLabel } from '@/components/layout/collapseExpandAria'
 import { StatusLamp } from '@/components/StatusLamp'
 import {
   SOCKET_MATRIX_LABELS,

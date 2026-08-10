@@ -63,7 +63,7 @@ describe('resolveSessionLaneFocus', () => {
     expect(f.kind).toBe('signoff')
     expect(f.lifecycle).toBe('active')
     expect(f.status).toBe('doing')
-    expect(f.line).toMatch(/Active Session/)
+    expect(f.line).toMatch(/In Flight/)
   })
 
   it('holds all-done queue until sessionReleased is known', () => {

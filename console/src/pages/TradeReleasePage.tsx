@@ -23,12 +23,12 @@ import {
 } from '@/components/delivery/LaneDetailShell'
 import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
 import { PipelineRunsPanel } from '@/components/delivery/PipelineRunsPanel'
+import { ReleaseStepCommandCenter } from '@/components/delivery/ReleaseStepCommandCenter'
 import {
-  ReleaseStepCommandCenter,
   runStepStatus,
   gateStepStatus,
   type FlowStep,
-} from '@/components/delivery/ReleaseStepCommandCenter'
+} from '@/lib/delivery/releaseStepTypes'
 import { ReleaseStateBanner } from '@/components/delivery/ReleaseStateBanner'
 import { StgSmokePanel } from '@/components/delivery/StgSmokePanel'
 import { StgTierBChecklistPanel } from '@/components/delivery/StgTierBChecklistPanel'

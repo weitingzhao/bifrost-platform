@@ -1,16 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Button, SegmentControl } from '@bifrost/ui'
 import { ChevronDown, ChevronRight, Languages, Package } from 'lucide-react'
-import {
-  CollapseExpandIcon,
-  collapseExpandAriaLabel,
-} from '@/components/layout/CollapseExpandIcon'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
+import { collapseExpandAriaLabel } from '@/components/layout/collapseExpandAria'
+import { BriefingProgramAutoPhases } from '@/components/briefing/BriefingProgramAutoPhases'
 import { SessionLaneCtaBar, type SessionLifecycle } from '@/components/briefing/SessionLaneCtaBar'
 import { MoveLaneBar } from '@/components/briefing/MoveLaneBar'
-import {
-  BriefingCommandChip,
-  withBriefingCommandHighlight,
-} from '@/components/briefing/BriefingCommandChip'
+import { BriefingCommandChip } from '@/components/briefing/BriefingCommandChip'
+import { withBriefingCommandHighlight } from '@/components/briefing/withBriefingCommandHighlight'
 import { TaskQueuePanel } from '@/components/briefing/TaskQueuePanel'
 import { BriefingReconcilePanel } from '@/components/briefing/BriefingReconcilePanel'
 import type { LaneLifecycle } from '@/lib/briefing/briefingStatus'
@@ -232,6 +229,8 @@ export function SessionDetailSection({
       {!isArchive && !isDoingRedirect && (
         <MoveLaneBar lane={lane} canOperate={canOperate} onMoved={onLaneMoved} />
       )}
+
+      <BriefingProgramAutoPhases laneId={lane.id} />
 
       {!isArchive && (
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-[var(--border)]/60 pt-2">

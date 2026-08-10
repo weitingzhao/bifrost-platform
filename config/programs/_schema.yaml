@@ -1,9 +1,70 @@
 # Program Blueprint Schema
 # ============================================================
-# Each YAML file in this directory defines a Program Blueprint —
+# Each YAML file under this tree defines a Program Blueprint —
 # declarative phases for Delivery Board sign-off and optional
 # Cursor SDK execution via api/internal/devagent.
 # ============================================================
+
+# --- Convention ---
+#
+# Program ID
+#   Format: {domain}-{intent}[-{qualifier}] kebab-case
+#   Regex (stock / loaded ids):  ^[a-z0-9]+(-[a-z0-9]+){1,5}(--[a-z0-9-]+)?$
+#   Max length: 40 characters
+#   Do not invent undeclared abbreviations.
+#   New from-template ids: {lane}-{yyyymmdd}[-n]
+#     e.g. trade-stack-20260809, trade-stack-20260809-2
+#   Do not create new ids containing `--`. Legacy `--` shells are archived.
+#   Do not create new empty-shell template instances.
+#   Existing empty/CLOSED shells are status: archived.
+#
+# Phase ID
+#   Legal: ^P[0-9]+$  OR  ^[a-z][a-z0-9-]{0,20}$
+#   Default for new programs: P1, P2, … (do not start new programs at P0)
+#   Stock P0…Pn on existing programs is allowed; do not renumber blindly.
+#   Semantic slugs are for non-linear steps (design, implement, verify, rollout-stg).
+#   Legacy allowlist (validator does not warn):
+#     program vision only — V1–V5 and S3
+#     program network-governance only — NG1–NG8 (deferred: 8 phases + verify_cmd complexity)
+#   Deferred migration: active programs with 8+ phases may defer phase-id migration
+#     when depends_on / verify_cmd / script rewiring is disproportionately complex.
+#     Validator silences the exempted prefixes; migrate when the program next needs edits.
+#   Forbidden (active programs warn):
+#     undeclared prefixes (TIBM*, SMOKE-*, NG*, IBGP*, …)
+#     priority-descending Q{n} (Q3→Q2→Q1)
+#     mixing W{n} with P{n} without a semantic slug declaration
+#
+# Status lifecycle
+#   active → completed → archived
+#   completed = all phases done and Owner confirmed
+#   archived  = hidden from default GET /api/v1/programs
+#               (visible with ?include_archived=true or full-dump mode)
+#
+# Close-out
+#   Closing a program = set YAML status (+ phase status: done) then move the file:
+#     active/ → completed/ or archived/
+#   Runtime state JSON under data/programs/ is disposable scratch, not the
+#   capability ledger. completed/archived programs may have no state file.
+#   Activating a completed or archived program returns 409.
+#
+# from-template bases
+#   Clone sources must use legal phase ids (P{n} or semantic slug).
+#   Closed capability blueprints (NG*, IBGP*, …) are not clone sources.
+#   Ground / Plugin spawn from archived skeletons ground-session / plugin-session.
+#
+# Storage layout
+#   config/programs/
+#     _schema.yaml
+#     _templates.yaml
+#     example-template.yaml
+#     active/*.yaml
+#     completed/*.yaml
+#     archived/*.yaml
+#   Loader walks recursively; skips basename starting with "_" and example-*.
+#
+# Phase aliases
+#   Optional phases[].aliases: ["TIBM0"] — old ids accepted on start/sign-off
+#   and remapped when loading persisted state.
 
 # --- Top-level fields ---
 
@@ -29,6 +90,7 @@ model: string           # defaults to composer-2.5
 
 phases:
   - id: string
+    aliases: [string]   # optional legacy ids remapped to id
     title: string
     status: enum        # pending | done | skipped
     prompt_template: string

@@ -55,7 +55,7 @@ export function useOperateQueueActivityBridge(): void {
           ? (job?.summary ?? job?.error ?? `Job ${job?.status}`)
           : 'Operate queue execution',
         settledOutcome: terminal ? (failed ? 'error' : 'resolved') : undefined,
-        linkTo: 'agent-desk',
+        linkTo: 'queue',
         bumpTs: prev == null || prev.phase !== phase,
       })
     }

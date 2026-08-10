@@ -3,7 +3,7 @@ import {
   BriefingStatusBadge,
   BriefingStatusLamp,
 } from '@/components/briefing/BriefingStatusChrome'
-import { withBriefingCommandHighlight } from '@/components/briefing/BriefingCommandChip'
+import { withBriefingCommandHighlight } from '@/components/briefing/withBriefingCommandHighlight'
 import { openInCursorButtonLabel } from '@/lib/briefing/briefingDeliveryChannels'
 import type { BriefingWorkStatus } from '@/lib/briefing/briefingStatus'
 import type { LaneLifecycle } from '@/lib/briefing/briefingStatus'

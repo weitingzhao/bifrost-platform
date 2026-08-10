@@ -1,9 +1,4 @@
-/** Re-export barrel — keep imports stable for SatelliteBusPage and SatelliteBusSheets. */
-export {
-  displayReachLabel,
-  healthTagVariant,
-  busHealthTagVariant,
-} from '@/pages/satellite-bus/satelliteBusTableUtils'
+/** Component re-export barrel for SatelliteBusPage. */
 export {
   TradeApiReachTable,
   SocketHealthMatrixTable,

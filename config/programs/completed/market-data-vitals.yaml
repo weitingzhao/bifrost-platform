@@ -1,0 +1,227 @@
+id: market-data-vitals
+title: "Market Data Vitals UI — Data Depth & Freshness Visibility"
+description: >
+  Data quality visibility upgrade for Ops Console Market Data page.
+  Surfaces coverage depth, freshness verdicts, gap detection, and quality scoring
+  using existing Plugin API endpoints (wildcard proxy already deployed).
+  Wave 1 (P1–P3): Overview Vitals strip + Today's Data verdict.
+  Wave 2 (P4–P6): Stock depth + Option coverage + Coverage tab refactor.
+  Wave 3 (P7–P8): Gap detection UI + Quality Score HTTP + UI.
+status: completed
+delivery:
+  board_visible: true
+  sign_off_mechanism: api
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+model: composer-2.5
+
+phases:
+  # ── Wave 1: Data Vitals (Overview 一眼可答) ──────────────────────────────
+  - id: md-vitals-p1
+    title: "Fetch functions: coverage/depth/gap endpoints"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Add Console API client types + fetchers for Market Data coverage/depth/gap
+      endpoints used by subsequent Vitals UI phases. No UI yet.
+
+      Deliverables (bifrost-platform/console):
+      - console/src/api/marketDataPlugin.ts — types + fetchers for:
+        bar-quality-detail, stock-day-gap, contracts, greeks, daily-checklist,
+        snapshot-quality-detail, universe-count, market/status
+      - Proxy smoke against platform-api /plugins/market-data/api/*
+
+      Verify already passed: tsc clean + proxy smoke HTTP 200.
+      Do NOT implement Overview/Coverage UI (md-vitals-p2+).
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform/console && npx tsc --noEmit"
+    acceptance:
+      - "marketDataPlugin.ts exports typed fetchers for coverage/depth/gap endpoints"
+      - "tsc --noEmit clean"
+      - "Proxy smoke returns 200 for key coverage endpoints"
+    sign_off:
+      required: true
+      checklist:
+        - "Owner confirmed fetchers match Plugin API response shapes"
+        - "Owner ready for Vitals UI Wave 1 (md-vitals-p2)"
+
+  - id: md-vitals-p2
+    title: "Data Vitals component (Overview top strip)"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Overview tab top strip answering "how deep is the data" in one row —
+      Stock Daily depth + Option coverage + Analytics progress + Universe size.
+
+      Uses fetchers from md-vitals-p1. Do NOT implement Today's Data verdict (p3)
+      or Coverage tab panels (p4+).
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform/console && npx tsc --noEmit"
+    acceptance:
+      - "Data Vitals strip renders on Market Data Overview"
+      - "Shows stock depth, option coverage, analytics progress, universe size"
+      - "Console type-check passes"
+    depends_on:
+      - md-vitals-p1
+    sign_off:
+      required: true
+      checklist:
+        - "Owner visual review of Data Vitals strip"
+
+  - id: md-vitals-p3
+    title: "Today's Data verdict logic"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Per-dimension "did today's data arrive?" verdict —
+      green OK / yellow scheduled in Xh / red missing.
+      Compare freshness + bar max_date + next_run_at.
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform/console && npx tsc --noEmit"
+    acceptance:
+      - "Each vitals dimension shows today's data verdict with OK/scheduled/missing"
+      - "Logic uses freshness + bar max_date + next_run_at"
+      - "Console type-check passes"
+    depends_on:
+      - md-vitals-p2
+    sign_off:
+      required: true
+      checklist:
+        - "Owner confirmed verdict thresholds match ops expectations"
+
+  # ── Wave 2: Coverage Depth (深度展示) ────────────────────────────────────
+  - id: md-vitals-p4
+    title: "Stock historical depth panel"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Coverage tab panel — date range + daily density + gap metrics + progress.
+      Data: bar-quality-detail + stock-day-gap fetchers.
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform/console && npx tsc --noEmit"
+    acceptance:
+      - "Stock historical depth panel renders on Coverage tab"
+      - "Shows date range, density, gaps, progress"
+      - "Console type-check passes"
+    depends_on:
+      - md-vitals-p3
+    sign_off:
+      required: false
+
+  - id: md-vitals-p5
+    title: "Option chain coverage panel"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Coverage tab panel — underlyings list + contract counts + expiry range +
+      Greeks completeness. Data: /coverage/contracts + /coverage/greeks.
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform/console && npx tsc --noEmit"
+    acceptance:
+      - "Option chain coverage panel renders on Coverage tab"
+      - "Shows underlyings, contracts, expiry range, Greeks completeness"
+      - "Console type-check passes"
+    depends_on:
+      - md-vitals-p4
+    sign_off:
+      required: false
+
+  - id: md-vitals-p6
+    title: "Coverage tab refactor (depth over row counts)"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Integrate P4+P5 panels; DB Coverage section → Data Depth section.
+      Row counts become secondary; depth/range/density are primary.
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform/console && npx tsc --noEmit"
+    acceptance:
+      - "Coverage tab shows Data Depth as primary section"
+      - "P4+P5 panels integrated; row counts demoted"
+      - "Console type-check passes"
+    depends_on:
+      - md-vitals-p5
+    sign_off:
+      required: true
+      checklist:
+        - "Owner visual review of Coverage Data Depth layout"
+
+  # ── Wave 3: Data Quality (Gap 检测与质量) ────────────────────────────────
+  - id: md-vitals-p7
+    title: "Gap detection UI (last 7 days)"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal: Show missing trading days in last 7 days — green "0 gaps" or red dated list.
+      Data: stock-day-gap missing_dates filtered. Integrate into Vitals or Depth panel.
+
+      Known Issue (from md-vitals-p1 QA): Plugin GET /market/coverage/stock-day-gap
+      often returns expected_trading_days=0 when us_trading_calendar is empty or
+      lookup fails. Do NOT use expected_trading_days for gap % or verdicts.
+      Prefer missing_dates (filter last 7) and covered_days. Optionally fix the
+      Plugin calendar path first, or document the bypass in the UI.
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: "cd bifrost-platform/console && npx tsc --noEmit"
+    acceptance:
+      - "Gap detection UI shows last-7-day missing dates"
+      - "Green empty state or red dated list"
+      - "Console type-check passes"
+    depends_on:
+      - md-vitals-p6
+    sign_off:
+      required: true
+      checklist:
+        - "Owner confirmed gap window (7 trading days) is correct"
+
+  - id: md-vitals-p8
+    title: "Quality Score HTTP endpoint + UI (optional)"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Goal (optional / deferrable): Expose Plugin quality.py checks as HTTP.
+      4-item PASS/FAIL score. Only phase that requires Plugin backend changes.
+      May be deferred.
+
+      Output a structured Phase completion report at the end.
+    verify_cmd: |
+      cd bifrost-platform-plugin-market-data && make test &&
+      cd ../bifrost-platform/console && npx tsc --noEmit
+    acceptance:
+      - "Plugin exposes Quality Score HTTP endpoint"
+      - "Console UI renders 4-item PASS/FAIL score"
+      - "Plugin tests + Console tsc pass"
+    depends_on:
+      - md-vitals-p7
+    sign_off:
+      required: true
+      checklist:
+        - "Owner accepted Quality Score rubric (or deferred phase)"
+        - "Program Vitals waves complete (or p8 explicitly deferred)"
+
+metadata:
+  created_at: "2026-08-07"
+  owner: "vision-mac-trader"
+  lane_id: market-data-vitals
+  prerequisite_programs:
+    - market-data-expand
+  tags:
+    - market-data
+    - vitals-ui
+    - data-quality
+    - coverage
+    - freshness

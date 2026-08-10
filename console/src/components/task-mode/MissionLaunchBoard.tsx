@@ -8,13 +8,10 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { LaunchGateBar } from '@/components/task-mode/LaunchGateBar'
 import { PipelineRunHistoryStrip } from '@/components/task-mode/PipelineRunHistoryStrip'
-import {
-  isProdReleaseBlocked,
-  MissionSharedBusPanel,
-  RocketReadinessStrip,
-  SatelliteReadinessStrip,
-  useSatelliteProdReadiness,
-} from '@/components/task-mode/TaskModeReadinessStrip'
+import { MissionSharedBusPanel, SatelliteReadinessStrip } from '@/components/task-mode/readiness/SatelliteReadinessStrip'
+import { RocketReadinessStrip } from '@/components/task-mode/readiness/RocketReadinessStrip'
+import { useSatelliteProdReadiness } from '@/components/task-mode/readiness/hooks'
+import { isProdReleaseBlocked } from '@/components/task-mode/readiness/utils'
 import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
 import { launchVerdictToSignal, readinessAnchorDomId } from '@/lib/task-mode/satelliteLaunchVerdict'

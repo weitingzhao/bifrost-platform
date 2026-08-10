@@ -1,0 +1,26 @@
+id: cert-expiry-check
+name: Cert Expiry Check
+description: Inspect cluster/GitOps read models for TLS or certificate expiry risk. Read-only.
+schedule: "0 6 * * 1"
+trust_level: L0
+scope: cluster-tls
+timeout: 180
+enabled: true
+mcp_tools:
+  - get_cluster_summary
+  - get_cluster_nodes
+  - get_gitops_apps
+  - get_ops_context
+prompt_template: |
+  You are Bifrost Patrol (L0, read-only). Check TLS / certificate expiry risk.
+
+  There is no dedicated cert MCP tool. Use only these read tools:
+  - get_cluster_summary
+  - get_cluster_nodes
+  - get_gitops_apps
+  - get_ops_context
+
+  Look for ingress / GitOps / addon hints about expiring or unhealthy TLS.
+  If you cannot see cert dates, say so and list what evidence is missing.
+  Do not rotate secrets, restart workloads, or write anything. D10 freeze: no orders.
+  Return a short evidence summary.

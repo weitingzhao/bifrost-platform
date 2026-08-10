@@ -10,7 +10,7 @@
  * governance summary that Ops Console and LLM agents need.
  */
 
-export const DESIGN_SYSTEM_VERSION = '2026-06-15'
+export const DESIGN_SYSTEM_VERSION = '2026-08-09.8'
 export const DESIGN_SYSTEM_SOURCE = 'console/src/lib/standards/designSystemCatalog.ts'
 export const LIVING_CONTRACT_PATH = '/settings/ui-design-system'
 
@@ -30,6 +30,9 @@ export const LAYER_STACK: LayerRow[] = [
   { layer: 'Layout', location: 'console/src/components/OpsContextStrip.tsx', role: 'Page-top Trade/Mission context strip inside PageShell; density=seat on Satellite Bus (Mission only, no Trade env twins); default compact when Mission OK, full when CAUTION+' },
   { layer: 'Layout', location: 'console/src/components/layout/OpsSection.tsx', role: 'OpsSection + OpsSubsectionTitle — unified page-section panel-elevated chrome' },
   { layer: 'Layout', location: 'console/src/components/layout/OpsVerdictStrip.tsx', role: 'OpsVerdictStrip — page verdict for Mission Control + Rocket Placement/Cluster (lamp + title + tag + summary + actions/meta)' },
+  { layer: 'Layout', location: '@bifrost/ui ShellNavSidebar + console ConsoleSidebar', role: 'Sidebar dual signal: route selected = pill; Task Mode phase path = inset accent rail; off-phase = muted ink (never whole-row opacity on current page)' },
+  { layer: 'Sidebar zones', location: '@bifrost/ui seatContent/partnerContent slots + console SeatStrip / PartnerStrip', role: 'Command hierarchy: Seat (Mission Control, pinned) → Partner (Engineer persona: Build Desk / Ops Desk / Analysis Desk) → Mission pig groups → Support chicken groups; Trade omits slots (zero-change)' },
+  { layer: 'Layout', location: 'console/src/components/task-mode/AgentTriadStrip.tsx', role: 'Three Desks Strip — Build / Ops / Analysis mode switch (TCC System + Control Room); Ops lands OpsDeskBoard; Analysis lands Analysis Workspace' },
   { layer: 'Data display', location: 'src/components/data-display/', role: 'Tables, PnL, segments, icon actions, collapsible groups — 14 primitives' },
   { layer: 'Domain', location: 'src/pages/*, src/components/*/', role: 'Business columns, hooks, API wiring only — minimal styling' },
 ]
@@ -285,6 +288,86 @@ export const MANDATORY_MAPPING: MandatoryMappingRow[] = [
     use: 'LaneStateStrip as Verdict equivalent + page-level actions on the strip',
     never: 'OpsVerdictStrip on lane pages; burying page-level Agent CTA inside Advanced recovery; pretending Plugin steps are Tekton STG/PROD',
   },
+  {
+    interaction: 'Sidebar here vs phase path (Task Mode lens)',
+    use: 'Route selected = bg pill; phaseFocusIds = inset --task-mode-accent rail; off-phase = muted ink via dimmedIds (skip current page)',
+    never: 'Whole-row opacity-40 to mean both “not here” and “not this phase”; same brightness for selected and phase-home',
+  },
+  {
+    interaction: 'Ops sidebar zones (Command Hierarchy)',
+    use: 'SeatStrip + PartnerStrip via ShellNavSidebar seatContent/partnerContent; Mission groups defaultOpen; Support emphasis=secondary + dividerBefore',
+    never: 'zone field on ShellNavGroup; injecting TCC into navGroups; collapsing Mission Control / Engineer as ordinary groups',
+  },
+  {
+    interaction: 'Three Desks (Build / Ops / Analysis)',
+    use: 'AgentTriadStrip on TCC System + Control Room; TaskModeIconRail System+Build+Ops+Analysis; Engineer PartnerStrip labels Build Desk / Ops Desk / Analysis Desk',
+    never: 'Standalone daily-ops / mission-launch / patrol pills; fourth page-chrome mode banner; fake Hermes insights when API is empty',
+  },
+]
+
+/* ── Sidebar command hierarchy (Ops Console) ── */
+
+export type SidebarZoneRow = {
+  zone: string
+  surface: string
+  intent: string
+}
+
+export const SIDEBAR_ZONES: SidebarZoneRow[] = [
+  {
+    zone: 'Seat',
+    surface: 'ShellNavSidebar.seatContent → SeatStrip (shrink-0, not in SidebarContent scroll)',
+    intent: 'Mission Control always visible: TCC (Task Mode) → Control Room → Observability → Defects → Audit. Filtered by navLens allowedTabIds; empty → omit slot.',
+  },
+  {
+    zone: 'Partner',
+    surface: 'ShellNavSidebar.partnerContent → PartnerStrip (persona block, not a nav group)',
+    intent: 'Engineer Three Desks: Build Desk always visible (Briefing → In Flight → Delivery → Dev Sessions); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk = Queue + Patrol + Execution Log + Operator Plane + Trust + Capability. Analysis Desk = Workspace + Insight Log + Hermes Status.',
+  },
+  {
+    zone: 'Mission',
+    surface: 'navGroups pig — Satellite then Rocket, defaultOpen: true',
+    intent: 'Payload + Ops Platform. Order unchanged (Satellite above Rocket). Dual signal (route pill + phase rail) still applies.',
+  },
+  {
+    zone: 'Support',
+    surface: 'navGroups chicken — Ground Systems then Subcontractors, emphasis: secondary, defaultOpen: false',
+    intent: 'Quieter infra + plugins. dividerBefore on Ground Systems. Dual signal still applies.',
+  },
+]
+
+/* ── Dual-perspective lifecycle (Engineer Partner) ── */
+
+export type DualPerspectiveLifecycleRow = {
+  node: string
+  owner: string
+  agent: string
+}
+
+/** Briefing / In Flight / Delivery — Owner vs Agent on one path. */
+export const DUAL_PERSPECTIVE_LIFECYCLE: DualPerspectiveLifecycleRow[] = [
+  {
+    node: 'Briefing — what to do today',
+    owner: 'Pick lane, pack, and intent. Quiet `N auto` = phases the agent can auto-verify; omit when 0.',
+    agent: 'Reads the scoped pack. Does not record Owner sign-off.',
+  },
+  {
+    node: 'In Flight — what is being done',
+    owner: 'Phase grid + Owner sign-off column. Phase work runs in Cursor IDE Agent; Console records Owner sign-off only.',
+    agent: 'Does not execute session phases via SDK. Reads the scoped pack; does not record Owner sign-off.',
+  },
+  {
+    node: 'Delivery — catalog and close',
+    owner: 'Catalog and gates. Record Owner sign-off on In Flight; Delivery phase table is read-only for typical programs.',
+    agent: 'Per-program job history via GET /programs/{id}/jobs. Job status is not Owner sign-off.',
+  },
+]
+
+export const DUAL_PERSPECTIVE_LIFECYCLE_RULES: string[] = [
+  'Phase work runs in Cursor IDE Agent. Owner sign-off is a separate admin action on In Flight (POST /programs/{id}/phases/{pid}/signoff). Console does not host a session SDK runtime.',
+  'Daily run and sign-off stay on In Flight. Delivery is the catalog and close surface.',
+  'Briefing `N auto` is quiet by default (render nothing when count is 0).',
+  'Delivery agent trace is per-program persisted history (GET /programs/{id}/jobs). Not a cross-program scrape.',
 ]
 
 /* ── Primitives inventory ── */
@@ -313,6 +396,8 @@ export const PRIMITIVES: PrimitiveRow[] = [
   { name: 'PageToolbar', file: 'console/src/components/layout/PageToolbar.tsx', category: 'Layout' },
   { name: 'OpsVerdictStrip', file: 'console/src/components/layout/OpsVerdictStrip.tsx', category: 'Layout' },
   { name: 'ConsoleHeader breadcrumb + TaskModeCapsule', file: 'console/src/components/ConsoleHeader.tsx', category: 'Layout' },
+  { name: 'AgentTriadStrip (Build / Ops / Analysis)', file: 'console/src/components/task-mode/AgentTriadStrip.tsx', category: 'Layout' },
+  { name: 'OpsDeskBoard', file: 'console/src/components/task-mode/OpsDeskBoard.tsx', category: 'Layout' },
   { name: 'OpsContextStrip (Trade / Mission)', file: 'console/src/components/OpsContextStrip.tsx', category: 'Layout' },
 ]
 
@@ -387,6 +472,20 @@ export function buildDesignSystemLlmPack(): string {
     '## Layer stack',
     '',
     ...LAYER_STACK.map(l => `- **${l.layer}** — \`${l.location}\` — ${l.role}`),
+    '',
+    '## Sidebar zones (Command Hierarchy)',
+    '',
+    'Slot API on `@bifrost/ui` ShellNavSidebar (`seatContent` / `partnerContent`). No `zone` field on ShellNavGroup. Dual signal (route pill vs phase rail) still applies in every zone.',
+    '',
+    ...SIDEBAR_ZONES.map(z => `- **${z.zone}** — ${z.surface} — ${z.intent}`),
+    '',
+    '## Dual-perspective lifecycle',
+    '',
+    ...DUAL_PERSPECTIVE_LIFECYCLE.map(
+      n => `- **${n.node}** — Owner: ${n.owner} — Agent: ${n.agent}`,
+    ),
+    '',
+    ...DUAL_PERSPECTIVE_LIFECYCLE_RULES.map(r => `- ${r}`),
     '',
     '## Page canvas (three surfaces)',
     '',

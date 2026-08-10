@@ -93,7 +93,7 @@ export function TaskBriefingLauncher({
     <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <ClipboardList size={16} />
-        <span className="text-[var(--text-dense-label)] font-semibold">Agent Briefing</span>
+        <span className="text-[var(--text-dense-label)] font-semibold">Briefing</span>
         {track != null && (
           <span className="text-[var(--text-dense-caption)] text-muted-foreground">
             Track · {track}
@@ -165,7 +165,7 @@ export function TaskBriefingLauncher({
         )}
         {focus.kind === 'signoff' && onNavigate != null && (
           <Button variant="secondary" size="xs" onClick={() => onNavigate('delivery-board')}>
-            Delivery Board →
+            Delivery →
           </Button>
         )}
         {onOpenFullBriefing != null && (

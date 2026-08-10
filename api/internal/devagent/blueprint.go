@@ -2,6 +2,7 @@ package devagent
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,10 +61,12 @@ type ProgramBlueprint struct {
 	Phases         []PhaseBlueprint         `yaml:"phases" json:"phases"`
 	PostCompletion *PostCompletionBlueprint `yaml:"post_completion" json:"post_completion,omitempty"`
 	Metadata       map[string]interface{}   `yaml:"metadata" json:"metadata,omitempty"`
+	SourcePath     string                   `yaml:"-" json:"-"`
 }
 
 type PhaseBlueprint struct {
 	ID             string              `yaml:"id" json:"id"`
+	Aliases        []string            `yaml:"aliases,omitempty" json:"aliases,omitempty"`
 	Title          string              `yaml:"title" json:"title"`
 	Status         string              `yaml:"status" json:"status"`
 	PromptTemplate string              `yaml:"prompt_template" json:"prompt_template,omitempty"`
@@ -96,6 +99,14 @@ type ProgramSummary struct {
 	AssessmentStatus string `json:"assessment_status,omitempty"`
 	// RequiresPostCompletion is true when the blueprint declares post_completion.
 	RequiresPostCompletion bool `json:"requires_post_completion,omitempty"`
+	// RuntimeJobStatus is this program's persisted active job: "" | running | awaiting_review | failed.
+	RuntimeJobStatus string `json:"runtime_job_status,omitempty"`
+	// PendingCount is blueprint phases not yet done (runtime phases + PhaseProgress).
+	PendingCount int `json:"pending_count"`
+	// PromptReady is true when a not-done phase has a non-empty prompt_template.
+	PromptReady bool `json:"prompt_ready"`
+	// RuntimeBucket is running | ready | idle | settled (phase readiness).
+	RuntimeBucket string `json:"runtime_bucket"`
 }
 
 type ProgramInfo struct {
@@ -105,42 +116,59 @@ type ProgramInfo struct {
 	Status      string `json:"status"`
 }
 
-func LoadProgramBlueprints(dir string) ([]*ProgramBlueprint, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("read programs dir %s: %w", dir, err)
+func skipProgramYAML(name string) bool {
+	if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+		return true
 	}
+	if strings.HasPrefix(name, "_") || strings.HasPrefix(name, "example-") {
+		return true
+	}
+	return false
+}
 
+func LoadProgramBlueprints(dir string) ([]*ProgramBlueprint, error) {
 	var programs []*ProgramBlueprint
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
+	seen := make(map[string]string)
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue
+		if d.IsDir() {
+			if strings.HasPrefix(d.Name(), "_") && path != dir {
+				return fs.SkipDir
+			}
+			return nil
 		}
-		if strings.HasPrefix(name, "_") || name == "example-template.yaml" {
-			continue
+		name := d.Name()
+		if skipProgramYAML(name) {
+			return nil
 		}
 
-		path := filepath.Join(dir, name)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", path, err)
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return fmt.Errorf("read %s: %w", path, readErr)
 		}
 
 		var bp ProgramBlueprint
-		if err := yaml.Unmarshal(data, &bp); err != nil {
-			return nil, fmt.Errorf("parse %s: %w", path, err)
+		if parseErr := yaml.Unmarshal(data, &bp); parseErr != nil {
+			return fmt.Errorf("parse %s: %w", path, parseErr)
 		}
 		if bp.ID == "" {
-			return nil, fmt.Errorf("program in %s missing id", path)
+			return fmt.Errorf("program in %s missing id", path)
 		}
+		if prev, ok := seen[bp.ID]; ok {
+			return fmt.Errorf("duplicate program id %s in %s and %s", bp.ID, prev, path)
+		}
+		seen[bp.ID] = path
 		if bp.Model == "" {
 			bp.Model = "composer-2.5"
 		}
+		bp.SourcePath = path
 		programs = append(programs, &bp)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read programs dir %s: %w", dir, err)
 	}
 
 	if len(programs) == 0 {

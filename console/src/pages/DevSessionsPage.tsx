@@ -265,7 +265,7 @@ export function DevSessionsPage() {
     })
   }, [sessions, controlMutation])
 
-  const allSessions = sessions ?? []
+  const allSessions = useMemo(() => sessions ?? [], [sessions])
   const running = allSessions.filter(s => s.status === 'running').length
   const total = allSessions.length
   const envLabel = (() => {

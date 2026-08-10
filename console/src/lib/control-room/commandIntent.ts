@@ -139,7 +139,7 @@ export function buildCommandIntentStripModel(input: {
 
   primaryChips.push({
     id: 'open-briefing',
-    label: 'Agent Briefing',
+    label: 'Briefing',
     detail: `Track: ${briefingTrack}`,
     action: { type: 'open_briefing', track: briefingTrack },
   })

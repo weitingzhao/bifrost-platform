@@ -84,6 +84,7 @@ func (h *Handler) RecordPhaseSignoff(programID, phaseID, signedOffBy, signedOffA
 	if !ok {
 		return fmt.Errorf("program not found: %s", programID)
 	}
+	phaseID = canonicalPhaseID(rt.blueprint, phaseID)
 	if !phaseExists(rt.blueprint, phaseID) {
 		return fmt.Errorf("phase not found: %s", phaseID)
 	}

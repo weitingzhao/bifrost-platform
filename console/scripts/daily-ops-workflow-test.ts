@@ -184,7 +184,7 @@ check('fleetClear + queue open → clear queue', () => {
   const r = resolveDailyOpsWorkflow({ fleet: clearFleet(), queueOpen: 2 })
   assert.equal(r.activePhase, 'clear')
   assert.equal(r.primaryAction.kind, 'clear-queue')
-  assert.equal(r.primaryAction.tabId, 'agent-desk')
+  assert.equal(r.primaryAction.tabId, 'queue')
 })
 
 check('agentPending → remediate View agent', () => {
@@ -193,7 +193,7 @@ check('agentPending → remediate View agent', () => {
   assert.equal(r.activePhase, 'remediate')
   assert.equal(r.primaryAction.kind, 'view-agent')
   assert.match(r.primaryAction.label, /View agent/i)
-  assert.equal(r.primaryAction.tabId, 'agent-desk')
+  assert.equal(r.primaryAction.tabId, 'queue')
   // Fix target binding: keep primary blocker while Agent is in flight
   assert.ok(r.primaryBlocker)
 })

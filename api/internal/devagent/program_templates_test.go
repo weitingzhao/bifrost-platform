@@ -7,10 +7,16 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+func utcDateStamp() string {
+	return time.Now().UTC().Format("20060102")
+}
 
 func writeTestTemplates(t *testing.T, programsDir string) {
 	t.Helper()
@@ -31,11 +37,11 @@ templates:
   - id: ground-build
     title: Ground Build
     description: test
-    base_blueprint_id: network-governance
+    base_blueprint_id: ground-session
   - id: plugin-build
     title: Plugin Build
     description: test
-    base_blueprint_id: ib-gateway-plugin
+    base_blueprint_id: plugin-session
   - id: build
     title: Build
     description: unified build
@@ -44,8 +50,8 @@ templates:
       console-api: control-room-ui
       trade-stack: trade-ib-client-migration
       agent-infra: dev-agent
-      network-server: network-governance
-      agent-services: ib-gateway-plugin
+      network-server: ground-session
+      agent-services: plugin-session
 `
 	if err := os.WriteFile(filepath.Join(programsDir, "_templates.yaml"), []byte(tpl), 0o644); err != nil {
 		t.Fatal(err)
@@ -64,7 +70,7 @@ func writeMinimalBlueprint(t *testing.T, programsDir, id, title string) {
 			SignOffMechanism: "api",
 		},
 		Phases: []PhaseBlueprint{
-			{ID: "P0", Title: "P0", Status: "pending"},
+			{ID: "P0", Title: "P0", Status: "done"},
 			{ID: "P1", Title: "P1", Status: "pending"},
 		},
 	}
@@ -107,19 +113,34 @@ func TestHandleCreateFromTemplate(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Program.ID != "control-room-ui--task-cc-test" {
-		t.Fatalf("program id = %q", resp.Program.ID)
+	wantID := "program-" + utcDateStamp()
+	if resp.Program.ID != wantID {
+		t.Fatalf("program id = %q want %q", resp.Program.ID, wantID)
+	}
+	if strings.Contains(resp.Program.ID, "--") {
+		t.Fatalf("new program id must not contain --: %q", resp.Program.ID)
 	}
 	if len(resp.Phases) != 2 {
 		t.Fatalf("phases = %d", len(resp.Phases))
 	}
+	for _, p := range resp.Phases {
+		if p.Status != "pending" {
+			t.Fatalf("clone phase %s status=%q want pending", p.ID, p.Status)
+		}
+	}
 
-	// Idempotent when same instance label.
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body))
 	rec2 := httptest.NewRecorder()
 	h.HandleCreateFromTemplate(rec2, req2)
-	if rec2.Code != http.StatusOK {
-		t.Fatalf("idempotent status = %d body=%s", rec2.Code, rec2.Body.String())
+	if rec2.Code != http.StatusCreated {
+		t.Fatalf("second create status = %d body=%s", rec2.Code, rec2.Body.String())
+	}
+	var resp2 ProgramDetailBoardResponse
+	if err := json.Unmarshal(rec2.Body.Bytes(), &resp2); err != nil {
+		t.Fatal(err)
+	}
+	if resp2.Program.ID != wantID+"-2" {
+		t.Fatalf("collision id = %q want %q", resp2.Program.ID, wantID+"-2")
 	}
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/programs?template_id=rocket-build", nil)
@@ -134,7 +155,7 @@ func TestHandleCreateFromTemplate(t *testing.T) {
 	if err := json.Unmarshal(listRec.Body.Bytes(), &listResp); err != nil {
 		t.Fatal(err)
 	}
-	if len(listResp.Programs) != 1 {
+	if len(listResp.Programs) != 2 {
 		t.Fatalf("filtered programs = %d", len(listResp.Programs))
 	}
 }
@@ -170,15 +191,19 @@ func TestHandleCreateFromTemplateBuildLane(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Program.ID != "trade-ib-client-migration--lane-test" {
-		t.Fatalf("program id = %q want trade-ib-client-migration--lane-test", resp.Program.ID)
+	wantID := "trade-stack-" + utcDateStamp()
+	if resp.Program.ID != wantID {
+		t.Fatalf("program id = %q want %q", resp.Program.ID, wantID)
+	}
+	if strings.Contains(resp.Program.ID, "--") {
+		t.Fatalf("new program id must not contain --: %q", resp.Program.ID)
 	}
 	if resp.Program.LaneID != "trade-stack" {
 		t.Fatalf("lane_id = %q", resp.Program.LaneID)
 	}
 
 	// Verify written blueprint metadata used resolved base.
-	raw, err := os.ReadFile(filepath.Join(programsDir, "trade-ib-client-migration--lane-test.yaml"))
+	raw, err := os.ReadFile(filepath.Join(programsDir, "active", wantID+".yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,6 +219,14 @@ func TestHandleCreateFromTemplateBuildLane(t *testing.T) {
 	}
 	if written.Metadata["lane_id"] != "trade-stack" {
 		t.Fatalf("lane_id = %v", written.Metadata["lane_id"])
+	}
+	if written.Status != "active" {
+		t.Fatalf("written status = %q", written.Status)
+	}
+	for _, p := range written.Phases {
+		if p.Status != "pending" {
+			t.Fatalf("written phase %s status=%q", p.ID, p.Status)
+		}
 	}
 }
 
@@ -233,6 +266,47 @@ phases:
 	}
 }
 
+func TestRepoSkeletonBlueprintsLegalPhases(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	programsDir := filepath.Clean(filepath.Join(wd, "..", "..", "..", "config", "programs"))
+	bps, err := LoadProgramBlueprints(programsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]*ProgramBlueprint{}
+	for _, bp := range bps {
+		if bp.ID == "ground-session" || bp.ID == "plugin-session" {
+			found[bp.ID] = bp
+		}
+	}
+	for _, id := range []string{"ground-session", "plugin-session"} {
+		bp := found[id]
+		if bp == nil {
+			t.Fatalf("missing skeleton %s", id)
+		}
+		if !isArchivedStatus(bp.Status) {
+			t.Fatalf("%s status = %q want archived", id, bp.Status)
+		}
+		if bp.Delivery == nil || bp.Delivery.BoardVisible {
+			t.Fatalf("%s must set board_visible: false", id)
+		}
+		if err := ValidateNewProgramID(bp.ID); err != nil {
+			t.Fatalf("%s id invalid: %v", id, err)
+		}
+		if len(bp.Phases) < 3 {
+			t.Fatalf("%s phases = %d", id, len(bp.Phases))
+		}
+		for _, p := range bp.Phases {
+			if !phaseIDAllowedForNewProgram(p.ID) {
+				t.Fatalf("%s phase %s not allowed for new programs", id, p.ID)
+			}
+		}
+	}
+}
+
 func TestGetProgramTemplate(t *testing.T) {
 	// Load from repo config (ensures YAML is the authority).
 	wd, err := os.Getwd()
@@ -256,8 +330,8 @@ func TestGetProgramTemplate(t *testing.T) {
 		base string
 	}{
 		{"engineer-build", "dev-agent"},
-		{"ground-build", "network-governance"},
-		{"plugin-build", "ib-gateway-plugin"},
+		{"ground-build", "ground-session"},
+		{"plugin-build", "plugin-session"},
 		{"build", "control-room-ui"},
 	}
 	for _, tc := range cases {
@@ -276,6 +350,12 @@ func TestGetProgramTemplate(t *testing.T) {
 	}
 	if build.ResolveBaseBlueprintID("trade-stack") != "trade-ib-client-migration" {
 		t.Fatalf("lane resolve trade-stack = %q", build.ResolveBaseBlueprintID("trade-stack"))
+	}
+	if build.ResolveBaseBlueprintID("network-server") != "ground-session" {
+		t.Fatalf("lane resolve network-server = %q", build.ResolveBaseBlueprintID("network-server"))
+	}
+	if build.ResolveBaseBlueprintID("agent-services") != "plugin-session" {
+		t.Fatalf("lane resolve agent-services = %q", build.ResolveBaseBlueprintID("agent-services"))
 	}
 	if build.ResolveBaseBlueprintID("") != "control-room-ui" {
 		t.Fatalf("default resolve = %q", build.ResolveBaseBlueprintID(""))
@@ -354,7 +434,7 @@ func TestHandleCreateFromTemplateRejectsSecondLiveLaneBind(t *testing.T) {
 	if rec2.Code != http.StatusConflict {
 		t.Fatalf("second live bind status = %d body=%s", rec2.Code, rec2.Body.String())
 	}
-	if !bytes.Contains(rec2.Body.Bytes(), []byte("control-room-ui--first")) {
+	if !bytes.Contains(rec2.Body.Bytes(), []byte("console-api-"+utcDateStamp())) {
 		t.Fatalf("409 body should name blocking program: %s", rec2.Body.String())
 	}
 }
@@ -384,7 +464,7 @@ func TestHandleCreateFromTemplateAllowsBindWhenSiblingSessionReleased(t *testing
 	}
 
 	h.mu.Lock()
-	rt := h.runtimes["control-room-ui--closed"]
+	rt := h.runtimes["console-api-"+utcDateStamp()]
 	signAllRuntimeGates(rt)
 	h.mu.Unlock()
 
@@ -421,7 +501,7 @@ func TestHandleCreateFromTemplateAllowsBindWhenSiblingInOperate(t *testing.T) {
 	}
 
 	h.mu.Lock()
-	rt := h.runtimes["control-room-ui--ops"]
+	rt := h.runtimes["console-api-"+utcDateStamp()]
 	signAllRuntimeGates(rt)
 	rt.blueprint.PostCompletion = &PostCompletionBlueprint{NewCapabilities: []string{"x"}}
 	rt.state.PostCompletion = &PostCompletionState{AssessmentStatus: "in_operate"}
@@ -432,5 +512,106 @@ func TestHandleCreateFromTemplateAllowsBindWhenSiblingInOperate(t *testing.T) {
 	h.HandleCreateFromTemplate(rec2, httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body2)))
 	if rec2.Code != http.StatusCreated {
 		t.Fatalf("bind after in_operate status = %d body=%s", rec2.Code, rec2.Body.String())
+	}
+}
+
+func TestHandleCreateFromTemplateRejectsLegacyPhaseIDs(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	programsDir := filepath.Join(configDir, "programs")
+	if err := os.MkdirAll(programsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestTemplates(t, programsDir)
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+
+	base := &ProgramBlueprint{
+		ID:     "ground-session",
+		Title:  "Ground Session",
+		Status: "archived",
+		Phases: []PhaseBlueprint{
+			{ID: "NG1", Title: "NG1", Status: "pending", PromptTemplate: "bad"},
+		},
+	}
+	data, err := yaml.Marshal(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(programsDir, "ground-session.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, err := NewHandler(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte(`{"template_id":"ground-build","lane_id":"network-server"}`)
+	rec := httptest.NewRecorder()
+	h.HandleCreateFromTemplate(rec, httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("NG1")) {
+		t.Fatalf("400 should mention illegal phase id: %s", rec.Body.String())
+	}
+}
+
+func TestHandleCreateFromTemplateGroundSession(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	programsDir := filepath.Join(configDir, "programs")
+	if err := os.MkdirAll(programsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestTemplates(t, programsDir)
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+
+	base := &ProgramBlueprint{
+		ID:     "ground-session",
+		Title:  "Ground Session",
+		Status: "archived",
+		Delivery: &DeliveryConfig{
+			BoardVisible:     false,
+			SignOffMechanism: "api",
+		},
+		Phases: []PhaseBlueprint{
+			{ID: "P1", Title: "Scope", Status: "pending", PromptTemplate: "scope it"},
+			{ID: "P2", Title: "Implement", Status: "pending", PromptTemplate: "do it"},
+			{ID: "P3", Title: "Verify", Status: "pending", PromptTemplate: "check it"},
+		},
+	}
+	for _, p := range base.Phases {
+		if !phaseIDAllowedForNewProgram(p.ID) {
+			t.Fatalf("skeleton phase %s must be legal", p.ID)
+		}
+	}
+	data, err := yaml.Marshal(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(programsDir, "ground-session.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, err := NewHandler(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte(`{"template_id":"ground-build","lane_id":"network-server"}`)
+	rec := httptest.NewRecorder()
+	h.HandleCreateFromTemplate(rec, httptest.NewRequest(http.MethodPost, "/api/v1/programs/from-template", bytes.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp ProgramDetailBoardResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	wantID := "network-server-" + utcDateStamp()
+	if resp.Program.ID != wantID {
+		t.Fatalf("program id = %q want %q", resp.Program.ID, wantID)
+	}
+	if len(resp.Phases) != 3 {
+		t.Fatalf("phases = %d", len(resp.Phases))
 	}
 }

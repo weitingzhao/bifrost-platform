@@ -1,12 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  DenseTag,
-} from '@bifrost/ui'
-import { ChevronRight } from 'lucide-react'
 import { LaunchPad } from '@/components/control-room/LaunchPad'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
@@ -43,7 +36,6 @@ import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
 import { TRADE_DEPLOY_SCOPE } from '@/lib/agent/tradeDeployAgentPrompt'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
-import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStrip'
 import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
@@ -273,7 +265,11 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
   const ops = mode.ops
   if (ops == null) return null
 
-  const isMissionLaunch = mode.id === 'mission-launch'
+  if (mode.id === 'ops') {
+    return <DailyOpsFleetDesk props={props} />
+  }
+
+  const isMissionLaunch = false
   const showLaunchPad =
     ops.showLaunchPad &&
     isMissionLaunch &&
@@ -404,14 +400,10 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     )
   }
 
-  if (mode.id === 'daily-ops') {
-    return <DailyOpsFleetDesk props={props} />
-  }
-
   return null
 }
 
-function DailyOpsFleetDesk({
+export function DailyOpsFleetDesk({
   props,
 }: {
   props: SummaryRowProps
@@ -510,6 +502,7 @@ function DailyOpsFleetDesk({
     if (key != null && key !== selectedCellKey) {
       setSelectedCellKey(key)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid snapping user cell selection back on fleet object churn
   }, [fleetWorkflow?.activePhase, fleetWorkflow?.targetCellKey])
 
   const stripError =
@@ -688,7 +681,7 @@ function DailyOpsFleetDesk({
                     } else if (onOpenAgentDesk != null) {
                       onOpenAgentDesk()
                     } else {
-                      onNavigate('agent-desk')
+                      onNavigate('queue')
                     }
                   })
                 }
@@ -739,14 +732,7 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
   const {
     mode,
     context,
-    matrices = [],
-    stgSmoke,
-    stgGate,
-    lastDeliverSucceeded,
-    tierB,
     onNavigate,
-    onOpenPromote,
-    onOpenDelivery,
     onDispatchRelease,
     onDispatchTradeDeploy,
     onDispatchPluginLaunch,
@@ -764,50 +750,14 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
   const ops = mode.ops
   if (ops == null) return null
 
-  /** Release posture (STG/Prod · Tier A·B) — Mission Launch TCC only; not Daily Ops. */
-  const promoteSection =
-    mode.id === 'mission-launch' ? (
-      <Collapsible defaultOpen className="group/release rounded-lg border border-border bg-card px-3 py-1.5">
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full cursor-pointer flex-wrap items-center gap-2 text-left"
-          >
-            <ChevronRight
-              className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/release:rotate-90"
-              aria-hidden
-            />
-            <span className="text-[var(--text-dense-meta)] font-semibold">Release posture</span>
-            <DenseTag variant="neutral" className="text-[9px]">
-              STG / Prod
-            </DenseTag>
-            <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-              Promote / cutover · Tier A·B
-            </span>
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="mt-2">
-            <PromoteCutoverStrip
-              context={context}
-              matrices={matrices}
-              stgSmoke={stgSmoke}
-              stgGate={stgGate}
-              lastDeliverSucceeded={lastDeliverSucceeded}
-              tierB={tierB}
-              onOpenPromote={onOpenPromote}
-              onOpenDelivery={onOpenDelivery}
-            />
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    ) : null
+  /** Release posture lived on Mission Launch TCC; Ops desk uses OpsDeskBoard + release tabs. */
+  const promoteSection = null
 
   if (promoteOnly) {
     return promoteSection != null ? <div className="flex flex-col gap-3">{promoteSection}</div> : null
   }
 
-  const isPlaybookLaunch = mode.id === 'mission-launch'
+  const isPlaybookLaunch = false
 
   const launchPadSection =
     ops.showLaunchPad &&
@@ -872,7 +822,7 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
   const readinessSection =
     isPlaybookLaunch && ops.showMissionSignals ? (
       <OpsSection title="Environment readiness">
-        <TaskModeReadinessStrip modeId="mission-launch" onNavigate={onNavigate} />
+        <TaskModeReadinessStrip modeId="ops" onNavigate={onNavigate} />
       </OpsSection>
     ) : null
 
@@ -888,14 +838,6 @@ export function OpsTaskStrips(props: OpsTaskStripsProps) {
     )
   }
 
-  if (mode.id === 'daily-ops') {
-    // Fleet Desk is rendered via OpsTaskSummaryRow; Daily Ops never shows Release posture.
-    return promoteOnly ? null : (
-      <div className="flex flex-col gap-3">
-        <DailyOpsFleetDesk props={props} />
-      </div>
-    )
-  }
 
   return (
     <div className="flex flex-col gap-3">

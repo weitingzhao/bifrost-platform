@@ -238,7 +238,7 @@ export function StockDepthSection({
     retry: 1,
   })
 
-  const rows = depthQ.data ?? []
+  const rows = useMemo(() => depthQ.data ?? [], [depthQ.data])
   const summary = useMemo(() => (rows.length > 0 ? buildSummary(rows) : null), [rows])
   const recentGaps = useMemo(() => buildRecentGapRows(rows), [rows])
 

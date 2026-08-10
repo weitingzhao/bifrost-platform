@@ -3,7 +3,8 @@ import { Button, SegmentControl, StatusLamp, cn } from '@bifrost/ui'
 import { Bot, ChevronDown, ChevronUp, LifeBuoy, Maximize2, Minimize2, X } from 'lucide-react'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
-import { DenseMarkdown, looksLikeMarkdown } from '@/components/agent/DenseMarkdown'
+import { DenseMarkdown } from '@/components/agent/DenseMarkdown'
+import { looksLikeMarkdown } from '@/components/agent/denseMarkdownUtils'
 import { DockDevSessionsPanel } from '@/components/agent/DockDevSessionsPanel'
 import { DockRecentAgentTasks } from '@/components/agent/DockRecentAgentTasks'
 import { ServerConsolePanel } from '@/components/ServerConsolePanel'
@@ -16,9 +17,13 @@ import {
 import { DockProcessFeed } from '@/components/agent/DockProcessFeed'
 import { updateActivityPhase, getActivityEvents } from '@/lib/activity/activityStore'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
+import {
+  persistOperatorTool,
+  readStoredTool,
+  type OperatorToolId,
+} from '@/components/agent/operatorDockStorage'
 
 const DOCK_HEIGHT_KEY = 'bifrost.console.agentExecutionDockHeight'
-const TOOL_KEY = 'bifrost.console.operatorDockTool'
 const AGENT_H_SPLIT_KEY = 'bifrost.console.dockAgentHSplitPct.v1'
 const AGENT_V_SPLIT_KEY = 'bifrost.console.dockAgentVSplitPct.v1'
 const DEFAULT_WORKING_VH = 42
@@ -93,7 +98,7 @@ function SummaryBody({
 }
 
 export type OperatorDockMode = 'collapsed' | 'working' | 'maximized'
-export type OperatorToolId = 'agent' | 'sessions' | 'console'
+export type { OperatorToolId }
 
 /** @deprecated Use OperatorDockMode */
 export type AgentExecutionDockMode = OperatorDockMode
@@ -146,26 +151,6 @@ function readStoredHeight(): number | null {
     return Number.isFinite(n) && n >= MIN_WORKING_PX ? n : null
   } catch {
     return null
-  }
-}
-
-/** Read last Operator Dock tool slot (Agent | Console). Safe for SSR / private mode. */
-export function readStoredTool(): OperatorToolId {
-  try {
-    const raw = localStorage.getItem(TOOL_KEY)
-    if (raw === 'console' || raw === 'agent' || raw === 'sessions') return raw
-  } catch {
-    /* ignore */
-  }
-  return 'agent'
-}
-
-/** Persist Operator Dock tool slot — used in both controlled and uncontrolled modes. */
-export function persistOperatorTool(tool: OperatorToolId): void {
-  try {
-    localStorage.setItem(TOOL_KEY, tool)
-  } catch {
-    /* ignore */
   }
 }
 
@@ -463,6 +448,7 @@ export function OperatorDock({
 
   useEffect(() => {
     if (pendingApproval != null) setApprovalLogsOpen(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset logs when approval id changes
   }, [pendingApproval?.id])
 
   // P2-C: mid-flight remediation phases → Activity Feed detail

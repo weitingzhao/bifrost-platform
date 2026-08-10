@@ -11,7 +11,7 @@ import {
   DenseTag,
   denseTableEntityLink,
 } from '@bifrost/ui'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useIsFetching, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ArgoCDStatus, GitOpsApplicationView, GitOpsAppsResponse } from '@/api/deliveryTypes'
 import type { Reachability } from '@/api/matrixTypes'
@@ -99,7 +99,7 @@ export function GitOpsProbePanel({
   onOpenAudit,
   onDrawerOpenChange,
 }: GitOpsProbePanelProps) {
-  const apps = data?.apps ?? []
+  const apps = useMemo(() => data?.apps ?? [], [data?.apps])
   const { canOperate, canAdmin } = usePlatformAuth()
   const qc = useQueryClient()
   const gitopsFetching = useIsFetching({ queryKey: ['gitops', 'apps'] }) > 0

@@ -1,7 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type {
-  LaunchProgramRequest,
-  LaunchProgramResponse,
   ProgramDetailResponse,
   ProgramsListResponse,
   CreateProgramFromTemplateRequest,
@@ -61,14 +59,6 @@ export async function signoffProgramPhase(
     { method: 'POST', body: JSON.stringify(body ?? {}) },
   )
   return r.json() as Promise<ProgramDetailResponse>
-}
-
-export async function launchProgramAgent(body: LaunchProgramRequest): Promise<LaunchProgramResponse> {
-  const r = await programsFetch('/api/v1/programs/launch', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-  return r.json() as Promise<LaunchProgramResponse>
 }
 
 export async function createProgramFromTemplate(

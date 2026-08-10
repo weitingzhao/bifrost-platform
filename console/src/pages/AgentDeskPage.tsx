@@ -325,7 +325,7 @@ export function AgentDeskPage({
       }
       else onOpenDeliveryBoard?.()
     },
-    [onOpenBriefing, onOpenDeliveryBoard],
+    [onOpenDeliveryBoard],
   )
 
   const handlePrepareHandoffAgent = useCallback((item: OperateQueueItem) => {

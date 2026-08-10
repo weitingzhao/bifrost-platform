@@ -4,15 +4,18 @@ import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  BRIEFING_DPR_COLOR,
   BriefingProgressMeter,
   BriefingStatusBadge,
   BriefingStatusLamp,
+} from '@/components/briefing/BriefingStatusChrome'
+import {
+  BRIEFING_DPR_COLOR,
   briefingDashedCardClass,
   briefingLaneListRowClass,
   briefingSolidCardClass,
-} from '@/components/briefing/BriefingStatusChrome'
-import { BriefingIconBadge, LANE_ICONS, TRACK_ICONS } from '@/lib/briefing/briefingIcons'
+} from '@/components/briefing/briefingStatusChromeClasses'
+import { BriefingIconBadge } from '@/lib/briefing/briefingIcons'
+import { LANE_ICONS, TRACK_ICONS } from '@/lib/briefing/briefingIconMaps'
 import {
   isLaneLifecycleHold,
   laneLifecycleFromQueue,
@@ -51,6 +54,8 @@ import {
 import { createLane, deleteLane, LANES_QUERY_KEY } from '@/api/lanes'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
+import { useDevAgentAutoReady } from '@/hooks/useDevAgentAutoReady'
+import { LaneAgentAutoIndicator } from '@/components/briefing/LaneAgentAutoIndicator'
 
 export type NewLaneReference = {
   id: LaneId
@@ -109,6 +114,7 @@ function LaneCard({
   onSelect,
   onDelete,
   showLineBadge = false,
+  autoReadyCount = 0,
 }: {
   lane: WorkLane
   selected: boolean
@@ -117,6 +123,7 @@ function LaneCard({
   onSelect: () => void
   onDelete?: () => void
   showLineBadge?: boolean
+  autoReadyCount?: number
 }) {
   const status = lifecycleToBriefingStatus(lifecycle)
   const lineShort = componentLineById(lane.componentLine).shortLabel
@@ -147,6 +154,7 @@ function LaneCard({
                   {lineShort}
                 </span>
               )}
+              <LaneAgentAutoIndicator count={autoReadyCount} />
               <BriefingStatusBadge status={status} />
             </div>
             <p className="m-0 mt-1 line-clamp-2 break-words text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -334,12 +342,14 @@ function EmptyLaneCard({
   onSelect,
   onDelete,
   showLineBadge = false,
+  autoReadyCount = 0,
 }: {
   lane: WorkLane
   selected: boolean
   onSelect: () => void
   onDelete?: () => void
   showLineBadge?: boolean
+  autoReadyCount?: number
 }) {
   const lineShort = componentLineById(lane.componentLine).shortLabel
   return (
@@ -369,6 +379,7 @@ function EmptyLaneCard({
                   {lineShort}
                 </span>
               )}
+              <LaneAgentAutoIndicator count={autoReadyCount} />
               <BriefingStatusBadge status="ready" />
             </div>
             <p className="m-0 mt-1 line-clamp-2 break-words text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -462,6 +473,7 @@ function LaneListRow({
   onDelete,
   showLineBadge,
   emptyHint,
+  autoReadyCount = 0,
 }: {
   lane: WorkLane
   progress: ReturnType<typeof queueProgress>
@@ -472,6 +484,7 @@ function LaneListRow({
   showLineBadge: boolean
   /** When lifecycle is empty, show ready hint instead of progress. */
   emptyHint?: boolean
+  autoReadyCount?: number
 }) {
   const status = lifecycleToBriefingStatus(lifecycle)
   const lineShort = componentLineById(lane.componentLine).shortLabel
@@ -507,6 +520,7 @@ function LaneListRow({
             {progress.done}/{progress.total}
           </span>
         ) : null}
+        <LaneAgentAutoIndicator count={autoReadyCount} />
         <BriefingStatusBadge status={status} />
       </button>
       {onDelete != null && <LaneDeleteButton lane={lane} onDelete={onDelete} />}
@@ -541,6 +555,7 @@ function CompletedLanesGroup({
   onRequestDelete,
   showLineBadge = false,
   viewMode,
+  autoReadyForLane,
 }: {
   items: LaneWithQueue[]
   selectedLane: LaneId
@@ -548,6 +563,7 @@ function CompletedLanesGroup({
   onRequestDelete?: (lane: WorkLane) => void
   showLineBadge?: boolean
   viewMode: LaneViewMode
+  autoReadyForLane: (laneId: string) => number
 }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -584,6 +600,7 @@ function CompletedLanesGroup({
                 onRequestDelete != null ? () => onRequestDelete(lane) : undefined
               }
               showLineBadge={showLineBadge}
+              autoReadyCount={autoReadyForLane(lane.id)}
             />
           ))}
         </div>
@@ -602,6 +619,7 @@ function CompletedLanesGroup({
                   onRequestDelete != null ? () => onRequestDelete(lane) : undefined
                 }
                 showLineBadge={showLineBadge}
+                autoReadyCount={autoReadyForLane(lane.id)}
               />
             </li>
           ))}
@@ -650,7 +668,7 @@ export function TrackLaneSection({
   const showLineBadge = resolvedScope === 'all' || crossTrack
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
-  const { programsReleasedFor } = useDeliveryProgramClosure()
+  const { programsReleasedFor, openProgramsFor } = useDeliveryProgramClosure()
 
   const requestDelete = useCallback(
     (lane: WorkLane) => {
@@ -724,6 +742,17 @@ export function TrackLaneSection({
     if (lifecycleFilter == null) return visible
     return visible.filter(item => item.lifecycle === lifecycleFilter)
   }, [laneItems, lifecycleFilter, programsReleasedFor])
+
+  const visibleProgramIds = useMemo(
+    () => filteredLaneItems.flatMap(item => openProgramsFor(item.lane.id).map(p => p.id)),
+    [filteredLaneItems, openProgramsFor],
+  )
+  const { autoReadyCount } = useDevAgentAutoReady(visibleProgramIds)
+  const autoReadyForLane = useCallback(
+    (laneId: string) =>
+      openProgramsFor(laneId).reduce((n, p) => n + autoReadyCount(p.id), 0),
+    [openProgramsFor, autoReadyCount],
+  )
 
   const groups = useMemo(() => {
     const g: Record<LaneLifecycle, LaneWithQueue[]> = {
@@ -818,7 +847,7 @@ export function TrackLaneSection({
       <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
         {filterActive
           ? `Showing ${filterChipLabel?.toLowerCase()} only across all track types (matches Summary). Clear filter for Track Type board.`
-          : 'Doing → Active Session. Backlog → Pack & Launch. Completed = archive.'}
+          : 'Doing → In Flight. Backlog → Pack & Launch. Completed = archive.'}
       </p>
 
       {filterEmpty && (
@@ -836,7 +865,7 @@ export function TrackLaneSection({
         <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2.5 text-center">
           <p className="m-0 text-sm font-medium text-[var(--foreground)]">All lanes complete</p>
           <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Start a new lane under Backlog. Program sign-off in Active Session; Delivery Board is
+            Start a new lane under Backlog. Program sign-off in In Flight; Delivery is
             read-only archive. Completed below is an archive view of lanes.
           </p>
         </div>
@@ -858,7 +887,7 @@ export function TrackLaneSection({
               status="doing"
               title="Doing"
               count={doingLanes.length}
-              hint="In progress — execute in Active Session"
+              hint="In progress — execute in In Flight"
             />
             {laneViewMode === 'tag' ? (
               <div className={LANE_TAG_GRID}>
@@ -874,6 +903,7 @@ export function TrackLaneSection({
                       deleteHandler != null ? () => deleteHandler(lane) : undefined
                     }
                     showLineBadge={showLineBadge}
+                    autoReadyCount={autoReadyForLane(lane.id)}
                   />
                 ))}
               </div>
@@ -891,6 +921,7 @@ export function TrackLaneSection({
                         deleteHandler != null ? () => deleteHandler(lane) : undefined
                       }
                       showLineBadge={showLineBadge}
+                      autoReadyCount={autoReadyForLane(lane.id)}
                     />
                   </li>
                 ))}
@@ -922,6 +953,7 @@ export function TrackLaneSection({
                       deleteHandler != null ? () => deleteHandler(lane) : undefined
                     }
                     showLineBadge={showLineBadge}
+                    autoReadyCount={autoReadyForLane(lane.id)}
                   />
                 ))}
                 {groups.planned.map(({ lane, progress, lifecycle }) => (
@@ -936,6 +968,7 @@ export function TrackLaneSection({
                       deleteHandler != null ? () => deleteHandler(lane) : undefined
                     }
                     showLineBadge={showLineBadge}
+                    autoReadyCount={autoReadyForLane(lane.id)}
                   />
                 ))}
                 {canCreateLane && !showNewLane && (
@@ -975,6 +1008,7 @@ export function TrackLaneSection({
                       }
                       showLineBadge={showLineBadge}
                       emptyHint
+                      autoReadyCount={autoReadyForLane(lane.id)}
                     />
                   </li>
                 ))}
@@ -990,6 +1024,7 @@ export function TrackLaneSection({
                         deleteHandler != null ? () => deleteHandler(lane) : undefined
                       }
                       showLineBadge={showLineBadge}
+                      autoReadyCount={autoReadyForLane(lane.id)}
                     />
                   </li>
                 ))}
@@ -1032,6 +1067,7 @@ export function TrackLaneSection({
             onRequestDelete={deleteHandler}
             showLineBadge={showLineBadge}
             viewMode={laneViewMode}
+            autoReadyForLane={autoReadyForLane}
           />
         )}
       </div>

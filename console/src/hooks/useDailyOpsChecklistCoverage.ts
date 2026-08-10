@@ -22,6 +22,7 @@ export function useDailyOpsChecklistCoverage(
 
   return useMemo(() => {
     if (fleet == null) return null
+    void touchEpoch
     return buildChecklistCoverageIndex(fleet)
-  }, [fleet, fleet?.cells, fleet?.verdict.kind, fleet?.fleetClear, touchEpoch])
+  }, [fleet, touchEpoch])
 }

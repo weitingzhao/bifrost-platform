@@ -1,0 +1,25 @@
+id: dev-agent
+title: Dev Agent Platform
+description: Declarative program blueprint and multi-program API.
+status: completed
+delivery:
+  board_visible: true
+  former_location: Engineer → Dev Agent
+  sign_off_mechanism: api
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/batch-execution/SKILL.md
+model: composer-2.5
+phases:
+  - id: P1
+    aliases: [DAP-1]
+    title: Platform delivery closure
+    status: done
+    sign_off:
+      required: true
+    agent_session:
+      enabled: true
+metadata:
+  created_at: "2026-07-07"
+  owner: vision-mac-trader
+  lane_id: agent-services
+  tags: [delivery-board, dev-agent]

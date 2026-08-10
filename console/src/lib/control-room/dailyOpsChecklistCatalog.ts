@@ -313,6 +313,26 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         critical: true,
       },
       {
+        id: 'db-backup-fresh',
+        label: 'CNPG backup < 48h',
+        group: 'datastore',
+        idPattern: '^db-backup-fresh$',
+        healthyCriteria: 'Latest completed CNPG Backup CR is younger than 48 hours',
+        fixScope: 'data-layer-backup',
+        fixCapability: 'semi_auto',
+        manualAction:
+          'Trigger on-demand CNPG Backup (barmanObjectStore) or inspect ScheduledBackup bifrost-postgres-daily / MinIO',
+        agentTools: ['get_cluster_summary'],
+        boardProjection: {
+          standardId: 'db-backup-fresh',
+          label: 'CNPG backup < 48h',
+          cell: { role: 'satellite', env: 'prod' },
+          group: 'datastore',
+          required: true,
+          reason: 'Cluster-wide CNPG barman freshness — not a per-env matrix target',
+        },
+      },
+      {
         id: 'redis',
         label: 'Redis reachable',
         group: 'datastore',
@@ -693,7 +713,7 @@ export const DAILY_OPS_CHECKLIST_META = {
   ],
   coverage: {
     totalSteps: 7,
-    totalItems: 18,
+    totalItems: 19,
     fleetRoles: ['ground', 'rocket', 'engineer', 'satellite', 'vendor'] as FleetRole[],
     fleetGroups: [
       'cluster',
@@ -711,7 +731,7 @@ export const DAILY_OPS_CHECKLIST_META = {
     excludedGroups: ['path'] as FleetStandardGroup[],
     fixCapabilitySummary: {
       full_auto: 7,
-      semi_auto: 9,
+      semi_auto: 10,
       manual: 1,
       observe: 1,
     },

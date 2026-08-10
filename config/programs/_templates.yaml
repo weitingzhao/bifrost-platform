@@ -20,12 +20,12 @@ templates:
   - id: ground-build
     title: Ground Build
     description: Dev loop instance for ground systems / network governance work.
-    base_blueprint_id: network-governance
+    base_blueprint_id: ground-session
 
   - id: plugin-build
     title: Plugin Build
     description: Dev loop instance for platform plugin work (e.g. IB Gateway).
-    base_blueprint_id: ib-gateway-plugin
+    base_blueprint_id: plugin-session
 
   # Unified Build view (Console taskModeCatalog templateId: build).
   # Legacy *-build templates above remain for existing program instances.
@@ -49,8 +49,8 @@ templates:
       # Engineer / Agent
       agent-infra: dev-agent
       # Ground / Network
-      network-server: network-governance
-      network-wifi: network-governance
-      ai-network: network-governance
+      network-server: ground-session
+      network-wifi: ground-session
+      ai-network: ground-session
       # Plugin
-      agent-services: ib-gateway-plugin
+      agent-services: plugin-session

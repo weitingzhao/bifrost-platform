@@ -1,14 +1,14 @@
-import type { ShellNavGroup } from '@bifrost/ui'
+import type { ShellNavGroup, ShellNavItem } from '@bifrost/ui'
 import {
   Activity,
   Archive,
   BookOpen,
   Bot,
   Boxes,
+  BrainCircuit,
   Building2,
   CalendarClock,
   ClipboardList,
-  Code2,
   Container,
   Cpu,
   Database,
@@ -18,6 +18,7 @@ import {
   History,
   LifeBuoy,
   LineChart,
+  ListTodo,
   MapPinned,
   Microscope,
   Network,
@@ -30,54 +31,112 @@ import {
   Server,
   Shield,
   ShieldCheck,
+  Sparkles,
   Terminal,
   Workflow,
 } from 'lucide-react'
 
 /**
- * Ops Console sidebar — six system-domain groups (Apollo model).
+ * Ops Console sidebar — Command Hierarchy (Seat / Partner / Mission / Support).
+ *
+ * Mission Control and Engineer are no longer collapsible navGroups. They render
+ * via ShellNavSidebar `seatContent` / `partnerContent` slots. Remaining groups
+ * are Mission (Satellite + Rocket, pig) and Support (Ground + Subcontractors, chicken).
  *
  * System Domain SSOT (ids + purpose + scope→domain): systemDomainCatalog.ts
  *
- * Instead of verb-based lenses (Observe / Operate / Architecture) the
- * navigation is organised by **system domain** so each domain self-contains
- * its observe, operate, and governance dimensions.
- *
- * | Group            | Domain                | Intent                                           |
- * |------------------|-----------------------|--------------------------------------------------|
- * | Mission Control  | Cross-domain ops hub  | Execute (TCC) → Posture (Control Room) → Health (Observability); defects, audit |
- * | Rocket           | Ops Platform itself   | K8s cluster, Launch Rocket, placement             |
- * | Ground Systems   | Infrastructure        | Network, compute (SSH via shell Operator Dock)    |
- * | Satellite        | Payload satellite(s)  | Bus, runtime, API & Auth Probes, Deploy Satellite |
- * | Subcontractors   | External plugins      | Plugin Gallery, future plugins                    |
- * | Engineer         | AI Agent              | Delivery (Plan → Execute → Archive) + Workspace, autonomous, trust, L-1 |
+ * | Zone     | Surface                         | Intent                                           |
+ * |----------|---------------------------------|--------------------------------------------------|
+ * | Seat     | Mission Control items (fixed)   | Execute (TCC) → Posture → Health; defects, audit |
+ * | Partner  | Engineer strip (persona)        | Build Desk always visible; Ops Desk / Analysis Desk |
+ * | Mission  | Satellite → Rocket (pig)        | Payload + Ops Platform                           |
+ * | Support  | Ground Systems → Subcontractors | Infra + plugins (quieter, default collapsed)     |
  *
  * Governance (Vision / Blueprint / Standards / …) lives in the shell User menu
  * — cross-domain reference library, not a daily-ops rail group.
  *
  * Engineer is fate-isolated from the system it services (bootstrap paradox, D7).
+ * `CONSOLE_NAV_PLANE_BY_TAB` plane labels stay unchanged (decoupled from render).
  */
+
+export const TASK_CC_NAV_ITEM: ShellNavItem = {
+  id: 'task-cc',
+  label: 'Task Control Center',
+  icon: ListTodo,
+  shortLabel: 'T',
+}
+
+export const MISSION_CONTROL_ITEMS: ShellNavItem[] = [
+  { id: 'control-room', label: 'Control Room', icon: Gauge },
+  { id: 'observability', label: 'Observability', icon: LineChart },
+  { id: 'defects', label: 'Defects', icon: Microscope },
+  { id: 'audit', label: 'Audit', icon: History },
+]
+
+/** Build Desk — field name `lifecycle` kept; display label is Build Desk. */
+export const ENGINEER_LIFECYCLE_ITEMS: ShellNavItem[] = [
+  { id: 'briefing', label: 'Briefing', icon: ClipboardList },
+  { id: 'active-session', label: 'In Flight', icon: Orbit },
+  { id: 'delivery-board', label: 'Delivery', icon: Archive },
+  { id: 'dev-sessions', label: 'Dev Sessions', icon: Terminal },
+]
+
+/** Ops Desk — field name `workspace` kept; display label is Ops Desk. */
+export const ENGINEER_WORKSPACE_ITEMS: ShellNavItem[] = [
+  { id: 'queue', label: 'Queue', icon: Bot },
+  { id: 'autonomous-skills', label: 'Patrol', icon: CalendarClock },
+  { id: 'execution-log', label: 'Execution Log', icon: Activity },
+  { id: 'operator-plane', label: 'Operator Plane', icon: LifeBuoy },
+  { id: 'agent-governance', label: 'Trust & Autonomy', icon: ShieldCheck },
+  { id: 'agent-capability', label: 'Agent Capability', icon: Network },
+]
+
+/** Analysis Desk — field name `profile` kept; display label is Analysis Desk. */
+export const ENGINEER_PROFILE_ITEMS: ShellNavItem[] = [
+  { id: 'analysis-workspace', label: 'Analysis Workspace', icon: BrainCircuit },
+  { id: 'insight-log', label: 'Insight Log', icon: Sparkles },
+  { id: 'hermes-status', label: 'Hermes Status', icon: Cpu },
+]
+
+export function filterAllowedNavItems(
+  items: readonly ShellNavItem[],
+  allowedTabIds: Set<string> | null,
+): ShellNavItem[] {
+  if (allowedTabIds == null) return [...items]
+  return items.filter(item => allowedTabIds.has(item.id))
+}
+
+export function buildSeatNavItems(
+  allowedTabIds: Set<string> | null,
+  showTaskControlCenter: boolean,
+): ShellNavItem[] {
+  const base = showTaskControlCenter
+    ? [TASK_CC_NAV_ITEM, ...MISSION_CONTROL_ITEMS]
+    : MISSION_CONTROL_ITEMS
+  return filterAllowedNavItems(base, allowedTabIds)
+}
+
+export type PartnerNavSections = {
+  lifecycle: ShellNavItem[]
+  workspace: ShellNavItem[]
+  profile: ShellNavItem[]
+}
+
+export function buildPartnerNavSections(
+  allowedTabIds: Set<string> | null,
+): PartnerNavSections | null {
+  const lifecycle = filterAllowedNavItems(ENGINEER_LIFECYCLE_ITEMS, allowedTabIds)
+  const workspace = filterAllowedNavItems(ENGINEER_WORKSPACE_ITEMS, allowedTabIds)
+  const profile = filterAllowedNavItems(ENGINEER_PROFILE_ITEMS, allowedTabIds)
+  if (lifecycle.length + workspace.length + profile.length === 0) return null
+  return { lifecycle, workspace, profile }
+}
+
 export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
-  {
-    label: 'Mission Control',
-    icon: Gauge,
-    defaultOpen: true,
-    subGroups: [
-      {
-        label: '',
-        // Order: execute → posture → health (TCC injected first by navLens in Ops/Dev modes).
-        items: [
-          { id: 'control-room', label: 'Control Room', icon: Gauge },
-          { id: 'observability', label: 'Observability', icon: LineChart },
-          { id: 'defects', label: 'Defects', icon: Microscope },
-          { id: 'audit', label: 'Audit', icon: History },
-        ],
-      },
-    ],
-  },
   {
     label: 'Satellite',
     icon: Satellite,
+    defaultOpen: true,
     subGroups: [
       {
         label: '',
@@ -93,6 +152,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
   {
     label: 'Rocket',
     icon: Rocket,
+    defaultOpen: true,
     subGroups: [
       {
         label: '',
@@ -105,49 +165,11 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
     ],
   },
   {
-    label: 'Engineer',
-    icon: Bot,
-    subGroups: [
-      {
-        label: 'Delivery',
-        items: [
-          { id: 'briefing', label: 'Agent Briefing', icon: ClipboardList },
-          { id: 'active-session', label: 'Active Session', icon: Orbit },
-          { id: 'delivery-board', label: 'Delivery Board', icon: Archive },
-        ],
-      },
-      {
-        label: 'Workspace',
-        items: [
-          { id: 'agent-capability', label: 'Agent Capability', icon: Network },
-          { id: 'dev-agent', label: 'Dev Agent', icon: Code2 },
-          { id: 'dev-sessions', label: 'Dev Sessions', icon: Terminal },
-        ],
-      },
-      {
-        label: 'Autonomous',
-        items: [
-          { id: 'autonomous-skills', label: 'Skills & Schedules', icon: CalendarClock },
-          { id: 'execution-log', label: 'Execution Log', icon: Activity },
-        ],
-      },
-      {
-        label: 'Trust',
-        items: [
-          { id: 'agent-governance', label: 'Trust & Autonomy', icon: ShieldCheck },
-        ],
-      },
-      {
-        label: 'Operator Plane (L-1)',
-        items: [
-          { id: 'operator-plane', label: 'Operator Plane', icon: LifeBuoy },
-        ],
-      },
-    ],
-  },
-  {
     label: 'Ground Systems',
     icon: Building2,
+    defaultOpen: false,
+    dividerBefore: true,
+    emphasis: 'secondary',
     subGroups: [
       {
         label: '',
@@ -161,6 +183,8 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
   {
     label: 'Subcontractors',
     icon: Handshake,
+    defaultOpen: false,
+    emphasis: 'secondary',
     subGroups: [
       {
         label: '',
@@ -243,17 +267,21 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'plugin-gallery': 'Subcontractors',
   'market-data-manage': 'Subcontractors',
   'plugin-release': 'Subcontractors',
+  queue: 'Engineer',
+  /** Legacy `#agent-desk` hash alias — plane kept for breadcrumb flash before redirect. */
   'agent-desk': 'Engineer',
   'agent-capability': 'Engineer',
   briefing: 'Engineer',
   'active-session': 'Engineer',
   'delivery-board': 'Engineer',
-  'dev-agent': 'Engineer',
   'dev-sessions': 'Engineer',
   'autonomous-skills': 'Engineer',
   'execution-log': 'Engineer',
   'agent-governance': 'Engineer',
   'operator-plane': 'Engineer',
+  'analysis-workspace': 'Engineer',
+  'insight-log': 'Engineer',
+  'hermes-status': 'Engineer',
   'flywheel-vision': 'Governance',
   blueprint: 'Governance',
   roadmap: 'Governance',

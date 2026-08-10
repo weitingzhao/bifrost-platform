@@ -269,7 +269,7 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
   'daily-ops-checklist-run': {
     entryPoint:
       'Daily Ops → Checklist · AI Check · scripts/agent/daily_ops_checklist.sh · launchd / market-open',
-    trigger: 'TCC AI Check or scheduled Daily Ops Checklist probe (18 items)',
+    trigger: 'TCC AI Check or scheduled Daily Ops Checklist probe (19 items)',
     description:
       'L0 prober (AI Check): verify_mission_snapshot + bridge/gitops/smoke/pipelines → report_checklist_signals. Not Operator Plane Fix. Auto-dispatch gated by fixCapability (D10 skip IB).',
   },

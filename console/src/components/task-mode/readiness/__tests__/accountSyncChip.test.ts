@@ -102,7 +102,7 @@ describe('pickPrimaryFailingChip', () => {
 describe('readinessChipFixActions account sync', () => {
   it('offers rollout-restart for Account sync chip', () => {
     const actions = readinessChipFixActions('Account sync', 'degraded', {
-      modeId: 'mission-launch',
+      modeId: 'ops',
       env: 'prod',
     })
     expect(actions.some(a => a.tabId === 'satellite-bus' && a.busFocus === 'monitor')).toBe(true)
@@ -116,7 +116,7 @@ describe('readinessChipFixActions account sync', () => {
 
   it('never offers daemon scale-up actuate', () => {
     const actions = readinessChipFixActions('Trading daemon', 'fail', {
-      modeId: 'mission-launch',
+      modeId: 'ops',
       env: 'stg',
     })
     expect(actions.every(a => a.kind !== 'actuate' || a.actuation?.kind !== 'rollout-restart' || a.actuation.deployment !== 'daemon')).toBe(true)

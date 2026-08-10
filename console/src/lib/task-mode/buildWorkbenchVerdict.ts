@@ -31,8 +31,6 @@ export type BuildWorkbenchInput = {
   programsReleased?: boolean
   programSigned?: number
   programPhaseCount?: number
-  /** True when Dev Agent status probe failed. */
-  devAgentError?: boolean
 }
 
 /** Dev-loop surface id — Verdict CTA scrolls here for pack / create program. */
@@ -42,12 +40,8 @@ function bindingSummary(lane: string | null, programId: string | null): string {
   return `Lane ${lane ?? '—'} · program ${programId}`
 }
 
-function lampFromFocusKind(
-  kind: SessionLaneFocusKind,
-  agentSoftDegrade: boolean,
-): BuildWorkbenchLamp {
+function lampFromFocusKind(kind: SessionLaneFocusKind): BuildWorkbenchLamp {
   if (kind === 'archive') return 'ok'
-  if (agentSoftDegrade) return 'degraded'
   if (kind === 'doing') return 'unknown'
   return 'degraded'
 }
@@ -57,7 +51,7 @@ function ctaFromFocusKind(kind: SessionLaneFocusKind): BuildWorkbenchCta {
     case 'pick-session':
       return { kind: 'navigate', tabId: 'briefing', label: 'Open Briefing →' }
     case 'signoff':
-      return { kind: 'navigate', tabId: 'active-session', label: 'Active Session →' }
+      return { kind: 'navigate', tabId: 'active-session', label: 'In Flight →' }
     case 'archive':
       return { kind: 'navigate', tabId: 'briefing', label: 'Open Briefing →' }
     case 'plan':
@@ -83,13 +77,12 @@ function ctaFromFocusKind(kind: SessionLaneFocusKind): BuildWorkbenchCta {
 export function resolveBuildWorkbenchVerdict(input: BuildWorkbenchInput): BuildWorkbenchVerdict {
   const lane = input.activeLane?.trim() || null
   const programId = input.programId?.trim() || null
-  const agentSoftDegrade = input.devAgentError === true
 
   if (!input.hasActiveSession) {
     return {
       lamp: 'fail',
       summary: 'No Active Session — Copy a Briefing session before linking work',
-      nextLine: 'Next: Copy session in Agent Briefing',
+      nextLine: 'Next: Copy session in Briefing',
       cta: { kind: 'navigate', tabId: 'briefing', label: 'Open Briefing →' },
     }
   }
@@ -136,7 +129,7 @@ export function resolveBuildWorkbenchVerdict(input: BuildWorkbenchInput): BuildW
       : laneFocus.line
 
   return {
-    lamp: lampFromFocusKind(laneFocus.kind, agentSoftDegrade),
+    lamp: lampFromFocusKind(laneFocus.kind),
     summary: bindingSummary(lane, programId),
     nextLine,
     cta: ctaFromFocusKind(laneFocus.kind),

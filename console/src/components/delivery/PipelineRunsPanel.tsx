@@ -179,7 +179,7 @@ export function PipelineRunsPanel({
     onError: (err: Error) => setRunError(err.message),
   })
 
-  const runs = runsQuery.data?.runs ?? []
+  const runs = useMemo(() => runsQuery.data?.runs ?? [], [runsQuery.data?.runs])
   const sortedRuns = useMemo(
     () => sortPipelineRuns(runs, runSort.key, runSort.dir),
     [runs, runSort],

@@ -3,12 +3,12 @@ import { Button, PageShell, SidebarInset, SidebarProvider, TooltipProvider } fro
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { RemediationJob } from '@/api/remediationTypes'
+import { AgentExecutionDock } from '@/components/agent/AgentExecutionDock'
 import {
-  AgentExecutionDock,
   persistOperatorTool,
   readStoredTool,
   type OperatorToolId,
-} from '@/components/agent/AgentExecutionDock'
+} from '@/components/agent/operatorDockStorage'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useLaneCatalog } from '@/hooks/useLaneCatalog'
 import { useAgentTaskCatalog } from '@/hooks/useAgentTaskCatalog'
@@ -43,6 +43,9 @@ import { prepareSatelliteBusActivityFocus } from '@/lib/activity/activityPageFoc
 import type { ActivityEvent } from '@/lib/activity/activityTypes'
 import { buildFullArchitectureLlmPack } from '@/lib/architecture/buildArchitectureLlmPack'
 import { AgentDeskPage } from '@/pages/AgentDeskPage'
+import { AnalysisWorkspacePage } from '@/pages/AnalysisWorkspacePage'
+import { InsightLogPage } from '@/pages/InsightLogPage'
+import { HermesStatusPage } from '@/pages/HermesStatusPage'
 import { AgentCapabilityPage } from '@/pages/AgentCapabilityPage'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
 import { BriefingReconciliationPage } from '@/pages/BriefingReconciliationPage'
@@ -80,11 +83,11 @@ import { AutonomousSkillsPage } from '@/pages/AutonomousSkillsPage'
 import { ExecutionLogPage } from '@/pages/ExecutionLogPage'
 import { AgentGovernancePage } from '@/pages/AgentGovernancePage'
 import { DefectsPage } from '@/pages/DefectsPage'
-import { DevAgentPage } from '@/pages/DevAgentPage'
 import { DevSessionsPage } from '@/pages/DevSessionsPage'
 import { StandardsPage } from '@/pages/StandardsPage'
 import { TaskControlCenterPage } from '@/pages/TaskControlCenterPage'
-import { TaskModeProvider, useTaskMode } from '@/lib/task-mode/TaskModeContext'
+import { TaskModeProvider } from '@/lib/task-mode/TaskModeContext'
+import { useTaskMode } from '@/lib/task-mode/useTaskMode'
 import { formatConsoleHash } from '@/lib/task-mode/taskModeUrl'
 import type { TaskModeId } from '@/lib/task-mode/types'
 
@@ -93,10 +96,13 @@ const ControlRoomPage = lazy(() =>
 )
 
 const VIEW_TITLES: Record<ConsoleViewTab, string> = {
-  'agent-desk': 'Agent Desk',
+  queue: 'Queue',
+  'analysis-workspace': 'Analysis Workspace',
+  'insight-log': 'Insight Log',
+  'hermes-status': 'Hermes Status',
   'agent-capability': 'Agent Capability',
-  briefing: 'Agent Briefing',
-  'active-session': 'Active Session',
+  briefing: 'Briefing',
+  'active-session': 'In Flight',
   'autonomous-skills': 'Skills & Schedules',
   'execution-log': 'Execution Log',
   'agent-governance': 'Trust & Autonomy',
@@ -110,7 +116,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   cluster: 'Cluster',
   placement: 'Placement',
   'trade-release': 'Deploy Satellite',
-  'delivery-board': 'Delivery Board',
+  'delivery-board': 'Delivery',
   blueprint: 'Blueprint',
   'flywheel-vision': 'Vision',
   roadmap: 'Roadmap',
@@ -122,7 +128,6 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'mcp-contract': 'MCP Contract',
   'design-system': 'Design System',
   'ai-compute': 'AI Compute Strategy',
-  'dev-agent': 'Dev Agent',
   'dev-sessions': 'Dev Sessions',
   console: 'Server console',
   network: 'Network',
@@ -139,9 +144,13 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
 const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   briefing: 'Plan and start work — pick scope and lane, pack, then Launch.',
   'active-session':
-    'Track Doing lanes — queue progress, verify, Owner sign-off.',
+    'Track Doing lanes — queue progress, verify, Owner sign-off. Phase work runs in Cursor IDE Agent.',
   'delivery-board': 'Completed programs catalog (read-only archive).',
-  'agent-desk': 'Operate and observe — run agent tasks, review remediation, close sessions.',
+  queue: 'Operate and observe — run agent tasks, review remediation, close sessions.',
+  'analysis-workspace':
+    'Hermes Analysis Desk V1 — status, Chat UI deep link, and First Task. Read-only; D10 blocked.',
+  'insight-log': 'Hermes insight history — time, symbol, type, verdict, duration.',
+  'hermes-status': 'Nous Hermes gateway lamp, model, version, MCP tools, and Chat UI deep link.',
   'agent-capability':
     'Live capability readiness — which agent scopes are ready, running, awaiting approval, or failed.',
   'control-room':
@@ -203,8 +212,6 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Trust matrix and autonomy policy — which skills may auto-act vs require confirmation.',
   'runtime-map':
     'Live topology of rocket, satellite, and agent paths — hardware, software stack, and gap analysis.',
-  'dev-agent':
-    'Guided multi-phase Dev Agent jobs — select program, run phases, approve or reject with feedback.',
   'dev-sessions':
     'Local dev service orchestration — tmux-managed processes with status, logs, and restart controls.',
 }
@@ -212,7 +219,10 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
 
 
 const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
-  'agent-desk',
+  'queue',
+  'analysis-workspace',
+  'insight-log',
+  'hermes-status',
   'autonomous-skills',
   'execution-log',
   'agent-governance',
@@ -241,6 +251,8 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
 ]
 
 const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
+  'agent-desk': 'queue',
+  'dev-agent': 'active-session',
   topology: 'runtime-map',
   matrix: 'runtime-map',
   pulse: 'control-room',
@@ -557,7 +569,7 @@ function ConsolePageInner() {
     } else {
       setAgentDeskFocusDecisionBriefs(false)
     }
-    setViewTab('agent-desk')
+    setViewTab('queue')
   }, [setViewTab])
 
   const expandAgentDock = useCallback(() => {
@@ -591,7 +603,7 @@ function ConsolePageInner() {
       title: job.label,
       target: job.scope,
       detail: 'Ambient agent running',
-      linkTo: 'agent-desk',
+      linkTo: 'queue',
       bumpTs: true,
     })
   }, [setOperatorToolId])
@@ -628,10 +640,10 @@ function ConsolePageInner() {
   const openDefects = () => setViewTab('defects')
   const openSatelliteBus = () => setViewTab('satellite-bus')
   const openCompute = () => setViewTab('compute')
-  const openAgentDeskTab = () => setViewTab('agent-desk')
+  const openAgentDeskTab = () => setViewTab('queue')
 
   const openLaunchView = useCallback(
-    (taskMode: 'mission-launch') => {
+    (taskMode: 'ops') => {
       setModeId(taskMode)
       setViewTab('task-cc', { taskMode })
     },
@@ -639,8 +651,8 @@ function ConsolePageInner() {
   )
 
   const openDailyOpsFleet = useCallback(() => {
-    setModeId('daily-ops')
-    setViewTab('task-cc', { taskMode: 'daily-ops' })
+    setModeId('ops')
+    setViewTab('task-cc', { taskMode: 'ops' })
   }, [setModeId, setViewTab])
 
   const handleTaskModeChange = useCallback(
@@ -716,7 +728,7 @@ function ConsolePageInner() {
               ) : viewTab === 'trade-release' ||
                 viewTab === 'platform-release' ||
                 viewTab === 'plugin-release' ? (
-                <BackToMissionLaunchButton onClick={() => openLaunchView('mission-launch')} />
+                <BackToMissionLaunchButton onClick={() => openLaunchView('ops')} />
               ) : undefined
             }
             healthy={healthQuery.data}
@@ -763,7 +775,7 @@ function ConsolePageInner() {
             onOpenRuntimeMap={openRuntimeMap}
           />
         )}
-        {viewTab === 'agent-desk' && (
+        {viewTab === 'queue' && (
           <AgentDeskPage
             context={contextQuery.data}
             matrices={pulseMatrices}
@@ -790,6 +802,12 @@ function ConsolePageInner() {
           />
         )}
 
+        {viewTab === 'analysis-workspace' && <AnalysisWorkspacePage />}
+
+        {viewTab === 'insight-log' && <InsightLogPage />}
+
+        {viewTab === 'hermes-status' && <HermesStatusPage />}
+
         {viewTab === 'agent-capability' && (
           <AgentCapabilityPage onOpenAgentDesk={openAgentDesk} />
         )}
@@ -804,8 +822,6 @@ function ConsolePageInner() {
         )}
 
         {viewTab === 'autonomous-skills' && <AutonomousSkillsPage />}
-
-        {viewTab === 'dev-agent' && <DevAgentPage />}
 
         {viewTab === 'dev-sessions' && <DevSessionsPage />}
 
@@ -881,6 +897,7 @@ function ConsolePageInner() {
                 onOpenAgentDeskTab={openAgentDeskTab}
                 onOpenLaunchView={openLaunchView}
                 onOpenFleetVendor={openDailyOpsFleet}
+                onModeChange={handleTaskModeChange}
               />
             </Suspense>
           </>
@@ -897,6 +914,7 @@ function ConsolePageInner() {
             lastDeliverSucceeded={lastDeliverSucceeded}
             tierB={tierBQuery.data}
             onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
+            onModeChange={handleTaskModeChange}
             onOpenBriefing={openBriefing}
             onOpenPromote={openPromote}
             onOpenDelivery={openDelivery}
@@ -1094,11 +1112,11 @@ function ConsolePageInner() {
         onOpenOperatorPlane={openOperatorPlane}
         onOpenDevSessions={() => setViewTab('dev-sessions')}
         activePage={
-          viewTab === 'operator-plane' ||
-          viewTab === 'agent-desk' ||
-          viewTab === 'dev-sessions'
+          viewTab === 'operator-plane' || viewTab === 'dev-sessions'
             ? viewTab
-            : null
+            : viewTab === 'queue'
+              ? 'agent-desk'
+              : null
         }
         onComplete={handleAmbientJobComplete}
       />

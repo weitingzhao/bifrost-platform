@@ -10,22 +10,25 @@
   --task-mode-accent-border: color-mix(in oklab, oklch(0.78 0.17 140) 42%, transparent);
 }
 
-[data-task-mode='daily-ops'] {
+[data-task-mode='ops'],
+[data-task-mode='daily-ops'],
+[data-task-mode='mission-launch'],
+[data-task-mode='patrol'] {
   --task-mode-accent: oklch(0.72 0.12 210);
   --task-mode-accent-subtle: color-mix(in oklab, oklch(0.72 0.12 210) 14%, transparent);
   --task-mode-accent-border: color-mix(in oklab, oklch(0.72 0.12 210) 40%, transparent);
-}
-
-[data-task-mode='mission-launch'] {
-  --task-mode-accent: oklch(0.78 0.16 55);
-  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.78 0.16 55) 16%, transparent);
-  --task-mode-accent-border: color-mix(in oklab, oklch(0.78 0.16 55) 45%, transparent);
 }
 
 [data-task-mode='build'] {
   --task-mode-accent: oklch(0.70 0.14 270);
   --task-mode-accent-subtle: color-mix(in oklab, oklch(0.70 0.14 270) 14%, transparent);
   --task-mode-accent-border: color-mix(in oklab, oklch(0.70 0.14 270) 42%, transparent);
+}
+
+[data-task-mode='analysis'] {
+  --task-mode-accent: oklch(0.68 0.14 25);
+  --task-mode-accent-subtle: color-mix(in oklab, oklch(0.68 0.14 25) 14%, transparent);
+  --task-mode-accent-border: color-mix(in oklab, oklch(0.68 0.14 25) 42%, transparent);
 }
 
 /* Fallback only when chrome root has no mode attribute */

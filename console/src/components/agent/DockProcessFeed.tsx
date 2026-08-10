@@ -1,6 +1,7 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import type { RemediationEvent } from '@/api/remediationTypes'
-import { DenseMarkdown, looksLikeMarkdown } from '@/components/agent/DenseMarkdown'
+import { DenseMarkdown } from '@/components/agent/DenseMarkdown'
+import { looksLikeMarkdown } from '@/components/agent/denseMarkdownUtils'
 import {
   extractStructuredSummaryChips,
   formatFeedEventLine,

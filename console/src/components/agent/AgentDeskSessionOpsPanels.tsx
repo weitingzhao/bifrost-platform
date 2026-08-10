@@ -95,7 +95,10 @@ export function AgentDeskSessionOpsPanels({
     return localSnapshot
   }, [serverSnapshotQuery.data, localSnapshot])
 
-  const remediationJobs = remediationJobsQuery.data?.jobs ?? []
+  const remediationJobs = useMemo(
+    () => remediationJobsQuery.data?.jobs ?? [],
+    [remediationJobsQuery.data?.jobs],
+  )
   const dataReady =
     context != null && !remediationJobsQuery.isLoading && !serverSnapshotQuery.isLoading
 

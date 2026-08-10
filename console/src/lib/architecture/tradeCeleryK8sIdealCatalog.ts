@@ -2,7 +2,7 @@
  * Trade Celery / Massive K8s Ideal — delivery program catalog.
  *
  * Program id: trade-celery-k8s-ideal · lane: trade-system-celery
- * Authority: this catalog + config/programs/trade-celery-k8s-ideal.yaml
+ * Authority: this catalog + config/programs/completed/trade-celery-k8s-ideal.yaml
  *
  * D10 remains BLOCKED — never scale daemon for live trade.
  *

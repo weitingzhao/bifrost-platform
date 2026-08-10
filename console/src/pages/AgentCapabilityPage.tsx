@@ -70,16 +70,16 @@ export function AgentCapabilityPage({ onOpenAgentDesk }: AgentCapabilityPageProp
     refetchInterval: 15_000,
   })
 
-  const taskCount = allAgentTasks().length
+  const tasks = allAgentTasks()
   const vm = useMemo(
     () =>
       buildAgentCapabilityViewModel({
-        tasks: allAgentTasks(),
+        tasks,
         jobs: jobsQuery.data?.jobs ?? [],
         bridge: bridgeQuery.data,
         health: healthQuery.data,
       }),
-    [taskCount, jobsQuery.data?.jobs, bridgeQuery.data, healthQuery.data],
+    [tasks, jobsQuery.data?.jobs, bridgeQuery.data, healthQuery.data],
   )
 
   const visibleTaskIds = useMemo(() => {

@@ -199,7 +199,7 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     scope: 'shared',
     role: 'required',
     source: 'remediation',
-    detailRoute: 'agent-desk',
+    detailRoute: 'queue',
     grafanaDashboardId: 'agent-operations',
   },
   {

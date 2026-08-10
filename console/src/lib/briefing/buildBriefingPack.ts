@@ -32,7 +32,7 @@ import {
   reconcileBriefing,
 } from '@/lib/briefing/reconcileBriefing'
 import type { BriefingPackSize } from '@/lib/briefing/briefingUrlState'
-import type { TaskModeBriefingContext } from '@/lib/task-mode/TaskModeContext'
+import type { TaskModeBriefingContext } from '@/lib/task-mode/taskModeBriefing'
 import {
   formatQueueStageSummary,
   splitQueueByCompletion,

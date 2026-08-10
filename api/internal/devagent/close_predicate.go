@@ -38,11 +38,15 @@ func normalizeAssessment(s string) string {
 
 // IsGatesComplete matches console isGatesComplete:
 // Complete || (gates>0 && Signed==gates) || (no gates && PhasesDone==PhaseCount).
+// Catalog status completed/archived is closed without requiring scratch JSON.
 //
 // Signed==0 falls back to PhasesSigned because Go ints are zero-valued when
 // omitted; TS uses ?? so an explicit 0 does not fall back. Handler writes both
 // fields to the same count — do not change the algorithm to "match" TS nil.
 func IsGatesComplete(sum ProgramSummary) bool {
+	if isClosedProgramStatus(sum.Status) {
+		return true
+	}
 	if sum.Complete {
 		return true
 	}
@@ -59,6 +63,9 @@ func IsGatesComplete(sum ProgramSummary) bool {
 
 // IsProgramCatalogComplete is Delivery Board Complete (D1).
 func IsProgramCatalogComplete(sum ProgramSummary) bool {
+	if isClosedProgramStatus(sum.Status) {
+		return true
+	}
 	if !IsGatesComplete(sum) {
 		return false
 	}
@@ -71,6 +78,9 @@ func IsProgramCatalogComplete(sum ProgramSummary) bool {
 
 // IsProgramSessionReleased is true when the program may leave Active Session Doing (D3).
 func IsProgramSessionReleased(sum ProgramSummary) bool {
+	if isClosedProgramStatus(sum.Status) {
+		return true
+	}
 	if !IsGatesComplete(sum) {
 		return false
 	}
@@ -125,8 +135,8 @@ func (h *Handler) errIfLiveLaneBindLocked(laneID, excludeProgramID string) error
 
 // LiveLaneCollision is a D2 invariant break: >1 not-sessionReleased program on one lane.
 type LiveLaneCollision struct {
-	LaneID     string
-	ProgramIDs []string
+	LaneID     string   `json:"lane_id"`
+	ProgramIDs []string `json:"program_ids"`
 }
 
 // liveLaneCollisionsLocked scans loaded runtimes (YAML + persisted state). Caller must hold h.mu.

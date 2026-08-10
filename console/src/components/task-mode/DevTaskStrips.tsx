@@ -1,11 +1,9 @@
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
 import { ClipboardList, Code2 } from 'lucide-react'
-import type { DevAgentStatusResponse } from '@/api/devAgentTypes'
 import type { ProgramDetailResponse } from '@/api/programsTypes'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { TaskBriefingLauncher } from '@/components/task-mode/TaskBriefingLauncher'
-import { TaskDevAgentStatus } from '@/components/task-mode/TaskDevAgentStatus'
 import type { InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
 import type { TaskModeDef } from '@/lib/task-mode/types'
 import { BUILD_DEV_LOOP_ELEMENT_ID } from '@/lib/task-mode/buildWorkbenchVerdict'
@@ -31,9 +29,6 @@ export type DevTaskStripsProps = {
   /** Optional deep-dive into the global aggregate Briefing page. */
   onOpenFullBriefing?: (opts?: BriefingUrlState) => void
   onBriefingOpened?: () => void
-  /** Lifted Dev Agent status from TaskControlCenter (F2) — avoid duplicate query. */
-  devAgentStatus?: DevAgentStatusResponse
-  devAgentLoading?: boolean
 }
 
 function isTemplateMissing(err: Error | null | undefined): boolean {
@@ -59,8 +54,6 @@ export function DevTaskStrips({
   inlineBriefingPack,
   onOpenFullBriefing,
   onBriefingOpened,
-  devAgentStatus,
-  devAgentLoading,
 }: DevTaskStripsProps) {
   const dev = mode.dev
   if (dev == null) return null
@@ -97,11 +90,6 @@ export function DevTaskStrips({
             onBriefingOpened={onBriefingOpened}
             onNavigate={onNavigate}
           />
-          <TaskDevAgentStatus
-            status={devAgentStatus}
-            loading={devAgentLoading}
-            onOpenDevAgent={() => onNavigate('dev-agent')}
-          />
 
           {/* Single program-binding strip — follows Active Session */}
           {programDetail != null ? (
@@ -135,7 +123,7 @@ export function DevTaskStrips({
               )}
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button variant="ghost" size="xs" onClick={() => onNavigate('delivery-board')}>
-                  Delivery Board →
+                  Delivery →
                 </Button>
                 {onCreateNewInstance != null && canCreateProgram && (
                   <Button

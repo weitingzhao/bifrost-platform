@@ -9,8 +9,8 @@ import type { ProgramSummary } from '@/api/programsTypes'
 import {
   BriefingStatusBadge,
   BriefingStatusLamp,
-  briefingLaneListRowClass,
 } from '@/components/briefing/BriefingStatusChrome'
+import { briefingLaneListRowClass } from '@/components/briefing/briefingStatusChromeClasses'
 import { ActiveSessionPhaseBoard } from '@/components/briefing/ActiveSessionPhaseBoard'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import {
@@ -146,7 +146,7 @@ export function ActiveSessionPage({
   if (!dataReady || !programsReady) {
     return (
       <section className="page-section panel-elevated flex min-h-[12rem] flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-        <p className="briefing-section-kicker m-0">Active Session</p>
+        <p className="briefing-section-kicker m-0">In Flight</p>
         <h2 className="m-0 text-sm font-semibold">Loading Doing lanes…</h2>
         <p className="m-0 max-w-sm text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           Waiting for spine and matrix so queue progress can be tracked.
@@ -160,11 +160,11 @@ export function ActiveSessionPage({
       <section className="page-section panel-elevated px-4 py-6">
         <EmptyState
           icon={<Orbit />}
-          title="No active sessions — start work from Agent Briefing"
+          title="No active sessions — start work from Briefing"
           description="Pack and Launch a Ready or Planned lane, then continue execution here."
           action={
             <Button size="sm" variant="outline" onClick={() => onOpenBriefing()}>
-              Open Agent Briefing
+              Open Briefing
             </Button>
           }
         />
@@ -310,7 +310,7 @@ function ActiveSessionDetail({
           )}
         </div>
         <p className="m-0 mt-1 break-words text-[var(--text-dense-caption)] text-[var(--muted-foreground)] [overflow-wrap:anywhere]">
-          Track queue progress and Owner sign-off. Pack / Launch lives on Agent Briefing.
+          Track queue progress and Owner sign-off. Pack / Launch lives on Briefing.
         </p>
 
         {!canAdmin && readyForSignOff && (
@@ -344,11 +344,11 @@ function ActiveSessionDetail({
         {selectedComplete && (
           <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)]/60 bg-[var(--secondary)]/20 px-2.5 py-1.5">
             <p className="m-0 flex-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              Queue items are complete — review Delivery Board archive for this lane.
+              Queue items are complete — review Delivery archive for this lane.
             </p>
             {onOpenDeliveryBoard != null && (
               <Button size="sm" variant="outline" onClick={onOpenDeliveryBoard}>
-                Open Delivery Board
+                Open Delivery
               </Button>
             )}
           </div>

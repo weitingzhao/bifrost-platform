@@ -1,15 +1,19 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, DenseTag } from '@bifrost/ui'
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
+import { OpsDeskBoard } from '@/components/task-mode/OpsDeskBoard'
+import { AnalysisWorkspacePage } from '@/pages/AnalysisWorkspacePage'
 import { DevModeStrips } from '@/components/task-mode/DevModeController'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
 import type { CommandLane } from '@/components/task-mode/MissionLaunchBoard'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { TaskCCVerdict } from '@/components/task-mode/tcc/TaskCCVerdict'
 import { LaunchFleetStrip } from '@/components/task-mode/tcc/LaunchFleetStrip'
+import { AutopilotHistorySection } from '@/components/task-mode/tcc/AutopilotHistorySection'
+import { AgentTriadStrip } from '@/components/task-mode/AgentTriadStrip'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import type { FleetViewerEnv } from '@/lib/control-room/fleetSnapshot'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
@@ -22,19 +26,17 @@ import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import type { PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
 import type { TaskPhaseFixAction, TaskPhaseHint } from '@/lib/task-mode/taskPhaseDiagnostics'
-import type { TaskModeDef, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
+import type { TaskModeDef, TaskModeId, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import type { UseDevProgramInstanceResult } from '@/hooks/useDevProgramInstance'
 import type { InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
-import type { useQuery } from '@tanstack/react-query'
-import type { fetchDevAgentStatus } from '@/api/devAgent'
 import type { useTaskControlQueries } from '@/components/task-mode/tcc/useTaskControlQueries'
 import type { useChecklistItemFix } from '@/components/task-mode/tcc/useChecklistItemFix'
 import type { useMissionLaunchFixAgents } from '@/components/task-mode/useMissionLaunchFixAgents'
 import type {
   useRocketProdReadiness,
   useSatelliteProdReadiness,
-} from '@/components/task-mode/TaskModeReadinessStrip'
+} from '@/components/task-mode/readiness/hooks'
 
 type VerdictLamp = 'ok' | 'degraded' | 'fail' | 'unknown'
 type SemanticTextClass = 'text-success' | 'text-warning' | 'text-danger' | 'text-muted-foreground'
@@ -79,6 +81,10 @@ export type TaskControlCenterViewProps = {
   isMissionLaunch: boolean
   isDailyOps: boolean
   isDevLoop: boolean
+  isSystem: boolean
+  operateQueueOpen?: number
+  recentRemediationFail?: boolean
+  onModeChange?: (landingTab: string, modeId: TaskModeId) => void
   canOperate: boolean
   loopLabel: string
   headerDescription: string
@@ -100,7 +106,6 @@ export type TaskControlCenterViewProps = {
   onNavigate: (tabId: string) => void
   onOpenBriefing?: (opts?: BriefingUrlState) => void
   handleBriefingOpened: () => void
-  devAgentQ: ReturnType<typeof useQuery<Awaited<ReturnType<typeof fetchDevAgentStatus>>>>
   context?: OpsContextResponse
   matrices?: MatrixResponse[]
   stgSmoke?: StgSmokeResponse
@@ -143,6 +148,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     isMissionLaunch,
     isDailyOps,
     isDevLoop,
+    isSystem,
     canOperate,
     loopLabel,
     showLaunchPad,
@@ -247,7 +253,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
       programsReleased: lane != null ? programsReleasedFor(lane) : undefined,
       programSigned: program?.phases_signed ?? program?.signed ?? 0,
       programPhaseCount: program?.phase_count ?? 0,
-      devAgentError: props.devAgentQ.isError,
     })
   }, [
     isDevLoop,
@@ -258,7 +263,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     props.resolvedProgramId,
     props.inlineBriefingPack.isReady,
     props.inlineBriefingPack.laneQueue,
-    props.devAgentQ.isError,
     programsReleasedFor,
   ])
 
@@ -275,12 +279,16 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
       const plugin = launchVerdictToSignal(props.pluginLaunchVerdict.kind)
       return worseLamp(worseLamp(rocket, satellite), plugin)
     }
+    if (mode.id === 'analysis') {
+      return 'unknown'
+    }
     return 'unknown'
   }, [
     isDevLoop,
     buildWorkbench,
     isDailyOps,
     isMissionLaunch,
+    mode.id,
     q.runnerHealthy,
     q.fleetClear,
     q.rocketVerdict.kind,
@@ -288,14 +296,14 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     props.pluginLaunchVerdict.kind,
   ])
 
-  const runBuildCta = (cta: NonNullable<typeof buildWorkbench>['cta']) => {
+  const runBuildCta = useCallback((cta: NonNullable<typeof buildWorkbench>['cta']) => {
     if (cta == null) return
     if (cta.kind === 'navigate') {
       onNavigate(cta.tabId)
       return
     }
     document.getElementById(cta.elementId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  }, [onNavigate])
 
   const verdictActions = useMemo(() => {
     const nodes: ReactNode[] = []
@@ -361,12 +369,12 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     canOperate,
     q.fleetClear,
     fix,
-    fix.dailyOpsWorkflow?.primaryAction.label,
     verdictLamp,
-    onNavigate,
+    runBuildCta,
   ])
 
-  const phaseProgressBlock: ReactNode = isDailyOps || isDevLoop ? null : phases.length > 0 ? (
+  const phaseProgressBlock: ReactNode =
+    isDailyOps || isDevLoop || mode.id === 'analysis' ? null : phases.length > 0 ? (
     <details
       id="task-cc-phase-progress"
       className="rounded-lg border border-border bg-card px-3 py-1.5"
@@ -416,7 +424,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
       inlineBriefingPack={props.inlineBriefingPack}
       onOpenFullBriefing={props.onOpenBriefing}
       onBriefingOpened={props.handleBriefingOpened}
-      devAgentQ={props.devAgentQ}
     />
   ) : null
 
@@ -426,7 +433,9 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         mode={mode}
         lamp={verdictLamp}
         tagLabel={loopLabel}
-        tagVariant={mode.loopArchetype === 'dev' ? 'info' : 'neutral'}
+        tagVariant={
+          mode.loopArchetype === 'dev' || mode.loopArchetype === 'analysis' ? 'info' : 'neutral'
+        }
         tagTitle={
           mode.loopArchetype === 'ops'
             ? 'Workflow identity — not an alert'
@@ -494,6 +503,14 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         actions={verdictActions}
       />
 
+      {isSystem && props.onModeChange != null ? (
+        <AgentTriadStrip
+          onModeChange={props.onModeChange}
+          operateQueueOpen={props.operateQueueOpen}
+          recentRemediationFail={props.recentRemediationFail}
+        />
+      ) : null}
+
       {isMissionLaunch && showLaunchPad ? (
         <LaunchFleetStrip
           rocket={q.rocketVerdict}
@@ -559,7 +576,10 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         </>
       )}
 
-      {mode.loopArchetype === 'ops' && (isMissionLaunch || isDailyOps) && (
+      {mode.id === 'ops' && (
+        <>
+        <OpsDeskBoard onNavigate={onNavigate} />
+        {isDailyOps && <AutopilotHistorySection />}
         <OpsTaskSummaryRow
           mode={mode}
           context={props.context}
@@ -722,7 +742,10 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
           selectedCommandLane={selectedCommandLane}
           onSelectedCommandLaneChange={setSelectedCommandLane}
         />
+        </>
       )}
+
+      {mode.id === 'analysis' && <AnalysisWorkspacePage />}
 
       {isDevLoop ? (
         <>

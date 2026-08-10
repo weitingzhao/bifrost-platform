@@ -16,7 +16,6 @@ import {
   buildScopeLayers,
   filterScopeLayersForNode,
   getNode,
-  matrixTargetToScopeTag,
   type RuntimeMapSelection,
   type ScopeLayer,
   type ScopeTag,
@@ -265,5 +264,3 @@ function formatAge(iso: string): string {
   if (min < 60) return `${min}m ago`
   return `${Math.floor(min / 60)}h ago`
 }
-
-export { matrixTargetToScopeTag }

@@ -1,7 +1,7 @@
 import { StatusLamp } from '@bifrost/ui'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { flywheelLabel } from '@/components/FocusStrip'
+import { flywheelLabel } from '@/components/focusStripUtils'
 import { CouplingGatePanel } from '@/components/control-room/CouplingGatePanel'
 import { baysForFlywheel, getBay } from '@/lib/control-room/bayRegistry'
 import { lampForBay, summaryForBay } from '@/lib/control-room/matrixSummary'

@@ -14,7 +14,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
-	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
@@ -26,10 +25,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devagent"
+	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
 	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/escapehatch"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
+	"github.com/weitingzhao/bifrost-platform/api/internal/hermesinsight"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/lanes"
@@ -39,6 +40,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
+	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
@@ -72,6 +74,7 @@ type Server struct {
 	operatequeue    *operatequeue.Handler
 	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
+	patrol          *patrol.Handler
 	remediation     *remediation.Handler
 	agentreport     *agentreport.Handler
 	agentbridge     *agentbridge.Handler
@@ -80,6 +83,7 @@ type Server struct {
 	driftproposal   *driftproposal.Handler
 	hermesgateway   *hermesgateway.Handler
 	hermesreadiness *hermesreadiness.Handler
+	hermesinsight   *hermesinsight.Handler
 	retrospective   *retrospective.Handler
 	satellite       *satellite.Handler
 	selfhealth      *selfhealth.Handler
@@ -116,6 +120,7 @@ func New(cfg *config.Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("devagent: %w", err)
 	}
+	devagentH.BindAudit(audit)
 	operatequeueH := operatequeue.NewHandler(cfg.ConfigDir(), audit)
 	operatequeueH.BindRemediationJobs(remediationH.Store())
 	operatequeueH.BindRemediationStarter(remediationH)
@@ -125,6 +130,18 @@ func New(cfg *config.Config) (*Server, error) {
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
 	checklistH.BindRemediation(remediationH)
 	checklistH.BindOperateQueue(operatequeueH)
+	patrolH, err := patrol.NewHandler(cfg.ConfigDir())
+	if err != nil {
+		return nil, fmt.Errorf("patrol: %w", err)
+	}
+	patrolH.Start(context.Background())
+	hermesReadinessH := hermesreadiness.NewHandler()
+	hermesInsightH, err := hermesinsight.NewHandlerWithOptions(hermesinsight.HandlerOptions{
+		Readiness: hermesReadinessH,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("hermesinsight: %w", err)
+	}
 	operatequeueH.BindEvidenceSource(operatequeue.EvidenceFunc(func() (operatequeue.EvidenceBundle, error) {
 		resp, err := checklistH.Store().Get()
 		if err != nil {
@@ -160,6 +177,7 @@ func New(cfg *config.Config) (*Server, error) {
 		operatequeue:    operatequeueH,
 		checklist:       checklistH,
 		opsagent:        opsagent.NewHandler(audit),
+		patrol:          patrolH,
 		remediation:     remediationH,
 		agentreport:     agentreport.NewHandler(),
 		agentbridge:     agentbridge.NewHandler(),
@@ -167,7 +185,8 @@ func New(cfg *config.Config) (*Server, error) {
 		agentdeploy:     agentdeploy.NewHandler(audit),
 		driftproposal:   driftproposal.NewHandler(audit),
 		hermesgateway:   hermesgateway.NewHandler(),
-		hermesreadiness: hermesreadiness.NewHandler(),
+		hermesreadiness: hermesReadinessH,
+		hermesinsight:   hermesInsightH,
 		retrospective:   retrospective.NewHandler(retroAnalyzer),
 		satellite:       satellite.NewHandler(cfg),
 		selfhealth:      selfhealth.NewHandler(cfg, gitopsH.Service()),
@@ -196,7 +215,7 @@ func (s *Server) Router() http.Handler {
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://127.0.0.1:5180", "http://localhost:5180"},
-		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Upgrade", "Connection"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -248,6 +267,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
 		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)
 		r.Get("/agent/hermes/first-task", s.hermesreadiness.HandleFirstTask)
+		r.Get("/hermes/insights", s.hermesinsight.HandleList)
+		r.Post("/hermes/run-first-task", s.hermesinsight.HandleRunFirstTask)
 		r.Get("/agent/governance/performance", s.agentgovernance.HandlePerformance)
 		r.Get("/agent/governance/trust-matrix", s.agentgovernance.HandleTrustMatrix)
 		r.Get("/agent/governance/capability-map", s.agentgovernance.HandleCapabilityMap)
@@ -259,6 +280,9 @@ func (s *Server) Router() http.Handler {
 		r.Get("/agent/skills", s.hermesgateway.HandleSkills)
 		r.Get("/agent/schedules", s.hermesgateway.HandleSchedules)
 		r.Get("/agent/executions", s.hermesgateway.HandleExecutions)
+		r.Get("/patrol/skills", s.patrol.HandleListSkills)
+		r.Get("/patrol/skills/{id}", s.patrol.HandleGetSkill)
+		r.Get("/patrol/runs", s.patrol.HandleListRuns)
 		r.Get("/agent/retrospective/report", s.retrospective.HandleReport)
 		r.Get("/agent/retrospective/patterns", s.retrospective.HandlePatterns)
 		r.Get("/agent/retrospective/insights", s.retrospective.HandleInsights)
@@ -272,6 +296,9 @@ func (s *Server) Router() http.Handler {
 			r.Post("/briefing/prepare", s.devagent.HandleBriefingPrepare)
 			r.Put("/agent/skills/{id}/actuation-level", s.hermesgateway.HandleSkillActuationLevel)
 			r.Put("/agent/governance/trust-overrides/{skill_id}", s.agentgovernance.HandlePutTrustOverride)
+			r.Put("/patrol/skills/{id}/enable", s.patrol.HandleEnable)
+			r.Post("/patrol/trigger/{id}", s.patrol.HandleTrigger)
+			r.Post("/patrol/webhook/{event}", s.patrol.HandleWebhook)
 		})
 		r.Route("/agent/drift-proposals", func(r chi.Router) {
 			r.Get("/", s.driftproposal.HandleList)
@@ -332,21 +359,13 @@ func (s *Server) Router() http.Handler {
 			r.Get("/templates", s.devagent.HandleListTemplates)
 			r.Get("/post-completion/pending", s.devagent.HandleListPendingPostCompletion)
 			r.Get("/{programId}", s.devagent.HandleGetProgram)
+			r.Get("/{programId}/jobs", s.devagent.HandleProgramJobs)
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleOperator))
 				r.Post("/from-template", s.devagent.HandleCreateFromTemplate)
 				r.Patch("/{programId}", s.devagent.HandlePatchProgram)
-				r.Post("/launch", s.devagent.HandleLaunch)
-				r.Post("/session-stop", s.devagent.HandleSessionStop)
-				r.Post("/{programId}/activate", s.devagent.HandleActivateProgram)
 				r.Post("/{programId}/phases/{phaseId}/progress", s.devagent.HandlePhaseProgress)
 				r.Post("/{programId}/complete", s.devagent.HandleProgramComplete)
-				r.Get("/active/persistence", s.devagent.HandlePersistence)
-				r.Get("/active/status", s.devagent.HandleStatus)
-				r.Post("/active/start", s.devagent.HandleStart)
-				r.Post("/active/{id}/approve", s.devagent.HandleApprove)
-				r.Post("/active/{id}/reject", s.devagent.HandleReject)
-				r.Post("/active/{id}/cancel", s.devagent.HandleCancel)
 			})
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleAdmin))
@@ -421,6 +440,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/governance", s.cluster.HandleGovernance)
 			r.Get("/service-readiness", s.cluster.HandleServiceReadiness)
 			r.Get("/postgres", s.cluster.HandlePostgresStatus)
+			r.Get("/postgres/backup-status", s.cluster.HandlePostgresBackupStatus)
 			r.Get("/data-freshness", s.cluster.HandleDataFreshness)
 			r.Get("/data-clone", s.cluster.HandleDataCloneList)
 			r.Get("/data-clone/schedule", s.cluster.HandleDataCloneScheduleGet)
@@ -439,6 +459,7 @@ func (s *Server) Router() http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleOperator))
 				r.Post("/namespaces/ensure-bifrost", s.cluster.HandleEnsureBifrost)
+				r.Post("/postgres/backup", s.cluster.HandleTriggerPostgresBackup)
 				r.Post("/workloads/rollout-restart", s.cluster.HandleRolloutRestart)
 				r.Post("/workloads/scale", s.cluster.HandleScale)
 				r.Post("/nodes/{name}/wake", s.cluster.HandleWakeNode)

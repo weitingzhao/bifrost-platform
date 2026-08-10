@@ -78,7 +78,7 @@ function dailyOpsFixActions(
     actions.push({ label: 'Cluster', tabId: 'cluster', kind: 'navigate' })
   }
   if (phaseId === 'clear') {
-    actions.push({ label: 'Agent Desk queue', tabId: 'agent-desk', kind: 'navigate' })
+    actions.push({ label: 'Queue', tabId: 'queue', kind: 'navigate' })
   }
   if (rootCauses.some(c => c.toLowerCase().includes('trade prod'))) {
     actions.push({ label: 'Satellite Bus', tabId: 'satellite-bus', kind: 'navigate' })
@@ -98,7 +98,7 @@ export function explainTaskPhase(
   const snap = input.snapshot
   const depReason = dependencyBlockReason(modeId, phase, input)
 
-  if (modeId === 'daily-ops') {
+  if (modeId === 'ops') {
     const rootCauses = missionIssueLines(snap)
     const fleetFix = input.fleetAgentFixAvailable === true
     const missionLine =

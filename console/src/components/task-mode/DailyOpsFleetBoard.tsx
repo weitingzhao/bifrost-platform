@@ -19,7 +19,7 @@ import {
   resolveCellGate,
 } from '@/lib/control-room/fleetSnapshot'
 import { cellAllowsAgentFix } from '@/lib/control-room/fleetCellFix'
-import { useDailyOpsContext } from '@/components/task-mode/daily-ops/DailyOpsContext'
+import { useDailyOpsContext } from '@/components/task-mode/daily-ops/useDailyOpsContext'
 import {
   describeCoverageEntry,
   formatChecklistTouchAge,

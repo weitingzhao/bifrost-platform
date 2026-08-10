@@ -237,8 +237,8 @@ export function componentLineForTaskMode(modeId: string): ComponentLineId {
   switch (modeId as TaskModeId) {
     case 'build':
       return 'rocket'
-    case 'daily-ops':
-    case 'mission-launch':
+    case 'ops':
+    case 'analysis':
       return 'operations'
     default:
       return 'rocket'
@@ -248,14 +248,14 @@ export function componentLineForTaskMode(modeId: string): ComponentLineId {
 /**
  * Map Briefing Scope → Task Mode accent identity
  * (drives `data-task-mode` → `--task-mode-accent` from taskModeChrome.css).
- * All component lines map to unified `build`; operations → daily-ops.
+ * All component lines map to unified `build`; operations → ops.
  */
 export function taskModeForBriefingScope(scope: BriefingScopeId): TaskModeId {
   switch (scope) {
     case 'all':
       return 'system'
     case 'operations':
-      return 'daily-ops'
+      return 'ops'
     case 'rocket':
     case 'satellite':
     case 'engineer':
@@ -270,10 +270,9 @@ export function trackTypeForTaskMode(modeId: string): WorkTrackType {
   switch (modeId as TaskModeId) {
     case 'build':
       return 'build'
-    case 'daily-ops':
+    case 'ops':
+    case 'analysis':
       return 'maintain'
-    case 'mission-launch':
-      return 'release'
     default:
       return 'build'
   }

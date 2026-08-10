@@ -4,8 +4,7 @@ import { cn } from '@bifrost/ui'
 import { Satellite } from 'lucide-react'
 import { fetchCluster } from '@/api/cluster'
 import { fetchReleaseGate } from '@/api/promote'
-import { fetchSatelliteBusDeep, isAllSatelliteBusDeep } from '@/api/core'
-import type { SatelliteBusDeepResponse } from '@/api/satelliteBusTypes'
+import { fetchSatelliteBusDeep } from '@/api/core'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { infraSignal, missionStatus, worst } from '@/lib/control-room/missionSignals'
@@ -18,6 +17,7 @@ import {
   isProdReleaseBlocked,
   namespacePods,
   accountSyncChipFromBus,
+  busForEnv,
   PROD_NS,
   REFETCH_MS,
   releaseGateSignal,
@@ -51,12 +51,6 @@ export function MissionSharedBusPanel({
     queryFn: () => fetchSatelliteBusDeep('prod'),
     refetchInterval: REFETCH_MS,
   })
-
-  const busForEnv = (data: typeof stgBusQ.data, env: 'stg' | 'prod'): SatelliteBusDeepResponse | undefined => {
-    if (data == null) return undefined
-    if (isAllSatelliteBusDeep(data)) return data.buses.find(b => b.environment === env)
-    return data
-  }
 
   const stgBusReach = useMemo(() => busForEnv(stgBusQ.data, 'stg'), [stgBusQ.data])
   const prodBusReach = useMemo(() => busForEnv(prodBusQ.data, 'prod'), [prodBusQ.data])
@@ -169,12 +163,6 @@ export function SatelliteReadinessStrip({
     }),
     [matrices],
   )
-
-  const busForEnv = (data: typeof stgBusQ.data, env: 'stg' | 'prod'): SatelliteBusDeepResponse | undefined => {
-    if (data == null) return undefined
-    if (isAllSatelliteBusDeep(data)) return data.buses.find(b => b.environment === env)
-    return data
-  }
 
   const stgBusReach = useMemo(() => busForEnv(stgBusQ.data, 'stg'), [stgBusQ.data])
   const prodBusReach = useMemo(() => busForEnv(prodBusQ.data, 'prod'), [prodBusQ.data])
@@ -315,7 +303,7 @@ export function SatelliteReadinessStrip({
           linkLabel="Satellite Bus →"
           onLink={() => onNavigate('satellite-bus')}
           onNavigate={onNavigate}
-          fixCtx={{ modeId: 'mission-launch', env: 'stg' }}
+          fixCtx={{ modeId: 'ops', env: 'stg' }}
           canOperate={canOperate}
           onAgentFix={onAgentFixStg}
           agentFixPending={agentFixPending}
@@ -334,7 +322,7 @@ export function SatelliteReadinessStrip({
           linkLabel="Deploy Satellite →"
           onLink={() => onNavigate('trade-release')}
           onNavigate={onNavigate}
-          fixCtx={{ modeId: 'mission-launch', env: 'prod' }}
+          fixCtx={{ modeId: 'ops', env: 'prod' }}
           canOperate={canOperate}
           onAgentFix={onAgentFixProd}
           agentFixPending={agentFixPending}

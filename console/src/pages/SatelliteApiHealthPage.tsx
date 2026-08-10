@@ -123,7 +123,7 @@ export function SatelliteApiHealthPage({
   }, [matrixQuery.data])
 
   const matrix = matrices.find(m => m.environment === env)
-  const allTargets = matrix?.targets ?? []
+  const allTargets = useMemo(() => matrix?.targets ?? [], [matrix?.targets])
   const writeTargets = useMemo(
     () =>
       [...allTargets.filter(t => t.category === 'trade_write')].sort((a, b) =>

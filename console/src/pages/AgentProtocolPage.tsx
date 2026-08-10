@@ -34,6 +34,7 @@ import {
   MISSION_SIGNAL_PROGRAM_REFERENCE,
   MODE_SELECTION_HINTS,
   OPENING_PROMPTS,
+  PATROL_AGENT,
   buildAgentProtocolLlmPack,
 } from '@/lib/architecture/agentProtocolCatalog'
 
@@ -192,6 +193,32 @@ export function AgentProtocolPage({
                 ))}
               </DenseTableBody>
             </DenseDataTable>
+          </CatalogSection>
+
+          <CatalogSection
+            title="Patrol (Agent Triad)"
+            description="Scheduled health skills — Console triad cell + Patrol task mode. Not a fourth Vision persona layer."
+          >
+            <dl className="grid gap-x-4 gap-y-1.5 text-[var(--text-dense-meta)] sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Runtime</dt>
+                <dd className="font-mono-tabular">{PATROL_AGENT.runtime}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Trigger</dt>
+                <dd>{PATROL_AGENT.trigger}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Trust</dt>
+                <dd>
+                  L0 {PATROL_AGENT.trust.L0} · L1 {PATROL_AGENT.trust.L1} · L2 {PATROL_AGENT.trust.L2}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Cost</dt>
+                <dd>{PATROL_AGENT.cost}</dd>
+              </div>
+            </dl>
           </CatalogSection>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -432,7 +459,7 @@ export function AgentProtocolPage({
             action={
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={onOpenDeliveryBoard}>
-                  Open Delivery Board
+                  Open Delivery
                 </Button>
                 <Button size="sm" variant="outline" onClick={onOpenAgentSystem}>
                   Open Agent System

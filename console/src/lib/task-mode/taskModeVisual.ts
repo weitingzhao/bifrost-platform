@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Gauge, Hammer, Layers2, Orbit } from 'lucide-react'
+import { BrainCircuit, Gauge, Hammer, Layers2 } from 'lucide-react'
 import type { TaskModeId } from './types'
 
 /** Per-mode visual identity — accent drives sidebar tint + active banners. */
@@ -12,10 +12,10 @@ export type TaskModeVisual = {
 
 /**
  * Icon semantics (Apollo facade — no labels needed):
- *   System   Layers2 — full stack overview
- *   Daily Ops Gauge  — live dials
- *   Launch   Orbit   — unified ascent / insertion
- *   Build    Hammer  — unified forge loop
+ *   System    Layers2     — full stack overview
+ *   Ops       Gauge       — live dials (Launch + Daily Ops + Patrol merged)
+ *   Build     Hammer      — unified forge loop
+ *   Analysis  BrainCircuit — Hermes insight desk
  */
 export const TASK_MODE_VISUAL: Record<TaskModeId, TaskModeVisual> = {
   system: {
@@ -23,20 +23,20 @@ export const TASK_MODE_VISUAL: Record<TaskModeId, TaskModeVisual> = {
     icon: Layers2,
     shortLabel: 'System',
   },
-  'daily-ops': {
-    id: 'daily-ops',
+  ops: {
+    id: 'ops',
     icon: Gauge,
-    shortLabel: 'Daily Ops',
-  },
-  'mission-launch': {
-    id: 'mission-launch',
-    icon: Orbit,
-    shortLabel: 'Launch',
+    shortLabel: 'Ops',
   },
   build: {
     id: 'build',
     icon: Hammer,
     shortLabel: 'Build',
+  },
+  analysis: {
+    id: 'analysis',
+    icon: BrainCircuit,
+    shortLabel: 'Analysis',
   },
 }
 

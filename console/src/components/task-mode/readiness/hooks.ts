@@ -1,10 +1,9 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchCluster, fetchClusterServiceReadiness } from '@/api/cluster'
-import { fetchContext, fetchSatelliteBusDeep, fetchSelfHealth, isAllSatelliteBusDeep } from '@/api/core'
+import { fetchContext, fetchSatelliteBusDeep, fetchSelfHealth } from '@/api/core'
 import { fetchReleaseGate, fetchStgSmoke, fetchTierBStatus } from '@/api/promote'
 import { fetchSupplyChain } from '@/api/delivery'
-import type { SatelliteBusDeepResponse } from '@/api/satelliteBusTypes'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import {
   infraSignal,
@@ -34,6 +33,7 @@ import {
   isProdReleaseBlocked,
   namespacePods,
   accountSyncChipFromBus,
+  busForEnv,
   PLATFORM_PROD,
   PLATFORM_STG,
   PROD_NS,
@@ -174,12 +174,7 @@ export function useSatelliteProdReadiness(enabled = true) {
     [matrices],
   )
 
-  const busReach = useMemo((): SatelliteBusDeepResponse | undefined => {
-    const data = busQ.data
-    if (data == null) return undefined
-    if (isAllSatelliteBusDeep(data)) return data.buses.find(b => b.environment === 'prod')
-    return data
-  }, [busQ.data])
+  const busReach = useMemo(() => busForEnv(busQ.data, 'prod'), [busQ.data])
 
   const rocket = useMemo(
     () => sharedRocketFromSocket(busReach?.monitor.socket),
@@ -515,12 +510,6 @@ export function useSatelliteDeployOverall(enabled = true): LaunchViewOverall {
     () => ({ signal: datastoreEnvSignal(matrices, 'prod'), detail: datastoreDetail(matrices, 'prod') }),
     [matrices],
   )
-
-  const busForEnv = (data: typeof stgBusQ.data, env: 'stg' | 'prod'): SatelliteBusDeepResponse | undefined => {
-    if (data == null) return undefined
-    if (isAllSatelliteBusDeep(data)) return data.buses.find(b => b.environment === env)
-    return data
-  }
 
   const stgBus = useMemo(() => busForEnv(stgBusQ.data, 'stg'), [stgBusQ.data])
   const prodBus = useMemo(() => busForEnv(prodBusQ.data, 'prod'), [prodBusQ.data])

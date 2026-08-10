@@ -99,11 +99,11 @@ describe('resolveBuildWorkbenchVerdict', () => {
       ],
     })
     expect(v.lamp).toBe('degraded')
-    expect(v.nextLine).toMatch(/Active Session/)
+    expect(v.nextLine).toMatch(/In Flight/)
     expect(v.cta).toEqual({
       kind: 'navigate',
       tabId: 'active-session',
-      label: 'Active Session →',
+      label: 'In Flight →',
     })
   })
 

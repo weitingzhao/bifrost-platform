@@ -408,7 +408,7 @@ export function RocketReadinessStrip({
           linkLabel="Launch Rocket →"
           onLink={() => onNavigate('platform-release')}
           onNavigate={onNavigate}
-          fixCtx={{ modeId: 'mission-launch', env: 'platform-stg' }}
+          fixCtx={{ modeId: 'ops', env: 'platform-stg' }}
           canOperate={canOperate}
           onAgentFix={onAgentFix}
           agentFixPending={agentFixPending}
@@ -427,7 +427,7 @@ export function RocketReadinessStrip({
           linkLabel="Launch Rocket →"
           onLink={() => onNavigate('platform-release')}
           onNavigate={onNavigate}
-          fixCtx={{ modeId: 'mission-launch', env: 'platform-prod' }}
+          fixCtx={{ modeId: 'ops', env: 'platform-prod' }}
           canOperate={canOperate}
           onAgentFix={onAgentFix}
           agentFixPending={agentFixPending}
@@ -503,7 +503,7 @@ export function SharedRocketStrip({
       </div>
       <ReadinessFixBar
         chips={chips}
-        ctx={{ modeId: 'mission-launch', env: 'prod', activityEnvScope: 'shared' }}
+        ctx={{ modeId: 'ops', env: 'prod', activityEnvScope: 'shared' }}
         canOperate={canOperate}
         onNavigate={onNavigate}
         dense={compact}

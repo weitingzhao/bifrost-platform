@@ -1,0 +1,93 @@
+id: delivery-ops-hygiene
+title: "Delivery ops hygiene — P1–P3"
+description: >
+  Residual hygiene after delivery-lifecycle-close (do not reopen that program).
+  P1: expose D2 live-lane collisions on GET /programs (log-only boot).
+  P2: MCP rebind_program_lane + Active Session Dense rebind (Board stays read-only).
+  P3: console ESLint warn cleanup (classic hooks only; no React Compiler rules).
+status: completed
+delivery:
+  board_visible: true
+  former_location: Mission Control → Active Session / Delivery Board
+  sign_off_mechanism: api
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+model: composer-2.5
+
+phases:
+  - id: P1
+    aliases: [Q3]
+    title: "Board GET live_lane_collisions + Console verdict (log-only boot)"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Do not fail platform-api boot on collisions. Keep NewHandler slog.Error only.
+      Extend GET /api/v1/programs to include live_lane_collisions (full-runtime scan;
+      board/lane filters must not hide collisions). Console Delivery Board OpsVerdictStrip
+      warns when collisions.length > 0. Zero collisions must not occupy UI.
+
+      Do not add an MCP tool for this diagnostic.
+    verify_cmd: "cd /Users/vision-mac-trader/Desktop/stocks/bifrost-platform/api && go test ./internal/devagent/ -count=1"
+    acceptance:
+      - "GET /api/v1/programs?board=1 includes live_lane_collisions (empty array when none)"
+      - "Lane/board filters do not suppress the collisions array"
+      - "Delivery Board shows a warning summary only when collisions exist"
+      - "API still starts when collisions exist (log-only)"
+    depends_on: []
+    sign_off:
+      required: true
+      checklist:
+        - "Owner confirms fail-boot is still out of scope"
+        - "Live board shows no false collision alarm"
+
+  - id: P2
+    aliases: [Q2]
+    title: "MCP rebind_program_lane + Active Session lane rebind"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      PATCH /api/v1/programs/{id} already exists. Wire MCP rebind_program_lane
+      (catalog + stdioToolNames + index.ts + catalog_test 80). Console ProgramDetailView
+      shows lane Select + ConfirmDialog only when allowSignOff (Active Session);
+      operator auth (canOperate). Delivery Board must not render rebind.
+    verify_cmd: "cd /Users/vision-mac-trader/Desktop/stocks/bifrost-platform/api && go test ./internal/mcp/ ./internal/devagent/ -count=1 && cd ../console && npx vitest run src/lib/architecture/__tests__/mcpStdioParity.test.ts"
+    acceptance:
+      - "MCP catalog Implemented count includes rebind_program_lane; stdio parity 80"
+      - "Active Session can rebind lane; Board catalog stays read-only"
+      - "D2 409 surfaces as OpsFeedback with API error text"
+    depends_on: ["P1"]
+    sign_off:
+      required: true
+      checklist:
+        - "Owner can rebind from Active Session with operator token"
+        - "Board detail has no rebind control"
+
+  - id: P3
+    aliases: [Q1]
+    title: "Console ESLint warn cleanup (classic hooks)"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Clear react-refresh/only-export-components and react-hooks/exhaustive-deps
+      warnings to zero. Do not enable React Compiler rules. Do not add --max-warnings 0.
+      Prefer extracting hooks to .ts files over file-level eslint-disable.
+    verify_cmd: "cd /Users/vision-mac-trader/Desktop/stocks/bifrost-platform/console && npm run lint && npx tsc --noEmit && npx vitest run"
+    acceptance:
+      - "npm run lint is 0 errors and 0 warnings"
+      - "eslint.config.js still has Compiler rules off"
+      - "No --max-warnings 0 in package.json lint script"
+    depends_on: ["P2"]
+    sign_off:
+      required: true
+      checklist:
+        - "Owner accepts warn cleanup without Compiler-rule enablement"
+
+metadata:
+  created_at: "2026-08-08"
+  owner: vision-mac-trader
+  lane_id: console-api
+  tags: [delivery-board, eslint, mcp, d2]
+  prerequisite_programs: [delivery-lifecycle-close]

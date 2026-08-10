@@ -4,7 +4,7 @@ import {
   BRIEFING_DPR_COLOR,
   briefingScopeGridCellClass,
   briefingTrackTypeCardClass,
-} from '@/components/briefing/BriefingStatusChrome'
+} from '@/components/briefing/briefingStatusChromeClasses'
 import {
   COMPONENT_LINE_DEFS,
   briefingScopeById,

@@ -26,6 +26,7 @@ const ITEM_META: Record<string, { capability: FixCapability; scope: string | nul
   'git-bridge': { capability: 'semi_auto', scope: 'git-dirty-remediate' },
   'mac-probe-bridge': { capability: 'manual', scope: null },
   postgres: { capability: 'semi_auto', scope: 'cluster_issues_full_auto' },
+  'db-backup-fresh': { capability: 'semi_auto', scope: 'data-layer-backup' },
   redis: { capability: 'full_auto', scope: 'cluster_issues_full_auto' },
   'nginx-edge': { capability: 'full_auto', scope: 'cluster_issues_full_auto' },
   'trade-apis': { capability: 'full_auto', scope: 'cluster_issues_full_auto' },

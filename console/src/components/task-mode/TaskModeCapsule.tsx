@@ -1,7 +1,7 @@
 import { DenseTag, Popover, PopoverContent, PopoverTrigger, cn } from '@bifrost/ui'
 import { ChevronDown } from 'lucide-react'
 import type { LoopArchetype, TaskModeId } from '@/lib/task-mode/types'
-import { useTaskMode } from '@/lib/task-mode/TaskModeContext'
+import { useTaskMode } from '@/lib/task-mode/useTaskMode'
 import { taskModeVisual } from '@/lib/task-mode/taskModeVisual'
 import { TaskModePickerContent } from '@/components/task-mode/TaskModePickerContent'
 
@@ -9,6 +9,7 @@ const LOOP_VARIANT: Record<LoopArchetype, 'neutral' | 'warning' | 'info'> = {
   system: 'neutral',
   ops: 'warning',
   dev: 'info',
+  analysis: 'info',
 }
 
 /** Compact chrome labels — full wording stays in title tooltip. */
@@ -16,12 +17,14 @@ const LOOP_LABEL: Record<LoopArchetype, string> = {
   system: 'System',
   ops: 'Ops',
   dev: 'Dev',
+  analysis: 'Analysis',
 }
 
 const LOOP_TITLE: Record<LoopArchetype, string> = {
   system: 'System',
   ops: 'Ops loop',
   dev: 'Dev loop',
+  analysis: 'Analysis',
 }
 
 export type TaskModeCapsuleProps = {

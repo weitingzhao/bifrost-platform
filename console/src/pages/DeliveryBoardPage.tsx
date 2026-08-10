@@ -196,6 +196,14 @@ export function DeliveryBoardPage({
     [programsQuery.data],
   )
 
+  const liveLaneCollisions = programsQuery.data?.live_lane_collisions ?? []
+  const collisionSummary =
+    liveLaneCollisions.length === 0
+      ? null
+      : liveLaneCollisions
+          .map(c => `D2 live collision: ${c.lane_id} → ${c.program_ids.join(', ')}`)
+          .join(' · ')
+
   const lanesWithPrograms = useMemo(() => {
     const set = new Set<string>()
     for (const p of allPrograms) {
@@ -273,35 +281,42 @@ export function DeliveryBoardPage({
 
   const isLoading = programsQuery.isLoading
   const isError = programsQuery.isError
+  const hasCollision = !isLoading && !isError && liveLaneCollisions.length > 0
   const verdictLamp =
     isLoading || isError
       ? ('unknown' as const)
-      : bands.inProgress.length > 0
+      : hasCollision
         ? ('degraded' as const)
-        : programs.length === 0
-          ? ('unknown' as const)
-          : bands.notStarted.length === programs.length
+        : bands.inProgress.length > 0
+          ? ('degraded' as const)
+          : programs.length === 0
             ? ('unknown' as const)
-            : ('ok' as const)
+            : bands.notStarted.length === programs.length
+              ? ('unknown' as const)
+              : ('ok' as const)
   const verdictTag: DenseTagVariant =
     isLoading || isError
       ? 'neutral'
-      : bands.inProgress.length > 0
+      : hasCollision
         ? 'warning'
-        : programs.length > 0 && bands.complete.length === programs.length
-          ? 'success'
-          : 'neutral'
+        : bands.inProgress.length > 0
+          ? 'warning'
+          : programs.length > 0 && bands.complete.length === programs.length
+            ? 'success'
+            : 'neutral'
   const verdictLabel = isLoading
     ? 'PROBING'
     : isError
       ? 'ERROR'
-      : programs.length === 0
-        ? 'EMPTY'
-        : bands.inProgress.length > 0
-          ? 'IN PROGRESS'
-          : bands.complete.length === programs.length
-            ? 'COMPLETE'
-            : 'IDLE'
+      : hasCollision
+        ? 'D2 COLLISION'
+        : programs.length === 0
+          ? 'EMPTY'
+          : bands.inProgress.length > 0
+            ? 'IN PROGRESS'
+            : bands.complete.length === programs.length
+              ? 'COMPLETE'
+              : 'IDLE'
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -316,9 +331,11 @@ export function DeliveryBoardPage({
             ? 'Loading delivery programs…'
             : isError
               ? 'Failed to load delivery programs from API.'
-              : programs.length === 0
-                ? 'No programs match this Scope → Lane filter.'
-                : `${programs.length} program${programs.length === 1 ? '' : 's'} · ${bands.inProgress.length} in progress · ${bands.complete.length} complete · ${bands.notStarted.length} not started`
+              : collisionSummary != null
+                ? collisionSummary
+                : programs.length === 0
+                  ? 'No programs match this Scope → Lane filter.'
+                  : `${programs.length} program${programs.length === 1 ? '' : 's'} · ${bands.inProgress.length} in progress · ${bands.complete.length} complete · ${bands.notStarted.length} not started`
         }
         actions={
           <div className="flex flex-wrap gap-2">

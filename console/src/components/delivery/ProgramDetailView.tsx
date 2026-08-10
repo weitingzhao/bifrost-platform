@@ -13,16 +13,20 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { fetchLanes, LANES_QUERY_KEY } from '@/api/lanes'
 import {
   fetchProgramDetail,
+  patchProgramLane,
   PROGRAMS_BOARD_QUERY_KEY,
   signoffProgramPhase,
 } from '@/api/programs'
 import type { ProgramPhaseDetail } from '@/api/programsTypes'
 import { PostCompletionPendingPanel } from '@/components/delivery/PostCompletionPendingPanel'
+import { ProgramAgentExecutionSection } from '@/components/delivery/ProgramAgentExecutionSection'
 import { ProgramAgentSessionsPanel } from '@/components/delivery/ProgramAgentSessionsPanel'
+import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 function phaseStatusVariant(phase: ProgramPhaseDetail): DenseTagVariant {
@@ -156,13 +160,22 @@ export function ProgramDetailView({
   /** When false, read-only catalog (Delivery Board). Default true for Briefing Session. */
   allowSignOff?: boolean
 }) {
-  const { canAdmin } = usePlatformAuth()
+  const { canAdmin, canOperate } = usePlatformAuth()
   const queryClient = useQueryClient()
   const [confirmPhaseId, setConfirmPhaseId] = useState<string | null>(null)
+  const [pendingLane, setPendingLane] = useState<string | null>(null)
+  const [confirmRebind, setConfirmRebind] = useState(false)
+  const [rebindError, setRebindError] = useState<string | null>(null)
 
   const detailQuery = useQuery({
     queryKey: ['programs', programId],
     queryFn: () => fetchProgramDetail(programId),
+  })
+
+  const lanesQuery = useQuery({
+    queryKey: LANES_QUERY_KEY,
+    queryFn: fetchLanes,
+    enabled: allowSignOff,
   })
 
   const signoffMutation = useMutation({
@@ -173,6 +186,27 @@ export function ProgramDetailView({
       setConfirmPhaseId(null)
     },
   })
+
+  const rebindMutation = useMutation({
+    mutationFn: (laneId: string) => patchProgramLane(programId, laneId),
+    onSuccess: () => {
+      setRebindError(null)
+      setConfirmRebind(false)
+      setPendingLane(null)
+      void queryClient.invalidateQueries({ queryKey: ['programs', programId] })
+      void queryClient.invalidateQueries({ queryKey: PROGRAMS_BOARD_QUERY_KEY })
+    },
+    onError: (err: unknown) => {
+      setConfirmRebind(false)
+      setRebindError(err instanceof Error ? err.message : 'Lane rebind failed')
+    },
+  })
+
+  useEffect(() => {
+    setPendingLane(null)
+    setRebindError(null)
+    setConfirmRebind(false)
+  }, [programId])
 
   const detail = detailQuery.data
   const signedCount = useMemo(
@@ -189,6 +223,10 @@ export function ProgramDetailView({
   const isMissionSignalProgram = programId === 'mission-signal'
   const panelSignOffOnly = isVisionProgram || isMissionSignalProgram
   const tableAllowSignOff = allowSignOff && !panelSignOffOnly
+  const currentLane = detail?.program.lane_id?.trim() ?? ''
+  const targetLane = pendingLane ?? currentLane
+  const laneDirty = targetLane !== '' && targetLane !== currentLane
+  const laneOptions = lanesQuery.data?.lanes ?? []
 
   if (detailQuery.isLoading) {
     return <p className="text-dense-meta text-muted-foreground">Loading program…</p>
@@ -210,9 +248,60 @@ export function ProgramDetailView({
             <DenseTag variant={phasesDone === totalPhases && totalPhases > 0 ? 'success' : 'neutral'}>
               {phasesDone}/{totalPhases} phases done
             </DenseTag>
+            {currentLane !== '' && (
+              <DenseTag variant="neutral">lane {currentLane}</DenseTag>
+            )}
           </div>
         }
-      />
+      >
+        {allowSignOff && (
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-dense-meta font-medium text-muted-foreground shrink-0">Lane:</span>
+              {canOperate ? (
+                <>
+                  <select
+                    className="h-7 rounded border border-border bg-background px-2 text-dense-label"
+                    value={targetLane}
+                    onChange={e => {
+                      setPendingLane(e.target.value)
+                      setRebindError(null)
+                    }}
+                    disabled={rebindMutation.isPending || lanesQuery.isLoading}
+                  >
+                    {currentLane !== '' && !laneOptions.some(l => l.id === currentLane) && (
+                      <option value={currentLane}>{currentLane}</option>
+                    )}
+                    {laneOptions.map(l => (
+                      <option key={l.id} value={l.id}>
+                        {l.short_label || l.label || l.id}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!laneDirty || rebindMutation.isPending}
+                    onClick={() => setConfirmRebind(true)}
+                  >
+                    Rebind lane
+                  </Button>
+                </>
+              ) : (
+                <span className="text-dense-caption text-muted-foreground">
+                  Operator auth required to rebind lane
+                </span>
+              )}
+            </div>
+            {rebindError != null && (
+              <OpsFeedback variant="error" title="Lane rebind failed">
+                {rebindError}
+              </OpsFeedback>
+            )}
+          </div>
+        )}
+      </OpsSection>
 
       <OpsSection
         title={allowSignOff ? 'Phase sign-off' : 'Phases'}
@@ -251,6 +340,8 @@ export function ProgramDetailView({
           </DenseTableBody>
         </DenseDataTable>
       </OpsSection>
+
+      <ProgramAgentExecutionSection programId={programId} />
 
       {allowSignOff && <PostCompletionPendingPanel programId={programId} />}
 
@@ -295,6 +386,17 @@ export function ProgramDetailView({
           if (confirmPhaseId) signoffMutation.mutate(confirmPhaseId)
         }}
         onCancel={() => setConfirmPhaseId(null)}
+      />
+      <ConfirmDialog
+        open={confirmRebind}
+        title="Confirm lane rebind"
+        message={`Rebind this program to lane ${targetLane}? If that lane already has a live (not session-released) program, the API returns 409.`}
+        confirmLabel="Confirm rebind"
+        confirming={rebindMutation.isPending}
+        onConfirm={() => {
+          if (targetLane !== '') rebindMutation.mutate(targetLane)
+        }}
+        onCancel={() => setConfirmRebind(false)}
       />
     </div>
   )

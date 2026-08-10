@@ -168,15 +168,52 @@ func slugInstanceLabel(label string) string {
 	return s
 }
 
-func instanceProgramID(baseID, instanceLabel string) string {
-	if strings.TrimSpace(instanceLabel) != "" {
-		return fmt.Sprintf("%s--%s", baseID, slugInstanceLabel(instanceLabel))
+func slugLaneID(lane string) string {
+	s := strings.ToLower(strings.TrimSpace(lane))
+	s = instanceSlugRe.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		return "program"
 	}
-	return fmt.Sprintf("%s--%s", baseID, time.Now().UTC().Format("20060102150405"))
+	return s
+}
+
+func instanceProgramID(laneID string, taken func(string) bool) (string, error) {
+	lane := slugLaneID(laneID)
+	date := time.Now().UTC().Format("20060102")
+	// Reserve "-99" so collision suffixes still fit maxProgramIDLen.
+	maxLane := maxProgramIDLen - len(date) - 1 - 3
+	if maxLane < 1 {
+		maxLane = 1
+	}
+	if len(lane) > maxLane {
+		lane = strings.Trim(lane[:maxLane], "-")
+		if lane == "" {
+			lane = "program"
+		}
+	}
+	base := lane + "-" + date
+	if err := ValidateNewProgramID(base); err != nil {
+		return "", err
+	}
+	if taken == nil || !taken(base) {
+		return base, nil
+	}
+	for n := 2; n < 100; n++ {
+		id := fmt.Sprintf("%s-%d", base, n)
+		if err := ValidateNewProgramID(id); err != nil {
+			continue
+		}
+		if !taken(id) {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("no available program id for lane %s on %s", lane, date)
 }
 
 func cloneBlueprintInstance(base *ProgramBlueprint, tmpl ProgramTemplate, programID, instanceLabel, notes, laneID string) *ProgramBlueprint {
 	clone := *base
+	clone.SourcePath = ""
 	clone.ID = programID
 	clone.Title = base.Title
 	if strings.TrimSpace(instanceLabel) != "" {
@@ -216,23 +253,64 @@ func cloneBlueprintInstance(base *ProgramBlueprint, tmpl ProgramTemplate, progra
 		clone.Metadata["lane_id"] = strings.TrimSpace(laneID)
 	}
 	clone.Metadata["created_at"] = time.Now().UTC().Format(time.RFC3339)
+	clone.Status = "active"
+	clone.Phases = make([]PhaseBlueprint, len(base.Phases))
+	for i, p := range base.Phases {
+		p.Status = "pending"
+		clone.Phases[i] = p
+	}
 	return &clone
 }
 
 func writeProgramBlueprint(dir string, bp *ProgramBlueprint) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	path := strings.TrimSpace(bp.SourcePath)
+	if path == "" {
+		path = filepath.Join(dir, "active", bp.ID+".yaml")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("mkdir programs config: %w", err)
 	}
 	data, err := yaml.Marshal(bp)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(dir, bp.ID+".yaml")
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return fmt.Errorf("write program blueprint: %w", err)
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	bp.SourcePath = path
+	return nil
+}
+
+func findProgramBlueprintFile(dir, programID string) (string, error) {
+	var found string
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if strings.HasPrefix(d.Name(), "_") && path != dir {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := d.Name()
+		if name == programID+".yaml" || name == programID+".yml" {
+			found = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if found == "" {
+		return "", fmt.Errorf("base blueprint not found: %s", programID)
+	}
+	return found, nil
 }
 
 func templateIDFromRuntime(rt *programRuntime) string {
@@ -254,12 +332,12 @@ func (h *Handler) loadBaseBlueprint(baseID string) (*ProgramBlueprint, error) {
 	}
 	h.mu.Unlock()
 
-	path := filepath.Join(h.blueprintDir, baseID+".yaml")
+	path, err := findProgramBlueprintFile(h.blueprintDir, baseID)
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("base blueprint not found: %s", baseID)
-		}
 		return nil, fmt.Errorf("read base blueprint %s: %w", baseID, err)
 	}
 	var bp ProgramBlueprint
@@ -321,11 +399,33 @@ func (h *Handler) HandleCreateFromTemplate(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
+	for _, p := range base.Phases {
+		if phaseIDAllowedForNewProgram(p.ID) {
+			continue
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("base blueprint phase id %q is not P{n} or a semantic slug; choose a different base", p.ID),
+		})
+		return
+	}
 
-	programID := instanceProgramID(baseID, req.InstanceLabel)
 	laneID := strings.TrimSpace(req.LaneID)
-
 	h.mu.Lock()
+	programID, err := instanceProgramID(laneID, func(id string) bool {
+		if _, ok := h.runtimes[id]; ok {
+			return true
+		}
+		if h.blueprintDir == "" {
+			return false
+		}
+		path, findErr := findProgramBlueprintFile(h.blueprintDir, id)
+		return findErr == nil && path != ""
+	})
+	if err != nil {
+		h.mu.Unlock()
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	if _, exists := h.runtimes[programID]; exists {
 		rt := h.runtimes[programID]
 		h.mu.Unlock()

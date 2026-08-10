@@ -1,5 +1,6 @@
 import { Button, StatusLamp } from '@bifrost/ui'
-import { BriefingIconBadge, TRACK_ICONS } from '@/lib/briefing/briefingIcons'
+import { BriefingIconBadge } from '@/lib/briefing/briefingIcons'
+import { TRACK_ICONS } from '@/lib/briefing/briefingIconMaps'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import type { TrackSummary, TrackId } from '@/lib/briefing/workTracks'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -72,10 +73,10 @@ export function WorkTracksStrip({ tracks, onOpenBriefing }: WorkTracksStripProps
   return (
     <OpsSection
       title="Work tracks"
-      description="Build / migrate / operate progress from spine — open Agent Briefing to pick a lane and generate a session pack."
+      description="Build / migrate / operate progress from spine — open Briefing to pick a lane and generate a session pack."
       actions={
         <Button variant="ghost" size="xs" onClick={() => onOpenBriefing()}>
-          Open Agent Briefing
+          Open Briefing
         </Button>
       }
       bodyPadding="default"

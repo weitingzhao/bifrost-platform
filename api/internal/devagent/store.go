@@ -309,7 +309,7 @@ func (s *FileStore) SavePendingPostCompletion(items []PostCompletionItem) error 
 	return os.Rename(tmp, s.PendingPostCompletionPath())
 }
 
-func (s *FileStore) ListInfo(activeProgramID string) (*PersistenceInfo, error) {
+func (s *FileStore) ListInfo(activeProgramID string, includeArchived bool, activeIDs map[string]struct{}) (*PersistenceInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -333,7 +333,7 @@ func (s *FileStore) ListInfo(activeProgramID string) (*PersistenceInfo, error) {
 			continue
 		}
 		name := entry.Name()
-		if !strings.HasSuffix(name, ".json") || name == "_active.json" {
+		if !strings.HasSuffix(name, ".json") || strings.HasPrefix(name, "_") {
 			continue
 		}
 		path := filepath.Join(s.dir, name)
@@ -345,7 +345,14 @@ func (s *FileStore) ListInfo(activeProgramID string) (*PersistenceInfo, error) {
 		updatedAt := ""
 		if rec, err := s.loadProgramLocked(programID); err == nil && rec != nil {
 			updatedAt = rec.UpdatedAt
-			programID = rec.ProgramID
+			if rec.ProgramID != "" {
+				programID = rec.ProgramID
+			}
+		}
+		if !includeArchived {
+			if _, ok := activeIDs[programID]; !ok {
+				continue
+			}
 		}
 		info.Files = append(info.Files, PersistenceFileInfo{
 			ProgramID: programID,
@@ -364,7 +371,9 @@ func mergePhasesFromState(blueprint *ProgramBlueprint, saved []Phase) []Phase {
 	}
 	byID := make(map[string]Phase, len(saved))
 	for _, p := range saved {
-		byID[p.ID] = p
+		id := canonicalPhaseID(blueprint, p.ID)
+		p.ID = id
+		byID[id] = p
 	}
 	for i := range base {
 		if savedPhase, ok := byID[base[i].ID]; ok {

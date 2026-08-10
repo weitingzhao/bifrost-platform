@@ -14,9 +14,8 @@ import {
 import {
   MarketDataFreshnessTable,
   MarketDataWorkersTable,
-  sortFreshness,
-  workerReady,
 } from '@/components/market-data/MarketDataProbeTables'
+import { sortFreshness, workerReady } from '@/components/market-data/marketDataProbeUtils'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'

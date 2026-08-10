@@ -82,6 +82,19 @@ describe('catalogComplete vs sessionReleased', () => {
     expect(isProgramSessionReleased(p)).toBe(true)
   })
 
+  it('closes catalog status completed without post-completion assessment', () => {
+    const p = program({
+      id: 'closed-yaml',
+      status: 'completed',
+      complete: false,
+      signed: 0,
+      sign_off_required_count: 4,
+      requires_post_completion: true,
+    })
+    expect(isProgramCatalogComplete(p)).toBe(true)
+    expect(isProgramSessionReleased(p)).toBe(true)
+  })
+
   it('keeps pending_review in Active Session', () => {
     const p = program({
       id: 'req',

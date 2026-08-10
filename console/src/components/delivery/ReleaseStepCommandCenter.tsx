@@ -20,9 +20,6 @@ import {
   type StepStatus,
 } from '@/lib/delivery/releaseStepTypes'
 
-export type { FlowStep, StepStatus } from '@/lib/delivery/releaseStepTypes'
-export { runStepStatus, gateStepStatus, deriveReleaseOutcome, pickDeployPipelineRun, deployRunRetryFailed } from '@/lib/delivery/releaseStepTypes'
-
 const RELEASE_OUTCOME_BADGE: Record<string, string> = {
   released: 'border-success/40 bg-success/10 text-success',
   in_progress: 'border-primary/40 bg-primary/10 text-primary',

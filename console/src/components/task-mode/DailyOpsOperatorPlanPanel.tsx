@@ -23,7 +23,7 @@ import {
 import { useNowMs } from '@/hooks/useNowMs'
 import type { FleetCell } from '@/lib/control-room/fleetSnapshot'
 import type { DailyOpsWorkflowPhase } from '@/lib/control-room/dailyOpsWorkflow'
-import { useDailyOpsContext } from '@/components/task-mode/daily-ops/DailyOpsContext'
+import { useDailyOpsContext } from '@/components/task-mode/daily-ops/useDailyOpsContext'
 import { ChecklistKPIHeader } from './operator-plan/ChecklistKPIHeader'
 import { ChecklistSection } from './operator-plan/ChecklistSection'
 import { resolveChecklist, toFailoverInput } from './operator-plan/checklistResolve'
@@ -138,7 +138,10 @@ export function DailyOpsOperatorPlanPanel({
     refetchInterval: checkBusy ? 3_000 : 15_000,
     enabled: activeDispatchJobs == null,
   })
-  const jobs = activeDispatchJobs ?? jobsQuery.data?.jobs ?? []
+  const jobs = useMemo(
+    () => activeDispatchJobs ?? jobsQuery.data?.jobs ?? [],
+    [activeDispatchJobs, jobsQuery.data?.jobs],
+  )
   const dispatchByItem = useMemo(() => {
     const map = new Map<string, ChecklistDispatchActionDto>()
     for (const a of signalsQuery.data?.last_dispatch ?? []) {

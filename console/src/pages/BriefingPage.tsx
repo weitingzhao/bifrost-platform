@@ -12,10 +12,8 @@ import {
   isLikelyCursorIdeBrowser,
   launchCursorBriefingAfterPrepare,
 } from '@/lib/briefing/briefingDeliveryChannels'
-import {
-  CollapseExpandIcon,
-  collapseExpandAriaLabel,
-} from '@/components/layout/CollapseExpandIcon'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
+import { collapseExpandAriaLabel } from '@/components/layout/collapseExpandAria'
 import { BriefingMasterDetail } from '@/components/briefing/BriefingMasterDetail'
 import { BriefingViewTabsSection } from '@/components/briefing/BriefingViewTabsSection'
 import { BriefingWorkDigestPanel } from '@/components/briefing/BriefingWorkDigestPanel'
@@ -178,7 +176,10 @@ export function BriefingPage({
     refetchInterval: 30_000,
   })
 
-  const remediationJobs = remediationJobsQuery.data?.jobs ?? []
+  const remediationJobs = useMemo(
+    () => remediationJobsQuery.data?.jobs ?? [],
+    [remediationJobsQuery.data?.jobs],
+  )
 
   const dataReady = !contextLoading && !matrixLoading && !auditLoading && !remediationJobsQuery.isLoading
 
