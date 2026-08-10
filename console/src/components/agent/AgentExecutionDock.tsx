@@ -11,9 +11,11 @@ import { ServerConsolePanel } from '@/components/ServerConsolePanel'
 import { RemediationApprovalBlock } from '@/components/cluster/RemediationApprovalBlock'
 import { useAgentJobLiveSession } from '@/hooks/useAgentJobLiveSession'
 import { useAgentHostPulse } from '@/hooks/useAgentHostPulse'
+import { useAgentApprovalMode } from '@/hooks/useAgentApprovalMode'
 import {
   feedKindLabel,
 } from '@/lib/agent/agentLiveFeed'
+import { buildAutoApprovalResponse } from '@/lib/agent/agentApprovalMode'
 import { DockProcessFeed } from '@/components/agent/DockProcessFeed'
 import { updateActivityPhase, getActivityEvents } from '@/lib/activity/activityStore'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
@@ -250,8 +252,10 @@ export function OperatorDock({
     readStoredPct(AGENT_V_SPLIT_KEY, DEFAULT_DETAIL_TOP_PCT, MIN_DETAIL_TOP_PCT, MAX_DETAIL_TOP_PCT),
   )
   const [focusPane, setFocusPane] = useState<AgentFocusPane>(null)
-  /** When awaiting approval, Result/Process stay collapsed so decision controls fit. */
   const [approvalLogsOpen, setApprovalLogsOpen] = useState(false)
+  const { mode: approvalMode, setMode: setApprovalMode } = useAgentApprovalMode()
+  const autoRespondedRef = useRef<string | null>(null)
+  const [autoPickHint, setAutoPickHint] = useState<string | null>(null)
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
   const heightPxRef = useRef(heightPx)
   const agentLeftPctRef = useRef(agentLeftPct)
@@ -465,6 +469,33 @@ export function OperatorDock({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset logs when approval id changes
   }, [pendingApproval?.id])
 
+  useEffect(() => {
+    autoRespondedRef.current = null
+    setAutoPickHint(null)
+  }, [jobId])
+
+  useEffect(() => {
+    if (approvalMode !== 'auto') return
+    if (pendingApproval == null || isArchive || isTerminal) {
+      if (pendingApproval == null) setAutoPickHint(null)
+      return
+    }
+    if (respondPending) return
+    if (autoRespondedRef.current === pendingApproval.id) return
+    const picked = buildAutoApprovalResponse(pendingApproval)
+    if (picked == null) return
+    autoRespondedRef.current = pendingApproval.id
+    setAutoPickHint(picked.optionLabel)
+    respond(picked.optionId, undefined, picked.commitMessage)
+  }, [
+    approvalMode,
+    pendingApproval,
+    isArchive,
+    isTerminal,
+    respondPending,
+    respond,
+  ])
+
   // P2-C: mid-flight remediation phases → Activity Feed detail
   const lastActivityPhaseRef = useRef<string | null>(null)
   useEffect(() => {
@@ -578,6 +609,26 @@ export function OperatorDock({
             if (next === 'sessions' && mode === 'collapsed') expandWorking()
           }}
         />
+        {toolId === 'agent' && (
+          <span
+            title={
+              approvalMode === 'auto'
+                ? 'Auto-default: when the agent asks for a decision, pick the recommended (first) option'
+                : 'Manual: confirm each agent decision yourself'
+            }
+          >
+            <SegmentControl
+              ariaLabel="Agent approval mode"
+              size="sm"
+              value={approvalMode}
+              options={[
+                { value: 'auto', label: 'Auto-default' },
+                { value: 'manual', label: 'Manual' },
+              ]}
+              onChange={v => setApprovalMode(v as 'auto' | 'manual')}
+            />
+          </span>
+        )}
         {toolId === 'agent' && !idle && label != null && label !== '' && (
           <span className="console-agent-execution-dock__label" title={label}>
             {label}
@@ -914,7 +965,7 @@ export function OperatorDock({
                           Connection: {error}
                         </p>
                       )}
-                      {pendingApproval != null && (
+                      {pendingApproval != null && approvalMode === 'manual' && (
                         <div className="console-agent-execution-dock__approval">
                           <RemediationApprovalBlock
                             event={pendingApproval}
@@ -926,10 +977,21 @@ export function OperatorDock({
                           />
                         </div>
                       )}
+                      {pendingApproval != null && approvalMode === 'auto' && (
+                        <p className="m-0 text-dense-meta text-muted-foreground">
+                          Auto-default · selecting{' '}
+                          <span className="font-medium text-foreground">
+                            {autoPickHint ?? 'recommended option'}
+                          </span>
+                          …
+                        </p>
+                      )}
                     </div>
                   )}
 
-                  {pendingApproval != null && !approvalLogsOpen && (
+                  {pendingApproval != null &&
+                    approvalMode === 'manual' &&
+                    !approvalLogsOpen && (
                     <button
                       type="button"
                       className="console-agent-execution-dock__logs-collapsed"
@@ -939,7 +1001,9 @@ export function OperatorDock({
                     </button>
                   )}
 
-                  {(pendingApproval == null || approvalLogsOpen) && (
+                  {(pendingApproval == null ||
+                    approvalLogsOpen ||
+                    approvalMode === 'auto') && (
                   <div
                     ref={detailSplitRef}
                     className={cn(
@@ -949,6 +1013,7 @@ export function OperatorDock({
                       focusPane === 'process' &&
                         'console-agent-execution-dock__detail-split--focus-process',
                       pendingApproval != null &&
+                        approvalMode === 'manual' &&
                         'console-agent-execution-dock__detail-split--under-approval',
                     )}
                     style={
@@ -965,7 +1030,7 @@ export function OperatorDock({
                     >
                       <div className="console-agent-execution-dock__pane-head">
                         <h3 className="console-agent-execution-dock__pane-title">Result</h3>
-                        {pendingApproval != null && (
+                        {pendingApproval != null && approvalMode === 'manual' && (
                           <Button
                             type="button"
                             variant="ghost"
