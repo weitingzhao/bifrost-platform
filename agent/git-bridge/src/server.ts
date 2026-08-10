@@ -27,10 +27,12 @@ const MANAGED_REPOS = [
 ]
 
 function git(repoDir: string, args: string): string {
+  // trimEnd only — trim() would strip the leading space on porcelain
+  // first lines (` M path`) and mis-parse them as staged `ata/...`.
   return execSync(`git -C "${repoDir}" ${args}`, {
     encoding: 'utf-8',
     timeout: 30_000,
-  }).trim()
+  }).replace(/\s+$/, '')
 }
 
 function isGitRepo(dir: string): boolean {
