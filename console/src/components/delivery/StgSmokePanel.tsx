@@ -20,6 +20,8 @@ interface StgSmokePanelProps {
   onRefresh?: () => void
   title?: string
   description?: string
+  collapsible?: boolean
+  defaultCollapsed?: boolean
 }
 
 export function StgSmokePanel({
@@ -30,6 +32,8 @@ export function StgSmokePanel({
   onRefresh,
   title = 'Stg smoke',
   description = 'HTTP probes for bifrost-stg via Traefik gateway (Host: stg.trader.bifrost.lan). APIs: /health (monitor also /status). Auto-refresh every 30s.',
+  collapsible = false,
+  defaultCollapsed = false,
 }: StgSmokePanelProps) {
   return (
     <OpsSection
@@ -56,6 +60,8 @@ export function StgSmokePanel({
       bodyPadding="none"
       overflow="visible"
       bodyClassName="ops-section-body--table"
+      collapsible={collapsible}
+      defaultCollapsed={defaultCollapsed}
     >
       <DenseDataTable>
         <DenseTableHeader>

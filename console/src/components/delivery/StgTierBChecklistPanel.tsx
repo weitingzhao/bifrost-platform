@@ -29,6 +29,8 @@ interface StgTierBChecklistPanelProps {
   onOpenPromote?: () => void
   /** observe: probe table only; operate: admin sign-off + Promote navigation */
   layout?: StgTierBChecklistLayout
+  collapsible?: boolean
+  defaultCollapsed?: boolean
 }
 
 export function StgTierBChecklistPanel({
@@ -37,6 +39,8 @@ export function StgTierBChecklistPanel({
   tierBError = null,
   onOpenPromote,
   layout = 'observe',
+  collapsible = false,
+  defaultCollapsed = false,
 }: StgTierBChecklistPanelProps) {
   const allowSignOff = layout === 'operate'
   const { canAdmin } = usePlatformAuth()
@@ -111,6 +115,8 @@ export function StgTierBChecklistPanel({
       bodyPadding="none"
       overflow="visible"
       bodyClassName="ops-section-body--table"
+      collapsible={collapsible}
+      defaultCollapsed={defaultCollapsed}
     >
       {loading && data == null ? (
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">Loading Tier B…</p>

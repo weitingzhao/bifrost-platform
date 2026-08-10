@@ -14,6 +14,7 @@ import {
   LaneGateSummaryLine,
   LaneStateStrip,
 } from '@/components/delivery/LaneDetailShell'
+import { LaneOperateSplit } from '@/components/delivery/LaneOperateSplit'
 import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
 import { ReleaseEnvAccessBar } from '@/components/delivery/ReleaseEnvAccessBar'
 import { ReleaseHealthStrip } from '@/components/delivery/ReleaseHealthStrip'
@@ -157,48 +158,68 @@ export function PlatformReleasePage({
     }),
   })
 
+  const stackNeedsOperate = stackNeedsOperatePanel(stackQuery.data?.addons ?? [])
+
   let stepDetail: ReactNode
   switch (activeIndex) {
     case 0:
       stepDetail = (
         <>
-          <PlatformDeliverActuatePanel target={PLATFORM_STG_TARGET} hideActions />
-          <DeliveryActiveRunPanel target={PLATFORM_STG_TARGET} />
+          <DeliveryActiveRunPanel target={PLATFORM_STG_TARGET} collapsible />
+          <LaneDetailCollapse
+            title="Deliver readiness · Platform STG"
+            defaultOpen={false}
+            bodyClassName="p-3"
+          >
+            <PlatformDeliverActuatePanel target={PLATFORM_STG_TARGET} hideActions />
+          </LaneDetailCollapse>
         </>
       )
       break
     case 1:
       stepDetail = (
-        <LaneDetailCollapse
-          key="stg-gate-detail"
-          title="STG gate check detail"
-          summaryExtra={<LaneGateSummaryLine gate={stgGate.data} />}
-          defaultOpen={stgGateStep.status === 'error'}
-          bodyClassName="p-3"
-        >
-          <PlatformStageGatePanel tier="platform-stg" label="STG" hideActions />
-        </LaneDetailCollapse>
+        <>
+          <DeliveryActiveRunPanel target={PLATFORM_STG_TARGET} collapsible />
+          <LaneDetailCollapse
+            key="stg-gate-detail"
+            title="STG gate check detail"
+            summaryExtra={<LaneGateSummaryLine gate={stgGate.data} />}
+            defaultOpen={stgGateStep.status === 'error'}
+            bodyClassName="p-3"
+          >
+            <PlatformStageGatePanel tier="platform-stg" label="STG" hideActions />
+          </LaneDetailCollapse>
+        </>
       )
       break
     case 2:
       stepDetail = (
         <>
-          <PlatformDeliverActuatePanel target={PLATFORM_PROD_TARGET} hideActions />
-          <DeliveryActiveRunPanel target={PLATFORM_PROD_TARGET} />
+          <DeliveryActiveRunPanel target={PLATFORM_PROD_TARGET} collapsible />
+          <LaneDetailCollapse
+            title="Deliver readiness · Platform PROD"
+            defaultOpen={false}
+            bodyClassName="p-3"
+          >
+            <PlatformDeliverActuatePanel target={PLATFORM_PROD_TARGET} hideActions />
+          </LaneDetailCollapse>
         </>
       )
       break
     default:
       stepDetail = (
-        <LaneDetailCollapse
-          key="prod-gate-detail"
-          title="PROD gate check detail"
-          summaryExtra={<LaneGateSummaryLine gate={prodGate.data} />}
-          defaultOpen={prodGateStep.status === 'error'}
-          bodyClassName="p-3"
-        >
-          <PlatformStageGatePanel tier="platform-prod" label="PROD" hideActions />
-        </LaneDetailCollapse>
+        <>
+          <DeliveryActiveRunPanel target={PLATFORM_PROD_TARGET} collapsible />
+          <LaneDetailCollapse
+            key="prod-gate-detail"
+            title="PROD gate check detail"
+            summaryExtra={<LaneGateSummaryLine gate={prodGate.data} />}
+            defaultOpen={prodGateStep.status === 'error'}
+            bodyClassName="p-3"
+          >
+            <PlatformStageGatePanel tier="platform-prod" label="PROD" hideActions />
+          </LaneDetailCollapse>
+        </>
       )
       break
   }
@@ -227,52 +248,72 @@ export function PlatformReleasePage({
         <ReleaseStateBanner tier="platform" />
       </LaneStateStrip>
 
-      <ReleaseStepCommandCenter
-        steps={steps}
-        activeIndex={activeIndex}
-        onSelect={setActiveIndex}
-        stepLabels={STEP_LABELS}
-        stgRun={stgRuns.data?.runs?.[0]}
-        prodRun={prodRuns.data?.runs?.[0]}
-        stgGate={stgGate.data}
-        prodGate={prodGate.data}
-        renderStepActions={renderPlatformStepActions}
+      <LaneOperateSplit
+        storageKey="bifrost.console.rocketLaneOperateSplit"
+        primary={
+          <>
+            <ReleaseStepCommandCenter
+              steps={steps}
+              activeIndex={activeIndex}
+              onSelect={setActiveIndex}
+              stepLabels={STEP_LABELS}
+              stgRun={stgRuns.data?.runs?.[0]}
+              prodRun={prodRuns.data?.runs?.[0]}
+              stgGate={stgGate.data}
+              prodGate={prodGate.data}
+              renderStepActions={renderPlatformStepActions}
+              collapsibleBody
+            />
+            <div className="flex flex-col gap-3">{stepDetail}</div>
+          </>
+        }
+        support={
+          <>
+            <LaneDetailCollapse
+              title="Supporting evidence"
+              summaryExtra={<ReleaseHealthStrip />}
+              defaultOpen={false}
+              showModeBadge
+              bodyClassName="flex flex-col gap-4 p-3"
+            >
+              <div className="flex flex-col gap-2">
+                <SelfHealthPanel collapsible />
+                <PlatformGateHistorySection collapsible defaultCollapsed />
+              </div>
+            </LaneDetailCollapse>
+
+            <LaneDetailCollapse
+              title="Toolbox"
+              defaultOpen={stackNeedsOperate}
+              bodyClassName="flex flex-col gap-4 p-3"
+            >
+              <div className="flex flex-col gap-2">
+                <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  Advanced recovery
+                </span>
+                <p className="m-0 text-dense-meta text-muted-foreground">
+                  Escape hatches for this lane. Primary AI Release stays on the lane state strip
+                  above.
+                </p>
+                <EscapeHatchPanel />
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  CI/CD stack · install wizard
+                </span>
+                <StackInstallWizardPanel
+                  data={stackQuery.data}
+                  isLoading={stackQuery.isLoading}
+                  errorMessage={
+                    stackQuery.error instanceof Error ? stackQuery.error.message : null
+                  }
+                  layout="operate"
+                />
+              </div>
+            </LaneDetailCollapse>
+          </>
+        }
       />
-
-      <div className="flex flex-col gap-3">{stepDetail}</div>
-
-      <LaneDetailCollapse
-        title="Evidence · control plane self-health"
-        summaryExtra={<ReleaseHealthStrip />}
-        bodyClassName="p-3"
-      >
-        <SelfHealthPanel />
-      </LaneDetailCollapse>
-
-      <LaneDetailCollapse title="Advanced recovery" bodyClassName="flex flex-col gap-3 p-3">
-        <p className="m-0 text-dense-meta text-muted-foreground">
-          Escape hatches for this lane. Primary Agent Launch lives in Mission Launch TCC; AI Release
-          is on the lane state strip above.
-        </p>
-        <EscapeHatchPanel />
-      </LaneDetailCollapse>
-
-      <LaneDetailCollapse title="Audit · gate run history">
-        <PlatformGateHistorySection />
-      </LaneDetailCollapse>
-
-      <LaneDetailCollapse
-        title="CI/CD stack · install wizard"
-        defaultOpen={stackNeedsOperatePanel(stackQuery.data?.addons ?? [])}
-        bodyClassName="p-3"
-      >
-        <StackInstallWizardPanel
-          data={stackQuery.data}
-          isLoading={stackQuery.isLoading}
-          errorMessage={stackQuery.error instanceof Error ? stackQuery.error.message : null}
-          layout="operate"
-        />
-      </LaneDetailCollapse>
     </div>
   )
 }

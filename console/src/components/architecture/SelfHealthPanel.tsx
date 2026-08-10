@@ -34,7 +34,13 @@ const CATEGORY_LABEL: Record<string, string> = {
   gitops: 'Argo CD sync',
 }
 
-export function SelfHealthPanel() {
+export function SelfHealthPanel({
+  collapsible = false,
+  defaultCollapsed = false,
+}: {
+  collapsible?: boolean
+  defaultCollapsed?: boolean
+} = {}) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['platform', 'self-health'],
     queryFn: fetchSelfHealth,
@@ -60,6 +66,9 @@ export function SelfHealthPanel() {
       }
       bodyPadding="default"
       overflow="visible"
+      variant={collapsible ? 'flat' : 'elevated'}
+      collapsible={collapsible}
+      defaultCollapsed={defaultCollapsed}
     >
       {error && (
         <p className="text-dense-meta text-destructive m-0">

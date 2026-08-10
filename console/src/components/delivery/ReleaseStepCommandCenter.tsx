@@ -9,9 +9,11 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import type { DeliveryPipelineRunView, ReleaseGateResponse } from '@/api/deliveryTypes'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { DeployStepSummary, GateStepSummary } from '@/components/delivery/ReleaseStepSummaries'
+import { CollapseExpandIcon } from '@/components/layout/CollapseExpandIcon'
 import {
   deriveReleaseIdentity,
   deriveReleaseOutcome,
@@ -290,6 +292,11 @@ export interface ReleaseStepCommandCenterProps {
   aiReleaseDisabled?: boolean
   aiReleaseDisabledReason?: string
   aiReleaseLabel?: string
+  /**
+   * When true, identity + stepper stay visible; action zone collapses.
+   * Defaults open when the active step is not done.
+   */
+  collapsibleBody?: boolean
 }
 
 export function ReleaseStepCommandCenter({
@@ -308,10 +315,18 @@ export function ReleaseStepCommandCenter({
   aiReleaseDisabled,
   aiReleaseDisabledReason,
   aiReleaseLabel,
+  collapsibleBody = false,
 }: ReleaseStepCommandCenterProps) {
   const isStg = activeIndex < 2
   const accentClass = isStg ? 'release-cc__accent--stg' : 'release-cc__accent--prod'
   const stepRevision = stepRevisionForIndex(activeIndex, stgRun, prodRun, stgGate, prodGate)
+  const activeStatus = steps[activeIndex]?.status
+  const bodyDefaultOpen = activeStatus !== 'done'
+
+  const [bodyOpen, setBodyOpen] = useState(bodyDefaultOpen)
+  useEffect(() => {
+    if (collapsibleBody) setBodyOpen(bodyDefaultOpen)
+  }, [collapsibleBody, bodyDefaultOpen, activeIndex])
 
   let summary: ReactNode
   switch (activeIndex) {
@@ -328,6 +343,32 @@ export function ReleaseStepCommandCenter({
       summary = <GateStepSummary gate={prodGate} />
       break
   }
+
+  const actionBody = (
+    <>
+      <div className="release-cc__action-zone px-4 py-3">
+        <StepStatusBanner
+          label={stepLabels[activeIndex] ?? steps[activeIndex]?.label ?? ''}
+          env={isStg ? 'STG' : 'PROD'}
+          status={steps[activeIndex].status}
+          statusLabel={steps[activeIndex].statusLabel}
+          stepRevision={stepRevision}
+          nextStep={steps[activeIndex + 1]}
+          onContinue={() => onSelect(activeIndex + 1)}
+        />
+        <StepActionZone
+          activeIndex={activeIndex}
+          status={steps[activeIndex].status}
+          renderStepActions={renderStepActions}
+        />
+      </div>
+
+      <div className="border-t border-border/40 px-4 py-1.5">
+        {summary}
+        {renderStepDetail?.(activeIndex)}
+      </div>
+    </>
+  )
 
   return (
     <div className="relative overflow-hidden rounded-lg border border-border bg-card">
@@ -348,29 +389,29 @@ export function ReleaseStepCommandCenter({
 
       <FlowStepper steps={steps} activeIndex={activeIndex} onSelect={onSelect} />
 
-      <div className="border-t border-border">
-        <div className="release-cc__action-zone px-4 py-3">
-          <StepStatusBanner
-            label={stepLabels[activeIndex] ?? steps[activeIndex]?.label ?? ''}
-            env={isStg ? 'STG' : 'PROD'}
-            status={steps[activeIndex].status}
-            statusLabel={steps[activeIndex].statusLabel}
-            stepRevision={stepRevision}
-            nextStep={steps[activeIndex + 1]}
-            onContinue={() => onSelect(activeIndex + 1)}
-          />
-          <StepActionZone
-            activeIndex={activeIndex}
-            status={steps[activeIndex].status}
-            renderStepActions={renderStepActions}
-          />
-        </div>
-
-        <div className="border-t border-border/40 px-4 py-1.5">
-          {summary}
-          {renderStepDetail?.(activeIndex)}
-        </div>
-      </div>
+      {collapsibleBody ? (
+        <details
+          className="group border-t border-border"
+          open={bodyOpen}
+          onToggle={e => setBodyOpen((e.currentTarget as HTMLDetailsElement).open)}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 hover:bg-secondary/30 [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-muted-foreground">
+              <CollapseExpandIcon open={bodyOpen} size={14} />
+              Step actions
+              <span className="text-dense-micro text-muted-foreground/70">
+                {bodyOpen ? 'Detail' : 'Summary · stepper only'}
+              </span>
+            </span>
+            <span className="font-mono text-dense-micro text-muted-foreground/60">
+              {steps[activeIndex]?.label}: {steps[activeIndex]?.statusLabel}
+            </span>
+          </summary>
+          {actionBody}
+        </details>
+      ) : (
+        <div className="border-t border-border">{actionBody}</div>
+      )}
     </div>
   )
 }

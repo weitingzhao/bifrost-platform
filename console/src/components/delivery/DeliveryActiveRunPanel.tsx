@@ -33,9 +33,14 @@ function logsNeedPoll(logs: string | undefined): boolean {
 
 interface DeliveryActiveRunPanelProps {
   target: DeliveryTargetConfig
+  /** Collapse section body; defaults open while running/failed. */
+  collapsible?: boolean
 }
 
-export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) {
+export function DeliveryActiveRunPanel({
+  target,
+  collapsible = false,
+}: DeliveryActiveRunPanelProps) {
   const qc = useQueryClient()
   const focusKey = deliveryFocusRunQueryKey(target.pipeline)
   const pipeline = target.pipeline
@@ -162,6 +167,8 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
   const logsUpdatedAt = logsQuery.dataUpdatedAt
     ? new Date(logsQuery.dataUpdatedAt).toLocaleTimeString()
     : null
+  const defaultCollapsed =
+    collapsible && focusRun != null && isPipelineRunSucceeded(focusRun) && !running
 
   return (
     <OpsSection
@@ -197,6 +204,8 @@ export function DeliveryActiveRunPanel({ target }: DeliveryActiveRunPanelProps) 
       }
       bodyPadding="default"
       overflow="visible"
+      collapsible={collapsible}
+      defaultCollapsed={defaultCollapsed}
     >
       {runsQuery.isLoading ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">Loading pipeline runs…</p>

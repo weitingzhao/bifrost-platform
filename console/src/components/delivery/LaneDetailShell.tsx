@@ -73,6 +73,8 @@ export function LaneDetailCollapse({
   defaultOpen = false,
   children,
   bodyClassName,
+  /** When true, header shows Summary (closed) / Detail (open) mode badge. */
+  showModeBadge = false,
 }: {
   title: string
   /** Compact latest-result summary shown on the closed summary row. */
@@ -80,15 +82,22 @@ export function LaneDetailCollapse({
   defaultOpen?: boolean
   children: ReactNode
   bodyClassName?: string
+  showModeBadge?: boolean
 }) {
-  // Capture initial value so re-renders never fight the user's manual toggle.
-  const [initialOpen] = useState(defaultOpen)
+  const [open, setOpen] = useState(defaultOpen)
   return (
-    <details open={initialOpen || undefined} className="group rounded-lg border border-border/50 bg-card">
+    <details
+      className="group rounded-lg border border-border/50 bg-card"
+      open={open}
+      onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2 hover:bg-secondary/30">
-        <span className="inline-flex items-center gap-1.5 text-dense-label font-medium text-foreground">
-          <CollapseExpandIcon open={false} size={14} className="group-open:rotate-180" />
+        <span className="inline-flex min-w-0 items-center gap-1.5 text-dense-label font-medium text-foreground">
+          <CollapseExpandIcon open={open} size={14} />
           {title}
+          {showModeBadge && (
+            <DenseTag variant={open ? 'info' : 'neutral'}>{open ? 'Detail' : 'Summary'}</DenseTag>
+          )}
         </span>
         {summaryExtra}
       </summary>

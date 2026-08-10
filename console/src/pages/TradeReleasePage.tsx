@@ -21,6 +21,7 @@ import {
   LaneStateStrip,
   LiveTradingFreezeNote,
 } from '@/components/delivery/LaneDetailShell'
+import { LaneOperateSplit } from '@/components/delivery/LaneOperateSplit'
 import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
 import { PipelineRunsPanel } from '@/components/delivery/PipelineRunsPanel'
 import { ReleaseStepCommandCenter } from '@/components/delivery/ReleaseStepCommandCenter'
@@ -47,7 +48,6 @@ import {
 } from '@/lib/agent/tradeDeployAgentPrompt'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
-import { isPipelineRunFailed, isPipelineRunRunning } from '@/lib/delivery/pipelineRunAskPack'
 
 const AI_DEPLOY_LABEL = 'AI Deploy'
 const AI_DEPLOY_TASK_LABEL = scopeToLabel(TRADE_DEPLOY_SCOPE)
@@ -97,13 +97,10 @@ function SupplyChainSummaryLine({
   const cmTotal = data?.dockerfile_configmaps?.length ?? 0
   return (
     <span className="inline-flex flex-wrap items-center gap-2 text-dense-meta text-muted-foreground">
-      <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
-        Supply chain
-      </span>
       <DenseTag variant={repos.length >= 7 ? 'success' : 'warning'}>
-        {repos.length} Gitea repos tracked
+        {repos.length} Gitea repos
       </DenseTag>
-      <DenseTag variant={cms === cmTotal ? 'success' : 'warning'}>
+      <DenseTag variant={cms === cmTotal && cmTotal > 0 ? 'success' : 'warning'}>
         Dockerfile CMs {cms}/{cmTotal}
       </DenseTag>
     </span>
@@ -222,42 +219,15 @@ export function TradeReleasePage({
     { key: 'prod-gate', label: 'Production Gate', env: 'PROD', status: prodGateStep.status, statusLabel: prodGateStep.label },
   ]
 
-  const lastStgRun = stgRuns.data?.runs?.[0]
-  const lastProdRun = prodRuns.data?.runs?.[0]
-  const showStgActiveRun =
-    activeIndex === 0
-    && lastStgRun != null
-    && (isPipelineRunRunning(lastStgRun) || isPipelineRunFailed(lastStgRun))
-  const showProdActiveRun =
-    activeIndex === 2
-    && lastProdRun != null
-    && (isPipelineRunRunning(lastProdRun) || isPipelineRunFailed(lastProdRun))
-
   let stepDetail: ReactNode
   switch (activeIndex) {
     case 0:
-      stepDetail = (
-        <>
-          {showStgActiveRun && <DeliveryActiveRunPanel target={TRADE_STG_TARGET} />}
-          <LaneDetailCollapse
-            title="Artifact evidence · supply chain"
-            summaryExtra={
-              <SupplyChainSummaryLine
-                data={supplyChain.data}
-                isLoading={supplyChain.isLoading}
-              />
-            }
-            defaultOpen={false}
-            bodyClassName="p-3"
-          >
-            <SupplyChainPanel layout="operate" hideDeliverAction />
-          </LaneDetailCollapse>
-        </>
-      )
+      stepDetail = <DeliveryActiveRunPanel target={TRADE_STG_TARGET} collapsible />
       break
     case 1:
       stepDetail = (
         <>
+          <DeliveryActiveRunPanel target={TRADE_STG_TARGET} collapsible />
           <StgSmokePanel
             data={stgSmoke.data}
             isLoading={stgSmoke.isLoading}
@@ -266,11 +236,13 @@ export function TradeReleasePage({
             onRefresh={() => void stgSmoke.refetch()}
             title="STG HTTP smoke"
             description="Post-deliver acceptance via trade-stg gateway."
+            collapsible
           />
           <StgTierBChecklistPanel
             tierB={tierB.data}
             tierBLoading={tierB.isLoading}
             layout="observe"
+            collapsible
           />
         </>
       )
@@ -279,15 +251,27 @@ export function TradeReleasePage({
       stepDetail = (
         <>
           <LiveTradingFreezeNote />
-          <PlatformDeliverActuatePanel target={TRADE_PROD_TARGET} hideActions />
-          {showProdActiveRun && <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} />}
-          <PipelineRunsPanel
-            pipelines={pipelines.data}
-            pipelinesLoading={pipelines.isLoading}
-            errorMessage={pipelines.error instanceof Error ? pipelines.error.message : null}
-            layout="observe"
-            onOpenPlacement={onOpenPlacement}
-          />
+          <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} collapsible />
+          <LaneDetailCollapse
+            title="Deliver readiness · Trade PROD"
+            defaultOpen={false}
+            bodyClassName="p-3"
+          >
+            <PlatformDeliverActuatePanel target={TRADE_PROD_TARGET} hideActions />
+          </LaneDetailCollapse>
+          <LaneDetailCollapse
+            title="Pipeline topology · observe"
+            defaultOpen={false}
+            bodyClassName="p-3"
+          >
+            <PipelineRunsPanel
+              pipelines={pipelines.data}
+              pipelinesLoading={pipelines.isLoading}
+              errorMessage={pipelines.error instanceof Error ? pipelines.error.message : null}
+              layout="observe"
+              onOpenPlacement={onOpenPlacement}
+            />
+          </LaneDetailCollapse>
         </>
       )
       break
@@ -295,11 +279,13 @@ export function TradeReleasePage({
       stepDetail = (
         <>
           <LiveTradingFreezeNote />
+          <DeliveryActiveRunPanel target={TRADE_PROD_TARGET} collapsible />
           <LaneDetailCollapse
             key="prod-gate-detail"
             title="Gate check detail — STG vs Prod"
             summaryExtra={<LaneGateSummaryLine gate={prodGate.data} />}
             defaultOpen={prodGateStep.status === 'error'}
+            showModeBadge
             bodyClassName="p-3"
           >
             <ReleaseGateCompareSection
@@ -368,43 +354,75 @@ export function TradeReleasePage({
         <ReleaseStateBanner tier="trade" />
       </LaneStateStrip>
 
-      <ReleaseStepCommandCenter
-        steps={steps}
-        activeIndex={activeIndex}
-        onSelect={setActiveIndex}
-        stepLabels={STEP_LABELS}
-        stgRun={stgRuns.data?.runs?.[0]}
-        prodRun={prodRuns.data?.runs?.[0]}
-        stgGate={stgGate.data}
-        prodGate={prodGate.data}
-        renderStepActions={renderTradeStepActions}
+      <LaneOperateSplit
+        storageKey="bifrost.console.satelliteLaneOperateSplit"
+        primary={
+          <>
+            <ReleaseStepCommandCenter
+              steps={steps}
+              activeIndex={activeIndex}
+              onSelect={setActiveIndex}
+              stepLabels={STEP_LABELS}
+              stgRun={stgRuns.data?.runs?.[0]}
+              prodRun={prodRuns.data?.runs?.[0]}
+              stgGate={stgGate.data}
+              prodGate={prodGate.data}
+              renderStepActions={renderTradeStepActions}
+              collapsibleBody
+            />
+            <div className="flex flex-col gap-3">{stepDetail}</div>
+          </>
+        }
+        support={
+          <>
+            <LaneDetailCollapse
+              title="Supporting evidence"
+              summaryExtra={
+                <SupplyChainSummaryLine
+                  data={supplyChain.data}
+                  isLoading={supplyChain.isLoading}
+                />
+              }
+              defaultOpen={false}
+              showModeBadge
+              bodyClassName="flex flex-col gap-4 p-3"
+            >
+              <SupplyChainPanel layout="operate" hideDeliverAction />
+              <PlatformGateHistorySection
+                stgTier="stg"
+                prodTier="prod"
+                description="Chronological log of Trade release gate runs."
+                collapsible
+                defaultCollapsed
+              />
+            </LaneDetailCollapse>
+
+            <LaneDetailCollapse
+              title="Toolbox"
+              defaultOpen={false}
+              bodyClassName="flex flex-col gap-4 p-3"
+            >
+              <div className="flex flex-col gap-2">
+                <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  GitOps · sync and rollback
+                </span>
+                <GitOpsQuickActionsPanel
+                  data={gitops.data}
+                  isLoading={gitops.isLoading}
+                  errorMessage={gitops.error instanceof Error ? gitops.error.message : null}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  CI/CD pipeline topology and release workflow
+                </span>
+                <DeliveryReleaseWorkflowPanel context={context} stgSmoke={stgSmoke.data} />
+                <DeliveryFlow context={context} gitops={gitops.data} />
+              </div>
+            </LaneDetailCollapse>
+          </>
+        }
       />
-
-      <div className="flex flex-col gap-3">{stepDetail}</div>
-
-      <LaneDetailCollapse title="Audit · gate run history">
-        <PlatformGateHistorySection
-          stgTier="stg"
-          prodTier="prod"
-          description="Chronological log of Trade release gate runs."
-        />
-      </LaneDetailCollapse>
-
-      <LaneDetailCollapse title="GitOps · sync and rollback" bodyClassName="p-3">
-        <GitOpsQuickActionsPanel
-          data={gitops.data}
-          isLoading={gitops.isLoading}
-          errorMessage={gitops.error instanceof Error ? gitops.error.message : null}
-        />
-      </LaneDetailCollapse>
-
-      <LaneDetailCollapse
-        title="CI/CD pipeline topology and release workflow"
-        bodyClassName="flex flex-col gap-4 px-4 py-3"
-      >
-        <DeliveryReleaseWorkflowPanel context={context} stgSmoke={stgSmoke.data} />
-        <DeliveryFlow context={context} gitops={gitops.data} />
-      </LaneDetailCollapse>
     </div>
   )
 }

@@ -13,7 +13,16 @@ export function SectionRefreshButton({
   disabled = false,
 }: SectionRefreshButtonProps) {
   return (
-    <Button variant="outline" size="sm" disabled={disabled || isFetching} onClick={onClick}>
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={disabled || isFetching}
+      onClick={e => {
+        e.preventDefault()
+        e.stopPropagation()
+        onClick()
+      }}
+    >
       {isFetching ? 'Refreshing…' : 'Refresh'}
     </Button>
   )

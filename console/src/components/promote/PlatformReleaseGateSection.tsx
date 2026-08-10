@@ -239,12 +239,16 @@ interface PlatformGateHistorySectionProps {
   stgTier?: ReleaseGateTier
   prodTier?: ReleaseGateTier
   description?: string
+  collapsible?: boolean
+  defaultCollapsed?: boolean
 }
 
 export function PlatformGateHistorySection({
   stgTier = STG_TIER,
   prodTier = PROD_TIER,
   description = 'Chronological log of Platform release gate runs.',
+  collapsible = false,
+  defaultCollapsed = false,
 }: PlatformGateHistorySectionProps = {}) {
   const [tier, setTier] = useState<ReleaseGateTier>(stgTier)
   const { data, isLoading, error } = useQuery({
@@ -265,14 +269,22 @@ export function PlatformGateHistorySection({
           <button
             type="button"
             className={`rounded px-2 py-0.5 text-[var(--text-dense-meta)] font-medium transition-colors ${tier === stgTier ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
-            onClick={() => setTier(stgTier)}
+            onClick={e => {
+              e.preventDefault()
+              e.stopPropagation()
+              setTier(stgTier)
+            }}
           >
             STG
           </button>
           <button
             type="button"
             className={`rounded px-2 py-0.5 text-[var(--text-dense-meta)] font-medium transition-colors ${tier === prodTier ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
-            onClick={() => setTier(prodTier)}
+            onClick={e => {
+              e.preventDefault()
+              e.stopPropagation()
+              setTier(prodTier)
+            }}
           >
             Prod
           </button>
@@ -281,6 +293,9 @@ export function PlatformGateHistorySection({
       bodyPadding="none"
       overflow="visible"
       bodyClassName="ops-section-body--table"
+      variant={collapsible ? 'flat' : 'elevated'}
+      collapsible={collapsible}
+      defaultCollapsed={defaultCollapsed}
     >
       {isLoading && (
         <p className="px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">Loading history…</p>
