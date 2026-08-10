@@ -93,10 +93,12 @@ export function TaskControlCenter({
   const isDevLoop = mode.loopArchetype === 'dev'
   const showLaunchPad = false
 
-  const rocketProd = useRocketProdReadiness(isMissionLaunch)
-  const satelliteProd = useSatelliteProdReadiness(isMissionLaunch)
-  const promoteVerify = usePromoteVerifyReadiness(isMissionLaunch)
-  const satelliteDeploy = useSatelliteDeployOverall(isMissionLaunch)
+  /** Release Focus on Daily Ops needs the same readiness/gate data Mission Launch used. */
+  const releaseReadinessEnabled = isMissionLaunch || isDailyOps
+  const rocketProd = useRocketProdReadiness(releaseReadinessEnabled)
+  const satelliteProd = useSatelliteProdReadiness(releaseReadinessEnabled)
+  const promoteVerify = usePromoteVerifyReadiness(releaseReadinessEnabled)
+  const satelliteDeploy = useSatelliteDeployOverall(releaseReadinessEnabled)
   // This probe accepts only an interval; call it unconditionally to preserve hook order.
   const liveProbe = useIbGatewayLiveProbe()
   const pluginEvidence = readPluginLaunchEvidence()
@@ -185,11 +187,11 @@ export function TaskControlCenter({
   }
 
   const releaseDispatchAllowed =
-    showLaunchPad && !agents.aiRelease.disabled && q.rocketVerdict.kind === 'GO'
+    !agents.aiRelease.disabled && q.rocketVerdict.kind === 'GO'
   const tradeDeployDispatchAllowed =
-    showLaunchPad && !agents.aiTradeDeploy.disabled && q.satelliteVerdict.kind === 'GO'
+    !agents.aiTradeDeploy.disabled && q.satelliteVerdict.kind === 'GO'
   const pluginLaunchDispatchAllowed =
-    showLaunchPad && !agents.aiPluginLaunch.disabled && pluginVerdict.kind === 'GO'
+    !agents.aiPluginLaunch.disabled && pluginVerdict.kind === 'GO'
   const releaseDisabledReason =
     q.rocketVerdict.kind !== 'GO' ? q.rocketVerdict.disabledReason : agents.aiRelease.disabledReason
   const tradeDeployDisabledReason =

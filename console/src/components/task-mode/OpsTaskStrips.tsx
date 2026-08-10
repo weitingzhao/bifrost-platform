@@ -41,6 +41,10 @@ import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { TaskModeDef } from '@/lib/task-mode/types'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
+import {
+  opsDeskFocusShows,
+  type OpsDeskFocus,
+} from '@/lib/task-mode/opsDeskFocus'
 
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 import type { RemediationJob } from '@/api/remediationTypes'
@@ -183,7 +187,9 @@ export type OpsTaskStripsProps = {
 type SummaryRowProps = Omit<OpsTaskStripsProps, 'promoteOnly'>
 
 /** Mission Launch summary — see MissionLaunchBoard (tabbed Vehicle | Payload lanes). */
-export function OpsTaskSummaryRow(props: SummaryRowProps) {
+export function OpsTaskSummaryRow(
+  props: SummaryRowProps & { focus?: OpsDeskFocus },
+) {
   const {
     mode,
     onNavigate,
@@ -243,6 +249,7 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
     platformProdGate,
     supplyCmsPresent,
     supplyCmsTotal,
+    focus = 'all',
   } = props
 
   const [liveViewDismissed, setLiveViewDismissed] = useState(false)
@@ -266,7 +273,7 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
   if (ops == null) return null
 
   if (mode.id === 'ops') {
-    return <DailyOpsFleetDesk props={props} />
+    return <DailyOpsFleetDesk props={props} focus={focus} />
   }
 
   const isMissionLaunch = false
@@ -405,8 +412,11 @@ export function OpsTaskSummaryRow(props: SummaryRowProps) {
 
 export function DailyOpsFleetDesk({
   props,
+  focus = 'all',
 }: {
   props: SummaryRowProps
+  /** Summary chip filter — Checklist + Fleet Board under Environment. */
+  focus?: OpsDeskFocus
 }) {
   const { fleet, isLoading, dataUpdatedAt } = useFleetSnapshot()
   const checklistCoverage = useDailyOpsChecklistCoverage(fleet)
@@ -575,7 +585,8 @@ export function DailyOpsFleetDesk({
   return (
     <DailyOpsProvider value={dailyOpsContextValue}>
       <div className="flex min-w-0 max-w-full flex-col gap-3">
-        {fleetWorkflow != null && (
+        {/* Ops loop + Execution — Agent focus */}
+        {opsDeskFocusShows(focus, 'agent') && fleetWorkflow != null ? (
           <DailyOpsProcessStrip
             workflow={fleetWorkflow}
             agentFixError={stripError}
@@ -629,8 +640,9 @@ export function DailyOpsFleetDesk({
               })
             }}
           />
-        )}
+        ) : null}
 
+        {opsDeskFocusShows(focus, 'agent') ? (
         <DailyOpsExecutionPanel
           fleetClear={fleet.fleetClear}
           remediating={
@@ -659,8 +671,10 @@ export function DailyOpsFleetDesk({
             fleetWorkflow != null ? `${fleetWorkflow.primaryAction.label} →` : 'Ops loop →'
           }
         />
+        ) : null}
 
-        {/* Checklist | Fleet Board + in-column Cell Detail */}
+        {/* Checklist | Fleet Board — Environment focus */}
+        {opsDeskFocusShows(focus, 'environment') ? (
         <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] xl:items-start">
           {!isLoading && (
             <div className="min-w-0 rounded-lg border border-border bg-secondary px-3 py-2">
@@ -723,6 +737,7 @@ export function DailyOpsFleetDesk({
             )}
           </div>
         </div>
+        ) : null}
       </div>
     </DailyOpsProvider>
   )

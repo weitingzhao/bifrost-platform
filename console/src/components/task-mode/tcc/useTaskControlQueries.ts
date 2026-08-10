@@ -145,21 +145,21 @@ export function useTaskControlQueries({
     queryKey: ['task-cc', 'cluster-fix'],
     queryFn: fetchCluster,
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || (isDailyOps && !fleetClear),
+    enabled: isMissionLaunch || isDailyOps,
   })
 
   const serviceReadinessForFixQ = useQuery({
     queryKey: ['task-cc', 'service-readiness-fix'],
     queryFn: fetchClusterServiceReadiness,
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || (isDailyOps && !fleetClear),
+    enabled: isMissionLaunch || isDailyOps,
   })
 
   const supplyQ = useQuery({
     queryKey: ['task-cc', 'supply'],
     queryFn: fetchSupplyChain,
     refetchInterval: 20_000,
-    enabled: isMissionLaunch,
+    enabled: isMissionLaunch || isDailyOps,
   })
 
   const platformRunsQ = useQuery({
@@ -171,21 +171,21 @@ export function useTaskControlQueries({
       if (ambientJobId != null && ambientJobScope === PLATFORM_RELEASE_SCOPE) return 5_000
       return 20_000
     },
-    enabled: isMissionLaunch || isDevLoop,
+    enabled: isMissionLaunch || isDevLoop || isDailyOps,
   })
 
   const platformStgGateQ = useQuery({
     queryKey: ['task-cc', 'platform-stg-gate'],
     queryFn: () => fetchReleaseGate('platform-stg'),
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || isDevLoop,
+    enabled: isMissionLaunch || isDevLoop || isDailyOps,
   })
 
   const platformProdGateQ = useQuery({
     queryKey: ['task-cc', 'platform-prod-gate'],
     queryFn: () => fetchReleaseGate('platform-prod'),
     refetchInterval: 20_000,
-    enabled: isMissionLaunch,
+    enabled: isMissionLaunch || isDailyOps,
   })
 
   const tradeRunsQ = useQuery({
@@ -197,21 +197,21 @@ export function useTaskControlQueries({
       if (ambientJobId != null && ambientJobScope === TRADE_DEPLOY_SCOPE) return 5_000
       return 20_000
     },
-    enabled: isMissionLaunch || isDevLoop,
+    enabled: isMissionLaunch || isDevLoop || isDailyOps,
   })
 
   const tradeGateQ = useQuery({
     queryKey: ['task-cc', 'trade-gate-detail'],
     queryFn: () => fetchReleaseGate('stg'),
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || isDevLoop,
+    enabled: isMissionLaunch || isDevLoop || isDailyOps,
   })
 
   const smokeQ = useQuery({
     queryKey: ['task-cc', 'smoke-detail'],
     queryFn: fetchStgSmoke,
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || isDevLoop,
+    enabled: isMissionLaunch || isDevLoop || isDailyOps,
   })
 
   const statusInput = useMemo((): TaskPhaseStatusInput => {

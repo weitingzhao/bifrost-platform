@@ -10,7 +10,7 @@
  * governance summary that Ops Console and LLM agents need.
  */
 
-export const DESIGN_SYSTEM_VERSION = '2026-08-09.8'
+export const DESIGN_SYSTEM_VERSION = '2026-08-10.1'
 export const DESIGN_SYSTEM_SOURCE = 'console/src/lib/standards/designSystemCatalog.ts'
 export const LIVING_CONTRACT_PATH = '/settings/ui-design-system'
 
@@ -150,7 +150,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     examples: [
       'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — alerts meta → Attention (triage + assisted Agent Fix / Diagnose)',
       'Control Room: OpsVerdictStrip ROOM POSTURE + Bay Scan cards → open bay detail (accordion Single) — no page-level Launch/Deploy',
-      'Task Control Center: OpsVerdictStrip TASK VERDICT · {MODE} — sole Mission/Launch/Fleet primary CTAs',
+      'Task Control Center: OpsVerdictStrip TASK VERDICT · {MODE} — sole Mission/Launch/Fleet primary CTAs; Daily Ops Body Focus chips Agent · Release · Environment filter OpsSection buckets (Ops loop + Execution under Agent)',
       'Audit: OpsVerdictStrip ACTUATION HISTORY · Download JSON in actions',
       'Placement: OpsVerdictStrip PLACEMENT VERDICT · Copy LLM pack / Open Delivery / Open Cluster in actions',
       'Cluster: OpsVerdictStrip CLUSTER VERDICT · failing pods / reachability drive lamp · Copy / Refresh / Sync in actions; KPI strip below',
@@ -300,7 +300,7 @@ export const MANDATORY_MAPPING: MandatoryMappingRow[] = [
   },
   {
     interaction: 'Three Desks (Build / Ops / Analysis)',
-    use: 'AgentTriadStrip on TCC System + Control Room; TaskModeIconRail System+Build+Ops+Analysis; Engineer PartnerStrip labels Build Desk / Ops Desk / Analysis Desk',
+    use: 'AgentTriadStrip on TCC System + Control Room; TaskModeIconRail System+Build+Ops+Analysis (Ops expanded = DEV/STG/PROD Fleet column lamps; collapsed = icon + badge); Engineer PartnerStrip labels Build Desk / Ops Desk / Analysis Desk',
     never: 'Standalone daily-ops / mission-launch / patrol pills; fourth page-chrome mode banner; fake Hermes insights when API is empty',
   },
 ]
@@ -397,6 +397,7 @@ export const PRIMITIVES: PrimitiveRow[] = [
   { name: 'OpsVerdictStrip', file: 'console/src/components/layout/OpsVerdictStrip.tsx', category: 'Layout' },
   { name: 'ConsoleHeader breadcrumb + TaskModeCapsule', file: 'console/src/components/ConsoleHeader.tsx', category: 'Layout' },
   { name: 'AgentTriadStrip (Build / Ops / Analysis)', file: 'console/src/components/task-mode/AgentTriadStrip.tsx', category: 'Layout' },
+  { name: 'OpsDeskFocusSummary', file: 'console/src/components/task-mode/OpsDeskFocusSummary.tsx', category: 'Layout' },
   { name: 'OpsDeskBoard', file: 'console/src/components/task-mode/OpsDeskBoard.tsx', category: 'Layout' },
   { name: 'OpsContextStrip (Trade / Mission)', file: 'console/src/components/OpsContextStrip.tsx', category: 'Layout' },
 ]

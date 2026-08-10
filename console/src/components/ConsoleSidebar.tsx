@@ -192,6 +192,9 @@ export function ConsoleSidebar({
           onModeChange={onModeChange}
           operateQueueOpen={operateQueueOpen}
           fleetCritical={fleetCritical}
+          fleet={fleet}
+          viewerEnv={viewerEnv}
+          viewerEnvLoading={viewerEnvLoading}
         />
       )}
       seatContent={

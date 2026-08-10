@@ -7,6 +7,10 @@ import { PatrolBoard } from '@/components/task-mode/PatrolBoard'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { resolveCellGate, type FleetEnvColumn, type FleetSnapshot } from '@/lib/control-room/fleetSnapshot'
+import {
+  opsDeskFocusShows,
+  type OpsDeskFocus,
+} from '@/lib/task-mode/opsDeskFocus'
 
 function columnLamp(fleet: FleetSnapshot, col: FleetEnvColumn): Reachability {
   const cells = fleet.cells.filter(c => c.env === col)
@@ -37,7 +41,14 @@ function formatWhen(iso: string): string {
   return new Date(ms).toLocaleString()
 }
 
-export function OpsDeskBoard({ onNavigate }: { onNavigate: (tabId: string) => void }) {
+export function OpsDeskBoard({
+  onNavigate,
+  focus = 'all',
+}: {
+  onNavigate: (tabId: string) => void
+  /** Summary chip filter — Agent / Environment buckets; Release lives elsewhere. */
+  focus?: OpsDeskFocus
+}) {
   const { fleet, snapshot, isLoading } = useFleetSnapshot()
   const queueQ = useOperateQueue()
   const jobsQ = useQuery({
@@ -63,85 +74,92 @@ export function OpsDeskBoard({ onNavigate }: { onNavigate: (tabId: string) => vo
     ['P', 'prod'],
   ]
 
+  const showEnvironment = opsDeskFocusShows(focus, 'environment')
+  const showAgent = opsDeskFocusShows(focus, 'agent')
+
   return (
     <div className="flex flex-col gap-3" data-ops-desk-board>
-      <OpsSection
-        title="Fleet"
-        leading={<StatusLamp value={fleetLamp} kind="reach" />}
-        description={
-          isLoading
-            ? 'Loading fleet snapshot…'
-            : fleetOk
-              ? 'Fleet clear — scored cells GO.'
-              : 'Fleet not clear — Discover / Remediate on this board.'
-        }
-        actions={
-          <button
-            type="button"
-            className="text-[var(--text-dense-caption)] text-primary hover:underline"
-            onClick={() => onNavigate('control-room')}
-          >
-            Control Room →
-          </button>
-        }
-        bodyPadding="compact"
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          {envLamps.map(([key, col]) => {
-            const lamp = columnLamp(fleet, col)
-            return (
-              <span key={col} className="inline-flex items-center gap-1.5">
-                <StatusLamp value={lamp} kind="reach" />
-                <span className="font-mono-tabular text-[var(--text-dense-meta)] font-semibold">{key}</span>
-                <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-                  {col.toUpperCase()}
+      {showEnvironment ? (
+        <OpsSection
+          title="Fleet"
+          leading={<StatusLamp value={fleetLamp} kind="reach" />}
+          description={
+            isLoading
+              ? 'Loading fleet snapshot…'
+              : fleetOk
+                ? 'Fleet clear — scored cells GO.'
+                : 'Fleet not clear — Discover / Remediate on this board.'
+          }
+          actions={
+            <button
+              type="button"
+              className="text-[var(--text-dense-caption)] text-primary hover:underline"
+              onClick={() => onNavigate('control-room')}
+            >
+              Control Room →
+            </button>
+          }
+          bodyPadding="compact"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            {envLamps.map(([key, col]) => {
+              const lamp = columnLamp(fleet, col)
+              return (
+                <span key={col} className="inline-flex items-center gap-1.5">
+                  <StatusLamp value={lamp} kind="reach" />
+                  <span className="font-mono-tabular text-[var(--text-dense-meta)] font-semibold">{key}</span>
+                  <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+                    {col.toUpperCase()}
+                  </span>
                 </span>
-              </span>
-            )
-          })}
-        </div>
-      </OpsSection>
+              )
+            })}
+          </div>
+        </OpsSection>
+      ) : null}
 
-      <OpsSection
-        title="Queue"
-        leading={<StatusLamp value={open > 0 ? 'degraded' : 'ok'} kind="reach" />}
-        description={`${open} open operate-queue item${open === 1 ? '' : 's'}.`}
-        actions={
-          <button
-            type="button"
-            className="text-[var(--text-dense-caption)] text-primary hover:underline"
-            onClick={() => onNavigate('queue')}
-          >
-            Queue →
-          </button>
-        }
-        bodyPadding="compact"
-      >
-        {recent.length === 0 ? (
-          <p className="text-[var(--text-dense-meta)] text-muted-foreground">
-            {jobsQ.isError ? 'Remediation history unavailable.' : 'No recent remediation jobs.'}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {recent.map(job => (
-              <li key={job.id} className="flex min-w-0 items-center gap-2 text-[var(--text-dense-meta)]">
-                <StatusLamp value={jobLamp(job)} kind="reach" />
-                <span className="min-w-0 flex-1 truncate">
-                  {job.summary?.trim() || job.scope || job.id}
-                </span>
-                <DenseTag variant={job.status === 'failed' ? 'danger' : job.status === 'done' ? 'success' : 'neutral'}>
-                  {job.status}
-                </DenseTag>
-                <span className="shrink-0 font-mono-tabular text-[var(--text-dense-caption)] text-muted-foreground">
-                  {formatWhen(job.updated_at || job.created_at)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </OpsSection>
+      {showAgent ? (
+        <OpsSection
+          title="Queue"
+          leading={<StatusLamp value={open > 0 ? 'degraded' : 'ok'} kind="reach" />}
+          description={`${open} open operate-queue item${open === 1 ? '' : 's'}.`}
+          actions={
+            <button
+              type="button"
+              className="text-[var(--text-dense-caption)] text-primary hover:underline"
+              onClick={() => onNavigate('queue')}
+            >
+              Queue →
+            </button>
+          }
+          bodyPadding="compact"
+        >
+          {recent.length === 0 ? (
+            <p className="text-[var(--text-dense-meta)] text-muted-foreground">
+              {jobsQ.isError ? 'Remediation history unavailable.' : 'No recent remediation jobs.'}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {recent.map(job => (
+                <li key={job.id} className="flex min-w-0 items-center gap-2 text-[var(--text-dense-meta)]">
+                  <StatusLamp value={jobLamp(job)} kind="reach" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {job.summary?.trim() || job.scope || job.id}
+                  </span>
+                  <DenseTag variant={job.status === 'failed' ? 'danger' : job.status === 'done' ? 'success' : 'neutral'}>
+                    {job.status}
+                  </DenseTag>
+                  <span className="shrink-0 font-mono-tabular text-[var(--text-dense-caption)] text-muted-foreground">
+                    {formatWhen(job.updated_at || job.created_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </OpsSection>
+      ) : null}
 
-      <PatrolBoard onNavigate={onNavigate} />
+      {showAgent ? <PatrolBoard onNavigate={onNavigate} /> : null}
     </div>
   )
 }

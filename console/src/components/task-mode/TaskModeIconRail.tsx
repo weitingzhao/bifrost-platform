@@ -2,6 +2,16 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { cn, DenseTag, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
 import { fetchHermesReadiness } from '@/api/hermes'
+import {
+  FLEET_COLUMNS,
+  fleetEnvColumnPosture,
+  viewerEnvToColumn,
+  type FleetCellSignal,
+  type FleetEnvColumn,
+  type FleetEnvColumnPosture,
+  type FleetSnapshot,
+  type FleetViewerEnv,
+} from '@/lib/control-room/fleetSnapshot'
 import { taskModesForSwitcher } from '@/lib/task-mode/taskModeCatalog'
 import { taskModeVisual } from '@/lib/task-mode/taskModeVisual'
 import type { LoopArchetype, TaskModeDef, TaskModeId } from '@/lib/task-mode/types'
@@ -9,7 +19,7 @@ import { useTaskMode } from '@/lib/task-mode/useTaskMode'
 
 /**
  * Flat single-row rail: System | [Build · Ops · Analysis] via hairline divider.
- * Expanded row uses full sidebar width — focused lenses justify-evenly.
+ * Ops (expanded) shows DEV/STG/PROD posture strip; collapsed keeps icon + badge.
  */
 
 const ARCHETYPE_TOOLTIP: Record<
@@ -22,6 +32,18 @@ const ARCHETYPE_TOOLTIP: Record<
   analysis: { label: 'Analysis', variant: 'info' },
 }
 
+const ENV_KEY: Record<FleetEnvColumn, string> = {
+  dev: 'D',
+  stg: 'S',
+  prod: 'P',
+}
+
+const ENV_LABEL: Record<FleetEnvColumn, string> = {
+  dev: 'DEV',
+  stg: 'STG',
+  prod: 'PROD',
+}
+
 export type ViewSignalLevel = 'warn' | 'error'
 
 type TaskModeIconRailProps = {
@@ -31,6 +53,11 @@ type TaskModeIconRailProps = {
   operateQueueOpen?: number
   /** Ops — fleet NO-GO / mission fail. */
   fleetCritical?: boolean
+  /** Live Fleet snapshot — Ops env strip (Rocket+Satellite per column). */
+  fleet?: FleetSnapshot | null
+  /** Current viewer seat; underlines matching D/S/P cell. */
+  viewerEnv?: FleetViewerEnv
+  viewerEnvLoading?: boolean
 }
 
 function resolveOpsSignal(
@@ -42,11 +69,27 @@ function resolveOpsSignal(
   return null
 }
 
+function envCellClass(signal: FleetCellSignal): string {
+  switch (signal) {
+    case 'ok':
+      return 'task-mode-icon-rail__env-cell--ok'
+    case 'fail':
+      return 'task-mode-icon-rail__env-cell--fail'
+    case 'degraded':
+      return 'task-mode-icon-rail__env-cell--degraded'
+    default:
+      return 'task-mode-icon-rail__env-cell--unknown'
+  }
+}
+
 export function TaskModeIconRail({
   collapsed = false,
   onModeChange,
   operateQueueOpen = 0,
   fleetCritical = false,
+  fleet = null,
+  viewerEnv = 'dev',
+  viewerEnvLoading = false,
 }: TaskModeIconRailProps) {
   const { modeId, setModeId, mode } = useTaskMode()
   const allModes = taskModesForSwitcher()
@@ -57,6 +100,13 @@ export function TaskModeIconRail({
     staleTime: 20_000,
     retry: false,
   })
+
+  const envPosture = useMemo((): FleetEnvColumnPosture | null => {
+    if (fleet == null) return null
+    return fleetEnvColumnPosture(fleet)
+  }, [fleet])
+
+  const seatColumn = viewerEnvLoading ? null : viewerEnvToColumn(viewerEnv)
 
   const signals = useMemo((): Partial<Record<TaskModeId, ViewSignalLevel>> => {
     const out: Partial<Record<TaskModeId, ViewSignalLevel>> = {}
@@ -126,6 +176,8 @@ export function TaskModeIconRail({
                 collapsed={collapsed}
                 onPick={pick}
                 signal={m.id === modeId ? null : (signals[m.id] ?? null)}
+                envPosture={m.id === 'ops' ? envPosture : null}
+                seatColumn={m.id === 'ops' ? seatColumn : null}
               />
             ))}
           </div>
@@ -141,20 +193,28 @@ function ModeGlyph({
   collapsed,
   onPick,
   signal,
+  envPosture,
+  seatColumn,
 }: {
   mode: TaskModeDef
   active: boolean
   collapsed: boolean
   onPick: (id: TaskModeId) => void
   signal: ViewSignalLevel | null
+  envPosture: FleetEnvColumnPosture | null
+  seatColumn: FleetEnvColumn | null
 }) {
   const visual = taskModeVisual(mode.id)
   const Icon = visual.icon
   const archetypeBadge = ARCHETYPE_TOOLTIP[mode.loopArchetype]
+  const showEnvStrip = mode.id === 'ops' && !collapsed && envPosture != null
   const ariaExtra =
     signal != null
       ? ` (${signal === 'error' ? 'attention required' : 'needs review'})`
       : ''
+  const envAria = showEnvStrip
+    ? ` · ${FLEET_COLUMNS.map(e => `${ENV_LABEL[e]} ${envPosture[e]}`).join(', ')}`
+    : ''
 
   return (
     <Tooltip>
@@ -166,13 +226,32 @@ function ModeGlyph({
           className={cn(
             'task-mode-icon-rail__btn relative inline-flex shrink-0 items-center justify-center rounded-md',
             active && 'task-mode-icon-rail__btn--active',
+            showEnvStrip && 'task-mode-icon-rail__btn--env',
           )}
-          aria-label={`${mode.label}${ariaExtra}`}
+          aria-label={`${mode.label}${ariaExtra}${envAria}`}
           aria-pressed={active}
           onClick={() => onPick(mode.id)}
         >
-          <Icon className="task-mode-icon-rail__icon" aria-hidden />
-          {signal != null && (
+          {!showEnvStrip && <Icon className="task-mode-icon-rail__icon" aria-hidden />}
+          {showEnvStrip && (
+            <span className="task-mode-icon-rail__env-strip" aria-hidden>
+              {FLEET_COLUMNS.map(env => (
+                <span
+                  key={env}
+                  className={cn(
+                    'task-mode-icon-rail__env-cell',
+                    envCellClass(envPosture[env]),
+                    seatColumn === env && 'task-mode-icon-rail__env-cell--seat',
+                  )}
+                  data-env={env}
+                  data-signal={envPosture[env]}
+                >
+                  <span className="task-mode-icon-rail__env-key">{ENV_KEY[env]}</span>
+                </span>
+              ))}
+            </span>
+          )}
+          {!showEnvStrip && signal != null && (
             <span
               className={cn(
                 'pointer-events-none absolute right-0.5 top-0.5 size-1.5 rounded-full',
@@ -200,6 +279,27 @@ function ModeGlyph({
         <p className="m-0 mt-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
           {mode.description}
         </p>
+        {showEnvStrip && (
+          <ul className="m-0 mt-1.5 list-none space-y-0.5 p-0 text-[var(--text-dense-caption)] text-muted-foreground">
+            {FLEET_COLUMNS.map(env => (
+              <li key={env} className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    'task-mode-icon-rail__env-cell',
+                    envCellClass(envPosture[env]),
+                    seatColumn === env && 'task-mode-icon-rail__env-cell--seat',
+                  )}
+                >
+                  <span className="task-mode-icon-rail__env-key">{ENV_KEY[env]}</span>
+                </span>
+                <span>
+                  {ENV_LABEL[env]} · {envPosture[env]}
+                  {seatColumn === env ? ' · seat' : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </TooltipContent>
     </Tooltip>
   )

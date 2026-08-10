@@ -1513,6 +1513,40 @@ export function getCell(
 }
 
 /**
+ * Map viewer seat onto a Fleet column (dev-local → DEV).
+ * Used by Ops icon-rail env strip to underline the current seat.
+ */
+export function viewerEnvToColumn(env: FleetViewerEnv): FleetEnvColumn {
+  return env === 'dev-local' ? 'dev' : env
+}
+
+export type FleetEnvColumnPosture = Record<FleetEnvColumn, FleetCellSignal>
+
+/**
+ * Per-column posture for Ops TaskModeIconRail: worst scored Rocket+Satellite
+ * signal in that env (unavailable / non-scoring cells skipped).
+ */
+export function fleetEnvColumnPosture(snap: FleetSnapshot): FleetEnvColumnPosture {
+  const out: FleetEnvColumnPosture = {
+    dev: 'unknown',
+    stg: 'unknown',
+    prod: 'unknown',
+  }
+  for (const env of FLEET_COLUMNS) {
+    let worst: FleetCellSignal | null = null
+    for (const role of ['rocket', 'satellite'] as const) {
+      const cell = getCell(snap, role, env)
+      if (cell == null || !cellCountsTowardVerdict(cell)) continue
+      if (worst == null || severityRank(cell.signal) > severityRank(worst)) {
+        worst = cell.signal
+      }
+    }
+    out[env] = worst ?? 'unknown'
+  }
+  return out
+}
+
+/**
  * Operate summary label when queue is empty but fleet is not clear.
  * fleetClear follows scored verdict (unavailable excluded) — must not hardcode Clear.
  */

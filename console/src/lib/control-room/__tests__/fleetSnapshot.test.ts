@@ -14,6 +14,7 @@ import {
   cellCountsTowardVerdict,
   cellKey,
   fleetCellNavigateTab,
+  fleetEnvColumnPosture,
   fleetRoleNavigateTab,
   getCell,
   groupStandards,
@@ -28,6 +29,7 @@ import {
   signalFromStandards,
   std,
   viewerEnvBadgeLabel,
+  viewerEnvToColumn,
   type FleetCell,
   type FleetStandard,
 } from '@/lib/control-room/fleetSnapshot'
@@ -821,6 +823,35 @@ describe('buildFleetSnapshot integration', () => {
       },
     ]
     expect(resolveFleetVerdict(degCells).kind).toBe('NO-GO')
+  })
+})
+
+describe('fleetEnvColumnPosture', () => {
+  it('maps viewerEnv seats onto Fleet columns', () => {
+    expect(viewerEnvToColumn('dev')).toBe('dev')
+    expect(viewerEnvToColumn('dev-local')).toBe('dev')
+    expect(viewerEnvToColumn('stg')).toBe('stg')
+    expect(viewerEnvToColumn('prod')).toBe('prod')
+  })
+
+  it('rolls Rocket+Satellite worst signal per env column', () => {
+    const snap = buildFleetSnapshot({
+      viewerEnv: 'dev',
+      matrices: [matrix('dev', false), matrix('stg'), matrix('prod')],
+      self: selfHealth(['dev', 'stg', 'prod']),
+      stg: stgSmokeOk,
+      supply: supplyOk,
+      cluster: clusterOk,
+      groundBridgeReady: true,
+      runner: { status: 'ok' },
+      ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
+      postgresBackup: backupOk,
+      bridge: bridgeOk,
+    })
+    const posture = fleetEnvColumnPosture(snap)
+    expect(posture.dev).toBe('fail')
+    expect(posture.stg).toBe('ok')
+    expect(posture.prod).toBe('ok')
   })
 })
 

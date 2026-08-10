@@ -5,6 +5,8 @@ import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { OpsTaskStrips, OpsTaskSummaryRow } from '@/components/task-mode/OpsTaskStrips'
 import { OpsDeskBoard } from '@/components/task-mode/OpsDeskBoard'
+import { OpsDeskFocusSummary } from '@/components/task-mode/OpsDeskFocusSummary'
+import { OpsDeskReleaseSection } from '@/components/task-mode/OpsDeskReleaseSection'
 import { AnalysisWorkspacePage } from '@/pages/AnalysisWorkspacePage'
 import { DevModeStrips } from '@/components/task-mode/DevModeController'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
@@ -27,6 +29,7 @@ import { missionStatus } from '@/lib/control-room/missionSignals'
 import type { PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
 import type { TaskPhaseFixAction, TaskPhaseHint } from '@/lib/task-mode/taskPhaseDiagnostics'
 import type { TaskModeDef, TaskModeId, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
+import type { OpsDeskFocus } from '@/lib/task-mode/opsDeskFocus'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import type { UseDevProgramInstanceResult } from '@/hooks/useDevProgramInstance'
 import type { InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
@@ -171,9 +174,13 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | undefined>()
   const { programsReleasedFor } = useDeliveryProgramClosure()
   const [selectedCommandLane, setSelectedCommandLane] = useState<CommandLane>('vehicle')
+  const [opsDeskFocus, setOpsDeskFocus] = useState<OpsDeskFocus>('all')
   useEffect(() => {
     setPhaseOpen(phaseDefaultOpen)
   }, [phaseDefaultOpen, mode.id])
+  useEffect(() => {
+    setOpsDeskFocus('all')
+  }, [mode.id])
 
   const phaseProgressHint = phaseOpen
     ? 'Open — not live Go/No-Go'
@@ -578,10 +585,69 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
 
       {mode.id === 'ops' && (
         <>
-        <OpsDeskBoard onNavigate={onNavigate} />
-        {isDailyOps && <AutopilotHistorySection />}
+        {isDailyOps && (
+          <OpsDeskFocusSummary focus={opsDeskFocus} onChange={setOpsDeskFocus} />
+        )}
+        <OpsDeskBoard onNavigate={onNavigate} focus={isDailyOps ? opsDeskFocus : 'all'} />
+        {isDailyOps && (opsDeskFocus === 'all' || opsDeskFocus === 'agent') && (
+          <AutopilotHistorySection />
+        )}
+        {isDailyOps && (opsDeskFocus === 'all' || opsDeskFocus === 'release') && (
+          <OpsDeskReleaseSection
+            onNavigate={onNavigate}
+            rocketVerdict={q.rocketVerdict}
+            rocketCheckpoints={q.rocketCheckpoints}
+            satelliteVerdict={q.satelliteVerdict}
+            satelliteCheckpoints={q.satelliteCheckpoints}
+            pluginVerdict={props.pluginLaunchVerdict}
+            pluginCheckpoints={props.pluginLaunchCheckpoints}
+            onDispatchRelease={props.dispatchReleaseAgent}
+            onDispatchTradeDeploy={props.dispatchTradeDeployAgent}
+            onDispatchPluginLaunch={props.dispatchPluginLaunchAgent}
+            releasePending={agents.aiRelease.isPending}
+            tradeDeployPending={agents.aiTradeDeploy.isPending}
+            pluginLaunchPending={agents.aiPluginLaunch.isPending}
+            canDispatchRelease={props.releaseDispatchAllowed}
+            canDispatchTradeDeploy={props.tradeDeployDispatchAllowed}
+            canDispatchPluginLaunch={props.pluginLaunchDispatchAllowed}
+            releaseDisabledReason={props.releaseDisabledReason}
+            tradeDeployDisabledReason={props.tradeDeployDisabledReason}
+            pluginLaunchDisabledReason={props.pluginLaunchDisabledReason}
+            onRocketAgentFix={() => agents.aiPlatformProdFix.trigger()}
+            onSatelliteAgentFix={() => agents.aiTradeProdFix.trigger()}
+            rocketAgentFixPending={agents.aiPlatformProdFix.isPending}
+            satelliteAgentFixPending={agents.aiTradeProdFix.isPending}
+            rocketAgentFixActive={agents.aiPlatformProdFix.isActive}
+            satelliteAgentFixActive={agents.aiTradeProdFix.isActive}
+            rocketAgentFixDisabled={agents.aiPlatformProdFix.disabled}
+            satelliteAgentFixDisabled={agents.aiTradeProdFix.disabled}
+            rocketAgentFixTitle={
+              agents.aiPlatformProdFix.disabledReason ??
+              fixScopeAgentTitle(
+                agents.platformProdFixScope,
+                scopeToLabel(agents.platformProdFixScope),
+                pickFailingFixSignal(rocketProd.fixSignals ?? [])?.label,
+              )
+            }
+            satelliteAgentFixTitle={
+              agents.aiTradeProdFix.disabledReason ??
+              fixScopeAgentTitle(
+                agents.tradeProdFixScope,
+                scopeToLabel(agents.tradeProdFixScope),
+                pickFailingFixSignal(agents.tradeProdFixSignals)?.label,
+              )
+            }
+            onExpandAgentDock={props.onExpandAgentDock}
+            onOpenAgentDesk={() => props.onOpenAgentDesk?.(props.ambientJobId ?? undefined)}
+            canOperate={canOperate}
+            releaseError={agents.aiRelease.error?.message ?? null}
+            tradeDeployError={agents.aiTradeDeploy.error?.message ?? null}
+            pluginLaunchError={agents.aiPluginLaunch.error?.message ?? null}
+          />
+        )}
         <OpsTaskSummaryRow
           mode={mode}
+          focus={isDailyOps ? opsDeskFocus : 'all'}
           context={props.context}
           matrices={props.matrices}
           stgSmoke={props.stgSmoke}
