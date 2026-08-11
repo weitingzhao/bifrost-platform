@@ -29,7 +29,6 @@ type ruleDef struct {
 var poolDefs = []poolDef{
 	{id: "amd64_ci", label: "amd64 CI / Kaniko", arch: "amd64", status: PoolStatusLive},
 	{id: "amd64_general", label: "amd64 general runtime", arch: "amd64", status: PoolStatusLive},
-	{id: "arm64_edge", label: "arm64 edge / frontend", arch: "arm64", status: PoolStatusLive},
 	{id: "nfs_client", label: "NFS PV clients", capabilityID: "nfs-client", status: PoolStatusLive},
 	{id: "gpu", label: "GPU workloads", workload: "gpu", status: PoolStatusPlanned, plannedHost: "gpu-server"},
 }
@@ -90,14 +89,6 @@ var ruleDefs = []ruleDef{
 		requiredSelector: "workload=gpu",
 		poolID:           "gpu",
 		plannedBinding:   "gpu-server",
-	},
-	{
-		workloadClass:    "frontend_edge",
-		namespace:        "bifrost",
-		services:         "trade-frontend (edge)",
-		requiredSelector: "kubernetes.io/arch=arm64 (optional)",
-		poolID:           "arm64_edge",
-		plannedBinding:   "ops-vm-ubt-01",
 	},
 }
 

@@ -149,7 +149,7 @@ milestones:
       pipeline_after: k3s-mac-agents
       authority: console/src/lib/architecture/workloadPlacementCatalog.ts
       note: >
-        Owner CLOSED 2026-08-05 — core placement governance delivered: catalog + GET /api/v1/cluster/placement evaluator live; pools amd64_ci / amd64_general / nfs_client live; 6/8 rules satisfied (cicd_build/control, stg_runtime, data, nfs_storage, monitoring). Residual (not blocking this milestone): GPU pool planned (P5a gpu-server — park lane gpu-pool-join); arm64_edge optional with 0 nodes. Ongoing evaluation stays on Cluster page / Daily Ops.
+        Owner CLOSED 2026-08-05 — core placement governance delivered: catalog + GET /api/v1/cluster/placement evaluator live; pools amd64_ci / amd64_general / nfs_client live; 6/7 rules satisfied (cicd_build/control, stg_runtime, data, nfs_storage, monitoring). Residual (not blocking this milestone): GPU pool planned (P5a gpu-server — park lane gpu-pool-join). Fleet standardized amd64-only (arm64_edge removed 2026-08-10). Ongoing evaluation stays on Placement / Cluster / Daily Ops.
 
     - id: autonomous-agent-v1
       label: Autonomous Agent v1 (nightly drift + morning briefing)
@@ -281,7 +281,7 @@ coupling_surfaces:
     - unifi_session_v2
 promotion:
     last_gate:
-        at: "2026-08-10T17:14:12Z"
+        at: "2026-08-10T20:32:58Z"
         result: pass
         log_path: bifrost-trade-infra/scripts/release_gate.log
 environments_extended:

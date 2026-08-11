@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Bot, Building2, ChevronRight, Satellite, type LucideIcon } from 'lucide-react'
+import { Bot, ChevronRight, Plug, Satellite, type LucideIcon } from 'lucide-react'
 import { StatusLamp } from '@/components/StatusLamp'
 import { fetchClusterNodes } from '@/api/cluster'
 import { fetchMatrix, fetchSatelliteBusDeep, isAllMatrices, isAllSatelliteBusDeep } from '@/api/core'
@@ -109,7 +109,7 @@ function SpokeCard({
 export interface SpokeSignalCardsProps {
   onOpenSatelliteBus: () => void
   onOpenNetwork: () => void
-  onOpenCompute: () => void
+  onOpenCluster: () => void
   onOpenAgentDesk: () => void
   onOpenDefects: () => void
 }
@@ -117,7 +117,7 @@ export interface SpokeSignalCardsProps {
 export function SpokeSignalCards({
   onOpenSatelliteBus,
   onOpenNetwork,
-  onOpenCompute,
+  onOpenCluster,
   onOpenAgentDesk,
   onOpenDefects,
 }: SpokeSignalCardsProps) {
@@ -232,14 +232,14 @@ export function SpokeSignalCards({
         linkLabel="Satellite → Bus Status"
       />
       <SpokeCard
-        icon={Building2}
-        title="Ground Systems"
+        icon={Plug}
+        title="Plugin"
         signal={groundSignal}
         summary={groundSummary}
-        detail="UniFi reachability + K3s compute nodes"
+        detail="UniFi Network · IB Gateway / Market Data manage pages"
         onOpen={onOpenNetwork}
-        linkLabel="Ground Systems → Network"
-        secondaryLink={{ label: 'Ground Systems → Compute', onOpen: onOpenCompute }}
+        linkLabel="Plugin → Network"
+        secondaryLink={{ label: 'Rocket → Cluster', onOpen: onOpenCluster }}
       />
       <SpokeCard
         icon={Bot}

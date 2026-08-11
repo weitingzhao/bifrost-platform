@@ -11,14 +11,24 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
+// PipelineStartedHook is called after a deliver PipelineRun is created successfully.
+// Used by promote to persist release-cycle history without a delivery→promote import cycle.
+type PipelineStartedHook func(pipelineName, revision, runName, triggeredBy, agentSessionID string)
+
 type Handler struct {
-	svc   *Service
-	audit *actuation.AuditLog
+	svc               *Service
+	audit             *actuation.AuditLog
+	onPipelineStarted PipelineStartedHook
 }
 
 func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 	entry := cfg.DefaultCluster()
 	return &Handler{svc: NewService(entry), audit: audit}
+}
+
+// BindPipelineStartedHook registers a callback for successful StartPipelineRun.
+func (h *Handler) BindPipelineStartedHook(hook PipelineStartedHook) {
+	h.onPipelineStarted = hook
 }
 
 func (h *Handler) HandlePipelines(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +82,15 @@ func (h *Handler) HandleStartPipelineRun(w http.ResponseWriter, r *http.Request)
 			"message": resp.Message,
 		})
 		return
+	}
+	if h.onPipelineStarted != nil {
+		principal := actuation.PrincipalFromContext(r.Context())
+		agentSessionID := strings.TrimSpace(r.Header.Get("X-Agent-Session-ID"))
+		rev := strings.TrimSpace(req.Revision)
+		if rev == "" {
+			rev = run.Revision
+		}
+		h.onPipelineStarted(name, rev, run.Name, principal.Name, agentSessionID)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      resp.OK,

@@ -24,7 +24,9 @@ import { DEPRECATED_NAMESPACES } from '@/components/cluster/ClusterWorkloadsExpl
 import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
 import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
 import {
+  FACILITY_CATEGORY_LABELS,
   INFRASTRUCTURE_CATEGORY_LABELS,
+  isFacilityCategory,
   isInfrastructureCategory,
 } from '@/lib/cluster/clusterCategories'
 import { buildClusterCategoryLlmContext } from '@/lib/cluster/buildClusterCategoryLlmContext'
@@ -227,6 +229,9 @@ export function useClusterPageQueries(input: ClusterPageQueriesInput) {
     if (selectedCategory == null) return undefined
     if (isInfrastructureCategory(selectedCategory)) {
       return INFRASTRUCTURE_CATEGORY_LABELS[selectedCategory]
+    }
+    if (isFacilityCategory(selectedCategory)) {
+      return FACILITY_CATEGORY_LABELS[selectedCategory]
     }
     return serviceReadinessQuery.data?.domains.find(d => d.id === selectedCategory)?.label
   }, [selectedCategory, serviceReadinessQuery.data?.domains])

@@ -59,7 +59,7 @@ export const UI_MCP_PARITY_MATRIX: UiMcpParityRow[] = [
     notes: 'Also available via mcp-server-prometheus (query_prometheus · list_alerts · list_targets)',
   },
   {
-    uiRoute: 'Satellite → Satellite Runtime',
+    uiRoute: 'Satellite → Satellite Health',
     uiSurface: 'API performance metrics',
     apiRoute: 'GET /api/v1/telemetry/overview?ns=…',
     mcpTool: 'get_telemetry_overview',

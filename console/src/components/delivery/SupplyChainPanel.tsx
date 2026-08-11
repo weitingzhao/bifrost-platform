@@ -113,7 +113,7 @@ export function SupplyChainPanel({
   const sectionDescription =
     layout === 'operate'
       ? hideDeliverAction
-        ? 'Revision + mirror sync + Dockerfile CMs. Deploy runs from the step actions above.'
+        ? 'Revision + mirror sync + Dockerfile CMs. Deliver via AI Deploy on the lane strip (Agent Session).'
         : 'Revision + mirror sync + deliver-stg. Switch target above for Ops Platform STG.'
       : layout === 'observe'
         ? 'Kaniko Dockerfile ConfigMaps (Trade + Platform) and STG deployment images.'

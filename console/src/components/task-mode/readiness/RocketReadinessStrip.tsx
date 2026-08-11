@@ -13,6 +13,7 @@ import {
   primaryChipNavigation,
   setSatelliteApiEnv,
   setSatelliteBusFocus,
+  setSatelliteHealthSection,
   type ReadinessChipContext,
 } from '@/lib/task-mode/readinessChipActions'
 import { readinessAnchorDomId } from '@/lib/task-mode/satelliteLaunchVerdict'
@@ -178,10 +179,22 @@ export function EnvironmentReadinessPanel({
                       if (nav.tabId === 'satellite-bus') {
                         setSatelliteBusFocus(nav.busFocus)
                       }
-                      if (nav.tabId === 'satellite-api') {
+                      if (
+                        nav.tabId === 'satellite-health' ||
+                        nav.tabId === 'satellite-api' ||
+                        nav.tabId === 'satellite-telemetry'
+                      ) {
                         setSatelliteApiEnv(nav.apiEnv)
+                        setSatelliteHealthSection(
+                          nav.healthSection ??
+                            (nav.tabId === 'satellite-telemetry' ? 'runtime' : 'probes'),
+                        )
                       }
-                      onNavigate(nav.tabId)
+                      onNavigate(
+                        nav.tabId === 'satellite-api' || nav.tabId === 'satellite-telemetry'
+                          ? 'satellite-health'
+                          : nav.tabId,
+                      )
                     }
                   : undefined
               }

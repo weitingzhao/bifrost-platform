@@ -761,12 +761,12 @@ function routeLabel(route: string): string {
   switch (route) {
     case 'cluster':
       return 'Rocket → Cluster'
+    case 'satellite-health':
     case 'satellite-telemetry':
-      return 'Satellite → Runtime'
+    case 'satellite-api':
+      return 'Satellite → Satellite Health'
     case 'satellite-bus':
       return 'Satellite → Bus Status'
-    case 'satellite-api':
-      return 'Satellite → API & Auth Probes'
     case 'plugin-gallery':
       return 'Subcontractors → Plugin Gallery'
     case 'queue':

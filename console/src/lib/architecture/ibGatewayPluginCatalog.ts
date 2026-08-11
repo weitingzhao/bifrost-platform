@@ -4,8 +4,8 @@
  * Created 2026-07-04 for bifrost-platform-plugin (Platform TWS bus).
  *
  * Live state (not this catalog):
- * - IB Gateway health + mode: Subcontractors → Plugin Gallery (observe / reconnect)
- * - Publish: Mission Launch · Launch Plugin (plugin-release) — Gallery ≠ Publish
+ * - IB Gateway health + mode: Subcontractors → IB Gateway (observe / reconnect)
+ * - Publish: Mission Launch · Launch Plugin (plugin-release) — manage page ≠ Publish
  * - Delivery Board: ib-gateway-plugin completed 7/7; launch-plugin-lane CLOSED-SUPERSEDED (hygiene 2026-08-05)
  * - Briefing lane ib-vendor: Done (synthetic closed queue) — not Init Build
  */
@@ -23,7 +23,7 @@ export const LAUNCH_PLUGIN_LANE = {
   verify: 'make verify-ib-gateway-program',
   steps: ['Detect', 'Approve', 'Install', 'Verify', 'Live check'] as const,
   galleryIsNotPublish:
-    'Plugin Gallery = observe / reconnect / mode. Launch Plugin = publish image + verify.',
+    'IB Gateway manage page = observe / reconnect / mode. Launch Plugin = publish image + verify.',
   dogfood: {
     revision: 'b2fb081',
     feature: 'on-demand STK',
@@ -149,7 +149,7 @@ export const IB_GATEWAY_PLUGIN_PROGRESS = {
 } as const
 
 export const IB_GATEWAY_RELATED_AUTHORITIES = [
-  'Live IB Gateway health + mode: Subcontractors → Plugin Gallery (observe — not publish)',
+  'Live IB Gateway health + mode: Subcontractors → IB Gateway (observe — not publish)',
   'Publish plugin: Mission Launch · Launch Plugin (plugin-release) — Detect→Approve→Install→Verify→Live',
   'Program history: Delivery Board · ib-gateway-plugin (completed) · launch-plugin-lane (closed-superseded)',
   'Migrate lane + spine stream: Engineer → Briefing · ib-gateway-plugin',
@@ -178,7 +178,7 @@ export function buildIbGatewayPluginLlmPack(): string {
     '# IB Gateway Plugin — implementation program',
     `Version: ${IB_GATEWAY_PLUGIN_CATALOG_VERSION}`,
     `Repo: ${IB_GATEWAY_PLUGIN_SOURCE}`,
-    'Live health + mode: Subcontractors → Plugin Gallery (observe) — not this catalog.',
+    'Live health + mode: Subcontractors → IB Gateway (observe) — not this catalog.',
     'Publish: Mission Launch · Launch Plugin — Gallery ≠ Publish.',
     'Sign-off state: Delivery Board · ib-gateway-plugin completed · launch-plugin-lane closed — not this catalog.',
     '',

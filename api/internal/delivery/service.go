@@ -374,11 +374,19 @@ func (s *Service) RunLogs(ctx context.Context, namespace, runName string) (RunLo
 		out.Logs = "(no pods yet — PipelineRun may still be starting)"
 		return out, nil
 	}
+	sort.Slice(pods.Items, func(i, j int) bool {
+		return pods.Items[i].Name < pods.Items[j].Name
+	})
 
 	var b strings.Builder
+	var lastLogAt *time.Time
 	for _, pod := range pods.Items {
 		for _, c := range pod.Spec.Containers {
-			logOpts := &corev1.PodLogOptions{Container: c.Name, TailLines: int64Ptr(200)}
+			logOpts := &corev1.PodLogOptions{
+				Container:  c.Name,
+				TailLines:  int64Ptr(5000),
+				Timestamps: true,
+			}
 			req := clientset.CoreV1().Pods(ns).GetLogs(pod.Name, logOpts)
 			stream, logErr := req.Stream(ctx)
 			if logErr != nil {
@@ -392,13 +400,16 @@ func (s *Service) RunLogs(ctx context.Context, namespace, runName string) (RunLo
 				fmt.Fprintf(&b, "(read error: %v)\n", readErr)
 				continue
 			}
-			b.Write(data)
-			if len(data) > 0 && data[len(data)-1] != '\n' {
+			cleaned, containerLast := stripK8sLogTimestamps(data)
+			lastLogAt = maxTimePtr(lastLogAt, containerLast)
+			b.WriteString(cleaned)
+			if cleaned != "" && !strings.HasSuffix(cleaned, "\n") {
 				b.WriteByte('\n')
 			}
 		}
 	}
 	out.Logs = b.String()
+	out.LastLogAt = lastLogAt
 	if out.Logs == "" {
 		out.Logs = "(pods found but no log lines yet)"
 	}

@@ -87,7 +87,7 @@ export function SatelliteBusEvidenceSection({
         title="Trade API reachability"
         bodyPadding="none"
         overflow="hidden"
-        description={`Matrix L0 HTTP probes for ${tradeEnv.toUpperCase()} · full detail on API & Auth Probes`}
+        description={`Matrix L0 HTTP probes for ${tradeEnv.toUpperCase()} · full detail on Satellite Health → Probes`}
       >
         <TradeApiReachTable targets={tradeApiTargetRows} loading={matrixLoading} />
       </OpsSection>

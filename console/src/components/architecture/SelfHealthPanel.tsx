@@ -37,9 +37,12 @@ const CATEGORY_LABEL: Record<string, string> = {
 export function SelfHealthPanel({
   collapsible = false,
   defaultCollapsed = false,
+  envFilter,
 }: {
   collapsible?: boolean
   defaultCollapsed?: boolean
+  /** When set, only show probes for that env (overall lamp still reflects full payload). */
+  envFilter?: 'stg' | 'prod'
 } = {}) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['platform', 'self-health'],
@@ -48,13 +51,19 @@ export function SelfHealthPanel({
   })
 
   const overall = data?.overall ?? 'unknown'
-  const probes = data?.probes ?? []
+  const probes = (data?.probes ?? []).filter(p =>
+    envFilter == null ? true : p.env === envFilter,
+  )
 
   return (
     <OpsSection
       title="L1 control plane self-health"
       leading={<StatusLamp value={STATUS_LAMP[overall]} kind="reach" />}
-      description="Platform probes its own API, Console, and Argo Application status across STG and PROD."
+      description={
+        envFilter == null
+          ? 'Platform probes its own API, Console, and Argo Application status across STG and PROD.'
+          : `Platform probes for ${envFilter.toUpperCase()} — API, Console, and Argo Application status.`
+      }
       actions={
         isLoading ? (
           <DenseTag variant="category">Loading…</DenseTag>
@@ -117,6 +126,13 @@ export function SelfHealthPanel({
             })}
           </DenseTableBody>
         </DenseDataTable>
+      )}
+      {!isLoading && !error && probes.length === 0 && (
+        <p className="m-0 text-dense-meta text-muted-foreground">
+          {envFilter != null
+            ? `No self-health probes for ${envFilter.toUpperCase()}.`
+            : 'No self-health probes returned.'}
+        </p>
       )}
       {data?.generated_at && (
         <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">

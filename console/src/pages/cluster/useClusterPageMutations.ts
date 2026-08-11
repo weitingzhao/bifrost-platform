@@ -22,6 +22,8 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
     selectedNs,
     onOpenAgentDesk,
     onStartAgentJob,
+    onExpandAgentDock,
+    onSelectAgentJob,
     setDrawerOpen,
     setSelectedPod,
   } = input
@@ -29,6 +31,8 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
   const qc = useQueryClient()
   const [syncError, setSyncError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  /** Actuation / Auto-Check success summary (may be markdown) — not kubeconfig sync. */
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [scaleState, setScaleState] = useState<ScaleState | null>(null)
 
@@ -37,16 +41,18 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
     setConfirmState(null)
     void qc.invalidateQueries({ queryKey: ['cluster'] })
     void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
-    setSyncError(message)
+    setActionSuccess(message)
   }
 
   function handleActuationError(err: Error) {
     setConfirmState(null)
+    setActionSuccess(null)
     setActionError(err.message)
   }
 
   function requireConfirm(next: Omit<ConfirmState, 'open'>) {
     setActionError(null)
+    setActionSuccess(null)
     setConfirmState({ ...next, open: true })
   }
 
@@ -71,6 +77,8 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
     selectedNs,
     onOpenAgentDesk,
     onStartAgentJob,
+    onExpandAgentDock,
+    onSelectAgentJob,
   })
 
   function actionPending() {
@@ -95,6 +103,8 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
     setSyncError,
     actionError,
     setActionError,
+    actionSuccess,
+    setActionSuccess,
     confirmState,
     setConfirmState,
     scaleState,

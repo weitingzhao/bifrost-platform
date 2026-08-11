@@ -30,6 +30,50 @@ function resolveIdChecker(
   return (id: string) => set.has(id)
 }
 
+function NumberedDeskSection({
+  label,
+  items,
+  activeId,
+  onSelect,
+  renderItemIcon,
+  signals,
+}: {
+  label: string
+  items: ShellNavItem[]
+  activeId: string
+  onSelect: (id: string) => void
+  renderItemIcon?: (item: ShellNavItem) => ReactNode
+  signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
+}) {
+  return (
+    <div>
+      <div className="mx-3 mb-0.5 mt-2 flex items-center gap-2">
+        <span className={shellNavSubGroupSectionLabelClass}>{label}</span>
+        <div className="flex-1 border-t border-sidebar-border/50" />
+      </div>
+      <SidebarMenu>
+        <SidebarMenuSub>
+          {items.map((item, index) => (
+            <ConsoleNavSlotItem
+              key={item.id}
+              item={item}
+              activeId={activeId}
+              onSelect={onSelect}
+              renderItemIcon={renderItemIcon}
+              signals={signals}
+              leading={
+                <span className="w-3 shrink-0 text-center text-dense-micro tabular-nums text-sidebar-foreground/30">
+                  {index + 1}
+                </span>
+              }
+            />
+          ))}
+        </SidebarMenuSub>
+      </SidebarMenu>
+    </div>
+  )
+}
+
 export function PartnerStrip({
   collapsed,
   activeId,
@@ -69,7 +113,12 @@ export function PartnerStrip({
 
   if (sections == null) return null
 
-  const allItems = [...sections.lifecycle, ...sections.workspace, ...sections.profile]
+  const allItems = [
+    ...sections.lifecycle,
+    ...sections.launch,
+    ...sections.workspace,
+    ...sections.profile,
+  ]
   const partnerActive = allItems.some(item => item.id === activeId)
   const partnerPhaseFocus = allItems.some(item => signals.isPhaseFocus?.(item.id) === true)
   const showStatusDot = partnerActive || partnerPhaseFocus
@@ -98,31 +147,25 @@ export function PartnerStrip({
       </div>
 
       {sections.lifecycle.length > 0 && (
-        <div>
-          <div className="mx-3 mb-0.5 mt-2 flex items-center gap-2">
-            <span className={shellNavSubGroupSectionLabelClass}>Build Desk</span>
-            <div className="flex-1 border-t border-sidebar-border/50" />
-          </div>
-          <SidebarMenu>
-            <SidebarMenuSub>
-              {sections.lifecycle.map((item, index) => (
-                <ConsoleNavSlotItem
-                  key={item.id}
-                  item={item}
-                  activeId={activeId}
-                  onSelect={onSelect}
-                  renderItemIcon={renderItemIcon}
-                  signals={signals}
-                  leading={
-                    <span className="w-3 shrink-0 text-center text-dense-micro tabular-nums text-sidebar-foreground/30">
-                      {index + 1}
-                    </span>
-                  }
-                />
-              ))}
-            </SidebarMenuSub>
-          </SidebarMenu>
-        </div>
+        <NumberedDeskSection
+          label="Build Desk"
+          items={sections.lifecycle}
+          activeId={activeId}
+          onSelect={onSelect}
+          renderItemIcon={renderItemIcon}
+          signals={signals}
+        />
+      )}
+
+      {sections.launch.length > 0 && (
+        <NumberedDeskSection
+          label="Launch Desk"
+          items={sections.launch}
+          activeId={activeId}
+          onSelect={onSelect}
+          renderItemIcon={renderItemIcon}
+          signals={signals}
+        />
       )}
 
       {hasSecondary && (
@@ -258,6 +301,17 @@ function CollapsedPartnerButton({
           <FlyoutSection
             label="Build Desk"
             items={sections.lifecycle}
+            activeId={activeId}
+            onSelect={handleSelect}
+            renderItemIcon={renderItemIcon}
+            signals={signals}
+            numbered
+          />
+        )}
+        {sections.launch.length > 0 && (
+          <FlyoutSection
+            label="Launch Desk"
+            items={sections.launch}
             activeId={activeId}
             onSelect={handleSelect}
             renderItemIcon={renderItemIcon}

@@ -63,7 +63,7 @@ export function NetworkHealthPanel({
       <div className="flex flex-wrap gap-2">
         {onOpenNetwork != null && (
           <Button variant="ghost" size="xs" onClick={onOpenNetwork}>
-            Ground Systems → Network
+            Plugin → Network
           </Button>
         )}
         {showPrimaryAgentAction && (

@@ -18,6 +18,8 @@ export type OpsVerdictStripProps = {
   actions?: ReactNode
   /** Optional second line (metrics, chips, hints). */
   meta?: ReactNode
+  /** Optional body under the strip (e.g. ranked issues) — same panel, one composition. */
+  body?: ReactNode
   /** Optional icon before title (e.g. Task Mode icon). */
   leading?: ReactNode
   ariaLabel?: string
@@ -26,7 +28,7 @@ export type OpsVerdictStripProps = {
 
 /**
  * Shared page verdict — first act on the canvas (Mission Control + Rocket Placement/Cluster).
- * StatusLamp · title · DenseTag · summary · actions (+ optional meta).
+ * StatusLamp · title · DenseTag · summary · actions (+ optional meta / body).
  * Rocket lane operate pages use LaneStateStrip instead.
  */
 export function OpsVerdictStrip({
@@ -38,6 +40,7 @@ export function OpsVerdictStrip({
   summary,
   actions,
   meta,
+  body,
   leading,
   ariaLabel = 'Page verdict',
   className,
@@ -67,6 +70,9 @@ export function OpsVerdictStrip({
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
           {meta}
         </div>
+      ) : null}
+      {body != null ? (
+        <div className="cluster-health-verdict-body mt-2 border-t border-border pt-2">{body}</div>
       ) : null}
     </section>
   )

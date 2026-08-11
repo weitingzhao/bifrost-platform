@@ -68,7 +68,7 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
       'Delivery Operate tab → Active deliver run: 6-phase progress bar (Clone → … → GitOps)',
       'Console: Satellite → Deploy Satellite → Pipeline runs (full history + logs)',
       'CLI: make k3s-deliver-stg',
-      'Preflight: amd64 CI node required (Rocket → Placement)',
+      'Preflight: amd64 CI node required (Rocket → Cluster → Facility → CI readiness)',
     ],
   },
   {

@@ -100,7 +100,6 @@ type ControlRoomPageProps = {
   onOpenAgentProtocol?: () => void
   onOpenNetwork?: () => void
   onOpenSatelliteBus?: () => void
-  onOpenCompute?: () => void
   onOpenDefects?: () => void
   onOpenAgentDeskTab?: () => void
   onOpenLaunchView?: (mode: 'ops') => void
@@ -140,7 +139,6 @@ export function ControlRoomPage({
   onOpenAgentProtocol,
   onOpenNetwork,
   onOpenSatelliteBus,
-  onOpenCompute,
   onOpenDefects,
   onOpenAgentDeskTab,
   onOpenLaunchView,
@@ -585,17 +583,17 @@ export function ControlRoomPage({
 
                 {onOpenSatelliteBus != null &&
                   onOpenNetwork != null &&
-                  onOpenCompute != null &&
+                  onOpenCluster != null &&
                   onOpenDefects != null &&
                   onOpenAgentDeskTab != null && (
                   <div className="flex flex-col gap-1.5">
                     <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Spokes — Satellite · Ground Systems · Engineer
+                      Spokes — Satellite · Plugin · Engineer
                     </span>
                     <SpokeSignalCards
                       onOpenSatelliteBus={onOpenSatelliteBus}
                       onOpenNetwork={onOpenNetwork}
-                      onOpenCompute={onOpenCompute}
+                      onOpenCluster={onOpenCluster}
                       onOpenAgentDesk={onOpenAgentDeskTab}
                       onOpenDefects={onOpenDefects}
                     />

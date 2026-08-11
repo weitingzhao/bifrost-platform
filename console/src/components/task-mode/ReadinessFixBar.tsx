@@ -13,6 +13,7 @@ import { chipCorrelateKey } from '@/lib/activity/signalTransitionDetector'
 import {
   readinessChipFixActions,
   setSatelliteApiEnv,
+  setSatelliteHealthSection,
   setSatelliteBusFocus,
   type ReadinessChipAction,
   type ReadinessChipContext,
@@ -128,10 +129,22 @@ export function ReadinessFixBar({
       if (action.tabId === 'satellite-bus') {
         setSatelliteBusFocus(action.busFocus)
       }
-      if (action.tabId === 'satellite-api') {
+      if (
+        action.tabId === 'satellite-health' ||
+        action.tabId === 'satellite-api' ||
+        action.tabId === 'satellite-telemetry'
+      ) {
         setSatelliteApiEnv(action.apiEnv)
+        setSatelliteHealthSection(
+          action.healthSection ??
+            (action.tabId === 'satellite-telemetry' ? 'runtime' : 'probes'),
+        )
       }
-      onNavigate(action.tabId)
+      onNavigate(
+        action.tabId === 'satellite-api' || action.tabId === 'satellite-telemetry'
+          ? 'satellite-health'
+          : action.tabId,
+      )
     },
     [onNavigate],
   )

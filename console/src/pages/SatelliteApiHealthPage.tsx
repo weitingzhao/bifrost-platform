@@ -1,9 +1,9 @@
 /**
- * Satellite → API & Auth Probes (tab id: satellite-api).
+ * Satellite Health → Probes panel (also used standalone for legacy embeds).
  *
- * Probe-detail page for Trade satellite matrix targets — HTTP reachability,
+ * Probe-detail for Trade satellite matrix targets — HTTP reachability,
  * ops auth, and D10 blocked write paths. System health verdict lives in
- * Mission Control → Observability; this page must not surface a readiness badge.
+ * Mission Control → Observability; this panel must not surface a readiness badge.
  * OpsVerdictStrip here is page-freshness / probe counts only.
  */
 
@@ -102,11 +102,24 @@ function AuthCell({ target }: { target: Target }) {
 
 export function SatelliteApiHealthPage({
   onOpenObservability,
+  env: controlledEnv,
+  onEnvChange,
+  hideEnvToolbar = false,
 }: {
   onOpenObservability?: () => void
+  /** Controlled environment (Satellite Health parent). */
+  env?: MatrixEnv
+  onEnvChange?: (env: MatrixEnv) => void
+  /** When true, parent owns Environment / Observability toolbar. */
+  hideEnvToolbar?: boolean
 } = {}) {
-  const focusedEnv = consumeSatelliteApiEnv()
-  const [env, setEnv] = useState<MatrixEnv>(focusedEnv ?? 'prod')
+  const focusedEnv = controlledEnv == null ? consumeSatelliteApiEnv() : null
+  const [internalEnv, setInternalEnv] = useState<MatrixEnv>(focusedEnv ?? 'prod')
+  const env = controlledEnv ?? internalEnv
+  const setEnv = (next: MatrixEnv) => {
+    if (onEnvChange != null) onEnvChange(next)
+    else setInternalEnv(next)
+  }
   const [selected, setSelected] = useState<Target | null>(null)
 
   const matrixQuery = useQuery({
@@ -212,26 +225,32 @@ export function SatelliteApiHealthPage({
         }
       />
 
-      <PageToolbar align="between">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs font-medium text-muted-foreground shrink-0">Environment:</span>
-          <SegmentControl value={env} options={[...ENV_OPTIONS]} onChange={v => setEnv(v as MatrixEnv)} />
-          {matrix?.generated_at != null && (
-            <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Probed {new Date(matrix.generated_at).toLocaleString()}
-            </span>
+      {!hideEnvToolbar && (
+        <PageToolbar align="between">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-medium text-muted-foreground shrink-0">Environment:</span>
+            <SegmentControl
+              value={env}
+              options={[...ENV_OPTIONS]}
+              onChange={v => setEnv(v as MatrixEnv)}
+            />
+            {matrix?.generated_at != null && (
+              <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                Probed {new Date(matrix.generated_at).toLocaleString()}
+              </span>
+            )}
+          </div>
+          {onOpenObservability != null && (
+            <button
+              type="button"
+              className="focus-strip-link text-[var(--text-dense-caption)]"
+              onClick={onOpenObservability}
+            >
+              View Observability
+            </button>
           )}
-        </div>
-        {onOpenObservability != null && (
-          <button
-            type="button"
-            className="focus-strip-link text-[var(--text-dense-caption)]"
-            onClick={onOpenObservability}
-          >
-            View Observability
-          </button>
-        )}
-      </PageToolbar>
+        </PageToolbar>
+      )}
 
       <OpsSection title="Endpoint probes" bodyPadding="default" overflow="visible">
         <DenseDataTable>

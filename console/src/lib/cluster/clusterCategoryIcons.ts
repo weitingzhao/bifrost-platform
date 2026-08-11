@@ -11,9 +11,12 @@ import {
   Boxes,
   ShieldCheck,
   Activity,
+  Layers,
+  ListChecks,
+  Hammer,
 } from 'lucide-react'
 import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
-import { isInfrastructureCategory } from '@/lib/cluster/clusterCategories'
+import { isFacilityCategory, isInfrastructureCategory } from '@/lib/cluster/clusterCategories'
 
 const APPLICATION_ICONS: Record<string, LucideIcon> = {
   database: Database,
@@ -32,9 +35,18 @@ const INFRASTRUCTURE_ICONS: Record<string, LucideIcon> = {
   observability: Activity,
 }
 
+const FACILITY_ICONS: Record<string, LucideIcon> = {
+  node_pools: Layers,
+  policy_matrix: ListChecks,
+  ci_readiness: Hammer,
+}
+
 export function categoryIcon(category: ClusterCategory): LucideIcon | undefined {
   if (isInfrastructureCategory(category)) {
     return INFRASTRUCTURE_ICONS[category]
+  }
+  if (isFacilityCategory(category)) {
+    return FACILITY_ICONS[category]
   }
   return APPLICATION_ICONS[category]
 }

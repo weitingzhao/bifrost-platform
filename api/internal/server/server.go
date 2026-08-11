@@ -167,7 +167,7 @@ func New(cfg *config.Config) (*Server, error) {
 		gitops:          gitopsH,
 		mcp:             mcp.NewHandler(),
 		stack:           stack.NewHandler(cfg, audit),
-		delivery:        delivery.NewHandler(cfg, audit),
+		delivery:        bindDeliveryCycleHook(delivery.NewHandler(cfg, audit), promoteH),
 		promote:         promoteH,
 		vision:          visionH,
 		buildgate:       buildgate.NewHandler(cfg, audit),
@@ -378,6 +378,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
 		r.Get("/promote/release-state", s.promote.HandleGetReleaseState)
 		r.Get("/promote/gate-history", s.promote.HandleGetGateHistory)
+		r.Get("/promote/release-cycles", s.promote.HandleListReleaseCycles)
+		r.Get("/promote/release-cycles/{id}", s.promote.HandleGetReleaseCycle)
 		r.Get("/promote/tier-b", s.promote.HandleGetTierB)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
@@ -612,6 +614,17 @@ func (s *Server) handleContext(w http.ResponseWriter, _ *http.Request) {
 	}
 	ctx := promote.OverlayContext(s.cfg.OpsContext, s.promote.Store())
 	writeJSON(w, http.StatusOK, ctx)
+}
+
+func bindDeliveryCycleHook(deliveryH *delivery.Handler, promoteH *promote.Handler) *delivery.Handler {
+	if deliveryH == nil || promoteH == nil || promoteH.Service() == nil || promoteH.Service().CycleStore() == nil {
+		return deliveryH
+	}
+	cycles := promoteH.Service().CycleStore()
+	deliveryH.BindPipelineStartedHook(func(pipelineName, revision, runName, triggeredBy, agentSessionID string) {
+		_, _ = cycles.RecordDeployFromPipeline(pipelineName, revision, runName, triggeredBy, agentSessionID)
+	})
+	return deliveryH
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -3,6 +3,9 @@ package promote
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
@@ -22,6 +25,11 @@ func NewHandler(cfg *config.Config, audit *actuation.AuditLog, cluster *cluster.
 
 func (h *Handler) Store() *Store {
 	return h.store
+}
+
+// Service exposes the promote service for cross-package wiring (e.g. delivery hooks).
+func (h *Handler) Service() *Service {
+	return h.svc
 }
 
 func (h *Handler) tierFromRequest(r *http.Request) GateTier {
@@ -82,6 +90,40 @@ func (h *Handler) HandleGetReleaseState(w http.ResponseWriter, r *http.Request) 
 		tier = "platform"
 	}
 	writeJSON(w, http.StatusOK, h.svc.ReleaseState(r.Context(), tier))
+}
+
+func (h *Handler) HandleListReleaseCycles(w http.ResponseWriter, r *http.Request) {
+	lane := ParseReleaseCycleLane(r.URL.Query().Get("lane"))
+	entries, err := h.svc.ListReleaseCycles(r.Context(), lane)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if entries == nil {
+		entries = []ReleaseCycleRecord{}
+	}
+	writeJSON(w, http.StatusOK, ReleaseCyclesResponse{
+		Lane:    lane,
+		Entries: entries,
+	})
+}
+
+func (h *Handler) HandleGetReleaseCycle(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cycle id required"})
+		return
+	}
+	rec, err := h.svc.GetReleaseCycle(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if rec == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "cycle not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, rec)
 }
 
 func (h *Handler) HandleGetTierB(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,6 @@
 import { Button, cn, DenseTag } from '@bifrost/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 import { fetchPipelineRunLogs, fetchPipelineRuns } from '@/api/delivery'
 import { DeliveryPipelineStepProgress } from '@/components/delivery/DeliveryPipelineStepProgress'
@@ -8,6 +8,12 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { StatusLamp } from '@/components/StatusLamp'
 import { deliveryFocusRunQueryKey } from '@/lib/delivery/deliveryFocusRun'
 import type { DeliveryTargetConfig } from '@/lib/delivery/deliveryTargets'
+import {
+  filterLogsByPhase,
+  formatSecondsAgo,
+  mergePipelineLogSnapshots,
+  secondsSince,
+} from '@/lib/delivery/pipelinePhaseLogs'
 import {
   buildPipelineRunAskPack,
   formatPipelineRunStatus,
@@ -31,10 +37,53 @@ function logsNeedPoll(logs: string | undefined): boolean {
   return logs.includes('no pods yet') || logs.includes('no log lines yet')
 }
 
-const LOG_TAIL_FOLLOW_BOTTOM_PX = 32
+const LOG_TAIL_FOLLOW_BOTTOM_PX = 48
 
 function isLogScrolledToBottom(el: HTMLElement): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= LOG_TAIL_FOLLOW_BOTTOM_PX
+}
+
+/**
+ * Two text nodes (gutter + body) instead of per-line React nodes — avoids full-tree
+ * remount jitter when the transcript grows every poll.
+ */
+function NumberedLogTail({
+  text,
+  preRef,
+  onScroll,
+}: {
+  text: string
+  preRef: RefObject<HTMLPreElement>
+  onScroll: () => void
+}) {
+  const lines = useMemo(() => {
+    if (text === '') return ['(empty)']
+    return text.replace(/\n$/, '').split('\n')
+  }, [text])
+  const width = Math.max(3, String(lines.length).length)
+  const gutter = useMemo(
+    () => lines.map((_, i) => String(i + 1).padStart(width, ' ')).join('\n'),
+    [lines, width],
+  )
+  const body = useMemo(() => lines.join('\n'), [lines])
+
+  return (
+    <pre
+      ref={preRef}
+      onScroll={onScroll}
+      className="llm-content-pre m-0 mt-2 flex max-h-80 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]"
+      aria-label="Pipeline log tail"
+    >
+      <span
+        className="sticky left-0 shrink-0 select-none border-r border-border/60 bg-[var(--card)] pr-2 text-right text-[var(--muted-foreground)]/70"
+        style={{ minWidth: `${width + 1}ch` }}
+        aria-hidden
+      >
+        {gutter}
+      </span>
+      <span className="min-w-0 flex-1 whitespace-pre-wrap break-all pl-2">{body}</span>
+    </pre>
+  )
 }
 
 interface DeliveryActiveRunPanelProps {
@@ -51,8 +100,14 @@ export function DeliveryActiveRunPanel({
   const focusKey = deliveryFocusRunQueryKey(target.pipeline)
   const pipeline = target.pipeline
   const logPreRef = useRef<HTMLPreElement>(null)
+  const programmaticScrollRef = useRef(false)
+  const prevDisplayLenRef = useRef(0)
   /** Default on — keep the viewport pinned to the newest log lines. */
   const [followLatest, setFollowLatest] = useState(true)
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  /** Append-only transcript across polls (survives kubectl TailLines sliding windows). */
+  const [accumulatedLogs, setAccumulatedLogs] = useState('')
 
   const { data: pinnedName = null } = useQuery<string | null>({
     queryKey: focusKey,
@@ -103,6 +158,12 @@ export function DeliveryActiveRunPanel({
   }, [focusRun?.name, qc])
 
   useEffect(() => {
+    setSelectedPhaseId(null)
+    setAccumulatedLogs('')
+    prevDisplayLenRef.current = 0
+  }, [focusRun?.name])
+
+  useEffect(() => {
     if (focusRun == null) return
     if (isPipelineRunSucceeded(focusRun) || isPipelineRunFailed(focusRun)) {
       qc.setQueryData(focusKey, null)
@@ -133,19 +194,25 @@ export function DeliveryActiveRunPanel({
     enabled: focusRun != null,
     refetchInterval: query => {
       if (focusRun == null) return false
-      if (isPipelineRunRunning(focusRun)) return 5_000
-      if (logsNeedPoll(query.state.data?.logs)) return 5_000
+      if (isPipelineRunRunning(focusRun)) return 3_000
+      if (logsNeedPoll(query.state.data?.logs)) return 3_000
       return false
     },
   })
 
+  useEffect(() => {
+    const incoming = logsQuery.data?.logs
+    if (incoming == null) return
+    setAccumulatedLogs(prev => mergePipelineLogSnapshots(prev, incoming))
+  }, [logsQuery.data?.logs, logsQuery.dataUpdatedAt])
+
   const handleAskAi = async () => {
     if (focusRun == null) return
-    // Pull the freshest logs so the bundle is complete even mid-failure.
-    let logsText = logsQuery.data?.logs ?? ''
+    let logsText = accumulatedLogs || logsQuery.data?.logs || ''
     try {
       const res = await fetchPipelineRunLogs(focusRun.name, ns)
-      logsText = res.logs
+      logsText = mergePipelineLogSnapshots(accumulatedLogs, res.logs)
+      setAccumulatedLogs(logsText)
     } catch {
       /* fall back to cached logs */
     }
@@ -161,7 +228,9 @@ export function DeliveryActiveRunPanel({
 
   const handleDownload = () => {
     if (focusRun == null) return
-    const blob = new Blob([buildAskPack(logsQuery.data?.logs ?? '')], { type: 'text/markdown' })
+    const blob = new Blob([buildAskPack(accumulatedLogs || logsQuery.data?.logs || '')], {
+      type: 'text/markdown',
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -170,23 +239,47 @@ export function DeliveryActiveRunPanel({
     URL.revokeObjectURL(url)
   }
 
-  const logsText = logsQuery.data?.logs ?? ''
+  const logsText = accumulatedLogs !== '' ? accumulatedLogs : (logsQuery.data?.logs ?? '')
+  const displayLogs =
+    filterLogsByPhase(logsText, selectedPhaseId, pipeline) ?? logsText
   const logHint = focusRun != null ? rolloutLogTailHint(logsText, focusRun) : null
   const elapsed = focusRun != null ? runElapsedLabel(focusRun) : null
   const logsUpdatedAt = logsQuery.dataUpdatedAt
     ? new Date(logsQuery.dataUpdatedAt).toLocaleTimeString()
     : null
+  const lastLogAt = logsQuery.data?.last_log_at
+  const lastLineAgeSec =
+    secondsSince(lastLogAt, nowMs) ??
+    (terminal && focusRun?.completion_time
+      ? secondsSince(focusRun.completion_time, nowMs)
+      : null)
   const defaultCollapsed =
     collapsible && focusRun != null && isPipelineRunSucceeded(focusRun) && !running
 
   useEffect(() => {
-    if (!followLatest) return
+    const id = window.setInterval(() => setNowMs(Date.now()), 1_000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    if (!followLatest) {
+      prevDisplayLenRef.current = displayLogs.length
+      return
+    }
+    const grew = displayLogs.length > prevDisplayLenRef.current
+    prevDisplayLenRef.current = displayLogs.length
+    if (!grew && selectedPhaseId == null) return
     const el = logPreRef.current
     if (el == null) return
+    programmaticScrollRef.current = true
     el.scrollTop = el.scrollHeight
-  }, [followLatest, logsText, logsQuery.dataUpdatedAt, focusRun?.name])
+    window.requestAnimationFrame(() => {
+      programmaticScrollRef.current = false
+    })
+  }, [followLatest, displayLogs, selectedPhaseId])
 
   const handleLogScroll = () => {
+    if (programmaticScrollRef.current) return
     const el = logPreRef.current
     if (el == null) return
     const atBottom = isLogScrolledToBottom(el)
@@ -221,7 +314,7 @@ export function DeliveryActiveRunPanel({
               <span className="release-cc__running-dot" aria-hidden />
               Live
             </span>
-            <span>Pipeline + logs auto-refresh (5s)</span>
+            <span>Pipeline + logs auto-refresh (3s)</span>
             {elapsed != null && <span>· elapsed {elapsed}</span>}
           </p>
         ) : null
@@ -265,11 +358,18 @@ export function DeliveryActiveRunPanel({
                 : undefined
             }
             runRunning={running}
+            selectedPhaseId={selectedPhaseId}
+            onSelectPhase={setSelectedPhaseId}
           />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
                 Log tail
+                {selectedPhaseId != null && (
+                  <span className="ml-1.5 normal-case font-normal text-foreground">
+                    · {selectedPhaseId}
+                  </span>
+                )}
               </span>
               <label
                 className="inline-flex cursor-pointer items-center gap-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]"
@@ -283,21 +383,32 @@ export function DeliveryActiveRunPanel({
                     const on = e.target.checked
                     setFollowLatest(on)
                     if (on && logPreRef.current != null) {
+                      programmaticScrollRef.current = true
                       logPreRef.current.scrollTop = logPreRef.current.scrollHeight
+                      window.requestAnimationFrame(() => {
+                        programmaticScrollRef.current = false
+                      })
                     }
                   }}
                 />
                 Follow latest
               </label>
             </div>
-            <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+            <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)] tabular-nums">
               {running && (
                 <span className="mr-2 inline-flex items-center gap-1 text-primary">
                   <span className="release-cc__running-dot scale-75" aria-hidden />
                   live
                 </span>
               )}
-              {logsUpdatedAt != null ? `refreshed ${logsUpdatedAt}` : '—'}
+              {lastLineAgeSec != null ? (
+                <span title={lastLogAt != null ? `Last log line at ${lastLogAt}` : undefined}>
+                  last line {formatSecondsAgo(lastLineAgeSec)}
+                </span>
+              ) : (
+                <span>last line —</span>
+              )}
+              {logsUpdatedAt != null ? ` · refreshed ${logsUpdatedAt}` : ''}
             </span>
           </div>
           {logHint != null && (
@@ -312,15 +423,13 @@ export function DeliveryActiveRunPanel({
               {logHint.message}
             </p>
           )}
-          <pre
-            ref={logPreRef}
-            onScroll={handleLogScroll}
-            className="llm-content-pre m-0 mt-2 max-h-80 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]"
-          >
-            {logsQuery.isLoading && logsQuery.data == null
-              ? 'Loading logs…'
-              : logsText !== '' ? logsText : '(empty)'}
-          </pre>
+          {logsQuery.isLoading && logsQuery.data == null && accumulatedLogs === '' ? (
+            <pre className="llm-content-pre m-0 mt-2 max-h-80 overflow-auto font-mono-tabular text-[var(--text-dense-meta)]">
+              Loading logs…
+            </pre>
+          ) : (
+            <NumberedLogTail text={displayLogs} preRef={logPreRef} onScroll={handleLogScroll} />
+          )}
           {terminal && isPipelineRunSucceeded(focusRun) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

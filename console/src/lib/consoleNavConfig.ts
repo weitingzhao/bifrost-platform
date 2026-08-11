@@ -6,7 +6,6 @@ import {
   Bot,
   Boxes,
   BrainCircuit,
-  Building2,
   CalendarClock,
   ClipboardList,
   Container,
@@ -14,7 +13,7 @@ import {
   Database,
   FileCode2,
   Gauge,
-  Handshake,
+  HeartPulse,
   History,
   LifeBuoy,
   LineChart,
@@ -48,9 +47,9 @@ import {
  * | Zone     | Surface                         | Intent                                           |
  * |----------|---------------------------------|--------------------------------------------------|
  * | Seat     | Mission Control items (fixed)   | Execute (TCC) → Posture → Health; defects, audit |
- * | Partner  | Engineer strip (persona)        | Build Desk always visible; Ops Desk / Analysis Desk |
- * | Mission  | Satellite → Rocket (pig)        | Payload + Ops Platform                           |
- * | Support  | Ground Systems → Subcontractors | Infra + plugins (quieter, default collapsed)     |
+ * | Partner  | Engineer strip (persona)        | Build Desk + Launch Desk; Ops Desk / Analysis Desk |
+ * | Mission  | Satellite → Rocket → Plugin     | Payload + Ops Platform + plugins/Network         |
+ * | Support  | (none — Plugin is peer Mission) |                                                  |
  *
  * Governance (Vision / Blueprint / Standards / …) lives in the shell User menu
  * — cross-domain reference library, not a daily-ops rail group.
@@ -79,6 +78,16 @@ export const ENGINEER_LIFECYCLE_ITEMS: ShellNavItem[] = [
   { id: 'active-session', label: 'In Flight', icon: Orbit },
   { id: 'delivery-board', label: 'Delivery', icon: Archive },
   { id: 'dev-sessions', label: 'Dev Sessions', icon: Terminal },
+]
+
+/**
+ * Launch Desk — always under Engineer Partner (below Build Desk).
+ * Domain plane for breadcrumbs stays Rocket / Satellite / Subcontractors.
+ */
+export const ENGINEER_LAUNCH_ITEMS: ShellNavItem[] = [
+  { id: 'platform-release', label: 'Rocket', icon: Container },
+  { id: 'trade-release', label: 'Satellite', icon: Workflow },
+  { id: 'plugin-release', label: 'Plugin', icon: Workflow },
 ]
 
 /** Ops Desk — field name `workspace` kept; display label is Ops Desk. */
@@ -118,6 +127,7 @@ export function buildSeatNavItems(
 
 export type PartnerNavSections = {
   lifecycle: ShellNavItem[]
+  launch: ShellNavItem[]
   workspace: ShellNavItem[]
   profile: ShellNavItem[]
 }
@@ -126,10 +136,11 @@ export function buildPartnerNavSections(
   allowedTabIds: Set<string> | null,
 ): PartnerNavSections | null {
   const lifecycle = filterAllowedNavItems(ENGINEER_LIFECYCLE_ITEMS, allowedTabIds)
+  const launch = filterAllowedNavItems(ENGINEER_LAUNCH_ITEMS, allowedTabIds)
   const workspace = filterAllowedNavItems(ENGINEER_WORKSPACE_ITEMS, allowedTabIds)
   const profile = filterAllowedNavItems(ENGINEER_PROFILE_ITEMS, allowedTabIds)
-  if (lifecycle.length + workspace.length + profile.length === 0) return null
-  return { lifecycle, workspace, profile }
+  if (lifecycle.length + launch.length + workspace.length + profile.length === 0) return null
+  return { lifecycle, launch, workspace, profile }
 }
 
 export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
@@ -142,9 +153,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'satellite-bus', label: 'Bus Status', icon: Activity },
-          { id: 'satellite-telemetry', label: 'Satellite Runtime', icon: LineChart },
-          { id: 'satellite-api', label: 'API & Auth Probes', icon: Gauge },
-          { id: 'trade-release', label: 'Deploy Satellite', icon: Workflow },
+          { id: 'satellite-health', label: 'Satellite Health', icon: Gauge },
         ],
       },
     ],
@@ -158,41 +167,27 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'cluster', label: 'Cluster', icon: Server },
-          { id: 'platform-release', label: 'Launch Rocket', icon: Container },
-          { id: 'placement', label: 'Placement', icon: Network },
+          { id: 'rocket-health', label: 'Rocket Health', icon: HeartPulse },
         ],
       },
     ],
   },
   {
-    label: 'Ground Systems',
-    icon: Building2,
-    defaultOpen: false,
-    dividerBefore: true,
-    emphasis: 'secondary',
+    label: 'Plugin',
+    icon: Plug,
+    defaultOpen: true,
     subGroups: [
       {
         label: '',
         items: [
-          { id: 'network', label: 'Network', icon: Network },
-          { id: 'compute', label: 'Compute', icon: Cpu },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'Subcontractors',
-    icon: Handshake,
-    defaultOpen: false,
-    emphasis: 'secondary',
-    subGroups: [
-      {
-        label: '',
-        items: [
-          { id: 'plugin-gallery', label: 'Plugin Gallery', icon: Plug },
+          { id: 'plugin-gallery', label: 'Plugin Gallery', icon: Boxes },
+          { id: 'ib-gateway-manage', label: 'IB Gateway', icon: Plug },
           { id: 'market-data-manage', label: 'Market Data', icon: Database },
-          { id: 'plugin-release', label: 'Launch Plugin', icon: Workflow },
         ],
+      },
+      {
+        label: 'Infra',
+        items: [{ id: 'network', label: 'Network', icon: Network }],
       },
     ],
   },
@@ -242,6 +237,7 @@ export type ConsoleNavPlane =
   | 'Ground Systems'
   | 'Satellite'
   | 'Subcontractors'
+  | 'Plugin'
   | 'Engineer'
   | 'Governance'
 
@@ -254,19 +250,21 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   defects: 'Mission Control',
   audit: 'Mission Control',
   cluster: 'Rocket',
+  'rocket-health': 'Rocket',
   'platform-release': 'Rocket',
-  placement: 'Rocket',
   /** Legacy `#console` redirects to Operator Dock — plane kept for hash/breadcrumb flash. */
-  console: 'Ground Systems',
-  network: 'Ground Systems',
-  compute: 'Ground Systems',
+  console: 'Plugin',
+  network: 'Plugin',
   'satellite-bus': 'Satellite',
+  'satellite-health': 'Satellite',
+  // Legacy aliases (redirected to satellite-health)
   'satellite-telemetry': 'Satellite',
   'satellite-api': 'Satellite',
   'trade-release': 'Satellite',
-  'plugin-gallery': 'Subcontractors',
-  'market-data-manage': 'Subcontractors',
-  'plugin-release': 'Subcontractors',
+  'plugin-gallery': 'Plugin',
+  'ib-gateway-manage': 'Plugin',
+  'market-data-manage': 'Plugin',
+  'plugin-release': 'Plugin',
   queue: 'Engineer',
   /** Legacy `#agent-desk` hash alias — plane kept for breadcrumb flash before redirect. */
   'agent-desk': 'Engineer',

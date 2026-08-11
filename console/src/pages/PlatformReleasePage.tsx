@@ -20,7 +20,6 @@ import { LaneOperateSplit } from '@/components/delivery/LaneOperateSplit'
 import { PlatformDeliverActuatePanel } from '@/components/delivery/PlatformDeliverActuatePanel'
 import { ReleaseEnvAccessBar } from '@/components/delivery/ReleaseEnvAccessBar'
 import { ReleaseHealthStrip } from '@/components/delivery/ReleaseHealthStrip'
-import { SelfHealthPanel } from '@/components/architecture/SelfHealthPanel'
 import { EscapeHatchPanel } from '@/components/architecture/EscapeHatchPanel'
 import { ReleaseStepCommandCenter } from '@/components/delivery/ReleaseStepCommandCenter'
 import { LaunchGateBar } from '@/components/task-mode/LaunchGateBar'
@@ -44,6 +43,7 @@ import {
   PlatformGateHistorySection,
   PlatformStageGatePanel,
 } from '@/components/promote/PlatformReleaseGateSection'
+import { ReleaseCycleHistorySection } from '@/components/promote/ReleaseCycleHistorySection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { useLaneStepFocus } from '@/hooks/useLaneStepFocus'
@@ -86,20 +86,34 @@ const PROD_PIPELINE = PLATFORM_PROD_TARGET.pipeline
 
 const STEP_LABELS = ['Staging Deploy', 'Staging Gate', 'Production Deploy', 'Production Gate'] as const
 
-function renderPlatformStepActions(activeIndex: number) {
+function renderPlatformStepActions(activeIndex: number, agentSessionId?: string | null) {
   switch (activeIndex) {
     case 0:
-      return <DeployActionBar target={PLATFORM_STG_TARGET} releaseStateTier="platform" />
+      return (
+        <DeployActionBar
+          target={PLATFORM_STG_TARGET}
+          releaseStateTier="platform"
+          agentSessionId={agentSessionId}
+        />
+      )
     case 1:
       return <GateActionBar tier="platform-stg" label="STG" />
     case 2:
-      return <DeployActionBar target={PLATFORM_PROD_TARGET} releaseStateTier="platform" />
+      return (
+        <DeployActionBar
+          target={PLATFORM_PROD_TARGET}
+          releaseStateTier="platform"
+          agentSessionId={agentSessionId}
+        />
+      )
     default:
       return <GateActionBar tier="platform-prod" label="PROD" />
   }
 }
 
-type PlatformReleasePageProps = AmbientAgentShellProps
+type PlatformReleasePageProps = AmbientAgentShellProps & {
+  onOpenRocketHealth?: () => void
+}
 
 export function PlatformReleasePage({
   ambientJobId,
@@ -107,6 +121,7 @@ export function PlatformReleasePage({
   ambientJobStatus,
   onStartAgentJob,
   onExpandAgentDock,
+  onOpenRocketHealth,
 }: PlatformReleasePageProps = {}) {
   const { canOperate } = usePlatformAuth()
   const [detailReason] = useState(readLaneDetailReasonFromLocation)
@@ -377,7 +392,11 @@ export function PlatformReleasePage({
             defaultOpen={false}
             bodyClassName="p-3"
           >
-            <PlatformDeliverActuatePanel target={PLATFORM_STG_TARGET} hideActions />
+            <PlatformDeliverActuatePanel
+              target={PLATFORM_STG_TARGET}
+              hideActions
+              agentSessionId={ambientJobId}
+            />
           </LaneDetailCollapse>
         </>
       )
@@ -419,7 +438,11 @@ export function PlatformReleasePage({
             defaultOpen={false}
             bodyClassName="p-3"
           >
-            <PlatformDeliverActuatePanel target={PLATFORM_PROD_TARGET} hideActions />
+            <PlatformDeliverActuatePanel
+              target={PLATFORM_PROD_TARGET}
+              hideActions
+              agentSessionId={ambientJobId}
+            />
           </LaneDetailCollapse>
         </>
       )
@@ -509,7 +532,7 @@ export function PlatformReleasePage({
               prodRun={prodRun}
               stgGate={stgGate.data}
               prodGate={prodGate.data}
-              renderStepActions={renderPlatformStepActions}
+              renderStepActions={i => renderPlatformStepActions(i, ambientJobId)}
               collapsibleBody
               agentDriven
               cycleTerminal={cycleTerminal}
@@ -579,14 +602,46 @@ export function PlatformReleasePage({
             </LaneDetailCollapse>
 
             <LaneDetailCollapse
+              title="Release cycle history"
+              defaultOpen
+              bodyClassName="p-0"
+            >
+              <ReleaseCycleHistorySection
+                lane="platform"
+                description="Full Platform STG → PROD release cycles from AI Release. Expand for stage detail; Copy for AI exports JSON for CI/CD analysis."
+              />
+            </LaneDetailCollapse>
+
+            <LaneDetailCollapse
               title="Supporting evidence"
-              summaryExtra={<ReleaseHealthStrip />}
+              summaryExtra={
+                <ReleaseHealthStrip onOpenRocketHealth={onOpenRocketHealth} />
+              }
               defaultOpen={false}
               showModeBadge
               bodyClassName="flex flex-col gap-4 p-3"
             >
               <div className="flex flex-col gap-2">
-                <SelfHealthPanel collapsible />
+                {onOpenRocketHealth != null && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/40 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="m-0 text-dense-meta font-medium text-foreground">
+                        Rocket Health
+                      </p>
+                      <p className="m-0 text-dense-caption text-muted-foreground">
+                        Full control-plane probes (API / Console / Argo) live on Rocket Health —
+                        not duplicated here.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="focus-strip-link shrink-0 text-[var(--text-dense-caption)]"
+                      onClick={onOpenRocketHealth}
+                    >
+                      Open Rocket Health →
+                    </button>
+                  </div>
+                )}
                 <PlatformGateHistorySection collapsible defaultCollapsed />
               </div>
             </LaneDetailCollapse>

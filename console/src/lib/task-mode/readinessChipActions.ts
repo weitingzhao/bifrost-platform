@@ -30,8 +30,10 @@ export type ReadinessChipAction = {
     | 'cluster'
     /** Trade daemon operate panel (Activity actuation deep-link) */
     | 'operate'
-  /** Prefill Satellite API & Auth Probes env when navigating there */
+  /** Prefill Satellite Health env when navigating there */
   apiEnv?: 'dev' | 'stg' | 'prod'
+  /** Prefill Satellite Health section (Probes | Runtime) */
+  healthSection?: SatelliteHealthSection
   actuation?: ReadinessActuation
   requiresOperate?: boolean
   /** Optional settle-watch hint for FixBar four-beat (defaults to primary chip label). */
@@ -61,11 +63,15 @@ function chipMatchesTradeApis(label: string): boolean {
   return label.includes('trade apis') || (label.includes('trade') && label.includes('apis'))
 }
 
+export type SatelliteHealthSection = 'probes' | 'runtime'
+
 export type ChipNavigation = {
   tabId: string
   busFocus?: ReadinessChipAction['busFocus']
-  /** Prefill Satellite API & Auth Probes env segment when tabId is satellite-api. */
+  /** Prefill Satellite Health env segment when tabId is satellite-health. */
   apiEnv?: 'dev' | 'stg' | 'prod'
+  /** Prefill Satellite Health view segment. */
+  healthSection?: SatelliteHealthSection
 }
 
 function tradeApiEnv(ctx: ReadinessChipContext): ChipNavigation['apiEnv'] {
@@ -90,15 +96,15 @@ export function primaryChipNavigation(
     return { tabId: 'satellite-bus', busFocus: 'cluster' }
   }
   if (chipMatchesTradeApis(label)) {
-    return { tabId: 'satellite-api', apiEnv: tradeApiEnv(ctx) }
+    return { tabId: 'satellite-health', apiEnv: tradeApiEnv(ctx), healthSection: 'probes' }
   }
-  // Full Trade connectivity matrix (mission tradeProd) — land on API & Auth Probes for that env.
+  // Full Trade connectivity matrix (mission tradeProd) — land on Satellite Health → Probes.
   if (
     label.includes('prod matrix') ||
     label.includes('stg matrix') ||
     (label.includes('matrix') && (label.includes('trade') || label.includes('prod') || label.includes('stg')))
   ) {
-    return { tabId: 'satellite-api', apiEnv: tradeApiEnv(ctx) }
+    return { tabId: 'satellite-health', apiEnv: tradeApiEnv(ctx), healthSection: 'probes' }
   }
   if (label.includes('k8s')) {
     return { tabId: 'cluster' }
@@ -111,7 +117,7 @@ export function primaryChipNavigation(
     return { tabId: 'trade-release' }
   }
   if (label.includes('self-health')) {
-    return { tabId: 'platform-release' }
+    return { tabId: 'rocket-health' }
   }
   return null
 }
@@ -134,8 +140,9 @@ export function readinessChipFixActions(
     actionLabel: string,
     busFocus?: ReadinessChipAction['busFocus'],
     apiEnv?: ReadinessChipAction['apiEnv'],
+    healthSection?: SatelliteHealthSection,
   ) => {
-    actions.push({ kind: 'navigate', label: actionLabel, tabId, busFocus, apiEnv })
+    actions.push({ kind: 'navigate', label: actionLabel, tabId, busFocus, apiEnv, healthSection })
   }
 
   if (
@@ -155,7 +162,7 @@ export function readinessChipFixActions(
   ) {
     pushNavigate('satellite-bus', 'Rocket IB bus', 'rocket')
     pushNavigate('satellite-bus', 'Socket matrix', 'socket')
-    pushNavigate('plugin-gallery', 'IB Gateway plugin')
+    pushNavigate('ib-gateway-manage', 'IB Gateway')
     pushNavigate('plugin-release', 'Launch Plugin')
     actions.push({
       kind: 'actuate',
@@ -181,7 +188,7 @@ export function readinessChipFixActions(
   }
 
   if (chipMatchesTradeApis(label)) {
-    pushNavigate('satellite-api', 'API & Auth Probes', undefined, tradeApiEnv(ctx))
+    pushNavigate('satellite-health', 'Satellite Health', undefined, tradeApiEnv(ctx), 'probes')
     pushNavigate('satellite-bus', 'API reachability', 'trade-apis')
     return actions
   }
@@ -215,7 +222,7 @@ export function readinessChipFixActions(
     label.includes('stg matrix') ||
     (label.includes('matrix') && (label.includes('trade') || label.includes('prod') || label.includes('stg')))
   ) {
-    pushNavigate('satellite-api', 'API & Auth Probes', undefined, tradeApiEnv(ctx))
+    pushNavigate('satellite-health', 'Satellite Health', undefined, tradeApiEnv(ctx), 'probes')
     pushNavigate('control-room', 'Control Room')
     return actions
   }
@@ -244,19 +251,26 @@ export function readinessChipFixActions(
   }
 
   if (label.includes('self-health')) {
-    pushNavigate('platform-release', 'Launch Rocket')
+    pushNavigate('rocket-health', 'Rocket Health')
     return actions
   }
 
   const primary = primaryChipNavigation(chipLabel, ctx)
   if (primary != null) {
-    pushNavigate(primary.tabId, 'Open details', primary.busFocus, primary.apiEnv)
+    pushNavigate(
+      primary.tabId,
+      'Open details',
+      primary.busFocus,
+      primary.apiEnv,
+      primary.healthSection,
+    )
   }
   return actions
 }
 
 export const SATELLITE_BUS_FOCUS_KEY = 'bifrost.satelliteBus.focus'
 export const SATELLITE_API_ENV_KEY = 'bifrost.satelliteApi.env'
+export const SATELLITE_HEALTH_SECTION_KEY = 'bifrost.satelliteHealth.section'
 
 export function setSatelliteBusFocus(focus: ReadinessChipAction['busFocus'] | undefined): void {
   if (focus == null) {
@@ -306,5 +320,20 @@ export function consumeSatelliteApiEnv(): ReadinessChipAction['apiEnv'] | null {
   const raw = sessionStorage.getItem(SATELLITE_API_ENV_KEY)
   sessionStorage.removeItem(SATELLITE_API_ENV_KEY)
   if (raw === 'dev' || raw === 'stg' || raw === 'prod') return raw
+  return null
+}
+
+export function setSatelliteHealthSection(section: SatelliteHealthSection | undefined): void {
+  if (section == null) {
+    sessionStorage.removeItem(SATELLITE_HEALTH_SECTION_KEY)
+    return
+  }
+  sessionStorage.setItem(SATELLITE_HEALTH_SECTION_KEY, section)
+}
+
+export function consumeSatelliteHealthSection(): SatelliteHealthSection | null {
+  const raw = sessionStorage.getItem(SATELLITE_HEALTH_SECTION_KEY)
+  sessionStorage.removeItem(SATELLITE_HEALTH_SECTION_KEY)
+  if (raw === 'probes' || raw === 'runtime') return raw
   return null
 }

@@ -263,7 +263,7 @@ export function PipelineRunsPanel({
               <span>CI preflight blocked: {activePipelineMeta?.block_reason ?? 'no Ready amd64 node'}</span>
               {onOpenPlacement != null && (
                 <Button size="sm" variant="outline" onClick={onOpenPlacement}>
-                  Open Placement
+                  Open Facility
                 </Button>
               )}
             </p>

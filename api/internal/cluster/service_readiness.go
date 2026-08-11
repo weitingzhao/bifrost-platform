@@ -374,7 +374,6 @@ func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
 func evalApplicationsDomain(snap readinessSnapshot) ServiceDomainView {
 	deps := []ServiceDependencyView{
 		schedulableAnyDep(snap, "Schedulable nodes"),
-		optionalPoolDep(snap, "arm64_edge", "arm64 edge pool (optional)"),
 		deploymentDep(snap, "kube-system", "traefik", "Traefik ingress controller"),
 	}
 	// Edge is Traefik IngressRoute trade-gateway per Trade NS (not per-NS nginx).
@@ -564,26 +563,6 @@ func poolDep(snap readinessSnapshot, id, label string) ServiceDependencyView {
 		reach = probe.ReachFail
 	}
 	return ServiceDependencyView{ID: "pool-" + id, Label: label, Reachability: reach, Detail: detail}
-}
-
-// optionalPoolDep — edge/arm pools the Owner may omit (amd64-only topology). Zero nodes = OK, not a blocker.
-func optionalPoolDep(snap readinessSnapshot, id, label string) ServiceDependencyView {
-	p, ok := snap.pools[id]
-	if !ok {
-		return ServiceDependencyView{
-			ID: "pool-" + id, Label: label,
-			Reachability: probe.ReachOK,
-			Detail:       "optional — not in cluster (amd64-only topology)",
-		}
-	}
-	if p.NodesReady == 0 {
-		return ServiceDependencyView{
-			ID: "pool-" + id, Label: label,
-			Reachability: probe.ReachOK,
-			Detail:       fmt.Sprintf("optional — 0/%d nodes (not required for amd64 Trade stack)", p.NodesTotal),
-		}
-	}
-	return poolDep(snap, id, label)
 }
 
 func schedulableArchDep(snap readinessSnapshot, arch, label string) ServiceDependencyView {

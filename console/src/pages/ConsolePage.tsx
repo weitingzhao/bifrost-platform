@@ -59,17 +59,22 @@ import { writeBriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { writeActiveSessionFocus } from '@/lib/briefing/deliveryPipelineNav'
 import { componentLineForTaskMode, trackTypeForTaskMode } from '@/lib/briefing/briefingViewTabs'
 import { ClusterPage } from '@/pages/ClusterPage'
-import { ComputePage } from '@/pages/ComputePage'
 import { DeliveryBoardPage } from '@/pages/DeliveryBoardPage'
 import { NetworkPage } from '@/pages/NetworkPage'
 import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
+import { IbGatewayManagePage } from '@/pages/IbGatewayManagePage'
 import { MarketDataManagePage } from '@/pages/MarketDataManagePage'
 import { PluginReleasePage } from '@/pages/PluginReleasePage'
-import { SatelliteApiHealthPage } from '@/pages/SatelliteApiHealthPage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
 import { ObservabilityPage } from '@/pages/ObservabilityPage'
-import { SatelliteTelemetryPage } from '@/pages/SatelliteTelemetryPage'
-import { PlacementPage } from '@/pages/PlacementPage'
+import { RocketHealthPage } from '@/pages/RocketHealthPage'
+import { SatelliteHealthPage } from '@/pages/SatelliteHealthPage'
+import { setSatelliteHealthSection } from '@/lib/task-mode/readinessChipActions'
+import {
+  DEFAULT_FACILITY_CATEGORY,
+  writeCategoryToUrl,
+  type FacilityCategory,
+} from '@/lib/cluster/clusterCategories'
 import { PlatformReleasePage } from '@/pages/PlatformReleasePage'
 import { TradeReleasePage } from '@/pages/TradeReleasePage'
 import { ControlRoomRuntimeMapSheet } from '@/components/control-room/ControlRoomRuntimeMapSheet'
@@ -114,7 +119,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   audit: 'Audit',
   'runtime-map': 'Runtime Map',
   cluster: 'Cluster',
-  placement: 'Placement',
+  'rocket-health': 'Rocket Health',
   'trade-release': 'Deploy Satellite',
   'delivery-board': 'Delivery',
   blueprint: 'Blueprint',
@@ -131,11 +136,12 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'dev-sessions': 'Dev Sessions',
   console: 'Server console',
   network: 'Network',
-  compute: 'Compute',
   'satellite-bus': 'Bus Status',
-  'satellite-telemetry': 'Satellite Runtime',
-  'satellite-api': 'API & Auth Probes',
+  'satellite-health': 'Satellite Health',
+  'satellite-telemetry': 'Satellite Health',
+  'satellite-api': 'Satellite Health',
   'plugin-gallery': 'Plugin Gallery',
+  'ib-gateway-manage': 'IB Gateway',
   'market-data-manage': 'Market Data',
   defects: 'Defects',
 }
@@ -163,28 +169,31 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Canonical actuation history for platform-api — GitOps, cluster, remediation/Agent lifecycle, and other operator writes.',
   defects:
     'Cross-job Agent remediation pattern analysis (history debt) — not live health or Launch GO|NO-GO.',
-  cluster: 'K3s nodes, namespaces, workloads, and platform-api actuation (join, power, rollout).',
-  placement:
-    'Fleet facility constraints — node pools and scheduling policy for Rocket CI, Satellite STG, and shared infra.',
+  cluster:
+    'K3s nodes, namespaces, workloads, facility constraints (pools / policy / CI readiness), and platform-api actuation (join, power, rollout).',
+  'rocket-health':
+    'Control-plane probes (API / Console / Argo) across STG and PROD. Runtime golden signals stay on Cluster Layer B and Observability until platform NS scrape is stable.',
   'trade-release': LANE_DETAIL_SUBTITLE,
   'platform-release': LANE_DETAIL_SUBTITLE,
   console:
     'Legacy hash — opens shell Operator Dock Console slot (SSH). Prefer Operator Dock Agent | Console.',
   network: 'Ground floor LAN / UniFi — live UCG probe, firewall drift audit, devices, and clients.',
-  compute:
-    'Physical ground systems — K3s nodes, Wake-on-LAN, join profiles, cordon/drain. Workload detail lives on Rocket → Cluster.',
   'satellite-bus':
     'Bus health for the selected Trade namespace — shared dependencies (Platform IB Gateway → redis-ib).',
+  'satellite-health':
+    'Trade satellite probes (HTTP/auth/D10) and runtime golden signals (PromQL) for the selected environment. System-wide health → Observability.',
   'satellite-telemetry':
-    'Trade-namespace golden signals via platform-api preset PromQL proxy. System-wide health → Observability.',
+    'Legacy hash — opens Satellite Health → Runtime.',
   'satellite-api':
-    'Per-environment matrix probes for Trade satellite endpoints — HTTP reachability, ops auth, and D10 blocked writes.',
+    'Legacy hash — opens Satellite Health → Probes.',
   'plugin-gallery':
-    'External subcontractor plugins — live L0 probes and L1 actuation (observe). Publish via Launch Plugin.',
+    'Subcontractor plugin directory — bus rollup + registry. Open IB Gateway / Market Data for probes; publish via Launch Desk → Plugin.',
+  'ib-gateway-manage':
+    'IB Gateway plugin observe — live probe, Trade cutover, reconnect (≠ Launch Plugin publish).',
   'market-data-manage':
     'Market Data Plugin management — Overview, Coverage checklist, Ingest queue, Analytics dashboard.',
   'plugin-release':
-    'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Gallery ≠ Publish.',
+    'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Manage pages ≠ Publish.',
   'operator-plane':
     'Out-of-band recovery layer — AI Remediation Runners outside K8s on dual Mac Minis (fate isolation D7 / L-1).',
   'flywheel-vision':
@@ -232,11 +241,12 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'active-session',
   'console',
   'network',
-  'compute',
   'satellite-bus',
+  'satellite-health',
   'satellite-telemetry',
   'satellite-api',
   'plugin-gallery',
+  'ib-gateway-manage',
   'market-data-manage',
   'plugin-release',
   'control-room',
@@ -245,8 +255,8 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'delivery-board',
   'trade-release',
   'platform-release',
+  'rocket-health',
   'cluster',
-  'placement',
   'dev-sessions',
 ]
 
@@ -267,10 +277,16 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   'data-layer': 'control-room',
   'network-upgrade': 'network',
   'network-api': 'network',
-  'ib-gateway-plugin': 'control-room',
+  'ib-gateway-plugin': 'ib-gateway-manage',
   'trade-ib-client-migration': 'control-room',
   'cluster-observability': 'cluster',
-  telemetry: 'satellite-telemetry',
+  /** Ground Compute removed — node lifecycle lives on Rocket → Cluster. */
+  compute: 'cluster',
+  /** Placement merged into Cluster → Categories → Facility. */
+  placement: 'cluster',
+  telemetry: 'satellite-health',
+  'satellite-telemetry': 'satellite-health',
+  'satellite-api': 'satellite-health',
 }
 
 function isConsoleViewTab(value: string): value is ConsoleViewTab {
@@ -282,8 +298,16 @@ function tabFromHash(): ConsoleViewTab | null {
   const raw = window.location.hash.replace(/^#/, '')
   if (!raw) return null
   const tabPart = raw.split('?')[0]
+  const legacy = LEGACY_RUNTIME_HASHES[tabPart]
+  if (legacy != null) {
+    if (tabPart === 'satellite-api') setSatelliteHealthSection('probes')
+    if (tabPart === 'satellite-telemetry' || tabPart === 'telemetry') {
+      setSatelliteHealthSection('runtime')
+    }
+    return legacy
+  }
   if (isConsoleViewTab(tabPart)) return tabPart
-  return LEGACY_RUNTIME_HASHES[tabPart] ?? null
+  return null
 }
 
 function ConsolePageInner() {
@@ -316,10 +340,18 @@ function ConsolePageInner() {
 
   const setViewTab = useCallback(
     (tab: ConsoleViewTab, opts?: { taskMode?: TaskModeId }) => {
-      setViewTabState(tab)
+      let nextTab = tab
+      if (tab === 'satellite-api') {
+        setSatelliteHealthSection('probes')
+        nextTab = 'satellite-health'
+      } else if (tab === 'satellite-telemetry') {
+        setSatelliteHealthSection('runtime')
+        nextTab = 'satellite-health'
+      }
+      setViewTabState(nextTab)
       const taskMode =
-        opts?.taskMode ?? (tab === 'task-cc' && modeId !== 'system' ? modeId : undefined)
-      const nextHash = formatConsoleHash(tab, taskMode)
+        opts?.taskMode ?? (nextTab === 'task-cc' && modeId !== 'system' ? modeId : undefined)
+      const nextHash = formatConsoleHash(nextTab, taskMode)
       if (window.location.hash !== nextHash) {
         window.history.replaceState(null, '', nextHash)
       }
@@ -328,12 +360,24 @@ function ConsolePageInner() {
   )
 
   useEffect(() => {
-    const onHashChange = () => {
+    const normalizeLegacyHash = () => {
+      const raw = window.location.hash.replace(/^#/, '').split('?')[0]
       const t = tabFromHash()
-      if (t != null) setViewTabState(t)
+      if (t == null) return
+      setViewTabState(t)
+      if (LEGACY_RUNTIME_HASHES[raw] != null) {
+        if (raw === 'placement') {
+          writeCategoryToUrl(DEFAULT_FACILITY_CATEGORY)
+        }
+        const nextHash = formatConsoleHash(t)
+        if (window.location.hash !== nextHash) {
+          window.history.replaceState(null, '', nextHash)
+        }
+      }
     }
-    window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
+    normalizeLegacyHash()
+    window.addEventListener('hashchange', normalizeLegacyHash)
+    return () => window.removeEventListener('hashchange', normalizeLegacyHash)
   }, [])
 
   useEffect(() => {
@@ -382,8 +426,7 @@ function ConsolePageInner() {
       viewTab === 'task-cc' ||
       viewTab === 'trade-release' ||
       viewTab === 'satellite-bus' ||
-      viewTab === 'satellite-telemetry' ||
-      viewTab === 'satellite-api',
+      viewTab === 'satellite-health',
   })
 
   const clusterQuery = useQuery({
@@ -394,8 +437,6 @@ function ConsolePageInner() {
       viewTab === 'briefing' ||
       viewTab === 'active-session' ||
       viewTab === 'cluster' ||
-      viewTab === 'compute' ||
-      viewTab === 'placement' ||
       viewTab === 'control-room' ||
       viewTab === 'task-cc' ||
       runtimeMapSheetOpen ||
@@ -498,11 +539,22 @@ function ConsolePageInner() {
   }, [envFilter])
   const openCluster = () => setViewTab('cluster')
   const openNetwork = () => setViewTab('network')
-  const openSatelliteApi = () => setViewTab('satellite-api')
-  const openSatelliteTelemetry = () => setViewTab('satellite-telemetry')
+  const openSatelliteHealth = (section: 'probes' | 'runtime' = 'probes') => {
+    setSatelliteHealthSection(section)
+    setViewTab('satellite-health')
+  }
+  const openSatelliteApi = () => openSatelliteHealth('probes')
+  const openSatelliteTelemetry = () => openSatelliteHealth('runtime')
   const openObservability = () => setViewTab('observability')
   const openPluginGallery = () => setViewTab('plugin-gallery')
-  const openPlacement = () => setViewTab('placement')
+  const openClusterFacility = useCallback(
+    (category: FacilityCategory = DEFAULT_FACILITY_CATEGORY) => {
+      writeCategoryToUrl(category)
+      setViewTab('cluster')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    },
+    [setViewTab],
+  )
   const openAudit = () => setViewTab('audit')
   const openBriefing = useCallback((opts?: BriefingUrlState) => {
     if (opts != null) {
@@ -647,7 +699,6 @@ function ConsolePageInner() {
   const openStandards = () => setViewTab('platform-standards')
   const openDefects = () => setViewTab('defects')
   const openSatelliteBus = () => setViewTab('satellite-bus')
-  const openCompute = () => setViewTab('compute')
   const openAgentDeskTab = () => setViewTab('queue')
 
   const openLaunchView = useCallback(
@@ -703,6 +754,9 @@ function ConsolePageInner() {
         activeTab={viewTab}
         onSelect={(id) => setViewTab(id as ConsoleViewTab)}
         onModeChange={handleTaskModeChange}
+        ambientJobId={ambientJob?.id ?? null}
+        ambientJobStatus={ambientJob?.status ?? null}
+        ambientJobScope={ambientJob?.scope ?? null}
       />
       <SidebarInset
         className="min-w-0 overflow-x-hidden pb-[var(--agent-dock-reserve,2.75rem)]"
@@ -902,7 +956,6 @@ function ConsolePageInner() {
                 onOpenAgentProtocol={() => setViewTab('agent-protocol')}
                 onOpenNetwork={openNetwork}
                 onOpenSatelliteBus={openSatelliteBus}
-                onOpenCompute={openCompute}
                 onOpenDefects={openDefects}
                 onOpenAgentDeskTab={openAgentDeskTab}
                 onOpenLaunchView={openLaunchView}
@@ -957,13 +1010,12 @@ function ConsolePageInner() {
               onOpenAgentDesk={openAgentDesk}
               onOpenDefects={() => setViewTab('defects')}
               onOpenObservability={openObservability}
+              onOpenDelivery={openDelivery}
               ambientJobId={ambientJob?.id ?? null}
               onStartAgentJob={startAmbientAgentJob}
+              onExpandAgentDock={() => openOperatorDock('agent')}
+              onSelectAgentJob={selectAmbientAgentJob}
             />
-        )}
-
-        {viewTab === 'placement' && (
-          <PlacementPage onOpenDelivery={openDelivery} onOpenCluster={openCluster} />
         )}
 
         {viewTab === 'delivery-board' && (
@@ -977,7 +1029,7 @@ function ConsolePageInner() {
           <TradeReleasePage
               context={contextQuery.data}
               isLoading={contextQuery.isLoading}
-              onOpenPlacement={openPlacement}
+              onOpenPlacement={() => openClusterFacility('ci_readiness')}
               onOpenSatelliteBus={openSatelliteBus}
               onOpenObservability={openObservability}
               onOpenApiHealth={openSatelliteApi}
@@ -989,6 +1041,14 @@ function ConsolePageInner() {
             />
         )}
 
+        {viewTab === 'rocket-health' && (
+          <RocketHealthPage
+            onOpenCluster={openCluster}
+            onOpenObservability={openObservability}
+            onOpenLaunchRocket={() => setViewTab('platform-release')}
+          />
+        )}
+
         {viewTab === 'platform-release' && (
           <PlatformReleasePage
               ambientJobId={ambientJob?.id ?? null}
@@ -996,6 +1056,7 @@ function ConsolePageInner() {
               ambientJobScope={ambientJob?.scope ?? null}
               onStartAgentJob={startAmbientAgentJob}
               onExpandAgentDock={expandAgentDock}
+              onOpenRocketHealth={() => setViewTab('rocket-health')}
             />
         )}
 
@@ -1003,7 +1064,9 @@ function ConsolePageInner() {
           <PluginReleasePage
             ambientJobId={ambientJob?.id ?? null}
             ambientJobStatus={ambientJob?.status ?? null}
+            ambientJobScope={ambientJob?.scope ?? null}
             onStartAgentJob={startAmbientAgentJob}
+            onExpandAgentDock={expandAgentDock}
             onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
           />
         )}
@@ -1013,10 +1076,6 @@ function ConsolePageInner() {
             context={contextQuery.data}
             onOpenAgentProtocol={() => setViewTab('agent-protocol')}
           />
-        )}
-
-        {viewTab === 'compute' && (
-          <ComputePage onOpenCluster={openCluster} onOpenAudit={openAudit} />
         )}
 
         {viewTab === 'satellite-bus' && (
@@ -1034,12 +1093,8 @@ function ConsolePageInner() {
           />
         )}
 
-        {viewTab === 'satellite-api' && (
-          <SatelliteApiHealthPage onOpenObservability={openObservability} />
-        )}
-
-        {viewTab === 'satellite-telemetry' && (
-          <SatelliteTelemetryPage
+        {viewTab === 'satellite-health' && (
+          <SatelliteHealthPage
             onOpenCluster={openCluster}
             onOpenObservability={openObservability}
           />
@@ -1056,6 +1111,9 @@ function ConsolePageInner() {
 
         {viewTab === 'plugin-gallery' && (
           <PluginGalleryPage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
+        )}
+        {viewTab === 'ib-gateway-manage' && (
+          <IbGatewayManagePage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
         )}
         {viewTab === 'market-data-manage' && <MarketDataManagePage />}
 

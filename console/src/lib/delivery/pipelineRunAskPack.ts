@@ -42,7 +42,7 @@ export const TRADE_STG_ASK_CONTEXT: PipelineRunAskContext = {
   ],
   clusterSignals: [
     'verify: Rocket → Cluster → bifrost-stg workloads (failing pods)',
-    'scheduling: Rocket → Placement (fleet facility constraints — amd64_ci pool, policy violations)',
+    'scheduling: Rocket → Cluster → Facility (amd64_ci pool, policy violations)',
     'gateway: https://stg.trader.bifrost.lan/ (Traefik Host ingress TLS)',
   ],
   acceptanceHint: 'How to confirm S12/S14 acceptance after the fix.',
@@ -144,7 +144,7 @@ export function rolloutLogTailHint(
     return {
       tone: 'info',
       message:
-        'Rollout in progress — kubectl is waiting for new replicas to become Ready (image pull, probes). Normal for 1–5+ minutes per deployment; logs refresh every 5s while the run is active.',
+        'Rollout in progress — kubectl is waiting for new replicas to become Ready (image pull, probes). Normal for 1–5+ minutes per deployment; logs refresh every 3s while the run is active (append-only transcript).',
     }
   }
   if (isPipelineRunFailed(run)) {

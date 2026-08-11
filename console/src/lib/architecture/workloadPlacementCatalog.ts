@@ -3,17 +3,18 @@
  * Product framing: fleet facility constraints (Rocket CI, Satellite STG, shared infra),
  * hosted under Rocket — not satellite-only planning.
  * Live evaluation SSOT: api/internal/placement/evaluate.go via GET /api/v1/cluster/placement.
- * This file mirrors that contract for Cluster namespace strip + offline LLM packs.
+ * Console surface: Rocket → Cluster → Categories → Facility (pools / policy / CI).
+ * This file mirrors that contract for offline LLM packs.
  */
 
 import { NAMESPACE_ALLOCATION, type NamespaceRow } from '@/lib/architecture/k3sArchitectureCatalog'
 import type { ClusterPlacementPool, ClusterPlacementRule } from '@/api/clusterTypes'
 
-export const PLACEMENT_CATALOG_VERSION = '2026-07-21-sync-go-evaluator'
+export const PLACEMENT_CATALOG_VERSION = '2026-08-10-amd64-only'
 export const PLACEMENT_CATALOG_SOURCE = 'console/src/lib/architecture/workloadPlacementCatalog.ts'
 
 /** Pool ids aligned with api/internal/placement/evaluate.go poolDefs. */
-export type NodePoolId = 'amd64_ci' | 'amd64_general' | 'arm64_edge' | 'nfs_client' | 'gpu'
+export type NodePoolId = 'amd64_ci' | 'amd64_general' | 'nfs_client' | 'gpu'
 
 export type WorkloadClass =
   | 'cicd_build'
@@ -23,7 +24,6 @@ export type WorkloadClass =
   | 'nfs_storage'
   | 'monitoring'
   | 'ai'
-  | 'frontend_edge'
 
 export type NodePoolDef = {
   id: NodePoolId
@@ -39,7 +39,6 @@ export type NodePoolDef = {
 export const NODE_POOLS: NodePoolDef[] = [
   { id: 'amd64_ci', label: 'amd64 CI / Kaniko', arch: 'amd64', status: 'live' },
   { id: 'amd64_general', label: 'amd64 general runtime', arch: 'amd64', status: 'live' },
-  { id: 'arm64_edge', label: 'arm64 edge / frontend', arch: 'arm64', status: 'live' },
   {
     id: 'nfs_client',
     label: 'NFS PV clients',
@@ -122,14 +121,6 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     poolId: 'gpu',
     plannedBinding: 'gpu-server',
   },
-  {
-    workloadClass: 'frontend_edge',
-    namespace: 'bifrost',
-    services: 'trade-frontend (edge)',
-    requiredSelector: 'kubernetes.io/arch=arm64 (optional)',
-    poolId: 'arm64_edge',
-    plannedBinding: 'ops-vm-ubt-01',
-  },
 ]
 
 export { NAMESPACE_ALLOCATION, type NamespaceRow }
@@ -162,10 +153,11 @@ export function buildPlacementLlmPack(liveSummary?: {
   const lines = [
     'Mode: Ops',
     '',
-    '## Fleet facility constraints (Placement)',
+    '## Fleet facility constraints (Cluster → Facility)',
     `Catalog: ${PLACEMENT_CATALOG_SOURCE} v${PLACEMENT_CATALOG_VERSION}`,
     'Scope: Rocket CI, Satellite STG runtime, and shared infra — not satellite-only planning.',
     'Live SSOT: api/internal/placement/evaluate.go via GET /api/v1/cluster/placement',
+    'Console: Rocket → Cluster → Categories → Facility',
     '',
     '## Node pools',
   ]

@@ -274,7 +274,7 @@ export function buildClusterLlmContext(input: ClusterLlmContextInput): string {
       '- Mode Ops: cluster/infrastructure work only — do not edit bifrost-trade-frontend pages unless cross-linked.',
       '- Prefer Ops Console actuation (platform-api) over ad-hoc kubectl for mutations.',
       '- bifrost-trader-engine/ is read-only reference — never edit.',
-      '- For placement/CI scheduling details also see Rocket → Placement (Copy LLM pack).',
+      '- For placement/CI scheduling details see Rocket → Cluster → Facility (Copy for LLM on category).',
       '- For hardware/env topology also see environments-catalog.ts (Copy All for LLM on Architecture tabs) or Runtime Map (live).',
       '',
       'When diagnosing issues:',

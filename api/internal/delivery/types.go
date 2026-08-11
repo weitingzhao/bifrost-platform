@@ -54,11 +54,13 @@ type PipelineRunView struct {
 }
 
 type RunLogsResponse struct {
-	ClusterID   string    `json:"cluster_id"`
-	Namespace   string    `json:"namespace"`
-	RunName     string    `json:"run_name"`
-	Logs        string    `json:"logs"`
-	GeneratedAt time.Time `json:"generated_at"`
+	ClusterID   string     `json:"cluster_id"`
+	Namespace   string     `json:"namespace"`
+	RunName     string     `json:"run_name"`
+	Logs        string     `json:"logs"`
+	GeneratedAt time.Time  `json:"generated_at"`
+	// LastLogAt is the newest kubectl --timestamps stamp across fetched containers (UTC).
+	LastLogAt *time.Time `json:"last_log_at,omitempty"`
 }
 
 type StgSmokeTargetView struct {

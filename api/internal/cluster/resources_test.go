@@ -30,14 +30,18 @@ func TestFormatCPU(t *testing.T) {
 
 func TestFormatMemory(t *testing.T) {
 	q := resource.MustParse("16Gi")
-	if got := formatMemory(q); got != "16Gi" {
+	if got := formatMemory(q); got != "16G" {
 		t.Fatalf("formatMemory: got %s", got)
 	}
-	// Typical summed node allocatable (~22.8Gi)
+	// Typical summed node allocatable (~22.8G)
 	q2 := resource.MustParse("23866632Ki")
 	got := formatMemory(q2)
-	if got != "22.8Gi" && got != "23Gi" {
+	if got != "22.8G" && got != "23G" {
 		t.Fatalf("formatMemory summed: got %s", got)
+	}
+	q3 := resource.MustParse("1016Mi")
+	if got := formatMemory(q3); got != "1016M" {
+		t.Fatalf("formatMemory Mi: got %s", got)
 	}
 }
 

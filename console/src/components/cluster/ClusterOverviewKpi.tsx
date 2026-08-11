@@ -60,12 +60,9 @@ export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverv
   const healthHint = clusterHealthHint(summary)
 
   return (
-    <section className="page-section panel-elevated cluster-kpi-strip px-3 py-2">
-      {/*
-       * Single row: gauges (left, wider) · divider · compact stat columns (right)
-       * Stat columns (importance): connectivity / alerts / workload
-       */}
-      <div className="cluster-kpi-row">
+    <section className="page-section panel-elevated cluster-kpi-strip cluster-kpi-strip--stacked px-3 py-2">
+      {/* Gauges on top; key status tiles underneath (not beside gauges). */}
+      <div className="cluster-kpi-gauges">
         <ClusterRadialGauge
           label="Core nodes ready"
           value={nodePct}
@@ -88,51 +85,28 @@ export function ClusterOverviewKpi({ summary, metrics, isLoading }: ClusterOverv
           unavailable={!metricsOk}
           sublabel={summary.memory_allocatable}
         />
+      </div>
 
-        <div className="cluster-kpi-row__divider" aria-hidden="true" />
-
-        <div className="cluster-kpi-stats">
-          <div className="cluster-kpi-stat-col">
-            <ClusterStatTile
-              label="API"
-              value={apiReach}
-              reach={apiReach}
-              hint="K8s API"
-            />
-            <ClusterStatTile
-              label="Health"
-              value={summary.reachability}
-              reach={summary.reachability}
-              hint={healthHint}
-            />
-          </div>
-
-          <div className="cluster-kpi-stat-col">
-            <ClusterStatTile
-              label="Failing"
-              value={String(summary.failing_pods)}
-              reach={failingReach}
-            />
-            <ClusterStatTile
-              label="Metrics"
-              value={metricsOk ? 'ok' : 'n/a'}
-              reach={metricsLamp(metrics?.metrics_server_available)}
-            />
-          </div>
-
-          <div className="cluster-kpi-stat-col">
-            <ClusterStatTile
-              label="Running"
-              value={String(summary.running_pods)}
-              reach="ok"
-            />
-            <ClusterStatTile
-              label="Pending"
-              value={String(summary.pending_pods)}
-              reach={summary.pending_pods > 0 ? 'degraded' : 'ok'}
-            />
-          </div>
-        </div>
+      <div className="cluster-kpi-stats cluster-kpi-stats--below">
+        <ClusterStatTile label="API" value={apiReach} reach={apiReach} hint="K8s API" />
+        <ClusterStatTile
+          label="Health"
+          value={summary.reachability}
+          reach={summary.reachability}
+          hint={healthHint}
+        />
+        <ClusterStatTile label="Failing" value={String(summary.failing_pods)} reach={failingReach} />
+        <ClusterStatTile
+          label="Metrics"
+          value={metricsOk ? 'ok' : 'n/a'}
+          reach={metricsLamp(metrics?.metrics_server_available)}
+        />
+        <ClusterStatTile label="Running" value={String(summary.running_pods)} reach="ok" />
+        <ClusterStatTile
+          label="Pending"
+          value={String(summary.pending_pods)}
+          reach={summary.pending_pods > 0 ? 'degraded' : 'ok'}
+        />
       </div>
 
       <p className="cluster-kpi-footer m-0 mt-2 font-mono-tabular text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

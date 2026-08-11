@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProgramDetailResponse, ProgramSummary } from '@/api/programsTypes'
-import { CONSOLE_NAV_GROUPS } from '@/lib/consoleNavConfig'
+import { CONSOLE_NAV_GROUPS, buildPartnerNavSections } from '@/lib/consoleNavConfig'
 import { resolveTaskModeId, taskModeById } from '@/lib/task-mode/taskModeCatalog'
 import {
   allNavTabIds,
@@ -34,8 +34,7 @@ describe('buildTaskNavGroups command hierarchy', () => {
     expect(groups.map(g => g.label)).toEqual([
       'Satellite',
       'Rocket',
-      'Ground Systems',
-      'Subcontractors',
+      'Plugin',
     ])
     const ids = allNavTabIds(groups)
     expect(ids).not.toContain('task-cc')
@@ -44,17 +43,25 @@ describe('buildTaskNavGroups command hierarchy', () => {
     expect(resolveAllowedTabIds('system')).toBeNull()
   })
 
-  it('ops navGroups keep launch tabs and leave Seat MC tabs out of groups', () => {
+  it('ops navGroups keep observe tabs; launch tabs live on Engineer Launch Desk', () => {
     const groups = buildTaskNavGroups('ops', CONSOLE_NAV_GROUPS)
     const ids = allNavTabIds(groups)
-    expect(ids).toContain('plugin-release')
-    expect(ids).toContain('platform-release')
-    expect(ids).toContain('trade-release')
+    expect(ids).not.toContain('plugin-release')
+    expect(ids).not.toContain('platform-release')
+    expect(ids).not.toContain('trade-release')
+    expect(ids).toContain('cluster')
+    expect(ids).toContain('satellite-bus')
     expect(ids).not.toContain('task-cc')
     expect(ids).not.toContain('control-room')
     expect(ids).not.toContain('observability')
     expect(ids).not.toContain('defects')
-    expect(groups.some(g => g.label === 'Subcontractors')).toBe(true)
+    expect(groups.map(g => g.label)).toEqual(['Satellite', 'Rocket'])
+    const partner = buildPartnerNavSections(resolveAllowedTabIds('ops'))
+    expect(partner?.launch.map(i => i.id)).toEqual([
+      'platform-release',
+      'trade-release',
+      'plugin-release',
+    ])
   })
 
   it('build navGroups have no Mission Control or Engineer items', () => {
@@ -77,6 +84,7 @@ describe('nav lens includeTabs', () => {
     expect(allowed?.has('agent-governance')).toBe(true)
     expect(allowed?.has('agent-capability')).toBe(true)
     expect(allowed?.has('platform-release')).toBe(true)
+    expect(allowed?.has('rocket-health')).toBe(true)
     expect(allowed?.has('task-cc')).toBe(true)
     expect(allowed?.has('control-room')).toBe(true)
     expect(allowed?.has('briefing')).toBe(false)

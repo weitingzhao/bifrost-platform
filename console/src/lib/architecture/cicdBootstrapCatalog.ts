@@ -339,8 +339,8 @@ export const CICD_GAPS: CicdGap[] = [
   {
     id: 'self-health',
     layer: 'L1',
-    gap: 'Implemented — /api/v1/self-health probes platform-api + console + Argo sync (STG + PROD); SelfHealthPanel on Launch Rocket page',
-    target: 'Console self-health panel: API liveness, Console reachability, Argo sync status',
+    gap: 'Implemented — /api/v1/self-health probes platform-api + console + Argo sync (STG + PROD); Rocket → Rocket Health hosts SelfHealthPanel; Launch Rocket links strip + evidence',
+    target: 'Console Rocket Health probes: API liveness, Console reachability, Argo sync status',
     spineTask: 'p6-self-health',
   },
   {
@@ -353,8 +353,8 @@ export const CICD_GAPS: CicdGap[] = [
   {
     id: 'platform-e2e-cicd',
     layer: 'L1',
-    gap: 'Implemented — Launch Rocket page consolidates end-to-end CI/CD: self-health → STG deliver → PROD deliver → independent release gates (platform-stg / platform-prod) → gate history; fully decoupled from Trade CI/CD',
-    target: 'Single Launch Rocket page with deliver actuation (STG + PROD), release gates, gate history, and self-health — complete end-to-end CI/CD for Platform',
+    gap: 'Implemented — Launch Rocket consolidates deliver + gates; Rocket Health owns self-health probes; independent release gates (platform-stg / platform-prod) + gate history; fully decoupled from Trade CI/CD',
+    target: 'Launch Rocket (deliver + gates) + Rocket Health (self-health probes) — complete end-to-end CI/CD for Platform',
     spineTask: 'p6-platform-e2e-cicd',
   },
   {
@@ -367,7 +367,7 @@ export const CICD_GAPS: CicdGap[] = [
 ]
 
 export const CICD_RELATED_AUTHORITIES = [
-  'Live L1 self-health + platform deliver: Rocket → Launch Rocket',
+  'Live L1 self-health probes: Rocket → Rocket Health; platform deliver: Rocket → Launch Rocket',
   'Live L2 trade deliver + release gates: Satellite → Deploy Satellite',
   'L-1 out-of-band operator plane: Engineer → Operator Plane',
   'Spine: config/ops-context.yaml · GET /api/v1/context',

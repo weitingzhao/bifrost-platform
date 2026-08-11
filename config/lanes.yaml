@@ -27,7 +27,7 @@ lanes:
       description: >
         PARKED residual after workload-placement-governance CLOSED. Live placement
         evaluator: GPU pool status=planned (P5a gpu-server not joined); ai rule unsatisfied.
-        Optional: arm64_edge pool has 0 nodes (frontend edge). Core amd64/nfs rules already OK.
+        Fleet is amd64-only (arm64 edge pool removed). Core amd64/nfs rules already OK.
         Do not reopen placement milestone — join GPU when ai-compute-strategy buy-signal fires.
       agent_mode: Ops
       work_intent: cluster

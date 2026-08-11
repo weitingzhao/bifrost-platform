@@ -1,5 +1,5 @@
 /**
- * Compact monitoring coverage strip for Satellite Bus / API & Auth Probes / Runtime pages.
+ * Compact monitoring coverage strip for Satellite Bus / Satellite Health pages.
  * Links to Mission Control → Observability — does not re-derive global verdicts.
  */
 

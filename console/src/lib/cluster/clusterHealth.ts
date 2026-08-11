@@ -64,6 +64,12 @@ export type DeriveClusterVerdictInput = {
   showBootstrapActions: boolean
   summaryFailed: boolean
   isProbing: boolean
+  /**
+   * Ops plane beyond fleet-only (mission Control/Agent, release, matrix, ranked triage).
+   * Same question as Cluster Issues: availability + whether fix is needed.
+   */
+  opsReach?: Reachability
+  opsSummaryLine?: string | null
 }
 
 function tagVariantFor(lamp: Reachability): ClusterVerdictTagVariant {
@@ -105,11 +111,20 @@ function healthySummaryLine(summary: ClusterSummary): string {
 }
 
 /**
- * Cluster page Verdict — priority order is locked (see Rocket R5 plan).
- * lamp is Reachability-compatible with OpsVerdictLamp.
+ * Cluster page Verdict — answers: is the cluster usable, does it need a fix,
+ * and how far has health degraded. Fleet checks first; then Ops plane
+ * (mission/release/matrix) so READY is never green while Issues still lists work.
  */
 export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterVerdictDerivation {
-  const { summary, unreachable, showBootstrapActions, summaryFailed, isProbing } = input
+  const {
+    summary,
+    unreachable,
+    showBootstrapActions,
+    summaryFailed,
+    isProbing,
+    opsReach = 'ok',
+    opsSummaryLine = null,
+  } = input
   const evidenceLine = buildEvidenceLine(summary)
 
   if (isProbing) {
@@ -205,6 +220,32 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
       tagLabel: 'NO DATA',
       tagVariant: tagVariantFor('unknown'),
       summaryLine: 'Cluster summary unavailable.',
+      evidenceLine,
+    }
+  }
+
+  // Fleet nominal — fold Ops Issues (Agent/Control/release/…) into the same verdict.
+  if (opsReach === 'fail') {
+    return {
+      lamp: 'fail',
+      tagLabel: 'NEEDS FIX',
+      tagVariant: tagVariantFor('fail'),
+      summaryLine:
+        opsSummaryLine != null && opsSummaryLine !== ''
+          ? opsSummaryLine
+          : 'Ops plane failing — AI Agent should remediate',
+      evidenceLine,
+    }
+  }
+  if (opsReach === 'degraded' || opsReach === 'unknown') {
+    return {
+      lamp: 'degraded',
+      tagLabel: 'CAUTION',
+      tagVariant: tagVariantFor('degraded'),
+      summaryLine:
+        opsSummaryLine != null && opsSummaryLine !== ''
+          ? opsSummaryLine
+          : 'Ops probes degraded — AI Agent assessing whether repair is needed',
       evidenceLine,
     }
   }

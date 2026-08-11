@@ -1,5 +1,5 @@
 /**
- * Satellite → Satellite Runtime
+ * Satellite Health → Runtime panel (also used standalone for legacy embeds).
  * Scoped golden signals for the selected Trade namespace.
  * Global Layer B readiness / system verdict → Mission Control → Observability.
  */
@@ -99,13 +99,26 @@ function buildApiPerformanceRows(metrics: TelemetryMetricResult[] | undefined) {
 interface SatelliteTelemetryPageProps {
   onOpenCluster?: () => void
   onOpenObservability?: () => void
+  /** Controlled environment (Satellite Health parent). */
+  env?: TradeEnv
+  onEnvChange?: (env: TradeEnv) => void
+  /** When true, parent owns Environment toolbar. */
+  hideEnvToolbar?: boolean
 }
 
 export function SatelliteTelemetryPage({
   onOpenCluster,
   onOpenObservability,
+  env: controlledEnv,
+  onEnvChange,
+  hideEnvToolbar = false,
 }: SatelliteTelemetryPageProps) {
-  const [tradeEnv, setTradeEnv] = useState<TradeEnv>('stg')
+  const [internalEnv, setInternalEnv] = useState<TradeEnv>('stg')
+  const tradeEnv = controlledEnv ?? internalEnv
+  const setTradeEnv = (next: TradeEnv) => {
+    if (onEnvChange != null) onEnvChange(next)
+    else setInternalEnv(next)
+  }
   const ns = TRADE_NS[tradeEnv]
 
   const observabilityQuery = useQuery({
@@ -208,7 +221,8 @@ export function SatelliteTelemetryPage({
         }
       />
 
-      <PageToolbar align="between">
+      {!hideEnvToolbar && (
+        <PageToolbar align="between">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground shrink-0">Trade NS:</span>
             <SegmentControl
@@ -224,7 +238,20 @@ export function SatelliteTelemetryPage({
               }}
             />
           </div>
-      </PageToolbar>
+        </PageToolbar>
+      )}
+
+      {hideEnvToolbar && (
+        <div className="flex justify-end">
+          <SectionRefreshButton
+            isFetching={telemetryQuery.isFetching || observabilityQuery.isFetching}
+            onClick={() => {
+              void observabilityQuery.refetch()
+              void telemetryQuery.refetch()
+            }}
+          />
+        </div>
+      )}
 
       <MonitoringCoverageStrip
         layerB={layerB}

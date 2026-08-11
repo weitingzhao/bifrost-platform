@@ -1,10 +1,24 @@
-import type { ClusterGovernanceResponse, ClusterMetricsResponse, ClusterObservabilityResponse, ClusterServiceReadinessResponse, ClusterSummary, ServiceDomain } from '@/api/clusterTypes'
+import { useEffect, useState } from 'react'
+import type {
+  ClusterGovernanceResponse,
+  ClusterMetricsResponse,
+  ClusterObservabilityResponse,
+  ClusterPlacementResponse,
+  ClusterServiceReadinessResponse,
+  ClusterSummary,
+  ServiceDomain,
+} from '@/api/clusterTypes'
 import type { Reachability } from '@/api/matrixTypes'
 import type { LucideIcon } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
+import { StatusLamp } from '@/components/StatusLamp'
 import { ClusterCategoryCard } from '@/components/cluster/ClusterCategoryCard'
-import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
+import type { ClusterCategory, ClusterDimension } from '@/lib/cluster/clusterCategories'
 import {
   applicationDomainHeadline,
+  categoryDimension,
+  FACILITY_CATEGORIES,
+  FACILITY_CATEGORY_LABELS,
   INFRASTRUCTURE_CATEGORY_LABELS,
 } from '@/lib/cluster/clusterCategories'
 import { categoryIcon } from '@/lib/cluster/clusterCategoryIcons'
@@ -20,6 +34,8 @@ interface ClusterCategoryGridProps {
   governanceLoading?: boolean
   observability: ClusterObservabilityResponse | undefined
   observabilityLoading?: boolean
+  placement: ClusterPlacementResponse | undefined
+  placementLoading?: boolean
   metrics: ClusterMetricsResponse | undefined
   selectedCategory: ClusterCategory | null
   onSelectCategory: (category: ClusterCategory) => void
@@ -207,6 +223,61 @@ function observabilitySummary(data: ClusterObservabilityResponse | undefined) {
   return { reach: observabilityReach(data), headline, detail, meta }
 }
 
+function placementReach(data: ClusterPlacementResponse | undefined): Reachability {
+  if (data == null) return 'unknown'
+  const critical = data.violations.filter(v => v.severity === 'critical').length
+  const amd64Ci = data.pools.find(p => p.id === 'amd64_ci')
+  if (critical > 0 || (amd64Ci != null && amd64Ci.nodes_ready === 0)) return 'fail'
+  return data.reachability
+}
+
+function facilityCardSummaries(data: ClusterPlacementResponse | undefined) {
+  const reach = placementReach(data)
+  const pools = data?.pools ?? []
+  const rules = data?.rules ?? []
+  const satisfied = rules.filter(r => r.satisfied).length
+  const critical = data?.violations.filter(v => v.severity === 'critical').length ?? 0
+  const amd64Ci = pools.find(p => p.id === 'amd64_ci')
+  const amd64Ready = amd64Ci?.nodes_ready ?? 0
+
+  return {
+    node_pools: {
+      reach,
+      headline:
+        pools.length === 0
+          ? 'No pools'
+          : `${pools.length} pools · ${pools.filter(p => p.status === 'live').length} live`,
+      detail: data?.detail,
+      meta: amd64Ci != null ? `amd64_ci ${amd64Ready}/${amd64Ci.nodes_total}` : undefined,
+    },
+    policy_matrix: {
+      reach: rules.length === 0 ? ('unknown' as Reachability) : satisfied === rules.length ? 'ok' : reach,
+      headline: rules.length === 0 ? 'No rules' : `${satisfied}/${rules.length} rules satisfied`,
+      detail: critical > 0 ? `${critical} critical violation${critical === 1 ? '' : 's'}` : undefined,
+      meta: critical > 0 ? `${critical} critical` : '0 critical',
+    },
+    ci_readiness: {
+      reach: amd64Ready > 0 ? ('ok' as Reachability) : data == null ? ('unknown' as Reachability) : 'fail',
+      headline:
+        amd64Ci == null
+          ? 'amd64_ci unknown'
+          : amd64Ready > 0
+            ? 'Kaniko build ready'
+            : 'Kaniko blocked — no amd64_ci Ready',
+      detail: amd64Ci != null ? `amd64_ci Ready ${amd64Ready}/${amd64Ci.nodes_total}` : undefined,
+      meta: 'deliver-stg',
+    },
+  }
+}
+
+function worstReach(reaches: Reachability[]): Reachability {
+  if (reaches.includes('fail')) return 'fail'
+  if (reaches.includes('degraded')) return 'degraded'
+  if (reaches.includes('unknown')) return 'unknown'
+  if (reaches.length === 0) return 'unknown'
+  return 'ok'
+}
+
 export function ClusterCategoryGrid({
   summary,
   summaryLoading = false,
@@ -216,6 +287,8 @@ export function ClusterCategoryGrid({
   governanceLoading = false,
   observability,
   observabilityLoading = false,
+  placement,
+  placementLoading = false,
   metrics,
   selectedCategory,
   onSelectCategory,
@@ -230,9 +303,10 @@ export function ClusterCategoryGrid({
   const workloads = workloadsSummary(summary)
   const gov = governanceSummary(governance)
   const obs = observabilitySummary(observability)
+  const facility = facilityCardSummaries(placement)
   const metricsOk = metrics?.metrics_server_available === true
 
-  const infraCards: {
+  type Card = {
     category: ClusterCategory
     title: string
     reach: Reachability
@@ -241,7 +315,9 @@ export function ClusterCategoryGrid({
     meta?: string
     icon?: LucideIcon
     loading: boolean
-  }[] = [
+  }
+
+  const infraCards: Card[] = [
     { category: 'nodes', title: INFRASTRUCTURE_CATEGORY_LABELS.nodes, ...nodes, icon: categoryIcon('nodes'), loading: summaryLoading },
     { category: 'workloads', title: INFRASTRUCTURE_CATEGORY_LABELS.workloads, ...workloads, icon: categoryIcon('workloads'), loading: summaryLoading },
     { category: 'governance', title: INFRASTRUCTURE_CATEGORY_LABELS.governance, ...gov, icon: categoryIcon('governance'), loading: governanceLoading },
@@ -255,82 +331,183 @@ export function ClusterCategoryGrid({
     },
   ]
 
+  const facilityCards: Card[] = FACILITY_CATEGORIES.map(id => ({
+    category: id,
+    title: FACILITY_CATEGORY_LABELS[id],
+    ...facility[id],
+    icon: categoryIcon(id),
+    loading: placementLoading,
+  }))
+
   const appReadyCount = domains.filter(d => d.status === 'ready').length
+  const rulesSatisfied = (placement?.rules ?? []).filter(r => r.satisfied).length
+  const rulesTotal = placement?.rules.length ?? 0
+
+  const [openDimension, setOpenDimension] = useState<ClusterDimension | null>(() =>
+    selectedCategory != null ? categoryDimension(selectedCategory) : null,
+  )
+
+  useEffect(() => {
+    if (selectedCategory == null) return
+    setOpenDimension(categoryDimension(selectedCategory))
+  }, [selectedCategory])
+
+  const infraReach = worstReach(infraCards.map(c => (c.loading ? 'unknown' : c.reach)))
+  const appReach = serviceReadinessLoading
+    ? ('unknown' as Reachability)
+    : worstReach(appCards.map(c => c.reach))
+  const facilityReach = worstReach(facilityCards.map(c => (c.loading ? 'unknown' : c.reach)))
+
+  const dimensionSummaries: {
+    id: ClusterDimension
+    title: string
+    reach: Reachability
+    headline: string
+    meta: string
+    loading: boolean
+  }[] = [
+    {
+      id: 'infrastructure',
+      title: 'Infrastructure',
+      reach: infraReach,
+      headline: 'Nodes · workloads · governance · observability',
+      meta: `${infraCards.length} categories`,
+      loading: summaryLoading || governanceLoading || observabilityLoading,
+    },
+    {
+      id: 'application',
+      title: 'Application stack',
+      reach: appReach,
+      headline:
+        domains.length === 0
+          ? 'Workload domains'
+          : `${appReadyCount}/${domains.length} domains ready`,
+      meta: domains.length > 0 ? `${domains.length} domains` : 'DB · cache · workers · apps',
+      loading: serviceReadinessLoading,
+    },
+    {
+      id: 'facility',
+      title: 'Facility',
+      reach: facilityReach,
+      headline:
+        rulesTotal > 0
+          ? `${rulesSatisfied}/${rulesTotal} policies ok`
+          : 'Node pools · policy · CI readiness',
+      meta: `${facilityCards.length} categories`,
+      loading: placementLoading,
+    },
+  ]
+
+  function renderCards(cards: Card[]) {
+    return cards.map(card => (
+      <ClusterCategoryCard
+        key={card.category}
+        title={card.title}
+        reach={card.reach}
+        headline={card.headline}
+        detail={card.detail}
+        meta={card.meta}
+        icon={card.icon}
+        loading={card.loading}
+        selected={selectedCategory === card.category}
+        copyState={categoryCopyId === card.category ? categoryCopyState : 'idle'}
+        onSelect={() => onSelectCategory(card.category)}
+        onCopyForLlm={
+          onCopyCategory != null && !card.loading
+            ? () => onCopyCategory(card.category, card.title)
+            : undefined
+        }
+      />
+    ))
+  }
+
+  function toggleDimension(id: ClusterDimension) {
+    setOpenDimension(prev => (prev === id ? null : id))
+  }
 
   return (
     <div className="cluster-category-grid">
-      <section className="cluster-category-grid__section">
-        <p className="cluster-category-grid__kicker">Infrastructure</p>
-        <p className="cluster-category-grid__desc">Nodes, workloads, governance, observability.</p>
-        <div className="cluster-category-grid__cards cluster-category-grid__cards--infra">
-          {infraCards.map(card => (
-            <ClusterCategoryCard
-              key={card.category}
-              title={card.title}
-              reach={card.reach}
-              headline={card.headline}
-              detail={card.detail}
-              meta={card.meta}
-              icon={card.icon}
-              loading={card.loading}
-              selected={selectedCategory === card.category}
-              copyState={categoryCopyId === card.category ? categoryCopyState : 'idle'}
-              onSelect={() => onSelectCategory(card.category)}
-              onCopyForLlm={
-                onCopyCategory != null && !card.loading
-                  ? () => onCopyCategory(card.category, card.title)
-                  : undefined
-              }
-            />
-          ))}
-        </div>
-      </section>
+      <div className="cluster-category-grid__summaries" role="tablist" aria-label="Category dimensions">
+        {dimensionSummaries.map(dim => {
+          const open = openDimension === dim.id
+          return (
+            <button
+              key={dim.id}
+              type="button"
+              role="tab"
+              aria-selected={open}
+              aria-expanded={open}
+              className={`cluster-category-dim${open ? ' cluster-category-dim--open' : ''}`}
+              onClick={() => toggleDimension(dim.id)}
+            >
+              <div className="cluster-category-dim__head">
+                <StatusLamp
+                  value={dim.loading ? 'unknown' : dim.reach}
+                  kind="reach"
+                  variant={open ? 'filled' : 'outline'}
+                />
+                <span className="cluster-category-dim__title">{dim.title}</span>
+                <ChevronDown className="cluster-category-dim__chevron" aria-hidden="true" />
+              </div>
+              <p className="cluster-category-dim__headline">
+                {dim.loading ? 'Loading…' : dim.headline}
+              </p>
+              <p className="cluster-category-dim__meta">{dim.meta}</p>
+            </button>
+          )
+        })}
+      </div>
 
-      <div className="cluster-home-summaries__divider" aria-hidden="true" />
+      {openDimension === 'infrastructure' && (
+        <section className="cluster-category-grid__section" aria-label="Infrastructure categories">
+          <p className="cluster-category-grid__desc">
+            Nodes, workloads, governance, observability.
+          </p>
+          <div className="cluster-category-grid__cards cluster-category-grid__cards--infra">
+            {renderCards(infraCards)}
+          </div>
+        </section>
+      )}
 
-      <section className="cluster-category-grid__section">
-        <div className="cluster-category-grid__section-head">
-          <p className="cluster-category-grid__kicker">Application stack</p>
-          {!serviceReadinessLoading && domains.length > 0 && (
-            <span className="cluster-category-grid__meta">
-              {appReadyCount}/{domains.length} domains ready
-            </span>
-          )}
-        </div>
-        <p className="cluster-category-grid__desc">Workload domains — DB, cache, workers, apps, CI/CD.</p>
-        <div className="cluster-category-grid__cards cluster-category-grid__cards--app">
-          {serviceReadinessLoading ? (
-            <ClusterCategoryCard
-              title="Loading"
-              reach="unknown"
-              headline="Loading domains…"
-              loading
-              selected={false}
-              onSelect={() => {}}
-            />
-          ) : domains.length === 0 ? (
-            <p className="cluster-category-grid__empty">Cluster unreachable</p>
-          ) : (
-            appCards.map(card => (
+      {openDimension === 'application' && (
+        <section className="cluster-category-grid__section" aria-label="Application stack categories">
+          <p className="cluster-category-grid__desc">
+            Workload domains — DB, cache, workers, apps, CI/CD.
+          </p>
+          <div className="cluster-category-grid__cards cluster-category-grid__cards--app">
+            {serviceReadinessLoading ? (
               <ClusterCategoryCard
-                key={card.category}
-                title={card.title}
-                reach={card.reach}
-                headline={card.headline}
-                detail={card.detail}
-                meta={card.meta}
-                icon={card.icon}
-                selected={selectedCategory === card.category}
-                copyState={categoryCopyId === card.category ? categoryCopyState : 'idle'}
-                onSelect={() => onSelectCategory(card.category)}
-                onCopyForLlm={
-                  onCopyCategory != null ? () => onCopyCategory(card.category, card.title) : undefined
-                }
+                title="Loading"
+                reach="unknown"
+                headline="Loading domains…"
+                loading
+                selected={false}
+                onSelect={() => {}}
               />
-            ))
-          )}
-        </div>
-      </section>
+            ) : domains.length === 0 ? (
+              <p className="cluster-category-grid__empty">Cluster unreachable</p>
+            ) : (
+              renderCards(
+                appCards.map(card => ({
+                  ...card,
+                  loading: false,
+                })),
+              )
+            )}
+          </div>
+        </section>
+      )}
+
+      {openDimension === 'facility' && (
+        <section className="cluster-category-grid__section" aria-label="Facility categories">
+          <p className="cluster-category-grid__desc">
+            Fleet facility constraints — node pools, scheduling policy, CI readiness.
+          </p>
+          <div className="cluster-category-grid__cards cluster-category-grid__cards--infra">
+            {renderCards(facilityCards)}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

@@ -1,13 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import type { Reachability } from '@/api/matrixTypes'
 import type { ClusterNode, ClusterWorkload } from '@/api/clusterTypes'
 import { ClusterCategoryGrid } from '@/components/cluster/ClusterCategoryGrid'
+import { ClusterOpsIssuesPanel } from '@/components/cluster/ClusterOpsIssuesPanel'
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import type { NodeWizardFlow } from '@/lib/cluster/nodeWizard'
 import { useClusterCategory } from '@/hooks/useClusterCategory'
-import { allowedNamespaceNames, type NsFilterType } from '@/lib/cluster/namespaceCatalog'
+import {
+  allowedNamespaceNames,
+  nsFilterForNamespace,
+  type NsFilterType,
+} from '@/lib/cluster/namespaceCatalog'
 import {
   DEFAULT_STORAGE_SERVICE,
   type StorageServiceId,
@@ -26,8 +32,11 @@ export function ClusterPage({
   onOpenAgentDesk,
   onOpenDefects,
   onOpenObservability,
+  onOpenDelivery,
   ambientJobId,
   onStartAgentJob,
+  onExpandAgentDock,
+  onSelectAgentJob,
 }: {
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
@@ -36,8 +45,11 @@ export function ClusterPage({
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenDefects?: () => void
   onOpenObservability?: () => void
+  onOpenDelivery?: () => void
   ambientJobId?: string | null
   onStartAgentJob?: (job: AmbientAgentJob) => void
+  onExpandAgentDock?: () => void
+  onSelectAgentJob?: (job: AmbientAgentJob) => void
 }) {
   const [nsFilter, setNsFilter] = useState<NsFilterType>('trade')
   const [selectedNs, setSelectedNs] = useState<string | null>('bifrost-stg')
@@ -50,8 +62,20 @@ export function ClusterPage({
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false)
   const [wizardFlow, setWizardFlow] = useState<NodeWizardFlow>('maintenance')
   const [wizardJoinProfileId, setWizardJoinProfileId] = useState<string | null>(null)
+  const [opsHealth, setOpsHealth] = useState<{
+    reach: Reachability
+    summaryLine: string
+    needsFix: boolean
+  } | null>(null)
   const { category: selectedCategory, setCategory, toggleCategory } = useClusterCategory()
   const { canOperate, canAdmin, caps, capsLoading } = usePlatformAuth()
+
+  const handleOpsHealthChange = useCallback(
+    (health: { reach: Reachability; summaryLine: string; needsFix: boolean }) => {
+      setOpsHealth(health)
+    },
+    [],
+  )
 
   const q = useClusterPageQueries({
     selectedNs,
@@ -78,14 +102,16 @@ export function ClusterPage({
     selectedNs,
     onOpenAgentDesk,
     onStartAgentJob,
+    onExpandAgentDock,
+    onSelectAgentJob,
     setDrawerOpen,
     setSelectedPod,
   })
 
   // Follow ambient Agent job on this page (do not discard the shell prop).
+  // Dock owns the session UI — only track job id locally; never open RemediationPanel.
   useEffect(() => {
     if (ambientJobId == null || ambientJobId === '') return
-    if (m.remediationJobId === ambientJobId && m.remediationPanelOpen) return
     m.followAmbientRemediationJob(ambientJobId)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- follow once per ambient id
   }, [ambientJobId])
@@ -115,6 +141,22 @@ export function ClusterPage({
     setDrawerOpen(true)
     setNodeDrawerOpen(false)
     setSelectedNode(null)
+  }
+
+  /** Top-pods row → Workloads category + pod drawer (same detail surface). */
+  function handleSelectTopPod(pod: { namespace: string; name: string }) {
+    setNsFilter(nsFilterForNamespace(pod.namespace))
+    setCategory('workloads')
+    handleSelectPod({
+      namespace: pod.namespace,
+      kind: 'Pod',
+      name: pod.name,
+      ready: '—',
+      status: 'Running',
+      restarts: 0,
+      age: '—',
+      reachability: 'ok',
+    })
   }
 
   function handleSelectNode(node: ClusterNode) {
@@ -172,9 +214,13 @@ export function ClusterPage({
           m.syncMutation.data?.ok === true ? m.syncMutation.data.message : undefined
         }
         actionError={m.actionError}
+        actionSuccess={m.actionSuccess}
         summaryError={q.clusterSummaryError}
+        opsReach={opsHealth?.reach}
+        opsSummaryLine={opsHealth?.summaryLine}
         ambientJobId={ambientJobId}
         onOpenAgentDesk={onOpenAgentDesk}
+        onExpandAgentDock={onExpandAgentDock}
         showBootstrapActions={q.showBootstrapActions}
         canOperate={canOperate}
         canAdmin={canAdmin}
@@ -190,22 +236,61 @@ export function ClusterPage({
         clusterSummary={q.clusterSummary}
         summaryFailed={q.clusterSummaryError != null}
         isProbing={q.summaryQuery.isPending && q.clusterSummary == null}
+        healthBody={
+          q.clusterSummary != null ? (
+            <ClusterOpsIssuesPanel
+              embedded
+              summary={q.clusterSummary}
+              serviceReadiness={q.serviceReadinessQuery.data}
+              postgresStatus={q.postgresStatusQuery.data}
+              onOpenAgentDesk={opts => onOpenAgentDesk?.(opts)}
+              onOpenDefects={onOpenDefects}
+              onPlaybookFix={({ scope, prompt }) => {
+                if (!canOperate) return
+                m.playbookFixMutation.mutate({ scope, prompt })
+              }}
+              playbookFixPending={m.playbookFixMutation.isPending}
+              onAutoCheck={m.handleAutoRemediate}
+              autoCheckPending={m.remediationStartMutation.isPending}
+              canOperate={canOperate}
+              activeRemediationJob={q.activeRemediationJob}
+              onOpenRemediationSession={m.handleOpenRemediationSession}
+              onHealthChange={handleOpsHealthChange}
+              autoAssess
+              onSelectPodNamespace={ns => {
+                setNsFilter(nsFilterForNamespace(ns))
+                handleSelectNs(ns)
+                setCategory('workloads')
+              }}
+            />
+          ) : null
+        }
       />
 
-      <ClusterOverviewKpi
-        summary={q.summaryQuery.data}
-        metrics={q.metricsQuery.data}
-        isLoading={q.summaryQuery.isLoading || q.metricsQuery.isLoading}
-      />
-
-      <div className="cluster-global-top-pods">
-        <ClusterTopPodsTable metrics={q.metricsQuery.data} isLoading={q.metricsQuery.isLoading} />
+      <div className="cluster-overview-row">
+        <div className="cluster-overview-row__kpi">
+          <ClusterOverviewKpi
+            summary={q.summaryQuery.data}
+            metrics={q.metricsQuery.data}
+            isLoading={q.summaryQuery.isLoading || q.metricsQuery.isLoading}
+          />
+        </div>
+        <div className="cluster-overview-row__pods">
+          <ClusterTopPodsTable
+            metrics={q.metricsQuery.data}
+            isLoading={q.metricsQuery.isLoading}
+            selectedPodKey={
+              selectedNs != null && selectedPod != null ? `${selectedNs}/${selectedPod}` : null
+            }
+            onSelectPod={handleSelectTopPod}
+          />
+        </div>
       </div>
 
       <OpsSection
         className="cluster-home-summaries"
         title="Categories"
-        description="Infrastructure and application domains"
+        description="Pick a dimension to expand tags · then open a category detail"
         bodyPadding="compact"
         overflow="visible"
       >
@@ -218,6 +303,8 @@ export function ClusterPage({
           governanceLoading={q.governanceQuery.isLoading}
           observability={q.observabilityQuery.data}
           observabilityLoading={q.observabilityQuery.isLoading}
+          placement={q.placementQuery.data}
+          placementLoading={q.placementQuery.isLoading}
           metrics={q.metricsQuery.data}
           selectedCategory={selectedCategory}
           onSelectCategory={toggleCategory}
@@ -256,8 +343,7 @@ export function ClusterPage({
         onOpenStandards={onOpenStandards}
         onOpenRuntimeMap={onOpenRuntimeMap}
         onOpenObservability={onOpenObservability}
-        onOpenAgentDesk={onOpenAgentDesk}
-        onOpenDefects={onOpenDefects}
+        onOpenDelivery={onOpenDelivery}
         onOpenServerConsole={onOpenServerConsole}
         handleSelectNs={handleSelectNs}
         handleSelectPod={handleSelectPod}

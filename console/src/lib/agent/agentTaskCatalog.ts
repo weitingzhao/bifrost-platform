@@ -274,7 +274,7 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
       'L0 prober (AI Check): verify_mission_snapshot + bridge/gitops/smoke/pipelines → report_checklist_signals. Not Operator Plane Fix. Auto-dispatch gated by fixCapability (D10 skip IB).',
   },
   'platform-self-health-recover': {
-    entryPoint: 'Cluster Failure triage · Control self-health row',
+    entryPoint: 'Rocket Health · Control self-health probes / Cluster Failure triage',
     trigger: 'Control plane self-health probes failing (console/API routes)',
     description: 'Restart platform-prod workloads; verify console/API NodePort reachability.',
   },

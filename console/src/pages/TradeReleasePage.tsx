@@ -46,6 +46,7 @@ import { StgTierBChecklistPanel } from '@/components/delivery/StgTierBChecklistP
 import { SupplyChainPanel } from '@/components/delivery/SupplyChainPanel'
 import { TradeEnvAccessBar } from '@/components/delivery/TradeEnvAccessBar'
 import { PlatformGateHistorySection } from '@/components/promote/PlatformReleaseGateSection'
+import { ReleaseCycleHistorySection } from '@/components/promote/ReleaseCycleHistorySection'
 import { ReleaseGateCompareSection } from '@/components/promote/ReleaseGateCompareSection'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { useLaneStepFocus } from '@/hooks/useLaneStepFocus'
@@ -89,7 +90,7 @@ const PROD_PIPELINE = TRADE_PROD_TARGET.pipeline
 
 const STEP_LABELS = ['Staging Deploy', 'Staging Gate', 'Production Deploy', 'Production Gate'] as const
 
-function renderTradeStepActions(activeIndex: number) {
+function renderTradeStepActions(activeIndex: number, agentSessionId?: string | null) {
   switch (activeIndex) {
     case 0:
       return (
@@ -97,6 +98,7 @@ function renderTradeStepActions(activeIndex: number) {
           target={TRADE_STG_TARGET}
           releaseStateTier="trade"
           deployButtonLabel={`Run ${STG_PIPELINE}`}
+          agentSessionId={agentSessionId}
         />
       )
     case 1:
@@ -107,6 +109,7 @@ function renderTradeStepActions(activeIndex: number) {
           target={TRADE_PROD_TARGET}
           releaseStateTier="trade"
           deployButtonLabel={`Run ${PROD_PIPELINE}`}
+          agentSessionId={agentSessionId}
         />
       )
     default:
@@ -446,13 +449,29 @@ export function TradeReleasePage({
   let stepDetail: ReactNode
   switch (activeIndex) {
     case 0:
-      stepDetail = awaitingNextCycleDeliver ? (
-        <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
-          No new Staging Deploy yet — finish Agent Session decisions (Commit &amp; Push /
-          approvals) first. A prior failed PipelineRun in Tekton history is not this cycle.
-        </p>
-      ) : (
-        <DeliveryActiveRunPanel target={TRADE_STG_TARGET} collapsible />
+      stepDetail = (
+        <>
+          {awaitingNextCycleDeliver ? (
+            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+              No new Staging Deploy yet — finish Agent Session decisions (Commit &amp; Push /
+              approvals) first. A prior failed PipelineRun in Tekton history is not this cycle.
+            </p>
+          ) : (
+            <DeliveryActiveRunPanel target={TRADE_STG_TARGET} collapsible />
+          )}
+          <LaneDetailCollapse
+            title="Deliver readiness · Trade STG"
+            defaultOpen={false}
+            showModeBadge
+            bodyClassName="p-3"
+          >
+            <PlatformDeliverActuatePanel
+              target={TRADE_STG_TARGET}
+              hideActions
+              agentSessionId={ambientJobId}
+            />
+          </LaneDetailCollapse>
+        </>
       )
       break
     case 1:
@@ -465,22 +484,31 @@ export function TradeReleasePage({
           ) : (
             <DeliveryActiveRunPanel target={TRADE_STG_TARGET} collapsible />
           )}
-          <StgSmokePanel
-            data={stgSmoke.data}
-            isLoading={stgSmoke.isLoading}
-            isFetching={stgSmoke.isFetching}
-            errorMessage={stgSmoke.error instanceof Error ? stgSmoke.error.message : null}
-            onRefresh={() => void stgSmoke.refetch()}
-            title="STG HTTP smoke"
-            description="Post-deliver acceptance via trade-stg gateway."
-            collapsible
-          />
-          <StgTierBChecklistPanel
-            tierB={tierB.data}
-            tierBLoading={tierB.isLoading}
-            layout="observe"
-            collapsible
-          />
+          <LaneDetailCollapse
+            key="stg-gate-smoke"
+            title="STG gate evidence — smoke & Tier B"
+            summaryExtra={<LaneGateSummaryLine gate={stgGate.data} />}
+            defaultOpen={stgGateStep.status === 'error'}
+            showModeBadge
+            bodyClassName="flex flex-col gap-3 p-3"
+          >
+            <StgSmokePanel
+              data={stgSmoke.data}
+              isLoading={stgSmoke.isLoading}
+              isFetching={stgSmoke.isFetching}
+              errorMessage={stgSmoke.error instanceof Error ? stgSmoke.error.message : null}
+              onRefresh={() => void stgSmoke.refetch()}
+              title="STG HTTP smoke"
+              description="Post-deliver acceptance via trade-stg gateway."
+              collapsible
+            />
+            <StgTierBChecklistPanel
+              tierB={tierB.data}
+              tierBLoading={tierB.isLoading}
+              layout="observe"
+              collapsible
+            />
+          </LaneDetailCollapse>
         </>
       )
       break
@@ -498,13 +526,19 @@ export function TradeReleasePage({
           <LaneDetailCollapse
             title="Deliver readiness · Trade PROD"
             defaultOpen={false}
+            showModeBadge
             bodyClassName="p-3"
           >
-            <PlatformDeliverActuatePanel target={TRADE_PROD_TARGET} hideActions />
+            <PlatformDeliverActuatePanel
+              target={TRADE_PROD_TARGET}
+              hideActions
+              agentSessionId={ambientJobId}
+            />
           </LaneDetailCollapse>
           <LaneDetailCollapse
             title="Pipeline topology · observe"
             defaultOpen={false}
+            showModeBadge
             bodyClassName="p-3"
           >
             <PipelineRunsPanel
@@ -569,7 +603,7 @@ export function TradeReleasePage({
         )}
         {onOpenApiHealth != null && (
           <Button size="xs" variant="ghost" onClick={onOpenApiHealth}>
-            API & Auth Probes
+            Satellite Health
           </Button>
         )}
       </div>
@@ -639,7 +673,7 @@ export function TradeReleasePage({
               prodRun={prodRun}
               stgGate={stgGate.data}
               prodGate={prodGate.data}
-              renderStepActions={renderTradeStepActions}
+              renderStepActions={i => renderTradeStepActions(i, ambientJobId)}
               collapsibleBody
               agentDriven
               cycleTerminal={cycleTerminal}
@@ -709,6 +743,17 @@ export function TradeReleasePage({
             </LaneDetailCollapse>
 
             <LaneDetailCollapse
+              title="Release cycle history"
+              defaultOpen
+              bodyClassName="p-0"
+            >
+              <ReleaseCycleHistorySection
+                lane="trade"
+                description="Full Trade STG → PROD release cycles from AI Deploy. Expand for stage detail; Copy for AI exports JSON for CI/CD analysis."
+              />
+            </LaneDetailCollapse>
+
+            <LaneDetailCollapse
               title="Supporting evidence"
               summaryExtra={
                 <SupplyChainSummaryLine
@@ -737,11 +782,11 @@ export function TradeReleasePage({
             >
               <div className="flex flex-col gap-2">
                 <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  GitOps · sync and rollback
+                  Advanced recovery
                 </span>
                 <p className="m-0 text-dense-meta text-muted-foreground">
-                  Escape hatches for this lane. Primary AI Deploy stays on the lane state strip
-                  above.
+                  Escape hatches for this lane (Argo sync / rollback). Primary AI Deploy stays on
+                  the lane state strip above — Step detail is observe-only.
                 </p>
                 <GitOpsQuickActionsPanel
                   data={gitops.data}
@@ -751,7 +796,7 @@ export function TradeReleasePage({
               </div>
               <div className="flex flex-col gap-2">
                 <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  CI/CD pipeline topology and release workflow
+                  CI/CD pipeline topology · release workflow
                 </span>
                 <DeliveryReleaseWorkflowPanel context={context} stgSmoke={stgSmoke.data} />
                 <DeliveryFlow context={context} gitops={gitops.data} />

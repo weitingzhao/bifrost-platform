@@ -126,6 +126,8 @@ export interface DeliveryRunLogsResponse {
   run_name: string
   logs: string
   generated_at: string
+  /** Newest kubectl --timestamps stamp across fetched containers (ISO). */
+  last_log_at?: string
 }
 
 export interface DeliveryStartRunResponse extends ActuationResponse {
@@ -308,6 +310,43 @@ export interface GateHistoryEntry {
 export interface GateHistoryResponse {
   tier: 'stg' | 'prod'
   entries: GateHistoryEntry[]
+}
+
+export type ReleaseCycleLane = 'trade' | 'platform'
+
+export type ReleaseCycleStepKind =
+  | 'stg_deploy'
+  | 'stg_gate'
+  | 'prod_deploy'
+  | 'prod_gate'
+
+export type ReleaseCycleOutcome = 'released' | 'failed' | 'in_progress' | 'superseded'
+
+export interface ReleaseCycleStepView {
+  kind: ReleaseCycleStepKind
+  started_at?: string
+  completed_at?: string
+  result?: string
+  run_name?: string
+  detail?: string
+  gate_checks?: ReleaseGateCheckView[]
+}
+
+export interface ReleaseCycleView {
+  id: string
+  lane: ReleaseCycleLane
+  revision: string
+  outcome: ReleaseCycleOutcome | string
+  started_at: string
+  completed_at?: string
+  steps: ReleaseCycleStepView[]
+  agent_session_id?: string
+  triggered_by?: string
+}
+
+export interface ReleaseCyclesResponse {
+  lane: ReleaseCycleLane
+  entries: ReleaseCycleView[]
 }
 
 export interface ReleaseStageState {

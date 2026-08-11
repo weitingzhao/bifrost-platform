@@ -1,12 +1,14 @@
-import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
+import type { IbGatewayStatusResponse, MarketDataStatusResponse } from '@/api/satelliteBusTypes'
 import type { Signal } from '@/lib/control-room/missionSignals'
-import type { PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
+import type { PluginLaunchEvidence, PluginLaunchTargetId } from '@/lib/delivery/pluginLaunchEvidence'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
 import { launchVerdictToSignal } from '@/lib/task-mode/satelliteLaunchVerdict'
 
 export type ResolvePluginLaunchVerdictInput = {
   canOperate: boolean
+  target?: PluginLaunchTargetId
   status?: IbGatewayStatusResponse
+  marketDataStatus?: MarketDataStatusResponse
   evidence?: PluginLaunchEvidence
   agentInFlight?: boolean
 }
@@ -31,11 +33,45 @@ export function resolvePluginLaunchVerdict(input: ResolvePluginLaunchVerdictInpu
     }
   }
 
+  const target = input.target ?? 'ib-gateway'
+  const verifyOk = input.evidence?.verifyOutcome === 'ok'
+  const installOk = input.evidence?.installOutcome === 'ok'
+
+  if (target === 'market-data') {
+    const md = input.marketDataStatus
+    const reach = md?.reachability ?? (md?.reachable === true ? 'ok' : md?.reachable === false ? 'fail' : '')
+    if (reach === 'fail') {
+      return {
+        kind: 'NO_GO',
+        title: 'Market Data unreachable',
+        detail: md?.summary ?? 'Plugin Market Data probe failed — open Detect step or Market Data manage.',
+        disabledReason: 'Fix Market Data reachability before publish',
+      }
+    }
+    if (verifyOk) {
+      return {
+        kind: 'GO',
+        title: 'Ready to (re)publish Market Data',
+        detail: 'Last verify ok. AI Launch Plugin republishes via kubectl apply.',
+      }
+    }
+    if (installOk && !verifyOk) {
+      return {
+        kind: 'GO',
+        title: 'Apply recorded — verify next',
+        detail: 'Install evidence present; run seat verify (or AI Launch Plugin to continue).',
+      }
+    }
+    return {
+      kind: 'GO',
+      title: 'Ready for Launch Plugin',
+      detail: 'Market Data · Detect → Approve → Install → Verify → Live. Gallery/manage ≠ Publish.',
+    }
+  }
+
   const mode = input.status?.mode ?? ''
   const ready = input.status?.deployment?.ready ?? ''
   const reach = input.status?.reachability ?? (input.status?.reachable === true ? 'ok' : '')
-  const verifyOk = input.evidence?.verifyOutcome === 'ok'
-  const installOk = input.evidence?.installOutcome === 'ok'
 
   if (verifyOk && (mode === 'live' || mode === 'mock') && (reach === 'ok' || reach === 'degraded')) {
     return {
@@ -72,21 +108,74 @@ export function resolvePluginLaunchVerdict(input: ResolvePluginLaunchVerdictInpu
 
 export function buildPluginLaunchCheckpoints(input: {
   canOperate: boolean
+  target?: PluginLaunchTargetId
   status?: IbGatewayStatusResponse
+  marketDataStatus?: MarketDataStatusResponse
   evidence?: PluginLaunchEvidence
   agentInFlight?: boolean
 }): LaunchCheckpoint[] {
+  const target = input.target ?? 'ib-gateway'
+  const agentCp: LaunchCheckpoint = {
+    id: 'readiness',
+    label: 'Agent',
+    ok: !input.agentInFlight,
+    signal: input.agentInFlight ? 'degraded' : 'ok',
+    detail: input.agentInFlight ? 'In flight' : 'Idle',
+  }
+  const authCp: LaunchCheckpoint = {
+    id: 'auth',
+    label: 'Operator auth',
+    ok: input.canOperate,
+    signal: input.canOperate ? 'ok' : 'fail',
+    detail: input.canOperate ? 'can_operate' : 'Authenticate',
+  }
+  const verifyCp: LaunchCheckpoint = {
+    id: 'pipeline',
+    label: 'Last verify',
+    ok: input.evidence?.verifyOutcome === 'ok',
+    signal:
+      input.evidence?.verifyOutcome === 'ok'
+        ? 'ok'
+        : input.evidence?.verifyOutcome === 'failed'
+          ? 'fail'
+          : 'unknown',
+    detail: input.evidence?.lastVerifyAt
+      ? `Verify ${input.evidence.verifyOutcome} @ ${new Date(input.evidence.lastVerifyAt).toLocaleString()}`
+      : 'No verify evidence yet',
+    readinessAnchor: 'pipeline',
+  }
+
+  if (target === 'market-data') {
+    const md = input.marketDataStatus
+    const reach = md?.reachability
+    const reachOk = reach === 'ok' || reach === 'degraded' || md?.reachable === true
+    return [
+      authCp,
+      {
+        id: 'rocket',
+        label: 'Market Data bus',
+        ok: reachOk,
+        signal: (reach as Signal | undefined) ?? (reachOk ? 'ok' : 'unknown'),
+        detail: md?.summary ?? 'Probe market-data',
+        readinessAnchor: 'rocket',
+      },
+      verifyCp,
+      {
+        id: 'promote',
+        label: 'D10',
+        ok: true,
+        signal: 'ok',
+        detail: 'Polygon REST only — no place_order',
+      },
+      agentCp,
+    ]
+  }
+
   const mode = input.status?.mode ?? ''
   const reach = input.status?.reachability
   const reachOk = reach === 'ok' || reach === 'degraded' || input.status?.reachable === true
   return [
-    {
-      id: 'auth',
-      label: 'Operator auth',
-      ok: input.canOperate,
-      signal: input.canOperate ? 'ok' : 'fail',
-      detail: input.canOperate ? 'can_operate' : 'Authenticate',
-    },
+    authCp,
     {
       id: 'rocket',
       label: 'Plugin bus',
@@ -95,21 +184,7 @@ export function buildPluginLaunchCheckpoints(input: {
       detail: input.status?.summary ?? 'Probe ib-gateway',
       readinessAnchor: 'rocket',
     },
-    {
-      id: 'pipeline',
-      label: 'Last verify',
-      ok: input.evidence?.verifyOutcome === 'ok',
-      signal:
-        input.evidence?.verifyOutcome === 'ok'
-          ? 'ok'
-          : input.evidence?.verifyOutcome === 'failed'
-            ? 'fail'
-            : 'unknown',
-      detail: input.evidence?.lastVerifyAt
-        ? `Verify ${input.evidence.verifyOutcome} @ ${new Date(input.evidence.lastVerifyAt).toLocaleString()}`
-        : 'No verify evidence yet',
-      readinessAnchor: 'pipeline',
-    },
+    verifyCp,
     {
       id: 'promote',
       label: 'Mode',
@@ -117,13 +192,7 @@ export function buildPluginLaunchCheckpoints(input: {
       signal: mode === 'live' ? 'ok' : mode === 'mock' ? 'degraded' : 'unknown',
       detail: mode !== '' ? `mode ${mode}` : 'mode unknown',
     },
-    {
-      id: 'readiness',
-      label: 'Agent',
-      ok: !input.agentInFlight,
-      signal: input.agentInFlight ? 'degraded' : 'ok',
-      detail: input.agentInFlight ? 'In flight' : 'Idle',
-    },
+    agentCp,
   ]
 }
 

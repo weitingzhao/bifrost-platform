@@ -66,13 +66,17 @@ export async function refreshDockerfileConfigMaps(
 export async function startPipelineRun(
   name: string,
   revision?: string,
+  agentSessionId?: string,
 ): Promise<DeliveryStartRunResponse> {
   const body =
     revision != null && revision.trim() !== '' ? JSON.stringify({ revision: revision.trim() }) : undefined
+  const headers: Record<string, string> = {}
+  const session = agentSessionId?.trim()
+  if (session) headers['X-Agent-Session-ID'] = session
   const r = await authedFetch(
     'pipeline run',
     `/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`,
-    { method: 'POST', body },
+    { method: 'POST', body, headers },
   )
   return r.json() as Promise<DeliveryStartRunResponse>
 }

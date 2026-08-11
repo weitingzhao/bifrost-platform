@@ -183,6 +183,27 @@ describe('deriveClusterVerdict', () => {
     expect(v.evidenceLine).toBe('3/3 nodes')
   })
 
+  it('ops Agent degraded → CAUTION (not false READY)', () => {
+    const v = deriveClusterVerdict({
+      ...baseInput,
+      opsReach: 'degraded',
+      opsSummaryLine: 'Agent (degraded) — Operator Plane repair recommended',
+    })
+    expect(v.lamp).toBe('degraded')
+    expect(v.tagLabel).toBe('CAUTION')
+    expect(v.summaryLine).toContain('Agent')
+  })
+
+  it('ops fail → NEEDS FIX', () => {
+    const v = deriveClusterVerdict({
+      ...baseInput,
+      opsReach: 'fail',
+      opsSummaryLine: 'Control plane failing',
+    })
+    expect(v.lamp).toBe('fail')
+    expect(v.tagLabel).toBe('NEEDS FIX')
+  })
+
   it('unreachable wins over bootstrap', () => {
     const v = deriveClusterVerdict({
       ...baseInput,

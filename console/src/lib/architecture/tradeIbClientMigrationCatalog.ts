@@ -275,7 +275,7 @@ export const TRADE_IB_MIGRATION_RELATED_AUTHORITIES = [
   'Trade IB health aggregate: Rocket → Cluster + Monitor matrix probes',
   'Program / rollout sign-off: Engineer → Active Session · trade-ib-migration',
   'Migrate lane + spine stream: Engineer → Briefing · trade-ib-client-migration',
-  'Platform TWS bus prerequisite: ibGatewayPluginCatalog.ts · Subcontractors → Plugin Gallery (ib-gateway)',
+  'Platform TWS bus prerequisite: ibGatewayPluginCatalog.ts · Subcontractors → IB Gateway (ib-gateway-manage)',
   'Trading execution freeze: spine decision D10 · tradeIbClientMigrationRolloutCatalog.ts TRADE_EXECUTION_FREEZE',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]

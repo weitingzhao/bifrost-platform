@@ -188,7 +188,7 @@ export const OBSERVABILITY_LAYERS: LayerDescription[] = [
     layer: 'C — Telemetry',
     scope: 'Trade API + datastore runtime metrics via PromQL',
     dataSource: 'GET /api/v1/telemetry/overview + /alerts + /targets (whitelist presets)',
-    notes: 'Mission Control → Observability (hub) · Satellite → Satellite Runtime (scoped golden signals)',
+    notes: 'Mission Control → Observability (hub) · Satellite → Satellite Health (Probes + Runtime)',
   },
 ]
 

@@ -217,8 +217,16 @@ function classifyMissionItem(
     return {
       track: 'playbook',
       trackReason: 'Platform control plane probe failure',
-      suggestedAction: 'Launch Rocket self-health; verify console/API/Argo routes',
+      suggestedAction: 'Rocket Health self-health; verify console/API/Argo routes',
       playbookId: 'platform-self-health-recover',
+    }
+  }
+  if (id.includes('Agent')) {
+    return {
+      track: 'playbook',
+      trackReason: 'Agent bridge / remediation runner plane — not a K8s node issue',
+      suggestedAction: 'Operator Plane — verify bridge + Active-Standby runners; restart if needed',
+      playbookId: 'operator-plane-remediate',
     }
   }
   if (id.includes('gate')) {
@@ -232,7 +240,7 @@ function classifyMissionItem(
   return {
     track: 'agent-adhoc',
     trackReason: 'Mission signal degradation',
-    suggestedAction: 'Open matching Launch View (Rocket/Satellite) and Agent Fix with scope hint',
+    suggestedAction: 'Open matching Launch View (Rocket/Satellite) and run Cluster AI Auto-Check',
     playbookId: 'cluster-issues-full-auto',
   }
 }

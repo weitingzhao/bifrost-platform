@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, SegmentControl } from '@bifrost/ui'
 import { fetchMarketDataStatus, postIbGatewayControl } from '@/api/network'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
+import { LaneOperateSplit } from '@/components/delivery/LaneOperateSplit'
 import {
   LaneDetailCollapse,
   LaneDetailContextStrip,
@@ -14,10 +15,14 @@ import {
   type PluginFlowStep,
 } from '@/components/delivery/pluginLaunchOutcome'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import { LaunchGateBar } from '@/components/task-mode/LaunchGateBar'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import {
+  isAmbientAgentActive,
+  type AmbientAgentShellProps,
+} from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   buildPluginLaunchPrompt,
@@ -41,6 +46,10 @@ import {
   type PluginLaunchTargetId,
 } from '@/lib/delivery/pluginLaunchEvidence'
 import type { StepStatus } from '@/lib/delivery/releaseStepTypes'
+import {
+  buildPluginLaunchCheckpoints,
+  resolvePluginLaunchVerdict,
+} from '@/lib/task-mode/pluginLaunchVerdict'
 
 const AI_LAUNCH_LABEL = 'AI Launch Plugin'
 const AI_LAUNCH_TASK_LABEL = scopeToLabel(PLUGIN_LAUNCH_SCOPE)
@@ -172,7 +181,10 @@ type PluginReleasePageProps = AmbientAgentShellProps & {
 
 export function PluginReleasePage({
   ambientJobId,
+  ambientJobStatus,
+  ambientJobScope,
   onStartAgentJob,
+  onExpandAgentDock,
   onNavigate,
 }: PluginReleasePageProps = {}) {
   const { canOperate } = usePlatformAuth()
@@ -242,6 +254,7 @@ export function PluginReleasePage({
   const aiLaunch = useAmbientAgentTask({
     canOperate,
     ambientJobId,
+    ambientJobStatus,
     onStartAgentJob,
     scope: PLUGIN_LAUNCH_SCOPE,
     label: AI_LAUNCH_TASK_LABEL,
@@ -258,6 +271,62 @@ export function PluginReleasePage({
       }),
     }),
   })
+
+  const pluginAgentInFlight =
+    aiLaunch.isPending ||
+    (isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+      ambientJobScope === PLUGIN_LAUNCH_SCOPE)
+
+  const pluginVerdict = useMemo(
+    () =>
+      resolvePluginLaunchVerdict({
+        canOperate,
+        target,
+        status: liveProbe.status,
+        marketDataStatus: mdStatusQ.data,
+        evidence,
+        agentInFlight: pluginAgentInFlight,
+      }),
+    [
+      canOperate,
+      target,
+      liveProbe.status,
+      mdStatusQ.data,
+      evidence,
+      pluginAgentInFlight,
+    ],
+  )
+
+  const pluginCheckpoints = useMemo(
+    () =>
+      buildPluginLaunchCheckpoints({
+        canOperate,
+        target,
+        status: liveProbe.status,
+        marketDataStatus: mdStatusQ.data,
+        evidence,
+        agentInFlight: pluginAgentInFlight,
+      }),
+    [
+      canOperate,
+      target,
+      liveProbe.status,
+      mdStatusQ.data,
+      evidence,
+      pluginAgentInFlight,
+    ],
+  )
+
+  const checklistOkCount = pluginCheckpoints.filter(c => c.ok).length
+  const checklistTotal = pluginCheckpoints.length
+
+  const handleAiLaunchClick = () => {
+    if (pluginAgentInFlight) {
+      onExpandAgentDock?.()
+      return
+    }
+    aiLaunch.trigger()
+  }
 
   const markDetect = () => {
     patchEvidence(
@@ -368,7 +437,7 @@ export function PluginReleasePage({
                 <Button size="sm" variant="outline" onClick={() => void mdStatusQ.refetch()}>
                   Refresh status
                 </Button>
-                <Button size="sm" onClick={markDetect}>
+                <Button size="sm" variant="outline" onClick={markDetect}>
                   {evidence.lastDetectAt != null ? 'Re-record detect' : 'Record detect'}
                 </Button>
                 {onNavigate != null && (
@@ -377,6 +446,9 @@ export function PluginReleasePage({
                   </Button>
                 )}
               </div>
+              <p className="m-0 text-dense-caption text-muted-foreground">
+                Record buttons supplement TCC evidence — prefer AI Launch Plugin as the main path.
+              </p>
             </div>
           )
         case 'approve':
@@ -384,7 +456,7 @@ export function PluginReleasePage({
             <div className="flex flex-col gap-2">
               <p className="m-0 text-dense-meta text-muted-foreground">
                 Owner approval before apply. Prefer AI Launch Plugin — Dock holds approval +
-                checklist. Or record local approve after Dock confirmation.
+                checklist. Local Record approve is evidence-only after Dock confirmation.
               </p>
               <ul className="m-0 list-disc pl-4 text-dense-caption text-muted-foreground">
                 <li>
@@ -397,9 +469,15 @@ export function PluginReleasePage({
                 <AgentTriggerButton
                   label={AI_LAUNCH_LABEL}
                   pending={aiLaunch.isPending}
-                  disabled={aiLaunch.disabled}
-                  title={aiLaunch.disabledReason ?? AI_LAUNCH_LABEL}
-                  onClick={() => aiLaunch.trigger()}
+                  active={pluginAgentInFlight}
+                  activeLabel="Expand dock"
+                  disabled={aiLaunch.disabled && !pluginAgentInFlight}
+                  title={
+                    pluginAgentInFlight
+                      ? 'Expand Agent Execution Dock'
+                      : (aiLaunch.disabledReason ?? AI_LAUNCH_LABEL)
+                  }
+                  onClick={handleAiLaunchClick}
                 />
                 <Button
                   size="sm"
@@ -417,13 +495,13 @@ export function PluginReleasePage({
             <div className="flex flex-col gap-2">
               <p className="m-0 font-mono text-dense-caption text-foreground">{applyCmd}</p>
               <p className="m-0 text-dense-meta text-muted-foreground">
-                AI Launch Plugin runs this after Dock approval. When apply finishes, record outcome
-                here for TCC evidence.
+                AI Launch Plugin runs this after Dock approval. Record outcome here only to
+                supplement TCC evidence.
               </p>
               <RecordedOutcomeButtons
                 outcome={evidence.installOutcome}
-                okLabel="Mark apply OK"
-                failLabel="Mark apply failed"
+                okLabel="Record apply OK"
+                failLabel="Record apply failed"
                 canOperate={canOperate}
                 onOk={() => markInstall(true)}
                 onFail={() => markInstall(false)}
@@ -442,8 +520,8 @@ export function PluginReleasePage({
               </p>
               <RecordedOutcomeButtons
                 outcome={evidence.verifyOutcome}
-                okLabel="Mark verify OK"
-                failLabel="Mark verify failed"
+                okLabel="Record verify OK"
+                failLabel="Record verify failed"
                 canOperate={canOperate}
                 onOk={() => markVerify(true)}
                 onFail={() => markVerify(false)}
@@ -455,7 +533,7 @@ export function PluginReleasePage({
             <div className="flex flex-col gap-2">
               <p className="m-0 text-dense-meta text-muted-foreground">
                 Confirm seat {effectiveSeat.toUpperCase()} is healthy: API /health ok, workers
-                Ready, Coverage/Analytics usable in Subcontractors → Market Data.
+                Ready, Coverage/Analytics usable in Plugin → Market Data.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <DenseTag variant="neutral">seat {effectiveSeat}</DenseTag>
@@ -463,8 +541,8 @@ export function PluginReleasePage({
               </div>
               <RecordedOutcomeButtons
                 outcome={evidence.liveCheckOutcome}
-                okLabel="Mark live check OK"
-                failLabel="Mark live check failed"
+                okLabel="Record live check OK"
+                failLabel="Record live check failed"
                 canOperate={canOperate}
                 onOk={() => markLiveCheck(true)}
                 onFail={() => markLiveCheck(false)}
@@ -480,7 +558,8 @@ export function PluginReleasePage({
         return (
           <div className="flex flex-col gap-2">
             <p className="m-0 text-dense-meta text-muted-foreground">
-              Probe IB Gateway via platform-api. Gallery observes the same bus — this lane publishes.
+              Probe IB Gateway via platform-api. Manage pages observe the same bus — this lane
+              publishes.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <DenseTag variant="neutral">mode {liveProbe.status?.mode ?? '—'}</DenseTag>
@@ -504,15 +583,18 @@ export function PluginReleasePage({
               <Button size="sm" variant="outline" onClick={() => liveProbe.refetch()}>
                 Refresh probe
               </Button>
-              <Button size="sm" onClick={markDetect}>
+              <Button size="sm" variant="outline" onClick={markDetect}>
                 {evidence.lastDetectAt != null ? 'Re-record detect' : 'Record detect'}
               </Button>
               {onNavigate != null && (
-                <Button size="sm" variant="ghost" onClick={() => onNavigate('plugin-gallery')}>
-                  Open Gallery →
+                <Button size="sm" variant="ghost" onClick={() => onNavigate('ib-gateway-manage')}>
+                  IB Gateway manage →
                 </Button>
               )}
             </div>
+            <p className="m-0 text-dense-caption text-muted-foreground">
+              Record buttons supplement TCC evidence — prefer AI Launch Plugin as the main path.
+            </p>
           </div>
         )
       case 'approve':
@@ -520,7 +602,7 @@ export function PluginReleasePage({
           <div className="flex flex-col gap-2">
             <p className="m-0 text-dense-meta text-muted-foreground">
               Owner approval required before install. Prefer AI Launch Plugin — approvals stay in
-              Operator Dock. Or record local approve after Dock confirmation.
+              Operator Dock. Local Record approve is evidence-only after Dock confirmation.
             </p>
             <ul className="m-0 list-disc pl-4 text-dense-caption text-muted-foreground">
               <li>
@@ -533,9 +615,15 @@ export function PluginReleasePage({
               <AgentTriggerButton
                 label={AI_LAUNCH_LABEL}
                 pending={aiLaunch.isPending}
-                disabled={aiLaunch.disabled}
-                title={aiLaunch.disabledReason ?? AI_LAUNCH_LABEL}
-                onClick={() => aiLaunch.trigger()}
+                active={pluginAgentInFlight}
+                activeLabel="Expand dock"
+                disabled={aiLaunch.disabled && !pluginAgentInFlight}
+                title={
+                  pluginAgentInFlight
+                    ? 'Expand Agent Execution Dock'
+                    : (aiLaunch.disabledReason ?? AI_LAUNCH_LABEL)
+                }
+                onClick={handleAiLaunchClick}
               />
               <Button size="sm" variant="outline" disabled={!canOperate} onClick={markApprove}>
                 {evidence.lastApproveAt != null ? 'Re-record approve' : 'Record approve'}
@@ -550,13 +638,13 @@ export function PluginReleasePage({
               cd bifrost-platform-plugin && make install-ib-gateway
             </p>
             <p className="m-0 text-dense-meta text-muted-foreground">
-              Agent requests Operator Dock checklist after approval. When install finishes, record
-              outcome here for TCC evidence.
+              Agent requests Operator Dock checklist after approval. Record outcome here only to
+              supplement TCC evidence.
             </p>
             <RecordedOutcomeButtons
               outcome={evidence.installOutcome}
-              okLabel="Mark install OK"
-              failLabel="Mark install failed"
+              okLabel="Record install OK"
+              failLabel="Record install failed"
               canOperate={canOperate}
               onOk={() => markInstall(true)}
               onFail={() => markInstall(false)}
@@ -574,8 +662,8 @@ export function PluginReleasePage({
             </p>
             <RecordedOutcomeButtons
               outcome={evidence.verifyOutcome}
-              okLabel="Mark verify OK"
-              failLabel="Mark verify failed"
+              okLabel="Record verify OK"
+              failLabel="Record verify failed"
               canOperate={canOperate}
               onOk={() => markVerify(true)}
               onFail={() => markVerify(false)}
@@ -609,8 +697,8 @@ export function PluginReleasePage({
             </div>
             <RecordedOutcomeButtons
               outcome={evidence.liveCheckOutcome}
-              okLabel="Mark live check OK"
-              failLabel="Mark live check failed"
+              okLabel="Record live check OK"
+              failLabel="Record live check failed"
               canOperate={canOperate}
               onOk={() => markLiveCheck(true)}
               onFail={() => markLiveCheck(false)}
@@ -625,6 +713,24 @@ export function PluginReleasePage({
       ? `Not Tekton — ${marketDataApplyCmd(effectiveSeat)}. Gallery ≠ Publish.`
       : 'Not Tekton — make install-ib-gateway + verify-ib-gateway-program. Gallery ≠ Publish.'
 
+  const evidenceLinks =
+    onNavigate != null ? (
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
+          Evidence
+        </span>
+        <Button size="xs" variant="ghost" onClick={() => onNavigate('plugin-gallery')}>
+          Gallery
+        </Button>
+        <Button size="xs" variant="ghost" onClick={() => onNavigate('ib-gateway-manage')}>
+          IB Gateway
+        </Button>
+        <Button size="xs" variant="ghost" onClick={() => onNavigate('market-data-manage')}>
+          Market Data
+        </Button>
+      </div>
+    ) : null
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
       {aiLaunch.error != null && (
@@ -638,53 +744,26 @@ export function PluginReleasePage({
 
       <LaneDetailContextStrip reason={detailReason} />
 
-      <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-secondary/20 px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-dense-meta font-medium text-muted-foreground shrink-0">
-            Target:
-          </span>
-          <SegmentControl
-            ariaLabel="Plugin launch target"
-            options={[
-              { value: 'ib-gateway', label: 'IB Gateway' },
-              { value: 'market-data', label: 'Market Data' },
-            ]}
-            value={target}
-            onChange={v => setTarget(v as PluginLaunchTargetId)}
-          />
-        </div>
-        {target === 'market-data' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-dense-meta font-medium text-muted-foreground shrink-0">
-              Seat:
-            </span>
-            <SegmentControl
-              ariaLabel="Market Data publish seat"
-              options={[
-                { value: 'dev', label: 'DEV' },
-                { value: 'stg', label: 'STG' },
-                { value: 'prod', label: 'PROD' },
-              ]}
-              value={seat}
-              onChange={v => setSeat(v as PluginLaunchSeat)}
-            />
-            <span className="font-mono text-dense-caption text-muted-foreground">
-              {marketDataNamespace(seat)} · bifrost-market-data:{MARKET_DATA_IMAGE_TAG}
-            </span>
-          </div>
-        )}
-      </div>
-
       <LaneStateStrip
         laneLabel="Plugin"
         actions={
-          <AgentTriggerButton
-            label={AI_LAUNCH_LABEL}
-            pending={aiLaunch.isPending}
-            disabled={aiLaunch.disabled}
-            title={aiLaunch.disabledReason ?? AI_LAUNCH_LABEL}
-            onClick={() => aiLaunch.trigger()}
-          />
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
+            <AgentTriggerButton
+              className="shrink-0"
+              label={AI_LAUNCH_LABEL}
+              pending={aiLaunch.isPending}
+              active={pluginAgentInFlight}
+              activeLabel="Expand dock"
+              disabled={aiLaunch.disabled && !pluginAgentInFlight}
+              title={
+                pluginAgentInFlight
+                  ? 'Expand Agent Execution Dock — live progress stays on this board'
+                  : (aiLaunch.disabledReason ?? AI_LAUNCH_LABEL)
+              }
+              onClick={handleAiLaunchClick}
+            />
+            {evidenceLinks}
+          </div>
         }
       >
         <div className="flex flex-wrap items-center gap-2 text-dense-meta">
@@ -701,65 +780,219 @@ export function PluginReleasePage({
         <p className="m-0 text-dense-caption text-muted-foreground">{stripHint}</p>
       </LaneStateStrip>
 
-      <PluginStepCommandCenter
-        steps={steps}
-        activeIndex={activeIndex}
-        onSelect={setActiveIndex}
-        evidence={evidence}
-        modeLabel={
-          target === 'market-data' ? `md-${effectiveSeat}` : liveProbe.status?.mode
+      <LaneOperateSplit
+        storageKey="bifrost.console.pluginLaneOperateSplit"
+        primary={
+          <>
+            <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-secondary/20 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-dense-meta font-medium text-muted-foreground shrink-0">
+                  Target:
+                </span>
+                <SegmentControl
+                  ariaLabel="Plugin launch target"
+                  options={[
+                    { value: 'ib-gateway', label: 'IB Gateway' },
+                    { value: 'market-data', label: 'Market Data' },
+                  ]}
+                  value={target}
+                  onChange={v => setTarget(v as PluginLaunchTargetId)}
+                />
+              </div>
+              {target === 'market-data' && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-dense-meta font-medium text-muted-foreground shrink-0">
+                    Seat:
+                  </span>
+                  <SegmentControl
+                    ariaLabel="Market Data publish seat"
+                    options={[
+                      { value: 'dev', label: 'DEV' },
+                      { value: 'stg', label: 'STG' },
+                      { value: 'prod', label: 'PROD' },
+                    ]}
+                    value={seat}
+                    onChange={v => setSeat(v as PluginLaunchSeat)}
+                  />
+                  <span className="font-mono text-dense-caption text-muted-foreground">
+                    {marketDataNamespace(seat)} · bifrost-market-data:{MARKET_DATA_IMAGE_TAG}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <PluginStepCommandCenter
+              steps={steps}
+              activeIndex={activeIndex}
+              onSelect={setActiveIndex}
+              evidence={evidence}
+              modeLabel={
+                target === 'market-data' ? `md-${effectiveSeat}` : liveProbe.status?.mode
+              }
+              revisionHint={revisionHint}
+              renderStepActions={renderStepActions}
+            />
+          </>
         }
-        revisionHint={revisionHint}
-        renderStepActions={renderStepActions}
+        support={
+          <>
+            <LaneDetailCollapse
+              title="Launch checklist"
+              summaryExtra={
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <DenseTag
+                    variant={
+                      pluginVerdict.kind === 'GO'
+                        ? 'success'
+                        : pluginVerdict.kind === 'IN_FLIGHT'
+                          ? 'warning'
+                          : 'danger'
+                    }
+                  >
+                    {pluginVerdict.kind === 'GO'
+                      ? 'GO'
+                      : pluginVerdict.kind === 'IN_FLIGHT'
+                        ? 'IN FLIGHT'
+                        : 'NO-GO'}
+                  </DenseTag>
+                  <DenseTag
+                    variant={checklistOkCount === checklistTotal ? 'success' : 'warning'}
+                  >
+                    {checklistOkCount}/{checklistTotal} ready
+                  </DenseTag>
+                </span>
+              }
+              defaultOpen
+              showModeBadge
+              bodyClassName="flex flex-col gap-3 p-3"
+            >
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                Plugin checklist is light (auth / bus / last verify) — not a Rocket Tekton GO gate.
+                AI Launch Plugin remains the primary path; Record buttons only supplement evidence.
+              </p>
+              <LaunchGateBar
+                layout="column"
+                verdict={pluginVerdict}
+                checkpoints={pluginCheckpoints}
+                hidePrimaryLaunch
+                onExpandAgentDock={onExpandAgentDock}
+                agentFixActive={pluginAgentInFlight}
+                agentFixPending={aiLaunch.isPending}
+              />
+            </LaneDetailCollapse>
+
+            <LaneDetailCollapse
+              title={
+                target === 'market-data'
+                  ? `Acceptance · Market Data ${effectiveSeat.toUpperCase()}`
+                  : 'Acceptance · on-demand STK dogfood'
+              }
+              defaultOpen={false}
+              bodyClassName="p-3"
+            >
+              {target === 'market-data' ? (
+                <ul className="m-0 list-disc pl-4 text-dense-meta text-muted-foreground">
+                  <li>
+                    Apply: <span className="font-mono">{marketDataApplyCmd(effectiveSeat)}</span>
+                  </li>
+                  <li>
+                    Image bifrost-market-data:{MARKET_DATA_IMAGE_TAG}; API + expand CronJobs present
+                  </li>
+                  <li>After publish: Plugin → Market Data Coverage / Analytics</li>
+                  <li>Program: market-data-expand / market-data-subcontractor</li>
+                </ul>
+              ) : (
+                <ul className="m-0 list-disc pl-4 text-dense-meta text-muted-foreground">
+                  <li>
+                    Payload on main: {PLUGIN_DOGFOOD_REVISION} — {PLUGIN_DOGFOOD_FEATURE}
+                  </li>
+                  <li>
+                    After publish: Trade Live on-demand symbols &gt; default 5; dynamic subscribe works
+                  </li>
+                  <li>Ghost TWS / empty accounts_snapshot do not block P2 acceptance</li>
+                  <li>Program: Delivery Board · launch-plugin-lane</li>
+                </ul>
+              )}
+            </LaneDetailCollapse>
+
+            <LaneDetailCollapse
+              title="Supporting evidence"
+              defaultOpen={false}
+              showModeBadge
+              bodyClassName="flex flex-col gap-2 p-3"
+            >
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                Runtime probes live on manage pages. Gallery is directory only — not Publish.
+              </p>
+              {onNavigate != null && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/40 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="m-0 text-dense-meta font-medium text-foreground">
+                        Plugin Gallery
+                      </p>
+                      <p className="m-0 text-dense-caption text-muted-foreground">
+                        Registry + PLUGIN BUS rollup
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="focus-strip-link shrink-0 text-[var(--text-dense-caption)]"
+                      onClick={() => onNavigate('plugin-gallery')}
+                    >
+                      Open Gallery →
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/40 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="m-0 text-dense-meta font-medium text-foreground">IB Gateway</p>
+                      <p className="m-0 text-dense-caption text-muted-foreground">
+                        Live status & cutover (manage ≠ publish)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="focus-strip-link shrink-0 text-[var(--text-dense-caption)]"
+                      onClick={() => onNavigate('ib-gateway-manage')}
+                    >
+                      Open IB Gateway →
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/40 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="m-0 text-dense-meta font-medium text-foreground">Market Data</p>
+                      <p className="m-0 text-dense-caption text-muted-foreground">
+                        Coverage / Analytics manage surface
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="focus-strip-link shrink-0 text-[var(--text-dense-caption)]"
+                      onClick={() => onNavigate('market-data-manage')}
+                    >
+                      Open Market Data →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </LaneDetailCollapse>
+
+            <LaneDetailCollapse
+              title="Toolbox"
+              defaultOpen={false}
+              bodyClassName="flex flex-col gap-2 p-3"
+            >
+              <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
+                Advanced · observe only
+              </span>
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                Escape hatches for this lane. Primary AI Launch Plugin stays on the lane state strip
+                above. Runtime health stays on Plugin Gallery / IB Gateway / Market Data manage.
+              </p>
+            </LaneDetailCollapse>
+          </>
+        }
       />
-
-      <LaneDetailCollapse
-        title={
-          target === 'market-data'
-            ? `Acceptance · Market Data ${effectiveSeat.toUpperCase()}`
-            : 'Acceptance · on-demand STK dogfood'
-        }
-        bodyClassName="p-3"
-      >
-        {target === 'market-data' ? (
-          <ul className="m-0 list-disc pl-4 text-dense-meta text-muted-foreground">
-            <li>
-              Apply: <span className="font-mono">{marketDataApplyCmd(effectiveSeat)}</span>
-            </li>
-            <li>
-              Image bifrost-market-data:{MARKET_DATA_IMAGE_TAG}; API + expand CronJobs present
-            </li>
-            <li>After publish: Subcontractors → Market Data Coverage / Analytics</li>
-            <li>Program: market-data-expand / market-data-subcontractor</li>
-          </ul>
-        ) : (
-          <ul className="m-0 list-disc pl-4 text-dense-meta text-muted-foreground">
-            <li>
-              Payload on main: {PLUGIN_DOGFOOD_REVISION} — {PLUGIN_DOGFOOD_FEATURE}
-            </li>
-            <li>After publish: Trade Live on-demand symbols &gt; default 5; dynamic subscribe works</li>
-            <li>Ghost TWS / empty accounts_snapshot do not block P2 acceptance</li>
-            <li>Program: Delivery Board · launch-plugin-lane</li>
-          </ul>
-        )}
-      </LaneDetailCollapse>
-
-      <LaneDetailCollapse title="Advanced · observe only" bodyClassName="p-3">
-        <p className="m-0 text-dense-meta text-muted-foreground">
-          Runtime health stays on Plugin Gallery / Market Data manage. Primary Agent Launch lives
-          in Mission Launch TCC; AI Launch Plugin is on the lane strip above.
-        </p>
-        {onNavigate != null && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => onNavigate('plugin-gallery')}>
-              Plugin Gallery →
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate('market-data-manage')}>
-              Market Data manage →
-            </Button>
-          </div>
-        )}
-      </LaneDetailCollapse>
     </div>
   )
 }

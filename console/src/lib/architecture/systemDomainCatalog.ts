@@ -56,17 +56,17 @@ export const SYSTEM_DOMAINS: SystemDomainRow[] = [
   {
     id: 'rocket',
     label: 'Rocket',
-    purpose: 'Ops Platform itself — K8s cluster, Launch Rocket, fleet placement (facility constraints), platform CI/CD',
+    purpose: 'Ops Platform itself — K8s cluster (incl. Facility constraints), Rocket Health, Launch Rocket, platform CI/CD',
   },
   {
     id: 'ground-systems',
     label: 'Ground Systems',
-    purpose: 'Infrastructure — network (UniFi), compute; SSH via shell Operator Dock Console slot',
+    purpose: 'Infrastructure — network (UniFi); SSH via shell Operator Dock Console slot. K3s nodes → Rocket → Cluster',
   },
   {
     id: 'satellite',
     label: 'Satellite',
-    purpose: 'Trade payload — bus, Satellite Runtime, API & Auth Probes, Deploy Satellite',
+    purpose: 'Trade payload — bus, Satellite Health (Probes + Runtime), Deploy Satellite',
   },
   {
     id: 'subcontractors',

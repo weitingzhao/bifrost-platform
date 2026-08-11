@@ -3,11 +3,7 @@ import type { ClusterNode, ClusterWorkload } from '@/api/clusterTypes'
 import { ClusterNodeDrawer } from '@/components/cluster/ClusterNodeDrawer'
 import { ClusterNodeWizardPanel } from '@/components/cluster/ClusterNodeWizardPanel'
 import { ClusterWorkloadsExplorer } from '@/components/cluster/ClusterWorkloadsExplorer'
-import {
-  allowedNamespaceNames,
-  nsFilterForNamespace,
-  type NsFilterType,
-} from '@/lib/cluster/namespaceCatalog'
+import { allowedNamespaceNames, type NsFilterType } from '@/lib/cluster/namespaceCatalog'
 import {
   DEFAULT_STORAGE_SERVICE,
   type StorageServiceId,
@@ -19,11 +15,10 @@ import { ClusterRedisDetailPanel } from '@/components/cluster/ClusterRedisDetail
 import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
 import { ClusterCategoryDetail } from '@/components/cluster/ClusterCategoryDetail'
 import { ClusterGovernancePanel } from '@/components/cluster/ClusterGovernancePanel'
-import { ClusterIssuesPanel } from '@/components/cluster/ClusterIssuesPanel'
-import { ClusterFailureTriageStrip } from '@/components/cluster/ClusterFailureTriageStrip'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
 import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabilityPanel'
+import { ClusterFacilityDetailBody } from '@/components/cluster/ClusterFacilityPanels'
 import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
 import type { NodeWizardFlow } from '@/lib/cluster/nodeWizard'
 import type { ClusterPageMutations } from './useClusterPageMutations'
@@ -59,8 +54,7 @@ export function ClusterPageMain({
   onOpenStandards,
   onOpenRuntimeMap,
   onOpenObservability,
-  onOpenAgentDesk,
-  onOpenDefects,
+  onOpenDelivery,
   onOpenServerConsole,
   handleSelectNs,
   handleSelectPod,
@@ -96,8 +90,7 @@ export function ClusterPageMain({
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
   onOpenObservability?: () => void
-  onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
-  onOpenDefects?: () => void
+  onOpenDelivery?: () => void
   onOpenServerConsole?: () => void
   handleSelectNs: (name: string) => void
   handleSelectPod: (workload: ClusterWorkload) => void
@@ -153,6 +146,15 @@ export function ClusterPageMain({
             />
           )
         }
+        facilityContent={facilityCategory => (
+          <ClusterFacilityDetailBody
+            category={facilityCategory}
+            placement={q.placementQuery.data}
+            isLoading={q.placementQuery.isLoading}
+            onSelectNodes={() => setCategory('nodes')}
+            onOpenDelivery={onOpenDelivery}
+          />
+        )}
         nodesContent={
           <div className="cluster-view-panels">
             <ClusterNodeWizardPanel
@@ -244,39 +246,6 @@ export function ClusterPageMain({
           />
         }
       />
-
-      {q.clusterSummary != null && (
-        <>
-          <ClusterFailureTriageStrip
-            summary={q.clusterSummary}
-            serviceReadiness={q.serviceReadinessQuery.data}
-            postgresStatus={q.postgresStatusQuery.data}
-            onOpenAgentDesk={opts => onOpenAgentDesk?.(opts)}
-            onOpenDefects={onOpenDefects}
-            onPlaybookFix={({ scope, prompt }) => {
-              if (!canOperate) return
-              m.playbookFixMutation.mutate({ scope, prompt })
-            }}
-            playbookFixPending={m.playbookFixMutation.isPending}
-            canOperate={canOperate}
-          />
-          <ClusterIssuesPanel
-            summary={q.clusterSummary}
-            serviceReadiness={q.serviceReadinessQuery.data}
-            postgresStatus={q.postgresStatusQuery.data}
-            canOperate={canOperate}
-            remediatePending={m.remediationStartMutation.isPending}
-            activeRemediationJob={q.activeRemediationJob}
-            onOpenRemediationSession={m.handleOpenRemediationSession}
-            onAutoRemediate={m.handleAutoRemediate}
-            onSelectPodNamespace={ns => {
-              setNsFilter(nsFilterForNamespace(ns))
-              handleSelectNs(ns)
-              setCategory('workloads')
-            }}
-          />
-        </>
-      )}
 
       <ClusterDrawer
         open={drawerOpen}

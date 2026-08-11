@@ -22,15 +22,15 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
   cluster: {
     status: 'done',
     notes:
-      'P1 workload actuation + P2 node wizard/join/drain/cordon + Layer A metrics; Layer B prometheus ensure admin-only (deferred)',
+      'P1/P2 actuation + Categories (Infra / Application / Facility pools·policy·CI) + Layer A metrics; Layer B ensure admin-only (deferred)',
   },
-  placement: {
+  'rocket-health': {
     status: 'done',
-    notes: 'Fleet facility constraints — node pools + policy matrix + CI readiness; GET /cluster/placement',
+    notes: 'Rocket Health Probes — control-plane self-health (API/Console/Argo); Runtime deferred',
   },
   'platform-release': {
     status: 'done',
-    notes: 'Launch Rocket STG/PROD deliver + gates + self-health/escape + CI/CD stack install wizard',
+    notes: 'Launch Rocket STG/PROD deliver + gates + Rocket Health link/escape + CI/CD stack install wizard',
   },
   'trade-release': {
     status: 'done',

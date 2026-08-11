@@ -3,10 +3,12 @@ import { Button } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   categoryDimension,
+  FACILITY_CATEGORY_LABELS,
   INFRASTRUCTURE_CATEGORY_LABELS,
+  isFacilityCategory,
   isInfrastructureCategory,
 } from '@/lib/cluster/clusterCategories'
-import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
+import type { ClusterCategory, FacilityCategory } from '@/lib/cluster/clusterCategories'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
@@ -16,6 +18,7 @@ interface ClusterCategoryDetailProps {
   copyState?: CopyState
   onCopyForLlm?: () => void
   applicationContent: (domainId: string) => ReactNode
+  facilityContent: (category: FacilityCategory) => ReactNode
   nodesContent: ReactNode
   workloadsContent: ReactNode
   governanceContent: ReactNode
@@ -26,6 +29,9 @@ function detailTitle(category: ClusterCategory, titleOverride?: string): string 
   if (titleOverride != null && titleOverride !== '') return titleOverride
   if (isInfrastructureCategory(category)) {
     return INFRASTRUCTURE_CATEGORY_LABELS[category]
+  }
+  if (isFacilityCategory(category)) {
+    return FACILITY_CATEGORY_LABELS[category]
   }
   return category
 }
@@ -47,6 +53,7 @@ export function ClusterCategoryDetail({
   copyState = 'idle',
   onCopyForLlm,
   applicationContent,
+  facilityContent,
   nodesContent,
   workloadsContent,
   governanceContent,
@@ -55,8 +62,11 @@ export function ClusterCategoryDetail({
   if (category == null) return null
 
   let body: ReactNode
-  if (categoryDimension(category) === 'application') {
+  const dimension = categoryDimension(category)
+  if (dimension === 'application') {
     body = applicationContent(category)
+  } else if (dimension === 'facility' && isFacilityCategory(category)) {
+    body = facilityContent(category)
   } else {
     switch (category) {
       case 'nodes':

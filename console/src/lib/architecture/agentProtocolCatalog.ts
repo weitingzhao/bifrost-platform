@@ -139,7 +139,7 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   },
   {
     action:
-      'kubectl set image bypass for ib-gateway publish — use Launch Plugin lane + make install-ib-gateway only; Plugin Gallery reconnect is observe/repair not publish',
+      'kubectl set image bypass for ib-gateway publish — use Launch Plugin lane + make install-ib-gateway only; IB Gateway manage reconnect is observe/repair not publish',
     scope: 'Mission Launch · Launch Plugin',
   },
   {
@@ -861,7 +861,7 @@ export function buildAgentProtocolLlmPack(): string {
     '',
     '## Three Desks (Build / Ops / Analysis)',
     '- Rail: System + Build + Ops + Analysis. Legacy daily-ops / mission-launch / patrol → ops.',
-    '- Engineer Partner: Build Desk / Ops Desk / Analysis Desk. Queue tab id `queue` (`#agent-desk` alias).',
+    '- Engineer Partner: Build Desk / Launch Desk / Ops Desk / Analysis Desk. Queue tab id `queue` (`#agent-desk` alias).',
     '',
     '## Patrol (Ops Desk — Cursor SDK nightshift)',
     `- Surface: ${PATROL_AGENT.surface}`,

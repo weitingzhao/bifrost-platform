@@ -20,22 +20,30 @@ type Service struct {
 	cfg               *config.Config
 	prober            *probe.Prober
 	store             *Store
+	cycles            *CycleStore
 	delivery          *delivery.Service
 	datastoreSnapshot func(context.Context) probe.DatastoreSnapshot
 }
 
 func NewService(cfg *config.Config, cluster *cluster.Handler) *Service {
 	entry := cfg.DefaultCluster()
+	cfgDir := configDirFrom(cfg)
 	svc := &Service{
 		cfg:      cfg,
 		prober:   probe.NewProber(),
-		store:    NewStore(configDirFrom(cfg)),
+		store:    NewStore(cfgDir),
+		cycles:   NewCycleStore(cfgDir),
 		delivery: delivery.NewService(entry),
 	}
 	if cluster != nil {
 		svc.datastoreSnapshot = cluster.DatastoreSnapshot
 	}
 	return svc
+}
+
+// CycleStore exposes the release-cycle persistence for wiring hooks.
+func (s *Service) CycleStore() *CycleStore {
+	return s.cycles
 }
 
 func configDirFrom(cfg *config.Config) string {
@@ -130,6 +138,9 @@ func (s *Service) RunReleaseGate(ctx context.Context, tier GateTier, triggeredBy
 	if !gate.Ready {
 		msg += fmt.Sprintf(" (blocked: %s)", strings.Join(gate.Blockers, "; "))
 	}
+	if s.cycles != nil {
+		_, _ = s.cycles.RecordGateFromTier(tier, revision, result, triggeredBy, rec.Summary, checks)
+	}
 	return RunGateResponse{
 		OK:          result == "pass",
 		Action:      "promote.release-gate",
@@ -139,6 +150,60 @@ func (s *Service) RunReleaseGate(ctx context.Context, tier GateTier, triggeredBy
 		Gate:        gate,
 		GeneratedAt: now,
 	}, nil
+}
+
+// ListReleaseCycles returns persisted release cycles for a lane (newest first).
+// Best-effort syncs running deploy steps from live PipelineRun status before listing.
+func (s *Service) ListReleaseCycles(ctx context.Context, lane ReleaseCycleLane) ([]ReleaseCycleRecord, error) {
+	if s.cycles == nil {
+		return nil, nil
+	}
+	_ = s.syncActiveCycleRuns(ctx, lane)
+	return s.cycles.List(lane)
+}
+
+// GetReleaseCycle returns one cycle by id.
+func (s *Service) GetReleaseCycle(id string) (*ReleaseCycleRecord, error) {
+	if s.cycles == nil {
+		return nil, nil
+	}
+	return s.cycles.Get(id)
+}
+
+// syncActiveCycleRuns looks up K8s PipelineRun status for running deploy steps and persists terminal results.
+func (s *Service) syncActiveCycleRuns(ctx context.Context, lane ReleaseCycleLane) error {
+	if s.cycles == nil || s.delivery == nil {
+		return nil
+	}
+	steps, err := s.cycles.RunningDeploySteps(lane)
+	if err != nil || len(steps) == 0 {
+		return err
+	}
+	statuses := make([]RunStatusInfo, 0, len(steps))
+	seenPipelines := map[string][]delivery.PipelineRunView{}
+	for _, step := range steps {
+		pipeline := PipelineForCycleStep(lane, step.Kind)
+		if pipeline == "" {
+			continue
+		}
+		runs, ok := seenPipelines[pipeline]
+		if !ok {
+			resp := s.delivery.PipelineRuns(ctx, pipeline)
+			runs = resp.Runs
+			seenPipelines[pipeline] = runs
+		}
+		for _, r := range runs {
+			if r.Name == step.RunName {
+				statuses = append(statuses, RunStatusInfo{
+					RunName: r.Name,
+					Status:  r.Status,
+					Reason:  r.Reason,
+				})
+				break
+			}
+		}
+	}
+	return s.cycles.SyncRunStatus(lane, statuses)
 }
 
 func (s *Service) collectStgChecks(ctx context.Context) []GateCheck {

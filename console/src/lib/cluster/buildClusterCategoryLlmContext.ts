@@ -10,10 +10,13 @@ import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
 import {
   APPLICATION_DOMAIN_PURPOSE,
   applicationDomainPurpose,
+  FACILITY_CATEGORY_LABELS,
   isApplicationDomainCategory,
+  isFacilityCategory,
   isInfrastructureCategory,
   INFRASTRUCTURE_CATEGORY_LABELS,
 } from '@/lib/cluster/clusterCategories'
+import { buildPlacementLlmPack } from '@/lib/architecture/workloadPlacementCatalog'
 import { clusterHealthHint } from '@/lib/cluster/clusterHealthHint'
 import type { ClusterLlmContextInput } from '@/lib/cluster/buildClusterLlmContext'
 import {
@@ -34,6 +37,7 @@ export interface ClusterCategoryLlmInput extends ClusterLlmContextInput {
 function resolveCategoryLabel(category: ClusterCategory, title?: string, domain?: ServiceDomain): string {
   if (title != null && title !== '') return title
   if (isInfrastructureCategory(category)) return INFRASTRUCTURE_CATEGORY_LABELS[category]
+  if (isFacilityCategory(category)) return FACILITY_CATEGORY_LABELS[category]
   if (domain != null) return domain.label
   return category
 }
@@ -239,6 +243,24 @@ export function buildClusterCategoryLlmContext(input: ClusterCategoryLlmInput): 
     `- category: ${category}`,
     `- focus: ${label}`,
   ]
+
+  if (isFacilityCategory(category)) {
+    lines.push(
+      '',
+      buildPlacementLlmPack(
+        placement != null
+          ? {
+              reachability: placement.reachability,
+              detail: placement.detail,
+              violations: placement.violations,
+              pools: placement.pools,
+              rules: placement.rules,
+            }
+          : undefined,
+      ),
+    )
+    return lines.join('\n')
+  }
 
   if (isApplicationDomainCategory(category) || domain != null) {
     if (domain == null) {

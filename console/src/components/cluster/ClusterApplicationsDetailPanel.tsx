@@ -54,16 +54,12 @@ function applicationsDomain(
   return readiness?.domains.find(d => d.id === 'applications')
 }
 
-function isOptionalDep(dep: ServiceDependency): boolean {
-  return dep.id === 'pool-arm64_edge' || dep.label.toLowerCase().includes('optional')
-}
-
 function isRuntimeDep(dep: ServiceDependency): boolean {
-  return dep.id.startsWith('schedulable') || (dep.id.startsWith('pool-') && !isOptionalDep(dep))
+  return dep.id.startsWith('schedulable') || dep.id.startsWith('pool-')
 }
 
 function isStackDep(dep: ServiceDependency): boolean {
-  return !isOptionalDep(dep) && !isRuntimeDep(dep)
+  return !isRuntimeDep(dep)
 }
 
 function DepRow({ dep }: { dep: ServiceDependency }) {
@@ -88,10 +84,6 @@ function runtimeRows(deps: ServiceDependency[]): ServiceDependency[] {
   return deps.filter(isRuntimeDep)
 }
 
-function optionalRows(deps: ServiceDependency[]): ServiceDependency[] {
-  return deps.filter(isOptionalDep)
-}
-
 export function ClusterApplicationsDetailPanel({
   serviceReadiness,
   isLoading,
@@ -101,7 +93,6 @@ export function ClusterApplicationsDetailPanel({
   const deps = domain?.dependencies ?? []
   const stack = stackRows(deps)
   const runtime = runtimeRows(deps)
-  const optional = optionalRows(deps)
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['cluster', 'service-readiness'] })
@@ -141,8 +132,7 @@ export function ClusterApplicationsDetailPanel({
           </div>
         </div>
         <p className="m-0 mt-1 text-dense-meta text-[var(--muted-foreground)]">
-          nginx · frontend · 9 FastAPI domains on amd64. arm64 edge pool is optional — absent nodes do not
-          block this domain.
+          Traefik trade-gateway · frontend · 9 FastAPI domains on amd64 (fleet is amd64-only).
         </p>
       </section>
 
@@ -211,27 +201,6 @@ export function ClusterApplicationsDetailPanel({
               )}
             </DenseTableBody>
           </DenseDataTable>
-        </OpsSection>
-
-        <OpsSection
-          title="Optional edge pools"
-          description="Not required when running amd64-only (no arm64 nodes in cluster)"
-          bodyPadding="compact"
-        >
-          <div className="space-y-2">
-            {optional.length === 0 ? (
-              <p className="m-0 text-dense-meta text-[var(--muted-foreground)]">No optional pools in catalog.</p>
-            ) : (
-              optional.map(dep => (
-                <div
-                  key={dep.id}
-                  className="rounded border border-dashed border-[var(--border)] bg-[var(--background)]/40 px-2 py-1.5"
-                >
-                  <DepRow dep={dep} />
-                </div>
-              ))
-            )}
-          </div>
         </OpsSection>
       </div>
     </div>

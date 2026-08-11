@@ -1,11 +1,11 @@
+import type { ReactNode } from 'react'
 import { Button } from '@bifrost/ui'
 import type { ClusterSummary } from '@/api/clusterTypes'
-import type { AuthCapabilities } from '@/api/matrixTypes'
+import type { AuthCapabilities, Reachability } from '@/api/matrixTypes'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { deriveClusterVerdict } from '@/lib/cluster/clusterHealth'
-import { scrollToSection } from '@/lib/dom/scrollToSection'
 import type { CopyState } from './useClusterPageQueries'
 
 export function ClusterPageChrome({
@@ -22,9 +22,13 @@ export function ClusterPageChrome({
   syncError,
   syncOkMessage,
   actionError,
+  actionSuccess,
   summaryError,
+  opsReach,
+  opsSummaryLine,
   ambientJobId,
   onOpenAgentDesk,
+  onExpandAgentDock,
   showBootstrapActions,
   canOperate,
   canAdmin,
@@ -40,6 +44,7 @@ export function ClusterPageChrome({
   clusterSummary,
   summaryFailed,
   isProbing,
+  healthBody,
 }: {
   clusterStatusLabel: string
   clusterFetching: boolean
@@ -50,13 +55,21 @@ export function ClusterPageChrome({
   onCopyForLlm: () => void
   onRefresh: () => void
   syncPending: boolean
-  onSyncKubeconfig: () => void
+  /** Optional — only for Bootstrap unreachable recovery; not a Verdict primary action. */
+  onSyncKubeconfig?: () => void
   syncError: string | null
   syncOkMessage?: string
   actionError: string | null
+  /** Auto-Check / actuation success body (plain or markdown). */
+  actionSuccess?: string | null
   summaryError?: string | null
+  /** Same Ops plane as Cluster Issues — drives unified Verdict grade. */
+  opsReach?: Reachability
+  opsSummaryLine?: string | null
   ambientJobId?: string | null
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
+  /** Prefer Operator Dock over Agent Desk when viewing ambient session. */
+  onExpandAgentDock?: () => void
   showBootstrapActions: boolean
   canOperate: boolean
   canAdmin: boolean
@@ -72,6 +85,8 @@ export function ClusterPageChrome({
   clusterSummary: ClusterSummary | undefined
   summaryFailed: boolean
   isProbing: boolean
+  /** Ranked issues + failing pods — nested in the same health panel. */
+  healthBody?: ReactNode
 }) {
   // Must be string | null — never boolean. (`x && msg` yields `false` when x is null,
   // and `false != null` is true → empty "Actuation" OpsFeedback banner.)
@@ -88,18 +103,20 @@ export function ClusterPageChrome({
     showBootstrapActions,
     summaryFailed,
     isProbing,
+    opsReach,
+    opsSummaryLine,
   })
 
   const failingPods = clusterSummary?.failing_pods ?? 0
   const nodesReady = clusterSummary?.nodes_ready
   const nodesTotal = clusterSummary?.nodes_total
-  const showTriageLink = verdict.tagLabel === 'DEGRADED'
+  const unified = healthBody != null
 
   return (
     <>
       <OpsVerdictStrip
-        ariaLabel="Cluster verdict"
-        title="CLUSTER VERDICT"
+        ariaLabel="Cluster health"
+        title="CLUSTER HEALTH"
         lamp={verdict.lamp}
         tagLabel={verdict.tagLabel}
         tagVariant={verdict.tagVariant}
@@ -116,9 +133,6 @@ export function ClusterPageChrome({
             <Button variant="outline" size="sm" disabled={clusterFetching} onClick={onRefresh}>
               {clusterFetching ? 'Refreshing…' : 'Refresh'}
             </Button>
-            <Button size="sm" disabled={syncPending} onClick={onSyncKubeconfig}>
-              {syncPending ? 'Syncing…' : 'Sync kubeconfig'}
-            </Button>
           </>
         }
         meta={
@@ -130,24 +144,9 @@ export function ClusterPageChrome({
               </span>
             ) : null}
             {failingPods > 0 ? (
-              <button
-                type="button"
-                className="font-mono-tabular text-warning hover:underline"
-                title="Scroll to Cluster issues"
-                onClick={() => scrollToSection('cluster-issues')}
-              >
+              <span className="font-mono-tabular text-warning">
                 {failingPods} failing pod{failingPods === 1 ? '' : 's'}
-              </button>
-            ) : null}
-            {showTriageLink ? (
-              <button
-                type="button"
-                className="font-mono-tabular text-warning hover:underline"
-                title="Scroll to Failure triage"
-                onClick={() => scrollToSection('cluster-failure-triage')}
-              >
-                View triage
-              </button>
+              </span>
             ) : null}
             <span>
               {clusterFetching
@@ -162,22 +161,34 @@ export function ClusterPageChrome({
                 Audit
               </button>
             ) : null}
-            {ambientJobId != null && ambientJobId !== '' && onOpenAgentDesk != null ? (
-              <button
-                type="button"
-                className="focus-strip-link shrink-0"
-                onClick={() => onOpenAgentDesk(ambientJobId)}
-              >
-                View agent
-              </button>
+            {ambientJobId != null && ambientJobId !== '' ? (
+              onExpandAgentDock != null ? (
+                <button
+                  type="button"
+                  className="focus-strip-link shrink-0"
+                  onClick={onExpandAgentDock}
+                >
+                  View agent
+                </button>
+              ) : onOpenAgentDesk != null ? (
+                <button
+                  type="button"
+                  className="focus-strip-link shrink-0"
+                  onClick={() => onOpenAgentDesk(ambientJobId)}
+                >
+                  View agent
+                </button>
+              ) : null
             ) : null}
           </>
         }
+        body={unified ? healthBody : undefined}
       />
 
       {(syncError != null ||
         syncOkMessage != null ||
         actionErrorDisplay != null ||
+        (actionSuccess != null && actionSuccess !== '') ||
         summaryError != null) && (
         <div className="space-y-1">
           {summaryError != null && (
@@ -191,6 +202,11 @@ export function ClusterPageChrome({
             </OpsFeedback>
           )}
           {syncOkMessage != null && <OpsFeedback variant="success">{syncOkMessage}</OpsFeedback>}
+          {actionSuccess != null && actionSuccess !== '' && (
+            <OpsFeedback variant="success" title="AI Auto-Check / actuation">
+              {actionSuccess}
+            </OpsFeedback>
+          )}
           {actionErrorDisplay != null && (
             <OpsFeedback variant="warning" title="Actuation">
               {actionErrorDisplay}
@@ -246,7 +262,21 @@ export function ClusterPageChrome({
             <>
               {unreachable && (
                 <OpsFeedback variant="warning" title="Cluster API unreachable" className="mt-2">
-                  Sync kubeconfig or check platform-api cluster access before bootstrap actions.
+                  AI Agent can call ensure_kubeconfig_secret / sync_cluster_kubeconfig when Auto-Check
+                  runs. Manual sync is only a bootstrap fallback.
+                  {onSyncKubeconfig != null && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="focus-strip-link"
+                        disabled={syncPending}
+                        onClick={onSyncKubeconfig}
+                      >
+                        {syncPending ? 'Syncing…' : 'Sync kubeconfig (fallback)'}
+                      </button>
+                    </>
+                  )}
                 </OpsFeedback>
               )}
               {caps != null && !canOperate && !capsLoading && (

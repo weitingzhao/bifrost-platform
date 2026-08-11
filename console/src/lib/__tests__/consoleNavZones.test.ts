@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { getAllNavItems } from '@bifrost/ui'
 import {
   buildPartnerNavSections,
   buildSeatNavItems,
   CONSOLE_NAV_GROUPS,
+  ENGINEER_LAUNCH_ITEMS,
   ENGINEER_LIFECYCLE_ITEMS,
   ENGINEER_PROFILE_ITEMS,
   ENGINEER_WORKSPACE_ITEMS,
@@ -18,9 +20,12 @@ describe('Seat / Partner zone builders', () => {
     expect(buildPartnerNavSections(null)?.lifecycle.map(i => i.id)).toEqual(
       ENGINEER_LIFECYCLE_ITEMS.map(i => i.id),
     )
+    expect(buildPartnerNavSections(null)?.launch.map(i => i.id)).toEqual(
+      ENGINEER_LAUNCH_ITEMS.map(i => i.id),
+    )
   })
 
-  it('ops seat is TCC + control-room + observability + defects; partner is Ops Desk', () => {
+  it('ops seat is TCC + control-room + observability + defects; partner is Launch + Ops Desk', () => {
     const allowed = resolveAllowedTabIds('ops')
     const items = buildSeatNavItems(allowed, true)
     expect(items.map(i => i.id)).toEqual([
@@ -31,6 +36,11 @@ describe('Seat / Partner zone builders', () => {
     ])
     const partner = buildPartnerNavSections(allowed)
     expect(partner?.lifecycle).toEqual([])
+    expect(partner?.launch.map(i => i.id)).toEqual([
+      'platform-release',
+      'trade-release',
+      'plugin-release',
+    ])
     expect(partner?.workspace.map(i => i.id)).toEqual([
       'queue',
       'autonomous-skills',
@@ -55,6 +65,7 @@ describe('Seat / Partner zone builders', () => {
       'delivery-board',
       'dev-sessions',
     ])
+    expect(partner?.launch).toEqual([])
     expect(partner?.workspace.map(i => i.id)).toEqual(['queue'])
     expect(ENGINEER_LIFECYCLE_ITEMS.find(i => i.id === 'dev-sessions')?.label).toBe('Dev Sessions')
     expect(partner?.profile).toEqual([])
@@ -66,6 +77,14 @@ describe('Seat / Partner zone builders', () => {
       'In Flight',
       'Delivery',
       'Dev Sessions',
+    ])
+  })
+
+  it('Launch Desk sidebar labels are Rocket → Satellite → Plugin', () => {
+    expect(ENGINEER_LAUNCH_ITEMS.map(i => i.label)).toEqual([
+      'Rocket',
+      'Satellite',
+      'Plugin',
     ])
   })
 
@@ -92,6 +111,7 @@ describe('Seat / Partner zone builders', () => {
     ])
     const analysis = buildPartnerNavSections(resolveAllowedTabIds('analysis'))
     expect(analysis?.lifecycle).toEqual([])
+    expect(analysis?.launch).toEqual([])
     expect(analysis?.workspace).toEqual([])
     expect(analysis?.profile.map(i => i.id)).toEqual([
       'analysis-workspace',
@@ -106,19 +126,25 @@ describe('Seat / Partner zone builders', () => {
     expect(resolveTaskModeId('patrol')).toBe('ops')
   })
 
-  it('remaining nav groups are Satellite → Rocket → Ground → Subcontractors', () => {
+  it('remaining nav groups are Satellite → Rocket → Plugin (Network under Plugin)', () => {
     expect(CONSOLE_NAV_GROUPS.map(g => g.label)).toEqual([
       'Satellite',
       'Rocket',
-      'Ground Systems',
-      'Subcontractors',
+      'Plugin',
     ])
+    const missionIds = CONSOLE_NAV_GROUPS.flatMap(g => getAllNavItems(g).map(i => i.id))
+    expect(missionIds).not.toContain('platform-release')
+    expect(missionIds).not.toContain('trade-release')
+    expect(missionIds).not.toContain('plugin-release')
+    expect(missionIds).toContain('network')
+    expect(missionIds).toContain('plugin-gallery')
+    const pluginGroup = CONSOLE_NAV_GROUPS.find(g => g.label === 'Plugin')
+    expect(pluginGroup?.subGroups?.map(sg => sg.label)).toEqual(['', 'Infra'])
+    expect(pluginGroup?.subGroups?.[1]?.items.map(i => i.id)).toEqual(['network'])
     expect(CONSOLE_NAV_GROUPS[0].defaultOpen).toBe(true)
     expect(CONSOLE_NAV_GROUPS[1].defaultOpen).toBe(true)
-    expect(CONSOLE_NAV_GROUPS[2].defaultOpen).toBe(false)
-    expect(CONSOLE_NAV_GROUPS[2].dividerBefore).toBe(true)
-    expect(CONSOLE_NAV_GROUPS[2].emphasis).toBe('secondary')
-    expect(CONSOLE_NAV_GROUPS[3].defaultOpen).toBe(false)
-    expect(CONSOLE_NAV_GROUPS[3].emphasis).toBe('secondary')
+    expect(CONSOLE_NAV_GROUPS[2].defaultOpen).toBe(true)
+    expect(CONSOLE_NAV_GROUPS[2].emphasis).toBeUndefined()
+    expect(CONSOLE_NAV_GROUPS[2].dividerBefore).toBeUndefined()
   })
 })

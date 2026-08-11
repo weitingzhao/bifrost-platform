@@ -48,6 +48,10 @@ export interface ClusterPageMutationsInput {
   selectedNs: string | null
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onStartAgentJob?: (job: AmbientAgentJob) => void
+  /** Expand Operator Dock Agent tab — preferred over page RemediationPanel. */
+  onExpandAgentDock?: () => void
+  /** Select / observe a job in the ambient dock without re-bumping Activity. */
+  onSelectAgentJob?: (job: AmbientAgentJob) => void
   setDrawerOpen: (open: boolean) => void
   setSelectedPod: (name: string | null) => void
 }

@@ -169,24 +169,16 @@ func TestEvalDatabaseDomainWithCaps(t *testing.T) {
 
 func int32Ptr(v int32) *int32 { return &v }
 
-func TestEvalApplicationsDomainAmd64OnlyNoArm64(t *testing.T) {
+func TestEvalApplicationsDomainNoArm64Pool(t *testing.T) {
 	snap := applicationsReadySnapshot()
 	d := evalApplicationsDomain(snap)
 	if strings.Contains(d.Summary, "arm64") {
-		t.Fatalf("optional arm64 pool must not block domain summary: %s", d.Summary)
+		t.Fatalf("applications summary must not mention arm64: %s", d.Summary)
 	}
-	var arm64Dep *ServiceDependencyView
-	for i := range d.Dependencies {
-		if d.Dependencies[i].ID == "pool-arm64_edge" {
-			arm64Dep = &d.Dependencies[i]
-			break
+	for _, dep := range d.Dependencies {
+		if dep.ID == "pool-arm64_edge" || strings.Contains(strings.ToLower(dep.Label), "arm64") {
+			t.Fatalf("arm64 edge pool removed from catalog; unexpected dep: %+v", dep)
 		}
-	}
-	if arm64Dep == nil {
-		t.Fatal("missing arm64 optional dep")
-	}
-	if arm64Dep.Reachability != probe.ReachOK {
-		t.Fatalf("optional arm64 pool should be ok when absent, got %s", arm64Dep.Reachability)
 	}
 }
 
@@ -219,7 +211,7 @@ func applicationsReadySnapshot() readinessSnapshot {
 			{Name: "n2", Architecture: "amd64", Status: "Ready", Reachability: probe.ReachOK},
 		},
 		pools: map[string]placement.PoolView{
-			"arm64_edge": {ID: "arm64_edge", NodesReady: 0, NodesTotal: 0, Status: placement.PoolStatusLive},
+			"amd64_general": {ID: "amd64_general", NodesReady: 2, NodesTotal: 2, Status: placement.PoolStatusLive},
 		},
 		deployments:   deploys,
 		ingressRoutes: routes,

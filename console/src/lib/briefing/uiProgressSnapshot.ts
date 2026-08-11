@@ -1,7 +1,16 @@
 /** Static snapshot of Ops Console UI implementation — S11: nav-derived + Owner overrides. */
 
-import { getAllNavItems } from '@bifrost/ui'
-import { CONSOLE_NAV_GROUPS, CONSOLE_NAV_PLANE_BY_TAB } from '@/lib/consoleNavConfig'
+import { getAllNavItems, type ShellNavItem } from '@bifrost/ui'
+import {
+  CONSOLE_NAV_GROUPS,
+  CONSOLE_NAV_PLANE_BY_TAB,
+  ENGINEER_LAUNCH_ITEMS,
+  ENGINEER_LIFECYCLE_ITEMS,
+  ENGINEER_PROFILE_ITEMS,
+  ENGINEER_WORKSPACE_ITEMS,
+  MISSION_CONTROL_ITEMS,
+  TASK_CC_NAV_ITEM,
+} from '@/lib/consoleNavConfig'
 import { UI_PROGRESS_OVERRIDES } from '@/lib/briefing/uiProgressOverrides'
 
 export type UiItemStatus = 'done' | 'partial' | 'planned'
@@ -13,23 +22,38 @@ export interface UiProgressItem {
   notes: string
 }
 
+function pushNavProgress(
+  items: UiProgressItem[],
+  seen: Set<string>,
+  navItems: readonly ShellNavItem[],
+  areaFallback: string,
+) {
+  for (const navItem of navItems) {
+    if (seen.has(navItem.id)) continue
+    seen.add(navItem.id)
+    const override = UI_PROGRESS_OVERRIDES[navItem.id]
+    items.push({
+      area: CONSOLE_NAV_PLANE_BY_TAB[navItem.id] ?? areaFallback,
+      item: navItem.label,
+      status: override?.status ?? 'planned',
+      notes: override?.notes ?? `Console tab: ${navItem.id}`,
+    })
+  }
+}
+
 /** S11: derive UI progress rows from sidebar nav registry + Owner overrides. */
 export function deriveConsoleUiProgress(): UiProgressItem[] {
   const items: UiProgressItem[] = []
   const seen = new Set<string>()
 
+  pushNavProgress(items, seen, [TASK_CC_NAV_ITEM, ...MISSION_CONTROL_ITEMS], 'Mission Control')
+  pushNavProgress(items, seen, ENGINEER_LIFECYCLE_ITEMS, 'Engineer')
+  pushNavProgress(items, seen, ENGINEER_LAUNCH_ITEMS, 'Engineer')
+  pushNavProgress(items, seen, ENGINEER_WORKSPACE_ITEMS, 'Engineer')
+  pushNavProgress(items, seen, ENGINEER_PROFILE_ITEMS, 'Engineer')
+
   for (const group of CONSOLE_NAV_GROUPS) {
-    for (const navItem of getAllNavItems(group)) {
-      if (seen.has(navItem.id)) continue
-      seen.add(navItem.id)
-      const override = UI_PROGRESS_OVERRIDES[navItem.id]
-      items.push({
-        area: CONSOLE_NAV_PLANE_BY_TAB[navItem.id] ?? group.label,
-        item: navItem.label,
-        status: override?.status ?? 'planned',
-        notes: override?.notes ?? `Console tab: ${navItem.id}`,
-      })
-    }
+    pushNavProgress(items, seen, getAllNavItems(group), group.label)
   }
 
   items.push(

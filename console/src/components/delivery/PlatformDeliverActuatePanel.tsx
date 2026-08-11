@@ -42,9 +42,15 @@ const SMOKE_URLS: Record<string, { console: string; apiHealth: string }> = {
 interface PlatformDeliverActuatePanelProps {
   target: DeliveryTargetConfig
   hideActions?: boolean
+  /** Ambient agent / remediation job id — persisted on the release cycle. */
+  agentSessionId?: string | null
 }
 
-export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDeliverActuatePanelProps) {
+export function PlatformDeliverActuatePanel({
+  target,
+  hideActions,
+  agentSessionId,
+}: PlatformDeliverActuatePanelProps) {
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
   const [revision, setRevision] = useState('main')
@@ -65,7 +71,8 @@ export function PlatformDeliverActuatePanel({ target, hideActions }: PlatformDel
   })
 
   const deliverMutation = useMutation({
-    mutationFn: (rev: string) => startPipelineRun(target.pipeline, rev),
+    mutationFn: (rev: string) =>
+      startPipelineRun(target.pipeline, rev, agentSessionId ?? undefined),
     onMutate: () => {
       setActionError(null)
       setActionSuccess(null)

@@ -11,9 +11,16 @@ import { TaskModeIconRail } from '@/components/task-mode/TaskModeIconRail'
 import { TradeMonitoringPeerLinks } from '@/components/TradeMonitoringPeerLinks'
 import { useControlRoomBayNavSignal } from '@/hooks/useControlRoomBayNavSignal'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
+import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
+import {
+  useLaunchDeskChecklistSignals,
+  type LaunchDeskLaneId,
+} from '@/hooks/useLaunchDeskChecklistSignals'
+import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePatrolSnapshot } from '@/hooks/usePatrolSnapshot'
-import { missionStatus, signalColor } from '@/lib/control-room/missionSignals'
+import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
+import { missionStatus, signalColor, type Signal } from '@/lib/control-room/missionSignals'
 import { isBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
 import {
   buildTaskNavGroups,
@@ -46,7 +53,7 @@ export type ConsoleViewTab =
   | 'audit'
   | 'runtime-map'
   | 'cluster'
-  | 'placement'
+  | 'rocket-health'
   | 'trade-release'
   | 'platform-release'
   | 'plugin-release'
@@ -61,11 +68,12 @@ export type ConsoleViewTab =
   | 'ai-compute'
   | 'console'
   | 'network'
-  | 'compute'
   | 'satellite-bus'
+  | 'satellite-health'
   | 'satellite-telemetry'
   | 'satellite-api'
   | 'plugin-gallery'
+  | 'ib-gateway-manage'
   | 'market-data-manage'
   | 'defects'
   | 'dev-sessions'
@@ -74,16 +82,29 @@ export function ConsoleSidebar({
   activeTab,
   onSelect,
   onModeChange,
+  ambientJobId,
+  ambientJobStatus,
+  ambientJobScope,
 }: {
   activeTab: string
   onSelect: (id: string) => void
   onModeChange?: (landingTab: string, modeId: TaskModeId) => void
+  ambientJobId?: string | null
+  ambientJobStatus?: AmbientAgentJob['status'] | null
+  ambientJobScope?: string | null
 }) {
   const { modeId, mode, isTaskLens } = useTaskMode()
   const { fleet, snapshot, viewerEnv, viewerEnvLoading } = useFleetSnapshot()
   const queueQ = useOperateQueue()
   const patrol = usePatrolSnapshot()
   const controlRoomBaySignal = useControlRoomBayNavSignal()
+  const ibGatewayProbe = useIbGatewayLiveProbe()
+  const marketDataProbe = useMarketDataLiveProbe()
+  const launchDeskSignals = useLaunchDeskChecklistSignals({
+    ambientJobId,
+    ambientJobStatus,
+    ambientJobScope,
+  })
 
   const navGroups = useMemo(
     () => buildTaskNavGroups(modeId, CONSOLE_NAV_GROUPS),
@@ -135,23 +156,54 @@ export function ConsoleSidebar({
     (item: ShellNavItem) => {
       const ItemIcon = item.icon
       if (ItemIcon == null) return null
-      if (item.id !== 'control-room') {
+
+      let signal: Signal | null = null
+      let title: string | undefined
+      if (item.id === 'control-room') {
+        signal = controlRoomBaySignal
+        title = `Control Room Bay Scan: ${missionStatus(controlRoomBaySignal)}`
+      } else if (item.id === 'ib-gateway-manage') {
+        signal = ibGatewayProbe.isLoading ? 'unknown' : ibGatewayProbe.probeReach
+        title = `IB Gateway: ${ibGatewayProbe.summary}`
+      } else if (item.id === 'market-data-manage') {
+        signal = marketDataProbe.isLoading ? 'unknown' : marketDataProbe.probeReach
+        title = `Market Data: ${marketDataProbe.summary}`
+      } else if (
+        item.id === 'platform-release' ||
+        item.id === 'trade-release' ||
+        item.id === 'plugin-release'
+      ) {
+        const lane = launchDeskSignals[item.id as LaunchDeskLaneId]
+        signal = lane.signal
+        title = lane.title
+      }
+
+      if (signal == null) {
         return <ItemIcon className={shellNavSubItemIconClass} aria-hidden />
       }
+
       // SidebarMenuSubButton forces data-[active=true]:[&_svg]:text-sidebar-accent-foreground.
       // Inherit lamp color onto the SVG with !important so status stays visible when selected.
-      const status = missionStatus(controlRoomBaySignal)
       return (
         <span
-          title={`Control Room Bay Scan: ${status}`}
+          title={title}
           className="inline-flex shrink-0 [&_svg]:!text-[inherit]"
-          style={{ color: signalColor(controlRoomBaySignal) }}
+          style={{ color: signalColor(signal) }}
         >
           <ItemIcon className={cn(shellNavSubItemIconClass, 'opacity-100')} aria-hidden />
         </span>
       )
     },
-    [controlRoomBaySignal],
+    [
+      controlRoomBaySignal,
+      ibGatewayProbe.isLoading,
+      ibGatewayProbe.probeReach,
+      ibGatewayProbe.summary,
+      marketDataProbe.isLoading,
+      marketDataProbe.probeReach,
+      marketDataProbe.summary,
+      launchDeskSignals,
+    ],
   )
 
   const footer: ReactNode = (

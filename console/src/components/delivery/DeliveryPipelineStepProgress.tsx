@@ -9,22 +9,37 @@ function phasesTerminal(phases: PipelinePhaseView[]): boolean {
   return phases.every(p => p.status === 'succeeded' || p.status === 'failed')
 }
 
-function PhaseChip({ phase, active }: { phase: PipelinePhaseView; active: boolean }) {
+function PhaseChip({
+  phase,
+  active,
+  selected,
+  onSelect,
+}: {
+  phase: PipelinePhaseView
+  active: boolean
+  selected: boolean
+  onSelect: () => void
+}) {
   const status = phase.status as 'pending' | 'running' | 'succeeded' | 'failed'
   const isRunning = status === 'running'
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
+      title={`Show logs for ${phase.label}`}
       className={cn(
-        'flex min-w-0 flex-col items-center gap-1 rounded-md p-1',
-        active && isRunning && 'ring-1 ring-primary/50 bg-primary/5',
-        active && !isRunning && 'ring-1 ring-[var(--warning)] bg-[var(--secondary)]/50',
+        'flex min-w-0 flex-col items-center gap-1 rounded-md p-1 text-left transition-colors',
+        'hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+        selected && 'ring-1 ring-primary bg-primary/10',
+        !selected && active && isRunning && 'ring-1 ring-primary/50 bg-primary/5',
+        !selected && active && !isRunning && 'ring-1 ring-[var(--warning)] bg-[var(--secondary)]/50',
       )}
     >
       <DenseTag
         variant={phaseStatusVariant(status)}
         className={cn(
           'w-full justify-center font-mono-tabular',
-          isRunning && active && 'release-cc__running-phase',
+          isRunning && (selected || active) && 'release-cc__running-phase',
         )}
       >
         {phase.label}
@@ -32,7 +47,7 @@ function PhaseChip({ phase, active }: { phase: PipelinePhaseView; active: boolea
       <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)] tabular-nums">
         {phase.detail ?? status}
       </span>
-    </div>
+    </button>
   )
 }
 
@@ -45,6 +60,9 @@ interface DeliveryPipelineStepProgressProps {
   runTerminal?: 'succeeded' | 'failed'
   /** PipelineRun still active — show live phase animation. */
   runRunning?: boolean
+  /** Phase whose logs are shown in Log Tail (null = all). */
+  selectedPhaseId?: string | null
+  onSelectPhase?: (phaseId: string | null) => void
 }
 
 export function DeliveryPipelineStepProgress({
@@ -53,6 +71,8 @@ export function DeliveryPipelineStepProgress({
   pollUntilTerminal,
   runTerminal,
   runRunning = false,
+  selectedPhaseId = null,
+  onSelectPhase,
 }: DeliveryPipelineStepProgressProps) {
   const stepsQuery = useQuery({
     queryKey: ['delivery', 'steps', runName, namespace],
@@ -99,6 +119,19 @@ export function DeliveryPipelineStepProgress({
     <div className="mb-3">
       <p className="m-0 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
         <span>Pipeline phases</span>
+        {onSelectPhase != null && (
+          <button
+            type="button"
+            className={cn(
+              'normal-case font-normal underline-offset-2 hover:underline',
+              selectedPhaseId == null ? 'text-foreground' : 'text-muted-foreground',
+            )}
+            onClick={() => onSelectPhase(null)}
+            title="Show full log tail"
+          >
+            All logs
+          </button>
+        )}
         {pollUntilTerminal && runRunning && !phasesTerminal(phases) && (
           <span className="normal-case inline-flex items-center gap-1 text-primary">
             <span className="release-cc__running-dot scale-75" aria-hidden />
@@ -123,11 +156,20 @@ export function DeliveryPipelineStepProgress({
       </p>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
         {phases.map((phase, idx) => (
-          <PhaseChip key={phase.id} phase={phase} active={idx === currentIdx && phase.status === 'running'} />
+          <PhaseChip
+            key={phase.id}
+            phase={phase}
+            active={idx === currentIdx && (phase.status === 'running' || phase.status === 'failed')}
+            selected={selectedPhaseId === phase.id}
+            onSelect={() => {
+              if (onSelectPhase == null) return
+              onSelectPhase(selectedPhaseId === phase.id ? null : phase.id)
+            }}
+          />
         ))}
       </div>
       {stepsQuery.isFetching && !stepsQuery.isLoading && (
-        <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">Refreshing…</p>
+        <span className="sr-only">Refreshing pipeline phases…</span>
       )}
       {stepsQuery.error instanceof Error && (
         <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--destructive)]">

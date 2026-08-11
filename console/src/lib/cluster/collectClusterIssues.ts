@@ -78,11 +78,7 @@ function collectServiceDomainIssues(
     if (isHealthy) continue
 
     const severity: ClusterIssueRow['severity'] = domain.reachability === 'fail' ? 'fail' : 'degraded'
-    const depDetail = failingDependencyDetail(
-      (domain.dependencies ?? []).filter(
-        d => !(d.id === 'pool-arm64_edge' && d.reachability === 'ok'),
-      ),
-    )
+    const depDetail = failingDependencyDetail(domain.dependencies ?? [])
     const detail =
       depDetail !== ''
         ? depDetail

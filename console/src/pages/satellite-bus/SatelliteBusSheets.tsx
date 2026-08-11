@@ -112,7 +112,7 @@ export function SatelliteBusInspectSheet({
                     className="focus-strip-link text-[var(--text-dense-caption)]"
                     onClick={onOpenApiHealth}
                   >
-                    API & Auth Probes
+                    Satellite Health
                   </button>
                 )}
               </div>

@@ -21,12 +21,15 @@ interface DeployActionBarProps {
   /** Release state tier query key segment — 'platform' or 'trade' */
   releaseStateTier?: string
   deployButtonLabel?: string
+  /** Ambient agent / remediation job id — persisted on the release cycle. */
+  agentSessionId?: string | null
 }
 
 export function DeployActionBar({
   target,
   releaseStateTier = 'platform',
   deployButtonLabel,
+  agentSessionId,
 }: DeployActionBarProps) {
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
@@ -78,7 +81,8 @@ export function DeployActionBar({
   const hasError = !!actionError || latestRunFailed
 
   const deliverMutation = useMutation({
-    mutationFn: (rev: string) => startPipelineRun(target.pipeline, rev),
+    mutationFn: (rev: string) =>
+      startPipelineRun(target.pipeline, rev, agentSessionId ?? undefined),
     onMutate: () => {
       setActionError(null)
       setActionSuccess(null)

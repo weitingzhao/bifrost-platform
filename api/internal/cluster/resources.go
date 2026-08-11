@@ -33,21 +33,22 @@ func formatMemory(q resource.Quantity) string {
 	bytes := q.Value()
 	const gib = 1024 * 1024 * 1024
 	const mib = 1024 * 1024
+	// Dense UI: G/M/K (same binary scale as Gi/Mi/Ki, shorter labels).
 	if bytes >= gib {
 		gi := float64(bytes) / float64(gib)
 		if math.Mod(gi, 1) == 0 {
-			return fmt.Sprintf("%dGi", int(gi))
+			return fmt.Sprintf("%dG", int(gi))
 		}
-		return fmt.Sprintf("%.1fGi", gi)
+		return fmt.Sprintf("%.1fG", gi)
 	}
 	if bytes >= mib {
 		mi := float64(bytes) / float64(mib)
 		if math.Mod(mi, 1) == 0 {
-			return fmt.Sprintf("%dMi", int(mi))
+			return fmt.Sprintf("%dM", int(mi))
 		}
-		return fmt.Sprintf("%.1fMi", mi)
+		return fmt.Sprintf("%.1fM", mi)
 	}
-	return fmt.Sprintf("%dKi", bytes/1024)
+	return fmt.Sprintf("%dK", bytes/1024)
 }
 
 func usagePercent(used, capacity resource.Quantity) (float64, bool) {

@@ -20,17 +20,35 @@ export const APPLICATION_DOMAIN_IDS = [
 
 export type ApplicationDomainCategory = (typeof APPLICATION_DOMAIN_IDS)[number]
 
-export type ClusterCategory = InfrastructureCategory | ApplicationDomainCategory | string
+/** Facility / placement constraint categories (former Rocket → Placement page). */
+export const FACILITY_CATEGORIES = ['node_pools', 'policy_matrix', 'ci_readiness'] as const
 
-export type ClusterDimension = 'application' | 'infrastructure'
+export type FacilityCategory = (typeof FACILITY_CATEGORIES)[number]
+
+export type ClusterCategory =
+  | InfrastructureCategory
+  | ApplicationDomainCategory
+  | FacilityCategory
+  | string
+
+export type ClusterDimension = 'application' | 'infrastructure' | 'facility'
 
 export const CLUSTER_CATEGORY_PARAM = 'category'
+
+/** Default facility category when deep-linking from legacy `#placement`. */
+export const DEFAULT_FACILITY_CATEGORY: FacilityCategory = 'node_pools'
 
 export const INFRASTRUCTURE_CATEGORY_LABELS: Record<InfrastructureCategory, string> = {
   nodes: 'Nodes',
   workloads: 'Workloads',
   governance: 'Governance',
   observability: 'Observability',
+}
+
+export const FACILITY_CATEGORY_LABELS: Record<FacilityCategory, string> = {
+  node_pools: 'Node pools',
+  policy_matrix: 'Policy matrix',
+  ci_readiness: 'CI readiness',
 }
 
 /** Purpose phrases from platform-api service readiness (finalizeDomain). */
@@ -74,13 +92,23 @@ export function isApplicationDomainCategory(value: string): value is Application
   return (APPLICATION_DOMAIN_IDS as readonly string[]).includes(value)
 }
 
+export function isFacilityCategory(value: string): value is FacilityCategory {
+  return (FACILITY_CATEGORIES as readonly string[]).includes(value)
+}
+
 export function isClusterCategory(value: string | null | undefined): value is ClusterCategory {
   if (value == null || value === '') return false
-  return isInfrastructureCategory(value) || isApplicationDomainCategory(value)
+  return (
+    isInfrastructureCategory(value) ||
+    isApplicationDomainCategory(value) ||
+    isFacilityCategory(value)
+  )
 }
 
 export function categoryDimension(category: ClusterCategory): ClusterDimension {
-  return isInfrastructureCategory(category) ? 'infrastructure' : 'application'
+  if (isInfrastructureCategory(category)) return 'infrastructure'
+  if (isFacilityCategory(category)) return 'facility'
+  return 'application'
 }
 
 export function parseCategoryFromUrl(url: URL = new URL(window.location.href)): ClusterCategory | null {

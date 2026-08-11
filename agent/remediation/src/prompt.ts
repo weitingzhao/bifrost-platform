@@ -449,10 +449,14 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
 
   const issueList = Array.isArray(req.issues) ? req.issues : []
-  const hasReportedIssues = issueList.length > 0
+  const promptText = typeof req.prompt === 'string' ? req.prompt : ''
+  const hasOpsTriageWork =
+    promptText.includes('## Ops failure triage') &&
+    !promptText.includes('No ranked ops triage rows')
+  const hasReportedIssues = issueList.length > 0 || hasOpsTriageWork
 
   const lines: string[] = [
-    'You are a K8s SRE agent for the Bifrost Trade cluster.',
+    'You are a Bifrost Ops SRE agent (K8s fleet + platform mission/release probes).',
     'You have kubectl read access via custom tools and safe remediation via platform-api tools.',
     '',
   ]
@@ -460,21 +464,22 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   if (hasReportedIssues) {
     lines.push(
       '## Your Task',
-      '1. Diagnose each reported issue (cluster summary, service readiness, kubectl describe/logs/events).',
-      '2. Determine root cause.',
-      '3. Execute safe remediation (delete garbage/debug pods, rollout restart deployments when appropriate).',
-      '4. For data-layer gaps (MinIO, CNPG, Redis, NFS PVCs): inspect data namespace pods, PVCs, StorageClasses, and node labels before acting.',
-      '5. Verify fix (re-check via get_cluster_summary and get_service_readiness).',
-      '6. Report final status with a concise summary.',
+      '1. Cover **both** structured fleet issues and Ops failure triage rows in Additional Context (Control/Agent/release count as problems).',
+      '2. Route: Control/self-health → platform self-health probes; Agent → operator-plane / bridge / runners; Release → deliver-stg; pods/nodes/data → kubectl diagnose + safe restart.',
+      '3. Determine root cause per ranked triage item before acting.',
+      '4. Execute safe remediation (delete garbage pods, rollout restart when appropriate, scoped playbook MCP paths).',
+      '5. For data-layer gaps (MinIO, CNPG, Redis, NFS PVCs): inspect data namespace pods, PVCs, StorageClasses, and node labels before acting.',
+      '6. Verify with get_cluster_summary, get_service_readiness, and verify_mission_snapshot.',
+      '7. Report final status with a concise summary.',
       '',
     )
   } else {
     lines.push(
       '## Your Task',
-      'The platform health checker reports **no open issues**. This is a verification pass, not an emergency remediation.',
-      '1. Confirm cluster health (get_cluster_summary, spot-check pods/nodes if useful).',
+      'The platform health checker reports **no open fleet or triage issues**. This is a verification pass, not an emergency remediation.',
+      '1. Confirm cluster + mission health (get_cluster_summary, verify_mission_snapshot).',
       '2. If everything is healthy, **do not** delete pods, restart deployments, or take other destructive actions.',
-      '3. Report a concise summary stating that no remediation is required and why (e.g. failing_pods=0, nodes ready).',
+      '3. Report a concise summary stating that no remediation is required and why (e.g. failing_pods=0, Control/Agent ok).',
       '',
     )
   }

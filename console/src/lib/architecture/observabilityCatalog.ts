@@ -19,7 +19,7 @@ export const OBSERVABILITY_CATALOG_SOURCE =
 export const OBSERVABILITY_OWNERSHIP = {
   hubRoute: 'observability',
   hubPlane: 'Mission Control',
-  satelliteRuntimeRoute: 'satellite-telemetry',
+  satelliteRuntimeRoute: 'satellite-health',
   clusterLayerABRoute: 'cluster',
   grafanaRole: 'Deep evidence / diagnostics — Console does not duplicate full dashboards',
   verdictSource: 'console/src/lib/observability/observabilityViewModel.ts',
@@ -46,7 +46,7 @@ export function buildObservabilityLlmPack(): string {
     `# Signal registry: ${OBSERVABILITY_REGISTRY_SOURCE} v${OBSERVABILITY_REGISTRY_VERSION}`,
     '',
     `Hub: Mission Control → Observability (\`${OBSERVABILITY_OWNERSHIP.hubRoute}\`)`,
-    `Satellite scoped detail: Satellite → Satellite Runtime (\`${OBSERVABILITY_OWNERSHIP.satelliteRuntimeRoute}\`)`,
+    `Satellite scoped detail: Satellite → Satellite Health (\`${OBSERVABILITY_OWNERSHIP.satelliteRuntimeRoute}\`)`,
     `Layer A/B install: Rocket → Cluster (\`${OBSERVABILITY_OWNERSHIP.clusterLayerABRoute}\`)`,
     `Grafana: ${OBSERVABILITY_OWNERSHIP.grafanaRole}`,
     `Verdict SSOT: \`${OBSERVABILITY_OWNERSHIP.verdictSource}\``,

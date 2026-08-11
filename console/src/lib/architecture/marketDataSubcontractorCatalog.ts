@@ -4,7 +4,7 @@
  * Created 2026-07-30 for bifrost-platform-plugin-market-data (Polygon REST ingest).
  *
  * Live state (not this catalog):
- * - Worker health + deployments + freshness tables: Subcontractors → Plugin Gallery (observe)
+ * - Worker health + deployments + freshness tables: Subcontractors → Market Data (observe)
  * - Optional readiness_rollup on GET /api/v1/plugins/market-data/status (read-only stock_readiness_daily snapshot; Trade owns runbook / gaps)
  * - Phase / program sign-off: Engineer → Active Session · market-data-subcontractor
  * - Implementation: bifrost-platform-plugin-market-data
@@ -26,7 +26,7 @@ export const MARKET_DATA_LAUNCH_LANE = {
     'kubectl -n plugin-market-data-{stg|prod} get deploy + /health (DEV: make verify-market-data)',
   steps: ['Detect', 'Approve', 'Install', 'Verify', 'Live check'] as const,
   galleryIsNotPublish:
-    'Plugin Gallery = observe health / deployments / freshness (+ optional readiness_rollup KPI). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
+    'Market Data manage page = observe health / deployments / freshness (+ optional readiness_rollup KPI). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
   d10: 'Market-data REST ingest only — no place_order / no IB socket',
   imageTag: '0.2.0',
 } as const
@@ -187,7 +187,7 @@ export const MARKET_DATA_PROGRESS = {
 } as const
 
 export const MARKET_DATA_RELATED_AUTHORITIES = [
-  'Live health + deployments + freshness: Subcontractors → Plugin Gallery (observe — not publish)',
+  'Live health + deployments + freshness: Subcontractors → Market Data (observe — not publish)',
   'Readiness rollup KPI: GET /api/v1/plugins/market-data/status → readiness_rollup (read-only; Trade Stock Data Readiness owns runbook / per-symbol gaps)',
   'Manage UI: Subcontractors → Market Data (`market-data-manage`) — Overview / Coverage / Ingest / Analytics (market-data-expand P6)',
   'Plugin API proxy: GET|POST /api/v1/plugins/market-data/api/market/* → market-data-api:8790 (or MARKET_DATA_API_URL)',
@@ -222,7 +222,7 @@ export function buildMarketDataSubcontractorLlmPack(): string {
     '# Market Data Subcontractor — implementation program',
     `Version: ${MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION}`,
     `Repo: ${MARKET_DATA_SUBCONTRACTOR_SOURCE}`,
-    'Live health: Subcontractors → Plugin Gallery (observe) — not this catalog.',
+    'Live health: Subcontractors → Market Data (observe) — not this catalog.',
     'Sign-off state: Active Session · market-data-subcontractor — not this catalog.',
     '',
     '## Launch lane',

@@ -134,7 +134,7 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     scope: 'env',
     role: 'required',
     source: 'telemetry_metric',
-    detailRoute: 'satellite-telemetry',
+    detailRoute: 'satellite-health',
     grafanaDashboardId: 'satellite-trade-overview',
   },
   {
@@ -144,7 +144,7 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     scope: 'env',
     role: 'required',
     source: 'telemetry_metric',
-    detailRoute: 'satellite-telemetry',
+    detailRoute: 'satellite-health',
     grafanaDashboardId: 'satellite-trade-overview',
   },
   {
@@ -154,7 +154,7 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     scope: 'env',
     role: 'required',
     source: 'telemetry_metric',
-    detailRoute: 'satellite-telemetry',
+    detailRoute: 'satellite-health',
     grafanaDashboardId: 'satellite-trade-overview',
   },
   {
@@ -186,7 +186,7 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     scope: 'shared',
     role: 'required',
     source: 'ib_gateway',
-    detailRoute: 'plugin-gallery',
+    detailRoute: 'ib-gateway-manage',
     grafanaDashboardId: 'ib-gateway',
     affectsDomains: ['subcontractors', 'satellite'],
   },

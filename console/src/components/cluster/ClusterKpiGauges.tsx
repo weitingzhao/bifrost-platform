@@ -32,14 +32,19 @@ function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: nu
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${large} 0 ${end.x} ${end.y}`
 }
 
+/** Dense memory/CPU alloc suffix — prefer G/M/K over Gi/Mi/Ki. */
 function formatAllocLabel(raw: string | undefined): string | undefined {
   if (raw == null || raw === '') return undefined
-  const ki = /^(\d+)Ki$/.exec(raw)
+  const ki = /^(\d+(?:\.\d+)?)Ki$/i.exec(raw)
   if (ki != null) {
-    const gi = Number(ki[1]) / (1024 * 1024)
-    return `${gi >= 10 ? gi.toFixed(0) : gi.toFixed(1)}Gi alloc`
+    const g = Number(ki[1]) / (1024 * 1024)
+    return `${g >= 10 ? g.toFixed(0) : g.toFixed(1)}G alloc`
   }
-  return `${raw} alloc`
+  const compact = raw
+    .replace(/([0-9.]+)Gi\b/gi, '$1G')
+    .replace(/([0-9.]+)Mi\b/gi, '$1M')
+    .replace(/([0-9.]+)Ki\b/gi, '$1K')
+  return `${compact} alloc`
 }
 
 interface ClusterAnalogGaugeProps {

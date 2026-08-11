@@ -1,4 +1,15 @@
-import type { GateHistoryResponse, ReleaseGateResponse, ReleaseStateResponse, RunReleaseGateResponse, StgSmokeResponse, TierBSignoffResponse, TierBStatusResponse } from './deliveryTypes'
+import type {
+  GateHistoryResponse,
+  ReleaseCycleLane,
+  ReleaseCyclesResponse,
+  ReleaseCycleView,
+  ReleaseGateResponse,
+  ReleaseStateResponse,
+  RunReleaseGateResponse,
+  StgSmokeResponse,
+  TierBSignoffResponse,
+  TierBStatusResponse,
+} from './deliveryTypes'
 import { authedFetch } from './client'
 
 export async function fetchStgSmoke(): Promise<StgSmokeResponse> {
@@ -32,6 +43,18 @@ export async function fetchReleaseState(tier = 'platform'): Promise<ReleaseState
   const r = await fetch(`/api/v1/promote/release-state?tier=${tier}`)
   if (!r.ok) throw new Error(`release state: HTTP ${r.status}`)
   return r.json() as Promise<ReleaseStateResponse>
+}
+
+export async function fetchReleaseCycles(lane: ReleaseCycleLane): Promise<ReleaseCyclesResponse> {
+  const r = await fetch(`/api/v1/promote/release-cycles?lane=${lane}`)
+  if (!r.ok) throw new Error(`release cycles: HTTP ${r.status}`)
+  return r.json() as Promise<ReleaseCyclesResponse>
+}
+
+export async function fetchReleaseCycleDetail(id: string): Promise<ReleaseCycleView> {
+  const r = await fetch(`/api/v1/promote/release-cycles/${encodeURIComponent(id)}`)
+  if (!r.ok) throw new Error(`release cycle: HTTP ${r.status}`)
+  return r.json() as Promise<ReleaseCycleView>
 }
 
 export async function fetchTierBStatus(): Promise<TierBStatusResponse> {
