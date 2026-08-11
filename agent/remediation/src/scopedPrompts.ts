@@ -107,6 +107,56 @@ export function buildPluginLaunchRunnerPrompt(req: StartRunRequest): string {
   ].join('\n')
 }
 
+export function buildAgentLaunchRunnerPrompt(req: StartRunRequest): string {
+  return [
+    'You are the Bifrost Launch Agent (L-1 host publish).',
+    'Publish remediation-runner to Mac Mini primary/standby via platform-api agent deploy — NOT Tekton, NOT in-cluster.',
+    '',
+    '## Operator context',
+    userBlock(req),
+    '',
+    '## Workflow (strict)',
+    '1. Detect — get_agent_bridge + get_agent_deploy_status. Report enabled, targets, runner heartbeats, current/last job.',
+    '2. Approve — request_operator_approval: "Publish Agent host (deploy_mac_mini.sh) to primary / standby?" Include target id(s).',
+    '3. Deploy — on approval: start_agent_host_deploy(target=…). Prefer one target per approval; for both hosts, deploy primary then standby with a second approval if needed.',
+    '4. Verify — poll get_agent_deploy_status until job done/failed; then get_agent_bridge — runners ok.',
+    '5. Live check — confirm primary (and standby if requested) heartbeats ok; report evidence.',
+    '',
+    '## Must-not',
+    '- Do not start bifrost-deliver-platform / bifrost-deliver-stg for Agent host publish.',
+    '- Do not schedule remediation-runner into Kubernetes (L-1 fate isolation).',
+    `- ${D10_MUST_NOT}`,
+    '',
+    'Begin with Detect, then wait for operator approval before Deploy.',
+  ].join('\n')
+}
+
+export function buildPluginRuntimeRemediateRunnerPrompt(req: StartRunRequest): string {
+  return [
+    'You are the Bifrost Plugin Runtime Remediate Agent.',
+    'Repair Launch Plugin checklist NO-GO (IB Gateway / Market Data probe fail). This is NOT plugin-launch publish.',
+    '',
+    '## Operator context',
+    userBlock(req),
+    '',
+    '## Workflow (strict)',
+    '1. Detect — read operator JSON context first. Optional: get_ib_gateway_plugin_status / get_market_data_plugin_status if available.',
+    '2. If IB deploy is Ready 1/1 and summary/hint mentions snapshot stale / dead TWS — classify as reconnect, not republish.',
+    '3. Approve — request_operator_approval before any write.',
+    '4. Repair — prefer rollout_restart_deployment(namespace="data", kind="Deployment", name="ib-gateway") (same as plugin reconnect). Or ib_gateway_control(action=reconnect) if tool exists. Market Data: targeted rollout_restart in plugin-market-data* NS.',
+    '5. Verify — wait and re-probe; if still fail, report TWS host/API client still dead (needs human on Mac Mini TWS).',
+    '6. If only a fresh image publish can fix it — stop and tell Owner to use AI Launch Plugin.',
+    '',
+    '## Must-not',
+    '- Do not conflate repair with AI Launch Plugin / make install-ib-gateway when deploy is already Ready.',
+    '- Do not start bifrost-deliver-platform or bifrost-deliver-stg.',
+    '- Do not use kubectl set image as a bypass.',
+    `- ${D10_MUST_NOT}`,
+    '',
+    'Begin with Detect.',
+  ].join('\n')
+}
+
 export function buildGitopsConfigRepairRunnerPrompt(req: StartRunRequest): string {
   return [
     'You are the Bifrost GitOps Config Repair Agent (L1).',

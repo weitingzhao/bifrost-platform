@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPipelineRuns } from '@/api/delivery'
+import { fetchAgentBridge, fetchAgentDeployStatus } from '@/api/agentOps'
 import {
   usePromoteVerifyReadiness,
   useRocketProdReadiness,
@@ -13,6 +14,7 @@ import {
   type AmbientAgentJob,
 } from '@/lib/agent/ambientAgent'
 import { PLUGIN_LAUNCH_SCOPE } from '@/lib/agent/pluginLaunchAgentPrompt'
+import { AGENT_LAUNCH_SCOPE } from '@/lib/agent/agentLaunchAgentPrompt'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import { TRADE_DEPLOY_SCOPE } from '@/lib/agent/tradeDeployAgentPrompt'
 import { missionStatus, type Signal } from '@/lib/control-room/missionSignals'
@@ -38,7 +40,7 @@ const PLATFORM_PROD_PIPELINE = deliveryTargetById('platform-prod').pipeline
 const TRADE_STG_PIPELINE = deliveryTargetById('trade-stg').pipeline
 const TRADE_PROD_PIPELINE = deliveryTargetById('trade-prod').pipeline
 
-export type LaunchDeskLaneId = 'platform-release' | 'trade-release' | 'plugin-release'
+export type LaunchDeskLaneId = 'platform-release' | 'trade-release' | 'plugin-release' | 'agent-release'
 
 export type LaunchDeskLaneSignal = {
   signal: Signal
@@ -107,6 +109,22 @@ export function useLaunchDeskChecklistSignals(opts?: {
 
   const ambientActive = isAmbientAgentActive(opts?.ambientJobId, opts?.ambientJobStatus)
   const scope = opts?.ambientJobScope ?? null
+
+  const agentBridge = useQuery({
+    queryKey: ['agent', 'bridge'],
+    queryFn: fetchAgentBridge,
+    refetchInterval: 60_000,
+    enabled,
+  })
+  const agentDeploy = useQuery({
+    queryKey: ['agent', 'deploy'],
+    queryFn: fetchAgentDeployStatus,
+    refetchInterval: q => {
+      if (q.state.data?.current?.status === 'running') return 2000
+      return 60_000
+    },
+    enabled,
+  })
 
   return useMemo(() => {
     const rocketInput = {
@@ -193,6 +211,32 @@ export function useLaunchDeskChecklistSignals(opts?: {
         checklistReady: pluginReady,
         checklistTotal: pluginCps.length,
       },
+      'agent-release': (() => {
+        const agentInFlight =
+          agentDeploy.data?.current?.status === 'running' ||
+          (ambientActive && scope === AGENT_LAUNCH_SCOPE)
+        const runnersOk =
+          agentBridge.data?.runners?.some(r => r.status === 'ok') ??
+          agentBridge.data?.remediation_runner?.status === 'ok'
+        const deployEnabled = agentDeploy.data?.enabled === true
+        const lastOk = agentDeploy.data?.last?.status === 'done'
+        const agentLoading = agentBridge.isLoading || agentDeploy.isLoading
+        const agentChecks = [canOperate, deployEnabled, runnersOk, lastOk]
+        const agentReady = agentChecks.filter(Boolean).length
+        const agentTotal = agentChecks.length
+        let agentVerdictKind: LaunchVerdict['kind']
+        if (agentInFlight) agentVerdictKind = 'IN_FLIGHT'
+        else if (agentReady === agentTotal) agentVerdictKind = 'GO'
+        else agentVerdictKind = 'NO_GO'
+        const agentVerdict: LaunchVerdict = { kind: agentVerdictKind, title: `Agent ${agentVerdictKind}`, detail: `${agentReady}/${agentTotal} ready` }
+        return {
+          signal: agentLoading ? ('unknown' as Signal) : launchVerdictToSignal(agentVerdictKind),
+          title: verdictTitle('Agent', agentVerdict, agentReady, agentTotal),
+          verdict: agentVerdict,
+          checklistReady: agentReady,
+          checklistTotal: agentTotal,
+        }
+      })(),
     }
   }, [
     canOperate,
@@ -216,5 +260,9 @@ export function useLaunchDeskChecklistSignals(opts?: {
     scope,
     ibProbe.status,
     ibProbe.isLoading,
+    agentBridge.data,
+    agentBridge.isLoading,
+    agentDeploy.data,
+    agentDeploy.isLoading,
   ])
 }

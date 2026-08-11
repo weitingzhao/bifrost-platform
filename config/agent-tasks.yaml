@@ -41,6 +41,22 @@ tasks:
     domain: Platform
     action: "Release"
 
+  - id: plugin-runtime-remediate
+    scope: "plugin-runtime-remediate"
+    label: "Plugin · Runtime Remediate"
+    tier: manual
+    default_level: L1
+    domain: Platform
+    action: "Remediate"
+
+  - id: agent-launch
+    scope: "agent-launch"
+    label: "Agent · Launch"
+    tier: manual
+    default_level: L1
+    domain: Platform
+    action: "Release"
+
   - id: deliver-stg-recover
     scope: "deliver-stg-recover"
     label: "Trade · Deliver STG Recover"

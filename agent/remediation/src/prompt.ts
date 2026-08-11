@@ -7,7 +7,9 @@ import {
   buildDeliverStgRecoverRunnerPrompt,
   buildGitopsConfigRepairRunnerPrompt,
   buildMassiveFeedRecoverRunnerPrompt,
+  buildAgentLaunchRunnerPrompt,
   buildPluginLaunchRunnerPrompt,
+  buildPluginRuntimeRemediateRunnerPrompt,
   buildPlatformSelfHealthRecoverRunnerPrompt,
   buildRegistryPullRecoverRunnerPrompt,
   buildStalePipelineTriageRunnerPrompt,
@@ -32,7 +34,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'plugin-launch' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover' || req.scope === 'data-layer-backup') {
+  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'plugin-launch' || req.scope === 'plugin-runtime-remediate' || req.scope === 'agent-launch' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover' || req.scope === 'data-layer-backup') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -416,6 +418,12 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
   if (req.scope === 'plugin-launch') {
     return buildPluginLaunchRunnerPrompt(req)
+  }
+  if (req.scope === 'plugin-runtime-remediate') {
+    return buildPluginRuntimeRemediateRunnerPrompt(req)
+  }
+  if (req.scope === 'agent-launch') {
+    return buildAgentLaunchRunnerPrompt(req)
   }
   if (req.scope === 'gitops-config-repair') {
     return buildGitopsConfigRepairRunnerPrompt(req)

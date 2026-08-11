@@ -10,10 +10,6 @@ import {
 import type { ReactNode } from 'react'
 import type { StepStatus } from '@/lib/delivery/releaseStepTypes'
 import {
-  evidenceSummaryLine,
-  type PluginLaunchEvidence,
-} from '@/lib/delivery/pluginLaunchEvidence'
-import {
   derivePluginLaunchOutcome,
   type PluginFlowStep,
 } from '@/components/delivery/pluginLaunchOutcome'
@@ -106,9 +102,14 @@ export interface PluginStepCommandCenterProps {
   steps: PluginFlowStep[]
   activeIndex: number
   onSelect: (i: number) => void
-  evidence: PluginLaunchEvidence
+  /** Precomputed evidence line (Plugin / Agent lanes). */
+  evidenceSummary: string
   modeLabel?: string
   revisionHint?: string
+  /** Lane identity badge — Plugin (default) or Agent. */
+  laneLabel?: string
+  idleHint?: string
+  completeMessage?: string
   renderStepActions: (activeIndex: number) => ReactNode
   onAiLaunch?: () => void
   aiLaunchPending?: boolean
@@ -118,16 +119,19 @@ export interface PluginStepCommandCenterProps {
 }
 
 /**
- * Full-step command center for Launch Plugin — mirrors ReleaseStepCommandCenter
- * visuals but does NOT pretend to be Tekton STG/PROD pipelines.
+ * Full-step command center for Launch Plugin / Launch Agent — mirrors
+ * ReleaseStepCommandCenter visuals but does NOT pretend to be Tekton.
  */
 export function PluginStepCommandCenter({
   steps,
   activeIndex,
   onSelect,
-  evidence,
+  evidenceSummary,
   modeLabel,
   revisionHint,
+  laneLabel = 'Plugin',
+  idleHint = 'make install · not Tekton',
+  completeMessage = 'Plugin publish complete',
   renderStepActions,
   onAiLaunch,
   aiLaunchPending = false,
@@ -147,7 +151,7 @@ export function PluginStepCommandCenter({
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="shrink-0 text-dense-label font-semibold uppercase tracking-wider text-muted-foreground">
-              Plugin
+              {laneLabel}
             </span>
             {revisionHint != null && revisionHint !== '' ? (
               <span className="truncate font-mono text-[15px] font-semibold tracking-tight text-foreground">
@@ -155,7 +159,7 @@ export function PluginStepCommandCenter({
               </span>
             ) : (
               <span className="text-dense-caption italic text-muted-foreground">
-                make install · not Tekton
+                {idleHint}
               </span>
             )}
             <span
@@ -189,7 +193,7 @@ export function PluginStepCommandCenter({
           </div>
         </div>
         <p className="m-0 mt-1.5 text-dense-micro text-muted-foreground">
-          {evidenceSummaryLine(evidence)}
+          {evidenceSummary}
         </p>
       </div>
 
@@ -203,7 +207,7 @@ export function PluginStepCommandCenter({
                 {step?.label}
               </span>
               <span className="rounded px-1 py-px text-dense-micro font-bold uppercase tracking-wider text-muted-foreground">
-                Plugin
+                {laneLabel}
               </span>
               <span className="text-dense-caption text-muted-foreground">{step?.statusLabel}</span>
             </div>
@@ -216,7 +220,7 @@ export function PluginStepCommandCenter({
             {step?.status === 'done' && nextStep == null && (
               <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-success">
                 <CheckCircle2 className="h-4 w-4" />
-                Plugin publish complete
+                {completeMessage}
               </span>
             )}
           </div>

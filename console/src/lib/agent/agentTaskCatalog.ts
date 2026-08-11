@@ -214,6 +214,19 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     description:
       'Plugin lane publish: make install-ib-gateway + verify-ib-gateway-program after Operator Dock approval. Not Tekton. Gallery ≠ Publish. D10 quotes-only.',
   },
+  'plugin-runtime-remediate': {
+    entryPoint: 'Launch Desk · Launch Plugin · Launch checklist · Agent Fix',
+    trigger: 'Plugin checklist NO-GO (IB Gateway / Market Data unreachable or bus probe fail)',
+    description:
+      'Runtime repair for Launch Plugin checklist — reconnect / rollout_restart after Dock approval. Not AI Launch Plugin publish. D10 quotes-only.',
+  },
+  'agent-launch': {
+    entryPoint: 'Launch Desk → Agent · AI Launch Agent',
+    trigger:
+      'Operator publishes L-1 Mac Mini remediation-runner via Detect→Approve→Deploy→Verify→Live',
+    description:
+      'Agent host publish: POST /api/v1/agent/deploy → deploy_mac_mini.sh after Operator Dock approval. Not Tekton; never in-cluster. Manual Update on AgentHostDeployPanel is escape only.',
+  },
   'deliver-stg-recover': {
     entryPoint: 'Task CC Agent Fix (signal dispatch) · Control Room · Cluster Triage · Deliver-stg Fix',
     trigger: 'Last bifrost-deliver-stg failed (especially stale-fail: pipeline red + STG smoke green)',

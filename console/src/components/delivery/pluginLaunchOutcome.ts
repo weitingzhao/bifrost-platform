@@ -36,7 +36,7 @@ export function derivePluginLaunchOutcome(steps: PluginFlowStep[]): PluginLaunch
     return {
       kind: 'released',
       label: 'Published',
-      detail: 'Detect → Live check complete — plugin lane published',
+      detail: 'Detect → Live check complete — lane published',
     }
   }
   if (doneCount === 0) {

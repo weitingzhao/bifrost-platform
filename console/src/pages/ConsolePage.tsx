@@ -894,7 +894,14 @@ function ConsolePageInner() {
         )}
 
         {viewTab === 'agent-release' && (
-          <AgentReleasePage onOpenOperatorPlane={openOperatorPlane} />
+          <AgentReleasePage
+            ambientJobId={ambientJob?.id ?? null}
+            ambientJobStatus={ambientJob?.status ?? null}
+            ambientJobScope={ambientJob?.scope ?? null}
+            onStartAgentJob={startAmbientAgentJob}
+            onExpandAgentDock={expandAgentDock}
+            onOpenOperatorPlane={openOperatorPlane}
+          />
         )}
 
         {viewTab === 'autonomous-skills' && <AutonomousSkillsPage />}

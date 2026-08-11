@@ -573,6 +573,85 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
         return textResult(jsonText(data))
       },
     },
+    get_agent_deploy_status: {
+      description:
+        'L-1 Mac Mini Agent host deploy status (enabled, targets primary/standby, current/last job, log). Launch Desk → Agent publish.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/agent/deploy')
+        return textResult(jsonText(data))
+      },
+    },
+    get_ib_gateway_plugin_status: {
+      description:
+        'IB Gateway plugin status (mode, deployment, reachability, summary). Launch Plugin checklist / manage repair.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/plugins/ib-gateway/status')
+        return textResult(jsonText(data))
+      },
+    },
+    get_market_data_plugin_status: {
+      description:
+        'Market Data plugin status (reachable, reachability, summary). Launch Plugin checklist / manage repair.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/plugins/market-data/status')
+        return textResult(jsonText(data))
+      },
+    },
+    ib_gateway_control: {
+      description:
+        'IB Gateway plugin control (reconnect / mode / maintenance). ' +
+        'IMPORTANT: call request_operator_approval BEFORE using this tool. Repair path — not make install publish.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'Control action: reconnect | mode | maintenance',
+          },
+          mode: {
+            type: 'string',
+            description: 'Required when action=mode: live | mock | maintenance (as API accepts)',
+          },
+        },
+        required: ['action'],
+      },
+      async execute(args) {
+        const action = String(args.action ?? '').trim()
+        if (action === '') throw new Error('action is required')
+        const body: Record<string, string> = {}
+        const mode = args.mode != null ? String(args.mode).trim() : ''
+        if (mode !== '') body.mode = mode
+        const data = await platformPost(
+          `/api/v1/plugins/ib-gateway/control/${encodeURIComponent(action)}`,
+          body,
+        )
+        return textResult(jsonText(data))
+      },
+    },
+    start_agent_host_deploy: {
+      description:
+        'Start L-1 Mac Mini Agent host publish via platform-api (deploy_mac_mini.sh rsync + launchctl). ' +
+        'IMPORTANT: call request_operator_approval BEFORE using this tool. Not Tekton; never schedules into K8s.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          target: {
+            type: 'string',
+            description: 'Deploy target id, usually "primary" or "standby"',
+          },
+        },
+      },
+      async execute(args) {
+        const body: { target?: string } = {}
+        const target = args.target != null ? String(args.target).trim() : ''
+        if (target !== '') body.target = target
+        const data = await platformPost('/api/v1/agent/deploy', body)
+        return textResult(jsonText(data))
+      },
+    },
     get_remediation_health: {
       description: 'Remediation runner health probe via platform-api (primary/standby).',
       inputSchema: { type: 'object', properties: {} },

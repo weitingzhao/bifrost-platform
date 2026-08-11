@@ -172,7 +172,8 @@ export function ConsoleSidebar({
       } else if (
         item.id === 'platform-release' ||
         item.id === 'trade-release' ||
-        item.id === 'plugin-release'
+        item.id === 'plugin-release' ||
+        item.id === 'agent-release'
       ) {
         const lane = launchDeskSignals[item.id as LaunchDeskLaneId]
         signal = lane.signal

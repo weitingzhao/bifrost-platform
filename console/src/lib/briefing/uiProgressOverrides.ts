@@ -39,12 +39,12 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
   'plugin-release': {
     status: 'done',
     notes:
-      'Launch Plugin lane — Detect→Approve→Install→Verify→Live (make install-ib-gateway; Gallery ≠ Publish)',
+      'Launch Plugin lane — Detect→Approve→Install→Verify→Live (make install-ib-gateway); checklist NO-GO → Agent Fix (plugin-runtime-remediate); Gallery ≠ Publish',
   },
   'agent-release': {
     status: 'done',
     notes:
-      'Launch Desk · Agent — L-1 Mac Mini host publish (deploy_mac_mini.sh); Operator Plane = heartbeats/MCP/AI Fix',
+      'Launch Desk · Agent — AI Launch Agent (Detect→Approve→Deploy→Verify→Live; deploy_mac_mini.sh; not Tekton); manual Update = escape; Operator Plane = heartbeats/MCP/AI Fix',
   },
   'operator-plane': {
     status: 'done',

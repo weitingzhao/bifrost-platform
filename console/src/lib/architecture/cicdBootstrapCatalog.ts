@@ -214,7 +214,7 @@ export const CICD_LAYER_RULES: CicdLayerRule[] = [
   { layer: 'L-1', dimension: 'Trigger', rule: 'launchd peer watchdog every 60s + platform-api health failover; Console Agent Desk per-role manual deploy', status: 'active' },
   { layer: 'L-1', dimension: 'Testing', rule: 'Post-deploy self-smoke + standby-first canary before promoting primary (agent release discipline)', status: 'planned' },
   { layer: 'L-1', dimension: 'Build', rule: 'Monorepo agent/ delivered via deploy_mac_mini.sh (rsync + npm) — no Kaniko, no in-cluster image', status: 'active' },
-  { layer: 'L-1', dimension: 'Deploy', rule: 'Per-role (primary .50 / standby .52); injects AGENT_ROLE / PEER_SSH / PEER_URL; nightly-drift on primary only', status: 'active' },
+  { layer: 'L-1', dimension: 'Deploy', rule: 'Launch Desk → Agent · AI Launch Agent (scope agent-launch) → Dock approval → POST /api/v1/agent/deploy; per-role primary/standby; manual Update = escape; nightly-drift on primary only', status: 'active' },
   { layer: 'L-1', dimension: 'Rollback', rule: 'Redeploy prior agent ref to standby first → verify → swap primary; peer keeps remediation alive during the swap', status: 'active' },
   { layer: 'L-1', dimension: 'Fate isolation', rule: 'MANDATORY — runners never scheduled into K8s; the recovery layer must never share fate with L0–L2 it recovers', status: 'active' },
 

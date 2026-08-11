@@ -103,7 +103,7 @@ export function AgentHostDeployPanel() {
       leading={<StatusLamp value={jobReach(displayJob)} kind="reach" />}
       description={
         data?.hint ??
-        'Push remediation-runner via deploy_mac_mini.sh. Requires SSH publickey from this host (BatchMode) — Console cannot type passwords. Optional AGENT_DEPLOY_SSH_IDENTITY in platform .env.'
+        'Escape hatch: manual Update via deploy_mac_mini.sh. Prefer AI Launch Agent on the lane strip (Dock approval). Requires SSH publickey (BatchMode) — Console cannot type passwords. Optional AGENT_DEPLOY_SSH_IDENTITY in platform .env.'
       }
       bodyPadding="compact"
       overflow="visible"
@@ -226,8 +226,8 @@ export function AgentHostDeployPanel() {
 
       {displayJob == null && data?.enabled && !isRunning && (
         <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          No deploy run yet. Use Update agent after changing remediation tools or approval UI on Mac
-          Pro.
+          No deploy run yet. Prefer AI Launch Agent; use Update here only as evidence / escape after
+          remediation or approval UI changes on Mac Pro.
         </p>
       )}
 

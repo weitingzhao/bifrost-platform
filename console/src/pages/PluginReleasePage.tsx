@@ -28,6 +28,10 @@ import {
   buildPluginLaunchPrompt,
   PLUGIN_LAUNCH_SCOPE,
 } from '@/lib/agent/pluginLaunchAgentPrompt'
+import {
+  buildPluginRuntimeRemediatePrompt,
+  PLUGIN_RUNTIME_REMEDIATE_SCOPE,
+} from '@/lib/agent/pluginRuntimeRemediatePrompt'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import {
   evidenceSummaryLine,
@@ -53,6 +57,10 @@ import {
 
 const AI_LAUNCH_LABEL = 'AI Launch Plugin'
 const AI_LAUNCH_TASK_LABEL = scopeToLabel(PLUGIN_LAUNCH_SCOPE)
+const AI_FIX_LABEL = 'Agent Fix'
+const AI_FIX_TASK_LABEL = scopeToLabel(PLUGIN_RUNTIME_REMEDIATE_SCOPE)
+const AI_FIX_TITLE =
+  'Agent Fix checklist NO-GO — repair IB Gateway / Market Data runtime (not publish)'
 
 const STEP_KEYS = ['detect', 'approve', 'install', 'verify', 'live-check'] as const
 
@@ -207,6 +215,7 @@ export function PluginReleasePage({
   const [acting, setActing] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [actionFailed, setActionFailed] = useState(false)
+  const [reconnectPending, setReconnectPending] = useState(false)
 
   const effectiveSeat: PluginLaunchSeat = target === 'market-data' ? seat : 'dev'
   const revisionHint =
@@ -297,6 +306,30 @@ export function PluginReleasePage({
     ],
   )
 
+  const aiFix = useAmbientAgentTask({
+    canOperate,
+    ambientJobId,
+    ambientJobStatus,
+    onStartAgentJob,
+    scope: PLUGIN_RUNTIME_REMEDIATE_SCOPE,
+    label: AI_FIX_TASK_LABEL,
+    buildRequest: () => ({
+      prompt: buildPluginRuntimeRemediatePrompt({
+        target,
+        verdictTitle: pluginVerdict.title,
+        verdictDetail: pluginVerdict.detail,
+        ibStatus: liveProbe.status,
+        marketDataStatus: mdStatusQ.data,
+        operatorSurface: 'Launch Plugin · checklist Agent Fix',
+      }),
+    }),
+  })
+
+  const pluginFixInFlight =
+    aiFix.isPending ||
+    (isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+      ambientJobScope === PLUGIN_RUNTIME_REMEDIATE_SCOPE)
+
   const pluginCheckpoints = useMemo(
     () =>
       buildPluginLaunchCheckpoints({
@@ -305,7 +338,7 @@ export function PluginReleasePage({
         status: liveProbe.status,
         marketDataStatus: mdStatusQ.data,
         evidence,
-        agentInFlight: pluginAgentInFlight,
+        agentInFlight: pluginAgentInFlight || pluginFixInFlight,
       }),
     [
       canOperate,
@@ -314,6 +347,7 @@ export function PluginReleasePage({
       mdStatusQ.data,
       evidence,
       pluginAgentInFlight,
+      pluginFixInFlight,
     ],
   )
 
@@ -326,6 +360,50 @@ export function PluginReleasePage({
       return
     }
     aiLaunch.trigger()
+  }
+
+  const handleAiFixClick = () => {
+    if (pluginFixInFlight) {
+      onExpandAgentDock?.()
+      return
+    }
+    if (aiFix.disabled) {
+      setActionFailed(true)
+      setActionMsg(aiFix.disabledReason ?? 'Agent Fix unavailable')
+      return
+    }
+    onExpandAgentDock?.()
+    aiFix.trigger()
+  }
+
+  const ibReachFail =
+    target === 'ib-gateway' &&
+    (liveProbe.status?.reachability === 'fail' || liveProbe.status?.reachable === false)
+
+  const handleReconnectGateway = async () => {
+    if (!canOperate) {
+      setActionFailed(true)
+      setActionMsg('Operator token required for Reconnect')
+      return
+    }
+    setReconnectPending(true)
+    setActionMsg(null)
+    setActionFailed(false)
+    try {
+      const resp = await postIbGatewayControl('reconnect')
+      setActionFailed(!resp.ok)
+      setActionMsg(
+        resp.ok
+          ? `${resp.message} — wait ~30–90s then Refresh status on Detect.`
+          : `Reconnect failed: ${resp.message}`,
+      )
+      if (resp.ok) liveProbe.refetch()
+    } catch (e) {
+      setActionFailed(true)
+      setActionMsg(e instanceof Error ? e.message : 'Reconnect failed')
+    } finally {
+      setReconnectPending(false)
+    }
   }
 
   const markDetect = () => {
@@ -733,11 +811,13 @@ export function PluginReleasePage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
-      {aiLaunch.error != null && (
-        <p className="m-0 text-dense-meta text-destructive">{aiLaunch.error.message}</p>
+      {(aiLaunch.error != null || aiFix.error != null) && (
+        <OpsFeedback variant="error" title="Agent dispatch failed">
+          {aiFix.error?.message ?? aiLaunch.error?.message}
+        </OpsFeedback>
       )}
       {actionMsg != null && (
-        <OpsFeedback variant={actionFailed ? 'error' : 'success'} title="Plugin launch">
+        <OpsFeedback variant={actionFailed ? 'error' : 'success'} title="Plugin lane">
           {actionMsg}
         </OpsFeedback>
       )}
@@ -825,7 +905,7 @@ export function PluginReleasePage({
               steps={steps}
               activeIndex={activeIndex}
               onSelect={setActiveIndex}
-              evidence={evidence}
+              evidenceSummary={evidenceSummaryLine(evidence)}
               modeLabel={
                 target === 'market-data' ? `md-${effectiveSeat}` : liveProbe.status?.mode
               }
@@ -868,16 +948,42 @@ export function PluginReleasePage({
             >
               <p className="m-0 text-dense-meta text-muted-foreground">
                 Plugin checklist is light (auth / bus / last verify) — not a Rocket Tekton GO gate.
-                AI Launch Plugin remains the primary path; Record buttons only supplement evidence.
+                Current NO-GO is usually runtime (stale account snapshot / dead TWS client) while
+                deploy stays 1/1 — Reconnect first; Agent Fix asks Dock approval then rollout
+                restart. Publish stays on AI Launch Plugin.
               </p>
+              {ibReachFail && (
+                <div className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-secondary/30 px-3 py-2">
+                  <p className="m-0 text-dense-caption text-muted-foreground">
+                    {liveProbe.status?.hint ??
+                      liveProbe.status?.summary ??
+                      'IB Gateway probe failed — prefer Reconnect over republish.'}
+                  </p>
+                  <Button
+                    size="sm"
+                    disabled={!canOperate || reconnectPending || pluginAgentInFlight}
+                    onClick={() => void handleReconnectGateway()}
+                  >
+                    {reconnectPending ? 'Reconnecting…' : 'Reconnect gateway'}
+                  </Button>
+                </div>
+              )}
               <LaunchGateBar
                 layout="column"
                 verdict={pluginVerdict}
                 checkpoints={pluginCheckpoints}
                 hidePrimaryLaunch
                 onExpandAgentDock={onExpandAgentDock}
-                agentFixActive={pluginAgentInFlight}
-                agentFixPending={aiLaunch.isPending}
+                onAgentFix={handleAiFixClick}
+                agentFixLabel={AI_FIX_LABEL}
+                agentFixPending={aiFix.isPending}
+                agentFixActive={pluginFixInFlight}
+                agentFixDisabled={aiFix.disabled || pluginAgentInFlight}
+                agentFixTitle={
+                  pluginAgentInFlight
+                    ? 'AI Launch Plugin is running — finish or expand dock first'
+                    : (aiFix.disabledReason ?? AI_FIX_TITLE)
+                }
               />
             </LaneDetailCollapse>
 
