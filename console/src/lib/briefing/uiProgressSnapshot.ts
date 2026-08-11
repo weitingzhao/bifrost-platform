@@ -9,6 +9,7 @@ import {
   ENGINEER_PROFILE_ITEMS,
   ENGINEER_WORKSPACE_ITEMS,
   MISSION_CONTROL_ITEMS,
+  MISSION_CONTROL_RECORDS_ITEMS,
   TASK_CC_NAV_ITEM,
 } from '@/lib/consoleNavConfig'
 import { UI_PROGRESS_OVERRIDES } from '@/lib/briefing/uiProgressOverrides'
@@ -47,6 +48,7 @@ export function deriveConsoleUiProgress(): UiProgressItem[] {
   const seen = new Set<string>()
 
   pushNavProgress(items, seen, [TASK_CC_NAV_ITEM, ...MISSION_CONTROL_ITEMS], 'Mission Control')
+  pushNavProgress(items, seen, MISSION_CONTROL_RECORDS_ITEMS, 'Mission Control')
   pushNavProgress(items, seen, ENGINEER_LIFECYCLE_ITEMS, 'Engineer')
   pushNavProgress(items, seen, ENGINEER_LAUNCH_ITEMS, 'Engineer')
   pushNavProgress(items, seen, ENGINEER_WORKSPACE_ITEMS, 'Engineer')

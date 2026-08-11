@@ -1,10 +1,19 @@
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   SidebarMenu,
   SidebarMenuSub,
+  shellNavSecondaryCollapseTriggerClass,
   type ShellNavItem,
 } from '@bifrost/ui'
-import { buildSeatNavItems } from '@/lib/consoleNavConfig'
+import { ChevronDown } from 'lucide-react'
+import {
+  buildSeatNavItems,
+  buildSeatRecordsItems,
+  MISSION_CONTROL_RECORDS_LABEL,
+} from '@/lib/consoleNavConfig'
 import { ConsoleNavSlotItem } from '@/components/shell/ConsoleNavSlotItem'
 
 function resolveIdChecker(
@@ -39,6 +48,10 @@ export function SeatStrip({
     () => buildSeatNavItems(allowedTabIds, showTaskControlCenter),
     [allowedTabIds, showTaskControlCenter],
   )
+  const recordsItems = useMemo(
+    () => buildSeatRecordsItems(allowedTabIds),
+    [allowedTabIds],
+  )
   const signals = useMemo(
     () => ({
       isDimmed: resolveIdChecker(dimmedIds),
@@ -47,12 +60,30 @@ export function SeatStrip({
     [dimmedIds, phaseFocusIds],
   )
 
-  if (items.length === 0) return null
+  const recordsActive = recordsItems.some(item => item.id === activeId)
+  const [recordsOpen, setRecordsOpen] = useState(recordsActive)
+
+  useEffect(() => {
+    if (recordsActive) setRecordsOpen(true)
+  }, [recordsActive])
+
+  if (items.length === 0 && recordsItems.length === 0) return null
 
   if (collapsed) {
     return (
       <div className="flex flex-col gap-1 px-1 py-1.5" aria-label="Mission Control">
         {items.map(item => (
+          <ConsoleNavSlotItem
+            key={item.id}
+            item={item}
+            activeId={activeId}
+            onSelect={onSelect}
+            renderItemIcon={renderItemIcon}
+            collapsed
+            signals={signals}
+          />
+        ))}
+        {recordsItems.map(item => (
           <ConsoleNavSlotItem
             key={item.id}
             item={item}
@@ -69,23 +100,56 @@ export function SeatStrip({
 
   return (
     <div aria-label="Mission Control">
-      <p className="px-3 pt-2 pb-0.5 text-dense-caption font-medium uppercase tracking-wide text-muted-foreground">
-        Mission Control
-      </p>
-      <SidebarMenu>
-        <SidebarMenuSub>
-          {items.map(item => (
-            <ConsoleNavSlotItem
-              key={item.id}
-              item={item}
-              activeId={activeId}
-              onSelect={onSelect}
-              renderItemIcon={renderItemIcon}
-              signals={signals}
-            />
-          ))}
-        </SidebarMenuSub>
-      </SidebarMenu>
+      {items.length > 0 && (
+        <>
+          <p className="px-3 pt-2 pb-0.5 text-dense-caption font-medium uppercase tracking-wide text-muted-foreground">
+            Mission Control
+          </p>
+          <SidebarMenu>
+            <SidebarMenuSub>
+              {items.map(item => (
+                <ConsoleNavSlotItem
+                  key={item.id}
+                  item={item}
+                  activeId={activeId}
+                  onSelect={onSelect}
+                  renderItemIcon={renderItemIcon}
+                  signals={signals}
+                />
+              ))}
+            </SidebarMenuSub>
+          </SidebarMenu>
+        </>
+      )}
+
+      {recordsItems.length > 0 && (
+        <Collapsible
+          open={recordsOpen}
+          onOpenChange={setRecordsOpen}
+          className="group/seat-records"
+        >
+          <CollapsibleTrigger className={shellNavSecondaryCollapseTriggerClass}>
+            <span>{MISSION_CONTROL_RECORDS_LABEL}</span>
+            <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]/seat-records:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <SidebarMenu>
+              <SidebarMenuSub>
+                {recordsItems.map(item => (
+                  <ConsoleNavSlotItem
+                    key={item.id}
+                    item={item}
+                    activeId={activeId}
+                    onSelect={onSelect}
+                    renderItemIcon={renderItemIcon}
+                    signals={signals}
+                  />
+                ))}
+              </SidebarMenuSub>
+            </SidebarMenu>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </div>
   )
 }

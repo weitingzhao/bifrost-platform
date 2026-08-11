@@ -14,6 +14,7 @@ import {
   cn,
   shellNavCollapsedIconButtonClass,
   shellNavFlyoutSectionTitleClass,
+  shellNavSecondaryCollapseTriggerClass,
   shellNavSubGroupSectionLabelClass,
   type ShellNavItem,
   type ShellNavSubGroup,
@@ -171,7 +172,7 @@ export function PartnerStrip({
 
       {hasSecondary && (
         <Collapsible open={secondaryOpen} onOpenChange={setSecondaryOpen} className="group/partner-more">
-          <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between px-3 py-1 text-dense-caption text-muted-foreground select-none hover:text-sidebar-foreground">
+          <CollapsibleTrigger className={shellNavSecondaryCollapseTriggerClass}>
             <span>Ops & Analysis</span>
             <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]/partner-more:rotate-180" />
           </CollapsibleTrigger>

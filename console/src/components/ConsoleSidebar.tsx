@@ -3,6 +3,7 @@ import { ShellNavSidebar, cn, shellNavSubItemIconClass, type ShellNavItem } from
 import {
   buildPartnerNavSections,
   buildSeatNavItems,
+  buildSeatRecordsItems,
   CONSOLE_NAV_GROUPS,
 } from '@/lib/consoleNavConfig'
 import { PartnerStrip } from '@/components/shell/PartnerStrip'
@@ -117,6 +118,10 @@ export function ConsoleSidebar({
   const seatItems = useMemo(
     () => buildSeatNavItems(allowedTabIds, showTaskControlCenter),
     [allowedTabIds, showTaskControlCenter],
+  )
+  const seatRecordsItems = useMemo(
+    () => buildSeatRecordsItems(allowedTabIds),
+    [allowedTabIds],
   )
   const partnerSections = useMemo(
     () => buildPartnerNavSections(allowedTabIds),
@@ -252,7 +257,7 @@ export function ConsoleSidebar({
         />
       )}
       seatContent={
-        seatItems.length === 0
+        seatItems.length === 0 && seatRecordsItems.length === 0
           ? undefined
           : collapsed => (
               <SeatStrip

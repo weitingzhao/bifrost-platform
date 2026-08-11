@@ -31,7 +31,6 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
-  Terminal,
   Workflow,
 } from 'lucide-react'
 
@@ -46,7 +45,8 @@ import {
  *
  * | Zone     | Surface                         | Intent                                           |
  * |----------|---------------------------------|--------------------------------------------------|
- * | Seat     | Mission Control items (fixed)   | Execute (TCC) → Posture → Health; defects, audit |
+ * | Seat     | Mission Control (fixed)         | Execute (TCC) → Control Room → Observability     |
+ * | Seat     | Defects & Audit (collapsible)   | Retrospective records adjacent to Seat           |
  * | Partner  | Engineer strip (persona)        | Build Desk + Launch Desk; Ops Desk / Analysis Desk |
  * | Mission  | Satellite → Rocket → Plugin     | Payload + Ops Platform + plugins/Network         |
  * | Support  | (none — Plugin is peer Mission) |                                                  |
@@ -65,19 +65,29 @@ export const TASK_CC_NAV_ITEM: ShellNavItem = {
   shortLabel: 'T',
 }
 
+/** Pinned Mission Control rail — high-frequency “now” surfaces only. */
 export const MISSION_CONTROL_ITEMS: ShellNavItem[] = [
   { id: 'control-room', label: 'Control Room', icon: Gauge },
   { id: 'observability', label: 'Observability', icon: LineChart },
+]
+
+/**
+ * Seat-adjacent retrospective records — collapsible under Mission Control.
+ * Patrol Log / Insight Log stay on their desks (workflow adjacency).
+ */
+export const MISSION_CONTROL_RECORDS_ITEMS: ShellNavItem[] = [
   { id: 'defects', label: 'Defects', icon: Microscope },
   { id: 'audit', label: 'Audit', icon: History },
 ]
 
-/** Build Desk — field name `lifecycle` kept; display label is Build Desk. */
+export const MISSION_CONTROL_RECORDS_LABEL = 'Defects & Audit'
+
+/** Build Desk — field name `lifecycle` kept; display label is Build Desk.
+ * Dev Sessions lives at framework chrome (header indicator / Operator Dock), not here. */
 export const ENGINEER_LIFECYCLE_ITEMS: ShellNavItem[] = [
   { id: 'briefing', label: 'Briefing', icon: ClipboardList },
   { id: 'active-session', label: 'In Flight', icon: Orbit },
   { id: 'delivery-board', label: 'Delivery', icon: Archive },
-  { id: 'dev-sessions', label: 'Dev Sessions', icon: Terminal },
 ]
 
 /**
@@ -146,6 +156,11 @@ export function buildSeatNavItems(
     ? [TASK_CC_NAV_ITEM, ...MISSION_CONTROL_ITEMS]
     : MISSION_CONTROL_ITEMS
   return filterAllowedNavItems(base, allowedTabIds)
+}
+
+/** Defects & Audit — filtered independently so the collapsible can hide when empty. */
+export function buildSeatRecordsItems(allowedTabIds: Set<string> | null): ShellNavItem[] {
+  return filterAllowedNavItems(MISSION_CONTROL_RECORDS_ITEMS, allowedTabIds)
 }
 
 export type PartnerNavSections = {

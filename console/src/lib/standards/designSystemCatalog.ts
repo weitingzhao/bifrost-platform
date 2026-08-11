@@ -31,7 +31,7 @@ export const LAYER_STACK: LayerRow[] = [
   { layer: 'Layout', location: 'console/src/components/layout/OpsSection.tsx', role: 'OpsSection + OpsSubsectionTitle — unified page-section panel-elevated chrome' },
   { layer: 'Layout', location: 'console/src/components/layout/OpsVerdictStrip.tsx', role: 'OpsVerdictStrip — page verdict for Mission Control + Rocket Cluster (lamp + title + tag + summary + actions/meta)' },
   { layer: 'Layout', location: '@bifrost/ui ShellNavSidebar + console ConsoleSidebar', role: 'Sidebar dual signal: route selected = pill; Task Mode phase path = inset accent rail; off-phase = muted ink (never whole-row opacity on current page)' },
-  { layer: 'Sidebar zones', location: '@bifrost/ui seatContent/partnerContent slots + console SeatStrip / PartnerStrip', role: 'Command hierarchy: Seat (Mission Control, pinned) → Partner (Engineer persona: Build Desk / Launch Desk / Ops Desk / Analysis Desk) → Mission groups (Satellite / Rocket / Plugin); Trade omits slots (zero-change)' },
+  { layer: 'Sidebar zones', location: '@bifrost/ui seatContent/partnerContent slots + console SeatStrip / PartnerStrip', role: 'Command hierarchy: Seat (Mission Control pinned + Defects & Audit collapsible) → Partner (Engineer persona: Build Desk / Launch Desk / Ops Desk / Analysis Desk) → Mission groups (Satellite / Rocket / Plugin); Trade omits slots (zero-change)' },
   { layer: 'Layout', location: 'console/src/components/task-mode/AgentTriadStrip.tsx', role: 'Three Desks Strip — Build / Ops / Analysis mode switch (TCC System + Control Room); Ops lands OpsDeskBoard; Analysis lands Analysis Workspace' },
   { layer: 'Data display', location: 'src/components/data-display/', role: 'Tables, PnL, segments, icon actions, collapsible groups — 14 primitives' },
   { layer: 'Domain', location: 'src/pages/*, src/components/*/', role: 'Business columns, hooks, API wiring only — minimal styling' },
@@ -322,12 +322,12 @@ export const SIDEBAR_ZONES: SidebarZoneRow[] = [
   {
     zone: 'Seat',
     surface: 'ShellNavSidebar.seatContent → SeatStrip (shrink-0, not in SidebarContent scroll)',
-    intent: 'Mission Control always visible: TCC (Task Mode) → Control Room → Observability → Defects → Audit. Filtered by navLens allowedTabIds; empty → omit slot.',
+    intent: 'Mission Control pinned: TCC (Task Mode) → Control Room → Observability. Defects & Audit in an adjacent Seat collapsible (default closed; auto-opens when active). Filtered by navLens allowedTabIds; empty → omit slot.',
   },
   {
     zone: 'Partner',
     surface: 'ShellNavSidebar.partnerContent → PartnerStrip (persona block, not a nav group)',
-    intent: 'Engineer desks: Build Desk always visible (Briefing → In Flight → Delivery → Dev Sessions); Launch Desk always visible when allowed (Rocket → Satellite → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane + Trust + Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status.',
+    intent: 'Engineer desks: Build Desk always visible (Briefing → In Flight → Delivery); Dev Sessions is framework chrome (header indicator / Operator Dock), not a Build Desk rail item. Launch Desk always visible when allowed (Rocket → Satellite → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane + Trust + Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status.',
   },
   {
     zone: 'Mission',
