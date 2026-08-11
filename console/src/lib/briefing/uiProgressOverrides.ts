@@ -41,6 +41,15 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
     notes:
       'Launch Plugin lane — Detect→Approve→Install→Verify→Live (make install-ib-gateway; Gallery ≠ Publish)',
   },
+  'agent-release': {
+    status: 'done',
+    notes:
+      'Launch Desk · Agent — L-1 Mac Mini host publish (deploy_mac_mini.sh); Operator Plane = heartbeats/MCP/AI Fix',
+  },
+  'operator-plane': {
+    status: 'done',
+    notes: 'L-1 Operator Plane — runner heartbeats, smoke, MCP Bridge, AI Fix (host publish → Launch Agent)',
+  },
   'plugin-gallery': {
     status: 'done',
     notes: 'Plugin Gallery observe/reconnect — Need publish? → Launch Plugin',

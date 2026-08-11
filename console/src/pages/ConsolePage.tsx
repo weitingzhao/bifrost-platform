@@ -64,6 +64,7 @@ import { NetworkPage } from '@/pages/NetworkPage'
 import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
 import { IbGatewayManagePage } from '@/pages/IbGatewayManagePage'
 import { MarketDataManagePage } from '@/pages/MarketDataManagePage'
+import { AgentReleasePage } from '@/pages/AgentReleasePage'
 import { PluginReleasePage } from '@/pages/PluginReleasePage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
 import { ObservabilityPage } from '@/pages/ObservabilityPage'
@@ -109,10 +110,11 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   briefing: 'Briefing',
   'active-session': 'In Flight',
   'autonomous-skills': 'Skills & Schedules',
-  'execution-log': 'Execution Log',
+  'execution-log': 'Patrol Log',
   'agent-governance': 'Trust & Autonomy',
   'agent-system': 'Agent System',
   'operator-plane': 'Operator Plane',
+  'agent-release': 'Launch Agent',
   'control-room': 'Control Room',
   observability: 'Observability',
   'task-cc': 'Task Control Center',
@@ -194,8 +196,10 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Market Data Plugin management — Overview, Coverage checklist, Ingest queue, Analytics dashboard.',
   'plugin-release':
     'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Manage pages ≠ Publish.',
+  'agent-release':
+    'Launch Desk · Agent — L-1 Mac Mini host publish (deploy_mac_mini.sh). Outside K8s; ≠ Rocket / Satellite / Plugin. Operator Plane keeps MCP / smoke / AI Fix.',
   'operator-plane':
-    'Out-of-band recovery layer — AI Remediation Runners outside K8s on dual Mac Minis (fate isolation D7 / L-1).',
+    'Out-of-band recovery layer — runner heartbeats, smoke, MCP Bridge, AI Fix. Host publish SSOT is Launch Desk → Agent.',
   'flywheel-vision':
     'WHERE — Ultimate destination: Trade + Ops converge into unified AI-native experience via three-layer Agents.',
   blueprint:
@@ -216,7 +220,7 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   'autonomous-skills':
     'Hermes Skills and Schedules — trigger types, actuation levels, and cron/webhook inventory.',
   'execution-log':
-    'Hermes autonomous execution history — every Skill run, trigger, duration, and outcome.',
+    'Patrol execution history — cron/manual Agent Skill runs, trigger, duration, and outcome.',
   'agent-governance':
     'Trust matrix and autonomy policy — which skills may auto-act vs require confirmation.',
   'runtime-map':
@@ -249,6 +253,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'ib-gateway-manage',
   'market-data-manage',
   'plugin-release',
+  'agent-release',
   'control-room',
   'observability',
   'task-cc',
@@ -592,7 +597,10 @@ function ConsolePageInner() {
   }, [])
   const openOperatorPlane = useCallback(() => {
     setViewTab('operator-plane')
-    // Defer until Operator Plane mounts so #agent-host-deploy exists.
+  }, [setViewTab])
+  const openAgentLaunch = useCallback(() => {
+    setViewTab('agent-release')
+    // Defer until Launch Agent mounts so #agent-host-deploy exists.
     window.requestAnimationFrame(() => {
       window.setTimeout(() => scrollToSection('agent-host-deploy'), 80)
     })
@@ -878,10 +886,15 @@ function ConsolePageInner() {
           <OperatorPlanePage
             onOpenMcpContract={() => setViewTab('mcp-contract')}
             onOpenBriefing={openBriefing}
+            onOpenAgentLaunch={openAgentLaunch}
             ambientJobId={ambientJob?.id ?? null}
             ambientJobStatus={ambientJob?.status ?? null}
             onStartAgentJob={startAmbientAgentJob}
           />
+        )}
+
+        {viewTab === 'agent-release' && (
+          <AgentReleasePage onOpenOperatorPlane={openOperatorPlane} />
         )}
 
         {viewTab === 'autonomous-skills' && <AutonomousSkillsPage />}
@@ -1188,9 +1201,12 @@ function ConsolePageInner() {
           else openAgentDeskTab()
         }}
         onOpenOperatorPlane={openOperatorPlane}
+        onOpenAgentLaunch={openAgentLaunch}
         onOpenDevSessions={() => setViewTab('dev-sessions')}
         activePage={
-          viewTab === 'operator-plane' || viewTab === 'dev-sessions'
+          viewTab === 'operator-plane' ||
+          viewTab === 'agent-release' ||
+          viewTab === 'dev-sessions'
             ? viewTab
             : viewTab === 'queue'
               ? 'agent-desk'

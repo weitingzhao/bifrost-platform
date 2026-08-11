@@ -164,6 +164,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Launch Rocket: LaneStateStrip (lane verdict) + AI Release actions — not OpsVerdictStrip',
       'Deploy Satellite: LaneStateStrip + AI Deploy (+ Evidence links) — not OpsVerdictStrip',
       'Launch Plugin: LaneStateStrip + AI Launch Plugin (+ Evidence links) + LaneOperateSplit (checklist / acceptance / evidence / toolbox) — Detect→Approve→Install→Verify→Live; not Tekton',
+      'Launch Agent: LaneStateStrip (L-1 · Mac Mini · outside K8s) + runner pulse + AgentHostDeployPanel — host publish SSOT; Operator Plane keeps MCP / smoke / AI Fix',
     ],
   },
   {
@@ -217,7 +218,8 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Launch Rocket: AI Release on LaneStateStrip; Step detail observe-only (no Deploy/Gate CTAs — Agent owns stages)',
       'Deploy Satellite: AI Deploy on LaneStateStrip (+ Evidence links); Step detail observe-only (no Deploy/Gate CTAs)',
       'Launch Plugin: AI Launch Plugin on LaneStateStrip (+ Evidence links); Detect→Live in primary pane; Record = evidence only; light checklist in support pane (not Rocket GO gate)',
-      'Launch Desk (Engineer Partner): Rocket / Satellite / Plugin icons tinted by live checklist verdict (GO green / NO-GO red / IN FLIGHT yellow) — same gate as lane pages',
+      'Launch Desk (Engineer Partner): Rocket / Satellite / Plugin icons tinted by live checklist verdict; Agent = L-1 host publish (no Tekton GO gate)',
+      'Launch Agent: AI path is host Update on AgentHostDeployPanel; Dock host/deploy CTA → Launch Agent; Operator Plane button → heartbeats/MCP',
       'Operator Dock: Segment Agent | Console — Fix live feed on Agent; SSH ServerConsolePanel on Console; head Host · P✓ S✓ + Operator Plane CTA; Deploy running is read-only deep-link',
     ],
   },
@@ -324,7 +326,7 @@ export const SIDEBAR_ZONES: SidebarZoneRow[] = [
   {
     zone: 'Partner',
     surface: 'ShellNavSidebar.partnerContent → PartnerStrip (persona block, not a nav group)',
-    intent: 'Engineer desks: Build Desk always visible (Briefing → In Flight → Delivery → Dev Sessions); Launch Desk always visible when allowed (Rocket → Satellite → Plugin); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk = Queue + Patrol + Execution Log + Operator Plane + Trust + Capability. Analysis Desk = Workspace + Insight Log + Hermes Status.',
+    intent: 'Engineer desks: Build Desk always visible (Briefing → In Flight → Delivery → Dev Sessions); Launch Desk always visible when allowed (Rocket → Satellite → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane + Trust + Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status.',
   },
   {
     zone: 'Mission',

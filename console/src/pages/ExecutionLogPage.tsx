@@ -74,7 +74,7 @@ export function ExecutionLogPage() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <OpsSection
-        title="Patrol Execution Log"
+        title="Patrol Log"
         description="Patrol execution history — Cursor Agent API runs (cron + manual), duration, and outcome. Click a row for the full dispatch log (error + evidence). Hermes execution proxy remains at /api/v1/agent/executions."
         overflow="visible"
       >

@@ -16,6 +16,7 @@ import {
   shellNavFlyoutSectionTitleClass,
   shellNavSubGroupSectionLabelClass,
   type ShellNavItem,
+  type ShellNavSubGroup,
 } from '@bifrost/ui'
 import { Bot, ChevronDown } from 'lucide-react'
 import { buildPartnerNavSections } from '@/lib/consoleNavConfig'
@@ -175,10 +176,10 @@ export function PartnerStrip({
             <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]/partner-more:rotate-180" />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            {sections.workspace.length > 0 && (
+            {sections.workspaceGroups.length > 0 && (
               <PartnerSection
                 label="Ops Desk"
-                items={sections.workspace}
+                groups={sections.workspaceGroups}
                 activeId={activeId}
                 onSelect={onSelect}
                 renderItemIcon={renderItemIcon}
@@ -205,18 +206,27 @@ export function PartnerStrip({
 function PartnerSection({
   label,
   items,
+  groups,
   activeId,
   onSelect,
   renderItemIcon,
   signals,
 }: {
   label: string
-  items: ShellNavItem[]
+  items?: ShellNavItem[]
+  groups?: ShellNavSubGroup[]
   activeId: string
   onSelect: (id: string) => void
   renderItemIcon?: (item: ShellNavItem) => ReactNode
   signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
 }) {
+  const blocks: ShellNavSubGroup[] =
+    groups != null && groups.length > 0
+      ? groups
+      : items != null && items.length > 0
+        ? [{ label: '', items }]
+        : []
+
   return (
     <div>
       <div className="mx-3 mb-0.5 mt-2 flex items-center gap-2">
@@ -224,18 +234,28 @@ function PartnerSection({
         <div className="flex-1 border-t border-sidebar-border/50" />
       </div>
       <SidebarMenu>
-        <SidebarMenuSub>
-          {items.map(item => (
-            <ConsoleNavSlotItem
-              key={item.id}
-              item={item}
-              activeId={activeId}
-              onSelect={onSelect}
-              renderItemIcon={renderItemIcon}
-              signals={signals}
-            />
-          ))}
-        </SidebarMenuSub>
+        {blocks.map((block, index) => (
+          <div key={block.label !== '' ? block.label : `ops-trail-${index}`}>
+            {index > 0 && <div className="mx-3 my-1 border-t border-sidebar-border/40" />}
+            {block.label !== '' ? (
+              <p className={cn(shellNavSubGroupSectionLabelClass, 'mx-3 mt-1 mb-0.5 px-0')}>
+                {block.label}
+              </p>
+            ) : null}
+            <SidebarMenuSub>
+              {block.items.map(item => (
+                <ConsoleNavSlotItem
+                  key={item.id}
+                  item={item}
+                  activeId={activeId}
+                  onSelect={onSelect}
+                  renderItemIcon={renderItemIcon}
+                  signals={signals}
+                />
+              ))}
+            </SidebarMenuSub>
+          </div>
+        ))}
       </SidebarMenu>
     </div>
   )
@@ -319,10 +339,10 @@ function CollapsedPartnerButton({
             numbered
           />
         )}
-        {sections.workspace.length > 0 && (
+        {sections.workspaceGroups.length > 0 && (
           <FlyoutSection
             label="Ops Desk"
-            items={sections.workspace}
+            groups={sections.workspaceGroups}
             activeId={activeId}
             onSelect={handleSelect}
             renderItemIcon={renderItemIcon}
@@ -347,6 +367,7 @@ function CollapsedPartnerButton({
 function FlyoutSection({
   label,
   items,
+  groups,
   activeId,
   onSelect,
   renderItemIcon,
@@ -354,33 +375,52 @@ function FlyoutSection({
   numbered,
 }: {
   label: string
-  items: ShellNavItem[]
+  items?: ShellNavItem[]
+  groups?: ShellNavSubGroup[]
   activeId: string
   onSelect: (id: string) => void
   renderItemIcon?: (item: ShellNavItem) => ReactNode
   signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
   numbered?: boolean
 }) {
+  const blocks: ShellNavSubGroup[] =
+    groups != null && groups.length > 0
+      ? groups
+      : items != null && items.length > 0
+        ? [{ label: '', items }]
+        : []
+
   return (
     <div>
       <p className={cn(shellNavSubGroupSectionLabelClass, 'px-1 pt-1.5 pb-0.5')}>{label}</p>
-      {items.map((item, index) => (
-        <ConsoleNavSlotItem
-          key={item.id}
-          item={item}
-          activeId={activeId}
-          onSelect={onSelect}
-          renderItemIcon={renderItemIcon}
-          signals={signals}
-          flyout
-          leading={
-            numbered === true ? (
-              <span className="w-3 shrink-0 text-center text-dense-micro tabular-nums text-sidebar-foreground/30">
-                {index + 1}
-              </span>
-            ) : undefined
-          }
-        />
+      {blocks.map((block, blockIndex) => (
+        <div key={block.label !== '' ? block.label : `flyout-trail-${blockIndex}`}>
+          {block.label !== '' ? (
+            <p className={cn(shellNavSubGroupSectionLabelClass, 'px-1 pt-1 pb-0.5 opacity-80')}>
+              {block.label}
+            </p>
+          ) : blockIndex > 0 ? (
+            <div className="my-1 border-t border-sidebar-border/40" />
+          ) : null}
+          {block.items.map((item, index) => (
+            <ConsoleNavSlotItem
+              key={item.id}
+              item={item}
+              activeId={activeId}
+              onSelect={onSelect}
+              renderItemIcon={renderItemIcon}
+              signals={signals}
+              flyout
+              leading={
+                numbered === true ? (
+                  <span className="w-3 shrink-0 text-center text-dense-micro tabular-nums text-sidebar-foreground/30">
+                    {index + 1}
+                  </span>
+                ) : undefined
+              }
+            />
+          ))}
+        </div>
       ))}
     </div>
   )

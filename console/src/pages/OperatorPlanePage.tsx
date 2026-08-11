@@ -4,7 +4,6 @@ import type { RunnerSmokeResponse, RunnerStatus } from '@/api/agentTypes'
 import { fetchAgentBridge, fetchRunnerSmoke } from '@/api/agentOps'
 import { fetchHermesGatewayHealth } from '@/api/hermes'
 import { AgentMcpPanel } from '@/components/agent/AgentMcpPanel'
-import { AgentHostDeployPanel } from '@/components/agent/AgentHostDeployPanel'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { PageToolbar } from '@/components/layout/PageToolbar'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -33,11 +32,14 @@ function runnerTagVariant(status: string | undefined): 'success' | 'warning' | '
 export function OperatorPlanePage({
   onOpenMcpContract,
   onOpenBriefing,
+  onOpenAgentLaunch,
   ambientJobId,
   onStartAgentJob,
 }: {
   onOpenMcpContract?: () => void
   onOpenBriefing?: () => void
+  /** Launch Desk → Agent (Mac Mini host publish SSOT). */
+  onOpenAgentLaunch?: () => void
 } & AmbientAgentShellProps) {
   const { canOperate } = usePlatformAuth()
 
@@ -233,7 +235,24 @@ export function OperatorPlanePage({
         )}
       </OpsSection>
 
-      <AgentHostDeployPanel />
+      <OpsSection
+        id="agent-host-deploy"
+        title="Agent host publish"
+        description="Mac Mini primary + standby Update lives on Launch Desk → Agent (deploy_mac_mini.sh). This page keeps L-1 heartbeats, smoke, MCP, and AI Fix."
+        bodyPadding="compact"
+        overflow="visible"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
+            L-1 host publish is not Rocket / Satellite / Plugin — outside K8s.
+          </p>
+          {onOpenAgentLaunch != null && (
+            <Button size="sm" variant="outline" onClick={onOpenAgentLaunch}>
+              Launch Desk → Agent
+            </Button>
+          )}
+        </div>
+      </OpsSection>
 
       <AgentMcpPanel onOpenMcpContract={onOpenMcpContract} onOpenBriefing={onOpenBriefing} />
     </div>

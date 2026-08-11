@@ -61,6 +61,7 @@ describe('buildTaskNavGroups command hierarchy', () => {
       'platform-release',
       'trade-release',
       'plugin-release',
+      'agent-release',
     ])
   })
 
@@ -84,6 +85,7 @@ describe('nav lens includeTabs', () => {
     expect(allowed?.has('agent-governance')).toBe(true)
     expect(allowed?.has('agent-capability')).toBe(true)
     expect(allowed?.has('platform-release')).toBe(true)
+    expect(allowed?.has('agent-release')).toBe(true)
     expect(allowed?.has('rocket-health')).toBe(true)
     expect(allowed?.has('task-cc')).toBe(true)
     expect(allowed?.has('control-room')).toBe(true)

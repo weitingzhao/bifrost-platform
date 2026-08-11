@@ -57,6 +57,7 @@ export type ConsoleViewTab =
   | 'trade-release'
   | 'platform-release'
   | 'plugin-release'
+  | 'agent-release'
   | 'blueprint'
   | 'roadmap'
   | 'platform-standards'

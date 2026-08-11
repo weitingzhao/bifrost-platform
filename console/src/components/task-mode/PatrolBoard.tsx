@@ -61,7 +61,7 @@ export function PatrolBoard({ onNavigate }: { onNavigate: (tabId: string) => voi
           className="text-[var(--text-dense-caption)] text-primary hover:underline"
           onClick={() => onNavigate('execution-log')}
         >
-          Execution Log →
+          Patrol Log →
         </button>
       }
       bodyPadding="compact"

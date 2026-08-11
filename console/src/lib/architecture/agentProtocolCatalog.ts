@@ -129,7 +129,7 @@ export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   },
   {
     action:
-      'Operator Dock embedded Agent host Update / Confirm / deploy log / smoke — Dock is L-1 pulse + deep-link only; Update SSOT remains Operator Plane (AgentHostDeployPanel)',
+      'Operator Dock embedded Agent host Update / Confirm / deploy log / smoke — Dock is L-1 pulse + deep-link only; Update SSOT = Launch Desk → Agent (AgentHostDeployPanel); Operator Plane = heartbeats / MCP / AI Fix',
     scope: 'Ops Console shell · Operator Dock',
   },
   {
@@ -510,7 +510,7 @@ export const DAILY_OPS_FLEET_DESK = {
     'Remediate primary CTA follows highest-priority Checklist×Fleet blocker (fail>degraded; manual/observe before AI-fixable at same severity): git-bridge dirty → Propose commit (git-dirty-remediate, approval required); other full_auto/semi_auto+scope → Agent Fix / AI Fix · Operator Plan; manual/observe/null-scope → Manual next step (no sparkles AI Fix); mixed → primary manual + outline Also: Propose commit (git dirty) / Also: AI Fix (sibling).',
     'Engineer CRITICAL: fleet cell Agent Fix stays disabled; git dirty uses Propose commit / Stash (not magic AI Fix that clears dirty); other AI-fixable → Operator Plan; else Manual next (e.g. Mac seat). Full Operator Plane page is escape hatch only.',
     'Full Operator Plane page is secondary escape (MCP / host deploy / self-smoke) — not the default primary CTA.',
-    'Operator Dock × L-1 Host: head shows dual heartbeat (Host · P✓ S✓) + optional Deploy · role… read-only; CTA deep-links to Operator Plane. Console Mac chips tag Primary/Standby from bridge runners only. No Dock Update button / Confirm / deploy log / Hosts tool slot — Update SSOT = Operator Plane AgentHostDeployPanel.',
+    'Operator Dock × L-1 Host: head shows dual heartbeat (Host · P✓ S✓) + optional Deploy · role… read-only; host/deploy CTA deep-links to Launch Desk → Agent. Operator Plane button keeps heartbeats / smoke / MCP / AI Fix. Console Mac chips tag Primary/Standby from bridge runners only. Update SSOT = Launch Agent AgentHostDeployPanel.',
     'Agent Fix running: CTA becomes Expand dock; shell Operator Dock (Agent slot) is SSOT for live feed/approvals; in-page panel is one-line summary only; Agent Desk is archive (explicit Open in Agent Desk).',
     'Mission Launch · Launch Live: telemetry-only for Agent (one-line + Expand dock); Pipeline + Post-deploy stay in-page; Commit & push / approvals only in Operator Dock Agent slot (same Daily Ops protocol).',
     'Mission Launch · Launch Plugin (third lane): Detect → Approve → Install → Verify → Live check; executor make install-ib-gateway (not Tekton); Gallery ≠ Publish; AI Launch Plugin ambient agent; approvals + checklist in Operator Dock; D10 quotes-only.',
@@ -861,7 +861,7 @@ export function buildAgentProtocolLlmPack(): string {
     '',
     '## Three Desks (Build / Ops / Analysis)',
     '- Rail: System + Build + Ops + Analysis. Legacy daily-ops / mission-launch / patrol → ops.',
-    '- Engineer Partner: Build Desk / Launch Desk / Ops Desk / Analysis Desk. Queue tab id `queue` (`#agent-desk` alias).',
+    '- Engineer Partner: Build Desk / Launch Desk / Ops Desk / Analysis Desk. Launch Desk: Rocket → Satellite → Plugin → Agent (L-1 Mac Mini host publish). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Queue tab id `queue` (`#agent-desk` alias).',
     '',
     '## Patrol (Ops Desk — Cursor SDK nightshift)',
     `- Surface: ${PATROL_AGENT.surface}`,

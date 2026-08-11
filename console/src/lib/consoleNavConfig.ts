@@ -1,4 +1,4 @@
-import type { ShellNavGroup, ShellNavItem } from '@bifrost/ui'
+import type { ShellNavGroup, ShellNavItem, ShellNavSubGroup } from '@bifrost/ui'
 import {
   Activity,
   Archive,
@@ -82,23 +82,46 @@ export const ENGINEER_LIFECYCLE_ITEMS: ShellNavItem[] = [
 
 /**
  * Launch Desk — always under Engineer Partner (below Build Desk).
- * Domain plane for breadcrumbs stays Rocket / Satellite / Subcontractors.
+ * Domain plane: Rocket / Satellite / Plugin / Engineer (Agent = L-1 host publish).
  */
 export const ENGINEER_LAUNCH_ITEMS: ShellNavItem[] = [
   { id: 'platform-release', label: 'Rocket', icon: Container },
   { id: 'trade-release', label: 'Satellite', icon: Workflow },
   { id: 'plugin-release', label: 'Plugin', icon: Workflow },
+  { id: 'agent-release', label: 'Agent', icon: Bot },
 ]
 
-/** Ops Desk — field name `workspace` kept; display label is Ops Desk. */
-export const ENGINEER_WORKSPACE_ITEMS: ShellNavItem[] = [
-  { id: 'queue', label: 'Queue', icon: Bot },
-  { id: 'autonomous-skills', label: 'Patrol', icon: CalendarClock },
-  { id: 'execution-log', label: 'Execution Log', icon: Activity },
-  { id: 'operator-plane', label: 'Operator Plane', icon: LifeBuoy },
-  { id: 'agent-governance', label: 'Trust & Autonomy', icon: ShieldCheck },
-  { id: 'agent-capability', label: 'Agent Capability', icon: Network },
+/**
+ * Ops Desk subgroups — Operate (reactive inbox) vs Patrol (scheduled skills).
+ * Empty label = no sub-header (governance / capability trail).
+ * Field name `workspace` kept; display label is Ops Desk.
+ */
+export const ENGINEER_WORKSPACE_SUBGROUPS: ShellNavSubGroup[] = [
+  {
+    label: 'Operate',
+    items: [{ id: 'queue', label: 'Queue', icon: Bot }],
+  },
+  {
+    label: 'Patrol',
+    items: [
+      { id: 'autonomous-skills', label: 'Patrol', icon: CalendarClock },
+      { id: 'execution-log', label: 'Patrol Log', icon: Activity },
+    ],
+  },
+  {
+    label: '',
+    items: [
+      { id: 'operator-plane', label: 'Operator Plane', icon: LifeBuoy },
+      { id: 'agent-governance', label: 'Trust & Autonomy', icon: ShieldCheck },
+      { id: 'agent-capability', label: 'Agent Capability', icon: Network },
+    ],
+  },
 ]
+
+/** Flat Ops Desk items (order = subgroup order) — progress / allowed-tab filters. */
+export const ENGINEER_WORKSPACE_ITEMS: ShellNavItem[] = ENGINEER_WORKSPACE_SUBGROUPS.flatMap(
+  g => g.items,
+)
 
 /** Analysis Desk — field name `profile` kept; display label is Analysis Desk. */
 export const ENGINEER_PROFILE_ITEMS: ShellNavItem[] = [
@@ -128,8 +151,23 @@ export function buildSeatNavItems(
 export type PartnerNavSections = {
   lifecycle: ShellNavItem[]
   launch: ShellNavItem[]
+  /** Flat Ops Desk items (active detection / secondary open). */
   workspace: ShellNavItem[]
+  /** Ops Desk Operate / Patrol / trail subgroups (sidebar chrome). */
+  workspaceGroups: ShellNavSubGroup[]
   profile: ShellNavItem[]
+}
+
+export function filterAllowedNavSubGroups(
+  groups: readonly ShellNavSubGroup[],
+  allowedTabIds: Set<string> | null,
+): ShellNavSubGroup[] {
+  return groups
+    .map(g => ({
+      label: g.label,
+      items: filterAllowedNavItems(g.items, allowedTabIds),
+    }))
+    .filter(g => g.items.length > 0)
 }
 
 export function buildPartnerNavSections(
@@ -137,10 +175,11 @@ export function buildPartnerNavSections(
 ): PartnerNavSections | null {
   const lifecycle = filterAllowedNavItems(ENGINEER_LIFECYCLE_ITEMS, allowedTabIds)
   const launch = filterAllowedNavItems(ENGINEER_LAUNCH_ITEMS, allowedTabIds)
-  const workspace = filterAllowedNavItems(ENGINEER_WORKSPACE_ITEMS, allowedTabIds)
+  const workspaceGroups = filterAllowedNavSubGroups(ENGINEER_WORKSPACE_SUBGROUPS, allowedTabIds)
+  const workspace = workspaceGroups.flatMap(g => g.items)
   const profile = filterAllowedNavItems(ENGINEER_PROFILE_ITEMS, allowedTabIds)
   if (lifecycle.length + launch.length + workspace.length + profile.length === 0) return null
-  return { lifecycle, launch, workspace, profile }
+  return { lifecycle, launch, workspace, workspaceGroups, profile }
 }
 
 export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
@@ -265,6 +304,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'ib-gateway-manage': 'Plugin',
   'market-data-manage': 'Plugin',
   'plugin-release': 'Plugin',
+  'agent-release': 'Engineer',
   queue: 'Engineer',
   /** Legacy `#agent-desk` hash alias — plane kept for breadcrumb flash before redirect. */
   'agent-desk': 'Engineer',

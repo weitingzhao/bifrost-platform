@@ -8,6 +8,7 @@ import {
   ENGINEER_LIFECYCLE_ITEMS,
   ENGINEER_PROFILE_ITEMS,
   ENGINEER_WORKSPACE_ITEMS,
+  ENGINEER_WORKSPACE_SUBGROUPS,
   MISSION_CONTROL_ITEMS,
 } from '@/lib/consoleNavConfig'
 import { resolveAllowedTabIds } from '@/lib/task-mode/navLens'
@@ -40,6 +41,7 @@ describe('Seat / Partner zone builders', () => {
       'platform-release',
       'trade-release',
       'plugin-release',
+      'agent-release',
     ])
     expect(partner?.workspace.map(i => i.id)).toEqual([
       'queue',
@@ -48,6 +50,12 @@ describe('Seat / Partner zone builders', () => {
       'operator-plane',
       'agent-governance',
       'agent-capability',
+    ])
+    expect(partner?.workspaceGroups.map(g => g.label)).toEqual(['Operate', 'Patrol', ''])
+    expect(partner?.workspaceGroups[0]?.items.map(i => i.id)).toEqual(['queue'])
+    expect(partner?.workspaceGroups[1]?.items.map(i => i.id)).toEqual([
+      'autonomous-skills',
+      'execution-log',
     ])
     expect(partner?.profile).toEqual([])
   })
@@ -67,6 +75,7 @@ describe('Seat / Partner zone builders', () => {
     ])
     expect(partner?.launch).toEqual([])
     expect(partner?.workspace.map(i => i.id)).toEqual(['queue'])
+    expect(partner?.workspaceGroups.map(g => g.label)).toEqual(['Operate'])
     expect(ENGINEER_LIFECYCLE_ITEMS.find(i => i.id === 'dev-sessions')?.label).toBe('Dev Sessions')
     expect(partner?.profile).toEqual([])
   })
@@ -80,11 +89,12 @@ describe('Seat / Partner zone builders', () => {
     ])
   })
 
-  it('Launch Desk sidebar labels are Rocket → Satellite → Plugin', () => {
+  it('Launch Desk sidebar labels are Rocket → Satellite → Plugin → Agent', () => {
     expect(ENGINEER_LAUNCH_ITEMS.map(i => i.label)).toEqual([
       'Rocket',
       'Satellite',
       'Plugin',
+      'Agent',
     ])
   })
 
@@ -97,6 +107,7 @@ describe('Seat / Partner zone builders', () => {
       'agent-governance',
       'agent-capability',
     ])
+    expect(ENGINEER_WORKSPACE_SUBGROUPS.map(g => g.label)).toEqual(['Operate', 'Patrol', ''])
     expect(ENGINEER_LIFECYCLE_ITEMS.some(i => i.id === 'queue')).toBe(false)
     expect(ENGINEER_PROFILE_ITEMS.some(i => i.id === 'queue')).toBe(false)
     const ops = buildPartnerNavSections(resolveAllowedTabIds('ops'))

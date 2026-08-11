@@ -188,9 +188,10 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Briefing Reconciliation', plane: 'Governance', purpose: 'Spine projection rules and drift reconciliation' },
   { view: 'MCP Contract', plane: 'Governance', purpose: 'Agent tool contract — read / routine / confirm / forbidden' },
   { view: 'Skills & Schedules', plane: 'Engineer', purpose: 'Autonomous skill registry and triggers' },
-  { view: 'Execution Log', plane: 'Engineer', purpose: 'Autonomous execution history' },
+  { view: 'Patrol Log', plane: 'Engineer', purpose: 'Patrol execution history (cron/manual Skill runs)' },
   { view: 'Trust & Autonomy', plane: 'Engineer', purpose: 'Earned autonomy KPIs and trust matrix' },
-  { view: 'Operator Plane (L-1)', plane: 'Engineer', purpose: 'Out-of-band runner infrastructure (fate-isolated)' },
+  { view: 'Launch Agent (L-1)', plane: 'Engineer', purpose: 'Mac Mini Agent host publish (deploy_mac_mini; fate-isolated)' },
+  { view: 'Operator Plane (L-1)', plane: 'Engineer', purpose: 'Out-of-band runner heartbeats / MCP / AI Fix (publish → Launch Agent)' },
   {
     view: 'Task Control Center',
     plane: 'Mission Control',

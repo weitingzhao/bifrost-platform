@@ -57,6 +57,7 @@ const OPS_PHASES: TaskModeDef['phases'] = [
       { label: 'Launch Rocket', tabId: 'platform-release' },
       { label: 'Deploy Satellite', tabId: 'trade-release' },
       { label: 'Launch Plugin', tabId: 'plugin-release' },
+      { label: 'Launch Agent', tabId: 'agent-release' },
     ],
   },
   {
@@ -67,7 +68,7 @@ const OPS_PHASES: TaskModeDef['phases'] = [
     dependsOn: ['deploy'],
     navigateTab: 'execution-log',
     actions: [
-      { label: 'Execution Log', tabId: 'execution-log' },
+      { label: 'Patrol Log', tabId: 'execution-log' },
       { label: 'Patrol', tabId: 'autonomous-skills' },
     ],
   },
@@ -246,6 +247,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
         'platform-release',
         'trade-release',
         'plugin-release',
+        'agent-release',
         'cluster',
         'rocket-health',
         'satellite-bus',
@@ -257,8 +259,15 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
       ],
       phaseRelevantTabs: {
         discover: ['task-cc', 'control-room'],
-        remediate: ['task-cc', 'operator-plane', 'defects'],
-        deploy: ['task-cc', 'platform-release', 'trade-release', 'plugin-release', 'control-room'],
+        remediate: ['task-cc', 'operator-plane', 'agent-release', 'defects'],
+        deploy: [
+          'task-cc',
+          'platform-release',
+          'trade-release',
+          'plugin-release',
+          'agent-release',
+          'control-room',
+        ],
         patrol: ['task-cc', 'execution-log', 'autonomous-skills', 'agent-governance'],
         clear: ['task-cc', 'queue'],
       },

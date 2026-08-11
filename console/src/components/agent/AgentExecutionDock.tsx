@@ -119,12 +119,14 @@ export type OperatorDockProps = {
    * Must not force Agent Desk tab — Agent Desk stays archive-only.
    */
   onSelectJob?: (job: AmbientAgentJob) => void
-  /** Deep-link to Engineer → Operator Plane (L-1 Update / smoke SSOT). */
+  /** Deep-link to Engineer → Operator Plane (L-1 heartbeats / MCP / AI Fix). */
   onOpenOperatorPlane?: () => void
+  /** Deep-link to Launch Desk → Agent (Mac Mini host publish SSOT). */
+  onOpenAgentLaunch?: () => void
   /** Deep-link to Engineer → Dev Sessions (local host runtime). */
   onOpenDevSessions?: () => void
   /** Current console view — highlights matching page link in dock head. */
-  activePage?: 'operator-plane' | 'agent-desk' | 'dev-sessions' | null
+  activePage?: 'operator-plane' | 'agent-release' | 'agent-desk' | 'dev-sessions' | null
   onComplete?: (job: RemediationJob) => void
   /**
    * Sync live/archive terminal status back to the shell so Agent CTAs unlock
@@ -225,6 +227,7 @@ export function OperatorDock({
   onOpenAgentDesk,
   onSelectJob,
   onOpenOperatorPlane,
+  onOpenAgentLaunch,
   onOpenDevSessions,
   activePage = null,
   onComplete,
@@ -640,7 +643,7 @@ export function OperatorDock({
           </span>
         )}
         <span className="console-agent-execution-dock__status">{headStatus}</span>
-        {onOpenOperatorPlane != null ? (
+        {onOpenAgentLaunch != null || onOpenOperatorPlane != null ? (
           <button
             type="button"
             className={cn(
@@ -648,8 +651,8 @@ export function OperatorDock({
               'console-agent-execution-dock__host-meta--link',
               hostPulse.anyRunnerDown && 'console-agent-execution-dock__host-meta--warn',
             )}
-            title={`${hostPulse.hostMetaTitle}\nOpen Operator Plane · Agent hosts`}
-            onClick={onOpenOperatorPlane}
+            title={`${hostPulse.hostMetaTitle}\nOpen Launch Desk · Agent (host publish)`}
+            onClick={() => (onOpenAgentLaunch ?? onOpenOperatorPlane)?.()}
           >
             <HostMetaMarks pulse={hostPulse} />
           </button>
@@ -668,9 +671,9 @@ export function OperatorDock({
           <button
             type="button"
             className="console-agent-execution-dock__deploy-meta"
-            title="Host update in progress — open Operator Plane for log / Update"
-            onClick={() => onOpenOperatorPlane?.()}
-            disabled={onOpenOperatorPlane == null}
+            title="Host update in progress — open Launch Desk · Agent for log / Update"
+            onClick={() => (onOpenAgentLaunch ?? onOpenOperatorPlane)?.()}
+            disabled={onOpenAgentLaunch == null && onOpenOperatorPlane == null}
           >
             {hostPulse.deployMetaShort}
           </button>
@@ -738,6 +741,23 @@ export function OperatorDock({
 
         <div className="console-agent-execution-dock__actions">
           {/* Page links first; window chrome (max/collapse) icon-only on the right */}
+          {onOpenAgentLaunch != null && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className={cn(
+                'gap-1',
+                activePage === 'agent-release'
+                  ? 'console-agent-execution-dock__page-link--active'
+                  : 'console-agent-execution-dock__page-link',
+              )}
+              onClick={onOpenAgentLaunch}
+              title="Launch Desk · Agent — Mac Mini host publish"
+              aria-current={activePage === 'agent-release' ? 'page' : undefined}
+            >
+              Launch Agent
+            </Button>
+          )}
           {onOpenOperatorPlane != null && (
             <Button
               variant="ghost"
@@ -749,7 +769,7 @@ export function OperatorDock({
                   : 'console-agent-execution-dock__page-link',
               )}
               onClick={onOpenOperatorPlane}
-              title="Operator Plane (L-1) — Update / smoke / MCP"
+              title="Operator Plane (L-1) — heartbeats / smoke / MCP / AI Fix"
               aria-current={activePage === 'operator-plane' ? 'page' : undefined}
             >
               <LifeBuoy className="console-agent-execution-dock__action-icon" aria-hidden />
@@ -881,15 +901,15 @@ export function OperatorDock({
                   {hostPulse.deployRunning && (
                     <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
                       Host update in progress — Fix may be flaky until deploy finishes.
-                      {onOpenOperatorPlane != null && (
+                      {(onOpenAgentLaunch ?? onOpenOperatorPlane) != null && (
                         <>
                           {' '}
                           <button
                             type="button"
                             className="console-agent-execution-dock__inline-link"
-                            onClick={onOpenOperatorPlane}
+                            onClick={() => (onOpenAgentLaunch ?? onOpenOperatorPlane)?.()}
                           >
-                            Operator Plane
+                            Launch Agent
                           </button>
                         </>
                       )}
@@ -897,16 +917,16 @@ export function OperatorDock({
                   )}
                   {!hostPulse.deployRunning && hostPulse.allRunnersDown && (
                     <p className="console-agent-execution-dock__idle-copy console-agent-execution-dock__idle-copy--warn">
-                      L-1 runners unreachable — recover hosts on Operator Plane.
-                      {onOpenOperatorPlane != null && (
+                      L-1 runners unreachable — recover hosts via Launch Agent / Operator Plane.
+                      {(onOpenAgentLaunch ?? onOpenOperatorPlane) != null && (
                         <>
                           {' '}
                           <button
                             type="button"
                             className="console-agent-execution-dock__inline-link"
-                            onClick={onOpenOperatorPlane}
+                            onClick={() => (onOpenAgentLaunch ?? onOpenOperatorPlane)?.()}
                           >
-                            Operator Plane
+                            Launch Agent
                           </button>
                         </>
                       )}
@@ -929,15 +949,15 @@ export function OperatorDock({
                       {hostPulse.deployRunning && (
                         <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--warn">
                           Host update in progress — Fix may be flaky
-                          {onOpenOperatorPlane != null && (
+                          {(onOpenAgentLaunch ?? onOpenOperatorPlane) != null && (
                             <>
                               {' · '}
                               <button
                                 type="button"
                                 className="console-agent-execution-dock__inline-link"
-                                onClick={onOpenOperatorPlane}
+                                onClick={() => (onOpenAgentLaunch ?? onOpenOperatorPlane)?.()}
                               >
-                                Operator Plane
+                                Launch Agent
                               </button>
                             </>
                           )}
