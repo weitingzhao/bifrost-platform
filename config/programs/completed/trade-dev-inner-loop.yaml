@@ -4,7 +4,7 @@ description: |
   Product-mode inner loop for Trade UI: accept on local Vite :5173 → bifrost-dev :30882;
   keep bifrost_dev ledger fresh via CNPG clone (not redis-live dump); Market Live via shared
   redis-ib. D10 BLOCKED. Satellite/Prod publish remains L2 gate only.
-status: active
+status: completed
 workspace: /Users/vision-mac-trader/Desktop/stocks
 skill_path: .cursor/skills/trade-dev-inner-loop/SKILL.md
 model: composer-2.5
