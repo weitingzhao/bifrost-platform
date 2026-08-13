@@ -24,11 +24,8 @@ lanes:
       track_type: build
       label: GPU pool join (placement residual)
       short_label: GPU pool
-      description: >
-        PARKED residual after workload-placement-governance CLOSED. Live placement
-        evaluator: GPU pool status=planned (P5a gpu-server not joined); ai rule unsatisfied.
-        Fleet is amd64-only (arm64 edge pool removed). Core amd64/nfs rules already OK.
-        Do not reopen placement milestone — join GPU when ai-compute-strategy buy-signal fires.
+      description: |
+        PARKED residual after workload-placement-governance CLOSED. Live placement evaluator: GPU pool status=planned (P5a gpu-server not joined); ai rule unsatisfied. Fleet is amd64-only (arm64 edge pool removed). Core amd64/nfs rules already OK. Do not reopen placement milestone — join GPU when ai-compute-strategy buy-signal fires.
       agent_mode: Ops
       work_intent: cluster
     - id: mcp-gitops
@@ -118,10 +115,8 @@ lanes:
       track_type: maintain
       label: Drift detection & remediation
       short_label: Drift
-      description: >
-        Nightly catalog drift scan closed. Active Delivery Board program retrospective-agent
-        (Waves B–C): DefectReport code attribution + fix-PR proposal. Spine stream
-        retrospective-agent. Hermes L0 first-task closed 2026-08-08 (hermes-gateway-integration 6/6).
+      description: |
+        Nightly catalog drift scan closed. Active Delivery Board program retrospective-agent (Waves B–C): DefectReport code attribution + fix-PR proposal. Spine stream retrospective-agent. Hermes L0 first-task closed 2026-08-08 (hermes-gateway-integration 6/6).
       agent_mode: Ops
       work_intent: automate
     - id: agent-services
@@ -143,10 +138,8 @@ lanes:
       track_type: build
       label: Trade advisory autonomous (parked)
       short_label: Trade advisory
-      description: >
-        PARKED — aspirational (Ready / empty queue). Morning briefing, position risk alerts,
-        SEPA notifications. Spine stream agent-trade-advisory remains not_started until
-        Owner opens a program. Do not project onto agent-services Doing queue.
+      description: |
+        PARKED — aspirational (Ready / empty queue). Morning briefing, position risk alerts, SEPA notifications. Spine stream agent-trade-advisory remains not_started until Owner opens a program. Do not project onto agent-services Doing queue.
       agent_mode: Ops
       work_intent: automate
     - id: flight-director-parked
@@ -155,10 +148,8 @@ lanes:
       track_type: build
       label: Flight Director governance (parked)
       short_label: Flight Director
-      description: >
-        PARKED — aspirational (Ready / empty queue). Owner-as-Mission-Director governance
-        after Hermes L0. Spine stream flight-director-governance remains not_started until
-        Owner opens a program. Do not project onto agent-services Doing queue.
+      description: |
+        PARKED — aspirational (Ready / empty queue). Owner-as-Mission-Director governance after Hermes L0. Spine stream flight-director-governance remains not_started until Owner opens a program. Do not project onto agent-services Doing queue.
       agent_mode: Ops
       work_intent: automate
     - id: network-server
@@ -185,12 +176,8 @@ lanes:
       track_type: build
       label: AI network autonomy
       short_label: AI Net
-      description: >
-        PARKED — aspirational vision lane (Ready / empty queue). No delivery program or
-        executable phases until Owner opens one. Foundation already delivered: UniFi MCP
-        (unifi-mcp-server closed 4/4) + L0 Network Monitoring Ops (health/bandwidth/anomaly/SLA).
-        Remaining vision (Home Assistant presence, isolate+alert, self-healing) stays in spine
-        stream ai-home-network as notes only — not a Planned execution contract.
+      description: |
+        PARKED — aspirational vision lane (Ready / empty queue). No delivery program or executable phases until Owner opens one. Foundation already delivered: UniFi MCP (unifi-mcp-server closed 4/4) + L0 Network Monitoring Ops (health/bandwidth/anomaly/SLA). Remaining vision (Home Assistant presence, isolate+alert, self-healing) stays in spine stream ai-home-network as notes only — not a Planned execution contract.
       agent_mode: Ops
       work_intent: automate
     - id: governance
@@ -276,9 +263,8 @@ lanes:
       track_type: build
       label: Market Data Plugin expansion (Layer 1+2)
       short_label: MD Expand
-      description: >
-        DONE — 8/8 phases signed · Layer 1 (raw ingest) + Layer 2 (analytics) + Layer 3 (API/UI migration + cleanup).
-        Vitals UI follow-on → market-data-vitals.
+      description: |
+        DONE — 8/8 phases signed · Layer 1 (raw ingest) + Layer 2 (analytics) + Layer 3 (API/UI migration + cleanup). Vitals UI follow-on → market-data-vitals.
       agent_mode: Ops
       work_intent: feature
     - id: market-data-vitals
@@ -287,11 +273,8 @@ lanes:
       track_type: build
       label: Market Data Vitals UI
       short_label: MD Vitals
-      description: >
-        Data quality visibility upgrade for Ops Console Market Data page.
-        Wave 1 (P1–P3): Overview Vitals strip + Today's Data verdict.
-        Wave 2 (P4–P6): Stock depth + Option coverage + Coverage tab refactor.
-        Wave 3 (P7–P8): Gap detection + Quality Score.
+      description: |
+        Data quality visibility upgrade for Ops Console Market Data page. Wave 1 (P1–P3): Overview Vitals strip + Today's Data verdict. Wave 2 (P4–P6): Stock depth + Option coverage + Coverage tab refactor. Wave 3 (P7–P8): Gap detection + Quality Score.
       agent_mode: Ops
       work_intent: feature
     - id: ib-vendor
@@ -362,3 +345,12 @@ lanes:
       description: PARKED residual after network-monitoring-ops. Add rule-based outbound traffic spike detection beyond device-down / probe-fail-streak. Needs stable time-series; without it, false positives are likely. Defer until metrics series exist.
       agent_mode: Ops
       work_intent: ops
+    - id: trade-iv-radar
+      track: build
+      component_line: satellite
+      track_type: build
+      label: Trade IV Radar
+      short_label: IV Radar
+      description: Wave A — Research IA (Ideas / Volatility / Structure / Risk / Lab) + IV Rank regime page (Benchmarks ∪ optionable Watchlist ∪ Holdings). D10 observe-only; A2 Event Radar out of scope.
+      agent_mode: Product
+      work_intent: feature

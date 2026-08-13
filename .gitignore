@@ -44,3 +44,6 @@ data/operate/
 .vscode/*
 !.vscode/extensions.json
 .docker-build/
+
+# Release cycle runtime (API rewrites; must not dirty git-bridge)
+data/release_cycles_*.json

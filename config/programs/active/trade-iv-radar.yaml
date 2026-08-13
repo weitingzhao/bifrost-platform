@@ -1,0 +1,195 @@
+id: trade-iv-radar
+title: Trade IV Radar — Research IA + Vol Regime (Wave A)
+description: |
+    Satellite / Product — restructure Trade Research nav to industry Ideas → Volatility → Structure → Risk → Lab; land IV Radar (IV Rank primary, Percentile column) with universe Benchmarks ∪ optionable Watchlist ∪ Holdings; rename IV & Greeks → Contract Greeks; move Data Readiness beside Settings Coverage. D10 observe-only. A2 Event Radar out of scope.
+status: active
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/trade-iv-radar/SKILL.md
+model: composer-2.5
+delivery:
+    board_visible: true
+    former_location: Build Desk · Satellite · trade-iv-radar (Build)
+    sign_off_mechanism: api
+phases:
+    - id: P1
+      title: Research IA M1 — nav five groups + Settings Data Readiness
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Follow {{skill_path}}.
+
+        Owner decisions (locked):
+        1. Research subgroups: Ideas / Volatility / Structure / Risk / Lab
+        2. Rename nav label "IV & Greeks" → "Contract Greeks" (route may stay /research/greeks)
+        3. Move Stock Data Readiness from Research → Settings (beside Coverage)
+
+        Goal: Information architecture only — no IV Radar page yet.
+
+        Deliverables:
+        - bifrost-trade-frontend/src/layout/navConfig.ts — Research subGroups as above
+        - Ideas: Stock Screener, Option Screener, Watchlist (remove Data Readiness)
+        - Volatility: Contract Greeks only for now (IV Radar added in P3)
+        - Structure: Option Discovery
+        - Risk: Risk Model
+        - Lab: Backtest
+        - SettingsLayout: Data Readiness leaf under Data Coverage (next to Overview/Option/Stock)
+        - router: keep /research/stock-data working OR redirect to /settings/... — prefer move route under settings with redirect from old path
+        - AppHeader / breadcrumbs titles updated if hardcoded
+        - UI strings English
+
+        Out of scope: IV Radar page, A2 Event Radar, D10 unlock, plugin API changes.
+
+        Output a structured Phase completion report at the end.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run build
+      acceptance:
+        - Research nav shows Ideas / Volatility / Structure / Risk / Lab
+        - Contract Greeks label visible; no 'IV & Greeks' nav label
+        - Data Readiness reachable from Settings beside Coverage
+        - Old /research/stock-data still works via redirect or moved route
+        - lint + build pass
+      depends_on: []
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed Research five-group labels in Trade UI sidebar
+            - Owner confirmed Data Readiness location under Settings → Data Coverage
+      agent_session:
+        enabled: true
+    - id: P2
+      title: IV Radar data layer — client, hooks, universe
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Follow {{skill_path}}.
+
+        Goal: Wire read path to market-data plugin IV percentile/rank; assemble industry universe.
+
+        Universe (locked):
+          All (default) = Benchmarks ∪ optionable Watchlist STK ∪ Holdings underlyings
+          Filters: All | Benchmarks | Watchlist | Holdings
+        Benchmarks default: SPY, QQQ, IWM
+        Primary metric: IV Rank; column: IV Percentile
+        Buckets: High >60 / Neutral 30–60 / Low <30
+        No full-market scan. No inventing missing rows.
+
+        Deliverables:
+        - API helper via marketDataPluginUrl('/market/analytics/iv-percentile')
+        - Types for iv_current, iv_percentile_1y, iv_rank_1y, lookback_days, trade_date
+        - TanStack Query hook(s) with bounded concurrency for symbol list
+        - Pure functions: assembleUniverse, bucketByIvRank (unit-testable)
+        - Reuse useWatchlist optionable STK + holdings symbols from existing hooks
+
+        Out of scope: full page chrome (P3); plugin batch API (not required for Wave A).
+
+        Output a structured Phase completion report at the end.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run build
+      acceptance:
+        - fetchIvPercentile (or equivalent) calls platform market-data proxy
+        - Universe assembler covers Benchmarks + optionable Watchlist + Holdings
+        - bucketByIvRank matches >60 / 30–60 / <30
+        - Missing rows surface as No data — no fabricated IV
+        - lint + build pass
+      depends_on:
+        - P1
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: P3
+      title: IV Radar page — regime UI under Volatility
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Follow {{skill_path}} and Dense UI rules (docs/DENSE_UI.md, dense-ui-system.mdc).
+
+        Goal: Ship independent IV Radar page; Discovery remains chain/structure only.
+
+        Deliverables:
+        - Route /research/iv-radar + lazy page
+        - Nav: Volatility group includes IV Radar + Contract Greeks
+        - PageShell + PageHeader title "IV Radar"
+        - Universe SegmentControl: All | Benchmarks | Watchlist | Holdings
+        - Three elevated regime cards (High / Neutral / Low) with counts + short English hints
+        - DenseDataTable: Symbol · IV · IV Rank · IV Percentile · Lookback · Source · As-of
+        - Symbol → Option Discovery drill-down (DenseLinkButton / router link)
+        - Disclaimer: relative regime only; Polygon IV vendor-dependent; not investment advice; D10 no execution
+        - Extremes sort optional (by |Rank−50| or Rank)
+
+        UI English. No window.confirm. No new page-local radar CSS modules.
+
+        Output a structured Phase completion report at the end.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run build && npm run check:legacy-css
+      acceptance:
+        - IV Radar opens under Research → Volatility
+        - Default All universe shows buckets when plugin data exists
+        - Drill-down to Discovery works
+        - No order/control write paths
+        - lint + build + check:legacy-css pass
+      depends_on:
+        - P2
+      sign_off:
+        required: true
+        checklist:
+            - Owner opened IV Radar with live/dev data and confirmed three regimes readable
+            - Owner confirmed Discovery still owns chain/structure
+      agent_session:
+        enabled: true
+    - id: P4
+      title: Wave A acceptance — polish + usage checklist
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Follow {{skill_path}}.
+
+        Goal: Final Wave A QA and operator-facing usage notes (English UI / Chinese Owner docs OK in skill or short Settings/Tech note — prefer concise PageHeader description + in-page help, not a new docs site).
+
+        Deliverables:
+        - Fix any residual nav/breadcrumb mismatches
+        - Empty/stale states when iv-percentile Cron empty (link hint to Ops Market Data if appropriate)
+        - Short "How to read" blurb on page (Rank vs Percentile; Benchmarks → Holdings → Watchlist flow)
+        - Run full FE verify; smoke manual path documented in Phase report
+        - Confirm A2 Event Radar NOT started; D10 untouched
+
+        Output a structured Phase completion report + suggested Owner daily ritual (2–5 min).
+
+        After Owner 验收: submit_post_completion per batch-execution skill.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run build && npm run check:legacy-css
+      acceptance:
+        - 'Wave A scope complete: IA M1 + IV Radar page'
+        - Usage blurb present on IV Radar
+        - No A2 / no live trading paths
+        - lint + build + check:legacy-css pass
+      depends_on:
+        - P3
+      sign_off:
+        required: true
+        checklist:
+            - Owner completed one daily ritual pass (Benchmarks → Holdings → Watchlist → Discovery drill)
+            - Owner approved Wave A closed; future GEX/Term stay out of this program
+      agent_session:
+        enabled: true
+post_completion:
+    new_capabilities:
+        - 'Trade Research IA: Ideas / Volatility / Structure / Risk / Lab'
+        - IV Radar — underlying vol regime (IV Rank primary, Percentile column)
+        - Data Readiness under Settings → Data Coverage
+    new_risks:
+        - IV levels vendor-dependent (Polygon snapshot IV); treat Rank/Percentile as relative
+        - Empty radar if market-data iv-percentile Cron not populated
+    operate_queue_items: []
+metadata:
+    created_at: "2026-08-11"
+    lane_id: trade-iv-radar
+    operate_lane: business-advisory
+    owner: vision-mac-trader
+    prerequisite_programs:
+        - market-data-expand
+    tags:
+        - satellite
+        - trade-iv-radar
+        - product
+        - research
+        - iv-radar
+        - wave-a
+        - d10-safe
