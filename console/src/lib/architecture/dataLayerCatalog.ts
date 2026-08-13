@@ -128,11 +128,12 @@ export const PG_DEPLOY_PRINCIPLES: PgPrinciple[] = [
 
 export const DATA_SERVICES_AGENT_FLOW: string[] = [
   '1. get_data_freshness — observe bifrost_dev / bifrost_stg lag_vs_prod_days vs bifrost_prod (verdict+badge: <3d fresh/green · 3–7d aging/yellow · ≥7d stale/red; prod=reference)',
-  '2. If aging or stale (lag ≥ 3d) and Owner/ops intent allows: trigger_data_clone with confirmation_token=CLONE-FROM-PROD and confirm=true (mode=full or selective+tables)',
-  '3. Poll get_data_clone_status until status=done|failed (steps: dumping → restoring → verifying); concurrent clone → HTTP 409',
-  '4. Optional: rollout_restart Trade API / worker in bifrost-dev if apps held stale connections (operator)',
-  '5. Never write bifrost_prod; never kubectl from Agent — Platform API is the executor',
-  '6. Cursor MCP: after adding tools, reload the bifrost-platform MCP server (Settings → MCP) so get_data_freshness / trigger_data_clone / get_data_clone_status appear',
+  '2. Inner-loop cadence (Program trade-dev-inner-loop / D-IL2): also watch last_clone_at — prefer ≤7d even when lag_vs_prod=0 (wall_age can look old on both sides while lag badge stays fresh)',
+  '3. If aging or stale (lag ≥ 3d) OR last_clone_at >7d before ledger-heavy UI work, and Owner/ops intent allows: trigger_data_clone with confirmation_token=CLONE-FROM-PROD and confirm=true (prefer full + targets=["bifrost_dev"])',
+  '4. Poll get_data_clone_status until status=done|failed (steps: dumping → restoring → verifying); concurrent clone → HTTP 409',
+  '5. Optional: rollout_restart Trade API in bifrost-dev (make bounce-dev-apis-after-clone or MCP rollout_restart_deployment) if apps held stale connections',
+  '6. Never write bifrost_prod; never dump redis-live-prod → redis-dev (Live = redis-ib, D-IL3); never kubectl from Agent — Platform API is the executor',
+  '7. Cursor MCP: after adding tools, reload the bifrost-platform MCP server (Settings → MCP) so get_data_freshness / trigger_data_clone / get_data_clone_status appear',
 ]
 
 export const DATA_SERVICES_MCP = {
@@ -144,7 +145,7 @@ export const DATA_SERVICES_MCP = {
 
 /** Briefing note — stale non-prod DBs surface in Console Postgres panel; Agent uses get_data_freshness. */
 export const DATA_FRESHNESS_BRIEFING_NOTE =
-  'Data freshness: Rocket → Cluster → Postgres → Data Freshness. Verdict uses lag_vs_prod_days (fresh|aging|stale; not wall-clock age). If bifrost_dev/stg lag ≥ 7d (stale), Sync from Prod (admin) or MCP trigger_data_clone (confirm:true). Aging (3–7d) is a soft warning.'
+  'Data freshness: Rocket → Cluster → Postgres → Data Freshness. Verdict uses lag_vs_prod_days (fresh|aging|stale; not wall-clock age alone — wall_age in detail can be large while lag=0). Inner-loop cadence (Program trade-dev-inner-loop / D-IL2): prefer last_clone_at ≤7d (or on-demand) before ledger-heavy Trade UI work. If bifrost_dev/stg lag ≥ 7d (stale) or last_clone_at old, Sync from Prod (admin) or MCP trigger_data_clone (confirm:true; prefer targets=["bifrost_dev"]). Aging (3–7d) is a soft warning. Live quotes ≠ PG — use redis-ib (never clone redis-live-prod → redis-dev).'
 
 /** Acceptance — Cursor MCP must list data tools after reload. */
 export const DATA_SERVICES_CURSOR_MCP_ACCEPTANCE: string[] = [

@@ -1,0 +1,388 @@
+id: trade-dev-inner-loop
+title: Trade DEV Inner Loop — Local FE + Fresh PG + redis-ib Live
+description: |
+  Product-mode inner loop for Trade UI: accept on local Vite :5173 → bifrost-dev :30882;
+  keep bifrost_dev ledger fresh via CNPG clone (not redis-live dump); Market Live via shared
+  redis-ib. D10 BLOCKED. Satellite/Prod publish remains L2 gate only.
+status: active
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/trade-dev-inner-loop/SKILL.md
+model: composer-2.5
+delivery:
+  board_visible: true
+  former_location: Build Desk · Satellite · trade-dev-inner-loop
+  sign_off_mechanism: api
+phases:
+  - id: P1
+    title: Inner-loop contract document (L0/L1/L2 + Redis dual-bus + D-IL*)
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+      Follow {{skill_path}}.
+      Deliverables: bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md covering L0/L1/L2,
+      Redis dual-bus (PG ledger vs redis-ib live), locked D-IL1–D-IL4, and non-goals.
+    verify_cmd: test -f bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
+    acceptance:
+      - Contract doc exists and defines L0/L1/L2 acceptance tiers
+      - D-IL1–D-IL4 and forbidden items documented
+      - Redis dual-bus (PG vs redis-ib) explicit; no redis-live-prod → redis-dev clone
+    depends_on: []
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P2
+    title: Habit guardrails — AGENTS/CLAUDE UI accept on :5173
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Update bifrost-trade-frontend/AGENTS.md and CLAUDE.md: UI default accept = local Vite
+      :5173 + .env.development.local → 30882; Prod refresh ≠ UI acceptance.
+    verify_cmd: rg -n "5173|30882|inner.loop|D-IL1" bifrost-trade-frontend/AGENTS.md bifrost-trade-frontend/CLAUDE.md
+    acceptance:
+      - AGENTS.md states default UI accept path is local :5173 → bifrost-dev
+      - Prod/Satellite refresh documented as L2 publish gate, not daily visual accept
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P3
+    title: Env presets — npm dev:k3s / confirm trade-ui → 30882
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Add npm script (or equivalent) to apply .env.development.k3s; document trade-ui / bdev
+      pointing at 192.168.10.73:30882.
+    verify_cmd: "rg -n 'dev:k3s|30882' bifrost-trade-frontend/package.json bifrost-trade-frontend/.env.development.k3s"
+    acceptance:
+      - package.json has dev:k3s (or documented equivalent)
+      - .env.development.k3s targets 192.168.10.73:30882 for Trade APIs
+    depends_on:
+      - P2
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P4
+    title: Smoke page pack — Instances / Live / Ledger checklist
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Add local smoke checklist for Instances, Live, Ledger into the contract doc.
+    verify_cmd: rg -n "Smoke page pack|Instances|/live|Ledger" bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
+    acceptance:
+      - Checklist covers Instances, Live, Ledger with pass/fail signals
+      - Checklist assumes local Vite + bifrost-dev APIs (D-IL1)
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P5
+    title: Clone playbook — get_data_freshness → trigger_data_clone → poll
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Document Owner-gated clone playbook (MCP). Do NOT auto-trigger clone.
+    verify_cmd: rg -n "trigger_data_clone|get_data_freshness|get_data_clone_status" bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
+    acceptance:
+      - Playbook lists get_data_freshness → Owner confirm → trigger_data_clone targets bifrost_dev → poll
+      - Agent default is document-only; no automatic clone
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P6
+    title: Post-clone consumer bounce — docs + safe restart guidance
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Document post-clone rollout_restart of DEV api-* ; optional Makefile/script pointer.
+    verify_cmd: rg -n "rollout_restart|post-clone|bounce" bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md bifrost-trade-infra/Makefile
+    acceptance:
+      - Post-clone bounce steps documented for bifrost-dev api deployments
+      - Script or Makefile target exists or clearly deferred to MCP rollout_restart
+    depends_on:
+      - P5
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P7
+    title: Freshness cadence ≤7d — Briefing / dataLayerCatalog alignment
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Align DATA_FRESHNESS_BRIEFING_NOTE / agent flow with inner-loop cadence and Program id.
+    verify_cmd: rg -n "trade-dev-inner-loop|≤7d|last_clone" bifrost-platform/console/src/lib/architecture/dataLayerCatalog.ts bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
+    acceptance:
+      - Cadence ≤7d / on-demand documented
+      - dataLayerCatalog references trade-dev-inner-loop Program
+    depends_on:
+      - P5
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P8
+    title: Selective vs full clone risk notes
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Document selective vs full clone risks in contract doc.
+    verify_cmd: rg -n "selective|full clone|FK|orphan" bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
+    acceptance:
+      - Full clone preferred for bifrost_dev inner loop; selective risks documented
+    depends_on:
+      - P5
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P9
+    title: Topology assert — ExternalName redis-ib + forbid redis-live dump
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Docs + check script/Makefile asserting bifrost-dev redis-ib ExternalName; forbid clone redis-live-prod.
+    verify_cmd: test -x bifrost-trade-infra/scripts/assert_redis_ib_topology.sh && bifrost-trade-infra/scripts/assert_redis_ib_topology.sh --dry-run
+    acceptance:
+      - assert_redis_ib_topology.sh exists and dry-run exits 0
+      - Contract forbids redis-live-prod → redis-dev dump
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P10
+    title: Live readiness probe — Gateway / redis-ib / api-market
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Read-only probe script (green/yellow/red) for Live path readiness.
+    verify_cmd: test -x bifrost-trade-infra/scripts/probe_dev_live_readiness.sh && bifrost-trade-infra/scripts/probe_dev_live_readiness.sh --dry-run
+    acceptance:
+      - Probe script dry-run works; live mode reports green/yellow/red diagnostics
+    depends_on:
+      - P9
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P11
+    title: Watchlist / on-demand bridge docs after empty clone
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Document empty watchlist after clone and on-demand subscribe via Gateway.
+    verify_cmd: rg -n "watchlist|on-demand" bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
+    acceptance:
+      - Empty watchlist recovery path documented (UI add + Gateway on-demand)
+    depends_on:
+      - P9
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P12
+    title: Failure UX copy — PG stale vs Gateway vs api-market
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Document English failure UX distinctions for Agents/Console catalogs.
+    verify_cmd: rg -n "PG stale|Gateway|api-market" bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md bifrost-platform/console/src/lib/architecture/tradeDevInnerLoopCatalog.ts
+    acceptance:
+      - Three failure classes distinguished with recommended Agent/Operator actions
+    depends_on:
+      - P10
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P13
+    title: Unified readiness model (TS catalog types + copy)
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Add tradeDevInnerLoopCatalog.ts with typed readiness dimensions (UI/PG/Live).
+    verify_cmd: test -f bifrost-platform/console/src/lib/architecture/tradeDevInnerLoopCatalog.ts
+    acceptance:
+      - Catalog exports typed readiness model + D-IL decisions
+      - Console type-check passes when catalog is imported
+    depends_on:
+      - P7
+      - P12
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P14
+    title: Console DEV Inner Loop surface (catalog-driven)
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Wire catalog into Architecture LLM pack and a minimal Vision topology section.
+    verify_cmd: rg -n "tradeDevInnerLoopCatalog|DEV Inner Loop|buildTradeDevInnerLoop" bifrost-platform/console/src
+    acceptance:
+      - Catalog wired into buildArchitectureLlmPack
+      - Minimal Console surface or catalog-only section visible in Vision topology
+    depends_on:
+      - P13
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P15
+    title: Agent Protocol / MCP playbook entry
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Add CLUSTER_REMEDIATION / Agent Protocol playbook for trade-dev-inner-loop.
+    verify_cmd: rg -n "trade-dev-inner-loop|dev-inner-loop" bifrost-platform/console/src/lib/architecture/agentProtocolCatalog.ts
+    acceptance:
+      - Agent Protocol pack references Program + MCP tools for freshness/live probe
+    depends_on:
+      - P13
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P16
+    title: Freshness metric harden — design + light improvement
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Document wall_age vs lag_vs_prod; light catalog note for last_clone_at cadence.
+      Do not break existing freshness API.
+    verify_cmd: rg -n "wall_age|last_clone_at|inner-loop cadence" bifrost-platform/console/src/lib/architecture/dataLayerCatalog.ts bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
+    acceptance:
+      - wall_age vs lag_vs_prod explained
+      - Inner-loop uses last_clone_at ≤7d as soft cadence (docs + briefing note)
+    depends_on:
+      - P7
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P17
+    title: Dogfood path — Instances-class change via inner loop
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Record dogfood evidence path in contract doc (no forced git commit).
+    verify_cmd: rg -n "Dogfood|dogfood" bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
+    acceptance:
+      - Dogfood path documented for Instances-class UI change
+    depends_on:
+      - P3
+      - P4
+      - P14
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P18
+    title: Publish checklist — local → push → STG → Prod (L2)
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Document publish ladder; unpushed local ≠ Prod; Satellite/Prod = L2 only (D-IL4).
+    verify_cmd: rg -n "Publish checklist|deliver-stg|L2" bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
+    acceptance:
+      - Publish checklist exists; D-IL4 L2-only for Prod visual/regression
+    depends_on:
+      - P17
+    sign_off:
+      required: false
+      checklist: []
+    agent_session:
+      enabled: true
+
+  - id: P19
+    title: Program sign-off — phases done; Owner confirm pending
+    status: done
+    prompt_template: |
+      Execute {{phase_title}}.
+      Mark P1–P18 done when deliverables verified. Keep program status active until Owner
+      API sign-off; do not move to completed/ without Owner confirm.
+    verify_cmd: "rg -c 'status: done' bifrost-platform/config/programs/active/trade-dev-inner-loop.yaml"
+    acceptance:
+      - All deliverable phases status done
+      - Program remains active until Owner sign-off (or completed after Owner confirm)
+    depends_on:
+      - P18
+      - P15
+      - P16
+    sign_off:
+      required: true
+      checklist:
+        - Owner confirmed D-IL1–D-IL4 still locked
+        - Owner ran or deferred clone window for bifrost_dev
+        - Owner confirmed local :5173 smoke pack once
+        - Delivery Board sign-off recorded via API
+    agent_session:
+      enabled: false
+
+metadata:
+  created_at: "2026-08-13"
+  owner: vision-mac-trader
+  lane_id: trade-stack
+  operate_lane: governance
+  prerequisite_programs:
+    - ib-gateway-plugin
+    - trade-ib-migration
+  tags:
+    - trade
+    - inner-loop
+    - dev
+    - redis-ib
+    - data-freshness
+post_completion:
+  new_capabilities:
+    - Documented Trade DEV inner-loop contract (local Vite + bifrost-dev + redis-ib)
+    - Topology assert + Live readiness probe scripts in bifrost-trade-infra
+    - Console catalog tradeDevInnerLoopCatalog for Agent/Briefing packs
+  new_risks:
+    - Agents may still treat Prod UI as accept surface if habit guardrails ignored
+    - Freshness API lag_vs_prod can read fresh while last_clone_at is old — use cadence note
+  operate_queue_items: []

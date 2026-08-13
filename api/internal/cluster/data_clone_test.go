@@ -195,6 +195,28 @@ func TestDataCloneDumpArgsSelectiveIsDataOnly(t *testing.T) {
 	}
 }
 
+func TestRestoreTargetFullDropsAllUserSchemas(t *testing.T) {
+	var seen []string
+	svc := NewService(nil)
+	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
+		seen = append(seen, strings.Join(command, " "))
+		return "", nil
+	})
+	if err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "full", nil); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(seen, "\n")
+	if !strings.Contains(joined, "DROP SCHEMA IF EXISTS") {
+		t.Fatalf("expected multi-schema drop in full reset, seen=%v", seen)
+	}
+	if !strings.Contains(joined, dataCloneRemoteDump) {
+		t.Fatalf("expected dump restore path, seen=%v", seen)
+	}
+	if strings.Count(joined, "DROP SCHEMA public CASCADE; CREATE SCHEMA public") > 0 {
+		t.Fatalf("legacy public-only reset must not be used, seen=%v", seen)
+	}
+}
+
 func TestRestoreTargetSelectiveFailsWhenTruncateFails(t *testing.T) {
 	svc := NewService(nil)
 	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {

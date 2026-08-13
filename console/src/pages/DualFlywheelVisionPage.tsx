@@ -39,6 +39,14 @@ import {
 } from '@/lib/architecture/dualFlywheelVisionCatalog'
 import { VISION_SPINE_MAP, VISION_SPINE_MAP_SOURCE, VISION_SPINE_MAP_VERSION } from '@/lib/architecture/visionSpineMap'
 import { DEV_AGENT_LOOP_STEPS, DEV_AGENT_LOOP_SOURCE } from '@/lib/architecture/devAgentLoopCatalog'
+import {
+  INNER_LOOP_FAILURE_UX,
+  INNER_LOOP_READINESS,
+  TRADE_DEV_INNER_LOOP_CONTRACT,
+  TRADE_DEV_INNER_LOOP_DECISIONS,
+  TRADE_DEV_INNER_LOOP_PROGRAM_ID,
+  TRADE_DEV_INNER_LOOP_SOURCE,
+} from '@/lib/architecture/tradeDevInnerLoopCatalog'
 import { OPS_AGENT_LOOP_STEPS, OPS_AGENT_LOOP_SOURCE } from '@/lib/architecture/opsAgentLoopCatalog'
 import {
   BUSINESS_AGENT_LOOP_STEPS,
@@ -318,6 +326,53 @@ export function DualFlywheelVisionPage() {
               </DenseDataTable>
             </CatalogSection>
           </div>
+
+          <CatalogSection
+            title={`DEV Inner Loop (${TRADE_DEV_INNER_LOOP_PROGRAM_ID} · ${TRADE_DEV_INNER_LOOP_SOURCE})`}
+          >
+            <div className="flex flex-col gap-3 px-3 py-3 text-[var(--text-dense)]">
+              <p className="m-0 leading-relaxed text-[var(--muted-foreground)]">
+                Daily Trade UI accept = local Vite :5173 → bifrost-dev :30882. Contract:{' '}
+                <span className="font-mono text-xs">{TRADE_DEV_INNER_LOOP_CONTRACT}</span>. Prod
+                browser refresh is L2 publish only — not visual QA.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {TRADE_DEV_INNER_LOOP_DECISIONS.map(d => (
+                  <DenseTag key={d.id} variant="category">
+                    {d.id}
+                  </DenseTag>
+                ))}
+              </div>
+              <DenseDataTable>
+                <DenseTableHeader>
+                  <DenseTableHeadRow>
+                    <DenseTableHead>Dimension</DenseTableHead>
+                    <DenseTableHead>Tier</DenseTableHead>
+                    <DenseTableHead>Green when</DenseTableHead>
+                    <DenseTableHead>Observe</DenseTableHead>
+                  </DenseTableHeadRow>
+                </DenseTableHeader>
+                <DenseTableBody>
+                  {INNER_LOOP_READINESS.map(r => (
+                    <DenseTableRow key={r.id}>
+                      <DenseTableCell className="font-medium whitespace-nowrap">{r.label}</DenseTableCell>
+                      <DenseTableCell>
+                        <DenseTag variant="neutral">{r.tier}</DenseTag>
+                      </DenseTableCell>
+                      <DenseTableCell className="text-[var(--muted-foreground)]">
+                        {r.greenWhen}
+                      </DenseTableCell>
+                      <DenseTableCell className="text-[var(--muted-foreground)]">{r.observe}</DenseTableCell>
+                    </DenseTableRow>
+                  ))}
+                </DenseTableBody>
+              </DenseDataTable>
+              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                Failure UX:{' '}
+                {INNER_LOOP_FAILURE_UX.map(f => f.label).join(' · ')}
+              </p>
+            </div>
+          </CatalogSection>
 
           <CatalogSection title="Redis Ideal Topology (Per Environment)">
             <div className="border-b border-[var(--border)] px-3 py-2 text-[var(--text-dense)] text-[var(--muted-foreground)]">

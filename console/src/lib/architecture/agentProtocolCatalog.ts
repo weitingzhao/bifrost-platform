@@ -37,9 +37,9 @@ export const AGENT_MODES: AgentModeRow[] = [
   {
     mode: 'Product',
     flywheel: 'A — Trade FE',
-    defaultUI: 'bifrost-trade-frontend :5173',
-    agentMay: 'Migrate pages, Dense UI, hooks, Legacy equivalence',
-    agentMustNot: 'Change compose, prod cutover, K3s, API contracts; enable live trading or scale daemon for auto-trade (D10 BLOCKED until Owner unlock)',
+    defaultUI: 'bifrost-trade-frontend :5173 → bifrost-dev :30882 (D-IL1; not Prod browser)',
+    agentMay: 'Migrate pages, Dense UI, hooks, Legacy equivalence; follow trade-dev-inner-loop smoke pack',
+    agentMustNot: 'Change compose, prod cutover, K3s, API contracts; treat Prod refresh as UI accept; enable live trading or scale daemon for auto-trade (D10 BLOCKED until Owner unlock)',
   },
   {
     mode: 'Ops',
@@ -259,15 +259,33 @@ export type ClusterRemediationPlaybook = {
 
 export const CLUSTER_REMEDIATION_PLAYBOOKS: ClusterRemediationPlaybook[] = [
   {
+    id: 'trade-dev-inner-loop',
+    title: 'Trade DEV inner loop (local FE + PG freshness + redis-ib Live)',
+    trigger:
+      'Product-mode Trade UI work: need accept path, bifrost_dev ledger freshness, or Live quotes on bifrost-dev without touching Prod FE',
+    agentAction:
+      'L0/L1: Follow Program trade-dev-inner-loop + TRADE_DEV_INNER_LOOP.md. UI accept = Vite :5173 → 30882 (D-IL1). Observe get_data_freshness (also last_clone_at ≤7d cadence). Owner-gated trigger_data_clone → bifrost_dev → poll → bounce DEV api-*. Live = assert redis-ib ExternalName + probe_dev_live_readiness (never dump redis-live-prod). Distinguish PG stale vs Gateway vs api-market failure UX.',
+    autonomy: 'L1',
+    mustNot:
+      'Do not treat Prod browser as daily UI accept (D-IL4); do not dump redis-live-prod → redis-dev; do not auto-clone without Owner; do not unlock D10',
+    mcpTools: [
+      'get_data_freshness',
+      'trigger_data_clone',
+      'get_data_clone_status',
+      'rollout_restart_deployment',
+      'list_dev_sessions',
+    ],
+  },
+  {
     id: 'data-freshness-clone',
     title: 'Refresh non-prod CNPG databases from prod',
     trigger:
-      'get_data_freshness shows bifrost_dev or bifrost_stg aging (≥3d) or stale (≥7d) lag vs bifrost_prod; local Trade/STG needs current schema/data',
+      'get_data_freshness shows bifrost_dev or bifrost_stg aging (≥3d) or stale (≥7d) lag vs bifrost_prod; local Trade/STG needs current schema/data; or last_clone_at >7d before ledger-heavy Trade UI (Program trade-dev-inner-loop)',
     agentAction:
-      'L1: If Briefing/session pack shows Data freshness STALE (≥7d), treat as evidence to run this playbook. get_data_freshness → Owner/admin confirm → trigger_data_clone (confirm:true + confirmation_token=CLONE-FROM-PROD; Console Full|Selective) → poll get_data_clone_status → optional rollout_restart consumers. If Cursor MCP lacks data tools, reload bifrost-platform MCP (Settings → MCP).',
+      'L1: If Briefing/session pack shows Data freshness STALE (≥7d), treat as evidence to run this playbook. get_data_freshness → Owner/admin confirm → trigger_data_clone (confirm:true + confirmation_token=CLONE-FROM-PROD; prefer Full targets=["bifrost_dev"]) → poll get_data_clone_status → optional rollout_restart consumers (make bounce-dev-apis-after-clone). If Cursor MCP lacks data tools, reload bifrost-platform MCP (Settings → MCP).',
     autonomy: 'L1',
-    mustNot: 'Do not target bifrost_prod; do not kubectl exec; do not enable live trading (D10); do not enable weekly auto-clone unless Owner explicitly requests',
-    mcpTools: ['get_data_freshness', 'trigger_data_clone', 'get_data_clone_status'],
+    mustNot: 'Do not target bifrost_prod; do not kubectl exec; do not enable live trading (D10); do not enable weekly auto-clone unless Owner explicitly requests; do not dump redis-live-prod',
+    mcpTools: ['get_data_freshness', 'trigger_data_clone', 'get_data_clone_status', 'rollout_restart_deployment'],
   },
   {
     id: 'deliver-stg-recover',
@@ -850,6 +868,13 @@ export function buildAgentProtocolLlmPack(): string {
     '',
     '## Example opening prompts',
     ...OPENING_PROMPTS.map(p => `- [${p.mode}] "${p.example}"`),
+    '',
+    '## Trade DEV Inner Loop (Program trade-dev-inner-loop)',
+    '- Contract: `bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md` · catalog `tradeDevInnerLoopCatalog.ts`',
+    '- D-IL1: UI accept = Vite :5173 → 192.168.10.73:30882; Prod refresh ≠ daily QA (D-IL4 L2 only)',
+    '- D-IL2: MCP get_data_freshness (+ last_clone_at ≤7d) → Owner trigger_data_clone → bifrost_dev → bounce',
+    '- D-IL3: Live = redis-ib ExternalName + probe_dev_live_readiness; never dump redis-live-prod → redis-dev',
+    '- Playbook id: `trade-dev-inner-loop` in CLUSTER_REMEDIATION_PLAYBOOKS',
     '',
     '## Dev Agent closed loop (Vision V2)',
     `- Pre-push: \`${DEV_AGENT_CLOSED_LOOP.prePushScript}\``,

@@ -756,8 +756,10 @@ func (s *Service) restoreTarget(ctx context.Context, primary, target, mode strin
 			return err
 		}
 	} else {
+		// Full clone dumps may include non-public schemas (market / data_ops / …).
+		// Dropping only public leaves those schemas and CREATE SCHEMA in the dump fails.
 		_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-c",
-			"DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO bifrost; GRANT ALL ON SCHEMA public TO public;")
+			dataCloneFullResetSQL)
 		if err != nil {
 			return err
 		}
@@ -766,10 +768,47 @@ func (s *Service) restoreTarget(ctx context.Context, primary, target, mode strin
 			return err
 		}
 	}
-	_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-c",
-		"GRANT ALL ON ALL TABLES IN SCHEMA public TO bifrost; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO bifrost; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO bifrost;")
+	_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-c", dataCloneGrantBifrostSQL)
 	return err
 }
+
+// dataCloneFullResetSQL drops every user schema so a multi-schema pg_dump restore is clean.
+const dataCloneFullResetSQL = `
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT nspname FROM pg_namespace
+    WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+      AND nspname NOT LIKE 'pg_temp_%'
+      AND nspname NOT LIKE 'pg_toast_temp_%'
+  LOOP
+    EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', r.nspname);
+  END LOOP;
+END $$;
+CREATE SCHEMA public;
+GRANT ALL ON SCHEMA public TO bifrost;
+GRANT ALL ON SCHEMA public TO public;
+`
+
+// dataCloneGrantBifrostSQL grants bifrost on all user schemas after restore (--no-acl dumps).
+const dataCloneGrantBifrostSQL = `
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT nspname FROM pg_namespace
+    WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+      AND nspname NOT LIKE 'pg_temp_%'
+      AND nspname NOT LIKE 'pg_toast_temp_%'
+  LOOP
+    EXECUTE format('GRANT ALL ON SCHEMA %I TO bifrost', r.nspname);
+    EXECUTE format('GRANT ALL ON ALL TABLES IN SCHEMA %I TO bifrost', r.nspname);
+    EXECUTE format('GRANT ALL ON ALL SEQUENCES IN SCHEMA %I TO bifrost', r.nspname);
+    EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I GRANT ALL ON TABLES TO bifrost', r.nspname);
+  END LOOP;
+END $$;
+`
 
 func (s *Service) verifyTarget(ctx context.Context, primary, target, source string) DataCloneVerifyResult {
 	vr := DataCloneVerifyResult{Database: target}
