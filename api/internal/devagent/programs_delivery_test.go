@@ -145,6 +145,45 @@ func TestNoHandoffDistinctFromNotAssessed(t *testing.T) {
 	}
 }
 
+func TestNoHandoffPersistsForCompletedProgram(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	dataDir := filepath.Join(dir, "data")
+	_ = os.Setenv("PLATFORM_DATA_DIR", dataDir)
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+	h := &Handler{
+		store: NewFileStore(configDir),
+		runtimes: map[string]*programRuntime{
+			"p": {
+				blueprint: &ProgramBlueprint{
+					ID: "p", Title: "Program", Status: "completed",
+					Phases: []PhaseBlueprint{gatePhase("P0")},
+					PostCompletion: &PostCompletionBlueprint{NewCapabilities: []string{"x"}},
+				},
+				state: &ProgramStateRecord{
+					ProgramID: "p",
+					PhaseSignOffs: []PhaseSignOffRecord{
+						{PhaseID: "P0", SignedOffAt: "2026-08-08T00:00:00Z", SignedOffBy: "owner"},
+					},
+				},
+			},
+		},
+	}
+	req := requestWithParam(http.MethodPost, "/no-handoff", `{"reason":"ops residual only","decision_by":"owner"}`, "programId", "p")
+	rec := httptest.NewRecorder()
+	h.HandleNoPostCompletionHandoff(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	loaded, err := h.store.LoadProgram("p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded == nil || loaded.PostCompletion == nil || loaded.PostCompletion.AssessmentStatus != "no_handoff" {
+		t.Fatalf("expected persisted no_handoff, got %+v", loaded)
+	}
+}
+
 func TestNoHandoffRequiresGatesComplete(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")

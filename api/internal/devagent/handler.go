@@ -190,8 +190,13 @@ func (h *Handler) persistRuntimeLocked(programID string) error {
 	if !ok {
 		return fmt.Errorf("program runtime not found: %s", programID)
 	}
+	// Closed catalog status freezes routine phase/job writes, but Owner post-completion
+	// assessment (NO HANDOFF / closed) must still land on disk or Briefing loses it on restart.
 	if rt.blueprint != nil && isClosedProgramStatus(rt.blueprint.Status) {
-		return nil
+		if rt.state == nil || rt.state.PostCompletion == nil ||
+			strings.TrimSpace(rt.state.PostCompletion.AssessmentStatus) == "" {
+			return nil
+		}
 	}
 	if rt.state == nil {
 		rt.state = &ProgramStateRecord{ProgramID: programID, History: []Job{}}
