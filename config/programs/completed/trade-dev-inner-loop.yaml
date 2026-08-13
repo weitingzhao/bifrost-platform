@@ -345,7 +345,7 @@ phases:
       Execute {{phase_title}}.
       Mark P1–P18 done when deliverables verified. Keep program status active until Owner
       API sign-off; do not move to completed/ without Owner confirm.
-    verify_cmd: "rg -c 'status: done' bifrost-platform/config/programs/active/trade-dev-inner-loop.yaml"
+    verify_cmd: "rg -c 'status: done' bifrost-platform/config/programs/completed/trade-dev-inner-loop.yaml"
     acceptance:
       - All deliverable phases status done
       - Program remains active until Owner sign-off (or completed after Owner confirm)
