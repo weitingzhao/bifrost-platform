@@ -194,7 +194,7 @@ func Catalog() []ToolView {
 		tool("get_postgres_backup_status", "CNPG Backup CR freshness (completed < 48h)", "read", "GET", "/api/v1/cluster/postgres/backup-status", "viewer", "Data", true),
 		tool("trigger_cnpg_backup", "Create on-demand CNPG Backup CR (barmanObjectStore)", "routine", "POST", "/api/v1/cluster/postgres/backup", "operator", "Data", true),
 		tool("repair_cnpg_wal_store", "Repair MinIO WAL object store, delete stuck Backup CRs, trigger on-demand backup", "routine", "POST", "/api/v1/cluster/postgres/wal-store/repair", "operator", "Data", true),
-		tool("trigger_data_clone", "Clone bifrost_prod → bifrost_dev/stg (admin; confirm:true + confirmation_token=CLONE-FROM-PROD)", "confirm", "POST", "/api/v1/cluster/data-clone", "admin", "Data", true),
+		tool("trigger_data_clone", "Clone bifrost_prod → non-prod (admin; confirm:true + confirmation_token=CLONE-FROM-PROD). Default target bifrost_dev only.", "confirm", "POST", "/api/v1/cluster/data-clone", "admin", "Data", true),
 		tool("get_data_clone_status", "Poll data-clone job progress", "read", "GET", "/api/v1/cluster/data-clone/{id}", "viewer", "Data", true),
 		tool("get_gitops_apps", "Argo CD applications health/sync", "read", "GET", "/api/v1/gitops/apps", "viewer", "P3", true),
 		tool("get_stack_addons", "CI/CD stack add-on status", "read", "GET", "/api/v1/stack/addons", "viewer", "P4", true),

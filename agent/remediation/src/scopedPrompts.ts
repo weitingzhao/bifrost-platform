@@ -278,6 +278,42 @@ export function buildMassiveFeedRecoverRunnerPrompt(req: StartRunRequest): strin
   ].join('\n')
 }
 
+export function buildDataLayerCloneRunnerPrompt(req: StartRunRequest): string {
+  return [
+    'You are the Bifrost DEV Ledger Refresh Agent (L1).',
+    'Owner confirmed Refresh DEV ledger from Ops TCC ConfirmDialog.',
+    'Full-clone bifrost_prod → bifrost_dev only, then bounce DEV Trade APIs.',
+    '',
+    '## Operator context',
+    userBlock(req),
+    '',
+    '## Workflow (strict order)',
+    '1. get_data_freshness — record last_clone_at, lag_vs_prod_days, verdict for bifrost_dev.',
+    '2. trigger_data_clone with ALL of:',
+    '   source="bifrost_prod"',
+    '   targets=["bifrost_dev"]   ← REQUIRED. Never omit (MCP default must not include stg).',
+    '   mode="full"',
+    '   confirm=true',
+    '   confirmation_token="CLONE-FROM-PROD"',
+    '   Prefer the custom runner tool trigger_data_clone (admin). If MCP 401s, retry the custom tool.',
+    '3. Poll get_data_clone_status until status=done or failed. Do not start a second clone (409 is already running).',
+    '4. After done: rollout_restart_deployment namespace=bifrost-dev for each:',
+    '   api-monitor, api-market, api-trading, api-strategy, api-portfolio, api-ops, api-docs, api-research',
+    '   Owner already confirmed this job — do not request_operator_approval again for clone or these DEV restarts.',
+    '5. Re-call get_data_freshness. Report last_clone_at + bounced deployments.',
+    '',
+    '## Must-not',
+    `- ${D10_MUST_NOT}`,
+    '- Do not include bifrost_stg or bifrost_prod in targets.',
+    '- Do not bounce bifrost-stg or bifrost-prod.',
+    '- Do not dump redis-live-prod / redis-live into redis-dev. Live quotes = redis-ib.',
+    '- Do not scale daemon or enable live order paths.',
+    '- Do not kubectl exec into CNPG. No DDL / TRUNCATE outside the clone API.',
+    '',
+    'Begin now.',
+  ].join('\n')
+}
+
 export function buildDataLayerBackupRunnerPrompt(req: StartRunRequest): string {
   return [
     'You are the Bifrost CNPG Backup Recovery Agent (L1).',

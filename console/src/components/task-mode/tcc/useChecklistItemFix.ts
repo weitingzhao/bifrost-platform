@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'rea
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchCluster, fetchClusterServiceReadiness } from '@/api/cluster'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
-import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
+import { DAILY_OPS_CHECKLIST_RUN_SCOPE, DATA_LAYER_CLONE_SCOPE } from '@/lib/agent/agentScopes'
 import {
   cellAllowsAgentFix,
   pickFleetFixCell,
@@ -13,6 +13,7 @@ import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { useChecklistGitDirtyFix } from '@/components/task-mode/tcc/useChecklistGitDirtyFix'
 import { useFleetCellFixAgents } from '@/components/task-mode/tcc/useFleetCellFixAgents'
+import { useDevLedgerRefresh } from '@/hooks/useDevLedgerRefresh'
 
 /**
  * Checklist item Fix mutation + Daily Ops remediation ambient agents
@@ -81,6 +82,15 @@ export function useChecklistItemFix({
     setAgentJustSucceeded,
   })
 
+  const ledger = useDevLedgerRefresh({
+    canOperate,
+    ambientJobId,
+    ambientJobStatus,
+    onStartAgentJob,
+    runnerHealthy,
+    enabled: isDailyOps,
+  })
+
   const fleetFix = useFleetCellFixAgents({
     isDailyOps,
     canOperate,
@@ -96,7 +106,7 @@ export function useChecklistItemFix({
     serviceReadinessForFixQ,
     dailyOpsFixStartedRef,
     setAgentJustSucceeded,
-    otherAgentPending: gitDirty.otherAgentPending,
+    otherAgentPending: gitDirty.otherAgentPending || ledger.isPending,
   })
 
   const dailyOpsWorkflow = useMemo(() => {
@@ -121,13 +131,16 @@ export function useChecklistItemFix({
     prevAmbientJobIdRef.current = ambientJobId
     prevAmbientJobScopeRef.current = ambientJobScope
 
-    if (prevId != null && ambientJobId == null) {
+      if (prevId != null && ambientJobId == null) {
       if (prevScope === DAILY_OPS_CHECKLIST_RUN_SCOPE || checklistCheckStartedRef.current) {
         checklistCheckStartedRef.current = false
         void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })
         void qc.invalidateQueries({ queryKey: ['checklist', 'kpis'] })
         void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
         void qc.invalidateQueries({ queryKey: ['cockpit'] })
+      }
+      if (prevScope === DATA_LAYER_CLONE_SCOPE) {
+        void qc.invalidateQueries({ queryKey: ['cluster', 'data-freshness'] })
       }
       if (dailyOpsFixStartedRef.current && prevScope !== DAILY_OPS_CHECKLIST_RUN_SCOPE) {
         const jobsCaches = [
@@ -214,7 +227,14 @@ export function useChecklistItemFix({
     checklistCheckTitle: gitDirty.checklistCheckTitle,
     checklistItemFixActiveId: gitDirty.checklistItemFixActiveId,
     checklistItemFixBlocked: gitDirty.checklistItemFixBlocked,
-    dailyOpsAgentPending: fleetFix.dailyOpsAgentPending,
+    dailyOpsAgentPending: fleetFix.dailyOpsAgentPending || ledger.isPending || ledger.isActive,
     dailyOpsWorkflow,
+    ledger,
+    handleRequestDevLedgerRefresh: () => ledger.requestConfirm(),
+    handleConfirmDevLedgerRefresh: () => {
+      dailyOpsFixStartedRef.current = true
+      setAgentJustSucceeded(false)
+      ledger.confirm()
+    },
   }
 }

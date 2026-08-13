@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { DenseTag, StatusLamp, type Reachability } from '@bifrost/ui'
+import { Button, DenseTag, StatusLamp, type Reachability } from '@bifrost/ui'
 import { fetchRemediationJobs } from '@/api/remediation'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -44,10 +44,20 @@ function formatWhen(iso: string): string {
 export function OpsDeskBoard({
   onNavigate,
   focus = 'all',
+  ledger,
 }: {
   onNavigate: (tabId: string) => void
   /** Summary chip filter — Agent / Environment buckets; Release lives elsewhere. */
   focus?: OpsDeskFocus
+  ledger?: {
+    lastCloneLabel: string
+    verdict: string | null
+    freshnessLoading: boolean
+    disabled: boolean
+    disabledReason: string | null
+    pending: boolean
+    onRefresh: () => void
+  }
 }) {
   const { fleet, snapshot, isLoading } = useFleetSnapshot()
   const queueQ = useOperateQueue()
@@ -115,6 +125,51 @@ export function OpsDeskBoard({
               )
             })}
           </div>
+        </OpsSection>
+      ) : null}
+
+      {showEnvironment && ledger != null ? (
+        <OpsSection
+          title="DEV ledger"
+          leading={
+            <StatusLamp
+              value={
+                ledger.freshnessLoading
+                  ? 'unknown'
+                  : ledger.verdict === 'stale'
+                    ? 'fail'
+                    : ledger.verdict === 'aging'
+                      ? 'degraded'
+                      : ledger.verdict === 'fresh'
+                        ? 'ok'
+                        : 'unknown'
+              }
+              kind="reach"
+            />
+          }
+          description={
+            ledger.freshnessLoading
+              ? 'Loading CNPG freshness…'
+              : `Last clone ${ledger.lastCloneLabel}${ledger.verdict != null ? ` · ${ledger.verdict}` : ''}`
+          }
+          actions={
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              disabled={ledger.disabled}
+              title={ledger.disabledReason ?? 'Full clone bifrost_prod → bifrost_dev via Agent Task'}
+              onClick={() => ledger.onRefresh()}
+            >
+              {ledger.pending ? 'Refreshing…' : 'Refresh DEV ledger'}
+            </Button>
+          }
+          bodyPadding="compact"
+        >
+          <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
+            Overwrites bifrost_dev from prod, then bounces bifrost-dev api-*. Does not touch STG/PROD or redis-live.
+          </p>
         </OpsSection>
       ) : null}
 

@@ -114,6 +114,15 @@ tasks:
     action: "Remediate"
     # L1: repair_cnpg_wal_store (MinIO WAL + stuck Backup CR) then on-demand Backup.
 
+  - id: data-layer-clone
+    scope: "data-layer-clone"
+    label: "Cluster · DEV Ledger Refresh"
+    tier: manual
+    default_level: L1
+    domain: Cluster
+    action: "Remediate"
+    # L1: Full clone bifrost_prod → bifrost_dev only. Owner TCC ConfirmDialog is the gate.
+
   - id: registry-pull-recover
     scope: "registry-pull-recover"
     label: "Infra · Registry Pull Recover"

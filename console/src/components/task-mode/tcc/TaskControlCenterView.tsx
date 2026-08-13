@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, DenseTag } from '@bifrost/ui'
+import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
@@ -329,6 +329,25 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         </Button>,
       )
     }
+    if (isDailyOps) {
+      nodes.push(
+        <Button
+          key="dev-ledger-refresh"
+          type="button"
+          size="sm"
+          variant="outline"
+          className="shrink-0"
+          disabled={fix.ledger.disabled}
+          title={
+            fix.ledger.disabledReason ??
+            'Overwrite bifrost_dev from bifrost_prod (Full clone) via Agent Task'
+          }
+          onClick={() => fix.handleRequestDevLedgerRefresh()}
+        >
+          {fix.ledger.isActive || fix.ledger.isPending ? 'Refreshing ledger…' : 'Refresh DEV ledger'}
+        </Button>,
+      )
+    }
     if (isDailyOps && !q.fleetClear) {
       nodes.push(
         <Button
@@ -537,6 +556,11 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
           {fix.aiGitDirtyFix.error.message}
         </OpsFeedback>
       )}
+      {isDailyOps && fix.ledger.error != null && (
+        <OpsFeedback variant="error" title="Failed to start DEV ledger refresh">
+          {fix.ledger.error.message}
+        </OpsFeedback>
+      )}
       {props.phaseFixUnavailableHint != null && (
         <OpsFeedback variant="warning" title="Agent Fix unavailable">
           {props.phaseFixUnavailableHint}
@@ -588,7 +612,23 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         {isDailyOps && (
           <OpsDeskFocusSummary focus={opsDeskFocus} onChange={setOpsDeskFocus} />
         )}
-        <OpsDeskBoard onNavigate={onNavigate} focus={isDailyOps ? opsDeskFocus : 'all'} />
+        <OpsDeskBoard
+          onNavigate={onNavigate}
+          focus={isDailyOps ? opsDeskFocus : 'all'}
+          ledger={
+            isDailyOps
+              ? {
+                  lastCloneLabel: fix.ledger.lastCloneLabel,
+                  verdict: fix.ledger.verdict,
+                  freshnessLoading: fix.ledger.freshnessLoading,
+                  disabled: fix.ledger.disabled,
+                  disabledReason: fix.ledger.disabledReason,
+                  pending: fix.ledger.isPending || fix.ledger.isActive,
+                  onRefresh: fix.handleRequestDevLedgerRefresh,
+                }
+              : undefined
+          }
+        />
         {isDailyOps && (opsDeskFocus === 'all' || opsDeskFocus === 'agent') && (
           <AutopilotHistorySection />
         )}
@@ -812,6 +852,18 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
       )}
 
       {mode.id === 'analysis' && <AnalysisWorkspacePage />}
+
+      {isDailyOps ? (
+        <ConfirmDialog
+          open={fix.ledger.confirmOpen}
+          title="Refresh DEV ledger"
+          message={fix.ledger.confirmMessage}
+          confirmLabel="Refresh DEV ledger"
+          confirming={fix.ledger.isPending}
+          onConfirm={() => fix.handleConfirmDevLedgerRefresh()}
+          onCancel={() => fix.ledger.cancelConfirm()}
+        />
+      ) : null}
 
       {isDevLoop ? (
         <>

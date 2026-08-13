@@ -51,6 +51,7 @@ describe('scopeForPlaybookId — Auto-Check / triage Fix mappings', () => {
     expect(scopeForPlaybookId('cluster-issues-full-auto')).toBe('cluster_issues_full_auto')
     expect(scopeForPlaybookId('operator-plane-remediate')).toBe('operator-plane-remediate')
     expect(scopeForPlaybookId('platform-self-health-recover')).toBe('platform-self-health-recover')
+    expect(scopeForPlaybookId('data-freshness-clone')).toBe('data-layer-clone')
   })
 })
 

@@ -103,7 +103,7 @@ server.tool(
 
 server.tool(
   'trigger_data_clone',
-  'Clone bifrost_prod → bifrost_dev/stg (admin; confirmation_token + confirm:true required)',
+  'Clone bifrost_prod → non-prod (admin; confirmation_token + confirm:true required). Default targets=["bifrost_dev"]; pass stg explicitly if needed.',
   {
     source: z.string().optional(),
     targets: z.array(z.string()).optional(),
@@ -116,7 +116,7 @@ server.tool(
     jsonResult(
       await platformPost('/api/v1/cluster/data-clone', {
         source: source ?? 'bifrost_prod',
-        targets: targets ?? ['bifrost_dev', 'bifrost_stg'],
+        targets: targets ?? ['bifrost_dev'],
         mode: mode ?? 'full',
         tables,
         confirmation_token,

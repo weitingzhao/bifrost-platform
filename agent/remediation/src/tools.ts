@@ -505,6 +505,88 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
         return textResult(jsonText(data))
       },
     },
+    get_data_freshness: {
+      description:
+        'CNPG logical DB activity freshness (dev/stg vs prod). Read last_clone_at, lag_vs_prod_days, verdict.',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() {
+        const data = await platformGet('/api/v1/cluster/data-freshness')
+        return textResult(jsonText(data))
+      },
+    },
+    trigger_data_clone: {
+      description:
+        'Admin Full clone bifrost_prod → bifrost_dev only. Requires confirm:true and confirmation_token=CLONE-FROM-PROD. Refuses stg/prod targets.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          source: { type: 'string', description: 'Must be bifrost_prod (default)' },
+          targets: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Must be ["bifrost_dev"] only. Default: ["bifrost_dev"].',
+          },
+          mode: { type: 'string', description: 'full (required for this task)' },
+          confirmation_token: {
+            type: 'string',
+            description: 'Must be CLONE-FROM-PROD',
+          },
+          confirm: { type: 'boolean', description: 'Must be true' },
+        },
+        required: ['confirmation_token', 'confirm'],
+      },
+      async execute(args) {
+        const source = String(args.source ?? 'bifrost_prod').trim() || 'bifrost_prod'
+        const targets = Array.isArray(args.targets)
+          ? args.targets.map(v => String(v).trim()).filter(Boolean)
+          : ['bifrost_dev']
+        const mode = String(args.mode ?? 'full').trim() || 'full'
+        const confirmationToken = String(args.confirmation_token ?? '').trim()
+        const confirm = args.confirm === true
+        if (source !== 'bifrost_prod') {
+          return textResult('refused: source must be bifrost_prod', true)
+        }
+        if (targets.length !== 1 || targets[0] !== 'bifrost_dev') {
+          return textResult(
+            'refused: targets must be exactly ["bifrost_dev"] (no stg/prod)',
+            true,
+          )
+        }
+        if (mode !== 'full') {
+          return textResult('refused: mode must be full for DEV ledger refresh', true)
+        }
+        if (!confirm || confirmationToken !== 'CLONE-FROM-PROD') {
+          return textResult(
+            'refused: confirm:true and confirmation_token=CLONE-FROM-PROD required',
+            true,
+          )
+        }
+        const data = await platformPostAdmin('/api/v1/cluster/data-clone', {
+          source,
+          targets,
+          mode,
+          confirmation_token: confirmationToken,
+          confirm: true,
+        })
+        return textResult(jsonText(data))
+      },
+    },
+    get_data_clone_status: {
+      description: 'Poll CNPG data-clone job progress by id.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Clone job id from trigger_data_clone' },
+        },
+        required: ['id'],
+      },
+      async execute(args) {
+        const id = String(args.id ?? '').trim()
+        if (id === '') return textResult('id required', true)
+        const data = await platformGet(`/api/v1/cluster/data-clone/${encodeURIComponent(id)}`)
+        return textResult(jsonText(data))
+      },
+    },
     verify_payload: {
       description:
         'Matrix vs cluster datastore classification (NOMINAL/PROBE_DRIFT/DATA_LAYER/HTTP_FAIL). Call before remediating PG/Redis.',

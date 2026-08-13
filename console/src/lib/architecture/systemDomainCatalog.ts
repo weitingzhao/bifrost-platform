@@ -129,6 +129,8 @@ export const SCOPE_TO_SYSTEM_DOMAIN: Record<string, SystemDomainId> = {
   'gitops-config-repair': 'rocket',
   'cluster-auto': 'rocket',
   'cluster_issues_full_auto': 'rocket',
+  'data-layer-backup': 'rocket',
+  'data-layer-clone': 'rocket',
   'platform-self-health-recover': 'rocket',
   'registry-pull-recover': 'rocket',
   'platform-workload-recover': 'rocket',

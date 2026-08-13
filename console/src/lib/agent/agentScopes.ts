@@ -13,6 +13,8 @@ export const DAILY_OPS_CHECKLIST_RUN_SCOPE = 'daily-ops-checklist-run'
 export const GIT_DIRTY_REMEDIATE_SCOPE = 'git-dirty-remediate'
 /** CNPG barman backup freshness — repair WAL object store + trigger Backup CR when >48h stale. */
 export const DATA_LAYER_BACKUP_SCOPE = 'data-layer-backup'
+/** Owner-gated Full clone bifrost_prod → bifrost_dev only (TCC Refresh DEV ledger). */
+export const DATA_LAYER_CLONE_SCOPE = 'data-layer-clone'
 /** Cluster page AI Auto-Check — fleet + ops triage (default K8s SRE prompt + enriched context). */
 export const CLUSTER_ISSUES_FULL_AUTO_SCOPE = 'cluster_issues_full_auto'
 /** Engineer Operator Plane — agent bridge / remediation runners. */
@@ -30,4 +32,5 @@ export const PLAYBOOK_ID_TO_SCOPE: Record<string, string> = {
   /** Hyphen playbook id → underscore API scope used by Auto-Check / Agent Fix. */
   'cluster-issues-full-auto': CLUSTER_ISSUES_FULL_AUTO_SCOPE,
   'operator-plane-remediate': OPERATOR_PLANE_REMEDIATE_SCOPE,
+  'data-freshness-clone': DATA_LAYER_CLONE_SCOPE,
 }

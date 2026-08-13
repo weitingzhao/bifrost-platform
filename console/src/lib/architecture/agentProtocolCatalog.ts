@@ -282,7 +282,7 @@ export const CLUSTER_REMEDIATION_PLAYBOOKS: ClusterRemediationPlaybook[] = [
     trigger:
       'get_data_freshness shows bifrost_dev or bifrost_stg aging (≥3d) or stale (≥7d) lag vs bifrost_prod; local Trade/STG needs current schema/data; or last_clone_at >7d before ledger-heavy Trade UI (Program trade-dev-inner-loop)',
     agentAction:
-      'L1: If Briefing/session pack shows Data freshness STALE (≥7d), treat as evidence to run this playbook. get_data_freshness → Owner/admin confirm → trigger_data_clone (confirm:true + confirmation_token=CLONE-FROM-PROD; prefer Full targets=["bifrost_dev"]) → poll get_data_clone_status → optional rollout_restart consumers (make bounce-dev-apis-after-clone). If Cursor MCP lacks data tools, reload bifrost-platform MCP (Settings → MCP).',
+      'L1: Owner TCC ConfirmDialog (Refresh DEV ledger) starts Agent Task data-layer-clone. get_data_freshness → trigger_data_clone (confirm:true + confirmation_token=CLONE-FROM-PROD; Full targets=["bifrost_dev"] only) → poll get_data_clone_status → rollout_restart_deployment bifrost-dev api-*. If Cursor MCP lacks data tools, reload bifrost-platform MCP (Settings → MCP).',
     autonomy: 'L1',
     mustNot: 'Do not target bifrost_prod; do not kubectl exec; do not enable live trading (D10); do not enable weekly auto-clone unless Owner explicitly requests; do not dump redis-live-prod',
     mcpTools: ['get_data_freshness', 'trigger_data_clone', 'get_data_clone_status', 'rollout_restart_deployment'],

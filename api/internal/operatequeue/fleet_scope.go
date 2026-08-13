@@ -13,6 +13,7 @@ type FleetProbe struct {
 var scopeToFleetProbe = map[string]FleetProbe{
 	"cluster_issues_full_auto":     {Role: "satellite", Env: "prod"},
 	"data-layer-backup":            {Role: "satellite", Env: "prod"},
+	"data-layer-clone":             {Role: "satellite", Env: "dev"},
 	"platform-self-health-recover": {Role: "rocket", Env: "prod"},
 	"deliver-stg-recover":          {Role: "rocket", Env: "stg"},
 	"operator-plane-remediate":     {Role: "engineer", Env: ""},

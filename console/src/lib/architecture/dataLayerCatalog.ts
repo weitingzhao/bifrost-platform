@@ -145,7 +145,7 @@ export const DATA_SERVICES_MCP = {
 
 /** Briefing note — stale non-prod DBs surface in Console Postgres panel; Agent uses get_data_freshness. */
 export const DATA_FRESHNESS_BRIEFING_NOTE =
-  'Data freshness: Rocket → Cluster → Postgres → Data Freshness. Verdict uses lag_vs_prod_days (fresh|aging|stale; not wall-clock age alone — wall_age in detail can be large while lag=0). Inner-loop cadence (Program trade-dev-inner-loop / D-IL2): prefer last_clone_at ≤7d (or on-demand) before ledger-heavy Trade UI work. If bifrost_dev/stg lag ≥ 7d (stale) or last_clone_at old, Sync from Prod (admin) or MCP trigger_data_clone (confirm:true; prefer targets=["bifrost_dev"]). Aging (3–7d) is a soft warning. Live quotes ≠ PG — use redis-ib (never clone redis-live-prod → redis-dev).'
+  'Data freshness: Rocket → Cluster → Postgres → Data Freshness, or Ops TCC → Refresh DEV ledger (Agent Task data-layer-clone, bifrost_dev only). Verdict uses lag_vs_prod_days (fresh|aging|stale; not wall-clock age alone — wall_age in detail can be large while lag=0). Inner-loop cadence (Program trade-dev-inner-loop / D-IL2): prefer last_clone_at ≤7d (or on-demand) before ledger-heavy Trade UI work. If bifrost_dev/stg lag ≥ 7d (stale) or last_clone_at old, Sync from Prod (admin, both targets) or TCC Refresh DEV ledger / MCP trigger_data_clone (confirm:true; targets=["bifrost_dev"]). Aging (3–7d) is a soft warning. Live quotes ≠ PG — use redis-ib (never clone redis-live-prod → redis-dev).'
 
 /** Acceptance — Cursor MCP must list data tools after reload. */
 export const DATA_SERVICES_CURSOR_MCP_ACCEPTANCE: string[] = [

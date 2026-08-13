@@ -297,6 +297,13 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     description:
       'Read backup-status; repair MinIO WAL store + clear stuck Backup CRs; trigger on-demand CNPG Backup. No DDL, no PVC wipe, no D10.',
   },
+  'data-layer-clone': {
+    entryPoint: 'Ops TCC · Refresh DEV ledger · ConfirmDialog → Agent Task',
+    trigger: 'Owner needs current bifrost_dev ledger (last_clone_at stale or on-demand Trade UI accept)',
+    aliases: ['data-freshness-clone'],
+    description:
+      'get_data_freshness → Full trigger_data_clone targets=["bifrost_dev"] only (confirm:true + CLONE-FROM-PROD) → poll → bounce bifrost-dev api-*. Never STG/PROD, never redis-live dump, never D10.',
+  },
   'registry-pull-recover': {
     entryPoint: 'Cluster Failure triage · ImagePull rows',
     trigger: 'ImagePullBackOff / ErrImagePull from registry.cicd',

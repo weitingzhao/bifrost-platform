@@ -1,6 +1,7 @@
 import type { FailureTriageRow } from '@/lib/cluster/clusterFailureTriage'
 import {
   CLUSTER_ISSUES_FULL_AUTO_SCOPE,
+  DATA_LAYER_CLONE_SCOPE,
   DELIVER_STG_RECOVER_SCOPE,
   GITOPS_CONFIG_REPAIR_SCOPE,
   OPERATOR_PLANE_REMEDIATE_SCOPE,
@@ -79,6 +80,20 @@ export function buildPlaybookAgentPrompt(row: FailureTriageRow): string {
         '1. Cover Ops failure triage rows and fleet issues in one pass.',
         '2. Route Control→self-health, Agent→operator-plane, Release→deliver-stg, pods→safe restart.',
       ].join('\n')
+    case 'data-freshness-clone':
+      return [
+        header,
+        '',
+        'Playbook: data-layer-clone',
+        '',
+        '## DEV ledger refresh',
+        '1. get_data_freshness',
+        '2. trigger_data_clone Full targets=["bifrost_dev"] confirm:true confirmation_token=CLONE-FROM-PROD',
+        '3. poll get_data_clone_status until done',
+        '4. rollout_restart_deployment bifrost-dev api-* only',
+        '',
+        'Never STG/PROD, never redis-live dump, never D10.',
+      ].join('\n')
     default:
       return header
   }
@@ -101,6 +116,8 @@ export function scopeForPlaybookId(playbookId: string | undefined): string | und
       return OPERATOR_PLANE_REMEDIATE_SCOPE
     case 'cluster-issues-full-auto':
       return CLUSTER_ISSUES_FULL_AUTO_SCOPE
+    case 'data-freshness-clone':
+      return DATA_LAYER_CLONE_SCOPE
     default:
       return undefined
   }
