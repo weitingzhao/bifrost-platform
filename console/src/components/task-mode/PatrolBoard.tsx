@@ -17,7 +17,7 @@ import {
   latestPatrolRun,
   nextPatrolRunAt,
   patrolPosture,
-  patrolRunLamp,
+  patrolSkillLamp,
   patrolSkillsOkCount,
 } from '@/lib/patrol/patrolStatus'
 import { describeCronSchedule } from '@/lib/patrol/cronSchedule'
@@ -118,7 +118,7 @@ export function PatrolBoard({ onNavigate }: { onNavigate: (tabId: string) => voi
               <DenseTableRow key={skill.id}>
                 <DenseTableCell>
                   <div className="flex items-center gap-1.5">
-                    <StatusLamp value={patrolRunLamp(skill.last_result)} kind="reach" />
+                    <StatusLamp value={patrolSkillLamp(skill)} kind="reach" />
                     <span className="font-medium">{skill.name}</span>
                   </div>
                 </DenseTableCell>
@@ -134,8 +134,13 @@ export function PatrolBoard({ onNavigate }: { onNavigate: (tabId: string) => voi
                   </DenseTag>
                 </DenseTableCell>
                 <DenseTableCell>
-                  <DenseTag variant={resultTagVariant(skill.last_result)} className="text-[9px]">
-                    {skill.last_result ?? '—'}
+                  <DenseTag
+                    variant={
+                      !skill.enabled ? 'neutral' : resultTagVariant(skill.last_result)
+                    }
+                    className="text-[9px]"
+                  >
+                    {!skill.enabled ? 'disabled' : (skill.last_result ?? 'pending')}
                   </DenseTag>
                 </DenseTableCell>
                 <DenseTableCell className={denseTableNumCell}>

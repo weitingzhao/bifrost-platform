@@ -6,6 +6,7 @@ import {
   patrolHasFailure,
   patrolPosture,
   patrolRailSignal,
+  patrolSkillLamp,
   patrolSkillsOkCount,
 } from '@/lib/patrol/patrolStatus'
 
@@ -85,6 +86,15 @@ describe('patrolStatus', () => {
     expect(patrolSkillsOkCount(SKILLS)).toEqual({ ok: 3, total: 3 })
   })
 
+  it('excludes disabled skills from OK count; never-run enabled counts OK', () => {
+    const mixed: PatrolSkill[] = [
+      { ...SKILLS[0], last_result: 'success' },
+      { ...SKILLS[1], last_result: undefined, last_run_at: undefined },
+      { ...SKILLS[2], enabled: false, last_result: undefined },
+    ]
+    expect(patrolSkillsOkCount(mixed)).toEqual({ ok: 2, total: 2 })
+  })
+
   it('empty skills+runs is Idle / unknown (no fake green)', () => {
     const posture = patrolPosture([], [])
     expect(posture.label).toBe('Idle')
@@ -97,6 +107,33 @@ describe('patrolStatus', () => {
     const posture = patrolPosture(SKILLS, RUNS)
     expect(posture.label).toBe('All OK')
     expect(posture.lamp).toBe('ok')
+  })
+
+  it('historical skipped runs do not WARN when skill heads are success', () => {
+    const historicalSkip: PatrolRun = {
+      id: 'old-skip',
+      skill_id: 'ops-autopilot',
+      skill_name: 'Ops Autopilot',
+      trigger: 'cron',
+      started_at: '2026-08-09T01:00:00.000Z',
+      finished_at: '2026-08-09T01:00:01.000Z',
+      result: 'skipped',
+      error: 'skill already running',
+    }
+    const newerSuccess: PatrolRun = {
+      id: 'new-ap',
+      skill_id: 'ops-autopilot',
+      skill_name: 'Ops Autopilot',
+      trigger: 'cron',
+      started_at: '2026-08-09T14:00:00.000Z',
+      finished_at: '2026-08-09T14:00:05.000Z',
+      result: 'success',
+    }
+    const window = [newerSuccess, historicalSkip, ...RUNS]
+    const posture = patrolPosture(SKILLS, window)
+    expect(posture.label).toBe('All OK')
+    expect(posture.lamp).toBe('ok')
+    expect(patrolRailSignal(window)).toBeNull()
   })
 
   it('posture is WARN when a skill skipped (no failure)', () => {
@@ -119,7 +156,7 @@ describe('patrolStatus', () => {
       error: 'probe timeout',
     }
     const posture = patrolPosture(SKILLS, [failed, ...RUNS])
-    expect(patrolHasFailure([failed])).toBe(true)
+    expect(patrolHasFailure([failed], SKILLS)).toBe(true)
     expect(posture.label).toBe('FAIL')
     expect(posture.lamp).toBe('fail')
   })
@@ -135,7 +172,7 @@ describe('patrolStatus', () => {
     expect(patrolRailSignal(runs)).toBe('warn')
   })
 
-  it('rail signal: failure beats skipped/escalated', () => {
+  it('rail signal: failure beats skipped/escalated on skill heads', () => {
     expect(patrolRailSignal(RUNS)).toBeNull()
     expect(
       patrolRailSignal([{ ...RUNS[0], result: 'skipped' }, { ...RUNS[1], result: 'escalated' }]),
@@ -146,6 +183,12 @@ describe('patrolStatus', () => {
         { ...RUNS[1], id: 'f', result: 'failure' },
       ]),
     ).toBe('error')
+  })
+
+  it('patrolSkillLamp: disabled and pending are green', () => {
+    expect(patrolSkillLamp({ ...SKILLS[2], enabled: false, last_result: undefined })).toBe('ok')
+    expect(patrolSkillLamp({ ...SKILLS[1], last_result: undefined })).toBe('ok')
+    expect(patrolSkillLamp(SKILLS[0])).toBe('ok')
   })
 
   it('formats relative hours and picks latest run', () => {
