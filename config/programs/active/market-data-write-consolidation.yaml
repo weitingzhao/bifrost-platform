@@ -1,0 +1,424 @@
+id: market-data-write-consolidation
+title: "Market Data Write Consolidation — Plugin as Sole Writer"
+description: |
+    Migrate all market.* WRITE operations from Trade services to Plugin API,
+    then migrate remaining READ residual SQL. Final goal: bifrost_dev has ZERO
+    market/market_analytics/data_ops schemas — Plugin owns all market data.
+
+    Predecessor: market-data-golden-source (completed 2026-08-14)
+    That program migrated 11 READ functions and created bifrost_golden_source DB.
+    This program completes the remaining ~148 SQL + all WRITE paths.
+
+    Architecture: Plugin API (:8790) is the sole reader AND writer of market.*.
+    Trade services send data to Plugin via HTTP POST; read via HTTP GET.
+    No direct SQL from Trade to any market.* table.
+
+    Three waves:
+    - Wave 0 (Plugin WRITE API): Plugin exposes POST endpoints for bars, ticker, expirations
+    - Wave 1 (Trade WRITE cutover): Trade WRITE paths switch from SQL to Plugin HTTP
+    - Wave 2 (Trade READ residual): Remaining ~148 direct SQL reads → Plugin HTTP
+    - Wave 3 (DROP + cleanup): DROP market.* from bifrost_dev, remove dead code
+
+    D10 remains BLOCKED — no live trading paths touched.
+status: active
+workspace: /Users/vision-mac-trader/Desktop/stocks
+
+delivery:
+    board_visible: true
+    sign_off_mechanism: api
+
+depends_on:
+    - market-data-golden-source
+
+model: composer-2.5
+
+phases:
+    # ── Wave 0: Plugin WRITE API ──────────────────────────────────────────
+
+    - id: W0-P1
+      title: "Plugin API — POST /stocks/bars/ingest (OHLC batch write)"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Plugin API exposes a POST endpoint to receive and write OHLC bars
+        to bifrost_golden_source.market.stock_daily / market.stock_minute.
+
+        Current WRITE callers (direct SQL to be replaced in Wave 1):
+        - bifrost_worker/data/bars/backfill.py → write_stock_bars() (IB bars backfill)
+        - bifrost_api/market/routers/market_data.py → write_ohlc_bars_to_db() (Market API)
+        - bifrost_core/persistence/postgres/postgres_sink.py → StatusSink.write_ohlc_bars() (Daemon)
+
+        Deliverables (in bifrost-platform-plugin-market-data):
+        - api/ingest_bars.py: POST /market/stocks/bars/ingest
+          - Request body: { "rows": [{ "symbol", "period", "bar_time/bar_date", "open", "high", "low", "close", "volume" }] }
+          - Writes to market.stock_daily (period "1 D") or market.stock_minute
+          - UPSERT semantics (ON CONFLICT DO UPDATE) matching existing behavior
+          - Returns { "ok": true, "written": N }
+        - api/ingest_bars.py: DELETE /market/stocks/bars
+          - Params: symbol, periods (optional), delete_daily (bool)
+          - Deletes bars for symbol, matching existing delete_stock_bars_for_symbol
+        - Register router in app.py
+        - Tests
+
+        Constraints:
+        - Must match existing UPSERT semantics exactly (last-writer-wins on PK)
+        - Period normalization: "1 D" → stock_daily, "1 min"/"5 mins"/"1 hour" → stock_minute
+        - No auth for now (cluster-internal only, protected by NetworkPolicy)
+      verify_cmd: "cd bifrost-platform-plugin-market-data && make lint && make test"
+      acceptance:
+        - "POST /stocks/bars/ingest with daily bars writes to market.stock_daily"
+        - "POST /stocks/bars/ingest with minute bars writes to market.stock_minute"
+        - "DELETE /stocks/bars deletes bars for symbol"
+        - "UPSERT semantics match existing write_ohlc_bars_to_db"
+        - "lint + test pass"
+      depends_on: []
+
+    - id: W0-P2
+      title: "Plugin API — POST /reference/ticker/upsert (ticker sync)"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Plugin API exposes POST endpoints for ticker metadata write,
+        covering upsert_ticker_row and upsert_ticker_overview_row from
+        bifrost_core/persistence/postgres/ticker_reference.py.
+
+        Current WRITE callers (direct SQL):
+        - Celery ticker sync tasks → upsert_ticker_row (INSERT/UPDATE market.ticker)
+        - Celery ticker overview sync → upsert_ticker_overview_row (UPDATE market.ticker)
+
+        Deliverables:
+        - api/ingest_ticker.py: POST /market/reference/ticker/upsert
+          - Request body: { "symbol", "name", "market", "locale", "type", ... }
+          - UPSERT into market.ticker
+        - api/ingest_ticker.py: POST /market/reference/ticker/upsert-overview
+          - Request body: { "symbol", "sector", "industry", "description", "market_cap", ... }
+          - UPDATE overview fields in market.ticker
+        - Tests
+
+        Constraints:
+        - Must match market.ticker column set (see _MARKET_TICKER_COLS in ticker_reference.py)
+        - ON CONFLICT (symbol) DO UPDATE semantics preserved
+      verify_cmd: "cd bifrost-platform-plugin-market-data && make lint && make test"
+      acceptance:
+        - "POST /reference/ticker/upsert creates/updates ticker row"
+        - "POST /reference/ticker/upsert-overview merges overview fields"
+        - "lint + test pass"
+      depends_on: []
+
+    - id: W0-P3
+      title: "Plugin API — POST /options/expirations/replace (cache refresh)"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Plugin API exposes a POST endpoint to replace option expirations
+        for a symbol in market.option_expiration.
+
+        Current WRITE caller (direct SQL):
+        - bifrost_api/research/market_pg.py → replace_option_expiration_cache()
+          DELETE + INSERT market.option_expiration for underlying
+
+        Deliverables:
+        - api/ingest_options.py: POST /market/options/expirations/replace
+          - Request body: { "symbol": "NVDA", "expirations": ["2026-09-19", ...] }
+          - DELETE existing + INSERT new (transactional)
+        - Tests
+
+        Constraints:
+        - Must be atomic (DELETE + INSERT in one transaction)
+        - ON CONFLICT (underlying, expiry) DO UPDATE SET updated_at = now()
+      verify_cmd: "cd bifrost-platform-plugin-market-data && make lint && make test"
+      acceptance:
+        - "POST /options/expirations/replace atomically replaces expirations"
+        - "lint + test pass"
+      depends_on: []
+
+    # ── Wave 1: Trade WRITE cutover ───────────────────────────────────────
+
+    - id: W1-P1
+      title: "Trade — IB bars backfill + Market API → Plugin POST"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Replace direct SQL bar writes in Trade services with HTTP POST
+        to Plugin API /stocks/bars/ingest.
+
+        Files to modify:
+        - bifrost_core/monitor/reader/market.py:
+          - write_ohlc_bars_to_db() → POST to Plugin API
+          - write_stock_bars() → POST to Plugin API
+          - delete_stock_bars_for_symbol() → DELETE to Plugin API
+        - bifrost_api/market/routers/market_data.py:
+          - Uses write_ohlc_bars_to_db → will use updated function
+        - bifrost_worker/data/bars/backfill.py:
+          - Uses write_stock_bars → will use updated function
+
+        Deliverables:
+        - bifrost_core: new market_write_client.py (HTTP client for Plugin WRITE)
+        - Update write_ohlc_bars_to_db / write_stock_bars / delete_stock_bars_for_symbol
+          to POST to Plugin API
+        - MARKET_DATA_PLUGIN_URL env var (same as existing READ client)
+        - Tests
+
+        Constraints:
+        - Function signatures preserved
+        - StatusSink.write_ohlc_bars (postgres_sink.py) handled separately in W1-P2
+      verify_cmd: |
+        cd bifrost-trade-core && make lint && make test &&
+        cd ../bifrost-trade-api && ruff check src/ && pytest tests/ -x -q &&
+        cd ../bifrost-trade-worker && make lint && make test
+      acceptance:
+        - "IB bars backfill writes through Plugin API"
+        - "Market API bar write goes through Plugin API"
+        - "Bar deletion goes through Plugin API"
+        - "lint + test pass in all three repos"
+      depends_on: [W0-P1]
+
+    - id: W1-P2
+      title: "Trade — StatusSink bars write → Plugin POST"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: StatusSink (postgres_sink.py) write_ohlc_bars → Plugin HTTP POST.
+
+        StatusSink is special: it holds a long-lived psycopg2 connection.
+        The write_ohlc_bars method should switch to HTTP POST using the
+        market_write_client from W1-P1.
+
+        File: bifrost_core/persistence/postgres/postgres_sink.py
+        - StatusSink.write_ohlc_bars() → POST /stocks/bars/ingest
+
+        Constraints:
+        - StatusSink still needs its PG connection for daemon_*, account_* writes
+        - Only market.* writes should go through Plugin API
+        - Failure should log warning but not crash daemon
+      verify_cmd: "cd bifrost-trade-core && make lint && make test"
+      acceptance:
+        - "StatusSink bars write goes through Plugin API"
+        - "StatusSink PG connection for daemon/account tables unaffected"
+        - "lint + test pass"
+      depends_on: [W0-P1, W1-P1]
+
+    - id: W1-P3
+      title: "Trade — ticker sync → Plugin POST"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Ticker sync operations (upsert_ticker_row, upsert_ticker_overview_row)
+        → Plugin HTTP POST.
+
+        File: bifrost_core/persistence/postgres/ticker_reference.py
+        - upsert_ticker_row → POST /reference/ticker/upsert
+        - upsert_ticker_overview_row → POST /reference/ticker/upsert-overview
+
+        Constraints:
+        - These functions receive a cursor object (cur) — need to refactor to
+          use HTTP client instead, while preserving call sites
+        - ticker_reference.py has many READ functions too — those are in Wave 2
+        - Only modify WRITE functions in this phase
+      verify_cmd: "cd bifrost-trade-core && make lint && make test"
+      acceptance:
+        - "Ticker upsert goes through Plugin API"
+        - "Ticker overview upsert goes through Plugin API"
+        - "Call sites unchanged"
+        - "lint + test pass"
+      depends_on: [W0-P2]
+
+    - id: W1-P4
+      title: "Trade — option expiration cache → Plugin POST"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: replace_option_expiration_cache in market_pg.py → Plugin HTTP POST.
+
+        File: bifrost_api/research/market_pg.py
+        - replace_option_expiration_cache → POST /options/expirations/replace
+
+        Constraints:
+        - Function signature preserved
+        - Atomic DELETE + INSERT behavior maintained via Plugin API
+      verify_cmd: "cd bifrost-trade-api && ruff check src/ && pytest tests/ -x -q"
+      acceptance:
+        - "Option expiration cache writes through Plugin API"
+        - "lint + test pass"
+      depends_on: [W0-P3]
+
+    # ── Wave 2: Trade READ residual ───────────────────────────────────────
+
+    - id: W2-P1
+      title: "Plugin API — SEPA financial aggregate endpoints"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Add Plugin API endpoints that return pre-unpacked financial data
+        matching what financials_data.py currently extracts via complex jsonb SQL.
+
+        Covers: sepa/financials_data.py (~20 functions, ~33 SQL, ~1004 lines)
+        This is the highest-complexity residual — each function unpacks jsonb with
+        extensive COALESCE/NULLIF/subquery logic specific to SEPA evaluation.
+
+        Approach: Plugin provides aggregate endpoints that do the jsonb unpacking
+        server-side, returning structured Python dicts matching SEPA's expected shapes.
+
+        Deliverables:
+        - Plugin API: GET /market/stocks/fundamentals/sepa/income?symbols=...
+        - Plugin API: GET /market/stocks/fundamentals/sepa/balance-sheet?symbols=...
+        - Plugin API: GET /market/stocks/fundamentals/sepa/cash-flow?symbols=...
+        - Plugin API: GET /market/stocks/fundamentals/sepa/ratios?symbols=...
+        - Plugin API: GET /market/stocks/fundamentals/gaps?report_type=...
+        - Tests + documentation
+      verify_cmd: "cd bifrost-platform-plugin-market-data && make lint && make test"
+      acceptance:
+        - "SEPA income/balance/cashflow/ratios endpoints return structured data"
+        - "Gap analysis endpoints cover all count_*_gaps functions"
+        - "Response shapes match what financials_data.py currently returns"
+        - "lint + test pass"
+      depends_on: [W1-P4]
+
+    - id: W2-P2
+      title: "Trade API — financials_data.py + readiness SQL → Plugin HTTP"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Replace all direct SQL in financials_data.py and readiness_snapshot.py
+        with HTTP calls to Plugin API endpoints from W2-P1.
+
+        Files:
+        - sepa/financials_data.py (~20 functions → Plugin HTTP)
+        - sepa/readiness_snapshot.py (~13 SQL → Plugin HTTP)
+
+        Deliverables:
+        - New sepa/financial_data_client.py (HTTP client)
+        - Replace SQL in financials_data.py with HTTP calls
+        - Replace SQL in readiness_snapshot.py with HTTP calls
+        - Tests
+      verify_cmd: "cd bifrost-trade-api && ruff check src/ && pytest tests/ -x -q"
+      acceptance:
+        - "Zero direct market.* SQL in financials_data.py"
+        - "Zero direct market.* SQL in readiness_snapshot.py"
+        - "SEPA pipeline produces same results"
+        - "lint + test pass"
+      depends_on: [W2-P1]
+
+    - id: W2-P3
+      title: "Plugin API — PCR, greeks, data_readiness endpoints"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Plugin API endpoints for remaining Trade READ consumers.
+
+        Covers:
+        - stock_option_pcr.py: PCR aggregate (OI + volume based)
+        - greeks.py: option_daily reads
+        - data_readiness.py: coverage stats + distribution queries
+
+        Deliverables:
+        - GET /market/options/analytics/pcr?symbol=...&type=oi|volume
+        - GET /market/options/daily?symbol=...&expiry=...&days=...
+        - GET /market/coverage/sepa-stats, /coverage/distributions
+        - Tests
+      verify_cmd: "cd bifrost-platform-plugin-market-data && make lint && make test"
+      acceptance:
+        - "PCR, greeks, coverage endpoints return correct data"
+        - "lint + test pass"
+      depends_on: [W2-P1]
+
+    - id: W2-P4
+      title: "Trade API + Core — remaining READ SQL → Plugin HTTP"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Migrate final remaining direct SQL reads to Plugin API HTTP.
+
+        Files:
+        - sepa_engine/stock_option_pcr.py → Plugin PCR endpoint
+        - routers/greeks.py → Plugin option_daily endpoint
+        - routers/data_readiness.py → Plugin coverage endpoints
+        - monitor/reader/market.py READ functions → Plugin bar/coverage endpoints
+        - ticker_reference.py READ functions → Plugin ticker endpoints
+
+        Deliverables:
+        - Extend market_data_client.py with PCR, greeks, coverage methods
+        - Replace SQL in all listed files
+        - Comprehensive grep audit: zero SELECT FROM market.* in Trade code
+        - Tests
+      verify_cmd: |
+        cd bifrost-trade-api && ruff check src/ && pytest tests/ -x -q &&
+        cd ../bifrost-trade-core && make lint && make test
+      acceptance:
+        - "grep audit: zero SELECT FROM market.* in Trade API"
+        - "grep audit: zero SELECT FROM market.* in Trade Core"
+        - "All pages functional on local Vite"
+        - "lint + test pass"
+      depends_on: [W2-P2, W2-P3]
+
+    # ── Wave 3: DROP + cleanup ────────────────────────────────────────────
+
+    - id: W3-P1
+      title: "DROP market/market_analytics/data_ops from bifrost_dev"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Remove market data schemas from bifrost_dev. At this point,
+        ALL reads and writes go through Plugin API → bifrost_golden_source.
+
+        Pre-check (MUST pass before DROP):
+        - grep audit: zero INSERT/UPDATE/DELETE FROM market.* in Trade repos
+        - grep audit: zero SELECT FROM market.* in Trade repos
+        - All Trade services running and healthy against Plugin API
+        - CNPG backup
+
+        Deliverables:
+        - DROP SCHEMA market CASCADE in bifrost_dev
+        - DROP SCHEMA market_analytics CASCADE in bifrost_dev
+        - DROP SCHEMA data_ops CASCADE in bifrost_dev
+        - Verify all Trade services still healthy
+      verify_cmd: "curl -s http://localhost:8780/api/v1/plugins/market-data/api/health | grep ok"
+      acceptance:
+        - "bifrost_dev has zero market/market_analytics/data_ops schemas"
+        - "All Trade services healthy"
+        - "All pages functional on local Vite"
+      depends_on: [W2-P4]
+      sign_off:
+        required: true
+        checklist:
+            - "CNPG backup completed before DROP"
+            - "grep audit: zero market.* SQL in all Trade repos"
+            - "Owner confirmed DROP"
+
+    - id: W3-P2
+      title: "Dead code removal + docs + governance"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Final cleanup after market.* schemas are gone from bifrost_dev.
+
+        Deliverables:
+        - Remove psycopg2 imports/usage from files that no longer need direct SQL
+        - Remove _get_conn_params usage from pure-HTTP-client files
+        - Update MARKET_SQL_RESIDUAL.md → mark all items as migrated
+        - Update MIGRATION_TRACKING.md
+        - Update CLAUDE.md docs across repos
+        - Update Ops Console governance catalogs
+        - Close program YAML as completed
+      verify_cmd: |
+        cd bifrost-trade-api && ruff check src/ && pytest tests/ -x -q &&
+        cd ../bifrost-trade-core && make lint && make test &&
+        cd ../bifrost-platform-plugin-market-data && make lint && make test
+      acceptance:
+        - "No unused psycopg2 imports in migrated files"
+        - "All docs updated"
+        - "All tests pass across all repos"
+      depends_on: [W3-P1]
