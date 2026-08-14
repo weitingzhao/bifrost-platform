@@ -354,7 +354,7 @@ phases:
 
     - id: W2-P1
       title: "K8s — collapse to single Plugin NS + watchlist union mode"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -394,7 +394,7 @@ phases:
 
     - id: W2-P2
       title: "Retire STG/PROD Plugin overlays + market.* tables"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -429,7 +429,7 @@ phases:
 
     - id: W2-P3
       title: "Golden database rename + Ops Console governance"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 

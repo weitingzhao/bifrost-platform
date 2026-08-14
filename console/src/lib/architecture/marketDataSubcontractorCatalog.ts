@@ -11,7 +11,7 @@
  */
 
 export const MARKET_DATA_SUBCONTRACTOR_SOURCE = 'bifrost-platform-plugin-market-data'
-export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-02-library-sla'
+export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-14-golden-source'
 
 /** Mission Launch lane — publish market-data plugin via kubectl apply (not Tekton). */
 export const MARKET_DATA_LAUNCH_LANE = {
@@ -19,16 +19,15 @@ export const MARKET_DATA_LAUNCH_LANE = {
   label: 'Launch Market Data',
   tabId: 'plugin-release',
   programId: 'market-data-subcontractor',
-  /** Seat-aware: DEV=k8s/base · STG/PROD=k8s/overlays/{stg|prod}. UI: Launch Plugin → Market Data. */
+  /** Single Golden Source NS — STG/PROD overlays archived (W2-P2). */
   executor:
-    'cd bifrost-platform-plugin-market-data && kubectl apply -k k8s/overlays/{stg|prod}  # or k8s/base for DEV',
-  verify:
-    'kubectl -n plugin-market-data-{stg|prod} get deploy + /health (DEV: make verify-market-data)',
+    'cd bifrost-platform-plugin-market-data && kubectl apply -k k8s/base  # single Golden Source NS',
+  verify: 'kubectl -n plugin-market-data get deploy + /health (make verify-market-data)',
   steps: ['Detect', 'Approve', 'Install', 'Verify', 'Live check'] as const,
   galleryIsNotPublish:
     'Market Data manage page = observe health / deployments / freshness (+ optional readiness_rollup KPI). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
   d10: 'Market-data REST ingest only — no place_order / no IB socket',
-  imageTag: '0.2.0',
+  imageTag: '0.3.0',
 } as const
 
 export type MarketDataPhaseId =
@@ -138,20 +137,22 @@ export const MARKET_DATA_PHASES: MarketDataPhase[] = [
 ]
 
 export const MARKET_DATA_DESIGN_PRINCIPLES = [
+  'Golden Source — single Plugin NS (`plugin-market-data`) serves all Trade environments; one DB (`bifrost_golden_source`).',
   'PG-as-broker — data_ops.job_ingest with SELECT FOR UPDATE SKIP LOCKED; no Celery Beat.',
-  'Schema isolation — market.* (public data) + data_ops.* (jobs/ops); single Polygon vendor.',
+  'Schema isolation — market.* (public data) + market_analytics.* (derived) + data_ops.* (jobs/ops); single Polygon vendor.',
   'K8s-native workers — stocks + options pools; CronJobs enqueue; NetworkPolicy egress to data NS + HTTPS.',
-  'Watchlist cross-schema — SELECT from public.watchlist (Trade); data_writer needs GRANT SELECT.',
+  'Watchlist union mode — Plugin reads union of all Trade environment watchlists via platform-api.',
   'Deterministic option-refresh rotation — sha256(date) offset covers full watchlist over days.',
   'Reference slot — daily ticker_sync (universe); weekends/holidays allowed (calendar-like).',
   'Fundamentals-rotate — daily financials batch (batch_size=40) over watchlist; skip non-trading days.',
-  'Library SLA (dev) — ticker_sync age <24h; financials age <24h; watchlist financials coverage ≤7 trading days.',
+  'Library SLA — ticker_sync age <24h; financials age <24h; watchlist financials coverage ≤7 trading days.',
   'Trading-calendar guard — stock-eod / eod-pipeline / universe-daily / corporate / fundamentals-rotate skip non-trading days.',
+  'Plugin API read layer — Trade consumers read via HTTP (:8790 proxied via platform-api :8780); zero direct SQL.',
   'D10-safe — REST market data only; no place_order / no IB socket path.',
 ] as const
 
 export const PG_SCHEMA_CONTRACT = {
-  database: 'bifrost_dev | bifrost_prod (shared CNPG)',
+  database: 'bifrost_golden_source (single Golden Source — shared CNPG)',
   writerRole: 'data_writer',
   readerRole: 'market_reader',
   marketTables: [
@@ -193,7 +194,7 @@ export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Plugin API proxy: GET|POST /api/v1/plugins/market-data/api/market/* → market-data-api:8790 (or MARKET_DATA_API_URL)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
   'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; image bifrost-market-data:0.2.0)',
-  'Image tag: bifrost-market-data:0.2.0 (k8s/base + overlays stg/prod; Launch Plugin → Market Data seat)',
+  'Image tag: bifrost-market-data:0.3.0 (k8s/base only — STG/PROD overlays archived W2-P2)',
   'Readiness rollup: optional KPI from public.stock_readiness_daily (Trade runbook). fund_cache_valid requires included_in_universe; public.v_us_equity_universe uses synthetic hashtext tickers_id after P9 (bifrost-core ≥0.5.2)',
   'Program / phase sign-off: Active Session (Engineer → Delivery) · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',
