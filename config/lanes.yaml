@@ -277,6 +277,18 @@ lanes:
         Data quality visibility upgrade for Ops Console Market Data page. Wave 1 (P1–P3): Overview Vitals strip + Today's Data verdict. Wave 2 (P4–P6): Stock depth + Option coverage + Coverage tab refactor. Wave 3 (P7–P8): Gap detection + Quality Score.
       agent_mode: Ops
       work_intent: feature
+    - id: market-data-golden-source
+      track: automate
+      component_line: subcontractor
+      track_type: build
+      label: Market Data Golden Source — single ingest, Plugin API read
+      short_label: MD Golden
+      description: |
+        Consolidate per-env duplicate Polygon ingest to single Golden Source DB.
+        Plugin API (:8790) becomes unified read interface for all Trade environments.
+        Wave 0: Plugin API补全. Wave 1: Trade SQL→HTTP cutover. Wave 2: collapse to single NS.
+      agent_mode: Ops
+      work_intent: feature
     - id: ib-vendor
       track: automate
       component_line: subcontractor

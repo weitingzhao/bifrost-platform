@@ -261,6 +261,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/network/sla", s.network.HandleSLA)
 		r.Get("/plugins/ib-gateway/status", s.ibgateway.HandleStatus)
 		r.Get("/plugins/market-data/status", s.marketdata.HandleStatus)
+		r.Get("/watchlist/union", s.marketdata.HandleWatchlistUnion)
 		// Read-only Plugin API proxy (coverage / analytics / ingest list / JSON probes).
 		r.Get("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)

@@ -1,0 +1,461 @@
+id: market-data-golden-source
+title: "Market Data Golden Source — Single Ingest, Plugin API Read"
+description: |
+    Consolidate market data from per-environment duplicate Polygon ingest to a single
+    Golden Source database, with Plugin API (:8790) as the unified read interface.
+    Eliminates 2–3x redundant Polygon REST calls; aligns with IB Gateway shared-bus model.
+
+    Architecture decision: Path B — Plugin API扩面, not FDW.
+    Trade consumers (bifrost-trade-api, bifrost-trade-core) stop direct SQL against market.*
+    and read exclusively through Plugin API HTTP endpoints proxied via platform-api (:8780).
+
+    Three waves:
+    - Wave 0 (Foundation): Plugin API covers all market.* read surfaces needed by Trade
+    - Wave 1 (Cutover): Trade consumers switch from raw SQL to Plugin API HTTP client
+    - Wave 2 (Consolidate): Collapse to single Plugin NS; retire STG/PROD duplicate workers
+
+    D10 remains BLOCKED — no live trading paths touched.
+status: active
+workspace: /Users/vision-mac-trader/Desktop/stocks
+
+delivery:
+    board_visible: true
+    sign_off_mechanism: api
+
+depends_on:
+    - market-data-expand    # Layer 1+2+3 complete
+    - trade-iv-radar        # Wave A P4 in progress (uses Plugin API already)
+
+model: composer-2.5
+
+phases:
+    # ── Wave 0: Plugin API 补全 ──────────────────────────────────────────
+
+    - id: W0-P1
+      title: "Plugin API — stock daily bars + ticker reference"
+      status: completed
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Add read endpoints to bifrost-platform-plugin-market-data Plugin API (:8790)
+        that cover the market.stock_daily and market.ticker read paths currently used by
+        bifrost-trade-api (research/market_pg.py) and bifrost-trade-core (ticker_reference.py).
+
+        Current consumers (raw SQL → to be replaced in Wave 1):
+        - market_pg.py get_stock_day_series_for_sepa() → market.stock_daily (OHLCV bars)
+        - market_pg.py get_stock_day_close_series_for_crs() → market.stock_daily (close only)
+        - market_pg.py get_spy_close_series() → market.stock_daily (SPY benchmark)
+        - data_readiness.py → market.ticker (ticker metadata)
+        - ticker_reference.py → market.ticker (read + write; write stays in Plugin only)
+
+        Deliverables (in bifrost-platform-plugin-market-data):
+        - api/stocks.py: GET /stocks/bars/daily?symbols=...&days=252 (batch, ascending)
+        - api/stocks.py: GET /stocks/bars/daily/close?symbols=...&days=252 (close-only series)
+        - api/reference.py or reference_db.py: GET /reference/ticker?symbol=... (single)
+        - api/reference.py: GET /reference/tickers?symbols=... (batch)
+        - Tests: tests/test_api_stocks.py, tests/test_api_reference.py
+        - Response format: JSON { rows: [...], count: N }
+
+        Constraints:
+        - Read-only endpoints; no write/upsert through API
+        - ticker_reference.py WRITE path (INSERT/UPDATE market.ticker) stays in
+          bifrost-trade-core for now — will be migrated to Plugin ingest in a future program
+        - Plugin API must remain backward compatible (existing endpoints unchanged)
+
+        Output a structured Phase completion report.
+      verify_cmd: "cd bifrost-platform-plugin-market-data && make lint && make test"
+      acceptance:
+        - "GET /stocks/bars/daily?symbols=NVDA&days=30 returns rows from market.stock_daily"
+        - "GET /stocks/bars/daily/close?symbols=SPY&days=252 returns close series"
+        - "GET /reference/ticker?symbol=NVDA returns ticker metadata"
+        - "Batch endpoint accepts comma-separated symbols"
+        - "lint + test pass"
+      depends_on: []
+
+    - id: W0-P2
+      title: "Plugin API — option chain, contracts, expirations, OI"
+      status: completed
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Add read endpoints covering option chain / contract / expiration / OI
+        read paths from bifrost-trade-api research/market_pg.py.
+
+        Current consumers (raw SQL):
+        - get_option_snapshots_latest() → market.option_snapshot + market.option_contract
+        - get_option_snapshots_eod_per_day() → market.option_snapshot (EOD per day)
+        - get_option_open_interest_daily() → market.option_open_interest
+        - get_option_expirations_from_contracts_db() → market.option_contract (DISTINCT expiry)
+        - get_strikes_for_expiry_from_contracts_db() → market.option_contract (DISTINCT strike)
+        - get_option_expiration_cache_snapshot() → market.option_expiration
+        - contract_key_bridge.py → market.option_contract (Polygon↔IB key bridging)
+
+        Plugin already has:
+        - api/options.py: GET /options/expirations, GET /options/snapshots, GET /options/oi
+
+        Deliverables:
+        - Extend api/options.py or add endpoints:
+          - GET /options/chain/latest?symbol=...&expiry=... (bridged snapshot with IB keys)
+          - GET /options/chain/eod?symbol=...&date=... (EOD daily snapshots)
+          - GET /options/contracts?symbol=... (contract metadata with IB key bridge)
+          - GET /options/strikes?symbol=...&expiry=... (distinct strikes)
+        - Ensure IB contract_key bridging logic is in Plugin API (not in Trade consumer)
+        - Tests for each new endpoint
+
+        Constraints:
+        - Must produce IB-shaped contract_key in response for Trade API backward compat
+        - Existing /options/* endpoints unchanged
+        - Read-only
+
+        Output a structured Phase completion report.
+      verify_cmd: "cd bifrost-platform-plugin-market-data && make lint && make test"
+      acceptance:
+        - "GET /options/chain/latest?symbol=NVDA returns bridged snapshots with IB keys"
+        - "GET /options/contracts?symbol=NVDA returns contract list"
+        - "GET /options/strikes?symbol=NVDA&expiry=20260919 returns sorted strikes"
+        - "lint + test pass"
+      depends_on: [W0-P1]
+
+    - id: W0-P3
+      title: "Plugin API — financials, short interest, SEPA helpers"
+      status: completed
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Add read endpoints for stock_financials and remaining research read paths.
+
+        Current consumers (raw SQL):
+        - sepa/financials_data.py → market.stock_financials (jsonb quarterly/annual)
+        - market_pg.py get_short_interest_recent() → market.* short interest
+        - market_pg.py get_short_volume_recent() → market.* short volume
+        - monitor/reader/market.py → market.* (monitor status reads)
+
+        Plugin already has:
+        - api/fundamentals.py (may have partial coverage)
+
+        Deliverables:
+        - api/fundamentals.py: GET /fundamentals/financials?symbol=... (quarterly+annual jsonb)
+        - api/stocks.py: GET /stocks/short-interest?symbol=...&days=90
+        - api/stocks.py: GET /stocks/short-volume?symbol=...&days=30
+        - Verify existing fundamentals endpoints cover SEPA phase-1 needs
+        - Tests
+
+        Constraints:
+        - stock_financials is large jsonb; paginate or limit fields if needed
+        - Read-only
+
+        Output a structured Phase completion report.
+      verify_cmd: "cd bifrost-platform-plugin-market-data && make lint && make test"
+      acceptance:
+        - "GET /fundamentals/financials?symbol=NVDA returns quarterly + annual data"
+        - "GET /stocks/short-interest?symbol=NVDA returns recent rows"
+        - "All SEPA financials_data.py read patterns have a Plugin API equivalent"
+        - "lint + test pass"
+      depends_on: [W0-P1]
+
+    - id: W0-P4
+      title: "Plugin API — watchlist union endpoint + platform-api proxy"
+      status: completed
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Plugin needs to know the UNION of all environments' watchlists to serve as
+        the single ingest coordinator. Add a watchlist aggregation path.
+
+        Architecture decision: platform-api aggregates watchlists from Trade environments
+        (it already has connectivity matrix + cluster access) and exposes a union endpoint.
+        Plugin scheduler reads this instead of local DB watchlist_query.
+
+        Deliverables:
+        - bifrost-platform api/: GET /api/v1/watchlist/union → deduplicated symbol list
+          from all registered Trade environments (DEV+STG+PROD watchlist tables)
+        - bifrost-platform-plugin-market-data scheduler/daily.py:
+          add load_watchlist_from_platform(platform_url) as alternative to DB query
+        - config/schedule.yaml: add watchlist_source: platform-api | db (default db for backward compat)
+        - When watchlist_source=platform-api, CronJob fetches union from platform-api
+        - Tests: mock platform-api response, verify union dedup + benchmark merge
+
+        Constraints:
+        - Backward compatible: watchlist_source=db keeps current behavior
+        - Platform-api endpoint is read-only (SELECT from each env's public.watchlist)
+        - Benchmarks (SPY/QQQ/IWM) still merged separately via iv_radar_benchmarks config
+
+        Output a structured Phase completion report.
+      verify_cmd: |
+        cd bifrost-platform && make test &&
+        cd ../bifrost-platform-plugin-market-data && make lint && make test
+      acceptance:
+        - "GET /api/v1/watchlist/union returns deduplicated symbols from all envs"
+        - "Plugin scheduler with watchlist_source=platform-api uses union endpoint"
+        - "Backward compat: watchlist_source=db still works"
+        - "lint + test pass in both repos"
+      depends_on: [W0-P1]
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed watchlist union approach (platform-api aggregation)
+            - Owner confirmed no PG cross-database dependency (dblink/FDW)
+
+    # ── Wave 1: Trade 消费者切换 ─────────────────────────────────────────
+
+    - id: W1-P1
+      title: "Trade API — market_pg.py stock reads → Plugin API HTTP client"
+      status: completed
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Replace direct SQL reads against market.stock_daily in
+        bifrost-trade-api/src/bifrost_api/research/market_pg.py with HTTP calls
+        to Plugin API endpoints created in W0-P1.
+
+        Functions to migrate:
+        - get_stock_day_series_for_sepa() → GET /stocks/bars/daily
+        - get_stock_day_close_series_for_crs() → GET /stocks/bars/daily/close
+        - get_spy_close_series() → GET /stocks/bars/daily/close?symbols=SPY
+
+        Deliverables:
+        - bifrost-trade-api: new src/bifrost_api/research/market_data_client.py
+          (async HTTP client wrapping Plugin API; base URL from config)
+        - Replace SQL in market_pg.py stock functions with market_data_client calls
+        - Config: MARKET_DATA_PLUGIN_URL env var (default http://localhost:8790)
+        - K8s: Trade API pods get MARKET_DATA_PLUGIN_URL pointing to Plugin Service
+        - Tests: mock HTTP responses, verify same return shape as SQL version
+
+        Constraints:
+        - Response shape must match current return dicts exactly (no downstream breakage)
+        - Keep SQL functions as _deprecated_* fallback behind feature flag for rollback
+        - Other market_pg.py functions (options, financials) NOT changed yet
+
+        Output a structured Phase completion report.
+      verify_cmd: "cd bifrost-trade-api && make lint && make test"
+      acceptance:
+        - "SEPA stock screening calls Plugin API instead of direct SQL"
+        - "SPY close series for CRS reads from Plugin API"
+        - "Feature flag can revert to direct SQL"
+        - "lint + test pass"
+      depends_on: [W0-P1, W0-P4]
+
+    - id: W1-P2
+      title: "Trade API — market_pg.py option reads → Plugin API HTTP client"
+      status: completed
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Replace direct SQL reads against market.option_* tables in market_pg.py
+        with HTTP calls to Plugin API endpoints created in W0-P2.
+
+        Functions to migrate:
+        - get_option_snapshots_latest() → GET /options/chain/latest
+        - get_option_snapshots_eod_per_day() → GET /options/chain/eod
+        - get_option_open_interest_daily() → GET /options/oi
+        - get_option_expirations_from_contracts_db() → GET /options/expirations
+        - get_strikes_for_expiry_from_contracts_db() → GET /options/strikes
+        - get_option_expiration_cache_snapshot() → GET /options/expirations
+        - All contract_key_bridge.py bridging → let Plugin API do the bridge
+
+        Deliverables:
+        - Extend market_data_client.py with option chain methods
+        - Replace SQL in market_pg.py option functions
+        - contract_key_bridge.py: simplify or remove (bridging now in Plugin API)
+        - Tests
+
+        Constraints:
+        - IB contract_key format in responses must be preserved
+        - Feature flag rollback path
+
+        Output a structured Phase completion report.
+      verify_cmd: "cd bifrost-trade-api && make lint && make test"
+      acceptance:
+        - "Option Discovery page data comes through Plugin API"
+        - "SEPA option chain reads use Plugin API"
+        - "Contract key bridging works end-to-end"
+        - "lint + test pass"
+      depends_on: [W0-P2, W1-P1]
+
+    - id: W1-P3
+      title: "Trade API + Core — financials, ticker, monitor reads → Plugin API"
+      status: completed
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Migrate remaining market.* SQL reads in bifrost-trade-api and
+        bifrost-trade-core to Plugin API.
+
+        Functions to migrate:
+        - sepa/financials_data.py → GET /fundamentals/financials
+        - data_readiness.py → GET /reference/ticker queries
+        - monitor/reader/market.py → Plugin API coverage/status endpoints
+        - get_short_interest_recent() / get_short_volume_recent() → GET /stocks/short-*
+
+        Special case — bifrost-trade-core ticker_reference.py:
+        - READ paths → Plugin API GET /reference/ticker
+        - WRITE paths (INSERT/UPDATE market.ticker) → keep as-is for now;
+          these are called by legacy data tasks that will move to Plugin ingest later
+        - Document the remaining write dependency
+
+        Deliverables:
+        - Extend market_data_client.py with financials, ticker, short interest methods
+        - Replace SQL in sepa/financials_data.py, data_readiness.py
+        - bifrost-trade-core monitor/reader/market.py → Plugin API health/coverage
+        - Document remaining market.ticker write path in bifrost-trade-core
+        - Tests
+
+        Output a structured Phase completion report.
+      verify_cmd: |
+        cd bifrost-trade-api && make lint && make test &&
+        cd ../bifrost-trade-core && make lint && make test
+      acceptance:
+        - "Zero SELECT FROM market.* in bifrost-trade-api (grep verification)"
+        - "bifrost-trade-core only has market.ticker WRITE paths remaining"
+        - "All research/SEPA pages function correctly via Plugin API"
+        - "lint + test pass in both repos"
+      depends_on: [W0-P3, W1-P2]
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed all Trade market.* reads go through Plugin API
+            - Owner confirmed remaining ticker write path documented for future migration
+
+    - id: W1-P4
+      title: "E2E smoke — Trade stack reads market data exclusively via Plugin API"
+      status: completed
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: End-to-end verification that Trade stack (all 9 API domains + frontend)
+        reads market data exclusively through Plugin API, with zero direct market.* SQL.
+
+        Deliverables:
+        - Grep audit: zero `FROM market.` SQL in bifrost-trade-api (except deprecated fallback)
+        - Grep audit: only WRITE in bifrost-trade-core/ticker_reference.py
+        - Local Vite smoke: IV Radar, Option Discovery, Stock Screener, SEPA — all functional
+        - Remove deprecated SQL fallback functions (feature flag cleanup)
+        - Update bifrost-trade-infra/docs/MIGRATION_TRACKING.md
+
+        Smoke checklist:
+        1. IV Radar (All + Benchmarks) — data loads
+        2. Option Discovery drill → chain populates
+        3. Stock Screener → SEPA fundamentals load
+        4. Contract Greeks → snapshots load
+        5. Data Readiness → coverage metrics from Plugin
+
+        Output a structured Phase completion report.
+      verify_cmd: |
+        cd bifrost-trade-api && make lint && make test &&
+        cd ../bifrost-trade-frontend && npm run lint && npm run build
+      acceptance:
+        - "All 5 smoke pages functional on local Vite"
+        - "No direct market.* SQL reads in Trade API (grep clean)"
+        - "Feature flag fallback code removed"
+        - "MIGRATION_TRACKING.md updated"
+      depends_on: [W1-P3]
+
+    # ── Wave 2: 基础设施收敛 ─────────────────────────────────────────────
+
+    - id: W2-P1
+      title: "K8s — collapse to single Plugin NS + watchlist union mode"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Consolidate Plugin from 3 independent namespaces to 1 shared instance.
+        Trade environments read through Plugin API (proven in W1).
+
+        Deliverables:
+        - plugin-market-data-stg: suspend all CronJobs, scale Workers to 0
+        - plugin-market-data-prod: suspend all CronJobs, scale Workers to 0
+        - plugin-market-data (DEV NS, now the Golden Source):
+          - schedule.yaml: watchlist_source: platform-api (union mode)
+          - ConfigMap updated with watchlist union config
+          - Rebuild + roll image with P4 Benchmarks + W0 API endpoints
+        - platform-api CORS: ensure Trade Prod frontend can reach Plugin API proxy
+        - Trade Prod K8s: MARKET_DATA_PLUGIN_URL → platform-api proxy (in-cluster)
+        - NetworkPolicy: allow bifrost-prod → plugin-market-data API
+
+        Constraints:
+        - Do NOT delete STG/PROD NS yet (keep as dormant for rollback)
+        - Golden NS database target stays bifrost_dev for now (rename in W2-P3)
+        - Verify Prod Trade UI still loads market data through proxy
+
+        Output a structured Phase completion report.
+      verify_cmd: |
+        cd bifrost-platform-plugin-market-data && make lint && make test
+      acceptance:
+        - "Only plugin-market-data NS has running Workers + active CronJobs"
+        - "plugin-market-data-stg and -prod Workers at replicas=0, CronJobs suspended"
+        - "Trade Prod frontend IV Radar / Option Discovery loads data"
+        - "Polygon REST calls happen once per symbol (not 2-3x)"
+      depends_on: [W1-P4, W0-P4]
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed single-NS ingest running for ≥3 trading days
+            - Owner confirmed Prod Trade UI reads market data via Plugin API proxy
+
+    - id: W2-P2
+      title: "Retire STG/PROD Plugin overlays + market.* tables"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Clean up dormant infrastructure after W2-P1 proven stable.
+
+        Deliverables:
+        - Delete k8s/overlays/stg and k8s/overlays/prod from plugin-market-data repo
+          (or move to k8s/overlays/_archived/)
+        - DROP SCHEMA market, market_analytics, data_ops in bifrost_stg (if exists)
+        - DROP SCHEMA market, market_analytics, data_ops in bifrost_prod (if exists)
+          (Trade private tables remain untouched)
+        - Delete plugin-market-data-stg and plugin-market-data-prod K8s namespaces
+        - Update docs/SCHEMA.md: single Golden Source database
+        - Update bifrost-trade-infra docs/MIGRATION_TRACKING.md
+
+        Constraints:
+        - CNPG backup before DROP (Owner-gated trigger_cnpg_backup)
+        - Owner explicit approval for each DROP
+
+        Output a structured Phase completion report.
+      verify_cmd: "cd bifrost-platform-plugin-market-data && make lint && make test"
+      acceptance:
+        - "Only plugin-market-data NS exists for market data"
+        - "bifrost_stg / bifrost_prod have no market.* / market_analytics.* schemas"
+        - "All docs updated"
+      depends_on: [W2-P1]
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed CNPG backup completed before DROP
+            - Owner confirmed DROP SCHEMA executed for stg + prod
+
+    - id: W2-P3
+      title: "Golden database rename + Ops Console governance"
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+
+        Goal: Optional rename of golden database from bifrost_dev to a neutral name
+        (e.g. bifrost_market or keep bifrost_dev) + register final architecture in
+        Ops Console governance catalogs.
+
+        Deliverables:
+        - Owner decision: rename golden DB or keep bifrost_dev
+        - If rename: update Plugin ConfigMap dbname, Plugin .env, all tests
+        - Ops Console: update marketDataSubcontractorCatalog.ts with Golden Source model
+        - Ops Console: Architecture → Plugins → Market Data — document shared bus
+        - Update bifrost-platform-plugin-market-data CLAUDE.md with final architecture
+        - Update workspace CLAUDE.md to reflect Golden Source model
+
+        Output a structured Phase completion report.
+      verify_cmd: |
+        cd bifrost-platform-plugin-market-data && make lint && make test &&
+        cd ../bifrost-platform && make test
+      acceptance:
+        - "Ops Console Architecture → Market Data reflects Golden Source"
+        - "All config files point to correct golden database"
+        - "Documentation updated across repos"
+      depends_on: [W2-P2]
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed golden database naming
+            - Owner confirmed Ops Console governance page accurate

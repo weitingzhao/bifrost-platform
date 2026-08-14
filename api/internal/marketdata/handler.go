@@ -23,6 +23,13 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
 }
 
+// HandleWatchlistUnion returns the deduplicated union of watchlist symbols
+// from all registered Trade environments (dev + stg + prod).
+func (h *Handler) HandleWatchlistUnion(w http.ResponseWriter, r *http.Request) {
+	resp := h.svc.WatchlistUnion(r.Context())
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // HandleAPIProxy proxies /api/v1/plugins/market-data/api/* → Plugin API (:8790)/*.
 // Example: GET .../api/market/coverage/db-summary → GET {plugin}/market/coverage/db-summary
 func (h *Handler) HandleAPIProxy(w http.ResponseWriter, r *http.Request) {
