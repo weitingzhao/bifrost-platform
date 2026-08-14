@@ -433,13 +433,16 @@ phases:
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
-        Goal: Optional rename of golden database from bifrost_dev to a neutral name
-        (e.g. bifrost_market or keep bifrost_dev) + register final architecture in
+        Goal: Rename golden database from bifrost_dev to bifrost_golden_source
+        (Owner decision: 2026-08-14) + register final architecture in
         Ops Console governance catalogs.
 
+        Golden Source DB: bifrost_golden_source
+        Schemas: market, market_analytics, data_ops (same logical separation as bifrost_dev)
+
         Deliverables:
-        - Owner decision: rename golden DB or keep bifrost_dev
-        - If rename: update Plugin ConfigMap dbname, Plugin .env, all tests
+        - CREATE DATABASE bifrost_golden_source; migrate schemas from bifrost_dev
+        - Update Plugin ConfigMap dbname → bifrost_golden_source, Plugin .env, all tests
         - Ops Console: update marketDataSubcontractorCatalog.ts with Golden Source model
         - Ops Console: Architecture → Plugins → Market Data — document shared bus
         - Update bifrost-platform-plugin-market-data CLAUDE.md with final architecture
@@ -451,11 +454,11 @@ phases:
         cd ../bifrost-platform && make test
       acceptance:
         - "Ops Console Architecture → Market Data reflects Golden Source"
-        - "All config files point to correct golden database"
+        - "All config files point to bifrost_golden_source"
         - "Documentation updated across repos"
       depends_on: [W2-P2]
       sign_off:
         required: true
         checklist:
-            - Owner confirmed golden database naming
+            - "Owner confirmed golden database naming: bifrost_golden_source (2026-08-14 ✅)"
             - Owner confirmed Ops Console governance page accurate
