@@ -20,7 +20,7 @@ description: |
     - Wave 3 (DROP + cleanup): DROP market.* from bifrost_dev, remove dead code
 
     D10 remains BLOCKED — no live trading paths touched.
-status: active
+status: completed
 workspace: /Users/vision-mac-trader/Desktop/stocks
 
 delivery:
@@ -37,7 +37,7 @@ phases:
 
     - id: W0-P1
       title: "Plugin API — POST /stocks/bars/ingest (OHLC batch write)"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -76,7 +76,7 @@ phases:
 
     - id: W0-P2
       title: "Plugin API — POST /reference/ticker/upsert (ticker sync)"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -109,7 +109,7 @@ phases:
 
     - id: W0-P3
       title: "Plugin API — POST /options/expirations/replace (cache refresh)"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -139,7 +139,7 @@ phases:
 
     - id: W1-P1
       title: "Trade — IB bars backfill + Market API → Plugin POST"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -179,7 +179,7 @@ phases:
 
     - id: W1-P2
       title: "Trade — StatusSink bars write → Plugin POST"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -205,7 +205,7 @@ phases:
 
     - id: W1-P3
       title: "Trade — ticker sync → Plugin POST"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -231,7 +231,7 @@ phases:
 
     - id: W1-P4
       title: "Trade — option expiration cache → Plugin POST"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -253,7 +253,7 @@ phases:
 
     - id: W2-P1
       title: "Plugin API — SEPA financial aggregate endpoints"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -284,7 +284,7 @@ phases:
 
     - id: W2-P2
       title: "Trade API — financials_data.py + readiness SQL → Plugin HTTP"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -310,7 +310,7 @@ phases:
 
     - id: W2-P3
       title: "Plugin API — PCR, greeks, data_readiness endpoints"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -334,7 +334,7 @@ phases:
 
     - id: W2-P4
       title: "Trade API + Core — remaining READ SQL → Plugin HTTP"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -366,7 +366,7 @@ phases:
 
     - id: W3-P1
       title: "DROP market/market_analytics/data_ops from bifrost_dev"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
@@ -399,7 +399,7 @@ phases:
 
     - id: W3-P2
       title: "Dead code removal + docs + governance"
-      status: pending
+      status: completed
       prompt_template: |
         Execute {{phase_title}} for program {{id}}.
 
