@@ -329,7 +329,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         </Button>,
       )
     }
-    if (isDailyOps) {
+    if (isDailyOps && q.fleetClear && fix.ledger.blocking) {
       nodes.push(
         <Button
           key="dev-ledger-refresh"
@@ -340,7 +340,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
           disabled={fix.ledger.disabled}
           title={
             fix.ledger.disabledReason ??
-            'Overwrite bifrost_dev from bifrost_prod (Full clone) via Agent Task'
+            'DEV ledger last_clone_at is stale — Full clone bifrost_prod → bifrost_dev'
           }
           onClick={() => fix.handleRequestDevLedgerRefresh()}
         >
@@ -620,6 +620,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
               ? {
                   lastCloneLabel: fix.ledger.lastCloneLabel,
                   verdict: fix.ledger.verdict,
+                  lamp: fix.ledger.lamp,
                   freshnessLoading: fix.ledger.freshnessLoading,
                   disabled: fix.ledger.disabled,
                   disabledReason: fix.ledger.disabledReason,

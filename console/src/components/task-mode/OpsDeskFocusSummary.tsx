@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { cn, StatusLamp, type Reachability } from '@bifrost/ui'
+import { fetchDataFreshness } from '@/api/cluster'
 import { fetchRemediationJobs } from '@/api/remediation'
 import { fetchPipelineRuns, fetchSupplyChain } from '@/api/delivery'
 import { fetchReleaseGate, fetchStgSmoke } from '@/api/promote'
@@ -24,6 +25,7 @@ import {
   type OpsDeskFocusChip,
   worseReachability,
 } from '@/lib/task-mode/opsDeskFocus'
+import { resolveDevLedgerSignal } from '@/lib/task-mode/devLedgerSignal'
 
 const AUTOPILOT_SKILL_ID = 'ops-autopilot'
 
@@ -73,6 +75,11 @@ function useOpsDeskFocusChips(): OpsDeskFocusChip[] {
     queryKey: ['task-cc', 'supply-chain-focus'],
     queryFn: fetchSupplyChain,
     refetchInterval: 20_000,
+  })
+  const freshnessQ = useQuery({
+    queryKey: ['cluster', 'data-freshness'],
+    queryFn: fetchDataFreshness,
+    refetchInterval: 60_000,
   })
 
   return useMemo(() => {
@@ -139,11 +146,23 @@ function useOpsDeskFocusChips(): OpsDeskFocusChip[] {
     if (noGo > 0) envLamp = worseReachability(envLamp, 'fail')
     const coverageLabel =
       boardTotal > 0 ? `Coverage ${boardHit}/${boardTotal}` : 'Coverage —'
+    const devDb = freshnessQ.data?.databases.find(
+      d => d.name === 'bifrost_dev' || d.environment === 'dev',
+    )
+    const ledger = resolveDevLedgerSignal({
+      lastCloneAt: devDb?.last_clone_at ?? freshnessQ.data?.last_clone_at,
+      lagDays: devDb?.lag_vs_prod_days,
+      verdict: devDb?.verdict,
+    })
+    if (!freshnessQ.isLoading && !freshnessQ.isError) {
+      envLamp = worseReachability(envLamp, ledger.lamp)
+    }
+    const ledgerLabel = freshnessQ.isLoading ? 'Ledger …' : ledger.chipLabel
     const envSummary = fleetLoading
       ? 'Loading fleet…'
-      : fleetOk
-        ? `Fleet clear · ${coverageLabel}`
-        : `NO-GO ${noGo} · ${coverageLabel}`
+      : [fleetOk ? 'Fleet clear' : `NO-GO ${noGo}`, ledgerLabel, coverageLabel]
+          .filter(Boolean)
+          .join(' · ')
 
     return OPS_DESK_FOCUS_CATEGORIES.map(id => {
       if (id === 'agent') return buildOpsDeskFocusChip(id, agentLamp, agentSummary)
@@ -167,6 +186,9 @@ function useOpsDeskFocusChips(): OpsDeskFocusChip[] {
     fleetLoading,
     snapshot.missionOverall,
     coverage,
+    freshnessQ.data,
+    freshnessQ.isLoading,
+    freshnessQ.isError,
   ])
 }
 
@@ -184,7 +206,13 @@ export function OpsDeskFocusSummary({
   const chips = useOpsDeskFocusChips()
 
   const select = (id: OpsDeskFocus) => {
-    onChange(focus === id ? 'all' : id)
+    const next = focus === id ? 'all' : id
+    onChange(next)
+    if (next === 'environment') {
+      requestAnimationFrame(() => {
+        document.getElementById('ops-dev-ledger')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
   }
 
   return (

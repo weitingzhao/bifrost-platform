@@ -52,6 +52,7 @@ export function OpsDeskBoard({
   ledger?: {
     lastCloneLabel: string
     verdict: string | null
+    lamp?: 'ok' | 'degraded' | 'fail' | 'unknown'
     freshnessLoading: boolean
     disabled: boolean
     disabledReason: string | null
@@ -90,87 +91,92 @@ export function OpsDeskBoard({
   return (
     <div className="flex flex-col gap-3" data-ops-desk-board>
       {showEnvironment ? (
-        <OpsSection
-          title="Fleet"
-          leading={<StatusLamp value={fleetLamp} kind="reach" />}
-          description={
-            isLoading
-              ? 'Loading fleet snapshot…'
-              : fleetOk
-                ? 'Fleet clear — scored cells GO.'
-                : 'Fleet not clear — Discover / Remediate on this board.'
-          }
-          actions={
-            <button
-              type="button"
-              className="text-[var(--text-dense-caption)] text-primary hover:underline"
-              onClick={() => onNavigate('control-room')}
-            >
-              Control Room →
-            </button>
-          }
-          bodyPadding="compact"
-        >
-          <div className="flex flex-wrap items-center gap-3">
-            {envLamps.map(([key, col]) => {
-              const lamp = columnLamp(fleet, col)
-              return (
-                <span key={col} className="inline-flex items-center gap-1.5">
-                  <StatusLamp value={lamp} kind="reach" />
-                  <span className="font-mono-tabular text-[var(--text-dense-meta)] font-semibold">{key}</span>
-                  <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-                    {col.toUpperCase()}
+        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+          <OpsSection
+            title="Fleet"
+            className="min-w-0"
+            leading={<StatusLamp value={fleetLamp} kind="reach" />}
+            description={
+              isLoading
+                ? 'Loading fleet snapshot…'
+                : fleetOk
+                  ? 'Fleet clear — scored cells GO.'
+                  : 'Fleet not clear — Discover / Remediate on this board.'
+            }
+            actions={
+              <button
+                type="button"
+                className="text-[var(--text-dense-caption)] text-primary hover:underline"
+                onClick={() => onNavigate('control-room')}
+              >
+                Control Room →
+              </button>
+            }
+            bodyPadding="compact"
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              {envLamps.map(([key, col]) => {
+                const lamp = columnLamp(fleet, col)
+                return (
+                  <span key={col} className="inline-flex items-center gap-1.5">
+                    <StatusLamp value={lamp} kind="reach" />
+                    <span className="font-mono-tabular text-[var(--text-dense-meta)] font-semibold">{key}</span>
+                    <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+                      {col.toUpperCase()}
+                    </span>
                   </span>
-                </span>
-              )
-            })}
-          </div>
-        </OpsSection>
-      ) : null}
+                )
+              })}
+            </div>
+          </OpsSection>
 
-      {showEnvironment && ledger != null ? (
-        <OpsSection
-          title="DEV ledger"
-          leading={
-            <StatusLamp
-              value={
-                ledger.freshnessLoading
-                  ? 'unknown'
-                  : ledger.verdict === 'stale'
-                    ? 'fail'
-                    : ledger.verdict === 'aging'
-                      ? 'degraded'
-                      : ledger.verdict === 'fresh'
-                        ? 'ok'
-                        : 'unknown'
+          {ledger != null ? (
+            <OpsSection
+              id="ops-dev-ledger"
+              title="DEV ledger"
+              className="min-w-0"
+              leading={
+                <StatusLamp
+                  value={
+                    ledger.freshnessLoading
+                      ? 'unknown'
+                      : (ledger.lamp ??
+                        (ledger.verdict === 'stale'
+                          ? 'fail'
+                          : ledger.verdict === 'aging'
+                            ? 'degraded'
+                            : ledger.verdict === 'fresh'
+                              ? 'ok'
+                              : 'unknown'))
+                  }
+                  kind="reach"
+                />
               }
-              kind="reach"
+              description={
+                ledger.freshnessLoading
+                  ? 'Loading CNPG freshness…'
+                  : `Last clone ${ledger.lastCloneLabel}${ledger.verdict != null ? ` · ${ledger.verdict}` : ''}`
+              }
+              actions={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={ledger.disabled}
+                  title={
+                    ledger.disabledReason ??
+                    'Full clone bifrost_prod → bifrost_dev, then bounce bifrost-dev api-*. Does not touch STG/PROD or redis-live.'
+                  }
+                  onClick={() => ledger.onRefresh()}
+                >
+                  {ledger.pending ? 'Refreshing…' : 'Refresh'}
+                </Button>
+              }
+              bodyPadding="none"
             />
-          }
-          description={
-            ledger.freshnessLoading
-              ? 'Loading CNPG freshness…'
-              : `Last clone ${ledger.lastCloneLabel}${ledger.verdict != null ? ` · ${ledger.verdict}` : ''}`
-          }
-          actions={
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="shrink-0"
-              disabled={ledger.disabled}
-              title={ledger.disabledReason ?? 'Full clone bifrost_prod → bifrost_dev via Agent Task'}
-              onClick={() => ledger.onRefresh()}
-            >
-              {ledger.pending ? 'Refreshing…' : 'Refresh DEV ledger'}
-            </Button>
-          }
-          bodyPadding="compact"
-        >
-          <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
-            Overwrites bifrost_dev from prod, then bounces bifrost-dev api-*. Does not touch STG/PROD or redis-live.
-          </p>
-        </OpsSection>
+          ) : null}
+        </div>
       ) : null}
 
       {showAgent ? (

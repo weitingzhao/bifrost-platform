@@ -7,21 +7,10 @@ import { DATA_LAYER_CLONE_SCOPE } from '@/lib/agent/agentScopes'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { buildDataLayerCloneOperatorPrompt } from '@/lib/agent/dataLayerClonePrompt'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
+import { resolveDevLedgerSignal } from '@/lib/task-mode/devLedgerSignal'
 
 function pickDevDb(rows: DataFreshnessDatabase[] | undefined): DataFreshnessDatabase | undefined {
   return rows?.find(d => d.name === 'bifrost_dev' || d.environment === 'dev')
-}
-
-function formatCloneWhen(iso: string | undefined): string {
-  if (iso == null || iso === '') return 'never'
-  const ms = Date.parse(iso)
-  if (!Number.isFinite(ms)) return iso
-  const delta = Date.now() - ms
-  if (delta < 60_000) return 'just now'
-  if (delta < 3_600_000) return `${Math.floor(delta / 60_000)}m ago`
-  if (delta < 86_400_000) return `${Math.floor(delta / 3_600_000)}h ago`
-  if (delta < 7 * 86_400_000) return `${Math.floor(delta / 86_400_000)}d ago`
-  return new Date(ms).toLocaleString()
 }
 
 export function useDevLedgerRefresh({
@@ -49,6 +38,7 @@ export function useDevLedgerRefresh({
   const lastCloneAt = devDb?.last_clone_at ?? freshnessQ.data?.last_clone_at ?? null
   const lagDays = devDb?.lag_vs_prod_days ?? null
   const verdict = devDb?.verdict ?? null
+  const signal = resolveDevLedgerSignal({ lastCloneAt, lagDays, verdict })
 
   const task = useAmbientAgentTask({
     canOperate,
@@ -76,20 +66,22 @@ export function useDevLedgerRefresh({
     : (task.disabledReason ?? null)
 
   const confirmMessage = useMemo(() => {
-    const age = formatCloneWhen(lastCloneAt ?? undefined)
     const lag = lagDays != null && Number.isFinite(lagDays) ? `${lagDays}d vs prod` : 'lag unknown'
     return [
       `Overwrite bifrost_dev with a Full clone of bifrost_prod, then bounce bifrost-dev Trade APIs (api-*).`,
-      `Last clone: ${age}. ${lag}.`,
+      `Last clone: ${signal.lastCloneLabel}. ${lag}.`,
       `bifrost_stg and bifrost_prod are not touched. Live quotes stay on redis-ib (no redis-live dump). D10 remains blocked.`,
     ].join(' ')
-  }, [lastCloneAt, lagDays])
+  }, [signal.lastCloneLabel, lagDays])
 
   return {
     lastCloneAt,
-    lastCloneLabel: formatCloneWhen(lastCloneAt ?? undefined),
+    lastCloneLabel: signal.lastCloneLabel,
     lagDays,
     verdict,
+    lamp: freshnessQ.isLoading ? 'unknown' : signal.lamp,
+    blocking: freshnessQ.isLoading || freshnessQ.isError ? false : signal.blocking,
+    chipLabel: signal.chipLabel,
     freshnessLoading: freshnessQ.isLoading,
     confirmOpen,
     confirmMessage,

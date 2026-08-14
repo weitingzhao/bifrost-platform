@@ -298,7 +298,7 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
       'Read backup-status; repair MinIO WAL store + clear stuck Backup CRs; trigger on-demand CNPG Backup. No DDL, no PVC wipe, no D10.',
   },
   'data-layer-clone': {
-    entryPoint: 'Ops TCC · Refresh DEV ledger · ConfirmDialog → Agent Task',
+    entryPoint: 'Ops TCC · Focus Environment · DEV ledger · ConfirmDialog → Agent Task',
     trigger: 'Owner needs current bifrost_dev ledger (last_clone_at stale or on-demand Trade UI accept)',
     aliases: ['data-freshness-clone'],
     description:

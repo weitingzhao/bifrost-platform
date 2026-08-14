@@ -150,7 +150,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     examples: [
       'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — alerts meta → Attention (triage + assisted Agent Fix / Diagnose)',
       'Control Room: OpsVerdictStrip ROOM POSTURE + Bay Scan cards → open bay detail (accordion Single) — no page-level Launch/Deploy',
-      'Task Control Center: OpsVerdictStrip TASK VERDICT · {MODE} — sole Mission/Launch/Fleet primary CTAs; Daily Ops Body Focus chips Agent · Release · Environment filter OpsSection buckets (Ops loop + Execution under Agent)',
+      'Task Control Center: OpsVerdictStrip TASK VERDICT · {MODE} — sole Mission/Launch/Fleet primary CTAs; Refresh DEV ledger only when last_clone_at >7d and fleet is clear. Daily Ops Focus chips Agent · Release · Environment filter Body; Environment maintenance (DEV ledger) lives in Body, not as a permanent Verdict action',
       'Audit: OpsVerdictStrip ACTUATION HISTORY · Download JSON in actions',
       'Cluster: OpsVerdictStrip CLUSTER HEALTH — grade + ranked issues + failing pods in one panel; KPI / categories below; Facility hosts former Placement (pools / policy / CI)',
       'Satellite Bus: OpsVerdictStrip BUS HEALTH · {ENV} — Agent Triage in actions; issues count scrolls to body',
@@ -212,7 +212,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Shell Operator Dock (bottom): multi-tool framework — Agent (ambient Fix) | Console (SSH); Collapse keeps Console sessions mounted; L-1 host pulse + Operator Plane deep-link in head (no Update in Dock)',
     ],
     examples: [
-      'Task Control Center: primary Launch / Fleet Fix / phase CTA on Verdict or Ops loop strip',
+      'Task Control Center: primary Launch / Fleet Fix / phase CTA on Verdict; Environment maintenance (DEV ledger clone) on the Environment Body section — Verdict only when ledger is the blocking signal',
       'Control Room: VerdictStrip has no Launch/Deploy actions — Bay Scan opens one bay; Launch bay Open TCC + detail deep-links',
       'Observability: Domain Health one runtime row — Trade env on Satellite only; Grafana links for deployed UIDs (Satellite/Ground/IB/Agent Bifrost + Rocket kube-prometheus stock; unset uid → “not deployed”); Attention Mute/Agent Fix/batch → Dock',
       'Defects: PatternDebt Verdict + Fix top pattern; PageToolbar Refresh below',
