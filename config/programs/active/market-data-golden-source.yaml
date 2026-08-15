@@ -15,7 +15,7 @@ description: |
     - Wave 2 (Consolidate): Collapse to single Plugin NS; retire STG/PROD duplicate workers
 
     D10 remains BLOCKED — no live trading paths touched.
-status: active
+status: completed
 workspace: /Users/vision-mac-trader/Desktop/stocks
 
 delivery:
