@@ -27,7 +27,7 @@ export const MARKET_DATA_LAUNCH_LANE = {
   galleryIsNotPublish:
     'Market Data manage page = observe health / deployments / freshness (+ optional readiness_rollup KPI). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
   d10: 'Market-data REST ingest only — no place_order / no IB socket',
-  imageTag: '0.3.0',
+  imageTag: '0.3.1',
 } as const
 
 export type MarketDataPhaseId =
@@ -194,7 +194,7 @@ export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Plugin API proxy: GET|POST /api/v1/plugins/market-data/api/market/* → market-data-api:8790 (or MARKET_DATA_API_URL)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
   'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; image bifrost-market-data:0.2.0)',
-  'Image tag: bifrost-market-data:0.3.0 (k8s/base only — STG/PROD overlays archived W2-P2)',
+  'Image tag: bifrost-market-data:0.3.1 (k8s/base only — STG/PROD overlays archived W2-P2)',
   'Readiness rollup: optional KPI from public.stock_readiness_daily (Trade runbook). fund_cache_valid requires included_in_universe; public.v_us_equity_universe uses synthetic hashtext tickers_id after P9 (bifrost-core ≥0.5.2)',
   'Program / phase sign-off: Active Session (Engineer → Delivery) · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',
