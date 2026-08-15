@@ -13,7 +13,9 @@ const (
 	optionsHealthHost = "market-data-health-options.plugin-market-data.svc.cluster.local"
 	healthServicePort = "8080"
 	healthPath        = "/health"
-	defaultFreshnessDB = "bifrost_dev"
+	// Golden Source is the only DB that still has data_ops / market.* after
+	// write-consolidation DROP on Trade DBs (bifrost_dev / _stg / _prod).
+	defaultFreshnessDB = "bifrost_golden_source"
 	freshnessMaxAgeH   = 24.0
 )
 
@@ -22,6 +24,9 @@ type Config struct {
 	StocksHealthURL  string
 	OptionsHealthURL string
 	FreshnessDB      string
+	// ReadinessDB is the Trade DB for public.stock_readiness_daily (optional KPI).
+	// Empty = same as FreshnessDB (Golden Source has no such table → KPI hidden).
+	ReadinessDB string
 	// APIBaseURL overrides Plugin API (:8790) for Console proxy (local port-forward).
 	// Example: http://127.0.0.1:8790 — paths are appended as /market/...
 	APIBaseURL string
@@ -53,6 +58,7 @@ func ConfigFromEnv() Config {
 		StocksHealthURL:  stocks,
 		OptionsHealthURL: options,
 		FreshnessDB:      db,
+		ReadinessDB:      strings.TrimSpace(os.Getenv("MARKET_DATA_READINESS_DB")),
 		APIBaseURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("MARKET_DATA_API_URL")), "/"),
 	}
 }

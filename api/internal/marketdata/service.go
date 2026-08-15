@@ -317,9 +317,11 @@ func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Re
 }
 
 // probeReadinessRollup reads Trade-owned public.stock_readiness_daily.
+// That table lives on Trade DBs, not Golden Source. After write-consolidation
+// the freshness probe points at bifrost_golden_source, so this query usually
+// returns nil and Console hides the KPI — correct until a GS-side snapshot exists.
 // Schema notes: as_of_date (not as_of); fund_cache_valid is derived from
 // fund_cache_expire_at + fundamental_eval (no fund_cache_valid column).
-// Failures return nil — Console hides the KPI strip.
 func (s *Service) probeReadinessRollup(ctx context.Context) *ReadinessRollup {
 	if s.readinessProbe != nil {
 		return s.readinessProbe(ctx)
@@ -327,7 +329,10 @@ func (s *Service) probeReadinessRollup(ctx context.Context) *ReadinessRollup {
 	if s.cluster == nil {
 		return nil
 	}
-	db := s.cfg.FreshnessDB
+	db := s.cfg.ReadinessDB
+	if db == "" {
+		db = s.cfg.FreshnessDB
+	}
 	if db == "" {
 		db = defaultFreshnessDB
 	}

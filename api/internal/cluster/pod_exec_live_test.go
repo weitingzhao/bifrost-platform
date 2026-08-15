@@ -27,7 +27,7 @@ func TestExecSQLOnPrimaryLive(t *testing.T) {
 	svc := NewService(&config.ClusterEntry{ID: "live", KubeconfigEnv: "PLATFORM_KUBECONFIG"})
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	out, err := svc.ExecSQLOnPrimary(ctx, "bifrost_dev", "SELECT count(*) FROM data_ops.ingest_freshness")
+	out, err := svc.ExecSQLOnPrimary(ctx, "bifrost_golden_source", "SELECT count(*) FROM data_ops.ingest_freshness")
 	if err != nil {
 		t.Fatalf("ExecSQLOnPrimary: %v", err)
 	}
