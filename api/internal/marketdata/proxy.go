@@ -43,6 +43,9 @@ func (s *Service) proxyHTTP(r *http.Request, target string, transport http.Round
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
 	req.Header.Set("Accept", "application/json")
 	return client.Do(req)
 }

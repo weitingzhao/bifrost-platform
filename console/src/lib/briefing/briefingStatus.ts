@@ -172,15 +172,24 @@ export function isLaneLifecycleHold(
   return programsReleased === undefined && queueAllDone(queue) && !queueHasActiveWork(queue)
 }
 
+function queueHasOperationalWork(queue: QueueItem[]): boolean {
+  return queue.some(
+    q => q.status === 'in_progress' || q.status === 'next' || q.status === 'issue',
+  )
+}
+
 /** Classify a lane queue the same way TrackLaneSection does. */
 export function laneLifecycleFromQueue(
   queue: QueueItem[],
   opts?: { programsReleased?: boolean; programsClosed?: boolean },
 ): LaneLifecycle {
   if (queue.length === 0) return 'empty'
+  const released = opts?.programsReleased ?? opts?.programsClosed
+  // D3: sessionReleased leaves In Flight. Catalog `ready_for_signoff` is stale
+  // after Owner sign-off + no_handoff; do not keep a Closed session in Doing.
+  if (released === true && !queueHasOperationalWork(queue)) return 'complete'
   if (queueHasActiveWork(queue)) return 'active'
   if (queueAllDone(queue)) {
-    const released = opts?.programsReleased ?? opts?.programsClosed
     if (released === true) return 'complete'
     // Known not-released → Doing. Unknown → caller must use isLaneLifecycleHold.
     return 'active'

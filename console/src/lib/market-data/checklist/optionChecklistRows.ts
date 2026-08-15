@@ -11,7 +11,7 @@ const rows: ChecklistRow[] = [
     tierMin: 'starter',
     projectStatus: 'implemented',
     verification:
-      'Contracts section: All Contracts (GET /v3/reference/options/contracts via Celery), Contract Overview (GET /v3/reference/options/contracts/{options_ticker}), DB Verify (option_contracts coverage & mapping), Snapshot Link (contract → snapshot end-to-end).',
+      'Contracts section: All Contracts (GET /v3/reference/options/contracts via Plugin ingest option_contract), Contract Overview (GET /v3/reference/options/contracts/{options_ticker}), DB Verify (option_contracts coverage & mapping), Snapshot Link (contract → snapshot end-to-end).',
     purpose:
       'Discover, inspect, and verify option contract reference data from Massive. Coverage and mapping metrics quantify local data quality against the API source of truth.',
     helpVerification:
@@ -46,10 +46,10 @@ const rows: ChecklistRow[] = [
     tierMin: 'starter',
     projectStatus: 'implemented',
     verification:
-      'Enqueue feed_option_snapshots (Massive option chain/contract/unified) → GET /research/option-snapshots or Verify section below',
+      'Plugin ingest option_snapshot (chain/contract/unified) → GET /research/option-snapshots or Verify section below',
     purpose: 'Pull delayed chain or contract data from Polygon REST; chain persists bid/ask/last and greeks when returned.',
     helpVerification:
-      'Option Chain Snapshot: Celery kind feed_option_snapshots, mode=chain for an underlying. Option Contract Snapshot: mode=contract + option_contract. Unified Snapshot: mode=unified + tickers. '
+      'Option Chain Snapshot: Plugin ingest option_snapshot, mode=chain for an underlying. Option Contract Snapshot: mode=contract + option_contract. Unified Snapshot: mode=unified + tickers. '
       + 'Then GET /research/option-snapshots?symbol=&expiration=&source=massive for chain persistence checks.',
   },
   {

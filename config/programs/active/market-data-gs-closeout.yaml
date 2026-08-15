@@ -1,0 +1,327 @@
+id: market-data-gs-closeout
+title: "Market Data Golden Source Closeout"
+description: |
+  Closeout after market-data-golden-source and market-data-write-consolidation.
+  Does not reopen predecessor waves. Residual QA only: calendar soak, Board close,
+  leftover Trade tables, catalog copy, Ingest pending rollup, Plugin write auth,
+  stock_daily depth A then B (watchlist+benchmarks then universe 5343; not C 13411).
+
+  Owner decisions (2026-08-15, locked):
+  - D1: Board close predecessors, then open this program
+  - D2: Depth A then B (watchlist+benchmarks ≥240, then universe ≥240). Not C.
+  - D3: Plugin write-path operator token in-scope (P6), not deferred
+
+  D10 remains BLOCKED. Do not unsuspend market-data-readiness-refresh.
+  Do not scale Celery *-massive replicas > 0. Do not write market.* from Trade DB.
+status: active
+delivery:
+  board_visible: true
+  sign_off_mechanism: api
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+model: composer-2.5
+
+phases:
+  # ── Wave 0: Ledger ──────────────────────────────────────────────────────
+  - id: P1
+    title: "Calendar Cron soak (non-blocking)"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Do NOT sleep until tonight 21:05 UTC. Verify live cluster now:
+      - watchlist union HTTP 200
+      - freshness 15/15 on local :8780 and in-cluster STG/PROD
+      - Cron market-data-readiness-refresh still suspend=true
+      - Plugin image 0.3.1
+      - CronJobs lastSuccessful for stock-eod, option-bars, analytics, option-refresh
+
+      Note in report that tonight 21:05–23:15 UTC calendar slots still need observation;
+      do not block Wave 1–4 on that soak.
+    verify_cmd: |
+      export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
+      kubectl -n plugin-market-data get cronjob market-data-readiness-refresh -o jsonpath='{.spec.suspend}{"\n"}' &&
+      kubectl -n plugin-market-data get deploy -o wide &&
+      curl -sfS http://127.0.0.1:8780/api/v1/plugins/market-data/api/health
+    acceptance:
+      - "union watchlist endpoint 200"
+      - "freshness 15/15 local + STG + PROD"
+      - "market-data-readiness-refresh suspend=true"
+      - "Plugin image 0.3.1"
+      - "Tonight 21:05–23:15 UTC calendar soak noted, not blocking"
+    sign_off:
+      required: false
+
+  - id: P2
+    title: "Predecessor Board close"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Owner authorized Delivery Board sign-off (D1) for:
+      - market-data-golden-source (11 phases)
+      - market-data-write-consolidation (13 phases)
+
+      Use official API POST /api/v1/programs/{id}/phases/{phaseId}/signoff (admin).
+      MCP has no program sign-off tool — do not fake signed_off in YAML.
+      After all_phases_done or official sign-off, move YAML active/ → completed/.
+      Continue P3+ even if Console click is still needed.
+    verify_cmd: |
+      test ! -f bifrost-platform/config/programs/active/market-data-golden-source.yaml &&
+      test ! -f bifrost-platform/config/programs/active/market-data-write-consolidation.yaml &&
+      test -f bifrost-platform/config/programs/completed/market-data-golden-source.yaml &&
+      test -f bifrost-platform/config/programs/completed/market-data-write-consolidation.yaml
+    acceptance:
+      - "Predecessor YAML files in completed/"
+      - "Official sign-off path used, or Owner notified to click Console if API/MCP cannot sign"
+      - "This closeout program remains active"
+    sign_off:
+      required: false
+
+  # ── Wave 1: Residue ─────────────────────────────────────────────────────
+  - id: P3
+    title: "Archive Trade leftover tables"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      - bifrost_dev.public.stock_readiness_daily frozen at 2026-06-11: rename archive or DROP
+        after grep confirms no production reader. Keep Cron market-data-readiness-refresh suspend=true.
+      - DROP bifrost_stg leftover report_option_* (not market schema) after grep no readers.
+      - Do NOT DROP any Golden Source schema. Do not touch us_equity_universe.
+      Avoid same-hour contention with P8 enqueue.
+    verify_cmd: |
+      export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
+      kubectl -n plugin-market-data get cronjob market-data-readiness-refresh -o jsonpath='{.spec.suspend}{"\n"}'
+    acceptance:
+      - "stock_readiness_daily RETAINED in bifrost_dev (live Trade/platform readers); Cron still suspend"
+      - "bifrost_stg has no report_option_* leftover tables"
+      - "Cron readiness-refresh still suspend=true"
+      - "Golden Source schemas untouched"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  - id: P4
+    title: "Catalog copy + env hygiene"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Replace remaining copy that says Celery kind feed_stocks_aggregate with Plugin ingest
+      (trade-api readiness data_catalog, frontend StepDetailPanel, etc.).
+      PLUGIN_URL: add to Trade deploys that may read market, or document skip for
+      docs/ops/portfolio/strategy/trading with no market.* SQL.
+      Massive workers stay replicas 0.
+    verify_cmd: |
+      cd bifrost-trade-api && ruff check src/ &&
+      cd ../bifrost-trade-frontend && npm run lint
+    acceptance:
+      - "readiness data_catalog / StepDetailPanel describe Plugin ingest not Celery Massive"
+      - "PLUGIN_URL present or documented skip on non-readers"
+      - "Massive workers stay replicas 0"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  # ── Wave 2: UX ──────────────────────────────────────────────────────────
+  - id: P5
+    title: "Ingest tab pending rollup"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      MarketDataIngestTab: pending+running counts by kind; status filter; keep job list.
+      Dense UI primitives only; no new CSS module. UI English.
+    verify_cmd: "cd bifrost-platform/console && npx tsc --noEmit"
+    acceptance:
+      - "Ingest tab shows pending+running counts by kind"
+      - "Status filter present; job list retained"
+      - "No new CSS module; tsc --noEmit clean"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  # ── Wave 3: Auth (D3 in-scope) ──────────────────────────────────────────
+  - id: P6
+    title: "Operator token on Plugin write routes"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Plugin POST/DELETE ingest write routes require operator token (platform-api style).
+      GET reads: no new auth. Trade writers (trade-api / core / worker daemon bars)
+      send Authorization. Test: no token → 401; with token → 200.
+      Sync K8s secret/env so live IB bars writes still work. D10 stays BLOCKED.
+      If cluster image deliver is needed, use existing plugin/trade deliver paths.
+    verify_cmd: |
+      cd bifrost-platform-plugin-market-data && make lint && make test
+    acceptance:
+      - "POST/DELETE ingest require operator token; GET unchanged"
+      - "curl without token → 401; with token → 200"
+      - "Trade writers send Authorization; IB bars path still works"
+      - "D10 untouched"
+    sign_off:
+      required: true
+      checklist:
+        - "Owner authorized D3 (2026-08-15) — write auth in this program"
+        - "Live IB bars ingest still succeeds with token"
+
+  # ── Wave 4: Depth (D2 A then B) ─────────────────────────────────────────
+  - id: P7
+    title: "Lock depth policy A then B"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Owner locked 2026-08-15: A then B. Not C (13411).
+      Record in program metadata / Decision Log. Then proceed to P8 enqueue.
+      Do not wait for another verbal confirmation.
+    verify_cmd: "grep -q 'A then B' bifrost-platform/config/programs/active/market-data-gs-closeout.yaml"
+    acceptance:
+      - "Decision D2 A then B written in program YAML"
+      - "C (13411) explicitly out of scope"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  - id: P8
+    title: "Watchlist+benchmark ≥240 bars"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Enqueue stock_daily_grouped for watchlist union (~16) + SPY/QQQ/IWM into
+      bifrost_golden_source.data_ops.job_ingest. Drain polygon-worker-stocks until
+      each symbol has ≥240 market.stock_daily bars in ~420d window.
+      Do not flood same-priority jobs while option_daily pending is high.
+      Do not scale Celery Massive. Do not write market.* from Trade DB.
+    verify_cmd: |
+      curl -sfS http://127.0.0.1:8780/api/v1/plugins/market-data/api/health
+    acceptance:
+      - "Each union+benchmark symbol ≥240 stock_daily in ~420d window"
+      - "Gateway readiness summary still 200"
+      - "stock_daily_grouped pending drained for this cohort"
+    depends_on:
+      - P7
+    sign_off:
+      required: false
+
+  - id: P9
+    title: "Universe ≥240 bars"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      After P8 drain, enqueue us_equity_universe (~5343) stock_daily_grouped in batches.
+      Target price_readiness_live.price_ready ≥5000 or as close as Polygon rate limits allow.
+      Do not starve daily Cron. Do not scale Massive. If session cannot finish 5343,
+      leave P9 in-progress with remaining backlog + resume commands.
+    verify_cmd: |
+      curl -sfS http://127.0.0.1:8780/api/v1/plugins/market-data/api/health
+    acceptance:
+      - "Batch enqueue of universe started after P8 drain"
+      - "price_ready significantly up (target ≥5000) OR remaining backlog documented"
+      - "Daily Cron not starved; Polygon not blasted"
+    depends_on:
+      - P8
+    sign_off:
+      required: false
+
+  - id: P10
+    title: "Global QA + close"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      freshness 15/15; Trade DBs still have no market/analytics/data_ops;
+      grep Trade repos no FROM market.; Ingest rollup visible; D10 untouched;
+      readiness-refresh still suspend. Call submit_post_completion / report_phase_progress.
+      post_completion includes fundamentals rotate policy (do not accelerate in this program).
+    verify_cmd: |
+      export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
+      kubectl -n plugin-market-data get cronjob market-data-readiness-refresh -o jsonpath='{.spec.suspend}{"\n"}' &&
+      curl -sfS http://127.0.0.1:8780/api/v1/plugins/market-data/api/health
+    acceptance:
+      - "Freshness 15/15"
+      - "Trade three DBs have no market/market_analytics/data_ops"
+      - "grep FROM market. clean in Trade repos"
+      - "Ingest rollup visible; D10 unchanged; readiness-refresh suspend=true"
+    depends_on:
+      - P4
+      - P5
+      - P6
+      - P8
+      - P9
+    sign_off:
+      required: true
+      checklist:
+        - "Owner visual / Board review of closeout"
+        - "post_completion submitted (fundamentals rotate, NP audit)"
+
+post_completion:
+  new_capabilities:
+    - "Golden Source closeout: leftover Trade fiction archived; Ingest pending rollup; Plugin write auth"
+    - "stock_daily depth policy A then B (watchlist+benchmarks then universe)"
+  new_risks:
+    - "Universe ≥240 drain may take hours under Polygon rate limits"
+    - "Write-path token mismatch can break IB bars ingest if secret not synced"
+  operate_queue_items:
+    - id: fund-rotate-policy
+      source_lane_id: market-data-gs-closeout
+      operate_lane: business-advisory
+      title: "Universe fundamentals rotate cadence"
+      description: >
+        Decide whether universe fundamentals should rotate faster than ~16/day
+        (today fund_cache_valid_count may be 0). Not accelerated in this program.
+      handoff_kind: one_off
+      reason: "Fundamentals rotate is policy, not a Golden Source cutover hole"
+      acceptance_criteria:
+        - "Owner decision on rotate rate vs current ~16 symbols/day"
+        - "No Massive/Celery reintroduction"
+      verification_steps:
+        - "Check Plugin fundamentals Cron and fund_cache_valid_count"
+        - "Document chosen cadence in Market Data governance"
+      risk_level: low
+      owner: vision-mac-trader
+    - id: ingest-np-audit
+      source_lane_id: market-data-gs-closeout
+      operate_lane: governance
+      title: "Confirm NetworkPolicy covers Plugin :8790 writers"
+      description: >
+        After P6 operator token, confirm NetworkPolicy still covers every namespace
+        that can reach Plugin API :8790 (defense in depth).
+      handoff_kind: one_off
+      reason: "Write auth is application-layer; NP remains the cluster-layer control"
+      acceptance_criteria:
+        - "Every writer NS allowed; others denied"
+        - "GET reads still work from Trade + Console proxy"
+      verification_steps:
+        - "kubectl get networkpolicy -n plugin-market-data"
+        - "Spot-check POST without token → 401 from allowed NS still requires token"
+      risk_level: low
+      owner: vision-mac-trader
+
+metadata:
+  created_at: "2026-08-15"
+  owner: "vision-mac-trader"
+  lane_id: market-data-gs-closeout
+  operate_lane: governance
+  prerequisite_programs:
+    - market-data-golden-source
+    - market-data-write-consolidation
+  tags:
+    - market-data
+    - golden-source
+    - closeout
+    - ingest
+    - depth
+  decisions:
+    D1: "Board close predecessors then open this program (Owner 2026-08-15)"
+    D2: "A then B — watchlist+benchmarks ≥240 then universe 5343 ≥240; not C 13411"
+    D3: "Plugin write-path operator token in-scope P6 (not deferred)"
+    D10: "BLOCKED — no live trading, no daemon scale, no observe-safe change"

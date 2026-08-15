@@ -31,6 +31,7 @@ export type AutomateLaneId =
   | 'polygon-vendor'
   | 'market-data-expand'
   | 'market-data-vitals'
+  | 'market-data-gs-closeout'
 export type InfraLaneId = 'network-server' | 'network-wifi' | 'ai-network'
 export type OperateLaneId = 'governance' | 'troubleshoot' | 'release' | 'business-advisory'
 export type FutureLaneId =
@@ -740,6 +741,83 @@ function buildMarketDataVitalsQueue(): QueueItem[] {
 }
 
 /**
+ * Synthetic queue for Subcontractor · Automate lane market-data-gs-closeout.
+ * In Flight (Build Desk) hosts Owner sign-off; Delivery Board is the catalog.
+ * P6 + P10 remain ready_for_signoff until Owner signs on In Flight.
+ */
+function buildMarketDataGsCloseoutQueue(): QueueItem[] {
+  const done = (
+    id: string,
+    label: string,
+    note: string,
+  ): QueueItem => ({
+    id,
+    label,
+    status: 'done',
+    note,
+    progress: { done: 1, total: 1 },
+  })
+  return [
+    done(
+      'P1',
+      'P1 — Calendar Cron soak (non-blocking)',
+      'union 200 · freshness 15/15 · readiness-refresh suspend=true. No Owner gate.',
+    ),
+    done(
+      'P2',
+      'P2 — Predecessor Board close',
+      'golden-source + write-consolidation official sign-off; YAML in completed/. No Owner gate on this program.',
+    ),
+    done(
+      'P3',
+      'P3 — Archive Trade leftover tables',
+      'Dropped STG report_option_*. Kept stock_readiness_daily (live readers). Cron still suspend.',
+    ),
+    done(
+      'P4',
+      'P4 — Catalog copy + env hygiene',
+      'Plugin ingest copy. Massive replicas 0. No Owner gate.',
+    ),
+    done(
+      'P5',
+      'P5 — Ingest tab pending rollup',
+      'queue-summary + status filter. No Owner gate.',
+    ),
+    {
+      id: 'P6',
+      label: 'P6 — Operator token on Plugin write routes',
+      status: 'ready_for_signoff',
+      note:
+        'Armed on cluster: unauthenticated POST → 401; Trade writers send Bearer. Owner must sign on In Flight. D10 BLOCKED.',
+      progress: { done: 1, total: 1 },
+    },
+    done(
+      'P7',
+      'P7 — Lock depth policy A then B',
+      'Owner locked 2026-08-15. Not C (13411). No further gate.',
+    ),
+    done(
+      'P8',
+      'P8 — Watchlist+benchmark ≥240 bars',
+      '18/19 ≥240 (CBRS listing-age). Grouped queue drained. No Owner gate.',
+    ),
+    done(
+      'P9',
+      'P9 — Universe ≥240 bars',
+      '4556/5343 universe ≥240; remainder listing-age. No Owner gate.',
+    ),
+    {
+      id: 'P10',
+      label: 'P10 — Global QA + close',
+      status: 'ready_for_signoff',
+      note:
+        'QA passed. Owner must sign on In Flight; do not record no_handoff until that sign-off.',
+      progress: { done: 1, total: 1 },
+    },
+  ]
+}
+
+/**
  * Synthetic queue for Subcontractor · Automate lane ib-vendor.
  * Gateway plugin + Launch Plugin meta-program closed; lane Done (not empty Init).
  */
@@ -879,6 +957,9 @@ export function buildQueueForLane(
       // Market Data Vitals UI — depth/freshness/gap/quality (program market-data-vitals).
       if (laneId === 'market-data-vitals') {
         return buildMarketDataVitalsQueue()
+      }
+      if (laneId === 'market-data-gs-closeout') {
+        return buildMarketDataGsCloseoutQueue()
       }
       return buildQueueFromAutomateStreams(tracks?.automate, laneId as AutomateLaneId)
     case 'infra':

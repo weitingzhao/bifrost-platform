@@ -417,6 +417,23 @@ export type IngestJobsResponse = {
   error?: string
 }
 
+export type IngestQueueKindCount = {
+  kind: string
+  pending: number
+  running: number
+  active: number
+}
+
+export type IngestQueueSummaryResponse = {
+  ok: boolean
+  pending?: number
+  running?: number
+  active?: number
+  kinds?: IngestQueueKindCount[]
+  generated_at?: string
+  error?: string
+}
+
 export type IngestKindsResponse = {
   ok: boolean
   kinds?: string[]
@@ -442,6 +459,10 @@ export function fetchIngestJobs(params?: { limit?: number; status?: string; kind
 
 export function fetchIngestKinds() {
   return proxyGet<IngestKindsResponse>('/market/ingest/kinds')
+}
+
+export function fetchIngestQueueSummary() {
+  return proxyGet<IngestQueueSummaryResponse>('/market/ingest/queue-summary')
 }
 
 export function enqueueIngestJob(body: {

@@ -11,13 +11,17 @@ import {
   DenseTableHeader,
   DenseTableRow,
   DenseTag,
+  SegmentControl,
 } from '@bifrost/ui'
 import {
   enqueueIngestJob,
   fetchIngestJobs,
   fetchIngestKinds,
+  fetchIngestQueueSummary,
   isProxyError,
   type IngestJob,
+  type IngestQueueKindCount,
+  type IngestQueueSummaryResponse,
 } from '@/api/marketDataPlugin'
 import { MarketDataJsonProbeCard } from '@/components/market-data/MarketDataJsonProbeCard'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -47,6 +51,7 @@ export function MarketDataIngestTab() {
   const { canOperate } = usePlatformAuth()
   const queryClient = useQueryClient()
   const [kind, setKind] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [payloadText, setPayloadText] = useState('{}')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [acting, setActing] = useState(false)
@@ -59,9 +64,19 @@ export function MarketDataIngestTab() {
     refetchInterval: 120_000,
     retry: 1,
   })
+  const summaryQ = useQuery({
+    queryKey: ['market-data', 'ingest', 'queue-summary'],
+    queryFn: fetchIngestQueueSummary,
+    refetchInterval: 15_000,
+    retry: 1,
+  })
   const jobsQ = useQuery({
-    queryKey: ['market-data', 'ingest', 'jobs'],
-    queryFn: () => fetchIngestJobs({ limit: 40 }),
+    queryKey: ['market-data', 'ingest', 'jobs', statusFilter],
+    queryFn: () =>
+      fetchIngestJobs({
+        limit: 40,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+      }),
     refetchInterval: 15_000,
     retry: 1,
   })
@@ -77,6 +92,12 @@ export function MarketDataIngestTab() {
   const jobsErr = jobsRaw != null && isProxyError(jobsRaw) ? jobsRaw.error : null
   const jobs: IngestJob[] =
     jobsRaw != null && !isProxyError(jobsRaw) ? (jobsRaw.jobs ?? []) : []
+
+  const summaryRaw = summaryQ.data
+  const summaryErr = summaryRaw != null && isProxyError(summaryRaw) ? summaryRaw.error : null
+  const summary: IngestQueueSummaryResponse | null =
+    summaryRaw != null && !isProxyError(summaryRaw) ? summaryRaw : null
+  const kindRollup: IngestQueueKindCount[] = summary?.kinds ?? []
 
   const selectedKind = useMemo(() => {
     if (kind !== '') return kind
@@ -118,6 +139,7 @@ export function MarketDataIngestTab() {
           : `Enqueued · job ${res.job_id ?? '—'}`,
       )
       void queryClient.invalidateQueries({ queryKey: ['market-data', 'ingest', 'jobs'] })
+      void queryClient.invalidateQueries({ queryKey: ['market-data', 'ingest', 'queue-summary'] })
     } catch (e) {
       setActionFailed(true)
       setActionMsg(e instanceof Error ? e.message : String(e))
@@ -130,17 +152,78 @@ export function MarketDataIngestTab() {
   return (
     <div className="flex flex-col gap-4">
       <OpsSection
+        title="Queue rollup"
+        description="Pending + running by kind (GET /market/ingest/queue-summary)"
+        bodyPadding="default"
+        overflow="visible"
+        collapsible
+        defaultCollapsed={false}
+      >
+        {summaryQ.isLoading ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Loading queue…
+          </p>
+        ) : summaryErr != null ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">{summaryErr}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <DenseTag variant={summary && (summary.active ?? 0) > 0 ? 'warning' : 'success'}>
+                active {summary?.active ?? 0}
+              </DenseTag>
+              <DenseTag variant="info">pending {summary?.pending ?? 0}</DenseTag>
+              <DenseTag variant="info">running {summary?.running ?? 0}</DenseTag>
+            </div>
+            {kindRollup.length === 0 ? (
+              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                No pending or running jobs
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {kindRollup.map(k => (
+                  <DenseTag key={k.kind} variant={k.active > 0 ? 'warning' : 'neutral'}>
+                    {k.kind} · p{k.pending} r{k.running}
+                  </DenseTag>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </OpsSection>
+
+      <OpsSection
         title="Job queue"
         description="Plugin GET /market/ingest/jobs"
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={jobsQ.isFetching}
-            onClick={() => void jobsQ.refetch()}
-          >
-            Refresh
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
+              Status
+            </span>
+            <SegmentControl
+              size="sm"
+              ariaLabel="Ingest job status filter"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'pending', label: 'Pending' },
+                { value: 'running', label: 'Running' },
+                { value: 'done', label: 'Done' },
+                { value: 'failed', label: 'Failed' },
+              ]}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={jobsQ.isFetching}
+              onClick={() => {
+                void jobsQ.refetch()
+                void summaryQ.refetch()
+              }}
+            >
+              Refresh
+            </Button>
+          </div>
         }
         bodyPadding="none"
         overflow="visible"

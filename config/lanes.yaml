@@ -289,6 +289,19 @@ lanes:
         Wave 0: Plugin API补全. Wave 1: Trade SQL→HTTP cutover. Wave 2: collapse to single NS.
       agent_mode: Ops
       work_intent: feature
+    - id: market-data-gs-closeout
+      track: automate
+      component_line: subcontractor
+      track_type: build
+      label: Market Data Golden Source Closeout
+      short_label: MD Closeout
+      description: |
+        Residual closeout after golden-source + write-consolidation: Board close,
+        leftover Trade tables, catalog copy, Ingest pending rollup, Plugin write auth,
+        stock_daily depth A then B (watchlist+benchmarks then universe). Not C (13411).
+        D10 BLOCKED. Do not unsuspend readiness-refresh. Do not scale Celery Massive.
+      agent_mode: Ops
+      work_intent: feature
     - id: ib-vendor
       track: automate
       component_line: subcontractor

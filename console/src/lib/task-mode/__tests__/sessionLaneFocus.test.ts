@@ -95,4 +95,18 @@ describe('resolveSessionLaneFocus', () => {
     expect(f.line).toMatch(/Briefing/)
     expect(f.line).not.toMatch(/Delivery Board →/)
   })
+
+  it('archives after no_handoff even if catalog still shows ready_for_signoff', () => {
+    const f = resolveSessionLaneFocus({
+      hasActiveSession: true,
+      hasProgram: true,
+      programsReleased: true,
+      queue: [
+        item({ id: 'P6', status: 'ready_for_signoff', label: 'P6' }),
+        item({ id: 'P10', status: 'ready_for_signoff', label: 'P10' }),
+      ],
+    })
+    expect(f.kind).toBe('archive')
+    expect(f.lifecycle).toBe('complete')
+  })
 })

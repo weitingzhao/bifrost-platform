@@ -134,6 +134,21 @@ describe('laneLifecycleFromQueue + programsReleased', () => {
     expect(laneLifecycleFromQueue(doneQueue, { programsReleased: false })).toBe('active')
   })
 
+  it('leaves In Flight after sessionReleased even if catalog still says ready_for_signoff', () => {
+    const staleSignoff = [
+      item({ id: 'P6', status: 'ready_for_signoff' }),
+      item({ id: 'P10', status: 'ready_for_signoff' }),
+    ]
+    expect(laneLifecycleFromQueue(staleSignoff, { programsReleased: true })).toBe('complete')
+    expect(laneLifecycleFromQueue(staleSignoff, { programsReleased: false })).toBe('active')
+  })
+
+  it('keeps Doing when sessionReleased but queue still has in_progress/issue work', () => {
+    expect(
+      laneLifecycleFromQueue([item({ id: 'x', status: 'issue' })], { programsReleased: true }),
+    ).toBe('active')
+  })
+
   it('holds all-done lanes until the board map is ready (callers must skip Doing/Archive)', () => {
     expect(isLaneLifecycleHold(doneQueue, undefined)).toBe(true)
     expect(isLaneLifecycleHold(doneQueue, false)).toBe(false)
