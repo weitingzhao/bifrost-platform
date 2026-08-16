@@ -191,7 +191,7 @@ export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Live health + deployments + freshness: Subcontractors → Market Data (observe — not publish)',
   'Readiness rollup KPI: GET /api/v1/plugins/market-data/status → readiness_rollup (read-only; Trade Stock Data Readiness owns runbook / per-symbol gaps)',
   'Manage UI: Subcontractors → Market Data (`market-data-manage`) — Overview / Coverage / Ingest / Analytics (market-data-expand P6)',
-  'Plugin API proxy: GET|POST /api/v1/plugins/market-data/api/market/* → market-data-api:8790 (or MARKET_DATA_API_URL)',
+  'Plugin API proxy: GET unauthenticated; POST/DELETE operator-authed then platform-api attaches MARKET_DATA_WRITE_TOKEN toward :8790 (browser never holds the Plugin write secret)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
   'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; image bifrost-market-data:0.2.0)',
   'Image tag: bifrost-market-data:0.3.1 (k8s/base only — STG/PROD overlays archived W2-P2)',

@@ -32,6 +32,8 @@ func (h *Handler) HandleWatchlistUnion(w http.ResponseWriter, r *http.Request) {
 
 // HandleAPIProxy proxies /api/v1/plugins/market-data/api/* → Plugin API (:8790)/*.
 // Example: GET .../api/market/coverage/db-summary → GET {plugin}/market/coverage/db-summary
+// POST/DELETE: Console sends PLATFORM_OPERATOR_TOKEN; this handler's Service.Proxy
+// replaces it with MARKET_DATA_WRITE_TOKEN before the Plugin hop.
 func (h *Handler) HandleAPIProxy(w http.ResponseWriter, r *http.Request) {
 	suffix := chi.URLParam(r, "*")
 	if suffix == "" {

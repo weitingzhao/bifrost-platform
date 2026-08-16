@@ -30,6 +30,10 @@ type Config struct {
 	// APIBaseURL overrides Plugin API (:8790) for Console proxy (local port-forward).
 	// Example: http://127.0.0.1:8790 — paths are appended as /market/...
 	APIBaseURL string
+	// WriteToken is MARKET_DATA_WRITE_TOKEN — attached to Plugin mutating
+	// proxy calls after Console already passed platform operator auth.
+	// Never forwarded to the browser.
+	WriteToken string
 }
 
 func ConfigFromEnv() Config {
@@ -60,5 +64,6 @@ func ConfigFromEnv() Config {
 		FreshnessDB:      db,
 		ReadinessDB:      strings.TrimSpace(os.Getenv("MARKET_DATA_READINESS_DB")),
 		APIBaseURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("MARKET_DATA_API_URL")), "/"),
+		WriteToken:       strings.TrimSpace(os.Getenv("MARKET_DATA_WRITE_TOKEN")),
 	}
 }

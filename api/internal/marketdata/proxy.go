@@ -43,11 +43,36 @@ func (s *Service) proxyHTTP(r *http.Request, target string, transport http.Round
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	if auth := r.Header.Get("Authorization"); auth != "" {
-		req.Header.Set("Authorization", auth)
-	}
+	s.applyUpstreamAuth(req, r)
 	req.Header.Set("Accept", "application/json")
 	return client.Do(req)
+}
+
+func isMutatingMethod(method string) bool {
+	switch strings.ToUpper(method) {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+// applyUpstreamAuth maps Console operator auth → Plugin write-token.
+// GET stays unauthenticated at Plugin. Mutating calls use MARKET_DATA_WRITE_TOKEN
+// so the browser never holds the Plugin secret.
+func (s *Service) applyUpstreamAuth(dst, src *http.Request) {
+	dst.Header.Del("Authorization")
+	if !isMutatingMethod(src.Method) {
+		return
+	}
+	tok := strings.TrimSpace(s.cfg.WriteToken)
+	if tok == "" {
+		return
+	}
+	dst.Header.Set("Authorization", "Bearer "+tok)
+	// Kubernetes API proxy overwrites Authorization with the kube token.
+	// Plugin prefers this header so Mac platform-api enqueue still authenticates.
+	dst.Header.Set("X-Market-Data-Write-Token", tok)
 }
 
 func (s *Service) proxyViaKube(r *http.Request, pluginPath string) (*http.Response, error) {

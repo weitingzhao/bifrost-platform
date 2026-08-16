@@ -40,6 +40,7 @@ if env_path.is_file():
             or key.startswith("OPS_")
             or key.startswith("NOUS_")
             or key.startswith("HERMES_")
+            or key.startswith("MARKET_DATA_")
         ):
             os.environ[key] = val
 
@@ -59,6 +60,7 @@ export_keys = sorted(
     k for k in os.environ
     if k in keys or k.startswith("PLATFORM_") or k.startswith("REMEDIATION_")
     or k.startswith("OPS_") or k.startswith("NOUS_") or k.startswith("HERMES_")
+    or k.startswith("MARKET_DATA_")
     or k in ("PATH", "CURSOR_API_KEY", "HOME")
 )
 for k in export_keys:

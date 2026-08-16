@@ -6,8 +6,9 @@
  * - GET (proxyGet): bare fetch — Plugin API is read-only with no auth of its own;
  *   platform-api does not require operator token for GET proxy routes.
  * - POST (proxyPost): authedFetch with PLATFORM_OPERATOR_TOKEN — platform-api mounts
- *   POST /plugins/market-data/api/* under the operator-authed middleware group
- *   (Enqueue writes to data_ops.job_ingest).
+ *   POST /plugins/market-data/api/* under the operator-authed middleware group.
+ *   The proxy then attaches MARKET_DATA_WRITE_TOKEN toward Plugin :8790 so the
+ *   browser never holds the Plugin write secret.
  */
 import { authedFetch } from './client'
 

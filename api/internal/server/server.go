@@ -407,7 +407,9 @@ func (s *Server) Router() http.Handler {
 			r.Post("/network/firewall/apply", s.network.HandleFirewallApply)
 			r.Post("/plugins/ib-gateway/control/{action}", s.ibgateway.HandleControl)
 			// Ingest enqueue (and other Plugin API writes) — operator auth.
+			// Proxy rewrites Authorization to MARKET_DATA_WRITE_TOKEN (not the operator token).
 			r.Post("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
+			r.Delete("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
 		})
 		r.Group(func(r chi.Router) {
