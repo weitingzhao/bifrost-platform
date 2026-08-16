@@ -743,7 +743,7 @@ function buildMarketDataVitalsQueue(): QueueItem[] {
 /**
  * Synthetic queue for Subcontractor · Automate lane market-data-gs-closeout.
  * In Flight (Build Desk) hosts Owner sign-off; Delivery Board is the catalog.
- * P6 + P10 remain ready_for_signoff until Owner signs on In Flight.
+ * P6 + P10 signed by Owner (2026-08-15); successor program market-data-gs-ops-closeout.
  */
 function buildMarketDataGsCloseoutQueue(): QueueItem[] {
   const done = (
@@ -783,14 +783,11 @@ function buildMarketDataGsCloseoutQueue(): QueueItem[] {
       'P5 — Ingest tab pending rollup',
       'queue-summary + status filter. No Owner gate.',
     ),
-    {
-      id: 'P6',
-      label: 'P6 — Operator token on Plugin write routes',
-      status: 'ready_for_signoff',
-      note:
-        'Armed on cluster: unauthenticated POST → 401; Trade writers send Bearer. Owner must sign on In Flight. D10 BLOCKED.',
-      progress: { done: 1, total: 1 },
-    },
+    done(
+      'P6',
+      'P6 — Operator token on Plugin write routes',
+      'Owner signed 2026-08-15. Unauthenticated POST → 401; Trade writers send Bearer. D10 BLOCKED.',
+    ),
     done(
       'P7',
       'P7 — Lock depth policy A then B',
@@ -806,14 +803,11 @@ function buildMarketDataGsCloseoutQueue(): QueueItem[] {
       'P9 — Universe ≥240 bars',
       '4556/5343 universe ≥240; remainder listing-age. No Owner gate.',
     ),
-    {
-      id: 'P10',
-      label: 'P10 — Global QA + close',
-      status: 'ready_for_signoff',
-      note:
-        'QA passed. Owner must sign on In Flight; do not record no_handoff until that sign-off.',
-      progress: { done: 1, total: 1 },
-    },
+    done(
+      'P10',
+      'P10 — Global QA + close',
+      'Owner signed 2026-08-15. Successor program market-data-gs-ops-closeout owns remaining ops residuals + Operate handoff.',
+    ),
   ]
 }
 

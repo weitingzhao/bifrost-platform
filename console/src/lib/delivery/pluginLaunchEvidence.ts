@@ -44,21 +44,18 @@ export type PluginLaunchStore = {
 export const PLUGIN_DOGFOOD_REVISION = 'b2fb081'
 export const PLUGIN_DOGFOOD_FEATURE = 'on-demand STK'
 
-export const MARKET_DATA_IMAGE_TAG = '0.2.0'
+export const MARKET_DATA_IMAGE_TAG = '0.3.3'
 
 export function evidenceKey(target: PluginLaunchTargetId, seat: PluginLaunchSeat): string {
   return `${target}:${seat}`
 }
 
-export function marketDataNamespace(seat: PluginLaunchSeat): string {
-  if (seat === 'stg') return 'plugin-market-data-stg'
-  if (seat === 'prod') return 'plugin-market-data-prod'
+export function marketDataNamespace(_seat: PluginLaunchSeat): string {
   return 'plugin-market-data'
 }
 
-export function marketDataApplyCmd(seat: PluginLaunchSeat): string {
-  const overlay = seat === 'dev' ? 'k8s/base' : `k8s/overlays/${seat}`
-  return `cd bifrost-platform-plugin-market-data && kubectl apply -k ${overlay}`
+export function marketDataApplyCmd(_seat: PluginLaunchSeat): string {
+  return 'cd bifrost-platform-plugin-market-data && kubectl apply -k k8s/base'
 }
 
 export function marketDataVerifyCmd(seat: PluginLaunchSeat): string {

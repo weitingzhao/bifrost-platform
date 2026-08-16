@@ -13,7 +13,7 @@ description: |
 
   D10 remains BLOCKED. Do not unsuspend market-data-readiness-refresh.
   Do not scale Celery *-massive replicas > 0. Do not write market.* from Trade DB.
-status: active
+status: completed
 delivery:
   board_visible: true
   sign_off_mechanism: api

@@ -19,11 +19,11 @@ const closeoutLane: WorkLane = {
 }
 
 describe('market-data-gs-closeout In Flight queue', () => {
-  it('keeps P6 and P10 ready_for_signoff until Owner signs', () => {
+  it('marks P6 and P10 done after Owner sign-off', () => {
     setLaneCatalog([closeoutLane])
     const queue = buildQueueForLane('market-data-gs-closeout', undefined, [], undefined)
-    expect(queue.find(q => q.id === 'P6')?.status).toBe('ready_for_signoff')
-    expect(queue.find(q => q.id === 'P10')?.status).toBe('ready_for_signoff')
+    expect(queue.find(q => q.id === 'P6')?.status).toBe('done')
+    expect(queue.find(q => q.id === 'P10')?.status).toBe('done')
     expect(laneLifecycleFromQueue(queue, { programsReleased: false })).toBe('active')
     expect(laneLifecycleFromQueue(queue, { programsReleased: true })).toBe('complete')
   })

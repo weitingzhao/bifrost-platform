@@ -300,6 +300,7 @@ lanes:
         leftover Trade tables, catalog copy, Ingest pending rollup, Plugin write auth,
         stock_daily depth A then B (watchlist+benchmarks then universe). Not C (13411).
         D10 BLOCKED. Do not unsuspend readiness-refresh. Do not scale Celery Massive.
+        Successor program: market-data-gs-ops-closeout (ops residuals; do not reopen settled YAML).
       agent_mode: Ops
       work_intent: feature
     - id: ib-vendor

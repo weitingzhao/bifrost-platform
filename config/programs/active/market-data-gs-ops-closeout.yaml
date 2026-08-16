@@ -1,0 +1,367 @@
+id: market-data-gs-ops-closeout
+title: "Market Data Golden Source Ops Closeout"
+description: |
+  Successor to settled market-data-gs-closeout (no_handoff). Does not reopen
+  predecessor phases. Residual ops/governance/product closeout only:
+  Trade rollout stocks-ib, Plugin 0.3.3 + drop overlay, CNPG Database CR,
+  catalog copy, retire postMassiveSync, fix indices/refresh, Operate handoff.
+
+  Owner decisions (2026-08-15, locked):
+    D1: New program on existing lane market-data-gs-closeout (do not reopen settled YAML)
+    D2: Plugin not Argo this round — image 0.3.3 + kubectl apply, drop deps overlay
+    D3: Trade STG rocket NOT auto-fired — P3 gated/skipped (verify-only record)
+    D4: P7 PROD PLATFORM_PROD_OPERATOR_TOKEN skipped entire phase; P10 MUST
+        submit_post_completion (never no_handoff)
+
+  Forbidden: bifrost-deliver-stg/prod (Trade), bifrost-deliver-platform-prod,
+  Platform STG rocket auto-fire, Plugin Argo Application, D10 unlock,
+  unsuspend market-data-readiness-refresh, scale Celery *-massive > 0,
+  write market.* from Trade DB, add GS to trigger_data_clone src/dst.
+status: active
+delivery:
+  board_visible: true
+  sign_off_mechanism: api
+
+workspace: /Users/vision-mac-trader/Desktop/stocks
+model: composer-2.5
+
+phases:
+  # ── Wave 0: Freeze ──────────────────────────────────────────────────────
+  - id: P1
+    title: "Freeze + enqueue re-check"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}. Observe-only. No code changes.
+
+      Re-snapshot that Golden Source cutover has not regressed:
+      - Cron market-data-readiness-refresh suspend=true
+      - celery-*-massive replicas=0 on DEV/STG/PROD
+      - STG daemon replicas=0
+      - STG/PROD POST enqueue probe {"kind":"__qa_auth_probe__"} → 400 Invalid kind
+      - grep FROM market. still clean in Trade repos
+      - freshness 15/15; Trade DBs market_ns=[]; write-token sha12 still matches
+      - D10 BLOCKED in spine
+
+      Fail this phase → stop the program. Do not enter Wave 1.
+    verify_cmd: |
+      export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
+      kubectl -n plugin-market-data get cronjob market-data-readiness-refresh -o jsonpath='{.spec.suspend}{"\n"}' &&
+      kubectl -n bifrost-stg get deploy daemon -o jsonpath='{.spec.replicas}{"\n"}' &&
+      kubectl -n bifrost-stg get deploy -l app.kubernetes.io/name -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.replicas}{"\n"}{end}' | grep -E 'massive' || true
+    acceptance:
+      - "market-data-readiness-refresh suspend=true"
+      - "celery-*-massive replicas=0; STG daemon replicas=0"
+      - "STG/PROD enqueue probe → 400 Invalid kind"
+      - "grep FROM market. clean in Trade repos"
+      - "freshness 15/15; Trade DBs have no market schemas; D10 BLOCKED"
+    sign_off:
+      required: false
+
+  # ── Wave 1: IB bars writer ──────────────────────────────────────────────
+  - id: P2
+    title: "Add stocks-ib to Trade rollout"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Patch bifrost-trade-infra/k8s/cicd/tekton/task-deliver-stg.yaml WORKER=
+      to include celery-worker-stocks-ib next to daemon/account-sync/celery-worker/celery-beat.
+      kubectl apply Task in cicd NS. Commit+push infra. No Trade rocket in this phase.
+      D10 untouched. Massive still 0.
+    verify_cmd: |
+      grep WORKER= bifrost-trade-infra/k8s/cicd/tekton/task-deliver-stg.yaml | grep celery-worker-stocks-ib
+    acceptance:
+      - "WORKER includes celery-worker-stocks-ib"
+      - "Task applied in cicd NS"
+      - "No Trade rocket in this phase; D10 untouched; Massive still 0"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  - id: P3
+    title: "Prove stocks-ib on next STG Trade rocket"
+    status: skipped
+    prompt_template: |
+      GATED/SKIPPED (Owner D3 2026-08-15): do not fire bifrost-deliver-stg or
+      bifrost-deliver-prod. Verify-only record. Owner next command: 「发 Trade STG 火箭」.
+    verify_cmd: "true"
+    acceptance:
+      - "Skipped per Owner D3 — Trade STG rocket not auto-fired"
+      - "Owner next nod: 发 Trade STG 火箭 (STG only; never auto-fire prod)"
+    depends_on:
+      - P2
+    sign_off:
+      required: false
+
+  # ── Wave 2: Plugin image ────────────────────────────────────────────────
+  - id: P4
+    title: "Plugin 0.3.3 image + drop overlay"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Build image 0.3.3, import to node registry 192.168.10.73:30500.
+      kustomize newTag 0.3.3. kubectl apply API + workers in plugin-market-data.
+      Delete write-auth-deps volume/ConfigMap overlay. WRITE_TOKEN_HEADER must
+      live in packaged deps.py, not a mount. Enqueue probe still 400.
+      Do NOT register Argo Application. Do NOT retag to a tag the cluster does not have.
+      If 0.3.3 cannot be built, stop and report — do not fake the tag.
+    verify_cmd: |
+      export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
+      kubectl -n plugin-market-data get deploy -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .spec.template.spec.containers[*]}{.image}{"\n"}{end}{end}'
+    acceptance:
+      - "API + stocks + options workers on 0.3.3"
+      - "No write-auth-deps volume; WRITE_TOKEN_HEADER in packaged deps.py"
+      - "GET health 200; POST no token 401; operator probe 400"
+      - "kustomization.yaml newTag=0.3.3; archived overlays stay archived"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  # ── Wave 3: CNPG ────────────────────────────────────────────────────────
+  - id: P5
+    title: "CNPG Database CR bifrost-golden-source"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Add CNPG Database CR in bifrost-trade-infra/k8s/data/databases.yaml:
+      name bifrost-golden-source, spec.name bifrost_golden_source, owner bifrost,
+      cluster bifrost-postgres. Labels: shared golden-source, NOT env=dev/stg/prod.
+      kubectl apply. Confirm datname still present; Plugin still connects.
+      Do NOT touch trigger_data_clone. No new schema.
+    verify_cmd: |
+      export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
+      kubectl -n data get database.postgresql.cnpg.io bifrost-golden-source -o jsonpath='{.spec.name}{"\n"}'
+    acceptance:
+      - "CR Ready; spec.name=bifrost_golden_source"
+      - "Labels mark shared golden-source, not env=dev/stg/prod"
+      - "datname still present; Plugin still connects as bifrost@bifrost_golden_source"
+      - "Trade clone path unchanged"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  # ── Wave 4: Governance ──────────────────────────────────────────────────
+  - id: P6
+    title: "Archive closeout YAML + catalog copy"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Move market-data-gs-closeout.yaml active/ → completed/.
+      workLanes.ts P6/P10 → done (Owner already signed).
+      pluginLaunchEvidence.ts NS=plugin-market-data, tag ≠ 0.2.0 (use 0.3.3 or live tag).
+      Catalog SLA copy drop 0.2.0. tsc.
+      Commit+push platform. Do NOT auto-fire Platform STG rocket (Owner nod later).
+    verify_cmd: |
+      test ! -f bifrost-platform/config/programs/active/market-data-gs-closeout.yaml &&
+      test -f bifrost-platform/config/programs/completed/market-data-gs-closeout.yaml
+    acceptance:
+      - "Settled closeout YAML in completed/; not listed as active"
+      - "workLanes P6/P10 status done"
+      - "pluginLaunchEvidence NS=plugin-market-data and tag≠0.2.0"
+      - "SLA copy not 0.2.0; tsc clean"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  - id: P7
+    title: "PROD operator token env (optional)"
+    status: skipped
+    prompt_template: |
+      SKIPPED entire phase (Owner D4 2026-08-15): do not inject
+      PLATFORM_PROD_OPERATOR_TOKEN. Proxy path already works via yaml fallback.
+      Owner next command if Console prod enqueue still 401: prod token wiring.
+    verify_cmd: "true"
+    acceptance:
+      - "Skipped per Owner D4 — no PROD operator token env injection"
+      - "Owner next nod if needed: prod token (PLATFORM_PROD_OPERATOR_TOKEN)"
+    sign_off:
+      required: false
+
+  # ── Wave 5: Product residuals ───────────────────────────────────────────
+  - id: P8
+    title: "Retire postMassiveSync on read pages"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Remove postMassiveSync from Trade FE read pages (hooks/pages/components).
+      Allowed only in deprecated wrappers or gone. Massive replicas stay 0.
+      Copy already says Plugin ingest. Empty/error path reads Plugin/PG.
+      UI English. npm run lint && build && check:legacy-css. DEV :5173 smoke, not Prod.
+    verify_cmd: |
+      cd bifrost-trade-frontend && rg postMassiveSync src/hooks src/pages src/components || true
+    acceptance:
+      - "postMassiveSync gone from read paths (hooks/pages/components)"
+      - "Massive replicas remain 0"
+      - "lint + build + check:legacy-css pass"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  - id: P9
+    title: "Fix POST /indices/refresh"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      bifrost-trade-core index_data_client.py: drop from src.massive / from src.vendor.massive.
+      Route writes through existing Plugin market_write_client. Prefer wrapping, do not
+      invent a new public signature unless needed. If public API changes, bump core
+      pyproject.toml. Unit test refresh uses Plugin write client. D10 untouched.
+    verify_cmd: |
+      rg "from src.massive|from src.vendor.massive" bifrost-trade-core/src || true
+    acceptance:
+      - "rg from src.massive / from src.vendor.massive in bifrost-trade-core/src → 0"
+      - "refresh uses Plugin write client; endpoint no longer ImportError"
+      - "core version bumped if public API changed; tests pass"
+    depends_on:
+      - P1
+    sign_off:
+      required: false
+
+  # ── Wave 6: Global QA + Operate handoff ─────────────────────────────────
+  - id: P10
+    title: "Global QA + close with Operate handoff"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}.
+
+      Re-check: P1 freeze still green; stocks-ib in WORKER; Plugin 0.3.3 no overlay;
+      Database CR Ready; catalogs not stale; postMassiveSync gone from read paths;
+      indices/refresh no src.massive.
+
+      MUST submit_post_completion (MCP). NEVER record_no_post_completion_handoff.
+      Operate queue must contain fund-rotate-policy and ingest-np-audit.
+      sign_off.required: true — if API needs Owner sign before post_completion,
+      leave program signable and ask Owner to sign P10; do not fake sign-off.
+    verify_cmd: |
+      export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
+      kubectl -n plugin-market-data get cronjob market-data-readiness-refresh -o jsonpath='{.spec.suspend}{"\n"}' &&
+      grep WORKER= bifrost-trade-infra/k8s/cicd/tekton/task-deliver-stg.yaml | grep celery-worker-stocks-ib &&
+      test -f bifrost-platform/config/programs/completed/market-data-gs-closeout.yaml
+    acceptance:
+      - "P1 checks still green"
+      - "stocks-ib in WORKER; Plugin images 0.3.3 no overlay; Database CR Ready"
+      - "Catalogs not stale; postMassiveSync gone; indices/refresh no src.massive"
+      - "submit_post_completion succeeded; operate/queue contains fund-rotate-policy and ingest-np-audit"
+      - "Did not record no_handoff"
+    depends_on:
+      - P2
+      - P4
+      - P5
+      - P6
+      - P8
+      - P9
+    sign_off:
+      required: true
+      checklist:
+        - "Owner Board review of ops-closeout (P3/P7 skipped as gated)"
+        - "post_completion submitted (fund-rotate-policy, ingest-np-audit); never no_handoff"
+
+post_completion:
+  new_capabilities:
+    - "Trade rollout Task includes celery-worker-stocks-ib (STG/PROD shared)"
+    - "Plugin 0.3.3 in-image write-token header; deps overlay removed"
+    - "CNPG Database CR declares shared bifrost_golden_source"
+    - "Trade FE read pages no longer POST Celery Massive sync"
+    - "POST /indices/refresh writes via Plugin → GS"
+  new_risks:
+    - "Trade STG rocket not fired this program — stocks-ib rollout unproven until Owner 「发 Trade STG 火箭」"
+    - "PROD PLATFORM_PROD_OPERATOR_TOKEN still unset (P7 deferred); yaml fallback covers proxy"
+    - "Plugin still kubectl-apply, not Argo"
+  operate_queue_items:
+    - id: fund-rotate-policy
+      source_lane_id: market-data-gs-closeout
+      operate_lane: business-advisory
+      title: "Universe fundamentals rotate cadence"
+      description: >
+        Universe fundamentals cadence vs Trade fund_cache_present=0/14709
+        (GS stock_financials already 3014). Not accelerated in this program.
+      handoff_kind: one_off
+      reason: "Fundamentals rotate is policy, not a Golden Source cutover hole"
+      acceptance_criteria:
+        - "Owner decision on rotate rate vs current ~16 symbols/day"
+        - "No Massive/Celery reintroduction"
+      verification_steps:
+        - "Check Plugin fundamentals Cron and fund_cache_valid_count"
+        - "Document chosen cadence in Market Data governance"
+      risk_level: low
+      owner: vision-mac-trader
+    - id: ingest-np-audit
+      source_lane_id: market-data-gs-closeout
+      operate_lane: governance
+      title: "Confirm NetworkPolicy vs every writer NS after cluster-DNS proxy"
+      description: >
+        Confirm NetworkPolicy vs every writer NS after cluster-DNS proxy
+        (STG/PROD no longer kube-proxy for Plugin). GET reads must stay open.
+      handoff_kind: one_off
+      reason: "Write auth is application-layer; NP remains the cluster-layer control"
+      acceptance_criteria:
+        - "Every writer NS allowed; others denied"
+        - "GET reads still work from Trade + Console proxy"
+      verification_steps:
+        - "kubectl get networkpolicy -n plugin-market-data"
+        - "Spot-check POST without token → 401 from allowed NS still requires token"
+      risk_level: low
+      owner: vision-mac-trader
+    - id: plugin-argo
+      source_lane_id: market-data-gs-closeout
+      operate_lane: governance
+      title: "Whether plugin-market-data should become an Argo app"
+      description: >
+        D2 deferred Argo this round. Decide whether plugin-market-data should
+        become an Argo Application in a later program.
+      handoff_kind: one_off
+      reason: "Plugin stays kubectl-apply until Owner chooses GitOps"
+      acceptance_criteria:
+        - "Owner decision: keep kubectl-apply or register Argo Application"
+        - "If Argo: overlay must stay dead; image tag from git"
+      verification_steps:
+        - "argocd app list | grep plugin-market-data"
+        - "kubectl -n plugin-market-data get deploy -o jsonpath images"
+      risk_level: low
+      owner: vision-mac-trader
+    - id: mcp-gs-freshness
+      source_lane_id: market-data-gs-closeout
+      operate_lane: governance
+      title: "get_data_freshness GS mention vs Trade-only by design"
+      description: >
+        Optional: get_data_freshness should mention Golden Source or stay
+        Trade-only by design.
+      handoff_kind: one_off
+      reason: "MCP freshness currently measures Trade DBs only; GS is Plugin /status"
+      acceptance_criteria:
+        - "Owner decision: extend MCP or document Trade-only by design"
+      verification_steps:
+        - "MCP get_data_freshness vs Plugin /status freshness"
+      risk_level: low
+      owner: vision-mac-trader
+
+metadata:
+  created_at: "2026-08-16"
+  owner: "vision-mac-trader"
+  lane_id: market-data-gs-closeout
+  operate_lane: governance
+  prerequisite_programs:
+    - market-data-gs-closeout
+    - market-data-golden-source
+    - market-data-write-consolidation
+  tags:
+    - market-data
+    - golden-source
+    - ops-closeout
+    - ingest
+  decisions:
+    D1: "New program market-data-gs-ops-closeout on existing lane market-data-gs-closeout (Owner 2026-08-15)"
+    D2: "Plugin not Argo this round — image 0.3.3 + kubectl apply, drop overlay"
+    D3: "P3 gated/skipped — Trade STG rocket is a separate Owner nod; never auto-fire prod"
+    D4: "P7 skipped entire phase; P10 must submit_post_completion (never no_handoff)"
+    D10: "BLOCKED — no live trading, no daemon scale, no observe-safe change"
