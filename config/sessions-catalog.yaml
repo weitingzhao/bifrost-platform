@@ -104,8 +104,8 @@ envs:
       group: worker
       namespace: bifrost-stg
       deployment: account-sync
-    - name: massive-ws
-      label: Massive WS
+    - name: massive-ws  # ⚠ PENDING RETIREMENT — WS migrated to Plugin polygon-ws-ingestor
+      label: Massive WS (→ Plugin)
       group: socket
       namespace: bifrost-stg
       deployment: massive-ws
@@ -203,8 +203,8 @@ envs:
       group: worker
       namespace: bifrost-prod
       deployment: account-sync
-    - name: massive-ws
-      label: Massive WS
+    - name: massive-ws  # ⚠ PENDING RETIREMENT — WS migrated to Plugin polygon-ws-ingestor
+      label: Massive WS (→ Plugin)
       group: socket
       namespace: bifrost-prod
       deployment: massive-ws
