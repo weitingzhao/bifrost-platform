@@ -104,11 +104,11 @@ envs:
       group: worker
       namespace: bifrost-stg
       deployment: account-sync
-    - name: massive-ws  # ⚠ SCALED TO 0 — Plugin polygon-ws-ingestor owns redis-massive; delete after +24h
-      label: Massive WS (→ Plugin)
-      group: socket
-      namespace: bifrost-stg
-      deployment: massive-ws
+    - name: polygon-ws-ingestor
+      label: Polygon Options WS (Plugin)
+      group: market-data
+      namespace: plugin-market-data
+      deployment: polygon-ws-ingestor
 
     - name: polygon-worker-stocks
       label: Market Data Stocks
@@ -203,11 +203,11 @@ envs:
       group: worker
       namespace: bifrost-prod
       deployment: account-sync
-    - name: massive-ws  # ⚠ SCALED TO 0 — Plugin polygon-ws-ingestor owns redis-massive; delete after +24h
-      label: Massive WS (→ Plugin)
-      group: socket
-      namespace: bifrost-prod
-      deployment: massive-ws
+    - name: polygon-ws-ingestor
+      label: Polygon Options WS (Plugin)
+      group: market-data
+      namespace: plugin-market-data
+      deployment: polygon-ws-ingestor
 
     - name: polygon-worker-stocks
       label: Market Data Stocks
