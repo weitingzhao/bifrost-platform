@@ -116,6 +116,13 @@ export interface PluginStepCommandCenterProps {
   aiLaunchDisabled?: boolean
   aiLaunchDisabledReason?: string
   aiLaunchLabel?: string
+  /**
+   * Published cycle terminal — hide Continue; show Start next publish
+   * (clears this-cycle evidence; not Tekton nextCycle).
+   */
+  cycleTerminal?: boolean
+  onStartNextCycle?: () => void
+  startNextLabel?: string
 }
 
 /**
@@ -138,6 +145,9 @@ export function PluginStepCommandCenter({
   aiLaunchDisabled = false,
   aiLaunchDisabledReason,
   aiLaunchLabel = 'AI Launch Plugin',
+  cycleTerminal = false,
+  onStartNextCycle,
+  startNextLabel = 'Start next publish',
 }: PluginStepCommandCenterProps) {
   const outcome = derivePluginLaunchOutcome(steps)
   const step = steps[activeIndex]
@@ -182,8 +192,12 @@ export function PluginStepCommandCenter({
             {onAiLaunch != null && (
               <Button
                 size="sm"
-                disabled={aiLaunchDisabled || aiLaunchPending}
-                title={aiLaunchDisabledReason ?? aiLaunchLabel}
+                disabled={aiLaunchDisabled || aiLaunchPending || cycleTerminal}
+                title={
+                  cycleTerminal
+                    ? 'Start next publish before launching again'
+                    : (aiLaunchDisabledReason ?? aiLaunchLabel)
+                }
                 onClick={onAiLaunch}
               >
                 {aiLaunchPending ? 'Starting…' : aiLaunchLabel}
@@ -201,30 +215,57 @@ export function PluginStepCommandCenter({
 
       <div className="border-t border-border">
         <div className="release-cc__action-zone px-4 py-3">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="release-cc__step-label text-dense-label font-semibold">
-                {step?.label}
-              </span>
-              <span className="rounded px-1 py-px text-dense-micro font-bold uppercase tracking-wider text-muted-foreground">
-                {laneLabel}
-              </span>
-              <span className="text-dense-caption text-muted-foreground">{step?.statusLabel}</span>
+          {cycleTerminal ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-success">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {completeMessage}
+                </span>
+                {onStartNextCycle != null && (
+                  <Button size="sm" onClick={onStartNextCycle} className="shadow-sm">
+                    {startNextLabel}
+                    <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+              <details className="group rounded-md border border-border/50 bg-background/40">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
+                  Re-record a stage (advanced)
+                </summary>
+                <div className="border-t border-border/50 px-3 py-2.5">
+                  {renderStepActions(activeIndex)}
+                </div>
+              </details>
             </div>
-            {step?.status === 'done' && nextStep != null && (
-              <Button size="sm" onClick={() => onSelect(activeIndex + 1)} className="shadow-sm">
-                Continue to {nextStep.label}
-                <ArrowRight className="ml-1 h-3.5 w-3.5" />
-              </Button>
-            )}
-            {step?.status === 'done' && nextStep == null && (
-              <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-success">
-                <CheckCircle2 className="h-4 w-4" />
-                {completeMessage}
-              </span>
-            )}
-          </div>
-          {renderStepActions(activeIndex)}
+          ) : (
+            <>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="release-cc__step-label text-dense-label font-semibold">
+                    {step?.label}
+                  </span>
+                  <span className="rounded px-1 py-px text-dense-micro font-bold uppercase tracking-wider text-muted-foreground">
+                    {laneLabel}
+                  </span>
+                  <span className="text-dense-caption text-muted-foreground">{step?.statusLabel}</span>
+                </div>
+                {step?.status === 'done' && nextStep != null && (
+                  <Button size="sm" onClick={() => onSelect(activeIndex + 1)} className="shadow-sm">
+                    Continue to {nextStep.label}
+                    <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {step?.status === 'done' && nextStep == null && (
+                  <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-success">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {completeMessage}
+                  </span>
+                )}
+              </div>
+              {renderStepActions(activeIndex)}
+            </>
+          )}
         </div>
       </div>
     </div>

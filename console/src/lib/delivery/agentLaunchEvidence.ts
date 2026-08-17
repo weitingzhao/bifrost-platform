@@ -26,6 +26,12 @@ export type AgentLaunchEvidence = {
   verifyOutcome?: 'ok' | 'failed' | 'pending'
   lastLiveCheckAt?: string
   liveCheckOutcome?: 'ok' | 'failed' | 'pending'
+  /**
+   * ISO — host deploy jobs finished before this are ignored by the stepper
+   * (set by Start next publish after a Published cycle).
+   */
+  cycleStartedAt?: string
+  lastPublishedAt?: string
   notes?: string
   updatedAt?: string
 }
@@ -118,5 +124,29 @@ export function evidenceSummaryLine(ev: AgentLaunchEvidence): string {
       `Live ${ev.liveCheckOutcome ?? '?'} @ ${new Date(ev.lastLiveCheckAt).toLocaleString()}`,
     )
   }
+  if (bits.length === 0 && ev.lastPublishedAt) {
+    bits.push(`Last published @ ${new Date(ev.lastPublishedAt).toLocaleString()}`)
+  }
   return bits.length > 0 ? bits.join(' · ') : 'No deploy/verify evidence yet'
+}
+
+/**
+ * Clear this-cycle Detect → Live evidence after Published.
+ * Host deploy jobs finished before cycleStartedAt no longer drive the stepper.
+ */
+export function beginNextAgentLaunchCycle(target?: AgentLaunchTargetId): AgentLaunchEvidence {
+  const store = readAgentLaunchStore()
+  const t = target ?? store.selectedTarget
+  const cur = store.byKey[t] ?? {}
+  const now = new Date().toISOString()
+  const nextEv: AgentLaunchEvidence = {
+    cycleStartedAt: now,
+    lastPublishedAt:
+      cur.lastLiveCheckAt ?? cur.lastVerifyAt ?? cur.lastDeployAt ?? cur.updatedAt ?? now,
+    updatedAt: now,
+  }
+  writeAgentLaunchStore({
+    byKey: { ...store.byKey, [t]: nextEv },
+  })
+  return nextEv
 }

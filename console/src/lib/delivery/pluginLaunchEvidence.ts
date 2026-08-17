@@ -30,6 +30,9 @@ export type PluginLaunchEvidence = {
   verifyOutcome?: 'ok' | 'failed' | 'pending'
   lastLiveCheckAt?: string
   liveCheckOutcome?: 'ok' | 'failed' | 'pending'
+  /** Set when operator starts the next publish cycle after Published. */
+  lastPublishedAt?: string
+  lastPublishedRevision?: string
   notes?: string
   updatedAt?: string
 }
@@ -172,6 +175,32 @@ export function clearPluginLaunchEvidence(
   writePluginLaunchStore({ byKey })
 }
 
+/**
+ * Clear this-cycle Detect → Live evidence after Published.
+ * Keeps revisionHint; records lastPublished* for the strip.
+ */
+export function beginNextPluginLaunchCycle(
+  target?: PluginLaunchTargetId,
+  seat?: PluginLaunchSeat,
+): PluginLaunchEvidence {
+  const store = readPluginLaunchStore()
+  const t = target ?? store.selectedTarget
+  const s = seat ?? (t === 'market-data' ? store.selectedSeat : 'dev')
+  const key = evidenceKey(t, s)
+  const cur = store.byKey[key] ?? {}
+  const nextEv: PluginLaunchEvidence = {
+    revisionHint: cur.revisionHint,
+    lastPublishedAt:
+      cur.lastLiveCheckAt ?? cur.lastVerifyAt ?? cur.updatedAt ?? new Date().toISOString(),
+    lastPublishedRevision: cur.revisionHint,
+    updatedAt: new Date().toISOString(),
+  }
+  writePluginLaunchStore({
+    byKey: { ...store.byKey, [key]: nextEv },
+  })
+  return nextEv
+}
+
 export function evidenceSummaryLine(ev: PluginLaunchEvidence): string {
   const bits: string[] = []
   if (ev.revisionHint) bits.push(`rev ${ev.revisionHint}`)
@@ -189,6 +218,9 @@ export function evidenceSummaryLine(ev: PluginLaunchEvidence): string {
     bits.push(
       `Live ${ev.liveCheckOutcome ?? '?'} @ ${new Date(ev.lastLiveCheckAt).toLocaleString()}`,
     )
+  }
+  if (bits.length <= (ev.revisionHint ? 1 : 0) && ev.lastPublishedAt) {
+    bits.push(`Last published @ ${new Date(ev.lastPublishedAt).toLocaleString()}`)
   }
   return bits.length > 0 ? bits.join(' · ') : 'No install/verify evidence yet'
 }
