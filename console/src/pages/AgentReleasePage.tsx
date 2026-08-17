@@ -14,6 +14,7 @@ import {
 import { PluginStepCommandCenter } from '@/components/delivery/PluginStepCommandCenter'
 import {
   derivePluginLaunchOutcome,
+  isPluginLaunchCycleTerminal,
   type PluginFlowStep,
 } from '@/components/delivery/pluginLaunchOutcome'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'

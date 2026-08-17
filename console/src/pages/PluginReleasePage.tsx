@@ -12,6 +12,7 @@ import {
 import { PluginStepCommandCenter } from '@/components/delivery/PluginStepCommandCenter'
 import {
   derivePluginLaunchOutcome,
+  isPluginLaunchCycleTerminal,
   type PluginFlowStep,
 } from '@/components/delivery/pluginLaunchOutcome'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
@@ -34,6 +35,7 @@ import {
 } from '@/lib/agent/pluginRuntimeRemediatePrompt'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import {
+  beginNextPluginLaunchCycle,
   evidenceSummaryLine,
   MARKET_DATA_IMAGE_TAG,
   marketDataApplyCmd,
@@ -76,8 +78,19 @@ function statusFromEvidence(
 
 function buildSteps(
   evidence: PluginLaunchEvidence,
-  detectDone: boolean,
+  opts: { ambientReady: boolean; cycleDetectDone: boolean },
 ): PluginFlowStep[] {
+  const { ambientReady, cycleDetectDone } = opts
+  const hasCycleEvidence =
+    cycleDetectDone ||
+    evidence.lastApproveAt != null ||
+    evidence.lastInstallAt != null ||
+    evidence.installOutcome != null ||
+    evidence.lastVerifyAt != null ||
+    evidence.verifyOutcome != null ||
+    evidence.lastLiveCheckAt != null ||
+    evidence.liveCheckOutcome != null
+
   const approve = statusFromEvidence(
     evidence.lastApproveAt != null ? 'ok' : undefined,
     evidence.lastApproveAt,
@@ -86,17 +99,41 @@ function buildSteps(
   const verify = statusFromEvidence(evidence.verifyOutcome, evidence.lastVerifyAt)
   const live = statusFromEvidence(evidence.liveCheckOutcome, evidence.lastLiveCheckAt)
 
+  let detectStatus: StepStatus = 'active'
+  let detectLabel = 'Probe status'
+  if (cycleDetectDone) {
+    detectStatus = 'done'
+    detectLabel = 'Probed'
+  } else if (ambientReady) {
+    // Ambient probe OK — readiness only; does not open Approve.
+    detectStatus = 'done'
+    detectLabel = 'Ready'
+  }
+
   const detect: PluginFlowStep = {
     key: 'detect',
     label: 'Detect',
-    status: detectDone ? 'done' : 'active',
-    statusLabel: detectDone ? 'Probed' : 'Probe status',
+    status: detectStatus,
+    statusLabel: detectLabel,
   }
+
+  const approveElevated =
+    hasCycleEvidence && detect.status === 'done' && approve.status === 'pending'
   const approveStep: PluginFlowStep = {
     key: 'approve',
     label: 'Approve',
-    status: detect.status !== 'done' ? 'pending' : approve.status === 'pending' ? 'active' : approve.status,
-    statusLabel: approve.label,
+    status: !hasCycleEvidence
+      ? 'pending'
+      : detect.status !== 'done'
+        ? 'pending'
+        : approve.status === 'pending'
+          ? 'active'
+          : approve.status,
+    statusLabel: approveElevated
+      ? 'Awaiting approval'
+      : approve.status === 'pending'
+        ? 'Not started'
+        : approve.label,
   }
   const installStep: PluginFlowStep = {
     key: 'install',
@@ -107,7 +144,10 @@ function buildSteps(
         : install.status === 'pending'
           ? 'active'
           : install.status,
-    statusLabel: install.label,
+    statusLabel:
+      approveStep.status === 'done' && install.status === 'pending'
+        ? 'Awaiting install'
+        : install.label,
   }
   const verifyStep: PluginFlowStep = {
     key: 'verify',
@@ -118,14 +158,20 @@ function buildSteps(
         : verify.status === 'pending'
           ? 'active'
           : verify.status,
-    statusLabel: verify.label,
+    statusLabel:
+      installStep.status === 'done' && verify.status === 'pending'
+        ? 'Awaiting verify'
+        : verify.label,
   }
   const liveStep: PluginFlowStep = {
     key: 'live-check',
     label: 'Live check',
     status:
       verifyStep.status !== 'done' ? 'pending' : live.status === 'pending' ? 'active' : live.status,
-    statusLabel: live.label,
+    statusLabel:
+      verifyStep.status === 'done' && live.status === 'pending'
+        ? 'Awaiting live check'
+        : live.label,
   }
   return [detect, approveStep, installStep, verifyStep, liveStep]
 }
@@ -222,28 +268,33 @@ export function PluginReleasePage({
     evidence.revisionHint ??
     (target === 'market-data' ? MARKET_DATA_IMAGE_TAG : PLUGIN_DOGFOOD_REVISION)
 
-  const ibDetectDone =
-    evidence.lastDetectAt != null ||
-    (liveProbe.probeReach !== 'unknown' && liveProbe.status?.mode != null)
-  const mdDetectDone =
-    evidence.lastDetectAt != null ||
-    (mdStatusQ.data != null && (mdStatusQ.data.reachable === true || mdStatusQ.data.reachable === false))
-  const detectDone = target === 'ib-gateway' ? ibDetectDone : mdDetectDone
+  const ibAmbientReady =
+    liveProbe.probeReach !== 'unknown' && liveProbe.status?.mode != null
+  const mdAmbientReady =
+    mdStatusQ.data != null &&
+    (mdStatusQ.data.reachable === true || mdStatusQ.data.reachable === false)
+  const ambientReady = target === 'ib-gateway' ? ibAmbientReady : mdAmbientReady
+  const cycleDetectDone = evidence.lastDetectAt != null
 
-  const steps = useMemo(() => buildSteps(evidence, detectDone), [evidence, detectDone])
+  const steps = useMemo(
+    () => buildSteps(evidence, { ambientReady, cycleDetectDone }),
+    [evidence, ambientReady, cycleDetectDone],
+  )
   const outcome = derivePluginLaunchOutcome(steps)
+  const cycleTerminal = isPluginLaunchCycleTerminal(outcome)
 
   useEffect(() => {
     const ev = readPluginLaunchEvidence(target, effectiveSeat)
     setEvidence(ev)
     writePluginLaunchStore({ selectedTarget: target, selectedSeat: seat })
     // Focus first incomplete step
-    const rebuilt = buildSteps(
-      ev,
-      target === 'ib-gateway'
-        ? ev.lastDetectAt != null || liveProbe.probeReach !== 'unknown'
-        : ev.lastDetectAt != null,
-    )
+    const rebuilt = buildSteps(ev, {
+      ambientReady:
+        target === 'ib-gateway'
+          ? liveProbe.probeReach !== 'unknown' && liveProbe.status?.mode != null
+          : false,
+      cycleDetectDone: ev.lastDetectAt != null,
+    })
     const idx = rebuilt.findIndex(s => s.status === 'active' || s.status === 'pending')
     setActiveIndex(idx >= 0 ? idx : Math.max(0, rebuilt.length - 1))
     setActionMsg(null)
@@ -259,6 +310,14 @@ export function PluginReleasePage({
     },
     [target, effectiveSeat],
   )
+
+  const handleStartNextCycle = useCallback(() => {
+    const next = beginNextPluginLaunchCycle(target, effectiveSeat)
+    setEvidence(next)
+    setActiveIndex(0)
+    setActionFailed(false)
+    setActionMsg('Next publish cycle started — Record detect when ready.')
+  }, [target, effectiveSeat])
 
   const aiLaunch = useAmbientAgentTask({
     canOperate,
@@ -911,6 +970,8 @@ export function PluginReleasePage({
               }
               revisionHint={revisionHint}
               renderStepActions={renderStepActions}
+              cycleTerminal={cycleTerminal}
+              onStartNextCycle={handleStartNextCycle}
             />
           </>
         }
