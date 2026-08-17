@@ -435,6 +435,66 @@ export type IngestQueueSummaryResponse = {
   error?: string
 }
 
+export type IngestScheduleSlot = {
+  slot: string
+  cron: string
+  note?: string
+  ok?: boolean
+  adherence?: string
+  detail?: string
+  last_fire?: string | null
+  next_fires?: string[]
+  grace_ends_at?: string
+  inline?: boolean
+  evidence_kinds?: string[]
+  jobs_in_window?: {
+    created?: number
+    done?: number
+    failed?: number
+    pending?: number
+    running?: number
+  }
+  freshness_dimension?: string | null
+  freshness_last_run_at?: string | null
+}
+
+export type IngestQueueDashboardResponse = {
+  ok: boolean
+  generated_at?: string
+  model?: {
+    ready_now?: string
+    running?: string
+    scheduled_future_jobs?: string
+  }
+  queue?: {
+    pending?: number
+    running?: number
+    active?: number
+    ready_now?: number
+    scheduled_future?: number
+    oldest_pending_age_sec?: number | null
+    verdict?: string
+    kinds?: IngestQueueKindCount[]
+  }
+  throughput?: {
+    done_last_5m?: number
+    done_last_15m?: number
+    done_last_60m?: number
+    failed_last_15m?: number
+    jobs_per_min_15m?: number
+    eta_minutes_at_current_rate?: number | null
+  }
+  schedule?: {
+    verdict?: string
+    on_plan?: number
+    due?: number
+    missed?: number
+    grace_minutes?: number
+    slots?: IngestScheduleSlot[]
+  }
+  error?: string
+}
+
 export type IngestKindsResponse = {
   ok: boolean
   kinds?: string[]
@@ -464,6 +524,15 @@ export function fetchIngestKinds() {
 
 export function fetchIngestQueueSummary() {
   return proxyGet<IngestQueueSummaryResponse>('/market/ingest/queue-summary')
+}
+
+export function fetchIngestQueueDashboard(params?: { grace_minutes?: number }) {
+  const q = new URLSearchParams()
+  if (params?.grace_minutes != null) q.set('grace_minutes', String(params.grace_minutes))
+  const qs = q.toString()
+  return proxyGet<IngestQueueDashboardResponse>(
+    `/market/ingest/queue-dashboard${qs ? `?${qs}` : ''}`,
+  )
 }
 
 export function enqueueIngestJob(body: {

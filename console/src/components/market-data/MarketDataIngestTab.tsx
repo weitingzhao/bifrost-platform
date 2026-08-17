@@ -17,11 +17,14 @@ import {
   enqueueIngestJob,
   fetchIngestJobs,
   fetchIngestKinds,
+  fetchIngestQueueDashboard,
   fetchIngestQueueSummary,
   isProxyError,
   type IngestJob,
+  type IngestQueueDashboardResponse,
   type IngestQueueKindCount,
   type IngestQueueSummaryResponse,
+  type IngestScheduleSlot,
 } from '@/api/marketDataPlugin'
 import { MarketDataJsonProbeCard } from '@/components/market-data/MarketDataJsonProbeCard'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -31,9 +34,9 @@ function statusVariant(
   status: string,
 ): 'success' | 'warning' | 'danger' | 'neutral' | 'info' {
   const s = status.toLowerCase()
-  if (s === 'done' || s === 'success') return 'success'
-  if (s === 'running' || s === 'pending') return 'info'
-  if (s === 'failed' || s === 'error') return 'danger'
+  if (s === 'done' || s === 'success' || s === 'on_plan') return 'success'
+  if (s === 'running' || s === 'pending' || s === 'due' || s === 'draining') return 'info'
+  if (s === 'failed' || s === 'error' || s === 'missed') return 'danger'
   return 'neutral'
 }
 
@@ -47,6 +50,84 @@ function formatResult(result: unknown): string {
   }
 }
 
+function formatAge(sec: number | null | undefined): string {
+  if (sec == null || !Number.isFinite(sec)) return '—'
+  if (sec < 60) return `${Math.floor(sec)}s`
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ${Math.floor(sec % 60)}s`
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return `${h}h ${m}m`
+}
+
+function waitedLabel(createdAt: string | undefined, nowMs: number): string {
+  if (!createdAt) return '—'
+  const t = Date.parse(createdAt)
+  if (!Number.isFinite(t)) return '—'
+  return formatAge((nowMs - t) / 1000)
+}
+
+function payloadBrief(payload: Record<string, unknown> | undefined): string {
+  if (payload == null) return '—'
+  const parts: string[] = []
+  for (const key of ['symbol', 'underlying', 'trade_date', 'from', 'to', 'option_ticker']) {
+    if (payload[key] != null && String(payload[key]).trim() !== '') {
+      parts.push(`${key}=${String(payload[key])}`)
+    }
+  }
+  if (parts.length === 0) {
+    try {
+      return JSON.stringify(payload).slice(0, 48)
+    } catch {
+      return '—'
+    }
+  }
+  return parts.join(' ')
+}
+
+function KindStackBars({ kinds }: { kinds: IngestQueueKindCount[] }) {
+  const max = Math.max(1, ...kinds.map(k => k.active))
+  if (kinds.length === 0) {
+    return (
+      <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+        No pending or running jobs
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      {kinds.map(k => {
+        const pendingPct = (k.pending / max) * 100
+        const runningPct = (k.running / max) * 100
+        return (
+          <div key={k.kind} className="flex items-center gap-2">
+            <span className="w-40 shrink-0 truncate font-mono text-[var(--text-dense-caption)]">
+              {k.kind}
+            </span>
+            <div className="flex h-2 min-w-0 flex-1 overflow-hidden rounded-sm bg-[var(--muted)]">
+              <div
+                className="h-full bg-[var(--color-info,theme(colors.sky.500))]"
+                style={{ width: `${pendingPct}%` }}
+                title={`pending ${k.pending}`}
+              />
+              <div
+                className="h-full bg-[var(--color-warning,theme(colors.amber.500))]"
+                style={{ width: `${runningPct}%` }}
+                title={`running ${k.running}`}
+              />
+            </div>
+            <span className="w-20 shrink-0 text-right font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              p{k.pending} r{k.running}
+            </span>
+          </div>
+        )
+      })}
+      <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+        Bar = relative depth · blue pending (ready) · amber running
+      </p>
+    </div>
+  )
+}
+
 export function MarketDataIngestTab() {
   const { canOperate } = usePlatformAuth()
   const queryClient = useQueryClient()
@@ -57,6 +138,7 @@ export function MarketDataIngestTab() {
   const [acting, setActing] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [actionFailed, setActionFailed] = useState(false)
+  const nowMs = Date.now()
 
   const kindsQ = useQuery({
     queryKey: ['market-data', 'ingest', 'kinds'],
@@ -64,11 +146,19 @@ export function MarketDataIngestTab() {
     refetchInterval: 120_000,
     retry: 1,
   })
+  const dashQ = useQuery({
+    queryKey: ['market-data', 'ingest', 'queue-dashboard'],
+    queryFn: () => fetchIngestQueueDashboard({ grace_minutes: 45 }),
+    refetchInterval: 15_000,
+    retry: 1,
+  })
   const summaryQ = useQuery({
     queryKey: ['market-data', 'ingest', 'queue-summary'],
     queryFn: fetchIngestQueueSummary,
     refetchInterval: 15_000,
     retry: 1,
+    // Fallback when dashboard API not yet deployed
+    enabled: dashQ.isError || (dashQ.data != null && isProxyError(dashQ.data)),
   })
   const jobsQ = useQuery({
     queryKey: ['market-data', 'ingest', 'jobs', statusFilter],
@@ -93,16 +183,28 @@ export function MarketDataIngestTab() {
   const jobs: IngestJob[] =
     jobsRaw != null && !isProxyError(jobsRaw) ? (jobsRaw.jobs ?? []) : []
 
+  const dashRaw = dashQ.data
+  const dashErr = dashRaw != null && isProxyError(dashRaw) ? dashRaw.error : null
+  const dash: IngestQueueDashboardResponse | null =
+    dashRaw != null && !isProxyError(dashRaw) ? dashRaw : null
+
   const summaryRaw = summaryQ.data
-  const summaryErr = summaryRaw != null && isProxyError(summaryRaw) ? summaryRaw.error : null
   const summary: IngestQueueSummaryResponse | null =
     summaryRaw != null && !isProxyError(summaryRaw) ? summaryRaw : null
-  const kindRollup: IngestQueueKindCount[] = summary?.kinds ?? []
+
+  const kindRollup: IngestQueueKindCount[] =
+    dash?.queue?.kinds ?? summary?.kinds ?? []
+  const readyNow = dash?.queue?.ready_now ?? summary?.pending ?? 0
+  const running = dash?.queue?.running ?? summary?.running ?? 0
+  const scheduledFuture = dash?.queue?.scheduled_future ?? 0
+  const queueVerdict = dash?.queue?.verdict ?? (readyNow + running > 0 ? 'draining' : 'idle')
 
   const selectedKind = useMemo(() => {
     if (kind !== '') return kind
     return kinds[0] ?? ''
   }, [kind, kinds])
+
+  const scheduleSlots: IngestScheduleSlot[] = dash?.schedule?.slots ?? []
 
   const runEnqueue = async () => {
     setActing(true)
@@ -119,12 +221,7 @@ export function MarketDataIngestTab() {
         }
       } catch (e) {
         setActionFailed(true)
-        setActionMsg(e instanceof Error ? e.message : 'Invalid payload JSON')
-        return
-      }
-      if (!selectedKind) {
-        setActionFailed(true)
-        setActionMsg('Select a kind')
+        setActionMsg(e instanceof Error ? e.message : 'Invalid JSON payload')
         return
       }
       const res = await enqueueIngestJob({ kind: selectedKind, payload })
@@ -135,14 +232,13 @@ export function MarketDataIngestTab() {
       }
       setActionMsg(
         res.deduplicated
-          ? `Deduplicated · job ${res.job_id ?? '—'}`
+          ? `Deduped · existing job ${res.job_id ?? '—'}`
           : `Enqueued · job ${res.job_id ?? '—'}`,
       )
-      void queryClient.invalidateQueries({ queryKey: ['market-data', 'ingest', 'jobs'] })
-      void queryClient.invalidateQueries({ queryKey: ['market-data', 'ingest', 'queue-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['market-data', 'ingest'] })
     } catch (e) {
       setActionFailed(true)
-      setActionMsg(e instanceof Error ? e.message : String(e))
+      setActionMsg(e instanceof Error ? e.message : 'Enqueue failed')
     } finally {
       setActing(false)
       setConfirmOpen(false)
@@ -152,48 +248,138 @@ export function MarketDataIngestTab() {
   return (
     <div className="flex flex-col gap-4">
       <OpsSection
-        title="Queue rollup"
-        description="Pending + running by kind (GET /market/ingest/queue-summary)"
+        title="Queue dashboard"
+        description="Ready queue vs Cron plan — GET /market/ingest/queue-dashboard"
         bodyPadding="default"
         overflow="visible"
         collapsible
         defaultCollapsed={false}
       >
-        {summaryQ.isLoading ? (
+        {dashQ.isLoading && dash == null && summary == null ? (
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Loading queue…
           </p>
-        ) : summaryErr != null ? (
-          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">{summaryErr}</p>
+        ) : dashErr != null && summary == null ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">{dashErr}</p>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <DenseTag variant={summary && (summary.active ?? 0) > 0 ? 'warning' : 'success'}>
-                active {summary?.active ?? 0}
-              </DenseTag>
-              <DenseTag variant="info">pending {summary?.pending ?? 0}</DenseTag>
-              <DenseTag variant="info">running {summary?.running ?? 0}</DenseTag>
-            </div>
-            {kindRollup.length === 0 ? (
-              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                No pending or running jobs
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {kindRollup.map(k => (
-                  <DenseTag key={k.kind} variant={k.active > 0 ? 'warning' : 'neutral'}>
-                    {k.kind} · p{k.pending} r{k.running}
+              <DenseTag variant={statusVariant(queueVerdict)}>{queueVerdict}</DenseTag>
+              <DenseTag variant="info">ready {readyNow}</DenseTag>
+              <DenseTag variant="warning">running {running}</DenseTag>
+              <DenseTag variant="neutral">scheduled(future) {scheduledFuture}</DenseTag>
+              {dash?.throughput != null ? (
+                <>
+                  <DenseTag variant="success">
+                    ~{dash.throughput.jobs_per_min_15m ?? 0}/min (15m)
                   </DenseTag>
-                ))}
-              </div>
-            )}
+                  <DenseTag variant="neutral">
+                    done 15m {dash.throughput.done_last_15m ?? 0}
+                  </DenseTag>
+                  {dash.throughput.eta_minutes_at_current_rate != null ? (
+                    <DenseTag variant="info">
+                      ETA ~{dash.throughput.eta_minutes_at_current_rate}m
+                    </DenseTag>
+                  ) : null}
+                </>
+              ) : null}
+              {dash?.queue?.oldest_pending_age_sec != null ? (
+                <DenseTag variant="neutral">
+                  oldest wait {formatAge(dash.queue.oldest_pending_age_sec)}
+                </DenseTag>
+              ) : null}
+            </div>
+            <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              {dash?.model?.scheduled_future_jobs ??
+                'CronJobs enqueue at fire time; job_ingest has no future-dated rows. Ready = pending waiting for workers.'}
+            </p>
+            <KindStackBars kinds={kindRollup} />
           </div>
         )}
       </OpsSection>
 
       <OpsSection
+        title="Schedule plan & adherence"
+        description="Future Cron fires + last fire vs jobs/freshness (plan vs actual)"
+        bodyPadding="none"
+        overflow="visible"
+        collapsible
+        defaultCollapsed={false}
+        actions={
+          dash?.schedule != null ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <DenseTag variant={statusVariant(dash.schedule.verdict ?? '')}>
+                {dash.schedule.verdict ?? '—'}
+              </DenseTag>
+              <DenseTag variant="success">on_plan {dash.schedule.on_plan ?? 0}</DenseTag>
+              <DenseTag variant="info">due {dash.schedule.due ?? 0}</DenseTag>
+              <DenseTag variant="danger">missed {dash.schedule.missed ?? 0}</DenseTag>
+              <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                grace {dash.schedule.grace_minutes ?? 45}m
+              </span>
+            </div>
+          ) : null
+        }
+      >
+        {dash == null ? (
+          <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            {dashErr != null
+              ? `Schedule dashboard needs Plugin ≥0.4.3 (${dashErr})`
+              : 'Loading schedule…'}
+          </p>
+        ) : scheduleSlots.length === 0 ? (
+          <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            No slots in schedule.yaml
+          </p>
+        ) : (
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Slot</DenseTableHead>
+                <DenseTableHead>Cron (UTC)</DenseTableHead>
+                <DenseTableHead>Adherence</DenseTableHead>
+                <DenseTableHead>Last fire</DenseTableHead>
+                <DenseTableHead>Next fires</DenseTableHead>
+                <DenseTableHead>Evidence</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {scheduleSlots.map(s => (
+                <DenseTableRow key={s.slot}>
+                  <DenseTableCell>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-mono text-xs">{s.slot}</span>
+                      <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                        {s.note ?? ''}
+                        {s.inline ? ' · inline' : ''}
+                      </span>
+                    </div>
+                  </DenseTableCell>
+                  <DenseTableCell className="font-mono text-xs">{s.cron}</DenseTableCell>
+                  <DenseTableCell>
+                    <DenseTag variant={statusVariant(s.adherence ?? '')}>
+                      {s.adherence ?? '—'}
+                    </DenseTag>
+                  </DenseTableCell>
+                  <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
+                    {s.last_fire ?? '—'}
+                  </DenseTableCell>
+                  <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
+                    {(s.next_fires ?? []).slice(0, 2).join(' · ') || '—'}
+                  </DenseTableCell>
+                  <DenseTableCell className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                    {s.detail ?? '—'}
+                  </DenseTableCell>
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        )}
+      </OpsSection>
+
+      <OpsSection
         title="Job queue"
-        description="Plugin GET /market/ingest/jobs"
+        description="Plugin GET /market/ingest/jobs — ready/running history rows"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
@@ -218,6 +404,7 @@ export function MarketDataIngestTab() {
               disabled={jobsQ.isFetching}
               onClick={() => {
                 void jobsQ.refetch()
+                void dashQ.refetch()
                 void summaryQ.refetch()
               }}
             >
@@ -249,6 +436,8 @@ export function MarketDataIngestTab() {
                 <DenseTableHead>ID</DenseTableHead>
                 <DenseTableHead>Kind</DenseTableHead>
                 <DenseTableHead>Status</DenseTableHead>
+                <DenseTableHead>Waited</DenseTableHead>
+                <DenseTableHead>Payload</DenseTableHead>
                 <DenseTableHead>Created</DenseTableHead>
                 <DenseTableHead>Result</DenseTableHead>
               </DenseTableHeadRow>
@@ -264,6 +453,16 @@ export function MarketDataIngestTab() {
                     <DenseTag variant={statusVariant(j.status)}>{j.status}</DenseTag>
                   </DenseTableCell>
                   <DenseTableCell className="font-mono text-xs">
+                    {j.status === 'pending' || j.status === 'running'
+                      ? waitedLabel(j.created_at, nowMs)
+                      : j.started_at && j.created_at
+                        ? waitedLabel(j.created_at, Date.parse(j.started_at))
+                        : '—'}
+                  </DenseTableCell>
+                  <DenseTableCell className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                    {payloadBrief(j.payload)}
+                  </DenseTableCell>
+                  <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
                     {j.created_at ?? '—'}
                   </DenseTableCell>
                   <DenseTableCell className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
@@ -282,7 +481,7 @@ export function MarketDataIngestTab() {
         bodyPadding="default"
         overflow="visible"
         collapsible
-        defaultCollapsed={false}
+        defaultCollapsed
       >
         {kindsErr != null ? (
           <p className="m-0 mb-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
@@ -345,8 +544,8 @@ export function MarketDataIngestTab() {
 
       <MarketDataJsonProbeCard
         title="JSON Probe"
-        description="Inspect ingest kinds / a single job"
-        defaultPath="/market/ingest/kinds"
+        description="Inspect ingest kinds / queue-dashboard / a single job"
+        defaultPath="/market/ingest/queue-dashboard"
       />
 
       <ConfirmDialog

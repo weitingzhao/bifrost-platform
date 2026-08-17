@@ -10,6 +10,9 @@ export const MARKET_DATA_SCHEDULE_SLOTS: ReadonlyArray<{
   { id: 'corporate', cron: '0 23 * * *', note: 'Corporate actions' },
   { id: 'option-refresh', cron: '20 */6 * * *', note: 'Option contract refresh' },
   { id: 'option-bars', cron: '45 22 * * *', note: 'Option daily bars' },
+  { id: 'minute-bars', cron: '15 23 * * *', note: 'Minute bars' },
+  { id: 'calendar', cron: '0 22 * * *', note: 'US trading calendar' },
+  { id: 'reference', cron: '30 21 * * *', note: 'Ticker sync' },
   { id: 'stock-snapshot', cron: '5 21 * * *', note: 'Stock snapshots' },
   { id: 'stock-movers', cron: '10 21 * * *', note: 'Stock movers' },
   { id: 'oi-gap-heal', cron: '0 4 * * 6', note: 'OI gap heal (weekly)' },
@@ -17,5 +20,6 @@ export const MARKET_DATA_SCHEDULE_SLOTS: ReadonlyArray<{
   { id: 'atm-iv-pcr', cron: '0 23 * * *', note: 'ATM IV + PCR' },
   { id: 'iv-percentile', cron: '15 23 * * *', note: 'IV Percentile' },
   { id: 'fundamentals-rotate', cron: '0 3 * * *', note: 'Fundamentals rotate' },
+  { id: 'readiness-refresh', cron: '30 23 * * *', note: 'Readiness refresh' },
   { id: 'trim', cron: '15 2 * * *', note: 'Job queue trim' },
 ]
