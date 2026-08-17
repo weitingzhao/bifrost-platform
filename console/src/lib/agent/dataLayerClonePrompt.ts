@@ -6,12 +6,8 @@ export const DATA_LAYER_CLONE_CONFIRM_TOKEN = 'CLONE-FROM-PROD'
 
 export const DATA_LAYER_CLONE_DEV_APIS = [
   'api-monitor',
+  'api-account',
   'api-market',
-  'api-trading',
-  'api-strategy',
-  'api-portfolio',
-  'api-ops',
-  'api-docs',
   'api-research',
 ] as const
 

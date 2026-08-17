@@ -72,8 +72,7 @@ func reposForPipeline(pipelineName string) []string {
 
 var stgImageDeployments = []string{
 	"nginx", "frontend",
-	"api-monitor", "api-massive", "api-docs", "api-ops", "api-trading",
-	"api-strategy", "api-portfolio", "api-market", "api-research",
+	"api-monitor", "api-account", "api-market", "api-research",
 	"daemon", "account-sync", "celery-worker",
 	"ib-market-gateway", "ib-account-agent", "ib-operator", "massive-ws",
 }

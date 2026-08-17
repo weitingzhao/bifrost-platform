@@ -34,7 +34,7 @@ var CatalogItems = []ItemMeta{
 	{ID: "db-backup-fresh", Label: "CNPG backup < 48h", FixScope: "data-layer-backup", FixCapability: FixSemiAuto},
 	{ID: "redis", Label: "Redis reachable", FixScope: "cluster_issues_full_auto", FixCapability: FixFullAuto},
 	{ID: "nginx-edge", Label: "Nginx / SPA edge", FixScope: "cluster_issues_full_auto", FixCapability: FixFullAuto},
-	{ID: "trade-apis", Label: "Trade APIs (9 domains)", FixScope: "cluster_issues_full_auto", FixCapability: FixFullAuto},
+	{ID: "trade-apis", Label: "Trade APIs (4 pods / path aliases)", FixScope: "cluster_issues_full_auto", FixCapability: FixFullAuto},
 	{ID: "deliver-pipeline", Label: "STG deliver pipeline", FixScope: "deliver-stg-recover", FixCapability: FixFullAuto},
 	{ID: "stg-smoke", Label: "STG smoke targets", FixScope: "deliver-stg-recover", FixCapability: FixSemiAuto},
 	{ID: "massive-polygon", Label: "Massive / Polygon feed", FixScope: "cluster_issues_full_auto", FixCapability: FixSemiAuto},

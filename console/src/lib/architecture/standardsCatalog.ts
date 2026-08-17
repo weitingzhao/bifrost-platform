@@ -19,7 +19,7 @@ export type ProbeRow = {
 export const HTTP_PROBES: ProbeRow[] = [
   { targetId: 'nginx-spa', path: '/', okCodes: '200' },
   { targetId: 'api-monitor', path: '/api/monitor/status', okCodes: '200, 503' },
-  { targetId: 'api-massive', path: '/api/massive/research/massive/health', okCodes: '200, 503' },
+  // Phase B: docs/ops → api-monitor; trading/strategy/portfolio → api-account (path aliases)
   { targetId: 'api-docs', path: '/api/docs/research/docs/health', okCodes: '200, 503' },
   { targetId: 'api-ops', path: '/api/ops/health', okCodes: '200, 503' },
   { targetId: 'api-trading', path: '/api/trading/health', okCodes: '200, 503' },

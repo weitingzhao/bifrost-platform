@@ -25,14 +25,15 @@ type ToolView struct {
 }
 
 func Domains() []DomainView {
+	// Phase B: 4 process pods; HTTP path prefixes preserved for gateway strip.
+	// monitor also serves ops+docs; account serves trading+portfolio+strategy.
 	return []DomainView{
 		{ID: "monitor", Port: 8765, ProbePath: "/status", ReadOnly: true},
-		{ID: "massive", Port: 8766, ProbePath: "/health", ReadOnly: true},
-		{ID: "docs", Port: 8767, ProbePath: "/health", ReadOnly: true},
-		{ID: "ops", Port: 8768, ProbePath: "/health", ReadOnly: true},
+		{ID: "docs", Port: 8765, ProbePath: "/research/docs/health", ReadOnly: true},
+		{ID: "ops", Port: 8765, ProbePath: "/ops/health", ReadOnly: true},
 		{ID: "trading", Port: 8769, ProbePath: "/health", ReadOnly: true},
-		{ID: "strategy", Port: 8770, ProbePath: "/health", ReadOnly: true},
-		{ID: "portfolio", Port: 8771, ProbePath: "/health", ReadOnly: true},
+		{ID: "strategy", Port: 8769, ProbePath: "/health", ReadOnly: true},
+		{ID: "portfolio", Port: 8769, ProbePath: "/health", ReadOnly: true},
 		{ID: "market", Port: 8772, ProbePath: "/health", ReadOnly: true},
 		{ID: "research", Port: 8773, ProbePath: "/health", ReadOnly: true},
 	}
@@ -54,7 +55,7 @@ func Catalog() []ToolView {
 	tools := []ToolView{
 		{Name: "trade_mcp_health", Description: "MCP server health + read-only mode", Level: "read", Implemented: true},
 		{Name: "trade_mcp_capabilities", Description: "List read-only Trade API tools", Level: "read", Method: "GET", Route: "/api/v1/trade-agent/catalog", Implemented: true},
-		{Name: "list_trade_domains", Description: "Nine Trade API domains with probe paths", Level: "read", Method: "GET", Route: "/api/v1/trade-agent/domains", Implemented: true},
+		{Name: "list_trade_domains", Description: "Trade API path domains (Phase B: 4 pods, path aliases preserved)", Level: "read", Method: "GET", Route: "/api/v1/trade-agent/domains", Implemented: true},
 	}
 	for _, d := range Domains() {
 		tools = append(tools, tool("get_"+d.ID+"_health", "Probe "+d.ID+" domain health", d.ID, d.ProbePath))

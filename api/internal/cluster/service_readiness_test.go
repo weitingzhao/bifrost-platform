@@ -199,8 +199,7 @@ func applicationsReadySnapshot() readinessSnapshot {
 		deploys[ns+"/frontend"] = readyAPI(ns, "frontend")
 		routes[ns+"/"+tradeGatewayIngressRoute] = true
 		for _, api := range []string{
-			"api-monitor", "api-ops", "api-trading", "api-strategy", "api-portfolio",
-			"api-market", "api-research", "api-massive", "api-docs",
+			"api-monitor", "api-account", "api-market", "api-research",
 		} {
 			deploys[ns+"/"+api] = readyAPI(ns, api)
 		}

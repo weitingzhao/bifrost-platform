@@ -298,7 +298,7 @@ export function buildDataLayerCloneRunnerPrompt(req: StartRunRequest): string {
     '   Prefer the custom runner tool trigger_data_clone (admin). If MCP 401s, retry the custom tool.',
     '3. Poll get_data_clone_status until status=done or failed. Do not start a second clone (409 is already running).',
     '4. After done: rollout_restart_deployment namespace=bifrost-dev for each:',
-    '   api-monitor, api-market, api-trading, api-strategy, api-portfolio, api-ops, api-docs, api-research',
+    '   api-monitor, api-account, api-market, api-research',
     '   Owner already confirmed this job — do not request_operator_approval again for clone or these DEV restarts.',
     '5. Re-call get_data_freshness. Report last_clone_at + bounced deployments.',
     '',

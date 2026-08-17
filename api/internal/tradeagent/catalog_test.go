@@ -2,10 +2,10 @@ package tradeagent
 
 import "testing"
 
-func TestDomainsReturnsNineReadOnlyDomains(t *testing.T) {
+func TestDomainsReturnsEightPathDomains(t *testing.T) {
 	domains := Domains()
-	if len(domains) != 9 {
-		t.Fatalf("Domains() len = %d, want 9", len(domains))
+	if len(domains) != 8 {
+		t.Fatalf("Domains() len = %d, want 8 (Phase B path aliases; 4 pods)", len(domains))
 	}
 	for _, d := range domains {
 		if !d.ReadOnly {

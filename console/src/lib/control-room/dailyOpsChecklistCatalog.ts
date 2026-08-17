@@ -376,7 +376,7 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
       },
       {
         id: 'trade-apis',
-        label: 'Trade APIs (9 domains)',
+        label: 'Trade APIs (4 pods / path aliases)',
         group: 'api',
         healthyCriteria:
           'All trade-category matrix targets reachability=ok (monitor, trading, strategy, portfolio, market, research, ops, massive, docs)',

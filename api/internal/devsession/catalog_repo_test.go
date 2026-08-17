@@ -40,7 +40,7 @@ func TestLoadSessionsCatalog_RepoFile(t *testing.T) {
 	if len(nss) < 3 {
 		t.Fatalf("discovery namespaces=%v", nss)
 	}
-	if cat.Lookup("stg", "api-massive") == nil || cat.Lookup("stg", "flower") == nil {
+	if cat.Lookup("stg", "api-account") == nil || cat.Lookup("stg", "flower") == nil {
 		t.Fatal("expanded API/worker entries missing")
 	}
 }

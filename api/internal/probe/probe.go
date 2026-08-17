@@ -21,9 +21,10 @@ const (
 var tradeAPIEndpoints = []HTTPEndpoint{
 	{ID: "nginx-spa", Category: "trade_frontend", Path: "/"},
 	{ID: "api-monitor", Category: "trade_api", Path: "/api/monitor/status"},
-	{ID: "api-massive", Category: "trade_api", Path: "/api/massive/research/massive/health"},
+	// Phase B: docs/ops absorbed into api-monitor (path aliases retained)
 	{ID: "api-docs", Category: "trade_api", Path: "/api/docs/research/docs/health"},
 	{ID: "api-ops", Category: "trade_api", Path: "/api/ops/health"},
+	// Phase B: trading/portfolio/strategy absorbed into api-account (path aliases retained)
 	{ID: "api-trading", Category: "trade_api", Path: "/api/trading/health"},
 	{ID: "api-strategy", Category: "trade_api", Path: "/api/strategy/health"},
 	{ID: "api-portfolio", Category: "trade_api", Path: "/api/portfolio/health"},

@@ -43,47 +43,17 @@ envs:
       ports: [5180]
 
     - name: api-monitor
-      label: Monitor API
+      label: Monitor API (ops+docs)
       group: api
       namespace: bifrost-stg
       deployment: api-monitor
       ports: [8765]
-    - name: api-massive
-      label: Massive API
+    - name: api-account
+      label: Account API (trading+portfolio+strategy)
       group: api
       namespace: bifrost-stg
-      deployment: api-massive
-      ports: [8766]
-    - name: api-docs
-      label: Docs API
-      group: api
-      namespace: bifrost-stg
-      deployment: api-docs
-      ports: [8767]
-    - name: api-ops
-      label: Ops API
-      group: api
-      namespace: bifrost-stg
-      deployment: api-ops
-      ports: [8768]
-    - name: api-trading
-      label: Trading API
-      group: api
-      namespace: bifrost-stg
-      deployment: api-trading
+      deployment: api-account
       ports: [8769]
-    - name: api-strategy
-      label: Strategy API
-      group: api
-      namespace: bifrost-stg
-      deployment: api-strategy
-      ports: [8770]
-    - name: api-portfolio
-      label: Portfolio API
-      group: api
-      namespace: bifrost-stg
-      deployment: api-portfolio
-      ports: [8771]
     - name: api-market
       label: Market API
       group: api
@@ -192,47 +162,17 @@ envs:
       ports: [5180]
 
     - name: api-monitor
-      label: Monitor API
+      label: Monitor API (ops+docs)
       group: api
       namespace: bifrost-prod
       deployment: api-monitor
       ports: [8765]
-    - name: api-massive
-      label: Massive API
+    - name: api-account
+      label: Account API (trading+portfolio+strategy)
       group: api
       namespace: bifrost-prod
-      deployment: api-massive
-      ports: [8766]
-    - name: api-docs
-      label: Docs API
-      group: api
-      namespace: bifrost-prod
-      deployment: api-docs
-      ports: [8767]
-    - name: api-ops
-      label: Ops API
-      group: api
-      namespace: bifrost-prod
-      deployment: api-ops
-      ports: [8768]
-    - name: api-trading
-      label: Trading API
-      group: api
-      namespace: bifrost-prod
-      deployment: api-trading
+      deployment: api-account
       ports: [8769]
-    - name: api-strategy
-      label: Strategy API
-      group: api
-      namespace: bifrost-prod
-      deployment: api-strategy
-      ports: [8770]
-    - name: api-portfolio
-      label: Portfolio API
-      group: api
-      namespace: bifrost-prod
-      deployment: api-portfolio
-      ports: [8771]
     - name: api-market
       label: Market API
       group: api

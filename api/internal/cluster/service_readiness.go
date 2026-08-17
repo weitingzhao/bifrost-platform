@@ -391,7 +391,7 @@ func evalApplicationsDomain(snap readinessSnapshot) ServiceDomainView {
 			Detail:       apiDetail,
 		})
 	}
-	return finalizeDomain("applications", "General applications", deps, "amd64 Trade stack · Traefik trade-gateway · frontend · 9 API domains")
+	return finalizeDomain("applications", "General applications", deps, "amd64 Trade stack · Traefik trade-gateway · frontend · 4 API pods (Phase B)")
 }
 
 func ingressRouteDep(snap readinessSnapshot, ns, name, label string) ServiceDependencyView {
@@ -865,8 +865,9 @@ func countReadyDeployments(snap readinessSnapshot, namespace, namePrefix string)
 }
 
 func apiReadyReach(ready int) probe.Reachability {
+	// Phase B: 4 process pods (monitor/account/market/research).
 	switch {
-	case ready >= 5:
+	case ready >= 4:
 		return probe.ReachOK
 	case ready > 0:
 		return probe.ReachDegraded
