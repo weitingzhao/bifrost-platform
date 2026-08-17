@@ -98,6 +98,35 @@ function PluginFlowStepper({
   )
 }
 
+function AgentDrivenStepDetail({
+  label,
+  laneLabel,
+  statusLabel,
+  launchLabel,
+}: {
+  label: string
+  laneLabel: string
+  statusLabel: string
+  launchLabel: string
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="release-cc__step-label text-dense-label font-semibold">{label}</span>
+        <span className="rounded px-1 py-px text-dense-micro font-bold uppercase tracking-wider text-muted-foreground">
+          {laneLabel}
+        </span>
+        <span className="text-dense-caption text-muted-foreground">{statusLabel}</span>
+      </div>
+      <p className="m-0 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-dense-meta text-muted-foreground">
+        Agent-driven publish — this panel is observe-only. Launch with{' '}
+        <span className="font-medium text-foreground">{launchLabel}</span> on the lane strip; decide
+        in <span className="font-medium text-foreground">Agent Session</span> / Operator Dock.
+      </p>
+    </div>
+  )
+}
+
 export interface PluginStepCommandCenterProps {
   steps: PluginFlowStep[]
   activeIndex: number
@@ -110,7 +139,13 @@ export interface PluginStepCommandCenterProps {
   laneLabel?: string
   idleHint?: string
   completeMessage?: string
+  /**
+   * Manual / record actions. Shown in Step body only when agentDriven is false;
+   * when agentDriven, keep these in Toolbox (escape hatch).
+   */
   renderStepActions: (activeIndex: number) => ReactNode
+  /** Optional read-only detail under the observe banner (agentDriven). */
+  renderStepDetail?: (activeIndex: number) => ReactNode
   onAiLaunch?: () => void
   aiLaunchPending?: boolean
   aiLaunchDisabled?: boolean
@@ -123,6 +158,11 @@ export interface PluginStepCommandCenterProps {
   cycleTerminal?: boolean
   onStartNextCycle?: () => void
   startNextLabel?: string
+  /**
+   * AI-first path (align Rocket / Satellite): Step detail is observe-only.
+   * Primary CTA stays on LaneStateStrip; decisions in Agent Session / Dock.
+   */
+  agentDriven?: boolean
 }
 
 /**
@@ -140,6 +180,7 @@ export function PluginStepCommandCenter({
   idleHint = 'make install · not Tekton',
   completeMessage = 'Plugin publish complete',
   renderStepActions,
+  renderStepDetail,
   onAiLaunch,
   aiLaunchPending = false,
   aiLaunchDisabled = false,
@@ -148,10 +189,13 @@ export function PluginStepCommandCenter({
   cycleTerminal = false,
   onStartNextCycle,
   startNextLabel = 'Start next publish',
+  agentDriven = false,
 }: PluginStepCommandCenterProps) {
   const outcome = derivePluginLaunchOutcome(steps)
   const step = steps[activeIndex]
   const nextStep = steps[activeIndex + 1]
+  // Lane strip owns the primary AI Launch CTA when agentDriven.
+  const showInlineAiLaunch = onAiLaunch != null && !agentDriven
 
   return (
     <div className="relative overflow-hidden rounded-lg border border-border bg-card">
@@ -189,7 +233,7 @@ export function PluginStepCommandCenter({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {onAiLaunch != null && (
+            {showInlineAiLaunch && (
               <Button
                 size="sm"
                 disabled={aiLaunchDisabled || aiLaunchPending || cycleTerminal}
@@ -218,25 +262,44 @@ export function PluginStepCommandCenter({
           {cycleTerminal ? (
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-success">
-                  <CheckCircle2 className="h-4 w-4" />
-                  {completeMessage}
-                </span>
-                {onStartNextCycle != null && (
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="inline-flex items-center gap-1.5 text-dense-caption font-medium text-success">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {completeMessage}
+                  </span>
+                  {agentDriven && (
+                    <span className="text-dense-caption text-muted-foreground">
+                      — use {aiLaunchLabel} on the lane strip to start the next cycle
+                    </span>
+                  )}
+                </div>
+                {!agentDriven && onStartNextCycle != null && (
                   <Button size="sm" onClick={onStartNextCycle} className="shadow-sm">
                     {startNextLabel}
                     <ArrowRight className="ml-1 h-3.5 w-3.5" />
                   </Button>
                 )}
               </div>
-              <details className="group rounded-md border border-border/50 bg-background/40">
-                <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
-                  Re-record a stage (advanced)
-                </summary>
-                <div className="border-t border-border/50 px-3 py-2.5">
-                  {renderStepActions(activeIndex)}
-                </div>
-              </details>
+              {!agentDriven && (
+                <details className="group rounded-md border border-border/50 bg-background/40">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
+                    Re-record a stage (advanced)
+                  </summary>
+                  <div className="border-t border-border/50 px-3 py-2.5">
+                    {renderStepActions(activeIndex)}
+                  </div>
+                </details>
+              )}
+            </div>
+          ) : agentDriven ? (
+            <div className="flex flex-col gap-3">
+              <AgentDrivenStepDetail
+                label={step?.label ?? ''}
+                laneLabel={laneLabel}
+                statusLabel={step?.statusLabel ?? ''}
+                launchLabel={aiLaunchLabel}
+              />
+              {renderStepDetail?.(activeIndex)}
             </div>
           ) : (
             <>

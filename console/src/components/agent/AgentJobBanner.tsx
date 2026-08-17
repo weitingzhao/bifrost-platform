@@ -9,6 +9,7 @@ import {
   feedKindLabel,
   formatFeedEventLine,
 } from '@/lib/agent/agentLiveFeed'
+import { isBenignRemediationStreamError } from '@/lib/remediation/remediationJobDisplay'
 
 interface AgentJobBannerProps {
   jobId: string
@@ -39,6 +40,9 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
     respond,
     reach,
   } = useAgentJobLiveSession(jobId, { onComplete, onDismiss })
+
+  const connectionError =
+    error != null && !isBenignRemediationStreamError(error) ? error : null
 
   const showInlineFeed = !isTerminal && liveFeed != null
   const showFeedPlaceholder = !isTerminal && liveFeed == null && connected
@@ -143,9 +147,9 @@ export function AgentJobBanner({ jobId, taskLabel, onDismiss, onOpenAgentDesk, o
         </p>
       )}
 
-      {error != null && !isTerminal && (
+      {connectionError != null && !isTerminal && (
         <p className="agent-job-banner__summary agent-job-banner__summary--failed">
-          Connection: {error}
+          Connection: {connectionError}
         </p>
       )}
 

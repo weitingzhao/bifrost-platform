@@ -14,6 +14,7 @@ import {
 import { PluginStepCommandCenter } from '@/components/delivery/PluginStepCommandCenter'
 import {
   derivePluginLaunchOutcome,
+  isAmbientReadyIdle,
   isPluginLaunchCycleTerminal,
   type PluginFlowStep,
 } from '@/components/delivery/pluginLaunchOutcome'
@@ -30,6 +31,7 @@ import {
 } from '@/lib/agent/agentLaunchAgentPrompt'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
+  beginNextAgentLaunchCycle,
   evidenceSummaryLine,
   readAgentLaunchEvidence,
   readAgentLaunchStore,
@@ -38,6 +40,11 @@ import {
   type AgentLaunchEvidence,
   type AgentLaunchTargetId,
 } from '@/lib/delivery/agentLaunchEvidence'
+import {
+  evidencePatchFromAgentLaunchProgress,
+  inferAgentLaunchAgentProgress,
+  type AgentLaunchAgentProgress,
+} from '@/lib/delivery/agentLaunchAgentProgress'
 import type { StepStatus } from '@/lib/delivery/releaseStepTypes'
 
 const AI_LAUNCH_LABEL = 'AI Launch Agent'
@@ -69,9 +76,13 @@ function statusFromEvidence(
 }
 
 type StepRuntime = {
-  detectDone: boolean
+  /** Live bridge/deploy probe present — readiness only when cycle not open. */
+  ambientReady: boolean
+  /** Operator recorded Detect for this publish cycle. */
+  cycleDetectDone: boolean
   agentInFlight: boolean
   agentPhase?: string | null
+  agentProgress?: AgentLaunchAgentProgress
   deployStatus?: AgentDeployStatusResponse
   target: AgentLaunchTargetId
   directDeployRunning: boolean
@@ -80,6 +91,7 @@ type StepRuntime = {
 function deployMatchesTarget(
   deploy: AgentDeployStatusResponse | undefined,
   target: AgentLaunchTargetId,
+  cycleStartedAt?: string,
 ): { running: boolean; lastOk: boolean; lastFailed: boolean } {
   const current = deploy?.current
   const last = deploy?.last
@@ -92,73 +104,136 @@ function deployMatchesTarget(
   const lastRole = roleOf(last)
   const matchesRole = (role: string | undefined) =>
     target === 'both' || role == null || role === target
+  const afterCycleStart = (iso?: string | null) => {
+    if (cycleStartedAt == null || cycleStartedAt === '') return true
+    if (iso == null || iso === '') return false
+    return iso >= cycleStartedAt
+  }
   const running = current?.status === 'running' && matchesRole(currentRole)
-  const lastOk = last?.status === 'done' && matchesRole(lastRole)
-  const lastFailed = last?.status === 'failed' && matchesRole(lastRole)
+  const lastOk =
+    last?.status === 'done' && matchesRole(lastRole) && afterCycleStart(last.finished_at)
+  const lastFailed =
+    last?.status === 'failed' && matchesRole(lastRole) && afterCycleStart(last.finished_at)
   return { running, lastOk, lastFailed }
 }
 
 function buildSteps(evidence: AgentLaunchEvidence, rt: StepRuntime): PluginFlowStep[] {
-  const { running, lastOk, lastFailed } = deployMatchesTarget(rt.deployStatus, rt.target)
-  const awaitingDock =
-    rt.agentInFlight &&
-    (rt.agentPhase == null ||
-      rt.agentPhase === 'starting' ||
-      rt.agentPhase === 'diagnosing' ||
-      rt.agentPhase === 'awaiting_approval')
-  const remediating =
-    rt.agentInFlight &&
-    (rt.agentPhase === 'remediating' || rt.agentPhase === 'verifying' || running)
+  const progress = rt.agentProgress
+  const { running, lastOk, lastFailed } = deployMatchesTarget(
+    rt.deployStatus,
+    rt.target,
+    evidence.cycleStartedAt,
+  )
+  const hostRunning = running || rt.directDeployRunning
 
-  const approveDone =
+  const cycleOpen =
+    rt.cycleDetectDone ||
+    progress?.detectDone === true ||
+    progress?.approveDone === true ||
+    progress?.approveAwaiting === true ||
     evidence.lastApproveAt != null ||
-    remediating ||
-    running ||
-    lastOk ||
-    lastFailed ||
-    rt.directDeployRunning
+    evidence.deployOutcome != null ||
+    evidence.lastDeployAt != null ||
+    evidence.lastVerifyAt != null ||
+    evidence.lastLiveCheckAt != null ||
+    rt.agentInFlight ||
+    rt.directDeployRunning ||
+    running
+
+  const useHost = cycleOpen
+  const hostLastOk = useHost && lastOk
+  const hostLastFailed = useHost && lastFailed
+
   const deployOutcome: AgentLaunchEvidence['deployOutcome'] =
     evidence.deployOutcome ??
-    (running || rt.directDeployRunning || (rt.agentInFlight && rt.agentPhase === 'remediating')
+    progress?.deployOutcome ??
+    (hostRunning
       ? 'pending'
-      : lastOk
+      : hostLastOk
         ? 'ok'
-        : lastFailed
+        : hostLastFailed
           ? 'failed'
           : undefined)
+
+  // Prefer live Dock progress over stale host lastOk for verify while session is bound.
   const verifyOutcome: AgentLaunchEvidence['verifyOutcome'] =
     evidence.verifyOutcome ??
-    (lastOk && !running ? 'ok' : lastFailed ? 'failed' : undefined)
+    progress?.verifyOutcome ??
+    (progress?.verifyAwaiting
+      ? 'pending'
+      : progress == null && hostLastOk && !hostRunning
+        ? 'ok'
+        : hostLastFailed
+          ? 'failed'
+          : undefined)
 
-  const deploy = statusFromEvidence(deployOutcome, evidence.lastDeployAt ?? (running ? 'pending' : undefined))
+  const liveOutcome =
+    evidence.liveCheckOutcome ?? progress?.liveOutcome ?? undefined
+
+  const deploy = statusFromEvidence(
+    deployOutcome,
+    evidence.lastDeployAt ?? (deployOutcome === 'pending' || hostRunning ? 'pending' : undefined),
+  )
   const verify = statusFromEvidence(
     verifyOutcome,
-    evidence.lastVerifyAt ?? (lastOk ? evidence.lastDeployAt : undefined),
+    evidence.lastVerifyAt ?? (verifyOutcome === 'pending' ? 'pending' : undefined),
   )
-  const live = statusFromEvidence(evidence.liveCheckOutcome, evidence.lastLiveCheckAt)
+  const live = statusFromEvidence(
+    liveOutcome,
+    evidence.lastLiveCheckAt ?? (liveOutcome === 'pending' ? 'pending' : undefined),
+  )
+
+  let detectStatus: StepStatus = 'active'
+  let detectLabel = 'Probe status'
+  if (rt.cycleDetectDone || rt.agentInFlight || rt.directDeployRunning || progress?.detectDone) {
+    detectStatus = 'done'
+    detectLabel =
+      rt.agentInFlight || progress?.detectDone || evidence.lastDetectAt != null
+        ? 'Probed'
+        : rt.ambientReady
+          ? 'Ready'
+          : 'Probed'
+  } else if (rt.ambientReady) {
+    detectStatus = 'done'
+    detectLabel = 'Ready'
+  }
 
   const detect: PluginFlowStep = {
     key: 'detect',
     label: 'Detect',
-    status: rt.detectDone || rt.agentInFlight || rt.directDeployRunning ? 'done' : 'active',
-    statusLabel: rt.detectDone || rt.agentInFlight || rt.directDeployRunning ? 'Probed' : 'Probe status',
+    status: detectStatus,
+    statusLabel: detectLabel,
   }
+
+  const approveDone =
+    evidence.lastApproveAt != null ||
+    progress?.approveDone === true ||
+    deployOutcome === 'ok' ||
+    deployOutcome === 'pending' ||
+    deployOutcome === 'failed' ||
+    hostRunning ||
+    hostLastOk ||
+    hostLastFailed
 
   let approveStatus: StepStatus = 'pending'
   let approveLabel = 'Not started'
-  if (detect.status !== 'done') {
+  if (!cycleOpen) {
+    approveStatus = 'pending'
+    approveLabel = 'Not started'
+  } else if (detect.status !== 'done') {
     approveStatus = 'pending'
     approveLabel = 'Not started'
   } else if (approveDone) {
     approveStatus = 'done'
     approveLabel = 'Approved'
-  } else if (awaitingDock) {
+  } else if (progress?.approveAwaiting || rt.agentInFlight) {
     approveStatus = 'active'
-    approveLabel =
-      rt.agentPhase === 'awaiting_approval' ? 'Awaiting Dock approval' : 'AI Launch · Dock'
+    approveLabel = progress?.approveAwaiting
+      ? 'Awaiting Dock approval'
+      : 'AI Launch · Dock'
   } else {
     approveStatus = 'active'
-    approveLabel = 'Deploy to approve'
+    approveLabel = 'Awaiting approval'
   }
 
   const approveStep: PluginFlowStep = {
@@ -177,9 +252,11 @@ function buildSteps(evidence: AgentLaunchEvidence, rt: StepRuntime): PluginFlowS
           ? 'active'
           : deploy.status,
     statusLabel:
-      running || rt.directDeployRunning || (rt.agentInFlight && rt.agentPhase === 'remediating')
+      hostRunning || deployOutcome === 'pending'
         ? 'Deploying…'
-        : deploy.label,
+        : approveStep.status === 'done' && deploy.status === 'pending'
+          ? 'Awaiting deploy'
+          : deploy.label,
   }
   const verifyStep: PluginFlowStep = {
     key: 'verify',
@@ -190,14 +267,24 @@ function buildSteps(evidence: AgentLaunchEvidence, rt: StepRuntime): PluginFlowS
         : verify.status === 'pending'
           ? 'active'
           : verify.status,
-    statusLabel: verify.label,
+    statusLabel:
+      deployStep.status === 'done' && verify.status === 'pending'
+        ? progress?.verifyAwaiting
+          ? 'Awaiting Dock verify'
+          : rt.agentInFlight
+            ? 'Verifying…'
+            : 'Awaiting verify'
+        : verify.label,
   }
   const liveStep: PluginFlowStep = {
     key: 'live-check',
     label: 'Live check',
     status:
       verifyStep.status !== 'done' ? 'pending' : live.status === 'pending' ? 'active' : live.status,
-    statusLabel: live.label,
+    statusLabel:
+      verifyStep.status === 'done' && live.status === 'pending'
+        ? 'Awaiting live check'
+        : live.label,
   }
   return [detect, approveStep, deployStep, verifyStep, liveStep]
 }
@@ -261,8 +348,8 @@ type AgentReleasePageProps = AmbientAgentShellProps & {
 
 /**
  * Launch Desk → Agent — L-1 Mac Mini Agent host publish (deploy_mac_mini.sh).
- * Primary path: Direct Deploy button → POST /api/v1/agent/deploy.
- * Secondary: AI Launch Agent (ambient) once runner code is deployed.
+ * Primary path: AI Launch Agent on lane strip → Agent Session / Dock.
+ * Step detail is observe-only; Toolbox holds Direct Deploy / Record escape.
  * Not Tekton / not in-cluster.
  */
 export function AgentReleasePage({
@@ -312,9 +399,58 @@ export function AgentReleasePage({
         : []
 
   const targetRunner = runners.find(r => r.role === (target === 'both' ? 'primary' : target)) ?? runners[0]
-  const detectDone =
-    evidence.lastDetectAt != null ||
-    (deployQuery.data != null && (bridgeQuery.data != null || deployQuery.data.enabled === false))
+  const ambientReady =
+    deployQuery.data != null && (bridgeQuery.data != null || deployQuery.data.enabled === false)
+
+  const ambientLaunchActive =
+    isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+    ambientJobScope === AGENT_LAUNCH_SCOPE
+
+  const launchJobQuery = useQuery({
+    queryKey: ['remediation', 'job', ambientJobId, 'agent-launch'],
+    queryFn: () => fetchRemediationJob(ambientJobId!),
+    enabled:
+      ambientJobId != null &&
+      ambientJobId !== '' &&
+      ambientJobScope === AGENT_LAUNCH_SCOPE,
+    refetchInterval: q => {
+      const st = q.state.data?.status
+      if (st === 'done' || st === 'failed' || st === 'cancelled') return false
+      return 2000
+    },
+  })
+
+  const [launchKickoff, setLaunchKickoff] = useState(false)
+  const [boundLaunchJobId, setBoundLaunchJobId] = useState<string | null>(null)
+  useEffect(() => {
+    if (ambientLaunchActive) setLaunchKickoff(false)
+  }, [ambientLaunchActive])
+  useEffect(() => {
+    if (ambientLaunchActive && ambientJobId != null && ambientJobId !== '') {
+      setBoundLaunchJobId(ambientJobId)
+    }
+  }, [ambientLaunchActive, ambientJobId])
+
+  const jobRunning =
+    launchJobQuery.data?.status === 'running' ||
+    (launchJobQuery.data?.phase != null &&
+      launchJobQuery.data.phase !== 'done' &&
+      launchJobQuery.data.phase !== 'failed' &&
+      launchJobQuery.data.phase !== 'cancelled')
+
+  const agentInFlightEarly = ambientLaunchActive || launchKickoff || jobRunning
+
+  const jobForProgress =
+    boundLaunchJobId != null && launchJobQuery.data?.id === boundLaunchJobId
+      ? launchJobQuery.data
+      : agentInFlightEarly
+        ? launchJobQuery.data
+        : undefined
+
+  const agentProgress = useMemo(
+    () => inferAgentLaunchAgentProgress(jobForProgress, agentInFlightEarly),
+    [jobForProgress, agentInFlightEarly],
+  )
 
   const patchEvidence = useCallback(
     (patch: Partial<AgentLaunchEvidence>, feedback: string) => {
@@ -325,6 +461,16 @@ export function AgentReleasePage({
     },
     [target],
   )
+
+  const handleStartNextCycle = useCallback(() => {
+    const next = beginNextAgentLaunchCycle(target === 'both' ? 'primary' : target)
+    setEvidence(next)
+    setBoundLaunchJobId(null)
+    setLaunchKickoff(false)
+    setActiveIndex(0)
+    setActionFailed(false)
+    setActionMsg('Next publish cycle started — use AI Launch Agent on the lane strip.')
+  }, [target])
 
   // Direct deploy mutation
   const deployMutation = useMutation({
@@ -337,34 +483,28 @@ export function AgentReleasePage({
   const directDeployRunning =
     deployMutation.isPending || deployQuery.data?.current?.status === 'running'
 
-  const ambientLaunchActive =
-    isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
-    ambientJobScope === AGENT_LAUNCH_SCOPE
-
-  const launchJobQuery = useQuery({
-    queryKey: ['remediation', 'job', ambientJobId],
-    queryFn: () => fetchRemediationJob(ambientJobId!),
-    enabled: ambientJobId != null && ambientJobId !== '' && ambientLaunchActive,
-    refetchInterval: q => {
-      const st = q.state.data?.status
-      if (st === 'done' || st === 'failed' || st === 'cancelled') return false
-      return 2000
-    },
-  })
-
-  const agentPhase = launchJobQuery.data?.phase ?? null
-
   const outcomeForPrompt = useMemo(() => {
     const preview = buildSteps(evidence, {
-      detectDone,
-      agentInFlight: ambientLaunchActive,
-      agentPhase,
+      ambientReady,
+      cycleDetectDone: evidence.lastDetectAt != null || agentProgress.detectDone,
+      agentInFlight: agentInFlightEarly,
+      agentPhase: jobForProgress?.phase ?? null,
+      agentProgress,
       deployStatus: deployQuery.data,
       target,
       directDeployRunning,
     })
     return derivePluginLaunchOutcome(preview)
-  }, [evidence, detectDone, ambientLaunchActive, agentPhase, deployQuery.data, target, directDeployRunning])
+  }, [
+    evidence,
+    ambientReady,
+    agentInFlightEarly,
+    agentProgress,
+    jobForProgress?.phase,
+    deployQuery.data,
+    target,
+    directDeployRunning,
+  ])
 
   const aiLaunch = useAmbientAgentTask({
     canOperate,
@@ -386,48 +526,103 @@ export function AgentReleasePage({
     }),
   })
 
-  const launchInFlight = aiLaunch.isPending || ambientLaunchActive
+  useEffect(() => {
+    if (aiLaunch.isPending) setLaunchKickoff(true)
+  }, [aiLaunch.isPending])
+
+  const launchInFlight = aiLaunch.isPending || ambientLaunchActive || agentInFlightEarly
 
   const steps = useMemo(
     () =>
       buildSteps(evidence, {
-        detectDone,
+        ambientReady,
+        cycleDetectDone: evidence.lastDetectAt != null || agentProgress.detectDone,
         agentInFlight: launchInFlight,
-        agentPhase,
+        agentPhase: jobForProgress?.phase ?? null,
+        agentProgress,
         deployStatus: deployQuery.data,
         target,
         directDeployRunning,
       }),
-    [evidence, detectDone, launchInFlight, agentPhase, deployQuery.data, target, directDeployRunning],
+    [
+      evidence,
+      ambientReady,
+      launchInFlight,
+      agentProgress,
+      jobForProgress?.phase,
+      deployQuery.data,
+      target,
+      directDeployRunning,
+    ],
   )
+  const outcome = derivePluginLaunchOutcome(steps)
+  const cycleTerminal = isPluginLaunchCycleTerminal(outcome)
 
   useEffect(() => {
     const ev = readAgentLaunchEvidence(target === 'both' ? 'primary' : target)
     setEvidence(ev)
     writeAgentLaunchStore({ selectedTarget: target })
     const rebuilt = buildSteps(ev, {
-      detectDone: ev.lastDetectAt != null || deployQuery.data != null,
-      agentInFlight: launchInFlight,
-      agentPhase,
+      ambientReady: deployQuery.data != null,
+      cycleDetectDone: ev.lastDetectAt != null,
+      agentInFlight: false,
       deployStatus: deployQuery.data,
       target,
-      directDeployRunning,
+      directDeployRunning: false,
     })
-    const idx = rebuilt.findIndex(s => s.status === 'active' || s.status === 'pending')
-    setActiveIndex(idx >= 0 ? idx : Math.max(0, rebuilt.length - 1))
+    if (isAmbientReadyIdle(rebuilt) || derivePluginLaunchOutcome(rebuilt).kind === 'released') {
+      setActiveIndex(0)
+    } else {
+      const idx = rebuilt.findIndex(s => s.status === 'active' || s.status === 'pending')
+      setActiveIndex(idx >= 0 ? idx : Math.max(0, rebuilt.length - 1))
+    }
     setActionMsg(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-focus on target change
   }, [target])
 
-  // Keep stepper focused on the live stage while deploy runs.
+  // Follow Dock session focus; stay on Detect when Ready/Published idle.
   useEffect(() => {
+    if (launchInFlight && agentProgress.focusStep) {
+      const focusIdx = STEP_KEYS.indexOf(agentProgress.focusStep)
+      if (focusIdx >= 0) {
+        setActiveIndex(focusIdx)
+        return
+      }
+    }
+    if (cycleTerminal || isAmbientReadyIdle(steps)) {
+      setActiveIndex(0)
+      return
+    }
     const idx = steps.findIndex(s => s.status === 'active')
     if (idx >= 0) setActiveIndex(idx)
-  }, [steps])
+  }, [steps, cycleTerminal, launchInFlight, agentProgress.focusStep])
+
+  // Persist advancing evidence from Dock session (checklist parity with Plugin).
+  useEffect(() => {
+    if (!agentInFlightEarly && jobForProgress?.phase !== 'done') return
+    const patch = evidencePatchFromAgentLaunchProgress(evidence, agentProgress)
+    if (patch == null) return
+    const next = writeAgentLaunchEvidence(patch, target === 'both' ? 'primary' : target)
+    setEvidence(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- silent sync on progress ticks
+  }, [
+    agentProgress.detectDone,
+    agentProgress.approveDone,
+    agentProgress.deployOutcome,
+    agentProgress.verifyOutcome,
+    agentProgress.liveOutcome,
+    agentInFlightEarly,
+    jobForProgress?.phase,
+    target,
+  ])
 
   // Sync local evidence from host deploy API once jobs finish.
   useEffect(() => {
-    const { running, lastOk, lastFailed } = deployMatchesTarget(deployQuery.data, target)
+    const { running, lastOk, lastFailed } = deployMatchesTarget(
+      deployQuery.data,
+      target,
+      evidence.cycleStartedAt,
+    )
     if (running && evidence.deployOutcome !== 'pending') {
       patchEvidence(
         {
@@ -524,14 +719,14 @@ export function AgentReleasePage({
       onExpandAgentDock?.()
       return
     }
-    if (evidence.lastDetectAt == null) {
+    if (cycleTerminal) {
+      handleStartNextCycle()
+    } else if (evidence.lastDetectAt == null) {
       patchEvidence({ lastDetectAt: new Date().toISOString() }, 'Detect recorded for AI Launch.')
     }
     onExpandAgentDock?.()
     setActionFailed(false)
-    setActionMsg(
-      'AI Launch Agent started — approve in Operator Dock. Note: requires runner code update on Mini.',
-    )
+    setActionMsg('AI Launch Agent started — approve in Operator Dock / Agent Session.')
     aiLaunch.trigger()
   }
 
@@ -657,42 +852,35 @@ export function AgentReleasePage({
         return (
           <div className="flex flex-col gap-2">
             <p className="m-0 text-dense-meta text-muted-foreground">
-              AI Launch Agent (Dock approval) is the primary path. Direct Deploy is fallback when
-              runner code is not yet deployed.
+              Prefer AI Launch Agent on the lane strip — approvals stay in Agent Session / Operator
+              Dock. Local Record approve is evidence-only. Direct Deploy is above in this Toolbox.
             </p>
             <ul className="m-0 list-disc pl-4 text-dense-caption text-muted-foreground">
               <li>Target: Mac Mini {target === 'both' ? 'primary + standby (sequential)' : target} · deploy_mac_mini.sh</li>
               <li>Outside K8s (L-1 fate isolation) — not Tekton</li>
               <li>D10: no place_order / daemon scale</li>
             </ul>
-            <div className="flex flex-wrap gap-2">
-              <AgentTriggerButton
-                label={AI_LAUNCH_LABEL}
-                pending={aiLaunch.isPending}
-                active={launchInFlight}
-                activeLabel="Expand dock"
-                disabled={aiLaunch.disabled && !launchInFlight}
-                title={
-                  launchInFlight
-                    ? 'Expand Agent Execution Dock'
-                    : (aiLaunch.disabledReason ?? AI_LAUNCH_LABEL)
-                }
-                onClick={handleAiLaunchClick}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!canOperate || !deployQuery.data?.enabled || directDeployRunning}
-                onClick={handleDirectDeploy}
-              >
-                {directDeployRunning ? 'Deploying…' : `Direct Deploy ${target === 'both' ? 'Both' : target}`}
-              </Button>
-            </div>
             {bothPhase !== 'idle' && (
               <p className="m-0 text-dense-caption text-primary">
                 Both mode: {bothPhase === 'primary' ? 'deploying primary (standby next)…' : 'deploying standby…'}
               </p>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canOperate}
+              onClick={() =>
+                patchEvidence(
+                  {
+                    lastApproveAt: new Date().toISOString(),
+                    approvedBy: 'operator',
+                  },
+                  'Approve recorded (evidence-only).',
+                )
+              }
+            >
+              {evidence.lastApproveAt != null ? 'Re-record approve' : 'Record approve'}
+            </Button>
           </div>
         )
       case 'deploy':
@@ -870,16 +1058,6 @@ export function AgentReleasePage({
               }
               onClick={handleAiLaunchClick}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={deployDisabled}
-              onClick={handleDirectDeploy}
-            >
-              {directDeployRunning
-                ? `Deploying ${deployQuery.data?.current?.role ?? target}…`
-                : `Deploy ${target === 'both' ? 'Both' : target}`}
-            </Button>
             {evidenceLinks}
           </div>
         }
@@ -892,7 +1070,8 @@ export function AgentReleasePage({
           <span className="text-muted-foreground">{evidenceSummaryLine(evidence)}</span>
         </div>
         <p className="m-0 text-dense-caption text-muted-foreground">
-          AI Launch Agent → approve in Operator Dock → deploy_mac_mini.sh. Direct Deploy button as fallback.
+          AI Launch Agent → approve in Agent Session / Operator Dock → deploy_mac_mini.sh. Step
+          detail is observe-only (align Rocket / Satellite).
         </p>
       </LaneStateStrip>
 
@@ -945,6 +1124,24 @@ export function AgentReleasePage({
               }
               aiLaunchLabel={AI_LAUNCH_LABEL}
               renderStepActions={renderStepActions}
+              renderStepDetail={idx => {
+                if (STEP_KEYS[idx] !== 'detect') return null
+                return (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DenseTag variant={deployQuery.data?.enabled ? 'success' : 'warning'}>
+                      deploy {deployQuery.data?.enabled ? 'enabled' : 'disabled'}
+                    </DenseTag>
+                    {targetRunner != null && (
+                      <DenseTag variant={runnerTagVariant(targetRunner.status)}>
+                        {target === 'both' ? 'primary' : target} {targetRunner.status}
+                      </DenseTag>
+                    )}
+                  </div>
+                )
+              }}
+              agentDriven
+              cycleTerminal={cycleTerminal}
+              onStartNextCycle={handleStartNextCycle}
             />
           </>
         }
@@ -1008,11 +1205,11 @@ export function AgentReleasePage({
               <ul className="m-0 list-disc pl-4 text-dense-meta text-muted-foreground">
                 <li>Agent hosts recover the control plane — they must not share fate with the cluster.</li>
                 <li>
-                  Publish path: Deploy button → confirm →{' '}
-                  <span className="font-mono">POST /api/v1/agent/deploy</span>.
+                  Primary path: AI Launch Agent → Agent Session / Dock →{' '}
+                  <span className="font-mono">deploy_mac_mini.sh</span>.
                 </li>
-                <li>Both mode: primary deploys first; standby auto-starts after primary succeeds.</li>
-                <li>≠ Rocket / Satellite / Plugin Tekton lanes.</li>
+                <li>Both mode (Toolbox Direct Deploy): primary first; standby after primary succeeds.</li>
+                <li>≠ Rocket / Satellite Tekton lanes — same AI-first UX, different executor.</li>
               </ul>
             </LaneDetailCollapse>
 
@@ -1049,7 +1246,34 @@ export function AgentReleasePage({
               bodyClassName="flex flex-col gap-2 p-3"
             >
               <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
-                Manual Update (escape hatch)
+                Advanced · escape hatches
+              </span>
+              <p className="m-0 text-dense-meta text-muted-foreground">
+                Primary path is AI Launch Agent on the lane strip. Step detail is observe-only —
+                approvals stay in Agent Session / Operator Dock.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={deployDisabled}
+                  onClick={handleDirectDeploy}
+                >
+                  {directDeployRunning
+                    ? `Deploying ${deployQuery.data?.current?.role ?? target}…`
+                    : `Direct Deploy ${target === 'both' ? 'Both' : target}`}
+                </Button>
+                {cycleTerminal && (
+                  <Button size="sm" variant="outline" onClick={handleStartNextCycle}>
+                    Start next publish (clear cycle evidence)
+                  </Button>
+                )}
+              </div>
+              <div className="rounded-md border border-border/60 bg-background/40 p-3">
+                {renderStepActions(activeIndex)}
+              </div>
+              <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
+                Manual Update
               </span>
               <AgentHostDeployPanel />
             </LaneDetailCollapse>

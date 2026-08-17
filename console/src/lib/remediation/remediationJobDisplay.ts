@@ -42,6 +42,21 @@ export function isRemediationStreamOrphanError(error: string | null | undefined)
   return lower.includes('not found') || lower.includes('not running')
 }
 
+/**
+ * Transient stream teardown noise (browser refresh, proxy idle close, runner SSE end).
+ * Not a job failure — Agent Desk / Dock should not show "Connection: unexpected EOF".
+ */
+export function isBenignRemediationStreamError(error: string | null | undefined): boolean {
+  if (error == null || error.trim() === '') return false
+  const lower = error.trim().toLowerCase()
+  return (
+    lower === 'unexpected eof' ||
+    lower.includes('unexpected eof') ||
+    lower === 'body stream already read' ||
+    lower.includes('err_incomplete_chunked_encoding')
+  )
+}
+
 /** All jobs still in progress (runner active or waiting on operator), newest first. */
 export function findActiveRemediationJobs(jobs: RemediationJob[]): RemediationJob[] {
   return jobs

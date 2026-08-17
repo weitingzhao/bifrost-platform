@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, SegmentControl } from '@bifrost/ui'
+import { fetchRemediationJob } from '@/api/remediation'
 import { fetchMarketDataStatus, postIbGatewayControl } from '@/api/network'
+import {
+  evidencePatchFromAgentProgress,
+  inferPluginLaunchAgentProgress,
+  type PluginLaunchAgentProgress,
+} from '@/lib/delivery/pluginLaunchAgentProgress'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { LaneOperateSplit } from '@/components/delivery/LaneOperateSplit'
 import {
@@ -12,6 +18,7 @@ import {
 import { PluginStepCommandCenter } from '@/components/delivery/PluginStepCommandCenter'
 import {
   derivePluginLaunchOutcome,
+  isAmbientReadyIdle,
   isPluginLaunchCycleTerminal,
   type PluginFlowStep,
 } from '@/components/delivery/pluginLaunchOutcome'
@@ -78,11 +85,23 @@ function statusFromEvidence(
 
 function buildSteps(
   evidence: PluginLaunchEvidence,
-  opts: { ambientReady: boolean; cycleDetectDone: boolean },
+  opts: {
+    ambientReady: boolean
+    cycleDetectDone: boolean
+    agentInFlight?: boolean
+    agentProgress?: PluginLaunchAgentProgress
+  },
 ): PluginFlowStep[] {
-  const { ambientReady, cycleDetectDone } = opts
+  const { ambientReady, agentInFlight = false } = opts
+  const progress = opts.agentProgress
+  const cycleDetectDone =
+    opts.cycleDetectDone || progress?.detectDone === true || agentInFlight
+
   const hasCycleEvidence =
     cycleDetectDone ||
+    agentInFlight ||
+    progress?.approveDone === true ||
+    progress?.approveAwaiting === true ||
     evidence.lastApproveAt != null ||
     evidence.lastInstallAt != null ||
     evidence.installOutcome != null ||
@@ -91,21 +110,58 @@ function buildSteps(
     evidence.lastLiveCheckAt != null ||
     evidence.liveCheckOutcome != null
 
+  const installOutcome =
+    evidence.installOutcome ??
+    (progress?.installOutcome === 'ok' ||
+    progress?.installOutcome === 'failed' ||
+    progress?.installOutcome === 'pending'
+      ? progress.installOutcome
+      : undefined)
+  const verifyOutcome =
+    evidence.verifyOutcome ??
+    (progress?.verifyOutcome === 'ok' ||
+    progress?.verifyOutcome === 'failed' ||
+    progress?.verifyOutcome === 'pending'
+      ? progress.verifyOutcome
+      : progress?.verifyAwaiting
+        ? 'pending'
+        : undefined)
+  const liveOutcome =
+    evidence.liveCheckOutcome ??
+    (progress?.liveOutcome === 'ok' ||
+    progress?.liveOutcome === 'failed' ||
+    progress?.liveOutcome === 'pending'
+      ? progress.liveOutcome
+      : undefined)
+
   const approve = statusFromEvidence(
-    evidence.lastApproveAt != null ? 'ok' : undefined,
+    evidence.lastApproveAt != null || progress?.approveDone === true ? 'ok' : undefined,
     evidence.lastApproveAt,
   )
-  const install = statusFromEvidence(evidence.installOutcome, evidence.lastInstallAt)
-  const verify = statusFromEvidence(evidence.verifyOutcome, evidence.lastVerifyAt)
-  const live = statusFromEvidence(evidence.liveCheckOutcome, evidence.lastLiveCheckAt)
+  const install = statusFromEvidence(
+    installOutcome,
+    evidence.lastInstallAt ?? (installOutcome === 'pending' ? 'pending' : undefined),
+  )
+  const verify = statusFromEvidence(
+    verifyOutcome,
+    evidence.lastVerifyAt ?? (verifyOutcome === 'pending' ? 'pending' : undefined),
+  )
+  const live = statusFromEvidence(
+    liveOutcome,
+    evidence.lastLiveCheckAt ?? (liveOutcome === 'pending' ? 'pending' : undefined),
+  )
 
   let detectStatus: StepStatus = 'active'
   let detectLabel = 'Probe status'
-  if (cycleDetectDone) {
+  if (cycleDetectDone || agentInFlight || progress?.detectDone === true) {
     detectStatus = 'done'
-    detectLabel = 'Probed'
+    detectLabel =
+      agentInFlight || progress?.detectDone === true || evidence.lastDetectAt != null
+        ? 'Probed'
+        : ambientReady
+          ? 'Ready'
+          : 'Probed'
   } else if (ambientReady) {
-    // Ambient probe OK — readiness only; does not open Approve.
     detectStatus = 'done'
     detectLabel = 'Ready'
   }
@@ -117,24 +173,37 @@ function buildSteps(
     statusLabel: detectLabel,
   }
 
-  const approveElevated =
-    hasCycleEvidence && detect.status === 'done' && approve.status === 'pending'
+  let approveStatus: StepStatus = 'pending'
+  let approveLabel = 'Not started'
+  if (!hasCycleEvidence) {
+    approveStatus = 'pending'
+    approveLabel = 'Not started'
+  } else if (detect.status !== 'done') {
+    approveStatus = 'pending'
+    approveLabel = 'Not started'
+  } else if (approve.status === 'done' || progress?.approveDone) {
+    approveStatus = 'done'
+    approveLabel = 'Approved'
+  } else if (progress?.approveAwaiting || agentInFlight) {
+    approveStatus = 'active'
+    approveLabel = progress?.approveAwaiting
+      ? 'Awaiting Dock approval'
+      : 'AI Launch · Dock'
+  } else if (approve.status === 'pending') {
+    approveStatus = 'active'
+    approveLabel = 'Awaiting approval'
+  } else {
+    approveStatus = approve.status
+    approveLabel = approve.label
+  }
+
   const approveStep: PluginFlowStep = {
     key: 'approve',
     label: 'Approve',
-    status: !hasCycleEvidence
-      ? 'pending'
-      : detect.status !== 'done'
-        ? 'pending'
-        : approve.status === 'pending'
-          ? 'active'
-          : approve.status,
-    statusLabel: approveElevated
-      ? 'Awaiting approval'
-      : approve.status === 'pending'
-        ? 'Not started'
-        : approve.label,
+    status: approveStatus,
+    statusLabel: approveLabel,
   }
+
   const installStep: PluginFlowStep = {
     key: 'install',
     label: 'Install',
@@ -146,7 +215,9 @@ function buildSteps(
           : install.status,
     statusLabel:
       approveStep.status === 'done' && install.status === 'pending'
-        ? 'Awaiting install'
+        ? agentInFlight
+          ? 'Installing…'
+          : 'Awaiting install'
         : install.label,
   }
   const verifyStep: PluginFlowStep = {
@@ -160,7 +231,11 @@ function buildSteps(
           : verify.status,
     statusLabel:
       installStep.status === 'done' && verify.status === 'pending'
-        ? 'Awaiting verify'
+        ? progress?.verifyAwaiting
+          ? 'Awaiting Dock verify'
+          : agentInFlight
+            ? 'Verifying…'
+            : 'Awaiting verify'
         : verify.label,
   }
   const liveStep: PluginFlowStep = {
@@ -274,11 +349,66 @@ export function PluginReleasePage({
     mdStatusQ.data != null &&
     (mdStatusQ.data.reachable === true || mdStatusQ.data.reachable === false)
   const ambientReady = target === 'ib-gateway' ? ibAmbientReady : mdAmbientReady
-  const cycleDetectDone = evidence.lastDetectAt != null
+  const ambientPluginInFlight =
+    isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
+    ambientJobScope === PLUGIN_LAUNCH_SCOPE
+
+  const launchJobQuery = useQuery({
+    queryKey: ['remediation', 'job', ambientJobId, 'plugin-launch'],
+    queryFn: () => fetchRemediationJob(ambientJobId!),
+    enabled:
+      ambientJobId != null &&
+      ambientJobId !== '' &&
+      ambientJobScope === PLUGIN_LAUNCH_SCOPE,
+    refetchInterval: q => {
+      const st = q.state.data?.status
+      if (st === 'done' || st === 'failed' || st === 'cancelled') return false
+      return 2000
+    },
+  })
+
+  // Soft in-flight before ambient job id binds (and while status=running).
+  const [launchKickoff, setLaunchKickoff] = useState(false)
+  const [boundLaunchJobId, setBoundLaunchJobId] = useState<string | null>(null)
+  useEffect(() => {
+    if (ambientPluginInFlight) setLaunchKickoff(false)
+  }, [ambientPluginInFlight])
+  useEffect(() => {
+    if (ambientPluginInFlight && ambientJobId != null && ambientJobId !== '') {
+      setBoundLaunchJobId(ambientJobId)
+    }
+  }, [ambientPluginInFlight, ambientJobId])
+
+  const jobRunning =
+    launchJobQuery.data?.status === 'running' ||
+    (launchJobQuery.data?.phase != null &&
+      launchJobQuery.data.phase !== 'done' &&
+      launchJobQuery.data.phase !== 'failed' &&
+      launchJobQuery.data.phase !== 'cancelled')
+
+  const pluginAgentInFlightEarly = ambientPluginInFlight || launchKickoff || jobRunning
+
+  const jobForProgress =
+    boundLaunchJobId != null && launchJobQuery.data?.id === boundLaunchJobId
+      ? launchJobQuery.data
+      : pluginAgentInFlightEarly
+        ? launchJobQuery.data
+        : undefined
+
+  const agentProgress = useMemo(
+    () => inferPluginLaunchAgentProgress(jobForProgress, pluginAgentInFlightEarly),
+    [jobForProgress, pluginAgentInFlightEarly],
+  )
 
   const steps = useMemo(
-    () => buildSteps(evidence, { ambientReady, cycleDetectDone }),
-    [evidence, ambientReady, cycleDetectDone],
+    () =>
+      buildSteps(evidence, {
+        ambientReady,
+        cycleDetectDone: evidence.lastDetectAt != null || agentProgress.detectDone,
+        agentInFlight: pluginAgentInFlightEarly,
+        agentProgress,
+      }),
+    [evidence, ambientReady, agentProgress, pluginAgentInFlightEarly],
   )
   const outcome = derivePluginLaunchOutcome(steps)
   const cycleTerminal = isPluginLaunchCycleTerminal(outcome)
@@ -287,7 +417,6 @@ export function PluginReleasePage({
     const ev = readPluginLaunchEvidence(target, effectiveSeat)
     setEvidence(ev)
     writePluginLaunchStore({ selectedTarget: target, selectedSeat: seat })
-    // Focus first incomplete step
     const rebuilt = buildSteps(ev, {
       ambientReady:
         target === 'ib-gateway'
@@ -295,11 +424,32 @@ export function PluginReleasePage({
           : false,
       cycleDetectDone: ev.lastDetectAt != null,
     })
-    const idx = rebuilt.findIndex(s => s.status === 'active' || s.status === 'pending')
-    setActiveIndex(idx >= 0 ? idx : Math.max(0, rebuilt.length - 1))
+    if (isAmbientReadyIdle(rebuilt) || derivePluginLaunchOutcome(rebuilt).kind === 'released') {
+      setActiveIndex(0)
+    } else {
+      const idx = rebuilt.findIndex(s => s.status === 'active' || s.status === 'pending')
+      setActiveIndex(idx >= 0 ? idx : Math.max(0, rebuilt.length - 1))
+    }
     setActionMsg(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-focus on target/seat change
   }, [target, effectiveSeat])
+
+  // Follow the live stage while AI Launch is in flight; stay on Detect when Ready/Published idle.
+  useEffect(() => {
+    if (pluginAgentInFlightEarly && agentProgress.focusStep) {
+      const focusIdx = STEP_KEYS.indexOf(agentProgress.focusStep)
+      if (focusIdx >= 0) {
+        setActiveIndex(focusIdx)
+        return
+      }
+    }
+    if (cycleTerminal || isAmbientReadyIdle(steps)) {
+      setActiveIndex(0)
+      return
+    }
+    const idx = steps.findIndex(s => s.status === 'active')
+    if (idx >= 0) setActiveIndex(idx)
+  }, [steps, cycleTerminal, pluginAgentInFlightEarly, agentProgress.focusStep])
 
   const patchEvidence = useCallback(
     (patch: Partial<PluginLaunchEvidence>, feedback: string) => {
@@ -311,12 +461,35 @@ export function PluginReleasePage({
     [target, effectiveSeat],
   )
 
+  // Persist advancing evidence from Dock session so checklist / Ready strip stay truthful.
+  useEffect(() => {
+    if (!pluginAgentInFlightEarly && launchJobQuery.data?.phase !== 'done') return
+    const patch = evidencePatchFromAgentProgress(evidence, agentProgress)
+    if (patch == null) return
+    const next = writePluginLaunchEvidence(patch, target, effectiveSeat)
+    setEvidence(next)
+    // Silent sync — avoid toast spam on every poll tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- evidence identity changes each patch
+  }, [
+    agentProgress.detectDone,
+    agentProgress.approveDone,
+    agentProgress.installOutcome,
+    agentProgress.verifyOutcome,
+    agentProgress.liveOutcome,
+    pluginAgentInFlightEarly,
+    launchJobQuery.data?.phase,
+    target,
+    effectiveSeat,
+  ])
+
   const handleStartNextCycle = useCallback(() => {
     const next = beginNextPluginLaunchCycle(target, effectiveSeat)
     setEvidence(next)
+    setBoundLaunchJobId(null)
+    setLaunchKickoff(false)
     setActiveIndex(0)
     setActionFailed(false)
-    setActionMsg('Next publish cycle started — Record detect when ready.')
+    setActionMsg('Next publish cycle started — use AI Launch Plugin on the lane strip.')
   }, [target, effectiveSeat])
 
   const aiLaunch = useAmbientAgentTask({
@@ -340,10 +513,11 @@ export function PluginReleasePage({
     }),
   })
 
-  const pluginAgentInFlight =
-    aiLaunch.isPending ||
-    (isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
-      ambientJobScope === PLUGIN_LAUNCH_SCOPE)
+  const pluginAgentInFlight = aiLaunch.isPending || ambientPluginInFlight
+
+  useEffect(() => {
+    if (aiLaunch.isPending) setLaunchKickoff(true)
+  }, [aiLaunch.isPending])
 
   const pluginVerdict = useMemo(
     () =>
@@ -418,6 +592,10 @@ export function PluginReleasePage({
       onExpandAgentDock?.()
       return
     }
+    if (cycleTerminal) {
+      handleStartNextCycle()
+    }
+    onExpandAgentDock?.()
     aiLaunch.trigger()
   }
 
@@ -847,8 +1025,71 @@ export function PluginReleasePage({
 
   const stripHint =
     target === 'market-data'
-      ? `Not Tekton — ${marketDataApplyCmd(effectiveSeat)}. Gallery ≠ Publish.`
-      : 'Not Tekton — make install-ib-gateway + verify-ib-gateway-program. Gallery ≠ Publish.'
+      ? `AI Launch Plugin → approve in Agent Session / Dock → kubectl apply. Not Tekton. Gallery ≠ Publish.`
+      : 'AI Launch Plugin → approve in Agent Session / Dock → make install-ib-gateway. Not Tekton. Gallery ≠ Publish.'
+
+  const renderStepObserve = (idx: number) => {
+    const key = STEP_KEYS[idx]
+    if (key === 'detect') {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          {target === 'market-data' ? (
+            <>
+              <DenseTag variant="neutral">seat {effectiveSeat}</DenseTag>
+              <DenseTag
+                variant={
+                  mdStatusQ.data?.reachable === true
+                    ? 'success'
+                    : mdStatusQ.data?.reachable === false
+                      ? 'danger'
+                      : 'warning'
+                }
+              >
+                platform-status{' '}
+                {mdStatusQ.data?.reachable === true
+                  ? 'ok'
+                  : mdStatusQ.isLoading
+                    ? '…'
+                    : 'n/a'}
+              </DenseTag>
+            </>
+          ) : (
+            <>
+              <DenseTag variant="neutral">mode {liveProbe.status?.mode ?? '—'}</DenseTag>
+              <DenseTag
+                variant={
+                  liveProbe.probeReach === 'ok'
+                    ? 'success'
+                    : liveProbe.probeReach === 'fail'
+                      ? 'danger'
+                      : 'warning'
+                }
+              >
+                probe {liveProbe.probeReach}
+              </DenseTag>
+            </>
+          )}
+        </div>
+      )
+    }
+    if (key === 'approve') {
+      return (
+        <p className="m-0 text-dense-caption text-muted-foreground">
+          Approval + checklist stay in Operator Dock after AI Launch Plugin.
+        </p>
+      )
+    }
+    if (key === 'install') {
+      return (
+        <p className="m-0 font-mono text-dense-caption text-muted-foreground">
+          {target === 'market-data'
+            ? marketDataApplyCmd(effectiveSeat)
+            : 'make install-ib-gateway'}
+        </p>
+      )
+    }
+    return null
+  }
 
   const evidenceLinks =
     onNavigate != null ? (
@@ -970,6 +1211,9 @@ export function PluginReleasePage({
               }
               revisionHint={revisionHint}
               renderStepActions={renderStepActions}
+              renderStepDetail={renderStepObserve}
+              agentDriven
+              aiLaunchLabel={AI_LAUNCH_LABEL}
               cycleTerminal={cycleTerminal}
               onStartNextCycle={handleStartNextCycle}
             />
@@ -1150,12 +1394,20 @@ export function PluginReleasePage({
               bodyClassName="flex flex-col gap-2 p-3"
             >
               <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">
-                Advanced · observe only
+                Advanced · manual evidence
               </span>
               <p className="m-0 text-dense-meta text-muted-foreground">
-                Escape hatches for this lane. Primary AI Launch Plugin stays on the lane state strip
-                above. Runtime health stays on Plugin Gallery / IB Gateway / Market Data manage.
+                Escape hatch only. Primary path is AI Launch Plugin on the lane strip — approvals
+                stay in Agent Session / Operator Dock. Step detail is observe-only.
               </p>
+              <div className="rounded-md border border-border/60 bg-background/40 p-3">
+                {renderStepActions(activeIndex)}
+              </div>
+              {cycleTerminal && (
+                <Button size="sm" variant="outline" onClick={handleStartNextCycle}>
+                  Start next publish (clear cycle evidence)
+                </Button>
+              )}
             </LaneDetailCollapse>
           </>
         }

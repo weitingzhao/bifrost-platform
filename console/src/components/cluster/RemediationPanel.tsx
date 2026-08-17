@@ -9,7 +9,7 @@ import { RemediationHistoryBar } from '@/components/cluster/RemediationHistoryBa
 import { RemediationInitBrief } from '@/components/cluster/RemediationInitBrief'
 import { AgentPhaseIndicator } from '@/components/agent/AgentPhaseIndicator'
 import { useRemediationStream } from '@/hooks/useRemediationStream'
-import { isRemediationStreamOrphanError } from '@/lib/remediation/remediationJobDisplay'
+import { isBenignRemediationStreamError, isRemediationStreamOrphanError } from '@/lib/remediation/remediationJobDisplay'
 
 interface RemediationPanelProps {
   open: boolean
@@ -774,7 +774,10 @@ export function RemediationPanel({
             Loading report…
           </p>
         )}
-        {error != null && error !== 'unexpected EOF' && isLiveView && !showOrphanBanner && (
+        {error != null &&
+          !isBenignRemediationStreamError(error) &&
+          isLiveView &&
+          !showOrphanBanner && (
           <div className="remediation-block remediation-block--error">
             <span className="remediation-block-kicker remediation-block-kicker--error">Connection</span>
             <p className="remediation-block-body remediation-block-body--error">{error}</p>

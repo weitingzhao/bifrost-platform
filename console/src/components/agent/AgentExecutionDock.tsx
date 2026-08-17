@@ -24,6 +24,7 @@ import {
   readStoredTool,
   type OperatorToolId,
 } from '@/components/agent/operatorDockStorage'
+import { isBenignRemediationStreamError } from '@/lib/remediation/remediationJobDisplay'
 
 const DOCK_HEIGHT_KEY = 'bifrost.console.agentExecutionDockHeight'
 const AGENT_H_SPLIT_KEY = 'bifrost.console.dockAgentHSplitPct.v1'
@@ -467,6 +468,9 @@ export function OperatorDock({
     reach,
   } = session
 
+  const connectionError =
+    error != null && !isBenignRemediationStreamError(error) ? error : null
+
   useEffect(() => {
     if (pendingApproval != null) setApprovalLogsOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset logs when approval id changes
@@ -735,7 +739,7 @@ export function OperatorDock({
         {toolId === 'agent' && elapsed != null && !idle && !isTerminal && (
           <span className="console-agent-execution-dock__elapsed">{elapsed}</span>
         )}
-        {toolId === 'agent' && !idle && !connected && !isTerminal && error == null && (
+        {toolId === 'agent' && !idle && !connected && !isTerminal && connectionError == null && (
           <span className="console-agent-execution-dock__connecting">connecting…</span>
         )}
 
@@ -943,7 +947,7 @@ export function OperatorDock({
                 >
                   {(hostPulse.deployRunning ||
                     isArchive ||
-                    error != null ||
+                    connectionError != null ||
                     pendingApproval != null) && (
                     <div className="console-agent-execution-dock__meta-strip">
                       {hostPulse.deployRunning && (
@@ -980,9 +984,9 @@ export function OperatorDock({
                           )}
                         </p>
                       )}
-                      {error != null && !isArchive && (
+                      {connectionError != null && !isArchive && (
                         <p className="console-agent-execution-dock__summary console-agent-execution-dock__summary--failed">
-                          Connection: {error}
+                          Connection: {connectionError}
                         </p>
                       )}
                       {pendingApproval != null && approvalMode === 'manual' && (

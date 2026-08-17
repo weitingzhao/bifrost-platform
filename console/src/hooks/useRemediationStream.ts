@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RemediationEvent, RemediationJob, RemediationPhase } from '@/api/remediationTypes'
 import { remediationStreamUrl } from '@/api/remediation'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
+import { isBenignRemediationStreamError } from '@/lib/remediation/remediationJobDisplay'
 
 const KNOWN_PHASES = new Set<string>([
   'starting',
@@ -128,7 +129,9 @@ export function useRemediationStream(jobId: string | null): UseRemediationStream
                   )
                 }
               } else if (payload.type === 'error' && payload.text != null) {
-                setError(payload.text)
+                if (!isBenignRemediationStreamError(payload.text)) {
+                  setError(payload.text)
+                }
               }
             } catch {
               // ignore malformed frames
@@ -137,7 +140,10 @@ export function useRemediationStream(jobId: string | null): UseRemediationStream
         }
       } catch (err) {
         if (controller.signal.aborted) return
-        setError(err instanceof Error ? err.message : 'Stream failed')
+        const msg = err instanceof Error ? err.message : 'Stream failed'
+        if (!isBenignRemediationStreamError(msg)) {
+          setError(msg)
+        }
       } finally {
         setConnected(false)
       }
