@@ -83,26 +83,6 @@ envs:
       group: worker
       namespace: bifrost-stg
       deployment: celery-worker-stocks-ib
-    - name: celery-worker-stocks-massive
-      label: Celery Stocks Massive
-      group: worker
-      namespace: bifrost-stg
-      deployment: celery-worker-stocks-massive
-    - name: celery-worker-stocks-massive-high
-      label: Celery Stocks Massive High
-      group: worker
-      namespace: bifrost-stg
-      deployment: celery-worker-stocks-massive-high
-    - name: celery-worker-options-massive
-      label: Celery Options Massive
-      group: worker
-      namespace: bifrost-stg
-      deployment: celery-worker-options-massive
-    - name: celery-worker-options-massive-high
-      label: Celery Options Massive High
-      group: worker
-      namespace: bifrost-stg
-      deployment: celery-worker-options-massive-high
     - name: celery-beat
       label: Celery Beat
       group: worker
@@ -202,26 +182,6 @@ envs:
       group: worker
       namespace: bifrost-prod
       deployment: celery-worker-stocks-ib
-    - name: celery-worker-stocks-massive
-      label: Celery Stocks Massive
-      group: worker
-      namespace: bifrost-prod
-      deployment: celery-worker-stocks-massive
-    - name: celery-worker-stocks-massive-high
-      label: Celery Stocks Massive High
-      group: worker
-      namespace: bifrost-prod
-      deployment: celery-worker-stocks-massive-high
-    - name: celery-worker-options-massive
-      label: Celery Options Massive
-      group: worker
-      namespace: bifrost-prod
-      deployment: celery-worker-options-massive
-    - name: celery-worker-options-massive-high
-      label: Celery Options Massive High
-      group: worker
-      namespace: bifrost-prod
-      deployment: celery-worker-options-massive-high
     - name: celery-beat
       label: Celery Beat
       group: worker
