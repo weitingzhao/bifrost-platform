@@ -29,6 +29,9 @@ import {
 import { MarketDataJsonProbeCard } from '@/components/market-data/MarketDataJsonProbeCard'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { describeCronSchedule } from '@/lib/patrol/cronSchedule'
+
+type IngestDetailTab = 'schedule' | 'jobs' | 'enqueue'
 
 function statusVariant(
   status: string,
@@ -132,6 +135,7 @@ export function MarketDataIngestTab() {
   const { canOperate } = usePlatformAuth()
   const queryClient = useQueryClient()
   const [kind, setKind] = useState('')
+  const [detailTab, setDetailTab] = useState<IngestDetailTab>('schedule')
   const [statusFilter, setStatusFilter] = useState('all')
   const [payloadText, setPayloadText] = useState('{}')
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -298,90 +302,31 @@ export function MarketDataIngestTab() {
         )}
       </OpsSection>
 
-      <OpsSection
-        title="Schedule plan & adherence"
-        description="Future Cron fires + last fire vs jobs/freshness (plan vs actual)"
-        bodyPadding="none"
-        overflow="visible"
-        collapsible
-        defaultCollapsed={false}
-        actions={
-          dash?.schedule != null ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <DenseTag variant={statusVariant(dash.schedule.verdict ?? '')}>
-                {dash.schedule.verdict ?? '—'}
-              </DenseTag>
-              <DenseTag variant="success">on_plan {dash.schedule.on_plan ?? 0}</DenseTag>
-              <DenseTag variant="info">due {dash.schedule.due ?? 0}</DenseTag>
-              <DenseTag variant="danger">missed {dash.schedule.missed ?? 0}</DenseTag>
-              <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                grace {dash.schedule.grace_minutes ?? 45}m
-              </span>
-            </div>
-          ) : null
-        }
-      >
-        {dash == null ? (
-          <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {dashErr != null
-              ? `Schedule dashboard needs Plugin ≥0.4.3 (${dashErr})`
-              : 'Loading schedule…'}
-          </p>
-        ) : scheduleSlots.length === 0 ? (
-          <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            No slots in schedule.yaml
-          </p>
-        ) : (
-          <DenseDataTable>
-            <DenseTableHeader>
-              <DenseTableHeadRow>
-                <DenseTableHead>Slot</DenseTableHead>
-                <DenseTableHead>Cron (UTC)</DenseTableHead>
-                <DenseTableHead>Adherence</DenseTableHead>
-                <DenseTableHead>Last fire</DenseTableHead>
-                <DenseTableHead>Next fires</DenseTableHead>
-                <DenseTableHead>Evidence</DenseTableHead>
-              </DenseTableHeadRow>
-            </DenseTableHeader>
-            <DenseTableBody>
-              {scheduleSlots.map(s => (
-                <DenseTableRow key={s.slot}>
-                  <DenseTableCell>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-xs">{s.slot}</span>
-                      <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                        {s.note ?? ''}
-                        {s.inline ? ' · inline' : ''}
-                      </span>
-                    </div>
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono text-xs">{s.cron}</DenseTableCell>
-                  <DenseTableCell>
-                    <DenseTag variant={statusVariant(s.adherence ?? '')}>
-                      {s.adherence ?? '—'}
-                    </DenseTag>
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
-                    {s.last_fire ?? '—'}
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
-                    {(s.next_fires ?? []).slice(0, 2).join(' · ') || '—'}
-                  </DenseTableCell>
-                  <DenseTableCell className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                    {s.detail ?? '—'}
-                  </DenseTableCell>
-                </DenseTableRow>
-              ))}
-            </DenseTableBody>
-          </DenseDataTable>
-        )}
-      </OpsSection>
-
-      <OpsSection
-        title="Job queue"
-        description="Plugin GET /market/ingest/jobs — ready/running history rows"
-        actions={
+      {/* ── Detail secondary tabs ── */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
+        <SegmentControl
+          size="sm"
+          ariaLabel="Ingest detail panel"
+          value={detailTab}
+          onChange={v => setDetailTab(v as IngestDetailTab)}
+          options={[
+            { value: 'schedule', label: 'Schedule' },
+            { value: 'jobs', label: 'Job queue' },
+            { value: 'enqueue', label: 'Enqueue' },
+          ]}
+        />
+        {detailTab === 'schedule' && dash?.schedule != null ? (
           <div className="flex flex-wrap items-center gap-2">
+            <DenseTag variant={statusVariant(dash.schedule.verdict ?? '')}>
+              {dash.schedule.verdict ?? '—'}
+            </DenseTag>
+            <DenseTag variant="success">on_plan {dash.schedule.on_plan ?? 0}</DenseTag>
+            <DenseTag variant="info">due {dash.schedule.due ?? 0}</DenseTag>
+            <DenseTag variant="danger">missed {dash.schedule.missed ?? 0}</DenseTag>
+          </div>
+        ) : null}
+        {detailTab === 'jobs' ? (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
               Status
             </span>
@@ -411,136 +356,210 @@ export function MarketDataIngestTab() {
               Refresh
             </Button>
           </div>
-        }
-        bodyPadding="none"
-        overflow="visible"
-        collapsible
-        defaultCollapsed={false}
-      >
-        {jobsQ.isLoading ? (
-          <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Loading jobs…
-          </p>
-        ) : jobsErr != null ? (
-          <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--destructive)]">
-            {jobsErr}
-          </p>
-        ) : jobs.length === 0 ? (
-          <p className="m-0 px-3 py-4 text-center text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            No ingest jobs
-          </p>
-        ) : (
-          <DenseDataTable>
-            <DenseTableHeader>
-              <DenseTableHeadRow>
-                <DenseTableHead>ID</DenseTableHead>
-                <DenseTableHead>Kind</DenseTableHead>
-                <DenseTableHead>Status</DenseTableHead>
-                <DenseTableHead>Waited</DenseTableHead>
-                <DenseTableHead>Payload</DenseTableHead>
-                <DenseTableHead>Created</DenseTableHead>
-                <DenseTableHead>Result</DenseTableHead>
-              </DenseTableHeadRow>
-            </DenseTableHeader>
-            <DenseTableBody>
-              {jobs.map(j => (
-                <DenseTableRow key={String(j.job_id ?? j.id)}>
-                  <DenseTableCell className="font-mono text-xs">
-                    {j.job_id ?? j.id ?? '—'}
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono text-xs">{j.kind}</DenseTableCell>
-                  <DenseTableCell>
-                    <DenseTag variant={statusVariant(j.status)}>{j.status}</DenseTag>
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono text-xs">
-                    {j.status === 'pending' || j.status === 'running'
-                      ? waitedLabel(j.created_at, nowMs)
-                      : j.started_at && j.created_at
-                        ? waitedLabel(j.created_at, Date.parse(j.started_at))
-                        : '—'}
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                    {payloadBrief(j.payload)}
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
-                    {j.created_at ?? '—'}
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                    {formatResult(j.result)}
-                  </DenseTableCell>
-                </DenseTableRow>
-              ))}
-            </DenseTableBody>
-          </DenseDataTable>
-        )}
-      </OpsSection>
+        ) : null}
+      </div>
 
-      <OpsSection
-        title="Enqueue job"
-        description="POST /market/ingest/enqueue — writes data_ops.job_ingest (operator auth)"
-        bodyPadding="default"
-        overflow="visible"
-        collapsible
-        defaultCollapsed
-      >
-        {kindsErr != null ? (
-          <p className="m-0 mb-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
-            {kindsErr}
-          </p>
-        ) : null}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="flex min-w-[12rem] flex-col gap-1">
-            <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
-              Kind
-            </span>
-            <select
-              className="h-8 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-[var(--text-dense-meta)]"
-              value={selectedKind}
-              onChange={e => setKind(e.target.value)}
-              disabled={kinds.length === 0}
+      {detailTab === 'schedule' ? (
+        <OpsSection
+          title="Schedule plan & adherence"
+          description="Future Cron fires + last fire vs jobs/freshness (plan vs actual)"
+          bodyPadding="none"
+          overflow="visible"
+        >
+          {dash == null ? (
+            <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              {dashErr != null
+                ? `Schedule dashboard needs Plugin ≥0.4.3 (${dashErr})`
+                : 'Loading schedule…'}
+            </p>
+          ) : scheduleSlots.length === 0 ? (
+            <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              No slots in schedule.yaml
+            </p>
+          ) : (
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Slot</DenseTableHead>
+                  <DenseTableHead>Schedule</DenseTableHead>
+                  <DenseTableHead>Adherence</DenseTableHead>
+                  <DenseTableHead>Last fire</DenseTableHead>
+                  <DenseTableHead>Next fires</DenseTableHead>
+                  <DenseTableHead>Evidence</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {scheduleSlots.map(s => (
+                  <DenseTableRow key={s.slot}>
+                    <DenseTableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-mono text-xs">{s.slot}</span>
+                        <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                          {s.note ?? ''}
+                          {s.inline ? ' · inline' : ''}
+                        </span>
+                      </div>
+                    </DenseTableCell>
+                    <DenseTableCell
+                      className="text-[var(--text-dense-meta)]"
+                      title={s.cron ? `cron: ${s.cron}` : undefined}
+                    >
+                      {s.cron ? describeCronSchedule(s.cron) : '—'}
+                    </DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag variant={statusVariant(s.adherence ?? '')}>
+                        {s.adherence ?? '—'}
+                      </DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
+                      {s.last_fire ?? '—'}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
+                      {(s.next_fires ?? []).slice(0, 2).join(' · ') || '—'}
+                    </DenseTableCell>
+                    <DenseTableCell className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                      {s.detail ?? '—'}
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          )}
+        </OpsSection>
+      ) : null}
+
+      {detailTab === 'jobs' ? (
+        <OpsSection
+          title="Job queue"
+          description="Plugin GET /market/ingest/jobs — ready/running history rows"
+          bodyPadding="none"
+          overflow="visible"
+        >
+          {jobsQ.isLoading ? (
+            <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Loading jobs…
+            </p>
+          ) : jobsErr != null ? (
+            <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--destructive)]">
+              {jobsErr}
+            </p>
+          ) : jobs.length === 0 ? (
+            <p className="m-0 px-3 py-4 text-center text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              No ingest jobs
+            </p>
+          ) : (
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>ID</DenseTableHead>
+                  <DenseTableHead>Kind</DenseTableHead>
+                  <DenseTableHead>Status</DenseTableHead>
+                  <DenseTableHead>Waited</DenseTableHead>
+                  <DenseTableHead>Payload</DenseTableHead>
+                  <DenseTableHead>Created</DenseTableHead>
+                  <DenseTableHead>Result</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {jobs.map(j => (
+                  <DenseTableRow key={String(j.job_id ?? j.id)}>
+                    <DenseTableCell className="font-mono text-xs">
+                      {j.job_id ?? j.id ?? '—'}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono text-xs">{j.kind}</DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag variant={statusVariant(j.status)}>{j.status}</DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono text-xs">
+                      {j.status === 'pending' || j.status === 'running'
+                        ? waitedLabel(j.created_at, nowMs)
+                        : j.started_at && j.created_at
+                          ? waitedLabel(j.created_at, Date.parse(j.started_at))
+                          : '—'}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                      {payloadBrief(j.payload)}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
+                      {j.created_at ?? '—'}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                      {formatResult(j.result)}
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          )}
+        </OpsSection>
+      ) : null}
+
+      {detailTab === 'enqueue' ? (
+        <OpsSection
+          title="Enqueue job"
+          description="POST /market/ingest/enqueue — writes data_ops.job_ingest (operator auth)"
+          bodyPadding="default"
+          overflow="visible"
+        >
+          {kindsErr != null ? (
+            <p className="m-0 mb-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
+              {kindsErr}
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="flex min-w-[12rem] flex-col gap-1">
+              <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
+                Kind
+              </span>
+              <select
+                className="h-8 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-[var(--text-dense-meta)]"
+                value={selectedKind}
+                onChange={e => setKind(e.target.value)}
+                disabled={kinds.length === 0}
+              >
+                {kinds.length === 0 ? <option value="">No kinds</option> : null}
+                {kinds.map(k => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
+                Payload (JSON)
+              </span>
+              <textarea
+                className="min-h-[4.5rem] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 font-mono text-[var(--text-dense-caption)]"
+                value={payloadText}
+                onChange={e => setPayloadText(e.target.value)}
+              />
+            </label>
+            <Button
+              size="sm"
+              disabled={!canOperate || acting || !selectedKind}
+              onClick={() => setConfirmOpen(true)}
+              title={canOperate ? undefined : 'Operator auth required'}
             >
-              {kinds.length === 0 ? <option value="">No kinds</option> : null}
-              {kinds.map(k => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
-              Payload (JSON)
-            </span>
-            <textarea
-              className="min-h-[4.5rem] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 font-mono text-[var(--text-dense-caption)]"
-              value={payloadText}
-              onChange={e => setPayloadText(e.target.value)}
-            />
-          </label>
-          <Button
-            size="sm"
-            disabled={!canOperate || acting || !selectedKind}
-            onClick={() => setConfirmOpen(true)}
-            title={canOperate ? undefined : 'Operator auth required'}
-          >
-            Enqueue
-          </Button>
-        </div>
-        {!canOperate ? (
-          <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Authenticate as operator to enqueue jobs.
-          </p>
-        ) : null}
-        {actionMsg != null ? (
-          <p
-            className={`m-0 mt-2 text-[var(--text-dense-meta)] ${
-              actionFailed ? 'text-[var(--destructive)]' : 'text-[var(--success)]'
-            }`}
-          >
-            {actionMsg}
-          </p>
-        ) : null}
-      </OpsSection>
+              Enqueue
+            </Button>
+          </div>
+          {!canOperate ? (
+            <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Authenticate as operator to enqueue jobs.
+            </p>
+          ) : null}
+          {actionMsg != null ? (
+            <p
+              className={`m-0 mt-2 text-[var(--text-dense-meta)] ${
+                actionFailed ? 'text-[var(--destructive)]' : 'text-[var(--success)]'
+              }`}
+            >
+              {actionMsg}
+            </p>
+          ) : null}
+        </OpsSection>
+      ) : null}
 
       <MarketDataJsonProbeCard
         title="JSON Probe"

@@ -37,6 +37,7 @@ import {
 } from '@/lib/market-data/checklist'
 
 type CoverageLens = 'stock' | 'option' | 'common'
+type CoverageDetailTab = 'quality' | 'db-summary' | 'capability'
 
 function statusVariant(
   status: ChecklistRow['projectStatus'],
@@ -96,6 +97,7 @@ function ChecklistTable({ rows }: { rows: ChecklistRow[] }) {
 }
 
 export function MarketDataCoverageTab() {
+  const [detailTab, setDetailTab] = useState<CoverageDetailTab>('quality')
   const [lens, setLens] = useState<CoverageLens>('stock')
 
   const summaryQ = useQuery({
@@ -150,68 +152,23 @@ export function MarketDataCoverageTab() {
     <div className="flex flex-col gap-4">
       <DataInventoryStrip />
 
-      <QualityScoreSection />
-
-      <StockDepthSection symbols={symbols} watchlistLoading={watchlistQ.isLoading} />
-
-      <OptionCoverageSection />
-
-      <OpsSection
-        title="DB summary (raw counts)"
-        description="Secondary — Plugin GET /market/coverage/db-summary + watchlist row counts"
-        bodyPadding="default"
-        overflow="visible"
-        collapsible
-        defaultCollapsed={true}
-      >
-        {summaryQ.isLoading ? (
-          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Loading coverage…
-          </p>
-        ) : summaryErr != null ? (
-          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">
-            {summaryErr}
-          </p>
-        ) : counts != null ? (
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(counts).map(([k, v]) => (
-              <DenseTag key={k} variant="neutral">
-                {k}: {v ?? '—'}
-              </DenseTag>
-            ))}
-          </div>
-        ) : (
-          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            No coverage summary
-          </p>
-        )}
-        <div className="mt-3">
-          <OpsSubsectionTitle>Watchlist sample</OpsSubsectionTitle>
-          {watchlistQ.isLoading ? (
-            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Loading…
-            </p>
-          ) : watchErr != null ? (
-            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">{watchErr}</p>
-          ) : symbols.length === 0 ? (
-            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              No symbols
-            </p>
-          ) : (
-            <p className="m-0 font-mono text-[var(--text-dense-meta)]">
-              {symbols.slice(0, 24).join(' · ')}
-              {symbols.length > 24 ? ` · +${symbols.length - 24}` : ''}
-            </p>
-          )}
-        </div>
-      </OpsSection>
-
-      <OpsSection
-        title="Capability checklist"
-        description={`${capTotal} Polygon features · Plugin utilization ${capPct}%`}
-        headerExtra={
+      {/* ── Detail secondary tabs ── */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
+        <SegmentControl
+          size="sm"
+          ariaLabel="Coverage detail panel"
+          value={detailTab}
+          onChange={v => setDetailTab(v as CoverageDetailTab)}
+          options={[
+            { value: 'quality', label: 'Quality' },
+            { value: 'db-summary', label: 'DB summary' },
+            { value: 'capability', label: 'Capability' },
+          ]}
+        />
+        {detailTab === 'capability' ? (
           <SegmentControl
             size="sm"
+            ariaLabel="Capability lens"
             value={lens}
             onChange={v => setLens(v as CoverageLens)}
             options={[
@@ -220,57 +177,120 @@ export function MarketDataCoverageTab() {
               { value: 'common', label: 'Common' },
             ]}
           />
-        }
-        bodyPadding="none"
-        overflow="visible"
-        collapsible
-        defaultCollapsed={true}
-      >
-        <div className="flex flex-col gap-3 p-3">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <span className="shrink-0 text-xs font-medium text-[var(--muted-foreground)]">
-                Polygon offers {capTotal} features
-              </span>
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--muted)]/30">
-                <div
-                  className="flex h-full"
-                  style={{ width: `${Math.round(((capImpl + capPartial) / capTotal) * 100)}%` }}
-                >
+        ) : null}
+      </div>
+
+      {detailTab === 'quality' ? (
+        <>
+          <QualityScoreSection />
+          <StockDepthSection symbols={symbols} watchlistLoading={watchlistQ.isLoading} />
+          <OptionCoverageSection />
+        </>
+      ) : null}
+
+      {detailTab === 'db-summary' ? (
+        <OpsSection
+          title="DB summary (raw counts)"
+          description="Plugin GET /market/coverage/db-summary + watchlist row counts"
+          bodyPadding="default"
+          overflow="visible"
+        >
+          {summaryQ.isLoading ? (
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              Loading coverage…
+            </p>
+          ) : summaryErr != null ? (
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">
+              {summaryErr}
+            </p>
+          ) : counts != null ? (
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(counts).map(([k, v]) => (
+                <DenseTag key={k} variant="neutral">
+                  {k}: {v ?? '—'}
+                </DenseTag>
+              ))}
+            </div>
+          ) : (
+            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              No coverage summary
+            </p>
+          )}
+          <div className="mt-3">
+            <OpsSubsectionTitle>Watchlist sample</OpsSubsectionTitle>
+            {watchlistQ.isLoading ? (
+              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                Loading…
+              </p>
+            ) : watchErr != null ? (
+              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">{watchErr}</p>
+            ) : symbols.length === 0 ? (
+              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                No symbols
+              </p>
+            ) : (
+              <p className="m-0 font-mono text-[var(--text-dense-meta)]">
+                {symbols.slice(0, 24).join(' · ')}
+                {symbols.length > 24 ? ` · +${symbols.length - 24}` : ''}
+              </p>
+            )}
+          </div>
+        </OpsSection>
+      ) : null}
+
+      {detailTab === 'capability' ? (
+        <OpsSection
+          title="Capability checklist"
+          description={`${capTotal} Polygon features · Plugin utilization ${capPct}%`}
+          bodyPadding="none"
+          overflow="visible"
+        >
+          <div className="flex flex-col gap-3 p-3">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <span className="shrink-0 text-xs font-medium text-[var(--muted-foreground)]">
+                  Polygon offers {capTotal} features
+                </span>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--muted)]/30">
                   <div
-                    className="h-full bg-emerald-500"
-                    style={{ width: `${Math.round((capImpl / (capImpl + capPartial || 1)) * 100)}%` }}
-                  />
-                  <div className="h-full bg-amber-500" style={{ flex: 1 }} />
+                    className="flex h-full"
+                    style={{ width: `${Math.round(((capImpl + capPartial) / capTotal) * 100)}%` }}
+                  >
+                    <div
+                      className="h-full bg-emerald-500"
+                      style={{ width: `${Math.round((capImpl / (capImpl + capPartial || 1)) * 100)}%` }}
+                    />
+                    <div className="h-full bg-amber-500" style={{ flex: 1 }} />
+                  </div>
                 </div>
               </div>
+              <div className="flex flex-wrap gap-3 text-xs tabular-nums">
+                <span>
+                  <span className="font-semibold text-emerald-500">{capImpl}</span>
+                  <span className="text-[var(--muted-foreground)]"> implemented</span>
+                </span>
+                <span>
+                  <span className="font-semibold text-amber-500">{capPartial}</span>
+                  <span className="text-[var(--muted-foreground)]"> partial</span>
+                </span>
+                <span>
+                  <span className="font-semibold text-[var(--muted-foreground)]">{capTotal - capImpl - capPartial}</span>
+                  <span className="text-[var(--muted-foreground)]"> not implemented</span>
+                </span>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-3 text-xs tabular-nums">
-              <span>
-                <span className="font-semibold text-emerald-500">{capImpl}</span>
-                <span className="text-[var(--muted-foreground)]"> implemented</span>
-              </span>
-              <span>
-                <span className="font-semibold text-amber-500">{capPartial}</span>
-                <span className="text-[var(--muted-foreground)]"> partial</span>
-              </span>
-              <span>
-                <span className="font-semibold text-[var(--muted-foreground)]">{capTotal - capImpl - capPartial}</span>
-                <span className="text-[var(--muted-foreground)]"> not implemented</span>
-              </span>
-            </div>
+            <OpsSubsectionTitle className="mt-1">
+              {lens === 'stock' ? 'Stock' : lens === 'option' ? 'Option' : 'Common'} — {rowCount} capabilities
+            </OpsSubsectionTitle>
+            {grouped.map(g => (
+              <div key={g.group} className="flex flex-col gap-1">
+                <OpsSubsectionTitle>{CAPABILITY_GROUP_LABELS[g.group]}</OpsSubsectionTitle>
+                <ChecklistTable rows={g.rows} />
+              </div>
+            ))}
           </div>
-          <OpsSubsectionTitle className="mt-1">
-            {lens === 'stock' ? 'Stock' : lens === 'option' ? 'Option' : 'Common'} — {rowCount} capabilities
-          </OpsSubsectionTitle>
-          {grouped.map(g => (
-            <div key={g.group} className="flex flex-col gap-1">
-              <OpsSubsectionTitle>{CAPABILITY_GROUP_LABELS[g.group]}</OpsSubsectionTitle>
-              <ChecklistTable rows={g.rows} />
-            </div>
-          ))}
-        </div>
-      </OpsSection>
+        </OpsSection>
+      ) : null}
 
       <MarketDataJsonProbeCard
         title="JSON Probe"
