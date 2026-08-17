@@ -13,12 +13,13 @@ func TestStgAPIProbePath(t *testing.T) {
 		want   string
 	}{
 		{domain: "monitor", want: "/status"},
-		{domain: "massive", want: "/health"},
-		{domain: "ops", want: "/health"},
+		{domain: "docs", want: "/research/docs/health"},
+		{domain: "ops", want: "/ops/health"},
+		{domain: "trading", want: "/health"},
 		{domain: "", want: "/health"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.domain+"→"+tc.want, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%q→%q", tc.domain, tc.want), func(t *testing.T) {
 			if got := stgAPIProbePath(tc.domain); got != tc.want {
 				t.Fatalf("stgAPIProbePath(%q) = %q, want %q", tc.domain, got, tc.want)
 			}

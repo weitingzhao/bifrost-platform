@@ -75,10 +75,12 @@ type ComputeNodeSpec struct {
 	Workloads        []ComputeWorkloadSpec `yaml:"workloads" json:"workloads"`
 }
 
-// DefaultStgAPIDomains — FastAPI domains behind nginx /api/{domain}/.
+// DefaultStgAPIDomains — FastAPI path domains behind gateway /api/{domain}/.
+// Phase B: 4 process pods; path aliases retained (docs/ops → monitor; trading/strategy/portfolio → account).
+// api-massive retired (P7) — do not list it (SPA catch-all would false-OK).
 func DefaultStgAPIDomains() []string {
 	return []string{
-		"monitor", "massive", "docs", "ops", "trading",
+		"monitor", "docs", "ops", "trading",
 		"strategy", "portfolio", "market", "research",
 	}
 }

@@ -1,7 +1,8 @@
 # Vision V4 — Trade API domain registry (read-only Business Agent)
 # Gateway routes: {nginx}/api/{domain}/...
+# Phase B: 4 process pods; HTTP path prefixes preserved as aliases.
 
-version: "2026-06-19"
+version: "2026-08-17"
 authority: config/trade-api-domains.yaml
 mode: read_only
 
@@ -9,30 +10,35 @@ domains:
   - id: monitor
     port: 8765
     probe_path: /status
-  - id: massive
-    port: 8766
-    probe_path: /health
+    process: api-monitor
   - id: docs
-    port: 8767
-    probe_path: /health
+    port: 8765
+    probe_path: /research/docs/health
+    process: api-monitor
   - id: ops
-    port: 8768
-    probe_path: /health
+    port: 8765
+    probe_path: /ops/health
+    process: api-monitor
   - id: trading
     port: 8769
     probe_path: /health
+    process: api-account
   - id: strategy
-    port: 8770
+    port: 8769
     probe_path: /health
+    process: api-account
   - id: portfolio
-    port: 8771
+    port: 8769
     probe_path: /health
+    process: api-account
   - id: market
     port: 8772
     probe_path: /health
+    process: api-market
   - id: research
     port: 8773
     probe_path: /health
+    process: api-research
 
 forbidden_writes:
   - POST /api/monitor/control/*

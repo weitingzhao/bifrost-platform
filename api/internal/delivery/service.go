@@ -554,12 +554,20 @@ func (s *Service) StgSmoke(ctx context.Context) StgSmokeResponse {
 	return out
 }
 
-// stgAPIProbePath — monitor exposes rich GET /status; other domains use /health only.
+// stgAPIProbePath — monitor exposes rich GET /status; docs aggregate uses prefixed health;
+// other domains use /health after strip middleware.
 func stgAPIProbePath(domain string) string {
-	if domain == "monitor" {
+	switch domain {
+	case "monitor":
 		return "/status"
+	case "docs":
+		return "/research/docs/health"
+	case "ops":
+		// After strip /api/ops, /ops/health remains on the merged monitor process.
+		return "/ops/health"
+	default:
+		return "/health"
 	}
-	return "/health"
 }
 
 // smokeHTTPStatus maps an HTTP status code to smoke probe reachability + detail.
