@@ -104,7 +104,7 @@ envs:
       group: worker
       namespace: bifrost-stg
       deployment: account-sync
-    - name: massive-ws  # ⚠ PENDING RETIREMENT — WS migrated to Plugin polygon-ws-ingestor
+    - name: massive-ws  # ⚠ SCALED TO 0 — Plugin polygon-ws-ingestor owns redis-massive; delete after +24h
       label: Massive WS (→ Plugin)
       group: socket
       namespace: bifrost-stg
@@ -203,7 +203,7 @@ envs:
       group: worker
       namespace: bifrost-prod
       deployment: account-sync
-    - name: massive-ws  # ⚠ PENDING RETIREMENT — WS migrated to Plugin polygon-ws-ingestor
+    - name: massive-ws  # ⚠ SCALED TO 0 — Plugin polygon-ws-ingestor owns redis-massive; delete after +24h
       label: Massive WS (→ Plugin)
       group: socket
       namespace: bifrost-prod
