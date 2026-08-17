@@ -5,6 +5,9 @@ import type { ClusterWorkload } from '@/api/clusterTypes'
 export const IB_GATEWAY_PLUGIN_NS = 'data'
 export const IB_GATEWAY_WORKLOAD = 'ib-gateway'
 
+/** Market Data Plugin NS. */
+export const MARKET_DATA_PLUGIN_NS = 'plugin-market-data'
+
 export type CriticalProcessRow = {
   label: string
   name: string
@@ -19,10 +22,12 @@ type CriticalProcessSpec = {
   /** Exact workload names in the selected Trade NS (first match wins). */
   tradeNames?: readonly string[]
   /**
-   * Exact names in the IB Gateway plugin NS (`data`).
-   * Used when Trade NS no longer runs legacy ib-ingestor / ib-operator.
+   * Exact names in a plugin NS (default: IB Gateway `data`).
+   * Used when Trade NS no longer runs the legacy workload.
    */
   pluginNames?: readonly string[]
+  /** Override plugin NS for this spec (default: IB_GATEWAY_PLUGIN_NS). */
+  pluginNs?: string
 }
 
 /**
@@ -46,7 +51,12 @@ export const CRITICAL_PROCESS_SPECS: readonly CriticalProcessSpec[] = [
     tradeNames: ['ib-account-agent', 'ib-account-gateway'],
     pluginNames: [IB_GATEWAY_WORKLOAD],
   },
-  { label: 'Massive WS', tradeNames: ['massive-ws'] },
+  {
+    label: 'Polygon WS Ingestor',
+    tradeNames: ['polygon-ws-ingestor'],
+    pluginNames: ['polygon-ws-ingestor'],
+    pluginNs: MARKET_DATA_PLUGIN_NS,
+  },
   { label: 'Celery worker', tradeNames: ['celery-worker'] },
   { label: 'Flower', tradeNames: ['flower'] },
 ]
@@ -108,9 +118,10 @@ export function resolveCriticalProcesses(
     if (tradeMatch != null) {
       return toRow(spec.label, tradeMatch, tradeNs, false)
     }
+    const effectivePluginNs = spec.pluginNs ?? pluginNs
     const pluginMatch = findByExactName(pluginWorkloads, spec.pluginNames)
     if (pluginMatch != null) {
-      return toRow(spec.label, pluginMatch, pluginNs, true)
+      return toRow(spec.label, pluginMatch, effectivePluginNs, true)
     }
     return toRow(spec.label, undefined, tradeNs, false)
   })

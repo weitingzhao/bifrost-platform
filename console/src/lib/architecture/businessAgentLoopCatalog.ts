@@ -9,7 +9,7 @@ export const BUSINESS_AGENT_LOOP_VERSION = '2026-06-19'
 export const BUSINESS_AGENT_LOOP_SOURCE = 'console/src/lib/architecture/businessAgentLoopCatalog.ts'
 
 export const BUSINESS_AGENT_LOOP_STATEMENT =
-  'Business Agent reads 9 Trade API domains via mcp-trade-api (read-only). ' +
+  'Business Agent reads 8 Trade API domains via mcp-trade-api (read-only). ' +
   'Scheduled pre/post-market briefs via Cursor SDK; ad-hoc Q&A in chat. ' +
   'Never writes orders, daemon_control, or strategy config — advisory only.'
 
@@ -20,10 +20,9 @@ export type TradeAPIDomain = {
   readExamples: string
 }
 
-/** Nine Trade FastAPI domains — read-only probe + example endpoints. */
+/** Eight Trade FastAPI domains — read-only probe + example endpoints (massive retired P7). */
 export const TRADE_API_DOMAINS: TradeAPIDomain[] = [
   { id: 'monitor', port: 8765, probePath: '/status', readExamples: 'GET /status, GET /operations' },
-  { id: 'massive', port: 8766, probePath: '/health', readExamples: 'Polygon data queries' },
   { id: 'docs', port: 8767, probePath: '/health', readExamples: 'OpenAPI schema' },
   { id: 'ops', port: 8768, probePath: '/health', readExamples: 'Celery queue status' },
   { id: 'trading', port: 8769, probePath: '/health', readExamples: 'Positions, orders, history' },
@@ -53,8 +52,8 @@ export const BUSINESS_AGENT_LOOP_STEPS: BusinessAgentLoopStep[] = [
     order: 2,
     phase: 'Probe',
     actor: 'Business Agent',
-    action: 'MCP read tools across 9 Trade API domains via gateway',
-    verify: 'STG/dev smoke 9/9 HTTP 200 on probe paths',
+    action: 'MCP read tools across 8 Trade API domains via gateway',
+    verify: 'STG/dev smoke 8/8 HTTP 200 on probe paths',
   },
   {
     order: 3,
