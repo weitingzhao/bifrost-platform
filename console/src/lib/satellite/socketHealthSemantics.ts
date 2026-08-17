@@ -1,5 +1,11 @@
 import type { Reachability } from '@/api/matrixTypes'
-import type { SatelliteBusDeepResponse, SatelliteBusIngestService, SatelliteBusMonitorDaemon, SatelliteBusSocketComponent } from '@/api/satelliteBusTypes'
+import type {
+  SatelliteBusDeepResponse,
+  SatelliteBusIngestService,
+  SatelliteBusMonitorDaemon,
+  SatelliteBusSocketComponent,
+} from '@/api/satelliteBusTypes'
+import { satelliteBusPolygonWs } from '@/api/satelliteBusTypes'
 import type { Signal } from '@/lib/control-room/missionSignals'
 import { worst } from '@/lib/control-room/missionSignals'
 
@@ -86,7 +92,18 @@ function ingestById(
   return services?.find(s => s.id === id)
 }
 
-function massiveRequired(env: TradeEnv, ingest?: SatelliteBusIngestService, raw?: Record<string, unknown>): SocketRequiredState {
+/** Prefer official polygon_ws ingest row; dual-accept legacy massive_ws. */
+function polygonWsIngest(
+  services: SatelliteBusIngestService[] | undefined,
+): SatelliteBusIngestService | undefined {
+  return ingestById(services, 'polygon_ws') ?? ingestById(services, 'massive_ws')
+}
+
+function isPolygonWsConsumerId(id: string): boolean {
+  return id === 'polygon_ws' || id === 'massive'
+}
+
+function polygonWsRequired(env: TradeEnv, ingest?: SatelliteBusIngestService, raw?: Record<string, unknown>): SocketRequiredState {
   const runtime = (ingest?.runtime_status ?? '').toLowerCase()
   const display = (ingest?.display_active ?? '').toLowerCase()
   const wsMode = rawStr(raw, 'ws_mode')
@@ -345,8 +362,8 @@ function classifyTradeSocketConsumer(
   const ingestRuntime = (ingest?.runtime_status ?? '').toLowerCase()
 
   let required: SocketRequiredState = 'required'
-  if (id === 'massive') {
-    required = massiveRequired(env, ingest, raw)
+  if (isPolygonWsConsumerId(id)) {
+    required = polygonWsRequired(env, ingest, raw)
   }
 
   if (required === 'policy-off') {
@@ -400,6 +417,7 @@ function classifyTradeSocketConsumer(
 
 export function buildSocketHealthRows(
   socket: {
+    polygon_ws?: SatelliteBusSocketComponent
     massive?: SatelliteBusSocketComponent
     ib_ingestor?: SatelliteBusSocketComponent
     ib_account_agent?: SatelliteBusSocketComponent
@@ -424,7 +442,13 @@ export function buildSocketHealthRows(
       ingest('ib_account_agent'),
     ),
     classifyTradeSocketConsumer('ib_operator', 'IB Operator', socket?.ib_operator, env, ingest('ib_operator')),
-    classifyTradeSocketConsumer('massive', 'Massive WS', socket?.massive, env, ingest('massive_ws')),
+    classifyTradeSocketConsumer(
+      'polygon_ws',
+      'Polygon WS (Plugin)',
+      satelliteBusPolygonWs(socket),
+      env,
+      polygonWsIngest(ingestServices),
+    ),
   ]
 
   const daemonRow = classifyTradingDaemon(env, ingest('trading_engine'), daemon, socket)
@@ -570,7 +594,7 @@ const TRADE_CONSUMER_DEFS: { id: string; label: string; includeDaemon?: boolean 
   { id: 'ib_ingestor', label: 'IB Ingestor' },
   { id: 'ib_account_agent', label: 'IB Account Agent' },
   { id: 'ib_operator', label: 'IB Operator' },
-  { id: 'massive', label: 'Massive WS' },
+  { id: 'polygon_ws', label: 'Polygon WS (Plugin)' },
   { id: 'trading_engine', label: 'Trading daemon', includeDaemon: true },
 ]
 
@@ -613,7 +637,9 @@ export function buildSocketHealthMatrix(
       const slice = buses[env]
       if (slice == null) continue
       const built = buildSocketHealthRows(slice.socket, policyEnv(env), slice.ingest, slice.daemon)
-      const match = built.trade.find(r => r.id === def.id)
+      const match = built.trade.find(
+        r => r.id === def.id || (def.id === 'polygon_ws' && r.id === 'massive'),
+      )
       const key = matrixCellKey(env)
       if (match != null) {
         cells[key] = rowToCell(match)

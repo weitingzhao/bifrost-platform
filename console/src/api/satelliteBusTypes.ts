@@ -26,11 +26,24 @@ export interface SatelliteBusMonitorDaemon {
 }
 
 export interface SatelliteBusMonitorSocket {
-  massive: SatelliteBusSocketComponent
+  /** Preferred Wave C key; readers should prefer polygon_ws ?? massive. */
+  polygon_ws?: SatelliteBusSocketComponent
+  /** Legacy dual-write field — Owner gate before dropping. */
+  massive?: SatelliteBusSocketComponent
   ib_ingestor: SatelliteBusSocketComponent
   ib_account_agent: SatelliteBusSocketComponent
   ib_operator: SatelliteBusSocketComponent
   platform_ib_gateway: SatelliteBusSocketComponent
+}
+
+/** Prefer socket.polygon_ws, fall back to legacy socket.massive. */
+export function satelliteBusPolygonWs(
+  socket:
+    | Pick<SatelliteBusMonitorSocket, 'polygon_ws' | 'massive'>
+    | null
+    | undefined,
+): SatelliteBusSocketComponent | undefined {
+  return socket?.polygon_ws ?? socket?.massive
 }
 
 export interface SatelliteBusMonitorCelery {

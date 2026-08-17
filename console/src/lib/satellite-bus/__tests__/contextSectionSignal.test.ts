@@ -191,8 +191,8 @@ describe('socketMatrixContextSignal', () => {
   it('ignores policy-off expected-off cells', () => {
     const s = socketMatrixContextSignal([
       matrixRow({
-        id: 'massive',
-        label: 'Massive WS',
+        id: 'polygon_ws',
+        label: 'Polygon WS (Plugin)',
         dev: {
           reach: 'fail',
           reachLabel: 'expected off',

@@ -42,6 +42,7 @@ type BusOverrides = {
   ib_ingestor?: SatelliteBusSocketComponent
   ib_account_agent?: SatelliteBusSocketComponent
   ib_operator?: SatelliteBusSocketComponent
+  polygon_ws?: SatelliteBusSocketComponent
   massive?: SatelliteBusSocketComponent
   platform_ib_gateway?: SatelliteBusSocketComponent
   ingest?: SatelliteBusIngestService[]
@@ -66,7 +67,7 @@ function bus(env: 'dev' | 'stg' | 'prod', o: BusOverrides = {}): SatelliteBusDee
         ]
       : []),
     {
-      id: 'massive_ws',
+      id: 'polygon_ws',
       runtime_status: 'policy-off',
       display_active: 'ws-disabled (rest-only)',
       reachability: 'ok' as Reachability,
@@ -91,7 +92,8 @@ function bus(env: 'dev' | 'stg' | 'prod', o: BusOverrides = {}): SatelliteBusDee
         block_reasons: daemonAlive ? [] : ['heartbeat_stale'],
       },
       socket: {
-        massive: o.massive ?? component('ok'),
+        polygon_ws: o.polygon_ws ?? o.massive ?? component('ok'),
+        massive: o.massive ?? o.polygon_ws ?? component('ok'),
         ib_ingestor: o.ib_ingestor ?? component('ok', 'connected @ redis-ib'),
         ib_account_agent: o.ib_account_agent ?? component('ok', 'connected @ redis-ib'),
         ib_operator: o.ib_operator ?? component('ok', 'rpc consumer ready'),
@@ -138,9 +140,9 @@ describe('buildSatelliteBusViewModel', () => {
     expect(daemonRow).toBeTruthy()
     expect(daemonRow!.stateLabel).toBe('EXPECTED OFF')
     expect(daemonRow!.health).toBe('expected-off')
-    const massiveRow = vm.dataPathConsumers.find(r => r.id === 'massive')
-    expect(massiveRow).toBeTruthy()
-    expect(massiveRow!.stateLabel).toBe('EXPECTED OFF')
+    const polygonRow = vm.dataPathConsumers.find(r => r.id === 'polygon_ws' || r.id === 'massive')
+    expect(polygonRow).toBeTruthy()
+    expect(polygonRow!.stateLabel).toBe('EXPECTED OFF')
     // D10: no visible copy suggests enabling live trading / starting the daemon.
     const serialized = JSON.stringify(vm)
     expect(serialized).not.toMatch(/NO-GO|policy-off fail|start the daemon|enable live/i)

@@ -34,6 +34,7 @@ describe('resolveDaemonIbObserve', () => {
         health: { reachability: 'degraded' },
         daemon: { reachability: 'degraded', block_reasons: blockReasons },
         socket: {
+          polygon_ws: { reachability: 'ok', detail: '' },
           massive: { reachability: 'ok', detail: '' },
           ib_ingestor: { reachability: 'ok', detail: '' },
           ib_account_agent: { reachability: 'ok', detail: '' },

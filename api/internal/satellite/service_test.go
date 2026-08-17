@@ -89,8 +89,11 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 	if resp.Ingest.Reachability != probe.ReachOK {
 		t.Fatalf("expected ingest ok with semantic runtime_status rows, got %s", resp.Ingest.Reachability)
 	}
+	if resp.Monitor.Socket.PolygonWs.Reachability != probe.ReachOK {
+		t.Fatalf("expected polygon_ws policy-off ok, got %s", resp.Monitor.Socket.PolygonWs.Reachability)
+	}
 	if resp.Monitor.Socket.Massive.Reachability != probe.ReachOK {
-		t.Fatalf("expected massive policy-off ok, got %s", resp.Monitor.Socket.Massive.Reachability)
+		t.Fatalf("expected massive legacy dual-field ok, got %s", resp.Monitor.Socket.Massive.Reachability)
 	}
 	if resp.Monitor.Socket.IBIngestor.Reachability != probe.ReachDegraded {
 		t.Fatalf("expected ib_ingestor degraded from lamp, got %s", resp.Monitor.Socket.IBIngestor.Reachability)
@@ -230,10 +233,10 @@ func TestSocketComponentDeepPlatformGatewayConnected(t *testing.T) {
 
 func TestSocketComponentDeepMassiveRestOnly(t *testing.T) {
 	raw := map[string]any{
-		"ws_mode":       "rest_only",
-		"ws_connected":  false,
-		"configured":    false,
-		"reachability":  "unknown",
+		"ws_mode":      "rest_only",
+		"ws_connected": false,
+		"configured":   false,
+		"reachability": "unknown",
 	}
 	got := socketComponentDeep(raw)
 	if got.Reachability != probe.ReachOK {

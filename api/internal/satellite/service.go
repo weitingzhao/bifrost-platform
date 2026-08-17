@@ -63,6 +63,7 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 				Reachability: probe.ReachUnknown,
 			},
 			Socket: MonitorSocketDeep{
+				PolygonWs:         SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 				Massive:           SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 				IBIngestor:        SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 				IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
@@ -151,6 +152,7 @@ func (s *Service) busDeepFromBridge(ctx context.Context, env config.Environment)
 			Health:       MonitorHealthDeep{Reachability: probe.ReachFail},
 			Daemon:       MonitorDaemonDeep{Reachability: probe.ReachFail},
 			Socket: MonitorSocketDeep{
+				PolygonWs:         SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
 				Massive:           SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
 				IBIngestor:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
 				IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
@@ -222,6 +224,7 @@ func monitorDeepFromBridgeError(msg string) MonitorDeep {
 		Health:       MonitorHealthDeep{Reachability: probe.ReachFail},
 		Daemon:       MonitorDaemonDeep{Reachability: probe.ReachFail},
 		Socket: MonitorSocketDeep{
+			PolygonWs:         SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
 			Massive:           SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
 			IBIngestor:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
 			IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
@@ -329,10 +332,14 @@ func monitorDetailFromRaw(raw monitorStatusRaw, reach probe.Reachability) string
 		}
 	}
 	nullSockets := []string{}
-	for _, key := range []string{"ib_ingestor", "ib_account_agent", "ib_operator", "massive", "platform_ib_gateway"} {
+	for _, key := range []string{"ib_ingestor", "ib_account_agent", "ib_operator", "platform_ib_gateway"} {
 		if raw.Socket[key] == nil {
 			nullSockets = append(nullSockets, key)
 		}
+	}
+	// Wave C: prefer polygon_ws; treat missing only when both dual-write keys absent.
+	if raw.Socket["polygon_ws"] == nil && raw.Socket["massive"] == nil {
+		nullSockets = append(nullSockets, "polygon_ws")
 	}
 	if len(nullSockets) > 0 {
 		parts = append(parts, "socket null: "+strings.Join(nullSockets, ", "))
@@ -379,15 +386,24 @@ func buildMonitorDeepFromRaw(raw monitorStatusRaw) MonitorDeep {
 		}
 	}
 
+	polygonRaw := raw.Socket["polygon_ws"]
+	if polygonRaw == nil {
+		polygonRaw = raw.Socket["massive"]
+	}
+	massiveRaw := raw.Socket["massive"]
+	if massiveRaw == nil {
+		massiveRaw = raw.Socket["polygon_ws"]
+	}
 	socket := MonitorSocketDeep{
-		Massive:           socketComponentDeep(raw.Socket["massive"]),
+		PolygonWs:         socketComponentDeep(polygonRaw),
+		Massive:           socketComponentDeep(massiveRaw),
 		IBIngestor:        socketComponentDeep(raw.Socket["ib_ingestor"]),
 		IBAccountAgent:    socketComponentDeep(raw.Socket["ib_account_agent"]),
 		IBOperator:        socketComponentDeep(raw.Socket["ib_operator"]),
 		PlatformIBGateway: socketComponentDeep(raw.Socket["platform_ib_gateway"]),
 	}
 	socketReach := aggregateReach(
-		socket.Massive.Reachability,
+		socket.PolygonWs.Reachability,
 		socket.IBIngestor.Reachability,
 		socket.IBAccountAgent.Reachability,
 		socket.IBOperator.Reachability,

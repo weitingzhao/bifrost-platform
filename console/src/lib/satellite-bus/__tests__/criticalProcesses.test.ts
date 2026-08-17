@@ -26,7 +26,7 @@ describe('resolveCriticalProcesses', () => {
       wl({ name: 'daemon', namespace: 'bifrost-prod', ready: '2/2' }),
       wl({ name: 'account-sync', namespace: 'bifrost-prod' }),
       wl({ name: 'api-massive', namespace: 'bifrost-prod' }),
-      wl({ name: 'massive-ws', namespace: 'bifrost-prod' }),
+      wl({ name: 'polygon-ws-ingestor', namespace: 'bifrost-prod' }),
       wl({ name: 'celery-beat', namespace: 'bifrost-prod' }),
       wl({ name: 'celery-worker', namespace: 'bifrost-prod', ready: '0/1', status: 'Pending', reachability: 'degraded' }),
       wl({ name: 'flower', namespace: 'bifrost-prod' }),
@@ -56,7 +56,10 @@ describe('resolveCriticalProcesses', () => {
     })
     // Must not confuse account-sync / api-massive / celery-beat
     expect(byLabel['IB Account Agent'].name).not.toBe('account-sync')
-    expect(byLabel['Massive WS']).toMatchObject({ name: 'massive-ws', namespace: 'bifrost-prod' })
+    expect(byLabel['Polygon WS Ingestor']).toMatchObject({
+      name: 'polygon-ws-ingestor',
+      namespace: 'bifrost-prod',
+    })
     expect(byLabel['Celery worker']).toMatchObject({
       name: 'celery-worker',
       ready: '0/1',

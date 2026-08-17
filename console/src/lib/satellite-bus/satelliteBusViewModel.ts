@@ -225,7 +225,7 @@ function rowsForEnv(
   )
 }
 
-const DATA_PATH_IDS = new Set(['ib_ingestor', 'ib_account_agent', 'ib_operator', 'massive'])
+const DATA_PATH_IDS = new Set(['ib_ingestor', 'ib_account_agent', 'ib_operator', 'polygon_ws', 'massive'])
 
 function splitTradeRows(rows: SocketHealthRow[]): {
   dataPath: SocketHealthRow[]
@@ -491,8 +491,9 @@ export function buildSatelliteBusViewModel(
         return rawSocket.ib_account_agent
       case 'ib_operator':
         return rawSocket.ib_operator
+      case 'polygon_ws':
       case 'massive':
-        return rawSocket.massive
+        return rawSocket.polygon_ws ?? rawSocket.massive
       default:
         return undefined
     }
