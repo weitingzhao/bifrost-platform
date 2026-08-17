@@ -31,7 +31,6 @@ function bus(overrides: {
       },
       socket: {
         polygon_ws: { reachability: 'ok', detail: 'ok' },
-        massive: { reachability: 'ok', detail: 'ok' },
         ib_ingestor: { reachability: 'ok', detail: 'ok' },
         ib_account_agent: { reachability: 'ok', detail: 'ok' },
         ib_operator: { reachability: 'ok', detail: 'ok' },

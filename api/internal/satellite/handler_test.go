@@ -22,7 +22,7 @@ func newSatelliteFixtureServer(t *testing.T) *httptest.Server {
 				"health": {"self_check":"ok","block_reasons":[],"status_lamp":"green"},
 				"daemon": {"self_check":"ok","lamp":"green","block_reasons":[],"trading":{"trading_suspended":false},"heartbeat":{"daemon_alive":true}},
 				"socket": {
-					"massive":{"lamp":"green","self_check":"ok"},
+					"polygon_ws":{"lamp":"green","self_check":"ok"},
 					"ib_ingestor":{"lamp":"green","self_check":"ok"},
 					"ib_account_agent":{"lamp":"green","self_check":"ok"},
 					"ib_operator":{"lamp":"green","self_check":"ok"},
@@ -37,7 +37,7 @@ func newSatelliteFixtureServer(t *testing.T) *httptest.Server {
 			_, _ = w.Write([]byte(`{
 				"ok": true,
 				"services": [
-					{"id":"massive_ws","process_active":"active"},
+					{"id":"polygon_ws","process_active":"active"},
 					{"id":"ib_ingestor","process_active":"active"},
 					{"id":"ib_account_agent","process_active":"active"},
 					{"id":"ib_operator","process_active":"active"}

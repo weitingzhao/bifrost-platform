@@ -211,7 +211,7 @@ export function useMissionLaunchFixAgents({
         const socket = bus?.monitor.socket
         const socketRows = socket
           ? [
-              socket.polygon_ws ?? socket.massive,
+              socket.polygon_ws,
               socket.ib_ingestor,
               socket.ib_account_agent,
               socket.ib_operator,
@@ -331,7 +331,7 @@ export function useMissionLaunchFixAgents({
       const socket = bus?.monitor.socket
       const socketRows = socket
         ? [
-            socket.polygon_ws ?? socket.massive,
+            socket.polygon_ws,
             socket.ib_ingestor,
             socket.ib_account_agent,
             socket.ib_operator,

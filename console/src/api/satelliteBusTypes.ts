@@ -26,9 +26,8 @@ export interface SatelliteBusMonitorDaemon {
 }
 
 export interface SatelliteBusMonitorSocket {
-  /** Preferred Wave C key; readers should prefer polygon_ws ?? massive. */
   polygon_ws?: SatelliteBusSocketComponent
-  /** Legacy dual-write field — Owner gate before dropping. */
+  /** @deprecated No longer populated by platform-api; omit when absent. */
   massive?: SatelliteBusSocketComponent
   ib_ingestor: SatelliteBusSocketComponent
   ib_account_agent: SatelliteBusSocketComponent
@@ -36,14 +35,11 @@ export interface SatelliteBusMonitorSocket {
   platform_ib_gateway: SatelliteBusSocketComponent
 }
 
-/** Prefer socket.polygon_ws, fall back to legacy socket.massive. */
+/** Read socket.polygon_ws only (no legacy massive fallback). */
 export function satelliteBusPolygonWs(
-  socket:
-    | Pick<SatelliteBusMonitorSocket, 'polygon_ws' | 'massive'>
-    | null
-    | undefined,
+  socket: Pick<SatelliteBusMonitorSocket, 'polygon_ws'> | null | undefined,
 ): SatelliteBusSocketComponent | undefined {
-  return socket?.polygon_ws ?? socket?.massive
+  return socket?.polygon_ws
 }
 
 export interface SatelliteBusMonitorCelery {

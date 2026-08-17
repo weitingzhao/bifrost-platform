@@ -25,7 +25,7 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 					"heartbeat":{"daemon_alive":true,"ib_connected":false,"last_ts":1751700000}
 				},
 				"socket": {
-					"massive":{"lamp":"green","self_check":"ok","status":"connected"},
+					"polygon_ws":{"lamp":"green","self_check":"ok","status":"connected"},
 					"ib_ingestor":{"lamp":"yellow","self_check":"degraded","status":"retrying"},
 					"ib_account_agent":{"lamp":"green","self_check":"ok","status":"connected"},
 					"ib_operator":{"lamp":"green","self_check":"ok","status":"connected"},
@@ -45,7 +45,7 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"ok": true,
 				"services": [
-					{"id":"massive_ws","process_active":"inactive","runtime_status":"policy-off","display_active":"ws-disabled (REST-only)","runtime_kind":"kubernetes"},
+					{"id":"polygon_ws","process_active":"inactive","runtime_status":"policy-off","display_active":"ws-disabled (REST-only)","runtime_kind":"kubernetes"},
 					{"id":"ib_ingestor","process_active":"inactive","runtime_status":"active","display_active":"managed@platform-ib-gateway","runtime_kind":"kubernetes","platform_gateway_managed":true},
 					{"id":"ib_account_agent","process_active":"inactive","runtime_status":"active","display_active":"managed@platform-ib-gateway","runtime_kind":"kubernetes","platform_gateway_managed":true},
 					{"id":"ib_operator","process_active":"inactive","runtime_status":"active","display_active":"managed@platform-ib-gateway","runtime_kind":"kubernetes","platform_gateway_managed":true},
@@ -92,8 +92,11 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 	if resp.Monitor.Socket.PolygonWs.Reachability != probe.ReachOK {
 		t.Fatalf("expected polygon_ws policy-off ok, got %s", resp.Monitor.Socket.PolygonWs.Reachability)
 	}
-	if resp.Monitor.Socket.Massive.Reachability != probe.ReachOK {
-		t.Fatalf("expected massive legacy dual-field ok, got %s", resp.Monitor.Socket.Massive.Reachability)
+	if resp.Monitor.Socket.Massive.Reachability != "" && resp.Monitor.Socket.Massive.Reachability != probe.ReachUnknown {
+		t.Fatalf("expected massive field unset/empty, got %s", resp.Monitor.Socket.Massive.Reachability)
+	}
+	if resp.Ingest.Services[0].ID != "polygon_ws" {
+		t.Fatalf("expected ingest id polygon_ws, got %q", resp.Ingest.Services[0].ID)
 	}
 	if resp.Monitor.Socket.IBIngestor.Reachability != probe.ReachDegraded {
 		t.Fatalf("expected ib_ingestor degraded from lamp, got %s", resp.Monitor.Socket.IBIngestor.Reachability)
@@ -114,7 +117,7 @@ func TestBusDeepAllHealthy(t *testing.T) {
 				"health": {"self_check":"ok","block_reasons":[],"status_lamp":"green"},
 				"daemon": {"self_check":"ok","lamp":"green","block_reasons":[],"trading":{"trading_suspended":false},"heartbeat":{"daemon_alive":true}},
 				"socket": {
-					"massive":{"lamp":"green","self_check":"ok"},
+					"polygon_ws":{"lamp":"green","self_check":"ok"},
 					"ib_ingestor":{"lamp":"green","self_check":"ok"},
 					"ib_account_agent":{"lamp":"green","self_check":"ok"},
 					"ib_operator":{"lamp":"green","self_check":"ok"},
@@ -129,7 +132,7 @@ func TestBusDeepAllHealthy(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"ok": true,
 				"services": [
-					{"id":"massive_ws","process_active":"active"},
+					{"id":"polygon_ws","process_active":"active"},
 					{"id":"ib_ingestor","process_active":"active"},
 					{"id":"ib_account_agent","process_active":"active"},
 					{"id":"ib_operator","process_active":"active"}
@@ -169,7 +172,7 @@ func TestBusDeepBridgeMode(t *testing.T) {
 		"health": {"self_check":"ok","block_reasons":[],"status_lamp":"green"},
 		"daemon": {"self_check":"ok","lamp":"green","block_reasons":[],"trading":{},"heartbeat":{"daemon_alive":true}},
 		"socket": {
-			"massive":{"lamp":"green","self_check":"ok"},
+			"polygon_ws":{"lamp":"green","self_check":"ok"},
 			"ib_ingestor":{"lamp":"green","self_check":"ok"},
 			"ib_account_agent":{"lamp":"green","self_check":"ok"},
 			"ib_operator":{"lamp":"green","self_check":"ok"},
@@ -178,7 +181,7 @@ func TestBusDeepBridgeMode(t *testing.T) {
 		"celery":{"broker_connected":true,"workers":["w1"],"worker_ib_connected":false},
 		"account_sync_daemon":{"heartbeat":{"daemon_alive":true,"stream_lag":0}}
 	}`
-	ingestBody := `{"ok":true,"services":[{"id":"massive_ws","process_active":"active"}]}`
+	ingestBody := `{"ok":true,"services":[{"id":"polygon_ws","process_active":"active"}]}`
 
 	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/bus-snapshot" {

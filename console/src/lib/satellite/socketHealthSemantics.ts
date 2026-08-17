@@ -92,15 +92,15 @@ function ingestById(
   return services?.find(s => s.id === id)
 }
 
-/** Prefer official polygon_ws ingest row; dual-accept legacy massive_ws. */
+/** Official polygon_ws ingest row only. */
 function polygonWsIngest(
   services: SatelliteBusIngestService[] | undefined,
 ): SatelliteBusIngestService | undefined {
-  return ingestById(services, 'polygon_ws') ?? ingestById(services, 'massive_ws')
+  return ingestById(services, 'polygon_ws')
 }
 
 function isPolygonWsConsumerId(id: string): boolean {
-  return id === 'polygon_ws' || id === 'massive'
+  return id === 'polygon_ws'
 }
 
 function polygonWsRequired(env: TradeEnv, ingest?: SatelliteBusIngestService, raw?: Record<string, unknown>): SocketRequiredState {
@@ -418,7 +418,6 @@ function classifyTradeSocketConsumer(
 export function buildSocketHealthRows(
   socket: {
     polygon_ws?: SatelliteBusSocketComponent
-    massive?: SatelliteBusSocketComponent
     ib_ingestor?: SatelliteBusSocketComponent
     ib_account_agent?: SatelliteBusSocketComponent
     ib_operator?: SatelliteBusSocketComponent
@@ -637,9 +636,7 @@ export function buildSocketHealthMatrix(
       const slice = buses[env]
       if (slice == null) continue
       const built = buildSocketHealthRows(slice.socket, policyEnv(env), slice.ingest, slice.daemon)
-      const match = built.trade.find(
-        r => r.id === def.id || (def.id === 'polygon_ws' && r.id === 'massive'),
-      )
+      const match = built.trade.find(r => r.id === def.id)
       const key = matrixCellKey(env)
       if (match != null) {
         cells[key] = rowToCell(match)

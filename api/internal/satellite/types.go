@@ -46,10 +46,10 @@ type MonitorDaemonDeep struct {
 }
 
 type MonitorSocketDeep struct {
-	// Preferred Wave C key; parsers prefer polygon_ws over massive.
+	// Official key; parsers may briefly accept legacy monitor JSON ``massive`` into PolygonWs.
 	PolygonWs SocketComponentDeep `json:"polygon_ws"`
-	// Legacy dual-write field — Owner gate before dropping.
-	Massive           SocketComponentDeep `json:"massive"`
+	// Deprecated dual-write field — no longer populated (omitempty).
+	Massive           SocketComponentDeep `json:"massive,omitempty"`
 	IBIngestor        SocketComponentDeep `json:"ib_ingestor"`
 	IBAccountAgent    SocketComponentDeep `json:"ib_account_agent"`
 	IBOperator        SocketComponentDeep `json:"ib_operator"`
