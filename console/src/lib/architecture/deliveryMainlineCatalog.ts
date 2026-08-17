@@ -49,7 +49,7 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
     seq: 2,
     title: 'STG config & overlay',
     owner: 'Ops',
-    summary: 'IB client_id 210段、Massive delayed WS、Secrets — ConfigMap bifrost-config + bifrost-stg-secrets.',
+    summary: 'IB client_id 210段、Plugin Polygon WS / redis-massive、Secrets — ConfigMap bifrost-config + bifrost-stg-secrets.',
     actions: [
       'make sync-stg-config (from .env)',
       'kubectl apply -k k8s/overlays/stg',
@@ -76,12 +76,12 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
     seq: 4,
     title: 'STG acceptance',
     owner: 'Ops / Agent',
-    summary: 'Automated HTTP verify runs inside pipeline; Tier B (IB/Massive/Celery) Owner sign-off on Promote.',
+    summary: 'Automated HTTP verify runs inside pipeline; Tier B (IB/Market Data Plugin/Celery) Owner sign-off on Promote.',
     actions: [
-      'Pipeline task verify-stg (gateway + 9 APIs)',
+      'Pipeline task verify-stg (gateway + trade API path domains)',
       'Satellite → Deploy Satellite → Verify STG (or Mission Control → Stg smoke)',
       'make k3s-verify-phase-b-stg-v2 (rollout + HTTP)',
-      'Seed watchlist if Massive WS empty: scripts/k3s/seed-stg-watchlist.sh',
+      'Seed watchlist if Polygon WS empty: scripts/k3s/seed-stg-watchlist.sh',
     ],
   },
   {
@@ -92,7 +92,7 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
     summary: 'STG deliver + smoke + STG release gate pass + Tier B sign-off — staging track complete.',
     actions: [
       'Promote → Run STG release gate (tier=stg)',
-      'Promote → Tier B sign-off after IB/Massive manual checks',
+      'Promote → Tier B sign-off after IB/Market Data Plugin manual checks',
       'Evaluate stgDeliverReady on Delivery coupling panel',
     ],
   },

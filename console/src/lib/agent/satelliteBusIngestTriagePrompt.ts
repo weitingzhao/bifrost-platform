@@ -171,9 +171,7 @@ export function buildSatelliteBusIngestTriagePrompt(input: {
     '## Agent workflow',
     '1. verify_mission_snapshot + GET /api/v1/satellite/bus-deep?env=' + input.env + ' (platform MCP).',
     '2. Treat **monitor.socket** as authoritative — cross-check ib_ingestor / ib_account_agent / ib_operator / platform_ib_gateway vs GET plugins/ib-gateway/status.',
-    '3. kubectl -n data get deploy ib-gateway; kubectl -n ' +
-      input.namespace +
-      ' get deploy massive-ws — confirm replicas/intent.',
+    '3. kubectl -n data get deploy ib-gateway; kubectl -n plugin-market-data get deploy polygon-ws-ingestor — confirm replicas/intent.',
     '4. Classify Rocket gateway: **ok** | **partial/observe** | **fail**; classify trade socket consumers separately (do not double-count shared Rocket into STG+PROD).',
     '5. Safe L1 actuation (operator token): rollout_restart deployment/ib-gateway -n data; Gateway reconnect via plugin when TWS slots need refresh.',
     '6. **D10 BLOCKED** — do NOT scale daemon, enable live trading, or remove daemon-scale-zero / observe-safe guards.',

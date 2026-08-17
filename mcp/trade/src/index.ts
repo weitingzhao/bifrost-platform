@@ -12,7 +12,6 @@ const SERVER_VERSION = '0.1.0'
 
 const DOMAINS = [
   { id: 'monitor', probe: '/status' },
-  { id: 'massive', probe: '/health' },
   { id: 'docs', probe: '/health' },
   { id: 'ops', probe: '/health' },
   { id: 'trading', probe: '/health' },

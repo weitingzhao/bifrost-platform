@@ -379,7 +379,7 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         label: 'Trade APIs (4 pods / path aliases)',
         group: 'api',
         healthyCriteria:
-          'All trade-category matrix targets reachability=ok (monitor, trading, strategy, portfolio, market, research, ops, massive, docs)',
+          'All trade-category matrix targets reachability=ok (monitor, trading, strategy, portfolio, market, research, ops, docs)',
         fixScope: PROD_ENV_FIX_SCOPE,
         fixCapability: 'full_auto',
         agentTools: [

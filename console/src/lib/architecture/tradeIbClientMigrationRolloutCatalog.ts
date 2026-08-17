@@ -122,7 +122,7 @@ export const TIBM_W3_STG_EVIDENCE = {
     {
       step: '1/6 deployments',
       status: 'pass' as const,
-      detail: 'api-market/massive/research/portfolio/docs/trading Available',
+      detail: 'api-market/research/portfolio/docs/trading Available',
     },
     { step: '2/6 daemon D10', status: 'pass' as const, detail: 'daemon replicas=0' },
     {
@@ -242,7 +242,6 @@ export const TIBM_ROLLOUT_WAVES: TibmRolloutWave[] = [
     scope: 'in_scope',
     targets: [
       'bifrost-api-market (SSE quotes)',
-      'bifrost-api-massive',
       'bifrost-api-research',
       'bifrost-api-portfolio',
       'bifrost-api-docs',

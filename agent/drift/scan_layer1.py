@@ -26,7 +26,6 @@ CANONICAL_PORTS: dict[int, str] = {
     8780: "platform-api",
     8781: "remediation runner",
     8765: "api-monitor",
-    8766: "api-massive",
     8767: "api-docs",
     8768: "api-ops",
     8769: "api-trading",

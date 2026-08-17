@@ -119,10 +119,10 @@ export const SCOPE_ROWS: ScopeRow[] = [
   },
   {
     tag: 'TRADE-API',
-    component: 'bifrost-trade-api (9 domains)',
+    component: 'bifrost-trade-api (path domains; massive retired)',
     technology: 'FastAPI · ports 8765–8773 via nginx /api/{domain}/',
     notes:
-      'monitor · massive · docs · ops · trading · strategy · portfolio · market · research. Platform probes health endpoints only.',
+      'monitor · docs · ops · trading · strategy · portfolio · market · research (massive REST retired → Market Data Plugin). Platform probes health endpoints only.',
   },
   {
     tag: 'WORKER',
@@ -133,8 +133,8 @@ export const SCOPE_ROWS: ScopeRow[] = [
   {
     tag: 'SOCKET',
     component: 'bifrost-trade-socket',
-    technology: 'Python · IB ingestor / account agent / operator · Massive WS',
-    notes: 'Only layer that talks to TWS (IB_HOST → Win11 LAN). Writes Redis streams/hashes; operator listens ib:operator:cmd.',
+    technology: 'Python · IB ingestor / account agent / operator · Polygon WS (Plugin)',
+    notes: 'Only layer that talks to TWS (IB_HOST → Win11 LAN). Writes Redis streams/hashes; operator listens ib:operator:cmd. Polygon options WS is Plugin polygon-ws-ingestor → redis-massive.',
   },
   {
     tag: 'CORE',

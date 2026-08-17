@@ -341,7 +341,7 @@ function buildRuntimeConsumers(
     health: celery == null ? 'unknown' : celery.broker_connected ? 'ok' : 'degraded',
     stateLabel: celery == null ? 'UNPROBED' : celery.broker_connected ? 'EXPECTED' : 'DEGRADED',
     detail:
-      'Deployment celery-beat (singleton). Schedules Massive jobs; confirm Ready via verify-trade-celery-massive-loop-stg.',
+      'Deployment celery-beat (singleton). Schedules stocks_ib / generic Beat tasks; confirm Ready via celery-beat deploy + broker probe.',
     probePath: `bus-deep[${env}].monitor.celery (+ deploy/celery-beat)`,
   })
   rows.push({

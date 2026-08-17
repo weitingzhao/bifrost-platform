@@ -4,17 +4,28 @@
  * Program id: trade-celery-k8s-ideal · lane: trade-system-celery
  * Authority: this catalog + config/programs/completed/trade-celery-k8s-ideal.yaml
  *
+ * Status: **SUPERSEDED** for Massive Celery path (P7/P9 / market-data-subcontractor).
+ * Remaining live Trade Celery surface is **stocks_ib-only** (IB bars backfill).
+ *
  * D10 remains BLOCKED — never scale daemon for live trade.
  *
  * P9 (market-data-subcontractor): Massive Celery queues
  * (`stocks_massive*`, `options_massive*`) and `job_massive_backfill` are
  * **superseded by market-data-subcontractor** (plugin-market-data /
  * `data_ops.job_ingest`). Keep `stocks_ib` for IB bars backfill.
+ *
+ * Removed (do not reintroduce):
+ * `make -C bifrost-platform-plugin verify-trade-celery-massive-loop-stg`
+ * → use `make -C bifrost-platform-plugin verify-trade-celery-bars` for stocks_ib.
  */
 
 export const TRADE_CELERY_K8S_IDEAL_PROGRAM_ID = 'trade-celery-k8s-ideal' as const
 export const TRADE_CELERY_K8S_IDEAL_LANE_ID = 'trade-system-celery' as const
 export const TRADE_CELERY_K8S_IDEAL_VERSION = '2026-07-22'
+
+/** Live stocks_ib-only verify (Massive loop script deleted). */
+export const TCKI_STOCKS_IB_VERIFY_CMD =
+  'make -C bifrost-platform-plugin verify-trade-celery-bars' as const
 
 /** W0.1 STG evidence pack (captured 2026-07-22 via bifrost-k3s → bifrost-stg). */
 export const TCKI_W0_STG_EVIDENCE = {
@@ -53,7 +64,7 @@ export const TCKI_W0_STG_EVIDENCE = {
       step: 'job_massive_backfill',
       status: 'warn' as const,
       detail:
-        'last rows ~2026-06-16 (feed_option_snapshots); status done=115 failed=1 — stale without beat; superseded by data_ops.job_ingest (market-data-subcontractor)',
+        'last rows ~2026-06-16 (feed_option_snapshots); status done=115 failed=1 — stale without beat; SUPERSEDED by data_ops.job_ingest (market-data-subcontractor)',
     },
     {
       step: 'executor_mode',
@@ -74,30 +85,32 @@ export const TCKI_W0_STG_EVIDENCE = {
 export const TCKI_W1_W3_STG_EVIDENCE = {
   capturedAt: '2026-07-22',
   namespace: 'bifrost-stg',
-  verifyCmd: 'make -C bifrost-platform-plugin verify-trade-celery-massive-loop-stg',
+  /** Historical Massive-loop verify removed; stocks_ib-only successor. */
+  verifyCmd: TCKI_STOCKS_IB_VERIFY_CMD,
   overallStatus: 'pass' as const,
   steps: [
     {
       step: 'verify script',
       status: 'pass' as const,
-      detail: 'verify-trade-celery-massive-loop-stg PASS',
+      detail:
+        'SUPERSEDED: verify-trade-celery-massive-loop-stg removed — historical PASS at capture; live verify = verify-trade-celery-bars (stocks_ib)',
     },
     {
       step: 'per-queue Deployments',
       status: 'pass' as const,
       detail:
-        'celery-worker-stocks-ib / stocks-massive / options-massive Ready 1/1; *_high at 0; monolith celery-worker replicas=0',
+        'Historical: celery-worker-stocks-ib / stocks-massive / options-massive Ready 1/1; Massive profiles SUPERSEDED — keep stocks_ib',
     },
     {
       step: 'active_queues',
       status: 'pass' as const,
       detail:
-        '3 nodes: stocks_ib + stocks_massive + options_massive — Massive nodes superseded by market-data-subcontractor (keep stocks_ib)',
+        'Historical: stocks_ib + stocks_massive + options_massive — Massive nodes SUPERSEDED by market-data-subcontractor (keep stocks_ib)',
     },
     {
       step: 'celery-beat',
       status: 'pass' as const,
-      detail: 'celery-beat 1/1 Running',
+      detail: 'Historical celery-beat 1/1; Massive beat schedules SUPERSEDED by plugin CronJobs',
     },
     {
       step: 'executor_mode',
@@ -111,9 +124,9 @@ export const TCKI_W1_W3_STG_EVIDENCE = {
     },
   ],
   ownerSummary:
-    'STG hemostasis + per-queue topology verified locally. GitOps: commit/push bifrost-trade-infra then re-enable ArgoCD auto-sync on bifrost-stg. D10 remains BLOCKED.',
+    'SUPERSEDED Massive Celery path; stocks_ib-only remains. D10 remains BLOCKED.',
   gitopsNote:
-    'ArgoCD Application cicd/bifrost-stg auto-sync was paused during apply (selfHeal was reverting local patches). Owner must commit+push overlays to main before re-enabling automated sync.',
+    'Massive Celery verify target deleted. Use verify-trade-celery-bars for stocks_ib; market-data-subcontractor owns Polygon ingest.',
 }
 
 export type TckiWave = {
@@ -132,7 +145,7 @@ export const TCKI_WAVES: TckiWave[] = [
     id: 'W0',
     label: 'Baseline evidence + program registration',
     priority: 'P0',
-    verify: 'catalog TCKI_W0_STG_EVIDENCE + program YAML present',
+    verify: 'catalog TCKI_W0_STG_EVIDENCE + program YAML present (completed/)',
     acceptance: [
       'STG evidence pack documented in catalog',
       'Program trade-celery-k8s-ideal registered with lane trade-system-celery',
@@ -144,7 +157,7 @@ export const TCKI_WAVES: TckiWave[] = [
     label: 'Hemostasis — all-queues worker + Beat + executor_mode kubernetes',
     priority: 'P0',
     dependsOn: ['W0'],
-    verify: 'make -C bifrost-platform-plugin verify-trade-celery-massive-loop-stg',
+    verify: `SUPERSEDED (Massive loop removed) — stocks_ib-only: ${TCKI_STOCKS_IB_VERIFY_CMD}`,
     acceptance: [
       'Worker consumes all canonical Massive + stocks_ib queues (historical; Massive superseded by market-data-subcontractor)',
       'celery-beat replicas=1 Running (historical Massive beat; plugin CronJobs supersede)',
@@ -171,7 +184,7 @@ export const TCKI_WAVES: TckiWave[] = [
     label: 'Per-queue Deployments matching worker_profiles',
     priority: 'P1',
     dependsOn: ['W1'],
-    verify: 'make -C bifrost-platform-plugin verify-trade-celery-massive-loop-stg',
+    verify: `SUPERSEDED (Massive profiles retired) — stocks_ib-only: ${TCKI_STOCKS_IB_VERIFY_CMD}`,
     acceptance: [
       '5 profile Deployments with correct -Q and solo (Massive profiles superseded — scale-zero / retire)',
       'Scale maps to named Deployments + max_worker_instances',
@@ -209,6 +222,7 @@ export const TCKI_WAVES: TckiWave[] = [
 export const TCKI_OWNER_SIGNOFF_CHECKLIST = [
   'SUPERSEDED: Massive queues (options_massive / stocks_massive) → market-data-subcontractor (plugin-market-data / data_ops.job_ingest)',
   'SUPERSEDED: celery-beat Massive schedules + job_massive_backfill → plugin CronJobs',
+  'SUPERSEDED: verify-trade-celery-massive-loop-stg removed — use verify-trade-celery-bars (stocks_ib)',
   'STG: stocks_ib bars path still healthy (writes market.stock_daily / stock_minute)',
   'STG/PROD: daemon replicas=0 (D10 BLOCKED — no live trade unlock)',
   'FE Celery page honest under executor_mode=kubernetes; Massive enqueue refused with plugin message',
@@ -217,7 +231,7 @@ export const TCKI_OWNER_SIGNOFF_CHECKLIST = [
 
 export function formatTradeCeleryK8sIdealBriefingAppendix(): string {
   const lines = [
-    '## Trade Celery / Massive K8s Ideal',
+    '## Trade Celery / Massive K8s Ideal (SUPERSEDED — stocks_ib-only remains)',
     '',
     `Program: \`${TRADE_CELERY_K8S_IDEAL_PROGRAM_ID}\` · lane \`${TRADE_CELERY_K8S_IDEAL_LANE_ID}\` · v${TRADE_CELERY_K8S_IDEAL_VERSION}`,
     '',
@@ -227,7 +241,7 @@ export function formatTradeCeleryK8sIdealBriefingAppendix(): string {
     '',
     `### W1+W3 STG evidence (${TCKI_W1_W3_STG_EVIDENCE.overallStatus})`,
     TCKI_W1_W3_STG_EVIDENCE.ownerSummary,
-    `Verify: \`${TCKI_W1_W3_STG_EVIDENCE.verifyCmd}\``,
+    `Live verify (stocks_ib): \`${TCKI_W1_W3_STG_EVIDENCE.verifyCmd}\``,
     ...TCKI_W1_W3_STG_EVIDENCE.steps.map(s => `- [${s.status}] ${s.step}: ${s.detail}`),
     `GitOps: ${TCKI_W1_W3_STG_EVIDENCE.gitopsNote}`,
     '',
@@ -244,6 +258,7 @@ export function formatTradeCeleryK8sIdealBriefingAppendix(): string {
     '',
     '### Constraints',
     '- D10 BLOCKED — never scale daemon for live trade / place_order',
+    '- Massive Celery path SUPERSEDED — do not reintroduce verify-trade-celery-massive-loop-stg',
     '- W1 before W3; W2 after W1.1; W5 only after STG W3 (+ W4 minimum)',
   ]
   return lines.join('\n')

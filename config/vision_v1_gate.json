@@ -31,13 +31,6 @@
       "detail": "HTTP 200"
     },
     {
-      "id": "dev-api-massive",
-      "label": "dev-api-massive",
-      "required": true,
-      "reachability": "ok",
-      "detail": "HTTP 200"
-    },
-    {
       "id": "dev-api-docs",
       "label": "dev-api-docs",
       "required": true,
