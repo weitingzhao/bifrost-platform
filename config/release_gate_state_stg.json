@@ -26,13 +26,6 @@
       "detail": "HTTP 200"
     },
     {
-      "id": "stg-api-massive",
-      "label": "stg-api-massive",
-      "required": true,
-      "reachability": "ok",
-      "detail": "HTTP 200"
-    },
-    {
       "id": "stg-api-docs",
       "label": "stg-api-docs",
       "required": true,

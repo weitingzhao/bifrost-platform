@@ -1230,5 +1230,14 @@
     ],
     "triggered_by": "admin",
     "summary": "stg release gate pass (11 checks)"
+  },
+  {
+    "tier": "note",
+    "at": "2026-08-17T06:03:33Z",
+    "result": "info",
+    "revision": "phase-a-final-sweep",
+    "summary": "Note: stg-api-massive retired (P7 \u2192 Market Data Plugin). Historical snapshots above may still list stg-api-massive; current release_gate_state*.json no longer include it.",
+    "checks": [],
+    "triggered_by": "phase-a-final-sweep"
   }
 ]

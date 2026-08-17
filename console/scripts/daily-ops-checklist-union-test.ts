@@ -85,9 +85,9 @@ function snap(cells: FleetCell[]): FleetSnapshot {
   }
 }
 
-check('injects IB virtual when vendor has massive probe but no IB probe', () => {
+check('injects IB virtual when vendor has massive-polygon probe but no IB probe', () => {
   const vendor = cell('vendor', null, [
-    std('api-massive', 'feed'),
+    std('massive-polygon', 'feed'),
     std('hermes', 'tooling'),
   ])
   const out = injectChecklistVirtualStandards([vendor])
@@ -144,7 +144,7 @@ check('paints db-backup-fresh virtual from checklist signals', () => {
 
 check('IB virtual is required — Vendor cannot GO without IB Client', () => {
   const vendor = cell('vendor', null, [
-    std('api-massive', 'feed'),
+    std('massive-polygon', 'feed'),
     std('hermes', 'tooling'),
   ])
   const out = injectChecklistVirtualStandards([vendor])[0]
@@ -156,7 +156,7 @@ check('IB virtual is required — Vendor cannot GO without IB Client', () => {
 
 check('IB probe ok allows Vendor GO when other required feeds ok', () => {
   const vendor = cell('vendor', null, [
-    std('api-massive', 'feed'),
+    std('massive-polygon', 'feed'),
     std('ib-feed', 'feed'),
     std('hermes', 'tooling'),
   ])
@@ -180,8 +180,7 @@ check('union audit: board gaps empty after vendor git-bridge removal + inject', 
         std('platform-api-stg', 'control'),
         std('platform-console-stg', 'control'),
         std('argo-stg', 'gitops'),
-        std('deliver-stg', 'release'),
-        std('stg-smoke', 'release'),
+        // deliver-stg / stg-smoke live on Launch Pad only (checklist fleetMapping: []).
       ]),
       cell('rocket', 'dev', [
         std('platform-api-dev', 'control'),
@@ -214,20 +213,27 @@ check('union audit: board gaps empty after vendor git-bridge removal + inject', 
         std('git-bridge', 'automation'),
         std('mac-seat', 'seat'),
       ]),
-      cell('vendor', null, [std('api-massive', 'feed'), std('hermes', 'tooling')]),
+      cell('vendor', null, [std('massive-polygon', 'feed'), std('hermes', 'tooling')]),
     ]),
   )
 
   const audit = auditChecklistFleetUnion(fleet)
   assert.equal(audit.boardGapCount, 0, `board gaps: ${JSON.stringify(audit.boardGaps)}`)
+  // release-readiness is Launch Pad only (fleetMapping: []) — expected checklist-only gaps
+  const fleetMissing = audit.checklistNeedsProjection.filter(x => x.stepId !== 'release-readiness')
   assert.equal(
-    audit.checklistNeedsProjection.length,
+    fleetMissing.length,
     0,
-    `checklist missing: ${JSON.stringify(audit.checklistNeedsProjection)}`,
+    `checklist missing on fleet: ${JSON.stringify(fleetMissing)}`,
+  )
+  assert.equal(
+    audit.checklistNeedsProjection.filter(x => x.stepId === 'release-readiness').length,
+    2,
   )
   assert.ok(audit.virtualCount >= 1)
 
   const cov = buildChecklistCoverageIndex(fleet, { persistTouches: false })
+  // uncoveredCount is board-side; Launch Pad release items are not Fleet standards
   assert.equal(cov.uncoveredCount, 0)
   assert.ok(cov.virtualCount >= 1)
 })
