@@ -151,6 +151,32 @@ export type FlexFreshnessResponse = {
   error?: string
 }
 
+export type FlexConfigSummary = {
+  tokens: {
+    host_token_set: boolean
+    host_token_last4: string | null
+    secondary_token_set: boolean
+    secondary_token_last4: string | null
+  }
+  range_days: { default: number; init: number }
+  query_rows: Array<{
+    purpose: string
+    query_label: string | null
+    query_host_id: string
+    query_secondary_id: string | null
+  }>
+}
+
+export type FlexRawPeekTable = 'executions_raw_flex' | 'transactions'
+
+export type FlexRawPeekResponse = {
+  table: string
+  row_count: number
+  columns: string[]
+  rows: unknown[][]
+  error?: string
+}
+
 export function fetchFlexIngestKinds() {
   return proxyGet<FlexKindsResponse>('/flex/ingest/kinds')
 }
@@ -182,4 +208,13 @@ export function fetchFlexCoverageDbSummary() {
 
 export function fetchFlexCoverageFreshness() {
   return proxyGet<FlexFreshnessResponse>('/flex/coverage/freshness')
+}
+
+export function fetchFlexConfigSummary() {
+  return proxyGet<FlexConfigSummary>('/flex/config/summary')
+}
+
+export function fetchFlexCoverageRawPeek(table: FlexRawPeekTable, limit = 20) {
+  const q = new URLSearchParams({ table, limit: String(limit) })
+  return proxyGet<FlexRawPeekResponse>(`/flex/coverage/raw-peek?${q.toString()}`)
 }

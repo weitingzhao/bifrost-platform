@@ -23,30 +23,30 @@ type PluginRegistryEntry = {
 const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
   {
     id: 'ib-gateway',
-    name: 'IB Gateway',
+    name: 'IB Client',
     vendor: 'Interactive Brokers',
     role: 'TWS socket bridge · redis-ib @ data NS',
     lifecycle: 'live',
     openTabId: 'ib-gateway-manage',
-    openLabel: 'Open IB Gateway',
+    openLabel: 'Open IB Client',
   },
   {
     id: 'market-data',
-    name: 'Market Data (Polygon)',
+    name: 'Massive',
     vendor: 'Polygon.io',
-    role: 'REST ingest · stock/option bars + snapshots · PG-as-broker @ plugin-market-data NS',
+    role: 'REST ingest · stock/option bars + snapshots · redis-massive · PG-as-broker @ plugin-market-data NS',
     lifecycle: 'live',
     openTabId: 'market-data-manage',
-    openLabel: 'Open Market Data',
+    openLabel: 'Open Massive',
   },
   {
     id: 'flex-query',
-    name: 'IB Flex Query',
+    name: 'IB Flex',
     vendor: 'Interactive Brokers',
     role: 'Flex Web Service ingest · trades/cash → brokerage.* @ plugin-flex-query NS',
     lifecycle: 'live',
     openTabId: 'flex-query-manage',
-    openLabel: 'Open IB Flex Query',
+    openLabel: 'Open IB Flex',
   },
 ]
 
@@ -106,7 +106,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
       ? 'unknown'
       : worseReach(worseReach(liveProbe.probeReach, marketProbe.probeReach), flexProbe.probeReach)
   const busVerdict = reachToVerdict(busReach)
-  const busSummary = `IB ${reachLabel(liveProbe.probeReach, liveProbe.isLoading)} · Market Data ${reachLabel(marketProbe.probeReach, marketProbe.isLoading)} · Flex ${reachLabel(flexProbe.probeReach, flexProbe.isLoading)}`
+  const busSummary = `IB ${reachLabel(liveProbe.probeReach, liveProbe.isLoading)} · Massive ${reachLabel(marketProbe.probeReach, marketProbe.isLoading)} · Flex ${reachLabel(flexProbe.probeReach, flexProbe.isLoading)}`
 
   const refreshBoth = useCallback(() => {
     liveProbe.refetch()
@@ -147,7 +147,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
 
       <OpsSection
         title="Plugin registry"
-        description="Directory only — open IB Gateway / Market Data / IB Flex Query for probes; Launch Desk → Plugin to publish."
+        description="Directory only — open IB Client / Massive / IB Flex for probes; Launch Desk → Plugin to publish."
         bodyPadding="default"
         overflow="visible"
       >

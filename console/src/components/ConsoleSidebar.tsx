@@ -173,13 +173,13 @@ export function ConsoleSidebar({
         title = `Control Room Bay Scan: ${missionStatus(controlRoomBaySignal)}`
       } else if (item.id === 'ib-gateway-manage') {
         signal = ibGatewayProbe.isLoading ? 'unknown' : ibGatewayProbe.probeReach
-        title = `IB Gateway: ${ibGatewayProbe.summary}`
+        title = `IB Client: ${ibGatewayProbe.summary}`
       } else if (item.id === 'market-data-manage') {
         signal = marketDataProbe.isLoading ? 'unknown' : marketDataProbe.probeReach
-        title = `Market Data: ${marketDataProbe.summary}`
+        title = `Massive: ${marketDataProbe.summary}`
       } else if (item.id === 'flex-query-manage') {
         signal = flexQueryProbe.isLoading ? 'unknown' : flexQueryProbe.probeReach
-        title = `IB Flex Query: ${flexQueryProbe.summary}`
+        title = `IB Flex: ${flexQueryProbe.summary}`
       } else if (
         item.id === 'platform-release' ||
         item.id === 'trade-release' ||

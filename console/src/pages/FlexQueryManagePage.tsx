@@ -16,14 +16,19 @@ import {
 } from '@bifrost/ui'
 import {
   enqueueFlexIngestJob,
+  fetchFlexConfigSummary,
   fetchFlexCoverageDbSummary,
   fetchFlexCoverageFreshness,
+  fetchFlexCoverageRawPeek,
   fetchFlexIngestJobs,
   fetchFlexIngestKinds,
   fetchFlexIngestQueueDashboard,
   isProxyError,
+  type FlexConfigSummary,
   type FlexIngestJob,
   type FlexQueueSlot,
+  type FlexRawPeekResponse,
+  type FlexRawPeekTable,
 } from '@/api/flexQueryPlugin'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
@@ -31,9 +36,9 @@ import { useFlexQueryLiveProbe } from '@/hooks/useFlexQueryLiveProbe'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { describeCronSchedule } from '@/lib/patrol/cronSchedule'
 
-type ManageTab = 'overview' | 'ingest' | 'coverage'
+type ManageTab = 'overview' | 'ingest' | 'coverage' | 'config'
 type IngestSubTab = 'schedule' | 'jobs' | 'enqueue'
-type CoverageSubTab = 'quality' | 'db-summary'
+type CoverageSubTab = 'quality' | 'db-summary' | 'raw-peek'
 
 function statusVariant(
   status: string,
@@ -90,6 +95,7 @@ export function FlexQueryManagePage() {
             { value: 'overview', label: 'Overview' },
             { value: 'ingest', label: 'Ingest' },
             { value: 'coverage', label: 'Coverage' },
+            { value: 'config', label: 'Config' },
           ]}
         />
       </div>
@@ -160,6 +166,7 @@ export function FlexQueryManagePage() {
 
       {tab === 'ingest' ? <IngestPanel /> : null}
       {tab === 'coverage' ? <CoveragePanel /> : null}
+      {tab === 'config' ? <ConfigPanel /> : null}
     </div>
   )
 }
@@ -512,6 +519,7 @@ function CoveragePanel() {
         options={[
           { value: 'quality', label: 'Quality' },
           { value: 'db-summary', label: 'DB Summary' },
+          { value: 'raw-peek', label: 'Raw Peek' },
         ]}
       />
 
@@ -600,6 +608,244 @@ function CoveragePanel() {
           )}
         </OpsSection>
       ) : null}
+
+      {sub === 'raw-peek' ? <RawPeekSubPanel /> : null}
     </div>
+  )
+}
+
+function formatPeekCell(value: unknown): string {
+  if (value == null || value === '') return '—'
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '—'
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function ConfigPanel() {
+  const q = useQuery({
+    queryKey: ['flex-query', 'config', 'summary'],
+    queryFn: fetchFlexConfigSummary,
+    refetchInterval: 60_000,
+    retry: 1,
+  })
+  const raw = q.data
+  const err = raw != null && isProxyError(raw) ? raw.error : null
+  let summary: FlexConfigSummary | null = null
+  if (raw != null && !isProxyError(raw)) {
+    summary = raw
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <OpsSection
+        title="Tokens"
+        description="Per-env public.settings — values masked (last 4)"
+        bodyPadding="default"
+        overflow="visible"
+      >
+        {q.isLoading ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Loading config…
+          </p>
+        ) : err != null ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">{err}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {(
+              [
+                ['Host', summary?.tokens.host_token_set, summary?.tokens.host_token_last4],
+                [
+                  'Secondary',
+                  summary?.tokens.secondary_token_set,
+                  summary?.tokens.secondary_token_last4,
+                ],
+              ] as const
+            ).map(([label, set, last4]) => (
+              <div key={label} className="flex flex-wrap items-center gap-2">
+                <span className="w-24 shrink-0 text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
+                  {label}
+                </span>
+                <DenseTag variant={set ? 'success' : 'neutral'}>{set ? 'set' : 'not set'}</DenseTag>
+                <span className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                  {set ? `····${last4}` : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </OpsSection>
+
+      <OpsSection
+        title="Range days"
+        description="Flex fetch window from public.settings"
+        bodyPadding="default"
+        overflow="visible"
+      >
+        {summary == null && err == null && q.isLoading ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Loading range…
+          </p>
+        ) : summary == null ? (
+          <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">—</p>
+        ) : (
+          <p className="m-0 font-mono text-[var(--text-dense-meta)]">
+            Default: {summary.range_days.default} days · Init: {summary.range_days.init} days
+          </p>
+        )}
+      </OpsSection>
+
+      <OpsSection
+        title="Query rows"
+        description="Golden Source brokerage.settings_flex"
+        bodyPadding="none"
+        overflow="visible"
+      >
+        {q.isLoading ? (
+          <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Loading query rows…
+          </p>
+        ) : err != null ? (
+          <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--destructive)]">
+            {err}
+          </p>
+        ) : (summary?.query_rows ?? []).length === 0 ? (
+          <p className="m-0 px-3 py-4 text-center text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            No brokerage.settings_flex rows
+          </p>
+        ) : (
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Purpose</DenseTableHead>
+                <DenseTableHead>Label</DenseTableHead>
+                <DenseTableHead>Host query ID</DenseTableHead>
+                <DenseTableHead>Secondary query ID</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {(summary?.query_rows ?? []).map((row, i) => (
+                <DenseTableRow key={`${row.purpose}-${row.query_host_id}-${i}`}>
+                  <DenseTableCell className="font-mono text-xs">{row.purpose}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--text-dense-meta)]">
+                    {row.query_label ?? '—'}
+                  </DenseTableCell>
+                  <DenseTableCell className="font-mono text-xs">
+                    {row.query_host_id || '—'}
+                  </DenseTableCell>
+                  <DenseTableCell className="font-mono text-xs">
+                    {row.query_secondary_id ?? '—'}
+                  </DenseTableCell>
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        )}
+      </OpsSection>
+
+      <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+        Read-only. Edit in Trade → Settings → IB Connection.
+      </p>
+    </div>
+  )
+}
+
+function RawPeekSubPanel() {
+  const [table, setTable] = useState<FlexRawPeekTable>('executions_raw_flex')
+  const [limit, setLimit] = useState('20')
+  const limitN = Number(limit) || 20
+  const peekQ = useQuery({
+    queryKey: ['flex-query', 'coverage', 'raw-peek', table, limitN],
+    queryFn: () => fetchFlexCoverageRawPeek(table, limitN),
+    refetchInterval: 60_000,
+    retry: 1,
+  })
+  const raw = peekQ.data
+  const err = raw != null && isProxyError(raw) ? raw.error : null
+  let peek: FlexRawPeekResponse | null = null
+  if (raw != null && !isProxyError(raw)) {
+    peek = raw
+  }
+  const columns = peek?.columns ?? []
+  const rows = peek?.rows ?? []
+
+  return (
+    <OpsSection
+      title="Raw peek"
+      description="Recent Golden Source rows — ingest QA only, not a Trade ledger"
+      bodyPadding="none"
+      overflow="visible"
+    >
+      <div className="flex flex-wrap items-center gap-3 px-3 py-2">
+        <SegmentControl
+          size="sm"
+          value={table}
+          onChange={v => setTable(v as FlexRawPeekTable)}
+          ariaLabel="Raw peek table"
+          options={[
+            { value: 'executions_raw_flex', label: 'executions_raw_flex' },
+            { value: 'transactions', label: 'transactions' },
+          ]}
+        />
+        <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
+          Limit:
+        </span>
+        <SegmentControl
+          size="sm"
+          value={limit}
+          onChange={setLimit}
+          ariaLabel="Raw peek row limit"
+          options={[
+            { value: '20', label: '20' },
+            { value: '50', label: '50' },
+            { value: '100', label: '100' },
+          ]}
+        />
+      </div>
+      {peekQ.isLoading ? (
+        <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Loading rows…
+        </p>
+      ) : err != null ? (
+        <p className="m-0 px-3 py-4 text-[var(--text-dense-meta)] text-[var(--destructive)]">{err}</p>
+      ) : rows.length === 0 ? (
+        <p className="m-0 px-3 py-4 text-center text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          No rows in {table}
+        </p>
+      ) : (
+        <>
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                {columns.map(c => (
+                  <DenseTableHead key={c}>{c}</DenseTableHead>
+                ))}
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {rows.map((row, i) => (
+                <DenseTableRow key={i}>
+                  {columns.map((c, j) => (
+                    <DenseTableCell
+                      key={c}
+                      className="font-mono text-[var(--text-dense-caption)] whitespace-nowrap"
+                    >
+                      {formatPeekCell(row[j])}
+                    </DenseTableCell>
+                  ))}
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+          <p className="m-0 px-3 py-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            Showing {peek?.row_count ?? rows.length} row{rows.length === 1 ? '' : 's'}
+          </p>
+        </>
+      )}
+    </OpsSection>
   )
 }

@@ -236,9 +236,9 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         label: '',
         items: [
           { id: 'plugin-gallery', label: 'Plugin Gallery', icon: Boxes },
-          { id: 'ib-gateway-manage', label: 'IB Gateway', icon: Plug },
-          { id: 'market-data-manage', label: 'Market Data', icon: Database },
-          { id: 'flex-query-manage', label: 'IB Flex Query', icon: FileSearch },
+          { id: 'ib-gateway-manage', label: 'IB Client', icon: Plug },
+          { id: 'market-data-manage', label: 'Massive', icon: Database },
+          { id: 'flex-query-manage', label: 'IB Flex', icon: FileSearch },
         ],
       },
       {

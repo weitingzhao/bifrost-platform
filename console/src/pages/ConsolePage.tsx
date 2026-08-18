@@ -144,9 +144,9 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'satellite-telemetry': 'Satellite Health',
   'satellite-api': 'Satellite Health',
   'plugin-gallery': 'Plugin Gallery',
-  'ib-gateway-manage': 'IB Gateway',
-  'market-data-manage': 'Market Data',
-  'flex-query-manage': 'IB Flex Query',
+  'ib-gateway-manage': 'IB Client',
+  'market-data-manage': 'Massive',
+  'flex-query-manage': 'IB Flex',
   defects: 'Defects',
 }
 
@@ -191,13 +191,13 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   'satellite-api':
     'Legacy hash — opens Satellite Health → Probes.',
   'plugin-gallery':
-    'Subcontractor plugin directory — bus rollup + registry. Open IB Gateway / Market Data for probes; publish via Launch Desk → Plugin.',
+    'Subcontractor plugin directory — bus rollup + registry. Open IB Client / Massive / IB Flex for probes; publish via Launch Desk → Plugin.',
   'ib-gateway-manage':
-    'IB Gateway plugin observe — live probe, Trade cutover, reconnect (≠ Launch Plugin publish).',
+    'IB Client (Gateway plugin) — TWS socket observe, Trade cutover, reconnect. Data plane is redis-ib, not PostgreSQL.',
   'market-data-manage':
-    'Market Data Plugin management — Overview, Coverage checklist, Ingest queue, Analytics dashboard.',
+    'Massive (Polygon) plugin — Overview, Coverage checklist, Ingest queue, Analytics. Shared Golden Source CNPG.',
   'flex-query-manage':
-    'IB Flex Query Plugin — scheduled Flex ingest into brokerage Golden Source. Overview, Ingest queue, Coverage.',
+    'IB Flex Plugin — scheduled Flex ingest into brokerage Golden Source (CNPG). Overview, Ingest, Coverage, Config.',
   'plugin-release':
     'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Manage pages ≠ Publish.',
   'agent-release':

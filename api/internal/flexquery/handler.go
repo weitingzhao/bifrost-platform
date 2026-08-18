@@ -67,6 +67,23 @@ func (h *Handler) HandleAPIProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ct := resp.Header.Get("Content-Type")
+	isJSON := ct == "" || strings.Contains(ct, "json")
+
+	if !isJSON || (len(body) > 0 && body[0] != '{' && body[0] != '[' && body[0] != '"') {
+		msg := strings.TrimSpace(string(body))
+		if len(msg) > 200 {
+			msg = msg[:200] + "…"
+		}
+		if msg == "" {
+			msg = "empty response"
+		}
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": "flex-query plugin returned non-JSON: " + msg,
+			"hint":  "Plugin API may not be deployed — apply k8s/base or set FLEX_QUERY_API_URL",
+		})
+		return
+	}
+
 	if ct == "" {
 		ct = "application/json"
 	}

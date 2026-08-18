@@ -1172,8 +1172,8 @@ export function PluginReleasePage({
                 <SegmentControl
                   ariaLabel="Plugin launch target"
                   options={[
-                    { value: 'ib-gateway', label: 'IB Gateway' },
-                    { value: 'market-data', label: 'Market Data' },
+                    { value: 'ib-gateway', label: 'IB Client' },
+                    { value: 'market-data', label: 'Massive' },
                   ]}
                   value={target}
                   onChange={v => setTarget(v as PluginLaunchTargetId)}
@@ -1366,7 +1366,7 @@ export function PluginReleasePage({
                       className="focus-strip-link shrink-0 text-[var(--text-dense-caption)]"
                       onClick={() => onNavigate('ib-gateway-manage')}
                     >
-                      Open IB Gateway →
+                      Open IB Client →
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/40 px-3 py-2">
@@ -1381,7 +1381,7 @@ export function PluginReleasePage({
                       className="focus-strip-link shrink-0 text-[var(--text-dense-caption)]"
                       onClick={() => onNavigate('market-data-manage')}
                     >
-                      Open Market Data →
+                      Open Massive →
                     </button>
                   </div>
                 </div>
