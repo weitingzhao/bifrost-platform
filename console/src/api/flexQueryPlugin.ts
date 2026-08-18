@@ -177,6 +177,33 @@ export type FlexRawPeekResponse = {
   error?: string
 }
 
+export type FlexFreshnessKpiMetric = {
+  at: string | null
+  age_seconds: number | null
+  age_label: string
+}
+
+export type FlexFreshnessKpiUntil = {
+  at: string | null
+  until_seconds: number | null
+  until_label: string
+  slot?: string | null
+}
+
+export type FlexFreshnessKpis = {
+  generated_at: string
+  last_successful_sync: FlexFreshnessKpiMetric
+  last_run: FlexFreshnessKpiMetric & { status: string | null; kind: string | null }
+  latest_execution: FlexFreshnessKpiMetric & { row_count: number | null }
+  latest_transaction: FlexFreshnessKpiMetric & { row_count: number | null }
+  next_scheduled_run: FlexFreshnessKpiUntil
+  last_planned: FlexFreshnessKpiMetric
+}
+
+export function fetchFlexFreshnessKpis() {
+  return proxyGet<FlexFreshnessKpis>('/flex/dashboard/freshness-kpis')
+}
+
 export function fetchFlexIngestKinds() {
   return proxyGet<FlexKindsResponse>('/flex/ingest/kinds')
 }

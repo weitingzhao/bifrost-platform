@@ -20,11 +20,13 @@ import {
   fetchFlexCoverageDbSummary,
   fetchFlexCoverageFreshness,
   fetchFlexCoverageRawPeek,
+  fetchFlexFreshnessKpis,
   fetchFlexIngestJobs,
   fetchFlexIngestKinds,
   fetchFlexIngestQueueDashboard,
   isProxyError,
   type FlexConfigSummary,
+  type FlexFreshnessKpis,
   type FlexIngestJob,
   type FlexQueueSlot,
   type FlexRawPeekResponse,
@@ -120,6 +122,7 @@ export function FlexQueryManagePage() {
               </Button>
             }
           />
+          <FreshnessKpiPanel />
           <OpsSection
             title="Deployments"
             description="L0 observe via platform-api GET /api/v1/plugins/flex-query/status"
@@ -751,6 +754,135 @@ function ConfigPanel() {
         Read-only. Edit in Trade → Settings → IB Connection.
       </p>
     </div>
+  )
+}
+
+function kpiAgeVariant(ageSecs: number | null | undefined, warnThreshold: number, dangerThreshold: number): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (ageSecs == null) return 'neutral'
+  if (ageSecs > dangerThreshold) return 'danger'
+  if (ageSecs > warnThreshold) return 'warning'
+  return 'success'
+}
+
+function FreshnessKpiPanel() {
+  const q = useQuery({
+    queryKey: ['flex-query', 'dashboard', 'freshness-kpis'],
+    queryFn: fetchFlexFreshnessKpis,
+    refetchInterval: 30_000,
+    retry: 1,
+  })
+  const raw = q.data
+  const err = raw != null && isProxyError(raw) ? raw.error : null
+  let kpis: FlexFreshnessKpis | null = null
+  if (raw != null && !isProxyError(raw)) {
+    kpis = raw
+  }
+
+  const cards: Array<{
+    label: string
+    value: string
+    sub?: string
+    variant: 'success' | 'warning' | 'danger' | 'neutral'
+  }> = []
+
+  if (kpis) {
+    const syncAge = kpis.last_successful_sync.age_seconds
+    cards.push({
+      label: 'Last successful sync',
+      value: kpis.last_successful_sync.age_label,
+      sub: kpis.last_successful_sync.at ?? undefined,
+      variant: syncAge == null ? 'neutral' : kpiAgeVariant(syncAge, 86400, 172800),
+    })
+
+    cards.push({
+      label: 'Latest execution',
+      value: kpis.latest_execution.age_label,
+      sub: kpis.latest_execution.at
+        ? `${kpis.latest_execution.at} · ${kpis.latest_execution.row_count ?? 0} rows`
+        : undefined,
+      variant: kpiAgeVariant(kpis.latest_execution.age_seconds, 172800, 604800),
+    })
+
+    cards.push({
+      label: 'Latest transaction',
+      value: kpis.latest_transaction.age_label,
+      sub: kpis.latest_transaction.at
+        ? `${kpis.latest_transaction.at} · ${kpis.latest_transaction.row_count ?? 0} rows`
+        : undefined,
+      variant: kpiAgeVariant(kpis.latest_transaction.age_seconds, 604800, 2592000),
+    })
+
+    const lastRunLabel = kpis.last_run.age_label !== '—'
+      ? `${kpis.last_run.age_label}${kpis.last_run.status ? ` · ${kpis.last_run.status}` : ''}`
+      : '—'
+    cards.push({
+      label: 'Last run job',
+      value: lastRunLabel,
+      sub: kpis.last_run.kind ?? undefined,
+      variant: kpis.last_run.status === 'done'
+        ? 'success'
+        : kpis.last_run.status === 'failed'
+          ? 'danger'
+          : kpis.last_run.status === 'running'
+            ? 'info' as 'warning'
+            : 'neutral',
+    })
+
+    cards.push({
+      label: 'Next scheduled run',
+      value: kpis.next_scheduled_run.until_label,
+      sub: kpis.next_scheduled_run.at
+        ? `${kpis.next_scheduled_run.at}${kpis.next_scheduled_run.slot ? ` · ${kpis.next_scheduled_run.slot}` : ''}`
+        : undefined,
+      variant: kpis.next_scheduled_run.until_seconds != null && kpis.next_scheduled_run.until_seconds <= 0
+        ? 'danger'
+        : 'neutral',
+    })
+
+    cards.push({
+      label: 'Last planned slot',
+      value: kpis.last_planned.age_label,
+      sub: kpis.last_planned.at ?? undefined,
+      variant: kpiAgeVariant(kpis.last_planned.age_seconds, 86400, 172800),
+    })
+  }
+
+  return (
+    <OpsSection
+      title="Data freshness"
+      description="Aggregated ingest + brokerage data age"
+      bodyPadding="default"
+      overflow="visible"
+    >
+      {q.isLoading ? (
+        <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+          Loading freshness KPIs…
+        </p>
+      ) : err != null ? (
+        <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">{err}</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {cards.map(c => (
+            <div
+              key={c.label}
+              className="flex flex-col gap-1 rounded-md border border-[var(--border)] px-3 py-2"
+            >
+              <span className="text-[var(--text-dense-caption)] font-medium text-[var(--muted-foreground)]">
+                {c.label}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <DenseTag variant={c.variant}>{c.value}</DenseTag>
+              </span>
+              {c.sub ? (
+                <span className="font-mono text-[var(--text-dense-micro)] text-[var(--muted-foreground)] truncate" title={c.sub}>
+                  {c.sub}
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </OpsSection>
   )
 }
 
