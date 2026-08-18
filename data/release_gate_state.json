@@ -1,6 +1,6 @@
 {
   "tier": "prod",
-  "at": "2026-08-13T15:45:35.098531Z",
+  "at": "2026-08-18T15:56:08.659737Z",
   "result": "pass",
   "revision": "main",
   "log_path": "bifrost-trade-infra/scripts/release_gate.log",
@@ -24,7 +24,7 @@
       "label": "bifrost-deliver-prod pipeline",
       "required": true,
       "reachability": "ok",
-      "detail": "bifrost-deliver-prod-1786635349 (True)"
+      "detail": "bifrost-deliver-prod-1787068072 (True)"
     },
     {
       "id": "stg-frontend",
@@ -91,5 +91,5 @@
     }
   ],
   "triggered_by": "admin",
-  "summary": "prod release gate pass (13 checks)"
+  "summary": "prod release gate pass (12 checks)"
 }
