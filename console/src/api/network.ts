@@ -113,6 +113,19 @@ export async function fetchMarketDataStatus(): Promise<MarketDataStatusResponse>
   return body
 }
 
+export async function fetchFlexQueryStatus(): Promise<MarketDataStatusResponse> {
+  const r = await fetch('/api/v1/plugins/flex-query/status')
+  const body = (await r.json()) as MarketDataStatusResponse
+  if (!r.ok) {
+    return {
+      ...body,
+      reachable: false,
+      error: body.error ?? `HTTP ${r.status}`,
+    }
+  }
+  return body
+}
+
 export async function postIbGatewayControl(
   action: 'reconnect' | 'maintenance' | 'mode',
   body: { account_id?: string; enabled?: boolean; mode?: 'mock' | 'live' } = {},

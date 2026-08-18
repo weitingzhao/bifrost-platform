@@ -18,6 +18,7 @@ import {
   type LaunchDeskLaneId,
 } from '@/hooks/useLaunchDeskChecklistSignals'
 import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
+import { useFlexQueryLiveProbe } from '@/hooks/useFlexQueryLiveProbe'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePatrolSnapshot } from '@/hooks/usePatrolSnapshot'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
@@ -77,6 +78,7 @@ export type ConsoleViewTab =
   | 'plugin-gallery'
   | 'ib-gateway-manage'
   | 'market-data-manage'
+  | 'flex-query-manage'
   | 'defects'
   | 'dev-sessions'
 
@@ -102,6 +104,7 @@ export function ConsoleSidebar({
   const controlRoomBaySignal = useControlRoomBayNavSignal()
   const ibGatewayProbe = useIbGatewayLiveProbe()
   const marketDataProbe = useMarketDataLiveProbe()
+  const flexQueryProbe = useFlexQueryLiveProbe()
   const launchDeskSignals = useLaunchDeskChecklistSignals({
     ambientJobId,
     ambientJobStatus,
@@ -174,6 +177,9 @@ export function ConsoleSidebar({
       } else if (item.id === 'market-data-manage') {
         signal = marketDataProbe.isLoading ? 'unknown' : marketDataProbe.probeReach
         title = `Market Data: ${marketDataProbe.summary}`
+      } else if (item.id === 'flex-query-manage') {
+        signal = flexQueryProbe.isLoading ? 'unknown' : flexQueryProbe.probeReach
+        title = `IB Flex Query: ${flexQueryProbe.summary}`
       } else if (
         item.id === 'platform-release' ||
         item.id === 'trade-release' ||
@@ -209,6 +215,9 @@ export function ConsoleSidebar({
       marketDataProbe.isLoading,
       marketDataProbe.probeReach,
       marketDataProbe.summary,
+      flexQueryProbe.isLoading,
+      flexQueryProbe.probeReach,
+      flexQueryProbe.summary,
       launchDeskSignals,
     ],
   )

@@ -28,6 +28,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
 	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/escapehatch"
+	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesinsight"
@@ -93,6 +94,7 @@ type Server struct {
 	network         *network.Handler
 	ibgateway       *ibgateway.Handler
 	marketdata      *marketdata.Handler
+	flexquery       *flexquery.Handler
 	telemetry       *telemetry.Handler
 	lanes           *lanes.Handler
 	sessions        *sessions.Handler
@@ -196,6 +198,7 @@ func New(cfg *config.Config) (*Server, error) {
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
 		marketdata:      marketdata.NewHandler(clusterH.Service()),
+		flexquery:       flexquery.NewHandler(clusterH.Service()),
 		telemetry:       telemetry.NewHandler(cfg, audit),
 		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
 		sessions:        sessionsH,
@@ -261,9 +264,11 @@ func (s *Server) Router() http.Handler {
 		r.Get("/network/sla", s.network.HandleSLA)
 		r.Get("/plugins/ib-gateway/status", s.ibgateway.HandleStatus)
 		r.Get("/plugins/market-data/status", s.marketdata.HandleStatus)
+		r.Get("/plugins/flex-query/status", s.flexquery.HandleStatus)
 		r.Get("/watchlist/union", s.marketdata.HandleWatchlistUnion)
 		// Read-only Plugin API proxy (coverage / analytics / ingest list / JSON probes).
 		r.Get("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
+		r.Get("/plugins/flex-query/api/*", s.flexquery.HandleAPIProxy)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
 		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)
@@ -410,6 +415,7 @@ func (s *Server) Router() http.Handler {
 			// Proxy rewrites Authorization to MARKET_DATA_WRITE_TOKEN (not the operator token).
 			r.Post("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 			r.Delete("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
+			r.Post("/plugins/flex-query/api/*", s.flexquery.HandleAPIProxy)
 			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
 		})
 		r.Group(func(r chi.Router) {

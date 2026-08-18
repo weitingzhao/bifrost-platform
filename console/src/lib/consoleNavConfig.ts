@@ -12,6 +12,7 @@ import {
   Cpu,
   Database,
   FileCode2,
+  FileSearch,
   Gauge,
   HeartPulse,
   History,
@@ -237,6 +238,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
           { id: 'plugin-gallery', label: 'Plugin Gallery', icon: Boxes },
           { id: 'ib-gateway-manage', label: 'IB Gateway', icon: Plug },
           { id: 'market-data-manage', label: 'Market Data', icon: Database },
+          { id: 'flex-query-manage', label: 'IB Flex Query', icon: FileSearch },
         ],
       },
       {
@@ -318,6 +320,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'plugin-gallery': 'Plugin',
   'ib-gateway-manage': 'Plugin',
   'market-data-manage': 'Plugin',
+  'flex-query-manage': 'Plugin',
   'plugin-release': 'Plugin',
   'agent-release': 'Engineer',
   queue: 'Engineer',

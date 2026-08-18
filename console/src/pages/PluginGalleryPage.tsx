@@ -8,8 +8,19 @@ import {
 } from '@/components/layout/OpsVerdictStrip'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
+import { useFlexQueryLiveProbe } from '@/hooks/useFlexQueryLiveProbe'
 
-const PLUGIN_REGISTRY = [
+type PluginRegistryEntry = {
+  id: string
+  name: string
+  vendor: string
+  role: string
+  lifecycle: 'live' | 'planned'
+  openTabId: string | null
+  openLabel: string | null
+}
+
+const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
   {
     id: 'ib-gateway',
     name: 'IB Gateway',
@@ -32,12 +43,12 @@ const PLUGIN_REGISTRY = [
     id: 'flex-query',
     name: 'IB Flex Query',
     vendor: 'Interactive Brokers',
-    role: 'Planned subcontractor plugin',
-    lifecycle: 'planned',
-    openTabId: null,
-    openLabel: null,
+    role: 'Flex Web Service ingest · trades/cash → brokerage.* @ plugin-flex-query NS',
+    lifecycle: 'live',
+    openTabId: 'flex-query-manage',
+    openLabel: 'Open IB Flex Query',
   },
-] as const
+]
 
 function reachLabel(reach: 'ok' | 'degraded' | 'fail' | 'unknown', loading: boolean): string {
   if (loading) return 'PROBING'
@@ -85,21 +96,23 @@ function reachToVerdict(reach: 'ok' | 'degraded' | 'fail' | 'unknown'): {
 export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string) => void } = {}) {
   const liveProbe = useIbGatewayLiveProbe()
   const marketProbe = useMarketDataLiveProbe()
+  const flexProbe = useFlexQueryLiveProbe()
 
   const liveCount = PLUGIN_REGISTRY.filter(p => p.lifecycle === 'live').length
   const plannedCount = PLUGIN_REGISTRY.filter(p => p.lifecycle === 'planned').length
 
   const busReach =
-    liveProbe.isLoading || marketProbe.isLoading
+    liveProbe.isLoading || marketProbe.isLoading || flexProbe.isLoading
       ? 'unknown'
-      : worseReach(liveProbe.probeReach, marketProbe.probeReach)
+      : worseReach(worseReach(liveProbe.probeReach, marketProbe.probeReach), flexProbe.probeReach)
   const busVerdict = reachToVerdict(busReach)
-  const busSummary = `IB ${reachLabel(liveProbe.probeReach, liveProbe.isLoading)} · Market Data ${reachLabel(marketProbe.probeReach, marketProbe.isLoading)}`
+  const busSummary = `IB ${reachLabel(liveProbe.probeReach, liveProbe.isLoading)} · Market Data ${reachLabel(marketProbe.probeReach, marketProbe.isLoading)} · Flex ${reachLabel(flexProbe.probeReach, flexProbe.isLoading)}`
 
   const refreshBoth = useCallback(() => {
     liveProbe.refetch()
     marketProbe.refetch()
-  }, [liveProbe, marketProbe])
+    flexProbe.refetch()
+  }, [liveProbe, marketProbe, flexProbe])
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -115,7 +128,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
             <Button
               variant="outline"
               size="sm"
-              disabled={liveProbe.isLoading || marketProbe.isLoading}
+              disabled={liveProbe.isLoading || marketProbe.isLoading || flexProbe.isLoading}
               onClick={refreshBoth}
             >
               Refresh
@@ -134,7 +147,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
 
       <OpsSection
         title="Plugin registry"
-        description="Directory only — open IB Gateway / Market Data for probes; Launch Desk → Plugin to publish."
+        description="Directory only — open IB Gateway / Market Data / IB Flex Query for probes; Launch Desk → Plugin to publish."
         bodyPadding="default"
         overflow="visible"
       >
@@ -157,6 +170,12 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
                     kind="reach"
                   />
                 ) : null}
+                {plugin.id === 'flex-query' ? (
+                  <StatusLamp
+                    value={flexProbe.isLoading ? 'unknown' : flexProbe.probeReach}
+                    kind="reach"
+                  />
+                ) : null}
                 <span className="text-[var(--text-dense-label)] font-semibold">{plugin.name}</span>
                 <DenseTag variant="neutral">{plugin.lifecycle}</DenseTag>
               </div>
@@ -168,7 +187,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => onNavigate(plugin.openTabId)}
+                    onClick={() => onNavigate(plugin.openTabId as string)}
                   >
                     {plugin.openLabel}
                   </Button>

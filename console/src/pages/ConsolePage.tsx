@@ -64,6 +64,7 @@ import { NetworkPage } from '@/pages/NetworkPage'
 import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
 import { IbGatewayManagePage } from '@/pages/IbGatewayManagePage'
 import { MarketDataManagePage } from '@/pages/MarketDataManagePage'
+import { FlexQueryManagePage } from '@/pages/FlexQueryManagePage'
 import { AgentReleasePage } from '@/pages/AgentReleasePage'
 import { PluginReleasePage } from '@/pages/PluginReleasePage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
@@ -145,6 +146,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'plugin-gallery': 'Plugin Gallery',
   'ib-gateway-manage': 'IB Gateway',
   'market-data-manage': 'Market Data',
+  'flex-query-manage': 'IB Flex Query',
   defects: 'Defects',
 }
 
@@ -194,6 +196,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'IB Gateway plugin observe — live probe, Trade cutover, reconnect (≠ Launch Plugin publish).',
   'market-data-manage':
     'Market Data Plugin management — Overview, Coverage checklist, Ingest queue, Analytics dashboard.',
+  'flex-query-manage':
+    'IB Flex Query Plugin — scheduled Flex ingest into brokerage Golden Source. Overview, Ingest queue, Coverage.',
   'plugin-release':
     'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Manage pages ≠ Publish.',
   'agent-release':
@@ -252,6 +256,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'plugin-gallery',
   'ib-gateway-manage',
   'market-data-manage',
+  'flex-query-manage',
   'plugin-release',
   'agent-release',
   'control-room',
@@ -1136,6 +1141,7 @@ function ConsolePageInner() {
           <IbGatewayManagePage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
         )}
         {viewTab === 'market-data-manage' && <MarketDataManagePage />}
+        {viewTab === 'flex-query-manage' && <FlexQueryManagePage />}
 
         {isGovernanceTab && (
           <div className="flex min-w-0 gap-4">
