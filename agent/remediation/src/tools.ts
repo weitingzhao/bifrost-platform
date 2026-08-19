@@ -1237,37 +1237,8 @@ export function buildCustomTools(jobId: string): Record<string, SDKCustomTool> {
       },
     },
 
-    git_stash: {
-      description:
-        'Stash dirty working-tree changes in specified repos (includes untracked by default). NEVER call without prior request_operator_approval. Does not drop stashes. Use when operator chooses "Stash to clear Fleet" instead of commit.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          repos: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Repo names to stash',
-          },
-          message: {
-            type: 'string',
-            description: 'Stash message (shown in git stash list)',
-          },
-          include_untracked: {
-            type: 'boolean',
-            description: 'Include untracked files (default true)',
-          },
-        },
-        required: ['repos'],
-      },
-      async execute(args) {
-        const repos = Array.isArray(args.repos) ? args.repos.map(String) : []
-        const message = args.message != null ? String(args.message) : undefined
-        const include_untracked =
-          args.include_untracked === undefined ? true : Boolean(args.include_untracked)
-        const data = await gitBridgePost('/stash', { repos, message, include_untracked })
-        return textResult(jsonText(data))
-      },
-    },
+    // git_stash: REMOVED — stashing hides Owner WIP and causes repeated code loss.
+    // Use git_commit (with operator approval) instead. Git Bridge /stash endpoint deprecated.
 
     // ── Delivery / GitOps read tools (deliver-stg-recover, gitops-config-repair) ──
 

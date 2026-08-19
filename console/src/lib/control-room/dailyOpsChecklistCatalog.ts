@@ -248,22 +248,21 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
       },
       {
         id: 'git-bridge',
-        label: 'Git bridge healthy + clean',
+        label: 'Git bridge healthy',
         group: 'automation',
         idPattern: '^git-bridge$',
         healthyCriteria:
-          'git_bridge.status=ok AND dirty_repos=0. Degraded = reachable but dirty repos exist.',
+          'git_bridge.status=ok. Dirty repos are informational (Owner WIP) — not a failure.',
         fixScope: GIT_DIRTY_FIX_SCOPE,
         fixCapability: 'semi_auto',
         manualAction:
-          'Review dirty repos on Engineer; Propose commit (operator approval) or Stash to clear Fleet — never auto-discard WIP',
+          'Review dirty repos on Engineer; Propose commit with operator approval — never stash or auto-discard WIP',
         agentTools: [
           'get_agent_bridge',
           'git_workspace_status',
           'git_diff',
           'request_operator_approval',
           'git_commit',
-          'git_stash',
         ],
       },
       {

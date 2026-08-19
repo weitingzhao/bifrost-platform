@@ -217,7 +217,6 @@ export function useChecklistItemFix({
     handleFleetCellFix: fleetFix.handleFleetCellFix,
     handleOperatorPlanFix: gitDirty.handleOperatorPlanFix,
     handleProposeCommit: gitDirty.handleProposeCommit,
-    handleProposeStash: gitDirty.handleProposeStash,
     handleChecklistCheck: gitDirty.handleChecklistCheck,
     handleChecklistItemFix: gitDirty.handleChecklistItemFix,
     handleFleetPrimaryCta: fleetFix.handleFleetPrimaryCta,

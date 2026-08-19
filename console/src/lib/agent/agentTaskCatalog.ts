@@ -179,10 +179,10 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
       'Diagnose Git Bridge / probe-bridge / runner HA. Prefer list_dev_sessions + restart_dev_session (bdev); fall back to Mac Pro/Mini manual steps.',
   },
   'git-dirty-remediate': {
-    entryPoint: 'Daily Ops · Engineer dirty · Propose commit / Stash',
-    trigger: 'Operator reviews dirty repos and proposes commit (or stash) with approval',
+    entryPoint: 'Daily Ops · Engineer dirty · Propose commit',
+    trigger: 'Operator reviews dirty repos and proposes commit with approval',
     description:
-      'git_workspace_status → git_diff → request_operator_approval → git_commit or git_stash. Never auto-clears dirty or discards Owner WIP.',
+      'git_workspace_status → git_diff → request_operator_approval → git_commit. Stash path removed (causes code loss). Never auto-clears dirty or discards Owner WIP.',
   },
   ops: {
     entryPoint: 'Agent Desk → Ops scope',

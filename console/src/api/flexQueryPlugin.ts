@@ -104,6 +104,7 @@ export type FlexQueueSlot = {
   next_fires?: Array<string | null>
   last_job?: FlexIngestJob | null
   late?: boolean
+  adherence?: string
 }
 
 export type FlexQueueDashboardResponse = {
@@ -202,6 +203,48 @@ export type FlexFreshnessKpis = {
 
 export function fetchFlexFreshnessKpis() {
   return proxyGet<FlexFreshnessKpis>('/flex/dashboard/freshness-kpis')
+}
+
+export type FlexTriggerResponse = {
+  ok: boolean
+  count?: number
+  raw_count?: number
+  message?: string
+  error?: string
+  per_query?: Array<{
+    role: string
+    query_id: string
+    label?: string | null
+    rows: number
+    data_from?: string | null
+    data_to?: string | null
+    used_fallback?: boolean
+    fallback_kind?: string | null
+  }>
+  updated_accounts?: number
+  range_mode?: string
+  range_days?: number
+  range_from?: string | null
+  range_to?: string | null
+  data_from?: string | null
+  data_to?: string | null
+  last_flex_date_after?: string | null
+}
+
+export type FlexUploadResponse = {
+  ok: boolean
+  count?: number
+  updated_accounts?: number
+  message?: string
+  error?: string
+}
+
+export function triggerFlexFetch(kind: 'trades' | 'transactions' = 'trades') {
+  return proxyPost<FlexTriggerResponse>('/flex/ingest/trigger', { kind })
+}
+
+export function uploadFlexXml(xml: string) {
+  return proxyPost<FlexUploadResponse>('/flex/ingest/upload-xml', { xml })
 }
 
 export function fetchFlexIngestKinds() {

@@ -33,9 +33,8 @@ export type DailyOpsContextValue = {
   /** Adopt an existing remediation job as ambient (Queue → Now). */
   onStartAgentJob?: (job: { id: string; scope: string; label: string }) => void
 
-  // Propose commit (git-dirty-remediate)
+  // Propose commit (git-dirty-remediate). Stash path removed.
   onProposeCommit?: () => void
-  onProposeStash?: () => void
   proposeCommitPending?: boolean
   proposeCommitDisabled?: boolean
   proposeCommitTitle?: string

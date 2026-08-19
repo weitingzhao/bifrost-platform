@@ -293,7 +293,6 @@ export function DailyOpsExecutionPanel({
     onVerifyReprobe,
     onStartAgentJob: onAdoptJob,
     onProposeCommit,
-    onProposeStash,
     proposeCommitPending = false,
   } = useDailyOpsContext()
   const hasAmbientJob = ambientJobId != null && ambientJobId !== ''
@@ -579,7 +578,6 @@ export function DailyOpsExecutionPanel({
                 <GitDirtyDetailsPanel
                   className="mb-2 rounded-md border border-amber-500/35 bg-amber-500/5 px-2.5 py-2"
                   onProposeCommit={onProposeCommit}
-                  onProposeStash={onProposeStash}
                   proposeDisabled={!canOperate || proposeCommitPending}
                 />
               )}

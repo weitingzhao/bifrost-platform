@@ -28,7 +28,7 @@ var CatalogItems = []ItemMeta{
 	{ID: "platform-console", Label: "Console reachable", FixScope: "platform-self-health-recover", FixCapability: FixFullAuto},
 	{ID: "argo-apps", Label: "GitOps Argo apps synced", FixScope: "platform-self-health-recover", FixCapability: FixSemiAuto},
 	{ID: "runners-ha", Label: "Agent runners (HA)", FixScope: "operator-plane-remediate", FixCapability: FixSemiAuto},
-	{ID: "git-bridge", Label: "Git bridge healthy + clean", FixScope: "git-dirty-remediate", FixCapability: FixSemiAuto},
+	{ID: "git-bridge", Label: "Git bridge healthy", FixScope: "git-dirty-remediate", FixCapability: FixSemiAuto},
 	{ID: "mac-probe-bridge", Label: "Mac seat · probe-bridge", FixScope: "", FixCapability: FixManual},
 	{ID: "postgres", Label: "PostgreSQL reachable", FixScope: "cluster_issues_full_auto", FixCapability: FixSemiAuto},
 	{ID: "db-backup-fresh", Label: "CNPG backup < 48h", FixScope: "data-layer-backup", FixCapability: FixSemiAuto},

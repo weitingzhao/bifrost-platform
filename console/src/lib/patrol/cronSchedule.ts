@@ -20,6 +20,32 @@ function dowName(raw: string): string | null {
   return DOW[idx]
 }
 
+const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+
+function dowShort(n: number): string {
+  const idx = n === 7 ? 0 : n
+  if (idx < 0 || idx > 6) return String(n)
+  return DOW_SHORT[idx]
+}
+
+function describeDow(raw: string): string | null {
+  if (raw === '*') return null
+  if (isNum(raw)) return dowName(raw)
+  const rangeMatch = raw.match(/^(\d)-(\d)$/)
+  if (rangeMatch) {
+    const lo = Number(rangeMatch[1])
+    const hi = Number(rangeMatch[2])
+    if (lo === 1 && hi === 5) return 'Mon–Fri'
+    if (lo === 0 && hi === 6) return null
+    return `${dowShort(lo)}–${dowShort(hi)}`
+  }
+  const parts = raw.split(',')
+  if (parts.length > 1 && parts.every(isNum)) {
+    return parts.map(p => dowShort(Number(p))).join(', ')
+  }
+  return null
+}
+
 /** Human-readable 5-field cron (min hour dom month dow). Unknown shapes keep the raw expr. */
 export function describeCronSchedule(expr: string): string {
   const fields = expr.trim().split(/\s+/)
@@ -40,11 +66,11 @@ export function describeCronSchedule(expr: string): string {
   if (isNum(min) && hour === '*' && dom === '*' && month === '*' && dow === '*') {
     return `Hourly at :${pad2(Number(min))}`
   }
-  if (isNum(min) && isNum(hour) && dom === '*' && month === '*' && dow === '*') {
-    return `Daily at ${fmtHm(Number(hour), Number(min))} UTC`
-  }
-  if (isNum(min) && isNum(hour) && dom === '*' && month === '*' && dowName(dow) != null) {
-    return `Weekly on ${dowName(dow)} at ${fmtHm(Number(hour), Number(min))} UTC`
+  if (isNum(min) && isNum(hour) && dom === '*' && month === '*') {
+    const time = fmtHm(Number(hour), Number(min))
+    const dowLabel = describeDow(dow)
+    if (dow === '*') return `Daily at ${time} UTC`
+    if (dowLabel != null) return `${dowLabel} at ${time} UTC`
   }
   if (isNum(min) && isNum(hour) && isNum(dom) && month === '*' && dow === '*') {
     return `Monthly on day ${dom} at ${fmtHm(Number(hour), Number(min))} UTC`

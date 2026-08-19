@@ -107,9 +107,8 @@ export type OpsTaskStripsProps = {
   operatorPlanFixDisabled?: boolean
   operatorPlanFixTitle?: string
   operatorPlanFixError?: string | null
-  /** Git dirty — propose commit / stash (scope git-dirty-remediate). */
+  /** Git dirty — propose commit (scope git-dirty-remediate). Stash removed. */
   onProposeCommit?: () => void
-  onProposeStash?: () => void
   proposeCommitPending?: boolean
   proposeCommitDisabled?: boolean
   proposeCommitTitle?: string
@@ -438,7 +437,6 @@ export function DailyOpsFleetDesk({
     operatorPlanFixTitle,
     operatorPlanFixError,
     onProposeCommit,
-    onProposeStash,
     proposeCommitPending,
     proposeCommitDisabled,
     proposeCommitTitle,
@@ -561,7 +559,6 @@ export function DailyOpsFleetDesk({
     onExpandAgentDock,
     onStartAgentJob,
     onProposeCommit,
-    onProposeStash,
     proposeCommitPending,
     proposeCommitDisabled,
     proposeCommitTitle,
@@ -605,9 +602,7 @@ export function DailyOpsFleetDesk({
             onSecondaryAction={
               fleetWorkflow.primaryAction.secondary?.kind === 'propose-commit'
                 ? () => {
-                    const label = fleetWorkflow.primaryAction.secondary?.label ?? ''
-                    if (/stash/i.test(label)) onProposeStash?.()
-                    else onProposeCommit?.()
+                    onProposeCommit?.()
                   }
                 : fleetWorkflow.primaryAction.secondary?.kind === 'operator-plan'
                   ? () => onOperatorPlanFix?.()
@@ -729,7 +724,6 @@ export function DailyOpsFleetDesk({
                 onReprobe={handleVerifyReprobe}
                 onClose={() => setSelectedCellKey(null)}
                 onProposeCommit={onProposeCommit}
-                onProposeStash={onProposeStash}
                 proposeCommitPending={proposeCommitPending}
                 proposeCommitDisabled={proposeCommitDisabled}
                 proposeCommitTitle={proposeCommitTitle}

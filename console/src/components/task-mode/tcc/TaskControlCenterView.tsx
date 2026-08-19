@@ -749,7 +749,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
             isDailyOps ? (fix.aiOperatorPlaneFix.error?.message ?? null) : undefined
           }
           onProposeCommit={isDailyOps ? fix.handleProposeCommit : undefined}
-          onProposeStash={isDailyOps ? fix.handleProposeStash : undefined}
           proposeCommitPending={isDailyOps ? fix.aiGitDirtyFix.isPending : undefined}
           proposeCommitDisabled={isDailyOps ? fix.aiGitDirtyFix.disabled : undefined}
           proposeCommitTitle={

@@ -193,7 +193,6 @@ export function DailyOpsFleetCellDetail({
   onReprobe,
   onClose,
   onProposeCommit,
-  onProposeStash,
   proposeCommitPending = false,
   proposeCommitDisabled = false,
   proposeCommitTitle,
@@ -214,7 +213,6 @@ export function DailyOpsFleetCellDetail({
   onClose: () => void
   /** git-dirty-remediate — propose commit (operator approval). */
   onProposeCommit?: () => void
-  onProposeStash?: () => void
   proposeCommitPending?: boolean
   proposeCommitDisabled?: boolean
   proposeCommitTitle?: string
@@ -573,24 +571,6 @@ export function DailyOpsFleetCellDetail({
               onClick={() => onProposeCommit()}
             >
               {proposeCommitPending ? 'Starting…' : 'Propose commit'}
-            </Button>
-          )}
-          {gitBridgeFailing && onProposeStash != null && (
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              disabled={
-                !canOperate || proposeCommitPending || proposeCommitDisabled || reconnectPending
-              }
-              title={
-                !canOperate
-                  ? 'Operator authentication required'
-                  : 'Start git-dirty-remediate toward stash (approval required; never drop WIP)'
-              }
-              onClick={() => onProposeStash()}
-            >
-              Stash
             </Button>
           )}
           {gate === 'NO-GO' && allowFix && onAgentFix != null && (

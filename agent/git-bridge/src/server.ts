@@ -313,64 +313,13 @@ app.post('/push', (req, res) => {
 })
 
 // ---------------------------------------------------------------------------
-// POST /stash — stash working tree changes (never drop; requires operator intent)
+// POST /stash — DEPRECATED: stashing hides Owner WIP and causes code loss.
+// Returns 410 Gone. Use POST /commit with operator approval instead.
 // ---------------------------------------------------------------------------
-app.post('/stash', (req, res) => {
-  const { repos, message, include_untracked } = req.body as {
-    repos: string[]
-    message?: string
-    include_untracked?: boolean
-  }
-
-  if (!Array.isArray(repos) || repos.length === 0) {
-    res.status(400).json({ error: 'repos[] required' })
-    return
-  }
-
-  const stashMsg =
-    typeof message === 'string' && message.trim() !== ''
-      ? message.trim()
-      : 'bifrost-git-bridge: stash to clear Fleet dirty'
-  const withUntracked = include_untracked !== false
-  const results: Array<{
-    repo: string
-    status: 'stashed' | 'skipped' | 'error'
-    detail: string
-  }> = []
-
-  for (const name of repos) {
-    if (!MANAGED_REPOS.includes(name)) {
-      results.push({ repo: name, status: 'error', detail: 'not a managed repo' })
-      continue
-    }
-    const dir = path.join(WORKSPACE, name)
-    if (!isGitRepo(dir)) {
-      results.push({ repo: name, status: 'error', detail: 'not a git repo' })
-      continue
-    }
-
-    try {
-      const statusBefore = git(dir, 'status --porcelain')
-      if (statusBefore === '') {
-        results.push({ repo: name, status: 'skipped', detail: 'working tree clean' })
-        continue
-      }
-
-      const flags = withUntracked ? '-u' : ''
-      const safeMsg = stashMsg.replace(/"/g, '\\"')
-      const output = git(dir, `stash push ${flags} -m "${safeMsg}"`.replace(/\s+/g, ' ').trim())
-      results.push({
-        repo: name,
-        status: 'stashed',
-        detail: output || 'stashed',
-      })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      results.push({ repo: name, status: 'error', detail: msg.slice(0, 300) })
-    }
-  }
-
-  res.json({ results })
+app.post('/stash', (_req, res) => {
+  res.status(410).json({
+    error: 'POST /stash is deprecated. Stashing hides Owner WIP and causes code loss. Use POST /commit with operator approval instead.',
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -795,15 +795,17 @@ export function buildEngineerCell(input: {
 
   const gb = bridge?.git_bridge
   const dirty = gb?.dirty_repos ?? 0
+  // Dirty repos are informational (Owner WIP), not a degradation signal.
+  // Only bridge unreachable/down is a real failure.
   const gitSig: Signal =
-    gb == null ? 'unknown' : gb.status !== 'ok' ? 'fail' : dirty > 0 ? 'degraded' : 'ok'
+    gb == null ? 'unknown' : gb.status !== 'ok' ? 'fail' : 'ok'
   const gitReason =
     gb == null
       ? 'Git bridge status unknown'
       : gb.status !== 'ok'
         ? 'Git bridge down'
         : dirty > 0
-          ? `Git bridge ${dirty} dirty repo(s)`
+          ? `Git bridge OK · ${dirty} dirty repo(s)`
           : 'Git bridge clean'
 
   let macSig: Signal = 'unknown'

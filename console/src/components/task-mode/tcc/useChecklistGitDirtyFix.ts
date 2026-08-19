@@ -45,7 +45,6 @@ export function useChecklistGitDirtyFix({
   setAgentJustSucceeded: (value: boolean) => void
 }) {
   const qc = useQueryClient()
-  const gitDirtyIntentRef = useRef<'commit' | 'stash'>('commit')
 
   const aiOperatorPlaneFix = useAmbientAgentTask({
     canOperate,
@@ -68,19 +67,11 @@ export function useChecklistGitDirtyFix({
     buildRequest: async () => {
       const bridge = await fetchAgentBridge()
       const base = buildGitDirtyRemediatePrompt(bridge)
-      const intent = gitDirtyIntentRef.current
-      const extra =
-        intent === 'stash'
-          ? [
-              '',
-              '## Operator intent: STASH (not commit)',
-              'Prefer git_stash after request_operator_approval. Do not git_commit unless operator changes mind.',
-            ].join('\n')
-          : [
-              '',
-              '## Operator intent: PROPOSE COMMIT',
-              'Draft commit_message → request_operator_approval → git_commit. Stash only if operator rejects commit and asks to stash.',
-            ].join('\n')
+      const extra = [
+        '',
+        '## Operator intent: PROPOSE COMMIT',
+        'Draft commit_message → request_operator_approval → git_commit. Never stash.',
+      ].join('\n')
       return { prompt: `${base}${extra}` }
     },
   })
@@ -105,16 +96,6 @@ export function useChecklistGitDirtyFix({
   const handleProposeCommit = () => {
     dailyOpsFixStartedRef.current = true
     setAgentJustSucceeded(false)
-    gitDirtyIntentRef.current = 'commit'
-    const engineerCell = fleet.cells.find(c => c.role === 'engineer')
-    if (engineerCell != null) recordChecklistRunTouch(engineerCell)
-    aiGitDirtyFix.trigger()
-  }
-
-  const handleProposeStash = () => {
-    dailyOpsFixStartedRef.current = true
-    setAgentJustSucceeded(false)
-    gitDirtyIntentRef.current = 'stash'
     const engineerCell = fleet.cells.find(c => c.role === 'engineer')
     if (engineerCell != null) recordChecklistRunTouch(engineerCell)
     aiGitDirtyFix.trigger()
@@ -202,7 +183,6 @@ export function useChecklistGitDirtyFix({
     aiChecklistItemFix,
     handleOperatorPlanFix,
     handleProposeCommit,
-    handleProposeStash,
     handleChecklistCheck,
     handleChecklistItemFix,
     checklistCheckActive,

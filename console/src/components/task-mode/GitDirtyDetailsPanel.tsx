@@ -18,12 +18,10 @@ function fileList(detail: GitDirtyRepoDetail): string[] {
 export function GitDirtyDetailsPanel({
   className,
   onProposeCommit,
-  onProposeStash,
   proposeDisabled,
 }: {
   className?: string
   onProposeCommit?: () => void
-  onProposeStash?: () => void
   proposeDisabled?: boolean
 }) {
   const bridgeQ = useQuery({
@@ -105,29 +103,16 @@ export function GitDirtyDetailsPanel({
           })}
         </ul>
       )}
-      {(onProposeCommit != null || onProposeStash != null) && (
+      {onProposeCommit != null && (
         <div className="mt-1.5 flex flex-wrap gap-2">
-          {onProposeCommit != null && (
-            <button
-              type="button"
-              className="text-[var(--text-dense-caption)] font-medium text-primary hover:underline disabled:opacity-50"
-              disabled={proposeDisabled}
-              onClick={onProposeCommit}
-            >
-              Propose commit →
-            </button>
-          )}
-          {onProposeStash != null && (
-            <button
-              type="button"
-              className="text-[var(--text-dense-caption)] font-medium text-muted-foreground hover:underline disabled:opacity-50"
-              disabled={proposeDisabled}
-              title="Approved stash only — never drops Owner WIP"
-              onClick={onProposeStash}
-            >
-              Stash to clear Fleet →
-            </button>
-          )}
+          <button
+            type="button"
+            className="text-[var(--text-dense-caption)] font-medium text-primary hover:underline disabled:opacity-50"
+            disabled={proposeDisabled}
+            onClick={onProposeCommit}
+          >
+            Propose commit →
+          </button>
         </div>
       )}
     </div>
