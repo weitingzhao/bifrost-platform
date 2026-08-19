@@ -45,5 +45,11 @@ data/operate/
 !.vscode/extensions.json
 .docker-build/
 
-# Release cycle runtime (API rewrites; must not dirty git-bridge)
+# Escape hatch drill state
+data/escape_hatch/
+
+# Release cycle + gate runtime (API rewrites; must not dirty git-bridge)
 data/release_cycles_*.json
+data/release_gate_state*.json
+data/release_gate_state_*.json
+data/release_gate.log
