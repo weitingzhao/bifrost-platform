@@ -6,8 +6,17 @@
  */
 
 export const AGENT_LAUNCH_STORE_KEY = 'bifrost.agentLaunch.store.v1'
+/** Same-tab listeners (Launch Desk sidebar) re-read after the lane page writes evidence. */
+export const AGENT_LAUNCH_STORE_EVENT = 'bifrost:agent-launch-store'
 
 export type AgentLaunchTargetId = 'primary' | 'standby' | 'both'
+
+/** `both` stores evidence under primary — the sequential both-cycle is one record. */
+export function agentLaunchEvidenceKey(
+  target: AgentLaunchTargetId,
+): Exclude<AgentLaunchTargetId, 'both'> {
+  return target === 'both' ? 'primary' : target
+}
 
 export type AgentLaunchStepId =
   | 'detect'
@@ -81,12 +90,15 @@ export function writeAgentLaunchStore(patch: Partial<AgentLaunchStore>): AgentLa
   } catch {
     /* ignore quota */
   }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AGENT_LAUNCH_STORE_EVENT))
+  }
   return next
 }
 
 export function readAgentLaunchEvidence(target?: AgentLaunchTargetId): AgentLaunchEvidence {
   const store = readAgentLaunchStore()
-  const t = target ?? store.selectedTarget
+  const t = agentLaunchEvidenceKey(target ?? store.selectedTarget)
   return store.byKey[t] ?? {}
 }
 
@@ -95,7 +107,7 @@ export function writeAgentLaunchEvidence(
   target?: AgentLaunchTargetId,
 ): AgentLaunchEvidence {
   const store = readAgentLaunchStore()
-  const t = target ?? store.selectedTarget
+  const t = agentLaunchEvidenceKey(target ?? store.selectedTarget)
   const nextEv: AgentLaunchEvidence = {
     ...(store.byKey[t] ?? {}),
     ...patch,
@@ -105,6 +117,14 @@ export function writeAgentLaunchEvidence(
     byKey: { ...store.byKey, [t]: nextEv },
   })
   return nextEv
+}
+
+/** Last-deploy lamp: API last job or local cycle evidence (Launch Agent checklist / sidebar). */
+export function isAgentLaunchLastDeployOk(
+  lastStatus: string | undefined,
+  evidence: AgentLaunchEvidence,
+): boolean {
+  return lastStatus === 'done' || evidence.deployOutcome === 'ok'
 }
 
 export function evidenceSummaryLine(ev: AgentLaunchEvidence): string {
@@ -136,7 +156,7 @@ export function evidenceSummaryLine(ev: AgentLaunchEvidence): string {
  */
 export function beginNextAgentLaunchCycle(target?: AgentLaunchTargetId): AgentLaunchEvidence {
   const store = readAgentLaunchStore()
-  const t = target ?? store.selectedTarget
+  const t = agentLaunchEvidenceKey(target ?? store.selectedTarget)
   const cur = store.byKey[t] ?? {}
   const now = new Date().toISOString()
   const nextEv: AgentLaunchEvidence = {

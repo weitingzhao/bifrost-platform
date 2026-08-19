@@ -31,8 +31,10 @@ import {
 } from '@/lib/agent/agentLaunchAgentPrompt'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
+  agentLaunchEvidenceKey,
   beginNextAgentLaunchCycle,
   evidenceSummaryLine,
+  isAgentLaunchLastDeployOk,
   readAgentLaunchEvidence,
   readAgentLaunchStore,
   writeAgentLaunchEvidence,
@@ -454,7 +456,7 @@ export function AgentReleasePage({
 
   const patchEvidence = useCallback(
     (patch: Partial<AgentLaunchEvidence>, feedback: string) => {
-      const next = writeAgentLaunchEvidence(patch, target === 'both' ? 'primary' : target)
+      const next = writeAgentLaunchEvidence(patch, agentLaunchEvidenceKey(target))
       setEvidence(next)
       setActionFailed(false)
       setActionMsg(feedback)
@@ -463,7 +465,7 @@ export function AgentReleasePage({
   )
 
   const handleStartNextCycle = useCallback(() => {
-    const next = beginNextAgentLaunchCycle(target === 'both' ? 'primary' : target)
+    const next = beginNextAgentLaunchCycle(agentLaunchEvidenceKey(target))
     setEvidence(next)
     setBoundLaunchJobId(null)
     setLaunchKickoff(false)
@@ -515,7 +517,7 @@ export function AgentReleasePage({
     label: AI_LAUNCH_TASK_LABEL,
     buildRequest: () => ({
       prompt: buildAgentLaunchPrompt({
-        target: target === 'both' ? 'primary' : target,
+        target: agentLaunchEvidenceKey(target),
         bridge: bridgeQuery.data,
         deployStatus: deployQuery.data,
         evidence,
@@ -559,7 +561,7 @@ export function AgentReleasePage({
   const cycleTerminal = isPluginLaunchCycleTerminal(outcome)
 
   useEffect(() => {
-    const ev = readAgentLaunchEvidence(target === 'both' ? 'primary' : target)
+    const ev = readAgentLaunchEvidence(agentLaunchEvidenceKey(target))
     setEvidence(ev)
     writeAgentLaunchStore({ selectedTarget: target })
     const rebuilt = buildSteps(ev, {
@@ -602,7 +604,7 @@ export function AgentReleasePage({
     if (!agentInFlightEarly && jobForProgress?.phase !== 'done') return
     const patch = evidencePatchFromAgentLaunchProgress(evidence, agentProgress)
     if (patch == null) return
-    const next = writeAgentLaunchEvidence(patch, target === 'both' ? 'primary' : target)
+    const next = writeAgentLaunchEvidence(patch, agentLaunchEvidenceKey(target))
     setEvidence(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- silent sync on progress ticks
   }, [
@@ -833,7 +835,7 @@ export function AgentReleasePage({
     {
       id: 'last-deploy',
       label: 'Last deploy',
-      ok: deployQuery.data?.last?.status === 'done' || evidence.deployOutcome === 'ok',
+      ok: isAgentLaunchLastDeployOk(deployQuery.data?.last?.status, evidence),
       detail:
         deployQuery.data?.last != null
           ? `${deployQuery.data.last.role ?? ''} ${deployQuery.data.last.status}`.trim()

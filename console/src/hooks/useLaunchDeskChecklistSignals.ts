@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPipelineRuns } from '@/api/delivery'
 import { fetchAgentBridge, fetchAgentDeployStatus } from '@/api/agentOps'
@@ -23,7 +23,13 @@ import {
   readPluginLaunchEvidence,
   readPluginLaunchStore,
 } from '@/lib/delivery/pluginLaunchEvidence'
-import { readAgentLaunchEvidence } from '@/lib/delivery/agentLaunchEvidence'
+import {
+  AGENT_LAUNCH_STORE_EVENT,
+  agentLaunchEvidenceKey,
+  isAgentLaunchLastDeployOk,
+  readAgentLaunchEvidence,
+  readAgentLaunchStore,
+} from '@/lib/delivery/agentLaunchEvidence'
 import {
   buildPluginLaunchCheckpoints,
   resolvePluginLaunchVerdict,
@@ -78,6 +84,16 @@ export function useLaunchDeskChecklistSignals(opts?: {
 }): Record<LaunchDeskLaneId, LaunchDeskLaneSignal> {
   const enabled = opts?.enabled !== false
   const { canOperate } = usePlatformAuth()
+  const [agentEvidenceTick, setAgentEvidenceTick] = useState(0)
+  useEffect(() => {
+    const bump = () => setAgentEvidenceTick(n => n + 1)
+    window.addEventListener(AGENT_LAUNCH_STORE_EVENT, bump)
+    window.addEventListener('storage', bump)
+    return () => {
+      window.removeEventListener(AGENT_LAUNCH_STORE_EVENT, bump)
+      window.removeEventListener('storage', bump)
+    }
+  }, [])
   const rocketProd = useRocketProdReadiness(enabled)
   const satelliteProd = useSatelliteProdReadiness(enabled)
   const promoteVerify = usePromoteVerifyReadiness(enabled)
@@ -128,6 +144,7 @@ export function useLaunchDeskChecklistSignals(opts?: {
   })
 
   return useMemo(() => {
+    void agentEvidenceTick
     const rocketInput = {
       mode: 'rocket' as const,
       canOperate,
@@ -216,14 +233,22 @@ export function useLaunchDeskChecklistSignals(opts?: {
         const agentInFlight =
           agentDeploy.data?.current?.status === 'running' ||
           (ambientActive && scope === AGENT_LAUNCH_SCOPE)
-        const runnersOk =
-          agentBridge.data?.runners?.some(r => r.status === 'ok') ??
-          agentBridge.data?.remediation_runner?.status === 'ok'
+        const store = readAgentLaunchStore()
+        const evidenceKey = agentLaunchEvidenceKey(store.selectedTarget)
+        const runners = agentBridge.data?.runners ?? []
+        const targetRunner =
+          runners.find(r => r.role === evidenceKey) ??
+          runners[0] ??
+          (agentBridge.data?.remediation_runner != null
+            ? agentBridge.data.remediation_runner
+            : undefined)
+        const runnersOk = targetRunner?.status === 'ok'
         const deployEnabled = agentDeploy.data?.enabled === true
-        // Parity with Launch Agent page checklist: local evidence counts as last deploy OK.
-        const lastOk =
-          agentDeploy.data?.last?.status === 'done' ||
-          readAgentLaunchEvidence().deployOutcome === 'ok'
+        // Same Last-deploy rule as Launch Agent page (both → primary evidence key).
+        const lastOk = isAgentLaunchLastDeployOk(
+          agentDeploy.data?.last?.status,
+          readAgentLaunchEvidence(store.selectedTarget),
+        )
         const agentLoading = agentBridge.isLoading || agentDeploy.isLoading
         const agentChecks = [canOperate, deployEnabled, runnersOk, lastOk]
         const agentReady = agentChecks.filter(Boolean).length
@@ -268,5 +293,6 @@ export function useLaunchDeskChecklistSignals(opts?: {
     agentBridge.isLoading,
     agentDeploy.data,
     agentDeploy.isLoading,
+    agentEvidenceTick,
   ])
 }
