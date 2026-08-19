@@ -21,7 +21,7 @@ func TestLoadFixture(t *testing.T) {
 	if f.NorthStar == nil || f.NorthStar.ID != "ops-ui-single-pane" {
 		t.Errorf("north_star = %+v", f.NorthStar)
 	}
-	if f.Deployment.ActiveTrack != "ops_ui_actuation" {
+	if f.Deployment.ActiveTrack != "trade_ib_client_migration_rollout" {
 		t.Errorf("active_track = %q", f.Deployment.ActiveTrack)
 	}
 	if len(f.Decisions) < 6 {

@@ -93,10 +93,10 @@ func TestNodeViewCapacityFields(t *testing.T) {
 	if v.CPUAllocatable != "4" {
 		t.Fatalf("cpu alloc: %s", v.CPUAllocatable)
 	}
-	if v.MemoryAllocatable != "16Gi" {
+	if v.MemoryAllocatable != "16G" {
 		t.Fatalf("mem alloc: %s", v.MemoryAllocatable)
 	}
-	if v.StorageAllocatable != "100Gi" {
+	if v.StorageAllocatable != "100G" {
 		t.Fatalf("storage alloc: %s", v.StorageAllocatable)
 	}
 }

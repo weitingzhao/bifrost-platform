@@ -56,6 +56,7 @@ func TestObservabilityGrafanaDeploymentPartial(t *testing.T) {
 		},
 		Status: appsv1.DeploymentStatus{
 			ReadyReplicas:     1,
+			UpdatedReplicas:   1,
 			AvailableReplicas: 1,
 		},
 	}
@@ -107,7 +108,11 @@ func TestObservabilityThreeRequiredReady(t *testing.T) {
 	deployGrafana := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "kube-prometheus-stack-grafana", Namespace: "monitoring"},
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-		Status:     appsv1.DeploymentStatus{ReadyReplicas: 1, AvailableReplicas: 1},
+		Status: appsv1.DeploymentStatus{
+			ReadyReplicas:     1,
+			UpdatedReplicas:   1,
+			AvailableReplicas: 1,
+		},
 	}
 	ssProm := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "prometheus-kube-prometheus-stack-prometheus", Namespace: "monitoring"},
