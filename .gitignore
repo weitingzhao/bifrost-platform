@@ -2,8 +2,10 @@
 .env
 .env.local
 
-# Release gate runtime state (Session S6)
+# Release gate runtime state (Session S6) — API rewrites; must not dirty git-bridge
 config/release_gate_state.json
+config/release_gate_state_*.json
+config/release_gate_state_history.json
 config/release_gate.log
 
 # Drift proposal runtime JSON (created by nightly agent / API)

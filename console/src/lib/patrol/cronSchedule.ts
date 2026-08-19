@@ -70,6 +70,7 @@ export function describeCronSchedule(expr: string): string {
     const time = fmtHm(Number(hour), Number(min))
     const dowLabel = describeDow(dow)
     if (dow === '*') return `Daily at ${time} UTC`
+    if (isNum(dow) && dowLabel != null) return `Weekly on ${dowLabel} at ${time} UTC`
     if (dowLabel != null) return `${dowLabel} at ${time} UTC`
   }
   if (isNum(min) && isNum(hour) && isNum(dom) && month === '*' && dow === '*') {

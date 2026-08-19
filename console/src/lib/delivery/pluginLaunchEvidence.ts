@@ -47,7 +47,7 @@ export type PluginLaunchStore = {
 export const PLUGIN_DOGFOOD_REVISION = 'b2fb081'
 export const PLUGIN_DOGFOOD_FEATURE = 'on-demand STK'
 
-export const MARKET_DATA_IMAGE_TAG = '0.3.3'
+export const MARKET_DATA_IMAGE_TAG = '0.4.3'
 
 export function evidenceKey(target: PluginLaunchTargetId, seat: PluginLaunchSeat): string {
   return `${target}:${seat}`
