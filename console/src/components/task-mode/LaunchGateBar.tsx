@@ -84,6 +84,9 @@ export function LaunchGateBar({
   hidePrimaryLaunch = false,
 }: LaunchGateBarProps) {
   const column = layout === 'column'
+  /** Lane checklist already shows NO-GO / N/M ready — do not paint verdict.title as an extra lamp. */
+  const checklistEmbed = column && hidePrimaryLaunch
+  const showColumnHeadline = column && (!checklistEmbed || agentFixActive || agentFixPending)
   const tone =
     verdict.kind === 'GO'
       ? 'success'
@@ -190,19 +193,16 @@ export function LaunchGateBar({
         </div>
       )}
 
-      {column && (
-        <div className="flex min-w-0 items-center gap-1.5">
-          <StatusLamp value={launchVerdictToSignal(verdict.kind)} kind="reach" />
-          <span
-            className={cn(
-              'min-w-0 truncate text-[var(--text-dense-caption)]',
-              verdict.kind === 'GO' ? 'text-muted-foreground' : 'font-medium text-warning',
-            )}
-            title={verdict.detail}
-          >
-            {title}
-          </span>
-        </div>
+      {showColumnHeadline && (
+        <p
+          className={cn(
+            'm-0 min-w-0 text-[var(--text-dense-caption)]',
+            verdict.kind === 'GO' ? 'text-muted-foreground' : 'font-medium text-warning',
+          )}
+          title={verdict.detail}
+        >
+          {title}
+        </p>
       )}
 
       <ul

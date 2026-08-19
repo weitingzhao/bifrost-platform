@@ -32,6 +32,7 @@ import {
   datastoreEnvSignal,
   isProdReleaseBlocked,
   namespacePods,
+  rocketLaunchProdOverall,
   accountSyncChipFromBus,
   busForEnv,
   PLATFORM_PROD,
@@ -301,7 +302,11 @@ export function useRocketProdReadiness(enabled = true) {
   const selfProd = useMemo(() => selfHealthEnvSignal(selfQ.data?.probes, 'prod'), [selfQ.data?.probes])
   const gate = useMemo(() => releaseGateSignal(prodGateQ.data), [prodGateQ.data])
 
-  const prodOverall = worst(k8sProd.signal, selfProd.signal, gate.signal, snapshot.release.signal)
+  const prodOverall = rocketLaunchProdOverall({
+    k8s: k8sProd.signal,
+    selfHealth: selfProd.signal,
+    prodGate: gate.signal,
+  })
 
   const isLoading = missionLoading || clusterQ.isLoading || selfQ.isLoading || prodGateQ.isLoading
   const prodBlocked = isProdReleaseBlocked(prodOverall)

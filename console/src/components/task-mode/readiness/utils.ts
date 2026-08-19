@@ -227,6 +227,20 @@ export function isProdReleaseBlocked(signal: Signal): boolean {
   return signal === 'fail' || signal === 'degraded'
 }
 
+/**
+ * Live Platform Prod for Rocket launch GO / NO-GO.
+ * Last Tekton deliver (`snapshot.release`) stays in cycle history and the Pipeline
+ * idle checkpoint — folding it in made a stale/failed cycle look like Platform Prod
+ * CAUTION and a fifth "Fix Prod" row next to `N/4 ready`.
+ */
+export function rocketLaunchProdOverall(input: {
+  k8s: Signal
+  selfHealth: Signal
+  prodGate: Signal
+}): Signal {
+  return worst(input.k8s, input.selfHealth, input.prodGate)
+}
+
 export function busForEnv(
   data: SatelliteBusDeepResponse | AllSatelliteBusDeepResponse | undefined,
   env: 'stg' | 'prod',

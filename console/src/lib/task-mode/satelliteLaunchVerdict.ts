@@ -88,6 +88,8 @@ export function readinessAnchorDomId(anchor: LaunchReadinessAnchor): string {
  * Critical launch checkpoints — lamps map 1:1 onto Environment Readiness / Recent panels.
  * Satellite: Auth · Rocket IB bus · Trade Prod · Promote / cutover · Pipeline idle
  * Rocket: Auth · Platform Prod · Promote / cutover · Pipeline idle
+ * Verdict title (e.g. "Fix Prod environment before release") is not a checkpoint —
+ * lane pages count these arrays for the `N/M ready` tag.
  * Any `ok: false` ⇒ No-Go (same inputs as resolveLaunchVerdict).
  */
 export function buildLaunchCheckpoints(input: ResolveLaunchVerdictInput): LaunchCheckpoint[] {
