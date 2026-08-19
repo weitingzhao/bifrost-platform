@@ -30,13 +30,12 @@ const CLONE_CONFIRM_TOKEN = 'CLONE-FROM-PROD'
 
 /** Selective sync presets — freshness probe tables + common business tables. */
 const SELECTIVE_TABLE_PRESETS = [
-  'daemon_control',
-  'daemon_run_status',
-  'daemon_heartbeat',
+  'strategy_instance',
+  'strategy_opportunity',
   'account_positions',
   'job_bars_backfill',
-  'strategy_opportunity',
   'preference_position_categories',
+  'watchlist',
 ] as const
 
 type CloneSyncMode = 'full' | 'selective'
@@ -92,7 +91,7 @@ export function DataFreshnessPanel({
   const [actionError, setActionError] = useState<string | null>(null)
   const [syncMode, setSyncMode] = useState<CloneSyncMode>('full')
   const [selectedTables, setSelectedTables] = useState<string[]>([
-    'daemon_control',
+    'strategy_instance',
     'account_positions',
   ])
 

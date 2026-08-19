@@ -142,7 +142,7 @@ export const AGENT_LAYERS: AgentLayerRow[] = [
     ],
     cursorRole: 'SDK (webhook-triggered) + MCP K8s/Redis/PG tools',
     k8sRole: 'Prometheus/Loki read; kubectl via MCP; ArgoCD API',
-    forbidden: 'daemon_control write; ib:operator:cmd; R-DV3 bypass',
+    forbidden: 'Monitor POST /control/*; Redis daemon control; ib:operator:cmd; R-DV3 bypass',
   },
   {
     layer: 3,
@@ -156,7 +156,7 @@ export const AGENT_LAYERS: AgentLayerRow[] = [
     ],
     cursorRole: 'IDE chat (ad-hoc Q&A) + SDK (scheduled daily brief)',
     k8sRole: 'Read Trade API (9 domains) + Redis live quotes + PG positions',
-    forbidden: 'Write ib:operator:cmd; modify daemon_control; auto-place orders',
+    forbidden: 'Write ib:operator:cmd; Redis daemon control write; auto-place orders',
   },
 ]
 
@@ -199,7 +199,7 @@ export const AGENT_PLANE: AgentPlaneRow[] = [
   },
   {
     dimension: 'Boundary',
-    reality: 'Recovers Ops Platform (rocket) and Trade (payload) but never violates trade write paths (R-DV3, ib:operator:cmd, daemon_control).',
+    reality: 'Recovers Ops Platform (rocket) and Trade (payload) but never violates trade write paths (R-DV3, ib:operator:cmd, Redis daemon control).',
   },
   {
     dimension: 'Dispatch → Autonomous',

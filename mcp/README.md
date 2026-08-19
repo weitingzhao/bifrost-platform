@@ -43,7 +43,8 @@ Or:
 See Ops Console → Architecture → MCP Contract.
 
 - No `ib:operator:cmd` writes
-- No `daemon_control` writes
+- No Redis daemon control stream writes (`bifrost:daemon:*:control`)
+- No Monitor `POST /api/monitor/control/*`
 - No direct trade order placement
 
 ## Future servers

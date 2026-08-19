@@ -44,4 +44,4 @@ forbidden_writes:
   - POST /api/monitor/control/*
   - POST /api/trading/orders
   - ib:operator:cmd
-  - daemon_control
+  - Redis daemon control stream (bifrost:daemon:*:control)

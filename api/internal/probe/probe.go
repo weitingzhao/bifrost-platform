@@ -47,7 +47,7 @@ var policyBlockedTargets = []Target{
 		Reachability:       ReachUnknown,
 		Auth:               AuthBlocked,
 		AuthorizationLevel: "forbidden",
-		Detail:             "Platform L0 probe does not invoke daemon_control write endpoints",
+		Detail:             "Platform L0 probe does not invoke Monitor POST /control/* (Redis daemon control)",
 	},
 }
 

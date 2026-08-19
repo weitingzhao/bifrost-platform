@@ -109,7 +109,7 @@ export const SCOPE_ROWS: ScopeRow[] = [
     component: 'Bifrost Ops Platform (control plane)',
     technology: 'Go API :8780 · React Ops Console :5180 · Dense UI tokens',
     notes:
-      'Control plane — Go API :8780, React Ops Console :5180, MCP tools. Probes matrix/topology/spine; no daemon_control or ib:operator:cmd.',
+      'Control plane — Go API :8780, React Ops Console :5180, MCP tools. Probes matrix/topology/spine; no Monitor POST /control/* or ib:operator:cmd.',
   },
   {
     tag: 'TRADE-FE',
@@ -369,7 +369,7 @@ export const AUTHORIZATION_LEVELS = [
     level: 'L2',
     behavior: 'Owner-confirmed changes (node join, stack install, Argo rollback — north star P2+)',
   },
-  { level: 'forbidden', behavior: 'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass' },
+  { level: 'forbidden', behavior: 'Monitor POST /control/* · Redis daemon control · ib:operator:cmd · R-DV3 auto-trade bypass' },
 ]
 
 /** Spine section from GET /api/v1/context (authoritative milestones). */

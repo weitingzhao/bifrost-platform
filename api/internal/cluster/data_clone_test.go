@@ -45,7 +45,7 @@ func TestValidateDataCloneRequest(t *testing.T) {
 		t.Fatal("expected selective tables required")
 	}
 
-	sel.Tables = []string{"daemon_control"}
+	sel.Tables = []string{"strategy_instance"}
 	if err := validateDataCloneRequest(sel); err != nil {
 		t.Fatalf("selective ok: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestRunDataCloneFullSuccess(t *testing.T) {
 			return "5000000", nil
 		case strings.Contains(joined, "information_schema.tables"):
 			return "42", nil
-		case strings.Contains(joined, "daemon_control"):
+		case strings.Contains(joined, "strategy_instance"):
 			return "3", nil
 		default:
 			return "", nil
@@ -166,17 +166,17 @@ func TestRunDataCloneSelectiveDumpArgs(t *testing.T) {
 		if strings.Contains(joined, "information_schema") {
 			return "10", nil
 		}
-		if strings.Contains(joined, "daemon_control") {
+		if strings.Contains(joined, "strategy_instance") {
 			return "1", nil
 		}
 		return "", nil
 	})
-	if err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "selective", []string{"daemon_control"}); err != nil {
+	if err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "selective", []string{"strategy_instance"}); err != nil {
 		t.Fatal(err)
 	}
 	foundTruncate := false
 	for _, s := range seen {
-		if strings.Contains(s, "TRUNCATE TABLE daemon_control") {
+		if strings.Contains(s, "TRUNCATE TABLE strategy_instance") {
 			foundTruncate = true
 		}
 	}
@@ -186,9 +186,9 @@ func TestRunDataCloneSelectiveDumpArgs(t *testing.T) {
 }
 
 func TestDataCloneDumpArgsSelectiveIsDataOnly(t *testing.T) {
-	args := dataCloneDumpArgs("bifrost_prod", "selective", []string{"daemon_control", "account_positions"})
+	args := dataCloneDumpArgs("bifrost_prod", "selective", []string{"strategy_instance", "account_positions"})
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"--data-only", "-t daemon_control", "-t account_positions", "--no-owner", "--no-acl"} {
+	for _, want := range []string{"--data-only", "-t strategy_instance", "-t account_positions", "--no-owner", "--no-acl"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("selective dump args %q missing %q", joined, want)
 		}
@@ -220,12 +220,12 @@ func TestRestoreTargetFullDropsAllUserSchemas(t *testing.T) {
 func TestRestoreTargetSelectiveFailsWhenTruncateFails(t *testing.T) {
 	svc := NewService(nil)
 	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
-		if strings.Contains(strings.Join(command, " "), "TRUNCATE TABLE daemon_control") {
+		if strings.Contains(strings.Join(command, " "), "TRUNCATE TABLE strategy_instance") {
 			return "", fmt.Errorf("relation does not exist")
 		}
 		return "", nil
 	})
-	err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "selective", []string{"daemon_control"})
+	err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "selective", []string{"strategy_instance"})
 	if err == nil || !strings.Contains(err.Error(), "truncate selective table") {
 		t.Fatalf("expected truncate error, got %v", err)
 	}
@@ -283,7 +283,7 @@ func TestRunDataCloneRecordsLastCloneAt(t *testing.T) {
 			return "5000000", nil
 		case strings.Contains(joined, "information_schema.tables"):
 			return "42", nil
-		case strings.Contains(joined, "daemon_control"):
+		case strings.Contains(joined, "strategy_instance"):
 			return "3", nil
 		default:
 			return "", nil

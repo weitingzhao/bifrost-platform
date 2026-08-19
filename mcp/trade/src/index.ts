@@ -39,7 +39,7 @@ server.tool('trade_mcp_capabilities', 'List read-only Trade domain probe tools',
     server: SERVER_NAME,
     mode: 'read_only',
     domains: DOMAINS,
-    forbidden: ['POST', 'PUT', 'DELETE', 'ib:operator:cmd', 'daemon_control write'],
+    forbidden: ['POST', 'PUT', 'DELETE', 'ib:operator:cmd', 'Redis daemon control write'],
   }),
 )
 

@@ -825,7 +825,7 @@ func (s *Service) verifyTarget(ctx context.Context, primary, target, source stri
 	}
 
 	sampleOut, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-tAc",
-		"SELECT count(*) FROM daemon_control")
+		"SELECT count(*) FROM strategy_instance")
 	if err == nil {
 		fmt.Sscanf(strings.TrimSpace(sampleOut), "%d", &vr.SampleRows)
 	}
@@ -839,7 +839,7 @@ func (s *Service) verifyTarget(ctx context.Context, primary, target, source stri
 		return vr
 	}
 	vr.OK = true
-	vr.Detail = fmt.Sprintf("%d tables · daemon_control rows=%d", vr.TableCount, vr.SampleRows)
+	vr.Detail = fmt.Sprintf("%d tables · strategy_instance rows=%d", vr.TableCount, vr.SampleRows)
 	return vr
 }
 

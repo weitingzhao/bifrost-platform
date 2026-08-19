@@ -11,7 +11,7 @@ export const BUSINESS_AGENT_LOOP_SOURCE = 'console/src/lib/architecture/business
 export const BUSINESS_AGENT_LOOP_STATEMENT =
   'Business Agent reads 8 Trade API domains via mcp-trade-api (read-only). ' +
   'Scheduled pre/post-market briefs via Cursor SDK; ad-hoc Q&A in chat. ' +
-  'Never writes orders, daemon_control, or strategy config — advisory only.'
+  'Never writes orders, daemon Redis control, or strategy config — advisory only.'
 
 export type TradeAPIDomain = {
   id: string
@@ -80,7 +80,7 @@ export const BUSINESS_AGENT_LOOP_STEPS: BusinessAgentLoopStep[] = [
     order: 6,
     phase: 'Boundary',
     actor: 'MCP deny-list',
-    action: 'No POST /control/*, no ib:operator:cmd, no daemon_control write',
+    action: 'No POST /control/*, no ib:operator:cmd, no Redis daemon control write',
     verify: 'mcpContractCatalog + VISION_BOUNDARIES enforced',
   },
 ]

@@ -100,7 +100,7 @@ export const MCP_PERMISSION_LEVELS: McpPermissionLevel[] = [
     level: 'forbidden',
     label: 'DENY — Never exposed',
     agentBehavior: 'MCP server must not implement; Agent cannot invoke',
-    examples: 'ib:operator:cmd write, daemon_control write, order placement',
+    examples: 'ib:operator:cmd write, Redis daemon control write, order placement',
   },
 ]
 
@@ -116,7 +116,7 @@ export type McpDenyRule = {
 
 export const MCP_DENY_LIST: McpDenyRule[] = [
   { action: 'Write to ib:operator:cmd Redis Stream', reason: 'R-DV3: only Daemon may send trade commands', enforcement: 'MCP redis server: XADD deny-list on key pattern' },
-  { action: 'Write daemon_control table', reason: 'Platform L0 never invokes Engine control', enforcement: 'MCP PG server: write deny; read-only connection' },
+  { action: 'Write Redis daemon control stream / POST /api/monitor/control/*', reason: 'Platform L0 never invokes Engine control', enforcement: 'MCP trade server: POST deny; no Redis XADD on bifrost:daemon:*:control' },
   { action: 'Place / modify / cancel orders via IB API', reason: 'Trade write path belongs to Daemon + Operator only', enforcement: 'No IB MCP server exists; TWS physically isolated' },
   { action: 'Modify strategy_* / gate_safety_* tables directly', reason: 'L3 only via PR → ArgoCD config apply', enforcement: 'MCP PG server: DDL/DML deny; suggest PR instead' },
   { action: 'Read TWS credentials or IB API keys', reason: 'Secrets isolation — never in MCP context', enforcement: 'K8s Secret not mounted in MCP server Pods' },

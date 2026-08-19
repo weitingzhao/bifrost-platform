@@ -23,12 +23,10 @@ var freshnessProbeSpecs = []struct {
 	table  string
 	column string
 }{
-	{"daemon_control", "created_at"},
-	{"daemon_run_status", "updated_at"},
-	{"daemon_heartbeat", "updated_at"},
-	{"execution_fill", "created_at"},
-	{"account_position", "updated_at"},
+	{"strategy_instance", "updated_at"},
+	{"strategy_opportunity", "updated_at"},
 	{"job_bars_backfill", "updated_at"},
+	{"watchlist", "created_at"},
 }
 
 type DataFreshnessDB struct {

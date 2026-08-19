@@ -134,7 +134,7 @@ export const DESIGN_PRINCIPLES: DesignPrinciple[] = [
   { id: 2, title: 'Scripts are implementation', description: 'Shell/Makefile in repo are API call implementation details, not operations manual.' },
   { id: 3, title: 'Graduated actuation', description: 'L0 diagnose → L1 safe retry → L2 Owner confirm; all leave audit trail.' },
   { id: 4, title: 'LLM-ready context', description: 'Every operation produces structured action/target/status/detail, feedable into spine and Agent packs.' },
-  { id: 5, title: 'Forbidden unchanged', description: 'daemon_control write, ib:operator:cmd, R-DV3 auto-order bypass — never exposed to platform AI.' },
+  { id: 5, title: 'Forbidden unchanged', description: 'Monitor POST /control/*, Redis daemon control, ib:operator:cmd, R-DV3 auto-order bypass — never exposed to platform AI.' },
   { id: 6, title: 'Out-of-band recovery never shares fate', description: 'The Agent that recovers the platform/cluster (L-1 Operator Plane) runs OUTSIDE K8s on dual Mac Minis with a mutual watchdog; it must never be scheduled into the cluster it recovers. The engineer stands on the ground, not inside the rocket.' },
   { id: 7, title: 'Earned autonomy over granted trust', description: 'Agent Skills start at L1 (confirm); consecutive successes earn L0 (auto); failure spikes trigger demotion back to L1. Owner governs via policy, not per-action approval — Flight Director model.' },
   {
@@ -298,7 +298,7 @@ export const BLUEPRINT_AUTHORIZATION_LEVELS: AuthorizationLevel[] = [
   {
     level: 'forbidden',
     behavior:
-      'daemon_control write · ib:operator:cmd · R-DV3 auto-trade bypass · live trading enablement (D10 BLOCKED) · bulk delete all Bifrost firewall zones · disable IDS/IPS',
+      'Monitor POST /control/* · Redis daemon control · ib:operator:cmd · R-DV3 auto-trade bypass · live trading enablement (D10 BLOCKED) · bulk delete all Bifrost firewall zones · disable IDS/IPS',
   },
 ]
 
@@ -381,7 +381,7 @@ export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
       'L2 controlled change: ArgoCD rollback, scaling — requires Owner confirmation',
       'L1 network: re-sync missing Bifrost firewall policies via unifi_firewall_setup.py apply (idempotent)',
       'L2 network: zone restructure or SSID CRUD — requires Owner confirmation',
-      'Forbidden: LLM direct to trade — daemon_control write, ib:operator:cmd, R-DV3 violation',
+      'Forbidden: LLM direct to trade — Monitor POST /control/*, Redis daemon control, ib:operator:cmd, R-DV3 violation',
     ],
   },
 ]
@@ -416,7 +416,7 @@ export const AI_PLATFORM_SUCCESS: AiSuccessCriterion[] = [
   { area: 'Release', criterion: 'tag → Pipeline → image → ArgoCD sync → prod-health all-green (no manual SSH compose up)' },
   { area: 'Maintenance', criterion: 'Config drift detectable; docs (Goal + Migration + Sign-off) trackable against runtime' },
   { area: 'Repair', criterion: 'L0/L1 scenarios (Celery pending, Socket yellow) have Runbook + optional AI summary; L2 needs confirmation' },
-  { area: 'Isolation', criterion: 'Trade review AI and ops Agent cannot trigger daemon_control or IB Operator RPC' },
+  { area: 'Isolation', criterion: 'Trade review AI and ops Agent cannot trigger Monitor POST /control/* or IB Operator RPC' },
   { area: 'Page refactoring', criterion: 'Each migrated page reaches Staging after CI gate; Owner sign-off chain complete' },
   { area: 'Trade review AI', criterion: 'At least one daily review report (positions + trades + PnL) generated locally; data source read-only and auditable' },
   {

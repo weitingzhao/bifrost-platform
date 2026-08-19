@@ -23,5 +23,5 @@ loop:
 
 forbidden:
   - Direct gate_safety_* write without PR
-  - daemon_control write
+  - POST /api/monitor/control/* / Redis daemon control stream
   - ib:operator:cmd

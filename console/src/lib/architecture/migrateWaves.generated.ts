@@ -143,7 +143,7 @@ export const GENERATED_DATA_LAYER_PHASES: DataLayerMigrationPhase[] = [
     displayCode: "③",
     label: "STG cutover — apps connect bifrost-postgres-rw.data.svc + redis-live/queue-stg; remove bifrost-stg in-ns postgres/redis",
     repo: "bifrost-trade-infra/k8s/overlays/stg/",
-    verify: "bifrost-stg daemon_control + IB ingestor Stream + deliver-stg smoke pass",
+    verify: "bifrost-stg Redis daemon IPC + IB ingestor Stream + deliver-stg smoke pass",
     blockedBy: "data-1-minio-backup",
   },
   {
@@ -163,7 +163,7 @@ export const GENERATED_DATA_LAYER_PHASES: DataLayerMigrationPhase[] = [
     displayCode: "⑤",
     label: "PROD PG migrate — pg_dump legacy .80 → CNPG bifrost_prod; maintenance window + rollback plan",
     repo: "bifrost-trade-infra/k8s/overlays/prod/config/",
-    verify: "make prod-health; monitor daemon_control; D2-prime cutover sign-off",
+    verify: "make prod-health; Redis daemon IPC heartbeat; D2-prime cutover sign-off",
     blockedBy: "data-3-dev-cutover",
   },
   {

@@ -96,7 +96,7 @@ export type ForbiddenAction = {
 }
 
 export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
-  { action: 'daemon_control write via platform AI', scope: 'All modes' },
+  { action: 'Redis daemon control write via platform AI (POST /api/monitor/control/*)', scope: 'All modes' },
   { action: 'ib:operator:cmd RPC', scope: 'All modes' },
   {
     action:

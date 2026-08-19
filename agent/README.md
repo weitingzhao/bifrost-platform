@@ -20,4 +20,4 @@ Not implemented. Connectivity matrix probes run from **platform-api** centrally.
 ## Security
 
 - Agent credentials are **separate** from trade Ops tokens
-- No access to `ib:operator:cmd` or `daemon_control` write paths
+- No access to `ib:operator:cmd` or Redis daemon control write paths
