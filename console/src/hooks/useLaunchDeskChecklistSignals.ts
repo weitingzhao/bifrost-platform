@@ -23,6 +23,7 @@ import {
   readPluginLaunchEvidence,
   readPluginLaunchStore,
 } from '@/lib/delivery/pluginLaunchEvidence'
+import { readAgentLaunchEvidence } from '@/lib/delivery/agentLaunchEvidence'
 import {
   buildPluginLaunchCheckpoints,
   resolvePluginLaunchVerdict,
@@ -219,7 +220,10 @@ export function useLaunchDeskChecklistSignals(opts?: {
           agentBridge.data?.runners?.some(r => r.status === 'ok') ??
           agentBridge.data?.remediation_runner?.status === 'ok'
         const deployEnabled = agentDeploy.data?.enabled === true
-        const lastOk = agentDeploy.data?.last?.status === 'done'
+        // Parity with Launch Agent page checklist: local evidence counts as last deploy OK.
+        const lastOk =
+          agentDeploy.data?.last?.status === 'done' ||
+          readAgentLaunchEvidence().deployOutcome === 'ok'
         const agentLoading = agentBridge.isLoading || agentDeploy.isLoading
         const agentChecks = [canOperate, deployEnabled, runnersOk, lastOk]
         const agentReady = agentChecks.filter(Boolean).length

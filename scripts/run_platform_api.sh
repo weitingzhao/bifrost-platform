@@ -25,6 +25,8 @@ keys = {
     "REMEDIATION_CWD", "REMEDIATION_MODEL", "CURSOR_API_KEY", "PLATFORM_API_URL",
     "GIT_BRIDGE_URL", "SATELLITE_PROBE_BRIDGE_URL", "HERMES_GATEWAY_URL",
     "PLATFORM_PROJECT_ROOT",
+    # IB Client status probe (redis-ib ACL user "platform") — required after ACL rotation.
+    "REDIS_IB_PLATFORM_PASS",
 }
 if env_path.is_file():
     for line in env_path.read_text(encoding="utf-8").splitlines():
@@ -41,6 +43,7 @@ if env_path.is_file():
             or key.startswith("NOUS_")
             or key.startswith("HERMES_")
             or key.startswith("MARKET_DATA_")
+            or key.startswith("REDIS_IB_")
         ):
             os.environ[key] = val
 
@@ -61,6 +64,7 @@ export_keys = sorted(
     if k in keys or k.startswith("PLATFORM_") or k.startswith("REMEDIATION_")
     or k.startswith("OPS_") or k.startswith("NOUS_") or k.startswith("HERMES_")
     or k.startswith("MARKET_DATA_")
+    or k.startswith("REDIS_IB_")
     or k in ("PATH", "CURSOR_API_KEY", "HOME")
 )
 for k in export_keys:

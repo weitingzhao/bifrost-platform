@@ -267,13 +267,12 @@ export function PluginStepCommandCenter({
                     <CheckCircle2 className="h-4 w-4" />
                     {completeMessage}
                   </span>
-                  {agentDriven && (
-                    <span className="text-dense-caption text-muted-foreground">
-                      — use {aiLaunchLabel} on the lane strip to start the next cycle
-                    </span>
-                  )}
+                  <span className="text-dense-caption text-muted-foreground">
+                    Published — clear boundary before the next cycle (align Rocket / Satellite)
+                    {agentDriven ? ` · or ${aiLaunchLabel} on the lane strip` : ''}
+                  </span>
                 </div>
-                {!agentDriven && onStartNextCycle != null && (
+                {onStartNextCycle != null && (
                   <Button size="sm" onClick={onStartNextCycle} className="shadow-sm">
                     {startNextLabel}
                     <ArrowRight className="ml-1 h-3.5 w-3.5" />

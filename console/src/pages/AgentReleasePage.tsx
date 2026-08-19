@@ -637,17 +637,28 @@ export function AgentReleasePage({
       return
     }
     if (lastOk && evidence.deployOutcome !== 'ok') {
+      const runnersHealthy = targetRunner?.status === 'ok'
+      const finishedAt = deployQuery.data?.last?.finished_at ?? new Date().toISOString()
       patchEvidence(
         {
           lastApproveAt: evidence.lastApproveAt ?? new Date().toISOString(),
           approvedBy: evidence.approvedBy ?? 'operator',
-          lastDeployAt: deployQuery.data?.last?.finished_at ?? new Date().toISOString(),
+          lastDeployAt: finishedAt,
           deployOutcome: 'ok',
           lastVerifyAt: new Date().toISOString(),
           verifyOutcome: 'ok',
           lastDetectAt: evidence.lastDetectAt ?? new Date().toISOString(),
+          // Close the cycle when host smoke already proved runners (Rocket/Satellite boundary).
+          ...(runnersHealthy
+            ? {
+                lastLiveCheckAt: new Date().toISOString(),
+                liveCheckOutcome: 'ok' as const,
+              }
+            : {}),
         },
-        'Host deploy done — evidence synced from platform-api.',
+        runnersHealthy
+          ? 'Host deploy done — Live check auto-recorded from runner heartbeat (Published).'
+          : 'Host deploy done — evidence synced from platform-api.',
       )
       // "Both" mode: after primary done, auto-trigger standby
       if (bothPhase === 'primary') {
@@ -766,6 +777,30 @@ export function AgentReleasePage({
       ok ? 'Live check recorded OK.' : 'Live check marked failed.',
     )
   }
+
+  // Stuck-cycle recovery: Deploy+Verify already OK + runners healthy → auto Live check
+  // so the board reaches Published instead of hanging on step 5 (align Rocket / Satellite).
+  useEffect(() => {
+    if (launchInFlight || directDeployRunning) return
+    if (evidence.deployOutcome !== 'ok' || evidence.verifyOutcome !== 'ok') return
+    if (evidence.liveCheckOutcome === 'ok' || evidence.liveCheckOutcome === 'failed') return
+    if (targetRunner?.status !== 'ok') return
+    patchEvidence(
+      {
+        lastLiveCheckAt: new Date().toISOString(),
+        liveCheckOutcome: 'ok',
+      },
+      'Live check auto-recorded from runner heartbeat — publish cycle Published.',
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot close when verify+runners ready
+  }, [
+    evidence.deployOutcome,
+    evidence.verifyOutcome,
+    evidence.liveCheckOutcome,
+    targetRunner?.status,
+    launchInFlight,
+    directDeployRunning,
+  ])
 
   const deployLogText = deployQuery.data?.current?.log ?? deployQuery.data?.last?.log ?? ''
   const deployFailed = deployQuery.data?.last?.status === 'failed'
