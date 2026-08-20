@@ -32,6 +32,8 @@ const rows: ChecklistRow[] = [
       + 'share_class_shares_outstanding, sic_code, sic_description, ticker, ticker_root, ticker_suffix, total_employees, weighted_shares_outstanding. '
       + 'Ticker Types: GET /v3/reference/tickers/types — optional params: asset_class (stocks|options|crypto|fx|indices), locale (us|global). '
       + 'Response: results[].code (e.g. CS, ETF, ADRC, WARRANT), description, asset_class, locale. '
+      + 'Ticker Types (Golden Source): market.ticker_type (code, description, asset_class, locale, fetched_at); '
+      + 'Plugin DB reads under /market/reference/ticker-types*; ingest kind=ticker_type (manual enqueue). '
       + 'Related Tickers (live proxy): GET /v1/related-companies/{ticker} — path: ticker (required). '
       + 'Response: ticker (query subject), results[].ticker (related symbols ranked by news/returns similarity analysis). '
       + 'Related Tickers (Golden Source): market.ticker_related (from_symbol, to_symbol, rank, fetched_at); '
