@@ -34,13 +34,16 @@ type FreshnessInfo struct {
 	Verdict     string  `json:"verdict"` // ok | stale | unknown
 }
 
-// ReadinessRollup is a read-only snapshot from public.stock_readiness_daily
-// (Trade-owned table). Null/omitted when the probe fails — Console ignores it.
+// ReadinessRollup is a Plugin-native quality KPI from
+// /market/readiness/snapshot-coverage + /market/readiness/vendor-gap.
+// Null/omitted when the Plugin probe fails — Console hides the KPI.
 type ReadinessRollup struct {
-	Universe   int    `json:"universe"`
-	PriceReady int    `json:"price_ready"`
-	FundValid  int    `json:"fund_cache_valid"`
-	AsOf       string `json:"as_of"`
+	Universe       int    `json:"universe"`
+	SnapshotRows   int    `json:"snapshot_rows"`
+	SnapshotCovered int   `json:"snapshot_covered"`
+	VendorGapCount int    `json:"vendor_gap_count"`
+	AsOf           string `json:"as_of"`
+	Source         string `json:"source"` // "plugin"
 }
 
 type StatusResponse struct {

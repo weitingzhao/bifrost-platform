@@ -22,7 +22,7 @@ type Service struct {
 	client  *http.Client
 	// freshnessProbe overrides CNPG query in unit tests.
 	freshnessProbe func(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string)
-	// readinessProbe overrides stock_readiness_daily rollup in unit tests.
+	// readinessProbe overrides Plugin readiness rollup in unit tests.
 	readinessProbe func(ctx context.Context) *ReadinessRollup
 	// deploymentsOverride skips live K8s reads in unit tests.
 	deploymentsOverride []DeploymentInfo
@@ -101,7 +101,7 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 		resp.Hint = "Ensure data_ops.ingest_freshness is populated (worker jobs marking done)"
 	}
 
-	// Read-only Trade readiness snapshot — failure leaves field nil (does not affect reachability).
+	// Plugin-native readiness KPI — failure leaves field nil (does not affect reachability).
 	resp.ReadinessRollup = s.probeReadinessRollup(ctx)
 
 	readyCount := 0
@@ -316,47 +316,111 @@ func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Re
 	return rows, reach, ""
 }
 
-// probeReadinessRollup reads Trade-owned public.stock_readiness_daily.
-// That table lives on Trade DBs, not Golden Source. After write-consolidation
-// the freshness probe points at bifrost_golden_source, so this query usually
-// returns nil and Console hides the KPI — correct until a GS-side snapshot exists.
-// Schema notes: as_of_date (not as_of); fund_cache_valid is derived from
-// fund_cache_expire_at + fundamental_eval (no fund_cache_valid column).
+// probeReadinessRollup calls Plugin quality endpoints (not Trade stock_readiness_daily).
+// Golden Source owns market.stock_snapshot; Trade DB no longer has a usable readiness KPI table.
 func (s *Service) probeReadinessRollup(ctx context.Context) *ReadinessRollup {
 	if s.readinessProbe != nil {
 		return s.readinessProbe(ctx)
 	}
-	if s.cluster == nil {
-		return nil
-	}
-	db := s.cfg.ReadinessDB
-	if db == "" {
-		db = s.cfg.FreshnessDB
-	}
-	if db == "" {
-		db = defaultFreshnessDB
-	}
-	sql := "SELECT count(*) FILTER (WHERE included_in_universe), count(*) FILTER (WHERE included_in_universe AND price_ready), count(*) FILTER (WHERE included_in_universe AND fundamental_eval IS NOT NULL AND fund_cache_expire_at IS NOT NULL AND fund_cache_expire_at > now()), COALESCE(max(as_of_date)::text,'') FROM public.stock_readiness_daily WHERE as_of_date = (SELECT max(as_of_date) FROM public.stock_readiness_daily) AND universe_rule_version = 'v1' AND price_source = 'massive'"
-	out, err := s.cluster.ExecSQLOnPrimary(ctx, db, sql)
+	covBody, err := s.fetchPluginJSON(ctx, "/market/readiness/snapshot-coverage")
 	if err != nil {
 		return nil
 	}
-	return parseReadinessRollupOutput(out)
+	var cov struct {
+		OK                bool   `json:"ok"`
+		RowCount          int    `json:"row_count"`
+		SessionDate       string `json:"session_date"`
+		LastFetchedAt     string `json:"last_fetched_at"`
+		ByInstrumentType  []struct {
+			Code                string `json:"code"`
+			SnapshotRowCount    int    `json:"snapshot_row_count"`
+			UniverseTickerCount int    `json:"universe_ticker_count"`
+		} `json:"by_instrument_type"`
+	}
+	if err := json.Unmarshal(covBody, &cov); err != nil {
+		return nil
+	}
+	universe := 0
+	covered := 0
+	for _, row := range cov.ByInstrumentType {
+		universe += row.UniverseTickerCount
+		covered += row.SnapshotRowCount
+	}
+	asOf := strings.TrimSpace(cov.SessionDate)
+	if asOf == "" {
+		asOf = strings.TrimSpace(cov.LastFetchedAt)
+	}
+	if asOf == "" && cov.RowCount == 0 && universe == 0 {
+		return nil
+	}
+
+	gapCount := 0
+	if gapBody, err := s.fetchPluginJSON(ctx, "/market/readiness/vendor-gap"); err == nil {
+		var gap struct {
+			GapCount int `json:"gap_count"`
+		}
+		if json.Unmarshal(gapBody, &gap) == nil {
+			gapCount = gap.GapCount
+		}
+	}
+
+	return &ReadinessRollup{
+		Universe:        universe,
+		SnapshotRows:    cov.RowCount,
+		SnapshotCovered: covered,
+		VendorGapCount:  gapCount,
+		AsOf:            asOf,
+		Source:          "plugin",
+	}
+}
+
+// fetchPluginJSON GETs a Plugin API path via MARKET_DATA_API_URL or K8s service proxy.
+func (s *Service) fetchPluginJSON(ctx context.Context, pluginPath string) ([]byte, error) {
+	pluginPath = "/" + strings.TrimPrefix(pluginPath, "/")
+	if base := strings.TrimRight(strings.TrimSpace(s.cfg.APIBaseURL), "/"); base != "" {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+pluginPath, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		client := &http.Client{Timeout: proxyTimeout}
+		res, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer res.Body.Close()
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		if res.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("plugin HTTP %d", res.StatusCode)
+		}
+		return body, nil
+	}
+	if s.cluster == nil {
+		return nil, fmt.Errorf("cluster service unavailable")
+	}
+	clientset, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		return nil, err
+	}
+	rawPath := strings.TrimPrefix(pluginPath, "/")
+	return clientset.CoreV1().Services(pluginNamespace).ProxyGet(
+		"http", apiServiceName, apiServicePort, rawPath, nil,
+	).DoRaw(ctx)
 }
 
 func parseReadinessRollupOutput(out string) *ReadinessRollup {
+	// Legacy Trade SQL pipe parser retained for older unit fixtures; prefer Plugin JSON path.
 	line := strings.TrimSpace(out)
 	if line == "" {
 		return nil
 	}
-	// psql -tAc may return one pipe-delimited row.
 	parts := strings.Split(line, "|")
 	if len(parts) < 4 {
 		return nil
 	}
 	universe, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
-	priceReady, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
-	fundValid, err3 := strconv.Atoi(strings.TrimSpace(parts[2]))
+	covered, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	gapCount, err3 := strconv.Atoi(strings.TrimSpace(parts[2]))
 	asOf := strings.TrimSpace(parts[3])
 	if err1 != nil || err2 != nil || err3 != nil {
 		return nil
@@ -365,10 +429,12 @@ func parseReadinessRollupOutput(out string) *ReadinessRollup {
 		return nil
 	}
 	return &ReadinessRollup{
-		Universe:   universe,
-		PriceReady: priceReady,
-		FundValid:  fundValid,
-		AsOf:       asOf,
+		Universe:        universe,
+		SnapshotRows:    covered,
+		SnapshotCovered: covered,
+		VendorGapCount:  gapCount,
+		AsOf:            asOf,
+		Source:          "legacy",
 	}
 }
 

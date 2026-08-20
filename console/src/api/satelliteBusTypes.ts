@@ -207,12 +207,14 @@ export interface MarketDataFreshnessInfo {
   verdict: 'ok' | 'stale' | 'unknown' | string
 }
 
-/** Read-only rollup from Trade public.stock_readiness_daily (optional). */
+/** Plugin-native quality KPI from snapshot-coverage + vendor-gap. */
 export interface MarketDataReadinessRollup {
   universe: number
-  price_ready: number
-  fund_cache_valid: number
+  snapshot_rows: number
+  snapshot_covered: number
+  vendor_gap_count: number
   as_of: string
+  source?: string
 }
 
 export interface MarketDataStatusResponse {

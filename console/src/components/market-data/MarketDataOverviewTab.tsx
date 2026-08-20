@@ -143,13 +143,15 @@ export function MarketDataOverviewTab({
             <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2">
               <p className="m-0 text-[var(--text-dense-label)] font-semibold">Data readiness rollup</p>
               <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Universe {readiness.universe} · Price ready {readiness.price_ready} · Fund cache{' '}
-                {readiness.fund_cache_valid} · as-of {readiness.as_of}
+                Universe {readiness.universe} · Snapshot {readiness.snapshot_covered}/
+                {readiness.snapshot_rows} · Vendor gaps {readiness.vendor_gap_count} · as-of{' '}
+                {readiness.as_of}
+                {readiness.source ? ` · ${readiness.source}` : ''}
               </p>
             </div>
           ) : (
             <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Readiness rollup unavailable (optional Trade snapshot).
+              Readiness rollup unavailable (Plugin snapshot-coverage / vendor-gap unreachable).
             </p>
           )}
         </div>

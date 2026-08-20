@@ -5,13 +5,13 @@
  *
  * Live state (not this catalog):
  * - Worker health + deployments + freshness tables: Subcontractors → Market Data (observe)
- * - Optional readiness_rollup on GET /api/v1/plugins/market-data/status (read-only stock_readiness_daily snapshot; Trade owns runbook / gaps)
+ * - Optional readiness_rollup on GET /api/v1/plugins/market-data/status (Plugin snapshot-coverage + vendor-gap; Trade owns runbook / per-symbol gaps)
  * - Phase / program sign-off: Engineer → Active Session · market-data-subcontractor
  * - Implementation: bifrost-platform-plugin-market-data
  */
 
 export const MARKET_DATA_SUBCONTRACTOR_SOURCE = 'bifrost-platform-plugin-market-data'
-export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-20-readiness-quality'
+export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-20-readiness-rollup-plugin'
 
 /** Mission Launch lane — publish market-data plugin via kubectl apply (not Tekton). */
 export const MARKET_DATA_LAUNCH_LANE = {
@@ -25,7 +25,7 @@ export const MARKET_DATA_LAUNCH_LANE = {
   verify: 'kubectl -n plugin-market-data get deploy + /health (make verify-market-data)',
   steps: ['Detect', 'Approve', 'Install', 'Verify', 'Live check'] as const,
   galleryIsNotPublish:
-    'Market Data manage page = observe health / deployments / freshness (+ optional readiness_rollup KPI). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
+    'Market Data manage page = observe health / deployments / freshness (+ readiness_rollup from Plugin quality endpoints). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
   d10: 'Market-data REST ingest only — no place_order / no IB socket',
   imageTag: '0.7.0',
 } as const
@@ -193,13 +193,13 @@ export const MARKET_DATA_PROGRESS = {
 
 export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Live health + deployments + freshness: Subcontractors → Market Data (observe — not publish)',
-  'Readiness rollup KPI: GET /api/v1/plugins/market-data/status → readiness_rollup (read-only; Trade Stock Data Readiness owns runbook / per-symbol gaps)',
+  'Readiness rollup KPI: GET /api/v1/plugins/market-data/status → readiness_rollup (Plugin /market/readiness/snapshot-coverage + vendor-gap; Trade Stock Data Readiness owns runbook / per-symbol gaps)',
   'Manage UI: Subcontractors → Market Data (`market-data-manage`) — Overview / Coverage / Ingest / Analytics (market-data-expand P6)',
   'Plugin API proxy: GET unauthenticated; POST/DELETE operator-authed then platform-api attaches MARKET_DATA_WRITE_TOKEN toward :8790 (browser never holds the Plugin write secret)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
   'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days · related-companies rotate ≤7 trading days · ticker_type dictionary on-demand (reference + fundamentals-rotate + related-rotate CronJobs; image bifrost-market-data:0.7.0)',
   'Image tag: bifrost-market-data:0.7.0 (k8s/base only — STG/PROD overlays archived W2-P2)',
-  'Readiness rollup: optional KPI from public.stock_readiness_daily (Trade runbook). fund_cache_valid requires included_in_universe; public.v_us_equity_universe uses synthetic hashtext tickers_id after P9 (bifrost-core ≥0.5.2)',
+  'Readiness rollup: Plugin-native (universe / snapshot_covered / snapshot_rows / vendor_gap_count / as_of). No longer reads Trade public.stock_readiness_daily.',
   'Program / phase sign-off: Active Session (Engineer → Delivery) · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',
   'Spine: config/ops-context.yaml · GET /api/v1/context · milestone market-data-subcontractor',

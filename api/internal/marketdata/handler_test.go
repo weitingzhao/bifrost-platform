@@ -190,11 +190,11 @@ func TestHandleStatusWithoutCluster(t *testing.T) {
 }
 
 func TestParseReadinessRollupOutput(t *testing.T) {
-	r := parseReadinessRollupOutput("1200|980|400|2026-08-01\n")
+	r := parseReadinessRollupOutput("1200|980|118|2026-08-01\n")
 	if r == nil {
 		t.Fatal("expected rollup")
 	}
-	if r.Universe != 1200 || r.PriceReady != 980 || r.FundValid != 400 || r.AsOf != "2026-08-01" {
+	if r.Universe != 1200 || r.SnapshotCovered != 980 || r.VendorGapCount != 118 || r.AsOf != "2026-08-01" {
 		t.Fatalf("unexpected rollup: %+v", r)
 	}
 	if parseReadinessRollupOutput("") != nil {
@@ -240,14 +240,49 @@ func TestStatusIncludesReadinessRollup(t *testing.T) {
 			}}, probe.ReachOK, ""
 		},
 		readinessProbe: func(ctx context.Context) *ReadinessRollup {
-			return &ReadinessRollup{Universe: 10, PriceReady: 8, FundValid: 5, AsOf: "2026-08-01"}
+			return &ReadinessRollup{
+				Universe: 5348, SnapshotRows: 13131, SnapshotCovered: 5307,
+				VendorGapCount: 118, AsOf: "2026-08-19", Source: "plugin",
+			}
 		},
 	}
 	resp := svc.Status(context.Background())
-	if resp.ReadinessRollup == nil || resp.ReadinessRollup.Universe != 10 || resp.ReadinessRollup.PriceReady != 8 {
+	if resp.ReadinessRollup == nil || resp.ReadinessRollup.Universe != 5348 || resp.ReadinessRollup.VendorGapCount != 118 {
 		t.Fatalf("readiness_rollup=%+v", resp.ReadinessRollup)
 	}
 	if resp.Reachability != probe.ReachOK {
 		t.Fatalf("reachability=%s (rollup must not affect reach)", resp.Reachability)
+	}
+}
+
+func TestProbeReadinessRollupFromPluginAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/market/readiness/snapshot-coverage", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true, "row_count": 13131, "session_date": "2026-08-19",
+			"by_instrument_type": []map[string]any{
+				{"code": "CS", "snapshot_row_count": 5307, "universe_ticker_count": 5348},
+			},
+		})
+	})
+	mux.HandleFunc("/market/readiness/vendor-gap", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "gap_count": 118, "session_date": "2026-08-19"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	svc := &Service{
+		cfg:    Config{APIBaseURL: srv.URL},
+		client: http.DefaultClient,
+	}
+	r := svc.probeReadinessRollup(context.Background())
+	if r == nil {
+		t.Fatal("expected rollup")
+	}
+	if r.Universe != 5348 || r.SnapshotRows != 13131 || r.SnapshotCovered != 5307 || r.VendorGapCount != 118 {
+		t.Fatalf("unexpected rollup: %+v", r)
+	}
+	if r.Source != "plugin" || r.AsOf != "2026-08-19" {
+		t.Fatalf("source/as_of: %+v", r)
 	}
 }

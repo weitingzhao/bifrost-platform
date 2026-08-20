@@ -23,12 +23,10 @@ const (
 type Config struct {
 	StocksHealthURL  string
 	OptionsHealthURL string
-	FreshnessDB      string
-	// ReadinessDB is the Trade DB for public.stock_readiness_daily (optional KPI).
-	// Empty = same as FreshnessDB (Golden Source has no such table → KPI hidden).
-	ReadinessDB string
+	FreshnessDB string
 	// APIBaseURL overrides Plugin API (:8790) for Console proxy (local port-forward).
 	// Example: http://127.0.0.1:8790 — paths are appended as /market/...
+	// Also used by readiness_rollup probe (snapshot-coverage / vendor-gap).
 	APIBaseURL string
 	// WriteToken is MARKET_DATA_WRITE_TOKEN — attached to Plugin mutating
 	// proxy calls after Console already passed platform operator auth.
@@ -62,7 +60,6 @@ func ConfigFromEnv() Config {
 		StocksHealthURL:  stocks,
 		OptionsHealthURL: options,
 		FreshnessDB:      db,
-		ReadinessDB:      strings.TrimSpace(os.Getenv("MARKET_DATA_READINESS_DB")),
 		APIBaseURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("MARKET_DATA_API_URL")), "/"),
 		WriteToken:       strings.TrimSpace(os.Getenv("MARKET_DATA_WRITE_TOKEN")),
 	}
