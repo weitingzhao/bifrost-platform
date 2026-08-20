@@ -168,6 +168,7 @@ export const PG_SCHEMA_CONTRACT = {
     'market.stock_financials',
     'market.corporate_action',
     'market.us_market_holiday',
+    'market.ticker_related',
   ] as const,
   dataOpsTables: [
     'data_ops.job_ingest',
@@ -193,8 +194,8 @@ export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Manage UI: Subcontractors → Market Data (`market-data-manage`) — Overview / Coverage / Ingest / Analytics (market-data-expand P6)',
   'Plugin API proxy: GET unauthenticated; POST/DELETE operator-authed then platform-api attaches MARKET_DATA_WRITE_TOKEN toward :8790 (browser never holds the Plugin write secret)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
-  'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days (reference + fundamentals-rotate CronJobs; image bifrost-market-data:0.5.1)',
-  'Image tag: bifrost-market-data:0.5.1 (k8s/base only — STG/PROD overlays archived W2-P2)',
+  'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days · related-companies rotate ≤7 trading days (reference + fundamentals-rotate + related-rotate CronJobs; image bifrost-market-data:0.6.0)',
+  'Image tag: bifrost-market-data:0.6.0 (k8s/base only — STG/PROD overlays archived W2-P2)',
   'Readiness rollup: optional KPI from public.stock_readiness_daily (Trade runbook). fund_cache_valid requires included_in_universe; public.v_us_equity_universe uses synthetic hashtext tickers_id after P9 (bifrost-core ≥0.5.2)',
   'Program / phase sign-off: Active Session (Engineer → Delivery) · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',

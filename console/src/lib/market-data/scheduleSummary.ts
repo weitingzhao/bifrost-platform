@@ -20,6 +20,7 @@ export const MARKET_DATA_SCHEDULE_SLOTS: ReadonlyArray<{
   { id: 'atm-iv-pcr', cron: '0 23 * * *', note: 'ATM IV + PCR' },
   { id: 'iv-percentile', cron: '15 23 * * *', note: 'IV Percentile' },
   { id: 'fundamentals-rotate', cron: '0 3 * * *', note: 'Fundamentals rotate' },
+  { id: 'related-rotate', cron: '30 22 * * *', note: 'Related-companies rotate' },
   { id: 'readiness-refresh', cron: '30 23 * * *', note: 'Readiness refresh' },
   { id: 'trim', cron: '15 2 * * *', note: 'Job queue trim' },
 ]

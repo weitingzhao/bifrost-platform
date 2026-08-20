@@ -10,12 +10,14 @@ const rows: ChecklistRow[] = [
       'Four Polygon REST reference endpoints: All Tickers (universe search and discovery with market, type, exchange, search, and active filters — up to 1,000 results per page with cursor pagination), '
       + 'Ticker Overview (single-ticker fundamental data: SIC code, market cap, total employees, address, branding logo and icon URLs, CIK, composite FIGI, list date, ticker_root), '
       + 'Ticker Types (reference classification: returns all supported instrument type codes with descriptions, filterable by asset_class and locale), '
-      + 'and Related Tickers (peer and competitor discovery via Massive news-coverage and returns-based similarity analysis).',
+      + 'and Related Tickers (peers persisted in Golden Source market.ticker_related via related-rotate; live Polygon proxy remains for ad-hoc refresh).',
     tierMin: 'starter',
     projectStatus: 'implemented',
     verification:
       'Subcontractors → Market Data → Coverage (Stock) → Tickers: each sub-tab has Execute → JSON. '
-      + 'Proxies: GET /market/tickers, GET /market/tickers/{ticker}, GET /market/tickers/types, GET /market/related-companies/{ticker}.',
+      + 'Proxies: GET /market/tickers, GET /market/tickers/{ticker}, GET /market/tickers/types, GET /market/related-companies/{ticker}. '
+      + 'Persisted peers: GET /market/reference/tickers/related-coverage, GET /market/reference/tickers/{ticker}/related (source=db → market.ticker_related). '
+      + 'Ingest: kind=ticker_related · CronJob related-rotate 30 22 * * * UTC.',
     purpose:
       'Foundation layer for stock research: discover and filter the full Massive ticker universe, enrich any ticker with company '
       + 'fundamentals and branding assets, populate type filter dropdowns from the canonical Ticker Types reference, '
@@ -30,8 +32,10 @@ const rows: ChecklistRow[] = [
       + 'share_class_shares_outstanding, sic_code, sic_description, ticker, ticker_root, ticker_suffix, total_employees, weighted_shares_outstanding. '
       + 'Ticker Types: GET /v3/reference/tickers/types — optional params: asset_class (stocks|options|crypto|fx|indices), locale (us|global). '
       + 'Response: results[].code (e.g. CS, ETF, ADRC, WARRANT), description, asset_class, locale. '
-      + 'Related Tickers: GET /v1/related-companies/{ticker} — path: ticker (required). '
-      + 'Response: ticker (query subject), results[].ticker (related symbols ranked by news/returns similarity analysis).',
+      + 'Related Tickers (live proxy): GET /v1/related-companies/{ticker} — path: ticker (required). '
+      + 'Response: ticker (query subject), results[].ticker (related symbols ranked by news/returns similarity analysis). '
+      + 'Related Tickers (Golden Source): market.ticker_related (from_symbol, to_symbol, rank, fetched_at); '
+      + 'Trade reads via FDW; Plugin coverage/query under /market/reference/tickers/*related*.',
   },
   {
     id: 'stock-aggregates',
