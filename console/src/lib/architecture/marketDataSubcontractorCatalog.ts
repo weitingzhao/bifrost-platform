@@ -11,7 +11,7 @@
  */
 
 export const MARKET_DATA_SUBCONTRACTOR_SOURCE = 'bifrost-platform-plugin-market-data'
-export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-14-golden-source'
+export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-20-readiness-quality'
 
 /** Mission Launch lane — publish market-data plugin via kubectl apply (not Tekton). */
 export const MARKET_DATA_LAUNCH_LANE = {
@@ -27,7 +27,7 @@ export const MARKET_DATA_LAUNCH_LANE = {
   galleryIsNotPublish:
     'Market Data manage page = observe health / deployments / freshness (+ optional readiness_rollup KPI). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
   d10: 'Market-data REST ingest only — no place_order / no IB socket',
-  imageTag: '0.3.1',
+  imageTag: '0.7.0',
 } as const
 
 export type MarketDataPhaseId =
@@ -148,6 +148,7 @@ export const MARKET_DATA_DESIGN_PRINCIPLES = [
   'Library SLA — ticker_sync age <24h; financials age <24h; watchlist financials coverage ≤7 trading days.',
   'Trading-calendar guard — stock-eod / eod-pipeline / universe-daily / corporate / fundamentals-rotate skip non-trading days.',
   'Plugin API read layer — Trade consumers read via HTTP (:8790 proxied via platform-api :8780); zero direct SQL.',
+  'Data quality self-check — /market/readiness/snapshot-coverage (market.stock_snapshot instrument-type breakdown) + /market/readiness/vendor-gap (session_date vs stock_daily bar gap detection).',
   'D10-safe — REST market data only; no place_order / no IB socket path.',
 ] as const
 
@@ -158,6 +159,7 @@ export const PG_SCHEMA_CONTRACT = {
   marketTables: [
     'market.stock_daily',
     'market.stock_minute',
+    'market.stock_snapshot',
     'market.option_daily',
     'market.option_minute',
     'market.option_contract',
@@ -195,8 +197,8 @@ export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Manage UI: Subcontractors → Market Data (`market-data-manage`) — Overview / Coverage / Ingest / Analytics (market-data-expand P6)',
   'Plugin API proxy: GET unauthenticated; POST/DELETE operator-authed then platform-api attaches MARKET_DATA_WRITE_TOKEN toward :8790 (browser never holds the Plugin write secret)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
-  'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days · related-companies rotate ≤7 trading days · ticker_type dictionary on-demand (reference + fundamentals-rotate + related-rotate CronJobs; image bifrost-market-data:0.6.1)',
-  'Image tag: bifrost-market-data:0.6.1 (k8s/base only — STG/PROD overlays archived W2-P2)',
+  'Library SLA: ticker_sync <24h · financials cadence <24h · watchlist financials rotate ≤7 trading days · related-companies rotate ≤7 trading days · ticker_type dictionary on-demand (reference + fundamentals-rotate + related-rotate CronJobs; image bifrost-market-data:0.7.0)',
+  'Image tag: bifrost-market-data:0.7.0 (k8s/base only — STG/PROD overlays archived W2-P2)',
   'Readiness rollup: optional KPI from public.stock_readiness_daily (Trade runbook). fund_cache_valid requires included_in_universe; public.v_us_equity_universe uses synthetic hashtext tickers_id after P9 (bifrost-core ≥0.5.2)',
   'Program / phase sign-off: Active Session (Engineer → Delivery) · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',
