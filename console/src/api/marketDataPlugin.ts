@@ -220,9 +220,8 @@ export type StockDayGapResponse = {
   lookback_years?: number
   /**
    * Expected trading-day count for the lookback window.
-   * Known issue (2026-08): Plugin may return 0 when `us_trading_calendar` is empty
-   * or the calendar lookup fails — do not trust this field for Gap UI until fixed
-   * (see market-data-vitals md-vitals-p7). Prefer `missing_dates` / `covered_days`.
+   * Derived from market.us_market_holiday (weekday − NYSE closed). Prefer
+   * `missing_dates` / `covered_days` when diagnosing gaps.
    */
   expected_trading_days?: number
   covered_days?: number

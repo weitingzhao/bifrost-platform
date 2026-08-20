@@ -100,10 +100,10 @@ const rows: ChecklistRow[] = [
     verification:
       'Market Operations section: tab order Exchanges → Market Holidays → Market Status → Condition Codes (each maps to one DocPage row).',
     purpose:
-      'Lookup cross-asset reference data from Massive. Market Holidays includes comparison with local reference_us_holidays.',
+      'Lookup cross-asset reference data from Massive. Market Holidays compares vs market.us_market_holiday.',
     helpVerification:
       '1) Exchanges: asset class + locale filters. '
-      + '2) Market Holidays: Fetch & Compare vs local table. '
+      + '2) Market Holidays: Fetch & Compare vs market.us_market_holiday. '
       + '3) Market Status: real-time cards per market. '
       + '4) Condition Codes: asset class + data type filters.',
   },
