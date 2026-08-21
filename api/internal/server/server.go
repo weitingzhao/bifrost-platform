@@ -17,6 +17,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/analytics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/briefing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
@@ -95,6 +96,7 @@ type Server struct {
 	ibgateway       *ibgateway.Handler
 	marketdata      *marketdata.Handler
 	flexquery       *flexquery.Handler
+	analytics       *analytics.Handler
 	telemetry       *telemetry.Handler
 	lanes           *lanes.Handler
 	sessions        *sessions.Handler
@@ -199,6 +201,7 @@ func New(cfg *config.Config) (*Server, error) {
 		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
 		marketdata:      marketdata.NewHandler(clusterH.Service()),
 		flexquery:       flexquery.NewHandler(clusterH.Service()),
+		analytics:       analytics.NewHandler(clusterH.Service()),
 		telemetry:       telemetry.NewHandler(cfg, audit),
 		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
 		sessions:        sessionsH,
@@ -265,10 +268,12 @@ func (s *Server) Router() http.Handler {
 		r.Get("/plugins/ib-gateway/status", s.ibgateway.HandleStatus)
 		r.Get("/plugins/market-data/status", s.marketdata.HandleStatus)
 		r.Get("/plugins/flex-query/status", s.flexquery.HandleStatus)
+		r.Get("/plugins/analytics/status", s.analytics.HandleStatus)
 		r.Get("/watchlist/union", s.marketdata.HandleWatchlistUnion)
 		// Read-only Plugin API proxy (coverage / analytics / ingest list / JSON probes).
 		r.Get("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 		r.Get("/plugins/flex-query/api/*", s.flexquery.HandleAPIProxy)
+		r.Get("/plugins/analytics/api/*", s.analytics.HandleAPIProxy)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
 		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)

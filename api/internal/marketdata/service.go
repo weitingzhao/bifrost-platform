@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -355,7 +356,29 @@ func (s *Service) probeReadinessRollup(ctx context.Context) *ReadinessRollup {
 	}
 
 	gapCount := 0
-	if gapBody, err := s.fetchPluginJSON(ctx, "/market/readiness/vendor-gap"); err == nil {
+	// Prefer detail rows so zero-close SPACs are not counted as actionable gaps
+	// (matches Ops Console Readiness; works before Plugin image excludes them).
+	if gapBody, err := s.fetchPluginJSON(ctx, "/market/readiness/vendor-gap?detail=true&limit=500"); err == nil {
+		var gap struct {
+			GapCount int `json:"gap_count"`
+			Gaps     []struct {
+				SnapshotClose *float64 `json:"snapshot_close"`
+			} `json:"gaps"`
+		}
+		if json.Unmarshal(gapBody, &gap) == nil {
+			if len(gap.Gaps) > 0 && len(gap.Gaps) >= gap.GapCount {
+				actionable := 0
+				for _, row := range gap.Gaps {
+					if row.SnapshotClose != nil && math.Abs(*row.SnapshotClose) >= 1e-9 {
+						actionable++
+					}
+				}
+				gapCount = actionable
+			} else {
+				gapCount = gap.GapCount
+			}
+		}
+	} else if gapBody, err := s.fetchPluginJSON(ctx, "/market/readiness/vendor-gap"); err == nil {
 		var gap struct {
 			GapCount int `json:"gap_count"`
 		}

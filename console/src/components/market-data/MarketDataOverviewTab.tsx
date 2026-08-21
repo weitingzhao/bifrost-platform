@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
+import { fetchQualityScore, isProxyError } from '@/api/marketDataPlugin'
 import { DataVitalsStrip } from '@/components/market-data/DataVitalsStrip'
 import {
   MarketDataFreshnessTable,
@@ -29,8 +31,10 @@ function reachToVerdict(reach: MarketDataLiveProbeState['probeReach']): {
 
 export function MarketDataOverviewTab({
   marketProbe,
+  onOpenCoverageReadiness,
 }: {
   marketProbe: MarketDataLiveProbeState
+  onOpenCoverageReadiness?: () => void
 }) {
   const mdReach = marketProbe.isLoading ? 'unknown' : marketProbe.probeReach
   const marketVerdict = reachToVerdict(mdReach)
@@ -52,6 +56,17 @@ export function MarketDataOverviewTab({
 
   const readiness = marketProbe.status?.readiness_rollup ?? null
 
+  const qualityQ = useQuery({
+    queryKey: ['market-data', 'coverage', 'quality-score'],
+    queryFn: fetchQualityScore,
+    refetchInterval: 60_000,
+    retry: 1,
+  })
+  const quality =
+    qualityQ.data != null && !isProxyError(qualityQ.data) ? qualityQ.data : null
+  const qualitySummary =
+    quality?.summary ?? (quality?.ok === true ? 'PASS' : quality != null ? 'FAIL' : null)
+
   return (
     <div className="flex flex-col gap-4">
       <OpsVerdictStrip
@@ -72,14 +87,24 @@ export function MarketDataOverviewTab({
           </Button>
         }
         meta={
-          <span>
-            freshness {freshness.length > 0 ? `${freshnessOk}/${freshness.length} ok` : '—'}
-            {marketProbe.status?.autonomy != null
-              ? ` · autonomy ${marketProbe.status.autonomy}`
-              : ''}
-            {marketProbe.status?.health_reachability != null
-              ? ` · health ${marketProbe.status.health_reachability}`
-              : ''}
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span>
+              freshness {freshness.length > 0 ? `${freshnessOk}/${freshness.length} ok` : '—'}
+              {marketProbe.status?.autonomy != null
+                ? ` · autonomy ${marketProbe.status.autonomy}`
+                : ''}
+              {marketProbe.status?.health_reachability != null
+                ? ` · health ${marketProbe.status.health_reachability}`
+                : ''}
+            </span>
+            {qualitySummary != null ? (
+              <DenseTag
+                variant={qualitySummary === 'PASS' ? 'success' : 'danger'}
+                title="Coverage → Quality Score"
+              >
+                Quality {qualitySummary}
+              </DenseTag>
+            ) : null}
           </span>
         }
       />
@@ -141,18 +166,43 @@ export function MarketDataOverviewTab({
 
           {readiness != null ? (
             <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2">
-              <p className="m-0 text-[var(--text-dense-label)] font-semibold">Data readiness rollup</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="m-0 text-[var(--text-dense-label)] font-semibold">
+                  Data readiness rollup
+                </p>
+                {onOpenCoverageReadiness != null ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onOpenCoverageReadiness}
+                    title="Open Coverage → Readiness panel"
+                  >
+                    Open Readiness
+                  </Button>
+                ) : null}
+              </div>
               <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                 Universe {readiness.universe} · Snapshot {readiness.snapshot_covered}/
                 {readiness.snapshot_rows} · Vendor gaps {readiness.vendor_gap_count} · as-of{' '}
                 {readiness.as_of}
                 {readiness.source ? ` · ${readiness.source}` : ''}
               </p>
+              <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                Producer dashboard: Coverage → Readiness (?tab=coverage&panel=readiness). Trade owns
+                SEPA criteria / stock_readiness_daily publish — not this panel.
+              </p>
             </div>
           ) : (
-            <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              Readiness rollup unavailable (Plugin snapshot-coverage / vendor-gap unreachable).
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                Readiness rollup unavailable (Plugin snapshot-coverage / vendor-gap unreachable).
+              </p>
+              {onOpenCoverageReadiness != null ? (
+                <Button variant="outline" size="sm" onClick={onOpenCoverageReadiness}>
+                  Open Readiness
+                </Button>
+              ) : null}
+            </div>
           )}
         </div>
       </OpsSection>

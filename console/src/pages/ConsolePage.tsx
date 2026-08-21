@@ -65,6 +65,7 @@ import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
 import { IbGatewayManagePage } from '@/pages/IbGatewayManagePage'
 import { MarketDataManagePage } from '@/pages/MarketDataManagePage'
 import { FlexQueryManagePage } from '@/pages/FlexQueryManagePage'
+import { AnalyticsPipelinePage } from '@/pages/AnalyticsPipelinePage'
 import { AgentReleasePage } from '@/pages/AgentReleasePage'
 import { PluginReleasePage } from '@/pages/PluginReleasePage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
@@ -147,6 +148,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'ib-gateway-manage': 'IB Client',
   'market-data-manage': 'Massive',
   'flex-query-manage': 'IB Flex',
+  'analytics-pipeline': 'Analytics',
   defects: 'Defects',
 }
 
@@ -198,6 +200,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Massive (Polygon) plugin — Overview, Coverage checklist, Ingest queue, Analytics. Shared Golden Source CNPG.',
   'flex-query-manage':
     'IB Flex Plugin — scheduled Flex ingest into brokerage Golden Source (CNPG). Overview, Ingest, Coverage, Config.',
+  'analytics-pipeline':
+    'dbt SEPA analytics + Elementary observability — lineage DAG, catalog, CronJob status. Report hosted by analytics-docs.',
   'plugin-release':
     'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Manage pages ≠ Publish.',
   'agent-release':
@@ -257,6 +261,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'ib-gateway-manage',
   'market-data-manage',
   'flex-query-manage',
+  'analytics-pipeline',
   'plugin-release',
   'agent-release',
   'control-room',
@@ -1142,6 +1147,7 @@ function ConsolePageInner() {
         )}
         {viewTab === 'market-data-manage' && <MarketDataManagePage />}
         {viewTab === 'flex-query-manage' && <FlexQueryManagePage />}
+        {viewTab === 'analytics-pipeline' && <AnalyticsPipelinePage />}
 
         {isGovernanceTab && (
           <div className="flex min-w-0 gap-4">

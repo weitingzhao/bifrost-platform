@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   DenseDataTable,
@@ -21,6 +21,14 @@ import { DataInventoryStrip } from '@/components/market-data/DataInventoryStrip'
 import { OptionCoverageSection } from '@/components/market-data/OptionCoverageSection'
 import { QualityScoreSection } from '@/components/market-data/QualityScoreSection'
 import { StockDepthSection } from '@/components/market-data/StockDepthSection'
+import { FinancialsPanel } from '@/components/market-data/quality/FinancialsPanel'
+import { ReadinessPanel } from '@/components/market-data/quality/ReadinessPanel'
+import { SepaStatsSection } from '@/components/market-data/quality/SepaStatsSection'
+import { SnapshotQualityTrend } from '@/components/market-data/quality/SnapshotQualityTrend'
+import {
+  type CoverageDetailPanel,
+  writeMdSearchParams,
+} from '@/components/market-data/quality/mdNavParams'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import {
   CAPABILITY_GROUP_LABELS,
@@ -37,7 +45,6 @@ import {
 } from '@/lib/market-data/checklist'
 
 type CoverageLens = 'stock' | 'option' | 'common'
-type CoverageDetailTab = 'quality' | 'db-summary' | 'capability'
 
 function statusVariant(
   status: ChecklistRow['projectStatus'],
@@ -96,9 +103,18 @@ function ChecklistTable({ rows }: { rows: ChecklistRow[] }) {
   )
 }
 
-export function MarketDataCoverageTab() {
-  const [detailTab, setDetailTab] = useState<CoverageDetailTab>('quality')
+export function MarketDataCoverageTab({
+  panel,
+  onPanelChange,
+}: {
+  panel: CoverageDetailPanel
+  onPanelChange: (panel: CoverageDetailPanel) => void
+}) {
   const [lens, setLens] = useState<CoverageLens>('stock')
+
+  useEffect(() => {
+    writeMdSearchParams({ tab: 'coverage', panel })
+  }, [panel])
 
   const summaryQ = useQuery({
     queryKey: ['market-data', 'coverage', 'db-summary'],
@@ -122,7 +138,7 @@ export function MarketDataCoverageTab() {
   const symbols =
     watchlist != null && !isProxyError(watchlist)
       ? (watchlist.symbols ?? [])
-          .map((s) => s.symbol?.trim())
+          .map(s => s.symbol?.trim())
           .filter((s): s is string => Boolean(s))
       : []
 
@@ -152,20 +168,21 @@ export function MarketDataCoverageTab() {
     <div className="flex flex-col gap-4">
       <DataInventoryStrip />
 
-      {/* ── Detail secondary tabs ── */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
         <SegmentControl
           size="sm"
           ariaLabel="Coverage detail panel"
-          value={detailTab}
-          onChange={v => setDetailTab(v as CoverageDetailTab)}
+          value={panel}
+          onChange={v => onPanelChange(v as CoverageDetailPanel)}
           options={[
-            { value: 'quality', label: 'Quality' },
-            { value: 'db-summary', label: 'DB summary' },
+            { value: 'quality', label: 'Quality Score' },
+            { value: 'readiness', label: 'Readiness' },
+            { value: 'financials', label: 'Financials' },
+            { value: 'db-summary', label: 'DB Summary' },
             { value: 'capability', label: 'Capability' },
           ]}
         />
-        {detailTab === 'capability' ? (
+        {panel === 'capability' ? (
           <SegmentControl
             size="sm"
             ariaLabel="Capability lens"
@@ -180,15 +197,21 @@ export function MarketDataCoverageTab() {
         ) : null}
       </div>
 
-      {detailTab === 'quality' ? (
+      {panel === 'quality' ? (
         <>
           <QualityScoreSection />
+          <SnapshotQualityTrend />
+          <SepaStatsSection />
           <StockDepthSection symbols={symbols} watchlistLoading={watchlistQ.isLoading} />
           <OptionCoverageSection />
         </>
       ) : null}
 
-      {detailTab === 'db-summary' ? (
+      {panel === 'readiness' ? <ReadinessPanel /> : null}
+
+      {panel === 'financials' ? <FinancialsPanel /> : null}
+
+      {panel === 'db-summary' ? (
         <OpsSection
           title="DB summary (raw counts)"
           description="Plugin GET /market/coverage/db-summary + watchlist row counts"
@@ -238,7 +261,7 @@ export function MarketDataCoverageTab() {
         </OpsSection>
       ) : null}
 
-      {detailTab === 'capability' ? (
+      {panel === 'capability' ? (
         <OpsSection
           title="Capability checklist"
           description={`${capTotal} Polygon features · Plugin utilization ${capPct}%`}
@@ -258,7 +281,9 @@ export function MarketDataCoverageTab() {
                   >
                     <div
                       className="h-full bg-emerald-500"
-                      style={{ width: `${Math.round((capImpl / (capImpl + capPartial || 1)) * 100)}%` }}
+                      style={{
+                        width: `${Math.round((capImpl / (capImpl + capPartial || 1)) * 100)}%`,
+                      }}
                     />
                     <div className="h-full bg-amber-500" style={{ flex: 1 }} />
                   </div>
@@ -274,13 +299,16 @@ export function MarketDataCoverageTab() {
                   <span className="text-[var(--muted-foreground)]"> partial</span>
                 </span>
                 <span>
-                  <span className="font-semibold text-[var(--muted-foreground)]">{capTotal - capImpl - capPartial}</span>
+                  <span className="font-semibold text-[var(--muted-foreground)]">
+                    {capTotal - capImpl - capPartial}
+                  </span>
                   <span className="text-[var(--muted-foreground)]"> not implemented</span>
                 </span>
               </div>
             </div>
             <OpsSubsectionTitle className="mt-1">
-              {lens === 'stock' ? 'Stock' : lens === 'option' ? 'Option' : 'Common'} — {rowCount} capabilities
+              {lens === 'stock' ? 'Stock' : lens === 'option' ? 'Option' : 'Common'} — {rowCount}{' '}
+              capabilities
             </OpsSubsectionTitle>
             {grouped.map(g => (
               <div key={g.group} className="flex flex-col gap-1">
@@ -293,9 +321,16 @@ export function MarketDataCoverageTab() {
       ) : null}
 
       <MarketDataJsonProbeCard
+        key={`probe-${panel}`}
         title="JSON Probe"
         description="Read-only GET against Plugin /market/* via platform-api proxy"
-        defaultPath="/market/coverage/db-summary"
+        defaultPath={
+          panel === 'readiness'
+            ? '/market/readiness/snapshot-coverage'
+            : panel === 'financials'
+              ? '/market/readiness/financials-by-instrument-type'
+              : '/market/coverage/db-summary'
+        }
       />
     </div>
   )

@@ -48,6 +48,15 @@ const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
     openTabId: 'flex-query-manage',
     openLabel: 'Open IB Flex',
   },
+  {
+    id: 'analytics-pipeline',
+    name: 'Analytics',
+    vendor: 'dbt + Elementary',
+    role: 'SEPA dbt marts · Elementary lineage/catalog report · CronJob @ plugin-market-data NS',
+    lifecycle: 'live',
+    openTabId: 'analytics-pipeline',
+    openLabel: 'Open Analytics',
+  },
 ]
 
 function reachLabel(reach: 'ok' | 'degraded' | 'fail' | 'unknown', loading: boolean): string {

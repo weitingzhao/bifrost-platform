@@ -24,7 +24,18 @@ async function proxyGet<T>(pluginPath: string): Promise<T | MarketDataProxyError
   const path = `${PROXY_BASE}${pluginPath.startsWith('/') ? pluginPath : `/${pluginPath}`}`
   try {
     const r = await fetch(path)
-    const body = (await r.json()) as T & { error?: string; detail?: string }
+    const text = await r.text()
+    let body: T & { error?: string; detail?: string }
+    try {
+      body = JSON.parse(text) as T & { error?: string; detail?: string }
+    } catch {
+      const snippet = text.trim().slice(0, 160) || '(empty body)'
+      return {
+        ok: false,
+        error: `Non-JSON response (HTTP ${r.status}): ${snippet}`,
+        status: r.status,
+      }
+    }
     if (!r.ok) {
       return {
         ok: false,
@@ -390,6 +401,223 @@ export function fetchUniverseCount() {
 
 export function fetchMarketStatus() {
   return proxyGet<MarketStatusResponse>('/market/status')
+}
+
+/* ── Readiness (producer quality dashboard) ───────────── */
+
+export type SnapshotByInstrumentType = {
+  code: string
+  snapshot_row_count: number
+  universe_ticker_count: number
+}
+
+export type SnapshotCoverageResponse = {
+  ok: boolean
+  row_count?: number
+  last_fetched_at?: string | null
+  session_date?: string | null
+  by_instrument_type?: SnapshotByInstrumentType[]
+  error?: string
+}
+
+export type VendorGapRow = {
+  symbol?: string
+  session_date?: string | null
+  last_bar_date?: string | null
+  last_bar_close?: number | null
+  snapshot_close?: number | null
+  reason?: string
+}
+
+export type VendorGapResponse = {
+  ok: boolean
+  gap_count?: number
+  /** Present on newer Plugin images — zero-close snapshots excluded from gap_count. */
+  zero_snapshot_count?: number
+  session_date?: string | null
+  gaps?: VendorGapRow[]
+  error?: string
+}
+
+export type DateCoverageEntry = {
+  date?: string
+  symbol_count?: number
+}
+
+export type DateCoverageResponse = {
+  ok: boolean
+  low_coverage_dates?: DateCoverageEntry[]
+  count?: number
+  error?: string
+}
+
+export type BarAggregateSymbol = {
+  bar_rows?: number
+  first_bar_date?: string | null
+  last_bar_date?: string | null
+  null_close_rows?: number
+  null_volume_rows?: number
+}
+
+export type BarAggregateResponse = {
+  ok: boolean
+  /** Present when ?summary=true — totals only, no per-symbol map. */
+  summary?: boolean
+  symbol_count?: number
+  total_bars?: number
+  null_close_rows?: number
+  null_volume_rows?: number
+  symbols?: Record<string, BarAggregateSymbol>
+  error?: string
+}
+
+export type FinancialsByTypeResponse = {
+  ok: boolean
+  counts?: {
+    income_statement_symbols?: number
+    balance_sheet_symbols?: number
+    cash_flow_symbols?: number
+    ratio_symbols?: number
+  }
+  error?: string
+}
+
+export type FinancialsFillRateResponse = {
+  ok: boolean
+  tables?: Record<string, Record<string, number>>
+  error?: string
+}
+
+export type FinancialsCoverageSymbolsResponse = {
+  ok: boolean
+  income_statement?: Record<string, { q_count?: number; a_count?: number }>
+  balance_sheet?: string[]
+  cash_flow_statement?: string[]
+  ratios?: string[]
+  short_interest?: string[]
+  short_volume?: string[]
+  error?: string
+}
+
+export type SepaGapsResponse = {
+  ok: boolean
+  count?: number
+  symbols?: string[]
+  note?: string
+  error?: string
+}
+
+export type ReferenceCoverageResponse = {
+  ok: boolean
+  total?: number
+  filled?: number
+  missing?: number
+  source?: string
+  note?: string
+  error?: string
+}
+
+export type SepaStatsTable = {
+  table?: string
+  row_count?: number | null
+  latest?: string | null
+}
+
+export type SepaStatsResponse = {
+  ok: boolean
+  tables?: SepaStatsTable[]
+  error?: string
+}
+
+export function fetchReadinessSnapshotCoverage() {
+  return proxyGet<SnapshotCoverageResponse>('/market/readiness/snapshot-coverage')
+}
+
+export function fetchReadinessVendorGapDetail(params?: { limit?: number }) {
+  const q = new URLSearchParams()
+  q.set('detail', 'true')
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  return proxyGet<VendorGapResponse>(`/market/readiness/vendor-gap?${q.toString()}`)
+}
+
+export function fetchReadinessDateCoverage(params?: {
+  days_back?: number
+  min_symbols?: number
+}) {
+  const q = new URLSearchParams()
+  if (params?.days_back != null) q.set('days_back', String(params.days_back))
+  if (params?.min_symbols != null) q.set('min_symbols', String(params.min_symbols))
+  const qs = q.toString()
+  return proxyGet<DateCoverageResponse>(
+    `/market/readiness/date-coverage${qs ? `?${qs}` : ''}`,
+  )
+}
+
+export function fetchReadinessBarAggregate(params?: {
+  window_days?: number
+  /** Prefer summary for Ops Console — avoids multi-MiB per-symbol payload. */
+  summary?: boolean
+}) {
+  const q = new URLSearchParams()
+  if (params?.window_days != null) q.set('window_days', String(params.window_days))
+  if (params?.summary === true) q.set('summary', 'true')
+  const qs = q.toString()
+  return proxyGet<BarAggregateResponse>(
+    `/market/readiness/bar-aggregate${qs ? `?${qs}` : ''}`,
+  )
+}
+
+export function fetchReadinessFinancialsByType() {
+  return proxyGet<FinancialsByTypeResponse>(
+    '/market/readiness/financials-by-instrument-type',
+  )
+}
+
+export function fetchReadinessFinancialsFillRate(params?: {
+  universe_symbols?: string | string[]
+}) {
+  const q = new URLSearchParams()
+  if (params?.universe_symbols != null) {
+    const syms = Array.isArray(params.universe_symbols)
+      ? params.universe_symbols.join(',')
+      : params.universe_symbols
+    if (syms) q.set('universe_symbols', syms)
+  }
+  const qs = q.toString()
+  return proxyGet<FinancialsFillRateResponse>(
+    `/market/readiness/financials-fill-rate${qs ? `?${qs}` : ''}`,
+  )
+}
+
+export function fetchReadinessFinancialsCoverage() {
+  return proxyGet<FinancialsCoverageSymbolsResponse>(
+    '/market/readiness/financials-coverage-symbols',
+  )
+}
+
+export function fetchSepaGaps(params: { report_type: string; limit?: number }) {
+  const q = new URLSearchParams()
+  q.set('report_type', params.report_type)
+  if (params.limit != null) q.set('limit', String(params.limit))
+  return proxyGet<SepaGapsResponse>(
+    `/market/stocks/fundamentals/sepa/gaps?${q.toString()}`,
+  )
+}
+
+export function fetchReferenceOverviewCoverage() {
+  return proxyGet<ReferenceCoverageResponse>(
+    '/market/reference/tickers/overview-coverage',
+  )
+}
+
+export function fetchReferenceRelatedCoverage() {
+  return proxyGet<ReferenceCoverageResponse>(
+    '/market/reference/tickers/related-coverage',
+  )
+}
+
+export function fetchSepaStats() {
+  return proxyGet<SepaStatsResponse>('/market/coverage/sepa-stats')
 }
 
 /* ── Ingest ───────────────────────────────────────────── */

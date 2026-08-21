@@ -21,6 +21,7 @@ import { buildNetworkApiContractLlmPack } from './networkApiContractCatalog'
 import { buildNetworkUpgradeLlmPack } from './networkUpgradeCatalog'
 import { buildIbGatewayPluginLlmPack } from './ibGatewayPluginCatalog'
 import { buildMarketDataSubcontractorLlmPack } from './marketDataSubcontractorCatalog'
+import { buildAnalyticsPipelineLlmPack } from './analyticsPipelineCatalog'
 import { buildTradeIbClientMigrationLlmPack } from './tradeIbClientMigrationCatalog'
 import { buildTradeDevInnerLoopLlmPack } from './tradeDevInnerLoopCatalog'
 import { buildRoadmapLlmPack } from './roadmapCatalog'
@@ -48,6 +49,7 @@ export function buildFullArchitectureLlmPack(spine?: OpsContextResponse): string
     buildNetworkApiContractLlmPack(),
     buildIbGatewayPluginLlmPack(),
     buildMarketDataSubcontractorLlmPack(),
+    buildAnalyticsPipelineLlmPack(),
     buildTradeIbClientMigrationLlmPack(),
     buildTradeDevInnerLoopLlmPack(),
     buildStandardsLlmPack(),

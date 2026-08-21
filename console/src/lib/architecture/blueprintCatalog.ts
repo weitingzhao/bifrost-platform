@@ -245,7 +245,7 @@ export const CONSOLE_VIEWS: ConsoleViewRow[] = [
     view: 'Plugin Gallery',
     plane: 'Subcontractors',
     purpose:
-      'Observe IB Gateway + Market Data pipeline health (workers / freshness); readiness_rollup from Plugin snapshot-coverage / vendor-gap + deep-link to Trade Stock Data Readiness (not runbook / per-symbol gaps; Gallery ≠ Publish)',
+      'Observe IB Gateway + Market Data pipeline health (workers / freshness); readiness_rollup from Plugin snapshot-coverage / vendor-gap; Coverage → Readiness / Financials producer DQ panels (not Trade runbook / SEPA criteria / stock_readiness_daily; Gallery ≠ Publish)',
   },
 ]
 

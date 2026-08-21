@@ -6,12 +6,13 @@
  * Live state (not this catalog):
  * - Worker health + deployments + freshness tables: Subcontractors → Market Data (observe)
  * - Optional readiness_rollup on GET /api/v1/plugins/market-data/status (Plugin snapshot-coverage + vendor-gap; Trade owns runbook / per-symbol gaps)
+ * - Coverage Quality Dashboard (secondary panels): Quality Score · Readiness · Financials · DB Summary · Capability (?tab=coverage&panel=readiness|financials)
  * - Phase / program sign-off: Engineer → Active Session · market-data-subcontractor
  * - Implementation: bifrost-platform-plugin-market-data
  */
 
 export const MARKET_DATA_SUBCONTRACTOR_SOURCE = 'bifrost-platform-plugin-market-data'
-export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-20-readiness-rollup-plugin'
+export const MARKET_DATA_SUBCONTRACTOR_CATALOG_VERSION = '2026-08-20-dq-dashboard-coverage-panels'
 
 /** Mission Launch lane — publish market-data plugin via kubectl apply (not Tekton). */
 export const MARKET_DATA_LAUNCH_LANE = {
@@ -25,7 +26,7 @@ export const MARKET_DATA_LAUNCH_LANE = {
   verify: 'kubectl -n plugin-market-data get deploy + /health (make verify-market-data)',
   steps: ['Detect', 'Approve', 'Install', 'Verify', 'Live check'] as const,
   galleryIsNotPublish:
-    'Market Data manage page = observe health / deployments / freshness (+ readiness_rollup from Plugin quality endpoints). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
+    'Market Data manage page = observe health / deployments / freshness (+ readiness_rollup) and Coverage Quality panels (Readiness / Financials). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
   d10: 'Market-data REST ingest only — no place_order / no IB socket',
   imageTag: '0.7.0',
 } as const
@@ -194,6 +195,7 @@ export const MARKET_DATA_PROGRESS = {
 export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Live health + deployments + freshness: Subcontractors → Market Data (observe — not publish)',
   'Readiness rollup KPI: GET /api/v1/plugins/market-data/status → readiness_rollup (Plugin /market/readiness/snapshot-coverage + vendor-gap; Trade Stock Data Readiness owns runbook / per-symbol gaps)',
+  'Coverage Quality Dashboard: Subcontractors → Market Data → Coverage → Quality Score / Readiness / Financials / DB Summary / Capability (deep link ?tab=coverage&panel=readiness)',
   'Manage UI: Subcontractors → Market Data (`market-data-manage`) — Overview / Coverage / Ingest / Analytics (market-data-expand P6)',
   'Plugin API proxy: GET unauthenticated; POST/DELETE operator-authed then platform-api attaches MARKET_DATA_WRITE_TOKEN toward :8790 (browser never holds the Plugin write secret)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',

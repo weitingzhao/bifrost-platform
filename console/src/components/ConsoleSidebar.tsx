@@ -79,6 +79,7 @@ export type ConsoleViewTab =
   | 'ib-gateway-manage'
   | 'market-data-manage'
   | 'flex-query-manage'
+  | 'analytics-pipeline'
   | 'defects'
   | 'dev-sessions'
 

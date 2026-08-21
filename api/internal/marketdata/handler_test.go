@@ -266,7 +266,14 @@ func TestProbeReadinessRollupFromPluginAPI(t *testing.T) {
 		})
 	})
 	mux.HandleFunc("/market/readiness/vendor-gap", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "gap_count": 118, "session_date": "2026-08-19"})
+		// Simulate current Plugin: all "gaps" are zero-close noise.
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true, "gap_count": 2, "session_date": "2026-08-19",
+			"gaps": []map[string]any{
+				{"symbol": "AACO", "snapshot_close": 0.0, "reason": "vendor_gap"},
+				{"symbol": "AACP", "snapshot_close": 0.0, "reason": "vendor_gap"},
+			},
+		})
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -279,8 +286,8 @@ func TestProbeReadinessRollupFromPluginAPI(t *testing.T) {
 	if r == nil {
 		t.Fatal("expected rollup")
 	}
-	if r.Universe != 5348 || r.SnapshotRows != 13131 || r.SnapshotCovered != 5307 || r.VendorGapCount != 118 {
-		t.Fatalf("unexpected rollup: %+v", r)
+	if r.Universe != 5348 || r.SnapshotRows != 13131 || r.SnapshotCovered != 5307 || r.VendorGapCount != 0 {
+		t.Fatalf("unexpected rollup (zero-close should not count): %+v", r)
 	}
 	if r.Source != "plugin" || r.AsOf != "2026-08-19" {
 		t.Fatalf("source/as_of: %+v", r)
