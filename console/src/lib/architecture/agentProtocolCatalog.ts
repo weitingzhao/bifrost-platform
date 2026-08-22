@@ -10,7 +10,7 @@
 
 import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog'
 
-export const AGENT_PROTOCOL_VERSION = '2026-08-09'
+export const AGENT_PROTOCOL_VERSION = '2026-08-21'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
 
 /**
@@ -56,6 +56,15 @@ export const AGENT_MODES: AgentModeRow[] = [
     agentMay: 'Query release-state, deploy via start_pipeline_run, run gates, verify smoke; follow next_action guidance',
     agentMustNot: 'Skip blockers (D1, gate), deploy PROD with different revision than STG, bypass admin role for gates; Promote rollout that enables live trading (D10 BLOCKED)',
   },
+  {
+    mode: 'Research',
+    flywheel: 'C — OLAP',
+    defaultUI: 'bifrost-research (dbt + engines + Research API :8795) · Ops Console Research governance (Wave 5)',
+    agentMay:
+      'Edit bifrost-research; run dbt on bifrost_golden_source analytics/research/market_analytics schemas; add Python engines; Research API read paths; K8s manifests under research NS',
+    agentMustNot:
+      'Write Trade DB (bifrost_dev/stg/prod); mutate market.* ingest tables (Plugin owns); change Ops spine/compose for Trade cutover; enable live trading or daemon scale (D10)',
+  },
 ]
 
 export type ContextPackButton = {
@@ -67,6 +76,7 @@ export const CONTEXT_PACK_BUTTONS: ContextPackButton[] = [
   { button: 'Copy Product', contents: 'Phase 1 discipline + spine focus/deployment — no matrix' },
   { button: 'Copy Ops', contents: 'Full spine section + matrix summary per environment' },
   { button: 'Copy Promote', contents: 'Ops pack + flywheel A/B checklist + promote blockers + prod fail list' },
+  { button: 'Copy Research', contents: 'D13 domains + bifrost-research CLAUDE + Golden Source schema boundaries — no Trade DB writes' },
   { button: 'Copy Scoped', contents: '(when a pipeline milestone is selected) Ops pack + scoped milestone/decision' },
 ]
 
@@ -628,12 +638,18 @@ export const OPENING_PROMPTS: OpeningPrompt[] = [
       'Mode: Ops. Task: audit Bifrost firewall vs FIREWALL_RULES; L1 apply only if drift. Spine D9 Session v2. No FE edits.',
   },
   { mode: 'Promote', example: 'Mode: Promote. Task: assess if prod cutover is allowed; list blockers from spine + matrix.' },
+  {
+    mode: 'Research',
+    example:
+      'Mode: Research. Task: extend bifrost-research dbt/engines on bifrost_golden_source only. No Trade DB writes. D10 blocked.',
+  },
 ]
 
 export const MODE_SELECTION_HINTS = [
   'focus.blocker or flywheel_primary === B → Ops',
   'tracks.infra / network-upgrade-* stream / VLAN-firewall task → Ops (network playbooks + D9 Session v2)',
   'Promote bay or cutover milestone → Promote',
+  'dbt / analytics.* / research.* / Golden Source OLAP / bifrost-research → Research (D13)',
   'Otherwise → Product',
 ]
 

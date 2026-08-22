@@ -46,6 +46,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/research"
 	"github.com/weitingzhao/bifrost-platform/api/internal/retrospective"
 	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
@@ -96,6 +97,7 @@ type Server struct {
 	ibgateway       *ibgateway.Handler
 	marketdata      *marketdata.Handler
 	flexquery       *flexquery.Handler
+	research        *research.Handler
 	analytics       *analytics.Handler
 	telemetry       *telemetry.Handler
 	lanes           *lanes.Handler
@@ -201,6 +203,7 @@ func New(cfg *config.Config) (*Server, error) {
 		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
 		marketdata:      marketdata.NewHandler(clusterH.Service()),
 		flexquery:       flexquery.NewHandler(clusterH.Service()),
+		research:        research.NewHandler(clusterH.Service()),
 		analytics:       analytics.NewHandler(clusterH.Service()),
 		telemetry:       telemetry.NewHandler(cfg, audit),
 		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
@@ -269,11 +272,16 @@ func (s *Server) Router() http.Handler {
 		r.Get("/plugins/market-data/status", s.marketdata.HandleStatus)
 		r.Get("/plugins/flex-query/status", s.flexquery.HandleStatus)
 		r.Get("/plugins/analytics/status", s.analytics.HandleStatus)
+		r.Get("/research/status", s.research.HandleStatus)
+		r.Get("/plugins/research/status", s.research.HandleStatus)
 		r.Get("/watchlist/union", s.marketdata.HandleWatchlistUnion)
 		// Read-only Plugin API proxy (coverage / analytics / ingest list / JSON probes).
 		r.Get("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 		r.Get("/plugins/flex-query/api/*", s.flexquery.HandleAPIProxy)
 		r.Get("/plugins/analytics/api/*", s.analytics.HandleAPIProxy)
+		// Research API (:8795) — preferred /research/* + plugin-style alias.
+		r.Get("/research/*", s.research.HandleAPIProxy)
+		r.Get("/plugins/research/api/*", s.research.HandleAPIProxy)
 		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
 		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
 		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)

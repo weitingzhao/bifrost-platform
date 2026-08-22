@@ -181,6 +181,20 @@ milestones:
       pipeline_after: k3s-data-layer
       authority: config/programs/completed/market-data-subcontractor.yaml
       note: "Program signed off 2026-07-30 (P0–P9). Post-P9 follow-on: STG/PROD promote + compat cleanup."
+    - id: research-foundation
+      label: Research Engine foundation (OLAP domain + dbt merge)
+      status: DONE
+      pipeline_lane: parallel
+      pipeline_after: market-data-subcontractor
+      authority: console/src/lib/architecture/blueprintCatalog.ts · bifrost-research/CLAUDE.md
+      note: "Wave 1 complete — bifrost-research repo, bifrost-analytics merged into src/bifrost_research/dbt/, D13 SIGNED + Research Agent mode. Baseline closeout 2026-08-21."
+    - id: research-runtime-ignition
+      label: Research Runtime Ignition (NS + API + CronJobs live)
+      status: DONE
+      pipeline_lane: parallel
+      pipeline_after: research-foundation
+      authority: config/programs/active/research-runtime-ignition.yaml · bifrost-research/CLAUDE.md
+      note: "2026-08-21 — research NS, research-api:8795, dbt/volatility/engines/intraday CronJobs, Trade Intelligence honest empty states. Dagster stays replicas:0. Follow-ons: news source + options tape."
 decisions:
     - id: D1
       status: SIGNED
@@ -260,6 +274,12 @@ decisions:
       conclusion: "All program phase sign-offs converge on POST /api/v1/programs/{id}/phases/{pid}/signoff → data/programs/{id}.json phase_sign_offs. Deprecate sign_off_mechanism enums dev_agent and vision_gate; schema default and only mechanism is api. Dev Agent Mark as Verified and Vision gate Owner sign-off become adapters that call the same programs signoff API. Vision gate run/check artifacts remain on /api/v1/vision/*/gate; Delivery Board reads unified programs state only."
       signed_at: "2026-07-07"
       authority: "console/src/lib/architecture/agentProtocolCatalog.ts · api/internal/devagent/programs_delivery.go"
+    - id: D13
+      status: SIGNED
+      topic: Research Engine independent — OLAP domain separated from Trade/Ops
+      conclusion: "Bifrost is three domains: Trade (OLTP), Research (OLAP), Ops (Control Plane). bifrost-research owns dbt analytics (former bifrost-analytics), Python analysis engines, and Research API on bifrost_golden_source. Research must not write Trade DB or market.* ingest tables, and must not trigger trade execution (D10 remains BLOCKED). Plugins remain data-source adapters; OLAP compute migrates into Research over subsequent Waves."
+      signed_at: "2026-08-21"
+      authority: "console/src/lib/architecture/blueprintCatalog.ts · agentProtocolCatalog.ts · bifrost-research/CLAUDE.md"
 platform_phases:
     - id: A
       label: Gate

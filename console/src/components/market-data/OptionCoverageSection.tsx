@@ -17,6 +17,11 @@ import {
   type CoverageContractRow,
   type CoverageGreeksRow,
 } from '@/api/marketDataPlugin'
+import {
+  CoverageBarRow,
+  ScoreRing,
+} from '@/components/market-data/overviewDash'
+import { fmtCount, toneByLevel } from '@/components/market-data/overviewDashModel'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 /** Plugin Query max is 500 — request full watchlist, avoid default truncation. */
@@ -183,6 +188,12 @@ export function OptionCoverageSection() {
     [contractsQ.data, greeksQ.data],
   )
   const summary = useMemo(() => (rows.length > 0 ? buildSummary(rows) : null), [rows])
+  const maxContracts = Math.max(1, ...rows.map(r => r.contractCount ?? 0))
+  const greeksOk = rows.filter(r => r.greeksPct != null && r.greeksPct >= 90).length
+  const greeksThin = rows.filter(
+    r => r.greeksPct != null && r.greeksPct >= 70 && r.greeksPct < 90,
+  ).length
+  const greeksFail = rows.length - greeksOk - greeksThin
 
   const loading = contractsQ.isLoading || greeksQ.isLoading
   const error =
@@ -197,8 +208,8 @@ export function OptionCoverageSection() {
   return (
     <OpsSection
       title="Option chain coverage"
-      description="Plugin /coverage/contracts + /coverage/greeks"
-      bodyPadding="default"
+      description="Bar = contracts vs max underlying. Color = Greeks fill."
+      bodyPadding="compact"
       overflow="visible"
       collapsible
       defaultCollapsed={false}
@@ -215,11 +226,78 @@ export function OptionCoverageSection() {
         </p>
       ) : (
         <>
-          {summary != null ? (
-            <p className="m-0 mb-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              {summary}
-            </p>
-          ) : null}
+          <div className="mb-2 flex items-center gap-2">
+            <ScoreRing
+              ready={greeksOk}
+              thin={greeksThin}
+              blocked={greeksFail}
+              total={Math.max(rows.length, 1)}
+              caption="greeks"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                {summary}
+              </p>
+              <div className="mt-1 flex flex-wrap gap-px">
+                {rows.map(row => (
+                  <span
+                    key={`heat-${row.symbol}`}
+                    title={`${row.symbol} · Greeks ${row.greeksPct != null ? `${Math.round(row.greeksPct)}%` : '—'}`}
+                    className={`h-3.5 w-3.5 rounded-[2px] ${toneByLevel(
+                      row.greeksPct == null
+                        ? 'unknown'
+                        : row.greeksPct >= 90
+                          ? 'ok'
+                          : row.greeksPct >= 70
+                            ? 'scheduled'
+                            : 'missing',
+                    )}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mb-2 grid grid-cols-1 gap-x-5 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
+            {rows.map(row => {
+              const fill =
+                row.contractCount != null ? (row.contractCount / maxContracts) * 100 : 0
+              const kind =
+                row.greeksPct == null
+                  ? 'unknown'
+                  : row.greeksPct >= 90
+                    ? 'ok'
+                    : row.greeksPct >= 70
+                      ? 'scheduled'
+                      : 'missing'
+              return (
+                <CoverageBarRow
+                  key={row.symbol}
+                  name={
+                    <span className="font-mono text-entity-symbol">{row.symbol}</span>
+                  }
+                  nameTitle={`${row.symbol} · ${fmtCount(row.contractCount)} contracts`}
+                  fillPct={fill}
+                  toneClass={toneByLevel(kind)}
+                  meterLabel={`${row.symbol} ${fmtCount(row.contractCount)} contracts · Greeks ${row.greeksPct != null ? `${Math.round(row.greeksPct)}%` : '—'}`}
+                  value={row.contractCount}
+                  valueText={fmtCount(row.contractCount)}
+                  suffix={
+                    <span className="w-8 text-right font-mono text-[var(--text-dense-micro)] tabular-nums text-[var(--muted-foreground)]">
+                      {row.greeksPct != null ? `${Math.round(row.greeksPct)}%` : '—'}
+                    </span>
+                  }
+                />
+              )
+            })}
+          </div>
+          <OpsSection
+            variant="flat"
+            title="Underlying table"
+            collapsible
+            defaultCollapsed
+            bodyPadding="none"
+            overflow="visible"
+          >
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
@@ -264,6 +342,7 @@ export function OptionCoverageSection() {
               ))}
             </DenseTableBody>
           </DenseDataTable>
+          </OpsSection>
         </>
       )}
     </OpsSection>

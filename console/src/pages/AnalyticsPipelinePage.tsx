@@ -1,10 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+  Button,
   DenseTag,
   SegmentControl,
   StatusLamp,
 } from '@bifrost/ui'
+import { ExternalLink, GitBranch } from 'lucide-react'
 import {
   ANALYTICS_REPORT_URL,
   fetchAnalyticsStatus,
@@ -31,16 +33,39 @@ const MODEL_INVENTORY: { layer: string; name: string; note: string }[] = [
   { layer: 'intermediate', name: 'int_stock_daily_enriched', note: 'SMA / ATR / ROC (incremental)' },
   { layer: 'intermediate', name: 'int_stock_crs', note: '252d CRS (needs depth)' },
   { layer: 'intermediate', name: 'int_financials_yoy', note: 'YoY growth' },
-  { layer: 'marts', name: 'sepa_fundamental_eval', note: '8 core fund conditions' },
-  { layer: 'marts', name: 'sepa_fundamental_ext', note: '25 extended fund conditions' },
-  { layer: 'marts', name: 'sepa_technical_eval', note: '11 tech conditions' },
-  { layer: 'marts', name: 'sepa_tier_momentum', note: 'Tier 2 momentum' },
-  { layer: 'marts', name: 'sepa_tier_structure', note: 'Tier 3 structure' },
-  { layer: 'marts', name: 'sepa_tier_sentiment', note: 'Tier 4 sentiment' },
-  { layer: 'marts', name: 'sepa_composite_score', note: 'Weighted composite' },
-  { layer: 'marts', name: 'sepa_screening_ranked', note: 'Rank / decile' },
-  { layer: 'marts', name: 'sepa_criteria_stats', note: 'Pre-agg pass rates' },
-  { layer: 'marts', name: 'sepa_screener_wide', note: 'Wide screener join' },
+  { layer: 'marts', name: 'mart_sepa_fundamental_eval', note: '8 core fund conditions' },
+  { layer: 'marts', name: 'mart_sepa_fundamental_ext', note: '25 extended fund conditions' },
+  { layer: 'marts', name: 'mart_sepa_technical_eval', note: '11 tech conditions' },
+  { layer: 'marts', name: 'mart_sepa_tier_momentum', note: 'Tier 2 momentum' },
+  { layer: 'marts', name: 'mart_sepa_tier_structure', note: 'Tier 3 structure' },
+  { layer: 'marts', name: 'mart_sepa_tier_sentiment', note: 'Tier 4 sentiment' },
+  { layer: 'marts', name: 'mart_sepa_composite_score', note: 'Weighted composite' },
+  { layer: 'marts', name: 'mart_sepa_screening_ranked', note: 'Rank / decile' },
+  { layer: 'marts', name: 'mart_sepa_criteria_stats', note: 'Pre-agg pass rates' },
+  { layer: 'marts', name: 'mart_sepa_screener_wide', note: 'Wide screener join' },
+]
+
+const LINEAGE_LAYERS: { id: string; title: string; detail: string }[] = [
+  {
+    id: 'raw',
+    title: 'RAW · market.*',
+    detail: 'Golden Source producer tables (stock_daily, stock_financials, ticker, holidays)',
+  },
+  {
+    id: 'stg',
+    title: 'STG · staging',
+    detail: 'jsonb → scalar columns (income / balance / cash flow / short interest)',
+  },
+  {
+    id: 'int',
+    title: 'INT · intermediate',
+    detail: 'Universe, calendar, enriched bars, CRS, YoY financials',
+  },
+  {
+    id: 'mart',
+    title: 'MART · sepa_*',
+    detail: 'Fundamental / technical / tiers → composite → screener wide',
+  },
 ]
 
 function reachToVerdict(status: AnalyticsStatus | undefined, loading: boolean): {
@@ -120,6 +145,8 @@ export function AnalyticsPipelinePage() {
     return m
   }, [])
 
+  const reportReady = Boolean(status?.report_available)
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <OpsVerdictStrip
@@ -128,6 +155,21 @@ export function AnalyticsPipelinePage() {
         summary={verdict.summary}
         tagLabel={verdict.tagLabel}
         tagVariant={verdict.tagVariant}
+        actions={
+          reportReady ? (
+            <Button asChild size="sm">
+              <a href={ANALYTICS_REPORT_URL} target="_blank" rel="noreferrer">
+                <ExternalLink className="size-3.5" />
+                Open Elementary
+              </a>
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" disabled>
+              <ExternalLink className="size-3.5" />
+              Open Elementary
+            </Button>
+          )
+        }
         meta={
           <span className="text-dense-meta text-muted-foreground">
             NS {status?.namespace ?? 'plugin-market-data'} · report{' '}
@@ -148,14 +190,6 @@ export function AnalyticsPipelinePage() {
             { value: 'quality', label: 'Data Quality' },
           ]}
         />
-        <a
-          className="text-dense-meta text-primary underline-offset-2 hover:underline"
-          href={ANALYTICS_REPORT_URL}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Open report in new tab
-        </a>
       </div>
 
       {tab === 'overview' && (
@@ -234,31 +268,80 @@ export function AnalyticsPipelinePage() {
       )}
 
       {tab === 'lineage' && (
-        <OpsSection title="Elementary lineage & catalog" collapsible defaultCollapsed={false}>
-          <p className="mb-2 text-dense-meta text-muted-foreground">
-            Interactive DAG, model catalog, and test coverage from Elementary OSS (
-            <code className="font-mono">edr report</code>). Regenerated after each CronJob run.
-          </p>
-          <div className="overflow-hidden rounded border border-border bg-background">
-            <iframe
-              title="Elementary observability report"
-              src={ANALYTICS_REPORT_URL}
-              className="h-[min(75vh,900px)] w-full border-0"
-              sandbox="allow-scripts allow-same-origin allow-popups"
-            />
-          </div>
-        </OpsSection>
+        <>
+          <OpsSection title="Open full Elementary report" collapsible defaultCollapsed={false}>
+            <div className="flex flex-col gap-3 rounded border border-border/60 bg-secondary/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2 text-dense-label font-medium text-foreground">
+                  <GitBranch className="size-4 shrink-0 text-muted-foreground" />
+                  Lineage DAG · Catalog · Test coverage
+                </div>
+                <p className="text-dense-meta text-muted-foreground">
+                  Elementary OSS is a full SPA — open it in a new browser tab for usable layout.
+                  In-page iframe is intentionally not used (no responsive shell).
+                </p>
+                <p className="text-dense-meta font-mono text-muted-foreground">{ANALYTICS_REPORT_URL}</p>
+              </div>
+              {reportReady ? (
+                <Button asChild size="default">
+                  <a href={ANALYTICS_REPORT_URL} target="_blank" rel="noreferrer">
+                    <ExternalLink className="size-4" />
+                    Open Elementary report
+                  </a>
+                </Button>
+              ) : (
+                <Button size="default" variant="outline" disabled>
+                  Report pending
+                </Button>
+              )}
+            </div>
+          </OpsSection>
+
+          <OpsSection title="Pipeline shape (text)" collapsible defaultCollapsed={false}>
+            <ol className="flex flex-col gap-2">
+              {LINEAGE_LAYERS.map((layer, idx) => (
+                <li
+                  key={layer.id}
+                  className="flex gap-3 rounded border border-border/60 bg-background/60 px-3 py-2"
+                >
+                  <span className="text-dense-meta font-mono text-muted-foreground tabular-nums">
+                    {idx + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-dense-label font-medium text-foreground">{layer.title}</div>
+                    <div className="text-dense-meta text-muted-foreground">{layer.detail}</div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </OpsSection>
+        </>
       )}
 
       {tab === 'quality' && (
         <>
           <OpsSection title="Observability surface" collapsible defaultCollapsed={false}>
             <p className="text-dense-body text-muted-foreground">
-              Pass/fail history, freshness, and volume anomalies live inside the Elementary report
-              (Lineage & Catalog tab). Schema YAML can add{' '}
+              Pass/fail history, freshness, and volume anomalies live in the Elementary report.
+              Open it from the verdict strip or Lineage tab. Mart schema YAML includes{' '}
               <code className="font-mono">elementary.volume_anomalies</code> /{' '}
-              <code className="font-mono">freshness_anomalies</code> on marts (Wave 4).
+              <code className="font-mono">freshness_anomalies</code> (warn severity until history
+              accumulates).
             </p>
+            <div className="mt-3">
+              {reportReady ? (
+                <Button asChild size="sm" variant="outline">
+                  <a href={ANALYTICS_REPORT_URL} target="_blank" rel="noreferrer">
+                    <ExternalLink className="size-3.5" />
+                    Open Elementary for test results
+                  </a>
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" disabled>
+                  Report pending
+                </Button>
+              )}
+            </div>
           </OpsSection>
           <OpsSection title="Quick links" collapsible defaultCollapsed={false}>
             <ul className="list-inside list-disc text-dense-body text-muted-foreground">

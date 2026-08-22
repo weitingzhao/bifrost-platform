@@ -119,12 +119,39 @@ export function writeAgentLaunchEvidence(
   return nextEv
 }
 
-/** Last-deploy lamp: API last job or local cycle evidence (Launch Agent checklist / sidebar). */
+export type AgentLaunchLastDeployContext = {
+  /** Target runner healthy — L-1 host already serving remediation-runner. */
+  runnersLive?: boolean
+  runnerVersion?: string
+}
+
+/** Last-deploy lamp: API last job, local cycle evidence, or live L-1 runners. */
 export function isAgentLaunchLastDeployOk(
   lastStatus: string | undefined,
   evidence: AgentLaunchEvidence,
+  ctx?: AgentLaunchLastDeployContext,
 ): boolean {
-  return lastStatus === 'done' || evidence.deployOutcome === 'ok'
+  if (lastStatus === 'done' || evidence.deployOutcome === 'ok') return true
+  if (ctx?.runnersLive === true && (ctx.runnerVersion?.trim() ?? '') !== '') return true
+  return false
+}
+
+export function agentLaunchLastDeployDetail(
+  last: { role?: string; status?: string } | null | undefined,
+  evidence: AgentLaunchEvidence,
+  ctx?: AgentLaunchLastDeployContext,
+): string {
+  if (last != null) {
+    return `${last.role ?? ''} ${last.status ?? ''}`.trim() || 'recorded'
+  }
+  if (evidence.deployOutcome != null) {
+    return `evidence ${evidence.deployOutcome}`
+  }
+  if (isAgentLaunchLastDeployOk(undefined, evidence, ctx) && ctx?.runnersLive) {
+    const v = ctx.runnerVersion?.trim()
+    return v ? `runners live v${v}` : 'runners live'
+  }
+  return 'none yet'
 }
 
 export function evidenceSummaryLine(ev: AgentLaunchEvidence): string {

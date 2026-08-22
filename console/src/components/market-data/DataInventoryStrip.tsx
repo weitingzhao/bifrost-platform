@@ -4,21 +4,16 @@ import {
   fetchCoverageInventory,
   isProxyError,
   type CoverageInventoryMetric,
-  type CoverageInventoryOption,
   type CoverageInventoryResponse,
-  type CoverageInventoryStockDaily,
 } from '@/api/marketDataPlugin'
+import { DashCard, Meter } from '@/components/market-data/overviewDash'
+import { fmtCount, toneByLevel } from '@/components/market-data/overviewDashModel'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 const REFETCH_MS = 60_000
 
-function formatCount(n: number): string {
-  return n.toLocaleString('en-US')
-}
-
 function shortDate(iso: string | null | undefined): string {
   if (!iso) return '—'
-  // Prefer YYYY-MM-DD; tolerate longer ISO timestamps.
   return iso.trim().slice(0, 10)
 }
 
@@ -26,127 +21,39 @@ function formatRange(min: string | null | undefined, max: string | null | undefi
   const a = shortDate(min)
   const b = shortDate(max)
   if (a !== '—' && b !== '—') return `${a} — ${b}`
-  if (a !== '—') return `${a} — —`
-  if (b !== '—') return `— — ${b}`
+  if (a !== '—') return a
+  if (b !== '—') return b
   return '—'
 }
 
-function InventoryCell({
-  label,
-  loading,
-  value,
-  detail,
-  muted,
-}: {
-  label: string
-  loading: boolean
-  value: string
-  detail?: string
-  muted?: boolean
-}) {
-  return (
-    <div className="min-w-0 flex-1">
-      <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{label}</p>
-      {loading ? (
-        <Skeleton className="mt-1 h-5 w-24" />
-      ) : (
-        <>
-          <p
-            className={
-              muted
-                ? 'm-0 mt-0.5 font-semibold tabular-nums text-[var(--text-dense-body)] text-[var(--muted-foreground)]'
-                : 'm-0 mt-0.5 font-semibold tabular-nums text-[var(--text-dense-body)] text-[var(--foreground)]'
-            }
-          >
-            {value}
-          </p>
-          {detail ? (
-            <p className="m-0 mt-0.5 truncate text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              {detail}
-            </p>
-          ) : null}
-        </>
-      )}
-    </div>
-  )
-}
-
-function stockDailyDisplay(data: CoverageInventoryStockDaily | null | undefined): {
-  value: string
-  detail: string
+function analyticsActive(analytics: CoverageInventoryResponse['analytics'] | undefined): {
+  active: number
+  symbols: number
+  latest: string
 } {
-  if (data == null) return { value: '—', detail: 'No stock daily data' }
-  const symbols = data.symbols ?? 0
-  const rows = data.total_rows ?? 0
-  return {
-    value: `${formatCount(symbols)} symbols · ${formatCount(rows)} rows`,
-    detail: formatRange(data.min_date, data.max_date),
-  }
-}
-
-function optionDisplay(data: CoverageInventoryOption | null | undefined): {
-  value: string
-  detail: string
-} {
-  if (data == null) return { value: '—', detail: 'No option contracts' }
-  const underlyings = data.underlyings ?? 0
-  const contracts = data.total_contracts ?? 0
-  const expiries = data.total_expiries ?? 0
-  return {
-    value: `${formatCount(underlyings)} underlyings · ${formatCount(contracts)} contracts`,
-    detail: `${formatCount(expiries)} expiries`,
-  }
-}
-
-function snapshotDisplay(data: CoverageInventoryOption | null | undefined): {
-  value: string
-  detail: string
-} {
-  if (data == null) return { value: '—', detail: 'No snapshots' }
-  const symbols = data.snapshot_symbols ?? 0
-  const oi = data.oi_symbols ?? 0
-  return {
-    value: `${formatCount(symbols)} snapshot · ${formatCount(oi)} OI symbols`,
-    detail: `Snap ${shortDate(data.snapshot_latest)} · OI ${shortDate(data.oi_latest)}`,
-  }
-}
-
-function analyticsDisplay(
-  analytics: CoverageInventoryResponse['analytics'] | undefined,
-): { value: string; detail: string } {
-  if (analytics == null) return { value: '—', detail: 'No analytics' }
-  const metrics: Array<[string, CoverageInventoryMetric | null | undefined]> = [
-    ['max_pain', analytics.max_pain],
-    ['atm_iv', analytics.atm_iv],
-    ['pcr', analytics.pcr],
-    ['iv_percentile', analytics.iv_percentile],
+  if (analytics == null) return { active: 0, symbols: 0, latest: '—' }
+  const metrics: Array<CoverageInventoryMetric | null | undefined> = [
+    analytics.max_pain,
+    analytics.atm_iv,
+    analytics.pcr,
+    analytics.iv_percentile,
   ]
-  const active = metrics.filter(([, m]) => m != null && (m.symbols ?? 0) > 0)
-  if (active.length === 0) return { value: '4 metrics · 0 symbols', detail: 'No analytics rows yet' }
-
-  const symbolCounts = active.map(([, m]) => m?.symbols ?? 0)
-  const maxSymbols = Math.max(...symbolCounts)
-  const latests = active
-    .map(([, m]) => m?.latest?.trim().slice(0, 10))
+  const live = metrics.filter(m => m != null && (m.symbols ?? 0) > 0)
+  const symbols = live.length > 0 ? Math.max(...live.map(m => m?.symbols ?? 0)) : 0
+  const latests = live
+    .map(m => m?.latest?.trim().slice(0, 10))
     .filter((d): d is string => Boolean(d))
     .sort()
-  const latest = latests[latests.length - 1] ?? '—'
-
-  return {
-    value: `${active.length}/4 metrics · ${formatCount(maxSymbols)} symbols`,
-    detail: `Latest ${latest}`,
-  }
+  return { active: live.length, symbols, latest: latests[latests.length - 1] ?? '—' }
 }
 
 function scopeLabel(data: CoverageInventoryResponse | undefined): string {
   const n = data?.watchlist_symbols?.length ?? 0
   const scope = (data?.scope ?? 'watchlist').trim() || 'watchlist'
-  if (scope === 'watchlist') return `Watchlist (${formatCount(n)} symbols)`
-  if (scope === 'option_contract_underlyings') {
-    return `Option underlyings (${formatCount(n)} symbols)`
-  }
-  if (scope === 'empty') return 'No symbols tracked'
-  return `${scope} (${formatCount(n)} symbols)`
+  if (scope === 'watchlist') return `Watchlist ${fmtCount(n)}`
+  if (scope === 'option_contract_underlyings') return `Underlyings ${fmtCount(n)}`
+  if (scope === 'empty') return 'No symbols'
+  return `${scope} ${fmtCount(n)}`
 }
 
 export function DataInventoryStrip() {
@@ -176,23 +83,27 @@ export function DataInventoryStrip() {
           ? inventoryQ.error.message
           : null
 
-  const stock = stockDailyDisplay(data?.stock_daily)
-  const option = optionDisplay(data?.option)
-  const snapshot = snapshotDisplay(data?.option)
-  const analytics = analyticsDisplay(data?.analytics)
+  const stockSymbols = data?.stock_daily?.symbols ?? null
+  const stockRows = data?.stock_daily?.total_rows ?? null
+  const underlyings = data?.option?.underlyings ?? null
+  const contracts = data?.option?.total_contracts ?? null
+  const snap = data?.option?.snapshot_symbols ?? null
+  const oi = data?.option?.oi_symbols ?? null
+  const optionTarget = Math.max(data?.watchlist_symbols?.length ?? 0, underlyings ?? 0, 1)
+  const analytics = analyticsActive(data?.analytics)
+  const loading = inventoryQ.isLoading && data == null
 
   return (
     <OpsSection
-      title="DATA INVENTORY"
-      description="Breadth × depth of Plugin market.* + market_analytics.* — watchlist-bound option scope"
+      title="Data inventory"
       headerExtra={
         data != null ? (
           <DenseTag variant="neutral" title="Ingest policy scope">
-            Scope: {scopeLabel(data)}
+            {scopeLabel(data)}
           </DenseTag>
         ) : null
       }
-      bodyPadding="default"
+      bodyPadding="compact"
       overflow="visible"
       collapsible={false}
     >
@@ -200,43 +111,66 @@ export function DataInventoryStrip() {
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">
           {errorMsg ?? 'Failed to load inventory'}
         </p>
+      ) : loading ? (
+        <div className="grid grid-cols-4 gap-1.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
       ) : (
-        <div
-          className="flex flex-wrap items-start gap-6"
-          role="region"
-          aria-label="Data inventory"
-        >
-          <InventoryCell
-            label="Stock Day"
-            loading={inventoryQ.isLoading}
-            value={stock.value}
-            detail={stock.detail}
-          />
-          <InventoryCell
-            label="Option"
-            loading={inventoryQ.isLoading}
-            value={option.value}
-            detail={option.detail}
-          />
-          <InventoryCell
-            label="Snapshots"
-            loading={inventoryQ.isLoading}
-            value={snapshot.value}
-            detail={snapshot.detail}
-          />
-          <InventoryCell
-            label="Analytics"
-            loading={inventoryQ.isLoading}
-            value={analytics.value}
-            detail={analytics.detail}
-          />
-          <InventoryCell
-            label="Stock Min"
-            loading={inventoryQ.isLoading}
-            value="—"
-            detail="Not tracked"
-            muted
-          />
+        <div className="grid grid-cols-2 gap-1.5 xl:grid-cols-4" role="region" aria-label="Data inventory">
+          <DashCard
+            title="Stock Day"
+            value={fmtCount(stockSymbols)}
+            rawValue={stockSymbols}
+            unit="symbols"
+            caption={`${fmtCount(stockRows)} rows · ${formatRange(data?.stock_daily?.min_date, data?.stock_daily?.max_date)}`}
+          >
+            <Meter
+              fillPct={stockSymbols != null && stockSymbols > 0 ? 100 : 0}
+              toneClass={toneByLevel(stockSymbols != null && stockSymbols > 0 ? 'ok' : 'missing')}
+              label="stock daily symbols"
+            />
+          </DashCard>
+          <DashCard
+            title="Option"
+            value={fmtCount(underlyings)}
+            rawValue={underlyings}
+            unit="underlyings"
+            caption={`${fmtCount(contracts)} contracts · ${fmtCount(data?.option?.total_expiries)} expiries`}
+          >
+            <Meter
+              fillPct={underlyings != null ? Math.min(100, (underlyings / optionTarget) * 100) : 0}
+              toneClass={toneByLevel(underlyings != null && underlyings > 0 ? 'ok' : 'missing')}
+              label="option underlyings"
+            />
+          </DashCard>
+          <DashCard
+            title="Snapshots"
+            value={fmtCount(snap)}
+            rawValue={snap}
+            unit="symbols"
+            caption={`OI ${fmtCount(oi)} · ${shortDate(data?.option?.snapshot_latest)}`}
+          >
+            <Meter
+              fillPct={snap != null ? Math.min(100, (snap / optionTarget) * 100) : 0}
+              toneClass={toneByLevel(snap != null && snap > 0 ? 'ok' : 'missing')}
+              label="snapshot symbols"
+            />
+          </DashCard>
+          <DashCard
+            title="Analytics"
+            value={`${analytics.active}/4`}
+            rawValue={analytics.active}
+            unit="metrics"
+            caption={`${fmtCount(analytics.symbols)} symbols · ${analytics.latest}`}
+          >
+            <Meter
+              fillPct={(analytics.active / 4) * 100}
+              toneClass={toneByLevel(analytics.active === 4 ? 'ok' : analytics.active > 0 ? 'scheduled' : 'missing')}
+              label="analytics metrics"
+            />
+          </DashCard>
         </div>
       )}
     </OpsSection>

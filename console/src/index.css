@@ -8370,4 +8370,40 @@ button.infra-stack-chip:hover {
   animation: checklist-fleet-chip-flash 0.55s ease-in-out 3;
 }
 
+/* Massive Overview — live metric tick */
+@keyframes md-tick-up {
+  0% {
+    color: var(--color-success);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--color-success) 70%, transparent);
+  }
+  100% {
+    color: inherit;
+    text-shadow: none;
+  }
+}
+
+@keyframes md-tick-down {
+  0% {
+    color: var(--color-warning);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--color-warning) 70%, transparent);
+  }
+  100% {
+    color: inherit;
+    text-shadow: none;
+  }
+}
+
+.md-tick-value {
+  display: inline-block;
+  transition: color 0.2s ease;
+}
+
+.md-tick-up {
+  animation: md-tick-up 1.1s ease-out;
+}
+
+.md-tick-down {
+  animation: md-tick-down 1.1s ease-out;
+}
+
 

@@ -483,7 +483,8 @@ func (h *Handler) HandleApprovePostCompletionItem(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	h.setProgramAssessmentStatus(approved.ProgramID, "approved", now, by, "")
+	// Keep Active Session open while any sibling remains pending_review (D3).
+	h.refreshProgramAssessmentFromItems(approved.ProgramID, pending, now, by)
 
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -615,21 +616,39 @@ func (h *Handler) setProgramAssessmentStatus(programID, status, at, by, noHandof
 	_ = h.persistRuntimeLocked(programID)
 }
 
+// refreshProgramAssessmentFromItems derives program-level assessment from
+// per-item statuses. Any remaining pending_review keeps assessment at
+// pending_review so Active Session does not sessionRelease mid-batch (D3).
 func (h *Handler) refreshProgramAssessmentFromItems(programID string, items []PostCompletionItem, at, by string) {
 	hasPending := false
 	hasApproved := false
+	hasInOperate := false
+	hasClosed := false
 	for _, item := range items {
 		if item.ProgramID != programID {
 			continue
 		}
-		hasPending = hasPending || item.Status == "pending_review"
-		hasApproved = hasApproved || item.Status == "approved"
+		switch item.Status {
+		case "pending_review":
+			hasPending = true
+		case "approved":
+			hasApproved = true
+		case "in_operate":
+			hasInOperate = true
+		case "closed":
+			hasClosed = true
+		}
 	}
 	status := "not_assessed"
-	if hasApproved {
-		status = "approved"
-	} else if hasPending {
+	switch {
+	case hasPending:
 		status = "pending_review"
+	case hasInOperate:
+		status = "in_operate"
+	case hasApproved:
+		status = "approved"
+	case hasClosed:
+		status = "closed"
 	}
 	h.setProgramAssessmentStatus(programID, status, at, by, "")
 }
@@ -644,6 +663,8 @@ func (h *Handler) OnOperateQueueExecution(queueItem operatequeue.Item) {
 			}
 		}
 		_ = h.store.SavePendingPostCompletion(items)
+		h.refreshProgramAssessmentFromItems(queueItem.ProgramID, items, queueItem.UpdatedAt, queueItem.ApprovedBy)
+		return
 	}
 	h.setProgramAssessmentStatus(queueItem.ProgramID, "in_operate", queueItem.UpdatedAt, queueItem.ApprovedBy, "")
 }
@@ -659,6 +680,8 @@ func (h *Handler) OnOperateQueueClosed(queueItem operatequeue.Item) {
 			}
 		}
 		_ = h.store.SavePendingPostCompletion(items)
+		h.refreshProgramAssessmentFromItems(queueItem.ProgramID, items, queueItem.ClosedAt, queueItem.ApprovedBy)
+		return
 	}
 	h.setProgramAssessmentStatus(queueItem.ProgramID, "closed", queueItem.ClosedAt, queueItem.ApprovedBy, "")
 }

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AGENT_LAUNCH_STORE_KEY,
   agentLaunchEvidenceKey,
+  agentLaunchLastDeployDetail,
   isAgentLaunchLastDeployOk,
   readAgentLaunchEvidence,
   writeAgentLaunchEvidence,
@@ -54,10 +55,22 @@ describe('readAgentLaunchEvidence', () => {
 })
 
 describe('isAgentLaunchLastDeployOk', () => {
-  it('accepts API last=done or local evidence ok', () => {
+  it('accepts API last=done, local evidence ok, or live runners', () => {
     expect(isAgentLaunchLastDeployOk('done', {})).toBe(true)
     expect(isAgentLaunchLastDeployOk(undefined, { deployOutcome: 'ok' })).toBe(true)
+    expect(
+      isAgentLaunchLastDeployOk(undefined, {}, { runnersLive: true, runnerVersion: '0.1.0' }),
+    ).toBe(true)
     expect(isAgentLaunchLastDeployOk('failed', {})).toBe(false)
     expect(isAgentLaunchLastDeployOk(undefined, {})).toBe(false)
+    expect(isAgentLaunchLastDeployOk(undefined, {}, { runnersLive: true })).toBe(false)
+  })
+})
+
+describe('agentLaunchLastDeployDetail', () => {
+  it('describes runner bootstrap when no API record', () => {
+    expect(
+      agentLaunchLastDeployDetail(undefined, {}, { runnersLive: true, runnerVersion: '0.1.0' }),
+    ).toBe('runners live v0.1.0')
   })
 })

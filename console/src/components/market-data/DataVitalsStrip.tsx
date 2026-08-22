@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Skeleton, cn } from '@bifrost/ui'
+import { DenseTag, Skeleton } from '@bifrost/ui'
 import {
   fetchCoverageContracts,
   fetchCoverageDbSummary,
@@ -13,189 +13,83 @@ import {
 } from '@/api/marketDataPlugin'
 import { fetchMarketDataStatus } from '@/api/network'
 import type { MarketDataWorkerInfo } from '@/api/satelliteBusTypes'
+import {
+  computeVerdict,
+  countByKind,
+  freshnessToday,
+  vitalFill,
+  vitalTagVariant,
+  type VitalKind,
+} from '@/components/market-data/dataVitalsModel'
+import {
+  DashCard,
+  Meter,
+  ScoreRing,
+} from '@/components/market-data/overviewDash'
+import { fmtCount, toneByLevel } from '@/components/market-data/overviewDashModel'
+import { OpsSection } from '@/components/layout/OpsSection'
 
 const REFETCH_MS = 60_000
-const SCHEDULED_WINDOW_MS = 6 * 60 * 60 * 1000
-
-type Verdict = { text: string; colorClass: string }
-
-/** Today's-data verdict: UTC date of last_run_at vs next_run within 6h. */
-function computeVerdict(lastRunAt?: string, nextRunAt?: string): Verdict {
-  const today = new Date().toISOString().slice(0, 10)
-  const lastDate = lastRunAt?.trim().slice(0, 10)
-  if (lastDate && lastDate === today) {
-    return { text: 'Today OK', colorClass: 'text-success' }
-  }
-  if (nextRunAt?.trim()) {
-    const nextMs = new Date(nextRunAt).getTime()
-    if (Number.isFinite(nextMs)) {
-      const delta = nextMs - Date.now()
-      if (delta >= 0 && delta <= SCHEDULED_WINDOW_MS) {
-        const hours = Math.max(1, Math.round(delta / (60 * 60 * 1000)))
-        return { text: `Scheduled ~${hours}h`, colorClass: 'text-warning' }
-      }
-    }
-  }
-  return { text: 'Missing', colorClass: 'text-destructive' }
-}
-
-function utcToday(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 function freshnessLastRun(
   rows: Array<{ dimension?: string; last_run_at?: string | null }> | undefined,
   dimension: string,
 ): string | undefined {
-  const row = rows?.find(
-    f => (f.dimension ?? '').toLowerCase() === dimension.toLowerCase(),
-  )
+  const row = rows?.find(f => (f.dimension ?? '').toLowerCase() === dimension.toLowerCase())
   const last = row?.last_run_at?.trim()
   return last || undefined
 }
 
-function workerNextRun(
-  workers: MarketDataWorkerInfo[] | undefined,
-  pool: string,
-): string | undefined {
+function workerNextRun(workers: MarketDataWorkerInfo[] | undefined, pool: string): string | undefined {
   const w = workers?.find(x => (x.pool ?? '').toLowerCase() === pool.toLowerCase())
   const next = w?.next_run_at?.trim()
   return next || undefined
 }
 
-function formatCount(n: number): string {
-  return n.toLocaleString('en-US')
-}
-
-function VitalCell({
-  label,
-  loading,
-  value,
-  detail,
-  verdict,
-}: {
-  label: string
-  loading: boolean
-  value: string
-  detail?: string
-  verdict?: Verdict
-}) {
-  return (
-    <div className="min-w-0 flex-1">
-      <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{label}</p>
-      {loading ? (
-        <Skeleton className="mt-1 h-5 w-24" />
-      ) : (
-        <>
-          <p className="m-0 mt-0.5 font-semibold tabular-nums text-[var(--text-dense-body)] text-[var(--foreground)]">
-            {value}
-          </p>
-          {verdict ? (
-            <p
-              className={cn(
-                'm-0 mt-0.5 truncate text-[var(--text-dense-caption)] font-medium',
-                verdict.colorClass,
-              )}
-            >
-              {verdict.text}
-            </p>
-          ) : detail ? (
-            <p className="m-0 mt-0.5 truncate text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-              {detail}
-            </p>
-          ) : null}
-        </>
-      )}
-    </div>
-  )
-}
-
-function universeDisplay(data: UniverseCountResponse | undefined, errored: boolean): string {
-  if (errored || data == null) return '—'
+function universeCount(data: UniverseCountResponse | undefined, errored: boolean): number | null {
+  if (errored || data == null) return null
   const n = data.total_tickers
-  if (n == null || Number.isNaN(n)) return '—'
-  return `${formatCount(n)} tickers`
+  if (n == null || Number.isNaN(n)) return null
+  return n
 }
 
-function stockDailyDisplay(
-  data: CoverageDbSummary | undefined,
-  errored: boolean,
-): { value: string } {
-  if (errored || data == null) return { value: '—' }
+function stockDailyRows(data: CoverageDbSummary | undefined, errored: boolean): number | null {
+  if (errored || data == null) return null
   const rows = data.counts?.stock_daily
-  if (rows == null) return { value: '—' }
-  return { value: `${formatCount(rows)} rows` }
+  if (rows == null) return null
+  return rows
 }
 
-function optionContractsDisplay(
+function optionCounts(
   data: CoverageContractsResponse | undefined,
   errored: boolean,
-): string {
-  if (errored || data == null) return '—'
+): { underlyings: number | null; contracts: number | null } {
+  if (errored || data == null) return { underlyings: null, contracts: null }
   const rows = data.rows ?? []
   const underlyings = data.count ?? rows.length
   const contracts = rows.reduce((sum, r) => sum + (r.contract_count ?? 0), 0)
-  if (underlyings === 0 && contracts === 0) return '—'
-  return `${formatCount(underlyings)} underlyings · ${formatCount(contracts)} contracts`
+  if (underlyings === 0 && contracts === 0) return { underlyings: null, contracts: null }
+  return { underlyings, contracts }
 }
 
-function analyticsDisplay(
-  data: MarketStatusResponse | undefined,
-  errored: boolean,
-): string {
-  if (errored || data == null) return '—'
+function activeDimensions(data: MarketStatusResponse | undefined, errored: boolean): {
+  ok: number
+  total: number
+} {
+  if (errored || data == null) return { ok: 0, total: 0 }
   const items = data.freshness_summary ?? []
-  if (items.length === 0) return '—'
   const ok = items.filter(i => {
     const s = (i.status ?? '').toLowerCase()
     return s === 'ok' || s === 'success' || s === 'active'
   }).length
-  return `${ok}/${items.length} dimensions active`
+  return { ok, total: items.length }
 }
 
-/** Data Freshness cell: count dimensions with last_run today; worst overall verdict. */
-function freshnessTodayVerdict(data: MarketStatusResponse | undefined): Verdict | undefined {
-  if (data == null) return undefined
-  const items = data.freshness_summary ?? []
-  if (items.length === 0) return undefined
-  const today = utcToday()
-  const todayCount = items.filter(i => {
-    const d = i.last_run_at?.trim().slice(0, 10)
-    return d === today
-  }).length
-  const total = items.length
-  const text = `${todayCount}/${total} today`
-  if (todayCount === total) {
-    return { text, colorClass: 'text-success' }
-  }
-  if (todayCount === 0) {
-    return { text, colorClass: 'text-destructive' }
-  }
-  return { text, colorClass: 'text-warning' }
-}
-
-/** Universe: ticker_sync last_run; stocks pool next_run as schedule fallback. */
-function universeVerdict(lastRunAt?: string, nextRunAt?: string): Verdict {
-  const today = utcToday()
-  const lastDate = lastRunAt?.trim().slice(0, 10)
-  if (lastDate && lastDate === today) {
-    return { text: 'Today OK', colorClass: 'text-success' }
-  }
-  // ticker_sync typically shares stocks pool CronJob cadence
-  if (nextRunAt?.trim()) {
-    const nextMs = new Date(nextRunAt).getTime()
-    if (Number.isFinite(nextMs)) {
-      const delta = nextMs - Date.now()
-      if (delta >= 0 && delta <= SCHEDULED_WINDOW_MS) {
-        const hours = Math.max(1, Math.round(delta / (60 * 60 * 1000)))
-        return { text: `Scheduled ~${hours}h`, colorClass: 'text-warning' }
-      }
-    }
-  }
-  return { text: 'Missing', colorClass: 'text-destructive' }
-}
-
-export function DataVitalsStrip() {
+export function DataVitalsStrip({
+  onOpenCoverage,
+}: {
+  onOpenCoverage?: (panel: 'readiness' | 'financials' | 'quality') => void
+}) {
   const universeQ = useQuery({
     queryKey: ['market-data', 'vitals', 'universe'],
     queryFn: fetchUniverseCount,
@@ -220,7 +114,6 @@ export function DataVitalsStrip() {
     refetchInterval: REFETCH_MS,
     retry: 1,
   })
-  // Share cache with Overview live probe for workers.next_run_at
   const probeQ = useQuery({
     queryKey: ['market-data', 'live-probe', 'status'],
     queryFn: fetchMarketDataStatus,
@@ -255,13 +148,15 @@ export function DataVitalsStrip() {
   const dbFresh = stockOk?.freshness
   const probeFresh = probeQ.data?.freshness
 
-  const stock = stockDailyDisplay(stockOk, stockErr)
+  const stockRows = stockDailyRows(stockOk, stockErr)
   const stockLast =
     freshnessLastRun(dbFresh, 'stock_daily') ?? freshnessLastRun(probeFresh, 'stock_daily')
   const stockVerdict =
     stockOk != null || probeQ.data != null
       ? computeVerdict(stockLast, workerNextRun(workers, 'stocks'))
-      : undefined
+      : { text: '—', kind: 'unknown' as const }
+
+  const option = optionCounts(contractsOk, contractsErr)
   const optionLast =
     freshnessLastRun(dbFresh, 'option_contract') ??
     freshnessLastRun(dbFresh, 'option_contracts') ??
@@ -270,45 +165,121 @@ export function DataVitalsStrip() {
   const optionVerdict =
     contractsOk != null || stockOk != null || probeQ.data != null
       ? computeVerdict(optionLast, workerNextRun(workers, 'options'))
-      : undefined
-  const dataFreshVerdict = !statusErr ? freshnessTodayVerdict(statusOk) : undefined
+      : { text: '—', kind: 'unknown' as const }
+
+  const dims = activeDimensions(statusOk, statusErr)
+  const today = !statusErr ? freshnessToday(statusOk?.freshness_summary ?? []) : null
+  const freshnessKind: VitalKind = today?.kind ?? 'unknown'
+
   const tickerLast =
     freshnessLastRun(dbFresh, 'ticker_sync') ?? freshnessLastRun(probeFresh, 'ticker_sync')
+  const uniCount = universeCount(universeOk, universeErr)
   const uniVerdict =
     !universeErr && universeOk != null
-      ? universeVerdict(tickerLast, workerNextRun(workers, 'stocks'))
-      : undefined
+      ? computeVerdict(tickerLast, workerNextRun(workers, 'stocks'))
+      : { text: '—', kind: 'unknown' as const }
+
+  const score = countByKind([stockVerdict.kind, optionVerdict.kind, freshnessKind, uniVerdict.kind])
+  const total = 4
+  const loading = stockQ.isLoading && stockOk == null
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-6 rounded-md bg-[var(--secondary)] px-4 py-3"
-      role="region"
-      aria-label="Data vitals"
+    <OpsSection
+      title="Stock summary"
+      headerExtra={
+        <div className="flex flex-wrap items-center gap-1.5">
+          <DenseTag variant="success">today {score.ok}</DenseTag>
+          <DenseTag variant="warning">scheduled {score.scheduled}</DenseTag>
+          <DenseTag variant="danger">missing {score.missing}</DenseTag>
+        </div>
+      }
+      bodyPadding="compact"
+      overflow="visible"
+      collapsible
+      defaultCollapsed={false}
     >
-      <VitalCell
-        label="Stock Daily"
-        loading={stockQ.isLoading}
-        value={stock.value}
-        verdict={stockVerdict}
-      />
-      <VitalCell
-        label="Option Contracts"
-        loading={contractsQ.isLoading || stockQ.isLoading}
-        value={optionContractsDisplay(contractsOk, contractsErr)}
-        verdict={optionVerdict}
-      />
-      <VitalCell
-        label="Data Freshness"
-        loading={statusQ.isLoading}
-        value={analyticsDisplay(statusOk, statusErr)}
-        verdict={dataFreshVerdict}
-      />
-      <VitalCell
-        label="Universe"
-        loading={universeQ.isLoading}
-        value={universeDisplay(universeOk, universeErr)}
-        verdict={uniVerdict}
-      />
-    </div>
+      {loading ? (
+        <div className="grid grid-cols-4 gap-1.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-stretch gap-2">
+          <ScoreRing
+            ready={score.ok}
+            thin={score.scheduled}
+            blocked={score.missing}
+            total={total}
+            caption="today"
+          />
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5 xl:grid-cols-4">
+            <DashCard
+              title="Stock Daily"
+              tag={stockVerdict.text}
+              tagVariant={vitalTagVariant(stockVerdict.kind)}
+              value={fmtCount(stockRows)}
+              rawValue={stockRows}
+              unit="rows"
+              caption={stockLast != null ? stockLast.slice(0, 10) : 'no last_run'}
+              onClick={onOpenCoverage ? () => onOpenCoverage('quality') : undefined}
+            >
+              <Meter
+                fillPct={vitalFill(stockVerdict.kind)}
+                toneClass={toneByLevel(stockVerdict.kind)}
+                label={stockVerdict.text}
+              />
+            </DashCard>
+            <DashCard
+              title="Option Contracts"
+              tag={optionVerdict.text}
+              tagVariant={vitalTagVariant(optionVerdict.kind)}
+              value={fmtCount(option.underlyings)}
+              rawValue={option.underlyings}
+              unit="underlyings"
+              caption={`${fmtCount(option.contracts)} contracts`}
+              onClick={onOpenCoverage ? () => onOpenCoverage('readiness') : undefined}
+            >
+              <Meter
+                fillPct={vitalFill(optionVerdict.kind)}
+                toneClass={toneByLevel(optionVerdict.kind)}
+                label={optionVerdict.text}
+              />
+            </DashCard>
+            <DashCard
+              title="Data Freshness"
+              tag={today?.text ?? '—'}
+              tagVariant={vitalTagVariant(freshnessKind)}
+              value={dims.total > 0 ? `${dims.ok}/${dims.total}` : '—'}
+              rawValue={today?.todayCount}
+              unit="active"
+              onClick={onOpenCoverage ? () => onOpenCoverage('quality') : undefined}
+            >
+              <Meter
+                fillPct={vitalFill(freshnessKind, today?.ratio)}
+                toneClass={toneByLevel(freshnessKind)}
+                label={today?.text}
+              />
+            </DashCard>
+            <DashCard
+              title="Universe"
+              tag={uniVerdict.text}
+              tagVariant={vitalTagVariant(uniVerdict.kind)}
+              value={fmtCount(uniCount)}
+              rawValue={uniCount}
+              unit="tickers"
+              caption={tickerLast != null ? tickerLast.slice(0, 10) : 'no ticker_sync'}
+              onClick={onOpenCoverage ? () => onOpenCoverage('readiness') : undefined}
+            >
+              <Meter
+                fillPct={vitalFill(uniVerdict.kind)}
+                toneClass={toneByLevel(uniVerdict.kind)}
+                label={uniVerdict.text}
+              />
+            </DashCard>
+          </div>
+        </div>
+      )}
+    </OpsSection>
   )
 }

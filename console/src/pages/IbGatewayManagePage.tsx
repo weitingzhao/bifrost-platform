@@ -1,10 +1,13 @@
 import { useCallback, useState } from 'react'
-import { Button, ConfirmDialog, DenseTag, StatusLamp } from '@bifrost/ui'
+import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
 import { postIbGatewayControl } from '@/api/network'
 import { IbGatewayCutoverStatusPanel } from '@/components/cluster/IbGatewayCutoverStatusPanel'
 import { IbGatewayLiveStatusPanel } from '@/components/cluster/IbGatewayLiveStatusPanel'
+import {
+  compactIbGatewaySummary,
+  ibGatewayExtraTags,
+} from '@/components/cluster/ibGatewaySummaryModel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
-import { OpsSection } from '@/components/layout/OpsSection'
 import {
   OpsVerdictStrip,
   type OpsVerdictLamp,
@@ -43,10 +46,7 @@ export function IbGatewayManagePage({ onNavigate }: { onNavigate?: (tabId: strin
 
   const ibReach = liveProbe.isLoading ? 'unknown' : liveProbe.probeReach
   const verdict = reachToVerdict(ibReach)
-  const cutoverOk =
-    liveProbe.status?.cutover?.reachability === 'ok' ||
-    liveProbe.status?.cutover?.legacy_socket_retired === true
-  const sectionHealthy = !liveProbe.isLoading && liveProbe.probeReach === 'ok' && cutoverOk
+  const extraTags = ibGatewayExtraTags(liveProbe.status)
 
   const runReconnect = useCallback(async () => {
     setActing(true)
@@ -67,14 +67,28 @@ export function IbGatewayManagePage({ onNavigate }: { onNavigate?: (tabId: strin
   }, [liveProbe])
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       <OpsVerdictStrip
+        compact
         ariaLabel="IB Gateway plugin verdict"
         title="IB GATEWAY"
         lamp={verdict.lamp}
         tagLabel={verdict.tagLabel}
         tagVariant={verdict.tagVariant}
-        summary={liveProbe.summary}
+        summary={
+          liveProbe.isLoading
+            ? 'Probing ib-gateway…'
+            : compactIbGatewaySummary(liveProbe.status)
+        }
+        extraTags={
+          <>
+            {extraTags.map(t => (
+              <DenseTag key={t.label} variant={t.variant}>
+                {t.label}
+              </DenseTag>
+            ))}
+          </>
+        }
         actions={
           <>
             <Button
@@ -107,7 +121,8 @@ export function IbGatewayManagePage({ onNavigate }: { onNavigate?: (tabId: strin
             {liveProbe.status?.mode != null && liveProbe.status.mode !== '' ? (
               <span>mode {liveProbe.status.mode}</span>
             ) : null}
-            {liveProbe.status?.deployment?.ready != null && liveProbe.status.deployment.ready !== '' ? (
+            {liveProbe.status?.deployment?.ready != null &&
+            liveProbe.status.deployment.ready !== '' ? (
               <span>deployment {liveProbe.status.deployment.ready}</span>
             ) : null}
           </>
@@ -120,21 +135,8 @@ export function IbGatewayManagePage({ onNavigate }: { onNavigate?: (tabId: strin
         </OpsFeedback>
       ) : null}
 
-      <OpsSection
-        title="Live status & cutover"
-        description="L0 observe + reconnect — publish path is Engineer → Launch Desk → Plugin."
-        leading={<StatusLamp value={ibReach} kind="reach" />}
-        headerExtra={<DenseTag variant={verdict.tagVariant}>{verdict.tagLabel}</DenseTag>}
-        bodyPadding="default"
-        overflow="visible"
-        collapsible
-        defaultCollapsed={sectionHealthy}
-      >
-        <div className="flex flex-col gap-3">
-          <IbGatewayLiveStatusPanel showPrimaryActions={false} embedded />
-          <IbGatewayCutoverStatusPanel embedded />
-        </div>
-      </OpsSection>
+      <IbGatewayLiveStatusPanel showPrimaryActions={false} />
+      <IbGatewayCutoverStatusPanel />
 
       <ConfirmDialog
         open={reconnectOpen}

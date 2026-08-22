@@ -18,10 +18,14 @@ export type OpsVerdictStripProps = {
   actions?: ReactNode
   /** Optional second line (metrics, chips, hints). */
   meta?: ReactNode
+  /** Extra chips after the primary verdict tag (same row). */
+  extraTags?: ReactNode
   /** Optional body under the strip (e.g. ranked issues) — same panel, one composition. */
   body?: ReactNode
   /** Optional icon before title (e.g. Task Mode icon). */
   leading?: ReactNode
+  /** Single-row, tighter padding — meta stays on the first line. */
+  compact?: boolean
   ariaLabel?: string
   className?: string
 }
@@ -40,17 +44,31 @@ export function OpsVerdictStrip({
   summary,
   actions,
   meta,
+  extraTags,
   body,
   leading,
+  compact = false,
   ariaLabel = 'Page verdict',
   className,
 }: OpsVerdictStripProps) {
+  const metaNode =
+    meta != null ? (
+      <div
+        className={cn(
+          'flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[var(--text-dense-caption)] text-muted-foreground',
+          !compact && 'mt-1 gap-x-3',
+        )}
+      >
+        {meta}
+      </div>
+    ) : null
+
   return (
     <section
-      className={cn('page-section panel-elevated px-3 py-2.5', className)}
+      className={cn('page-section panel-elevated px-3', compact ? 'py-1.5' : 'py-2.5', className)}
       aria-label={ariaLabel}
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <StatusLamp value={lamp} kind="reach" />
         {leading}
         {typeof title === 'string' ? (
@@ -61,16 +79,21 @@ export function OpsVerdictStrip({
         <DenseTag variant={tagVariant} title={tagTitle} className="text-[10px] font-semibold">
           {tagLabel}
         </DenseTag>
-        <span className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)]">{summary}</span>
+        {extraTags}
+        <span
+          className={cn(
+            'min-w-0 flex-1 text-[var(--text-dense-meta)]',
+            !compact && 'truncate',
+          )}
+        >
+          {summary}
+        </span>
+        {compact ? metaNode : null}
         {actions != null ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">{actions}</div>
         ) : null}
       </div>
-      {meta != null ? (
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[var(--text-dense-caption)] text-muted-foreground">
-          {meta}
-        </div>
-      ) : null}
+      {!compact ? metaNode : null}
       {body != null ? (
         <div className="cluster-health-verdict-body mt-2 border-t border-border pt-2">{body}</div>
       ) : null}

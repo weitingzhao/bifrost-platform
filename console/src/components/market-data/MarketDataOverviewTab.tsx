@@ -1,16 +1,21 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
+import { Button, DenseTag } from '@bifrost/ui'
 import { fetchQualityScore, isProxyError } from '@/api/marketDataPlugin'
+import type { MarketDataWorkerInfo } from '@/api/satelliteBusTypes'
+import { AnalyticsDemandPanel } from '@/components/market-data/AnalyticsDemandPanel'
+import { ApiReachabilityPanel } from '@/components/market-data/ApiReachabilityPanel'
 import { DataVitalsStrip } from '@/components/market-data/DataVitalsStrip'
-import {
-  MarketDataFreshnessTable,
-  MarketDataWorkersTable,
-} from '@/components/market-data/MarketDataProbeTables'
-import { sortFreshness, workerReady } from '@/components/market-data/marketDataProbeUtils'
-import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
+import { WorkersFreshnessPanel } from '@/components/market-data/WorkersFreshnessPanel'
+import { sortFreshness } from '@/components/market-data/marketDataProbeUtils'
+import { FlashValue } from '@/components/market-data/overviewDash'
+import { fmtCount, parseReadyRatio } from '@/components/market-data/overviewDashModel'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import type { MarketDataLiveProbeState } from '@/hooks/useMarketDataLiveProbe'
+
+function poolOf(workers: MarketDataWorkerInfo[], pool: string): MarketDataWorkerInfo | undefined {
+  return workers.find(w => (w.pool ?? '').toLowerCase() === pool)
+}
 
 function reachToVerdict(reach: MarketDataLiveProbeState['probeReach']): {
   lamp: 'ok' | 'degraded' | 'fail' | 'unknown'
@@ -31,10 +36,10 @@ function reachToVerdict(reach: MarketDataLiveProbeState['probeReach']): {
 
 export function MarketDataOverviewTab({
   marketProbe,
-  onOpenCoverageReadiness,
+  onOpenCoverage,
 }: {
   marketProbe: MarketDataLiveProbeState
-  onOpenCoverageReadiness?: () => void
+  onOpenCoverage?: (panel: 'readiness' | 'financials' | 'quality') => void
 }) {
   const mdReach = marketProbe.isLoading ? 'unknown' : marketProbe.probeReach
   const marketVerdict = reachToVerdict(mdReach)
@@ -46,15 +51,13 @@ export function MarketDataOverviewTab({
     [marketProbe.status?.freshness],
   )
   const freshnessOk = freshness.filter(f => f.verdict === 'ok').length
-  const freshnessAttention = freshness.filter(f => f.verdict !== 'ok')
-  const freshnessAllOk =
-    freshness.length > 0 && freshnessAttention.length === 0 && !marketProbe.isLoading
-  const workersAllReady =
-    workers.length > 0 && workers.every(workerReady) && !marketProbe.isLoading
-  const sectionHealthy =
-    !marketProbe.isLoading && marketProbe.probeReach === 'ok' && freshnessAllOk && workersAllReady
-
   const readiness = marketProbe.status?.readiness_rollup ?? null
+  const stocks = poolOf(workers, 'stocks')
+  const options = poolOf(workers, 'options')
+  const deployReady = deployments.filter(d => {
+    const ratio = parseReadyRatio(d.ready)
+    return ratio != null && ratio.d > 0 && ratio.n === ratio.d
+  }).length
 
   const qualityQ = useQuery({
     queryKey: ['market-data', 'coverage', 'quality-score'],
@@ -68,14 +71,82 @@ export function MarketDataOverviewTab({
     quality?.summary ?? (quality?.ok === true ? 'PASS' : quality != null ? 'FAIL' : null)
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       <OpsVerdictStrip
+        compact
         ariaLabel="Market Data plugin verdict"
         title="MARKET DATA PLUGIN"
         lamp={marketVerdict.lamp}
         tagLabel={marketVerdict.tagLabel}
         tagVariant={marketVerdict.tagVariant}
-        summary={marketProbe.summary}
+        tagTitle="Plugin reach — Coverage quality is a separate axis"
+        extraTags={
+          qualitySummary != null ? (
+            <button
+              type="button"
+              className="inline-flex border-0 bg-transparent p-0"
+              title="Coverage → Quality Score"
+              onClick={() => onOpenCoverage?.('quality')}
+            >
+              <DenseTag variant={qualitySummary === 'PASS' ? 'success' : 'danger'}>
+                Quality {qualitySummary}
+              </DenseTag>
+            </button>
+          ) : null
+        }
+        summary={
+          <span className="inline-flex flex-wrap items-center gap-x-1.5">
+            <span>
+              {deployments.length > 0 ? `${deployReady}/${deployments.length} ready` : marketProbe.summary}
+            </span>
+            {stocks != null ? (
+              <span>
+                · stocks{' '}
+                <FlashValue value={stocks.jobs_done}>{fmtCount(stocks.jobs_done)}</FlashValue> done
+                {stocks.jobs_failed > 0 ? (
+                  <>
+                    {' '}
+                    <FlashValue value={stocks.jobs_failed} invert className="text-destructive">
+                      {fmtCount(stocks.jobs_failed)} fail
+                    </FlashValue>
+                  </>
+                ) : null}
+              </span>
+            ) : null}
+            {options != null ? (
+              <span>
+                · options{' '}
+                <FlashValue value={options.jobs_done}>{fmtCount(options.jobs_done)}</FlashValue> done
+                {options.jobs_failed > 0 ? (
+                  <>
+                    {' '}
+                    <FlashValue value={options.jobs_failed} invert className="text-destructive">
+                      {fmtCount(options.jobs_failed)} fail
+                    </FlashValue>
+                  </>
+                ) : null}
+              </span>
+            ) : null}
+            {freshness.length > 0 ? (
+              <span>
+                · fresh{' '}
+                <FlashValue value={freshnessOk}>
+                  {freshnessOk}/{freshness.length}
+                </FlashValue>
+              </span>
+            ) : null}
+            {marketProbe.status?.autonomy != null ? (
+              <span className="text-[var(--muted-foreground)]">
+                · {marketProbe.status.autonomy}
+              </span>
+            ) : null}
+            {marketProbe.status?.health_reachability != null ? (
+              <span className="text-[var(--muted-foreground)]">
+                · health {marketProbe.status.health_reachability}
+              </span>
+            ) : null}
+          </span>
+        }
         actions={
           <Button
             variant="outline"
@@ -86,155 +157,26 @@ export function MarketDataOverviewTab({
             Refresh
           </Button>
         }
-        meta={
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span>
-              freshness {freshness.length > 0 ? `${freshnessOk}/${freshness.length} ok` : '—'}
-              {marketProbe.status?.autonomy != null
-                ? ` · autonomy ${marketProbe.status.autonomy}`
-                : ''}
-              {marketProbe.status?.health_reachability != null
-                ? ` · health ${marketProbe.status.health_reachability}`
-                : ''}
-            </span>
-            {qualitySummary != null ? (
-              <DenseTag
-                variant={qualitySummary === 'PASS' ? 'success' : 'danger'}
-                title="Coverage → Quality Score"
-              >
-                Quality {qualitySummary}
-              </DenseTag>
-            ) : null}
-          </span>
-        }
       />
 
-      <DataVitalsStrip />
+      <DataVitalsStrip onOpenCoverage={onOpenCoverage} />
 
-      <OpsSection
-        title="Workers & freshness"
-        description="L0 observe via platform-api GET /api/v1/plugins/market-data/status"
-        leading={<StatusLamp value={mdReach} kind="reach" />}
-        headerExtra={
-          <DenseTag variant={marketVerdict.tagVariant}>{marketVerdict.tagLabel}</DenseTag>
-        }
-        bodyPadding="default"
-        overflow="visible"
-        collapsible
-        defaultCollapsed={sectionHealthy}
-      >
-        <div className="flex flex-col gap-4">
-          {freshnessAttention.length > 0 ? (
-            <div
-              className="rounded-md border border-[color-mix(in_srgb,var(--warning)_45%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_10%,var(--secondary))] px-3 py-2"
-              role="status"
-            >
-              <p className="m-0 text-[var(--text-dense-label)] font-semibold">Attention</p>
-              <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                {freshnessAttention.length} dimension
-                {freshnessAttention.length === 1 ? '' : 's'} not ok:{' '}
-                {freshnessAttention.map(f => `${f.dimension} (${f.verdict})`).join(' · ')}
-              </p>
-            </div>
-          ) : null}
+      <AnalyticsDemandPanel freshness={freshness} onOpenCoverage={onOpenCoverage} />
 
-          <div className="flex flex-col gap-2">
-            <OpsSubsectionTitle>Freshness</OpsSubsectionTitle>
-            {freshness.length === 0 ? (
-              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                No ingest_freshness rows yet — run workers / daily CronJobs, then refresh.
-              </p>
-            ) : (
-              <MarketDataFreshnessTable rows={freshness} collapsibleWhenOk={freshnessAllOk} />
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <OpsSubsectionTitle>Workers</OpsSubsectionTitle>
-            {deployments.length === 0 && workers.length === 0 ? (
-              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                No deployment / worker snapshot yet — apply k8s/base or check platform-api probe.
-              </p>
-            ) : (
-              <MarketDataWorkersTable
-                deployments={deployments}
-                workers={workers}
-                collapsibleWhenOk={workersAllReady}
-              />
-            )}
-          </div>
-
-          {readiness != null ? (
-            <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="m-0 text-[var(--text-dense-label)] font-semibold">
-                  Data readiness rollup
-                </p>
-                {onOpenCoverageReadiness != null ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onOpenCoverageReadiness}
-                    title="Open Coverage → Readiness panel"
-                  >
-                    Open Readiness
-                  </Button>
-                ) : null}
-              </div>
-              <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Universe {readiness.universe} · Snapshot {readiness.snapshot_covered}/
-                {readiness.snapshot_rows} · Vendor gaps {readiness.vendor_gap_count} · as-of{' '}
-                {readiness.as_of}
-                {readiness.source ? ` · ${readiness.source}` : ''}
-              </p>
-              <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                Producer dashboard: Coverage → Readiness (?tab=coverage&panel=readiness). Trade owns
-                SEPA criteria / stock_readiness_daily publish — not this panel.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                Readiness rollup unavailable (Plugin snapshot-coverage / vendor-gap unreachable).
-              </p>
-              {onOpenCoverageReadiness != null ? (
-                <Button variant="outline" size="sm" onClick={onOpenCoverageReadiness}>
-                  Open Readiness
-                </Button>
-              ) : null}
-            </div>
-          )}
-        </div>
-      </OpsSection>
-
-      <OpsSection
-        title="API reachability"
-        description="Plugin API is reached via platform-api proxy (/api/v1/plugins/market-data/api/market/*)."
-        bodyPadding="default"
-        overflow="visible"
-        collapsible
-        defaultCollapsed={marketProbe.probeReach === 'ok'}
-      >
-        <ul className="m-0 list-disc space-y-1 pl-4 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          <li>
-            Status probe:{' '}
-            <span className="font-mono text-[var(--foreground)]">
-              GET /api/v1/plugins/market-data/status
-            </span>
-          </li>
-          <li>
-            Plugin proxy:{' '}
-            <span className="font-mono text-[var(--foreground)]">
-              /api/v1/plugins/market-data/api/market/*
-            </span>{' '}
-            → market-data-api:8790 (or MARKET_DATA_API_URL)
-          </li>
-          <li>
-            Overall reach:{' '}
-            <DenseTag variant={marketVerdict.tagVariant}>{marketVerdict.tagLabel}</DenseTag>
-          </li>
-        </ul>
-      </OpsSection>
+      <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+        <WorkersFreshnessPanel
+          marketProbe={marketProbe}
+          freshness={freshness}
+          deployments={deployments}
+          workers={workers}
+          readiness={readiness}
+          onOpenCoverage={onOpenCoverage}
+          reachLamp={marketVerdict.lamp}
+          reachTag={marketVerdict.tagLabel}
+          reachVariant={marketVerdict.tagVariant}
+        />
+        <ApiReachabilityPanel marketProbe={marketProbe} />
+      </div>
     </div>
   )
 }

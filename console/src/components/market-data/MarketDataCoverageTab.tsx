@@ -165,7 +165,7 @@ export function MarketDataCoverageTab({
   const capPct = capTotal > 0 ? Math.round(((capImpl + capPartial * 0.5) / capTotal) * 100) : 0
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       <DataInventoryStrip />
 
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
@@ -320,18 +320,26 @@ export function MarketDataCoverageTab({
         </OpsSection>
       ) : null}
 
-      <MarketDataJsonProbeCard
-        key={`probe-${panel}`}
-        title="JSON Probe"
+      <OpsSection
+        title="JSON probe"
         description="Read-only GET against Plugin /market/* via platform-api proxy"
-        defaultPath={
-          panel === 'readiness'
-            ? '/market/readiness/snapshot-coverage'
-            : panel === 'financials'
-              ? '/market/readiness/financials-by-instrument-type'
-              : '/market/coverage/db-summary'
-        }
-      />
+        bodyPadding="compact"
+        overflow="visible"
+        collapsible
+        defaultCollapsed
+      >
+        <MarketDataJsonProbeCard
+          key={`probe-${panel}`}
+          title="JSON Probe"
+          defaultPath={
+            panel === 'readiness'
+              ? '/market/readiness/snapshot-coverage'
+              : panel === 'financials'
+                ? '/market/readiness/financials-by-instrument-type'
+                : '/market/coverage/db-summary'
+          }
+        />
+      </OpsSection>
     </div>
   )
 }

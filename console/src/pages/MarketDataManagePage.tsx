@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import { SegmentControl } from '@bifrost/ui'
-import { MarketDataAnalyticsTab } from '@/components/market-data/MarketDataAnalyticsTab'
 import { MarketDataCoverageTab } from '@/components/market-data/MarketDataCoverageTab'
 import { MarketDataIngestTab } from '@/components/market-data/MarketDataIngestTab'
 import { MarketDataOverviewTab } from '@/components/market-data/MarketDataOverviewTab'
@@ -14,12 +13,15 @@ import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
 
 /**
  * Subcontractors → Market Data — Plugin management page (P6).
- * Tabs: Overview | Coverage | Ingest | Analytics (D18=A).
+ * Tabs: Overview | Coverage | Ingest.
  * Deep link: ?tab=coverage&panel=readiness|financials|quality|db-summary|capability
+ * Legacy ?tab=analytics lands on Overview (demand dashboard).
  */
 export function MarketDataManagePage() {
   const initial = readMdSearchParams()
-  const [tab, setTab] = useState<MarketDataManageTab>(initial.tab ?? 'overview')
+  const [tab, setTab] = useState<MarketDataManageTab>(() =>
+    initial.tab === 'analytics' ? 'overview' : (initial.tab ?? 'overview'),
+  )
   const [coveragePanel, setCoveragePanel] = useState<CoverageDetailPanel>(
     initial.panel ?? 'quality',
   )
@@ -42,7 +44,7 @@ export function MarketDataManagePage() {
   }, [])
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <SegmentControl
           size="sm"
@@ -53,7 +55,6 @@ export function MarketDataManagePage() {
             { value: 'overview', label: 'Overview' },
             { value: 'coverage', label: 'Coverage' },
             { value: 'ingest', label: 'Ingest' },
-            { value: 'analytics', label: 'Analytics' },
           ]}
         />
       </div>
@@ -61,14 +62,13 @@ export function MarketDataManagePage() {
       {tab === 'overview' ? (
         <MarketDataOverviewTab
           marketProbe={marketProbe}
-          onOpenCoverageReadiness={() => openCoveragePanel('readiness')}
+          onOpenCoverage={openCoveragePanel}
         />
       ) : null}
       {tab === 'coverage' ? (
         <MarketDataCoverageTab panel={coveragePanel} onPanelChange={setCoveragePanel} />
       ) : null}
       {tab === 'ingest' ? <MarketDataIngestTab /> : null}
-      {tab === 'analytics' ? <MarketDataAnalyticsTab /> : null}
     </div>
   )
 }

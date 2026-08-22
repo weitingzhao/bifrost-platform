@@ -57,6 +57,15 @@ const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
     openTabId: 'analytics-pipeline',
     openLabel: 'Open Analytics',
   },
+  {
+    id: 'research-engine',
+    name: 'Research',
+    vendor: 'bifrost-research',
+    role: 'OLAP engines · forecast accuracy / token cost / pipeline health · Research API :8795 @ research NS',
+    lifecycle: 'live',
+    openTabId: 'research-engine',
+    openLabel: 'Open Research',
+  },
 ]
 
 function reachLabel(reach: 'ok' | 'degraded' | 'fail' | 'unknown', loading: boolean): string {

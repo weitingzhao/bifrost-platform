@@ -248,6 +248,10 @@ export function useLaunchDeskChecklistSignals(opts?: {
         const lastOk = isAgentLaunchLastDeployOk(
           agentDeploy.data?.last?.status,
           readAgentLaunchEvidence(store.selectedTarget),
+          {
+            runnersLive: targetRunner?.status === 'ok',
+            runnerVersion: targetRunner?.version,
+          },
         )
         const agentLoading = agentBridge.isLoading || agentDeploy.isLoading
         const agentChecks = [canOperate, deployEnabled, runnersOk, lastOk]

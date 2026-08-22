@@ -1,0 +1,220 @@
+id: research-runtime-ignition
+title: Research Runtime Ignition — OLAP compute plane live
+description: |
+    Research mode — bring Wave 2–6 Research Engine code from repo to k3s:
+    research NS + research-api :8795 + dbt/volatility CronJobs + daily engines +
+    intraday/settlement + honest Trade FE empty states for proxy/news-blocked pages.
+    Zero new engines. D10 BLOCKED. D13 OLAP-only. Dagster stays replicas:0.
+status: active
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/research-runtime-ignition/SKILL.md
+model: composer-2.5
+delivery:
+    board_visible: true
+    former_location: Satellite · data-layer-k3s · research-runtime-ignition
+    sign_off_mechanism: api
+phases:
+    - id: P0
+      title: Preflight — image / secrets / CNPG / DDL
+      status: done
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Follow plan Research Runtime Ignition.
+        Read-only where possible; DDL apply is idempotent only.
+        D10 BLOCKED · D13 OLAP-only · no Dagster enable.
+      verify_cmd: |
+        kubectl -n data exec bifrost-postgres-1 -- psql -U postgres -d bifrost_golden_source -c "SELECT count(*) FROM information_schema.tables WHERE table_schema IN ('research','market_analytics')"
+      acceptance:
+        - research + market_analytics schemas exist with Wave 3–6 tables
+        - analytics_writer has USAGE/CREATE on research + market_analytics
+        - bifrost-research:0.5.0 image available in cluster registry (or build/push done)
+      depends_on: []
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed CNPG host bifrost-postgres-rw.data.svc.cluster.local
+            - Owner confirmed analytics_writer password source (bifrost-analytics-secrets)
+      agent_session:
+        enabled: true
+    - id: P1
+      title: Foundation — NS + Secret + research-api + Argo/apply
+      status: done
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Apply namespace, secrets, PVC, api Deployment/Service.
+        platform-api /api/v1/research/status must return reachable.
+        D10 BLOCKED · D13 OLAP-only.
+      verify_cmd: |
+        kubectl -n research get deploy research-api && curl -sf http://127.0.0.1:8780/api/v1/research/status
+      acceptance:
+        - research NS exists; research-api 1/1 Ready
+        - GET /health on :8795 returns 200
+        - platform-api research status reachable true
+      depends_on:
+        - P0
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed research-api healthy in Ops Console Research tab
+      agent_session:
+        enabled: true
+    - id: P2
+      title: dbt + market_analytics CronJobs
+      status: done
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Apply dbt/ + cronjob-volatility. Manual Job trigger for first run.
+        Screener must not regress.
+      verify_cmd: |
+        kubectl -n research get cronjobs
+      acceptance:
+        - volatility CronJobs applied
+        - market_analytics.* has recent rows (or Job succeeded writing)
+        - Stock Screener still works via Trade api-research
+      depends_on:
+        - P1
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed no Screener regression
+      agent_session:
+        enabled: true
+    - id: P3
+      title: Engines daily — 6 slots + backfill
+      status: done
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Apply cronjob-engines.yaml. Backfill momentum→gex→iv-surface→flow→terrain→forecast.
+      verify_cmd: |
+        kubectl -n research get cronjobs -l app.kubernetes.io/part-of=bifrost-research
+      acceptance:
+        - research.momentum_score_daily / gex_daily / iv_surface_daily / order_sentiment_daily / market_terrain_daily / forecast_session have recent rows
+        - Momentum Radar and Forecast Sessions pages non-empty when API reachable
+      depends_on:
+        - P2
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed Forecast Sessions list non-empty
+      agent_session:
+        enabled: true
+    - id: P4
+      title: Intraday + Settlement CronJobs
+      status: done
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Apply cronjob-intraday.yaml. Manual Job for gex-intraday once.
+      verify_cmd: |
+        kubectl -n research get cronjob research-gex-intraday research-terrain-intraday research-settlement
+      acceptance:
+        - gex_intraday / terrain_intraday have asof slices
+        - GEX Intraday page shows data for SPX (or configured symbol)
+      depends_on:
+        - P3
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed GEX Intraday page shows hourly data
+      agent_session:
+        enabled: true
+    - id: P5
+      title: Trade FE honest empty states
+      status: done
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        OrderSentimentPage proxy source badge; EventRadarPage news-source EmptyState.
+        lint + build + check:legacy-css.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run build && npm run check:legacy-css
+      acceptance:
+        - Order Sentiment shows snapshot proxy warning when data_source is option_snapshot_aggregates
+        - Event Radar empty state says News source not configured
+        - lint/build/legacy-css pass
+      depends_on:
+        - P4
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed Intelligence pages are not misleading
+      agent_session:
+        enabled: true
+    - id: P6
+      title: Governance & handoff
+      status: done
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Spine milestone research-runtime-ignition DONE; catalog freshness note;
+        Operate Queue follow-ons; CLAUDE.md + version 0.5.1.
+      verify_cmd: |
+        rg -n research-runtime-ignition bifrost-platform/config/ops-context.yaml
+      acceptance:
+        - spine milestone present
+        - researchEngineCatalog notes pipeline health
+        - two Operate Queue follow-ons submitted (or recorded for Owner)
+        - bifrost-research version 0.5.1
+      depends_on:
+        - P5
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed Delivery Board program complete
+            - Owner acknowledged follow-ons for news source + options tape
+      agent_session:
+        enabled: true
+post_completion:
+    new_capabilities:
+        - "research NS + research-api :8795 live on k3s"
+        - "dbt / volatility / engines / intraday / settlement CronJobs producing market_analytics.* + research.*"
+        - "Trade FE honest empty states (Order Sentiment proxy badge; Event Radar news-source empty)"
+        - "spine milestone research-runtime-ignition; bifrost-research 0.5.1"
+    new_risks:
+        - "Order Sentiment remains option_snapshot_aggregates proxy until market.option_trades"
+        - "Event Radar has no news ingest until Owner picks a source"
+        - "Dagster still replicas:0 — CronJobs are the runtime path"
+        - "D10 BLOCKED — no live trading path from Research"
+    operate_queue_items:
+        - id: research-radar-news-source
+          source_lane_id: data-layer-k3s
+          operate_lane: business-advisory
+          title: "Research Event Radar — choose news ingest source"
+          description: >
+            Runtime Ignition left Event Radar news ingest out of scope;
+            Trade FE EmptyState points here. Decide Research-workspace input
+            directory mount vs Plugin RSS agent vs manual API.
+          handoff_kind: one_off
+          reason: "Event Radar news ingest was explicitly out of ignition scope"
+          acceptance_criteria:
+            - "Owner decides news source architecture"
+            - "Ingest path documented"
+            - "Event Radar empty state retires when first batch lands"
+          verification_steps:
+            - "Operate Queue item visible after Owner approves post-completion"
+            - "GET /research/event-radar/events returns rows after ingest enabled"
+          risk_level: medium
+          owner: vision-mac-trader
+        - id: plugin-options-tape
+          source_lane_id: data-layer-k3s
+          operate_lane: governance
+          title: "Market Data Plugin — market.option_trades for Order Sentiment"
+          description: >
+            Order Sentiment uses option_snapshot_aggregates proxy; Trade FE
+            shows snapshot proxy badge. Need Plugin writes of market.option_trades
+            and non-proxy research.order_sentiment_daily data_source.
+          handoff_kind: one_off
+          reason: "Order Sentiment honesty depends on options tape, not ignition runtime"
+          acceptance_criteria:
+            - "Plugin writes market.option_trades"
+            - "New research.order_sentiment_daily rows use non-proxy data_source"
+            - "Trade FE proxy badge retires"
+          verification_steps:
+            - "Confirm Plugin schema + worker path"
+            - "Backfill one day and check data_source"
+          risk_level: medium
+          owner: vision-mac-trader
+metadata:
+    lane_id: data-layer-k3s
+    operate_lane: business-advisory
+    tags:
+        - research
+        - runtime-ignition
+        - d10-safe
+        - d13-olap

@@ -54,6 +54,11 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
     status: 'done',
     notes: 'Plugin Gallery observe/reconnect — Need publish? → Launch Plugin',
   },
+  'research-engine': {
+    status: 'partial',
+    notes:
+      'Wave 5.2 Research governance — accuracy / token cost / pipeline health / runs via /api/v1/research/*; Dagster freshness pending W5.1',
+  },
   program: {
     status: 'done',
     notes: 'ops-context spine: milestones, decisions, north_star',

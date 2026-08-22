@@ -6,33 +6,39 @@ import {
   type QualityCheckItem,
   type QualityScoreResponse,
 } from '@/api/marketDataPlugin'
+import {
+  DashCard,
+  Meter,
+  ScoreRing,
+} from '@/components/market-data/overviewDash'
+import { toneByLevel } from '@/components/market-data/overviewDashModel'
+import {
+  qualityCheckCaption,
+  qualityCheckFill,
+  qualityCheckLabel,
+} from '@/components/market-data/qualityScoreModel'
 import { OpsSection } from '@/components/layout/OpsSection'
 
-const CHECK_LABELS: Record<string, string> = {
-  stock_daily_coverage: 'Stock daily coverage',
-  option_snapshot_coverage: 'Option snapshot coverage',
-  option_oi_coverage: 'Option OI coverage',
-  freshness: 'Freshness',
-}
-
-function checkLabel(check: string): string {
-  return CHECK_LABELS[check] ?? check.replace(/_/g, ' ')
-}
-
-function CheckRow({ item }: { item: QualityCheckItem }) {
+function CheckCard({ item }: { item: QualityCheckItem }) {
   const pass = item.ok === true
+  const fill = qualityCheckFill(item)
   return (
-    <div className="flex flex-wrap items-start gap-2">
-      <DenseTag variant={pass ? 'success' : 'danger'}>{pass ? 'PASS' : 'FAIL'}</DenseTag>
-      <div className="min-w-0 flex-1">
-        <p className="m-0 text-[var(--text-dense-label)] font-medium">{checkLabel(item.check)}</p>
-        {item.detail ? (
-          <p className="m-0 mt-0.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-            {item.detail}
-          </p>
-        ) : null}
-      </div>
-    </div>
+    <DashCard
+      title={qualityCheckLabel(item.check)}
+      tag={pass ? 'PASS' : 'FAIL'}
+      tagVariant={pass ? 'success' : 'danger'}
+      value={pass ? 'OK' : `${Math.round(fill)}%`}
+      rawValue={fill}
+      invertFlash={!pass}
+      caption={qualityCheckCaption(item)}
+      captionTitle={item.detail}
+    >
+      <Meter
+        fillPct={fill}
+        toneClass={toneByLevel(pass ? 'ok' : fill >= 50 ? 'scheduled' : 'missing')}
+        label={`${item.check} ${item.detail ?? ''}`}
+      />
+    </DashCard>
   )
 }
 
@@ -57,18 +63,19 @@ export function QualityScoreSection() {
   const summary =
     score?.summary ?? (score?.ok === true ? 'PASS' : score != null ? 'FAIL' : null)
   const checks: QualityCheckItem[] = score?.checks ?? []
+  const passed = checks.filter(c => c.ok).length
+  const failed = checks.length - passed
   const overallPass = summary === 'PASS' || score?.ok === true
 
   return (
     <OpsSection
-      title="Data Quality Score"
-      description="Plugin GET /market/coverage/quality-score — four acceptance checks"
+      title="Data quality score"
       headerExtra={
         q.isLoading || err != null || summary == null ? null : (
           <DenseTag variant={overallPass ? 'success' : 'danger'}>{summary}</DenseTag>
         )
       }
-      bodyPadding="default"
+      bodyPadding="compact"
       overflow="visible"
       collapsible
       defaultCollapsed={false}
@@ -84,10 +91,18 @@ export function QualityScoreSection() {
           No quality checks returned
         </p>
       ) : (
-        <div className="flex flex-col gap-3">
-          {checks.map(item => (
-            <CheckRow key={item.check} item={item} />
-          ))}
+        <div className="flex items-stretch gap-2">
+          <ScoreRing
+            ready={passed}
+            blocked={failed}
+            total={Math.max(checks.length, 1)}
+            caption="pass"
+          />
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5 xl:grid-cols-4">
+            {checks.map(item => (
+              <CheckCard key={item.check} item={item} />
+            ))}
+          </div>
         </div>
       )}
     </OpsSection>

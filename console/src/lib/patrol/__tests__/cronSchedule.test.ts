@@ -4,6 +4,7 @@ import {
   formatCountdownTo,
   formatDurationParts,
   formatNextRunAt,
+  iterCronFiresUtc,
 } from '@/lib/patrol/cronSchedule'
 
 describe('describeCronSchedule', () => {
@@ -39,6 +40,37 @@ describe('formatCountdownTo', () => {
   it('handles missing', () => {
     expect(formatCountdownTo(undefined, now)).toBe('—')
     expect(formatCountdownTo('', now)).toBe('—')
+  })
+})
+
+describe('iterCronFiresUtc', () => {
+  it('matches Plugin stock-eod and option-refresh', () => {
+    const after = new Date('2026-08-17T15:00:00Z')
+    const eod = iterCronFiresUtc('30 21 * * *', after, new Date('2026-08-19T00:00:00Z'))
+    expect(eod.map(d => d.toISOString())).toEqual([
+      '2026-08-17T21:30:00.000Z',
+      '2026-08-18T21:30:00.000Z',
+    ])
+    const refresh = iterCronFiresUtc(
+      '20 */6 * * *',
+      new Date('2026-08-17T00:00:00Z'),
+      new Date('2026-08-18T00:00:00Z'),
+    )
+    expect(refresh.map(d => d.toISOString())).toEqual([
+      '2026-08-17T00:20:00.000Z',
+      '2026-08-17T06:20:00.000Z',
+      '2026-08-17T12:20:00.000Z',
+      '2026-08-17T18:20:00.000Z',
+    ])
+  })
+
+  it('matches weekly Saturday oi-gap-heal', () => {
+    const fires = iterCronFiresUtc(
+      '0 4 * * 6',
+      new Date('2026-08-10T00:00:00Z'),
+      new Date('2026-08-17T12:00:00Z'),
+    )
+    expect(fires.map(d => d.toISOString())).toEqual(['2026-08-15T04:00:00.000Z'])
   })
 })
 

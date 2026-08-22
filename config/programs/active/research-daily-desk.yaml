@@ -1,0 +1,125 @@
+id: research-daily-desk
+title: Research Daily Desk — P0 Brief + P1 decision visuals
+description: |
+    Research / Product — Daily Brief home synthesizes existing Options/Stocks
+    Starter + Financials engines (Event Radar, SEPA, Momentum, IV, Terrain, GEX,
+    Forecast). P1 deepens Playbook LIVE/Invalidate/Mechanism, Analysis Model IV/Close,
+    and GEX timeline chart. Zero new engines. No Options Trades entitlement.
+    D10 BLOCKED. Dagster stays replicas:0.
+status: active
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/research-daily-desk/SKILL.md
+model: composer-2.5
+lane_id: data-layer-k3s
+delivery:
+    board_visible: true
+    former_location: Satellite · data-layer-k3s · research-daily-desk
+    sign_off_mechanism: api
+phases:
+    - id: P0
+      title: Daily Brief page + Ideas nav + router + program YAML
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Add DailyBriefPage at /research/daily-brief as Ideas first item.
+        Dense UI only. D10 BLOCKED. No new engines.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run build
+      acceptance:
+        - Daily Brief reachable from Research → Ideas (first item)
+        - Verdict strip + seven elevated cards with Open links
+        - Honest empty/warn lamps when SPX has no same-day rows
+      depends_on: []
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed Daily Brief opens on local Vite :5173
+      agent_session:
+        enabled: true
+    - id: P1
+      title: Playbook LIVE / Invalidate / Mechanism
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        IntradayPlaybookPage — LIVE on argmax; Invalidate rules; Mechanism=regime.
+        Do not invent butterfly/lottery copy.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run build
+      acceptance:
+        - Highest-probability scenario card shows LIVE DenseTag
+        - Each scenario shows Invalidate / Stop line
+        - Info bar Mechanism reflects terrain regime
+      depends_on:
+        - P0
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed Playbook decision cards on SPX
+      agent_session:
+        enabled: true
+    - id: P2
+      title: Analysis Model IV + Close 1σ
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Wire smile/ATM IV; Close shows 1σ from inputs or derived gamma half-width.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run build
+      acceptance:
+        - IV card shows ATM IV / RMSE / n_points / fit_model (or honest —)
+        - Close card shows 1σ with derived caption when proxied
+        - Still three columns only
+      depends_on:
+        - P1
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed IV card is not a stub
+      agent_session:
+        enabled: true
+    - id: P3
+      title: GexTimelineChart + mount on GEX Intraday
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}.
+        Pure SVG timeline (spot + call/zero-γ/put steps); keep strike chart.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run build && npm run check:legacy-css
+      acceptance:
+        - Timeline between info bar and strike chart
+        - Existing strike chart and time table retained
+      depends_on:
+        - P2
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed GEX timeline vs strike chart coexistence
+      agent_session:
+        enabled: true
+post_completion:
+    new_capabilities:
+        - "Trade Research Daily Brief at /research/daily-brief (Ideas first)"
+        - "Playbook LIVE + Invalidate + Mechanism from terrain regime"
+        - "Analysis Model IV card wired to smile/ATM IV; Close 1σ"
+        - "GEX Intraday timeline chart (spot + walls over asof_ts)"
+    new_risks:
+        - "Order Sentiment remains option_snapshot_aggregates proxy lamp only"
+        - "IV / smile rows may be empty for indexes without market_analytics coverage"
+        - "D10 BLOCKED — Daily Brief is observe-only, not trade signals"
+        - "Dagster still replicas:0 — CronJobs remain the compute path"
+    operate_queue_items:
+        - id: research-daily-desk-accept
+          source_lane_id: data-layer-k3s
+          operate_lane: business-advisory
+          title: "Research Daily Desk — Owner :5173 SPX smoke"
+          description: >
+            After Delivery Sign-off, smoke Daily Brief seven lamps + Open links,
+            Playbook LIVE/Invalidate, Analysis Model IV non-stub, GEX timeline
+            on local Vite against DEV Research API. Empty/warn when no same-day rows.
+          handoff_kind: one_off
+          reason: "Program delivers FE synthesis; Owner visual accept is the gate"
+          acceptance_criteria:
+            - "Daily Brief verdict + seven cards smoke on :5173"
+            - "No fabricated numbers when SPX rows missing"
+            - "lint + build + check:legacy-css already green"
+          verification_steps:
+            - "npm run dev:k3s → open /research/daily-brief"
+            - "Open Playbook / Analysis Model / GEX Intraday from Brief cards"
+          risk_level: low
+          owner: vision-mac-trader

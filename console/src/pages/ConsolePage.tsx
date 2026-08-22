@@ -66,6 +66,7 @@ import { IbGatewayManagePage } from '@/pages/IbGatewayManagePage'
 import { MarketDataManagePage } from '@/pages/MarketDataManagePage'
 import { FlexQueryManagePage } from '@/pages/FlexQueryManagePage'
 import { AnalyticsPipelinePage } from '@/pages/AnalyticsPipelinePage'
+import { ResearchEnginePage } from '@/pages/ResearchEnginePage'
 import { AgentReleasePage } from '@/pages/AgentReleasePage'
 import { PluginReleasePage } from '@/pages/PluginReleasePage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
@@ -149,6 +150,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'market-data-manage': 'Massive',
   'flex-query-manage': 'IB Flex',
   'analytics-pipeline': 'Analytics',
+  'research-engine': 'Research',
   defects: 'Defects',
 }
 
@@ -202,6 +204,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'IB Flex Plugin — scheduled Flex ingest into brokerage Golden Source (CNPG). Overview, Ingest, Coverage, Config.',
   'analytics-pipeline':
     'dbt SEPA analytics + Elementary observability — lineage DAG, catalog, CronJob status. Report hosted by analytics-docs.',
+  'research-engine':
+    'Research Engine OLAP governance — forecast accuracy (Path Hit / Close Miss), token cost KPIs, pipeline health, recent forecast runs. D10 blocked.',
   'plugin-release':
     'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Manage pages ≠ Publish.',
   'agent-release':
@@ -262,6 +266,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'market-data-manage',
   'flex-query-manage',
   'analytics-pipeline',
+  'research-engine',
   'plugin-release',
   'agent-release',
   'control-room',
@@ -1146,8 +1151,11 @@ function ConsolePageInner() {
           <IbGatewayManagePage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
         )}
         {viewTab === 'market-data-manage' && <MarketDataManagePage />}
-        {viewTab === 'flex-query-manage' && <FlexQueryManagePage />}
+        {viewTab === 'flex-query-manage' && (
+          <FlexQueryManagePage onOpenAgentDesk={openAgentDesk} />
+        )}
         {viewTab === 'analytics-pipeline' && <AnalyticsPipelinePage />}
+        {viewTab === 'research-engine' && <ResearchEnginePage />}
 
         {isGovernanceTab && (
           <div className="flex min-w-0 gap-4">

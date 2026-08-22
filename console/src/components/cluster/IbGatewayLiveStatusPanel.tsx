@@ -12,10 +12,17 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
+import type { IbGatewaySlotStatus } from '@/api/satelliteBusTypes'
 import { postIbGatewayControl } from '@/api/network'
+import {
+  DashCard,
+  Meter,
+  ScoreRing,
+} from '@/components/market-data/overviewDash'
+import { toneByLevel } from '@/components/market-data/overviewDashModel'
+import { OpsSection } from '@/components/layout/OpsSection'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { OpsSection } from '@/components/layout/OpsSection'
 
 function reachTagVariant(reach: string): 'success' | 'warning' | 'danger' | 'neutral' {
   if (reach === 'ok') return 'success'
@@ -24,13 +31,64 @@ function reachTagVariant(reach: string): 'success' | 'warning' | 'danger' | 'neu
   return 'neutral'
 }
 
+function slotTone(slot: IbGatewaySlotStatus): 'ok' | 'scheduled' | 'missing' | 'unknown' {
+  if (slot.connected && slot.reachability === 'ok') return 'ok'
+  if (slot.connected || slot.reachability === 'degraded') return 'scheduled'
+  if (slot.reachability === 'fail') return 'missing'
+  return 'unknown'
+}
+
+function SlotCard({
+  slot,
+  canOperate,
+  acting,
+  onMaintenance,
+}: {
+  slot: IbGatewaySlotStatus
+  canOperate: boolean
+  acting: boolean
+  onMaintenance: (enabled: boolean, accountId: string) => void
+}) {
+  const tone = slotTone(slot)
+  return (
+    <DashCard
+      title={slot.slot}
+      tag={slot.status}
+      tagVariant={slot.connected ? 'success' : 'neutral'}
+      value={slot.connected ? 'connected' : 'down'}
+      caption={`${slot.account_id} · reach ${slot.reachability}`}
+      captionTitle={slot.detail}
+    >
+      <Meter fillPct={slot.connected ? 100 : 0} toneClass={toneByLevel(tone)} label={slot.slot} />
+      {canOperate ? (
+        <div className="mt-1 flex gap-1">
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={acting}
+            onClick={() => onMaintenance(true, slot.account_id)}
+          >
+            Enter
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={acting}
+            onClick={() => onMaintenance(false, slot.account_id)}
+          >
+            Clear
+          </Button>
+        </div>
+      ) : null}
+    </DashCard>
+  )
+}
+
 export function IbGatewayLiveStatusPanel({
   showPrimaryActions = true,
   embedded = false,
 }: {
-  /** When false, hide Reconnect (page Verdict owns it). Mode switch stays here. Default true. */
   showPrimaryActions?: boolean
-  /** Flat inner block when nested under Plugin Gallery IB Gateway OpsSection. */
   embedded?: boolean
 } = {}) {
   const liveProbe = useIbGatewayLiveProbe()
@@ -67,25 +125,30 @@ export function IbGatewayLiveStatusPanel({
     }
   }, [])
 
-  const runModeSwitch = useCallback(async (mode: 'live' | 'mock') => {
-    setActing(true)
-    setActionMsg(null)
-    try {
-      const resp = await postIbGatewayControl('mode', { mode })
-      setActionMsg(resp.ok ? resp.message : `Failed: ${resp.message}`)
-      if (resp.ok) {
-        void liveProbe.refetch()
+  const runModeSwitch = useCallback(
+    async (mode: 'live' | 'mock') => {
+      setActing(true)
+      setActionMsg(null)
+      try {
+        const resp = await postIbGatewayControl('mode', { mode })
+        setActionMsg(resp.ok ? resp.message : `Failed: ${resp.message}`)
+        if (resp.ok) void liveProbe.refetch()
+      } catch (e) {
+        setActionMsg(e instanceof Error ? e.message : 'Mode switch failed')
+      } finally {
+        setActing(false)
+        setModeConfirm(null)
       }
-    } catch (e) {
-      setActionMsg(e instanceof Error ? e.message : 'Mode switch failed')
-    } finally {
-      setActing(false)
-      setModeConfirm(null)
-    }
-  }, [liveProbe])
+    },
+    [liveProbe],
+  )
 
   const status = liveProbe.status
   const currentMode = status?.mode?.toLowerCase()
+  const slots = status?.slots ?? []
+  const connected = slots.filter(s => s.connected).length
+  const degraded = slots.filter(s => !s.connected && s.reachability !== 'fail').length
+  const failed = slots.length - connected - degraded
 
   const modeButtons =
     currentMode === 'mock' ? (
@@ -100,7 +163,7 @@ export function IbGatewayLiveStatusPanel({
 
   const reconnectButton = showPrimaryActions ? (
     <Button variant="outline" size="xs" disabled={acting} onClick={() => setReconnectOpen(true)}>
-      Reconnect (rollout restart)
+      Reconnect
     </Button>
   ) : null
 
@@ -115,94 +178,115 @@ export function IbGatewayLiveStatusPanel({
   return (
     <OpsSection
       variant={embedded ? 'flat' : 'elevated'}
-      title="IB Gateway live status"
-      description={
-        showPrimaryActions
-          ? 'L0 probe via GET /api/v1/plugins/ib-gateway/status — redis-ib health + K8s deployment @ data NS.'
-          : embedded
-            ? 'Mode switch here · Reconnect on parent IB Gateway section header.'
-            : 'Mode switch here · Reconnect on page Verdict. L0 probe via GET /api/v1/plugins/ib-gateway/status.'
-      }
+      title="IB Gateway live"
+      description="TWS slots · mode switch here"
       actions={sectionActions}
-      bodyPadding="default"
-    >
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <StatusLamp value={liveProbe.probeReach} kind="reach" />
+      headerExtra={
         <DenseTag variant={reachTagVariant(liveProbe.probeReach)}>
-          {liveProbe.isLoading ? 'PROBING…' : liveProbe.probeReach.toUpperCase()}
+          {liveProbe.isLoading ? '…' : liveProbe.probeReach}
         </DenseTag>
-        <DenseTag variant="info">L0 status</DenseTag>
-        {status?.mode != null && (
-          <DenseTag variant={currentMode === 'live' ? 'success' : 'neutral'}>
-            mode: {status.mode}
-          </DenseTag>
-        )}
-        {status?.deployment?.ready != null && (
-          <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            deployment {status.deployment.ready}
-          </span>
-        )}
+      }
+      bodyPadding="compact"
+      overflow="visible"
+      collapsible={!embedded}
+      defaultCollapsed={false}
+    >
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-stretch gap-2">
+          <ScoreRing
+            ready={connected}
+            thin={degraded}
+            blocked={failed}
+            total={Math.max(slots.length, 1)}
+            caption="conn"
+          />
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {slots.map(slot => (
+              <SlotCard
+                key={slot.slot}
+                slot={slot}
+                canOperate={canOperate}
+                acting={acting}
+                onMaintenance={(en, id) => void runMaintenance(en, id)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {status?.hint != null && status.reachable !== true ? (
+          <p
+            className="m-0 line-clamp-2 break-words text-[var(--text-dense-caption)] text-warning"
+            title={status.hint}
+          >
+            {status.hint}
+          </p>
+        ) : null}
+
+        {actionMsg != null ? (
+          <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            {actionMsg}
+          </p>
+        ) : null}
+
+        <OpsSection
+          variant="flat"
+          title="Slot table"
+          collapsible
+          defaultCollapsed
+          bodyPadding="none"
+          overflow="visible"
+        >
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Slot</DenseTableHead>
+                <DenseTableHead>Account</DenseTableHead>
+                <DenseTableHead>Status</DenseTableHead>
+                <DenseTableHead>Reach</DenseTableHead>
+                {canOperate ? <DenseTableHead>Maintenance</DenseTableHead> : null}
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {slots.map(slot => (
+                <DenseTableRow key={slot.slot}>
+                  <DenseTableCell className="font-mono text-xs">{slot.slot}</DenseTableCell>
+                  <DenseTableCell>{slot.account_id}</DenseTableCell>
+                  <DenseTableCell>
+                    <DenseTag variant={slot.connected ? 'success' : 'neutral'}>
+                      {slot.status}
+                    </DenseTag>
+                  </DenseTableCell>
+                  <DenseTableCell>
+                    <StatusLamp value={slot.reachability} kind="reach" />
+                  </DenseTableCell>
+                  {canOperate ? (
+                    <DenseTableCell>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          disabled={acting}
+                          onClick={() => void runMaintenance(true, slot.account_id)}
+                        >
+                          Enter
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          disabled={acting}
+                          onClick={() => void runMaintenance(false, slot.account_id)}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </DenseTableCell>
+                  ) : null}
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        </OpsSection>
       </div>
-
-      <p className="m-0 mb-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-        {liveProbe.summary}
-      </p>
-
-      {status?.hint != null && status.reachable !== true && (
-        <p className="m-0 mb-3 text-[var(--text-dense-caption)] text-[var(--warning)]">{status.hint}</p>
-      )}
-
-      {actionMsg != null && (
-        <p className="m-0 mb-3 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">{actionMsg}</p>
-      )}
-
-      <DenseDataTable>
-        <DenseTableHeader>
-          <DenseTableHeadRow>
-            <DenseTableHead>Slot</DenseTableHead>
-            <DenseTableHead>Account</DenseTableHead>
-            <DenseTableHead>Status</DenseTableHead>
-            <DenseTableHead>Reach</DenseTableHead>
-            {canOperate && <DenseTableHead>Maintenance</DenseTableHead>}
-          </DenseTableHeadRow>
-        </DenseTableHeader>
-        <DenseTableBody>
-          {(status?.slots ?? []).map(slot => (
-            <DenseTableRow key={slot.slot}>
-              <DenseTableCell className="font-mono text-xs">{slot.slot}</DenseTableCell>
-              <DenseTableCell>{slot.account_id}</DenseTableCell>
-              <DenseTableCell>
-                <DenseTag variant={slot.connected ? 'success' : 'neutral'}>{slot.status}</DenseTag>
-              </DenseTableCell>
-              <DenseTableCell>
-                <StatusLamp value={slot.reachability} kind="reach" />
-              </DenseTableCell>
-              {canOperate && (
-                <DenseTableCell>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      disabled={acting}
-                      onClick={() => void runMaintenance(true, slot.account_id)}
-                    >
-                      Enter
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      disabled={acting}
-                      onClick={() => void runMaintenance(false, slot.account_id)}
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                </DenseTableCell>
-              )}
-            </DenseTableRow>
-          ))}
-        </DenseTableBody>
-      </DenseDataTable>
 
       <ConfirmDialog
         open={showPrimaryActions && reconnectOpen}

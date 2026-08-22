@@ -19,6 +19,8 @@ import (
 //   else: gatesComplete
 //
 // pending_review or empty assessment + requires_post_completion → NOT released.
+// Program assessment stays pending_review while any post-completion item is still
+// pending_review (partial Approve must not sessionRelease — refreshProgramAssessmentFromItems).
 
 var catalogCompleteAssessments = map[string]struct{}{
 	"no_handoff": {},

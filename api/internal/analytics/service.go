@@ -104,7 +104,12 @@ func (s *Service) probeReport(resp *StatusResponse) {
 	var r *http.Response
 	if s.cfg.DocsBaseURL != "" {
 		target := s.cfg.DocsBaseURL + "/elementary_report.html"
-		r, err = s.client.Get(target)
+		req, reqErr := http.NewRequest(http.MethodGet, target, nil)
+		if reqErr != nil {
+			return
+		}
+		req.Header.Set("Range", "bytes=0-0")
+		r, err = s.client.Do(req)
 	} else {
 		r, err = s.proxyViaKube(httpReq, "/elementary_report.html")
 	}
@@ -117,12 +122,25 @@ func (s *Service) probeReport(resp *StatusResponse) {
 	defer func() { _ = r.Body.Close() }()
 	if r.StatusCode == http.StatusOK || r.StatusCode == http.StatusPartialContent {
 		resp.ReportAvailable = true
-		if cl := r.Header.Get("Content-Length"); cl != "" {
-			var n int64
-			_, _ = fmt.Sscan(cl, &n)
-			resp.ReportBytes = n
-		} else if r.ContentLength > 0 {
-			resp.ReportBytes = r.ContentLength
+		// Range responses often set Content-Length=1; total size is in Content-Range: bytes 0-0/N
+		if cr := r.Header.Get("Content-Range"); cr != "" {
+			if i := strings.LastIndex(cr, "/"); i >= 0 && i+1 < len(cr) {
+				var n int64
+				if _, scanErr := fmt.Sscan(cr[i+1:], &n); scanErr == nil && n > 0 {
+					resp.ReportBytes = n
+				}
+			}
+		}
+		if resp.ReportBytes == 0 {
+			if cl := r.Header.Get("Content-Length"); cl != "" {
+				var n int64
+				_, _ = fmt.Sscan(cl, &n)
+				if n > 1 {
+					resp.ReportBytes = n
+				}
+			} else if r.ContentLength > 1 {
+				resp.ReportBytes = r.ContentLength
+			}
 		}
 	}
 }

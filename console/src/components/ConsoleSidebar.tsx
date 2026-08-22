@@ -80,6 +80,7 @@ export type ConsoleViewTab =
   | 'market-data-manage'
   | 'flex-query-manage'
   | 'analytics-pipeline'
+  | 'research-engine'
   | 'defects'
   | 'dev-sessions'
 

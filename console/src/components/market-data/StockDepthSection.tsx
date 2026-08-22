@@ -16,6 +16,11 @@ import {
   type BarQualityDetailResponse,
   type StockDayGapResponse,
 } from '@/api/marketDataPlugin'
+import {
+  CoverageBarRow,
+  ScoreRing,
+} from '@/components/market-data/overviewDash'
+import { fmtCount, toneByLevel } from '@/components/market-data/overviewDashModel'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 type DepthRowStatus = 'ok' | 'gaps' | 'error' | 'partial'
@@ -243,12 +248,22 @@ export function StockDepthSection({
   const recentGaps = useMemo(() => buildRecentGapRows(rows), [rows])
 
   const loading = Boolean(watchlistLoading) || (symbols.length > 0 && depthQ.isLoading)
+  const zeroGaps = rows.filter(r => r.status === 'ok' || r.missingDays === 0).length
+  const gapKnown = rows.filter(r => typeof r.missingDays === 'number').length
+  const errored = rows.filter(r => r.status === 'error').length
 
   return (
     <OpsSection
       title="Stock historical depth"
-      description="Plugin bar-quality-detail + stock-day-gap for watchlist"
-      bodyPadding="default"
+      description="Bar = covered / (covered + gaps). Cell = symbol status."
+      headerExtra={
+        rows.length > 0 ? (
+          <DenseTag variant={recentGaps.length === 0 ? 'success' : 'warning'}>
+            {recentGaps.length === 0 ? '7d clear' : `${recentGaps.length} recent gaps`}
+          </DenseTag>
+        ) : null
+      }
+      bodyPadding="compact"
       overflow="visible"
       collapsible
       defaultCollapsed={false}
@@ -271,11 +286,85 @@ export function StockDepthSection({
         </p>
       ) : (
         <>
-          {summary != null ? (
-            <p className="m-0 mb-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-              {summary}
+          <div className="mb-2 flex items-center gap-2">
+            <ScoreRing
+              ready={zeroGaps}
+              thin={Math.max(0, gapKnown - zeroGaps)}
+              blocked={errored}
+              total={Math.max(rows.length, 1)}
+              caption="ok"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                {summary}
+              </p>
+              <div className="mt-1 flex flex-wrap gap-px">
+                {rows.map(row => (
+                  <span
+                    key={`heat-${row.symbol}`}
+                    title={`${row.symbol} · ${row.status} · ${fmtCount(row.missingDays)} gaps`}
+                    className={`h-3.5 w-3.5 rounded-[2px] ${toneByLevel(
+                      row.status === 'ok' || row.missingDays === 0
+                        ? 'ok'
+                        : row.status === 'error'
+                          ? 'missing'
+                          : 'scheduled',
+                    )}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mb-2 grid grid-cols-1 gap-x-5 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
+            {rows.map(row => {
+              const covered = row.coveredDays ?? 0
+              const missing = row.missingDays ?? 0
+              const denom = covered + missing
+              const fill = denom > 0 ? (covered / denom) * 100 : row.status === 'ok' ? 100 : 0
+              const kind =
+                row.status === 'error'
+                  ? 'missing'
+                  : row.status === 'ok' || missing === 0
+                    ? 'ok'
+                    : fill >= 70
+                      ? 'scheduled'
+                      : 'missing'
+              return (
+                <CoverageBarRow
+                  key={row.symbol}
+                  name={
+                    <span className="font-mono text-entity-symbol">{row.symbol}</span>
+                  }
+                  nameTitle={`${row.symbol} · ${formatRange(row.minDate, row.maxDate)}`}
+                  fillPct={fill}
+                  toneClass={toneByLevel(kind)}
+                  meterLabel={`${row.symbol} covered ${fmtCount(covered)} · gaps ${fmtCount(missing)} · ${formatRange(row.minDate, row.maxDate)}`}
+                  value={missing}
+                  invert
+                  valueText={fmtCount(row.missingDays)}
+                  suffix={
+                    <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+                      gaps
+                    </span>
+                  }
+                />
+              )
+            })}
+          </div>
+          {recentGaps.length > 0 ? (
+            <p className="m-0 mb-2 break-words text-[var(--text-dense-caption)] text-warning">
+              Last 7d missing:{' '}
+              {recentGaps.map(g => `${g.symbol} (${g.dates.join(', ')})`).join(' · ')}
             </p>
           ) : null}
+          <OpsSection
+            variant="flat"
+            title="Symbol table"
+            collapsible
+            defaultCollapsed
+            bodyPadding="none"
+            overflow="visible"
+          >
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
@@ -310,41 +399,7 @@ export function StockDepthSection({
               ))}
             </DenseTableBody>
           </DenseDataTable>
-
-          <div className="mt-4 border-t border-[var(--border)] pt-3">
-            <p className="m-0 mb-2 text-[var(--text-dense-label)] font-medium text-[var(--foreground)]">
-              Recent gaps (7 days)
-            </p>
-            {recentGaps.length === 0 ? (
-              <div className="flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)] text-[var(--success)]">
-                <span>0 gaps in last 7 days</span>
-                <DenseTag variant="success">All clear</DenseTag>
-              </div>
-            ) : (
-              <DenseDataTable>
-                <DenseTableHeader>
-                  <DenseTableHeadRow>
-                    <DenseTableHead>Symbol</DenseTableHead>
-                    <DenseTableHead>Missing dates</DenseTableHead>
-                  </DenseTableHeadRow>
-                </DenseTableHeader>
-                <DenseTableBody>
-                  {recentGaps.map(gap => (
-                    <DenseTableRow key={gap.symbol}>
-                      <DenseTableCell>
-                        <span className="font-semibold font-mono text-entity-symbol">
-                          {gap.symbol}
-                        </span>
-                      </DenseTableCell>
-                      <DenseTableCell className="font-mono text-[var(--text-dense-meta)] text-[var(--destructive)]">
-                        {gap.dates.join(', ')}
-                      </DenseTableCell>
-                    </DenseTableRow>
-                  ))}
-                </DenseTableBody>
-              </DenseDataTable>
-            )}
-          </div>
+          </OpsSection>
         </>
       )}
     </OpsSection>

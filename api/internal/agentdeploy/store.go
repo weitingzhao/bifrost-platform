@@ -1,6 +1,10 @@
 package agentdeploy
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,13 +22,70 @@ type Job struct {
 }
 
 type Store struct {
-	mu      sync.RWMutex
-	current *Job
-	last    *Job
+	mu       sync.RWMutex
+	current  *Job
+	last     *Job
+	lastPath string
 }
 
 func NewStore() *Store {
-	return &Store{}
+	s := &Store{lastPath: resolveLastJobPath()}
+	if j := s.loadLastLocked(); j != nil {
+		s.last = j
+	}
+	return s
+}
+
+func resolveLastJobPath() string {
+	if p := strings.TrimSpace(os.Getenv("PLATFORM_AGENT_DEPLOY_LAST")); p != "" {
+		return p
+	}
+	data := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR"))
+	if data == "" {
+		if root := strings.TrimSpace(os.Getenv("PLATFORM_PROJECT_ROOT")); root != "" {
+			data = filepath.Join(root, "data")
+		} else {
+			data = filepath.Join(os.Getenv("HOME"), ".bifrost-platform", "data")
+		}
+	}
+	return filepath.Join(data, "agent-deploy", "last.json")
+}
+
+func (s *Store) loadLastLocked() *Job {
+	if s.lastPath == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(s.lastPath)
+	if err != nil {
+		return nil
+	}
+	var job Job
+	if err := json.Unmarshal(raw, &job); err != nil {
+		return nil
+	}
+	if job.Status == "" {
+		return nil
+	}
+	return cloneJob(&job)
+}
+
+func (s *Store) persistLastLocked(j *Job) {
+	if s.lastPath == "" || j == nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(s.lastPath), 0o755); err != nil {
+		return
+	}
+	// Trim log before persist — checklist only needs status/timestamps.
+	toSave := *j
+	if len(toSave.Log) > 16*1024 {
+		toSave.Log = toSave.Log[len(toSave.Log)-16*1024:]
+	}
+	raw, err := json.MarshalIndent(toSave, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(s.lastPath, raw, 0o644)
 }
 
 func (s *Store) Current() *Job {
@@ -101,6 +162,7 @@ func (s *Store) Finish(exitCode int, errMsg string) *Job {
 	}
 	s.last = cloneJob(s.current)
 	done := cloneJob(s.current)
+	s.persistLastLocked(s.last)
 	s.current = nil
 	return done
 }

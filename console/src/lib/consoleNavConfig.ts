@@ -241,6 +241,7 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
           { id: 'market-data-manage', label: 'Massive', icon: Database },
           { id: 'flex-query-manage', label: 'IB Flex', icon: FileSearch },
           { id: 'analytics-pipeline', label: 'Analytics', icon: GitBranch },
+          { id: 'research-engine', label: 'Research', icon: Microscope },
         ],
       },
       {
@@ -324,6 +325,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'market-data-manage': 'Plugin',
   'flex-query-manage': 'Plugin',
   'analytics-pipeline': 'Plugin',
+  'research-engine': 'Plugin',
   'plugin-release': 'Plugin',
   'agent-release': 'Engineer',
   queue: 'Engineer',

@@ -662,6 +662,12 @@ export type IngestQueueSummaryResponse = {
   error?: string
 }
 
+export type IngestScheduleDrain = {
+  started_at?: string | null
+  ended_at?: string | null
+  active?: boolean
+}
+
 export type IngestScheduleSlot = {
   slot: string
   cron: string
@@ -683,6 +689,8 @@ export type IngestScheduleSlot = {
   }
   freshness_dimension?: string | null
   freshness_last_run_at?: string | null
+  fires_in_window?: string[]
+  drain?: IngestScheduleDrain | null
 }
 
 export type IngestQueueDashboardResponse = {
@@ -717,6 +725,7 @@ export type IngestQueueDashboardResponse = {
     due?: number
     missed?: number
     grace_minutes?: number
+    horizon?: { start?: string; end?: string }
     slots?: IngestScheduleSlot[]
   }
   error?: string

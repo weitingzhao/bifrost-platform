@@ -109,6 +109,11 @@ export const STRATEGY_C_LAYERS: StrategyCLayer[] = [
     responsibility: 'Auth L0/L1/L2, job queue, audit log, no arbitrary shell',
   },
   {
+    layer: 'Research Engine',
+    responsibility:
+      'OLAP analysis domain (bifrost-research) — dbt SEPA analytics, Python engines (IV/GEX/Momentum/Forecast), Research API :8795; single Golden Source bifrost_golden_source; never writes Trade DB or trade-execution paths (D10/D13)',
+  },
+  {
     layer: 'Mature components',
     responsibility:
       'Argo CD, Tekton, Headlamp/Rancher, UniFi Controller — wrapped via API (Session v2 / future Integration), not replacing control plane',
@@ -338,14 +343,53 @@ export type ActuationPhaseRow = {
 
 export const AI_PLATFORM_MISSION =
   'Build an AI-native, self-discovering, self-maintaining, self-healing release and operations environment. ' +
-  'Bifrost Trade workloads (frontend, API, Worker, Socket) evolve safely, observably, and rollback-ready on this platform. ' +
-  'Two downstream product lines share this unified foundation: (1) page continuous refactoring (Dense UI / frontend migration); ' +
-  '(2) trade review AI (read-only analysis, isolated from trade execution path). ' +
+  'Bifrost runs as three system domains: OLTP (Trade), OLAP (Research Engine), and Control Plane (Ops). ' +
+  'Trade workloads (frontend, API, Worker, Socket) evolve safely, observably, and rollback-ready on this platform. ' +
+  'Research (bifrost-research) owns analytics, forecast, and backtest on bifrost_golden_source — isolated from trade execution (D10/D13). ' +
+  'Downstream product lines on this foundation: (1) page continuous refactoring (Dense UI / frontend migration); ' +
+  '(2) Research / trade-review AI (read-only analysis, isolated from live trading). ' +
   'Ultimate convergence target: see Governance → Vision (dualFlywheelVisionCatalog.ts) — ' +
   'three-layer Agent (Dev / Ops / Business) unifying code, operations, and trade intelligence in one Cursor window.'
 
 export const AI_MERGE_RATIONALE =
   'Splitting into two projects causes duplicate MCP, context, and gates. Merged: one platform, one Tool contract, one release mainline.'
+
+/** Three system domains — OLTP + OLAP + Control Plane (D13). */
+export type SystemDomainDef = {
+  id: string
+  name: string
+  role: string
+  primaryRepos: string
+  database: string
+  mustNot: string
+}
+
+export const SYSTEM_DOMAINS: SystemDomainDef[] = [
+  {
+    id: 'trade',
+    name: 'Trade (OLTP)',
+    role: 'Execution, positions, real-time monitoring, env-isolated operational data',
+    primaryRepos: 'bifrost-trade-* (frontend :5173, APIs :8765–8773)',
+    database: 'bifrost_dev / bifrost_stg / bifrost_prod (environment-isolated)',
+    mustNot: 'Own Golden Source analytics/research schemas; bypass D10 freeze for live trading',
+  },
+  {
+    id: 'research',
+    name: 'Research (OLAP)',
+    role: 'Analysis, screening, forecast, backtest, AI intelligence on shared market facts',
+    primaryRepos: 'bifrost-research (dbt + engines + Research API :8795)',
+    database: 'bifrost_golden_source single instance (analytics.* / research.* / market_analytics.*)',
+    mustNot: 'Write Trade DB; write market.* (Plugin owns ingest); trigger trade execution (D10)',
+  },
+  {
+    id: 'ops',
+    name: 'Ops (Control Plane)',
+    role: 'Environment governance, health probes, deploy orchestration, Agent protocol',
+    primaryRepos: 'bifrost-platform (Console :5180, platform-api :8780)',
+    database: 'Control-plane state (spine, programs, operate queue) — not Trade/Research business DBs',
+    mustNot: 'Implement OLAP engines inside Plugins; expose Monitor POST /control/* or ib:operator:cmd to platform AI',
+  },
+]
 
 export type AiCapability = { name: string; description: string; examples: string[] }
 
@@ -526,6 +570,12 @@ export function buildBlueprintConstitutionPack(): string {
     '',
     '### Strategy C layers',
     ...STRATEGY_C_LAYERS.map(l => `- **${l.layer}**: ${l.responsibility}`),
+    '',
+    '### System domains (OLTP + OLAP + Ops)',
+    ...SYSTEM_DOMAINS.map(
+      d =>
+        `- **${d.name}** [${d.id}]: ${d.role} | Repos: ${d.primaryRepos} | DB: ${d.database} | Must-not: ${d.mustNot}`,
+    ),
     '',
     '## Design principles',
     ...DESIGN_PRINCIPLES.map(p => `${p.id}. **${p.title}** — ${p.description}`),

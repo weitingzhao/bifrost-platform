@@ -32,6 +32,7 @@ import {
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import {
   agentLaunchEvidenceKey,
+  agentLaunchLastDeployDetail,
   beginNextAgentLaunchCycle,
   evidenceSummaryLine,
   isAgentLaunchLastDeployOk,
@@ -808,6 +809,11 @@ export function AgentReleasePage({
   const deployFailed = deployQuery.data?.last?.status === 'failed'
   const showDeployLog = directDeployRunning || (deployLogText.trim() !== '' && (activeIndex === 2 || deployFailed))
 
+  const lastDeployCtx = {
+    runnersLive: targetRunner?.status === 'ok',
+    runnerVersion: targetRunner?.version,
+  }
+
   const checklistItems = [
     {
       id: 'auth',
@@ -835,13 +841,8 @@ export function AgentReleasePage({
     {
       id: 'last-deploy',
       label: 'Last deploy',
-      ok: isAgentLaunchLastDeployOk(deployQuery.data?.last?.status, evidence),
-      detail:
-        deployQuery.data?.last != null
-          ? `${deployQuery.data.last.role ?? ''} ${deployQuery.data.last.status}`.trim()
-          : evidence.deployOutcome != null
-            ? `evidence ${evidence.deployOutcome}`
-            : 'none yet',
+      ok: isAgentLaunchLastDeployOk(deployQuery.data?.last?.status, evidence, lastDeployCtx),
+      detail: agentLaunchLastDeployDetail(deployQuery.data?.last, evidence, lastDeployCtx),
     },
   ]
   const checklistOkCount = checklistItems.filter(c => c.ok).length

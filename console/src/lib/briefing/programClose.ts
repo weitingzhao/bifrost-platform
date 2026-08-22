@@ -59,6 +59,8 @@ export function isProgramCatalogComplete(p: ProgramCloseFields): boolean {
  *   if requires_post_completion: assessment ∈ {no_handoff, closed, approved, in_operate}
  *   else: gatesComplete
  * pending_review or empty assessment + requires_post_completion → NOT released.
+ * API keeps assessment at pending_review while any sibling item is still pending_review
+ * (partial Approve must not empty In Flight).
  */
 export function isProgramSessionReleased(p: ProgramCloseFields): boolean {
   if (isCatalogClosedStatus(p.status)) return true

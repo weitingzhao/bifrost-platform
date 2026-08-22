@@ -38,7 +38,15 @@ func TestHandleApprovePostCompletionInjectsOperateQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := &Handler{store: store}
+	h := &Handler{
+		store: store,
+		runtimes: map[string]*programRuntime{
+			"test-program": {
+				blueprint: &ProgramBlueprint{ID: "test-program", Title: "Test"},
+				state:     &ProgramStateRecord{ProgramID: "test-program", PostCompletion: &PostCompletionState{AssessmentStatus: "pending_review"}},
+			},
+		},
+	}
 	h.operateQueue = operatequeue.NewHandler(configDir, actuation.NewAuditLog(""))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/programs/post-completion/pc-1/approve", bytes.NewReader([]byte(`{}`)))
@@ -79,6 +87,71 @@ func TestHandleApprovePostCompletionInjectsOperateQueue(t *testing.T) {
 		got.HandoffKind != "recurring_setup" || got.AgentTaskID != "ops" ||
 		len(got.AcceptanceCriteria) != 1 || len(got.VerificationSteps) != 1 {
 		t.Fatalf("structured fields not injected: %+v", got)
+	}
+	if got := h.runtimes["test-program"].state.PostCompletion.AssessmentStatus; got != "approved" {
+		t.Fatalf("sole approve should release assessment=%s", got)
+	}
+}
+
+func TestApproveKeepsPendingReviewWhileSiblingsRemain(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
+
+	store := NewFileStore(configDir)
+	pending := []PostCompletionItem{
+		{
+			ID: "pc-a", ProgramID: "multi", Title: "First", Status: "pending_review",
+			CreatedAt: "2026-07-07T00:00:00Z", SourceLaneID: "delivery", OperateLane: "governance",
+			HandoffKind: "one_off", Reason: "a", AcceptanceCriteria: []string{"a"},
+			VerificationSteps: []string{"a"}, RiskLevel: "low",
+		},
+		{
+			ID: "pc-b", ProgramID: "multi", Title: "Second", Status: "pending_review",
+			CreatedAt: "2026-07-07T00:00:00Z", SourceLaneID: "delivery", OperateLane: "governance",
+			HandoffKind: "one_off", Reason: "b", AcceptanceCriteria: []string{"b"},
+			VerificationSteps: []string{"b"}, RiskLevel: "low",
+		},
+	}
+	if err := store.SavePendingPostCompletion(pending); err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{
+		store: store,
+		runtimes: map[string]*programRuntime{
+			"multi": {
+				blueprint: &ProgramBlueprint{ID: "multi", Title: "Multi"},
+				state: &ProgramStateRecord{
+					ProgramID: "multi",
+					PostCompletion: &PostCompletionState{AssessmentStatus: "pending_review"},
+				},
+			},
+		},
+		operateQueue: operatequeue.NewHandler(configDir, actuation.NewAuditLog("")),
+	}
+
+	req := requestWithParam(http.MethodPost, "/approve", `{}`, "itemId", "pc-a")
+	rec := httptest.NewRecorder()
+	h.HandleApprovePostCompletionItem(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := h.runtimes["multi"].state.PostCompletion.AssessmentStatus; got != "pending_review" {
+		t.Fatalf("first of two approve must keep pending_review, got %s", got)
+	}
+
+	req2 := requestWithParam(http.MethodPost, "/approve", `{}`, "itemId", "pc-b")
+	rec2 := httptest.NewRecorder()
+	h.HandleApprovePostCompletionItem(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("second status=%d body=%s", rec2.Code, rec2.Body.String())
+	}
+	if got := h.runtimes["multi"].state.PostCompletion.AssessmentStatus; got != "approved" {
+		t.Fatalf("all approved should set approved, got %s", got)
 	}
 }
 
