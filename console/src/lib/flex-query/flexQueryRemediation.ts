@@ -162,7 +162,7 @@ export function buildFlexDiagnosePrefill(
     'Remediation plan (operator approval for writes):',
     '1. GET flex config summary — tokens/query IDs set?',
     '2. If stale: POST enqueue flex-trades + flex-transactions (or Flex Refresh on Manual tab).',
-    '3. Poll GET flex/ingest/jobs until done; confirm flex_ops.ingest_freshness latest_ts < 48h.',
+    '3. Poll GET flex/ingest/jobs until done; confirm ops_jobs.flex_ingest_freshness latest_ts < 48h.',
     '4. If worker stuck: check plugin-flex-query worker logs; rollout restart flex-query-worker.',
     '5. Report evidence before any k8s secret or credential changes.',
   )
