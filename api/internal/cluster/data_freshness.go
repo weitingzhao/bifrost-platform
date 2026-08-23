@@ -25,7 +25,6 @@ var freshnessProbeSpecs = []struct {
 }{
 	{"strategy_instance", "updated_at"},
 	{"strategy_opportunity", "updated_at"},
-	{"job_bars_backfill", "updated_at"},
 	{"watchlist", "created_at"},
 }
 

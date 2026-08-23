@@ -49,7 +49,6 @@ const SELECTIVE_TABLE_PRESETS = [
   'strategy_instance',
   'strategy_opportunity',
   'account_positions',
-  'job_bars_backfill',
   'preference_position_categories',
   'watchlist',
 ] as const

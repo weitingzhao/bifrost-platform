@@ -201,7 +201,7 @@ export const DATA_RESPONSIBILITY: ResponsibilitySplit[] = [
   { concern: 'Account positions', redis: 'Staging bus (event stream)', pg: 'Business truth (synced by Account Sync)' },
   { concern: 'Daemon state', redis: 'Health hash (live lamp)', pg: 'Historical snapshots (status sink)' },
   { concern: 'Strategy config', redis: 'N/A', pg: 'Source of truth (gate_safety_*, strategy_*)' },
-  { concern: 'Celery tasks', redis: 'Broker + result', pg: 'Job history (job_bars_backfill)' },
+  { concern: 'Bars / ingest jobs', redis: 'N/A', pg: 'Golden Source ops_jobs.job_ingest (Market Data Plugin)' },
   { concern: 'Trade history', redis: 'N/A', pg: 'Source of truth (executions, fills)' },
 ]
 
