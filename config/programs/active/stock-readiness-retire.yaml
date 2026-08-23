@@ -15,6 +15,8 @@ description: |
   **Not a table problem:** `symbols-snapshot` / tier marts empty until ≥252 trading days of
   `market.stock_daily` — same gap on analytics path; fundamentals already live (STG ~3555).
 
+  **Owner decision: RETIRE (2026-08-23)** — P1 signed off; proceed with Waves W1–W5.
+
   D10 BLOCKED. Do not unsuspend `market-data-readiness-refresh` CronJob.
 status: active
 workspace: /Users/vision-mac-trader/Desktop/stocks
@@ -60,7 +62,7 @@ phases:
       enabled: false
   - id: P2
     title: Owner lock — RETIRE decision + scope
-    status: pending
+    status: done
     prompt_template: |
       Execute {{phase_title}} for program {{id}}.
       Follow {{skill_path}}.
