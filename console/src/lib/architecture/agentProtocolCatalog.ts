@@ -63,7 +63,7 @@ export const AGENT_MODES: AgentModeRow[] = [
     agentMay:
       'Edit bifrost-research; run dbt on bifrost_golden_source analytics/research/market_analytics schemas; add Python engines; Research API read paths; K8s manifests under research NS',
     agentMustNot:
-      'Write Trade DB (bifrost_dev/stg/prod); mutate market.* ingest tables (Plugin owns); change Ops spine/compose for Trade cutover; enable live trading or daemon scale (D10)',
+      'Write Trade DB (bifrost_dev/stg/prod); mutate raw_market.* ingest tables (Plugin owns); change Ops spine/compose for Trade cutover; enable live trading or daemon scale (D10)',
   },
 ]
 
@@ -649,7 +649,7 @@ export const MODE_SELECTION_HINTS = [
   'focus.blocker or flywheel_primary === B → Ops',
   'tracks.infra / network-upgrade-* stream / VLAN-firewall task → Ops (network playbooks + D9 Session v2)',
   'Promote bay or cutover milestone → Promote',
-  'dbt / analytics.* / research.* / Golden Source OLAP / bifrost-research → Research (D13)',
+  'dbt / dw_stock.* / signals.* / Golden Source OLAP / bifrost-research → Research (D13)',
   'Otherwise → Product',
 ]
 

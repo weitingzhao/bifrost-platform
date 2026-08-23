@@ -226,15 +226,16 @@ export const TIBM_ROLLOUT_WAVES: TibmRolloutWave[] = [
   },
   {
     id: 'W2',
-    title: 'Data plane (historical bars — not live trading)',
+    title: 'Data plane (stock OHLC — Polygon Plugin, Celery RETIRED)',
     scope: 'in_scope',
-    targets: ['celery-worker (stocks_ib / bars queues)'],
+    targets: ['plugin-market-data Cron (stock-eod / minute-bars)', 'Trade API bars enqueue → ops_jobs'],
     verify: [
-      'verify-trade-celery-bars',
-      'Celery task logs — IbOperatorBarsAdapter, no MarketIbClient / ib_insync',
+      'make -C bifrost-platform-plugin verify-trade-ib-w2-stg',
+      'No celery-worker-stocks-ib Deployment (or replicas=0)',
+      'POST /api/market/bars/backfill enqueues Plugin ingest job',
     ],
     notes:
-      'Backfill and research data only. Does not place orders. W2 Owner signed 2026-07-22 — verify-trade-ib-w2-stg PASS after IB Gateway reconnect cleared ghost session (accounts_snapshot populated; fetch_bars_range OK). D10 daemon replicas=0.',
+      'IB historical bars Celery path retired 2026-08-23. Stock OHLC via Market Data Plugin only. D10 daemon replicas=0.',
   },
   {
     id: 'W3',

@@ -4,28 +4,21 @@
  * Program id: trade-celery-k8s-ideal · lane: trade-system-celery
  * Authority: this catalog + config/programs/completed/trade-celery-k8s-ideal.yaml
  *
- * Status: **SUPERSEDED** for Massive Celery path (P7/P9 / market-data-subcontractor).
- * Remaining live Trade Celery surface is **stocks_ib-only** (IB bars backfill).
+ * Status: **RETIRED** — Trade Celery (stocks_ib IB bars backfill) removed.
+ * Stock OHLC ingest: Market Data Plugin `ops_jobs` → `raw_market.stock_daily` / `stock_minute`.
+ *
+ * Historical Massive Celery path was superseded earlier (P7/P9 / market-data-subcontractor).
  *
  * D10 remains BLOCKED — never scale daemon for live trade.
- *
- * P9 (market-data-subcontractor): Massive Celery queues
- * (`stocks_massive*`, `options_massive*`) and `job_massive_backfill` are
- * **superseded by market-data-subcontractor** (plugin-market-data /
- * `data_ops.job_ingest`). Keep `stocks_ib` for IB bars backfill.
- *
- * Removed (do not reintroduce):
- * `make -C bifrost-platform-plugin verify-trade-celery-massive-loop-stg`
- * → use `make -C bifrost-platform-plugin verify-trade-celery-bars` for stocks_ib.
  */
 
 export const TRADE_CELERY_K8S_IDEAL_PROGRAM_ID = 'trade-celery-k8s-ideal' as const
 export const TRADE_CELERY_K8S_IDEAL_LANE_ID = 'trade-system-celery' as const
-export const TRADE_CELERY_K8S_IDEAL_VERSION = '2026-07-22'
+export const TRADE_CELERY_K8S_IDEAL_VERSION = '2026-08-23'
 
-/** Live stocks_ib-only verify (Massive loop script deleted). */
+/** Celery retired — no live verify target. */
 export const TCKI_STOCKS_IB_VERIFY_CMD =
-  'make -C bifrost-platform-plugin verify-trade-celery-bars' as const
+  'echo Trade Celery RETIRED — use Market Data Plugin Cron / ingest enqueue' as const
 
 /** W0.1 STG evidence pack (captured 2026-07-22 via bifrost-k3s → bifrost-stg). */
 export const TCKI_W0_STG_EVIDENCE = {

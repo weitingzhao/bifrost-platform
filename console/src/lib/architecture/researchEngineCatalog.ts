@@ -13,7 +13,14 @@ export const RESEARCH_ENGINE_SUMMARY = {
   apiPort: 8795,
   domain: 'OLAP',
   goldenSource: 'bifrost_golden_source',
-  schemas: ['analytics.*', 'research.*', 'market_analytics.*'] as const,
+  schemas: [
+    'dw_stock.*',
+    'features_daily.*',
+    'features_option.*',
+    'signals.*',
+    'forecasts.*',
+    'backtests.*',
+  ] as const,
   engines: [
     'dbt SEPA',
     'volatility (IV / PCR / Max Pain)',
@@ -48,11 +55,11 @@ export const RESEARCH_GOVERNANCE_SURFACES = [
   {
     id: 'pipeline-health',
     title: 'Pipeline health',
-    api: 'GET /health · GET /api/v1/research/status · CronJob lastScheduleTime (research NS) · research.*/market_analytics.* row freshness',
+    api: 'GET /health · GET /api/v1/research/status · CronJob lastScheduleTime (research NS) · pipeline schema row freshness',
     metrics: [
       'reachable',
       'CronJob last successful Job',
-      'max(trade_date)/max(asof_ts) on research.* + market_analytics.*',
+      'max(trade_date)/max(asof_ts) on features_daily.* / features_option.* / signals.* / forecasts.* / backtests.*',
       'elementary present/mtime when PVC report exists',
     ],
   },
