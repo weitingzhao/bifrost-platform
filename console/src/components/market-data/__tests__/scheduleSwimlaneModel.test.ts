@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   clipBar,
+  filterScheduleSlots,
   resolveDrain,
   resolveFires,
   resolveHorizon,
+  slotAdherenceBucket,
   swimlaneSlots,
   toggleSlotSelection,
 } from '@/components/market-data/scheduleSwimlaneModel'
@@ -104,5 +106,26 @@ describe('scheduleSwimlaneModel', () => {
     expect(toggleSlotSelection(null, 'stock-eod')).toBe('stock-eod')
     expect(toggleSlotSelection('stock-eod', 'stock-eod')).toBeNull()
     expect(toggleSlotSelection('stock-eod', 'calendar')).toBe('calendar')
+  })
+
+  it('buckets draining with due and filters by adherence', () => {
+    expect(slotAdherenceBucket('draining')).toBe('due')
+    expect(slotAdherenceBucket('on_plan')).toBe('on_plan')
+    expect(slotAdherenceBucket('migrated')).toBe('other')
+    const rows = [
+      slot({ slot: 'ok', adherence: 'on_plan' }),
+      slot({ slot: 'wait', adherence: 'draining' }),
+      slot({ slot: 'late', adherence: 'missed' }),
+      slot({ slot: 'old', adherence: 'migrated' }),
+    ]
+    expect(filterScheduleSlots(rows, 'all').map(s => s.slot)).toEqual([
+      'ok',
+      'wait',
+      'late',
+      'old',
+    ])
+    expect(filterScheduleSlots(rows, 'due').map(s => s.slot)).toEqual(['wait'])
+    expect(filterScheduleSlots(rows, 'missed').map(s => s.slot)).toEqual(['late'])
+    expect(filterScheduleSlots(rows, 'on_plan').map(s => s.slot)).toEqual(['ok'])
   })
 })

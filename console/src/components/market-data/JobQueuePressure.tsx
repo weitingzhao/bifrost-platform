@@ -14,6 +14,7 @@ import {
 } from '@/components/market-data/overviewDash'
 import { fmtCount, toneByLevel } from '@/components/market-data/overviewDashModel'
 import { formatDurationParts } from '@/lib/patrol/cronSchedule'
+import { kindQueueCountsLabel } from '@/components/market-data/queueRunningJobs'
 
 function levelLabel(level: QueuePressureLevel): string {
   if (level === 'idle') return 'idle'
@@ -162,11 +163,12 @@ export function JobQueuePressure({
       </div>
 
       {view.kinds.length > 0 ? (
-        <div className="grid grid-cols-1 gap-x-5 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-x-5 gap-y-1 md:grid-cols-2">
           {view.kinds.map(k => {
             const selected = selectedKind === k.kind
             const kindTone =
               k.running > 0 ? 'scheduled' : k.pending > 0 ? 'ok' : 'unknown'
+            const counts = kindQueueCountsLabel(k)
             const kindEta =
               k.etaMinutes != null ? formatDurationParts(k.etaMinutes * 60_000) : '—'
             return (
@@ -174,26 +176,27 @@ export function JobQueuePressure({
                 key={k.kind}
                 type="button"
                 className={cn(
-                  'rounded-sm border-0 bg-transparent p-0 text-left',
+                  'min-w-0 rounded-sm border-0 bg-transparent p-0 text-left',
                   onSelectKind && 'cursor-pointer hover:bg-[var(--muted)]/40',
                   selected &&
                     'bg-[color-mix(in_oklab,var(--color-info,#38bdf8)_14%,transparent)]',
                 )}
                 aria-pressed={selected}
+                title={`${k.kind} · ${k.pending} waiting · ${k.running} running`}
                 onClick={() => onSelectKind?.(k.kind)}
               >
                 <CoverageBarRow
                   name={shortIngestKind(k.kind)}
-                  nameTitle={`${k.kind} · pending ${k.pending} · running ${k.running}`}
+                  nameTitle={k.kind}
                   fillPct={(k.active / maxKind) * 100}
                   toneClass={toneByLevel(kindTone)}
-                  meterLabel={`${k.kind} pending ${k.pending} running ${k.running}`}
-                  value={k.pending}
+                  meterLabel={`${k.kind} ${counts.valueText}${counts.suffix != null ? ` ${counts.suffix}` : ''}`}
+                  value={counts.value}
                   invert={k.pending > 0}
-                  valueText={fmtCount(k.pending)}
+                  valueText={counts.valueText}
                   suffix={
                     <span className="font-mono text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
-                      r{k.running}
+                      {counts.suffix ?? ''}
                       {k.pending > 0 ? ` · ${kindEta}` : ''}
                     </span>
                   }

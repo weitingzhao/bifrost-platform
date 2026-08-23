@@ -5,6 +5,7 @@ const KIND_ALIAS: Record<string, string> = {
   option_minute: 'opt_min',
   option_trades: 'opt_trd',
   option_contract: 'opt_ctr',
+  option_expiration: 'opt_exp',
   stock_daily: 'stk_day',
   stock_daily_grouped: 'stk_grp',
   stock_minute: 'stk_min',

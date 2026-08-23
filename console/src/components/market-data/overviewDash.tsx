@@ -46,15 +46,20 @@ export function CoverageBarRow({
   suffix?: ReactNode
 }) {
   return (
-    <div className="grid grid-cols-[minmax(0,6.75rem)_minmax(3.25rem,9.5rem)_auto] items-center gap-x-1.5">
+    <div className="grid min-w-0 grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)_max-content] items-center gap-x-2">
       <span
         className="min-w-0 truncate font-mono text-[var(--text-dense-caption)]"
         title={nameTitle}
       >
         {name}
       </span>
-      <Meter fillPct={fillPct} toneClass={toneClass} label={meterLabel} />
-      <div className="flex min-w-0 items-baseline justify-end gap-1 whitespace-nowrap">
+      <Meter
+        fillPct={fillPct}
+        toneClass={toneClass}
+        label={meterLabel}
+        className="w-full min-w-0"
+      />
+      <div className="flex shrink-0 items-baseline justify-end gap-1 whitespace-nowrap">
         <FlashValue
           value={value}
           invert={invert}

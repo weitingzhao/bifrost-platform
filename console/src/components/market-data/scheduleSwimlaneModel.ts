@@ -108,6 +108,33 @@ export function swimlaneSlots(slots: IngestScheduleSlot[]): IngestScheduleSlot[]
   return slots.filter(s => s.adherence !== 'migrated')
 }
 
+export type ScheduleAdherenceFilter = 'all' | 'on_plan' | 'due' | 'missed'
+
+export function slotAdherenceBucket(
+  adherence: string | undefined,
+): ScheduleAdherenceFilter | 'other' {
+  const a = (adherence ?? '').toLowerCase()
+  if (a === 'on_plan') return 'on_plan'
+  if (a === 'due' || a === 'draining') return 'due'
+  if (a === 'missed') return 'missed'
+  return 'other'
+}
+
+export function slotMatchesAdherenceFilter(
+  slot: IngestScheduleSlot,
+  filter: ScheduleAdherenceFilter,
+): boolean {
+  if (filter === 'all') return true
+  return slotAdherenceBucket(slot.adherence) === filter
+}
+
+export function filterScheduleSlots(
+  slots: IngestScheduleSlot[],
+  filter: ScheduleAdherenceFilter,
+): IngestScheduleSlot[] {
+  return slots.filter(s => slotMatchesAdherenceFilter(s, filter))
+}
+
 export function scheduleLaneId(slot: string): string {
   return `md-schedule-lane-${slot}`
 }

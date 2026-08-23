@@ -34,10 +34,19 @@ import { ScheduleSwimlane } from '@/components/market-data/ScheduleSwimlane'
 import { ScoreRing } from '@/components/market-data/overviewDash'
 import { toneByLevel } from '@/components/market-data/overviewDashModel'
 import {
+  filterScheduleSlots,
   scheduleLaneId,
   scheduleRowId,
   toggleSlotSelection,
+  type ScheduleAdherenceFilter,
 } from '@/components/market-data/scheduleSwimlaneModel'
+import {
+  formatDurationSec,
+  freshnessLabel,
+  freshnessTagVariant,
+  runningAgeSec,
+  runningFreshness,
+} from '@/components/market-data/queueRunningJobs'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { describeCronSchedule } from '@/lib/patrol/cronSchedule'
@@ -138,6 +147,7 @@ export function MarketDataIngestTab() {
   const [kind, setKind] = useState('')
   const [detailTab, setDetailTab] = useState<IngestDetailTab>('schedule')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [adherenceFilter, setAdherenceFilter] = useState<ScheduleAdherenceFilter>('all')
   const [jobKindFilter, setJobKindFilter] = useState('')
   const [selectedSlot, setSelectedSlot] = useState<string | null>(
     () => new URLSearchParams(window.location.search).get('slot'),
@@ -216,6 +226,10 @@ export function MarketDataIngestTab() {
     () => dash?.schedule?.slots ?? [],
     [dash?.schedule?.slots],
   )
+  const visibleScheduleSlots = useMemo(
+    () => filterScheduleSlots(scheduleSlots, adherenceFilter),
+    [scheduleSlots, adherenceFilter],
+  )
   const done15m = dash?.throughput?.done_last_15m
   const failed15m = dash?.throughput?.failed_last_15m
   const jobsShowing = jobPageShowingLabel({
@@ -228,8 +242,8 @@ export function MarketDataIngestTab() {
     failed15m,
   })
   const selectedSlotRow = useMemo(
-    () => scheduleSlots.find(s => s.slot === selectedSlot) ?? null,
-    [scheduleSlots, selectedSlot],
+    () => visibleScheduleSlots.find(s => s.slot === selectedSlot) ?? null,
+    [visibleScheduleSlots, selectedSlot],
   )
 
   useEffect(() => {
@@ -241,8 +255,8 @@ export function MarketDataIngestTab() {
 
   useEffect(() => {
     if (selectedSlot == null || scheduleSlots.length === 0) return
-    if (!scheduleSlots.some(s => s.slot === selectedSlot)) setSelectedSlot(null)
-  }, [scheduleSlots, selectedSlot])
+    if (!visibleScheduleSlots.some(s => s.slot === selectedSlot)) setSelectedSlot(null)
+  }, [scheduleSlots.length, visibleScheduleSlots, selectedSlot])
 
   const selectScheduleSlot = useCallback((slot: string, from: 'lane' | 'table') => {
     setSelectedSlot(prev => {
@@ -309,6 +323,13 @@ export function MarketDataIngestTab() {
         summary={summary}
         loading={dashQ.isLoading && dash == null && summary == null}
         error={dashErr != null && summary == null ? dashErr : null}
+        checkedAtMs={dashQ.dataUpdatedAt || summaryQ.dataUpdatedAt}
+        nowMs={nowMs}
+        onOpenJobQueue={({ kind, status }) => {
+          setJobKindFilter(kind)
+          setStatusFilter(status)
+          setDetailTab('jobs')
+        }}
       />
 
       {/* ── Detail secondary tabs ── */}
@@ -329,9 +350,21 @@ export function MarketDataIngestTab() {
             <DenseTag variant={statusVariant(dash.schedule.verdict ?? '')}>
               {dash.schedule.verdict ?? '—'}
             </DenseTag>
-            <DenseTag variant="success">on_plan {dash.schedule.on_plan ?? 0}</DenseTag>
-            <DenseTag variant="info">due {dash.schedule.due ?? 0}</DenseTag>
-            <DenseTag variant="danger">missed {dash.schedule.missed ?? 0}</DenseTag>
+            <span className="text-[var(--text-dense-meta)] font-medium text-[var(--muted-foreground)]">
+              Adherence
+            </span>
+            <SegmentControl
+              size="sm"
+              ariaLabel="Schedule adherence filter"
+              value={adherenceFilter}
+              onChange={v => setAdherenceFilter(v as ScheduleAdherenceFilter)}
+              options={[
+                { value: 'all', label: `All ${scheduleSlots.length}` },
+                { value: 'on_plan', label: `On plan ${dash.schedule.on_plan ?? 0}` },
+                { value: 'due', label: `Due ${dash.schedule.due ?? 0}` },
+                { value: 'missed', label: `Missed ${dash.schedule.missed ?? 0}` },
+              ]}
+            />
           </div>
         ) : null}
         {detailTab === 'jobs' ? (
@@ -409,9 +442,12 @@ export function MarketDataIngestTab() {
                   <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
                     {dash.schedule?.verdict ?? '—'} · {dash.schedule?.on_plan ?? 0} on plan ·{' '}
                     {dash.schedule?.due ?? 0} due · {dash.schedule?.missed ?? 0} missed
+                    {adherenceFilter !== 'all'
+                      ? ` · showing ${visibleScheduleSlots.length}`
+                      : ''}
                   </p>
                   <div className="mt-1 flex flex-wrap gap-px">
-                    {scheduleSlots.map(s => (
+                    {visibleScheduleSlots.map(s => (
                       <button
                         key={`heat-${s.slot}`}
                         type="button"
@@ -424,14 +460,20 @@ export function MarketDataIngestTab() {
                   </div>
                 </div>
               </div>
+              {visibleScheduleSlots.length === 0 ? (
+                <p className="m-0 px-3 py-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+                  No slots match this adherence filter
+                </p>
+              ) : (
               <ScheduleSwimlane
-                slots={scheduleSlots}
+                slots={visibleScheduleSlots}
                 kindCounts={kindRollup}
                 horizon={dash.schedule?.horizon}
                 nowMs={nowMs}
                 selectedSlot={selectedSlot}
                 onSelectSlot={slot => selectScheduleSlot(slot, 'lane')}
               />
+              )}
               {selectedSlotRow != null ? (
                 <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-3 py-2">
                   <DenseTag variant={statusVariant(selectedSlotRow.adherence ?? '')}>
@@ -474,7 +516,14 @@ export function MarketDataIngestTab() {
                   </DenseTableHeadRow>
                 </DenseTableHeader>
                 <DenseTableBody>
-                  {scheduleSlots.map(s => (
+                  {visibleScheduleSlots.length === 0 ? (
+                    <DenseTableRow>
+                      <DenseTableCell colSpan={6} className="text-center text-[var(--muted-foreground)]">
+                        No slots match this adherence filter
+                      </DenseTableCell>
+                    </DenseTableRow>
+                  ) : (
+                  visibleScheduleSlots.map(s => (
                     <DenseTableRow
                       key={s.slot}
                       id={scheduleRowId(s.slot)}
@@ -523,7 +572,8 @@ export function MarketDataIngestTab() {
                         {s.detail ?? '—'}
                       </DenseTableCell>
                     </DenseTableRow>
-                  ))}
+                  ))
+                  )}
                 </DenseTableBody>
               </DenseDataTable>
               </OpsSection>
@@ -535,7 +585,7 @@ export function MarketDataIngestTab() {
       {detailTab === 'jobs' ? (
         <OpsSection
           title="Job queue"
-          description={`Click a kind to filter · table is latest ${JOB_PAGE_LIMIT}`}
+          description={`Click a kind to filter · table is latest ${JOB_PAGE_LIMIT} · Running = time since claim`}
           headerExtra={<DenseTag variant="neutral">{jobsShowing}</DenseTag>}
           bodyPadding="none"
           overflow="visible"
@@ -567,7 +617,7 @@ export function MarketDataIngestTab() {
               variant="flat"
               title="Latest jobs"
               collapsible
-              defaultCollapsed
+              defaultCollapsed={statusFilter === 'all' && jobKindFilter === ''}
               bodyPadding="none"
               overflow="visible"
             >
@@ -578,6 +628,7 @@ export function MarketDataIngestTab() {
                   <DenseTableHead>Kind</DenseTableHead>
                   <DenseTableHead>Status</DenseTableHead>
                   <DenseTableHead>Waited</DenseTableHead>
+                  <DenseTableHead>Running</DenseTableHead>
                   <DenseTableHead>Payload</DenseTableHead>
                   <DenseTableHead>Created</DenseTableHead>
                   <DenseTableHead>Result</DenseTableHead>
@@ -594,11 +645,31 @@ export function MarketDataIngestTab() {
                       <DenseTag variant={statusVariant(j.status)}>{j.status}</DenseTag>
                     </DenseTableCell>
                     <DenseTableCell className="font-mono text-xs">
-                      {j.status === 'pending' || j.status === 'running'
+                      {j.status === 'pending'
                         ? waitedLabel(j.created_at, nowMs)
                         : j.started_at && j.created_at
                           ? waitedLabel(j.created_at, Date.parse(j.started_at))
                           : '—'}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono text-xs">
+                      {j.started_at == null ? (
+                        '—'
+                      ) : j.status === 'running' ? (
+                        <span className="inline-flex items-center gap-1">
+                          {formatDurationSec(runningAgeSec(j.started_at, nowMs))}
+                          <DenseTag
+                            variant={freshnessTagVariant(
+                              runningFreshness(runningAgeSec(j.started_at, nowMs)),
+                            )}
+                          >
+                            {freshnessLabel(runningFreshness(runningAgeSec(j.started_at, nowMs)))}
+                          </DenseTag>
+                        </span>
+                      ) : j.finished_at != null ? (
+                        waitedLabel(j.started_at, Date.parse(j.finished_at))
+                      ) : (
+                        '—'
+                      )}
                     </DenseTableCell>
                     <DenseTableCell className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
                       {payloadBrief(j.payload)}
