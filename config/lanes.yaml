@@ -380,3 +380,15 @@ lanes:
       description: Wave A — Research IA (Ideas / Volatility / Structure / Risk / Lab) + IV Rank regime page (Benchmarks ∪ optionable Watchlist ∪ Holdings). D10 observe-only; A2 Event Radar out of scope.
       agent_mode: Product
       work_intent: feature
+    - id: stock-readiness-retire
+      track: migrate
+      component_line: satellite
+      track_type: migrate
+      label: Retire stock_readiness_daily
+      short_label: SRD retire
+      description: |
+        Trade DB legacy SEPA daily snapshot table — superseded by Golden Source dbt marts
+        (mart_sepa_*) + Plugin readiness HTTP. P1 verdict RETIRE under SEPA_USE_ANALYTICS=true.
+        DDL CREATE + legacy SQL are technical debt; table DROPped on Trade DB 2026-08-20/21.
+      agent_mode: Ops
+      work_intent: feature
