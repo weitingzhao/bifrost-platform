@@ -771,7 +771,7 @@ function buildMarketDataGsCloseoutQueue(): QueueItem[] {
     done(
       'P3',
       'P3 — Archive Trade leftover tables',
-      'Dropped STG report_option_*. Kept stock_readiness_daily (live readers). Cron still suspend.',
+      'Dropped STG report_option_*. stock_readiness_daily RETIRED 2026-08-23 (stock-readiness-retire). Cron still suspend.',
     ),
     done(
       'P4',

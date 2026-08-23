@@ -94,7 +94,7 @@ phases:
       export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
       kubectl -n plugin-market-data get cronjob market-data-readiness-refresh -o jsonpath='{.spec.suspend}{"\n"}'
     acceptance:
-      - "stock_readiness_daily RETAINED in bifrost_dev (live Trade/platform readers); Cron still suspend"
+      - "stock_readiness_daily RETIRED 2026-08-23 (stock-readiness-retire program); §15 DROP is final state"
       - "bifrost_stg has no report_option_* leftover tables"
       - "Cron readiness-refresh still suspend=true"
       - "Golden Source schemas untouched"

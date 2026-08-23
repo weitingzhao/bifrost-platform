@@ -1,0 +1,70 @@
+id: stock-readiness-retire
+title: Stock Readiness Daily — Retire Trade Legacy Table
+description: |
+  Retired `public.stock_readiness_daily` on Trade DB (bifrost_dev/stg/prod).
+
+  **Completed 2026-08-23:** core 0.10.7 DROP-only DDL; API legacy SQL removed; FE screener
+  empty-state; Plugin readiness-refresh slot retired (CronJob suspend); deliver STG+PROD;
+  three Trade DBs confirm zero `stock_readiness_daily` rows in pg_tables.
+
+  Replacement path: Golden Source `dw_stock.mart_sepa_*` / Research API + Plugin
+  `/market/readiness/*`. D10 BLOCKED. `market-data-readiness-refresh` remains suspend.
+
+  **Owner decision: RETIRE (2026-08-23)**
+status: completed
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/stock-readiness-retire/SKILL.md
+model: composer-2.5
+delivery:
+  board_visible: false
+  former_location: Delivery Board · Satellite · stock-readiness-retire
+  sign_off_mechanism: api
+phases:
+  - id: P1
+    title: Analysis — consumers, replacements, verdict
+    status: done
+    depends_on: []
+    sign_off:
+      required: true
+  - id: P2
+    title: Owner lock — RETIRE decision + scope
+    status: done
+    depends_on:
+      - P1
+    sign_off:
+      required: true
+  - id: P3
+    title: Code hygiene — API no-op / unconditional analytics path
+    status: done
+    depends_on:
+      - P2
+    sign_off:
+      required: false
+  - id: P4
+    title: Cluster verify + STG/PROD deliver
+    status: done
+    depends_on:
+      - P3
+    sign_off:
+      required: true
+  - id: P5
+    title: Catalog + doc reconciliation
+    status: done
+    depends_on:
+      - P4
+    sign_off:
+      required: false
+metadata:
+  created_at: "2026-08-23T22:05:00-05:00"
+  completed_at: "2026-08-23T22:35:00-05:00"
+  owner: Owner
+  lane_id: stock-readiness-retire
+  operate_lane: release
+  prerequisite_programs:
+    - market-data-gs-closeout
+  tags:
+    - satellite
+    - research
+    - ddl
+    - sepa
+    - retire
