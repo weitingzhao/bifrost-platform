@@ -649,7 +649,7 @@ export const MODE_SELECTION_HINTS = [
   'focus.blocker or flywheel_primary === B → Ops',
   'tracks.infra / network-upgrade-* stream / VLAN-firewall task → Ops (network playbooks + D9 Session v2)',
   'Promote bay or cutover milestone → Promote',
-  'dbt / dw_stock.* / signals.* / Golden Source OLAP / bifrost-research → Research (D13)',
+  'dbt / dw_stock.* / features_signals.* / Golden Source OLAP / bifrost-research → Research (D13)',
   'Otherwise → Product',
 ]
 

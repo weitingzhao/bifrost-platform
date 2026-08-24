@@ -17,9 +17,9 @@ export const RESEARCH_ENGINE_SUMMARY = {
     'dw_stock.*',
     'features_daily.*',
     'features_option.*',
-    'signals.*',
-    'forecasts.*',
-    'backtests.*',
+    'features_signals.*',
+    'features_forecasts.*',
+    'features_backtests.*',
   ] as const,
   engines: [
     'dbt SEPA',
@@ -59,7 +59,7 @@ export const RESEARCH_GOVERNANCE_SURFACES = [
     metrics: [
       'reachable',
       'CronJob last successful Job',
-      'max(trade_date)/max(asof_ts) on features_daily.* / features_option.* / signals.* / forecasts.* / backtests.*',
+      'max(trade_date)/max(asof_ts) on features_daily.* / features_option.* / features_signals.* / features_forecasts.* / features_backtests.*',
       'elementary present/mtime when PVC report exists',
     ],
   },

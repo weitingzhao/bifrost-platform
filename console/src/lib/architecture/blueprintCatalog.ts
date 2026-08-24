@@ -378,7 +378,7 @@ export const SYSTEM_DOMAINS: SystemDomainDef[] = [
     name: 'Research (OLAP)',
     role: 'Analysis, screening, forecast, backtest, AI intelligence on shared market facts',
     primaryRepos: 'bifrost-research (dbt + engines + Research API :8795)',
-    database: 'bifrost_golden_source single instance (dw_stock.* / signals.* / market_dw_stock.*)',
+    database: 'bifrost_golden_source single instance (dw_stock.* / features_signals.* / market_dw_stock.*)',
     mustNot: 'Write Trade DB; write raw_market.* (Plugin owns ingest); trigger trade execution (D10)',
   },
   {
