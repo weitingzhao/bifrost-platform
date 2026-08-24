@@ -292,6 +292,30 @@ decisions:
       conclusion: "Wave 6.1 cleared active code paths. Wave 6.2 aligns tracked local config (bifrost-trade-infra/config/config.yaml) with bifrost-core example, updates stale CLAUDE/docs/environments-catalog copy, and retires misleading operational references. Governance program catalogs and migration history remain as audit evidence."
       signed_at: "2026-08-24"
       authority: "bifrost-trade-infra/config/config.yaml · bifrost-platform/console/src/lib/environments-catalog.ts"
+    - id: D-Wave-6.6
+      status: SIGNED
+      topic: Feature Store legacy schema retirement (Wave 6.6)
+      conclusion: "Drop features_daily/option/signals/forecasts/backtests view schemas; canonical features.* only; bifrost-research 0.7.0; db-init drops legacy schemas idempotently."
+      signed_at: "2026-08-24"
+      authority: "bifrost-research/scripts/wave_6_6_drop_legacy_features_schemas.sql"
+    - id: D-Wave-7
+      status: SIGNED
+      topic: Golden Source Wave 7 Hardening
+      conclusion: "Plugin retires features_daily DDL/ingest; analytics read paths use features.option_metric_*; Research 0.8.0 with GRANT-in-DDL, partition maintenance CronJob, vol backfill Job + weekly repair CronJob; Research + Plugin API startup schema guard (/health.startup_ok)."
+      signed_at: "2026-08-24"
+      authority: "bifrost-research/k8s/engines/job-vol-backfill-2024.yaml · bifrost-platform-plugin-market-data/src/bifrost_market_data/schema/ddl.py"
+    - id: D-Wave-6.5
+      status: SIGNED
+      topic: SEPA single owner + API fork (Wave 6.5)
+      conclusion: "mart_sepa_feature_daily dbt mart; Python projection to features.stock_signal_sepa_daily; Research API /sepa/* reads dw_stock.mart_sepa_screener_wide; /sepa/model/* reads features; bifrost-research 0.6.1."
+      signed_at: "2026-08-24"
+      authority: "bifrost-research/src/bifrost_research/orchestration/sepa_projection.py"
+    - id: D-Wave-6.4
+      status: SIGNED
+      topic: Feature Store schema unify (Wave 6.4)
+      conclusion: "Single features schema + 19 four-part table names; legacy features_* read-only views; engine writes canonical features.*; bifrost-research 0.6.0; SEPA projection + API fork deferred Wave 6.5."
+      signed_at: "2026-08-24"
+      authority: "bifrost-research/src/bifrost_research/schema/schemas.py · bifrost-trade-infra/docs/GOLDEN_SOURCE_RETENTION.md"
     - id: D-Wave-6.3
       status: SIGNED
       topic: Golden Source alignment (Wave 6.3)
