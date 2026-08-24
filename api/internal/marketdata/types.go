@@ -24,7 +24,7 @@ type WorkerInfo struct {
 	NextRunAt  string  `json:"next_run_at,omitempty"`
 }
 
-// FreshnessInfo is one row from data_ops.ingest_freshness.
+// FreshnessInfo is one row from ops_jobs.ingest_freshness.
 type FreshnessInfo struct {
 	Dimension   string  `json:"dimension"`
 	LastRunAt   string  `json:"last_run_at,omitempty"`

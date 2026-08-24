@@ -15,14 +15,10 @@ export const RESEARCH_ENGINE_SUMMARY = {
   goldenSource: 'bifrost_golden_source',
   schemas: [
     'dw_stock.*',
-    'features_daily.*',
-    'features_option.*',
-    'features_signals.*',
-    'features_forecasts.*',
-    'features_backtests.*',
+    'features.*',
   ] as const,
   engines: [
-    'dbt SEPA (canonical read: dw_stock.mart_sepa_*)',
+    'dbt SEPA (canonical read: dw_stock.mart_sepa_*; model write: features.stock_signal_sepa_daily via mart_sepa_feature_daily)',
     'volatility (IV / PCR / Max Pain)',
     'momentum',
     'GEX',
@@ -59,7 +55,7 @@ export const RESEARCH_GOVERNANCE_SURFACES = [
     metrics: [
       'reachable',
       'CronJob last successful Job',
-      'max(trade_date)/max(asof_ts) on features_daily.* / features_option.* / features_signals.* / features_forecasts.* / features_backtests.*',
+      'max(trade_date)/max(asof_ts) on features.* (19 Feature Store tables)',
       'elementary present/mtime when PVC report exists',
     ],
   },

@@ -298,6 +298,12 @@ decisions:
       conclusion: "Drop features_daily/option/signals/forecasts/backtests view schemas; canonical features.* only; bifrost-research 0.7.0; db-init drops legacy schemas idempotently."
       signed_at: "2026-08-24"
       authority: "bifrost-research/scripts/wave_6_6_drop_legacy_features_schemas.sql"
+    - id: D-Wave-8
+      status: EXECUTED
+      topic: Golden Source Wave 8 (financials split + OI partition + Trade public FK)
+      conclusion: "raw_market.stock_financials split into 6 entity tables + compat view; option_open_interest month-partitioned; settings.active_*_id FK ON DELETE SET NULL; Flex token Secret canonical write path; data_ops.ingest_freshness compat view retired; platform-api probe reads ops_jobs.ingest_freshness."
+      signed_at: "2026-08-24"
+      authority: "bifrost-platform-plugin-market-data/src/bifrost_market_data/schema/wave8_migrations.py · bifrost-trade-core/src/bifrost_core/persistence/postgres/ddl.py"
     - id: D-Wave-7
       status: SIGNED
       topic: Golden Source Wave 7 Hardening

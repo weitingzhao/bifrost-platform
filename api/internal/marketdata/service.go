@@ -99,7 +99,7 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	// non-empty error as fail even when reachability is ok.
 	if freshErr != "" && resp.Error == "" && freshReach != probe.ReachUnknown {
 		resp.Error = freshErr
-		resp.Hint = "Ensure data_ops.ingest_freshness is populated (worker jobs marking done)"
+		resp.Hint = "Ensure ops_jobs.ingest_freshness is populated (worker jobs marking done)"
 	}
 
 	// Plugin-native readiness KPI — failure leaves field nil (does not affect reachability).
@@ -296,7 +296,7 @@ func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Re
 	if db == "" {
 		db = defaultFreshnessDB
 	}
-	sql := "SELECT dimension, COALESCE(last_run_at::text,''), COALESCE(rows_written,0), COALESCE(status,'unknown') FROM data_ops.ingest_freshness ORDER BY dimension"
+	sql := "SELECT dimension, COALESCE(last_run_at::text,''), COALESCE(rows_written,0), COALESCE(status,'unknown') FROM ops_jobs.ingest_freshness ORDER BY dimension"
 	out, err := s.cluster.ExecSQLOnPrimary(ctx, db, sql)
 	if err != nil {
 		return nil, probe.ReachFail, err.Error()
