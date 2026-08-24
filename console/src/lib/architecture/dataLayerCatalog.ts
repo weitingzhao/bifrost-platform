@@ -44,7 +44,7 @@ export const REDIS_INSTANCES: RedisInstanceDef[] = [
   },
   {
     name: 'redis-queue',
-    roles: 'R6 Celery broker + result backend',
+    roles: 'R6 — retired (Trade Celery removed Wave 5); historical redis-queue instance archived',
     maxmemoryPolicy: 'allkeys-lru or volatile-lru',
     persistence: 'AOF or RDB+AOF (task results can expire)',
     ha: 'Primary + Replica + Sentinel (same quorum)',

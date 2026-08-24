@@ -98,7 +98,7 @@ export const MARKET_DATA_PHASES: MarketDataPhase[] = [
     id: 'P5',
     spineStep: '⑤',
     title: 'Scheduler + K8s CronJob',
-    summary: 'CronJob-driven enqueue into data_ops.job_ingest; payload_hash dedup.',
+    summary: 'CronJob-driven enqueue into ops_jobs.job_ingest; payload_hash dedup.',
     deliverable:
       'scheduler/daily.py + CronJobs (incl. reference / fundamentals-rotate) + schedule.yaml',
     status: 'done',
@@ -115,7 +115,7 @@ export const MARKET_DATA_PHASES: MarketDataPhase[] = [
     id: 'P7',
     spineStep: '⑦',
     title: 'Full backfill + data quality verification',
-    summary: 'Historical depth + freshness probe via data_ops.ingest_freshness.',
+    summary: 'Historical depth + freshness probe via ops_jobs.ingest_freshness (data_ops.ingest_freshness view shim for platform-api probe).',
     deliverable: 'verify_data_quality.py + freshness green',
     status: 'done',
   },
@@ -255,8 +255,9 @@ export function buildMarketDataSubcontractorLlmPack(): string {
     `- Watchlist: ${PG_SCHEMA_CONTRACT.watchlist}`,
     '- market tables:',
     ...PG_SCHEMA_CONTRACT.marketTables.map(t => `  - ${t}`),
-    '- data_ops tables:',
+    '- ops_jobs tables (canonical):',
     ...PG_SCHEMA_CONTRACT.dataOpsTables.map(t => `  - ${t}`),
+    '- legacy alias: data_ops.* → ops_jobs.* (view shim only; do not add new consumers)',
     '',
     '## Phases (definitions)',
     ...MARKET_DATA_PHASES.map(

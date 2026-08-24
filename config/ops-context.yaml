@@ -292,6 +292,12 @@ decisions:
       conclusion: "Wave 6.1 cleared active code paths. Wave 6.2 aligns tracked local config (bifrost-trade-infra/config/config.yaml) with bifrost-core example, updates stale CLAUDE/docs/environments-catalog copy, and retires misleading operational references. Governance program catalogs and migration history remain as audit evidence."
       signed_at: "2026-08-24"
       authority: "bifrost-trade-infra/config/config.yaml · bifrost-platform/console/src/lib/environments-catalog.ts"
+    - id: D-Wave-6.3
+      status: SIGNED
+      topic: Golden Source alignment (Wave 6.3)
+      conclusion: "Canonical schema naming in DATABASE.md and Console catalogs; GOLDEN_SOURCE_RETENTION matrix; settings active_*_id write guard (core 0.15.2); flex_ops compat DEPRECATED; SEPA canonical read = dw_stock.mart_sepa_* (API switch deferred Wave 6.5). No DDL breaking changes."
+      signed_at: "2026-08-24"
+      authority: "bifrost-trade-core/docs/DATABASE.md · bifrost-trade-infra/docs/GOLDEN_SOURCE_RETENTION.md"
 platform_phases:
     - id: A
       label: Gate

@@ -22,7 +22,7 @@ export const RESEARCH_ENGINE_SUMMARY = {
     'features_backtests.*',
   ] as const,
   engines: [
-    'dbt SEPA',
+    'dbt SEPA (canonical read: dw_stock.mart_sepa_*)',
     'volatility (IV / PCR / Max Pain)',
     'momentum',
     'GEX',
