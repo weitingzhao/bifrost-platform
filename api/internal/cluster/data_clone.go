@@ -21,6 +21,8 @@ const (
 	dataCloneAuditBackupTpl  = "/var/lib/postgresql/data/bifrost-audit-backup-%s.sql"
 	dataCloneMinDumpB        = 1_000_000
 	dataCloneAuditTable      = "public.ops_audit_log"
+	// Wave 4: partitioned parent + monthly children (ops_audit_log_yYYYYmMM / _default).
+	dataCloneAuditTablePat   = "public.ops_audit_log*"
 )
 
 var safeIdentRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -713,8 +715,8 @@ func (s *Service) runDataClone(ctx context.Context, jobID string) {
 
 // dataCloneDumpArgs returns a schema-inclusive dump for full clone, and a data-only
 // dump for selective clone. Selective restore assumes destination tables already exist.
-// Full clone excludes ops_audit_log row data so each env keeps its own audit trail;
-// schema CREATE for the table is still included.
+// Full clone excludes ops_audit_log row data (parent + partitions) so each env keeps
+// its own audit trail; schema CREATE for the table is still included.
 func dataCloneDumpArgs(source, mode string, tables []string) []string {
 	args := []string{"pg_dump", "-U", "postgres", "-d", source, "--no-owner", "--no-acl", "--format=plain"}
 	if mode == "selective" {
@@ -723,7 +725,7 @@ func dataCloneDumpArgs(source, mode string, tables []string) []string {
 			args = append(args, "-t", table)
 		}
 	} else {
-		args = append(args, "--exclude-table-data="+dataCloneAuditTable)
+		args = append(args, "--exclude-table-data="+dataCloneAuditTablePat)
 	}
 	return append(args, "-f", dataCloneRemoteDump)
 }
@@ -732,12 +734,12 @@ func dataCloneAuditBackupPath(target string) string {
 	return fmt.Sprintf(dataCloneAuditBackupTpl, target)
 }
 
-// backupTargetAuditLog best-effort dumps target ops_audit_log before full reset.
+// backupTargetAuditLog best-effort dumps target ops_audit_log (incl. partitions) before full reset.
 func (s *Service) backupTargetAuditLog(ctx context.Context, primary, target string) {
 	path := dataCloneAuditBackupPath(target)
 	_, err := s.execOnPrimary(ctx, primary, "pg_dump", "-U", "postgres", "-d", target,
 		"--data-only", "--no-owner", "--no-acl",
-		"-t", dataCloneAuditTable,
+		"-t", dataCloneAuditTablePat,
 		"-f", path)
 	if err != nil {
 		// Table may be missing on fresh targets; never block clone.

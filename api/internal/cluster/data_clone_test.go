@@ -201,12 +201,24 @@ func TestDataCloneDumpArgsSelectiveIsDataOnly(t *testing.T) {
 func TestDataCloneDumpArgsFullExcludesAuditData(t *testing.T) {
 	args := dataCloneDumpArgs("bifrost_prod", "full", nil)
 	joined := strings.Join(args, " ")
-	want := "--exclude-table-data=" + dataCloneAuditTable
+	want := "--exclude-table-data=" + dataCloneAuditTablePat
 	if !strings.Contains(joined, want) {
 		t.Fatalf("full dump args %q missing %q", joined, want)
 	}
+	if !strings.Contains(joined, "ops_audit_log*") {
+		t.Fatalf("full dump must use partition wildcard pattern: %q", joined)
+	}
 	if strings.Contains(joined, "--data-only") {
 		t.Fatalf("full dump must not be data-only: %q", joined)
+	}
+}
+
+func TestDataCloneAuditTablePatternCoversPartitions(t *testing.T) {
+	if dataCloneAuditTablePat != "public.ops_audit_log*" {
+		t.Fatalf("unexpected audit pattern %q", dataCloneAuditTablePat)
+	}
+	if !strings.HasPrefix(dataCloneAuditTablePat, dataCloneAuditTable) {
+		t.Fatalf("pattern %q must extend base table %q", dataCloneAuditTablePat, dataCloneAuditTable)
 	}
 }
 
