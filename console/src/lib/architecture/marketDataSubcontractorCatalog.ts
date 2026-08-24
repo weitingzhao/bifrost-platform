@@ -5,7 +5,7 @@
  *
  * Live state (not this catalog):
  * - Worker health + deployments + freshness tables: Subcontractors → Market Data (observe)
- * - Optional readiness_rollup on GET /api/v1/plugins/market-data/status (Plugin snapshot-coverage + vendor-gap; Trade owns runbook / per-symbol gaps)
+ * - Optional readiness_rollup on GET /api/v1/plugins/market-data/status (Plugin snapshot-coverage + vendor-gap + composite /readiness/summary)
  * - Coverage Quality Dashboard (secondary panels): Quality Score · Readiness · Financials · DB Summary · Capability (?tab=coverage&panel=readiness|financials)
  * - Phase / program sign-off: Engineer → Active Session · market-data-subcontractor
  * - Implementation: bifrost-platform-plugin-market-data
@@ -28,7 +28,7 @@ export const MARKET_DATA_LAUNCH_LANE = {
   galleryIsNotPublish:
     'Market Data manage page = observe health / deployments / freshness (+ readiness_rollup) and Coverage Quality panels (Readiness / Financials). Launch Plugin → Market Data seat = publish workers + API + CronJobs.',
   d10: 'Market-data REST ingest only — no place_order / no IB socket',
-  imageTag: '0.7.0',
+  imageTag: '0.7.9',
 } as const
 
 export type MarketDataPhaseId =
@@ -149,7 +149,8 @@ export const MARKET_DATA_DESIGN_PRINCIPLES = [
   'Library SLA — ticker_sync age <24h; financials age <24h; CS financials coverage catch-up then daily rotate.',
   'Trading-calendar guard — stock-eod / eod-pipeline / universe-daily / corporate / fundamentals-rotate skip non-trading days.',
   'Plugin API read layer — Trade consumers read via HTTP (:8790 proxied via platform-api :8780); zero direct SQL.',
-  'Data quality self-check — /market/readiness/snapshot-coverage (raw_market.stock_snapshot instrument-type breakdown) + /market/readiness/vendor-gap (session_date vs stock_daily bar gap detection).',
+  'Data quality self-check — /market/readiness/snapshot-coverage + /market/readiness/vendor-gap + composite /market/readiness/summary (Trade FE SepaReadinessSummaryResponse shape).',
+  'Source-void ack — ops_jobs.data_source_void + GET/POST /market/readiness/source-void (migrated from Trade preference_data_gap_ack).',
   'D10-safe — REST market data only; no place_order / no IB socket path.',
 ] as const
 
@@ -177,6 +178,7 @@ export const PG_SCHEMA_CONTRACT = {
   dataOpsTables: [
     'ops_jobs.job_ingest',
     'ops_jobs.ingest_freshness',
+    'ops_jobs.data_source_void',
   ] as const,
   watchlist: 'public.watchlist (Trade schema — SELECT only for scheduler)',
   namespace: 'plugin-market-data',
@@ -199,9 +201,9 @@ export const MARKET_DATA_RELATED_AUTHORITIES = [
   'Manage UI: Subcontractors → Market Data (`market-data-manage`) — Overview (incl. Analytics demand) / Coverage / Ingest',
   'Plugin API proxy: GET unauthenticated; POST/DELETE operator-authed then platform-api attaches MARKET_DATA_WRITE_TOKEN toward :8790 (browser never holds the Plugin write secret)',
   'Publish: kubectl apply -k k8s/base + make verify-market-data',
-  'Library SLA: ticker_sync <24h · financials cadence <24h · CS financials catch-up then daily rotate · related-companies rotate ≤7 trading days · ticker_type dictionary on-demand (reference + fundamentals-rotate + related-rotate CronJobs; image bifrost-market-data:0.7.6)',
-  'Image tag: bifrost-market-data:0.7.6 (k8s/base only — STG/PROD overlays archived W2-P2; stale-running reclaim + job timeout)',
-  'Readiness rollup: Plugin-native (universe / snapshot_covered / snapshot_rows / vendor_gap_count / as_of). No longer reads Trade public.stock_readiness_daily.',
+  'Library SLA: ticker_sync <24h · financials cadence <24h · CS financials catch-up then daily rotate · related-companies rotate ≤7 trading days · ticker_type dictionary on-demand (reference + fundamentals-rotate + related-rotate CronJobs; image bifrost-market-data:0.7.9)',
+  'Image tag: bifrost-market-data:0.7.9 (k8s/base only — STG/PROD overlays archived W2-P2; stale-running reclaim + job timeout)',
+  'Readiness authority: Plugin owns data completeness (ops_jobs.data_source_void + /market/readiness/summary + /source-void). Trade public.preference_data_gap_ack retired (core 0.10.10); Trade API is thin HTTP passthrough.',
   'Program / phase sign-off: Active Session (Engineer → Delivery) · market-data-subcontractor',
   'Implementation: bifrost-platform-plugin-market-data',
   'Spine: config/ops-context.yaml · GET /api/v1/context · milestone market-data-subcontractor',
