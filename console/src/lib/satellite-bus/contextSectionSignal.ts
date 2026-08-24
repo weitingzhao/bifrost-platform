@@ -283,7 +283,6 @@ export function evidenceContextSignal(
       observeOnly = true
     }
   }
-  push(bus.monitor.celery?.reachability, `celery ${bus.monitor.celery?.reachability}`)
   push(bus.monitor.account_sync?.reachability, `account_sync ${bus.monitor.account_sync?.reachability}`)
   push(bus.ops?.reachability, `ops ${bus.ops?.reachability}`)
 

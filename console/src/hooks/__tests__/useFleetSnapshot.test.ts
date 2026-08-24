@@ -40,12 +40,6 @@ describe('resolveDaemonIbObserve', () => {
           ib_operator: { reachability: 'ok', detail: '' },
           platform_ib_gateway: { reachability: 'ok', detail: '' },
         },
-        celery: {
-          broker_connected: true,
-          workers: [],
-          worker_ib_connected: false,
-          reachability: 'ok',
-        },
         account_sync: { daemon_alive: true, reachability: 'ok' },
       },
       ops: { reachability: 'ok', detail: '' },

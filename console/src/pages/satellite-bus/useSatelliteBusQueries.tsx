@@ -323,25 +323,6 @@ export function useSatelliteBusQueries({
     ]
   }, [busDeep?.monitor.daemon, busLoading])
 
-  const celeryRows = useMemo((): MonitorKvRow[] => {
-    const celery = busDeep?.monitor.celery
-    return [
-      {
-        label: 'Reachability',
-        value: (
-          <>
-            <StatusLamp value={busLampReach(celery?.reachability)} kind="reach" />{' '}
-            {renderText(celery?.reachability)}
-          </>
-        ),
-      },
-      { label: 'broker_connected', value: renderText(celery?.broker_connected) },
-      { label: 'workers', value: (celery?.workers ?? []).join(', ') || '—' },
-      { label: 'worker_ib_connected', value: renderText(celery?.worker_ib_connected) },
-      { label: 'worker_ib_client_id', value: renderText(celery?.worker_ib_client_id) },
-    ]
-  }, [busDeep?.monitor.celery])
-
   const accountSyncRows = useMemo((): MonitorKvRow[] => {
     const sync = busDeep?.monitor.account_sync
     return [
@@ -405,7 +386,6 @@ export function useSatelliteBusQueries({
     aiIngestTriage,
     canOperate,
     daemonRows,
-    celeryRows,
     accountSyncRows,
     opsRows,
     probeTime,

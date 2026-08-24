@@ -42,15 +42,6 @@ export function satelliteBusPolygonWs(
   return socket?.polygon_ws
 }
 
-export interface SatelliteBusMonitorCelery {
-  broker_connected: boolean
-  workers: string[]
-  worker_ib_connected: boolean
-  worker_ib_client_id?: unknown
-  worker_last_updated_ts?: unknown
-  reachability: Reachability
-}
-
 export interface SatelliteBusMonitorAccountSync {
   daemon_alive: boolean
   stream_lag?: unknown
@@ -64,7 +55,6 @@ export interface SatelliteBusMonitorDeep {
   health: SatelliteBusMonitorHealth
   daemon: SatelliteBusMonitorDaemon
   socket: SatelliteBusMonitorSocket
-  celery: SatelliteBusMonitorCelery
   account_sync: SatelliteBusMonitorAccountSync
 }
 

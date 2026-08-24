@@ -21,7 +21,6 @@ export function SatelliteBusEvidenceSection({
   evidenceSectionRef,
   highlightSection,
   daemonRows,
-  celeryRows,
   accountSyncRows,
   opsRows,
   tradeApiTargetRows,
@@ -38,7 +37,6 @@ export function SatelliteBusEvidenceSection({
   evidenceSectionRef: Ref<HTMLDetailsElement>
   highlightSection: string | null
   daemonRows: MonitorKvRow[]
-  celeryRows: MonitorKvRow[]
   accountSyncRows: MonitorKvRow[]
   opsRows: MonitorKvRow[]
   tradeApiTargetRows: Target[]
@@ -71,10 +69,7 @@ export function SatelliteBusEvidenceSection({
       >
         <MonitorKvTable rows={daemonRows} loading={busLoading} />
       </OpsSection>
-      <div className="grid divide-x divide-[var(--border)] border-t border-[var(--border)] sm:grid-cols-2 xl:grid-cols-3">
-        <OpsSection variant="flat" title="Celery" bodyPadding="none" overflow="hidden">
-          <MonitorKvTable rows={celeryRows} loading={busLoading} />
-        </OpsSection>
+      <div className="grid divide-x divide-[var(--border)] border-t border-[var(--border)] sm:grid-cols-2">
         <OpsSection variant="flat" title="Account sync" bodyPadding="none" overflow="hidden">
           <MonitorKvTable rows={accountSyncRows} loading={busLoading} />
         </OpsSection>

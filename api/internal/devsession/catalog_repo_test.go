@@ -19,7 +19,7 @@ func TestLoadSessionsCatalog_RepoFile(t *testing.T) {
 	}
 	stg := cat.EntriesForEnv("stg")
 	prod := cat.EntriesForEnv("prod")
-	if len(stg) < 17 || len(prod) < 17 {
+	if len(stg) < 13 || len(prod) < 13 {
 		t.Fatalf("expected expanded catalogs, got stg=%d prod=%d", len(stg), len(prod))
 	}
 	platform := cat.Lookup("stg", "platform")
@@ -40,7 +40,7 @@ func TestLoadSessionsCatalog_RepoFile(t *testing.T) {
 	if len(nss) < 3 {
 		t.Fatalf("discovery namespaces=%v", nss)
 	}
-	if cat.Lookup("stg", "api-account") == nil || cat.Lookup("stg", "flower") == nil {
+	if cat.Lookup("stg", "api-account") == nil || cat.Lookup("stg", "daemon") == nil {
 		t.Fatal("expanded API/worker entries missing")
 	}
 }

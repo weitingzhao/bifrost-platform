@@ -27,9 +27,6 @@ describe('resolveCriticalProcesses', () => {
       wl({ name: 'account-sync', namespace: 'bifrost-prod' }),
       wl({ name: 'api-massive', namespace: 'bifrost-prod' }),
       wl({ name: 'polygon-ws-ingestor', namespace: 'bifrost-prod' }),
-      wl({ name: 'celery-beat', namespace: 'bifrost-prod' }),
-      wl({ name: 'celery-worker', namespace: 'bifrost-prod', ready: '0/1', status: 'Pending', reachability: 'degraded' }),
-      wl({ name: 'flower', namespace: 'bifrost-prod' }),
     ]
     const plugin = [
       wl({ name: IB_GATEWAY_WORKLOAD, namespace: IB_GATEWAY_PLUGIN_NS, ready: '1/1' }),
@@ -54,18 +51,12 @@ describe('resolveCriticalProcesses', () => {
       name: 'ib-gateway',
       namespace: 'data',
     })
-    // Must not confuse account-sync / api-massive / celery-beat
+    // Must not confuse account-sync / api-massive
     expect(byLabel['IB Account Agent'].name).not.toBe('account-sync')
     expect(byLabel['Polygon WS Ingestor']).toMatchObject({
       name: 'polygon-ws-ingestor',
       namespace: 'bifrost-prod',
     })
-    expect(byLabel['Celery worker']).toMatchObject({
-      name: 'celery-worker',
-      ready: '0/1',
-      reachability: 'degraded',
-    })
-    expect(byLabel['Flower'].name).toBe('flower')
     expect(byLabel['GsTrading daemon'].ready).toBe('2/2')
   })
 

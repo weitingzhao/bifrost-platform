@@ -59,7 +59,6 @@ export type SatelliteBusDetailSectionsProps = {
   tradeApiTargetRows: Target[]
   criticalProcesses: CriticalProcessRow[]
   daemonRows: MonitorKvRow[]
-  celeryRows: MonitorKvRow[]
   accountSyncRows: MonitorKvRow[]
   opsRows: MonitorKvRow[]
   onOpenCluster?: () => void
@@ -104,7 +103,6 @@ export function SatelliteBusDetailSections({
   tradeApiTargetRows,
   criticalProcesses,
   daemonRows,
-  celeryRows,
   accountSyncRows,
   opsRows,
   onOpenCluster,
@@ -229,7 +227,6 @@ export function SatelliteBusDetailSections({
             evidenceSectionRef={evidenceSectionRef}
             highlightSection={highlightSection}
             daemonRows={daemonRows}
-            celeryRows={celeryRows}
             accountSyncRows={accountSyncRows}
             opsRows={opsRows}
             tradeApiTargetRows={tradeApiTargetRows}

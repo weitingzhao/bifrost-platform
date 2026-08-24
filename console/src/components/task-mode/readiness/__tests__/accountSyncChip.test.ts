@@ -36,12 +36,6 @@ function bus(overrides: {
         ib_operator: { reachability: 'ok', detail: 'ok' },
         platform_ib_gateway: { reachability: 'ok', detail: 'ok' },
       },
-      celery: {
-        broker_connected: true,
-        workers: ['w1'],
-        worker_ib_connected: false,
-        reachability: 'ok',
-      },
       account_sync: {
         daemon_alive: accountSyncOk,
         reachability: accountSyncOk ? 'ok' : 'fail',

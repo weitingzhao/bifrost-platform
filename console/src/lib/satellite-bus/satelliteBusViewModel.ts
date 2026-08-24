@@ -307,54 +307,6 @@ function buildRuntimeConsumers(
     probePath: `matrix[${env}].targets(trade_api)`,
   })
 
-  const celery = bus?.monitor.celery
-  const celeryHealth: BusNodeHealth =
-    celery == null
-      ? 'unknown'
-      : celery.reachability === 'ok' && celery.broker_connected
-        ? 'ok'
-        : celery.reachability === 'fail'
-          ? 'fail'
-          : 'degraded'
-  rows.push({
-    id: 'celery-workers',
-    label: 'Celery workers',
-    kind: 'runtime',
-    requirement: 'required',
-    health: celeryHealth,
-    stateLabel:
-      celeryHealth === 'ok' ? 'OK' : celeryHealth === 'fail' ? 'UNEXPECTED DOWN' : celeryHealth === 'degraded' ? 'DEGRADED' : 'UNPROBED',
-    detail:
-      celery == null
-        ? 'No celery probe'
-        : `broker ${celery.broker_connected ? 'connected' : 'disconnected'} · ${celery.workers.length} worker(s)`,
-    probePath: `bus-deep[${env}].monitor.celery`,
-    raw: celery,
-  })
-
-  // W4 trade-celery-k8s-ideal — surface Beat + Flower as first-class Satellite Bus nodes.
-  rows.push({
-    id: 'celery-beat',
-    label: 'Celery Beat',
-    kind: 'runtime',
-    requirement: 'required',
-    health: celery == null ? 'unknown' : celery.broker_connected ? 'ok' : 'degraded',
-    stateLabel: celery == null ? 'UNPROBED' : celery.broker_connected ? 'EXPECTED' : 'DEGRADED',
-    detail:
-      'Deployment celery-beat (singleton). Schedules stocks_ib / generic Beat tasks; confirm Ready via celery-beat deploy + broker probe.',
-    probePath: `bus-deep[${env}].monitor.celery (+ deploy/celery-beat)`,
-  })
-  rows.push({
-    id: 'flower',
-    label: 'Flower',
-    kind: 'runtime',
-    requirement: 'optional',
-    health: celery == null ? 'unknown' : celery.broker_connected ? 'ok' : 'degraded',
-    stateLabel: celery == null ? 'UNPROBED' : 'READY',
-    detail: 'Deployment flower :5555 — Celery monitoring UI (ClusterIP).',
-    probePath: `bus-deep[${env}].monitor.celery (+ deploy/flower)`,
-  })
-
   const sync = bus?.monitor.account_sync
   const daemonConsumerHealth = daemonRow != null ? consumerHealth(daemonRow) : 'unknown'
   const daemonTradingSideUp =
@@ -581,7 +533,7 @@ export function buildSatelliteBusViewModel(
       health: namespaceNodeHealth,
       stateLabel: nodeStateLabel(namespaceNodeHealth),
       headline: `${runtimeOk}/${scoredRuntime.length} monitor consumers ok${expectedOff > 0 ? ` · expected-off neutral` : ''}`,
-      detail: `Selected namespace monitor consumers — trading daemon / Trade APIs / Celery / account sync in ${namespace}`,
+      detail: `Selected namespace monitor consumers — trading daemon / Trade APIs / account sync in ${namespace}`,
       probePath: `bus-deep[${selectedEnv}].monitor + matrix[${selectedEnv}]`,
     },
   ]

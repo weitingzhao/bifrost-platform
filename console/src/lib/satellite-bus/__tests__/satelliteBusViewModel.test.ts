@@ -47,7 +47,6 @@ type BusOverrides = {
   ingest?: SatelliteBusIngestService[]
   daemonAlive?: boolean
   daemonPolicyOff?: boolean
-  celeryOk?: boolean
   accountSyncOk?: boolean
   opsFail?: boolean
 }
@@ -96,12 +95,6 @@ function bus(env: 'dev' | 'stg' | 'prod', o: BusOverrides = {}): SatelliteBusDee
         ib_account_agent: o.ib_account_agent ?? component('ok', 'connected @ redis-ib'),
         ib_operator: o.ib_operator ?? component('ok', 'rpc consumer ready'),
         platform_ib_gateway: o.platform_ib_gateway ?? gatewayUp(),
-      },
-      celery: {
-        broker_connected: o.celeryOk ?? true,
-        workers: ['celery@w1'],
-        worker_ib_connected: false,
-        reachability: (o.celeryOk ?? true) ? 'ok' : 'fail',
       },
       account_sync: {
         daemon_alive: o.accountSyncOk ?? o.daemonPolicyOff !== true,

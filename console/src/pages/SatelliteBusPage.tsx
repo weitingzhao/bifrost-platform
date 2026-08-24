@@ -655,7 +655,6 @@ export function SatelliteBusPage({
           tradeApiTargetRows={q.tradeApiTargetRows}
           criticalProcesses={q.criticalProcesses}
           daemonRows={q.daemonRows}
-          celeryRows={q.celeryRows}
           accountSyncRows={q.accountSyncRows}
           opsRows={q.opsRows}
           onOpenCluster={onOpenCluster}

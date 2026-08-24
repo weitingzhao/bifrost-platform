@@ -69,10 +69,6 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 				IBOperator:        SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 				PlatformIBGateway: SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 			},
-			Celery: MonitorCeleryDeep{
-				Workers:      []string{},
-				Reachability: probe.ReachUnknown,
-			},
 			AccountSync: MonitorAccountSyncDeep{
 				Reachability: probe.ReachUnknown,
 			},
@@ -157,10 +153,6 @@ func (s *Service) busDeepFromBridge(ctx context.Context, env config.Environment)
 				IBOperator:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
 				PlatformIBGateway: SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
 			},
-			Celery: MonitorCeleryDeep{
-				Workers:      []string{},
-				Reachability: probe.ReachFail,
-			},
 			AccountSync: MonitorAccountSyncDeep{Reachability: probe.ReachFail},
 		},
 		Ops: OpsDeep{
@@ -227,10 +219,6 @@ func monitorDeepFromBridgeError(msg string) MonitorDeep {
 			IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
 			IBOperator:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
 			PlatformIBGateway: SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
-		},
-		Celery: MonitorCeleryDeep{
-			Workers:      []string{},
-			Reachability: probe.ReachFail,
 		},
 		AccountSync: MonitorAccountSyncDeep{Reachability: probe.ReachFail},
 	}
@@ -300,13 +288,6 @@ type monitorStatusRaw struct {
 		Heartbeat    map[string]any `json:"heartbeat"`
 	} `json:"daemon"`
 	Socket map[string]any `json:"socket"`
-	Celery struct {
-		BrokerConnected   bool     `json:"broker_connected"`
-		Workers           []string `json:"workers"`
-		WorkerIBConnected bool     `json:"worker_ib_connected"`
-		WorkerIBClientID  any      `json:"worker_ib_client_id"`
-		WorkerLastUpdated any      `json:"worker_last_updated_ts"`
-	} `json:"celery"`
 	AccountSyncDaemon *struct {
 		Heartbeat map[string]any `json:"heartbeat"`
 	} `json:"account_sync_daemon"`
@@ -354,18 +335,6 @@ func buildMonitorDeepFromRaw(raw monitorStatusRaw) MonitorDeep {
 		reachFromSelfCheck(raw.Daemon.SelfCheck),
 	)
 
-	celeryWorkers := raw.Celery.Workers
-	if celeryWorkers == nil {
-		celeryWorkers = []string{}
-	}
-	celeryReach := probe.ReachFail
-	switch {
-	case raw.Celery.BrokerConnected && len(celeryWorkers) > 0:
-		celeryReach = probe.ReachOK
-	case raw.Celery.BrokerConnected:
-		celeryReach = probe.ReachDegraded
-	}
-
 	accountSync := MonitorAccountSyncDeep{
 		Reachability: probe.ReachUnknown,
 	}
@@ -402,7 +371,7 @@ func buildMonitorDeepFromRaw(raw monitorStatusRaw) MonitorDeep {
 		socket.PlatformIBGateway.Reachability,
 	)
 
-	reach := aggregateReach(healthReach, daemonReach, socketReach, celeryReach, accountSync.Reachability)
+	reach := aggregateReach(healthReach, daemonReach, socketReach, accountSync.Reachability)
 	return MonitorDeep{
 		Reachability: reach,
 		Detail:       monitorDetailFromRaw(raw, reach),
@@ -422,14 +391,6 @@ func buildMonitorDeepFromRaw(raw monitorStatusRaw) MonitorDeep {
 			AutoStatus:   mapFromAny(raw.Daemon.Trading["auto_status"]),
 		},
 		Socket: socket,
-		Celery: MonitorCeleryDeep{
-			BrokerConnected:   raw.Celery.BrokerConnected,
-			Workers:           celeryWorkers,
-			WorkerIBConnected: raw.Celery.WorkerIBConnected,
-			WorkerIBClientID:  raw.Celery.WorkerIBClientID,
-			WorkerLastUpdated: raw.Celery.WorkerLastUpdated,
-			Reachability:      celeryReach,
-		},
 		AccountSync: accountSync,
 	}
 }

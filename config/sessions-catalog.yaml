@@ -73,27 +73,6 @@ envs:
       deployment: frontend
       ports: [80]
 
-    - name: celery-worker
-      label: Celery Worker
-      group: worker
-      namespace: bifrost-stg
-      deployment: celery-worker
-    - name: celery-worker-stocks-ib
-      label: Celery Stocks IB
-      group: worker
-      namespace: bifrost-stg
-      deployment: celery-worker-stocks-ib
-    - name: celery-beat
-      label: Celery Beat
-      group: worker
-      namespace: bifrost-stg
-      deployment: celery-beat
-    - name: flower
-      label: Flower
-      group: worker
-      namespace: bifrost-stg
-      deployment: flower
-      ports: [5555]
     - name: daemon
       label: Daemon
       group: worker
@@ -172,27 +151,6 @@ envs:
       deployment: frontend
       ports: [80]
 
-    - name: celery-worker
-      label: Celery Worker
-      group: worker
-      namespace: bifrost-prod
-      deployment: celery-worker
-    - name: celery-worker-stocks-ib
-      label: Celery Stocks IB
-      group: worker
-      namespace: bifrost-prod
-      deployment: celery-worker-stocks-ib
-    - name: celery-beat
-      label: Celery Beat
-      group: worker
-      namespace: bifrost-prod
-      deployment: celery-beat
-    - name: flower
-      label: Flower
-      group: worker
-      namespace: bifrost-prod
-      deployment: flower
-      ports: [5555]
     - name: daemon
       label: Daemon
       group: worker

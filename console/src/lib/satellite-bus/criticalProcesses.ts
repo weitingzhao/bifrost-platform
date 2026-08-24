@@ -57,8 +57,6 @@ export const CRITICAL_PROCESS_SPECS: readonly CriticalProcessSpec[] = [
     pluginNames: ['polygon-ws-ingestor'],
     pluginNs: MARKET_DATA_PLUGIN_NS,
   },
-  { label: 'Celery worker', tradeNames: ['celery-worker'] },
-  { label: 'Flower', tradeNames: ['flower'] },
 ]
 
 function findByExactName(

@@ -280,6 +280,12 @@ decisions:
       conclusion: "Bifrost is three domains: Trade (OLTP), Research (OLAP), Ops (Control Plane). bifrost-research owns dbt analytics (former bifrost-analytics), Python analysis engines, and Research API on bifrost_golden_source. Research must not write Trade DB or market.* ingest tables, and must not trigger trade execution (D10 remains BLOCKED). Plugins remain data-source adapters; OLAP compute migrates into Research over subsequent Waves."
       signed_at: "2026-08-21"
       authority: "console/src/lib/architecture/blueprintCatalog.ts · agentProtocolCatalog.ts · bifrost-research/CLAUDE.md"
+    - id: D-Wave-6.1
+      status: SIGNED
+      topic: Trade Celery active-code sweep (Wave 6.1)
+      conclusion: "Wave 5 retired Trade Celery runtime (zero celery-worker / celery-beat / flower pods). Wave 6.1 removes remaining active code paths: platform-api satellite monitor.celery field, Console Satellite Bus celery nodes, sessions-catalog celery sessions, Trade FE celeryBeat noop hook, bifrost-core config.yaml.example ops.celery dead fields. Governance catalogs and completed program yaml retained as audit evidence."
+      signed_at: "2026-08-24"
+      authority: "console/src/lib/architecture/tradeCeleryK8sIdealCatalog.ts · bifrost-trade-infra/docs/WAVE5_ROLLOUT.md"
 platform_phases:
     - id: A
       label: Gate
@@ -677,5 +683,5 @@ probe_hints:
       trade_route: /operations/daemon
       hint: "Daemon status and control overview"
     - target_id: api-ops
-      trade_route: /operations/celery
-      hint: "Celery workers and queues"
+      trade_route: /operations/logs
+      hint: "Ops API health and log streams"

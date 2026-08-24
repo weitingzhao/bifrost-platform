@@ -31,7 +31,6 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 					"ib_operator":{"lamp":"green","self_check":"ok","status":"connected"},
 					"platform_ib_gateway":{"lamp":"yellow","self_check":"degraded","status":"partial"}
 				},
-				"celery":{"broker_connected":true,"workers":["w1"],"worker_ib_connected":false,"worker_ib_client_id":77,"worker_last_updated_ts":1751700012},
 				"account_sync_daemon":{"heartbeat":{"daemon_alive":true,"stream_lag":3,"last_ts":1751700012}}
 			}`))
 		case "/api/ops/health":
@@ -77,9 +76,6 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 	if resp.Monitor.Daemon.Heartbeat["daemon_alive"] != true {
 		t.Fatalf("expected daemon_alive true in heartbeat, got %#v", resp.Monitor.Daemon.Heartbeat)
 	}
-	if !resp.Monitor.Celery.BrokerConnected || len(resp.Monitor.Celery.Workers) != 1 {
-		t.Fatalf("expected parsed celery workers, got %+v", resp.Monitor.Celery)
-	}
 	if resp.Monitor.AccountSync.Reachability != probe.ReachOK {
 		t.Fatalf("expected account sync ok, got %s", resp.Monitor.AccountSync.Reachability)
 	}
@@ -123,7 +119,6 @@ func TestBusDeepAllHealthy(t *testing.T) {
 					"ib_operator":{"lamp":"green","self_check":"ok"},
 					"platform_ib_gateway":{"lamp":"green","self_check":"ok"}
 				},
-				"celery":{"broker_connected":true,"workers":["w1","w2"],"worker_ib_connected":true},
 				"account_sync_daemon":{"heartbeat":{"daemon_alive":true,"stream_lag":0}}
 			}`))
 		case "/api/ops/health":
@@ -178,7 +173,6 @@ func TestBusDeepBridgeMode(t *testing.T) {
 			"ib_operator":{"lamp":"green","self_check":"ok"},
 			"platform_ib_gateway":{"lamp":"green","self_check":"ok"}
 		},
-		"celery":{"broker_connected":true,"workers":["w1"],"worker_ib_connected":false},
 		"account_sync_daemon":{"heartbeat":{"daemon_alive":true,"stream_lag":0}}
 	}`
 	ingestBody := `{"ok":true,"services":[{"id":"polygon_ws","process_active":"active"}]}`

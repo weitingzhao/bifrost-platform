@@ -17,7 +17,6 @@ var tierBManualItems = []struct {
 }{
 	{id: "ib-tws-live", label: "IB TWS live connection verified (manual)"},
 	{id: "massive-ws-quotes", label: "Plugin Market Data: REST retired; WS via polygon-ws-ingestor / redis-massive (manual)"},
-	{id: "celery-workers", label: "Celery workers processing tasks (manual)"},
 }
 
 func (s *Service) TierBStatus(ctx context.Context) TierBStatusResponse {

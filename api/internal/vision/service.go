@@ -213,9 +213,6 @@ func (s *Service) checkDevNamespace(ctx context.Context) GateCheck {
 	ready := 0
 	notReady := []string{}
 	for _, d := range deploys.Items {
-		if d.Name == "celery-worker" && d.Spec.Replicas != nil && *d.Spec.Replicas == 0 {
-			continue
-		}
 		if d.Status.ReadyReplicas > 0 && d.Status.ReadyReplicas >= d.Status.Replicas {
 			ready++
 		} else {

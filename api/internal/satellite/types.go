@@ -23,7 +23,6 @@ type MonitorDeep struct {
 	Health       MonitorHealthDeep      `json:"health"`
 	Daemon       MonitorDaemonDeep      `json:"daemon"`
 	Socket       MonitorSocketDeep      `json:"socket"`
-	Celery       MonitorCeleryDeep      `json:"celery"`
 	AccountSync  MonitorAccountSyncDeep `json:"account_sync"`
 }
 
@@ -62,15 +61,6 @@ type SocketComponentDeep struct {
 	SelfCheck    string             `json:"self_check,omitempty"`
 	Detail       string             `json:"detail"`
 	Raw          map[string]any     `json:"raw,omitempty"`
-}
-
-type MonitorCeleryDeep struct {
-	BrokerConnected   bool               `json:"broker_connected"`
-	Workers           []string           `json:"workers"`
-	WorkerIBConnected bool               `json:"worker_ib_connected"`
-	WorkerIBClientID  any                `json:"worker_ib_client_id,omitempty"`
-	WorkerLastUpdated any                `json:"worker_last_updated_ts,omitempty"`
-	Reachability      probe.Reachability `json:"reachability"`
 }
 
 type MonitorAccountSyncDeep struct {

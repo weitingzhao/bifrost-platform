@@ -233,7 +233,6 @@ describe('evidenceContextSignal', () => {
           lamp: 'yellow',
           block_reasons: ['ib_not_connected'],
         },
-        celery: { reachability: 'ok' },
         account_sync: { reachability: 'ok' },
       },
       ops: { reachability: 'ok' },
@@ -257,7 +256,6 @@ describe('evidenceContextSignal', () => {
             graceful_shutdown_at: 1785087512.175405,
           },
         },
-        celery: { reachability: 'ok' },
         account_sync: { reachability: 'ok' },
       },
       ops: { reachability: 'ok' },
@@ -280,7 +278,6 @@ describe('evidenceContextSignal', () => {
             daemon_alive: false,
           },
         },
-        celery: { reachability: 'ok' },
         account_sync: { reachability: 'ok' },
       },
       ops: { reachability: 'ok' },
@@ -294,7 +291,6 @@ describe('evidenceContextSignal', () => {
     const bus = {
       monitor: {
         daemon: { reachability: 'ok' },
-        celery: { reachability: 'ok' },
         account_sync: { reachability: 'ok' },
       },
       ops: { reachability: 'ok' },

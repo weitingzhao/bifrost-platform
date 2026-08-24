@@ -350,7 +350,7 @@ func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
 			Reachability: probe.ReachDegraded, Detail: "not deployed",
 		})
 	}
-	domain := finalizeDomain("workers", "General workers", deps, "Daemon · Celery · data pipelines")
+	domain := finalizeDomain("workers", "General workers", deps, "Daemon · data pipelines")
 	if domain.Status == "partial" || domain.Status == "standby" {
 		onlyStandby := true
 		for _, d := range domain.Dependencies {

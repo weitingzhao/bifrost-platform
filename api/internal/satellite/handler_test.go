@@ -28,7 +28,6 @@ func newSatelliteFixtureServer(t *testing.T) *httptest.Server {
 					"ib_operator":{"lamp":"green","self_check":"ok"},
 					"platform_ib_gateway":{"lamp":"green","self_check":"ok"}
 				},
-				"celery":{"broker_connected":true,"workers":["w1"],"worker_ib_connected":true},
 				"account_sync_daemon":{"heartbeat":{"daemon_alive":true,"stream_lag":0}}
 			}`))
 		case "/api/ops/health":

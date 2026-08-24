@@ -103,7 +103,7 @@ export function SatelliteBusSelectedEnvSection({
           title="Runtime consumers"
           bodyPadding="none"
           overflow="hidden"
-          description="Monitor consumers — trading daemon / Trade APIs / Celery workers / account sync. Issues here degrade the bus verdict but never mark it unavailable. K8s workload readiness is Evidence and does not affect Bus Health"
+          description="Monitor consumers — trading daemon / Trade APIs / account sync. Issues here degrade the bus verdict but never mark it unavailable. K8s workload readiness is Evidence and does not affect Bus Health"
         >
           <ConsumerTable
             rows={viewModel.runtimeConsumers}
