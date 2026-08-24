@@ -193,6 +193,21 @@ func TestDataCloneDumpArgsSelectiveIsDataOnly(t *testing.T) {
 			t.Errorf("selective dump args %q missing %q", joined, want)
 		}
 	}
+	if strings.Contains(joined, "--exclude-table-data=") {
+		t.Errorf("selective dump must not exclude audit table data: %q", joined)
+	}
+}
+
+func TestDataCloneDumpArgsFullExcludesAuditData(t *testing.T) {
+	args := dataCloneDumpArgs("bifrost_prod", "full", nil)
+	joined := strings.Join(args, " ")
+	want := "--exclude-table-data=" + dataCloneAuditTable
+	if !strings.Contains(joined, want) {
+		t.Fatalf("full dump args %q missing %q", joined, want)
+	}
+	if strings.Contains(joined, "--data-only") {
+		t.Fatalf("full dump must not be data-only: %q", joined)
+	}
 }
 
 func TestRestoreTargetFullDropsAllUserSchemas(t *testing.T) {
@@ -211,6 +226,13 @@ func TestRestoreTargetFullDropsAllUserSchemas(t *testing.T) {
 	}
 	if !strings.Contains(joined, dataCloneRemoteDump) {
 		t.Fatalf("expected dump restore path, seen=%v", seen)
+	}
+	auditBackup := dataCloneAuditBackupPath("bifrost_dev")
+	if !strings.Contains(joined, auditBackup) {
+		t.Fatalf("expected audit backup path %q in full restore, seen=%v", auditBackup, seen)
+	}
+	if !strings.Contains(joined, "pg_dump") || !strings.Contains(joined, "-t "+dataCloneAuditTable) {
+		t.Fatalf("expected audit backup pg_dump before reset, seen=%v", seen)
 	}
 	if strings.Count(joined, "DROP SCHEMA public CASCADE; CREATE SCHEMA public") > 0 {
 		t.Fatalf("legacy public-only reset must not be used, seen=%v", seen)
