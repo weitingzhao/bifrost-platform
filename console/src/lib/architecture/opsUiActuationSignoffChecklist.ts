@@ -17,6 +17,15 @@ export type OpsUiActuationSignoffItem = {
 /** Wave A Phase A3 — agent-completable items marked done; Owner-only gates marked owner/deferred. */
 export const OPS_UI_ACTUATION_SIGNOFF_CHECKLIST: OpsUiActuationSignoffItem[] = [
   {
+    id: 'satellite-audit-ingest',
+    area: 'Audit',
+    criterion: 'Trade satellite actuation → POST /api/v1/audit/append → GET /api/v1/audit',
+    agentStatus: 'done',
+    verify:
+      'Trigger Trade market-ingest control (or POST audit/append with satellite token); confirm record in Mission Control → Audit and MCP get_audit_log',
+    notes: 'Wave 6 — ops_audit_log PG table retired; platform JSON audit is authoritative',
+  },
+  {
     id: 'cluster-p1-p2-ui',
     area: 'Cluster',
     criterion: 'Node join/drain/cordon, workload restart/scale/logs, node wizard — UI/API only',

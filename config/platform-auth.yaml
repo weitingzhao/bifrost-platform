@@ -14,3 +14,7 @@ tokens:
     role: admin
     token_env: PLATFORM_ADMIN_TOKEN
     token: platform-admin-dev
+  - name: trade-satellite
+    role: operator
+    token_env: PLATFORM_SATELLITE_AUDIT_TOKEN
+    token: platform-satellite-dev

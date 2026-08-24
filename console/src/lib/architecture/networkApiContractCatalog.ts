@@ -197,7 +197,7 @@ export const NETWORK_API_EXECUTOR_MODEL = {
   primary: 'scripts/unifi_firewall_setup.py audit | apply',
   sessionPath: 'bifrost-agent Super Admin local account — UniFi v2 API + CSRF (spine decision D9)',
   catalogAuthority: 'networkUpgradeCatalog.ts — FIREWALL_APPLIED + FIREWALL_RULES',
-  auditTrail: 'POST actuation → GET /api/v1/audit (same pattern as cluster/gitops L1)',
+  auditTrail: 'POST actuation → GET /api/v1/audit (cluster/gitops L1); Trade satellite → POST /api/v1/audit/append (operator token)',
   spineStream: 'unifi-mcp-server — ①–④ complete (client, L0+MCP read, live probe, MCP write L1 apply)',
   clientLibrary: 'api/internal/network/unifi — ConfigFromEnv, Login, LegacyGet, V2Get, ListDevices/Clients/Zones/Policies',
   mcpServer: 'mcp/unifi — get_network_* + audit_network_firewall + apply_network_firewall → platform-api',

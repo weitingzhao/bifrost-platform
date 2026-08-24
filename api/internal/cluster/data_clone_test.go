@@ -198,27 +198,17 @@ func TestDataCloneDumpArgsSelectiveIsDataOnly(t *testing.T) {
 	}
 }
 
-func TestDataCloneDumpArgsFullExcludesAuditData(t *testing.T) {
+func TestDataCloneDumpArgsFullIsSchemaInclusive(t *testing.T) {
 	args := dataCloneDumpArgs("bifrost_prod", "full", nil)
 	joined := strings.Join(args, " ")
-	want := "--exclude-table-data=" + dataCloneAuditTablePat
-	if !strings.Contains(joined, want) {
-		t.Fatalf("full dump args %q missing %q", joined, want)
-	}
-	if !strings.Contains(joined, "ops_audit_log*") {
-		t.Fatalf("full dump must use partition wildcard pattern: %q", joined)
+	if strings.Contains(joined, "--exclude-table-data=") {
+		t.Fatalf("full dump must not exclude table data (ops_audit_log retired): %q", joined)
 	}
 	if strings.Contains(joined, "--data-only") {
 		t.Fatalf("full dump must not be data-only: %q", joined)
 	}
-}
-
-func TestDataCloneAuditTablePatternCoversPartitions(t *testing.T) {
-	if dataCloneAuditTablePat != "public.ops_audit_log*" {
-		t.Fatalf("unexpected audit pattern %q", dataCloneAuditTablePat)
-	}
-	if !strings.HasPrefix(dataCloneAuditTablePat, dataCloneAuditTable) {
-		t.Fatalf("pattern %q must extend base table %q", dataCloneAuditTablePat, dataCloneAuditTable)
+	if !strings.Contains(joined, dataCloneRemoteDump) {
+		t.Fatalf("full dump must write remote dump path: %q", joined)
 	}
 }
 
@@ -238,13 +228,6 @@ func TestRestoreTargetFullDropsAllUserSchemas(t *testing.T) {
 	}
 	if !strings.Contains(joined, dataCloneRemoteDump) {
 		t.Fatalf("expected dump restore path, seen=%v", seen)
-	}
-	auditBackup := dataCloneAuditBackupPath("bifrost_dev")
-	if !strings.Contains(joined, auditBackup) {
-		t.Fatalf("expected audit backup path %q in full restore, seen=%v", auditBackup, seen)
-	}
-	if !strings.Contains(joined, "pg_dump") || !strings.Contains(joined, "-t "+dataCloneAuditTable) {
-		t.Fatalf("expected audit backup pg_dump before reset, seen=%v", seen)
 	}
 	if strings.Count(joined, "DROP SCHEMA public CASCADE; CREATE SCHEMA public") > 0 {
 		t.Fatalf("legacy public-only reset must not be used, seen=%v", seen)

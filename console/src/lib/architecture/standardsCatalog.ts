@@ -120,6 +120,7 @@ export type ActuationApiRoute = {
 export const ACTUATION_API_ROUTES: ActuationApiRoute[] = [
   { phase: 'P1', method: 'GET', route: '/api/v1/auth/capabilities', role: 'viewer', purpose: 'Report Bearer token role and capability' },
   { phase: 'P1', method: 'GET', route: '/api/v1/audit', role: 'viewer', purpose: 'Recent actuation records' },
+  { phase: 'P1', method: 'POST', route: '/api/v1/audit/append', role: 'operator', purpose: 'Satellite audit ingest (Trade market-ingest / shutdown)' },
   { phase: 'P1', method: 'GET', route: '/api/v1/jobs', role: 'viewer', purpose: 'Current simple job list' },
   { phase: 'P1', method: 'POST', route: '/api/v1/cluster/namespaces/ensure-bifrost', role: 'operator', purpose: 'Idempotently create Bifrost namespaces' },
   { phase: 'P1', method: 'POST', route: '/api/v1/cluster/workloads/rollout-restart', role: 'operator', purpose: 'Rollout restart Deployment' },
