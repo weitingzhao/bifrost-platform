@@ -127,7 +127,7 @@ export const SCOPE_ROWS: ScopeRow[] = [
   {
     tag: 'WORKER',
     component: 'bifrost-trade-worker',
-    technology: 'Python · daemon (GsTrading FSM) · Celery · Flower :5555',
+    technology: 'Python · daemon (GsTrading FSM) · account-sync',
     notes: 'Daemon reads Redis quotes/account; orders via ib_operator RPC. Does not connect to TWS directly.',
   },
   {

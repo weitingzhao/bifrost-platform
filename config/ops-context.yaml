@@ -286,6 +286,12 @@ decisions:
       conclusion: "Wave 5 retired Trade Celery runtime (zero celery-worker / celery-beat / flower pods). Wave 6.1 removes remaining active code paths: platform-api satellite monitor.celery field, Console Satellite Bus celery nodes, sessions-catalog celery sessions, Trade FE celeryBeat noop hook, bifrost-core config.yaml.example ops.celery dead fields. Governance catalogs and completed program yaml retained as audit evidence."
       signed_at: "2026-08-24"
       authority: "console/src/lib/architecture/tradeCeleryK8sIdealCatalog.ts · bifrost-trade-infra/docs/WAVE5_ROLLOUT.md"
+    - id: D-Wave-6.2
+      status: SIGNED
+      topic: Trade Celery doc and local config alignment (Wave 6.2)
+      conclusion: "Wave 6.1 cleared active code paths. Wave 6.2 aligns tracked local config (bifrost-trade-infra/config/config.yaml) with bifrost-core example, updates stale CLAUDE/docs/environments-catalog copy, and retires misleading operational references. Governance program catalogs and migration history remain as audit evidence."
+      signed_at: "2026-08-24"
+      authority: "bifrost-trade-infra/config/config.yaml · bifrost-platform/console/src/lib/environments-catalog.ts"
 platform_phases:
     - id: A
       label: Gate
