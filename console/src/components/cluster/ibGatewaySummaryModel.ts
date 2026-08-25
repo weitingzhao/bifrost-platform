@@ -1,9 +1,13 @@
 import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 
+/** Redis health hashes store connected as "True"/"False" (Python bool str), not "ok"/"connected". */
 function ingestorConnected(status: IbGatewayStatusResponse | undefined): boolean {
   if (status?.ingestor_health == null) return false
-  const vals = Object.values(status.ingestor_health)
-  return vals.some(v => String(v).toLowerCase() === 'ok' || String(v).toLowerCase() === 'connected')
+  const raw = status.ingestor_health.connected
+  if (raw == null) return false
+  if (typeof raw === 'boolean') return raw
+  const s = String(raw).trim().toLowerCase()
+  return s === 'true' || s === '1' || s === 'yes' || s === 'ok' || s === 'connected'
 }
 
 /** Compact one-line verdict — avoids repeating the raw plugin summary in panels. */
