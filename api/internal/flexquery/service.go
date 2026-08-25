@@ -62,7 +62,7 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	resp.FreshnessReach = freshReach
 	if freshErr != "" && resp.Error == "" && freshReach != probe.ReachUnknown {
 		resp.Error = freshErr
-		resp.Hint = "Ensure flex_ops.ingest_freshness is populated (worker jobs marking done)"
+		resp.Hint = "Ensure ops_jobs.flex_ingest_freshness is populated (worker jobs marking done)"
 	}
 
 	readyCount := 0
@@ -241,7 +241,7 @@ func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Re
 	if db == "" {
 		db = defaultFreshnessDB
 	}
-	sql := "SELECT dimension, COALESCE(latest_ts::text,''), COALESCE(row_count,0), 'ok' FROM flex_ops.ingest_freshness ORDER BY dimension"
+	sql := "SELECT dimension, COALESCE(latest_ts::text,''), COALESCE(row_count,0), 'ok' FROM ops_jobs.flex_ingest_freshness ORDER BY dimension"
 	out, err := s.cluster.ExecSQLOnPrimary(ctx, db, sql)
 	if err != nil {
 		return nil, probe.ReachFail, err.Error()
