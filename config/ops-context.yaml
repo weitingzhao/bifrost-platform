@@ -298,6 +298,36 @@ decisions:
       conclusion: "Drop features_daily/option/signals/forecasts/backtests view schemas; canonical features.* only; bifrost-research 0.7.0; db-init drops legacy schemas idempotently."
       signed_at: "2026-08-24"
       authority: "bifrost-research/scripts/wave_6_6_drop_legacy_features_schemas.sql"
+    - id: D-Wave-9-strategy-collapse
+      status: SIGNED
+      topic: Trade strategy_* + gate_safety collapse (Wave 9)
+      conclusion: "strategy_* 10 tables → 7 (legs/symbols/entry_conditions → jsonb); gate_safety_strategy 36 cols → metadata + params_json; strategy_dim → six dim_*_t enums + read-only catalog; bifrost-core 0.17.0 breaking migration migrate_wave9_strategy_collapse()."
+      signed_at: "2026-08-24"
+      authority: "bifrost-trade-core/src/bifrost_core/persistence/postgres/wave9_migrations.py · bifrost-trade-core/src/bifrost_core/monitor/schemas/gate_params.py"
+    - id: D-Wave-10
+      status: SIGNED
+      topic: Wave 9 dead code + dim enum catalog sync (Wave 10)
+      conclusion: "Remove Wave 1 _upgrade_gate_safety_strategy path; ensure_dim_enum_types() from catalog; CREATE TABLE uses dim_*_t; bifrost-core 0.17.2."
+      signed_at: "2026-08-24"
+      authority: "bifrost-trade-core/src/bifrost_core/persistence/postgres/wave9_migrations.py · tests/test_wave10_dim_consistency.py"
+    - id: D-Wave-11
+      status: SIGNED
+      topic: Flex token Secret-only + DROP Trade DB columns (Wave 11)
+      conclusion: "DROP settings.ib_flex_host_token / ib_flex_secondary_token; Flex Plugin 0.5.0 Secret-only resolve_flex_tokens; bifrost-core 0.18.0 BREAKING."
+      signed_at: "2026-08-24"
+      authority: "bifrost-platform-plugin-flex-query/src/bifrost_flex_query/orchestration/config_rw.py · bifrost-trade-core/src/bifrost_core/persistence/postgres/wave11_migrations.py"
+    - id: D-Wave-13
+      status: SIGNED
+      topic: DB over-design slimming (Wave 13 — except Elementary)
+      conclusion: "mart_sepa_criteria_stats table→view; mart_sepa_tier_options sparse mart (only symbols with option_metric data); Elementary retained; strategy_template 20 cols and strategy_instance/alloc/link tables unchanged; bifrost-research 0.8.3."
+      signed_at: "2026-08-24"
+      authority: "bifrost-research/src/bifrost_research/dbt/models/marts/mart_sepa_criteria_stats.sql · mart_sepa_tier_options.sql"
+    - id: D-Wave-12
+      status: SIGNED
+      topic: SEPA single owner dbt + PIT semantics (Wave 12)
+      conclusion: "dbt mart_sepa_composite_score weights 30F/35T/20M/15O from features.option_metric_*; delete engines/sepa Cron slot; sepa_projection only writer; asof_ts = last projection ts; bifrost-research 0.8.2."
+      signed_at: "2026-08-24"
+      authority: "bifrost-research/src/bifrost_research/dbt/models/marts/mart_sepa_feature_daily.sql · orchestration/sepa_projection.py"
     - id: D-Wave-8
       status: EXECUTED
       topic: Golden Source Wave 8 (financials split + OI partition + Trade public FK)
