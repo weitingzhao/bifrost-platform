@@ -361,7 +361,7 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
       {sub === 'enqueue' ? (
         <OpsSection
           title="Enqueue job"
-          description="Writes flex_ops.job_flex_ingest · operator auth"
+          description="Writes ops_jobs.job_flex_ingest · operator auth"
           bodyPadding="compact"
           overflow="visible"
           collapsible
@@ -432,7 +432,7 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
       <ConfirmDialog
         open={confirmOpen}
         title="Enqueue Flex ingest job"
-        message={`Enqueue kind "${selectedKind}" into flex_ops.job_flex_ingest? The worker will pick it up asynchronously.`}
+        message={`Enqueue kind "${selectedKind}" into ops_jobs.job_flex_ingest? The worker will pick it up asynchronously.`}
         confirmLabel="Confirm enqueue"
         confirming={acting}
         onConfirm={() => void runEnqueue()}

@@ -194,7 +194,7 @@ export function FlexCoverageTab() {
       {sub === 'quality' ? (
         <OpsSection
           title="Freshness"
-          description="flex_ops.ingest_freshness per kind"
+          description="ops_jobs.flex_ingest_freshness per kind"
           bodyPadding="compact"
           overflow="visible"
           collapsible

@@ -28,7 +28,7 @@ export function FlexQueueDashboardPanel({
   return (
     <OpsSection
       title="Queue dashboard"
-      description="flex_ops.job_flex_ingest counts"
+      description="ops_jobs.job_flex_ingest counts"
       headerExtra={
         <DenseTag variant={failed > 0 ? 'danger' : idle ? 'success' : 'info'}>
           {idle ? 'idle' : 'active'}
