@@ -67,7 +67,7 @@ export function buildAnalyticsPipelineLlmPack(): string {
   }
   lines.push('')
   lines.push('## Notes')
-  lines.push('- Trade API consumes analytics via SEPA_USE_ANALYTICS=true')
+  lines.push('- Trade API reads dw_stock.mart_sepa_* directly (dbt cutover complete since Wave 12)')
   lines.push('- Technical/CRS marts need ≥252 trading days of market.stock_daily')
   lines.push('- Elementary edr report regenerated after each CronJob')
   return lines.join('\n')
