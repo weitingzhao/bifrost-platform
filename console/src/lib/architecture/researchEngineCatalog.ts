@@ -33,6 +33,15 @@ export const RESEARCH_ENGINE_SUMMARY = {
   platformProxy: 'GET /api/v1/research/*',
   consoleTab: 'research-engine',
   runtimeIgnition: 'DONE 2026-08-21 — research NS live; CronJobs dbt/volatility/engines/intraday; Dagster replicas:0',
+  cronjobTriggers: [
+    { trigger_id: 'dbt-sepa', cronjob: 'bifrost-analytics-daily', empty_hint: 'SEPA empty' },
+    { trigger_id: 'momentum', cronjob: 'research-engines-momentum', empty_hint: 'Momentum empty' },
+    { trigger_id: 'iv-percentile', cronjob: 'research-iv-percentile', empty_hint: 'IV empty' },
+    { trigger_id: 'terrain-forecast', cronjob: 'research-engines-forecast', empty_hint: 'Forecast / Terrain empty' },
+    { trigger_id: 'terrain-intraday', cronjob: 'research-terrain-intraday', empty_hint: 'Intraday empty' },
+    { trigger_id: 'gex-intraday', cronjob: 'research-gex-intraday', empty_hint: 'GEX empty' },
+    { trigger_id: 'event-radar', cronjob: 'research-engines-event-radar', empty_hint: 'Events empty' },
+  ] as const,
 } as const
 
 export const RESEARCH_GOVERNANCE_SURFACES = [

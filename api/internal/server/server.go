@@ -203,7 +203,7 @@ func New(cfg *config.Config) (*Server, error) {
 		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
 		marketdata:      marketdata.NewHandler(clusterH.Service()),
 		flexquery:       flexquery.NewHandler(clusterH.Service()),
-		research:        research.NewHandler(clusterH.Service()),
+		research:        research.NewHandler(clusterH.Service(), audit),
 		analytics:       analytics.NewHandler(clusterH.Service()),
 		telemetry:       telemetry.NewHandler(cfg, audit),
 		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
@@ -430,6 +430,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 			r.Delete("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 			r.Post("/plugins/flex-query/api/*", s.flexquery.HandleAPIProxy)
+			r.Post("/research/cronjobs/{name}/trigger", s.research.HandleCronJobTrigger)
 			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
 		})
 		r.Group(func(r chi.Router) {

@@ -8,15 +8,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 )
 
 type Handler struct {
-	svc *Service
+	svc   *Service
+	audit *actuation.AuditLog
 }
 
-func NewHandler(clusterSvc *cluster.Service) *Handler {
-	return &Handler{svc: NewService(clusterSvc)}
+func NewHandler(clusterSvc *cluster.Service, audit *actuation.AuditLog) *Handler {
+	return &Handler{svc: NewService(clusterSvc), audit: audit}
 }
 
 func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +82,23 @@ func (h *Handler) HandleAPIProxy(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ct)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(body)
+}
+
+func (h *Handler) HandleCronJobTrigger(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(chi.URLParam(r, "name"))
+	resp, err := h.svc.TriggerCronJob(r.Context(), name)
+	status := "ok"
+	if err != nil || !resp.OK {
+		status = "failed"
+	}
+	if h.audit != nil {
+		h.audit.Record(r, "research.cronjob.trigger", resp.CronJob, status, resp.Message)
+	}
+	if err != nil || !resp.OK {
+		writeJSON(w, http.StatusBadGateway, resp)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // stripProxyPrefix normalizes the chi wildcard suffix to an upstream path.
