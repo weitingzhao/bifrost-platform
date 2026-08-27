@@ -1,6 +1,7 @@
 package ibgateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -17,11 +18,18 @@ type Handler struct {
 }
 
 func NewHandler(clusterSvc *cluster.Service, audit *actuation.AuditLog) *Handler {
-	return &Handler{svc: NewService(clusterSvc), audit: audit}
+	svc := NewService(clusterSvc)
+	h := &Handler{svc: svc, audit: audit}
+	svc.StartAutoRepair(context.Background(), audit)
+	return h
 }
 
 func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
+}
+
+func (h *Handler) HandleSelfHeal(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.SelfHealStatus(r.Context()))
 }
 
 func (h *Handler) HandleControl(w http.ResponseWriter, r *http.Request) {
@@ -33,9 +41,32 @@ func (h *Handler) HandleControl(w http.ResponseWriter, r *http.Request) {
 		h.handleMaintenance(w, r)
 	case "mode":
 		h.handleMode(w, r)
+	case "self-heal":
+		h.handleSelfHealToggle(w, r)
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action: " + action})
 	}
+}
+
+func (h *Handler) handleSelfHealToggle(w http.ResponseWriter, r *http.Request) {
+	var req ControlRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+	}
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	resp, err := h.svc.SetSelfHealEnabled(r.Context(), enabled)
+	h.recordAudit(r, resp.Action, resp.Target, resp.OK, resp.Message)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, resp)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) handleReconnect(w http.ResponseWriter, r *http.Request) {

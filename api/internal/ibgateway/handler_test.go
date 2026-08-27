@@ -82,6 +82,22 @@ func TestAssessSocketFeedQualityMockSkips(t *testing.T) {
 	}
 }
 
+func TestSnapshotAgeSec(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	raw := fmt.Sprintf(`{"updated_at":%d}`, now.Unix()-120)
+	age, ok := snapshotAgeSec(raw, now)
+	if !ok || age < 119 || age > 121 {
+		t.Fatalf("expected age ~120, got %v ok=%v", age, ok)
+	}
+	if snapshotFresh(raw, now, 90) {
+		t.Fatal("expected stale snapshot")
+	}
+	fresh := fmt.Sprintf(`{"updated_at":%d}`, now.Unix()-10)
+	if !snapshotFresh(fresh, now, 90) {
+		t.Fatal("expected fresh snapshot")
+	}
+}
+
 func TestParseRedisHash(t *testing.T) {
 	m := parseRedisHash("connected\nTrue\nmode\nmock\n")
 	if m["connected"] != "True" || m["mode"] != "mock" {

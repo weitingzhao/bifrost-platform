@@ -67,10 +67,10 @@ export function buildPluginRuntimeRemediatePrompt(
             ? 'Deployment is Ready 1/1 — do NOT treat as missing install. Prefer reconnect / rollout_restart.'
             : 'Check deployment readiness before deciding reconnect vs republish.',
           staleSnapshot
-            ? 'Console hint: account snapshot stale / dead TWS API client — primary action is reconnect (rollout restart ib-gateway).'
-            : 'If reachability=fail with redis-ib ok, prefer reconnect over make install.',
-          'Primary repair tool (always available): rollout_restart_deployment(namespace="data", kind="Deployment", name="ib-gateway") after approval.',
-          'Optional if on runner: get_ib_gateway_plugin_status, ib_gateway_control(action=reconnect).',
+            ? 'Console hint: account snapshot stale / dead TWS API client — use ib_gateway_control(action=reconnect): soft reconnect_all first, then rollout restart if still stale. Plugin L0 may already be retrying in-process.'
+            : 'If reachability=fail with redis-ib ok, prefer reconnect (soft-first) over make install.',
+          'Primary repair tool (always available): ib_gateway_control(action=reconnect) — soft reconnect then rollout_restart fallback.',
+          'Optional if on runner: get_ib_gateway_plugin_status, rollout_restart_deployment(namespace="data", kind="Deployment", name="ib-gateway").',
           'Manage reconnect = repair. AI Launch Plugin / make install = publish — do not conflate.',
         ]
 
@@ -90,7 +90,7 @@ export function buildPluginRuntimeRemediatePrompt(
     '## Workflow (strict)',
     '1. Detect — use the JSON snapshot above; optionally re-probe plugin status. Classify: deploy-not-ready vs dead TWS/snapshot-stale vs false-alarm.',
     '2. Approve — request_operator_approval before any write (reconnect / rollout_restart).',
-    '3. Repair — IB with Ready deploy + stale snapshot: rollout_restart_deployment data/ib-gateway (same as plugin reconnect). Market Data: targeted rollout_restart in plugin-market-data* NS.',
+    '3. Repair — IB with Ready deploy + stale snapshot: ib_gateway_control reconnect (soft-first) or rollout_restart_deployment data/ib-gateway. Market Data: targeted rollout_restart in plugin-market-data* NS.',
     '4. Verify — wait ~30–90s; re-probe until reachability is not fail OR report TWS host still dead (needs Mac Mini TWS / human).',
     '5. If only a fresh image publish can fix it — stop and tell Owner to use **AI Launch Plugin**.',
     '',

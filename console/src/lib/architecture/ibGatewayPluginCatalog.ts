@@ -11,7 +11,7 @@
  */
 
 export const IB_GATEWAY_PLUGIN_SOURCE = 'bifrost-platform-plugin'
-export const IB_GATEWAY_PLUGIN_CATALOG_VERSION = '2026-07-27'
+export const IB_GATEWAY_PLUGIN_CATALOG_VERSION = '2026-08-27'
 
 /** Mission Launch third release lane — publish plugin via make install (not Tekton). */
 export const LAUNCH_PLUGIN_LANE = {
@@ -94,6 +94,17 @@ export const IB_GATEWAY_PLUGIN_PHASES: IbGatewayPluginPhase[] = [
   },
 ]
 
+export const IB_GATEWAY_SELF_HEAL_LADDER = {
+  title: 'Self-heal ladder (L0 → L1)',
+  steps: [
+    'L0 Plugin: snapshot stale ≥90s → disconnect_all + reconnect_all (in-process; cooldown 60s)',
+    'L1 Console reconnect: soft reconnect_all via operator RPC → wait snapshot fresh → else rollout restart',
+    'L1 Auto-repair (OPS_IB_AUTOREPAIR_ENABLED): stale_streak ≥3 + rollout_recommended → auto reconnect ladder with 900s cooldown',
+    'Escalation: TWS host on Mac Mini — not automated; verify API Clients on .30/.32',
+  ],
+  d10: 'Observe/reconnect only — no place_order, no daemon scale',
+} as const
+
 export const IB_GATEWAY_DESIGN_PRINCIPLES = [
   'TWS stays on Win11 dedicated hosts — never scheduled in K3s.',
   'One shared market-data subscription (Host account TWS only) — all Trade envs read the same ib:tick/* keys.',
@@ -123,6 +134,7 @@ export const REDIS_IB_CONTRACT = {
     'ib:health:{account_id}',
     'ib:events:{account_id}',
     'ib:control:{account_id}',
+    'bifrost:ib:gateway:self_heal (HASH — L0 self-heal ladder state)',
   ],
   onDemandStk: {
     writer: 'Trade Market API GET /quotes (SADD + heartbeat)',
@@ -192,6 +204,10 @@ export function buildIbGatewayPluginLlmPack(): string {
     `- Acceptance: ${LAUNCH_PLUGIN_LANE.dogfood.acceptance}`,
     `- D10: ${LAUNCH_PLUGIN_LANE.d10}`,
     `- Tekton: ${LAUNCH_PLUGIN_LANE.tektonNote}`,
+    '',
+    '## Self-heal ladder',
+    ...IB_GATEWAY_SELF_HEAL_LADDER.steps.map(s => `- ${s}`),
+    `- D10: ${IB_GATEWAY_SELF_HEAL_LADDER.d10}`,
     '',
     '## Design principles',
     ...IB_GATEWAY_DESIGN_PRINCIPLES.map(p => `- ${p}`),

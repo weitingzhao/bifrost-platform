@@ -269,6 +269,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/network/anomalies", s.network.HandleAnomalies)
 		r.Get("/network/sla", s.network.HandleSLA)
 		r.Get("/plugins/ib-gateway/status", s.ibgateway.HandleStatus)
+		r.Get("/plugins/ib-gateway/self-heal", s.ibgateway.HandleSelfHeal)
 		r.Get("/plugins/market-data/status", s.marketdata.HandleStatus)
 		r.Get("/plugins/flex-query/status", s.flexquery.HandleStatus)
 		r.Get("/plugins/analytics/status", s.analytics.HandleStatus)

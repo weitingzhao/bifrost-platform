@@ -358,6 +358,12 @@ decisions:
       conclusion: "Canonical schema naming in DATABASE.md and Console catalogs; GOLDEN_SOURCE_RETENTION matrix; settings active_*_id write guard (core 0.15.2); flex_ops compat DEPRECATED; SEPA canonical read = dw_stock.mart_sepa_* (API switch deferred Wave 6.5). No DDL breaking changes."
       signed_at: "2026-08-24"
       authority: "bifrost-trade-core/docs/DATABASE.md · bifrost-trade-infra/docs/GOLDEN_SOURCE_RETENTION.md"
+    - id: D-IB-Heal
+      status: SIGNED
+      topic: IB Gateway self-heal ladder (L0/L1)
+      conclusion: "L0 Plugin snapshot-stale → reconnect_all in-process; L1 platform-api reconnect soft-first then rollout; optional OPS_IB_AUTOREPAIR_ENABLED auto rollout with cooldown. D10 BLOCKED — reconnect/observe only; no TWS host automation."
+      signed_at: "2026-08-27"
+      authority: "bifrost-platform-plugin 0.2.0 · console/src/lib/architecture/ibGatewayPluginCatalog.ts · api/internal/ibgateway"
 platform_phases:
     - id: A
       label: Gate

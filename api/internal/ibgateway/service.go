@@ -163,10 +163,35 @@ func (s *Service) readCutoverStatus(ctx context.Context) *CutoverStatus {
 
 func (s *Service) Reconnect(ctx context.Context) (ControlResponse, error) {
 	now := time.Now().UTC()
-	if s.cluster == nil {
+	target := dataNamespace + "/Deployment/" + gatewayDeployName
+	staleSec := s.cfg.SnapshotStaleSec
+	if staleSec <= 0 {
+		staleSec = defaultSnapshotStaleSec
+	}
+
+	softAt := now
+	softErr := s.sendOperatorCommand(ctx, "reconnect_all", 30*time.Second)
+	if softErr == nil && s.waitSnapshotFresh(ctx, 45*time.Second, staleSec) {
 		return ControlResponse{
-			OK: false, Action: "ib-gateway.reconnect", Target: dataNamespace + "/Deployment/" + gatewayDeployName,
-			Autonomy: "L1", Message: "cluster service unavailable", GeneratedAt: now,
+			OK:              true,
+			Action:          "ib-gateway.reconnect",
+			Target:          target,
+			Autonomy:        "L1",
+			ActionTaken:     "soft_reconnect",
+			SoftReconnectAt: softAt,
+			Message:         "soft reconnect_all succeeded; account snapshot refreshed",
+			GeneratedAt:     now,
+		}, nil
+	}
+
+	if s.cluster == nil {
+		msg := "cluster service unavailable"
+		if softErr != nil {
+			msg = fmt.Sprintf("soft reconnect failed: %v; cluster unavailable", softErr)
+		}
+		return ControlResponse{
+			OK: false, Action: "ib-gateway.reconnect", Target: target,
+			Autonomy: "L1", ActionTaken: "rollout_restart", Message: msg, GeneratedAt: now,
 		}, fmt.Errorf("cluster service unavailable")
 	}
 	resp, err := s.cluster.RolloutRestart(ctx, cluster.RolloutRestartRequest{
@@ -174,10 +199,122 @@ func (s *Service) Reconnect(ctx context.Context) (ControlResponse, error) {
 		Kind:      "Deployment",
 		Name:      gatewayDeployName,
 	})
+	msg := resp.Message
+	if softErr != nil {
+		msg = fmt.Sprintf("soft reconnect failed (%v); rollout restart: %s", softErr, msg)
+	} else {
+		msg = fmt.Sprintf("snapshot still stale after soft reconnect; rollout restart: %s", msg)
+	}
 	return ControlResponse{
-		OK: resp.OK, Action: "ib-gateway.reconnect", Target: resp.Target,
-		Autonomy: "L1", Message: resp.Message, GeneratedAt: now,
+		OK:          resp.OK,
+		Action:      "ib-gateway.reconnect",
+		Target:      resp.Target,
+		Autonomy:    "L1",
+		ActionTaken: "rollout_restart",
+		Message:     msg,
+		GeneratedAt: now,
 	}, err
+}
+
+func (s *Service) SelfHealStatus(ctx context.Context) SelfHealStatusResponse {
+	now := time.Now().UTC()
+	out := SelfHealStatusResponse{
+		Reach:             probe.ReachUnknown,
+		Enabled:           true,
+		AutoRepairEnabled: s.cfg.AutoRepairEnabled,
+		GeneratedAt:       now,
+	}
+	if s.cfg.RedisPlatformPass == "" {
+		out.Reach = probe.ReachFail
+		out.Error = "REDIS_IB_PLATFORM_PASS not configured"
+		return out
+	}
+	raw, err := s.redisCLI("HGETALL", selfHealRedisKey)
+	if err != nil {
+		out.Reach = probe.ReachFail
+		out.Error = err.Error()
+		return out
+	}
+	fields := parseRedisHash(raw)
+	out.LastAction = fields["last_action"]
+	if v, ok := parseFloatField(fields["last_action_ts"]); ok {
+		out.LastActionTS = v
+	}
+	if v, ok := parseIntField(fields["stale_streak"]); ok {
+		out.StaleStreak = v
+	}
+	if v, ok := parseFloatField(fields["cooldown_until"]); ok {
+		out.CooldownUntil = v
+	}
+	out.Reason = fields["reason"]
+	if fields["enabled"] == "" {
+		out.Enabled = true
+	} else {
+		out.Enabled = strings.EqualFold(fields["enabled"], "true") || fields["enabled"] == "1"
+	}
+	out.RolloutRecommended = strings.EqualFold(fields["rollout_recommended"], "true") || fields["rollout_recommended"] == "1"
+	if v, ok := parseFloatField(fields["snapshot_age_sec"]); ok {
+		out.SnapshotAgeSec = v
+	}
+	snapRaw, _ := s.redisCLI("GET", accountSnapshotKey)
+	if age, ok := snapshotAgeSec(snapRaw, now); ok {
+		out.SnapshotAgeSec = age
+	}
+	out.Reach = probe.ReachOK
+	return out
+}
+
+func (s *Service) SetSelfHealEnabled(_ context.Context, enabled bool) (ControlResponse, error) {
+	now := time.Now().UTC()
+	key := selfHealRedisKey
+	if s.cfg.RedisPlatformPass == "" {
+		return ControlResponse{
+			OK: false, Action: "ib-gateway.self-heal", Target: key,
+			Autonomy: "L1", Message: "REDIS_IB_PLATFORM_PASS not configured", GeneratedAt: now,
+		}, fmt.Errorf("REDIS_IB_PLATFORM_PASS not configured")
+	}
+	val := "false"
+	if enabled {
+		val = "true"
+	}
+	if _, err := s.redisCLI("HSET", key, "enabled", val, "updated_at", fmt.Sprintf("%d", now.Unix())); err != nil {
+		return ControlResponse{
+			OK: false, Action: "ib-gateway.self-heal", Target: key,
+			Autonomy: "L1", Message: err.Error(), GeneratedAt: now,
+		}, err
+	}
+	state := "disabled"
+	if enabled {
+		state = "enabled"
+	}
+	return ControlResponse{
+		OK: true, Action: "ib-gateway.self-heal", Target: key,
+		Autonomy: "L1", Message: fmt.Sprintf("plugin self-heal %s", state), GeneratedAt: now,
+	}, nil
+}
+
+func parseFloatField(raw string) (float64, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false
+	}
+	var f float64
+	if _, err := fmt.Sscanf(raw, "%f", &f); err != nil {
+		return 0, false
+	}
+	return f, true
+}
+
+func parseIntField(raw string) (int, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false
+	}
+	var n int
+	if _, err := fmt.Sscanf(raw, "%d", &n); err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 func (s *Service) SetMaintenance(_ context.Context, req ControlRequest) (ControlResponse, error) {

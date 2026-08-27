@@ -53,12 +53,29 @@ type ControlRequest struct {
 }
 
 type ControlResponse struct {
-	OK          bool      `json:"ok"`
-	Action      string    `json:"action"`
-	Target      string    `json:"target"`
-	Autonomy    string    `json:"autonomy"`
-	Message     string    `json:"message"`
-	GeneratedAt time.Time `json:"generated_at"`
+	OK              bool      `json:"ok"`
+	Action          string    `json:"action"`
+	Target          string    `json:"target"`
+	Autonomy        string    `json:"autonomy"`
+	Message         string    `json:"message"`
+	ActionTaken     string    `json:"action_taken,omitempty"`
+	SoftReconnectAt time.Time `json:"soft_reconnect_at,omitempty"`
+	GeneratedAt     time.Time `json:"generated_at"`
+}
+
+type SelfHealStatusResponse struct {
+	Reach           probe.Reachability `json:"reachability"`
+	LastAction      string             `json:"last_action,omitempty"`
+	LastActionTS    float64            `json:"last_action_ts,omitempty"`
+	StaleStreak     int                `json:"stale_streak,omitempty"`
+	CooldownUntil   float64            `json:"cooldown_until,omitempty"`
+	Reason          string             `json:"reason,omitempty"`
+	Enabled         bool               `json:"enabled"`
+	RolloutRecommended bool           `json:"rollout_recommended"`
+	SnapshotAgeSec  float64            `json:"snapshot_age_sec,omitempty"`
+	AutoRepairEnabled bool             `json:"auto_repair_enabled"`
+	GeneratedAt     time.Time          `json:"generated_at"`
+	Error           string             `json:"error,omitempty"`
 }
 
 type TradeCutoverEnv struct {

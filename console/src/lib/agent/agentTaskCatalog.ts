@@ -218,7 +218,7 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     entryPoint: 'Launch Desk · Launch Plugin · Launch checklist · Agent Fix',
     trigger: 'Plugin checklist NO-GO (IB Gateway / Market Data unreachable or bus probe fail)',
     description:
-      'Runtime repair for Launch Plugin checklist — reconnect / rollout_restart after Dock approval. Not AI Launch Plugin publish. D10 quotes-only.',
+      'Runtime repair for Launch Plugin checklist — ib_gateway_control reconnect (soft-first) / rollout_restart after Dock approval. L0 plugin self-heal may already be running. Not AI Launch Plugin publish. D10 quotes-only.',
   },
   'agent-launch': {
     entryPoint: 'Launch Desk → Agent · AI Launch Agent',

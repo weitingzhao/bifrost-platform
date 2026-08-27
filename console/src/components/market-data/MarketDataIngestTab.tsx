@@ -699,7 +699,7 @@ export function MarketDataIngestTab() {
       {detailTab === 'enqueue' ? (
         <OpsSection
           title="Enqueue job"
-          description="Writes data_ops.job_ingest · operator auth"
+          description="Writes ops_jobs.job_ingest · operator auth"
           bodyPadding="compact"
           overflow="visible"
           collapsible
@@ -783,7 +783,7 @@ export function MarketDataIngestTab() {
       <ConfirmDialog
         open={confirmOpen}
         title="Enqueue ingest job"
-        message={`Enqueue kind "${selectedKind}" into data_ops.job_ingest? Workers will pick it up asynchronously.`}
+        message={`Enqueue kind "${selectedKind}" into ops_jobs.job_ingest? Workers will pick it up asynchronously.`}
         confirmLabel="Confirm enqueue"
         confirming={acting}
         onConfirm={() => void runEnqueue()}

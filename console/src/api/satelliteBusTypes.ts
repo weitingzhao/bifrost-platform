@@ -165,7 +165,24 @@ export interface IbGatewayControlResponse {
   target: string
   autonomy: string
   message: string
+  action_taken?: 'soft_reconnect' | 'rollout_restart' | string
+  soft_reconnect_at?: string
   generated_at?: string
+}
+
+export interface IbGatewaySelfHealResponse {
+  reachability?: IbGatewayReachability
+  last_action?: string
+  last_action_ts?: number
+  stale_streak?: number
+  cooldown_until?: number
+  reason?: string
+  enabled?: boolean
+  rollout_recommended?: boolean
+  snapshot_age_sec?: number
+  auto_repair_enabled?: boolean
+  generated_at?: string
+  error?: string
 }
 
 export type MarketDataReachability = 'ok' | 'degraded' | 'fail' | 'unknown'

@@ -1,5 +1,6 @@
 import type {
   IbGatewayControlResponse,
+  IbGatewaySelfHealResponse,
   IbGatewayStatusResponse,
   MarketDataStatusResponse,
 } from './satelliteBusTypes'
@@ -126,8 +127,17 @@ export async function fetchFlexQueryStatus(): Promise<MarketDataStatusResponse> 
   return body
 }
 
+export async function fetchIbGatewaySelfHeal(): Promise<IbGatewaySelfHealResponse> {
+  const r = await fetch('/api/v1/plugins/ib-gateway/self-heal')
+  const body = (await r.json()) as IbGatewaySelfHealResponse
+  if (!r.ok) {
+    return { ...body, error: body.error ?? `HTTP ${r.status}` }
+  }
+  return body
+}
+
 export async function postIbGatewayControl(
-  action: 'reconnect' | 'maintenance' | 'mode',
+  action: 'reconnect' | 'maintenance' | 'mode' | 'self-heal',
   body: { account_id?: string; enabled?: boolean; mode?: 'mock' | 'live' } = {},
 ): Promise<IbGatewayControlResponse> {
   const r = await authedFetch(`ib-gateway ${action}`, `/api/v1/plugins/ib-gateway/control/${action}`, {
