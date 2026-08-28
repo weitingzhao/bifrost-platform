@@ -25,7 +25,9 @@ api/platform-api
 *.test
 
 # Node
-console/node_modules/
+# 依赖树一律不入库（六处历史遗留已于本次 git rm --cached 清理；
+# 部署走 deploy_mac_mini.sh 的 --exclude=node_modules + 远程 npm install，package-lock 保证可复现）
+node_modules/
 console/dist/
 console/.vite/
 console/tsconfig.tsbuildinfo
@@ -55,3 +57,4 @@ data/release_cycles_*.json
 data/release_gate_state*.json
 data/release_gate_state_*.json
 data/release_gate.log
+
