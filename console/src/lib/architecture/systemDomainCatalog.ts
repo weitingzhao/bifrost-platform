@@ -1,5 +1,13 @@
 /**
- * System Domain catalog — Apollo seven-domain taxonomy (Console sidebar planes).
+ * System Domain catalog — Apollo eight-domain taxonomy (Console sidebar planes).
+ *
+ * Research was promoted from Subcontractors to a first-class domain (2026-08-28):
+ * it is the **second payload** (decision) peer to Satellite (execution), not an
+ * external plugin. Subcontractors supply data (Polygon / IB Flex → raw_*);
+ * Research consumes raw_market.* and produces dw_stock.* / features.* — the
+ * opposite position in the data flow. Being filed under Subcontractors left it
+ * with neither release path (Launch Plugin covers only ib-gateway / market-data,
+ * and bifrost-deliver-stg is Trade-only), which is why it was hand-published.
  *
  * Authoritative for Ops Console → Governance → Blueprint / Agent Protocol,
  * and for Defects / Audit / Agent scope projection onto a shared mental model.
@@ -16,12 +24,13 @@ import {
   Building2,
   Gauge,
   Handshake,
+  Microscope,
   Rocket,
   Satellite,
 } from 'lucide-react'
 import type { ConsoleNavPlane } from '@/lib/consoleNavConfig'
 
-export const SYSTEM_DOMAIN_VERSION = '2026-07-20'
+export const SYSTEM_DOMAIN_VERSION = '2026-08-28'
 export const SYSTEM_DOMAIN_SOURCE = 'console/src/lib/architecture/systemDomainCatalog.ts'
 
 /** Kebab ids — stable for filters, maps, and LLM packs. */
@@ -30,6 +39,7 @@ export type SystemDomainId =
   | 'rocket'
   | 'ground-systems'
   | 'satellite'
+  | 'research'
   | 'subcontractors'
   | 'engineer'
   | 'governance'
@@ -42,8 +52,8 @@ export type SystemDomainRow = {
 }
 
 /**
- * Apollo seven domains — keep label strings identical to ConsoleNavPlane
- * in consoleNavConfig.ts. Six domains appear in the sidebar rail; Governance
+ * Apollo eight domains — keep label strings identical to ConsoleNavPlane
+ * in consoleNavConfig.ts. Seven domains appear in the sidebar rail; Governance
  * is reached via the shell User menu (still a first-class plane for catalogs).
  */
 export const SYSTEM_DOMAINS: SystemDomainRow[] = [
@@ -66,7 +76,14 @@ export const SYSTEM_DOMAINS: SystemDomainRow[] = [
   {
     id: 'satellite',
     label: 'Satellite',
-    purpose: 'Trade payload — bus, Satellite Health (Probes + Runtime), Deploy Satellite',
+    purpose:
+      'Trade payload (execution) — bus, Satellite Health (Probes + Runtime), Deploy Satellite',
+  },
+  {
+    id: 'research',
+    label: 'Research',
+    purpose:
+      'OLAP payload (decision) — Golden Source, Feature Store, dbt marts, Research API + Copilot; peer to Satellite, published via Launch Research (bifrost-deliver-research)',
   },
   {
     id: 'subcontractors',
@@ -92,6 +109,7 @@ export const SYSTEM_DOMAIN_VARIANT: Record<SystemDomainId, DenseTagVariant> = {
   rocket: 'info',
   'ground-systems': 'success',
   satellite: 'category',
+  research: 'success',
   subcontractors: 'neutral',
   engineer: 'info',
   governance: 'neutral',
@@ -103,6 +121,7 @@ export const SYSTEM_DOMAIN_ICON: Record<SystemDomainId, LucideIcon> = {
   rocket: Rocket,
   'ground-systems': Building2,
   satellite: Satellite,
+  research: Microscope,
   subcontractors: Handshake,
   engineer: Bot,
   governance: BookOpen,
@@ -141,6 +160,12 @@ export const SCOPE_TO_SYSTEM_DOMAIN: Record<string, SystemDomainId> = {
   'trade-deploy': 'satellite',
   'trade-release-fix': 'satellite',
   'satellite-bus-ingest-triage': 'satellite',
+
+  // Research — OLAP payload (decision), peer to Satellite
+  'research-deploy': 'research',
+  'research-release-fix': 'research',
+  'research-engine': 'research',
+  'golden-source-triage': 'research',
 
   // Subcontractors — plugins / vendors
   'ib-gateway': 'subcontractors',

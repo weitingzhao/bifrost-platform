@@ -95,7 +95,17 @@ function domainToFleetRoleFallback(domain: SystemDomainId): FleetRole {
   switch (domain) {
     case 'rocket':
       return 'rocket'
+    // Research is a first-class System Domain (second payload) but FleetRole is
+    // the Control Room board taxonomy, which has no Research lane. Both are
+    // payloads, so it rolls up under `satellite` here rather than under `vendor`
+    // (its old Subcontractors home) — a defect in the research namespace is a
+    // payload defect, not a vendor feed defect.
+    //
+    // Adding a dedicated Research lane would mean reshaping the Daily Ops Fleet
+    // board (groups, visuals, checklist resolution — 9 consumers of FleetRole);
+    // that is a separate decision, deliberately not bundled here.
     case 'satellite':
+    case 'research':
       return 'satellite'
     case 'ground-systems':
       return 'ground'

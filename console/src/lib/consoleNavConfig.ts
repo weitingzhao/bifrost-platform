@@ -99,6 +99,9 @@ export const ENGINEER_LIFECYCLE_ITEMS: ShellNavItem[] = [
 export const ENGINEER_LAUNCH_ITEMS: ShellNavItem[] = [
   { id: 'platform-release', label: 'Rocket', icon: Container },
   { id: 'trade-release', label: 'Satellite', icon: Workflow },
+  // TODO(P5): { id: 'research-release', label: 'Research' } — added together with
+  // ResearchReleasePage + ConsoleSidebar tab id + ConsolePage routing, so the
+  // Launch Desk never shows an entry that leads nowhere.
   { id: 'plugin-release', label: 'Plugin', icon: Workflow },
   { id: 'agent-release', label: 'Agent', icon: Bot },
 ]
@@ -215,6 +218,19 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
     ],
   },
   {
+    // Second payload (decision), peer to Satellite (execution) — promoted out of
+    // the Plugin group 2026-08-28. See systemDomainCatalog.ts header.
+    label: 'Research',
+    icon: Microscope,
+    defaultOpen: true,
+    subGroups: [
+      {
+        label: '',
+        items: [{ id: 'research-engine', label: 'Research Engine', icon: Microscope }],
+      },
+    ],
+  },
+  {
     label: 'Rocket',
     icon: Rocket,
     defaultOpen: true,
@@ -241,7 +257,6 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
           { id: 'market-data-manage', label: 'Massive', icon: Database },
           { id: 'flex-query-manage', label: 'IB Flex', icon: FileSearch },
           { id: 'analytics-pipeline', label: 'Analytics', icon: GitBranch },
-          { id: 'research-engine', label: 'Research', icon: Microscope },
         ],
       },
       {
@@ -295,6 +310,7 @@ export type ConsoleNavPlane =
   | 'Rocket'
   | 'Ground Systems'
   | 'Satellite'
+  | 'Research'
   | 'Subcontractors'
   | 'Plugin'
   | 'Engineer'
@@ -325,7 +341,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'market-data-manage': 'Plugin',
   'flex-query-manage': 'Plugin',
   'analytics-pipeline': 'Plugin',
-  'research-engine': 'Plugin',
+  'research-engine': 'Research',
   'plugin-release': 'Plugin',
   'agent-release': 'Engineer',
   queue: 'Engineer',
