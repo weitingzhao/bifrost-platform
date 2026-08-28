@@ -21,6 +21,8 @@ __pycache__/
 # Go
 api/bin/
 api/platform-api
+# 历史误提交的根级构建产物路径（63MB 二进制），正确路径是上面的 api/bin/
+/bin/
 *.exe
 *.test
 
