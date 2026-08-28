@@ -57,6 +57,7 @@ export type ConsoleViewTab =
   | 'cluster'
   | 'rocket-health'
   | 'trade-release'
+  | 'research-release'
   | 'platform-release'
   | 'plugin-release'
   | 'agent-release'

@@ -66,7 +66,7 @@ func (h *Handler) HandleStartPipelineRun(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	resp, run, err := h.svc.StartPipelineRun(r.Context(), name, req.Revision)
+	resp, run, err := h.svc.StartPipelineRun(r.Context(), name, req.Revision, req.Tag)
 	status := "ok"
 	if err != nil {
 		status = "failed"

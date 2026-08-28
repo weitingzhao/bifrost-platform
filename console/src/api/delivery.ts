@@ -67,9 +67,13 @@ export async function startPipelineRun(
   name: string,
   revision?: string,
   agentSessionId?: string,
+  /** Image tag to build. Only bifrost-deliver-research consumes it today. */
+  tag?: string,
 ): Promise<DeliveryStartRunResponse> {
-  const body =
-    revision != null && revision.trim() !== '' ? JSON.stringify({ revision: revision.trim() }) : undefined
+  const payload: { revision?: string; tag?: string } = {}
+  if (revision != null && revision.trim() !== '') payload.revision = revision.trim()
+  if (tag != null && tag.trim() !== '') payload.tag = tag.trim()
+  const body = Object.keys(payload).length > 0 ? JSON.stringify(payload) : undefined
   const headers: Record<string, string> = {}
   const session = agentSessionId?.trim()
   if (session) headers['X-Agent-Session-ID'] = session

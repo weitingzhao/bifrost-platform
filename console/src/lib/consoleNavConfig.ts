@@ -99,9 +99,7 @@ export const ENGINEER_LIFECYCLE_ITEMS: ShellNavItem[] = [
 export const ENGINEER_LAUNCH_ITEMS: ShellNavItem[] = [
   { id: 'platform-release', label: 'Rocket', icon: Container },
   { id: 'trade-release', label: 'Satellite', icon: Workflow },
-  // TODO(P5): { id: 'research-release', label: 'Research' } — added together with
-  // ResearchReleasePage + ConsoleSidebar tab id + ConsolePage routing, so the
-  // Launch Desk never shows an entry that leads nowhere.
+  { id: 'research-release', label: 'Research', icon: Workflow },
   { id: 'plugin-release', label: 'Plugin', icon: Workflow },
   { id: 'agent-release', label: 'Agent', icon: Bot },
 ]
@@ -342,6 +340,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'flex-query-manage': 'Plugin',
   'analytics-pipeline': 'Plugin',
   'research-engine': 'Research',
+  'research-release': 'Research',
   'plugin-release': 'Plugin',
   'agent-release': 'Engineer',
   queue: 'Engineer',

@@ -194,7 +194,7 @@ func (s *Service) PipelineRuns(ctx context.Context, pipelineName string) Pipelin
 	}
 }
 
-func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision string) (cluster.ActuationResponse, PipelineRunView, error) {
+func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, tag string) (cluster.ActuationResponse, PipelineRunView, error) {
 	now := time.Now().UTC()
 	ns := s.PipelinesNamespace()
 	target := fmt.Sprintf("PipelineRun/%s/%s", ns, pipelineName)
@@ -251,10 +251,18 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 			"name": pipelineName,
 		},
 	}
-	if pipelineName == "bifrost-deliver-stg" || pipelineName == "bifrost-deliver-prod" || pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" {
-		spec["params"] = []map[string]any{
+	if pipelineName == "bifrost-deliver-stg" || pipelineName == "bifrost-deliver-prod" || pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" || pipelineName == "bifrost-deliver-research" {
+		params := []map[string]any{
 			{"name": "revision", "value": rev},
 		}
+		// research builds an explicitly tagged image; the tag must match what
+		// k8s/api/deployment.yaml will point at once the image lands.
+		if pipelineName == "bifrost-deliver-research" {
+			if t := strings.TrimSpace(tag); t != "" {
+				params = append(params, map[string]any{"name": "tag", "value": t})
+			}
+		}
+		spec["params"] = params
 	}
 	if ws := pipelineRunWorkspaces(pipelineName); len(ws) > 0 {
 		spec["workspaces"] = ws
@@ -279,6 +287,16 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision s
 	if pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" {
 		spec["taskRunSpecs"] = []map[string]any{
 			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
+			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
+		}
+	}
+	// Research (second payload). verify-research also needs the SA: it asserts the
+	// running Deployment image matches the tag just built, which the default SA
+	// cannot read in the research namespace.
+	if pipelineName == "bifrost-deliver-research" {
+		spec["taskRunSpecs"] = []map[string]any{
+			{"pipelineTaskName": "rollout-research", "serviceAccountName": "tekton-deliver"},
+			{"pipelineTaskName": "verify-research", "serviceAccountName": "tekton-deliver"},
 			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
 		}
 	}
@@ -486,7 +504,7 @@ func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 			{"name": "api-source", "emptyDir": map[string]any{}},
 			{"name": "frontend-source", "emptyDir": map[string]any{}},
 		}
-	case "bifrost-build-frontend-stg":
+	case "bifrost-deliver-research", "bifrost-build-frontend-stg":
 		return []map[string]any{buildContextPVC}
 	default:
 		return nil

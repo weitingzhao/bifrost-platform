@@ -67,6 +67,7 @@ import { MarketDataManagePage } from '@/pages/MarketDataManagePage'
 import { FlexQueryManagePage } from '@/pages/FlexQueryManagePage'
 import { AnalyticsPipelinePage } from '@/pages/AnalyticsPipelinePage'
 import { ResearchEnginePage } from '@/pages/ResearchEnginePage'
+import { ResearchReleasePage } from '@/pages/ResearchReleasePage'
 import { AgentReleasePage } from '@/pages/AgentReleasePage'
 import { PluginReleasePage } from '@/pages/PluginReleasePage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
@@ -126,6 +127,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   cluster: 'Cluster',
   'rocket-health': 'Rocket Health',
   'trade-release': 'Deploy Satellite',
+  'research-release': 'Launch Research',
   'delivery-board': 'Delivery',
   blueprint: 'Blueprint',
   'flywheel-vision': 'Vision',
@@ -182,6 +184,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   'rocket-health':
     'Control-plane probes (API / Console / Argo) across STG and PROD. Runtime golden signals stay on Cluster Layer B and Observability until platform NS scrape is stable.',
   'trade-release': LANE_DETAIL_SUBTITLE,
+  'research-release':
+    'Research OLAP payload delivery — build the image first, then bump k8s/api/deployment.yaml. Argo CD syncs research from GitHub automatically.',
   'platform-release': LANE_DETAIL_SUBTITLE,
   console:
     'Legacy hash — opens shell Operator Dock Console slot (SSH). Prefer Operator Dock Agent | Console.',
@@ -267,6 +271,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'flex-query-manage',
   'analytics-pipeline',
   'research-engine',
+  'research-release',
   'plugin-release',
   'agent-release',
   'control-room',
@@ -1156,6 +1161,7 @@ function ConsolePageInner() {
         )}
         {viewTab === 'analytics-pipeline' && <AnalyticsPipelinePage />}
         {viewTab === 'research-engine' && <ResearchEnginePage />}
+        {viewTab === 'research-release' && <ResearchReleasePage />}
 
         {isGovernanceTab && (
           <div className="flex min-w-0 gap-4">
