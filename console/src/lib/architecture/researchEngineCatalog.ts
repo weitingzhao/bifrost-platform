@@ -106,6 +106,9 @@ export function buildResearchEngineLlmPack(): string {
   )
   lines.push('- Dagster orchestration stays replicas:0 (production blockers unchanged); CronJobs are the live scheduler')
   lines.push('- Accuracy aggregates computed in Console from settlement rows (proxy is GET-only)')
+  lines.push(
+    '- Research Harness observe surface (Wave A+O, package ≥0.47.0): Trade FE `/research/loop/harness` — propose-only objectives/runs; D10 BLOCKED (no ib:operator:cmd)',
+  )
   lines.push('- Follow-ons: research-radar-news-source · plugin-options-tape (Operate Queue)')
   return lines.join('\n')
 }
