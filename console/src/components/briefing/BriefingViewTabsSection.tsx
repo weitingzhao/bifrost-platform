@@ -36,6 +36,7 @@ import type { TaskModeId } from '@/lib/task-mode/types'
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
+import type { ProgramSummary } from '@/api/programsTypes'
 
 /** Active-work counts for Briefing scope tags — Done omitted (Session sign-off / Board catalog). */
 export type ScopeActiveCounts = {
@@ -55,6 +56,7 @@ function countActiveLanes(
   matrices: MatrixResponse[],
   clusterSummary: ClusterSummary | undefined,
   programsReleasedFor: (laneId: string) => boolean | undefined,
+  programs?: ProgramSummary[],
 ): ScopeActiveCounts {
   const counts: ScopeActiveCounts = { doing: 0, planned: 0, ready: 0 }
   const lanes =
@@ -62,7 +64,7 @@ function countActiveLanes(
       ? allWorkLanes()
       : allWorkLanes().filter(l => l.componentLine === scope)
   for (const lane of lanes) {
-    const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+    const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary, programs)
     const released = programsReleasedFor(lane.id)
     if (isLaneLifecycleHold(queue, released)) continue
     const life = laneLifecycleFromQueue(queue, { programsReleased: released })
@@ -81,10 +83,11 @@ function countOpenLanes(
   matrices: MatrixResponse[],
   clusterSummary: ClusterSummary | undefined,
   programsReleasedFor: (laneId: string) => boolean | undefined,
+  programs?: ProgramSummary[],
 ): number {
   let n = 0
   for (const lane of lanesForScopeTrack(scope, trackType)) {
-    const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+    const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary, programs)
     const released = programsReleasedFor(lane.id)
     if (isLaneLifecycleHold(queue, released)) continue
     const life = laneLifecycleFromQueue(queue, { programsReleased: released })
@@ -263,7 +266,7 @@ export function BriefingViewTabsSection({
   matrices,
   clusterSummary,
 }: BriefingViewTabsSectionProps) {
-  const { programsReleasedFor } = useDeliveryProgramClosure()
+  const { programsReleasedFor, programs } = useDeliveryProgramClosure()
   const scopeDef = briefingScopeById(selectedScope)
   const trackTypeDefs = trackTypeDefsForScope(selectedScope)
   const ttDef = trackTypeById(selectedTrackType)
@@ -277,23 +280,38 @@ export function BriefingViewTabsSection({
     const byLine = Object.fromEntries(
       COMPONENT_LINE_DEFS.map(line => [
         line.id,
-        countActiveLanes(line.id, context, matrices, clusterSummary, programsReleasedFor),
+        countActiveLanes(line.id, context, matrices, clusterSummary, programsReleasedFor, programs),
       ]),
     ) as Record<ComponentLineId, ScopeActiveCounts>
-    const all = countActiveLanes('all', context, matrices, clusterSummary, programsReleasedFor)
+    const all = countActiveLanes(
+      'all',
+      context,
+      matrices,
+      clusterSummary,
+      programsReleasedFor,
+      programs,
+    )
     return { byLine, all }
-  }, [context, matrices, clusterSummary, programsReleasedFor])
+  }, [context, matrices, clusterSummary, programsReleasedFor, programs])
 
   const trackTypeOpenCounts = useMemo(() => {
     const map = new Map<WorkTrackType, number>()
     for (const def of trackTypeDefs) {
       map.set(
         def.id,
-        countOpenLanes(selectedScope, def.id, context, matrices, clusterSummary, programsReleasedFor),
+        countOpenLanes(
+          selectedScope,
+          def.id,
+          context,
+          matrices,
+          clusterSummary,
+          programsReleasedFor,
+          programs,
+        ),
       )
     }
     return map
-  }, [trackTypeDefs, selectedScope, context, matrices, clusterSummary, programsReleasedFor])
+  }, [trackTypeDefs, selectedScope, context, matrices, clusterSummary, programsReleasedFor, programs])
 
   return (
     <section className="page-section panel-elevated px-3 py-2">

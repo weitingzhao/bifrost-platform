@@ -35,6 +35,8 @@ export function useDeliveryProgramClosure() {
     /** @deprecated alias of releasedByLane */
     closedByLane: releasedByLane,
     programsReady: query.isSuccess,
+    /** Board programs (phases when fetched with board=1). */
+    programs,
     programsReleasedFor,
     /** @deprecated alias of programsReleasedFor */
     programsClosedFor: programsReleasedFor,

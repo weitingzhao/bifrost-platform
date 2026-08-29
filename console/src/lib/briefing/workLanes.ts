@@ -8,6 +8,8 @@ import {
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 import type { TrackId } from '@/lib/briefing/workTracks'
 import { visionGovernanceQueueItems } from '@/lib/architecture/visionSpineMap'
+import type { ProgramSummary } from '@/api/programsTypes'
+import { projectQueueFromOpenPrograms } from '@/lib/briefing/projectProgramQueue'
 import {
   TRADE_K8S_NATIVE_MIGRATE_STREAM_ID,
   TRADE_K8S_NATIVE_WAVES,
@@ -889,6 +891,19 @@ function buildNetworkMonitoringQueue(): QueueItem[] {
 }
 
 export function buildQueueForLane(
+  laneId: LaneId,
+  context: OpsContextResponse | undefined,
+  matrices: MatrixResponse[],
+  clusterSummary: ClusterSummary | undefined,
+  /** Board programs (with phases from board=1) — fills empty spine/hardcoded queues. */
+  programs?: ProgramSummary[],
+): QueueItem[] {
+  const spine = buildSpineOrHardcodedQueueForLane(laneId, context, matrices, clusterSummary)
+  if (spine.length > 0) return spine
+  return projectQueueFromOpenPrograms(laneId, programs ?? [])
+}
+
+function buildSpineOrHardcodedQueueForLane(
   laneId: LaneId,
   context: OpsContextResponse | undefined,
   matrices: MatrixResponse[],

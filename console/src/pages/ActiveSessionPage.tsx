@@ -78,7 +78,7 @@ export function ActiveSessionPage({
 }: ActiveSessionPageProps) {
   const { canAdmin } = usePlatformAuth()
   const operateQueueQuery = useOperateQueue()
-  const { programsReleasedFor, openProgramsFor, programsReady } = useDeliveryProgramClosure()
+  const { programsReleasedFor, openProgramsFor, programsReady, programs } = useDeliveryProgramClosure()
   const initialFocus = useMemo(() => parseActiveSessionFocus(), [])
   const [selectedLaneId, setSelectedLaneId] = useState<LaneId | null>(
     () => initialFocus.laneId ?? null,
@@ -90,7 +90,7 @@ export function ActiveSessionPage({
     if (!dataReady || !programsReady) return []
     return allWorkLanes()
       .map(lane => {
-        const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+        const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary, programs)
         return { lane, queue, progress: queueProgress(queue) }
       })
       .filter(
@@ -99,7 +99,7 @@ export function ActiveSessionPage({
             programsReleased: programsReleasedFor(row.lane.id),
           }) === 'active',
       )
-  }, [dataReady, programsReady, context, matrices, clusterSummary, programsReleasedFor])
+  }, [dataReady, programsReady, context, matrices, clusterSummary, programsReleasedFor, programs])
 
   useEffect(() => {
     if (doingLanes.length === 0) {

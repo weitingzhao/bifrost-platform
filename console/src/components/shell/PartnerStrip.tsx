@@ -22,6 +22,29 @@ import {
 import { Bot, ChevronDown } from 'lucide-react'
 import { buildPartnerNavSections } from '@/lib/consoleNavConfig'
 import { ConsoleNavSlotItem } from '@/components/shell/ConsoleNavSlotItem'
+import { useBuildDeskWorkloadCounts } from '@/hooks/useBuildDeskWorkloadCounts'
+import type { BuildDeskWorkloadCounts } from '@/lib/briefing/buildDeskWorkload'
+
+function workloadBadgeForItem(
+  itemId: string,
+  counts: BuildDeskWorkloadCounts,
+): ReactNode {
+  const n =
+    itemId === 'briefing'
+      ? counts.briefing
+      : itemId === 'active-session'
+        ? counts.activeSession
+        : 0
+  if (n <= 0) return null
+  return (
+    <span
+      className="shrink-0 text-dense-micro tabular-nums text-sidebar-foreground/55"
+      aria-label={`${n}`}
+    >
+      {n}
+    </span>
+  )
+}
 
 function resolveIdChecker(
   ids: Set<string> | string[] | undefined,
@@ -39,6 +62,7 @@ function NumberedDeskSection({
   onSelect,
   renderItemIcon,
   signals,
+  workloadCounts,
 }: {
   label: string
   items: ShellNavItem[]
@@ -46,6 +70,7 @@ function NumberedDeskSection({
   onSelect: (id: string) => void
   renderItemIcon?: (item: ShellNavItem) => ReactNode
   signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
+  workloadCounts?: BuildDeskWorkloadCounts
 }) {
   return (
     <div>
@@ -67,6 +92,9 @@ function NumberedDeskSection({
                 <span className="w-3 shrink-0 text-center text-dense-micro tabular-nums text-sidebar-foreground/30">
                   {index + 1}
                 </span>
+              }
+              trailing={
+                workloadCounts != null ? workloadBadgeForItem(item.id, workloadCounts) : null
               }
             />
           ))}
@@ -94,6 +122,7 @@ export function PartnerStrip({
   phaseFocusIds?: Set<string> | string[]
 }) {
   const sections = useMemo(() => buildPartnerNavSections(allowedTabIds), [allowedTabIds])
+  const workloadCounts = useBuildDeskWorkloadCounts()
   const signals = useMemo(
     () => ({
       isDimmed: resolveIdChecker(dimmedIds),
@@ -135,6 +164,7 @@ export function PartnerStrip({
         signals={signals}
         isActive={partnerActive}
         showStatusDot={showStatusDot}
+        workloadCounts={workloadCounts}
       />
     )
   }
@@ -156,6 +186,7 @@ export function PartnerStrip({
           onSelect={onSelect}
           renderItemIcon={renderItemIcon}
           signals={signals}
+          workloadCounts={workloadCounts}
         />
       )}
 
@@ -270,6 +301,7 @@ function CollapsedPartnerButton({
   signals,
   isActive,
   showStatusDot,
+  workloadCounts,
 }: {
   sections: NonNullable<ReturnType<typeof buildPartnerNavSections>>
   activeId: string
@@ -278,6 +310,7 @@ function CollapsedPartnerButton({
   signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
   isActive: boolean
   showStatusDot: boolean
+  workloadCounts: BuildDeskWorkloadCounts
 }) {
   const [open, setOpen] = useState(false)
 
@@ -327,6 +360,7 @@ function CollapsedPartnerButton({
             renderItemIcon={renderItemIcon}
             signals={signals}
             numbered
+            workloadCounts={workloadCounts}
           />
         )}
         {sections.launch.length > 0 && (
@@ -374,6 +408,7 @@ function FlyoutSection({
   renderItemIcon,
   signals,
   numbered,
+  workloadCounts,
 }: {
   label: string
   items?: ShellNavItem[]
@@ -383,6 +418,7 @@ function FlyoutSection({
   renderItemIcon?: (item: ShellNavItem) => ReactNode
   signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
   numbered?: boolean
+  workloadCounts?: BuildDeskWorkloadCounts
 }) {
   const blocks: ShellNavSubGroup[] =
     groups != null && groups.length > 0
@@ -418,6 +454,9 @@ function FlyoutSection({
                     {index + 1}
                   </span>
                 ) : undefined
+              }
+              trailing={
+                workloadCounts != null ? workloadBadgeForItem(item.id, workloadCounts) : null
               }
             />
           ))}

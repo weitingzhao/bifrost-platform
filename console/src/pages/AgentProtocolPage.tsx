@@ -37,9 +37,17 @@ import {
   PATROL_AGENT,
   buildAgentProtocolLlmPack,
 } from '@/lib/architecture/agentProtocolCatalog'
+import {
+  CONSOLE_SEAT_ACCEPTANCE,
+  CONSOLE_SEAT_PAGES,
+  CONSOLE_SEAT_RULES,
+  CONSOLE_SEAT_SOURCE,
+  CONSOLE_SEAT_VERSION,
+  CONSOLE_SEATS,
+} from '@/lib/architecture/consoleSeatCatalog'
 
 type CopyState = 'idle' | 'copied' | 'error'
-type ProtocolSection = 'boundaries' | 'session' | 'playbooks'
+type ProtocolSection = 'boundaries' | 'seats' | 'session' | 'playbooks'
 
 const PROTOCOL_SECTIONS: Array<GovernanceCatalogSection<ProtocolSection>> = [
   {
@@ -48,6 +56,13 @@ const PROTOCOL_SECTIONS: Array<GovernanceCatalogSection<ProtocolSection>> = [
     badge: 'MUST',
     summary: 'Session modes vs persona layers, escalation, and forbidden actions.',
     hint: 'Modes · Personas · Escalation · Forbidden',
+  },
+  {
+    id: 'seats',
+    label: 'Seats',
+    badge: 'MAP',
+    summary: 'Engineer (local) vs Flight Director (Prod) — page home and ROOM POSTURE rules.',
+    hint: 'Seats · Page home · Dirty ≠ CAUTION',
   },
   {
     id: 'session',
@@ -67,9 +82,16 @@ const PROTOCOL_SECTIONS: Array<GovernanceCatalogSection<ProtocolSection>> = [
 
 const PROTOCOL_SHORTCUTS: Array<GovernanceCatalogShortcut<ProtocolSection>> = [
   { label: 'Who may what? → Boundaries', sectionId: 'boundaries' },
+  { label: 'Local vs Prod seat? → Seats', sectionId: 'seats' },
   { label: 'How do I start? → Session', sectionId: 'session' },
   { label: 'Classify before act? → Playbooks', sectionId: 'playbooks' },
 ]
+
+function seatHomeLabel(home: string): string {
+  if (home === 'engineer') return 'Engineer'
+  if (home === 'fleet') return 'Flight Director'
+  return 'Both'
+}
 
 /** Session mode (Product / Ops / Promote) — distinct from persona layers. */
 function modeTagVariant(mode: string): 'info' | 'neutral' | 'warning' {
@@ -266,6 +288,116 @@ export function AgentProtocolPage({
               </DenseDataTable>
             </CatalogSection>
           </div>
+        </>
+      ) : null}
+
+      {section === 'seats' ? (
+        <>
+          <CatalogSection
+            title="Console seats (Engineer · Flight Director)"
+            description={
+              <>
+                One control plane, two seats — not two products. Source:{' '}
+                <code className="font-mono-tabular text-[var(--primary)]">{CONSOLE_SEAT_SOURCE}</code>
+                {' '}(v{CONSOLE_SEAT_VERSION}). Home is habitual guidance; pages stay available on both seats.
+              </>
+            }
+          >
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Seat</DenseTableHead>
+                  <DenseTableHead>How</DenseTableHead>
+                  <DenseTableHead>Answers</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {CONSOLE_SEATS.map(s => (
+                  <DenseTableRow key={s.id}>
+                    <DenseTableCell className="font-medium whitespace-nowrap">
+                      <DenseTag variant={s.id === 'engineer' ? 'success' : 'warning'}>
+                        {s.label}
+                      </DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell className="text-xs">{s.how}</DenseTableCell>
+                    <DenseTableCell className="text-xs text-[var(--muted-foreground)]">
+                      {s.answers}
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          </CatalogSection>
+
+          <CatalogSection
+            title="ROOM POSTURE rules"
+            description="What may CAUTION the room vs Engineer annotation only."
+          >
+            <ul className="m-0 flex flex-col gap-1 py-2 pl-4 text-[var(--text-dense)]">
+              {CONSOLE_SEAT_RULES.map((r, i) => (
+                <li key={i} className="text-xs">
+                  {r}
+                </li>
+              ))}
+            </ul>
+          </CatalogSection>
+
+          <CatalogSection
+            title="Page home map"
+            description="Habitual seat per page. roomPosture = feeds Control Room ROOM / Mission lamps (git dirty never does)."
+          >
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Page</DenseTableHead>
+                  <DenseTableHead>Plane</DenseTableHead>
+                  <DenseTableHead>Home</DenseTableHead>
+                  <DenseTableHead>ROOM</DenseTableHead>
+                  <DenseTableHead>Note</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {CONSOLE_SEAT_PAGES.map(p => (
+                  <DenseTableRow key={p.id}>
+                    <DenseTableCell className="font-medium whitespace-nowrap">
+                      <span className="font-mono-tabular text-xs text-muted-foreground">{p.id}</span>
+                      <span className="ml-1.5">{p.label}</span>
+                    </DenseTableCell>
+                    <DenseTableCell className="text-xs whitespace-nowrap">{p.plane}</DenseTableCell>
+                    <DenseTableCell className="whitespace-nowrap">
+                      <DenseTag
+                        variant={
+                          p.home === 'engineer'
+                            ? 'success'
+                            : p.home === 'fleet'
+                              ? 'warning'
+                              : 'neutral'
+                        }
+                      >
+                        {seatHomeLabel(p.home)}
+                      </DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell className="text-xs">
+                      {p.roomPosture ? 'yes' : '—'}
+                    </DenseTableCell>
+                    <DenseTableCell className="text-xs text-[var(--muted-foreground)]">
+                      {p.note ?? '—'}
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          </CatalogSection>
+
+          <CatalogSection title="Seat acceptance">
+            <ul className="m-0 flex flex-col gap-1 py-2 pl-4 text-[var(--text-dense)]">
+              {CONSOLE_SEAT_ACCEPTANCE.map((a, i) => (
+                <li key={i} className="font-mono-tabular text-xs">
+                  {a}
+                </li>
+              ))}
+            </ul>
+          </CatalogSection>
         </>
       ) : null}
 

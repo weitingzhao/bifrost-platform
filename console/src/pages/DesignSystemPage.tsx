@@ -23,6 +23,7 @@ import {
   DESIGN_SYSTEM_VERSION,
   DUAL_PERSPECTIVE_LIFECYCLE,
   DUAL_PERSPECTIVE_LIFECYCLE_RULES,
+  PROGRAM_QUEUE_PROJECTION_ACCEPTANCE,
   FORBIDDEN_PATTERNS,
   LAYER_STACK,
   LIVING_CONTRACT_PATH,
@@ -220,6 +221,14 @@ export function DesignSystemPage() {
             <ul className="m-0 mt-2 list-inside list-disc space-y-0.5 pl-0 text-[var(--text-dense-meta)] text-muted-foreground">
               {DUAL_PERSPECTIVE_LIFECYCLE_RULES.map(r => (
                 <li key={r}>{r}</li>
+              ))}
+            </ul>
+            <p className="m-0 mt-3 text-dense-caption font-medium text-muted-foreground">
+              Program → queue projection acceptance
+            </p>
+            <ul className="m-0 mt-1 list-inside list-disc space-y-0.5 pl-0 font-mono-tabular text-[var(--text-dense-meta)] text-muted-foreground">
+              {PROGRAM_QUEUE_PROJECTION_ACCEPTANCE.map(a => (
+                <li key={a}>{a}</li>
               ))}
             </ul>
           </CatalogSection>

@@ -35,6 +35,11 @@ export interface ProgramSummary {
   prompt_ready?: boolean
   /** Phase readiness bucket: running | ready | idle | settled. */
   runtime_bucket?: 'running' | 'ready' | 'idle' | 'settled' | string
+  /**
+   * Compact phases on board=1 responses — used to project Briefing/In Flight queues.
+   * Absent on non-board program lists.
+   */
+  phases?: ProgramPhaseDetail[]
 }
 
 export interface ProgramPhaseDetail {

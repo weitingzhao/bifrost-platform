@@ -237,6 +237,9 @@ func (h *Handler) HandlePrograms(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		sum := h.buildProgramSummary(id, rt)
+		if boardOnly {
+			sum.Phases = h.compactPhasesForBoard(rt)
+		}
 		if laneFilter != "" && sum.LaneID != laneFilter {
 			continue
 		}

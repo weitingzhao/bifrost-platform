@@ -176,15 +176,12 @@ export function agentSignal(runner?: RemediationHealthResponse, bridge?: AgentBr
   }
 
   const gb = bridge?.git_bridge
-  const bridgeSig: Signal =
-    gb == null
-      ? 'unknown'
-      : gb.status !== 'ok'
-        ? 'fail'
-        : (gb.dirty_repos ?? 0) > 0
-          ? 'degraded'
-          : 'ok'
   const dirty = gb?.dirty_repos ?? 0
+  // Align with fleetSnapshot.buildEngineerCell: dirty repos are Owner WIP
+  // (informational). Only Bridge unreachable/down is a real failure — dirty
+  // must not degrade ROOM POSTURE / Mission CAUTION (consoleSeatCatalog).
+  const bridgeSig: Signal =
+    gb == null ? 'unknown' : gb.status !== 'ok' ? 'fail' : 'ok'
   const parts: string[] = [runnerLabel]
   parts.push(
     bridgeSig === 'unknown'

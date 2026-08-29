@@ -668,7 +668,7 @@ export function TrackLaneSection({
   const showLineBadge = resolvedScope === 'all' || crossTrack
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
-  const { programsReleasedFor, openProgramsFor } = useDeliveryProgramClosure()
+  const { programsReleasedFor, openProgramsFor, programs } = useDeliveryProgramClosure()
 
   const requestDelete = useCallback(
     (lane: WorkLane) => {
@@ -724,7 +724,7 @@ export function TrackLaneSection({
   const laneItems: LaneWithQueue[] = useMemo(
     () =>
       lanes.map(lane => {
-        const q = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+        const q = buildQueueForLane(lane.id, context, matrices, clusterSummary, programs)
         return {
           lane,
           queue: q,
@@ -732,7 +732,7 @@ export function TrackLaneSection({
           lifecycle: laneLifecycle(q, programsReleasedFor(lane.id)),
         }
       }),
-    [lanes, context, matrices, clusterSummary, programsReleasedFor],
+    [lanes, context, matrices, clusterSummary, programsReleasedFor, programs],
   )
 
   const filteredLaneItems = useMemo(() => {

@@ -20,6 +20,7 @@ import { computeAllTracks, type TrackId } from '@/lib/briefing/workTracks'
 import type { WorkIntent } from '@/lib/briefing/workIntents'
 import type { TaskModeDef } from '@/lib/task-mode/types'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
+import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 
 export type UseInlineBriefingPackArgs = {
   mode: TaskModeDef
@@ -82,6 +83,7 @@ export function useInlineBriefingPack({
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
   const operateQueueQ = useOperateQueue()
+  const { programs } = useDeliveryProgramClosure()
 
   const observabilityQ = useQuery({
     queryKey: ['cluster', 'observability'],
@@ -103,9 +105,8 @@ export function useInlineBriefingPack({
 
   const laneQueue = useMemo(() => {
     if (selectedLaneId == null) return []
-    return buildQueueForLane(selectedLaneId, context, matrices, clusterSummary)
-  }, [selectedLaneId, context, matrices, clusterSummary])
-
+    return buildQueueForLane(selectedLaneId, context, matrices, clusterSummary, programs)
+  }, [selectedLaneId, context, matrices, clusterSummary, programs])
   const trackSummaries = useMemo(
     () =>
       computeAllTracks(

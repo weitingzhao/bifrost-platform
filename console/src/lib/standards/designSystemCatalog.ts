@@ -374,6 +374,19 @@ export const DUAL_PERSPECTIVE_LIFECYCLE_RULES: string[] = [
   'Daily run and sign-off stay on In Flight. Delivery is the catalog and close surface.',
   'Briefing `N auto` is quiet by default (render nothing when count is 0).',
   'Delivery agent trace is per-program persisted history (GET /programs/{id}/jobs). Not a cross-program scrape.',
+  'Program-first lanes (board-visible programs without spine task mapping): Briefing / In Flight queue may be projected from GET /programs?board=1 phases (SSOT = Programs runtime, not a third store).',
+  'Queue precedence: non-empty spine or hardcoded synthetic queue wins; program phase projection applies only when that queue would be empty. Do not add new hardcoded closed queues for program-first lanes.',
+  'Doing (In Flight) = projected/spine queue has active work OR (queue all done AND any linked program not sessionReleased). Empty spine alone must not hide an open program.',
+  'Build Desk nav badges: Briefing = count of not-sessionReleased board programs; In Flight = Doing lane count (same predicate as Active Session).',
+]
+
+/** Acceptance checkpoints for program→queue projection (Build Desk self-consistency). */
+export const PROGRAM_QUEUE_PROJECTION_ACCEPTANCE: string[] = [
+  'Q1: trade-iv-radar (or any open program-first lane) appears in Delivery In Progress and In Flight Doing together.',
+  'Q2: Spine/hardcoded lanes with non-empty queues are unchanged when board programs exist on other lanes.',
+  'Q3: After sessionReleased, lane leaves In Flight Doing and Briefing open-program count drops.',
+  'Q4: Owner sign-off on In Flight still joins by phase id and invalidates PROGRAMS_BOARD_QUERY_KEY.',
+  'Q5: PartnerStrip shows Briefing / In Flight counts only when > 0.',
 ]
 
 /* ── Primitives inventory ── */
@@ -493,6 +506,10 @@ export function buildDesignSystemLlmPack(): string {
     ),
     '',
     ...DUAL_PERSPECTIVE_LIFECYCLE_RULES.map(r => `- ${r}`),
+    '',
+    '## Program → queue projection acceptance',
+    '',
+    ...PROGRAM_QUEUE_PROJECTION_ACCEPTANCE.map(a => `- ${a}`),
     '',
     '## Page canvas (three surfaces)',
     '',

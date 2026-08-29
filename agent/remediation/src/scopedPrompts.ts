@@ -412,7 +412,7 @@ export function buildDailyOpsChecklistRunPrompt(req: StartRunRequest): string {
     'external-vendors: massive-polygon, ib-feed, hermes-tooling',
     '',
     '## Scoring (must match Fleet lamps — avoid fleet≠agent)',
-    '- git-bridge: ok only if git_bridge.status=ok AND dirty_repos=0. degraded if reachable but dirty_repos>0. fail if down/unavailable.',
+    '- git-bridge: ok if git_bridge.status=ok (dirty_repos>0 is informational Owner WIP — report in detail, do NOT signal degraded). fail if down/unavailable.',
     '- Runtime JSON under bifrost-platform data/checklist/ and data/operate/ is local API state (gitignored) — do not treat as WIP.',
     '- hermes-tooling: ok if nous_hermes.status=ok OR get_hermes_readiness.ready=true (local hermes_mcp :8782 optional).',
     '- db-backup-fresh: ok if get_postgres_backup_status.fresh=true (completed < 48h). Always report this item_id.',

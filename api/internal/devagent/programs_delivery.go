@@ -113,7 +113,11 @@ func (h *Handler) phaseSignoffRecord(rt *programRuntime, phaseID string) *PhaseS
 	return h.phaseSignoffRecordLocked(rt, phaseID)
 }
 
-func (h *Handler) programDetailBoardResponse(programID string, rt *programRuntime) ProgramDetailBoardResponse {
+/** compactPhasesForBoard builds phase rows for board list (no rendered prompts). */
+func (h *Handler) compactPhasesForBoard(rt *programRuntime) []PhaseDetailBoard {
+	if rt == nil || rt.blueprint == nil {
+		return nil
+	}
 	phases := make([]PhaseDetailBoard, len(rt.blueprint.Phases))
 	statusByID := make(map[string]PhaseStatus, len(rt.phases))
 	for _, p := range rt.phases {
@@ -133,17 +137,14 @@ func (h *Handler) programDetailBoardResponse(programID string, rt *programRuntim
 		}
 		rec := h.phaseSignoffRecord(rt, bp.ID)
 		detail := PhaseDetailBoard{
-			ID:             bp.ID,
-			Title:          bp.Title,
-			Status:         st,
-			VerifyCmd:      bp.VerifyCmd,
-			Acceptance:     bp.Acceptance,
-			DependsOn:      bp.DependsOn,
-			SignOff:        bp.SignOff,
-			AgentSession:   bp.AgentSession,
-			Progress:       progressByID[bp.ID],
-			RenderedPrompt: promptForPhase(rt.blueprint, bp.ID),
-			SkillInjected:  skillFileLoaded(rt.blueprint.Workspace, rt.blueprint.SkillPath),
+			ID:         bp.ID,
+			Title:      bp.Title,
+			Status:     st,
+			VerifyCmd:  bp.VerifyCmd,
+			Acceptance: bp.Acceptance,
+			DependsOn:  bp.DependsOn,
+			SignOff:    bp.SignOff,
+			Progress:   progressByID[bp.ID],
 		}
 		if rec != nil {
 			detail.SignedOff = true
@@ -151,6 +152,18 @@ func (h *Handler) programDetailBoardResponse(programID string, rt *programRuntim
 			detail.SignedOffBy = rec.SignedOffBy
 		}
 		phases[i] = detail
+	}
+	return phases
+}
+
+func (h *Handler) programDetailBoardResponse(programID string, rt *programRuntime) ProgramDetailBoardResponse {
+	phases := h.compactPhasesForBoard(rt)
+	// Detail endpoint enriches prompts (board list skips these).
+	for i := range phases {
+		bp := rt.blueprint.Phases[i]
+		phases[i].AgentSession = bp.AgentSession
+		phases[i].RenderedPrompt = promptForPhase(rt.blueprint, bp.ID)
+		phases[i].SkillInjected = skillFileLoaded(rt.blueprint.Workspace, rt.blueprint.SkillPath)
 	}
 	resp := ProgramDetailBoardResponse{
 		Program: h.buildProgramSummary(programID, rt),

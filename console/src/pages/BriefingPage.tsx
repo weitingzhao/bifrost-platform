@@ -152,7 +152,7 @@ export function BriefingPage({
 
   const { canOperate } = usePlatformAuth()
   const operateQueueQuery = useOperateQueue()
-  const { releasedByLane, programsReleasedFor } = useDeliveryProgramClosure()
+  const { releasedByLane, programsReleasedFor, programs } = useDeliveryProgramClosure()
   const [localSnapshot] = useState(() => loadSnapshot())
   const [sessionDelta, setSessionDelta] = useState<SessionDelta | null>(null)
 
@@ -205,7 +205,7 @@ export function BriefingPage({
         ? lanesForScope(selectedScope)
         : lanesForScopeTrack(selectedScope, selectedTrackType)
     const queues = lanes.map(lane => {
-      const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+      const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary, programs)
       return {
         label: lane.label,
         laneId: lane.id,
@@ -223,7 +223,7 @@ export function BriefingPage({
       visible.map(({ label, queue, laneId }) => ({ label, queue, laneId })),
       { programsReleasedByLane: releasedByLane },
     )
-  }, [selectedScope, selectedTrackType, lifecycleFilter, context, matrices, clusterSummary, releasedByLane, programsReleasedFor])
+  }, [selectedScope, selectedTrackType, lifecycleFilter, context, matrices, clusterSummary, releasedByLane, programsReleasedFor, programs])
 
   /** Config / lane changes invalidate the "Active" session marker until re-copy. */
   function invalidateSessionPackUi() {
@@ -238,7 +238,7 @@ export function BriefingPage({
     if (lifecycleFilter == null) return
     const lanes = lanesForScope(selectedScope)
     const matching = lanes.filter(lane => {
-      const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary)
+      const queue = buildQueueForLane(lane.id, context, matrices, clusterSummary, programs)
       const released = programsReleasedFor(lane.id)
       if (isLaneLifecycleHold(queue, released)) return false
       const life = laneLifecycleFromQueue(queue, { programsReleased: released })
@@ -259,6 +259,7 @@ export function BriefingPage({
     matrices,
     clusterSummary,
     programsReleasedFor,
+    programs,
   ])
 
   useEffect(() => {
@@ -326,8 +327,8 @@ export function BriefingPage({
   }
 
   const laneQueue = useMemo(
-    () => buildQueueForLane(selectedLane, context, matrices, clusterSummary),
-    [selectedLane, context, matrices, clusterSummary],
+    () => buildQueueForLane(selectedLane, context, matrices, clusterSummary, programs),
+    [selectedLane, context, matrices, clusterSummary, programs],
   )
   const selectedLaneLifecycle = useMemo(
     () =>

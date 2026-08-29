@@ -161,13 +161,13 @@ export function BriefingWorkDigestPanel({
   onNewLane,
   compact = false,
 }: BriefingWorkDigestPanelProps) {
-  const { releasedByLane, programsReleasedFor } = useDeliveryProgramClosure()
+  const { releasedByLane, programsReleasedFor, programs } = useDeliveryProgramClosure()
   const { summary, hotLines, laneTotal } = useMemo(() => {
     const lanes = allWorkLanes()
     const queues = lanes.map(lane => ({
       label: lane.label,
       laneId: lane.id,
-      queue: buildQueueForLane(lane.id, context, matrices, clusterSummary),
+      queue: buildQueueForLane(lane.id, context, matrices, clusterSummary, programs),
       line: lane.componentLine,
     }))
     const summary = computeScopeWorkSummary(
@@ -194,7 +194,7 @@ export function BriefingWorkDigestPanel({
       }))
 
     return { summary, hotLines, laneTotal: lanes.length }
-  }, [context, matrices, clusterSummary, releasedByLane, programsReleasedFor])
+  }, [context, matrices, clusterSummary, releasedByLane, programsReleasedFor, programs])
 
   const { status, nextStep, laneCounts } = summary
   const hasActiveFilter = lifecycleFilter != null

@@ -205,6 +205,72 @@ func TestHandleProgramsEmptyLiveLaneCollisions(t *testing.T) {
 	}
 }
 
+func TestHandleProgramsBoardIncludesPhases(t *testing.T) {
+	h := &Handler{
+		runtimes: map[string]*programRuntime{
+			"trade-iv-radar": {
+				blueprint: &ProgramBlueprint{
+					ID: "trade-iv-radar", Title: "IV Radar", Status: "active",
+					Delivery: &DeliveryConfig{BoardVisible: true},
+					Metadata: map[string]interface{}{"lane_id": "trade-iv-radar"},
+					Phases: []PhaseBlueprint{
+						{ID: "P1", Title: "Nav", SignOff: &PhaseSignOffConfig{Required: true}},
+						{ID: "P2", Title: "Data", SignOff: &PhaseSignOffConfig{Required: true}},
+						{ID: "P3", Title: "UI", SignOff: &PhaseSignOffConfig{Required: true}},
+						{ID: "P4", Title: "QA", SignOff: &PhaseSignOffConfig{Required: false}},
+					},
+				},
+				phases: []Phase{
+					{ID: "P1", Status: PhaseDone},
+					{ID: "P2", Status: PhaseDone},
+					{ID: "P3", Status: PhaseDone},
+					{ID: "P4", Status: PhaseDone},
+				},
+				state: &ProgramStateRecord{ProgramID: "trade-iv-radar", LaneID: "trade-iv-radar"},
+			},
+		},
+	}
+	rec := httptest.NewRecorder()
+	h.HandlePrograms(rec, httptest.NewRequest(http.MethodGet, "/api/v1/programs?board=1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body programsListBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Programs) != 1 {
+		t.Fatalf("programs=%d", len(body.Programs))
+	}
+	p := body.Programs[0]
+	if p.PhaseCount != 4 {
+		t.Fatalf("phase_count=%d", p.PhaseCount)
+	}
+	if len(p.Phases) != 4 {
+		t.Fatalf("phases len=%d want 4", len(p.Phases))
+	}
+	if p.Phases[0].ID != "P1" || p.Phases[0].Title == "" {
+		t.Fatalf("phase0=%+v", p.Phases[0])
+	}
+	if p.Phases[0].Status != string(PhaseDone) {
+		t.Fatalf("phase0 status=%s", p.Phases[0].Status)
+	}
+
+	// Non-board list omits phases.
+	rec2 := httptest.NewRecorder()
+	h.HandlePrograms(rec2, httptest.NewRequest(http.MethodGet, "/api/v1/programs", nil))
+	var body2 programsListBody
+	if err := json.Unmarshal(rec2.Body.Bytes(), &body2); err != nil {
+		t.Fatal(err)
+	}
+	if len(body2.Programs) != 1 {
+		t.Fatalf("programs=%d", len(body2.Programs))
+	}
+	if len(body2.Programs[0].Phases) != 0 {
+		t.Fatalf("non-board should omit phases, got %d", len(body2.Programs[0].Phases))
+	}
+}
+
 func TestHandleProgramsReportsCollisionsDespiteLaneFilter(t *testing.T) {
 	h := &Handler{
 		runtimes: map[string]*programRuntime{

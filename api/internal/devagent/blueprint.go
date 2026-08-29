@@ -107,6 +107,9 @@ type ProgramSummary struct {
 	PromptReady bool `json:"prompt_ready"`
 	// RuntimeBucket is running | ready | idle | settled (phase readiness).
 	RuntimeBucket string `json:"runtime_bucket"`
+	// Phases is compact phase detail on board=1 list (program→queue projection).
+	// Omitted on non-board list responses.
+	Phases []PhaseDetailBoard `json:"phases,omitempty"`
 }
 
 type ProgramInfo struct {

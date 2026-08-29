@@ -9,6 +9,7 @@
  */
 
 import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog'
+import { buildConsoleSeatLlmPack } from '@/lib/architecture/consoleSeatCatalog'
 
 export const AGENT_PROTOCOL_VERSION = '2026-08-21'
 export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocolCatalog.ts'
@@ -561,6 +562,7 @@ export const DAILY_OPS_FLEET_DESK = {
     'Any non-green required standard ⇒ cell NO-GO; fleet GO only when every scored cell is GO.',
     'Mac seat is Engineer — not a fourth env column. Prod/STG viewer: Mac seat informational only.',
     'Viewer seat: OPS_VIEWER_ENV > (in-cluster only) clusters.yaml viewer_env > dev.',
+    'Git dirty is Owner WIP — Fleet Engineer cell and Control Room missionSignals.agentSignal stay ok when Bridge is reachable; dirty does NOT enter ROOM POSTURE / Mission CAUTION. Cross-ref: consoleSeatCatalog.ts.',
     'D10 live trading remains BLOCKED.',
   ],
   /** Acceptance checkpoints (Fleet Desk QA + Ops loop). */
@@ -578,6 +580,7 @@ export const DAILY_OPS_FLEET_DESK = {
     'Q11: Notes show fleet≠agent on polarity mismatch; Action opens job/queue; Queued (busy) when auto demoted by concurrency; Queue Dismiss available with evidence for stale/resolved.',
     'Q12: Non-ok row shows Fix (Ops Agent when fixScope) and/or Ask for AI (Cursor failover copy); header Ask for AI packs all non-ok items.',
     'Q13: Dirty details panel lists repo/files/+N/−M from git-bridge via agent/bridge; Propose commit never auto-commits without approval card.',
+    'Q14: Bridge ok + dirty_repos>0 → Fleet + Mission agentSignal ok (detail may note dirty); ROOM POSTURE not CAUTION from dirty alone — see consoleSeatCatalog.ts.',
   ],
 } as const
 
@@ -822,6 +825,8 @@ export function buildAgentProtocolLlmPack(): string {
       `- **${m.mode}** [${m.flywheel}]: UI=${m.defaultUI} | May: ${m.agentMay} | Must-not: ${m.agentMustNot}`),
     '',
     buildSystemDomainLlmPack(),
+    '',
+    buildConsoleSeatLlmPack(),
     '',
     '## Three-layer Agent architecture',
     ...AGENT_LAYERS.map(a =>
