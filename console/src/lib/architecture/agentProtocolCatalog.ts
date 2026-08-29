@@ -903,7 +903,7 @@ export function buildAgentProtocolLlmPack(): string {
     '',
     '## Three Desks (Build / Ops / Analysis)',
     '- Rail: System + Build + Ops + Analysis. Legacy daily-ops / mission-launch / patrol → ops.',
-    '- Engineer Partner: Build Desk / Launch Desk / Ops Desk / Analysis Desk. Launch Desk: Rocket → Satellite → Plugin → Agent (L-1 Mac Mini host publish). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Queue tab id `queue` (`#agent-desk` alias).',
+    '- Engineer Partner: Build Desk / Launch Desk / Ops Desk / Analysis Desk. Launch Desk: Rocket → Satellite → Research → Plugin → Agent (L-1 Mac Mini host publish). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Queue tab id `queue` (`#agent-desk` alias).',
     '',
     '## Patrol (Ops Desk — Cursor SDK nightshift)',
     `- Surface: ${PATROL_AGENT.surface}`,

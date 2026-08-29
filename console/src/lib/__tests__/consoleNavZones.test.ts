@@ -48,6 +48,7 @@ describe('Seat / Partner zone builders', () => {
     expect(partner?.launch.map(i => i.id)).toEqual([
       'platform-release',
       'trade-release',
+      'research-release',
       'plugin-release',
       'agent-release',
     ])
@@ -96,10 +97,11 @@ describe('Seat / Partner zone builders', () => {
     ])
   })
 
-  it('Launch Desk sidebar labels are Rocket → Satellite → Plugin → Agent', () => {
+  it('Launch Desk sidebar labels are Rocket → Satellite → Research → Plugin → Agent', () => {
     expect(ENGINEER_LAUNCH_ITEMS.map(i => i.label)).toEqual([
       'Rocket',
       'Satellite',
+      'Research',
       'Plugin',
       'Agent',
     ])
@@ -144,9 +146,10 @@ describe('Seat / Partner zone builders', () => {
     expect(resolveTaskModeId('patrol')).toBe('ops')
   })
 
-  it('remaining nav groups are Satellite → Rocket → Plugin (Network under Plugin)', () => {
+  it('remaining nav groups are Satellite → Research → Rocket → Plugin (Network under Plugin)', () => {
     expect(CONSOLE_NAV_GROUPS.map(g => g.label)).toEqual([
       'Satellite',
+      'Research',
       'Rocket',
       'Plugin',
     ])
@@ -157,14 +160,17 @@ describe('Seat / Partner zone builders', () => {
     expect(missionIds).toContain('network')
     expect(missionIds).toContain('plugin-gallery')
     expect(missionIds).toContain('research-engine')
+    const researchGroup = CONSOLE_NAV_GROUPS.find(g => g.label === 'Research')
+    expect(researchGroup?.subGroups?.[0]?.items.map(i => i.id)).toEqual(['research-engine'])
     const pluginGroup = CONSOLE_NAV_GROUPS.find(g => g.label === 'Plugin')
     expect(pluginGroup?.subGroups?.map(sg => sg.label)).toEqual(['', 'Infra'])
-    expect(pluginGroup?.subGroups?.[0]?.items.map(i => i.id)).toContain('research-engine')
+    expect(pluginGroup?.subGroups?.[0]?.items.map(i => i.id)).not.toContain('research-engine')
     expect(pluginGroup?.subGroups?.[1]?.items.map(i => i.id)).toEqual(['network'])
     expect(CONSOLE_NAV_GROUPS[0].defaultOpen).toBe(true)
     expect(CONSOLE_NAV_GROUPS[1].defaultOpen).toBe(true)
     expect(CONSOLE_NAV_GROUPS[2].defaultOpen).toBe(true)
-    expect(CONSOLE_NAV_GROUPS[2].emphasis).toBeUndefined()
-    expect(CONSOLE_NAV_GROUPS[2].dividerBefore).toBeUndefined()
+    expect(CONSOLE_NAV_GROUPS[3].defaultOpen).toBe(true)
+    expect(CONSOLE_NAV_GROUPS[3].emphasis).toBeUndefined()
+    expect(CONSOLE_NAV_GROUPS[3].dividerBefore).toBeUndefined()
   })
 })

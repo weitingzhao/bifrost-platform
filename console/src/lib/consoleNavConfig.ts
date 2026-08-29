@@ -94,7 +94,7 @@ export const ENGINEER_LIFECYCLE_ITEMS: ShellNavItem[] = [
 
 /**
  * Launch Desk — always under Engineer Partner (below Build Desk).
- * Domain plane: Rocket / Satellite / Plugin / Engineer (Agent = L-1 host publish).
+ * Domain plane: Rocket / Satellite / Research / Plugin / Engineer (Agent = L-1 host publish).
  */
 export const ENGINEER_LAUNCH_ITEMS: ShellNavItem[] = [
   { id: 'platform-release', label: 'Rocket', icon: Container },

@@ -185,7 +185,7 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Control-plane probes (API / Console / Argo) across STG and PROD. Runtime golden signals stay on Cluster Layer B and Observability until platform NS scrape is stable.',
   'trade-release': LANE_DETAIL_SUBTITLE,
   'research-release':
-    'Research OLAP payload delivery — build the image first, then bump k8s/api/deployment.yaml. Argo CD syncs research from GitHub automatically.',
+    'Launch Research — GO/NO-GO gate (auth · pipeline · semver tag). Build the image first, then bump k8s/api/deployment.yaml. Argo CD syncs research from GitHub automatically.',
   'platform-release': LANE_DETAIL_SUBTITLE,
   console:
     'Legacy hash — opens shell Operator Dock Console slot (SSH). Prefer Operator Dock Agent | Console.',

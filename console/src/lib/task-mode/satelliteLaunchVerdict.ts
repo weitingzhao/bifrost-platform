@@ -47,6 +47,7 @@ export type LaunchCheckpointId =
   | 'platform-prod'
   | 'promote'
   | 'pipeline'
+  | 'tag'
   /** @deprecated collapsed readiness — prefer rocket / trade-prod */
   | 'readiness'
 

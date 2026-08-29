@@ -186,6 +186,7 @@ export function ConsoleSidebar({
       } else if (
         item.id === 'platform-release' ||
         item.id === 'trade-release' ||
+        item.id === 'research-release' ||
         item.id === 'plugin-release' ||
         item.id === 'agent-release'
       ) {

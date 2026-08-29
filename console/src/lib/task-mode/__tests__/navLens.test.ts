@@ -33,6 +33,7 @@ describe('buildTaskNavGroups command hierarchy', () => {
     const groups = buildTaskNavGroups('system', CONSOLE_NAV_GROUPS)
     expect(groups.map(g => g.label)).toEqual([
       'Satellite',
+      'Research',
       'Rocket',
       'Plugin',
     ])
@@ -60,6 +61,7 @@ describe('buildTaskNavGroups command hierarchy', () => {
     expect(partner?.launch.map(i => i.id)).toEqual([
       'platform-release',
       'trade-release',
+      'research-release',
       'plugin-release',
       'agent-release',
     ])
@@ -85,6 +87,7 @@ describe('nav lens includeTabs', () => {
     expect(allowed?.has('agent-governance')).toBe(true)
     expect(allowed?.has('agent-capability')).toBe(true)
     expect(allowed?.has('platform-release')).toBe(true)
+    expect(allowed?.has('research-release')).toBe(true)
     expect(allowed?.has('agent-release')).toBe(true)
     expect(allowed?.has('rocket-health')).toBe(true)
     expect(allowed?.has('task-cc')).toBe(true)

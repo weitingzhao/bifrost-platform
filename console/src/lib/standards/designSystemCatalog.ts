@@ -327,7 +327,7 @@ export const SIDEBAR_ZONES: SidebarZoneRow[] = [
   {
     zone: 'Partner',
     surface: 'ShellNavSidebar.partnerContent → PartnerStrip (persona block, not a nav group)',
-    intent: 'Engineer desks: Build Desk always visible (Briefing → In Flight → Delivery); Dev Sessions is framework chrome (header indicator / Operator Dock), not a Build Desk rail item. Launch Desk always visible when allowed (Rocket → Satellite → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane + Trust + Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status.',
+    intent: 'Engineer desks: Build Desk always visible (Briefing → In Flight → Delivery); Dev Sessions is framework chrome (header indicator / Operator Dock), not a Build Desk rail item. Launch Desk always visible when allowed (Rocket → Satellite → Research → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane + Trust + Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status.',
   },
   {
     zone: 'Mission',

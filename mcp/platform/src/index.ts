@@ -189,12 +189,13 @@ reg(
 
 reg(
   'start_pipeline_run',
-  'Start Tekton PipelineRun (operator). Pass revision (Gitea tag) to pin deploy version.',
-  { name: z.string(), revision: z.string().optional() },
-  async ({ name, revision }) =>
+  'Start Tekton PipelineRun (operator). Pass revision (Gitea tag) to pin deploy version. For bifrost-deliver-research, pass tag (semver image pin, e.g. 0.48.4) — default tag is the moving smoke tag `dev` and must not pin k8s.',
+  { name: z.string(), revision: z.string().optional(), tag: z.string().optional() },
+  async ({ name, revision, tag }) =>
     jsonResult(
       await platformPost(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`, {
         revision: revision ?? '',
+        ...(tag != null && tag.trim() !== '' ? { tag: tag.trim() } : {}),
       }),
     ),
 )

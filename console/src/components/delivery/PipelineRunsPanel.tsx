@@ -44,6 +44,8 @@ interface PipelineRunsPanelProps {
   onOpenPlacement?: () => void
   /** observe: history + logs only; operate: includes Run / Delete (operator token) */
   layout?: PipelineRunsPanelLayout
+  /** Prefer this pipeline in the run list (Launch Research / lane pages). */
+  preferPipeline?: string
 }
 
 function runStatusVariant(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -93,10 +95,16 @@ export function PipelineRunsPanel({
   stgSmokeDetail,
   onOpenPlacement,
   layout = 'observe',
+  preferPipeline,
 }: PipelineRunsPanelProps) {
   const allowActuation = layout === 'operate'
   const pipelineList = pipelines?.pipelines ?? []
+  const preferred =
+    preferPipeline != null && preferPipeline !== ''
+      ? pipelineList.find(p => p.name === preferPipeline)?.name
+      : undefined
   const defaultPipeline =
+    preferred ??
     pipelineList.find(p => p.name === DELIVER_STG_PIPELINE)?.name ??
     pipelineList.find(p => p.name === 'bifrost-build-stg')?.name ??
     pipelineList.find(p => p.name === 'bifrost-smoke')?.name ??

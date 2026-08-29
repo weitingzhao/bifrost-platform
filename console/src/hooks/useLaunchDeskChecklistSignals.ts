@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchPipelineRuns } from '@/api/delivery'
+import { fetchDeliveryPipelines, fetchPipelineRuns } from '@/api/delivery'
 import { fetchAgentBridge, fetchAgentDeployStatus } from '@/api/agentOps'
 import {
   usePromoteVerifyReadiness,
@@ -35,6 +35,11 @@ import {
   resolvePluginLaunchVerdict,
 } from '@/lib/task-mode/pluginLaunchVerdict'
 import {
+  RESEARCH_DEFAULT_TAG,
+  buildResearchLaunchCheckpoints,
+  resolveResearchLaunchVerdict,
+} from '@/lib/task-mode/researchLaunchVerdict'
+import {
   buildLaunchCheckpoints,
   hasDeliverInFlight,
   launchVerdictToSignal,
@@ -47,7 +52,14 @@ const PLATFORM_PROD_PIPELINE = deliveryTargetById('platform-prod').pipeline
 const TRADE_STG_PIPELINE = deliveryTargetById('trade-stg').pipeline
 const TRADE_PROD_PIPELINE = deliveryTargetById('trade-prod').pipeline
 
-export type LaunchDeskLaneId = 'platform-release' | 'trade-release' | 'plugin-release' | 'agent-release'
+const RESEARCH_PIPELINE = 'bifrost-deliver-research'
+
+export type LaunchDeskLaneId =
+  | 'platform-release'
+  | 'trade-release'
+  | 'research-release'
+  | 'plugin-release'
+  | 'agent-release'
 
 export type LaunchDeskLaneSignal = {
   signal: Signal
@@ -121,6 +133,18 @@ export function useLaunchDeskChecklistSignals(opts?: {
     queryKey: ['delivery', 'runs', TRADE_PROD_PIPELINE],
     queryFn: () => fetchPipelineRuns(TRADE_PROD_PIPELINE),
     refetchInterval: 20_000,
+    enabled,
+  })
+  const researchRuns = useQuery({
+    queryKey: ['delivery', 'runs', RESEARCH_PIPELINE],
+    queryFn: () => fetchPipelineRuns(RESEARCH_PIPELINE),
+    refetchInterval: 20_000,
+    enabled,
+  })
+  const pipelinesQ = useQuery({
+    queryKey: ['delivery', 'pipelines'],
+    queryFn: fetchDeliveryPipelines,
+    refetchInterval: 30_000,
     enabled,
   })
 
@@ -207,6 +231,17 @@ export function useLaunchDeskChecklistSignals(opts?: {
     const satelliteReady = satelliteCps.filter(c => c.ok).length
     const pluginReady = pluginCps.filter(c => c.ok).length
 
+    const researchInput = {
+      canOperate,
+      pipelinePresent: (pipelinesQ.data?.pipelines ?? []).some(p => p.name === RESEARCH_PIPELINE),
+      tag: RESEARCH_DEFAULT_TAG,
+      deliverInFlight: hasDeliverInFlight(researchRuns.data?.runs),
+    }
+    const researchVerdict = resolveResearchLaunchVerdict(researchInput)
+    const researchCps = buildResearchLaunchCheckpoints(researchInput)
+    const researchReady = researchCps.filter(c => c.ok).length
+    const researchLoading = pipelinesQ.isLoading || researchRuns.isLoading
+
     return {
       'platform-release': {
         signal: rocketLoading ? 'unknown' : launchVerdictToSignal(rocketVerdict.kind),
@@ -221,6 +256,13 @@ export function useLaunchDeskChecklistSignals(opts?: {
         verdict: satelliteVerdict,
         checklistReady: satelliteReady,
         checklistTotal: satelliteCps.length,
+      },
+      'research-release': {
+        signal: researchLoading ? 'unknown' : launchVerdictToSignal(researchVerdict.kind),
+        title: verdictTitle('Research', researchVerdict, researchReady, researchCps.length),
+        verdict: researchVerdict,
+        checklistReady: researchReady,
+        checklistTotal: researchCps.length,
       },
       'plugin-release': {
         signal: pluginLoading ? 'unknown' : launchVerdictToSignal(pluginVerdict.kind),
@@ -289,6 +331,10 @@ export function useLaunchDeskChecklistSignals(opts?: {
     platformProdRuns.data?.runs,
     tradeStgRuns.data?.runs,
     tradeProdRuns.data?.runs,
+    researchRuns.data?.runs,
+    researchRuns.isLoading,
+    pipelinesQ.data?.pipelines,
+    pipelinesQ.isLoading,
     ambientActive,
     scope,
     ibProbe.status,
