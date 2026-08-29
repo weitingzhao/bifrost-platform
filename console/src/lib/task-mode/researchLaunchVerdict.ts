@@ -15,6 +15,7 @@ export type ResolveResearchLaunchVerdictInput = {
   pipelinePresent: boolean
   tag: string
   deliverInFlight: boolean
+  agentInFlight?: boolean
 }
 
 export function buildResearchLaunchCheckpoints(
@@ -42,11 +43,13 @@ export function buildResearchLaunchCheckpoints(
 export function resolveResearchLaunchVerdict(
   input: ResolveResearchLaunchVerdictInput,
 ): LaunchVerdict {
-  if (input.deliverInFlight) {
+  if (input.deliverInFlight || input.agentInFlight) {
     return {
       kind: 'IN_FLIGHT',
       title: 'Research launch in flight',
-      detail: 'bifrost-deliver-research is running — wait for Kaniko + verify.',
+      detail: input.agentInFlight
+        ? 'AI Deploy Research is running — decide in Agent Session, then watch Build steps.'
+        : 'bifrost-deliver-research is running — wait for Kaniko + verify.',
       disabledReason: 'Research delivery already running',
     }
   }

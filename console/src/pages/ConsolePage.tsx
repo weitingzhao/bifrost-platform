@@ -185,7 +185,7 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Control-plane probes (API / Console / Argo) across STG and PROD. Runtime golden signals stay on Cluster Layer B and Observability until platform NS scrape is stable.',
   'trade-release': LANE_DETAIL_SUBTITLE,
   'research-release':
-    'Launch Research — GO/NO-GO gate (auth · pipeline · semver tag). Build the image first, then bump k8s/api/deployment.yaml. Argo CD syncs research from GitHub automatically.',
+    'Launch Research — AI Deploy Research on the lane strip. Build → Verify image → Pin → Live. This desk starts bifrost-deliver-research only.',
   'platform-release': LANE_DETAIL_SUBTITLE,
   console:
     'Legacy hash — opens shell Operator Dock Console slot (SSH). Prefer Operator Dock Agent | Console.',
@@ -1161,7 +1161,16 @@ function ConsolePageInner() {
         )}
         {viewTab === 'analytics-pipeline' && <AnalyticsPipelinePage />}
         {viewTab === 'research-engine' && <ResearchEnginePage />}
-        {viewTab === 'research-release' && <ResearchReleasePage />}
+        {viewTab === 'research-release' && (
+          <ResearchReleasePage
+            ambientJobId={ambientJob?.id ?? null}
+            ambientJobStatus={ambientJob?.status ?? null}
+            ambientJobScope={ambientJob?.scope ?? null}
+            onStartAgentJob={startAmbientAgentJob}
+            onExpandAgentDock={expandAgentDock}
+            onOpenResearchEngine={() => setViewTab('research-engine')}
+          />
+        )}
 
         {isGovernanceTab && (
           <div className="flex min-w-0 gap-4">

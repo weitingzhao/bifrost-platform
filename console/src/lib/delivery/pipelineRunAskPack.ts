@@ -49,6 +49,28 @@ export const TRADE_STG_ASK_CONTEXT: PipelineRunAskContext = {
 }
 
 /** Ask context for an Ops Platform deliver pipeline (STG or PROD). */
+export function researchDeliverAskContext(): PipelineRunAskContext {
+  return {
+    task: 'Diagnose this bifrost-deliver-research PipelineRun (Research OLAP payload). First-pass verify-research fail after a successful Kaniko push is expected until k8s/api/deployment.yaml is pinned.',
+    pipelineTitle: 'bifrost-deliver-research tasks (declared order)',
+    pipelineOrder: [
+      'mirror-sync: bifrost-gitea-mirror-sync (bifrost-research)',
+      'clone-research: bifrost-git-clone-gitea → workspace build-context',
+      'build-research: Kaniko → registry.cicd /bifrost-research:<tag>',
+      'rollout-research: rollout restart research-api (does not change the pinned tag)',
+      'verify-research: assert Deployment image tag + /health startup_ok',
+      'gitops-sync: Argo CD Application bifrost-research',
+    ],
+    clusterSignals: [
+      'namespace: research — ImagePullBackOff means the manifest was pinned before the image landed',
+      'registry: 192.168.10.73:30500/bifrost-research',
+      'D10: research namespace only — do not touch trade daemon',
+    ],
+    acceptanceHint:
+      'Registry has the tag, then bump k8s/api/deployment.yaml — do not pin a missing tag.',
+  }
+}
+
 export function platformDeliverAskContext(target: {
   shortLabel: string
   namespace: string
@@ -148,6 +170,13 @@ export function rolloutLogTailHint(
     }
   }
   if (isPipelineRunFailed(run)) {
+    if (/image was pushed|not running the tag this run built/i.test(logs)) {
+      return {
+        tone: 'info',
+        message:
+          'Kaniko pushed the image. verify-research failed because the Deployment still pins the previous tag — expected until k8s/api/deployment.yaml is pinned.',
+      }
+    }
     return {
       tone: 'warning',
       message:

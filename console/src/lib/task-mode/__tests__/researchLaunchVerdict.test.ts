@@ -35,6 +35,11 @@ describe('resolveResearchLaunchVerdict', () => {
     expect(v.kind).toBe('IN_FLIGHT')
   })
 
+  it('IN_FLIGHT when AI Deploy Research is already running', () => {
+    const v = resolveResearchLaunchVerdict({ ...ready, agentInFlight: true })
+    expect(v.kind).toBe('IN_FLIGHT')
+  })
+
   it('NO_GO without operator auth', () => {
     const v = resolveResearchLaunchVerdict({ ...ready, canOperate: false })
     expect(v.kind).toBe('NO_GO')

@@ -98,6 +98,15 @@ async function researchGet<T>(path: string): Promise<T | ResearchProxyError> {
   return body as T
 }
 
+export type ResearchHealth = {
+  version?: string
+  startup_ok?: boolean
+}
+
+export async function fetchResearchHealth(): Promise<ResearchHealth | ResearchProxyError> {
+  return researchGet<ResearchHealth>('/health')
+}
+
 export async function fetchResearchStatus(): Promise<ResearchStatus> {
   const res = await fetch(STATUS_URL, { credentials: 'same-origin' })
   if (!res.ok) {

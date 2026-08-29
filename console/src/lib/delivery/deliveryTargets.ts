@@ -8,7 +8,12 @@ import {
 } from '@/lib/delivery/deliverPlatformPhases'
 import { EXPECTED_DOCKERFILE_CONFIGMAPS } from '@/lib/delivery/deliverStgPhases'
 
-export type DeliveryTargetId = 'trade-stg' | 'trade-prod' | 'platform-stg' | 'platform-prod'
+export type DeliveryTargetId =
+  | 'trade-stg'
+  | 'trade-prod'
+  | 'platform-stg'
+  | 'platform-prod'
+  | 'research'
 
 export type DeliveryTargetConfig = {
   id: DeliveryTargetId
@@ -86,6 +91,21 @@ export const DELIVERY_TARGETS: DeliveryTargetConfig[] = [
     successLink: { href: PLATFORM_PROD_URLS.console, label: 'Open Ops Console PROD' },
     actuateDescription:
       'STG preflight → Kaniko (:prod) → rollout HA ×2 bifrost-platform-prod → Argo sync.',
+  },
+  {
+    id: 'research',
+    label: 'Research OLAP payload',
+    shortLabel: 'Research',
+    pipeline: 'bifrost-deliver-research',
+    namespace: 'research',
+    dockerfileConfigMaps: [],
+    mirrorRepos: ['bifrost-research'],
+    successLink: {
+      href: 'http://192.168.10.73:30882/api/plugin/research/health',
+      label: 'Open research-api health',
+    },
+    actuateDescription:
+      'mirror-sync → clone → kaniko (tag) → rollout research-api → verify → Argo sync bifrost-research. Pin k8s only after the image lands.',
   },
 ]
 

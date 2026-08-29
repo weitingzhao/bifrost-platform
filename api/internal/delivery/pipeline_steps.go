@@ -69,12 +69,27 @@ var deliverPlatformProdPhaseDefs = []struct {
 	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
 }
 
+var deliverResearchPhaseDefs = []struct {
+	ID    string
+	Label string
+	Tasks []string
+}{
+	{ID: "mirror", Label: "Mirror", Tasks: []string{"mirror-sync"}},
+	{ID: "clone", Label: "Clone", Tasks: []string{"clone-research"}},
+	{ID: "build", Label: "Build", Tasks: []string{"build-research"}},
+	{ID: "rollout", Label: "Rollout", Tasks: []string{"rollout-research"}},
+	{ID: "verify", Label: "Verify", Tasks: []string{"verify-research"}},
+	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
+}
+
 func aggregatePhasesForPipeline(pipelineName string, taskStatus map[string]string) []PipelinePhaseView {
 	switch pipelineName {
 	case "bifrost-deliver-platform":
 		return aggregateDeliverPhases(deliverPlatformPhaseDefs, taskStatus)
 	case "bifrost-deliver-platform-prod":
 		return aggregateDeliverPhases(deliverPlatformProdPhaseDefs, taskStatus)
+	case "bifrost-deliver-research":
+		return aggregateDeliverPhases(deliverResearchPhaseDefs, taskStatus)
 	default:
 		return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus)
 	}
@@ -207,7 +222,7 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 		}
 	}
 	switch pipelineName {
-	case "bifrost-deliver-platform", "bifrost-deliver-platform-prod":
+	case "bifrost-deliver-platform", "bifrost-deliver-platform-prod", "bifrost-deliver-research":
 		out.Phases = aggregatePhasesForPipeline(pipelineName, map[string]string{})
 	default:
 		out.Phases = aggregateDeliverStgPhases(map[string]string{})

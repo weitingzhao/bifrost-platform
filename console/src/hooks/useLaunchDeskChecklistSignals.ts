@@ -34,6 +34,7 @@ import {
   buildPluginLaunchCheckpoints,
   resolvePluginLaunchVerdict,
 } from '@/lib/task-mode/pluginLaunchVerdict'
+import { RESEARCH_DEPLOY_SCOPE } from '@/lib/agent/researchDeployAgentPrompt'
 import {
   RESEARCH_DEFAULT_TAG,
   buildResearchLaunchCheckpoints,
@@ -236,6 +237,7 @@ export function useLaunchDeskChecklistSignals(opts?: {
       pipelinePresent: (pipelinesQ.data?.pipelines ?? []).some(p => p.name === RESEARCH_PIPELINE),
       tag: RESEARCH_DEFAULT_TAG,
       deliverInFlight: hasDeliverInFlight(researchRuns.data?.runs),
+      agentInFlight: ambientActive && scope === RESEARCH_DEPLOY_SCOPE,
     }
     const researchVerdict = resolveResearchLaunchVerdict(researchInput)
     const researchCps = buildResearchLaunchCheckpoints(researchInput)

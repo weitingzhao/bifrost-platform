@@ -100,3 +100,32 @@ func TestAggregateDeliverStgPhasesBuildRunning(t *testing.T) {
 		t.Fatalf("rollout should be pending: %+v", phases[3])
 	}
 }
+
+func TestAggregatePhasesForPipelineResearch(t *testing.T) {
+	taskStatus := map[string]string{
+		"mirror-sync":      "succeeded",
+		"clone-research":   "succeeded",
+		"build-research":   "succeeded",
+		"rollout-research": "succeeded",
+		"verify-research":  "failed",
+		"gitops-sync":      "pending",
+	}
+	phases := aggregatePhasesForPipeline("bifrost-deliver-research", taskStatus)
+	if len(phases) != 6 {
+		t.Fatalf("expected 6 research phases, got %d", len(phases))
+	}
+	if phases[0].ID != "mirror" || phases[2].ID != "build" || phases[4].ID != "verify" {
+		t.Fatalf("unexpected research phase ids: %+v", phases)
+	}
+	if phases[2].Status != "succeeded" {
+		t.Fatalf("build: %+v", phases[2])
+	}
+	if phases[4].Status != "failed" {
+		t.Fatalf("verify expected failed: %+v", phases[4])
+	}
+	for _, p := range phases {
+		if p.ID == "prepare" {
+			t.Fatalf("trade-stg prepare leaked into research phases")
+		}
+	}
+}

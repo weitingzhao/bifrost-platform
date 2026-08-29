@@ -21,6 +21,7 @@ import {
   isPipelineRunRunning,
   isPipelineRunSucceeded,
   platformDeliverAskContext,
+  researchDeliverAskContext,
   rolloutLogTailHint,
   runElapsedLabel,
 } from '@/lib/delivery/pipelineRunAskPack'
@@ -177,6 +178,7 @@ export function DeliveryActiveRunPanel({
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
 
   const isPlatformTarget = target.id === 'platform-stg' || target.id === 'platform-prod'
+  const isResearchTarget = target.id === 'research'
 
   const buildAskPack = (logsText: string): string =>
     buildPipelineRunAskPack({
@@ -185,7 +187,9 @@ export function DeliveryActiveRunPanel({
       logs: logsText,
       context: isPlatformTarget
         ? platformDeliverAskContext({ shortLabel: target.shortLabel, namespace: target.namespace })
-        : undefined,
+        : isResearchTarget
+          ? researchDeliverAskContext()
+          : undefined,
     })
 
   const logsQuery = useQuery({
@@ -242,7 +246,19 @@ export function DeliveryActiveRunPanel({
   const logsText = accumulatedLogs !== '' ? accumulatedLogs : (logsQuery.data?.logs ?? '')
   const displayLogs =
     filterLogsByPhase(logsText, selectedPhaseId, pipeline) ?? logsText
-  const logHint = focusRun != null ? rolloutLogTailHint(logsText, focusRun) : null
+  const logHint =
+    isResearchTarget &&
+    focusRun != null &&
+    isPipelineRunFailed(focusRun) &&
+    focusRun.reason !== 'ParameterMissing'
+      ? {
+          tone: 'info' as const,
+          message:
+            'Kaniko pushed the image. verify-research failed because the Deployment still pins the previous tag — expected until k8s/api/deployment.yaml is pinned.',
+        }
+      : focusRun != null
+        ? rolloutLogTailHint(logsText, focusRun)
+        : null
   const elapsed = focusRun != null ? runElapsedLabel(focusRun) : null
   const logsUpdatedAt = logsQuery.dataUpdatedAt
     ? new Date(logsQuery.dataUpdatedAt).toLocaleTimeString()
@@ -293,7 +309,9 @@ export function DeliveryActiveRunPanel({
       description={
         running
           ? `Live Tekton steps for ${pipeline} (auto-refresh).`
-          : `Most recent ${pipeline} run — start from actuate panel above.`
+          : isResearchTarget
+            ? `Most recent ${pipeline} run — start with AI Deploy Research on the lane strip.`
+            : `Most recent ${pipeline} run — start from actuate panel above.`
       }
       leading={focusRun != null ? <StatusLamp value={runLamp(focusRun)} kind="reach" /> : undefined}
       actions={

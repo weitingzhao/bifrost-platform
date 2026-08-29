@@ -33,6 +33,14 @@ tasks:
     domain: Trade
     action: "Release"
 
+  - id: research-deploy
+    scope: "research-deploy"
+    label: "Research · Deploy"
+    tier: manual
+    default_level: L1
+    domain: Platform
+    action: "Release"
+
   - id: plugin-launch
     scope: "plugin-launch"
     label: "Plugin · Launch"

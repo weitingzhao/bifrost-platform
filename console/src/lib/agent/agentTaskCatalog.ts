@@ -208,6 +208,12 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     description:
       'Deliver Trade stack: mirror sync + Dockerfile CMs → Kaniko build → rollout bifrost-stg/prod → STG smoke + release gates. Does NOT enable live trading (D10).',
   },
+  'research-deploy': {
+    entryPoint: 'Launch Desk → Research · AI Deploy Research',
+    trigger: 'Operator publishes Research OLAP payload via bifrost-deliver-research',
+    description:
+      'Build tagged research image, confirm registry, then pin k8s/api/deployment.yaml. verify-research fail before pin is expected. D10 — research namespace only.',
+  },
   'plugin-launch': {
     entryPoint: 'Mission Launch · Launch Plugin · AI Launch Plugin · Subcontractors → Launch Plugin',
     trigger: 'Operator publishes bifrost-platform-plugin (IB Gateway) via Detect→Approve→Install→Verify→Live',

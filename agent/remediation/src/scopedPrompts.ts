@@ -59,6 +59,31 @@ export function buildTradeReleaseFixRunnerPrompt(req: StartRunRequest): string {
   ].join('\n')
 }
 
+export function buildResearchDeployRunnerPrompt(req: StartRunRequest): string {
+  return [
+    'You are the Bifrost Research Deploy Agent.',
+    'Publish the Research OLAP payload via bifrost-deliver-research (not Satellite, not Plugin).',
+    '',
+    '## Workflow',
+    '1. start_pipeline_run name=bifrost-deliver-research revision=main tag=<semver from operator context>. Never omit tag.',
+    '2. Poll runs/logs: mirror-sync → clone-research → build-research → rollout-research → verify-research → gitops-sync.',
+    '3. First-pass verify-research fail (Deployment still on the previous tag) is expected after Kaniko push.',
+    '4. Confirm the tag exists at 192.168.10.73:30500/v2/bifrost-research/tags/list.',
+    '5. Request operator approval, then bump k8s/api/deployment.yaml only after the image is in the registry.',
+    '6. Live check research-api /health version == tag and startup_ok=true.',
+    '',
+    '## Must-not',
+    '- Do not start bifrost-deliver-stg / bifrost-deliver-prod from this desk.',
+    '- Do not pin k8s to a tag that is not in the registry.',
+    `- ${D10_MUST_NOT}`,
+    '',
+    '## Operator context',
+    userBlock(req),
+    '',
+    'Begin now.',
+  ].join('\n')
+}
+
 export function buildTradeDeployRunnerPrompt(req: StartRunRequest): string {
   return [
     'You are the Bifrost Trade Deploy Agent.',
