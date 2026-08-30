@@ -1,5 +1,5 @@
 import type { ActuationResponse } from './matrixTypes'
-import type { DeliveryPipelinePreflightResponse, DeliveryPipelineRunsResponse, DeliveryPipelinesResponse, DeliveryRunLogsResponse, DeliveryStartRunResponse, PipelineRunStepsResponse, RefPreflightResponse, RevisionsResponse, SupplyChainActuationResponse, SupplyChainResponse } from './deliveryTypes'
+import type { CompareResponse, DeliveryPipelinePreflightResponse, DeliveryPipelineRunsResponse, DeliveryPipelinesResponse, DeliveryRunLogsResponse, DeliveryStartRunResponse, PipelineRunStepsResponse, RefPreflightResponse, RevisionsResponse, SupplyChainActuationResponse, SupplyChainResponse } from './deliveryTypes'
 import { authedFetch } from './client'
 
 export async function fetchDeliveryPipelines(): Promise<DeliveryPipelinesResponse> {
@@ -33,6 +33,18 @@ export async function fetchRevisions(repos?: string[]): Promise<RevisionsRespons
   const r = await fetch(`/api/v1/delivery/revisions${params}`)
   if (!r.ok) throw new Error(`revisions: HTTP ${r.status}`)
   return r.json() as Promise<RevisionsResponse>
+}
+
+/** Read-only Gitea compare — fail-soft callers treat errors as empty paths. */
+export async function fetchCompare(
+  repo: string,
+  from: string,
+  to: string,
+): Promise<CompareResponse> {
+  const params = new URLSearchParams({ repo, from, to })
+  const r = await fetch(`/api/v1/delivery/compare?${params}`)
+  if (!r.ok) throw new Error(`compare: HTTP ${r.status}`)
+  return r.json() as Promise<CompareResponse>
 }
 
 export async function fetchRefPreflight(

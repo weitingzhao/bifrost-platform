@@ -605,16 +605,21 @@ function ConsolePageInner() {
     },
     [setViewTab],
   )
-  const openDeliveryBoard = useCallback((opts?: { laneId?: string }) => {
-    setViewTabState('delivery-board')
-    const params = new URLSearchParams()
-    if (opts?.laneId) params.set('lane_id', opts.laneId)
-    const q = params.toString()
-    const nextHash = q ? `#delivery-board?${q}` : '#delivery-board'
-    if (window.location.hash !== nextHash) {
-      window.history.replaceState(null, '', nextHash)
-    }
-  }, [])
+  const openDeliveryBoard = useCallback(
+    (opts?: { laneId?: string; scope?: string; trackType?: string }) => {
+      setViewTabState('delivery-board')
+      const params = new URLSearchParams()
+      if (opts?.laneId) params.set('lane_id', opts.laneId)
+      if (opts?.scope && opts.scope !== 'all') params.set('scope', opts.scope)
+      if (opts?.trackType) params.set('tt', opts.trackType)
+      const q = params.toString()
+      const nextHash = q ? `#delivery-board?${q}` : '#delivery-board'
+      if (window.location.hash !== nextHash) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`)
+      }
+    },
+    [],
+  )
   const openOperatorPlane = useCallback(() => {
     setViewTab('operator-plane')
   }, [setViewTab])
@@ -945,6 +950,7 @@ function ConsolePageInner() {
               auditLoading={auditQuery.isLoading}
               onOpenAudit={openAudit}
               onOpenActiveSession={openActiveSession}
+              onOpenDeliveryBoard={openDeliveryBoard}
             />
         )}
 
@@ -1160,7 +1166,9 @@ function ConsolePageInner() {
           <FlexQueryManagePage onOpenAgentDesk={openAgentDesk} />
         )}
         {viewTab === 'analytics-pipeline' && <AnalyticsPipelinePage />}
-        {viewTab === 'research-engine' && <ResearchEnginePage />}
+        {viewTab === 'research-engine' && (
+          <ResearchEnginePage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
+        )}
         {viewTab === 'research-release' && (
           <ResearchReleasePage
             ambientJobId={ambientJob?.id ?? null}
@@ -1257,6 +1265,9 @@ function ConsolePageInner() {
         onComplete={handleAmbientJobComplete}
         onJobStatus={status => {
           setAmbientJob(prev => (prev == null ? prev : { ...prev, status }))
+        }}
+        onSelectTab={tabId => {
+          if (isConsoleViewTab(tabId)) setViewTab(tabId)
         }}
       />
     </SidebarProvider>

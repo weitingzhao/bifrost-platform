@@ -194,7 +194,7 @@ milestones:
       pipeline_lane: parallel
       pipeline_after: research-foundation
       authority: config/programs/active/research-runtime-ignition.yaml · bifrost-research/CLAUDE.md
-      note: "2026-08-21 — research NS, research-api:8795, dbt/volatility/engines/intraday CronJobs, Trade Intelligence honest empty states. Dagster stays replicas:0. Follow-ons: news source + options tape."
+      note: "2026-08-21 — research NS, research-api:8795, dbt/volatility/engines/intraday CronJobs, Trade Intelligence honest empty states. Follow-ons: news source + options tape. 2026-08-30 — Dagster webserver/daemon replicas:1; research_trading_day_schedule default RUNNING; husbandry closed-loop."
 decisions:
     - id: D1
       status: SIGNED

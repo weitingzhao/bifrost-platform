@@ -11,10 +11,12 @@ import {
   SPINE_STATUS_SEMANTICS_NOTE,
 } from '@/lib/architecture/spineSemantics'
 import { buildSystemDomainLlmPack } from '@/lib/architecture/systemDomainCatalog'
+import { buildDataHusbandryLlmPack } from '@/lib/architecture/dataHusbandryCatalog'
+import { buildOpsToolRackLlmPack } from '@/lib/architecture/opsToolRackCatalog'
 import { buildOpsUiActuationSignoffMarkdown } from '@/lib/architecture/opsUiActuationSignoffChecklist'
 import { buildPostQaOwnerGateMarkdown } from '@/lib/architecture/postQaOwnerGatePack'
 
-export const BLUEPRINT_VERSION = '2026-08-09'
+export const BLUEPRINT_VERSION = '2026-08-29'
 export const BLUEPRINT_SOURCE = 'console/src/lib/architecture/blueprintCatalog.ts'
 
 /** Slow-changing principles — North Star, design rules, forbidden actions. */
@@ -147,6 +149,30 @@ export const DESIGN_PRINCIPLES: DesignPrinciple[] = [
     title: 'Network is the ground floor',
     description:
       'Network infrastructure (UCG / Switch / AP) is the physical substrate all layers depend on; probe and actuation must work independently of K8s (platform-api Session-connects UCG directly, bypassing cluster).',
+  },
+  {
+    id: 9,
+    title: 'Payload constellation',
+    description:
+      'Satellite is one vehicle (display-host = Trade); Research is an instrument. New payloads = catalog row + Launch child + edges — never a Briefing Line. Formation = two independent pipelines + ConfirmDialog (never merge Tekton).',
+  },
+  {
+    id: 10,
+    title: 'Data husbandry is one scheduler class',
+    description:
+      'All Golden Source husbandry periodic ignition (Massive slots / IB Flex / Research dbt→engines→signals) = Dagster Data Assets with multi-schedule cadence. Plugin workers stay executors. IB Gateway / Client / realtime buses stay Deployments. K8s Job Complete ≠ husbandry success; void ≠ fail. See dataHusbandryCatalog.ts.',
+  },
+  {
+    id: 11,
+    title: 'External UIs via Tool Rack, not iframe',
+    description:
+      'Gitea / Grafana / Dagster open from header Tools (and contextual Open links) in a new tab. Never embed third-party SPAs in Console. See opsToolRackCatalog.ts.',
+  },
+  {
+    id: 12,
+    title: 'Research Engine verdict is three-layer rollup',
+    description:
+      'Feedstock (Massive/Flex) · Batch (Dagster research_trading_day) · Product asof (signal-health). Page OpsVerdictStrip and sidebar Research icon follow research_olap (Product+Batch) — not Market missed alone. void ≠ fail; Job Complete ≠ success. See dataHusbandryCatalog.ts RESEARCH_HEALTH_LAYERS.',
   },
 ]
 
@@ -376,7 +402,7 @@ export const SYSTEM_DOMAINS: SystemDomainDef[] = [
   {
     id: 'research',
     name: 'Research (OLAP)',
-    role: 'Analysis, screening, forecast, backtest, AI intelligence on shared market facts',
+    role: 'OLAP instrument on the Satellite vehicle — analysis, screening, forecast, backtest on shared market facts (domain identity ≠ Briefing Line)',
     primaryRepos: 'bifrost-research (dbt + engines + Research API :8795)',
     database: 'bifrost_golden_source single instance (raw_market.* / dw_stock.* / features_* / ops_jobs.*)',
     mustNot: 'Write Trade DB; write raw_market.* (Plugin owns ingest); trigger trade execution (D10)',
@@ -581,6 +607,10 @@ export function buildBlueprintConstitutionPack(): string {
     ...DESIGN_PRINCIPLES.map(p => `${p.id}. **${p.title}** — ${p.description}`),
     '',
     buildSystemDomainLlmPack(),
+    '',
+    buildDataHusbandryLlmPack(),
+    '',
+    buildOpsToolRackLlmPack(),
     '',
     '## Console views',
     ...CONSOLE_VIEWS.map(v => `- **${v.view}** [${v.plane}]: ${v.purpose}`),

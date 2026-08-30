@@ -158,7 +158,11 @@ export type FlexConfigSummary = {
     host_token_last4: string | null
     secondary_token_set: boolean
     secondary_token_last4: string | null
+    host_source?: 'secret' | 'none'
+    secondary_source?: 'secret' | 'none'
   }
+  /** Aggregate token source — secret if either env token present. */
+  source?: 'secret' | 'none'
   range_days: { default: number; init: number }
   query_rows: Array<{
     purpose: string

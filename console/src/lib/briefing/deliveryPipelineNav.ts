@@ -72,7 +72,7 @@ export function buildDeliveryBoardDeepLink(opts?: {
   const url = new URL(window.location.href)
   const params = new URLSearchParams()
   if (opts?.laneId) params.set('lane_id', opts.laneId)
-  if (opts?.scope) params.set('scope', opts.scope)
+  if (opts?.scope && opts.scope !== 'all') params.set('scope', opts.scope)
   if (opts?.trackType) params.set('tt', opts.trackType)
   const q = params.toString()
   url.hash = q ? `#${DELIVERY_TAB_DELIVERY_BOARD}?${q}` : `#${DELIVERY_TAB_DELIVERY_BOARD}`

@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { ProgramSummary } from '@/api/programsTypes'
 import {
   computeBuildDeskWorkloadCounts,
-  countOpenBoardPrograms,
+  countDoingLanes,
+  countReadyLanes,
 } from '@/lib/briefing/buildDeskWorkload'
+import { setLaneCatalog, type WorkLane } from '@/lib/briefing/workLanes'
 
 function program(partial: Partial<ProgramSummary> & { id: string }): ProgramSummary {
   return {
@@ -18,43 +20,73 @@ function program(partial: Partial<ProgramSummary> & { id: string }): ProgramSumm
   }
 }
 
-describe('countOpenBoardPrograms', () => {
-  it('counts only not-sessionReleased programs', () => {
-    const open = program({
-      id: 'trade-iv-radar',
-      signed: 2,
-      sign_off_required_count: 3,
-      complete: false,
-    })
-    const released = program({
-      id: 'done-prog',
-      signed: 2,
-      sign_off_required_count: 2,
-      complete: true,
-      phases_done: 2,
-      phase_count: 2,
-    })
-    expect(countOpenBoardPrograms([open, released])).toBe(1)
+const readyLane: WorkLane = {
+  id: 'test-ready-lane',
+  track: 'automate',
+  componentLine: 'engineer',
+  trackType: 'build',
+  label: 'Test Ready',
+  shortLabel: 'Ready',
+  description: 'Empty queue fixture',
+  agentMode: 'Ops',
+  workIntent: 'feature',
+}
+
+const doingLane: WorkLane = {
+  id: 'market-data-gs-closeout',
+  track: 'automate',
+  componentLine: 'subcontractor',
+  trackType: 'build',
+  label: 'Market Data Golden Source Closeout',
+  shortLabel: 'MD Closeout',
+  description: 'Hardcoded done queue → Doing until sessionReleased',
+  agentMode: 'Ops',
+  workIntent: 'feature',
+}
+
+afterEach(() => {
+  setLaneCatalog([])
+})
+
+describe('countReadyLanes / countDoingLanes', () => {
+  it('Briefing counts Ready (empty); In Flight counts Doing when programsReady', () => {
+    setLaneCatalog([readyLane, doingLane])
+    const releasedByLane = new Map<string, boolean>([
+      ['test-ready-lane', true],
+      ['market-data-gs-closeout', false],
+    ])
+    const base = {
+      context: undefined,
+      matrices: [],
+      clusterSummary: undefined,
+      programs: [] as ProgramSummary[],
+      releasedByLane,
+    }
+    expect(countReadyLanes(base)).toBe(1)
+    expect(
+      countDoingLanes({ ...base, programsReady: true }),
+    ).toBe(1)
+    expect(
+      countDoingLanes({ ...base, programsReady: false }),
+    ).toBe(0)
   })
 })
 
 describe('computeBuildDeskWorkloadCounts', () => {
-  it('returns briefing count from programs even before matrix loads', () => {
+  it('maps Ready → briefing and Doing → activeSession', () => {
+    setLaneCatalog([readyLane, doingLane])
     const counts = computeBuildDeskWorkloadCounts({
-      programs: [
-        program({
-          id: 'trade-iv-radar',
-          signed: 1,
-          sign_off_required_count: 3,
-        }),
-      ],
+      programs: [program({ id: 'x', lane_id: 'market-data-gs-closeout' })],
       context: undefined,
       matrices: [],
       clusterSummary: undefined,
-      releasedByLane: undefined,
-      programsReady: false,
+      releasedByLane: new Map([
+        ['test-ready-lane', true],
+        ['market-data-gs-closeout', false],
+      ]),
+      programsReady: true,
     })
     expect(counts.briefing).toBe(1)
-    expect(counts.activeSession).toBe(0)
+    expect(counts.activeSession).toBe(1)
   })
 })

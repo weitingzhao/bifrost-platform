@@ -38,6 +38,9 @@ var CatalogItems = []ItemMeta{
 	{ID: "deliver-pipeline", Label: "STG deliver pipeline", FixScope: "deliver-stg-recover", FixCapability: FixFullAuto},
 	{ID: "stg-smoke", Label: "STG smoke targets", FixScope: "deliver-stg-recover", FixCapability: FixSemiAuto},
 	{ID: "massive-polygon", Label: "Massive / Polygon feed", FixScope: "cluster_issues_full_auto", FixCapability: FixSemiAuto},
+	{ID: "market-batch-sla", Label: "Market batch husbandry SLA", FixScope: "cluster_issues_full_auto", FixCapability: FixSemiAuto},
+	{ID: "flex-tokens-secret", Label: "Flex tokens Secret", FixScope: "cluster_issues_full_auto", FixCapability: FixSemiAuto},
+	{ID: "research-batch-sla", Label: "Research batch SLA", FixScope: "cluster_issues_full_auto", FixCapability: FixSemiAuto},
 	{ID: "ib-feed", Label: "IB data feed", FixScope: "", FixCapability: FixObserve},
 	{ID: "hermes-tooling", Label: "Hermes AI tooling", FixScope: "operator-plane-remediate", FixCapability: FixSemiAuto},
 }

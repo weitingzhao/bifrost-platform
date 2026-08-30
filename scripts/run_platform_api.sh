@@ -27,6 +27,8 @@ keys = {
     "PLATFORM_PROJECT_ROOT",
     # IB Client status probe (redis-ib ACL user "platform") — required after ACL rotation.
     "REDIS_IB_PLATFORM_PASS",
+    # Local Research API override (otherwise platform-api uses K8s research-api proxy).
+    "RESEARCH_API_URL",
 }
 if env_path.is_file():
     for line in env_path.read_text(encoding="utf-8").splitlines():
@@ -44,29 +46,33 @@ if env_path.is_file():
             or key.startswith("HERMES_")
             or key.startswith("MARKET_DATA_")
             or key.startswith("REDIS_IB_")
+            or key.startswith("RESEARCH_")
+            or key.startswith("FLEX_QUERY_")
         ):
             os.environ[key] = val
 
-os.environ.setdefault("OPS_VIEWER_ENV", "dev")
-os.environ.setdefault("PLATFORM_LISTEN", ":8780")
-os.environ["PLATFORM_PROJECT_ROOT"] = str(root)
+    os.environ.setdefault("OPS_VIEWER_ENV", "dev")
+    os.environ.setdefault("PLATFORM_LISTEN", ":8780")
+    os.environ["PLATFORM_PROJECT_ROOT"] = str(root)
 
-kc = os.environ.get("PLATFORM_KUBECONFIG", "")
-if kc:
-    os.environ["PLATFORM_KUBECONFIG"] = os.path.expanduser(os.path.expandvars(kc))
+    kc = os.environ.get("PLATFORM_KUBECONFIG", "")
+    if kc:
+        os.environ["PLATFORM_KUBECONFIG"] = os.path.expanduser(os.path.expandvars(kc))
 
-brew = "/opt/homebrew/bin"
-if os.path.isdir(brew):
-    os.environ["PATH"] = brew + os.pathsep + os.environ.get("PATH", "")
+    brew = "/opt/homebrew/bin"
+    if os.path.isdir(brew):
+        os.environ["PATH"] = brew + os.pathsep + os.environ.get("PATH", "")
 
-export_keys = sorted(
-    k for k in os.environ
-    if k in keys or k.startswith("PLATFORM_") or k.startswith("REMEDIATION_")
-    or k.startswith("OPS_") or k.startswith("NOUS_") or k.startswith("HERMES_")
-    or k.startswith("MARKET_DATA_")
-    or k.startswith("REDIS_IB_")
-    or k in ("PATH", "CURSOR_API_KEY", "HOME")
-)
+    export_keys = sorted(
+        k for k in os.environ
+        if k in keys or k.startswith("PLATFORM_") or k.startswith("REMEDIATION_")
+        or k.startswith("OPS_") or k.startswith("NOUS_") or k.startswith("HERMES_")
+        or k.startswith("MARKET_DATA_")
+        or k.startswith("REDIS_IB_")
+        or k.startswith("RESEARCH_")
+        or k.startswith("FLEX_QUERY_")
+        or k in ("PATH", "CURSOR_API_KEY", "HOME")
+    )
 for k in export_keys:
     print(f"export {shlex.quote(k)}={shlex.quote(os.environ[k])}")
 PY

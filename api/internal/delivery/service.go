@@ -1234,3 +1234,95 @@ func (s *Service) fetchGiteaBranches(ctx context.Context, repo, user, pass strin
 	}
 	return branches, nil
 }
+
+// Compare returns changed file paths between two refs via Gitea compare API (read-only).
+func (s *Service) Compare(ctx context.Context, repo, from, to string) CompareResponse {
+	now := time.Now().UTC()
+	out := CompareResponse{
+		ClusterID:    s.clusterID(),
+		Repo:         repo,
+		From:         from,
+		To:           to,
+		Files:        []string{},
+		Reachability: probe.ReachFail,
+		GeneratedAt:  now,
+	}
+	repo = strings.TrimSpace(repo)
+	from = strings.TrimSpace(from)
+	to = strings.TrimSpace(to)
+	if repo == "" || from == "" || to == "" {
+		out.Detail = "repo, from, and to query params required"
+		return out
+	}
+	if from == to {
+		out.Reachability = probe.ReachOK
+		out.Detail = "identical refs — no files"
+		return out
+	}
+
+	clientset, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		out.Detail = "cluster client: " + err.Error()
+		return out
+	}
+	ns := s.PipelinesNamespace()
+	user, pass := s.giteaCredentials(ctx, clientset, ns)
+
+	files, fetchErr := s.fetchGiteaCompareFiles(ctx, repo, from, to, user, pass)
+	if fetchErr != nil {
+		out.Detail = fetchErr.Error()
+		return out
+	}
+	out.Files = files
+	out.Reachability = probe.ReachOK
+	out.Detail = fmt.Sprintf("%d files", len(files))
+	return out
+}
+
+func (s *Service) fetchGiteaCompareFiles(ctx context.Context, repo, from, to, user, pass string) ([]string, error) {
+	// Gitea: GET /api/v1/repos/{owner}/{repo}/compare/{base}...{head}
+	url := fmt.Sprintf(
+		"%s/api/v1/repos/%s/%s/compare/%s...%s",
+		giteaBaseURL(),
+		giteaOrg,
+		repo,
+		from,
+		to,
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if user != "" && pass != "" {
+		req.SetBasicAuth(user, pass)
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		Files []struct {
+			Filename string `json:"filename"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("json: %w", err)
+	}
+	files := make([]string, 0, len(raw.Files))
+	for _, f := range raw.Files {
+		if name := strings.TrimSpace(f.Filename); name != "" {
+			files = append(files, name)
+		}
+	}
+	sort.Strings(files)
+	return files, nil
+}

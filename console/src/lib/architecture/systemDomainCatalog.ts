@@ -1,13 +1,12 @@
 /**
  * System Domain catalog — Apollo eight-domain taxonomy (Console sidebar planes).
  *
- * Research was promoted from Subcontractors to a first-class domain (2026-08-28):
- * it is the **second payload** (decision) peer to Satellite (execution), not an
- * external plugin. Subcontractors supply data (Polygon / IB Flex → raw_*);
- * Research consumes raw_market.* and produces dw_stock.* / features.* — the
- * opposite position in the data flow. Being filed under Subcontractors left it
- * with neither release path (Launch Plugin covers only ib-gateway / market-data,
- * and bifrost-deliver-stg is Trade-only), which is why it was hand-published.
+ * Research is a first-class **domain** (D13 OLAP write boundary) and an
+ * **instrument** on the Satellite vehicle (display-host = Trade) — see
+ * payloadConstellationCatalog.ts. Domain identity ≠ top-level Ops sidebar group:
+ * Launch/Ops nest Research under Satellite; Briefing Lines do not gain a Research
+ * line. Subcontractors supply data (Polygon / IB Flex → raw_*); Research consumes
+ * raw_market.* and produces dw_stock.* / features.*.
  *
  * Authoritative for Ops Console → Governance → Blueprint / Agent Protocol,
  * and for Defects / Audit / Agent scope projection onto a shared mental model.
@@ -77,13 +76,13 @@ export const SYSTEM_DOMAINS: SystemDomainRow[] = [
     id: 'satellite',
     label: 'Satellite',
     purpose:
-      'Trade payload (execution) — bus, Satellite Health (Probes + Runtime), Deploy Satellite',
+      'On-orbit vehicle — Trade display-host (bus, health, Deploy Satellite) + instrument Launch children (Research); constellation edges in payloadConstellationCatalog',
   },
   {
     id: 'research',
     label: 'Research',
     purpose:
-      'OLAP payload (decision) — Golden Source, Feature Store, dbt marts, Research API + Copilot; peer to Satellite, published via Launch Research (bifrost-deliver-research)',
+      'OLAP instrument (decision) on Satellite — Golden Source, Feature Store, dbt marts, Research API + Copilot; published via Satellite · Research (bifrost-deliver-research); D13 domain id retained',
   },
   {
     id: 'subcontractors',
@@ -161,7 +160,7 @@ export const SCOPE_TO_SYSTEM_DOMAIN: Record<string, SystemDomainId> = {
   'trade-release-fix': 'satellite',
   'satellite-bus-ingest-triage': 'satellite',
 
-  // Research — OLAP payload (decision), peer to Satellite
+  // Research — OLAP instrument on Satellite (domain identity; lanes still hang under satellite for Briefing)
   'research-deploy': 'research',
   'research-release-fix': 'research',
   'research-engine': 'research',

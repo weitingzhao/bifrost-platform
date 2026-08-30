@@ -475,6 +475,45 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         },
       },
       {
+        id: 'market-batch-sla',
+        label: 'Market batch husbandry SLA',
+        group: 'feed',
+        idPattern: 'market.batch|market_batch|husbandry',
+        healthyCriteria:
+          'data-husbandry market_batch is healthy|due|draining — missed/degraded fails (due is waiting, not Operate)',
+        fixScope: PROD_ENV_FIX_SCOPE,
+        fixCapability: 'semi_auto',
+        manualAction:
+          'Open Massive → Ingest; clear Cron/queue so market_batch leaves missed/degraded. due alone is OK.',
+        agentTools: ['get_cluster_summary', 'rollout_restart_deployment'],
+      },
+      {
+        id: 'flex-tokens-secret',
+        label: 'Flex tokens Secret',
+        group: 'feed',
+        idPattern: 'flex.token|flex_batch|bifrost-flex-tokens',
+        healthyCriteria:
+          'GET /flex/config/summary source=secret; data-husbandry flex_batch healthy (not source=none)',
+        fixScope: PROD_ENV_FIX_SCOPE,
+        fixCapability: 'semi_auto',
+        manualAction:
+          'Fill IB_FLEX_*_TOKEN in trade-infra .env then make sync-flex-tokens; verify_wave4_flex_secret.sh must PASS',
+        agentTools: ['get_cluster_summary'],
+      },
+      {
+        id: 'research-batch-sla',
+        label: 'Research batch SLA',
+        group: 'feed',
+        idPattern: 'research.batch|research_olap|dagster|orchestration',
+        healthyCriteria:
+          'data-husbandry research_olap healthy — missed/degraded fails (Dagster research_trading_day)',
+        fixScope: PROD_ENV_FIX_SCOPE,
+        fixCapability: 'semi_auto',
+        manualAction:
+          'Open Dagster :30301; ensure dagster-daemon Ready + research_trading_day_schedule RUNNING; inspect last run',
+        agentTools: ['get_cluster_summary'],
+      },
+      {
         id: 'ib-feed',
         label: 'IB data feed',
         group: 'feed',
@@ -699,6 +738,7 @@ export const DAILY_OPS_CHECKLIST_META = {
     'Union: Checklist boardProjection injects virtual chips when first-match-wins leaves an item without a probe; Vendor git-bridge mirror removed (Engineer owns it).',
     'Contract: observe items and items shadowed by a same-group null idPattern must declare boardProjection (assertChecklistBoardProjectionContract).',
     'Vendor feeds: Massive/Polygon uses stable massive-polygon probe id; IB Client scored from plugins/ib-gateway/status with socket-quality gate (empty accounts_snapshot / stale heartbeat / missing client_id / RTH no-BBO → fail) — no Vendor GO without a live TWS API feed.',
+    'Husbandry closed-loop: market-batch-sla / flex-tokens-secret / research-batch-sla from data-husbandry (POST /checklist/husbandry-sync → Operate). Market due ≠ fail; missed/degraded and Flex source=none do.',
     'boardProjection.required=true overrides observe default so missing IB probe cannot hide behind a green Vendor cell.',
     'Step-2: daily-ops-checklist-run prober + checklistDispatch (full_auto→auto, semi_auto→queue, manual/observe→notify); D10 never auto-dispatches IB.',
     'AI Check (TCC) = scope daily-ops-checklist-run; Operator Plane Fix = operator-plane-remediate; Git dirty = git-dirty-remediate — do not conflate.',

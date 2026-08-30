@@ -25,6 +25,7 @@ import {
   type OperatorToolId,
 } from '@/components/agent/operatorDockStorage'
 import { isBenignRemediationStreamError } from '@/lib/remediation/remediationJobDisplay'
+import { QueuePulseDockStrip } from '@/components/shell/QueuePulseDockStrip'
 
 const DOCK_HEIGHT_KEY = 'bifrost.console.agentExecutionDockHeight'
 const AGENT_H_SPLIT_KEY = 'bifrost.console.dockAgentHSplitPct.v1'
@@ -142,6 +143,8 @@ export type OperatorDockProps = {
   /** Controlled tool slot. Ambient job forces Agent. */
   toolId?: OperatorToolId
   onToolIdChange?: (toolId: OperatorToolId) => void
+  /** Deep-link from Queue Pulse strip → Massive Ingest. */
+  onSelectTab?: (tabId: string) => void
 }
 
 /** @deprecated Use OperatorDockProps */
@@ -238,6 +241,7 @@ export function OperatorDock({
   onExpandedChange,
   toolId: toolIdProp,
   onToolIdChange,
+  onSelectTab,
 }: OperatorDockProps) {
   const idle = jobId == null || jobId === ''
   const knownTerminal =
@@ -721,6 +725,9 @@ export function OperatorDock({
             Local host sessions — expand for status &amp; consoles
           </span>
         )}
+        {mode === 'collapsed' && (
+          <QueuePulseDockStrip density="collapsed" onNavigate={onSelectTab} />
+        )}
         {showFeedPlaceholder && mode !== 'collapsed' && (
           <span className="console-agent-execution-dock__feed-text console-agent-execution-dock__feed-text--placeholder">
             Waiting for agent activity…
@@ -863,6 +870,10 @@ export function OperatorDock({
           )}
         </div>
       </div>
+
+      {mode !== 'collapsed' && (
+        <QueuePulseDockStrip density="expanded" onNavigate={onSelectTab} />
+      )}
 
       {/* Always mounted so Console SSH survives collapse; visibility toggled. */}
       <div

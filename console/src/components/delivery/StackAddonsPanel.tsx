@@ -11,9 +11,11 @@ import {
 } from '@bifrost/ui'
 import type { StackAddonView, StackAddonsResponse } from '@/api/deliveryTypes'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
+import { ExternalLink } from 'lucide-react'
 import { DeliveryBrandLabel } from '@/components/delivery/DeliveryBrandLabel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
+import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 
 interface StackAddonsPanelProps {
   data: StackAddonsResponse | undefined
@@ -112,7 +114,21 @@ export function StackAddonsPanel({
             addons.map(addon => (
               <DenseTableRow key={addon.id}>
                 <DenseTableCell className="font-medium">
-                  <DeliveryBrandLabel id={addon.id}>{addon.label}</DeliveryBrandLabel>
+                  <span className="inline-flex flex-wrap items-center gap-2">
+                    <DeliveryBrandLabel id={addon.id}>{addon.label}</DeliveryBrandLabel>
+                    {addon.id === 'gitea' ? (
+                      <a
+                        href={resolveOpsToolUrl('gitea')}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-0.5 text-dense-caption text-muted-foreground no-underline hover:text-foreground"
+                        title="Open Gitea"
+                      >
+                        <ExternalLink size={12} aria-hidden />
+                        Open
+                      </a>
+                    ) : null}
+                  </span>
                 </DenseTableCell>
                 <DenseTableCell>
                   <DenseTag variant={addonTagVariant(addon.status, addon.reachability)}>

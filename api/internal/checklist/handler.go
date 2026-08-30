@@ -14,6 +14,7 @@ type Handler struct {
 	audit       *actuation.AuditLog
 	remediation *remediation.Handler
 	operate     *operatequeue.Handler
+	husbandry   HusbandrySource
 }
 
 func NewHandler(configDir string, audit *actuation.AuditLog) *Handler {
@@ -29,11 +30,14 @@ func (h *Handler) BindOperateQueue(o *operatequeue.Handler) { h.operate = o }
 // Store exposes the checklist signal cache for read-only consumers (e.g. queue sweep).
 func (h *Handler) Store() *Store { return h.store }
 
-func (h *Handler) HandleGetSignals(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) HandleGetSignals(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.store.Get()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	if overlay := h.liveHusbandrySignals(r.Context()); len(overlay) > 0 {
+		resp.Signals = mergeHusbandryOverlay(resp.Signals, overlay)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -73,6 +77,41 @@ func (h *Handler) HandlePostSignals(w http.ResponseWriter, r *http.Request) {
 		resp.LastDispatch = actions
 	}
 
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// HandleHusbandrySync probes data-husbandry, merges checklist signals, and auto-dispatches Operate.
+func (h *Handler) HandleHusbandrySync(w http.ResponseWriter, r *http.Request) {
+	if h.husbandry == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "husbandry probe not bound",
+		})
+		return
+	}
+	signals := h.liveHusbandrySignals(r.Context())
+	if len(signals) == 0 {
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": "husbandry probe returned no signals",
+		})
+		return
+	}
+	resp, err := h.store.Merge(MergeRequest{
+		RunID:   "husbandry-sync",
+		Source:  "data-husbandry",
+		Signals: signals,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	h.audit.Record(r, "checklist.husbandry.sync", "husbandry-sync", "ok",
+		"count="+itoa(len(signals)))
+
+	if h.remediation != nil && h.operate != nil {
+		actions := h.executeDispatch(r.Context(), resp.Signals)
+		_ = h.store.SetDispatch(actions)
+		resp.LastDispatch = actions
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 

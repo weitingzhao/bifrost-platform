@@ -33,7 +33,6 @@ describe('buildTaskNavGroups command hierarchy', () => {
     const groups = buildTaskNavGroups('system', CONSOLE_NAV_GROUPS)
     expect(groups.map(g => g.label)).toEqual([
       'Satellite',
-      'Research',
       'Rocket',
       'Plugin',
     ])
@@ -60,10 +59,13 @@ describe('buildTaskNavGroups command hierarchy', () => {
     const partner = buildPartnerNavSections(resolveAllowedTabIds('ops'))
     expect(partner?.launch.map(i => i.id)).toEqual([
       'platform-release',
-      'trade-release',
-      'research-release',
+      'satellite-launch',
       'plugin-release',
       'agent-release',
+    ])
+    expect(partner?.launch.find(i => i.id === 'satellite-launch')?.children?.map(c => c.id)).toEqual([
+      'trade-release',
+      'research-release',
     ])
   })
 

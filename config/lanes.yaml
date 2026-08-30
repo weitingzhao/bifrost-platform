@@ -132,26 +132,6 @@ lanes:
         Vision parked on Ready lanes agent-trade-advisory-parked + flight-director-parked.
       agent_mode: Ops
       work_intent: automate
-    - id: agent-trade-advisory-parked
-      track: automate
-      component_line: engineer
-      track_type: build
-      label: Trade advisory autonomous (parked)
-      short_label: Trade advisory
-      description: |
-        PARKED — aspirational (Ready / empty queue). Morning briefing, position risk alerts, SEPA notifications. Spine stream agent-trade-advisory remains not_started until Owner opens a program. Do not project onto agent-services Doing queue.
-      agent_mode: Ops
-      work_intent: automate
-    - id: flight-director-parked
-      track: automate
-      component_line: engineer
-      track_type: build
-      label: Flight Director governance (parked)
-      short_label: Flight Director
-      description: |
-        PARKED — aspirational (Ready / empty queue). Owner-as-Mission-Director governance after Hermes L0. Spine stream flight-director-governance remains not_started until Owner opens a program. Do not project onto agent-services Doing queue.
-      agent_mode: Ops
-      work_intent: automate
     - id: network-server
       track: infra
       component_line: ground
@@ -170,16 +150,6 @@ lanes:
       description: 'Replace Eero with UniFi APs: per-floor rollout, MoCA backhaul, VLAN SSIDs (Bifrost/Family/vision), coverage benchmark.'
       agent_mode: Ops
       work_intent: ops
-    - id: ai-network
-      track: infra
-      component_line: ground
-      track_type: build
-      label: AI network autonomy
-      short_label: AI Net
-      description: |
-        PARKED — aspirational vision lane (Ready / empty queue). No delivery program or executable phases until Owner opens one. Foundation already delivered: UniFi MCP (unifi-mcp-server closed 4/4) + L0 Network Monitoring Ops (health/bandwidth/anomaly/SLA). Remaining vision (Home Assistant presence, isolate+alert, self-healing) stays in spine stream ai-home-network as notes only — not a Planned execution contract.
-      agent_mode: Ops
-      work_intent: automate
     - id: governance
       track: operate
       component_line: operations
@@ -207,18 +177,6 @@ lanes:
       description: Flywheel readiness, cutover blockers, release gate, prod matrix sign-off.
       agent_mode: Promote
       work_intent: release
-    - id: business-advisory
-      track: operate
-      component_line: operations
-      track_type: maintain
-      label: Trade analysis & advisory
-      short_label: Biz
-      description: |
-        READY — On-demand Business Agent session template (not a Delivery Build). Vision V4 Business Agent SIGNED;
-        Trade portfolio/market/SEPA/strategy surfaces exist. Start via Prepare pack when Owner needs read-only analysis;
-        do not project a fake 0/4 Planned queue. No write paths (D10).
-      agent_mode: Ops
-      work_intent: business
     - id: platform-health
       track: operate
       component_line: rocket
@@ -229,15 +187,6 @@ lanes:
         DONE — Mission Signal program completed (7/7 gates signed, no_handoff). Ongoing uptime/latency/readiness/alert triage lives in Daily Ops / Control Room, not this delivery lane. Original intent: Console uptime, API latency, cluster workload readiness, self-health probes, alert triage.
       agent_mode: Ops
       work_intent: ops
-    - id: trade-features
-      track: build
-      component_line: satellite
-      track_type: build
-      label: Trade feature development
-      short_label: Features
-      description: New Trade frontend pages, API endpoint enhancements, Dense UI improvements — post-migration feature work.
-      agent_mode: Product
-      work_intent: feature
     - id: network-monitoring
       track: infra
       component_line: ground
@@ -277,18 +226,6 @@ lanes:
         Data quality visibility upgrade for Ops Console Market Data page. Wave 1 (P1–P3): Overview Vitals strip + Today's Data verdict. Wave 2 (P4–P6): Stock depth + Option coverage + Coverage tab refactor. Wave 3 (P7–P8): Gap detection + Quality Score.
       agent_mode: Ops
       work_intent: feature
-    - id: market-data-golden-source
-      track: automate
-      component_line: subcontractor
-      track_type: build
-      label: Market Data Golden Source — single ingest, Plugin API read
-      short_label: MD Golden
-      description: |
-        Consolidate per-env duplicate Polygon ingest to single Golden Source DB.
-        Plugin API (:8790) becomes unified read interface for all Trade environments.
-        Wave 0: Plugin API补全. Wave 1: Trade SQL→HTTP cutover. Wave 2: collapse to single NS.
-      agent_mode: Ops
-      work_intent: feature
     - id: market-data-gs-closeout
       track: automate
       component_line: subcontractor
@@ -315,15 +252,6 @@ lanes:
         Publish/observe: Mission Launch · Launch Plugin + Plugin Gallery. Ongoing version / client ID / Lease = maintain patches, not this Init Build lane.
       agent_mode: Ops
       work_intent: feature
-    - id: vendor-health
-      track: operate
-      component_line: subcontractor
-      track_type: maintain
-      label: Vendor SLA & API health
-      short_label: Health
-      description: Third-party API uptime monitoring, latency tracking, SLA compliance, incident response playbooks.
-      agent_mode: Ops
-      work_intent: ops
     - id: qa-describe-first-4894
       track: migrate
       component_line: satellite
@@ -344,33 +272,6 @@ lanes:
         DONE — Trade Celery / Massive K8s Ideal (W0–W5) signed complete. Verdict: keep Celery for IB bars (stocks_ib); Massive Polygon ingest moved off Celery to plugin-market-data (market-data-subcontractor). K8s Ideal for remaining Celery = per-queue Deployments + Beat + executor_mode=kubernetes (program trade-celery-k8s-ideal). Original question: 基于目前Trade System使用的Python语言，之前Trade采用的后台Task方案是Celery， 在基于k8s的运行环境下，和Trade 系统的业务需求，最Ideal的Worker 方式还是Celery吗？ 如果是的话，那目前Celery在目前环境下的运行方式也是Ideal的方式吗？
       agent_mode: Ops
       work_intent: feature
-    - id: network-clients-bandwidth-ui
-      track: infra
-      component_line: ground
-      track_type: maintain
-      label: Network clients bandwidth UI
-      short_label: Clients BW UI
-      description: PARKED residual after network-monitoring-ops (Done / no_handoff). Console table for UniFi client rx/tx rates — API GET /api/v1/network/bandwidth already returns client rates (~72/86). Do not reopen network-monitoring lane; ship as small Console patch when Owner wants top-talker triage on Network page.
-      agent_mode: Ops
-      work_intent: ops
-    - id: network-sla-promql
-      track: infra
-      component_line: ground
-      track_type: maintain
-      label: Network SLA via PromQL
-      short_label: SLA PromQL
-      description: PARKED residual after network-monitoring-ops. Upgrade probe-based GET /api/v1/network/sla to PromQL/historical SLA. Requires metrics pipeline + storage; current L0 probe SLA is enough for Daily Ops. Defer until observability maturity or ai-home-network needs history.
-      agent_mode: Ops
-      work_intent: ops
-    - id: network-anomaly-outbound-spike
-      track: infra
-      component_line: ground
-      track_type: maintain
-      label: Network anomaly outbound-spike rule
-      short_label: Outbound spike
-      description: PARKED residual after network-monitoring-ops. Add rule-based outbound traffic spike detection beyond device-down / probe-fail-streak. Needs stable time-series; without it, false positives are likely. Defer until metrics series exist.
-      agent_mode: Ops
-      work_intent: ops
     - id: trade-iv-radar
       track: build
       component_line: satellite
@@ -379,16 +280,4 @@ lanes:
       short_label: IV Radar
       description: Wave A — Research IA (Ideas / Volatility / Structure / Risk / Lab) + IV Rank regime page (Benchmarks ∪ optionable Watchlist ∪ Holdings). D10 observe-only; A2 Event Radar out of scope.
       agent_mode: Product
-      work_intent: feature
-    - id: stock-readiness-retire
-      track: migrate
-      component_line: satellite
-      track_type: migrate
-      label: Retire stock_readiness_daily
-      short_label: SRD retire
-      description: |
-        Trade DB legacy SEPA daily snapshot table — superseded by Golden Source dbt marts
-        (mart_sepa_*) + Plugin readiness HTTP. P1 verdict RETIRE under SEPA_USE_ANALYTICS=true.
-        DDL CREATE + legacy SQL are technical debt; table DROPped on Trade DB 2026-08-20/21.
-      agent_mode: Ops
       work_intent: feature

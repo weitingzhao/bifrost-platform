@@ -157,7 +157,7 @@ export function FlexRemediationPanel({
       <ConfirmDialog
         open={confirmOpen}
         title="Enqueue stale Flex ingest jobs"
-        message={`Enqueue ${kindsToEnqueue.join(' + ')} into ops_jobs.job_flex_ingest? Worker will fetch from IB Flex Web Service using Trade Settings tokens.`}
+        message={`Enqueue ${kindsToEnqueue.join(' + ')} into ops_jobs.job_flex_ingest? Worker will fetch from IB Flex Web Service using K8s Secret bifrost-flex-tokens (make sync-flex-tokens).`}
         confirmLabel="Confirm enqueue"
         confirming={acting}
         onConfirm={() => void runEnqueueStale()}

@@ -173,6 +173,13 @@ func (h *Handler) HandleRevisions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Revisions(r.Context(), repos))
 }
 
+func (h *Handler) HandleCompare(w http.ResponseWriter, r *http.Request) {
+	repo := strings.TrimSpace(r.URL.Query().Get("repo"))
+	from := strings.TrimSpace(r.URL.Query().Get("from"))
+	to := strings.TrimSpace(r.URL.Query().Get("to"))
+	writeJSON(w, http.StatusOK, h.svc.Compare(r.Context(), repo, from, to))
+}
+
 func (h *Handler) HandleRefPreflight(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 	if name == "" {

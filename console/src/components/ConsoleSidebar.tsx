@@ -1,5 +1,5 @@
 import { useCallback, useMemo, type ReactNode } from 'react'
-import { ShellNavSidebar, cn, shellNavSubItemIconClass, type ShellNavItem } from '@bifrost/ui'
+import { ShellNavSidebar, cn, shellNavSubItemIconClass, StatusLamp, type ShellNavItem } from '@bifrost/ui'
 import {
   buildPartnerNavSections,
   buildSeatNavItems,
@@ -18,7 +18,9 @@ import {
   type LaunchDeskLaneId,
 } from '@/hooks/useLaunchDeskChecklistSignals'
 import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
+import { useMarketIngestQueuePulse } from '@/hooks/useMarketIngestQueuePulse'
 import { useFlexQueryLiveProbe } from '@/hooks/useFlexQueryLiveProbe'
+import { useResearchEngineLiveProbe } from '@/hooks/useResearchEngineLiveProbe'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePatrolSnapshot } from '@/hooks/usePatrolSnapshot'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
@@ -107,7 +109,9 @@ export function ConsoleSidebar({
   const controlRoomBaySignal = useControlRoomBayNavSignal()
   const ibGatewayProbe = useIbGatewayLiveProbe()
   const marketDataProbe = useMarketDataLiveProbe()
+  const marketQueuePulse = useMarketIngestQueuePulse()
   const flexQueryProbe = useFlexQueryLiveProbe()
+  const researchEngineProbe = useResearchEngineLiveProbe()
   const launchDeskSignals = useLaunchDeskChecklistSignals({
     ambientJobId,
     ambientJobStatus,
@@ -178,19 +182,31 @@ export function ConsoleSidebar({
         signal = ibGatewayProbe.isLoading ? 'unknown' : ibGatewayProbe.probeReach
         title = `IB Client: ${ibGatewayProbe.summary}`
       } else if (item.id === 'market-data-manage') {
-        signal = marketDataProbe.isLoading ? 'unknown' : marketDataProbe.probeReach
-        title = `Massive: ${marketDataProbe.summary}`
+        // Prefer ingest queue husbandry when active; else plugin reach.
+        if (marketQueuePulse.view.active) {
+          signal = marketQueuePulse.view.lamp
+          title = `Massive queue: ${marketQueuePulse.view.verdict} · ${marketQueuePulse.view.pending} ready · ${marketQueuePulse.view.detail}`
+        } else {
+          signal = marketDataProbe.isLoading ? 'unknown' : marketDataProbe.probeReach
+          title = `Massive: ${marketDataProbe.summary}`
+        }
       } else if (item.id === 'flex-query-manage') {
         signal = flexQueryProbe.isLoading ? 'unknown' : flexQueryProbe.probeReach
         title = `IB Flex: ${flexQueryProbe.summary}`
+      } else if (item.id === 'research-engine') {
+        signal = researchEngineProbe.isLoading ? 'unknown' : researchEngineProbe.probeReach
+        title = `Research Engine: ${researchEngineProbe.summary}`
       } else if (
         item.id === 'platform-release' ||
         item.id === 'trade-release' ||
         item.id === 'research-release' ||
         item.id === 'plugin-release' ||
-        item.id === 'agent-release'
+        item.id === 'agent-release' ||
+        item.id === 'satellite-launch'
       ) {
-        const lane = launchDeskSignals[item.id as LaunchDeskLaneId]
+        const laneId =
+          item.id === 'satellite-launch' ? 'trade-release' : (item.id as LaunchDeskLaneId)
+        const lane = launchDeskSignals[laneId]
         signal = lane.signal
         title = lane.title
       }
@@ -219,10 +235,65 @@ export function ConsoleSidebar({
       marketDataProbe.isLoading,
       marketDataProbe.probeReach,
       marketDataProbe.summary,
+      marketQueuePulse.view.active,
+      marketQueuePulse.view.lamp,
+      marketQueuePulse.view.verdict,
+      marketQueuePulse.view.pending,
+      marketQueuePulse.view.detail,
       flexQueryProbe.isLoading,
       flexQueryProbe.probeReach,
       flexQueryProbe.summary,
+      researchEngineProbe.isLoading,
+      researchEngineProbe.probeReach,
+      researchEngineProbe.summary,
       launchDeskSignals,
+    ],
+  )
+
+  const renderItemExtras = useCallback(
+    (item: ShellNavItem) => {
+      if (item.id === 'market-data-manage') {
+        const signal = marketQueuePulse.view.active
+          ? marketQueuePulse.view.lamp
+          : marketDataProbe.isLoading
+            ? 'unknown'
+            : marketDataProbe.probeReach
+        const title = marketQueuePulse.view.active
+          ? `Massive queue: ${marketQueuePulse.view.verdict} · ${marketQueuePulse.view.pending} ready`
+          : `Massive: ${marketDataProbe.summary}`
+        return (
+          <span
+            title={title}
+            className="ml-auto inline-flex shrink-0 items-center"
+            aria-label={`Massive health ${signal}`}
+          >
+            <StatusLamp value={signal} kind="reach" />
+          </span>
+        )
+      }
+      if (item.id !== 'research-engine') return null
+      const signal = researchEngineProbe.isLoading ? 'unknown' : researchEngineProbe.probeReach
+      return (
+        <span
+          title={`Research Engine: ${researchEngineProbe.summary}`}
+          className="ml-auto inline-flex shrink-0 items-center"
+          aria-label={`Research health ${signal}`}
+        >
+          <StatusLamp value={signal} kind="reach" />
+        </span>
+      )
+    },
+    [
+      marketDataProbe.isLoading,
+      marketDataProbe.probeReach,
+      marketDataProbe.summary,
+      marketQueuePulse.view.active,
+      marketQueuePulse.view.lamp,
+      marketQueuePulse.view.verdict,
+      marketQueuePulse.view.pending,
+      researchEngineProbe.isLoading,
+      researchEngineProbe.probeReach,
+      researchEngineProbe.summary,
     ],
   )
 
@@ -256,6 +327,7 @@ export function ConsoleSidebar({
       storageKey="bifrost-ops"
       openGroupsStorageKey="bifrost-ops:openGroups:v2"
       renderItemIcon={renderItemIcon}
+      renderItemExtras={renderItemExtras}
       dimmedIds={dimmedIds.length > 0 ? dimmedIds : undefined}
       phaseFocusIds={phaseFocusIds.length > 0 ? phaseFocusIds : undefined}
       navPrefix={collapsed => (

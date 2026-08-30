@@ -200,6 +200,14 @@ func probeRedisTarget(spec redisTargetSpec, snap readinessSnapshot, services map
 		return view
 	}
 
+	// Celery redis-queue-* retired (Wave 5) — PG-as-broker owns ingest. Missing
+	// Bitnami queue targets must not yellow the Redis domain forever.
+	if spec.role == "queue" {
+		view.Reach = probe.ReachOK
+		view.Detail = "retired Wave 5 (Celery queue) — standby · not required"
+		return view
+	}
+
 	view.Reach = probe.ReachDegraded
 	view.Detail = "not deployed — phase ⑥ (k8s/data/redis/)"
 	return view
@@ -254,8 +262,12 @@ func buildRedisEnvEndpoints(targets []RedisTargetInstanceView) []RedisEnvEndpoin
 			row.Detail = "Target endpoints ready"
 		case row.Environment == "dev" && row.LiveReach == probe.ReachOK:
 			row.Detail = "Dev may use Mac local Redis instead of data NS"
+		case row.LiveReach == probe.ReachOK:
+			// Queue Bitnami optional after Celery retirement — live OK is enough.
+			row.QueueReach = probe.ReachOK
+			row.Detail = "live ok · queue retired Wave 5 (PG-as-broker)"
 		default:
-			row.Detail = "Awaiting phase ⑥ Bitnami deploy"
+			row.Detail = "Awaiting phase ⑥ Bitnami live deploy"
 		}
 		out = append(out, *row)
 	}
@@ -391,21 +403,28 @@ func redisLanAccessProbe(ctx context.Context, clientset kubernetes.Interface) []
 
 func summarizeRedisStatus(r RedisStatusResponse) (probe.Reachability, string) {
 	if r.TargetsReady == r.TargetsTotal && r.TargetsTotal > 0 && r.EmbeddedActive == 0 {
-		return probe.ReachOK, "Bitnami live/queue @ data NS · embedded redis retired"
+		return probe.ReachOK, "Bitnami live @ data NS · Celery queue retired · embedded redis retired"
 	}
-	if r.TargetsReady > 0 {
-		return probe.ReachDegraded, fmt.Sprintf(
-			"Partial — %d/%d data NS targets · %d embedded still active",
-			r.TargetsReady, r.TargetsTotal, r.EmbeddedActive,
-		)
-	}
-	if r.EmbeddedActive > 0 {
-		return probe.ReachDegraded, fmt.Sprintf(
-			"Embedded redis in %d namespace(s) · live/queue split pending (phase ⑥)",
+	// Live targets ready (queue may be retired standby) + embedded still serving Trade envs.
+	if r.TargetsReady > 0 && r.EmbeddedActive > 0 {
+		return probe.ReachOK, fmt.Sprintf(
+			"live ok · queue retired Wave 5 · %d embedded still active (cutover optional)",
 			r.EmbeddedActive,
 		)
 	}
-	return probe.ReachDegraded, "No Redis targets in data NS · deploy phase ⑥ manifests"
+	if r.TargetsReady > 0 {
+		return probe.ReachOK, fmt.Sprintf(
+			"%d/%d data NS targets ready · queue targets standby/retired",
+			r.TargetsReady, r.TargetsTotal,
+		)
+	}
+	if r.EmbeddedActive > 0 {
+		return probe.ReachOK, fmt.Sprintf(
+			"Embedded redis in %d namespace(s) · Bitnami live optional · queue retired Wave 5",
+			r.EmbeddedActive,
+		)
+	}
+	return probe.ReachDegraded, "No Redis live targets and no embedded redis"
 }
 
 func redisTargetDep(snap readinessSnapshot, name, role, env string) ServiceDependencyView {

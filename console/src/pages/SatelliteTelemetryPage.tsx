@@ -29,6 +29,7 @@ import {
 } from '@/components/layout/OpsVerdictStrip'
 import { PageToolbar } from '@/components/layout/PageToolbar'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
+import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { buildGrafanaDashboardUrl } from '@/lib/observability'
 
 const TRADE_ENV_OPTIONS = [
@@ -148,7 +149,7 @@ export function SatelliteTelemetryPage({
 
   const layerB = observabilityQuery.data?.layer_b_status
   const tradeDashUrl = buildGrafanaDashboardUrl({
-    grafanaBaseUrl: observabilityQuery.data?.grafana_url,
+    grafanaBaseUrl: resolveOpsToolUrl('grafana', observabilityQuery.data?.grafana_url),
     dashboardId: 'satellite-trade-overview',
     env: tradeEnv,
     namespace: ns,

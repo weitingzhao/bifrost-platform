@@ -21,6 +21,8 @@ func NewHandler(clusterSvc *cluster.Service, audit *actuation.AuditLog) *Handler
 	return &Handler{svc: NewService(clusterSvc), audit: audit}
 }
 
+func (h *Handler) Service() *Service { return h.svc }
+
 func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
 }

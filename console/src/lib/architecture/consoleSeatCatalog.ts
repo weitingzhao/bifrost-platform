@@ -134,14 +134,14 @@ export const CONSOLE_SEAT_PAGES: ConsoleSeatPageRow[] = [
   },
   {
     id: 'trade-release',
-    label: 'Satellite (Launch)',
+    label: 'Satellite · Trade (Launch)',
     plane: 'Satellite',
     home: 'engineer',
     roomPosture: true,
   },
   {
     id: 'research-release',
-    label: 'Research (Launch)',
+    label: 'Satellite · Research (Launch)',
     plane: 'Research',
     home: 'engineer',
     roomPosture: true,

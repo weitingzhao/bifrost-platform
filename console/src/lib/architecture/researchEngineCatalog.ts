@@ -32,19 +32,52 @@ export const RESEARCH_ENGINE_SUMMARY = {
   platformStatus: 'GET /api/v1/research/status → reachable + freshness (Runtime Ignition 2026-08-21)',
   platformProxy: 'GET /api/v1/research/*',
   consoleTab: 'research-engine',
-  runtimeIgnition: 'DONE 2026-08-21 — research NS live; CronJobs dbt/volatility/engines/intraday; Dagster replicas:0',
+  runtimeIgnition:
+    'DONE — research NS live; Dagster multi-schedule husbandry (replicas≥1); NodePort :30301 via Ops Tool Rack; all Golden Source husbandry CronJobs suspended after migrate',
+  /** Legacy CronJob names — suspended; ignition is Dagster schedule/asset (same logical trigger). */
   cronjobTriggers: [
-    { trigger_id: 'dbt-sepa', cronjob: 'bifrost-analytics-daily', empty_hint: 'SEPA empty' },
-    { trigger_id: 'momentum', cronjob: 'research-engines-momentum', empty_hint: 'Momentum empty' },
-    { trigger_id: 'iv-percentile', cronjob: 'research-iv-percentile', empty_hint: 'IV empty' },
-    { trigger_id: 'terrain-forecast', cronjob: 'research-engines-forecast', empty_hint: 'Forecast / Terrain empty' },
-    { trigger_id: 'terrain-intraday', cronjob: 'research-terrain-intraday', empty_hint: 'Intraday empty' },
-    { trigger_id: 'gex-intraday', cronjob: 'research-gex-intraday', empty_hint: 'GEX empty' },
-    { trigger_id: 'event-radar', cronjob: 'research-engines-event-radar', empty_hint: 'Events empty' },
+    { trigger_id: 'dbt-sepa', cronjob: 'bifrost-analytics-daily', empty_hint: 'SEPA empty', scheduler: 'dagster' },
+    { trigger_id: 'momentum', cronjob: 'research-engines-momentum', empty_hint: 'Momentum empty', scheduler: 'dagster' },
+    { trigger_id: 'iv-percentile', cronjob: 'research-iv-percentile', empty_hint: 'IV empty', scheduler: 'dagster' },
+    { trigger_id: 'terrain-forecast', cronjob: 'research-engines-forecast', empty_hint: 'Forecast / Terrain empty', scheduler: 'dagster' },
+    { trigger_id: 'terrain-intraday', cronjob: 'research-terrain-intraday', empty_hint: 'Intraday empty', scheduler: 'dagster' },
+    { trigger_id: 'gex-intraday', cronjob: 'research-gex-intraday', empty_hint: 'GEX empty', scheduler: 'dagster' },
+    { trigger_id: 'event-radar', cronjob: 'research-engines-event-radar', empty_hint: 'Events empty', scheduler: 'dagster' },
   ] as const,
 } as const
 
 export const RESEARCH_GOVERNANCE_SURFACES = [
+  {
+    id: 'feedstock',
+    title: 'Feedstock (upstream)',
+    api: 'GET /api/v1/data-husbandry → market_batch + flex_batch; readiness_rollup via market-data status',
+    metrics: [
+      'market_batch.verdict',
+      'flex_batch.verdict',
+      'void ≠ fail',
+      'readiness_rollup (snap covered/universe · vendor_gap)',
+      'deep-link Massive Coverage → Readiness',
+    ],
+  },
+  {
+    id: 'batch',
+    title: 'Batch compute (Dagster)',
+    api: 'GET /research/orchestration/status (ops_dagster; fail-soft)',
+    metrics: ['verdict', 'last_run_status', 'overdue', 'research_trading_day'],
+  },
+  {
+    id: 'product-asof',
+    title: 'Product asof',
+    api: 'GET /research/signal-health',
+    metrics: [
+      'overall',
+      'freshness[].status',
+      'age_hours',
+      'max_computed_at',
+      'age_meter vs 36h SLA',
+      'StackedBar fresh/stale mix',
+    ],
+  },
   {
     id: 'accuracy',
     title: 'Forecast accuracy',
@@ -59,13 +92,13 @@ export const RESEARCH_GOVERNANCE_SURFACES = [
   },
   {
     id: 'pipeline-health',
-    title: 'Pipeline health',
-    api: 'GET /health · GET /api/v1/research/status · CronJob lastScheduleTime (research NS) · pipeline schema row freshness',
+    title: 'Pipeline health (three-layer body)',
+    api: 'Feedstock + Batch + Product asof on Research Engine Pipeline health tab; OpsVerdictStrip = API ∧ research_olap',
     metrics: [
       'reachable',
-      'CronJob last successful Job',
-      'max(trade_date)/max(asof_ts) on features.* (19 Feature Store tables)',
-      'elementary present/mtime when PVC report exists',
+      'research_olap husbandry rollup',
+      'orchestration last run',
+      'signal-health freshness rows',
     ],
   },
   {
@@ -85,6 +118,7 @@ export function buildResearchEngineLlmPack(): string {
     `- Platform: ${RESEARCH_ENGINE_SUMMARY.platformStatus} · ${RESEARCH_ENGINE_SUMMARY.platformProxy}`,
     `- Console: Plugin → Research (tab ${RESEARCH_ENGINE_SUMMARY.consoleTab})`,
     `- Decision: D13 Research domain · D10 BLOCKED (no trade actuation)`,
+    `- Runtime: ${RESEARCH_ENGINE_SUMMARY.runtimeIgnition}`,
     '',
     '## Engines',
   ]
@@ -100,11 +134,20 @@ export function buildResearchEngineLlmPack(): string {
   }
   lines.push('')
   lines.push('## Notes')
-  lines.push('- Token cost KPIs are placeholders until forecast_session persists token metadata')
   lines.push(
-    '- Runtime Ignition 2026-08-21 DONE: research-api + engine CronJobs live; pipeline freshness from CronJob Jobs + table max(trade_date)/asof_ts',
+    '- Health layers: feedstock (Market/Flex) · batch (Dagster orchestration) · product_asof (signal-health)',
   )
-  lines.push('- Dagster orchestration stays replicas:0 (production blockers unchanged); CronJobs are the live scheduler')
+  lines.push(
+    '- Always-on three lamps under OpsVerdictStrip; default Console tab = Pipeline health; human copy never dumps SQL',
+  )
+  lines.push(
+    '- Feedstock → Massive Readiness deep-link + readiness_rollup one-liner; Product age meters (36h SLA FillBar, not chart library)',
+  )
+  lines.push(
+    '- Sidebar Research Engine icon follows research_olap only — Market missed / Flex source=none do not paint it red',
+  )
+  lines.push('- OpsVerdictStrip = API reachable ∧ research_olap; Accuracy/Cost are downstream quality tabs')
+  lines.push('- Token cost KPIs are placeholders until forecast_session persists token metadata')
   lines.push('- Accuracy aggregates computed in Console from settlement rows (proxy is GET-only)')
   lines.push(
     '- Research Harness observe surface (Wave A+O, package ≥0.47.0): Trade FE `/research/loop/harness` — propose-only objectives/runs; D10 BLOCKED (no ib:operator:cmd)',

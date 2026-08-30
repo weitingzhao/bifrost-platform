@@ -9,6 +9,7 @@ import { fetchGitOpsApps } from '@/api/gitOps'
 import { fetchReleaseGate, fetchStgSmoke, fetchTierBStatus } from '@/api/promote'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
+import { ConstellationStrip } from '@/components/delivery/ConstellationStrip'
 import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
 import { DeliveryFlow } from '@/components/delivery/DeliveryFlow'
 import { GitOpsQuickActionsPanel } from '@/components/delivery/GitOpsQuickActionsPanel'
@@ -71,11 +72,14 @@ import {
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
+import { useConstellationImpact } from '@/hooks/useConstellationImpact'
+import { useConstellationLaunch } from '@/hooks/useConstellationLaunch'
 import {
   buildLaunchCheckpoints,
   hasDeliverInFlight,
   resolveLaunchVerdict,
 } from '@/lib/task-mode/satelliteLaunchVerdict'
+import { RESEARCH_DEFAULT_TAG } from '@/lib/task-mode/researchLaunchVerdict'
 
 const AI_DEPLOY_LABEL = 'AI Deploy'
 const AI_DEPLOY_TASK_LABEL = scopeToLabel(TRADE_DEPLOY_SCOPE)
@@ -218,6 +222,16 @@ export function TradeReleasePage({
     queryFn: fetchSupplyChain,
     refetchInterval: 30_000,
   })
+
+  const deployRevision =
+    supplyChain.data?.last_deliver_run?.revision?.trim() ||
+    supplyChain.data?.default_revision?.trim() ||
+    'main'
+  const constellationImpact = useConstellationImpact({
+    origin: 'trade',
+    revision: deployRevision,
+  })
+  const formation = useConstellationLaunch(constellationImpact)
 
   const stgGatePassed = stgGate.data?.result === 'pass'
   const prodGatePassed = prodGate.data?.result === 'pass'
@@ -659,6 +673,29 @@ export function TradeReleasePage({
         <TradeEnvAccessBar />
         <ReleaseStateBanner tier="trade" />
       </LaneStateStrip>
+
+      <ConstellationStrip
+        impact={constellationImpact}
+        onFormationLaunch={() =>
+          formation.requestLaunch({
+            revision: deployRevision,
+            tag: RESEARCH_DEFAULT_TAG,
+            env: 'stg',
+          })
+        }
+        formationPending={formation.isPending}
+        formationDisabled={
+          !canOperate ||
+          hasDeliverInFlight(stgRuns.data?.runs) ||
+          hasDeliverInFlight(prodRuns.data?.runs)
+        }
+        formationDisabledReason={
+          !canOperate
+            ? 'Authenticate to launch'
+            : 'Deliver in flight'
+        }
+      />
+      {formation.dialog}
 
       <LaneOperateSplit
         storageKey="bifrost.console.satelliteLaneOperateSplit"

@@ -261,7 +261,7 @@ func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 		}
 	}
 
-	domain := finalizeDomain("redis", "Redis", deps, "Bitnami live/queue @ data NS · per-env isolation")
+	domain := finalizeDomain("redis", "Redis", deps, "Bitnami live @ data NS · Celery queue retired Wave 5")
 	targetsReady := 0
 	embeddedActive := 0
 	for _, d := range deps {
@@ -275,16 +275,31 @@ func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 	if targetsReady == len(redisTargetCatalog) && embeddedActive == 0 {
 		return domain
 	}
+	// Queue targets are standby/retired; live+embedded OK must not force degraded.
+	if domain.Status == "ready" || domain.Reachability == probe.ReachOK {
+		if embeddedActive > 0 {
+			domain.Summary = fmt.Sprintf(
+				"Embedded redis in %d env(s) · queue retired Wave 5 · Bitnami live optional",
+				embeddedActive,
+			)
+		} else if targetsReady > 0 {
+			domain.Summary = fmt.Sprintf(
+				"%d/%d data NS targets · queue standby/retired",
+				targetsReady, len(redisTargetCatalog),
+			)
+		}
+		return domain
+	}
 	if domain.Status == "ready" {
 		domain.Status = "partial"
 		domain.Reachability = probe.ReachDegraded
 	}
 	if embeddedActive > 0 && targetsReady == 0 {
-		domain.Summary = fmt.Sprintf("Embedded redis in %d env(s) · phase ⑥ live/queue @ data NS pending", embeddedActive)
+		domain.Summary = fmt.Sprintf("Embedded redis in %d env(s) · Bitnami live optional", embeddedActive)
 	} else if targetsReady > 0 {
 		domain.Summary = fmt.Sprintf("%d/%d data NS targets · %d embedded active", targetsReady, len(redisTargetCatalog), embeddedActive)
 	} else {
-		domain.Summary = "Embedded redis only · Bitnami split not deployed (phase ⑥)"
+		domain.Summary = "No Redis live coverage"
 	}
 	return domain
 }
@@ -454,7 +469,9 @@ func finalizeDomain(id, label string, deps []ServiceDependencyView, purpose stri
 
 func dependencyIsStandby(d ServiceDependencyView) bool {
 	lower := strings.ToLower(d.Detail)
-	standbyText := strings.Contains(lower, "standby") || strings.Contains(lower, "scaled to zero")
+	standbyText := strings.Contains(lower, "standby") ||
+		strings.Contains(lower, "scaled to zero") ||
+		strings.Contains(lower, "retired wave 5")
 	if !standbyText {
 		return false
 	}

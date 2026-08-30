@@ -160,6 +160,18 @@ type RevisionsResponse struct {
 	GeneratedAt  time.Time           `json:"generated_at"`
 }
 
+// CompareResponse — changed paths between two refs (Gitea compare). Read-only.
+type CompareResponse struct {
+	ClusterID    string             `json:"cluster_id"`
+	Repo         string             `json:"repo"`
+	From         string             `json:"from"`
+	To           string             `json:"to"`
+	Files        []string           `json:"files"`
+	Reachability probe.Reachability `json:"reachability"`
+	Detail       string             `json:"detail"`
+	GeneratedAt  time.Time          `json:"generated_at"`
+}
+
 type RepoRefStatus struct {
 	Repo   string `json:"repo"`
 	Exists bool   `json:"exists"`

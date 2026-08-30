@@ -3,6 +3,7 @@ import type { ClusterObservabilityResponse, LayerBStatus } from '@/api/clusterTy
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
+import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 
 interface ClusterObservabilityPanelProps {
@@ -58,7 +59,8 @@ export function ClusterObservabilityPanel({
   const observabilityFetching = useIsFetching({ queryKey: ['cluster', 'observability'] }) > 0
   const components = data?.components ?? []
   const docsUrl = data?.docs_url?.trim()
-  const tradeDashUrl = tradeDashboardUrl(data?.grafana_url)
+  const grafanaHref = resolveOpsToolUrl('grafana', data?.grafana_url)
+  const tradeDashUrl = tradeDashboardUrl(grafanaHref)
 
   const headerExtra = (
     <>
@@ -112,16 +114,16 @@ export function ClusterObservabilityPanel({
             </a>
           </Button>
         )}
-        {data?.grafana_url != null && data.grafana_url !== '' && data.layer_b_status === 'ready' && (
+        {data?.layer_b_status === 'ready' && (
           <Button size="sm" asChild>
-            <a href={data.grafana_url} target="_blank" rel="noreferrer">
+            <a href={grafanaHref} target="_blank" rel="noopener noreferrer">
               Open Grafana
             </a>
           </Button>
         )}
         {tradeDashUrl != null && data?.layer_b_status === 'ready' && (
           <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" asChild>
-            <a href={tradeDashUrl} target="_blank" rel="noreferrer">
+            <a href={tradeDashUrl} target="_blank" rel="noopener noreferrer">
               Open Trade Dashboard
             </a>
           </Button>
@@ -189,12 +191,9 @@ export function ClusterObservabilityPanel({
                   </span>
                 </DenseTableCell>
                 <DenseTableCell>
-                  {component.id === 'grafana' &&
-                  data.grafana_url != null &&
-                  data.grafana_url !== '' &&
-                  component.reachability === 'ok' ? (
+                  {component.id === 'grafana' && component.reachability === 'ok' ? (
                     <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" asChild>
-                      <a href={data.grafana_url} target="_blank" rel="noreferrer">
+                      <a href={grafanaHref} target="_blank" rel="noopener noreferrer">
                         Open Grafana
                       </a>
                     </Button>

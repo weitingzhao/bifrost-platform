@@ -5,7 +5,7 @@ description: |
     Starter + Financials engines (Event Radar, SEPA, Momentum, IV, Terrain, GEX,
     Forecast). P1 deepens Playbook LIVE/Invalidate/Mechanism, Analysis Model IV/Close,
     and GEX timeline chart. Zero new engines. No Options Trades entitlement.
-    D10 BLOCKED. Dagster stays replicas:0.
+    D10 BLOCKED. Dagster multi-schedule owns husbandry (replicas≥1).
 status: active
 workspace: /Users/vision-mac-trader/Desktop/stocks
 skill_path: .cursor/skills/research-daily-desk/SKILL.md
@@ -102,7 +102,7 @@ post_completion:
         - "Order Sentiment remains option_snapshot_aggregates proxy lamp only"
         - "IV / smile rows may be empty for indexes without market_analytics coverage"
         - "D10 BLOCKED — Daily Brief is observe-only, not trade signals"
-        - "Dagster still replicas:0 — CronJobs remain the compute path"
+        - "Dagster multi-schedule owns husbandry — CronJobs suspended"
     operate_queue_items:
         - id: research-daily-desk-accept
           source_lane_id: data-layer-k3s

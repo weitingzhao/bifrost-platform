@@ -205,6 +205,12 @@ func buildFixPrompt(itemID, detail string) string {
 	switch itemID {
 	case "massive-polygon":
 		playbook = "Playbook: massive-feed-recover\n"
+	case "market-batch-sla":
+		playbook = "Playbook: Open Massive ingest/queue; clear market_batch missed/degraded (due is OK).\n"
+	case "flex-tokens-secret":
+		playbook = "Playbook: make sync-flex-tokens — confirm bifrost-flex-tokens non-empty; summary source=secret.\n"
+	case "research-batch-sla":
+		playbook = "Playbook: Open Dagster; ensure dagster-daemon Ready + research_trading_day_schedule RUNNING; inspect ops_dagster.runs.\n"
 	case "postgres", "redis":
 		playbook = "Playbook: data-layer-recover\n"
 	case "git-bridge":

@@ -10,6 +10,7 @@ import type { NetworkSlaResponse } from '@/api/networkTypes'
 import type { RemediationHealthResponse } from '@/api/remediationTypes'
 import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
+import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import {
   annotateStandbyAlerts,
   hostMatchesStandbyNode,
@@ -809,11 +810,10 @@ export function buildObservabilityViewModel(
 ): ObservabilityViewModel {
   const nowMs = input.nowMs ?? Date.now()
   const env = input.selectedEnv
-  const grafanaBase =
-    input.observability?.grafana_url != null && input.observability.grafana_url !== ''
-      ? input.observability.grafana_url
-      : null
-
+  const grafanaBase = resolveOpsToolUrl(
+    'grafana',
+    input.observability?.grafana_url,
+  )
   const standbyNodes = input.standbyNodes ?? []
   const downScrapeTargets = (input.targets ?? [])
     .filter(t => (t.health ?? '').toLowerCase() === 'down')

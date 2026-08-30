@@ -29,7 +29,7 @@ export function FlexConfigTab() {
     <div className="flex flex-col gap-2">
       <OpsSection
         title="Tokens"
-        description="Masked · edit in Trade Settings"
+        description="Masked · K8s Secret bifrost-flex-tokens (Wave 11)"
         bodyPadding="compact"
         overflow="visible"
         collapsible
@@ -44,28 +44,49 @@ export function FlexConfigTab() {
         ) : summary == null ? (
           <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">—</p>
         ) : (
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-            {(
-              [
-                ['Host', summary.tokens.host_token_set, summary.tokens.host_token_last4],
-                ['Secondary', summary.tokens.secondary_token_set, summary.tokens.secondary_token_last4],
-              ] as const
-            ).map(([label, set, last4]) => (
-              <DashCard
-                key={label}
-                title={label}
-                tag={set ? 'set' : 'not set'}
-                tagVariant={set ? 'success' : 'neutral'}
-                value={set ? `····${last4}` : '—'}
-                caption="Flex Web Service token"
-              >
-                <Meter
-                  fillPct={set ? 100 : 0}
-                  toneClass={toneByLevel(set ? 'ok' : 'missing')}
-                  label={label}
-                />
-              </DashCard>
-            ))}
+          <div className="flex flex-col gap-2">
+            <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+              Token source:{' '}
+              <span className="font-mono text-[var(--foreground)]">
+                {summary.source ?? 'unknown'}
+              </span>
+              {summary.source === 'none'
+                ? ' — enqueue fail-closed until Secret is synced (make sync-flex-tokens)'
+                : ''}
+            </p>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {(
+                [
+                  [
+                    'Host',
+                    summary.tokens.host_token_set,
+                    summary.tokens.host_token_last4,
+                    summary.tokens.host_source,
+                  ],
+                  [
+                    'Secondary',
+                    summary.tokens.secondary_token_set,
+                    summary.tokens.secondary_token_last4,
+                    summary.tokens.secondary_source,
+                  ],
+                ] as const
+              ).map(([label, set, last4, src]) => (
+                <DashCard
+                  key={label}
+                  title={label}
+                  tag={set ? `set · ${src ?? 'secret'}` : 'not set'}
+                  tagVariant={set ? 'success' : 'neutral'}
+                  value={set ? `····${last4}` : '—'}
+                  caption="Flex Web Service token"
+                >
+                  <Meter
+                    fillPct={set ? 100 : 0}
+                    toneClass={toneByLevel(set ? 'ok' : 'missing')}
+                    label={label}
+                  />
+                </DashCard>
+              ))}
+            </div>
           </div>
         )}
       </OpsSection>
@@ -149,7 +170,9 @@ export function FlexConfigTab() {
       </OpsSection>
 
       <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-        Read-only. Edit in Trade → Settings → IB Connection.
+        Read-only. Tokens via <span className="font-mono">make sync-flex-tokens</span> / K8s
+        Secret <span className="font-mono">bifrost-flex-tokens</span> only (Wave 11 — Trade Settings
+        token columns retired).
       </p>
     </div>
   )

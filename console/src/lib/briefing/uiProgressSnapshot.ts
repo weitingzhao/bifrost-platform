@@ -12,6 +12,7 @@ import {
   MISSION_CONTROL_RECORDS_ITEMS,
   TASK_CC_NAV_ITEM,
 } from '@/lib/consoleNavConfig'
+import { flattenLaunchNav } from '@/lib/architecture/payloadConstellationCatalog'
 import { UI_PROGRESS_OVERRIDES } from '@/lib/briefing/uiProgressOverrides'
 
 export type UiItemStatus = 'done' | 'partial' | 'planned'
@@ -50,7 +51,7 @@ export function deriveConsoleUiProgress(): UiProgressItem[] {
   pushNavProgress(items, seen, [TASK_CC_NAV_ITEM, ...MISSION_CONTROL_ITEMS], 'Mission Control')
   pushNavProgress(items, seen, MISSION_CONTROL_RECORDS_ITEMS, 'Mission Control')
   pushNavProgress(items, seen, ENGINEER_LIFECYCLE_ITEMS, 'Engineer')
-  pushNavProgress(items, seen, ENGINEER_LAUNCH_ITEMS, 'Engineer')
+  pushNavProgress(items, seen, flattenLaunchNav(ENGINEER_LAUNCH_ITEMS), 'Engineer')
   pushNavProgress(items, seen, ENGINEER_WORKSPACE_ITEMS, 'Engineer')
   pushNavProgress(items, seen, ENGINEER_PROFILE_ITEMS, 'Engineer')
 

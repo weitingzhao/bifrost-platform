@@ -180,7 +180,7 @@ export function DataFreshnessPanel({
     <>
       <OpsSection
         title={title}
-        description="Activity lag vs bifrost_prod · Sync clones prod → dev/stg on CNPG"
+        description="Trade DB clone lag vs bifrost_prod — not Golden Source husbandry (Market/Flex/Research asof)"
         bodyPadding="none"
         actions={
           <div className="flex flex-wrap items-center gap-2">

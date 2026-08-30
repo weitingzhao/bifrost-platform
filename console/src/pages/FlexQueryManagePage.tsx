@@ -4,6 +4,7 @@ import { FlexConfigTab } from '@/components/flex-query/FlexConfigTab'
 import { FlexCoverageTab } from '@/components/flex-query/FlexCoverageTab'
 import { FlexIngestTab, type FlexIngestSubTab } from '@/components/flex-query/FlexIngestTab'
 import { FlexOverviewTab } from '@/components/flex-query/FlexOverviewTab'
+import { HusbandryStrip } from '@/components/delivery/HusbandryStrip'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 
 type ManageTab = 'overview' | 'ingest' | 'coverage' | 'config'
@@ -23,6 +24,7 @@ export function FlexQueryManagePage({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-2">
+      <HusbandryStrip />
       <div className="flex flex-wrap items-center gap-2">
         <SegmentControl
           size="sm"

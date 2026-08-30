@@ -24,6 +24,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
+	"github.com/weitingzhao/bifrost-platform/api/internal/datahusbandry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
@@ -98,6 +99,7 @@ type Server struct {
 	marketdata      *marketdata.Handler
 	flexquery       *flexquery.Handler
 	research        *research.Handler
+	datahusbandry   *datahusbandry.Handler
 	analytics       *analytics.Handler
 	telemetry       *telemetry.Handler
 	lanes           *lanes.Handler
@@ -165,7 +167,7 @@ func New(cfg *config.Config) (*Server, error) {
 	devagentH.BindSessions(sessionsH.Store())
 	visionH := vision.NewHandler(cfg, audit)
 	visionH.BindPrograms(devagentH)
-	return &Server{
+	srv := &Server{
 		cfg:             cfg,
 		prober:          prober,
 		console:         console.NewHandlerWithCluster(cfg, clusterH),
@@ -212,7 +214,13 @@ func New(cfg *config.Config) (*Server, error) {
 		auth:            auth,
 		audit:           audit,
 		jobs:            jobs,
-	}, nil
+	}
+	mdH := srv.marketdata
+	fqH := srv.flexquery
+	rsH := srv.research
+	srv.datahusbandry = datahusbandry.NewHandler(datahusbandry.NewService(mdH.Service(), fqH.Service(), rsH.Service()))
+	srv.checklist.BindHusbandry(srv.datahusbandry.Service())
+	return srv, nil
 }
 
 func (s *Server) Router() http.Handler {
@@ -275,6 +283,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/plugins/analytics/status", s.analytics.HandleStatus)
 		r.Get("/research/status", s.research.HandleStatus)
 		r.Get("/plugins/research/status", s.research.HandleStatus)
+		r.Get("/data-husbandry", s.datahusbandry.HandleSnapshot)
 		r.Get("/watchlist/union", s.marketdata.HandleWatchlistUnion)
 		// Read-only Plugin API proxy (coverage / analytics / ingest list / JSON probes).
 		r.Get("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
@@ -336,6 +345,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/pipelines", s.delivery.HandlePipelines)
 		r.Get("/delivery/supply-chain", s.delivery.HandleSupplyChain)
 		r.Get("/delivery/revisions", s.delivery.HandleRevisions)
+		r.Get("/delivery/compare", s.delivery.HandleCompare)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/pipelines/{name}/ref-preflight", s.delivery.HandleRefPreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
@@ -355,6 +365,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/operate/drain/status", s.operatequeue.HandleDrainStatus)
 		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
 		r.Get("/checklist/kpis", s.checklist.HandleGetKPIs)
+		r.Post("/checklist/husbandry-sync", s.checklist.HandleHusbandrySync)
 		r.Get("/lanes", s.lanes.HandleList)
 		r.Get("/lanes/{id}", s.lanes.HandleGet)
 		r.Get("/sessions", s.sessions.HandleList)

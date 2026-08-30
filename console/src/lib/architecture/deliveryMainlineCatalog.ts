@@ -143,7 +143,7 @@ export const DELIVERY_PIPELINE_CATALOG = [
     name: 'bifrost-deliver-research',
     tier: 'primary' as const,
     purpose:
-      'Research OLAP payload (second payload, peer to Satellite): mirror-sync → clone → Kaniko → rollout → verify (asserts running tag) → Argo sync bifrost-research',
+      'Research OLAP instrument on Satellite vehicle: mirror-sync → clone → Kaniko → rollout → verify (asserts running tag) → Argo sync bifrost-research. Formation with Trade = two independent pipelines (see payloadConstellationCatalog).',
     legacy: false,
   },
   {

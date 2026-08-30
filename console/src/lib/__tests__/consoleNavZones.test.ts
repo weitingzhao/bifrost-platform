@@ -29,9 +29,17 @@ describe('Seat / Partner zone builders', () => {
     expect(buildPartnerNavSections(null)?.lifecycle.map(i => i.id)).toEqual(
       ENGINEER_LIFECYCLE_ITEMS.map(i => i.id),
     )
-    expect(buildPartnerNavSections(null)?.launch.map(i => i.id)).toEqual(
-      ENGINEER_LAUNCH_ITEMS.map(i => i.id),
-    )
+    expect(buildPartnerNavSections(null)?.launch.map(i => i.id)).toEqual([
+      'platform-release',
+      'satellite-launch',
+      'plugin-release',
+      'agent-release',
+    ])
+    expect(
+      buildPartnerNavSections(null)?.launch.find(i => i.id === 'satellite-launch')?.children?.map(
+        c => c.id,
+      ),
+    ).toEqual(['trade-release', 'research-release'])
   })
 
   it('ops seat is TCC + control-room + observability; records keep defects', () => {
@@ -47,11 +55,13 @@ describe('Seat / Partner zone builders', () => {
     expect(partner?.lifecycle).toEqual([])
     expect(partner?.launch.map(i => i.id)).toEqual([
       'platform-release',
-      'trade-release',
-      'research-release',
+      'satellite-launch',
       'plugin-release',
       'agent-release',
     ])
+    expect(partner?.launch.find(i => i.id === 'satellite-launch')?.children?.map(c => c.id)).toEqual(
+      ['trade-release', 'research-release'],
+    )
     expect(partner?.workspace.map(i => i.id)).toEqual([
       'queue',
       'autonomous-skills',
@@ -97,13 +107,16 @@ describe('Seat / Partner zone builders', () => {
     ])
   })
 
-  it('Launch Desk sidebar labels are Rocket → Satellite → Research → Plugin → Agent', () => {
+  it('Launch Desk sidebar labels are Rocket → Satellite(Trade, Research) → Plugin → Agent', () => {
     expect(ENGINEER_LAUNCH_ITEMS.map(i => i.label)).toEqual([
       'Rocket',
       'Satellite',
-      'Research',
       'Plugin',
       'Agent',
+    ])
+    expect(ENGINEER_LAUNCH_ITEMS.find(i => i.id === 'satellite-launch')?.children?.map(c => c.label)).toEqual([
+      'Trade',
+      'Research',
     ])
   })
 
@@ -146,10 +159,9 @@ describe('Seat / Partner zone builders', () => {
     expect(resolveTaskModeId('patrol')).toBe('ops')
   })
 
-  it('remaining nav groups are Satellite → Research → Rocket → Plugin (Network under Plugin)', () => {
+  it('remaining nav groups are Satellite → Rocket → Plugin (Research Engine under Satellite)', () => {
     expect(CONSOLE_NAV_GROUPS.map(g => g.label)).toEqual([
       'Satellite',
-      'Research',
       'Rocket',
       'Plugin',
     ])
@@ -160,8 +172,13 @@ describe('Seat / Partner zone builders', () => {
     expect(missionIds).toContain('network')
     expect(missionIds).toContain('plugin-gallery')
     expect(missionIds).toContain('research-engine')
-    const researchGroup = CONSOLE_NAV_GROUPS.find(g => g.label === 'Research')
-    expect(researchGroup?.subGroups?.[0]?.items.map(i => i.id)).toEqual(['research-engine'])
+    const satelliteGroup = CONSOLE_NAV_GROUPS.find(g => g.label === 'Satellite')
+    expect(satelliteGroup?.subGroups?.[0]?.items.map(i => i.id)).toEqual([
+      'satellite-bus',
+      'satellite-health',
+      'research-engine',
+    ])
+    expect(CONSOLE_NAV_GROUPS.find(g => g.label === 'Research')).toBeUndefined()
     const pluginGroup = CONSOLE_NAV_GROUPS.find(g => g.label === 'Plugin')
     expect(pluginGroup?.subGroups?.map(sg => sg.label)).toEqual(['', 'Infra'])
     expect(pluginGroup?.subGroups?.[0]?.items.map(i => i.id)).not.toContain('research-engine')
@@ -169,8 +186,7 @@ describe('Seat / Partner zone builders', () => {
     expect(CONSOLE_NAV_GROUPS[0].defaultOpen).toBe(true)
     expect(CONSOLE_NAV_GROUPS[1].defaultOpen).toBe(true)
     expect(CONSOLE_NAV_GROUPS[2].defaultOpen).toBe(true)
-    expect(CONSOLE_NAV_GROUPS[3].defaultOpen).toBe(true)
-    expect(CONSOLE_NAV_GROUPS[3].emphasis).toBeUndefined()
-    expect(CONSOLE_NAV_GROUPS[3].dividerBefore).toBeUndefined()
+    expect(CONSOLE_NAV_GROUPS[2].emphasis).toBeUndefined()
+    expect(CONSOLE_NAV_GROUPS[2].dividerBefore).toBeUndefined()
   })
 })

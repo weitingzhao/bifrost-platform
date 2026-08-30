@@ -88,6 +88,12 @@ interface BriefingPageProps {
   auditLoading: boolean
   onOpenAudit?: () => void
   onOpenActiveSession?: (opts?: { laneId?: LaneId }) => void
+  /** Jump to Delivery Board (archive) with optional scope × track × lane filters. */
+  onOpenDeliveryBoard?: (opts?: {
+    laneId?: LaneId
+    scope?: BriefingScopeId
+    trackType?: WorkTrackType
+  }) => void
 }
 
 async function copyText(text: string): Promise<void> {
@@ -105,6 +111,7 @@ export function BriefingPage({
   auditLoading,
   onOpenAudit,
   onOpenActiveSession,
+  onOpenDeliveryBoard,
 }: BriefingPageProps) {
   const initialUrl = useMemo(() => {
     const parsed = parseBriefingUrlState()
@@ -633,6 +640,20 @@ export function BriefingPage({
             scopeWorkSummary={scopeWorkSummary}
             lifecycleFilter={lifecycleFilter}
             onClearLifecycleFilter={handleClearLifecycleFilter}
+            selectedLaneId={selectedLane}
+            onSelectLane={id => {
+              setSelectedLane(id)
+              invalidateSessionPackUi()
+            }}
+            onOpenDeliveryBoard={
+              onOpenDeliveryBoard != null
+                ? () =>
+                    onOpenDeliveryBoard({
+                      scope: selectedScope,
+                      trackType: selectedTrackType,
+                    })
+                : undefined
+            }
             context={context}
             matrices={matrices}
             clusterSummary={clusterSummary}

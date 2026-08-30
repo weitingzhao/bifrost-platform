@@ -206,9 +206,53 @@ export function progressToBriefingStatus(
   return 'planned'
 }
 
+/** Per-lane queue item tallies that sum to ScopeWorkSummary.progress. */
+export type ScopeQueueLaneBreakdown = {
+  laneId: string
+  label: string
+  /** Lane lifecycle when this row was tallied (usually active/planned/complete — empty lanes omit). */
+  lifecycle: LaneLifecycle
+  done: number
+  total: number
+}
+
+/** Briefing Scope strip: keep inventory short; Done history lives on Delivery. */
+export const BRIEFING_QUEUE_INVENTORY_LIMIT = 3
+
+const QUEUE_INVENTORY_LIFECYCLE_RANK: Record<LaneLifecycle, number> = {
+  active: 0,
+  planned: 1,
+  complete: 2,
+  empty: 3,
+}
+
+/**
+ * Doing first, then Planned, then Done. Cap at BRIEFING_QUEUE_INVENTORY_LIMIT
+ * (overflow → Delivery / Completed lanes, not this strip).
+ */
+export function selectBriefingQueueInventory(
+  rows: ScopeQueueLaneBreakdown[],
+  limit = BRIEFING_QUEUE_INVENTORY_LIMIT,
+): { visible: ScopeQueueLaneBreakdown[]; hiddenCount: number } {
+  const sorted = [...rows].sort((a, b) => {
+    const rank =
+      QUEUE_INVENTORY_LIFECYCLE_RANK[a.lifecycle] - QUEUE_INVENTORY_LIFECYCLE_RANK[b.lifecycle]
+    if (rank !== 0) return rank
+    return a.label.localeCompare(b.label)
+  })
+  const visible = sorted.slice(0, Math.max(0, limit))
+  return { visible, hiddenCount: Math.max(0, sorted.length - visible.length) }
+}
+
 export interface ScopeWorkSummary {
   status: BriefingWorkStatus
+  /**
+   * Sum of queue *items* (phases/streams/waves) across lanes in this scope × track type.
+   * Not Session count. Not the selected-lane Task Queue alone.
+   */
   progress: { done: number; total: number; percent: number } | null
+  /** Lanes that contribute queue items — sums to progress.total when present. */
+  queueByLane: ScopeQueueLaneBreakdown[]
   /** Next actionable queue item label under this scope × track type. */
   nextStep: string | null
   laneCounts: {
@@ -234,6 +278,7 @@ export function computeScopeWorkSummary(
   let doneItems = 0
   let totalItems = 0
   let nextStep: string | null = null
+  const queueByLane: ScopeQueueLaneBreakdown[] = []
   const releasedMap = opts?.programsReleasedByLane ?? opts?.programsClosedByLane
 
   for (const { label, queue, laneId } of laneQueues) {
@@ -256,10 +301,19 @@ export function computeScopeWorkSummary(
         break
     }
 
+    let laneDone = 0
+    let laneTotal = 0
     for (const item of queue) {
       if (item.status === 'issue') continue
       totalItems += 1
-      if (item.status === 'done' || item.status === 'closed') doneItems += 1
+      laneTotal += 1
+      if (item.status === 'done' || item.status === 'closed') {
+        doneItems += 1
+        laneDone += 1
+      }
+    }
+    if (laneTotal > 0 && laneId != null && laneId !== '') {
+      queueByLane.push({ laneId, label, lifecycle: life, done: laneDone, total: laneTotal })
     }
 
     if (nextStep == null) {
@@ -307,5 +361,5 @@ export function computeScopeWorkSummary(
         }
       : null
 
-  return { status, progress, nextStep, laneCounts }
+  return { status, progress, queueByLane, nextStep, laneCounts }
 }

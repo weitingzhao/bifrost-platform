@@ -9,6 +9,7 @@ import {
 } from '@/api/delivery'
 import { fetchResearchHealth, isResearchProxyError } from '@/api/researchEngine'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
+import { ConstellationStrip } from '@/components/delivery/ConstellationStrip'
 import { DeliveryActiveRunPanel } from '@/components/delivery/DeliveryActiveRunPanel'
 import {
   LaneDetailCollapse,
@@ -32,6 +33,8 @@ import {
 } from '@/lib/agent/researchDeployAgentPrompt'
 import { readLaneDetailReasonFromLocation } from '@/lib/delivery/laneDetailContext'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
+import { useConstellationImpact } from '@/hooks/useConstellationImpact'
+import { useConstellationLaunch } from '@/hooks/useConstellationLaunch'
 import {
   formatPipelineRunStatus,
   isPipelineRunFailed,
@@ -59,7 +62,7 @@ type ResearchReleasePageProps = AmbientAgentShellProps & {
 }
 
 /**
- * Launch Research — payload-grade desk (peer to Satellite).
+ * Launch Research — Satellite instrument desk (OLAP payload on Trade display-host).
  * Agent owns Build; Pin waits until the image is in the registry (Argo auto-sync).
  */
 export function ResearchReleasePage({
@@ -110,6 +113,13 @@ export function ResearchReleasePage({
     refetchInterval: 20_000,
   })
   const health = healthQ.data != null && !isResearchProxyError(healthQ.data) ? healthQ.data : null
+
+  const constellationImpact = useConstellationImpact({
+    origin: 'research',
+    revision: isResearchReleaseTag(tag) ? tag.trim() : 'main',
+    changedRepos: ['bifrost-research'],
+  })
+  const formation = useConstellationLaunch(constellationImpact)
 
   const verdictInput = useMemo(
     () => ({
@@ -212,7 +222,7 @@ export function ResearchReleasePage({
       <LaneDetailContextStrip reason={detailReason} />
 
       <LaneStateStrip
-        laneLabel="Research"
+        laneLabel="Satellite · Research"
         actions={
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
             <AgentTriggerButton
@@ -247,7 +257,7 @@ export function ResearchReleasePage({
             />
           </label>
           <span className="text-dense-caption text-muted-foreground">
-            second payload · {RESEARCH_TARGET.pipeline}
+            Satellite instrument · {RESEARCH_TARGET.pipeline}
           </span>
           {health?.version != null && (
             <DenseTag variant={health.version === tag.trim() ? 'success' : 'neutral'} size="cell">
@@ -260,6 +270,29 @@ export function ResearchReleasePage({
           syncs from GitHub automatically.
         </p>
       </LaneStateStrip>
+
+      <ConstellationStrip
+        impact={constellationImpact}
+        onFormationLaunch={() =>
+          formation.requestLaunch({
+            tag: isResearchReleaseTag(tag) ? tag.trim() : undefined,
+            revision: 'main',
+            env: 'stg',
+          })
+        }
+        formationPending={formation.isPending}
+        formationDisabled={!canOperate || deliverInFlight || !isResearchReleaseTag(tag)}
+        formationDisabledReason={
+          !canOperate
+            ? 'Authenticate to launch'
+            : deliverInFlight
+              ? 'Deliver in flight'
+              : !isResearchReleaseTag(tag)
+                ? 'Enter a semver image tag'
+                : undefined
+        }
+      />
+      {formation.dialog}
 
       <LaneOperateSplit
         storageKey="bifrost.console.researchLaneOperateSplit"

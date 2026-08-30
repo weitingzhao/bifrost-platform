@@ -1,4 +1,4 @@
-import { cn } from '@bifrost/ui'
+import { cn, DenseTag } from '@bifrost/ui'
 import type { IngestQueueKindCount, IngestScheduleSlot } from '@/api/marketDataPlugin'
 import {
   clipBar,
@@ -11,6 +11,10 @@ import {
   swimlaneSlots,
 } from '@/components/market-data/scheduleSwimlaneModel'
 import { formatDurationParts } from '@/lib/patrol/cronSchedule'
+import {
+  slotSchedulerKind,
+  slotSchedulerLabel,
+} from '@/lib/market-data/slotScheduler'
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
@@ -102,11 +106,16 @@ export function ScheduleSwimlane({
                   onSelectSlot && 'cursor-pointer hover:bg-[var(--muted)]/60',
                   selected && selectedLaneClass,
                 )}
-                title={s.note ?? s.slot}
+                title={`${s.note ?? s.slot} · scheduler=${slotSchedulerLabel(slotSchedulerKind(s.slot))}`}
                 aria-pressed={selected}
                 onClick={() => onSelectSlot?.(s.slot)}
               >
-                {s.slot}
+                <span className="min-w-0 truncate">{s.slot}</span>
+                {slotSchedulerKind(s.slot) === 'dagster' ? (
+                  <DenseTag variant="neutral" className="ml-1 shrink-0">
+                    Dagster
+                  </DenseTag>
+                ) : null}
               </button>
             )
           })}

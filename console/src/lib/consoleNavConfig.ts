@@ -50,7 +50,7 @@ import {
  * | Seat     | Mission Control (fixed)         | Execute (TCC) → Control Room → Observability     |
  * | Seat     | Defects & Audit (collapsible)   | Retrospective records adjacent to Seat           |
  * | Partner  | Engineer strip (persona)        | Build Desk + Launch Desk; Ops Desk / Analysis Desk |
- * | Mission  | Satellite → Rocket → Plugin     | Payload + Ops Platform + plugins/Network         |
+ * | Mission  | Satellite → Rocket → Plugin     | Vehicle (Trade+Research Engine) + Rocket + plugins |
  * | Support  | (none — Plugin is peer Mission) |                                                  |
  *
  * Governance (Vision / Blueprint / Standards / …) lives in the shell User menu
@@ -94,15 +94,31 @@ export const ENGINEER_LIFECYCLE_ITEMS: ShellNavItem[] = [
 
 /**
  * Launch Desk — always under Engineer Partner (below Build Desk).
- * Domain plane: Rocket / Satellite / Research / Plugin / Engineer (Agent = L-1 host publish).
+ * Rocket / Satellite(Trade·Research instruments) / Plugin / Agent (L-1).
+ * Tab ids for instruments stay trade-release / research-release (flatten for filters).
  */
+export const SATELLITE_LAUNCH_PARENT_ID = 'satellite-launch' as const
+
 export const ENGINEER_LAUNCH_ITEMS: ShellNavItem[] = [
   { id: 'platform-release', label: 'Rocket', icon: Container },
-  { id: 'trade-release', label: 'Satellite', icon: Workflow },
-  { id: 'research-release', label: 'Research', icon: Workflow },
+  {
+    id: SATELLITE_LAUNCH_PARENT_ID,
+    label: 'Satellite',
+    icon: Satellite,
+    children: [
+      { id: 'trade-release', label: 'Trade', icon: Workflow },
+      { id: 'research-release', label: 'Research', icon: Workflow },
+    ],
+  },
   { id: 'plugin-release', label: 'Plugin', icon: Workflow },
   { id: 'agent-release', label: 'Agent', icon: Bot },
 ]
+
+/** Resolve synthetic Launch parent → display-host tab. */
+export function resolveLaunchNavSelect(id: string): string {
+  if (id === SATELLITE_LAUNCH_PARENT_ID) return 'trade-release'
+  return id
+}
 
 /**
  * Ops Desk subgroups — Operate (reactive inbox) vs Patrol (scheduled skills).
@@ -147,8 +163,32 @@ export function filterAllowedNavItems(
   items: readonly ShellNavItem[],
   allowedTabIds: Set<string> | null,
 ): ShellNavItem[] {
-  if (allowedTabIds == null) return [...items]
-  return items.filter(item => allowedTabIds.has(item.id))
+  if (allowedTabIds == null) return items.map(cloneNavItem)
+  return items
+    .map(item => filterNavItemTree(item, allowedTabIds))
+    .filter((item): item is ShellNavItem => item != null)
+}
+
+function cloneNavItem(item: ShellNavItem): ShellNavItem {
+  return {
+    ...item,
+    children: item.children?.map(cloneNavItem),
+  }
+}
+
+/** Keep parent if any child is allowed; leaf must be in allowed set. */
+function filterNavItemTree(
+  item: ShellNavItem,
+  allowed: Set<string>,
+): ShellNavItem | null {
+  if (item.children != null && item.children.length > 0) {
+    const children = item.children
+      .map(c => filterNavItemTree(c, allowed))
+      .filter((c): c is ShellNavItem => c != null)
+    if (children.length === 0) return null
+    return { ...item, children }
+  }
+  return allowed.has(item.id) ? { ...item } : null
 }
 
 export function buildSeatNavItems(
@@ -211,20 +251,8 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
         items: [
           { id: 'satellite-bus', label: 'Bus Status', icon: Activity },
           { id: 'satellite-health', label: 'Satellite Health', icon: Gauge },
+          { id: 'research-engine', label: 'Research Engine', icon: Microscope },
         ],
-      },
-    ],
-  },
-  {
-    // Second payload (decision), peer to Satellite (execution) — promoted out of
-    // the Plugin group 2026-08-28. See systemDomainCatalog.ts header.
-    label: 'Research',
-    icon: Microscope,
-    defaultOpen: true,
-    subGroups: [
-      {
-        label: '',
-        items: [{ id: 'research-engine', label: 'Research Engine', icon: Microscope }],
       },
     ],
   },

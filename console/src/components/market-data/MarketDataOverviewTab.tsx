@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag } from '@bifrost/ui'
 import { fetchQualityScore, isProxyError } from '@/api/marketDataPlugin'
@@ -6,11 +6,16 @@ import type { MarketDataWorkerInfo } from '@/api/satelliteBusTypes'
 import { AnalyticsDemandPanel } from '@/components/market-data/AnalyticsDemandPanel'
 import { ApiReachabilityPanel } from '@/components/market-data/ApiReachabilityPanel'
 import { DataVitalsStrip } from '@/components/market-data/DataVitalsStrip'
+import {
+  buildMassiveAgentPack,
+  gatherMassiveAgentSnapshot,
+} from '@/components/market-data/massiveAgentPack'
 import { WorkersFreshnessPanel } from '@/components/market-data/WorkersFreshnessPanel'
 import { sortFreshness } from '@/components/market-data/marketDataProbeUtils'
 import { FlashValue } from '@/components/market-data/overviewDash'
 import { fmtCount, parseReadyRatio } from '@/components/market-data/overviewDashModel'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
+import { HusbandryStrip } from '@/components/delivery/HusbandryStrip'
 import type { MarketDataLiveProbeState } from '@/hooks/useMarketDataLiveProbe'
 
 function poolOf(workers: MarketDataWorkerInfo[], pool: string): MarketDataWorkerInfo | undefined {
@@ -70,8 +75,26 @@ export function MarketDataOverviewTab({
   const qualitySummary =
     quality?.summary ?? (quality?.ok === true ? 'PASS' : quality != null ? 'FAIL' : null)
 
+  const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
+
+  async function handleCopyForAgent() {
+    if (copyState === 'busy') return
+    setCopyState('busy')
+    try {
+      const snap = await gatherMassiveAgentSnapshot()
+      const text = buildMassiveAgentPack(snap)
+      await navigator.clipboard.writeText(text)
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2000)
+    } catch {
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 3000)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2">
+      <HusbandryStrip />
       <OpsVerdictStrip
         compact
         ariaLabel="Market Data plugin verdict"
@@ -148,14 +171,31 @@ export function MarketDataOverviewTab({
           </span>
         }
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={marketProbe.isLoading}
-            onClick={() => marketProbe.refetch()}
-          >
-            Refresh
-          </Button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={copyState === 'busy'}
+              title="Copy a repair pack (husbandry + queue + vitals + analytics demand) for an AI agent"
+              onClick={() => void handleCopyForAgent()}
+            >
+              {copyState === 'busy'
+                ? 'Exporting…'
+                : copyState === 'copied'
+                  ? 'Copied!'
+                  : copyState === 'error'
+                    ? 'Copy failed'
+                    : 'Copy for Agent'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={marketProbe.isLoading}
+              onClick={() => marketProbe.refetch()}
+            >
+              Refresh
+            </Button>
+          </div>
         }
       />
 

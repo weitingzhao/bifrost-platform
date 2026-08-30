@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { LayoutGrid } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
-  BriefingProgressMeter,
   BriefingStatusBadge,
   BriefingStatusLamp,
 } from '@/components/briefing/BriefingStatusChrome'
@@ -15,6 +14,8 @@ import {
   briefingLifecycleFilterLabel,
   isLaneLifecycleHold,
   laneLifecycleFromQueue,
+  lifecycleToBriefingStatus,
+  selectBriefingQueueInventory,
   type ScopeWorkSummary,
   type BriefingLaneLifecycleFilter,
 } from '@/lib/briefing/briefingStatus'
@@ -249,6 +250,11 @@ export type BriefingViewTabsSectionProps = {
   scopeWorkSummary: ScopeWorkSummary
   lifecycleFilter?: BriefingLaneLifecycleFilter | null
   onClearLifecycleFilter?: () => void
+  /** Open a lane whose queue contributes to the scope progress meter. */
+  onSelectLane?: (laneId: string) => void
+  selectedLaneId?: string
+  /** Open Delivery Board for full queue inventory (scope × track). */
+  onOpenDeliveryBoard?: () => void
   context: OpsContextResponse | undefined
   matrices: MatrixResponse[]
   clusterSummary: ClusterSummary | undefined
@@ -262,6 +268,9 @@ export function BriefingViewTabsSection({
   scopeWorkSummary,
   lifecycleFilter = null,
   onClearLifecycleFilter,
+  onSelectLane,
+  selectedLaneId,
+  onOpenDeliveryBoard,
   context,
   matrices,
   clusterSummary,
@@ -272,9 +281,16 @@ export function BriefingViewTabsSection({
   const ttDef = trackTypeById(selectedTrackType)
   const singleTrackType = trackTypeDefs.length <= 1
   const isAll = selectedScope === 'all'
-  const { status, progress, nextStep, laneCounts } = scopeWorkSummary
+  const { status, progress, nextStep, laneCounts, queueByLane } = scopeWorkSummary
   const filterLabel =
     lifecycleFilter != null ? briefingLifecycleFilterLabel(lifecycleFilter) : null
+  /** Sessions = lanes with a queue; tasks = all queue items in those sessions. */
+  const sessionCount = queueByLane.length
+  const taskCount = progress?.total ?? queueByLane.reduce((n, r) => n + r.total, 0)
+  const { visible: inventoryVisible, hiddenCount: inventoryHidden } = useMemo(
+    () => selectBriefingQueueInventory(queueByLane),
+    [queueByLane],
+  )
 
   const scopeCounts = useMemo(() => {
     const byLine = Object.fromEntries(
@@ -396,56 +412,117 @@ export function BriefingViewTabsSection({
           </p>
         )}
 
-        {/* Summary strip — compact for Scope column */}
-        <div className="mt-2 flex flex-wrap items-start gap-2 rounded-md border border-border bg-[var(--card)] px-2.5 py-2">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <BriefingStatusLamp status={status} />
-              <span className="text-[var(--text-dense-label)] font-semibold text-[var(--muted-foreground)]">
-                {scopeDef.label}
-              </span>
-              <span className="rounded bg-border px-1.5 py-0.5 text-[var(--text-dense-caption)] font-medium uppercase tracking-wider text-muted-foreground">
-                {lifecycleFilter != null ? 'All tracks' : ttDef.label}
-              </span>
-              {isAll && <BriefingStatusBadge status="ready" label="Aggregate" />}
-              <BriefingStatusBadge status={status} />
-              {filterLabel != null && (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-md border border-[var(--primary)]/40 bg-[var(--primary)]/10 px-2 py-0.5 text-[var(--text-dense-caption)] font-medium"
-                  onClick={() => onClearLifecycleFilter?.()}
-                >
-                  Filter · {filterLabel} ✕
-                </button>
-              )}
+        {/* Summary strip — lane lifecycle vs queue-item progress (different grains). */}
+        <div className="mt-2 flex flex-col gap-1.5 rounded-md border border-border bg-[var(--card)] px-2.5 py-2">
+          <div className="flex flex-wrap items-start gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <BriefingStatusLamp status={status} />
+                <span className="text-[var(--text-dense-label)] font-semibold text-[var(--muted-foreground)]">
+                  {scopeDef.label}
+                </span>
+                <span className="rounded bg-border px-1.5 py-0.5 text-[var(--text-dense-caption)] font-medium uppercase tracking-wider text-muted-foreground">
+                  {lifecycleFilter != null ? 'All tracks' : ttDef.label}
+                </span>
+                {isAll && <BriefingStatusBadge status="ready" label="Aggregate" />}
+                <BriefingStatusBadge status={status} />
+                {filterLabel != null && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--primary)]/40 bg-[var(--primary)]/10 px-2 py-0.5 text-[var(--text-dense-caption)] font-medium"
+                    onClick={() => onClearLifecycleFilter?.()}
+                  >
+                    Filter · {filterLabel} ✕
+                  </button>
+                )}
+              </div>
+              <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
+                {laneCounts.ready} ready · {laneCounts.planned} planned · {laneCounts.doing} doing
+                {laneCounts.done > 0 ? ` · ${laneCounts.done} done` : ''}
+              </p>
+              {nextStep != null && nextStep !== '' ? (
+                <p className="m-0 truncate text-[var(--text-dense-caption)]">
+                  <span className="text-muted-foreground">Next: </span>
+                  <span className="text-foreground">{nextStep}</span>
+                </p>
+              ) : status === 'done' ? (
+                <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
+                  All lanes complete — start a new lane.
+                </p>
+              ) : status === 'ready' ? (
+                <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
+                  No active queue — pick a ready lane.
+                </p>
+              ) : null}
             </div>
-            <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
-              {laneCounts.ready} ready · {laneCounts.planned} planned · {laneCounts.doing} doing
-            </p>
-            {nextStep != null && nextStep !== '' ? (
-              <p className="m-0 truncate text-[var(--text-dense-caption)]">
-                <span className="text-muted-foreground">Next: </span>
-                <span className="text-foreground">{nextStep}</span>
-              </p>
-            ) : status === 'done' ? (
-              <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
-                All lanes complete — start a new lane.
-              </p>
-            ) : status === 'ready' ? (
-              <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
-                No active queue — pick a ready lane.
-              </p>
-            ) : null}
+            {sessionCount > 0 && (
+              <div
+                className="w-28 shrink-0 text-right"
+                title="Sessions = lanes with a queue in this scope × track. Tasks = all queue items across those sessions. Done history → Delivery."
+              >
+                <p className="m-0 text-[var(--text-dense-micro)] uppercase tracking-wider text-muted-foreground">
+                  Scope totals
+                </p>
+                <p className="m-0 mt-0.5 font-mono text-[var(--text-dense-label)] tabular-nums text-foreground">
+                  {sessionCount}
+                  <span className="text-muted-foreground"> sess</span>
+                </p>
+                <p className="m-0 font-mono text-[var(--text-dense-caption)] tabular-nums text-muted-foreground">
+                  {taskCount} tasks
+                </p>
+              </div>
+            )}
           </div>
-          {progress != null && (
-            <div className="w-24 shrink-0">
-              <BriefingProgressMeter
-                done={progress.done}
-                total={progress.total}
-                percent={progress.percent}
-                status={status}
-                className="mt-0"
-              />
+          {inventoryVisible.length > 0 && (
+            <div className="border-t border-border/60 pt-1.5">
+              <p
+                className="m-0 mb-1 text-[var(--text-dense-micro)] uppercase tracking-wider text-muted-foreground"
+                title="Up to 3 lanes: Doing first, then Planned, then Done. Overflow and full Done history live on Delivery."
+              >
+                Queue inventory · select lane
+              </p>
+              <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+                {inventoryVisible.map(row => {
+                  const selected = selectedLaneId === row.laneId
+                  const rowStatus = lifecycleToBriefingStatus(row.lifecycle)
+                  return (
+                    <li key={row.laneId}>
+                      <button
+                        type="button"
+                        className={[
+                          'flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[var(--text-dense-caption)]',
+                          selected
+                            ? 'bg-[var(--primary)]/10 text-foreground'
+                            : 'text-muted-foreground hover:bg-[var(--muted)]/40 hover:text-foreground',
+                        ].join(' ')}
+                        onClick={() => onSelectLane?.(row.laneId)}
+                        title={`${row.label} · ${rowStatus} · ${row.done}/${row.total} queue items`}
+                      >
+                        <BriefingStatusBadge status={rowStatus} />
+                        <span className="min-w-0 flex-1 truncate">{row.label}</span>
+                        <span className="shrink-0 font-mono tabular-nums">
+                          {row.done}/{row.total}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+              {inventoryHidden > 0 &&
+                (onOpenDeliveryBoard != null ? (
+                  <button
+                    type="button"
+                    className="m-0 mt-1 text-left text-[var(--text-dense-caption)] text-[var(--primary)] underline-offset-2 hover:underline"
+                    onClick={onOpenDeliveryBoard}
+                    title="Open Delivery Board filtered to this scope × track — full lane inventory"
+                  >
+                    +{inventoryHidden} more on Delivery
+                  </button>
+                ) : (
+                  <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-muted-foreground">
+                    +{inventoryHidden} more on Delivery
+                  </p>
+                ))}
             </div>
           )}
         </div>

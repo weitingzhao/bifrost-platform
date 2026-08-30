@@ -58,3 +58,11 @@ export async function fetchChecklistKPIs(): Promise<ChecklistKPIsResponse> {
   return r.json() as Promise<ChecklistKPIsResponse>
 }
 
+/** Probe data-husbandry → merge checklist signals → Operate auto_dispatch. */
+export async function syncHusbandryChecklist(): Promise<ChecklistSignalsResponse> {
+  const r = await fetch('/api/v1/checklist/husbandry-sync', { method: 'POST' })
+  if (!r.ok) throw await parseError('checklist husbandry-sync', r)
+  return r.json() as Promise<ChecklistSignalsResponse>
+}
+
+

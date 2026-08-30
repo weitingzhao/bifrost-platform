@@ -215,12 +215,14 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
     examples: [
       'Task Control Center: primary Launch / Fleet Fix / phase CTA on Verdict; Environment maintenance (DEV ledger clone) on the Environment Body section — Verdict only when ledger is the blocking signal',
       'Control Room: VerdictStrip has no Launch/Deploy actions — Bay Scan opens one bay; Launch bay Open TCC + detail deep-links',
-      'Observability: Domain Health one runtime row — Trade env on Satellite only; Grafana links for deployed UIDs (Satellite/Ground/IB/Agent Bifrost + Rocket kube-prometheus stock; unset uid → “not deployed”); Attention Mute/Agent Fix/batch → Dock',
+      'Observability: Domain Health one runtime row — Trade env on Satellite only; Grafana links for deployed UIDs (Satellite/Ground/IB/Agent Bifrost + Rocket kube-prometheus stock; unset uid → catalog LAN Tool Rack / “not deployed”); Attention Mute/Agent Fix/batch → Dock',
+      'External UIs (Gitea / Grafana / Dagster): header Tools popover + contextual Open — new tab only, never iframe (opsToolRackCatalog)',
+      'Research Engine: always-on Feedstock / Batch / Product lamps under OpsVerdictStrip; default Pipeline health tab; sidebar icon tint + StatusLamp follows research_olap human copy; Feedstock → Massive Readiness deep-link + readiness_rollup KPI; Product age meters (not chart library)',
       'Defects: PatternDebt Verdict + Fix top pattern; PageToolbar Refresh below',
       'Launch Rocket: AI Release on LaneStateStrip; Step detail observe-only (no Deploy/Gate CTAs — Agent owns stages)',
       'Deploy Satellite: AI Deploy on LaneStateStrip (+ Evidence links); Step detail observe-only (no Deploy/Gate CTAs)',
       'Launch Plugin: AI Launch Plugin on LaneStateStrip (+ Evidence links); Step detail observe-only (no Record/Approve CTAs — Agent Session / Dock owns stages); Toolbox = manual evidence escape',
-      'Launch Desk (Engineer Partner): Rocket / Satellite / Research / Plugin icons tinted by live checklist verdict; Agent = L-1 host publish (no Tekton GO gate)',
+      'Launch Desk (Engineer Partner): Rocket / Satellite(Trade·Research) / Plugin icons tinted by live checklist verdict; Agent = L-1 host publish (no Tekton GO gate)',
       'Launch Agent: AI Launch Agent on LaneStateStrip; Step detail observe-only (no Deploy/Record CTAs); Toolbox = Direct Deploy + Record + Manual Update escape; Operator Plane → heartbeats/MCP',
       'Operator Dock: Segment Agent | Console — Fix live feed on Agent; SSH ServerConsolePanel on Console; head Host · P✓ S✓ + Operator Plane CTA; Deploy running is read-only deep-link',
     ],
@@ -328,17 +330,17 @@ export const SIDEBAR_ZONES: SidebarZoneRow[] = [
   {
     zone: 'Partner',
     surface: 'ShellNavSidebar.partnerContent → PartnerStrip (persona block, not a nav group)',
-    intent: 'Engineer desks: Build Desk always visible (Briefing → In Flight → Delivery); Dev Sessions is framework chrome (header indicator / Operator Dock), not a Build Desk rail item. Launch Desk always visible when allowed (Rocket → Satellite → Research → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane + Trust + Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status.',
+    intent: 'Engineer desks: Build Desk always visible (Briefing → In Flight → Delivery); Dev Sessions is framework chrome (header indicator / Operator Dock), not a Build Desk rail item. Launch Desk always visible when allowed (Rocket → Satellite(Trade, Research instruments) → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status.',
   },
   {
     zone: 'Mission',
     surface: 'navGroups pig — Satellite then Rocket, defaultOpen: true',
-    intent: 'Payload + Ops Platform. Order unchanged (Satellite above Rocket). Dual signal (route pill + phase rail) still applies.',
+    intent: 'Satellite vehicle (Trade + Research Engine observe) + Ops Platform. Dual signal (route pill + phase rail) still applies.',
   },
   {
     zone: 'Support',
     surface: 'navGroups — Satellite / Rocket / Plugin peer Mission groups, defaultOpen: true',
-    intent: 'Mission peers share primary group chrome (no secondary opacity). Dual signal still applies.',
+    intent: 'Mission peers share primary group chrome (no secondary opacity). Research observe lives under Satellite (not a peer group). Dual signal still applies.',
   },
 ]
 
@@ -377,16 +379,17 @@ export const DUAL_PERSPECTIVE_LIFECYCLE_RULES: string[] = [
   'Program-first lanes (board-visible programs without spine task mapping): Briefing / In Flight queue may be projected from GET /programs?board=1 phases (SSOT = Programs runtime, not a third store).',
   'Queue precedence: non-empty spine or hardcoded synthetic queue wins; program phase projection applies only when that queue would be empty. Do not add new hardcoded closed queues for program-first lanes.',
   'Doing (In Flight) = projected/spine queue has active work OR (queue all done AND any linked program not sessionReleased). Empty spine alone must not hide an open program.',
-  'Build Desk nav badges: Briefing = count of not-sessionReleased board programs; In Flight = Doing lane count (same predicate as Active Session).',
+  'Build Desk nav badges: Briefing = Ready lane count (empty queue, Scope “r”); In Flight = Doing lane count. Badge colors use Ready / Doing DPR tokens (env-dev / lamp-yellow).',
+  'Payload constellation (Plan C): Satellite = vehicle; Trade = display-host; Research = instrument. Launch Desk nests Research under Satellite. New payloads = catalog row + Launch child + edges — never a Briefing Line. Formation = two independent pipelines + ConfirmDialog.',
 ]
 
 /** Acceptance checkpoints for program→queue projection (Build Desk self-consistency). */
 export const PROGRAM_QUEUE_PROJECTION_ACCEPTANCE: string[] = [
   'Q1: trade-iv-radar (or any open program-first lane) appears in Delivery In Progress and In Flight Doing together.',
   'Q2: Spine/hardcoded lanes with non-empty queues are unchanged when board programs exist on other lanes.',
-  'Q3: After sessionReleased, lane leaves In Flight Doing and Briefing open-program count drops.',
+  'Q3: After sessionReleased, lane leaves In Flight Doing; Briefing Ready badge stays empty-queue count (not open-program count).',
   'Q4: Owner sign-off on In Flight still joins by phase id and invalidates PROGRAMS_BOARD_QUERY_KEY.',
-  'Q5: PartnerStrip shows Briefing / In Flight counts only when > 0.',
+  'Q5: PartnerStrip shows Briefing / In Flight counts only when > 0; colors match Ready / Doing DPR tokens.',
 ]
 
 /* ── Primitives inventory ── */

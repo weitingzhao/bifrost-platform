@@ -17,8 +17,10 @@ import {
 } from '@/lib/control-room/fleetSnapshot'
 import { viewerSeatTagVariant } from '@/lib/envVisual'
 import { UserMenu } from '@/components/UserMenu'
+import { ToolsMenu } from '@/components/ToolsMenu'
 import { ActivityIndicator } from '@/components/activity/ActivityIndicator'
 import { DevSessionsIndicator } from '@/components/DevSessionsIndicator'
+import { QueuePulseChip } from '@/components/shell/QueuePulseChip'
 import { TaskModeCapsule } from '@/components/task-mode/TaskModeCapsule'
 import type { ActivityEvent } from '@/lib/activity/activityTypes'
 import type { TaskModeId } from '@/lib/task-mode/types'
@@ -153,6 +155,8 @@ export function ConsoleHeader({
 
       <div className="min-w-0 flex-1" />
 
+      <QueuePulseChip onNavigate={onSelectTab} />
+
       <ViewerEnvChip viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />
 
       <DevSessionsIndicator onOpen={() => onSelectTab('dev-sessions')} />
@@ -212,6 +216,8 @@ export function ConsoleHeader({
       />
 
       {children != null ? <div className="shrink-0">{children}</div> : null}
+
+      <ToolsMenu />
 
       <UserMenu
         onSelectTab={onSelectTab}

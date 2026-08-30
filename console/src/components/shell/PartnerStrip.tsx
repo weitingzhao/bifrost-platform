@@ -20,30 +20,42 @@ import {
   type ShellNavSubGroup,
 } from '@bifrost/ui'
 import { Bot, ChevronDown } from 'lucide-react'
-import { buildPartnerNavSections } from '@/lib/consoleNavConfig'
+import { buildPartnerNavSections, resolveLaunchNavSelect } from '@/lib/consoleNavConfig'
 import { ConsoleNavSlotItem } from '@/components/shell/ConsoleNavSlotItem'
 import { useBuildDeskWorkloadCounts } from '@/hooks/useBuildDeskWorkloadCounts'
 import type { BuildDeskWorkloadCounts } from '@/lib/briefing/buildDeskWorkload'
+import { BRIEFING_DPR_COLOR } from '@/components/briefing/briefingStatusChromeClasses'
+import { flattenLaunchNav } from '@/lib/architecture/payloadConstellationCatalog'
 
 function workloadBadgeForItem(
   itemId: string,
   counts: BuildDeskWorkloadCounts,
 ): ReactNode {
-  const n =
-    itemId === 'briefing'
-      ? counts.briefing
-      : itemId === 'active-session'
-        ? counts.activeSession
-        : 0
-  if (n <= 0) return null
-  return (
-    <span
-      className="shrink-0 text-dense-micro tabular-nums text-sidebar-foreground/55"
-      aria-label={`${n}`}
-    >
-      {n}
-    </span>
-  )
+  if (itemId === 'briefing') {
+    if (counts.briefing <= 0) return null
+    return (
+      <span
+        className={cn('shrink-0 text-dense-micro tabular-nums', BRIEFING_DPR_COLOR.ready)}
+        aria-label={`${counts.briefing} ready`}
+        title="Ready lanes"
+      >
+        {counts.briefing}
+      </span>
+    )
+  }
+  if (itemId === 'active-session') {
+    if (counts.activeSession <= 0) return null
+    return (
+      <span
+        className={cn('shrink-0 text-dense-micro tabular-nums', BRIEFING_DPR_COLOR.doing)}
+        aria-label={`${counts.activeSession} doing`}
+        title="Doing lanes"
+      >
+        {counts.activeSession}
+      </span>
+    )
+  }
+  return null
 }
 
 function resolveIdChecker(
@@ -81,25 +93,112 @@ function NumberedDeskSection({
       <SidebarMenu>
         <SidebarMenuSub>
           {items.map((item, index) => (
-            <ConsoleNavSlotItem
+            <NumberedDeskItem
               key={item.id}
               item={item}
+              index={index}
               activeId={activeId}
               onSelect={onSelect}
               renderItemIcon={renderItemIcon}
               signals={signals}
-              leading={
-                <span className="w-3 shrink-0 text-center text-dense-micro tabular-nums text-sidebar-foreground/30">
-                  {index + 1}
-                </span>
-              }
-              trailing={
-                workloadCounts != null ? workloadBadgeForItem(item.id, workloadCounts) : null
-              }
+              workloadCounts={workloadCounts}
             />
           ))}
         </SidebarMenuSub>
       </SidebarMenu>
+    </div>
+  )
+}
+
+function NumberedDeskItem({
+  item,
+  index,
+  activeId,
+  onSelect,
+  renderItemIcon,
+  signals,
+  workloadCounts,
+}: {
+  item: ShellNavItem
+  index: number
+  activeId: string
+  onSelect: (id: string) => void
+  renderItemIcon?: (item: ShellNavItem) => ReactNode
+  signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
+  workloadCounts?: BuildDeskWorkloadCounts
+}) {
+  const children = item.children
+  const hasChildren = children != null && children.length > 0
+  const childActive = hasChildren && children!.some(c => c.id === activeId)
+  const [open, setOpen] = useState(childActive)
+
+  useEffect(() => {
+    if (childActive) setOpen(true)
+  }, [childActive])
+
+  const leading = (
+    <span className="w-3 shrink-0 text-center text-dense-micro tabular-nums text-sidebar-foreground/30">
+      {index + 1}
+    </span>
+  )
+  const trailing =
+    workloadCounts != null ? workloadBadgeForItem(item.id, workloadCounts) : null
+
+  if (!hasChildren) {
+    return (
+      <ConsoleNavSlotItem
+        item={item}
+        activeId={activeId}
+        onSelect={id => onSelect(resolveLaunchNavSelect(id))}
+        renderItemIcon={renderItemIcon}
+        signals={signals}
+        leading={leading}
+        trailing={trailing}
+      />
+    )
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-0.5">
+        <div className="min-w-0 flex-1">
+          <ConsoleNavSlotItem
+            item={item}
+            activeId={childActive ? item.id : activeId}
+            onSelect={id => onSelect(resolveLaunchNavSelect(id))}
+            renderItemIcon={renderItemIcon}
+            signals={signals}
+            leading={leading}
+            trailing={trailing}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="mr-2 flex h-6 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-sidebar-foreground/30 transition-colors hover:text-sidebar-foreground/70"
+          aria-label={open ? `Collapse ${item.label}` : `Expand ${item.label}`}
+        >
+          <ChevronDown
+            className={cn('h-3 w-3 transition-transform', open ? 'rotate-180' : '')}
+            aria-hidden
+          />
+        </button>
+      </div>
+      {open && (
+        <ul className="m-0 mb-0.5 ml-3 list-none border-l border-sidebar-border/50 py-0.5 pl-2">
+          {children!.map(child => (
+            <li key={child.id}>
+              <ConsoleNavSlotItem
+                item={child}
+                activeId={activeId}
+                onSelect={onSelect}
+                renderItemIcon={renderItemIcon}
+                signals={signals}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
@@ -146,7 +245,7 @@ export function PartnerStrip({
 
   const allItems = [
     ...sections.lifecycle,
-    ...sections.launch,
+    ...flattenLaunchNav(sections.launch),
     ...sections.workspace,
     ...sections.profile,
   ]
@@ -424,7 +523,13 @@ function FlyoutSection({
     groups != null && groups.length > 0
       ? groups
       : items != null && items.length > 0
-        ? [{ label: '', items }]
+        ? [
+            {
+              label: '',
+              // Launch Desk flyout: flatten Satellite children so Trade/Research are clickable.
+              items: numbered === true ? flattenLaunchNav(items) : items,
+            },
+          ]
         : []
 
   return (
@@ -444,7 +549,7 @@ function FlyoutSection({
               key={item.id}
               item={item}
               activeId={activeId}
-              onSelect={onSelect}
+              onSelect={id => onSelect(resolveLaunchNavSelect(id))}
               renderItemIcon={renderItemIcon}
               signals={signals}
               flyout

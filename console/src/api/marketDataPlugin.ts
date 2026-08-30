@@ -696,6 +696,12 @@ export type IngestScheduleSlot = {
 export type IngestQueueDashboardResponse = {
   ok: boolean
   generated_at?: string
+  husbandry?: {
+    verdict?: string
+    detail?: string
+    schedule?: string
+    queue?: string
+  }
   model?: {
     ready_now?: string
     running?: string

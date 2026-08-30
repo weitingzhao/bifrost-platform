@@ -16,7 +16,8 @@ func TestSummarizeRedisStatusEmbeddedOnly(t *testing.T) {
 		EmbeddedActive: 3,
 	}
 	reach, summary := summarizeRedisStatus(resp)
-	if reach != probe.ReachDegraded {
+	// Queue targets retired — embedded-only is still OK (not domain-degraded).
+	if reach != probe.ReachOK {
 		t.Fatalf("reach=%s", reach)
 	}
 	if summary == "" {

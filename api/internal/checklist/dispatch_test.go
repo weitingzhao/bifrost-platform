@@ -88,11 +88,16 @@ func TestPlanActionsDedup(t *testing.T) {
 	}
 }
 
-func TestCatalogHas19Items(t *testing.T) {
-	if len(CatalogItems) != 19 {
-		t.Fatalf("expected 19 catalog items, got %d", len(CatalogItems))
+func TestCatalogHas22Items(t *testing.T) {
+	if len(CatalogItems) != 22 {
+		t.Fatalf("expected 22 catalog items, got %d", len(CatalogItems))
 	}
 	if _, ok := ItemByID("db-backup-fresh"); !ok {
 		t.Fatal("db-backup-fresh missing from catalog")
+	}
+	for _, id := range []string{"market-batch-sla", "flex-tokens-secret", "research-batch-sla"} {
+		if _, ok := ItemByID(id); !ok {
+			t.Fatalf("%s missing from catalog", id)
+		}
 	}
 }

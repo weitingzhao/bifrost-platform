@@ -48,6 +48,10 @@ import {
   runningFreshness,
 } from '@/components/market-data/queueRunningJobs'
 import { OpsSection } from '@/components/layout/OpsSection'
+import {
+  slotSchedulerKind,
+  slotSchedulerLabel,
+} from '@/lib/market-data/slotScheduler'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { describeCronSchedule } from '@/lib/patrol/cronSchedule'
 
@@ -412,7 +416,7 @@ export function MarketDataIngestTab() {
       {detailTab === 'schedule' ? (
         <OpsSection
           title="Schedule plan & adherence"
-          description="Diamond = Cron fire · bar = drain. Click a lane to link the table."
+          description="Ignition = Dagster (DenseTag on lanes). Diamond = planned fire · bar = drain. CronJobs suspended. Open Tools → Dagster for runs."
           bodyPadding="compact"
           overflow="visible"
           collapsible
@@ -508,6 +512,7 @@ export function MarketDataIngestTab() {
                 <DenseTableHeader>
                   <DenseTableHeadRow>
                     <DenseTableHead>Slot</DenseTableHead>
+                    <DenseTableHead>Scheduler</DenseTableHead>
                     <DenseTableHead>Schedule</DenseTableHead>
                     <DenseTableHead>Adherence</DenseTableHead>
                     <DenseTableHead>Last fire</DenseTableHead>
@@ -518,7 +523,7 @@ export function MarketDataIngestTab() {
                 <DenseTableBody>
                   {visibleScheduleSlots.length === 0 ? (
                     <DenseTableRow>
-                      <DenseTableCell colSpan={6} className="text-center text-[var(--muted-foreground)]">
+                      <DenseTableCell colSpan={7} className="text-center text-[var(--muted-foreground)]">
                         No slots match this adherence filter
                       </DenseTableCell>
                     </DenseTableRow>
@@ -550,6 +555,11 @@ export function MarketDataIngestTab() {
                             {s.inline ? ' · inline' : ''}
                           </span>
                         </div>
+                      </DenseTableCell>
+                      <DenseTableCell>
+                        <DenseTag variant="neutral">
+                          {slotSchedulerLabel(slotSchedulerKind(s.slot))}
+                        </DenseTag>
                       </DenseTableCell>
                       <DenseTableCell
                         className="text-[var(--text-dense-meta)]"

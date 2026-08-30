@@ -14,18 +14,23 @@ import {
   StatusLamp,
   denseTableNumCell,
 } from '@bifrost/ui'
-import { RefreshCw } from 'lucide-react'
+import { ExternalLink, RefreshCw } from 'lucide-react'
 import {
   fetchElementaryStatus,
   fetchForecastSessions,
   fetchForecastSettlements,
+  fetchOrchestrationStatus,
   fetchResearchStatus,
+  fetchSignalHealth,
   isResearchProxyError,
   summarizeSettlements,
   type ForecastSessionRow,
   type ForecastSettlementRow,
+  type OrchestrationStatusData,
+  type SignalHealthData,
 } from '@/api/researchEngine'
 import { fetchAnalyticsStatus } from '@/api/analyticsPlugin'
+import { fetchDataHusbandry } from '@/api/dataHusbandry'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { PageToolbar } from '@/components/layout/PageToolbar'
 import {
@@ -34,6 +39,21 @@ import {
   type OpsVerdictTagVariant,
 } from '@/components/layout/OpsVerdictStrip'
 import { RESEARCH_ENGINE_SUMMARY } from '@/lib/architecture/researchEngineCatalog'
+import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
+import { buildResearchVerdictCopy } from '@/lib/research/researchHealthCopy'
+import {
+  formatReadinessRollupLine,
+  openFlexManage,
+  openMassiveReadiness,
+} from '@/lib/research/massiveNav'
+import { HusbandryStrip } from '@/components/delivery/HusbandryStrip'
+import { ResearchHealthLayersStrip } from '@/components/research/ResearchHealthLayersStrip'
+import {
+  AgeMeterCell,
+  SignalHealthAgeMeters,
+} from '@/components/research/SignalHealthAgeMeters'
+import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
+import { stackFreshnessStatuses } from '@/lib/research/signalHealthAgeMeters'
 
 type ManageTab = 'accuracy' | 'cost' | 'health' | 'runs'
 
@@ -86,57 +106,44 @@ function sumOptional(rows: ForecastSessionRow[], key: 'token_usage' | 'token_cos
   return any ? total : null
 }
 
-function reachToVerdict(opts: {
-  loading: boolean
-  reachable: boolean | undefined
-  sessions: number
-  settlements: number
-  statusError?: string
-}): {
-  lamp: OpsVerdictLamp
-  tagLabel: string
-  tagVariant: OpsVerdictTagVariant
-  summary: string
-} {
-  if (opts.loading) {
-    return {
-      lamp: 'unknown',
-      tagLabel: 'PROBING',
-      tagVariant: 'neutral',
-      summary: 'Probing Research API health and forecast surfaces…',
-    }
-  }
-  if (!opts.reachable) {
-    return {
-      lamp: 'fail',
-      tagLabel: 'UNREACHABLE',
-      tagVariant: 'danger',
-      summary: opts.statusError || 'Research API :8795 unreachable — governance KPIs unavailable',
-    }
-  }
-  if (opts.settlements === 0 && opts.sessions === 0) {
-    return {
-      lamp: 'degraded',
-      tagLabel: 'EMPTY',
-      tagVariant: 'warning',
-      summary: 'API reachable · no forecast sessions or settlements yet (mock-friendly empty)',
-    }
-  }
-  return {
-    lamp: 'ok',
-    tagLabel: 'OK',
-    tagVariant: 'success',
-    summary: `${opts.sessions} sessions · ${opts.settlements} settlements · D10 blocked (observe only)`,
-  }
+function laneLamp(verdict: string | undefined): 'ok' | 'degraded' | 'fail' | 'unknown' {
+  const v = (verdict ?? '').toLowerCase()
+  if (v === 'healthy' || v === 'ok') return 'ok'
+  if (v === 'due' || v === 'draining' || v === 'caution') return 'degraded'
+  if (v === 'missed' || v === 'degraded') return 'fail'
+  return 'unknown'
 }
 
-export function ResearchEnginePage() {
-  const [tab, setTab] = useState<ManageTab>('accuracy')
+export function ResearchEnginePage({
+  onNavigate,
+}: {
+  onNavigate?: (tabId: string) => void
+} = {}) {
+  const [tab, setTab] = useState<ManageTab>('health')
+  const marketProbe = useMarketDataLiveProbe()
 
   const statusQ = useQuery({
     queryKey: ['research-engine-status'],
     queryFn: fetchResearchStatus,
     refetchInterval: 30_000,
+  })
+  const husbandryQ = useQuery({
+    queryKey: ['data-husbandry'],
+    queryFn: fetchDataHusbandry,
+    refetchInterval: 30_000,
+    retry: 1,
+  })
+  const signalHealthQ = useQuery({
+    queryKey: ['research-engine-signal-health'],
+    queryFn: fetchSignalHealth,
+    refetchInterval: 60_000,
+    retry: 1,
+  })
+  const orchestrationQ = useQuery({
+    queryKey: ['research-engine-orchestration'],
+    queryFn: fetchOrchestrationStatus,
+    refetchInterval: 60_000,
+    retry: 1,
   })
   const settlementsQ = useQuery({
     queryKey: ['research-engine-settlements'],
@@ -196,29 +203,74 @@ export function ResearchEnginePage() {
       ? elementaryQ.data.error
       : null
 
+  const researchLane = husbandryQ.data?.lanes.find(l => l.id === 'research_olap')
+  const marketLane = husbandryQ.data?.lanes.find(l => l.id === 'market_batch')
+  const flexLane = husbandryQ.data?.lanes.find(l => l.id === 'flex_batch')
+
+  const signalHealth: SignalHealthData | null =
+    signalHealthQ.data != null && !isResearchProxyError(signalHealthQ.data)
+      ? signalHealthQ.data.data
+      : null
+  const signalHealthErr =
+    signalHealthQ.data != null && isResearchProxyError(signalHealthQ.data)
+      ? signalHealthQ.data.error
+      : null
+
+  const readinessLine = formatReadinessRollupLine(
+    marketProbe.status?.readiness_rollup ?? null,
+  )
+  const freshnessStack = useMemo(
+    () => stackFreshnessStatuses(signalHealth?.freshness ?? []),
+    [signalHealth?.freshness],
+  )
+
+  const orchestration: OrchestrationStatusData | null =
+    orchestrationQ.data != null && !isResearchProxyError(orchestrationQ.data)
+      ? orchestrationQ.data.data
+      : null
+  const orchestrationErr =
+    orchestrationQ.data != null && isResearchProxyError(orchestrationQ.data)
+      ? orchestrationQ.data.error
+      : null
+
   const accuracy = useMemo(() => summarizeSettlements(settlementRows), [settlementRows])
   const providers = useMemo(() => providerCounts(sessionRows), [sessionRows])
   const tokenUsage = useMemo(() => sumOptional(sessionRows, 'token_usage'), [sessionRows])
   const tokenCost = useMemo(() => sumOptional(sessionRows, 'token_cost_usd'), [sessionRows])
 
-  const loading =
-    statusQ.isLoading ||
-    (settlementsQ.isLoading && sessionsQ.isLoading)
+  const loading = statusQ.isLoading || husbandryQ.isLoading
 
   const verdict = useMemo(
     () =>
-      reachToVerdict({
+      buildResearchVerdictCopy({
         loading,
         reachable: statusQ.data?.reachable,
-        sessions: sessionRows.length,
-        settlements: settlementRows.length,
         statusError: statusQ.data?.error || statusQ.data?.hint,
+        marketVerdict: marketLane?.verdict,
+        flexVerdict: flexLane?.verdict,
+        batchVerdict: orchestration?.verdict,
+        batchDetail: orchestration?.detail ?? orchestrationErr,
+        productOverall: signalHealth?.overall,
       }),
-    [loading, statusQ.data, sessionRows.length, settlementRows.length],
+    [
+      loading,
+      statusQ.data,
+      marketLane?.verdict,
+      flexLane?.verdict,
+      orchestration?.verdict,
+      orchestration?.detail,
+      orchestrationErr,
+      signalHealth?.overall,
+    ],
   )
+
+  const dagsterUrl = resolveOpsToolUrl('dagster')
 
   const refreshAll = () => {
     void statusQ.refetch()
+    void husbandryQ.refetch()
+    void signalHealthQ.refetch()
+    void orchestrationQ.refetch()
     void settlementsQ.refetch()
     void sessionsQ.refetch()
     void elementaryQ.refetch()
@@ -227,17 +279,25 @@ export function ResearchEnginePage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
+      <HusbandryStrip />
       <OpsVerdictStrip
-        lamp={verdict.lamp}
+        lamp={verdict.lamp as OpsVerdictLamp}
         title="Research Engine"
         summary={verdict.summary}
         tagLabel={verdict.tagLabel}
-        tagVariant={verdict.tagVariant}
+        tagVariant={verdict.tagVariant as OpsVerdictTagVariant}
         actions={
           <Button
             size="sm"
             variant="outline"
-            disabled={statusQ.isFetching || settlementsQ.isFetching || sessionsQ.isFetching}
+            disabled={
+              statusQ.isFetching ||
+              husbandryQ.isFetching ||
+              signalHealthQ.isFetching ||
+              orchestrationQ.isFetching ||
+              settlementsQ.isFetching ||
+              sessionsQ.isFetching
+            }
             onClick={refreshAll}
           >
             <RefreshCw className="size-3.5" />
@@ -250,6 +310,11 @@ export function ResearchEnginePage() {
             BLOCKED
           </span>
         }
+      />
+
+      <ResearchHealthLayersStrip
+        layers={verdict.layers}
+        onSelectLayer={() => setTab('health')}
       />
 
       <PageToolbar align="between">
@@ -452,8 +517,129 @@ export function ResearchEnginePage() {
 
       {tab === 'health' && (
         <>
-          <OpsSection title="Pipeline health / freshness" collapsible defaultCollapsed={false}>
+          <OpsSection
+            title="Feedstock (upstream)"
+            collapsible
+            defaultCollapsed={false}
+            actions={
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-dense-caption"
+                  onClick={() => openMassiveReadiness(onNavigate)}
+                >
+                  <ExternalLink size={12} aria-hidden />
+                  Open Massive
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-dense-caption"
+                  onClick={() => openFlexManage(onNavigate)}
+                >
+                  <ExternalLink size={12} aria-hidden />
+                  Open Flex
+                </Button>
+              </div>
+            }
+          >
+            <p className="mb-2 text-dense-meta text-muted-foreground">
+              Husbandry = enqueue gate (Massive / Flex lanes). readiness_rollup = Massive coverage /
+              gaps. void ≠ fail — does not paint the Research sidebar icon. Detail: Massive → Coverage
+              → Readiness.
+            </p>
+            <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+              {[marketLane, flexLane].map(lane =>
+                lane == null ? null : (
+                  <li
+                    key={lane.id}
+                    className="inline-flex items-center gap-1.5 rounded border border-border/60 bg-card px-2 py-1"
+                    title={lane.detail}
+                  >
+                    <StatusLamp value={laneLamp(lane.verdict)} kind="reach" />
+                    <DenseTag variant={lane.verdict === 'healthy' ? 'success' : lane.verdict === 'degraded' || lane.verdict === 'missed' ? 'danger' : 'warning'}>
+                      {lane.verdict.toUpperCase()}
+                    </DenseTag>
+                    <span className="text-dense-caption font-medium">{lane.label}</span>
+                    <span className="text-dense-micro text-muted-foreground">{lane.detail}</span>
+                  </li>
+                ),
+              )}
+            </ul>
+            <p className="mt-2 m-0 text-dense-caption text-muted-foreground">
+              {marketProbe.isLoading
+                ? 'Massive readiness: probing…'
+                : readinessLine != null
+                  ? `Massive readiness: ${readinessLine}`
+                  : marketProbe.status?.hint ||
+                    marketProbe.status?.error ||
+                    'Massive readiness: rollup unavailable'}
+            </p>
+            {husbandryQ.isLoading ? (
+              <p className="mt-2 text-dense-meta text-muted-foreground">Loading husbandry…</p>
+            ) : null}
+          </OpsSection>
+
+          <OpsSection
+            title="Batch compute (Dagster)"
+            collapsible
+            defaultCollapsed={false}
+            actions={
+              <Button variant="outline" size="sm" className="h-7 gap-1 px-2 text-dense-caption" asChild>
+                <a href={dagsterUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink size={12} aria-hidden />
+                  Open Dagster
+                </a>
+              </Button>
+            }
+          >
             <div className="grid gap-2 text-dense-body sm:grid-cols-2 lg:grid-cols-4">
+              <Metric
+                label="Orchestration"
+                value={
+                  <span className="inline-flex items-center gap-1.5">
+                    <StatusLamp
+                      value={laneLamp(orchestration?.verdict)}
+                      kind="reach"
+                    />
+                    {orchestration?.verdict?.toUpperCase() ?? '—'}
+                  </span>
+                }
+                detail={orchestrationErr || orchestration?.detail || 'GET /research/orchestration/status'}
+              />
+              <Metric
+                label="Job"
+                value={orchestration?.job_name ?? 'research_trading_day'}
+                detail={
+                  orchestration?.overdue ? 'Overdue vs 22:30 ET SLA' : 'Schedule Mon–Fri 22:30 ET'
+                }
+              />
+              <Metric
+                label="Last run"
+                value={orchestration?.last_run_status ?? '—'}
+                detail={formatWhen(orchestration?.last_run_ended_at)}
+              />
+              <Metric
+                label="research_olap"
+                value={researchLane?.verdict?.toUpperCase() ?? '—'}
+                detail={researchLane?.detail ?? 'Product + Batch rollup'}
+              />
+            </div>
+          </OpsSection>
+
+          <OpsSection title="Product asof (signal-health)" collapsible defaultCollapsed={false}>
+            <div className="mb-2 grid gap-2 text-dense-body sm:grid-cols-2 lg:grid-cols-4">
+              <Metric
+                label="Overall"
+                value={signalHealth?.overall?.toUpperCase() ?? '—'}
+                detail={
+                  signalHealthErr ||
+                  (freshnessStack.total > 0
+                    ? `${freshnessStack.fresh} fresh / ${freshnessStack.stale} stale · ${formatWhen(signalHealth?.as_of)}`
+                    : formatWhen(signalHealth?.as_of))
+                }
+              />
               <Metric
                 label="Research API"
                 value={
@@ -496,16 +682,53 @@ export function ResearchEnginePage() {
                 }
                 detail={`Cron last: ${formatWhen(analyticsQ.data?.last_schedule)}`}
               />
-              <Metric
-                label="Orchestration"
-                value="Cron / planned Dagster"
-                detail="Wave 5.1 Dagster freshness not wired yet"
-              />
             </div>
-            {(statusQ.data?.error || elementaryErr) && (
-              <p className="mt-2 text-dense-meta text-destructive">
-                {statusQ.data?.error || elementaryErr}
-              </p>
+            {signalHealthErr ? (
+              <p className="text-dense-meta text-destructive">{signalHealthErr}</p>
+            ) : signalHealthQ.isLoading ? (
+              <p className="text-dense-meta text-muted-foreground">Loading signal-health…</p>
+            ) : (signalHealth?.freshness?.length ?? 0) === 0 ? (
+              <p className="text-dense-meta text-muted-foreground">No freshness rows.</p>
+            ) : (
+              <>
+                <SignalHealthAgeMeters rows={signalHealth!.freshness} />
+                <DenseDataTable>
+                  <DenseTableHeader>
+                    <DenseTableHeadRow>
+                      <DenseTableHead>Label</DenseTableHead>
+                      <DenseTableHead>Status</DenseTableHead>
+                      <DenseTableHead>Age vs 36h</DenseTableHead>
+                      <DenseTableHead>Max computed</DenseTableHead>
+                    </DenseTableHeadRow>
+                  </DenseTableHeader>
+                  <DenseTableBody>
+                    {signalHealth!.freshness.map(row => (
+                      <DenseTableRow key={`${row.label}-${row.table ?? ''}`}>
+                        <DenseTableCell className="font-mono text-xs">{row.label}</DenseTableCell>
+                        <DenseTableCell>
+                          <DenseTag
+                            variant={
+                              row.status === 'fresh'
+                                ? 'success'
+                                : row.status === 'stale' || row.status === 'missing'
+                                  ? 'danger'
+                                  : 'warning'
+                            }
+                          >
+                            {row.status}
+                          </DenseTag>
+                        </DenseTableCell>
+                        <DenseTableCell>
+                          <AgeMeterCell ageHours={row.age_hours} status={row.status} />
+                        </DenseTableCell>
+                        <DenseTableCell className="text-dense-meta text-muted-foreground">
+                          {formatWhen(row.max_computed_at)}
+                        </DenseTableCell>
+                      </DenseTableRow>
+                    ))}
+                  </DenseTableBody>
+                </DenseDataTable>
+              </>
             )}
           </OpsSection>
 

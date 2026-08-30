@@ -222,7 +222,7 @@ export function FlexManualOpsPanel() {
       <ConfirmDialog
         open={triggerConfirm}
         title="Trigger Flex refresh"
-        message={`Synchronously fetch ${triggerKind === 'trades' ? 'Trades (executions)' : 'Cash Transactions'} from IB Flex Web Service? This uses the tokens and query IDs configured in Trade Settings.`}
+        message={`Synchronously fetch ${triggerKind === 'trades' ? 'Trades (executions)' : 'Cash Transactions'} from IB Flex Web Service? Uses K8s Secret tokens (make sync-flex-tokens) and query IDs from settings_flex.`}
         confirmLabel="Confirm fetch"
         confirming={triggerActing}
         onConfirm={() => void runTrigger()}

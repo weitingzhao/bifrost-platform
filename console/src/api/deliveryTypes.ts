@@ -208,6 +208,18 @@ export interface RevisionsResponse {
   generated_at: string
 }
 
+/** Changed paths between two refs (Gitea compare) — constellation path impact. */
+export interface CompareResponse {
+  cluster_id: string
+  repo: string
+  from: string
+  to: string
+  files: string[]
+  reachability: Reachability
+  detail: string
+  generated_at: string
+}
+
 export interface RepoRefStatus {
   repo: string
   exists: boolean

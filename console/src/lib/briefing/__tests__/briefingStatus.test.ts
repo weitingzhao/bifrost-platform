@@ -4,6 +4,7 @@ import type { QueueItem } from '@/lib/briefing/workLanes'
 import {
   buildLaneProgramsCatalogCompleteMap,
   buildLaneProgramsSessionReleasedMap,
+  computeScopeWorkSummary,
   isLaneLifecycleHold,
   isProgramCatalogComplete,
   isProgramDeliveryClosed,
@@ -11,6 +12,8 @@ import {
   laneLifecycleFromQueue,
   openDeliveryProgramsForLane,
   programsReleasedForLane,
+  selectBriefingQueueInventory,
+  type ScopeQueueLaneBreakdown,
 } from '@/lib/briefing/briefingStatus'
 
 function item(partial: Partial<QueueItem> & { id: string; status: QueueItem['status'] }): QueueItem {
@@ -224,5 +227,86 @@ describe('lane AND maps', () => {
       }),
     ]
     expect(openDeliveryProgramsForLane('console-api', programs).map(p => p.id)).toEqual(['live'])
+  })
+})
+
+describe('computeScopeWorkSummary queueByLane', () => {
+  it('breaks progress into per-lane queue items that sum to the meter', () => {
+    const summary = computeScopeWorkSummary(
+      [
+        {
+          laneId: 'compose-k3s',
+          label: 'Compose → K3s',
+          queue: [
+            item({ id: 'a', status: 'closed' }),
+            item({ id: 'b', status: 'closed' }),
+            item({ id: 'c', status: 'closed' }),
+          ],
+        },
+        {
+          laneId: 'trade-k8s-native',
+          label: 'Trade K8s-native',
+          queue: Array.from({ length: 5 }, (_, i) => item({ id: `w${i}`, status: 'done' })),
+        },
+        {
+          laneId: 'stock-readiness-retire',
+          label: 'Retire stock readiness',
+          queue: [],
+        },
+      ],
+      {
+        programsReleasedByLane: new Map([
+          ['compose-k3s', true],
+          ['trade-k8s-native', true],
+          ['stock-readiness-retire', true],
+        ]),
+      },
+    )
+    expect(summary.progress).toEqual({ done: 8, total: 8, percent: 100 })
+    expect(summary.queueByLane).toEqual([
+      {
+        laneId: 'compose-k3s',
+        label: 'Compose → K3s',
+        lifecycle: 'complete',
+        done: 3,
+        total: 3,
+      },
+      {
+        laneId: 'trade-k8s-native',
+        label: 'Trade K8s-native',
+        lifecycle: 'complete',
+        done: 5,
+        total: 5,
+      },
+    ])
+    expect(summary.queueByLane.reduce((n, r) => n + r.total, 0)).toBe(summary.progress?.total)
+  })
+})
+
+describe('selectBriefingQueueInventory', () => {
+  const row = (
+    partial: Pick<ScopeQueueLaneBreakdown, 'laneId' | 'lifecycle'> &
+      Partial<ScopeQueueLaneBreakdown>,
+  ): ScopeQueueLaneBreakdown => ({
+    label: partial.label ?? partial.laneId,
+    done: partial.done ?? 0,
+    total: partial.total ?? 1,
+    ...partial,
+  })
+
+  it('puts Doing first, then Planned, then Done, and caps at 3', () => {
+    const { visible, hiddenCount } = selectBriefingQueueInventory([
+      row({ laneId: 'done-a', lifecycle: 'complete', label: 'Z Done' }),
+      row({ laneId: 'planned', lifecycle: 'planned', label: 'Plan' }),
+      row({ laneId: 'doing', lifecycle: 'active', label: 'Active' }),
+      row({ laneId: 'done-b', lifecycle: 'complete', label: 'A Done' }),
+      row({ laneId: 'done-c', lifecycle: 'complete', label: 'M Done' }),
+    ])
+    expect(visible.map(r => r.laneId)).toEqual(['doing', 'planned', 'done-b'])
+    expect(hiddenCount).toBe(2)
+  })
+
+  it('returns empty when there are no rows', () => {
+    expect(selectBriefingQueueInventory([])).toEqual({ visible: [], hiddenCount: 0 })
   })
 })

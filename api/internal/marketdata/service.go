@@ -120,9 +120,8 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	case readyCount < total || healthReach == probe.ReachFail || freshReach == probe.ReachFail:
 		resp.Reachability = probe.ReachDegraded
 		resp.Reachable = readyCount > 0
-	case healthReach == probe.ReachDegraded || healthReach == probe.ReachUnknown ||
-		freshReach == probe.ReachDegraded:
-		// freshness unknown (no rows yet) must not degrade overall reachability
+	case healthReach == probe.ReachDegraded || freshReach == probe.ReachDegraded:
+		// freshness unknown (no rows yet) and health unknown must not degrade overall
 		resp.Reachability = probe.ReachDegraded
 		resp.Reachable = true
 	default:

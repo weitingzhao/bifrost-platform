@@ -4,7 +4,7 @@ description: |
     Research mode — bring Wave 2–6 Research Engine code from repo to k3s:
     research NS + research-api :8795 + dbt/volatility CronJobs + daily engines +
     intraday/settlement + honest Trade FE empty states for proxy/news-blocked pages.
-    Zero new engines. D10 BLOCKED. D13 OLAP-only. Dagster stays replicas:0.
+    D10 BLOCKED. D13 OLAP-only. Dagster multi-schedule owns husbandry (replicas≥1); overlapping CronJobs suspended.
 status: active
 workspace: /Users/vision-mac-trader/Desktop/stocks
 skill_path: .cursor/skills/research-runtime-ignition/SKILL.md
@@ -169,7 +169,7 @@ post_completion:
     new_risks:
         - "Order Sentiment remains option_snapshot_aggregates proxy until market.option_trades"
         - "Event Radar has no news ingest until Owner picks a source"
-        - "Dagster still replicas:0 — CronJobs are the runtime path"
+        - "Dagster multi-schedule owns husbandry — CronJobs suspended"
         - "D10 BLOCKED — no live trading path from Research"
     operate_queue_items:
         - id: research-radar-news-source

@@ -131,6 +131,53 @@ export async function fetchElementaryStatus(): Promise<ElementaryStatus | Resear
   return researchGet<ElementaryStatus>('/analytics/elementary')
 }
 
+export type SignalHealthFreshnessRow = {
+  label: string
+  table?: string
+  status: string
+  age_hours?: number | null
+  max_computed_at?: string | null
+  row_count?: number
+}
+
+export type SignalHealthData = {
+  overall: string
+  as_of?: string
+  freshness: SignalHealthFreshnessRow[]
+  extra_tables?: SignalHealthFreshnessRow[]
+}
+
+export type SignalHealthResponse = {
+  ok: boolean
+  data: SignalHealthData
+}
+
+export type OrchestrationStatusData = {
+  verdict: string
+  job_name: string
+  last_run_status?: string | null
+  last_run_ended_at?: string | null
+  last_run_id?: string | null
+  overdue: boolean
+  detail: string
+  as_of?: string
+}
+
+export type OrchestrationStatusResponse = {
+  ok: boolean
+  data: OrchestrationStatusData
+}
+
+export async function fetchSignalHealth(): Promise<SignalHealthResponse | ResearchProxyError> {
+  return researchGet<SignalHealthResponse>('/research/signal-health')
+}
+
+export async function fetchOrchestrationStatus(): Promise<
+  OrchestrationStatusResponse | ResearchProxyError
+> {
+  return researchGet<OrchestrationStatusResponse>('/research/orchestration/status')
+}
+
 export type AccuracySummary = {
   sessionsSettled: number
   pathHitRate: number | null
