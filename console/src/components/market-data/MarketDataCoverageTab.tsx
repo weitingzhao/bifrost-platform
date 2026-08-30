@@ -17,6 +17,11 @@ import {
   isProxyError,
 } from '@/api/marketDataPlugin'
 import { MarketDataJsonProbeCard } from '@/components/market-data/MarketDataJsonProbeCard'
+import {
+  type CoverageDetailPanel,
+  isMdDebugProbeEnabled,
+  writeMdSearchParams,
+} from '@/components/market-data/quality/mdNavParams'
 import { DataInventoryStrip } from '@/components/market-data/DataInventoryStrip'
 import { OptionCoverageSection } from '@/components/market-data/OptionCoverageSection'
 import { QualityScoreSection } from '@/components/market-data/QualityScoreSection'
@@ -25,10 +30,6 @@ import { FinancialsPanel } from '@/components/market-data/quality/FinancialsPane
 import { ReadinessPanel } from '@/components/market-data/quality/ReadinessPanel'
 import { SepaStatsSection } from '@/components/market-data/quality/SepaStatsSection'
 import { SnapshotQualityTrend } from '@/components/market-data/quality/SnapshotQualityTrend'
-import {
-  type CoverageDetailPanel,
-  writeMdSearchParams,
-} from '@/components/market-data/quality/mdNavParams'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import {
   CAPABILITY_GROUP_LABELS,
@@ -320,26 +321,29 @@ export function MarketDataCoverageTab({
         </OpsSection>
       ) : null}
 
-      <OpsSection
-        title="JSON probe"
-        description="Read-only GET against Plugin /market/* via platform-api proxy"
-        bodyPadding="compact"
-        overflow="visible"
-        collapsible
-        defaultCollapsed
-      >
-        <MarketDataJsonProbeCard
-          key={`probe-${panel}`}
-          title="JSON Probe"
-          defaultPath={
-            panel === 'readiness'
-              ? '/market/readiness/snapshot-coverage'
-              : panel === 'financials'
-                ? '/market/readiness/financials-by-instrument-type'
-                : '/market/coverage/db-summary'
-          }
-        />
-      </OpsSection>
+      {isMdDebugProbeEnabled() ? (
+        <OpsSection
+          title="Advanced · raw JSON probe"
+          description="Contract escape hatch (enabled via ?debug=1). Prefer Coverage / Readiness panels for ops."
+          bodyPadding="compact"
+          overflow="visible"
+          collapsible
+          defaultCollapsed
+        >
+          <MarketDataJsonProbeCard
+            key={`probe-${panel}`}
+            title="Raw Plugin GET"
+            description="Read-only GET against Plugin /market/* — not a product verdict surface"
+            defaultPath={
+              panel === 'readiness'
+                ? '/market/readiness/snapshot-coverage'
+                : panel === 'financials'
+                  ? '/market/readiness/financials-by-instrument-type'
+                  : '/market/coverage/db-summary'
+            }
+          />
+        </OpsSection>
+      ) : null}
     </div>
   )
 }

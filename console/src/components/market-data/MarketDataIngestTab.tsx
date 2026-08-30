@@ -28,6 +28,7 @@ import {
   type IngestScheduleSlot,
 } from '@/api/marketDataPlugin'
 import { MarketDataJsonProbeCard } from '@/components/market-data/MarketDataJsonProbeCard'
+import { isMdDebugProbeEnabled } from '@/components/market-data/quality/mdNavParams'
 import { JobQueuePressure } from '@/components/market-data/JobQueuePressure'
 import { QueueDashboardPanel } from '@/components/market-data/QueueDashboardPanel'
 import { ScheduleSwimlane } from '@/components/market-data/ScheduleSwimlane'
@@ -826,20 +827,22 @@ export function MarketDataIngestTab() {
         </OpsSection>
       ) : null}
 
-      <OpsSection
-        title="JSON probe"
-        description="Inspect kinds / queue-dashboard / a single job"
-        bodyPadding="compact"
-        overflow="visible"
-        collapsible
-        defaultCollapsed
-      >
-        <MarketDataJsonProbeCard
-          title="JSON Probe"
-          description="Inspect ingest kinds / queue-dashboard / a single job"
-          defaultPath="/market/ingest/queue-dashboard"
-        />
-      </OpsSection>
+      {isMdDebugProbeEnabled() ? (
+        <OpsSection
+          title="Advanced · raw JSON probe"
+          description="Contract escape hatch (enabled via ?debug=1). Prefer Queue / Schedule panels for ops."
+          bodyPadding="compact"
+          overflow="visible"
+          collapsible
+          defaultCollapsed
+        >
+          <MarketDataJsonProbeCard
+            title="Raw Plugin GET"
+            description="Inspect kinds / queue-dashboard / a single job — not a product verdict surface"
+            defaultPath="/market/ingest/queue-dashboard"
+          />
+        </OpsSection>
+      ) : null}
 
       <ConfirmDialog
         open={confirmOpen}

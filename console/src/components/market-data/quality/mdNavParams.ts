@@ -58,3 +58,14 @@ export function writeMdSearchParams(next: {
   }
   window.history.replaceState({}, '', url.toString())
 }
+
+/**
+ * JSON Probe is an engineer contract escape hatch — not Mission Control narrative.
+ * Enable with `?debug=1` (or `debug=true`) on Market Data manage URLs.
+ */
+export function isMdDebugProbeEnabled(search = window.location.search): boolean {
+  const raw = new URLSearchParams(search).get('debug')
+  if (raw == null) return false
+  const v = raw.trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes'
+}
