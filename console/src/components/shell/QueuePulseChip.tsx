@@ -2,6 +2,10 @@ import { Button, DenseTag, Tooltip, TooltipContent, TooltipTrigger, cn } from '@
 import { FlashValue } from '@/components/market-data/overviewDash'
 import { useMarketIngestQueuePulse } from '@/hooks/useMarketIngestQueuePulse'
 import {
+  dagsterRunsUrl,
+  resolveOpsToolUrl,
+} from '@/lib/architecture/opsToolRackCatalog'
+import {
   formatCompactCount,
   formatEtaMinutes,
   formatRatePerMin,
@@ -37,7 +41,11 @@ export function QueuePulseChip({
     view.topKind != null
       ? `top ${view.topKind} (${view.topKindPending} ready)`
       : null,
+    view.ignitionHint != null ? `ignition: Dagster ${view.ignitionHint}` : null,
+    view.drainMode === 'expected' ? 'expected worker drain' : null,
+    view.drainMode === 'stalled' ? 'drain may be stalled' : null,
     'Click → Massive Ingest',
+    `Open Dagster → ${resolveOpsToolUrl('dagster')}`,
   ].filter(Boolean)
 
   return (
@@ -57,16 +65,34 @@ export function QueuePulseChip({
           title={tipBits.join(' · ')}
           aria-label={`Market ingest queue ${view.verdict}, ${view.pending} ready`}
           onClick={() => openMassiveIngest(onNavigate)}
+          onContextMenu={e => {
+            e.preventDefault()
+            window.open(dagsterRunsUrl(), '_blank', 'noopener,noreferrer')
+          }}
         >
           <DenseTag variant={view.tagVariant}>{view.verdict.toUpperCase()}</DenseTag>
           <span className="truncate text-[var(--text-dense-caption)] text-foreground">
-            <span className="text-muted-foreground">Queue </span>
-            <FlashValue
-              value={view.pending}
-              className="font-mono tabular-nums font-medium"
-            >
-              {formatCompactCount(view.pending)}
-            </FlashValue>
+            {view.topKindLabel != null ? (
+              <>
+                <span className="text-muted-foreground">{view.topKindLabel} </span>
+                <FlashValue
+                  value={view.pending}
+                  className="font-mono tabular-nums font-medium"
+                >
+                  {formatCompactCount(view.pending)}
+                </FlashValue>
+              </>
+            ) : (
+              <>
+                <span className="text-muted-foreground">Queue </span>
+                <FlashValue
+                  value={view.pending}
+                  className="font-mono tabular-nums font-medium"
+                >
+                  {formatCompactCount(view.pending)}
+                </FlashValue>
+              </>
+            )}
             <span className="text-muted-foreground"> · </span>
             <FlashValue
               value={view.ratePerMin}
@@ -93,7 +119,18 @@ export function QueuePulseChip({
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-sm text-left">
-        {tipBits.join(' · ')}
+        <div className="flex flex-col gap-1">
+          <span>{tipBits.filter(b => !String(b).startsWith('Open Dagster')).join(' · ')}</span>
+          <a
+            href={dagsterRunsUrl()}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[var(--color-info,#38bdf8)] underline-offset-2 hover:underline"
+            onClick={e => e.stopPropagation()}
+          >
+            Open Dagster runs
+          </a>
+        </div>
       </TooltipContent>
     </Tooltip>
   )

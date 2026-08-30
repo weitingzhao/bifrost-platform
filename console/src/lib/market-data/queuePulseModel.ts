@@ -24,6 +24,26 @@ export type QueuePulseVerdict =
   | 'idle'
   | 'unknown'
 
+/** ops_jobs kind → Dagster schedule that typically enqueues it (husbandry migrate). */
+export const KIND_TO_DAGSTER_SCHEDULE: Readonly<Record<string, string>> = {
+  financials: 'market_fundamentals_rotate_schedule',
+  related: 'market_related_schedule',
+  option_open_interest: 'market_option_refresh_schedule',
+  option_snapshot: 'market_option_refresh_schedule',
+  option_bars: 'market_option_bars_schedule',
+  option_trades: 'market_corporate_trades_schedule',
+  minute_bars: 'market_minute_bars_schedule',
+  stock_snapshot: 'market_snapshot_schedule',
+  stock_movers: 'market_movers_schedule',
+  reference: 'market_reference_schedule',
+  universe: 'market_universe_calendar_schedule',
+  calendar: 'market_universe_calendar_schedule',
+  corporate: 'market_corporate_trades_schedule',
+  trim: 'market_trim_schedule',
+}
+
+export type DrainMode = 'expected' | 'stalled' | 'none'
+
 export type QueuePulseView = {
   verdict: QueuePulseVerdict
   /** Show Header chip / Dock strip when true. */
@@ -33,11 +53,56 @@ export type QueuePulseView = {
   ratePerMin: number | null
   etaMinutes: number | null
   topKind: string | null
+  /** Short label for chip face (e.g. financials). */
+  topKindLabel: string | null
   topKindPending: number
+  /** Dagster schedule name when kind maps; else null. */
+  ignitionHint: string | null
+  /** draining + rate: expected drain vs stalled (no rate / runaway ETA). */
+  drainMode: DrainMode
   detail: string
   /** StatusLamp / icon signal for sidebar. */
   lamp: Signal
   tagVariant: 'success' | 'warning' | 'danger' | 'neutral'
+}
+
+export function shortKindLabel(kind: string | null | undefined): string | null {
+  if (kind == null || kind.trim() === '') return null
+  const k = kind.trim().toLowerCase()
+  if (k === 'financials') return 'financials'
+  if (k === 'option_open_interest') return 'opt-oi'
+  if (k === 'option_snapshot') return 'opt-snap'
+  if (k === 'option_bars') return 'opt-bars'
+  if (k === 'option_trades') return 'opt-trades'
+  if (k === 'minute_bars') return 'min-bars'
+  if (k === 'stock_snapshot') return 'snapshot'
+  if (k === 'stock_movers') return 'movers'
+  return k.replace(/_/g, '-')
+}
+
+export function ignitionScheduleForKind(kind: string | null | undefined): string | null {
+  if (kind == null || kind.trim() === '') return null
+  const key = kind.trim().toLowerCase().replace(/-/g, '_')
+  return KIND_TO_DAGSTER_SCHEDULE[key] ?? null
+}
+
+export function classifyDrainMode(opts: {
+  verdict: QueuePulseVerdict
+  ratePerMin: number | null
+  etaMinutes: number | null
+  pending: number
+}): DrainMode {
+  if (opts.verdict !== 'draining' && !(opts.pending > 0)) return 'none'
+  const rateOk = opts.ratePerMin != null && opts.ratePerMin > 0
+  const etaOk =
+    opts.etaMinutes != null &&
+    Number.isFinite(opts.etaMinutes) &&
+    opts.etaMinutes >= 0 &&
+    opts.etaMinutes < 24 * 60
+  if (rateOk && etaOk) return 'expected'
+  if (opts.pending > 0 && (!rateOk || !etaOk)) return 'stalled'
+  if (opts.verdict === 'draining') return rateOk ? 'expected' : 'stalled'
+  return 'none'
 }
 
 export function normalizeQueueVerdict(raw: string | null | undefined): QueuePulseVerdict {
@@ -124,7 +189,10 @@ export function buildQueuePulseView(
       ratePerMin: null,
       etaMinutes: null,
       topKind: null,
+      topKindLabel: null,
       topKindPending: 0,
+      ignitionHint: null,
+      drainMode: 'none',
       detail: 'queue-dashboard unavailable',
       lamp: 'unknown',
       tagVariant: 'neutral',
@@ -154,6 +222,13 @@ export function buildQueuePulseView(
     etaRaw != null && Number.isFinite(etaRaw) && etaRaw >= 0 ? Number(etaRaw) : null
 
   const top = pickTopKind(dash.queue?.kinds)
+  const ignitionHint = ignitionScheduleForKind(top.kind)
+  const drainMode = classifyDrainMode({
+    verdict,
+    ratePerMin,
+    etaMinutes,
+    pending,
+  })
   const active =
     pending > 0 ||
     verdict === 'draining' ||
@@ -161,13 +236,18 @@ export function buildQueuePulseView(
     verdict === 'degraded' ||
     verdict === 'due'
 
-  const detail =
+  let detail =
     dash.husbandry?.detail ??
     (pending > 0
       ? `${pending} pending · ${running} running`
       : scheduleVerdict === 'missed'
         ? 'schedule missed'
         : 'queue idle')
+  if (drainMode === 'expected') {
+    detail = `${detail} · expected drain (workers)`
+  } else if (drainMode === 'stalled') {
+    detail = `${detail} · drain stalled (no rate / ETA)`
+  }
 
   return {
     verdict,
@@ -177,7 +257,10 @@ export function buildQueuePulseView(
     ratePerMin,
     etaMinutes,
     topKind: top.kind,
+    topKindLabel: shortKindLabel(top.kind),
     topKindPending: top.pending,
+    ignitionHint,
+    drainMode,
     detail,
     lamp: queueVerdictToLamp(verdict),
     tagVariant: queueVerdictTagVariant(verdict),
@@ -252,10 +335,13 @@ export function formatChipLine(opts: {
   deltaLabel: string | null
 }): string {
   const { view, deltaLabel } = opts
+  const kindBit =
+    view.topKindLabel != null
+      ? `${view.topKindLabel} ${formatCompactCount(view.pending)}`
+      : formatCompactCount(view.pending)
   const parts = [
-    'Queue',
     view.verdict.toUpperCase(),
-    formatCompactCount(view.pending),
+    kindBit,
     formatRatePerMin(view.ratePerMin),
     `ETA ${formatEtaMinutes(view.etaMinutes)}`,
   ]

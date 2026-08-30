@@ -49,9 +49,12 @@ import {
 } from '@/components/market-data/queueRunningJobs'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
+  dagsterScheduleForSlot,
   slotSchedulerKind,
   slotSchedulerLabel,
 } from '@/lib/market-data/slotScheduler'
+import { dagsterRunsUrl } from '@/lib/architecture/opsToolRackCatalog'
+import { useOrchestrationStatus } from '@/hooks/useOrchestrationStatus'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { describeCronSchedule } from '@/lib/patrol/cronSchedule'
 
@@ -162,6 +165,7 @@ export function MarketDataIngestTab() {
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [actionFailed, setActionFailed] = useState(false)
   const nowMs = Date.now()
+  const orchQ = useOrchestrationStatus({ enabled: detailTab === 'schedule' })
 
   const kindsQ = useQuery({
     queryKey: ['market-data', 'ingest', 'kinds'],
@@ -476,6 +480,7 @@ export function MarketDataIngestTab() {
                 nowMs={nowMs}
                 selectedSlot={selectedSlot}
                 onSelectSlot={slot => selectScheduleSlot(slot, 'lane')}
+                scheduleByName={orchQ.byName}
               />
               )}
               {selectedSlotRow != null ? (
@@ -486,6 +491,30 @@ export function MarketDataIngestTab() {
                   <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
                     {selectedSlotRow.detail ?? selectedSlotRow.note ?? 'Selected slot'}
                   </span>
+                  {(() => {
+                    const schedName = dagsterScheduleForSlot(selectedSlotRow.slot)
+                    const orch = schedName != null ? orchQ.byName.get(schedName) : undefined
+                    if (schedName == null) return null
+                    return (
+                      <>
+                        <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                          Dagster {schedName}
+                          {orch?.last_run_status != null
+                            ? ` · last ${orch.last_run_status}`
+                            : ' · no run yet'}
+                        </span>
+                        <Button variant="outline" size="sm" asChild>
+                          <a
+                            href={dagsterRunsUrl({ runId: orch?.last_run_id })}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open in Dagster
+                          </a>
+                        </Button>
+                      </>
+                    )
+                  })()}
                   {(selectedSlotRow.evidence_kinds ?? []).length > 0 ? (
                     <Button
                       variant="outline"
@@ -513,6 +542,7 @@ export function MarketDataIngestTab() {
                   <DenseTableHeadRow>
                     <DenseTableHead>Slot</DenseTableHead>
                     <DenseTableHead>Scheduler</DenseTableHead>
+                    <DenseTableHead>Dagster run</DenseTableHead>
                     <DenseTableHead>Schedule</DenseTableHead>
                     <DenseTableHead>Adherence</DenseTableHead>
                     <DenseTableHead>Last fire</DenseTableHead>
@@ -523,12 +553,15 @@ export function MarketDataIngestTab() {
                 <DenseTableBody>
                   {visibleScheduleSlots.length === 0 ? (
                     <DenseTableRow>
-                      <DenseTableCell colSpan={7} className="text-center text-[var(--muted-foreground)]">
+                      <DenseTableCell colSpan={8} className="text-center text-[var(--muted-foreground)]">
                         No slots match this adherence filter
                       </DenseTableCell>
                     </DenseTableRow>
                   ) : (
-                  visibleScheduleSlots.map(s => (
+                  visibleScheduleSlots.map(s => {
+                    const schedName = dagsterScheduleForSlot(s.slot)
+                    const orch = schedName != null ? orchQ.byName.get(schedName) : undefined
+                    return (
                     <DenseTableRow
                       key={s.slot}
                       id={scheduleRowId(s.slot)}
@@ -561,6 +594,23 @@ export function MarketDataIngestTab() {
                           {slotSchedulerLabel(slotSchedulerKind(s.slot))}
                         </DenseTag>
                       </DenseTableCell>
+                      <DenseTableCell className="text-[var(--text-dense-caption)]">
+                        {orch?.last_run_status ?? '—'}
+                        {orch?.last_run_id != null ? (
+                          <>
+                            {' '}
+                            <a
+                              href={dagsterRunsUrl({ runId: orch.last_run_id })}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[var(--color-info,#38bdf8)] underline-offset-2 hover:underline"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              open
+                            </a>
+                          </>
+                        ) : null}
+                      </DenseTableCell>
                       <DenseTableCell
                         className="text-[var(--text-dense-meta)]"
                         title={s.cron ? `cron: ${s.cron}` : undefined}
@@ -582,7 +632,8 @@ export function MarketDataIngestTab() {
                         {s.detail ?? '—'}
                       </DenseTableCell>
                     </DenseTableRow>
-                  ))
+                    )
+                  })
                   )}
                 </DenseTableBody>
               </DenseDataTable>

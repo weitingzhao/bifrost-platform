@@ -251,6 +251,10 @@ export function ResearchEnginePage({
         batchVerdict: orchestration?.verdict,
         batchDetail: orchestration?.detail ?? orchestrationErr,
         productOverall: signalHealth?.overall,
+        schedulesTotal: orchestration?.schedules_total,
+        schedulesRunning: orchestration?.schedules_running,
+        schedulesStopped: orchestration?.schedules_stopped,
+        recentFailures: orchestration?.recent_failures,
       }),
     [
       loading,
@@ -259,6 +263,10 @@ export function ResearchEnginePage({
       flexLane?.verdict,
       orchestration?.verdict,
       orchestration?.detail,
+      orchestration?.schedules_total,
+      orchestration?.schedules_running,
+      orchestration?.schedules_stopped,
+      orchestration?.recent_failures,
       orchestrationErr,
       signalHealth?.overall,
     ],
@@ -609,23 +617,47 @@ export function ResearchEnginePage({
                 detail={orchestrationErr || orchestration?.detail || 'GET /research/orchestration/status'}
               />
               <Metric
-                label="Job"
+                label="Schedules"
+                value={
+                  orchestration?.schedules_total != null
+                    ? `${orchestration.schedules_total} · ${orchestration.schedules_running ?? 0} run · ${orchestration.schedules_stopped ?? 0} stop`
+                    : '—'
+                }
+                detail={
+                  orchestration?.recent_failures?.[0]?.name
+                    ? `Last fail ${orchestration.recent_failures[0].name}`
+                    : orchestration?.schedules_detail ||
+                      'Whitelist husbandry schedules in ops_dagster'
+                }
+              />
+              <Metric
+                label="Trading-day SLA"
                 value={orchestration?.job_name ?? 'research_trading_day'}
                 detail={
                   orchestration?.overdue ? 'Overdue vs 22:30 ET SLA' : 'Schedule Mon–Fri 22:30 ET'
                 }
               />
               <Metric
-                label="Last run"
+                label="Last trading-day run"
                 value={orchestration?.last_run_status ?? '—'}
                 detail={formatWhen(orchestration?.last_run_ended_at)}
               />
-              <Metric
-                label="research_olap"
-                value={researchLane?.verdict?.toUpperCase() ?? '—'}
-                detail={researchLane?.detail ?? 'Product + Batch rollup'}
-              />
             </div>
+            {orchestration?.recent_failures != null && orchestration.recent_failures.length > 0 ? (
+              <ul className="mt-2 m-0 list-none space-y-1 p-0 text-dense-caption text-muted-foreground">
+                {orchestration.recent_failures.map(f => (
+                  <li key={f.name} className="font-mono">
+                    FAIL {f.name}
+                    {f.last_run_status ? ` · ${f.last_run_status}` : ''}
+                    {f.last_run_ended_at ? ` · ${formatWhen(f.last_run_ended_at)}` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <p className="mt-2 m-0 text-dense-micro text-muted-foreground">
+              research_olap: {researchLane?.verdict?.toUpperCase() ?? '—'}
+              {researchLane?.detail ? ` · ${researchLane.detail}` : ''}
+            </p>
           </OpsSection>
 
           <OpsSection title="Product asof (signal-health)" collapsible defaultCollapsed={false}>

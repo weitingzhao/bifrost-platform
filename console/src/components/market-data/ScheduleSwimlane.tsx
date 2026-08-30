@@ -1,4 +1,5 @@
-import { cn, DenseTag } from '@bifrost/ui'
+import { cn, DenseTag, StatusLamp } from '@bifrost/ui'
+import type { OrchestrationScheduleRow } from '@/api/researchEngine'
 import type { IngestQueueKindCount, IngestScheduleSlot } from '@/api/marketDataPlugin'
 import {
   clipBar,
@@ -12,6 +13,7 @@ import {
 } from '@/components/market-data/scheduleSwimlaneModel'
 import { formatDurationParts } from '@/lib/patrol/cronSchedule'
 import {
+  dagsterScheduleForSlot,
   slotSchedulerKind,
   slotSchedulerLabel,
 } from '@/lib/market-data/slotScheduler'
@@ -45,6 +47,19 @@ function drainClass(active: boolean, adherence: string | undefined): string {
 const selectedLaneClass =
   'bg-[color-mix(in_oklab,var(--color-info,#38bdf8)_14%,transparent)]'
 
+function runLampSignal(
+  row: OrchestrationScheduleRow | undefined,
+): 'ok' | 'fail' | 'degraded' | 'unknown' {
+  if (row == null) return 'unknown'
+  const st = (row.last_run_status ?? '').toUpperCase()
+  if (st === 'SUCCESS' || st === 'SUCCESSFUL') return 'ok'
+  if (st === 'FAILURE' || st === 'FAILED' || st === 'CANCELED' || st === 'CANCELLED') {
+    return 'fail'
+  }
+  if (st === 'STARTED' || st === 'STARTING' || st === 'QUEUED') return 'degraded'
+  return 'unknown'
+}
+
 export function ScheduleSwimlane({
   slots,
   kindCounts,
@@ -52,6 +67,7 @@ export function ScheduleSwimlane({
   nowMs,
   selectedSlot,
   onSelectSlot,
+  scheduleByName,
 }: {
   slots: IngestScheduleSlot[]
   kindCounts: IngestQueueKindCount[]
@@ -59,6 +75,8 @@ export function ScheduleSwimlane({
   nowMs: number
   selectedSlot?: string | null
   onSelectSlot?: (slot: string) => void
+  /** Dagster schedule summary keyed by schedule name. */
+  scheduleByName?: Map<string, OrchestrationScheduleRow>
 }) {
   const rows = swimlaneSlots(slots)
   const { startMs, endMs } = resolveHorizon(nowMs, horizon)
@@ -76,7 +94,7 @@ export function ScheduleSwimlane({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-start gap-3">
-        <div className="w-40 shrink-0" />
+        <div className="w-48 shrink-0" />
         <div className="relative min-w-0 flex-1">
           <div className="relative h-4">
             {ticks.map(t => (
@@ -93,26 +111,41 @@ export function ScheduleSwimlane({
       </div>
 
       <div className="flex items-start gap-3">
-        <div className="flex w-40 shrink-0 flex-col">
+        <div className="flex w-48 shrink-0 flex-col">
           {rows.map(s => {
             const selected = selectedSlot === s.slot
+            const schedName = dagsterScheduleForSlot(s.slot)
+            const orch = schedName != null ? scheduleByName?.get(schedName) : undefined
+            const lamp = runLampSignal(orch)
             return (
               <button
                 key={s.slot}
                 type="button"
                 id={scheduleLaneId(s.slot)}
                 className={cn(
-                  'flex h-6 items-center truncate rounded-sm px-1 text-left font-mono text-[var(--text-dense-caption)]',
+                  'flex h-6 items-center gap-1 truncate rounded-sm px-1 text-left font-mono text-[var(--text-dense-caption)]',
                   onSelectSlot && 'cursor-pointer hover:bg-[var(--muted)]/60',
                   selected && selectedLaneClass,
                 )}
-                title={`${s.note ?? s.slot} · scheduler=${slotSchedulerLabel(slotSchedulerKind(s.slot))}`}
+                title={[
+                  s.note ?? s.slot,
+                  `scheduler=${slotSchedulerLabel(slotSchedulerKind(s.slot))}`,
+                  schedName != null ? `dagster=${schedName}` : null,
+                  orch?.last_run_status != null
+                    ? `last_run=${orch.last_run_status}`
+                    : 'last_run=—',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
                 aria-pressed={selected}
                 onClick={() => onSelectSlot?.(s.slot)}
               >
+                <span className="shrink-0">
+                  <StatusLamp value={lamp} />
+                </span>
                 <span className="min-w-0 truncate">{s.slot}</span>
                 {slotSchedulerKind(s.slot) === 'dagster' ? (
-                  <DenseTag variant="neutral" className="ml-1 shrink-0">
+                  <DenseTag variant="neutral" className="ml-auto shrink-0">
                     Dagster
                   </DenseTag>
                 ) : null}
@@ -152,7 +185,10 @@ export function ScheduleSwimlane({
                 {bar != null ? (
                   <span
                     className={`absolute top-[7px] h-2.5 rounded-sm ${drainClass(drain?.active ?? false, s.adherence)}`}
-                    style={{ left: `${bar.leftPct}%`, width: `${Math.max(bar.widthPct, 0.4)}%` }}
+                    style={{
+                      left: `${bar.leftPct}%`,
+                      width: `${Math.max(bar.widthPct, 0.4)}%`,
+                    }}
                     title={
                       drain
                         ? `${s.slot} drain ${formatDurationParts(drainMs)}${drain.active ? ' · still draining' : ''}`
@@ -178,7 +214,7 @@ export function ScheduleSwimlane({
       </div>
 
       <p className="m-0 text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
-        24h back + 6h ahead UTC · diamond = fire · bar = drain
+        24h back + 6h ahead UTC · diamond = fire · bar = drain · lamp = last Dagster run
       </p>
     </div>
   )

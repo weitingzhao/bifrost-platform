@@ -152,6 +152,15 @@ export type SignalHealthResponse = {
   data: SignalHealthData
 }
 
+export type OrchestrationScheduleRow = {
+  name: string
+  job_name: string
+  status: string
+  last_run_status?: string | null
+  last_run_ended_at?: string | null
+  last_run_id?: string | null
+}
+
 export type OrchestrationStatusData = {
   verdict: string
   job_name: string
@@ -161,6 +170,13 @@ export type OrchestrationStatusData = {
   overdue: boolean
   detail: string
   as_of?: string
+  schedules?: OrchestrationScheduleRow[]
+  schedules_total?: number
+  schedules_running?: number
+  schedules_stopped?: number
+  schedules_unknown?: number
+  recent_failures?: OrchestrationScheduleRow[]
+  schedules_detail?: string
 }
 
 export type OrchestrationStatusResponse = {

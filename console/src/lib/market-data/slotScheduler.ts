@@ -22,6 +22,26 @@ const DAGSTER_SLOTS = new Set([
   'trim',
 ])
 
+/** Slot → Dagster schedule name (UTC market_* + trading_day for EOD). */
+export const SLOT_TO_DAGSTER_SCHEDULE: Readonly<Record<string, string>> = {
+  'stock-eod': 'research_trading_day_schedule',
+  'eod-pipeline': 'research_trading_day_schedule',
+  'stock-snapshot': 'market_snapshot_schedule',
+  'stock-movers': 'market_movers_schedule',
+  reference: 'market_reference_schedule',
+  'universe-daily': 'market_universe_calendar_schedule',
+  calendar: 'market_universe_calendar_schedule',
+  'related-rotate': 'market_related_schedule',
+  'option-bars': 'market_option_bars_schedule',
+  corporate: 'market_corporate_trades_schedule',
+  'option-trades': 'market_corporate_trades_schedule',
+  'minute-bars': 'market_minute_bars_schedule',
+  'fundamentals-rotate': 'market_fundamentals_rotate_schedule',
+  'option-refresh': 'market_option_refresh_schedule',
+  trim: 'market_trim_schedule',
+  'oi-gap-heal': 'market_oi_gap_heal_schedule',
+}
+
 /** Analytics slots moved to Research — not Massive Cron. */
 const RESEARCH_MIGRATED = new Set(['max-pain', 'atm-iv-pcr', 'iv-percentile'])
 
@@ -40,4 +60,9 @@ export function slotSchedulerLabel(kind: SlotSchedulerKind): string {
   if (kind === 'research') return 'Research'
   if (kind === 'cron') return 'Cron'
   return '—'
+}
+
+export function dagsterScheduleForSlot(slot: string): string | null {
+  const s = slot.trim().toLowerCase()
+  return SLOT_TO_DAGSTER_SCHEDULE[s] ?? null
 }

@@ -9,7 +9,7 @@
  * source_void ≠ fail; enqueue must fail-closed when credentials missing.
  */
 
-export const DATA_HUSBANDRY_VERSION = '2026-08-30-w6'
+export const DATA_HUSBANDRY_VERSION = '2026-08-30-observe-ux'
 export const DATA_HUSBANDRY_SOURCE =
   'console/src/lib/architecture/dataHusbandryCatalog.ts'
 
@@ -37,7 +37,7 @@ export const RESEARCH_HEALTH_LAYERS: readonly ResearchHealthLayer[] = [
     id: 'batch',
     label: 'Batch compute (Dagster)',
     evidence:
-      'GET /research/orchestration/status — research_trading_day + market_* / research_* schedules; SLA vs 22:30 ET for trading-day job',
+      'GET /research/orchestration/status — multi-schedule rollup (schedules_running / stopped / recent_failures≤3) + research_trading_day SLA vs 22:30 ET; Console Batch strip shows “N schedules · M stopped · last fail …”',
     navAffectsResearchIcon: true,
   },
   {
@@ -82,7 +82,7 @@ export const HUSBANDRY_LANES: readonly HusbandryLane[] = [
     label: 'Research OLAP (dbt → features)',
     owner: 'bifrost-research',
     groundTruth:
-      'Product asof (signal-health) + Batch (orchestration/status) — Feedstock is separate lanes; nav lamp = research_olap only',
+      'Product asof (signal-health) + Batch (orchestration/status multi-schedule + trading_day SLA) — Feedstock is separate lanes; nav lamp = research_olap only',
     schedulerTarget: 'dagster',
     mustNot:
       'Dual-write same features.* day via Cron and Dagster; put IB Client in the asset graph; paint Research nav red from Market missed / Flex source=none',

@@ -5,6 +5,8 @@ import { ExternalLink } from 'lucide-react'
 import { syncHusbandryChecklist } from '@/api/checklist'
 import { fetchDataHusbandry, type HusbandryLaneView } from '@/api/dataHusbandry'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
+import { useOrchestrationStatus } from '@/hooks/useOrchestrationStatus'
+import { formatSchedulesSummary } from '@/lib/research/researchHealthCopy'
 import { massiveReadinessHref } from '@/lib/research/massiveNav'
 
 const HUSBANDRY_SYNC_KEY = 'bifrost.husbandrySyncAt'
@@ -54,7 +56,14 @@ export function HusbandryStrip({ className }: { className?: string }) {
     refetchInterval: 30_000,
     retry: 1,
   })
+  const orchQ = useOrchestrationStatus()
   const snap = q.data
+  const schedulesLine = formatSchedulesSummary({
+    schedulesTotal: orchQ.data?.schedules_total,
+    schedulesRunning: orchQ.data?.schedules_running,
+    schedulesStopped: orchQ.data?.schedules_stopped,
+    recentFailures: orchQ.data?.recent_failures,
+  })
 
   useEffect(() => {
     if (snap == null || !shouldSyncHusbandry(snap.overall)) return
@@ -125,6 +134,15 @@ export function HusbandryStrip({ className }: { className?: string }) {
             <LaneChip key={lane.id} lane={lane} />
           ))}
         </ul>
+      ) : null}
+      {schedulesLine != null ? (
+        <p
+          className="m-0 text-dense-caption text-muted-foreground"
+          title="ops_dagster husbandry schedules"
+        >
+          Batch: {schedulesLine}
+          {orchQ.data?.overdue ? ' · trading_day overdue' : ''}
+        </p>
       ) : null}
       {snap?.note != null ? (
         <p className="m-0 text-dense-micro text-muted-foreground/80">{snap.note}</p>

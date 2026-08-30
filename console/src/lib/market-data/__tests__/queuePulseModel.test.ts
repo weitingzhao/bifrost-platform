@@ -2,15 +2,19 @@ import { describe, expect, it } from 'vitest'
 import type { IngestQueueDashboardResponse } from '@/api/marketDataPlugin'
 import {
   buildQueuePulseView,
+  classifyDrainMode,
   formatChipLine,
   formatCompactCount,
   formatEtaMinutes,
   formatRatePerMin,
+  ignitionScheduleForKind,
   pendingDeltaView,
   queueVerdictTagVariant,
   queueVerdictToLamp,
+  shortKindLabel,
 } from '@/lib/market-data/queuePulseModel'
 import { formatSignedDelta as fmtDelta } from '@/components/market-data/queueReadyCheck'
+import { dagsterRunsUrl } from '@/lib/architecture/opsToolRackCatalog'
 
 function dash(
   partial: Partial<IngestQueueDashboardResponse> & {
@@ -35,23 +39,49 @@ describe('buildQueuePulseView active / hide', () => {
     expect(view.active).toBe(false)
     expect(view.verdict).toBe('idle')
     expect(view.lamp).toBe('ok')
+    expect(view.ignitionHint).toBeNull()
   })
 
-  it('shows when pending > 0', () => {
+  it('shows when pending > 0 with top kind + ignition', () => {
     const view = buildQueuePulseView(
       dash({
         husbandry: { verdict: 'healthy' },
-        queue: { pending: 4000, running: 2, verdict: 'draining' },
+        queue: {
+          pending: 4000,
+          running: 2,
+          verdict: 'draining',
+          kinds: [
+            { kind: 'financials', pending: 3990, running: 2 },
+            { kind: 'option_snapshot', pending: 10, running: 0 },
+          ],
+        },
         throughput: { jobs_per_min_15m: 16, eta_minutes_at_current_rate: 250 },
       }),
     )
     expect(view.active).toBe(true)
     expect(view.verdict).toBe('draining')
     expect(view.pending).toBe(4000)
-    expect(view.ratePerMin).toBe(16)
-    expect(view.etaMinutes).toBe(250)
-    expect(view.lamp).toBe('degraded')
-    expect(view.tagVariant).toBe('warning')
+    expect(view.topKind).toBe('financials')
+    expect(view.topKindLabel).toBe('financials')
+    expect(view.ignitionHint).toBe('market_fundamentals_rotate_schedule')
+    expect(view.drainMode).toBe('expected')
+    expect(view.detail).toMatch(/expected drain/)
+  })
+
+  it('marks stalled drain when no rate', () => {
+    const view = buildQueuePulseView(
+      dash({
+        husbandry: { verdict: 'draining' },
+        queue: {
+          pending: 100,
+          running: 0,
+          verdict: 'draining',
+          kinds: [{ kind: 'financials', pending: 100, running: 0 }],
+        },
+      }),
+    )
+    expect(view.drainMode).toBe('stalled')
+    expect(view.detail).toMatch(/stalled/)
   })
 
   it('shows on husbandry draining even if pending=0 briefly', () => {
@@ -91,6 +121,34 @@ describe('buildQueuePulseView active / hide', () => {
   })
 })
 
+describe('kind ignition map', () => {
+  it('maps financials → fundamentals schedule', () => {
+    expect(ignitionScheduleForKind('financials')).toBe(
+      'market_fundamentals_rotate_schedule',
+    )
+    expect(shortKindLabel('option_open_interest')).toBe('opt-oi')
+  })
+
+  it('classifies drain modes', () => {
+    expect(
+      classifyDrainMode({
+        verdict: 'draining',
+        ratePerMin: 10,
+        etaMinutes: 60,
+        pending: 100,
+      }),
+    ).toBe('expected')
+    expect(
+      classifyDrainMode({
+        verdict: 'draining',
+        ratePerMin: null,
+        etaMinutes: null,
+        pending: 100,
+      }),
+    ).toBe('stalled')
+  })
+})
+
 describe('queue pulse formatting', () => {
   it('formats compact counts / rate / ETA', () => {
     expect(formatCompactCount(4000)).toBe('4.0k')
@@ -109,16 +167,27 @@ describe('queue pulse formatting', () => {
     expect(queueVerdictTagVariant('due')).toBe('warning')
   })
 
-  it('builds chip line with Δ', () => {
+  it('builds chip line with kind on face', () => {
     const view = buildQueuePulseView(
       dash({
         husbandry: { verdict: 'draining' },
-        queue: { pending: 4000, running: 1 },
+        queue: {
+          pending: 4000,
+          running: 1,
+          kinds: [{ kind: 'financials', pending: 4000, running: 1 }],
+        },
         throughput: { jobs_per_min_15m: 16, eta_minutes_at_current_rate: 240 },
       }),
     )
-    expect(formatChipLine({ view, deltaLabel: 'Δ −3' })).toContain('DRAINING')
-    expect(formatChipLine({ view, deltaLabel: 'Δ −3' })).toContain('Δ −3')
+    const line = formatChipLine({ view, deltaLabel: 'Δ −3' })
+    expect(line).toContain('DRAINING')
+    expect(line).toContain('financials')
+    expect(line).toContain('Δ −3')
+  })
+
+  it('builds Dagster runs deep link', () => {
+    expect(dagsterRunsUrl()).toMatch(/\/runs$/)
+    expect(dagsterRunsUrl({ runId: 'abc' })).toMatch(/\/runs\/abc$/)
   })
 })
 
@@ -126,10 +195,13 @@ describe('pending Δ', () => {
   it('labels signed delta like Ready Check', () => {
     expect(fmtDelta(-3)).toBe('Δ −3')
     expect(fmtDelta(5)).toBe('Δ +5')
-    const d = pendingDeltaView({
-      previous: { count: 100, atMs: 0 },
-      current: { count: 97, atMs: 10_000 },
-    }, 10_000)
+    const d = pendingDeltaView(
+      {
+        previous: { count: 100, atMs: 0 },
+        current: { count: 97, atMs: 10_000 },
+      },
+      10_000,
+    )
     expect(d.delta).toBe(-3)
     expect(d.label).toBe('Δ −3')
     expect(d.caption).toContain('was 100')

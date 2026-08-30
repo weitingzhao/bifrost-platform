@@ -21,6 +21,11 @@ export type ResearchHealthCopyInput = {
   batchVerdict?: string | null
   batchDetail?: string | null
   productOverall?: string | null
+  /** Multi-schedule summary from orchestration/status (ops_dagster). */
+  schedulesTotal?: number | null
+  schedulesRunning?: number | null
+  schedulesStopped?: number | null
+  recentFailures?: Array<{ name?: string | null }> | null
 }
 
 export type ResearchHealthLayerView = {
@@ -79,18 +84,46 @@ function productFromOverall(overall: string | null | undefined): HealthLayerVerd
   return 'unknown'
 }
 
-function batchHumanMeta(verdict: HealthLayerVerdict, detail: string | null | undefined): string {
+/** Dense multi-schedule line for Batch layer / HusbandryStrip (English UI). */
+export function formatSchedulesSummary(input: {
+  schedulesTotal?: number | null
+  schedulesRunning?: number | null
+  schedulesStopped?: number | null
+  recentFailures?: Array<{ name?: string | null }> | null
+}): string | null {
+  const total = input.schedulesTotal
+  if (total == null || total <= 0) return null
+  const stopped = input.schedulesStopped ?? 0
+  const parts: string[] = [`${total} schedules`]
+  if (stopped > 0) {
+    parts.push(`${stopped} stopped`)
+  } else if (input.schedulesRunning != null) {
+    parts.push(`${input.schedulesRunning} running`)
+  }
+  const failName = input.recentFailures?.[0]?.name
+  if (failName) parts.push(`last fail ${failName}`)
+  return parts.join(' · ')
+}
+
+function batchSlaMeta(verdict: HealthLayerVerdict, detail: string | null | undefined): string {
   const d = (detail ?? '').toLowerCase()
   if (d.includes('permission denied')) return 'runs table permission denied'
   if (d.includes('schema missing')) return 'ops_dagster schema missing'
   if (d.includes('table missing')) return 'Dagster runs table not created yet'
   if (d.includes('not found') || d.includes('may not have started')) return 'orchestration unprobed'
-  if (verdict === 'healthy') return 'research_trading_day within SLA'
+  if (verdict === 'healthy') return 'trading_day within SLA'
   if (verdict === 'missed') return 'batch overdue vs 22:30 ET SLA'
-  if (verdict === 'degraded') return 'last run failed'
-  if (verdict === 'due') return 'run in progress'
-  if (verdict === 'caution') return 'no recent batch run (within grace)'
+  if (verdict === 'degraded') return 'last trading_day run failed'
+  if (verdict === 'due') return 'trading_day run in progress'
+  if (verdict === 'caution') return 'no recent trading_day run (within grace)'
   return 'batch status unknown'
+}
+
+function batchHumanMeta(input: ResearchHealthCopyInput, verdict: HealthLayerVerdict): string {
+  const sla = batchSlaMeta(verdict, input.batchDetail)
+  const sched = formatSchedulesSummary(input)
+  if (sched != null) return `${sched} · ${sla}`
+  return sla
 }
 
 function feedstockMeta(market: HealthLayerVerdict, flex: HealthLayerVerdict): string {
@@ -162,7 +195,7 @@ export function buildResearchHealthLayers(
       id: 'batch',
       label: 'Batch',
       verdict: batch,
-      meta: batchHumanMeta(batch, input.batchDetail),
+      meta: batchHumanMeta(input, batch),
     },
     {
       id: 'product',

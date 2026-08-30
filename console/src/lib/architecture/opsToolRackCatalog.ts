@@ -67,6 +67,22 @@ export function resolveOpsToolUrl(
   return opsToolById(id).lanUrl
 }
 
+/** Dagster UI runs list (optional run id deep-link). Never iframe — new tab only. */
+export function dagsterRunsUrl(opts?: {
+  liveBase?: string | null
+  runId?: string | null
+}): string {
+  const base = resolveOpsToolUrl('dagster', opts?.liveBase)
+  const runId = (opts?.runId ?? '').trim()
+  if (runId !== '') return `${base}/runs/${encodeURIComponent(runId)}`
+  return `${base}/runs`
+}
+
+/** Dagster UI automation / schedules overview. */
+export function dagsterSchedulesUrl(liveBase?: string | null): string {
+  return `${resolveOpsToolUrl('dagster', liveBase)}/automation`
+}
+
 export function buildOpsToolRackLlmPack(): string {
   const lines = [
     '## Ops Tool Rack (external UIs)',
